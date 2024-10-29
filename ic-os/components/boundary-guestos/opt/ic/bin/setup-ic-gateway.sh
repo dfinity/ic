@@ -147,7 +147,7 @@ CACHE_LOCK_TIMEOUT="10s"
 CACHE_XFETCH_BETA="3.0"
 SHED_SYSTEM_CPU="0.95"
 SHED_SYSTEM_MEMORY="0.95"
-SHED_SHARDED_LATENCY="query:600ms,call:300ms,sync_call:13s,read_state:600ms,read_state_subnet:600ms,status:20ms,health:20ms,registrations:600ms,http:800ms"
+SHED_SHARDED_LATENCY="query:600ms,call:300ms,sync_call:13s,read_state:600ms,read_state_subnet:600ms,status:20ms,health:20ms,registrations:5s,http:800ms"
 EOF
 
     if [ ! -z "${DENYLIST_URL}" ]; then
