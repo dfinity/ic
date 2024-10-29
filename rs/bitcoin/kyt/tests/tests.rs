@@ -16,7 +16,7 @@ use pocket_ic::{
         CanisterHttpHeader, CanisterHttpReply, CanisterHttpRequest, CanisterHttpResponse,
         MockCanisterHttpResponse, RawMessageId,
     },
-    query_candid, PocketIc, UserError, WasmResult,
+    query_candid, PocketIc, PocketIcBuilder, UserError, WasmResult,
 };
 use std::str::FromStr;
 
@@ -53,7 +53,12 @@ fn kyt_wasm() -> Vec<u8> {
 impl Setup {
     fn new(btc_network: BtcNetwork) -> Setup {
         let controller = PrincipalId::new_user_test_id(1).0;
-        let env = PocketIc::new();
+        // Enable nonmainnet_features to avoid CanisterInstallCodeRateLimited error
+        // for canister upgrades
+        let env = PocketIcBuilder::new()
+            .with_application_subnet()
+            .with_nonmainnet_features(true)
+            .build();
 
         let init_arg = InitArg {
             btc_network,
@@ -178,7 +183,6 @@ fn test_check_address() {
     assert!(result.is_err_and(|err| format!("{:?}", err).contains("Not a bitcoin mainnet address")));
 
     // Test KytMode::AcceptAll
-    env.tick();
     env.upgrade_canister(
         kyt_canister,
         kyt_wasm(),
@@ -220,7 +224,6 @@ fn test_check_address() {
     assert!(result.is_err_and(|err| format!("{:?}", err).contains("Not a bitcoin testnet address")));
 
     // Test KytMode::RejectAll
-    env.tick();
     env.upgrade_canister(
         kyt_canister,
         kyt_wasm(),
