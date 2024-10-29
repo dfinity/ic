@@ -41,6 +41,8 @@ pub enum AddConfigError {
     RuleEncodingError(#[from] RuleEncodingError),
     #[error("Rule violates policy: {0}")]
     RulePolicyViolation(#[from] RulePolicyError),
+    #[error("Configuration for version={0} was not found")]
+    NoConfigFound(Version),
     #[error("Unauthorized operation")]
     Unauthorized,
     #[error("An unexpected error occurred: {0}")]
@@ -65,15 +67,15 @@ impl<R, A> ConfigAdder<R, A> {
 // - A rate-limit config is an ordered set of rate-limit rules: config = [rule_1, rule_2, ..., rule_N].
 // - Rules order within a config is significant, as rules are applied in the order they appear in the config.
 // - Adding a new config requires providing an entire list of ordered rules; config version is increment by one for 'add' operation.
-// - Each rule is identified by its unique ID and its non-mutable context provided by the caller
-//   - incident_id: each rule must be linked to a certain incident_id, multiple rules can be linked to the same incident_id
+// - Each rule is identified by its unique ID and its non-mutable context provided by the caller:
+//   - incident_id: each rule must be linked to a certain incident_id; multiple rules can be linked to the same incident_id
 //   - rule_raw: binary encoded JSON of the rate-limit rule
 //   - description: some info why this rule was introduced
 // - Alongside an immutable context, each rule includes metadata:
 //   - disclosed_at
 //   - added_in_version
 //   - removed_in_version
-// - ID for a newly submitted rule is generated randomly by the canister.
+// - The canister generates a unique, random ID for each newly submitted rule.
 // - Rules can persist across config versions, if resubmitted.
 // - Non-resubmitted rules are considered as "removed" and their metadata fields are updated.
 // - Individual rules or incidents (a set of rules sharing the same incident_id) can be disclosed. This implies that the context of the rule becomes visible for the callers with `RestrictedRead` access level.
@@ -102,11 +104,15 @@ impl<R: Repository, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
 
         let new_version = current_version + 1;
 
-        // Canister init() ensures that an initial config always exists, so we can safely unwrap here
-        let current_config: StorableConfig = self.repository.get_config(current_version).unwrap();
+        let current_config: StorableConfig = self
+            .repository
+            .get_config(current_version)
+            .ok_or_else(|| AddConfigError::NoConfigFound(current_version))?;
 
-        let current_full_config: InputConfig =
-            self.repository.get_full_config(current_version).unwrap();
+        let current_full_config: InputConfig = self
+            .repository
+            .get_full_config(current_version)
+            .ok_or_else(|| AddConfigError::NoConfigFound(current_version))?;
 
         // IDs of all rules in the submitted config
         let mut rule_ids = Vec::<RuleId>::new();
@@ -139,6 +145,7 @@ impl<R: Repository, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
 
                 rule_id
             } else {
+                // TODO: check for collisions and regenerate if needed
                 let rule_id = generate_random_uuid()?.to_string();
 
                 // Check if the new rule is linked to an existing incident

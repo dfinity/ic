@@ -12,4 +12,5 @@ anyhow = { workspace = true }
 clap = { workspace = true }
 config = { path = "../../config" }
 network = { path = "../../network" }
+mac_address = { path = "../../network/mac_address" }
 utils = { path = "../../utils" }

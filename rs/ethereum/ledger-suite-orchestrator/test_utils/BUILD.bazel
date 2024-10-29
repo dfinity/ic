@@ -18,6 +18,7 @@ rust_library(
         # Keep sorted.
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator",
+        "//rs/ledger_suite/icrc1/ledger",
         "//rs/rust_canisters/http_types",
         "//rs/state_machine_tests",
         "//rs/test_utilities/load_wasm",
