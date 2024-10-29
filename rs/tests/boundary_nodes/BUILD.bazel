@@ -107,6 +107,36 @@ system_test_nns(
 )
 
 system_test_nns(
+    name = "rate_limiting_canister_test",
+    env = {
+        "RATE_LIMITING_CANISTER_WASM_PATH": "$(rootpath //rs/boundary_node/rate_limits:rate_limit_canister)",
+    },
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "k8s",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = GUESTOS_RUNTIME_DEPS +
+                   ["//rs/boundary_node/rate_limits:rate_limit_canister"],
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "//rs/boundary_node/rate_limits/api:rate_limits_api",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:ic-agent",
+        "@crate_index//:k256",
+        "@crate_index//:rand",
+        "@crate_index//:rand_chacha",
+        "@crate_index//:regex",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
+)
+
+system_test_nns(
     name = "bn_performance_test",
     colocated_test_driver_vm_required_host_features = ["performance"],
     colocated_test_driver_vm_resources = {

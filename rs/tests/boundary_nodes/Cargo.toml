@@ -28,6 +28,8 @@ itertools = { workspace = true }
 k256 = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
+rate-limits-api = { path = "../../boundary_node/rate_limits/api" }
+regex = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
 slog = { workspace = true }
 tokio = { workspace = true }
@@ -56,3 +58,7 @@ path = "bn_performance_test.rs"
 [[bin]]
 name = "ic-systest-mainnet-bn-performance"
 path = "mainnet_bn_performance_test.rs"
+
+[[bin]]
+name = "ic-systest-rate-limiting-canister"
+path = "rate_limiting_canister_test.rs"
