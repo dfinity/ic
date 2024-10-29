@@ -95,6 +95,7 @@ use ic_nns_governance::{
     },
     temporarily_disable_private_neuron_enforcement, temporarily_disable_set_visibility_proposals,
     temporarily_enable_private_neuron_enforcement, temporarily_enable_set_visibility_proposals,
+    DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
 };
 use ic_nns_governance_api::{
     pb::v1::CreateServiceNervousSystem as ApiCreateServiceNervousSystem,
@@ -265,16 +266,30 @@ fn test_single_neuron_proposal_new() {
             NNSStateChange::GovernanceProto(vec![
                 GovernanceChange::Neurons(vec![MapChange::Changed(
                     0,
-                    vec![NeuronChange::RecentBallots(vec![VecChange::Added(
-                        0,
-                        vec![
-                            BallotInfoChange::ProposalId(OptionChange::Different(
-                                None,
-                                Some(ProposalId { id: 1 }),
-                            )),
-                            BallotInfoChange::Vote(I32Change(0, 1)),
-                        ],
-                    )])],
+                    vec![
+                        NeuronChange::RecentBallots(vec![VecChange::Added(
+                            0,
+                            vec![
+                                BallotInfoChange::ProposalId(OptionChange::Different(
+                                    None,
+                                    Some(ProposalId { id: 1 }),
+                                )),
+                                BallotInfoChange::Vote(I32Change(0, 1)),
+                            ],
+                        )]),
+                        // Neuron's voting power was refreshed, because it directly votes (i.e. not
+                        // as a result of following), but implicitly voted (by virtue of being the
+                        // proposer). (Normally, the amount would increase, but for testing
+                        // purposes, it is enough to show that the value changed.)
+                        NeuronChange::VotingPowerRefreshedTimestampSeconds(
+                            OptionChange::BothSome(
+                                U64Change(
+                                    DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
+                                    DEFAULT_TEST_START_TIMESTAMP_SECONDS,
+                                ),
+                            ),
+                        ),
+                    ],
                 )]),
                 GovernanceChange::Proposals(vec![MapChange::Added(
                     1,
@@ -932,6 +947,13 @@ async fn test_cascade_following_new() {
                             BallotInfoChange::Vote(I32Change(0, 1)),
                         ],
                     )]),
+                    // As in an earlier test, the proposer's voting power gets refreshed.
+                    NeuronChange::VotingPowerRefreshedTimestampSeconds(OptionChange::BothSome(
+                        U64Change(
+                            DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
+                            DEFAULT_TEST_START_TIMESTAMP_SECONDS,
+                        ),
+                    ),),
                 ],
             )]),
             GovernanceChange::Proposals(vec![MapChange::Added(
@@ -1064,16 +1086,25 @@ async fn test_cascade_following_new() {
         Changed::Changed(vec![NNSStateChange::GovernanceProto(vec![
             GovernanceChange::Neurons(vec![MapChange::Changed(
                 5,
-                vec![NeuronChange::RecentBallots(vec![VecChange::Added(
-                    0,
-                    vec![
-                        BallotInfoChange::ProposalId(OptionChange::Different(
-                            None,
-                            Some(ProposalId { id: 1 }),
-                        )),
-                        BallotInfoChange::Vote(I32Change(0, 1)),
-                    ],
-                )])],
+                vec![
+                    NeuronChange::RecentBallots(vec![VecChange::Added(
+                        0,
+                        vec![
+                            BallotInfoChange::ProposalId(OptionChange::Different(
+                                None,
+                                Some(ProposalId { id: 1 }),
+                            )),
+                            BallotInfoChange::Vote(I32Change(0, 1)),
+                        ],
+                    )]),
+                    // Neuron's voting power was refreshed, because it voted directly.
+                    NeuronChange::VotingPowerRefreshedTimestampSeconds(OptionChange::BothSome(
+                        U64Change(
+                            DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
+                            DEFAULT_TEST_START_TIMESTAMP_SECONDS,
+                        ),
+                    ),),
+                ],
             )]),
             GovernanceChange::Proposals(vec![MapChange::Changed(
                 1,
@@ -1167,16 +1198,26 @@ async fn test_cascade_following_new() {
                 ),
                 MapChange::Changed(
                     6,
-                    vec![NeuronChange::RecentBallots(vec![VecChange::Added(
-                        0,
-                        vec![
-                            BallotInfoChange::ProposalId(OptionChange::Different(
-                                None,
-                                Some(ProposalId { id: 1 }),
-                            )),
-                            BallotInfoChange::Vote(I32Change(0, 1)),
-                        ],
-                    )])],
+                    vec![
+                        NeuronChange::RecentBallots(vec![VecChange::Added(
+                            0,
+                            vec![
+                                BallotInfoChange::ProposalId(OptionChange::Different(
+                                    None,
+                                    Some(ProposalId { id: 1 }),
+                                )),
+                                BallotInfoChange::Vote(I32Change(0, 1)),
+                            ],
+                        )]),
+                        // Only this neuron voted directly; therefore, even though other neurons
+                        // voted (via following) only this neuron's voting power was refreshed.
+                        NeuronChange::VotingPowerRefreshedTimestampSeconds(OptionChange::BothSome(
+                            U64Change(
+                                DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
+                                DEFAULT_TEST_START_TIMESTAMP_SECONDS,
+                            ),
+                        ),),
+                    ],
                 ),
             ]),
             GovernanceChange::Proposals(vec![MapChange::Changed(
