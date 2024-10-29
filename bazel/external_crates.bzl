@@ -1228,7 +1228,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.8",
             ),
             "thiserror": crate.spec(
-                version = "^1.0.62",
+                version = "^1.0.65",
             ),
             "thousands": crate.spec(
                 version = "^0.2.0",
