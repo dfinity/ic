@@ -386,7 +386,7 @@ fn icrc3_get_blocks(
         .expect("Failed to decode GetBlocksResult")
 }
 
-fn status(env: &StateMachine, index_id: CanisterId) -> Status {
+pub fn status(env: &StateMachine, index_id: CanisterId) -> Status {
     let res = env
         .query(index_id, "status", Encode!(&()).unwrap())
         .expect("Failed to send status")
