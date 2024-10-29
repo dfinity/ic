@@ -177,6 +177,30 @@ fn add_neuron_inactive_typical() -> BenchResult {
 }
 
 #[bench(raw)]
+fn update_recent_ballots() -> BenchResult {
+    let mut rng = new_rng();
+    let mut neuron_store = set_up_neuron_store(&mut rng, 100, 200);
+    let neuron = build_neuron(&mut rng, NeuronLocation::Heap, NeuronSize::Maximum);
+    let id = neuron.id();
+
+    assert_eq!(neuron.recent_ballots.len(), MAX_NEURON_RECENT_BALLOTS);
+
+    neuron_store.add_neuron(neuron).unwrap();
+
+    bench_fn(|| {
+        neuron_store
+            .with_neuron_mut(&id, |neuron| {
+                neuron.register_recent_ballot(
+                    Topic::Governance,
+                    &ProposalId { id: rng.next_u64() },
+                    Vote::Yes,
+                )
+            })
+            .unwrap();
+    })
+}
+
+#[bench(raw)]
 fn add_neuron_inactive_maximum() -> BenchResult {
     let mut rng = new_rng();
     let mut neuron_store = set_up_neuron_store(&mut rng, 100, 200);
