@@ -1946,6 +1946,7 @@ pub fn generate_tschnorr_protocol_inputs<R: RngCore + CryptoRng>(
     key_transcript: &IDkgTranscript,
     message: &[u8],
     nonce: Randomness,
+    taproot_tree_root: Option<&[u8]>,
     derivation_path: &ExtendedDerivationPath,
     alg: AlgorithmId,
     rng: &mut R,
@@ -1961,7 +1962,7 @@ pub fn generate_tschnorr_protocol_inputs<R: RngCore + CryptoRng>(
     ThresholdSchnorrSigInputs::new(
         derivation_path,
         message,
-        None,
+        taproot_tree_root,
         nonce,
         presig,
         key_transcript.clone(),
@@ -2977,6 +2978,21 @@ pub mod schnorr {
         rng.fill_bytes(&mut message);
         let seed = Randomness::from(rng.gen::<[u8; 32]>());
 
+        let taproot_tree_root = {
+            if alg == AlgorithmId::ThresholdSchnorrBip340 {
+                let choose = rng.gen::<u8>();
+                if choose <= 128 {
+                    None
+                } else if choose <= 192 {
+                    Some(vec![])
+                } else {
+                    Some(rng.gen::<[u8; 32]>().to_vec())
+                }
+            } else {
+                None
+            }
+        };
+
         let key_transcript = generate_key_transcript(&env, &dealers, &receivers, alg, rng);
         let tsig_inputs = generate_tschnorr_protocol_inputs(
             &env,
@@ -2985,6 +3001,7 @@ pub mod schnorr {
             &key_transcript,
             &message,
             seed,
+            taproot_tree_root.as_deref(),
             &derivation_path,
             alg,
             rng,
