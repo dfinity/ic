@@ -1142,11 +1142,10 @@ fn process_mock_canister_https_response(
                         .collect(),
                     content: reply.body.clone(),
                 })));
-            let query_handler = subnet.query_handler.lock().unwrap().clone();
             let mut client = CanisterHttpAdapterClientImpl::new(
                 pic.runtime.handle().clone(),
                 grpc_channel,
-                query_handler.clone(),
+                subnet.query_handler.lock().unwrap().clone(),
                 1,
                 MetricsRegistry::new(),
                 subnet.get_subnet_type(),
@@ -1807,7 +1806,7 @@ impl Operation for QueryRequest {
                 let delegation = pic.get_nns_delegation_for_subnet(subnet.get_subnet_id());
                 let node = &subnet.nodes[0];
                 subnet.certify_latest_state();
-                let query_handler = subnet.query_handler.clone();
+                let query_handler = subnet.query_handler.lock().unwrap().clone();
                 let svc = QueryServiceBuilder::builder(
                     subnet.replica_logger.clone(),
                     node.node_id,
@@ -1815,7 +1814,7 @@ impl Operation for QueryRequest {
                     subnet.registry_client.clone(),
                     Arc::new(StandaloneIngressSigVerifier),
                     Arc::new(OnceCell::new_with(delegation)),
-                    query_handler.lock().unwrap().clone(),
+                    query_handler,
                 )
                 .build_service();
 
