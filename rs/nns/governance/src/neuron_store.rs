@@ -833,8 +833,6 @@ impl NeuronStore {
         &self,
         now_seconds: u64,
     ) -> (HashMap<u64, Ballot>, u128) {
-        let callback = |iter| {};
-
         let mut ballots = HashMap::<u64, Ballot>::new();
         let mut total_power: u128 = 0;
         if self.use_stable_memory_for_all_neurons {
