@@ -1,7 +1,9 @@
 use super::{get_btc_address::init_ecdsa_public_key, get_withdrawal_account::compute_subaccount};
 use crate::logs::P0;
 use crate::logs::P1;
-use crate::management::{check_withdrawal_destination_address, fetch_withdrawal_alerts};
+use crate::management::{
+    check_withdrawal_destination_address, fetch_withdrawal_alerts, CheckAddressResponse,
+};
 use crate::memo::{BurnMemo, Status};
 use crate::state::ReimbursementReason;
 use crate::tasks::{schedule_now, TaskType};
@@ -12,7 +14,6 @@ use crate::{
 };
 use candid::{CandidType, Deserialize, Nat, Principal};
 use ic_base_types::PrincipalId;
-use ic_btc_kyt::CheckAddressResponse;
 use ic_canister_log::log;
 use ic_ckbtc_kyt::Error as KytError;
 use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};

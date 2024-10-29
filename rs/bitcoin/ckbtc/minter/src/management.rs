@@ -3,12 +3,11 @@
 use crate::logs::P0;
 use crate::tx;
 use crate::ECDSAPublicKey;
-use candid::{CandidType, Principal};
+use candid::{CandidType, Deserialize, Principal};
 use ic_btc_interface::{
     Address, GetCurrentFeePercentilesRequest, GetUtxosRequest, GetUtxosResponse,
     MillisatoshiPerByte, Network, Utxo, UtxosFilterInRequest,
 };
-use ic_btc_kyt::{CheckAddressArgs, CheckAddressResponse};
 use ic_canister_log::log;
 use ic_cdk::api::call::RejectionCode;
 use ic_ckbtc_kyt::{DepositRequest, Error as KytError, FetchAlertsResponse, WithdrawalAttempt};
@@ -16,7 +15,20 @@ use ic_management_canister_types::{
     DerivationPath, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId,
 };
 use serde::de::DeserializeOwned;
+use serde::Serialize;
 use std::fmt;
+
+#[derive(CandidType, Debug, Deserialize, Serialize)]
+pub struct CheckAddressArgs {
+    /// Bitcoin address to be checked.
+    pub address: String,
+}
+
+#[derive(CandidType, Debug, Deserialize, Serialize)]
+pub enum CheckAddressResponse {
+    Passed,
+    Failed,
+}
 
 /// Represents an error from a management canister call, such as
 /// `sign_with_ecdsa` or `bitcoin_send_transaction`.
