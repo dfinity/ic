@@ -65,7 +65,7 @@ impl From<pb::NeuronInfo> for pb_api::NeuronInfo {
             known_neuron_data: item.known_neuron_data.map(|x| x.into()),
             neuron_type: item.neuron_type,
             visibility: item.visibility,
-            following_refreshed_timestamp_seconds: item.following_refreshed_timestamp_seconds,
+            voting_power_refreshed_timestamp_seconds: item.voting_power_refreshed_timestamp_seconds,
         }
     }
 }
@@ -84,7 +84,7 @@ impl From<pb_api::NeuronInfo> for pb::NeuronInfo {
             known_neuron_data: item.known_neuron_data.map(|x| x.into()),
             neuron_type: item.neuron_type,
             visibility: item.visibility,
-            following_refreshed_timestamp_seconds: item.following_refreshed_timestamp_seconds,
+            voting_power_refreshed_timestamp_seconds: item.voting_power_refreshed_timestamp_seconds,
         }
     }
 }
@@ -145,7 +145,7 @@ impl From<pb::Neuron> for pb_api::Neuron {
             neuron_type: item.neuron_type,
             dissolve_state: item.dissolve_state.map(|x| x.into()),
             visibility: item.visibility,
-            following_refreshed_timestamp_seconds: item.following_refreshed_timestamp_seconds,
+            voting_power_refreshed_timestamp_seconds: item.voting_power_refreshed_timestamp_seconds,
         }
     }
 }
@@ -178,7 +178,7 @@ impl From<pb_api::Neuron> for pb::Neuron {
             neuron_type: item.neuron_type,
             dissolve_state: item.dissolve_state.map(|x| x.into()),
             visibility: item.visibility,
-            following_refreshed_timestamp_seconds: item.following_refreshed_timestamp_seconds,
+            voting_power_refreshed_timestamp_seconds: item.voting_power_refreshed_timestamp_seconds,
         }
     }
 }
@@ -262,7 +262,7 @@ impl From<pb::AbridgedNeuron> for pb_api::AbridgedNeuron {
             neuron_type: item.neuron_type,
             dissolve_state: item.dissolve_state.map(|x| x.into()),
             visibility: item.visibility,
-            following_refreshed_timestamp_seconds: item.following_refreshed_timestamp_seconds,
+            voting_power_refreshed_timestamp_seconds: item.voting_power_refreshed_timestamp_seconds,
         }
     }
 }
@@ -285,7 +285,7 @@ impl From<pb_api::AbridgedNeuron> for pb::AbridgedNeuron {
             neuron_type: item.neuron_type,
             dissolve_state: item.dissolve_state.map(|x| x.into()),
             visibility: item.visibility,
-            following_refreshed_timestamp_seconds: item.following_refreshed_timestamp_seconds,
+            voting_power_refreshed_timestamp_seconds: item.voting_power_refreshed_timestamp_seconds,
         }
     }
 }

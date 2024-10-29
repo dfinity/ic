@@ -4362,7 +4362,7 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(dissolve_delay_seconds)),
             kyc_verified: true,
             visibility,
-            following_refreshed_timestamp_seconds: Some(START_TIMESTAMP_SECONDS),
+            voting_power_refreshed_timestamp_seconds: Some(START_TIMESTAMP_SECONDS),
             ..Default::default()
         }
     );
@@ -10054,7 +10054,7 @@ fn test_include_public_neurons_in_full_neurons() {
             controller: Some(controller),
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(ONE_YEAR_SECONDS)),
             aging_since_timestamp_seconds: 1_721_727_936,
-            following_refreshed_timestamp_seconds: Some(START_TIMESTAMP_SECONDS),
+            voting_power_refreshed_timestamp_seconds: Some(START_TIMESTAMP_SECONDS),
 
             ..Default::default()
         }

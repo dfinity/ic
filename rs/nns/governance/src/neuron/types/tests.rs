@@ -126,7 +126,7 @@ fn test_abridged_neuron_size() {
             u64::MAX,
         )),
         visibility: None,
-        following_refreshed_timestamp_seconds: Some(u64::MAX),
+        voting_power_refreshed_timestamp_seconds: Some(u64::MAX),
     };
 
     assert!(abridged_neuron.encoded_len() as u32 <= AbridgedNeuron::BOUND.max_size());

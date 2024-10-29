@@ -255,7 +255,7 @@ message NeuronInfo {
   // This will always be populated. If the underlying neuron was never
   // refreshed, this will be set to 2024-11-05T00:00:01 UTC (1730764801 seconds
   // after the UNIX epoch), the Following Refreshed Epoch.
-  optional uint64 following_refreshed_timestamp_seconds = 13;
+  optional uint64 voting_power_refreshed_timestamp_seconds = 13;
 }
 
 // A transfer performed from some account to stake a new neuron.
@@ -449,7 +449,7 @@ message Neuron {
   // When this is not populated (the Rust field is set to None), the Neuron is
   // treated as though this is set to 2024-11-05T00:00:01 UTC (1730764801
   // seconds after the UNIX epoch), the Following Refreshed Epoch.
-  optional uint64 following_refreshed_timestamp_seconds = 24;
+  optional uint64 voting_power_refreshed_timestamp_seconds = 24;
 }
 
 // Subset of Neuron that has no collections or big fields that might not exist in most neurons, and
@@ -475,7 +475,7 @@ message AbridgedNeuron {
   optional uint64 joined_community_fund_timestamp_seconds = 17;
   optional NeuronType neuron_type = 22;
   optional Visibility visibility = 23;
-  optional uint64 following_refreshed_timestamp_seconds = 24;
+  optional uint64 voting_power_refreshed_timestamp_seconds = 24;
 
   reserved 1;
   reserved "id";

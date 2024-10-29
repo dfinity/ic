@@ -123,7 +123,7 @@ pub struct NeuronInfo {
     /// refreshed, this will be set to 2024-11-05T00:00:01 UTC (1730764801 seconds
     /// after the UNIX epoch), the Following Refreshed Epoch.
     #[prost(uint64, optional, tag = "13")]
-    pub following_refreshed_timestamp_seconds: ::core::option::Option<u64>,
+    pub voting_power_refreshed_timestamp_seconds: ::core::option::Option<u64>,
 }
 /// A transfer performed from some account to stake a new neuron.
 #[derive(
@@ -297,7 +297,7 @@ pub struct Neuron {
     /// treated as though this is set to 2024-11-05T00:00:01 UTC (1730764801
     /// seconds after the UNIX epoch), the Following Refreshed Epoch.
     #[prost(uint64, optional, tag = "24")]
-    pub following_refreshed_timestamp_seconds: ::core::option::Option<u64>,
+    pub voting_power_refreshed_timestamp_seconds: ::core::option::Option<u64>,
     /// At any time, at most one of `when_dissolved` and
     /// `dissolve_delay` are specified.
     ///
@@ -424,7 +424,7 @@ pub struct AbridgedNeuron {
     #[prost(enumeration = "Visibility", optional, tag = "23")]
     pub visibility: ::core::option::Option<i32>,
     #[prost(uint64, optional, tag = "24")]
-    pub following_refreshed_timestamp_seconds: ::core::option::Option<u64>,
+    pub voting_power_refreshed_timestamp_seconds: ::core::option::Option<u64>,
     #[prost(oneof = "abridged_neuron::DissolveState", tags = "9, 10")]
     pub dissolve_state: ::core::option::Option<abridged_neuron::DissolveState>,
 }
