@@ -106,6 +106,7 @@ pub(crate) fn execute_upgrade(
 
     // Stage 0: validate input.
     if let Err(err) = helper.validate_input(&original, &round, round_limits) {
+        let is_wasm64_execution = original.is_wasm64_execution;
         return finish_err(
             clean_canister,
             helper.instructions_left(),
@@ -113,6 +114,7 @@ pub(crate) fn execute_upgrade(
             round,
             err,
             helper.take_canister_log(),
+            is_wasm64_execution,
         );
     }
 
@@ -123,6 +125,7 @@ pub(crate) fn execute_upgrade(
     let execution_state = match helper.canister().execution_state.as_ref() {
         Some(es) => es,
         None => {
+            let is_wasm64_execution = original.is_wasm64_execution;
             return finish_err(
                 clean_canister,
                 helper.instructions_left(),
@@ -130,6 +133,7 @@ pub(crate) fn execute_upgrade(
                 round,
                 (canister_id, HypervisorError::WasmModuleNotFound).into(),
                 helper.take_canister_log(),
+                is_wasm64_execution,
             );
         }
     };
@@ -231,6 +235,7 @@ fn upgrade_stage_1_process_pre_upgrade_result(
 
     if let Err(err) = result {
         let instructions_left = helper.instructions_left();
+        let is_wasm64_execution = original.is_wasm64_execution;
         return finish_err(
             clean_canister,
             instructions_left,
@@ -238,6 +243,7 @@ fn upgrade_stage_1_process_pre_upgrade_result(
             round,
             err,
             helper.take_canister_log(),
+            is_wasm64_execution,
         );
     }
 
@@ -269,6 +275,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
     let wasm_module = match context.wasm_source.into_canister_module() {
         Ok(wasm_module) => wasm_module,
         Err(err) => {
+            let is_wasm64_execution = original.is_wasm64_execution;
             return finish_err(
                 clean_canister,
                 helper.instructions_left(),
@@ -276,6 +283,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
                 round,
                 err,
                 helper.take_canister_log(),
+                is_wasm64_execution,
             );
         }
     };
@@ -301,6 +309,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
         Ok(memory_handling) => memory_handling,
         Err(err) => {
             let instructions_left = helper.instructions_left();
+            let is_wasm64_execution = original.is_wasm64_execution;
             return finish_err(
                 clean_canister,
                 instructions_left,
@@ -308,6 +317,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
                 round,
                 err,
                 helper.take_canister_log(),
+                is_wasm64_execution,
             );
         }
     };
@@ -324,6 +334,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
         &original,
     ) {
         let instructions_left = helper.instructions_left();
+        let is_wasm64_execution = original.is_wasm64_execution;
         return finish_err(
             clean_canister,
             instructions_left,
@@ -331,6 +342,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
             round,
             err,
             helper.take_canister_log(),
+            is_wasm64_execution,
         );
     }
 
@@ -436,6 +448,7 @@ fn upgrade_stage_3b_process_start_result(
 
     if let Err(err) = result {
         let instructions_left = helper.instructions_left();
+        let is_wasm64_execution = original.is_wasm64_execution;
         return finish_err(
             clean_canister,
             instructions_left,
@@ -443,6 +456,7 @@ fn upgrade_stage_3b_process_start_result(
             round,
             err,
             helper.take_canister_log(),
+            is_wasm64_execution,
         );
     }
 
@@ -550,6 +564,7 @@ fn upgrade_stage_4b_process_post_upgrade_result(
     );
     if let Err(err) = result {
         let instructions_left = helper.instructions_left();
+        let is_wasm64_execution = original.is_wasm64_execution;
         return finish_err(
             clean_canister,
             instructions_left,
@@ -557,6 +572,7 @@ fn upgrade_stage_4b_process_post_upgrade_result(
             round,
             err,
             helper.take_canister_log(),
+            is_wasm64_execution,
         );
     }
     helper.finish(clean_canister, original, round, round_limits)
@@ -601,6 +617,7 @@ impl PausedInstallCodeExecution for PausedPreUpgradeExecution {
                     err
                 );
                 self.paused_wasm_execution.abort();
+                let is_wasm64_execution = self.original.is_wasm64_execution;
                 return finish_err(
                     clean_canister,
                     instructions_left,
@@ -608,6 +625,7 @@ impl PausedInstallCodeExecution for PausedPreUpgradeExecution {
                     round,
                     err,
                     new_canister_log,
+                    is_wasm64_execution,
                 );
             }
         };
@@ -706,6 +724,7 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringUpgrade {
                     err
                 );
                 self.paused_wasm_execution.abort();
+                let is_wasm64_execution = self.original.is_wasm64_execution;
                 return finish_err(
                     clean_canister,
                     instructions_left,
@@ -713,6 +732,7 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringUpgrade {
                     round,
                     err,
                     new_canister_log,
+                    is_wasm64_execution,
                 );
             }
         };
@@ -810,6 +830,7 @@ impl PausedInstallCodeExecution for PausedPostUpgradeExecution {
                     err
                 );
                 self.paused_wasm_execution.abort();
+                let is_wasm64_execution = self.original.is_wasm64_execution;
                 return finish_err(
                     clean_canister,
                     instructions_left,
@@ -817,6 +838,7 @@ impl PausedInstallCodeExecution for PausedPostUpgradeExecution {
                     round,
                     err,
                     new_canister_log,
+                    is_wasm64_execution,
                 );
             }
         };

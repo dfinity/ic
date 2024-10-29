@@ -7935,10 +7935,8 @@ fn check_update_call_canister_in_wasm64_mode_is_charged_correctly() {
     let (balance32, execution_cost32) = run_canister_in_wasm_mode(false, true);
     let (balance64, execution_cost64) = run_canister_in_wasm_mode(true, true);
 
-    // At the moment, charging differently for Wasm64 is not enabled.
-    // Charging for Wasm32 should be equivalent to charging for Wasm64.
-    assert_eq!(balance64, balance32);
-    assert_eq!(execution_cost32, execution_cost64);
+    assert_lt!(balance64, balance32);
+    assert_lt!(execution_cost32, execution_cost64);
 }
 
 #[test]
@@ -7946,8 +7944,6 @@ fn check_install_code_in_wasm64_mode_is_charged_correctly() {
     let (balance32, execution_cost32) = run_canister_in_wasm_mode(false, false);
     let (balance64, execution_cost64) = run_canister_in_wasm_mode(true, false);
 
-    // At the moment, charging differently for Wasm64 is not enabled.
-    // Charging for Wasm32 should be equivalent to charging for Wasm64.
-    assert_eq!(balance64, balance32);
-    assert_eq!(execution_cost32, execution_cost64);
+    assert_lt!(balance64, balance32);
+    assert_lt!(execution_cost32, execution_cost64);
 }

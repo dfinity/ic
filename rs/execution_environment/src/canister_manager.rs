@@ -12,10 +12,12 @@ use crate::{
     util::GOVERNANCE_CANISTER_ID,
 };
 use ic_base_types::NumSeconds;
+use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::{
     execution_environment::MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER, flag_status::FlagStatus,
 };
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
+use ic_embedders::wasm_utils::decoding::decode_wasm;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, IngressHistoryWriter, SubnetAvailableMemory,
@@ -54,6 +56,7 @@ use ic_types::{
     InvalidMemoryAllocationError, MemoryAllocation, NumBytes, NumInstructions, PrincipalId,
     SnapshotId, SubnetId, Time,
 };
+use ic_wasm_transform::Module;
 use ic_wasm_types::{doc_ref, AsErrorHelp, CanisterModule, ErrorHelp, WasmHash};
 use num_traits::cast::ToPrimitive;
 use num_traits::SaturatingAdd;
@@ -875,6 +878,39 @@ impl CanisterManager {
         }
     }
 
+    /// Checks if the given wasm module is a Wasm64 module.
+    /// This is solely for the purpose of install code, when at the replica level
+    /// we don't know yet if the module is Wasm32/64 and we need to prepay accordingly.
+    /// In case of errors, we simply return false, assuming Wasm32.
+    /// The errors will be caught and handled by the sandbox.
+    fn check_if_wasm64_module(&self, wasm_module_source: WasmSource) -> bool {
+        let _instructions_to_assemble = wasm_module_source.instructions_to_assemble();
+        let wasm_module = match wasm_module_source.into_canister_module() {
+            Ok(wasm_module) => wasm_module,
+            Err(_err) => {
+                return false;
+            }
+        };
+
+        let decoded_wasm_module = match decode_wasm(
+            EmbeddersConfig::new().wasm_max_size,
+            Arc::new(wasm_module.as_slice().to_vec()),
+        ) {
+            Ok(decoded_wasm_module) => decoded_wasm_module,
+            Err(_err) => {
+                return false;
+            }
+        };
+
+        let module = match Module::parse(decoded_wasm_module.as_slice(), false) {
+            Ok(module) => module,
+            Err(_err) => {
+                return false;
+            }
+        };
+        module.memories.first().map_or(false, |m| m.memory64)
+    }
+
     /// Installs code to a canister.
     ///
     /// Only the controller of the canister can install code.
@@ -923,16 +959,15 @@ impl CanisterManager {
             };
         }
 
+        let is_wasm64_execution = self.check_if_wasm64_module(context.wasm_source.clone());
+
         let prepaid_execution_cycles = match prepaid_execution_cycles {
             Some(prepaid_execution_cycles) => prepaid_execution_cycles,
             None => {
                 let memory_usage = canister.memory_usage();
                 let message_memory_usage = canister.message_memory_usage();
                 let reveal_top_up = canister.controllers().contains(message.sender());
-                // At this point, we don't really know if what we are about to install is a
-                // wasm32 or wasm64 module. We will assume it is wasm64 and adjust the
-                // cycles later if it turns out to be wasm32.
-                let is_wasm64_execution = true;
+
                 match self.cycles_account_manager.prepay_execution_cycles(
                     &mut canister.system_state,
                     memory_usage,
@@ -973,6 +1008,7 @@ impl CanisterManager {
             sender: context.sender(),
             canister_id: canister.canister_id(),
             log_dirty_pages,
+            is_wasm64_execution,
         };
 
         let round = RoundContext {

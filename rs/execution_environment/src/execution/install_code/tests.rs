@@ -28,6 +28,8 @@ use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use maplit::btreemap;
 use std::mem::size_of;
 
+const IS_WASM64_EXECUTION: bool = false;
+
 const DTS_INSTALL_WAT: &str = r#"
     (module
         (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
@@ -116,9 +118,6 @@ fn dts_resume_works_in_install_code() {
     let original_system_state = test.canister_state(canister_id).system_state.clone();
     let original_execution_cost = test.canister_execution_cost(canister_id);
     let ingress_id = test.dts_install_code(payload);
-    // Irrespective of canister execution mode, the `install_code` execution cost
-    // is considered as if from a Wasm64 execution.
-    let install_code_is_wasm64_execution = true;
     for _ in 0..4 {
         assert_eq!(
             test.canister_state(canister_id).next_execution(),
@@ -130,7 +129,7 @@ fn dts_resume_works_in_install_code() {
                 - test.cycles_account_manager().execution_cost(
                     NumInstructions::from(INSTRUCTION_LIMIT),
                     test.subnet_size(),
-                    install_code_is_wasm64_execution
+                    IS_WASM64_EXECUTION,
                 ),
         );
         test.execute_slice(canister_id);
@@ -170,9 +169,6 @@ fn dts_abort_works_in_install_code() {
     let original_system_state = test.canister_state(canister_id).system_state.clone();
     let original_execution_cost = test.canister_execution_cost(canister_id);
     let ingress_id = test.dts_install_code(payload);
-    // Irrespective of canister execution mode, the `install_code` execution cost
-    // is considered as if from a Wasm64 execution.
-    let install_code_is_wasm64_execution = true;
     for _ in 0..3 {
         assert_eq!(
             test.canister_state(canister_id).next_execution(),
@@ -184,7 +180,7 @@ fn dts_abort_works_in_install_code() {
                 - test.cycles_account_manager().execution_cost(
                     NumInstructions::from(INSTRUCTION_LIMIT),
                     test.subnet_size(),
-                    install_code_is_wasm64_execution
+                    IS_WASM64_EXECUTION
                 ),
         );
         test.execute_slice(canister_id);
@@ -207,7 +203,7 @@ fn dts_abort_works_in_install_code() {
                 - test.cycles_account_manager().execution_cost(
                     NumInstructions::from(INSTRUCTION_LIMIT),
                     test.subnet_size(),
-                    install_code_is_wasm64_execution
+                    IS_WASM64_EXECUTION
                 ),
         );
         test.execute_slice(canister_id);
@@ -560,10 +556,6 @@ fn execute_install_code_message_dts_helper(
     let original_system_state = test.canister_state(canister_id).system_state.clone();
     test.execute_subnet_message();
 
-    // Irrespective of canister execution mode, the `install_code` execution cost
-    // is considered as if from a Wasm64 execution.
-    let install_code_is_wasm64_execution = true;
-
     // Execute all slices.
     for _ in 0..2 {
         assert_eq!(
@@ -576,7 +568,7 @@ fn execute_install_code_message_dts_helper(
                 - test.cycles_account_manager().execution_cost(
                     NumInstructions::from(1_000_000),
                     test.subnet_size(),
-                    install_code_is_wasm64_execution
+                    IS_WASM64_EXECUTION
                 ),
         );
         test.execute_slice(canister_id);
@@ -2297,14 +2289,10 @@ fn failed_install_chunked_charges_for_wasm_assembly() {
     )
     .encode();
 
-    // Irrespective of canister execution mode, the `install_code` execution cost
-    // is considered as if from a Wasm64 execution.
-    let install_code_is_wasm64_execution = true;
-
     let expected_cost = test.cycles_account_manager().execution_cost(
         NumInstructions::from(wasm_chunk_store::chunk_size().get()),
         test.subnet_size(),
-        install_code_is_wasm64_execution,
+        IS_WASM64_EXECUTION,
     );
 
     // Install the universal canister
@@ -2376,21 +2364,17 @@ fn successful_install_chunked_charges_for_wasm_assembly() {
     )
     .encode();
 
-    // Irrespective of canister execution mode, the `install_code` execution cost
-    // is considered as if from a Wasm64 execution.
-    let install_code_is_wasm64_execution = true;
-
     // There is a fixed overhead in the `execution_cost` which we don't want to
     // double count.
     let fixed_execution_overhead = test.cycles_account_manager().execution_cost(
         NumInstructions::from(0),
         test.subnet_size(),
-        false, // is_wasm64_execution does not matter in this case as the number of instructions is 0.
+        IS_WASM64_EXECUTION,
     );
     let expected_cost = test.cycles_account_manager().execution_cost(
         NumInstructions::from(wasm_chunk_store::chunk_size().get()),
         test.subnet_size(),
-        install_code_is_wasm64_execution,
+        IS_WASM64_EXECUTION,
     ) - fixed_execution_overhead
         + charge_for_regular_install;
 

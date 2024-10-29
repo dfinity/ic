@@ -263,29 +263,22 @@ impl InstallCodeHelper {
                 .saturating_sub(instructions_left.get()),
         );
 
-        // At the beginning of install/upgrade we have prepaid the execution cost
-        // as if the canister was executing in Wasm64 mode because we did not know
-        // what kind of canister it is. If the canister is not Wasm64, we need to
-        // refund the unused cycles, minding the type of execution.
         let is_wasm64_execution = self
             .canister
             .execution_state
             .as_ref()
             .map_or(false, |es| es.is_wasm64);
 
-        round
-            .cycles_account_manager
-            .refund_unused_execution_cycles_after_install_code(
-                &mut self.canister.system_state,
-                instructions_used,
-                instructions_left,
-                message_instruction_limit,
-                original.prepaid_execution_cycles,
-                round.counters.execution_refund_error,
-                original.subnet_size,
-                is_wasm64_execution,
-                round.log,
-            );
+        round.cycles_account_manager.refund_unused_execution_cycles(
+            &mut self.canister.system_state,
+            instructions_left,
+            message_instruction_limit,
+            original.prepaid_execution_cycles,
+            round.counters.execution_refund_error,
+            original.subnet_size,
+            is_wasm64_execution,
+            round.log,
+        );
 
         self.canister
             .system_state
@@ -317,6 +310,7 @@ impl InstallCodeHelper {
                     round,
                     CanisterManagerError::Hypervisor(self.canister.canister_id(), err),
                     self.take_canister_log(),
+                    is_wasm64_execution,
                 );
             }
         }
@@ -361,6 +355,7 @@ impl InstallCodeHelper {
                         round,
                         err,
                         self.take_canister_log(),
+                        is_wasm64_execution,
                     );
                 }
             }
@@ -387,6 +382,7 @@ impl InstallCodeHelper {
                     round,
                     err,
                     self.take_canister_log(),
+                    is_wasm64_execution,
                 );
             }
         }
@@ -431,6 +427,7 @@ impl InstallCodeHelper {
                         round,
                         err,
                         self.take_canister_log(),
+                        is_wasm64_execution,
                     );
                 }
             }
@@ -454,6 +451,7 @@ impl InstallCodeHelper {
                         available: available.max(old_compute_allocation.as_percent()),
                     },
                     self.take_canister_log(),
+                    is_wasm64_execution,
                 );
             }
             round_limits.compute_allocation_used = others + new_compute_allocation.as_percent();
@@ -888,6 +886,7 @@ pub(crate) struct OriginalContext {
     pub sender: PrincipalId,
     pub canister_id: CanisterId,
     pub log_dirty_pages: FlagStatus,
+    pub is_wasm64_execution: bool,
 }
 
 pub(crate) fn validate_controller(
@@ -935,6 +934,7 @@ pub(crate) fn finish_err(
     round: RoundContext,
     err: CanisterManagerError,
     new_canister_log: CanisterLog,
+    is_wasm64_execution: bool,
 ) -> DtsInstallCodeResult {
     let mut new_canister = clean_canister;
 
@@ -948,11 +948,6 @@ pub(crate) fn finish_err(
         );
 
     let message_instruction_limit = original.execution_parameters.instruction_limits.message();
-
-    // This execution ended in an error. At the beginning we have prepaid assuming the
-    // install/upgrade was in Wasm64 mode. Therefore, we have to refund the unused cycles
-    // as if the canister was executing in Wasm64 mode.
-    let is_wasm64_execution = true;
 
     round.cycles_account_manager.refund_unused_execution_cycles(
         &mut new_canister.system_state,

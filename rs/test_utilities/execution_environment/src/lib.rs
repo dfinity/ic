@@ -438,14 +438,10 @@ impl ExecutionTest {
 
     pub fn install_code_reserved_execution_cycles(&self) -> Cycles {
         let num_instructions = self.install_code_instruction_limits.message();
-        // The install code message is always executed as if it were a Wasm64 message.
-        // In case the canister was a Wasm32 canister, the refund is calculated to take
-        // this into account.
-        let is_wasm64_execution = true;
         self.cycles_account_manager.execution_cost(
             num_instructions,
             self.subnet_size(),
-            is_wasm64_execution,
+            false, // For this test, we can assume a Wasm32 execution.
         )
     }
 
