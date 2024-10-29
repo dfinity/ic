@@ -51,7 +51,7 @@ pub enum Commands {
         #[arg(long, value_name = "ipv6_address")]
         guestos_ipv6_address: String,
     },
-    /// Creates a GuestOSConfig object directly from GenerateTestnetConfigClapArgs
+    /// Creates a GuestOSConfig object directly from GenerateTestnetConfigClapArgs. Only used for testing purposes.
     GenerateTestnetConfig(GenerateTestnetConfigClapArgs),
 }
 
