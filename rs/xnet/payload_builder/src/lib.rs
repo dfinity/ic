@@ -530,7 +530,8 @@ impl XNetPayloadBuilderImpl {
         }
 
         if !reject_signals.is_empty() {
-            // TODO(MR-635): Change this check to use `MAX_STREAM_MESSAGES` instead.
+            // TODO(MR-635): Change this check to use the same mechanism used for capping
+            // the number of signals in streams instead.
             // Given the minimum message size (zero-length sender and receiver, no cycles,
             // no payload) of 17 bytes; plus 16 bytes for `LabelTree` encoding plus label;
             // and 16+6 bytes for a `Witness::Known` and a `Witness::Fork` node; we have
