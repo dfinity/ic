@@ -30,7 +30,7 @@ const IDLE_TIMEOUT_TO_TRIM_BUFFER: Duration = Duration::from_secs(50);
 // The timeout after which `libc::malloc_trim()` is called to unmap free pages
 // of the malloc allocator. Note that this timeout should be higher than
 // `IDLE_TIMEOUT_TO_TRIM_BUFFER` to achieve maximum memory reduction.
-const IDLE_TIMEOUT_TO_TRIM_MALLOC: Duration = Duration::from_secs(100);
+const IDLE_TIMEOUT_TO_TRIM_MALLOC: Duration = Duration::from_secs(10);
 
 // There are different types used for the msg_controllen member of
 // struct cmsghdr -- we presently support Linux and Darwin compilation.
@@ -460,6 +460,7 @@ pub fn socket_read_messages<
                             unsafe {
                                 libc::malloc_trim(0);
                             }
+                            println!("Trimmed RPC buffer");
                         }
                     }
                     // Read the message without any timeout.

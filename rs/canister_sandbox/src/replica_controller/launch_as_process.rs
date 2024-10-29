@@ -92,6 +92,8 @@ pub fn spawn_canister_sandbox_process(
         socket: sock_sandbox.as_raw_fd(),
     };
     let LaunchSandboxReply { pid } = launcher.launch_sandbox(request).sync()?;
+    println!("Sandbox pid is {pid}");
+    std::thread::sleep(std::time::Duration::from_secs(15));
 
     let socket = Arc::new(sock_controller);
 
