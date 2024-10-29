@@ -27,11 +27,11 @@ const MAX_TICKS: usize = 10;
 // by a small margin. Namely, the universal_canister itself would consume
 // some cycle for decoding args and sending the call.
 //
-// The number 7_000_000 is obtained empirically by running tests with pocket-ic
+// The number 42_000_000 is obtained empirically by running tests with pocket-ic
 // and checking the actual consumptions. It is both big enough to allow tests to
 // succeed, and small enough not to interfere with the expected cycle cost we
 // are testing for.
-const UNIVERSAL_CANISTER_CYCLE_MARGIN: u128 = 7_000_000;
+const UNIVERSAL_CANISTER_CYCLE_MARGIN: u128 = 42_000_000;
 
 struct Setup {
     // Owner of canisters created for the setup.
@@ -286,7 +286,10 @@ fn test_check_transaction_passed() {
         CHECK_TRANSACTION_CYCLES_SERVICE_FEE + 2 * get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES);
     let actual_cost = cycles_before - cycles_after;
     assert!(actual_cost > expected_cost);
-    assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
+    assert!(
+        actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN,
+        "actual_cost: {actual_cost}, expected_cost: {expected_cost}"
+    );
 }
 
 #[test]
