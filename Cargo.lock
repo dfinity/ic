@@ -17573,6 +17573,7 @@ dependencies = [
  "anyhow",
  "bincode",
  "candid",
+ "getrandom",
  "hex",
  "ic-canisters-http-types",
  "ic-cdk 0.16.0",
@@ -17581,11 +17582,13 @@ dependencies = [
  "ic-metrics-encoder",
  "ic-stable-structures",
  "mockall 0.13.0",
+ "rand_chacha 0.3.1",
  "rate-limits-api",
  "serde",
  "serde_json",
  "sha2 0.10.8",
  "thiserror",
+ "uuid",
 ]
 
 [[package]]
