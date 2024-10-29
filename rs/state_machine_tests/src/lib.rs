@@ -1763,6 +1763,9 @@ impl StateMachine {
                         (public_key, private_key)
                     }
                 },
+                MasterPublicKeyId::VetKd(_vetkd_key_id) => {
+                    todo!("CRP-2629: Support vetKD in state machine tests")
+                }
             };
 
             idkg_subnet_secret_keys.insert(key_id.clone(), private_key);
@@ -2338,6 +2341,7 @@ impl StateMachine {
             time: self.get_time_of_next_round(),
             consensus_responses: payload.consensus_responses,
             blockmaker_metrics: BlockmakerMetrics::new_for_test(),
+            replica_version: ReplicaVersion::default(),
         };
 
         self.message_routing
