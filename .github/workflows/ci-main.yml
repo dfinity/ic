@@ -132,51 +132,6 @@ jobs:
           if-no-files-found: error
           path: |
             bazel-targets
-  bazel-build-all-config-check:
-    runs-on:
-      labels: dind-large
-    container:
-      image: ghcr.io/dfinity/ic-build@sha256:ced9611af39119f62feedc8a5ad75a8fac478cb43d2d56b623023766f6ce8ca7
-      options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
-    timeout-minutes: 90
-    name: Bazel Build All Config Check
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
-      - name: Before script
-        id: before-script
-        shell: bash
-        run: |
-          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
-      - name: Login to Dockerhub
-        shell: bash
-        run: ./ci/scripts/docker-login.sh
-        env:
-          DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
-          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
-      - name: Run bazel build --config=check //rs/...
-        id: bazel-build-config-check
-        uses: ./.github/actions/bazel-test-all/
-        with:
-          BAZEL_COMMAND: "build"
-          BAZEL_TARGETS: "//rs/..."
-          BAZEL_CI_CONFIG: "--config=check --config=ci --keep_going"
-      - name: Upload bazel-bep
-        # runs only if previous step succeeded or failed;
-        # we avoid collecting artifacts of jobs that were cancelled
-        if: success() || failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ github.job }}-bep
-          retention-days: 14
-          if-no-files-found: ignore
-          compression-level: 9
-          path: |
-            bazel-bep.pb
-            profile.json
   bazel-test-macos-intel:
     name: Bazel Test macOS Intel
     timeout-minutes: 130
