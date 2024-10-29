@@ -7,8 +7,7 @@ use crate::eth_rpc::{BlockSpec, GetLogsParam, HttpOutcallError, LogEntry, Topic}
 use crate::eth_rpc_client::{EthRpcClient, MultiCallError};
 use crate::guard::TimerGuard;
 use crate::logs::{DEBUG, INFO};
-use crate::numeric::{BlockNumber, LedgerMintIndex};
-use crate::state::eth_logs_scraping::BlockRangeInclusive;
+use crate::numeric::{BlockNumber, BlockRangeInclusive, LedgerMintIndex};
 use crate::state::{
     audit::process_event, event::EventType, mutate_state, read_state, State, TaskType,
 };
