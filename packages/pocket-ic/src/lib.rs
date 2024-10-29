@@ -33,14 +33,16 @@
 //! ```
 //! For more information, see the [README](https://crates.io/crates/pocket-ic).
 //!
-use crate::common::rest::{
-    BlobCompression, BlobId, CanisterHttpRequest, DtsFlag, ExtendedSubnetConfigSet, HttpsConfig,
-    InstanceId, MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId, SubnetId,
-    SubnetKind, SubnetSpec, Topology,
-};
 pub use crate::management_canister::CanisterSettings;
-use crate::management_canister::{CanisterId, CanisterStatusResult};
-use crate::nonblocking::PocketIc as PocketIcAsync;
+use crate::{
+    common::rest::{
+        BlobCompression, BlobId, CanisterHttpRequest, DtsFlag, ExtendedSubnetConfigSet,
+        HttpsConfig, InstanceId, MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId,
+        SubnetId, SubnetKind, SubnetSpec, Topology,
+    },
+    management_canister::{CanisterId, CanisterStatusResult},
+    nonblocking::PocketIc as PocketIcAsync,
+};
 use candid::{
     decode_args, encode_args,
     utils::{ArgumentDecoder, ArgumentEncoder},
@@ -51,14 +53,13 @@ use reqwest::Url;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use slog::Level;
-use std::sync::mpsc::channel;
-use std::thread;
-use std::thread::JoinHandle;
 use std::{
     net::SocketAddr,
     path::{Path, PathBuf},
     process::Command,
-    sync::Arc,
+    sync::{mpsc::channel, Arc},
+    thread,
+    thread::JoinHandle,
     time::{Duration, SystemTime},
 };
 use thiserror::Error;
@@ -1382,9 +1383,11 @@ To download the binary, please visit https://github.com/dfinity/pocketic."
     ));
     #[cfg(not(windows))]
     cmd.arg(port_file_path.clone());
-    if std::env::var("POCKET_IC_MUTE_SERVER").is_ok() {
-        cmd.stdout(std::process::Stdio::null());
-        cmd.stderr(std::process::Stdio::null());
+    if let Ok(mute_server) = std::env::var("POCKET_IC_MUTE_SERVER") {
+        if mute_server.as_str() == "1" {
+            cmd.stdout(std::process::Stdio::null());
+            cmd.stderr(std::process::Stdio::null());
+        }
     }
     cmd.spawn()
         .unwrap_or_else(|_| panic!("Failed to start PocketIC binary ({:?})", bin_path));
