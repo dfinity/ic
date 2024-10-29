@@ -7,6 +7,7 @@ use url::Url;
 use crate::serialize_and_write_config;
 use crate::types::*;
 
+#[derive(Default)]
 pub struct GenerateTestnetConfigArgs {
     // NetworkSettings arguments
     pub ipv6_config_type: Option<Ipv6ConfigType>,
@@ -251,4 +252,200 @@ pub fn generate_testnet_config(
     );
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn test_valid_configuration() {
+        let args = GenerateTestnetConfigArgs {
+            ipv6_config_type: Some(Ipv6ConfigType::RouterAdvertisement),
+            mgmt_mac: Some("00:11:22:33:44:55".to_string()),
+            nns_urls: Some(vec!["https://example.com".to_string()]),
+            ..Default::default()
+        };
+
+        let result = generate_testnet_config(args, PathBuf::from("/tmp/guestos_config.json"));
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_missing_deterministic_prefix() {
+        let args = GenerateTestnetConfigArgs {
+            ipv6_config_type: Some(Ipv6ConfigType::Deterministic),
+            deterministic_prefix: None,
+            deterministic_prefix_length: Some(64),
+            deterministic_gateway: Some("fe80::1".to_string()),
+            ..Default::default()
+        };
+
+        let result = generate_testnet_config(args, PathBuf::from("/dev/null"));
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "deterministic_prefix is required when ipv6_config_type is 'Deterministic'"
+        );
+    }
+
+    #[test]
+    fn test_missing_deterministic_prefix_length() {
+        let args = GenerateTestnetConfigArgs {
+            ipv6_config_type: Some(Ipv6ConfigType::Deterministic),
+            deterministic_prefix: Some("2001:db8::".to_string()),
+            deterministic_prefix_length: None,
+            deterministic_gateway: Some("fe80::1".to_string()),
+            ..Default::default()
+        };
+
+        let result = generate_testnet_config(args, PathBuf::from("/dev/null"));
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "deterministic_prefix_length is required when ipv6_config_type is 'Deterministic'"
+        );
+    }
+
+    #[test]
+    fn test_missing_deterministic_gateway() {
+        let args = GenerateTestnetConfigArgs {
+            ipv6_config_type: Some(Ipv6ConfigType::Deterministic),
+            deterministic_prefix: Some("2001:db8::".to_string()),
+            deterministic_prefix_length: Some(64),
+            deterministic_gateway: None,
+            ..Default::default()
+        };
+
+        let result = generate_testnet_config(args, PathBuf::from("/dev/null"));
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "deterministic_gateway is required when ipv6_config_type is 'Deterministic'"
+        );
+    }
+
+    #[test]
+    fn test_invalid_deterministic_gateway() {
+        let args = GenerateTestnetConfigArgs {
+            ipv6_config_type: Some(Ipv6ConfigType::Deterministic),
+            deterministic_prefix: Some("2001:db8::".to_string()),
+            deterministic_prefix_length: Some(64),
+            deterministic_gateway: Some("invalid_ip".to_string()),
+            ..Default::default()
+        };
+
+        let result = generate_testnet_config(args, PathBuf::from("/dev/null"));
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Failed to parse deterministic_gateway"));
+    }
+
+    #[test]
+    fn test_missing_fixed_address() {
+        let args = GenerateTestnetConfigArgs {
+            ipv6_config_type: Some(Ipv6ConfigType::Fixed),
+            fixed_address: None,
+            fixed_gateway: Some("fe80::1".to_string()),
+            ..Default::default()
+        };
+
+        let result = generate_testnet_config(args, PathBuf::from("/dev/null"));
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "fixed_address is required when ipv6_config_type is 'Fixed'"
+        );
+    }
+
+    #[test]
+    fn test_missing_fixed_gateway() {
+        let args = GenerateTestnetConfigArgs {
+            ipv6_config_type: Some(Ipv6ConfigType::Fixed),
+            fixed_address: Some("2001:db8::1/64".to_string()),
+            fixed_gateway: None,
+            ..Default::default()
+        };
+
+        let result = generate_testnet_config(args, PathBuf::from("/dev/null"));
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "fixed_gateway is required when ipv6_config_type is 'Fixed'"
+        );
+    }
+
+    #[test]
+    fn test_invalid_fixed_gateway() {
+        let args = GenerateTestnetConfigArgs {
+            ipv6_config_type: Some(Ipv6ConfigType::Fixed),
+            fixed_address: Some("2001:db8::1/64".to_string()),
+            fixed_gateway: Some("invalid_ip".to_string()),
+            ..Default::default()
+        };
+
+        let result = generate_testnet_config(args, PathBuf::from("/dev/null"));
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Failed to parse fixed_gateway"));
+    }
+
+    #[test]
+    fn test_incomplete_ipv4_config() {
+        let args = GenerateTestnetConfigArgs {
+            ipv4_address: Some("192.0.2.1".to_string()),
+            ipv4_gateway: Some("192.0.2.254".to_string()),
+            ipv4_prefix_length: None,
+            ipv4_domain: Some("example.com".to_string()),
+            ..Default::default()
+        };
+
+        let result = generate_testnet_config(args, PathBuf::from("/dev/null"));
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Incomplete IPv4 configuration provided. All parameters (ipv4_address, ipv4_gateway, ipv4_prefix_length, ipv4_domain) are required for IPv4 configuration."
+        );
+    }
+
+    #[test]
+    fn test_invalid_ipv4_address() {
+        let args = GenerateTestnetConfigArgs {
+            ipv4_address: Some("invalid_ip".to_string()),
+            ipv4_gateway: Some("192.0.2.254".to_string()),
+            ipv4_prefix_length: Some(24),
+            ipv4_domain: Some("example.com".to_string()),
+            ..Default::default()
+        };
+
+        let result = generate_testnet_config(args, PathBuf::from("/dev/null"));
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Failed to parse ipv4_address"));
+    }
+
+    #[test]
+    fn test_invalid_ipv4_gateway() {
+        let args = GenerateTestnetConfigArgs {
+            ipv4_address: Some("192.0.2.1".to_string()),
+            ipv4_gateway: Some("invalid_ip".to_string()),
+            ipv4_prefix_length: Some(24),
+            ipv4_domain: Some("example.com".to_string()),
+            ..Default::default()
+        };
+
+        let result = generate_testnet_config(args, PathBuf::from("/dev/null"));
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Failed to parse ipv4_gateway"));
+    }
 }
