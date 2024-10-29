@@ -58,7 +58,7 @@ pub(crate) const STABLE_MEMORY_NAME: &str = "stable_memory";
 pub(crate) const STABLE_BYTEMAP_MEMORY_NAME: &str = "stable_bytemap_memory";
 
 pub(crate) const MAX_STORE_TABLES: usize = 1;
-pub(crate) const MAX_STORE_TABLE_ELEMENTS: u32 = 1_000_000;
+pub(crate) const MAX_STORE_TABLE_ELEMENTS: usize = 1_000_000;
 
 fn demangle(func_name: &str) -> String {
     if let Ok(name) = rustc_demangle::try_demangle(func_name) {
@@ -1035,7 +1035,7 @@ impl WasmtimeInstance {
                     .ok_or_else(|| HypervisorError::ToolchainContractViolation {
                         error: "export 'table' is not a table".to_string(),
                     })?
-                    .get(&mut self.store, closure.func_idx)
+                    .get(&mut self.store, closure.func_idx as u64)
                     .ok_or(HypervisorError::FunctionNotFound(0, closure.func_idx))?
                     .as_func()
                     .ok_or_else(|| HypervisorError::ToolchainContractViolation {
