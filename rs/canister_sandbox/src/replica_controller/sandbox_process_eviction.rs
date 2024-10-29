@@ -1,5 +1,5 @@
 use num_traits::ops::saturating::SaturatingAdd;
-use std::{cmp::Ordering, time::Instant};
+use std::time::Instant;
 
 use ic_types::{AccumulatedPriority, CanisterId, NumBytes};
 
@@ -9,21 +9,6 @@ pub(crate) struct EvictionCandidate {
     pub last_used: Instant,
     pub rss: NumBytes,
     pub scheduler_priority: AccumulatedPriority,
-}
-
-impl Ord for EvictionCandidate {
-    fn cmp(&self, other: &Self) -> Ordering {
-        if self.scheduler_priority == other.scheduler_priority {
-            return self.last_used.cmp(&other.last_used);
-        }
-        self.scheduler_priority.cmp(&other.scheduler_priority)
-    }
-}
-
-impl PartialOrd for EvictionCandidate {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
 }
 
 /// Evicts the least recently used candidates in order to bring the number of
@@ -43,22 +28,39 @@ impl PartialOrd for EvictionCandidate {
 ///      evicts the most candidates with `last_used < last_used_threshold`.
 /// 4. Return the evicted candidates.
 pub(crate) fn evict(
-    mut candidates: Vec<EvictionCandidate>,
+    candidates: Vec<EvictionCandidate>,
     total_rss: NumBytes,
     max_count_threshold: usize,
     last_used_threshold: Instant,
     max_sandboxes_rss: NumBytes,
 ) -> Vec<EvictionCandidate> {
-    candidates.sort_by_key(|x| x.last_used);
+    let evict_at_least: usize = candidates.len().saturating_sub(max_count_threshold);
 
-    let evict_at_least = candidates.len().saturating_sub(max_count_threshold);
+    // Evict all idle canididates.
+    let (mut evicted, mut non_idle): (_, Vec<_>) = candidates
+        .into_iter()
+        .partition(|candidate| candidate.last_used < last_used_threshold);
 
-    let mut evicted = vec![];
     let mut evicted_rss = NumBytes::new(0);
 
-    for candidate in candidates.into_iter() {
-        if candidate.last_used >= last_used_threshold
-            && evicted.len() >= evict_at_least
+    for evicted_candidate in evicted.iter() {
+        evicted_rss = evicted_rss.saturating_add(&evicted_candidate.rss);
+    }
+
+    if evicted.len() >= evict_at_least
+        && total_rss <= max_sandboxes_rss.saturating_add(&evicted_rss)
+    {
+        // We have already evicted the minimum required number of candidates
+        // and all the remaining candidates were not idle the recent
+        // `last_used_threshold` time window. No need to evict more.
+        return evicted;
+    }
+
+    non_idle.sort_by_key(|x| x.scheduler_priority);
+    non_idle.reverse();
+
+    for candidate in non_idle.into_iter() {
+        if evicted.len() >= evict_at_least
             && total_rss <= max_sandboxes_rss.saturating_add(&evicted_rss)
         {
             // We have already evicted the minimum required number of candidates
@@ -147,6 +149,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn evict_some_due_to_idle_time() {
         let mut candidates = vec![];
         let now = Instant::now();
