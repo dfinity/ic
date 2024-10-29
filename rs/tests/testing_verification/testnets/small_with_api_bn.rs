@@ -1,17 +1,20 @@
 // Set up a testnet containing:
-//   one 1-node System and one 1-node Application subnets, one unassigned node, single boundary node, and a p8s (with grafana) VM.
+//   one 1-node System and one 1-node Application subnets, one unassigned node with a domain
+//   (which could be turned into an API boundary node through a proposal), one API boundary node,
+//   a single boundary node (for HTTP gateway protocol support),
+//   and a p8s (with grafana) VM.
 // All replica nodes use the following resources: 6 vCPUs, 24GiB of RAM, and 50 GiB disk.
 //
 // You can setup this testnet with a lifetime of 180 mins by executing the following commands:
 //
 //   $ ./gitlab-ci/tools/docker-run
-//   $ ict testnet create small --lifetime-mins=180 --output-dir=./small -- --test_tmpdir=./small
+//   $ ict testnet create small_with_api_bns --lifetime-mins=180 --output-dir=./small -- --test_tmpdir=./small
 //
-// The --output-dir=./small will store the debug output of the test driver in the specified directory.
-// The --test_tmpdir=./small will store the remaining test output in the specified directory.
+// The --output-dir=./small_with_api_bns will store the debug output of the test driver in the specified directory.
+// The --test_tmpdir=./small_with_api_bns will store the remaining test output in the specified directory.
 // This is useful to have access to in case you need to SSH into an IC node for example like:
 //
-//   $ ssh -i small/_tmp/*/setup/ssh/authorized_priv_keys/admin admin@
+//   $ ssh -i small_with_api_bns/_tmp/*/setup/ssh/authorized_priv_keys/admin admin@
 //
 // Note that you can get the  address of the IC node from the ict console output:
 //
@@ -28,9 +31,9 @@
 //
 // To get access to P8s and Grafana look for the following lines in the ict console output:
 //
-//     prometheus: Prometheus Web UI at http://prometheus.small--1692597750709.testnet.farm.dfinity.systems,
-//     grafana: Grafana at http://grafana.small--1692597750709.testnet.farm.dfinity.systems,
-//     progress_clock: IC Progress Clock at http://grafana.small--1692597750709.testnet.farm.dfinity.systems/d/ic-progress-clock/ic-progress-clock?refresh=10su0026from=now-5mu0026to=now,
+//     prometheus: Prometheus Web UI at http://prometheus.small_with_api_bns--1692597750709.testnet.farm.dfinity.systems,
+//     grafana: Grafana at http://grafana.small_with_api_bns--1692597750709.testnet.farm.dfinity.systems,
+//     progress_clock: IC Progress Clock at http://grafana.small_with_api_bns--1692597750709.testnet.farm.dfinity.systems/d/ic-progress-clock/ic-progress-clock?refresh=10su0026from=now-5mu0026to=now,
 //
 // Happy testing!
 
