@@ -1,5 +1,5 @@
 {
-  "checksum": "064a13c0359982d947a7c1993ad892be8a541f816ab527f4c04db07118bb1530",
+  "checksum": "7d6315901415b36b0e75876824e88368a8e546aa1b4aa4caa8c6bd5789443ec2",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -4443,7 +4443,7 @@
               "target": "hyper"
             },
             {
-              "id": "hyper-util 0.1.9",
+              "id": "hyper-util 0.1.10",
               "target": "hyper_util"
             },
             {
@@ -4972,7 +4972,7 @@
               "target": "hyper"
             },
             {
-              "id": "hyper-util 0.1.9",
+              "id": "hyper-util 0.1.10",
               "target": "hyper_util"
             },
             {
@@ -15067,7 +15067,7 @@
               "target": "rand_core"
             },
             {
-              "id": "typenum 1.16.0",
+              "id": "typenum 1.17.0",
               "target": "typenum"
             }
           ],
@@ -17576,7 +17576,7 @@
               "target": "hyper_socks2"
             },
             {
-              "id": "hyper-util 0.1.9",
+              "id": "hyper-util 0.1.10",
               "target": "hyper_util"
             },
             {
@@ -23704,7 +23704,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "typenum 1.16.0",
+              "id": "typenum 1.17.0",
               "target": "typenum"
             },
             {
@@ -27094,7 +27094,7 @@
               "target": "hyper_rustls"
             },
             {
-              "id": "hyper-util 0.1.9",
+              "id": "hyper-util 0.1.10",
               "target": "hyper_util"
             },
             {
@@ -27406,7 +27406,7 @@
               "target": "hyper"
             },
             {
-              "id": "hyper-util 0.1.9",
+              "id": "hyper-util 0.1.10",
               "target": "hyper_util"
             },
             {
@@ -27500,7 +27500,7 @@
               "target": "hyper"
             },
             {
-              "id": "hyper-util 0.1.9",
+              "id": "hyper-util 0.1.10",
               "target": "hyper_util"
             },
             {
@@ -27564,7 +27564,7 @@
               "target": "hyper"
             },
             {
-              "id": "hyper-util 0.1.9",
+              "id": "hyper-util 0.1.10",
               "target": "hyper_util"
             },
             {
@@ -27592,14 +27592,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "hyper-util 0.1.9": {
+    "hyper-util 0.1.10": {
       "name": "hyper-util",
-      "version": "0.1.9",
+      "version": "0.1.10",
       "package_url": "https://github.com/hyperium/hyper-util",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/hyper-util/0.1.9/download",
-          "sha256": "41296eb09f183ac68eec06e03cdbea2e759633d4067b2f6552fc2e009bcad08b"
+          "url": "https://static.crates.io/crates/hyper-util/0.1.10/download",
+          "sha256": "df2dcfbe0677734ab2f3ffa7fa7bfd4706bfdc1ef393f2ee30184aed67e631b4"
         }
       },
       "targets": [
@@ -27687,7 +27687,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.1.9"
+        "version": "0.1.10"
       },
       "license": "MIT",
       "license_ids": [
@@ -28034,7 +28034,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "hyper-util 0.1.9",
+                "id": "hyper-util 0.1.10",
                 "target": "hyper_util"
               },
               {
@@ -28176,7 +28176,7 @@
               "target": "hyper"
             },
             {
-              "id": "hyper-util 0.1.9",
+              "id": "hyper-util 0.1.10",
               "target": "hyper_util"
             },
             {
@@ -32829,7 +32829,7 @@
               "target": "hyper_rustls"
             },
             {
-              "id": "hyper-util 0.1.9",
+              "id": "hyper-util 0.1.10",
               "target": "hyper_util"
             },
             {
@@ -34322,7 +34322,7 @@
               "target": "hyper_timeout"
             },
             {
-              "id": "hyper-util 0.1.9",
+              "id": "hyper-util 0.1.10",
               "target": "hyper_util"
             },
             {
@@ -38296,7 +38296,7 @@
               "target": "hyper_rustls"
             },
             {
-              "id": "hyper-util 0.1.9",
+              "id": "hyper-util 0.1.10",
               "target": "hyper_util"
             },
             {
@@ -52859,7 +52859,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "hyper-util 0.1.9",
+                "id": "hyper-util 0.1.10",
                 "target": "hyper_util"
               },
               {
@@ -66403,7 +66403,7 @@
               "target": "hyper_timeout"
             },
             {
-              "id": "hyper-util 0.1.9",
+              "id": "hyper-util 0.1.10",
               "target": "hyper_util"
             },
             {
@@ -68557,14 +68557,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "typenum 1.16.0": {
+    "typenum 1.17.0": {
       "name": "typenum",
-      "version": "1.16.0",
+      "version": "1.17.0",
       "package_url": "https://github.com/paholg/typenum",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/typenum/1.16.0/download",
-          "sha256": "497961ef93d974e23eb6f433eb5fe1b7930b659f06d12dec6fc44a8f554c0bba"
+          "url": "https://static.crates.io/crates/typenum/1.17.0/download",
+          "sha256": "42ff0bf0c66b8238c6f3b578df37d0b7848e55df8577b3f74f92a69acceeb825"
         }
       },
       "targets": [
@@ -68601,14 +68601,14 @@
         "deps": {
           "common": [
             {
-              "id": "typenum 1.16.0",
+              "id": "typenum 1.17.0",
               "target": "build_script_main"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.16.0"
+        "version": "1.17.0"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -78394,7 +78394,7 @@
     "hyper 1.5.0",
     "hyper-rustls 0.27.3",
     "hyper-socks2 0.9.1",
-    "hyper-util 0.1.9",
+    "hyper-util 0.1.10",
     "ic-agent 0.37.1",
     "ic-bn-lib 0.1.0",
     "ic-btc-interface 0.2.2",

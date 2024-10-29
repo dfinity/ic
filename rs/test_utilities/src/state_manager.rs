@@ -25,7 +25,7 @@ use ic_types::{
     CryptoHashOfPartialState, CryptoHashOfState, Height, RegistryVersion, SubnetId,
 };
 use serde::{Deserialize, Serialize};
-use std::collections::VecDeque;
+use std::collections::{BTreeSet, VecDeque};
 use std::sync::{Arc, Barrier, RwLock};
 
 #[derive(Clone)]
@@ -196,7 +196,11 @@ impl StateManager for FakeStateManager {
             .retain(|snap| snap.height == Height::new(0) || snap.height >= height)
     }
 
-    fn remove_inmemory_states_below(&self, _height: Height) {
+    fn remove_inmemory_states_below(
+        &self,
+        _height: Height,
+        _extra_heights_to_keep: &BTreeSet<Height>,
+    ) {
         // All heights are checkpoints
     }
 
@@ -683,11 +687,15 @@ impl StateManager for RefMockStateManager {
         self.mock.read().unwrap().remove_states_below(height)
     }
 
-    fn remove_inmemory_states_below(&self, height: Height) {
+    fn remove_inmemory_states_below(
+        &self,
+        height: Height,
+        extra_heights_to_keep: &BTreeSet<Height>,
+    ) {
         self.mock
             .read()
             .unwrap()
-            .remove_inmemory_states_below(height)
+            .remove_inmemory_states_below(height, extra_heights_to_keep)
     }
 
     fn commit_and_certify(
