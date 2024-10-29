@@ -1,5 +1,5 @@
 use crate::height_index::HeightIndex;
-use crate::metrics::{PoolMetrics, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED};
+use crate::metrics::{LABEL_POOL_TYPE, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED};
 use crate::pool_common::HasLabel;
 use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
 use ic_interfaces::p2p::consensus::ArtifactWithOpt;
@@ -23,8 +23,70 @@ use ic_types::{
     consensus::HasHeight,
     Height,
 };
-use prometheus::IntCounter;
+use prometheus::{labels, opts, IntCounter, IntGauge};
 use std::collections::{BTreeMap, HashSet};
+
+struct PerTypeMetrics {
+    max_height: IntGauge,
+    min_height: IntGauge,
+    count: IntGauge,
+}
+
+const LABEL_TYPE: &str = "type";
+const LABEL_STAT: &str = "stat";
+
+impl PerTypeMetrics {
+    fn new(registry: &ic_metrics::MetricsRegistry, pool_portion: &str, type_name: &str) -> Self {
+        const NAME: &str = "artifact_pool_certification_height_stat";
+        const HELP: &str =
+            "The height of objects in a certification pool, by pool type, object type and stat";
+        Self {
+            max_height: registry.register(
+                IntGauge::with_opts(opts!(
+                    NAME,
+                    HELP,
+                    labels! {LABEL_POOL_TYPE => pool_portion, LABEL_TYPE => type_name, LABEL_STAT => "max"}
+                ))
+                .unwrap(),
+            ),
+            min_height: registry.register(
+                IntGauge::with_opts(opts!(
+                    NAME,
+                    HELP,
+                    labels! {LABEL_POOL_TYPE => pool_portion, LABEL_TYPE => type_name, LABEL_STAT => "min"}
+                ))
+                .unwrap(),
+            ),
+            count: registry.register(
+                IntGauge::with_opts(opts!(
+                    "certification_pool_size",
+                    "The number of artifacts in a certification pool, by pool type and object type",
+                    labels! {LABEL_POOL_TYPE => pool_portion, LABEL_TYPE => type_name}
+                ))
+                .unwrap(),
+            ),
+        }
+    }
+}
+
+/* FIXME: Remove PoolMetrics import and rename this */
+struct PoolMetrics {
+    certification: PerTypeMetrics,
+    certification_share: PerTypeMetrics,
+}
+
+impl PoolMetrics {
+    fn new(registry: ic_metrics::MetricsRegistry, pool_portion: &str) -> Self {
+        Self {
+            certification: PerTypeMetrics::new(&registry, pool_portion, "certification"),
+            certification_share: PerTypeMetrics::new(
+                &registry,
+                pool_portion,
+                "certification_share",
+            ),
+        }
+    }
+}
 
 /// Certification pool contains 2 types of artifacts: partial and
 /// multi-signatures of (height, hash) pairs, where hash corresponds to an
@@ -45,7 +107,6 @@ pub struct CertificationPoolImpl {
     log: ReplicaLogger,
 }
 
-const POOL_CERTIFICATION: &str = "certification";
 const CERTIFICATION_ARTIFACT_TYPE: &str = "certification";
 const CERTIFICATION_SHARE_ARTIFACT_TYPE: &str = "certification_share";
 
@@ -89,14 +150,9 @@ impl CertificationPoolImpl {
             ),
             unvalidated_pool_metrics: PoolMetrics::new(
                 metrics_registry.clone(),
-                POOL_CERTIFICATION,
                 POOL_TYPE_UNVALIDATED,
             ),
-            validated_pool_metrics: PoolMetrics::new(
-                metrics_registry,
-                POOL_CERTIFICATION,
-                POOL_TYPE_VALIDATED,
-            ),
+            validated_pool_metrics: PoolMetrics::new(metrics_registry, POOL_TYPE_VALIDATED),
             log,
         }
     }
@@ -143,25 +199,69 @@ impl CertificationPoolImpl {
     }
 
     fn update_metrics(&self) {
-        // Validated artifacts metrics
-        self.validated_pool_metrics
-            .pool_artifacts
-            .with_label_values(&[CERTIFICATION_ARTIFACT_TYPE])
-            .set(self.validated.certifications().size() as i64);
-        self.validated_pool_metrics
-            .pool_artifacts
-            .with_label_values(&[CERTIFICATION_SHARE_ARTIFACT_TYPE])
-            .set(self.validated.certification_shares().size() as i64);
-
-        // Unvalidated artifacts metrics
+        // Unvalidated section
+        if let (Some(min_cert), Some(max_cert), Some(min_share), Some(max_share)) = (
+            self.unvalidated_cert_index.range(..).next(),
+            self.unvalidated_cert_index.range(..).last(),
+            self.unvalidated_share_index.range(..).next(),
+            self.unvalidated_share_index.range(..).last(),
+        ) {
+            self.unvalidated_pool_metrics
+                .certification
+                .min_height
+                .set(min_cert.0.get() as i64);
+            self.unvalidated_pool_metrics
+                .certification
+                .max_height
+                .set(max_cert.0.get() as i64);
+            self.unvalidated_pool_metrics
+                .certification_share
+                .min_height
+                .set(min_share.0.get() as i64);
+            self.unvalidated_pool_metrics
+                .certification_share
+                .max_height
+                .set(max_share.0.get() as i64);
+        }
         self.unvalidated_pool_metrics
-            .pool_artifacts
-            .with_label_values(&[CERTIFICATION_ARTIFACT_TYPE])
+            .certification
+            .count
             .set(self.unvalidated_cert_index.size() as i64);
         self.unvalidated_pool_metrics
-            .pool_artifacts
-            .with_label_values(&[CERTIFICATION_SHARE_ARTIFACT_TYPE])
+            .certification_share
+            .count
             .set(self.unvalidated_share_index.size() as i64);
+
+        // Validated section
+        if let (Some(cert), Some(share)) = (
+            self.validated.certifications().height_range(),
+            self.validated.certification_shares().height_range(),
+        ) {
+            self.validated_pool_metrics
+                .certification
+                .min_height
+                .set(cert.min.get() as i64);
+            self.validated_pool_metrics
+                .certification
+                .max_height
+                .set(cert.max.get() as i64);
+            self.validated_pool_metrics
+                .certification_share
+                .min_height
+                .set(share.min.get() as i64);
+            self.validated_pool_metrics
+                .certification_share
+                .max_height
+                .set(share.max.get() as i64);
+        }
+        self.validated_pool_metrics
+            .certification
+            .count
+            .set(self.validated.certifications().size() as i64);
+        self.validated_pool_metrics
+            .certification_share
+            .count
+            .set(self.validated.certification_shares().size() as i64);
     }
 }
 
@@ -169,9 +269,7 @@ impl MutablePool<CertificationMessage> for CertificationPoolImpl {
     type Mutations = Mutations;
 
     fn insert(&mut self, msg: UnvalidatedArtifact<CertificationMessage>) {
-        let label = msg.message.label().to_owned();
         let hash = CertificationMessageHash::from(&msg.message);
-        let size = std::mem::size_of_val(&msg.message) as f64;
 
         if match hash {
             CertificationMessageHash::Certification(_) => self
@@ -182,10 +280,6 @@ impl MutablePool<CertificationMessage> for CertificationPoolImpl {
                 .insert(msg.message.height(), &hash),
         } {
             self.unvalidated.insert(hash, msg.message);
-            self.unvalidated_pool_metrics
-                .received_artifact_bytes
-                .with_label_values(&[&label])
-                .observe(size);
         }
     }
 
@@ -212,10 +306,6 @@ impl MutablePool<CertificationMessage> for CertificationPoolImpl {
                     artifact: msg.clone(),
                     is_latency_sensitive: true,
                 }));
-                self.validated_pool_metrics
-                    .received_artifact_bytes
-                    .with_label_values(&[msg.label()])
-                    .observe(std::mem::size_of_val(&msg) as f64);
                 self.validated.insert(msg);
             }
 
@@ -227,14 +317,7 @@ impl MutablePool<CertificationMessage> for CertificationPoolImpl {
                         is_latency_sensitive: false,
                     }));
                 }
-                let label = msg.label().to_owned();
-
                 self.remove(&CertificationMessageId::from(&msg));
-                self.validated_pool_metrics
-                    .received_artifact_bytes
-                    .with_label_values(&[&label])
-                    .observe(std::mem::size_of_val(&msg) as f64);
-
                 match msg {
                     CertificationMessage::CertificationShare(share) => {
                         self.validated
