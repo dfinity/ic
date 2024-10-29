@@ -42,21 +42,24 @@ async fn main() {
     println!("Call 3. Read config by non-privileged user (RestrictedRead level). Rules and descriptions are hidden in the response");
     let rule_ids = read_config(&agent_restricted_read, version, canister_id).await;
 
-    println!("Call 4. Disclose rules (two rules in this case) linked to a single incident");
+    println!("Call 4. Inspect the metadata of a rule before disclosure. All metadata fields should be hidden");
+    read_rule(&agent_restricted_read, &rule_ids[2], canister_id).await;
+
+    println!("Call 5. Disclose rules (two rules in this case) linked to a single incident");
     let incident_id = "incident_id_1".to_string();
     disclose_incident(&agent_full_access, incident_id, canister_id).await;
 
-    println!("Call 5. Read config by non-privileged user again. Now rules related to the disclosed incident are fully shown");
+    println!("Call 6. Read config by non-privileged user again. Now rules related to the disclosed incident are fully shown");
     let _ = read_config(&agent_restricted_read, version, canister_id).await;
 
-    println!("Call 6. Add another config (version = 3) with one newly added rule, one remove rule");
+    println!("Call 7. Add another config (version = 3) with one newly added rule, one remove rule");
     add_config_2(&agent_full_access, canister_id).await;
 
-    println!("Call 7. Read config by privileged user (FullAccess or FullRead caller level). Response will expose rules/descriptions in their full form");
+    println!("Call 8. Read config by privileged user (FullAccess or FullRead caller level). Response will expose rules/descriptions in their full form");
     let version = 3;
     let _ = read_config(&agent_full_access, version, canister_id).await;
 
-    println!("Call 8. Inspect the metadata of the removed rule. All metadata fields should be visible, including versions when the rule was added/removed");
+    println!("Call 9. Inspect the metadata of the removed rule. All metadata fields should be visible, including versions when the rule was added/removed");
     read_rule(&agent_restricted_read, &rule_ids[2], canister_id).await;
 }
 

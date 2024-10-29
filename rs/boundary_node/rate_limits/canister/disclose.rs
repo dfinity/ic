@@ -110,7 +110,11 @@ fn disclose_incidents(
         if !metadata.is_disclosed {
             disclose_rules(repository, time, &metadata.rule_ids)?;
             metadata.is_disclosed = true;
-            let _ = repository.update_incident(incident_id, metadata);
+            // TODO: consider aggregating errors
+            repository
+                .update_incident(incident_id.clone(), metadata)
+                .then(|| ())
+                .ok_or_else(|| DiscloseRulesError::IncidentIdNotFound(incident_id))?;
         }
     }
 
