@@ -6,10 +6,12 @@ package(default_visibility = ["//visibility:public"])
 
 rust_library(
     name = "btc_kyt_lib",
-    srcs = glob(
-        ["src/**"],
-        exclude = ["src/main.rs"],
-    ),
+    srcs = [
+      "src/lib.rs",
+      "src/blocklist.rs",
+      "src/providers.rs",
+      "src/types.rs",
+    ],
     compile_data = [
         "templates/dashboard.html",
     ],
@@ -64,7 +66,13 @@ rust_test(
 rust_canister(
     name = "btc_kyt_canister",
     srcs = [
+        "src/dashboard.rs",
+        "src/dashboard/tests.rs",
+        "src/fetch.rs",
+        "src/fetch/tests.rs",
         "src/main.rs",
+        "src/state.rs",
+        "src/state/tests.rs",
     ],
     proc_macro_deps = ["@crate_index//:ic-cdk-macros"],
     service_file = "btc_kyt_canister.did",
