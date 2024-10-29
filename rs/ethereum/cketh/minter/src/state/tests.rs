@@ -615,6 +615,8 @@ prop_compose! {
         erc20_helper_contract_address in proptest::option::of(arb_address()),
         last_erc20_scraped_block_number in proptest::option::of(arb_nat()),
         evm_rpc_id in proptest::option::of(arb_principal()),
+        deposit_with_subaccount_helper_contract_address in proptest::option::of(arb_address()),
+        last_deposit_with_subaccount_scraped_block_number in proptest::option::of(arb_nat()),
     ) -> UpgradeArg {
         UpgradeArg {
             ethereum_contract_address: contract_address.map(|addr| addr.to_string()),
@@ -624,7 +626,9 @@ prop_compose! {
             ledger_suite_orchestrator_id,
             erc20_helper_contract_address: erc20_helper_contract_address.map(|addr| addr.to_string()),
             last_erc20_scraped_block_number,
-            evm_rpc_id
+            evm_rpc_id,
+            deposit_with_subaccount_helper_contract_address: deposit_with_subaccount_helper_contract_address.map(|addr| addr.to_string()),
+            last_deposit_with_subaccount_scraped_block_number
         }
     }
 }
@@ -1017,6 +1021,16 @@ fn state_equivalence() {
         .unwrap();
         s
     };
+    let deposit_with_subaccount_log_scraping = {
+        let mut s = LogScrapingState::new(BlockNumber::new(1_000_000));
+        s.set_contract_address(
+            "0x2D39863d30716aaf2B7fFFd85Dd03Dda2BFC2E38"
+                .parse()
+                .unwrap(),
+        )
+        .unwrap();
+        s
+    };
 
     let state = State {
         ethereum_network: EthereumNetwork::Mainnet,
@@ -1024,6 +1038,7 @@ fn state_equivalence() {
         cketh_ledger_id: "apia6-jaaaa-aaaar-qabma-cai".parse().unwrap(),
         eth_log_scraping: eth_log_scraping.clone(),
         erc20_log_scraping: erc20_log_scraping.clone(),
+        deposit_with_subaccount_log_scraping: deposit_with_subaccount_log_scraping.clone(),
         ecdsa_public_key: Some(EcdsaPublicKeyResponse {
             public_key: vec![1; 32],
             chain_code: vec![2; 32],
@@ -1113,6 +1128,19 @@ fn state_equivalence() {
         state.is_equivalent_to(&State {
             erc20_log_scraping: {
                 let mut s = erc20_log_scraping.clone();
+                s.set_last_scraped_block_number(BlockNumber::new(100_000_000_000));
+                s
+            },
+            ..state.clone()
+        }),
+        "changing essential fields should break equivalence",
+    );
+
+    assert_ne!(
+        Ok(()),
+        state.is_equivalent_to(&State {
+            deposit_with_subaccount_log_scraping: {
+                let mut s = deposit_with_subaccount_log_scraping.clone();
                 s.set_last_scraped_block_number(BlockNumber::new(100_000_000_000));
                 s
             },
