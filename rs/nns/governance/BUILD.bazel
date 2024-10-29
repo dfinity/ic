@@ -61,6 +61,7 @@ DEPENDENCIES = [
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/utils",
+    "//rs/utils/lru_cache",
     "@crate_index//:build-info",
     "@crate_index//:bytes",
     "@crate_index//:candid",

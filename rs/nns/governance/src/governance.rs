@@ -5834,9 +5834,11 @@ impl Governance {
             retain_neurons_with_castable_ballots(&mut all_followers, ballots);
 
             for f in all_followers.iter() {
-                let f_vote = match neuron_store.with_neuron(&NeuronId { id: f.id }, |n| {
-                    n.would_follow_ballots(topic, ballots)
-                }) {
+                let f_vote = match neuron_store.neuron_would_follow_ballots(
+                    NeuronId { id: f.id },
+                    topic,
+                    ballots,
+                ) {
                     Ok(vote) => vote,
                     Err(e) => {
                         // This is a bad inconsistency, but there is
