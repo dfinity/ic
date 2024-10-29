@@ -49,9 +49,8 @@ fn deserialize_json_reply() {
 
 mod eth_get_logs {
     use crate::eth_logs::{
-        Erc20WithSubaccountLogParser, Erc20WithoutSubaccountLogParser,
-        EthWithoutSubaccountLogParser, LedgerSubaccount, LogParser, ReceivedErc20Event,
-        ReceivedEthEvent,
+        Erc20WithSubaccountLogParser, LedgerSubaccount, LogParser, ReceivedErc20Event,
+        ReceivedErc20LogParser, ReceivedEthEvent, ReceivedEthLogParser,
     };
     use crate::eth_rpc::LogEntry;
     use crate::numeric::{BlockNumber, Erc20Value, LogIndex, Wei};
@@ -127,10 +126,9 @@ mod eth_get_logs {
             "logIndex": "0x27",
             "removed": false
         }"#;
-        let parsed_event = EthWithoutSubaccountLogParser::parse_log(
-            serde_json::from_str::<LogEntry>(event).unwrap(),
-        )
-        .unwrap();
+        let parsed_event =
+            ReceivedEthLogParser::parse_log(serde_json::from_str::<LogEntry>(event).unwrap())
+                .unwrap();
         let expected_event = ReceivedEthEvent {
             transaction_hash: "0x705f826861c802b407843e99af986cfde8749b669e5e0a5a150f4350bcaa9bc3"
                 .parse()
@@ -167,10 +165,9 @@ mod eth_get_logs {
             "logIndex": "0x27",
             "removed": false
         }"#;
-        let parsed_event = Erc20WithoutSubaccountLogParser::parse_log(
-            serde_json::from_str::<LogEntry>(event).unwrap(),
-        )
-        .unwrap();
+        let parsed_event =
+            ReceivedErc20LogParser::parse_log(serde_json::from_str::<LogEntry>(event).unwrap())
+                .unwrap();
         let expected_event = ReceivedErc20Event {
             transaction_hash: "0x44d8e93a8f4bbc89ad35fc4fbbdb12cb597b4832da09c0b2300777be180fde87"
                 .parse()
@@ -260,9 +257,8 @@ mod eth_get_logs {
             "removed": true
         }"#;
 
-        let parsed_event = EthWithoutSubaccountLogParser::parse_log(
-            serde_json::from_str::<LogEntry>(event).unwrap(),
-        );
+        let parsed_event =
+            ReceivedEthLogParser::parse_log(serde_json::from_str::<LogEntry>(event).unwrap());
         let expected_error = Err(ReceivedEventError::InvalidEventSource {
             source: EventSource {
                 transaction_hash:

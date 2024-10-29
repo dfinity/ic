@@ -1,13 +1,14 @@
 use crate::eth_logs::{
-    report_transaction_error, Erc20WithoutSubaccountLogParser, EthWithoutSubaccountLogParser,
-    LogParser, ReceivedEvent, ReceivedEventError,
+    report_transaction_error, LogParser, LogScraping, ReceivedErc20LogParser,
+    ReceivedErc20LogScraping, ReceivedEthLogParser, ReceivedEthLogScraping, ReceivedEvent,
+    ReceivedEventError,
 };
-use crate::eth_rpc::{BlockSpec, FixedSizeData, GetLogsParam, HttpOutcallError, LogEntry, Topic};
+use crate::eth_rpc::{BlockSpec, GetLogsParam, HttpOutcallError, LogEntry, Topic};
 use crate::eth_rpc_client::{EthRpcClient, MultiCallError};
 use crate::guard::TimerGuard;
 use crate::logs::{DEBUG, INFO};
 use crate::numeric::{BlockNumber, LedgerMintIndex};
-use crate::state::eth_logs_scraping::{ActiveLogScrapingState, BlockRangeInclusive};
+use crate::state::eth_logs_scraping::BlockRangeInclusive;
 use crate::state::{
     audit::process_event, event::EventType, mutate_state, read_state, State, TaskType,
 };
@@ -23,10 +24,6 @@ use std::time::Duration;
 pub(crate) const RECEIVED_ETH_EVENT_TOPIC: [u8; 32] =
     hex!("257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435");
 
-// Keccak256("ReceivedEth(address,uint256,bytes32,bytes32)")
-pub(crate) const RECEIVED_ETH_EVENT_WITH_SUBACCOUNT_TOPIC: [u8; 32] =
-    hex!("5cf3eb7dcd092fdae9eb9a8bee8249f871222400db54ff78e64b809d723a02bf");
-
 // Keccak256("ReceivedErc20(address,address,uint256,bytes32)")
 pub(crate) const RECEIVED_ERC20_EVENT_TOPIC: [u8; 32] =
     hex!("4d69d0bd4287b7f66c548f90154dc81bc98f65a1b362775df5ae171a2ccd262b");
@@ -35,76 +32,9 @@ pub(crate) const RECEIVED_ERC20_EVENT_TOPIC: [u8; 32] =
 pub(crate) const RECEIVED_ERC20_EVENT_WITH_SUBACCOUNT_TOPIC: [u8; 32] =
     hex!("aef895090c2f5d6e81a70bef80dce496a0558487845aada57822159d5efae5cf");
 
-pub trait LogScraper {
-    fn check_active(state: &State) -> Option<ActiveLogScrapingState>;
-    fn update_last_scraped_block_number(state: &mut State, block_number: BlockNumber);
-    fn event_topics(state: &State) -> Vec<Topic>;
-    fn display_id() -> &'static str;
-}
-
-struct EthWithoutSubaccountScraper {}
-
-impl LogScraper for EthWithoutSubaccountScraper {
-    fn check_active(state: &State) -> Option<ActiveLogScrapingState> {
-        state.eth_log_scraping.clone().into_active()
-    }
-
-    fn update_last_scraped_block_number(state: &mut State, block_number: BlockNumber) {
-        state
-            .eth_log_scraping
-            .set_last_scraped_block_number(block_number);
-    }
-
-    fn event_topics(_state: &State) -> Vec<Topic> {
-        vec![Topic::from(FixedSizeData(RECEIVED_ETH_EVENT_TOPIC))]
-    }
-
-    fn display_id() -> &'static str {
-        "ETH"
-    }
-}
-
-struct Erc20WithoutSubaccount {}
-
-impl LogScraper for Erc20WithoutSubaccount {
-    fn check_active(state: &State) -> Option<ActiveLogScrapingState> {
-        if state.ckerc20_tokens.is_empty() {
-            return None;
-        }
-        state.erc20_log_scraping.clone().into_active()
-    }
-
-    fn update_last_scraped_block_number(state: &mut State, block_number: BlockNumber) {
-        state
-            .erc20_log_scraping
-            .set_last_scraped_block_number(block_number);
-    }
-
-    fn event_topics(state: &State) -> Vec<Topic> {
-        let token_contract_addresses = state.ckerc20_tokens.alt_keys().cloned().collect::<Vec<_>>();
-        let mut topics: Vec<_> = vec![Topic::from(FixedSizeData(RECEIVED_ERC20_EVENT_TOPIC))];
-        // We add token contract addresses as additional topics to match.
-        // It has a disjunction semantics, so it will match if event matches any one of these addresses.
-        if !token_contract_addresses.is_empty() {
-            topics.push(
-                token_contract_addresses
-                    .iter()
-                    .map(|address| FixedSizeData(address.into()))
-                    .collect::<Vec<_>>()
-                    .into(),
-            )
-        }
-        topics
-    }
-
-    fn display_id() -> &'static str {
-        "ERC-20"
-    }
-}
-
 //TODO XC-220: get rif of this clippy warning
 #[allow(clippy::type_complexity)]
-async fn scrape_block_range<S: LogScraper, P: LogParser>(
+async fn scrape_block_range<S: LogScraping, P: LogParser>(
     rpc_client: &EthRpcClient,
     contract_address: Address,
     topics: Vec<Topic>,
@@ -246,7 +176,7 @@ pub fn register_deposit_events(
     }
 }
 
-async fn scrape_until_block<S: LogScraper, P: LogParser>(
+async fn scrape_until_block<S: LogScraping, P: LogParser>(
     last_block_number: BlockNumber,
     max_block_spread: u16,
 ) {
@@ -425,12 +355,12 @@ pub async fn scrape_logs() {
         }
     };
     let max_block_spread = read_state(|s| s.max_block_spread_for_logs_scraping());
-    scrape_until_block::<EthWithoutSubaccountScraper, EthWithoutSubaccountLogParser>(
+    scrape_until_block::<ReceivedEthLogScraping, ReceivedEthLogParser>(
         last_block_number,
         max_block_spread,
     )
     .await;
-    scrape_until_block::<Erc20WithoutSubaccount, Erc20WithoutSubaccountLogParser>(
+    scrape_until_block::<ReceivedErc20LogScraping, ReceivedErc20LogParser>(
         last_block_number,
         max_block_spread,
     )
