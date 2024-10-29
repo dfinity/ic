@@ -592,7 +592,7 @@ impl CertifiedStreamStore for FakeStateManager {
     }
 }
 
-/// Encode a `StreamSlice` directly as CBOR, with no whitness or certification;
+/// Encode a `StreamSlice` directly as CBOR, with no witness or certification;
 /// compatible with `FakeStateManager`.
 ///
 /// This is useful for generating a `CertifiedStreamSlice` where
