@@ -9,8 +9,6 @@ fi
 
 MERGE_BASE=${MERGE_BASE_SHA:-HEAD}
 
-BUF="$(readlink "$buf_path")"
-CONF="$(readlink "$buf_config")"
 REPO_PATH="$(dirname "$(readlink "$WORKSPACE")")"
 cd "$REPO_PATH"
 

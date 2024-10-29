@@ -229,8 +229,8 @@ sh_test(
     env = {
         # Hack to escape the sandbox and grep on the actual repository
         "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
-        "buf_config": "$(rootpath //:buf.yaml)",
-        "buf_path": "$(rootpath @buf//:buf)",
+        "CONF": "$(rootpath //:buf.yaml)",
+        "BUF": "$(rootpath @buf//:buf)",
     },
     env_inherit = [
         "MERGE_BASE_SHA",
