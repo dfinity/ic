@@ -7,7 +7,9 @@ use mac_address::mac_address::{get_ipmi_mac, FormattedMacAddress};
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
-use config::generate_testnet_config::{generate_testnet_config, GenerateTestnetConfigArgs};
+use config::generate_testnet_config::{
+    generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
+};
 use config::types::*;
 
 #[derive(Subcommand)]
@@ -63,7 +65,7 @@ struct ConfigArgs {
 #[derive(Args)]
 pub struct GenerateTestnetConfigClapArgs {
     #[arg(long)]
-    pub ipv6_config_type: Option<String>, // "Deterministic", "Fixed", "RouterAdvertisement"
+    pub ipv6_config_type: Option<Ipv6ConfigType>,
     #[arg(long)]
     pub deterministic_prefix: Option<String>,
     #[arg(long)]

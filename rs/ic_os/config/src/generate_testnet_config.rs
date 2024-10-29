@@ -9,7 +9,7 @@ use crate::types::*;
 
 pub struct GenerateTestnetConfigArgs {
     // NetworkSettings arguments
-    pub ipv6_config_type: Option<String>, // "Deterministic", "Fixed", "RouterAdvertisement"
+    pub ipv6_config_type: Option<Ipv6ConfigType>,
     pub deterministic_prefix: Option<String>,
     pub deterministic_prefix_length: Option<u8>,
     pub deterministic_gateway: Option<String>,
@@ -44,6 +44,13 @@ pub struct GenerateTestnetConfigArgs {
     pub jaeger_addr: Option<String>,
     pub socks_proxy: Option<String>,
     pub hostname: Option<String>,
+}
+
+#[derive(Clone, clap::ValueEnum)]
+pub enum Ipv6ConfigType {
+    Deterministic,
+    Fixed,
+    RouterAdvertisement,
 }
 
 /// Generates a writes a serialized GuestOSConfig to guestos_config_json_path
@@ -85,8 +92,8 @@ pub fn generate_testnet_config(
     } = config;
 
     // Construct the NetworkSettings
-    let ipv6_config = match ipv6_config_type.as_deref() {
-        Some("Deterministic") => {
+    let ipv6_config = match ipv6_config_type {
+        Some(Ipv6ConfigType::Deterministic) => {
             let prefix = deterministic_prefix.ok_or_else(|| {
                 anyhow::anyhow!(
                     "deterministic_prefix is required when ipv6_config_type is 'Deterministic'"
@@ -112,7 +119,7 @@ pub fn generate_testnet_config(
                 gateway,
             })
         }
-        Some("Fixed") => {
+        Some(Ipv6ConfigType::Fixed) => {
             let address = fixed_address.ok_or_else(|| {
                 anyhow::anyhow!("fixed_address is required when ipv6_config_type is 'Fixed'")
             })?;
@@ -126,10 +133,7 @@ pub fn generate_testnet_config(
             Ipv6Config::Fixed(FixedIpv6Config { address, gateway })
         }
         // Default to RouterAdvertisement if not provided
-        Some("RouterAdvertisement") | None => Ipv6Config::RouterAdvertisement,
-        Some(other) => {
-            anyhow::bail!("Invalid ipv6_config_type '{}'. Must be 'Deterministic', 'Fixed', or 'RouterAdvertisement'.", other);
-        }
+        Some(Ipv6ConfigType::RouterAdvertisement) | None => Ipv6Config::RouterAdvertisement,
     };
 
     let ipv4_config = match (ipv4_address, ipv4_gateway, ipv4_prefix_length, ipv4_domain) {
