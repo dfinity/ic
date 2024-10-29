@@ -27,8 +27,12 @@ fn check_address(args: CheckAddressArgs) -> CheckAddressResponse {
     match config.kyt_mode {
         KytMode::AcceptAll => CheckAddressResponse::Passed,
         KytMode::RejectAll => CheckAddressResponse::Failed,
-        KytMode::Normal if blocklist_contains(&address) => CheckAddressResponse::Failed,
-        KytMode::Normal => CheckAddressResponse::Passed,
+        KytMode::Normal => {
+            if blocklist_contains(&address) {
+                return CheckAddressResponse::Failed;
+            }
+            CheckAddressResponse::Passed
+        }
     }
 }
 
