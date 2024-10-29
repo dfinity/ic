@@ -299,6 +299,18 @@ type Governance = record {
   sns_metadata : opt ManageSnsMetadata;
   neurons : vec record { text; Neuron };
   genesis_timestamp_seconds : nat64;
+  target_version: opt Version;
+  timers : opt Timers;
+};
+
+type Timers = record {
+  requires_periodic_tasks : opt bool;
+  last_reset_timestamp_seconds : opt nat64;
+  last_spawned_timestamp_seconds : opt nat64;
+};
+
+type GetTimersResponse = record {
+  timers : opt Timers;
 };
 
 type GovernanceCachedMetrics = record {
@@ -726,7 +738,11 @@ type GetUpgradeJournalRequest = record {};
 type GetUpgradeJournalResponse = record {
   upgrade_steps : opt Versions;
   response_timestamp_seconds : opt nat64;
+  target_version : opt Version;
 };
+
+type AdvanceTargetVersionRequest = record { target_version : opt Version; };
+type AdvanceTargetVersionResponse = record {};
 
 service : (Governance) -> {
   add_maturity : (AddMaturityRequest) -> (AddMaturityResponse);
@@ -755,4 +771,7 @@ service : (Governance) -> {
   mint_tokens : (MintTokensRequest) -> (record {});
   set_mode : (SetMode) -> (record {});
   update_neuron : (Neuron) -> (opt GovernanceError);
+  advance_target_version : (AdvanceTargetVersionRequest) -> (AdvanceTargetVersionResponse);
+  reset_timers : (record {}) -> (record {});
+  get_timers : (record {}) -> (GetTimersResponse) query;
 }

@@ -2187,21 +2187,8 @@ impl StateMachine {
                 );
                 let (dk, _cc) = k.derive_subkey(&path);
 
-                let message = {
-                    if context.schnorr_args().message.len() == 32 {
-                        let mut message = [0u8; 32];
-                        message.copy_from_slice(&context.schnorr_args().message);
-                        message
-                    } else {
-                        error!(
-                            self.replica_logger,
-                            "Currently BIP340 signing of messages != 32 bytes not supported"
-                        );
-                        return None;
-                    }
-                };
-
-                dk.sign_message_with_bip340_no_rng(&message).to_vec()
+                dk.sign_message_with_bip340_no_rng(&context.schnorr_args().message)
+                    .to_vec()
             }
             Some(SignatureSecretKey::Ed25519(k)) => {
                 let path = ic_crypto_ed25519::DerivationPath::from_canister_id_and_path(
@@ -2346,6 +2333,7 @@ impl StateMachine {
             time: self.get_time_of_next_round(),
             consensus_responses: payload.consensus_responses,
             blockmaker_metrics: BlockmakerMetrics::new_for_test(),
+            replica_version: ReplicaVersion::default(),
         };
 
         self.message_routing

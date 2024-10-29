@@ -1,6 +1,6 @@
 use crate::dashboard::tests::assertions::DashboardAssert;
 use crate::dashboard::{filters, DashboardTemplate, Fetched, Status, DEFAULT_TX_TABLE_PAGE_SIZE};
-use crate::state::Timestamp;
+use crate::state::{Timestamp, TransactionKytData};
 use crate::{blocklist::BTC_ADDRESS_BLOCKLIST, dashboard, state, BtcNetwork};
 use bitcoin::Address;
 use bitcoin::{absolute::LockTime, transaction::Version, Transaction};
@@ -116,12 +116,16 @@ fn test_pagination() {
     state::set_config(state::Config {
         btc_network: BtcNetwork::Mainnet,
     });
-    let mock_transaction = Transaction {
-        version: Version::ONE,
-        lock_time: LockTime::ZERO,
-        input: Vec::new(),
-        output: Vec::new(),
-    };
+    let mock_transaction = TransactionKytData::from_transaction(
+        &BtcNetwork::Mainnet,
+        Transaction {
+            version: Version::ONE,
+            lock_time: LockTime::ZERO,
+            input: Vec::new(),
+            output: Vec::new(),
+        },
+    )
+    .unwrap();
     let mut expected_txids = vec![];
     // Generate entries to fill one and half pages
     for i in 0..DEFAULT_TX_TABLE_PAGE_SIZE * 3 / 2 {
@@ -130,7 +134,7 @@ fn test_pagination() {
         state::set_fetch_status(
             txid,
             state::FetchTxStatus::Fetched(state::FetchedTx {
-                tx: mock_transaction.clone().try_into().unwrap(),
+                tx: mock_transaction.clone(),
                 input_addresses: vec![],
             }),
         );

@@ -286,7 +286,7 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
                             if unvalidated_artifact.peer_id == self.node_id {
                                 transmits.push(ArtifactTransmit::Deliver(ArtifactWithOpt {
                                     artifact: unvalidated_artifact.message.signed_ingress.clone(),
-                                    is_latency_sensitive: false,
+                                    is_latency_sensitive: true,
                                 }));
                             }
                             self.validated.insert(

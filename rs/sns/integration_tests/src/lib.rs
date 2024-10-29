@@ -57,3 +57,6 @@ mod http_request;
 
 #[cfg(test)]
 mod timers;
+
+#[cfg(test)]
+mod golden_state_swap_upgrade_twice;

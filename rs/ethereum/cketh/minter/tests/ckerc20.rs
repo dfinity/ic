@@ -1355,6 +1355,7 @@ fn should_deposit_cketh_and_ckerc20_when_ledger_temporary_offline() {
                 from_address: format_ethereum_address_to_eip_55(DEFAULT_DEPOSIT_FROM_ADDRESS),
                 value: CKETH_MINIMUM_WITHDRAWAL_AMOUNT.into(),
                 principal: caller,
+                subaccount: None,
             },
             EventPayload::AcceptedErc20Deposit {
                 transaction_hash: DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH.to_string(),
@@ -1364,6 +1365,7 @@ fn should_deposit_cketh_and_ckerc20_when_ledger_temporary_offline() {
                 value: ONE_USDC.into(),
                 principal: caller,
                 erc20_contract_address: ckusdc.erc20_contract_address.clone(),
+                subaccount: None,
             },
         ])
         .check_events()
@@ -1546,6 +1548,7 @@ fn should_retrieve_minter_info() {
             last_eth_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
             last_erc20_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
             cketh_ledger_id: Some(ckerc20.cketh_ledger_id()),
+            evm_rpc_id: ckerc20.cketh.evm_rpc_id.map(Principal::from),
         }
     );
 }

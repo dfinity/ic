@@ -1,5 +1,7 @@
 # Proposal to install the {{canister}} canister
 
+Repository: `{{canister.git_repository_url()}}`
+
 Git hash: `{{at}}`
 
 New compressed Wasm hash: `{{compressed_wasm_hash}}`
@@ -17,7 +19,9 @@ TODO: THIS MUST BE FILLED OUT
 ```
 git fetch
 git checkout {{at}}
-cd {{canister.repo_dir().as_path().display()}}
+{% if let Some(dir) = canister.repo_dir() -%}
+cd {{dir.as_path().display()}}
+{% endif -%}
 {{install_args.didc_encode_cmd()}} | xxd -r -p | sha256sum
 ```
 
@@ -28,6 +32,6 @@ Verify that the hash of the gzipped WASM matches the proposed hash.
 ```
 git fetch
 git checkout {{at}}
-./ci/container/build-ic.sh -c
+{{build_artifact_command}}
 sha256sum ./{{canister.artifact().as_path().display()}}
 ```
