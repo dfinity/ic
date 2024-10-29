@@ -113,7 +113,16 @@ rm -rf "$CANISTERS_DIR_FULL"
 rm -rf "$DISK_DIR_FULL"
 
 echo_green "Building selected IC artifacts"
-BAZEL_CMD="bazel build --config=local --ic_version='$VERSION' --ic_version_rc_only='$IC_VERSION_RC_ONLY'"
+BAZEL_CMD="bazel build --config=local --ic_version='$VERSION' --ic_version_rc_only='$IC_VERSION_RC_ONLY' \
+           --release_build=$RELEASE"
+
+BAZEL_CLEAN_CMD=$(
+    cat <<-END
+    # clear bazel cache
+    bazel clean
+END
+)
+
 BUILD_BINARIES_CMD=$(
     cat <<-END
     # build binaries
@@ -148,7 +157,7 @@ BUILD_IMAGES_CMD=$(
     bazel cquery --config=local --output=files //ic-os/setupos/envs/prod | xargs -I {} cp {} "${DISK_DIR}/setupos"
 END
 )
-BUILD_CMD=""
+BUILD_CMD="${BAZEL_CLEAN_CMD}"
 
 if "$BUILD_BIN"; then BUILD_CMD="${BUILD_CMD}${BUILD_BINARIES_CMD}"; fi
 if "$BUILD_CAN"; then BUILD_CMD="${BUILD_CMD}${BUILD_CANISTERS_CMD}"; fi

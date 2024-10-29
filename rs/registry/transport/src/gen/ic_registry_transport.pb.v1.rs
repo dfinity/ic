@@ -45,13 +45,13 @@ pub mod registry_error {
         /// (if the ProtoBuf definition does not change) and safe for programmatic use.
         pub fn as_str_name(&self) -> &'static str {
             match self {
-                Code::MalformedMessage => "MALFORMED_MESSAGE",
-                Code::KeyNotPresent => "KEY_NOT_PRESENT",
-                Code::KeyAlreadyPresent => "KEY_ALREADY_PRESENT",
-                Code::VersionNotLatest => "VERSION_NOT_LATEST",
-                Code::VersionBeyondLatest => "VERSION_BEYOND_LATEST",
-                Code::Authorization => "AUTHORIZATION",
-                Code::InternalError => "INTERNAL_ERROR",
+                Self::MalformedMessage => "MALFORMED_MESSAGE",
+                Self::KeyNotPresent => "KEY_NOT_PRESENT",
+                Self::KeyAlreadyPresent => "KEY_ALREADY_PRESENT",
+                Self::VersionNotLatest => "VERSION_NOT_LATEST",
+                Self::VersionBeyondLatest => "VERSION_BEYOND_LATEST",
+                Self::Authorization => "AUTHORIZATION",
+                Self::InternalError => "INTERNAL_ERROR",
             }
         }
         /// Creates an enum from field names used in the ProtoBuf definition.
@@ -203,10 +203,10 @@ pub mod registry_mutation {
         /// (if the ProtoBuf definition does not change) and safe for programmatic use.
         pub fn as_str_name(&self) -> &'static str {
             match self {
-                Type::Insert => "INSERT",
-                Type::Update => "UPDATE",
-                Type::Delete => "DELETE",
-                Type::Upsert => "UPSERT",
+                Self::Insert => "INSERT",
+                Self::Update => "UPDATE",
+                Self::Delete => "DELETE",
+                Self::Upsert => "UPSERT",
             }
         }
         /// Creates an enum from field names used in the ProtoBuf definition.

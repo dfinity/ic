@@ -98,12 +98,6 @@ pub enum StateError {
     /// Canister is stopping, only accepting responses.
     CanisterStopping(CanisterId),
 
-    /// Message enqueuing failed due to canister migration.
-    CanisterMigrating {
-        canister_id: CanisterId,
-        host_subnet: SubnetId,
-    },
-
     /// Message enqueuing failed due to full in/out queue.
     QueueFull { capacity: usize },
 
@@ -259,7 +253,6 @@ impl PeekableOutputIterator for OutputIterator<'_> {
     }
 }
 
-pub const LABEL_VALUE_CANISTER_MIGRATING: &str = "CanisterMigrating";
 pub const LABEL_VALUE_QUEUE_FULL: &str = "QueueFull";
 pub const LABEL_VALUE_OUT_OF_MEMORY: &str = "OutOfMemory";
 pub const LABEL_VALUE_INVALID_RESPONSE: &str = "InvalidResponse";
@@ -273,7 +266,6 @@ impl StateError {
             StateError::CanisterNotFound(_) => LABEL_VALUE_CANISTER_NOT_FOUND,
             StateError::CanisterStopped(_) => LABEL_VALUE_CANISTER_STOPPED,
             StateError::CanisterStopping(_) => LABEL_VALUE_CANISTER_STOPPING,
-            StateError::CanisterMigrating { .. } => LABEL_VALUE_CANISTER_MIGRATING,
             StateError::QueueFull { .. } => LABEL_VALUE_QUEUE_FULL,
             StateError::OutOfMemory { .. } => LABEL_VALUE_OUT_OF_MEMORY,
             StateError::NonMatchingResponse { .. } => LABEL_VALUE_INVALID_RESPONSE,
@@ -284,7 +276,7 @@ impl StateError {
     }
 
     /// Creates a `StateError::CanisterNotFound` variant with the given error
-    /// mnessage for the given `Response`.
+    /// message for the given `Response`.
     pub fn non_matching_response(err_str: impl ToString, response: &Response) -> Self {
         Self::NonMatchingResponse {
             err_str: err_str.to_string(),
@@ -309,9 +301,6 @@ impl std::fmt::Display for StateError {
             }
             StateError::CanisterStopping(canister_id) => {
                 write!(f, "Canister {} is stopping", canister_id)
-            }
-            StateError::CanisterMigrating { canister_id, host_subnet } => {
-                write!(f, "Canister {} is being migrated to/from {}", canister_id, host_subnet)
             }
             StateError::QueueFull { capacity } => {
                 write!(f, "Maximum queue capacity {} reached", capacity)
@@ -902,7 +891,7 @@ impl ReplicatedState {
         // Because the borrow checker requires us to remove each canister before
         // calling `time_out_messages()` on it and replace it afterwards; and removing
         // and replacing every canister on a large subnet is very costly; we first
-        // filter for the (usually much fewer) canisters with timed requests and only
+        // filter for the (usually much fewer) canisters with timed out requests and only
         // apply the costly remove-call-replace to those.
         let canister_ids_with_expired_deadlines = self
             .canister_states
@@ -910,7 +899,7 @@ impl ReplicatedState {
             .filter(|(_, canister_state)| {
                 canister_state
                     .system_state
-                    .has_expired_deadlines(current_time)
+                    .has_expired_message_deadlines(current_time)
             })
             .map(|(canister_id, _)| *canister_id)
             .collect::<Vec<_>>();
@@ -927,6 +916,45 @@ impl ReplicatedState {
         }
 
         timed_out_messages_count
+    }
+
+    /// Times out all callbacks with expired deadlines (given the state time) that
+    /// have not already been timed out. Returns the number of timed out callbacks
+    /// and any errors that prevented a `DeadlineExpired` response from being
+    /// enqueued (which would signal a bug).
+    ///
+    /// See `CanisterQueues::time_out_callbacks` for further details.
+    pub fn time_out_callbacks(&mut self) -> (usize, Vec<StateError>) {
+        let current_time = CoarseTime::floor(self.metadata.time());
+        // Because the borrow checker requires us to remove each canister before
+        // calling `time_out_callbacks()` on it and replace it afterwards; and removing
+        // and replacing every canister on a large subnet is very costly; we first
+        // filter for the (usually much fewer) canisters with timed out callbacks and
+        // only apply the costly remove-call-replace to those.
+        let canister_ids_with_expired_callbacks = self
+            .canister_states
+            .iter()
+            .filter(|(_, canister_state)| {
+                canister_state
+                    .system_state
+                    .has_expired_callbacks(current_time)
+            })
+            .map(|(canister_id, _)| *canister_id)
+            .collect::<Vec<_>>();
+
+        let mut expired_callback_count = 0;
+        let mut errors = Vec::new();
+        for canister_id in canister_ids_with_expired_callbacks {
+            let mut canister = self.canister_states.remove(&canister_id).unwrap();
+            let (canister_expired_callback_count, canister_errors) = canister
+                .system_state
+                .time_out_callbacks(current_time, &canister_id, &self.canister_states);
+            expired_callback_count += canister_expired_callback_count;
+            errors.extend(canister_errors);
+            self.canister_states.insert(canister_id, canister);
+        }
+
+        (expired_callback_count, errors)
     }
 
     /// Splits the replicated state as part of subnet splitting phase 1, retaining

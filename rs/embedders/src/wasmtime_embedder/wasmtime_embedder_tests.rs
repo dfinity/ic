@@ -233,7 +233,10 @@ fn test_initial_wasmtime_config() {
         });
         // Format error message with cause using '{:?}'
         let err_msg = format!("{:?}", err);
-        // Make sure the error is because of the feature being disabled.
+        // Verify that the error occurred because the expected feature was disabled.
+        // If this test fails, check whether:
+        // 1. The feature being tested is enabled by default (in that case, explicitly disable it in the config), or
+        // 2. The error message has changed in a new release (update the expected error message accordingly).
         assert!(
             err_msg.contains(expected_err_msg),
             "Error expecting `{expected_err_msg}`, but got `{err_msg}`"

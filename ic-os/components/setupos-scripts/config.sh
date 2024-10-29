@@ -13,6 +13,8 @@ CONFIG_INI_CLONE="${CONFIG_TMP}/config.ini"
 SSH_AUTHORIZED_KEYS="${CONFIG_DIR}/ssh_authorized_keys"
 SSH_AUTHORIZED_KEYS_CLONE="${CONFIG_TMP}/ssh_authorized_keys"
 
+source /opt/ic/bin/functions.sh
+
 # Define empty variables so they are not unset
 ipv6_prefix=""
 ipv6_gateway=""
@@ -106,7 +108,6 @@ function verify_variables() {
 
 # Establish run order
 main() {
-    source /opt/ic/bin/functions.sh
     log_start "$(basename $0)"
     print_config_file
     create_config_tmp

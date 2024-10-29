@@ -422,13 +422,6 @@ pub struct CyclesAccountManagerConfig {
 impl CyclesAccountManagerConfig {
     pub fn application_subnet() -> Self {
         Self {
-            max_storage_reservation_period: Duration::from_secs(300_000_000),
-            ..Self::verified_application_subnet()
-        }
-    }
-
-    pub fn verified_application_subnet() -> Self {
-        Self {
             reference_subnet_size: DEFAULT_REFERENCE_SUBNET_SIZE,
             canister_creation_fee: Cycles::new(100_000_000_000),
             compute_percent_allocated_per_second_fee: Cycles::new(10_000_000),
@@ -451,11 +444,13 @@ impl CyclesAccountManagerConfig {
             http_request_quadratic_baseline_fee: Cycles::new(60_000),
             http_request_per_byte_fee: Cycles::new(400),
             http_response_per_byte_fee: Cycles::new(800),
-            // This effectively disables the storage reservation mechanism on
-            // verified application subnets.
-            max_storage_reservation_period: Duration::from_secs(0),
+            max_storage_reservation_period: Duration::from_secs(300_000_000),
             default_reserved_balance_limit: DEFAULT_RESERVED_BALANCE_LIMIT,
         }
+    }
+
+    pub fn verified_application_subnet() -> Self {
+        Self::application_subnet()
     }
 
     /// All processing is free on system subnets

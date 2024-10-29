@@ -205,7 +205,14 @@ class SlackApi:
                 for message in api_response["messages"]:
                     if include_message(message):
                         blocks = message["blocks"] if "blocks" in message else None
-                        slack_messages.append(SlackMessage(id=message["ts"], text=message["text"], blocks=blocks))
+                        reactions = set()
+                        if "reactions" in message:
+                            for reaction in message["reactions"]:
+                                if "name" in reaction:
+                                    reactions.add(reaction["name"])
+                        slack_messages.append(
+                            SlackMessage(id=message["ts"], text=message["text"], blocks=blocks, reactions=reactions)
+                        )
                 if "response_metadata" in api_response and "next_cursor" in api_response["response_metadata"]:
                     cursor = api_response["response_metadata"]["next_cursor"]
                 else:

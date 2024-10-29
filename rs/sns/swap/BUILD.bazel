@@ -15,17 +15,15 @@ filegroup(
 DEPENDENCIES = [
     # Keep sorted.
     "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//rs/ledger_suite/common/ledger_core",
+    "//rs/ledger_suite/icp:icp_ledger",
     "//rs/nervous_system/canisters",
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
     "//rs/nervous_system/neurons_fund",
     "//rs/nervous_system/proto",
     "//rs/nervous_system/runtime",
-    "//rs/rosetta-api/icp_ledger",
-    "//rs/rosetta-api/ledger_core",
     "//rs/rust_canisters/canister_log",
-    "//rs/rust_canisters/dfn_candid",
-    "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/http_types",
     "//rs/sns/governance",
     "//rs/types/base_types",
@@ -34,6 +32,8 @@ DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:comparable",
     "@crate_index//:hex",
+    "@crate_index//:ic-cdk",
+    "@crate_index//:ic-cdk-timers",
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:ic-stable-structures",
     "@crate_index//:itertools",
@@ -48,6 +48,7 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:async-trait",
+    "@crate_index//:ic-cdk-macros",
     "@crate_index//:rust_decimal_macros",
 ]
 

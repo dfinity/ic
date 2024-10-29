@@ -48,9 +48,9 @@ impl NodeRewardType {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            NodeRewardType::Unspecified => "NODE_REWARD_TYPE_UNSPECIFIED",
-            NodeRewardType::Small => "NODE_REWARD_TYPE_SMALL",
-            NodeRewardType::StorageUpgrade => "NODE_REWARD_TYPE_STORAGE_UPGRADE",
+            Self::Unspecified => "NODE_REWARD_TYPE_UNSPECIFIED",
+            Self::Small => "NODE_REWARD_TYPE_SMALL",
+            Self::StorageUpgrade => "NODE_REWARD_TYPE_STORAGE_UPGRADE",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.

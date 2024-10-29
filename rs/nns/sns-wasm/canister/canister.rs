@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use candid::candid_method;
-use dfn_candid::{candid, candid_one, CandidOne};
+use dfn_candid::{candid_one, CandidOne};
 use dfn_core::{
     api::{caller, Funds},
     over, over_async, over_init,
@@ -581,13 +581,6 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
 #[export_name = "canister_query http_request"]
 fn http_request() {
     dfn_http_metrics::serve_metrics(encode_metrics);
-}
-
-/// Deprecated: The blessed alternative is to do (the equivalent of)
-/// `dfx canister metadata $CANISTER 'candid:service'`.
-#[export_name = "canister_query __get_candid_interface_tmp_hack"]
-fn expose_candid() {
-    over(candid, |_: ()| include_str!("sns-wasm.did").to_string())
 }
 
 fn main() {

@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 
 use crate::info::NetworkInfo;
 use crate::interfaces::{get_interfaces, has_ipv6_connectivity, Interface};
-use crate::mac_address::FormattedMacAddress;
+use mac_address::mac_address::FormattedMacAddress;
 
 pub static DEFAULT_SYSTEMD_NETWORK_DIR: &str = "/run/systemd/network";
 

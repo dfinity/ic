@@ -423,7 +423,7 @@ fn rosetta_workspace_path() -> String {
 }
 
 fn rosetta_api_bin_path() -> PathBuf {
-    get_dependency_path("rs/rosetta-api/ic-rosetta-api")
+    get_dependency_path("rs/rosetta-api/icp/ic-rosetta-api")
 }
 
 fn rosetta_cli_bin_path() -> String {

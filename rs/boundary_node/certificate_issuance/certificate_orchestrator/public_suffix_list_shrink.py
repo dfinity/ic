@@ -9,7 +9,5 @@ with open("public_suffix_list.dat", "w") as shrank_file:
             break
         else:
             # remove comments and empty lines
-            if (not item == "\n" and not item.startswith("//")) or (
-                "ICANN DOMAINS" in item
-            ):
+            if (not item == "\n" and not item.startswith("//")) or ("ICANN DOMAINS" in item):
                 shrank_file.write(item)

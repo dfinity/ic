@@ -6,6 +6,8 @@ set -o pipefail
 SHELL="/bin/bash"
 PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 
+source /opt/ic/bin/functions.sh
+
 function start_setupos() {
     # Wait until login prompt appears
     sleep 5
@@ -34,7 +36,6 @@ function reboot_setupos() {
 
 # Establish run order
 main() {
-    source /opt/ic/bin/functions.sh
     log_start "$(basename $0)"
     start_setupos
     /opt/ic/bin/check-setupos-age.sh

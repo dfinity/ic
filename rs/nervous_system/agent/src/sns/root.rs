@@ -10,6 +10,11 @@ pub struct RootCanister {
 }
 
 impl RootCanister {
+    pub fn new(canister_id: impl Into<PrincipalId>) -> Self {
+        let canister_id = canister_id.into();
+        Self { canister_id }
+    }
+
     pub async fn sns_canisters_summary<C: CallCanisters>(
         &self,
         agent: &C,

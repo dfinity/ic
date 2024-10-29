@@ -156,7 +156,8 @@ fn consensus_produces_expected_batches() {
             metrics_registry.clone(),
             no_op_logger(),
         );
-        let consensus_bouncer = ic_consensus::consensus::ConsensusBouncer::new(router.clone());
+        let consensus_bouncer =
+            ic_consensus::consensus::ConsensusBouncer::new(&metrics_registry, router.clone());
         let dkg = dkg::DkgImpl::new(
             replica_config.node_id,
             Arc::clone(&fake_crypto) as Arc<_>,
@@ -200,14 +201,14 @@ fn consensus_produces_expected_batches() {
             metrics_registry,
         );
         driver.step(); // this stops before notary timeout expires after making 1st block
-        time_source.advance_time(Duration::from_millis(2000));
+        time_source.advance_time(Duration::from_millis(1000));
         driver.step(); // this stops before notary timeout expires after making 2nd block
-        time_source.advance_time(Duration::from_millis(2000));
+        time_source.advance_time(Duration::from_millis(1000));
         driver.step(); // this stops before notary timeout expires after making 3rd block
 
         // Make a few more batches past the summary.
         for _ in 0..=DKG_INTERVAL_LENGTH {
-            time_source.advance_time(Duration::from_millis(2000));
+            time_source.advance_time(Duration::from_millis(1000));
             driver.step();
         }
         let batches = router.batches.read().unwrap().clone();

@@ -15,7 +15,6 @@ component_files = {
     Label("hostos-scripts/libvirt/setup-libvirt.sh"): "/opt/ic/bin/setup-libvirt.sh",
     Label("hostos-scripts/libvirt/setup-libvirt.service"): "/etc/systemd/system/setup-libvirt.service",
     Label("hostos-scripts/misc/setup-var.sh"): "/opt/ic/bin/setup-var.sh",
-    Label("hostos-scripts/misc/fetch-mgmt-mac.sh"): "/opt/ic/bin/fetch-mgmt-mac.sh",
     Label("hostos-scripts/misc/detect-first-boot.sh"): "/opt/ic/bin/detect-first-boot.sh",
     Label("hostos-scripts/monitoring/monitor-guestos.sh"): "/opt/ic/bin/monitor-guestos.sh",
     Label("hostos-scripts/monitoring/monitor-guestos.service"): "/etc/systemd/system/monitor-guestos.service",
@@ -44,6 +43,8 @@ component_files = {
     Label("early-boot/fstab/fstab-hostos"): "/etc/fstab",
     Label("early-boot/locale"): "/etc/default/locale",
     Label("early-boot/initramfs-tools/hostos/initramfs.conf"): "/etc/initramfs-tools/initramfs.conf",
+    Label("early-boot/initramfs-tools/hostos/amd64-microcode"): "/etc/default/amd64-microcode",
+    Label("early-boot/initramfs-tools/hostos/intel-microcode"): "/etc/default/intel-microcode",
     Label("early-boot/initramfs-tools/hostos/modules"): "/etc/initramfs-tools/modules",
     Label("early-boot/initramfs-tools/hostos/set-machine-id/set-machine-id"): "/etc/initramfs-tools/scripts/init-bottom/set-machine-id/set-machine-id",
 

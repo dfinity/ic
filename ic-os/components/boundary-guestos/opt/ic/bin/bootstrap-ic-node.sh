@@ -71,7 +71,6 @@ function process_bootstrap() {
         nns_public_key.pem
         nns.conf
         pre_isolation_canisters.txt
-        prober_identity.pem
     )
 
     for FILE in ${FILES[@]}; do

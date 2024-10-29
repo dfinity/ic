@@ -69,6 +69,8 @@ pub struct SerializedModule {
     pub compilation_cost: NumInstructions,
     /// Imported System API functions that are deprecated, should become deprecated, or should only be used by NNS canisters.
     pub imports_details: WasmImportsDetails,
+    /// Boolean value that indicates whether this is a Wasm64 module or not.
+    pub is_wasm64: bool,
 }
 
 impl CountBytes for SerializedModule {
@@ -82,6 +84,7 @@ impl SerializedModule {
         module: &Module,
         instrumentation_output: InstrumentationOutput,
         validation_details: WasmValidationDetails,
+        is_wasm64: bool,
     ) -> HypervisorResult<Self> {
         let bytes = SerializedModuleBytes::try_from(module)?;
         Ok(Self {
@@ -91,6 +94,7 @@ impl SerializedModule {
             wasm_metadata: validation_details.wasm_metadata,
             compilation_cost: instrumentation_output.compilation_cost,
             imports_details: validation_details.imports_details,
+            is_wasm64,
         })
     }
 

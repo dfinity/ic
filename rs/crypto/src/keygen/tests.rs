@@ -13,7 +13,7 @@ use ic_crypto_internal_csp::vault::api::NodeKeysErrors;
 use ic_crypto_internal_csp::vault::api::PksAndSksContainsErrors;
 use ic_crypto_internal_csp::vault::api::SecretKeyError;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
-use ic_crypto_internal_threshold_sig_ecdsa::MEGaPublicKey;
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::MEGaPublicKey;
 use ic_crypto_temp_crypto::EcdsaSubnetConfig;
 use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
 use ic_crypto_test_utils_keys::public_keys::{
@@ -933,7 +933,7 @@ mod check_keys_with_registry {
 
 mod rotate_idkg_dealing_encryption_keys {
     use super::*;
-    use ic_crypto_internal_threshold_sig_ecdsa::EccCurveType;
+    use ic_crypto_internal_threshold_sig_canister_threshold_sig::EccCurveType;
     use ic_crypto_test_utils_keys::public_keys::valid_idkg_dealing_encryption_public_key_2;
     use ic_crypto_test_utils_keys::public_keys::valid_idkg_dealing_encryption_public_key_3;
     use ic_test_utilities_in_memory_logger::{assertions::LogEntriesAssert, InMemoryReplicaLogger};

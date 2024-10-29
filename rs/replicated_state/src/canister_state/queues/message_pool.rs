@@ -117,6 +117,18 @@ impl Id {
             Class::BestEffort
         }
     }
+
+    /// Tests whether this `Id` represents an inbound best-effort response.
+    fn is_inbound_best_effort_response(&self) -> bool {
+        self.0 & (Context::BIT | Class::BIT | Kind::BIT)
+            == (Context::Inbound as u64 | Class::BestEffort as u64 | Kind::Response as u64)
+    }
+
+    /// Tests whether this `Id` represents an outbound guaranteed-response request.
+    fn is_outbound_guaranteed_request(&self) -> bool {
+        self.0 & (Context::BIT | Class::BIT | Kind::BIT)
+            == (Context::Outbound as u64 | Class::GuaranteedResponse as u64 | Kind::Request as u64)
+    }
 }
 
 /// A typed reference -- inbound (`CanisterInput`) or outbound
@@ -142,12 +154,19 @@ impl<T> Reference<T> {
         Id::from(self).kind()
     }
 
-    pub(super) fn context(&self) -> Context {
+    #[cfg(test)]
+    fn context(&self) -> Context {
         Id::from(self).context()
     }
 
-    pub(super) fn class(&self) -> Class {
+    #[allow(dead_code)]
+    fn class(&self) -> Class {
         Id::from(self).class()
+    }
+
+    /// Tests whether this is a reference to an inbound best-effort response.
+    pub(super) fn is_inbound_best_effort_response(&self) -> bool {
+        Id::from(self).is_inbound_best_effort_response()
     }
 }
 
@@ -235,51 +254,27 @@ impl From<Id> for SomeReference {
     }
 }
 
-impl<T> From<&Reference<T>> for pb_queues::canister_queue::QueueItem {
+impl<T> TryFrom<u64> for Reference<T>
+where
+    T: ToContext,
+{
+    type Error = ProxyDecodeError;
+    fn try_from(item: u64) -> Result<Self, Self::Error> {
+        let id = Id(item);
+        if id.context() == T::context() {
+            Ok(Reference(item, PhantomData))
+        } else {
+            Err(ProxyDecodeError::Other(format!(
+                "Mismatched reference context: {}",
+                item
+            )))
+        }
+    }
+}
+
+impl<T> From<&Reference<T>> for u64 {
     fn from(item: &Reference<T>) -> Self {
-        use pb_queues::canister_queue::queue_item::R;
-
-        Self {
-            r: Some(R::Reference(item.0)),
-        }
-    }
-}
-
-impl TryFrom<pb_queues::canister_queue::QueueItem> for InboundReference {
-    type Error = ProxyDecodeError;
-    fn try_from(item: pb_queues::canister_queue::QueueItem) -> Result<Self, Self::Error> {
-        match item.r {
-            Some(pb_queues::canister_queue::queue_item::R::Reference(id)) => {
-                let reference = Reference(id, PhantomData);
-                if reference.context() == Context::Inbound {
-                    Ok(reference)
-                } else {
-                    Err(ProxyDecodeError::Other(
-                        "Not an inbound reference".to_string(),
-                    ))
-                }
-            }
-            None => Err(ProxyDecodeError::MissingField("QueueItem::r")),
-        }
-    }
-}
-
-impl TryFrom<pb_queues::canister_queue::QueueItem> for OutboundReference {
-    type Error = ProxyDecodeError;
-    fn try_from(item: pb_queues::canister_queue::QueueItem) -> Result<Self, Self::Error> {
-        match item.r {
-            Some(pb_queues::canister_queue::queue_item::R::Reference(id)) => {
-                let reference = Reference(id, PhantomData);
-                if reference.context() == Context::Outbound {
-                    Ok(reference)
-                } else {
-                    Err(ProxyDecodeError::Other(
-                        "Not an outbound reference".to_string(),
-                    ))
-                }
-            }
-            None => Err(ProxyDecodeError::MissingField("QueueItem::r")),
-        }
+        item.0
     }
 }
 
@@ -300,10 +295,7 @@ impl TryFrom<pb_queues::canister_queues::CallbackReference> for CallbackReferenc
     type Error = ProxyDecodeError;
     fn try_from(item: pb_queues::canister_queues::CallbackReference) -> Result<Self, Self::Error> {
         let reference = Reference(item.id, PhantomData);
-        if reference.context() == Context::Inbound
-            && reference.class() == Class::BestEffort
-            && reference.kind() == Kind::Response
-        {
+        if reference.is_inbound_best_effort_response() {
             Ok(CallbackReference(reference, item.callback_id.into()))
         } else {
             Err(ProxyDecodeError::Other(
@@ -385,6 +377,14 @@ impl MessagePool {
         };
 
         self.insert_impl(msg, actual_deadline, Context::Inbound)
+    }
+
+    /// Reserves an `InboundReference` for a timeout reject response for a
+    /// best-effort callback.
+    ///
+    /// This is equivalent to inserting and then immediately removing the response.
+    pub(super) fn make_inbound_timeout_response_reference(&mut self) -> InboundReference {
+        self.next_reference(Class::BestEffort, Kind::Response)
     }
 
     /// Inserts an outbound request (one that is to be enqueued in an output queue)
@@ -616,7 +616,9 @@ impl MessagePool {
             .into_iter()
             .map(|(_, id)| {
                 let msg = self.take_impl(id).unwrap();
-                self.outbound_guaranteed_request_deadlines.remove(&id);
+                if id.is_outbound_guaranteed_request() {
+                    self.outbound_guaranteed_request_deadlines.remove(&id);
+                }
                 self.remove_from_size_queue(id, &msg);
                 (id.into(), msg)
             })
@@ -648,16 +650,6 @@ impl MessagePool {
     /// Returns the number of messages in the pool.
     pub(super) fn len(&self) -> usize {
         self.messages.len()
-    }
-
-    /// Returns the implicitly assigned deadlines of enqueued outbound guaranteed
-    /// response requests.
-    pub(super) fn outbound_guaranteed_request_deadline<T>(
-        &self,
-        reference: Reference<T>,
-    ) -> Option<&CoarseTime> {
-        self.outbound_guaranteed_request_deadlines
-            .get(&reference.into())
     }
 
     /// Returns a reference to the pool's message stats.
@@ -722,10 +714,7 @@ impl MessagePool {
         // guaranteed response requests (and nothing else).
         let mut expected_outbound_guaranteed_request_ids = BTreeSet::new();
         self.messages.keys().for_each(|id| {
-            if id.context() == Context::Outbound
-                && id.class() == Class::GuaranteedResponse
-                && id.kind() == Kind::Request
-            {
+            if id.is_outbound_guaranteed_request() {
                 expected_outbound_guaranteed_request_ids.insert(id);
             }
         });

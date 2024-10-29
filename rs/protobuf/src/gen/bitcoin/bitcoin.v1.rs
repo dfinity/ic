@@ -187,10 +187,10 @@ impl Network {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            Network::Unspecified => "NETWORK_UNSPECIFIED",
-            Network::Testnet => "NETWORK_TESTNET",
-            Network::Mainnet => "NETWORK_MAINNET",
-            Network::Regtest => "NETWORK_REGTEST",
+            Self::Unspecified => "NETWORK_UNSPECIFIED",
+            Self::Testnet => "NETWORK_TESTNET",
+            Self::Mainnet => "NETWORK_MAINNET",
+            Self::Regtest => "NETWORK_REGTEST",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.

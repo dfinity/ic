@@ -203,92 +203,86 @@ impl ErrorCode {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            ErrorCode::Unspecified => "ERROR_CODE_UNSPECIFIED",
-            ErrorCode::SubnetOversubscribed => "ERROR_CODE_SUBNET_OVERSUBSCRIBED",
-            ErrorCode::MaxNumberOfCanistersReached => "ERROR_CODE_MAX_NUMBER_OF_CANISTERS_REACHED",
-            ErrorCode::CanisterQueueFull => "ERROR_CODE_CANISTER_QUEUE_FULL",
-            ErrorCode::IngressMessageTimeout => "ERROR_CODE_INGRESS_MESSAGE_TIMEOUT",
-            ErrorCode::CanisterQueueNotEmpty => "ERROR_CODE_CANISTER_QUEUE_NOT_EMPTY",
-            ErrorCode::IngressHistoryFull => "ERROR_CODE_INGRESS_HISTORY_FULL",
-            ErrorCode::CanisterIdAlreadyExists => "ERROR_CODE_CANISTER_ID_ALREADY_EXISTS",
-            ErrorCode::StopCanisterRequestTimeout => "ERROR_CODE_STOP_CANISTER_REQUEST_TIMEOUT",
-            ErrorCode::CanisterOutOfCycles => "ERROR_CODE_CANISTER_OUT_OF_CYCLES",
-            ErrorCode::CertifiedStateUnavailable => "ERROR_CODE_CERTIFIED_STATE_UNAVAILABLE",
-            ErrorCode::CanisterInstallCodeRateLimited => {
-                "ERROR_CODE_CANISTER_INSTALL_CODE_RATE_LIMITED"
-            }
-            ErrorCode::CanisterHeapDeltaRateLimited => {
-                "ERROR_CODE_CANISTER_HEAP_DELTA_RATE_LIMITED"
-            }
-            ErrorCode::CanisterNotFound => "ERROR_CODE_CANISTER_NOT_FOUND",
-            ErrorCode::CanisterSnapshotNotFound => "ERROR_CODE_CANISTER_SNAPSHOT_NOT_FOUND",
-            ErrorCode::InsufficientMemoryAllocation => "ERROR_CODE_INSUFFICIENT_MEMORY_ALLOCATION",
-            ErrorCode::InsufficientCyclesForCreateCanister => {
+            Self::Unspecified => "ERROR_CODE_UNSPECIFIED",
+            Self::SubnetOversubscribed => "ERROR_CODE_SUBNET_OVERSUBSCRIBED",
+            Self::MaxNumberOfCanistersReached => "ERROR_CODE_MAX_NUMBER_OF_CANISTERS_REACHED",
+            Self::CanisterQueueFull => "ERROR_CODE_CANISTER_QUEUE_FULL",
+            Self::IngressMessageTimeout => "ERROR_CODE_INGRESS_MESSAGE_TIMEOUT",
+            Self::CanisterQueueNotEmpty => "ERROR_CODE_CANISTER_QUEUE_NOT_EMPTY",
+            Self::IngressHistoryFull => "ERROR_CODE_INGRESS_HISTORY_FULL",
+            Self::CanisterIdAlreadyExists => "ERROR_CODE_CANISTER_ID_ALREADY_EXISTS",
+            Self::StopCanisterRequestTimeout => "ERROR_CODE_STOP_CANISTER_REQUEST_TIMEOUT",
+            Self::CanisterOutOfCycles => "ERROR_CODE_CANISTER_OUT_OF_CYCLES",
+            Self::CertifiedStateUnavailable => "ERROR_CODE_CERTIFIED_STATE_UNAVAILABLE",
+            Self::CanisterInstallCodeRateLimited => "ERROR_CODE_CANISTER_INSTALL_CODE_RATE_LIMITED",
+            Self::CanisterHeapDeltaRateLimited => "ERROR_CODE_CANISTER_HEAP_DELTA_RATE_LIMITED",
+            Self::CanisterNotFound => "ERROR_CODE_CANISTER_NOT_FOUND",
+            Self::CanisterSnapshotNotFound => "ERROR_CODE_CANISTER_SNAPSHOT_NOT_FOUND",
+            Self::InsufficientMemoryAllocation => "ERROR_CODE_INSUFFICIENT_MEMORY_ALLOCATION",
+            Self::InsufficientCyclesForCreateCanister => {
                 "ERROR_CODE_INSUFFICIENT_CYCLES_FOR_CREATE_CANISTER"
             }
-            ErrorCode::SubnetNotFound => "ERROR_CODE_SUBNET_NOT_FOUND",
-            ErrorCode::CanisterNotHostedBySubnet => "ERROR_CODE_CANISTER_NOT_HOSTED_BY_SUBNET",
-            ErrorCode::CanisterRejectedMessage => "ERROR_CODE_CANISTER_REJECTED_MESSAGE",
-            ErrorCode::UnknownManagementMessage => "ERROR_CODE_UNKNOWN_MANAGEMENT_MESSAGE",
-            ErrorCode::InvalidManagementPayload => "ERROR_CODE_INVALID_MANAGEMENT_PAYLOAD",
-            ErrorCode::CanisterTrapped => "ERROR_CODE_CANISTER_TRAPPED",
-            ErrorCode::CanisterCalledTrap => "ERROR_CODE_CANISTER_CALLED_TRAP",
-            ErrorCode::CanisterContractViolation => "ERROR_CODE_CANISTER_CONTRACT_VIOLATION",
-            ErrorCode::CanisterInvalidWasm => "ERROR_CODE_CANISTER_INVALID_WASM",
-            ErrorCode::CanisterDidNotReply => "ERROR_CODE_CANISTER_DID_NOT_REPLY",
-            ErrorCode::CanisterOutOfMemory => "ERROR_CODE_CANISTER_OUT_OF_MEMORY",
-            ErrorCode::CanisterStopped => "ERROR_CODE_CANISTER_STOPPED",
-            ErrorCode::CanisterStopping => "ERROR_CODE_CANISTER_STOPPING",
-            ErrorCode::CanisterNotStopped => "ERROR_CODE_CANISTER_NOT_STOPPED",
-            ErrorCode::CanisterStoppingCancelled => "ERROR_CODE_CANISTER_STOPPING_CANCELLED",
-            ErrorCode::CanisterInvalidController => "ERROR_CODE_CANISTER_INVALID_CONTROLLER",
-            ErrorCode::CanisterFunctionNotFound => "ERROR_CODE_CANISTER_FUNCTION_NOT_FOUND",
-            ErrorCode::CanisterNonEmpty => "ERROR_CODE_CANISTER_NON_EMPTY",
-            ErrorCode::QueryCallGraphLoopDetected => "ERROR_CODE_QUERY_CALL_GRAPH_LOOP_DETECTED",
-            ErrorCode::InsufficientCyclesInCall => "ERROR_CODE_INSUFFICIENT_CYCLES_IN_CALL",
-            ErrorCode::CanisterWasmEngineError => "ERROR_CODE_CANISTER_WASM_ENGINE_ERROR",
-            ErrorCode::CanisterInstructionLimitExceeded => {
+            Self::SubnetNotFound => "ERROR_CODE_SUBNET_NOT_FOUND",
+            Self::CanisterNotHostedBySubnet => "ERROR_CODE_CANISTER_NOT_HOSTED_BY_SUBNET",
+            Self::CanisterRejectedMessage => "ERROR_CODE_CANISTER_REJECTED_MESSAGE",
+            Self::UnknownManagementMessage => "ERROR_CODE_UNKNOWN_MANAGEMENT_MESSAGE",
+            Self::InvalidManagementPayload => "ERROR_CODE_INVALID_MANAGEMENT_PAYLOAD",
+            Self::CanisterTrapped => "ERROR_CODE_CANISTER_TRAPPED",
+            Self::CanisterCalledTrap => "ERROR_CODE_CANISTER_CALLED_TRAP",
+            Self::CanisterContractViolation => "ERROR_CODE_CANISTER_CONTRACT_VIOLATION",
+            Self::CanisterInvalidWasm => "ERROR_CODE_CANISTER_INVALID_WASM",
+            Self::CanisterDidNotReply => "ERROR_CODE_CANISTER_DID_NOT_REPLY",
+            Self::CanisterOutOfMemory => "ERROR_CODE_CANISTER_OUT_OF_MEMORY",
+            Self::CanisterStopped => "ERROR_CODE_CANISTER_STOPPED",
+            Self::CanisterStopping => "ERROR_CODE_CANISTER_STOPPING",
+            Self::CanisterNotStopped => "ERROR_CODE_CANISTER_NOT_STOPPED",
+            Self::CanisterStoppingCancelled => "ERROR_CODE_CANISTER_STOPPING_CANCELLED",
+            Self::CanisterInvalidController => "ERROR_CODE_CANISTER_INVALID_CONTROLLER",
+            Self::CanisterFunctionNotFound => "ERROR_CODE_CANISTER_FUNCTION_NOT_FOUND",
+            Self::CanisterNonEmpty => "ERROR_CODE_CANISTER_NON_EMPTY",
+            Self::QueryCallGraphLoopDetected => "ERROR_CODE_QUERY_CALL_GRAPH_LOOP_DETECTED",
+            Self::InsufficientCyclesInCall => "ERROR_CODE_INSUFFICIENT_CYCLES_IN_CALL",
+            Self::CanisterWasmEngineError => "ERROR_CODE_CANISTER_WASM_ENGINE_ERROR",
+            Self::CanisterInstructionLimitExceeded => {
                 "ERROR_CODE_CANISTER_INSTRUCTION_LIMIT_EXCEEDED"
             }
-            ErrorCode::CanisterMemoryAccessLimitExceeded => {
+            Self::CanisterMemoryAccessLimitExceeded => {
                 "ERROR_CODE_CANISTER_MEMORY_ACCESS_LIMIT_EXCEEDED"
             }
-            ErrorCode::QueryCallGraphTooDeep => "ERROR_CODE_QUERY_CALL_GRAPH_TOO_DEEP",
-            ErrorCode::QueryCallGraphTotalInstructionLimitExceeded => {
+            Self::QueryCallGraphTooDeep => "ERROR_CODE_QUERY_CALL_GRAPH_TOO_DEEP",
+            Self::QueryCallGraphTotalInstructionLimitExceeded => {
                 "ERROR_CODE_QUERY_CALL_GRAPH_TOTAL_INSTRUCTION_LIMIT_EXCEEDED"
             }
-            ErrorCode::CompositeQueryCalledInReplicatedMode => {
+            Self::CompositeQueryCalledInReplicatedMode => {
                 "ERROR_CODE_COMPOSITE_QUERY_CALLED_IN_REPLICATED_MODE"
             }
-            ErrorCode::QueryTimeLimitExceeded => "ERROR_CODE_QUERY_TIME_LIMIT_EXCEEDED",
-            ErrorCode::QueryCallGraphInternal => "ERROR_CODE_QUERY_CALL_GRAPH_INTERNAL",
-            ErrorCode::InsufficientCyclesInComputeAllocation => {
+            Self::QueryTimeLimitExceeded => "ERROR_CODE_QUERY_TIME_LIMIT_EXCEEDED",
+            Self::QueryCallGraphInternal => "ERROR_CODE_QUERY_CALL_GRAPH_INTERNAL",
+            Self::InsufficientCyclesInComputeAllocation => {
                 "ERROR_CODE_INSUFFICIENT_CYCLES_IN_COMPUTE_ALLOCATION"
             }
-            ErrorCode::InsufficientCyclesInMemoryAllocation => {
+            Self::InsufficientCyclesInMemoryAllocation => {
                 "ERROR_CODE_INSUFFICIENT_CYCLES_IN_MEMORY_ALLOCATION"
             }
-            ErrorCode::InsufficientCyclesInMemoryGrow => {
-                "ERROR_CODE_INSUFFICIENT_CYCLES_IN_MEMORY_GROW"
-            }
-            ErrorCode::ReservedCyclesLimitExceededInMemoryAllocation => {
+            Self::InsufficientCyclesInMemoryGrow => "ERROR_CODE_INSUFFICIENT_CYCLES_IN_MEMORY_GROW",
+            Self::ReservedCyclesLimitExceededInMemoryAllocation => {
                 "ERROR_CODE_RESERVED_CYCLES_LIMIT_EXCEEDED_IN_MEMORY_ALLOCATION"
             }
-            ErrorCode::ReservedCyclesLimitExceededInMemoryGrow => {
+            Self::ReservedCyclesLimitExceededInMemoryGrow => {
                 "ERROR_CODE_RESERVED_CYCLES_LIMIT_EXCEEDED_IN_MEMORY_GROW"
             }
-            ErrorCode::InsufficientCyclesInMessageMemoryGrow => {
+            Self::InsufficientCyclesInMessageMemoryGrow => {
                 "ERROR_CODE_INSUFFICIENT_CYCLES_IN_MESSAGE_MEMORY_GROW"
             }
-            ErrorCode::CanisterMethodNotFound => "ERROR_CODE_CANISTER_METHOD_NOT_FOUND",
-            ErrorCode::CanisterWasmModuleNotFound => "ERROR_CODE_CANISTER_WASM_MODULE_NOT_FOUND",
-            ErrorCode::CanisterAlreadyInstalled => "ERROR_CODE_CANISTER_ALREADY_INSTALLED",
-            ErrorCode::CanisterWasmMemoryLimitExceeded => {
+            Self::CanisterMethodNotFound => "ERROR_CODE_CANISTER_METHOD_NOT_FOUND",
+            Self::CanisterWasmModuleNotFound => "ERROR_CODE_CANISTER_WASM_MODULE_NOT_FOUND",
+            Self::CanisterAlreadyInstalled => "ERROR_CODE_CANISTER_ALREADY_INSTALLED",
+            Self::CanisterWasmMemoryLimitExceeded => {
                 "ERROR_CODE_CANISTER_WASM_MEMORY_LIMIT_EXCEEDED"
             }
-            ErrorCode::ReservedCyclesLimitIsTooLow => "ERROR_CODE_RESERVED_CYCLES_LIMIT_IS_TOO_LOW",
-            ErrorCode::DeadlineExpired => "ERROR_CODE_DEADLINE_EXPIRED",
-            ErrorCode::ResponseDropped => "ERROR_CODE_RESPONSE_DROPPED",
+            Self::ReservedCyclesLimitIsTooLow => "ERROR_CODE_RESERVED_CYCLES_LIMIT_IS_TOO_LOW",
+            Self::DeadlineExpired => "ERROR_CODE_DEADLINE_EXPIRED",
+            Self::ResponseDropped => "ERROR_CODE_RESPONSE_DROPPED",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.

@@ -645,7 +645,7 @@ def test_findings_helper_one_finding(npm_test):
                 fix_version_for_vulnerability={},
             )
         ],
-        projects=["ic"],
+        projects=[__test_get_ic_path()],
         risk_assessor=[],
         risk=None,
         patch_responsible=[],

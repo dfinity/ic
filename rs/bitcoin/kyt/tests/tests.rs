@@ -348,11 +348,92 @@ fn test_check_transaction_error() {
         .env
         .await_call(call_id)
         .expect("the fetch request didn't finish");
+    // 500 error is retriable
     assert!(matches!(
-        dbg!(decode::<CheckTransactionResponse>(&result)),
+        decode::<CheckTransactionResponse>(&result),
         CheckTransactionResponse::Unknown(CheckTransactionStatus::Retriable(
-            CheckTransactionRetriable::TransientInternalError(_)
-        ))
+            CheckTransactionRetriable::TransientInternalError(msg)
+        )) if msg.contains("received code 500")
+    ));
+    let cycles_after = setup.env.cycle_balance(setup.caller);
+    let expected_cost =
+        CHECK_TRANSACTION_CYCLES_SERVICE_FEE + get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES);
+    let actual_cost = cycles_before - cycles_after;
+    assert!(actual_cost > expected_cost);
+    assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
+
+    // Test for 404 error
+    let cycles_before = setup.env.cycle_balance(setup.caller);
+    let call_id = setup
+        .submit_kyt_call(
+            "check_transaction",
+            Encode!(&CheckTransactionArgs { txid: txid.clone() }).unwrap(),
+            CHECK_TRANSACTION_CYCLES_REQUIRED,
+        )
+        .expect("submit_call failed to return call id");
+    let canister_http_requests = tick_until_next_request(&setup.env);
+    setup
+        .env
+        .mock_canister_http_response(MockCanisterHttpResponse {
+            subnet_id: canister_http_requests[0].subnet_id,
+            request_id: canister_http_requests[0].request_id,
+            response: CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
+                status: 404,
+                headers: vec![],
+                body: vec![],
+            }),
+            additional_responses: vec![],
+        });
+    let result = setup
+        .env
+        .await_call(call_id)
+        .expect("the fetch request didn't finish");
+    // 404 error is retriable too
+    assert!(matches!(
+        decode::<CheckTransactionResponse>(&result),
+        CheckTransactionResponse::Unknown(CheckTransactionStatus::Retriable(
+            CheckTransactionRetriable::TransientInternalError(msg)
+        )) if msg.contains("received code 404")
+    ));
+    let cycles_after = setup.env.cycle_balance(setup.caller);
+    let expected_cost =
+        CHECK_TRANSACTION_CYCLES_SERVICE_FEE + get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES);
+    let actual_cost = cycles_before - cycles_after;
+    assert!(actual_cost > expected_cost);
+    assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
+
+    // Test for malformatted transaction data
+    let cycles_before = setup.env.cycle_balance(setup.caller);
+    let call_id = setup
+        .submit_kyt_call(
+            "check_transaction",
+            Encode!(&CheckTransactionArgs { txid: txid.clone() }).unwrap(),
+            CHECK_TRANSACTION_CYCLES_REQUIRED,
+        )
+        .expect("submit_call failed to return call id");
+    let canister_http_requests = tick_until_next_request(&setup.env);
+    setup
+        .env
+        .mock_canister_http_response(MockCanisterHttpResponse {
+            subnet_id: canister_http_requests[0].subnet_id,
+            request_id: canister_http_requests[0].request_id,
+            response: CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
+                status: 200,
+                headers: vec![],
+                body: vec![2, 0, 0, 0],
+            }),
+            additional_responses: vec![],
+        });
+    let result = setup
+        .env
+        .await_call(call_id)
+        .expect("the fetch request didn't finish");
+    // malformated tx error is retriable
+    assert!(matches!(
+        decode::<CheckTransactionResponse>(&result),
+        CheckTransactionResponse::Unknown(CheckTransactionStatus::Retriable(
+            CheckTransactionRetriable::TransientInternalError(msg)
+        )) if msg.contains("TxEncoding")
     ));
     let cycles_after = setup.env.cycle_balance(setup.caller);
     let expected_cost =
@@ -378,7 +459,7 @@ fn test_check_transaction_error() {
     assert!(matches!(
         decode::<CheckTransactionResponse>(&result),
         CheckTransactionResponse::Unknown(CheckTransactionStatus::Error(
-            CheckTransactionIrrecoverableError::InvalidTransaction(_)
+            CheckTransactionIrrecoverableError::InvalidTransactionId(_)
         ))
     ));
 

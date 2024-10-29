@@ -166,17 +166,15 @@ pub mod wasm_method {
         /// (if the ProtoBuf definition does not change) and safe for programmatic use.
         pub fn as_str_name(&self) -> &'static str {
             match self {
-                SystemMethod::Unspecified => "SYSTEM_METHOD_UNSPECIFIED",
-                SystemMethod::CanisterStart => "SYSTEM_METHOD_CANISTER_START",
-                SystemMethod::CanisterInit => "SYSTEM_METHOD_CANISTER_INIT",
-                SystemMethod::CanisterPreUpgrade => "SYSTEM_METHOD_CANISTER_PRE_UPGRADE",
-                SystemMethod::CanisterPostUpgrade => "SYSTEM_METHOD_CANISTER_POST_UPGRADE",
-                SystemMethod::CanisterInspectMessage => "SYSTEM_METHOD_CANISTER_INSPECT_MESSAGE",
-                SystemMethod::CanisterHeartbeat => "SYSTEM_METHOD_CANISTER_HEARTBEAT",
-                SystemMethod::CanisterGlobalTimer => "SYSTEM_METHOD_CANISTER_GLOBAL_TIMER",
-                SystemMethod::CanisterOnLowWasmMemory => {
-                    "SYSTEM_METHOD_CANISTER_ON_LOW_WASM_MEMORY"
-                }
+                Self::Unspecified => "SYSTEM_METHOD_UNSPECIFIED",
+                Self::CanisterStart => "SYSTEM_METHOD_CANISTER_START",
+                Self::CanisterInit => "SYSTEM_METHOD_CANISTER_INIT",
+                Self::CanisterPreUpgrade => "SYSTEM_METHOD_CANISTER_PRE_UPGRADE",
+                Self::CanisterPostUpgrade => "SYSTEM_METHOD_CANISTER_POST_UPGRADE",
+                Self::CanisterInspectMessage => "SYSTEM_METHOD_CANISTER_INSPECT_MESSAGE",
+                Self::CanisterHeartbeat => "SYSTEM_METHOD_CANISTER_HEARTBEAT",
+                Self::CanisterGlobalTimer => "SYSTEM_METHOD_CANISTER_GLOBAL_TIMER",
+                Self::CanisterOnLowWasmMemory => "SYSTEM_METHOD_CANISTER_ON_LOW_WASM_MEMORY",
             }
         }
         /// Creates an enum from field names used in the ProtoBuf definition.
@@ -238,6 +236,8 @@ pub struct ExecutionStateBits {
     pub binary_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
     #[prost(enumeration = "NextScheduledMethod", optional, tag = "7")]
     pub next_scheduled_method: ::core::option::Option<i32>,
+    #[prost(bool, tag = "8")]
+    pub is_wasm64: bool,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StopCanisterContext {
@@ -361,10 +361,10 @@ pub mod execution_task {
         /// (if the ProtoBuf definition does not change) and safe for programmatic use.
         pub fn as_str_name(&self) -> &'static str {
             match self {
-                CanisterTask::Unspecified => "CANISTER_TASK_UNSPECIFIED",
-                CanisterTask::Heartbeat => "CANISTER_TASK_HEARTBEAT",
-                CanisterTask::Timer => "CANISTER_TASK_TIMER",
-                CanisterTask::OnLowWasmMemory => "CANISTER_TASK_ON_LOW_WASM_MEMORY",
+                Self::Unspecified => "CANISTER_TASK_UNSPECIFIED",
+                Self::Heartbeat => "CANISTER_TASK_HEARTBEAT",
+                Self::Timer => "CANISTER_TASK_TIMER",
+                Self::OnLowWasmMemory => "CANISTER_TASK_ON_LOW_WASM_MEMORY",
             }
         }
         /// Creates an enum from field names used in the ProtoBuf definition.
@@ -679,9 +679,9 @@ impl CustomSectionType {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            CustomSectionType::Unspecified => "CUSTOM_SECTION_TYPE_UNSPECIFIED",
-            CustomSectionType::Public => "CUSTOM_SECTION_TYPE_PUBLIC",
-            CustomSectionType::Private => "CUSTOM_SECTION_TYPE_PRIVATE",
+            Self::Unspecified => "CUSTOM_SECTION_TYPE_UNSPECIFIED",
+            Self::Public => "CUSTOM_SECTION_TYPE_PUBLIC",
+            Self::Private => "CUSTOM_SECTION_TYPE_PRIVATE",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -709,10 +709,10 @@ impl NextScheduledMethod {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            NextScheduledMethod::Unspecified => "NEXT_SCHEDULED_METHOD_UNSPECIFIED",
-            NextScheduledMethod::GlobalTimer => "NEXT_SCHEDULED_METHOD_GLOBAL_TIMER",
-            NextScheduledMethod::Heartbeat => "NEXT_SCHEDULED_METHOD_HEARTBEAT",
-            NextScheduledMethod::Message => "NEXT_SCHEDULED_METHOD_MESSAGE",
+            Self::Unspecified => "NEXT_SCHEDULED_METHOD_UNSPECIFIED",
+            Self::GlobalTimer => "NEXT_SCHEDULED_METHOD_GLOBAL_TIMER",
+            Self::Heartbeat => "NEXT_SCHEDULED_METHOD_HEARTBEAT",
+            Self::Message => "NEXT_SCHEDULED_METHOD_MESSAGE",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -751,22 +751,22 @@ impl CyclesUseCase {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            CyclesUseCase::Unspecified => "CYCLES_USE_CASE_UNSPECIFIED",
-            CyclesUseCase::Memory => "CYCLES_USE_CASE_MEMORY",
-            CyclesUseCase::ComputeAllocation => "CYCLES_USE_CASE_COMPUTE_ALLOCATION",
-            CyclesUseCase::IngressInduction => "CYCLES_USE_CASE_INGRESS_INDUCTION",
-            CyclesUseCase::Instructions => "CYCLES_USE_CASE_INSTRUCTIONS",
-            CyclesUseCase::RequestAndResponseTransmission => {
+            Self::Unspecified => "CYCLES_USE_CASE_UNSPECIFIED",
+            Self::Memory => "CYCLES_USE_CASE_MEMORY",
+            Self::ComputeAllocation => "CYCLES_USE_CASE_COMPUTE_ALLOCATION",
+            Self::IngressInduction => "CYCLES_USE_CASE_INGRESS_INDUCTION",
+            Self::Instructions => "CYCLES_USE_CASE_INSTRUCTIONS",
+            Self::RequestAndResponseTransmission => {
                 "CYCLES_USE_CASE_REQUEST_AND_RESPONSE_TRANSMISSION"
             }
-            CyclesUseCase::Uninstall => "CYCLES_USE_CASE_UNINSTALL",
-            CyclesUseCase::CanisterCreation => "CYCLES_USE_CASE_CANISTER_CREATION",
-            CyclesUseCase::EcdsaOutcalls => "CYCLES_USE_CASE_ECDSA_OUTCALLS",
-            CyclesUseCase::HttpOutcalls => "CYCLES_USE_CASE_HTTP_OUTCALLS",
-            CyclesUseCase::DeletedCanisters => "CYCLES_USE_CASE_DELETED_CANISTERS",
-            CyclesUseCase::NonConsumed => "CYCLES_USE_CASE_NON_CONSUMED",
-            CyclesUseCase::BurnedCycles => "CYCLES_USE_CASE_BURNED_CYCLES",
-            CyclesUseCase::SchnorrOutcalls => "CYCLES_USE_CASE_SCHNORR_OUTCALLS",
+            Self::Uninstall => "CYCLES_USE_CASE_UNINSTALL",
+            Self::CanisterCreation => "CYCLES_USE_CASE_CANISTER_CREATION",
+            Self::EcdsaOutcalls => "CYCLES_USE_CASE_ECDSA_OUTCALLS",
+            Self::HttpOutcalls => "CYCLES_USE_CASE_HTTP_OUTCALLS",
+            Self::DeletedCanisters => "CYCLES_USE_CASE_DELETED_CANISTERS",
+            Self::NonConsumed => "CYCLES_USE_CASE_NON_CONSUMED",
+            Self::BurnedCycles => "CYCLES_USE_CASE_BURNED_CYCLES",
+            Self::SchnorrOutcalls => "CYCLES_USE_CASE_SCHNORR_OUTCALLS",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -806,9 +806,9 @@ impl LongExecutionMode {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            LongExecutionMode::Unspecified => "LONG_EXECUTION_MODE_UNSPECIFIED",
-            LongExecutionMode::Opportunistic => "LONG_EXECUTION_MODE_OPPORTUNISTIC",
-            LongExecutionMode::Prioritized => "LONG_EXECUTION_MODE_PRIORITIZED",
+            Self::Unspecified => "LONG_EXECUTION_MODE_UNSPECIFIED",
+            Self::Opportunistic => "LONG_EXECUTION_MODE_OPPORTUNISTIC",
+            Self::Prioritized => "LONG_EXECUTION_MODE_PRIORITIZED",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -836,12 +836,10 @@ impl OnLowWasmMemoryHookStatus {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            OnLowWasmMemoryHookStatus::Unspecified => "ON_LOW_WASM_MEMORY_HOOK_STATUS_UNSPECIFIED",
-            OnLowWasmMemoryHookStatus::ConditionNotSatisfied => {
-                "ON_LOW_WASM_MEMORY_HOOK_STATUS_CONDITION_NOT_SATISFIED"
-            }
-            OnLowWasmMemoryHookStatus::Ready => "ON_LOW_WASM_MEMORY_HOOK_STATUS_READY",
-            OnLowWasmMemoryHookStatus::Executed => "ON_LOW_WASM_MEMORY_HOOK_STATUS_EXECUTED",
+            Self::Unspecified => "ON_LOW_WASM_MEMORY_HOOK_STATUS_UNSPECIFIED",
+            Self::ConditionNotSatisfied => "ON_LOW_WASM_MEMORY_HOOK_STATUS_CONDITION_NOT_SATISFIED",
+            Self::Ready => "ON_LOW_WASM_MEMORY_HOOK_STATUS_READY",
+            Self::Executed => "ON_LOW_WASM_MEMORY_HOOK_STATUS_EXECUTED",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.

@@ -1,11 +1,12 @@
 use bitcoin::Address;
 use ic_btc_interface::Txid;
 use ic_btc_kyt::{
-    blocklist_contains, check_transaction_inputs, get_config, set_config, CheckAddressArgs,
-    CheckAddressResponse, CheckTransactionArgs, CheckTransactionIrrecoverableError,
-    CheckTransactionResponse, CheckTransactionStatus, Config, KytArg,
-    CHECK_TRANSACTION_CYCLES_REQUIRED, CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
+    blocklist_contains, check_transaction_inputs, dashboard, get_config, set_config,
+    CheckAddressArgs, CheckAddressResponse, CheckTransactionArgs,
+    CheckTransactionIrrecoverableError, CheckTransactionResponse, CheckTransactionStatus, Config,
+    KytArg, CHECK_TRANSACTION_CYCLES_REQUIRED, CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
 };
+use ic_canisters_http_types as http;
 use ic_cdk::api::management_canister::http_request::{HttpResponse, TransformArgs};
 use std::str::FromStr;
 
@@ -61,7 +62,9 @@ async fn check_transaction(args: CheckTransactionArgs) -> CheckTransactionRespon
                 check_transaction_inputs(txid).await
             }
         }
-        Err(err) => CheckTransactionIrrecoverableError::InvalidTransaction(err.to_string()).into(),
+        Err(err) => {
+            CheckTransactionIrrecoverableError::InvalidTransactionId(err.to_string()).into()
+        }
     }
 }
 
@@ -91,6 +94,34 @@ fn post_upgrade(arg: KytArg) {
     match arg {
         KytArg::UpgradeArg(_) => (),
         KytArg::InitArg(_) => ic_cdk::trap("cannot upgrade canister state without upgrade args"),
+    }
+}
+
+#[ic_cdk::query(hidden = true)]
+fn http_request(req: http::HttpRequest) -> http::HttpResponse {
+    if req.path() == "/metrics" {
+        // TODO(XC-205): Add metrics
+        unimplemented!()
+    } else if req.path() == "/dashboard" {
+        use askama::Template;
+        let page_index = match req.raw_query_param("page") {
+            Some(arg) => match usize::from_str(arg) {
+                Ok(value) => value,
+                Err(_) => {
+                    return http::HttpResponseBuilder::bad_request()
+                        .with_body_and_content_length("failed to parse the 'page' parameter")
+                        .build()
+                }
+            },
+            None => 0,
+        };
+        let dashboard = dashboard::dashboard(page_index).render().unwrap();
+        http::HttpResponseBuilder::ok()
+            .header("Content-Type", "text/html; charset=utf-8")
+            .with_body_and_content_length(dashboard)
+            .build()
+    } else {
+        http::HttpResponseBuilder::not_found().build()
     }
 }
 

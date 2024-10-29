@@ -2,7 +2,7 @@
 
 
 The ckBTC Minter canister converts BTC to ckBTC and back.
-It works with a link:../../../rosetta-api/icrc1/README.md[Ledger Canister], handling the _ckBTC_ token transfers, and a link:../../canister/README.adoc[Bitcoin Canister], interfacing with the Bitcoin network.
+It works with a link:../../../ledger_suite/icrc1/README.md[Ledger Canister], handling the _ckBTC_ token transfers, and a link:../../canister/README.adoc[Bitcoin Canister], interfacing with the Bitcoin network.
 The ckBTC Minter canister is a https://github.com/dfinity/ICRC-1/blob/8c526e1dae38622eb0940643996e8187d2063513/standards/ICRC-1/README.md#minting-account-[minter] for the ckBTC Ledger canister: it can mint and burn ckBTC tokens.
 
 == Interact with the ckBTC minter

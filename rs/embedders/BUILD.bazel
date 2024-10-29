@@ -122,6 +122,12 @@ rust_test(
     deps = [":embedders"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
+# Run some tests using wasm spec files.
+# To add a test suite, see the `http_archive` pulling in the testsuite
+# and add a new target.
+#
+# To inspect the spec files, use this command:
+# $ ls $(bazel info output_base)/external/wasm_spec_testsuite
 rust_ic_test_suite_with_extra_srcs(
     name = "embedders_integration",
     srcs = glob(
@@ -133,13 +139,20 @@ rust_ic_test_suite_with_extra_srcs(
     ),
     aliases = ALIASES,
     compile_data = glob(["tests/instrumentation-test-data/*"]),
-    data = DATA + ["@wasm_spec_testsuite//:wast_files"] + glob([
+    data = DATA + [
+        "@wasm_spec_testsuite//:base_wast_files",
+        "@wasm_spec_testsuite//:memory64_wast_files",
+        "@wasm_spec_testsuite//:multi_memory_wast_files",
+    ] + glob([
         "tests/compressed/*",
         "tests/instrumentation-test-data/*",
         "tests/round-trip-test-data/*",
     ]),
     env = dict(ENV.items() + [
         ("CARGO_MANIFEST_DIR", "rs/embedders"),
+        ("WASM_SPEC_BASE", "$(locations @wasm_spec_testsuite//:base_wast_files)"),
+        ("WASM_SPEC_MULTI_MEMORY", "$(locations @wasm_spec_testsuite//:multi_memory_wast_files)"),
+        ("WASM_SPEC_MEMORY64", "$(locations @wasm_spec_testsuite//:memory64_wast_files)"),
     ]),
     extra_srcs = [
         "tests/wasmtime_simple.rs",
