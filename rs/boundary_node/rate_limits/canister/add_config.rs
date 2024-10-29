@@ -272,6 +272,7 @@ fn validate_config_encoding(config: &InputConfig) -> Result<(), AddConfigError> 
     Ok(())
 }
 
+// TODO: make it work with canister upgrade, post_upgrade
 fn generate_random_uuid() -> Result<Uuid, anyhow::Error> {
     let mut buf = [0u8; 16];
     getrandom(&mut buf)
