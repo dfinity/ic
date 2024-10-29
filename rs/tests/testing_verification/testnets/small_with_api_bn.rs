@@ -41,7 +41,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
     boundary_node::BoundaryNode,
     group::SystemTestGroup,
-    ic::{InternetComputer, Subnet},
+    ic::{InternetComputer, Node, Subnet},
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
     test_env_api::{await_boundary_node_healthy, HasTopologySnapshot, NnsCustomizations},
@@ -63,8 +63,8 @@ pub fn setup(env: TestEnv) {
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
         .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
-        .with_unassigned_nodes(2)
-        .with_api_boundary_nodes(2)
+        .with_unassigned_node(Node::new().with_domain("api-bn.icp.app".to_string()))
+        .with_api_boundary_nodes(1)
         .setup_and_start(&env)
         .expect("Failed to setup IC under test");
     install_nns_with_customizations_and_check_progress(

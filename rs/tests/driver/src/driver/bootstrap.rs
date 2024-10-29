@@ -175,7 +175,7 @@ pub fn init_ic(
     for node in &ic.api_boundary_nodes {
         let node_index = next_node_index;
         next_node_index += 1;
-        ic_topology.insert_api_boundary_node(node_index as NodeIndex, node_to_config(node));
+        ic_topology.insert_api_boundary_node(node_index as NodeIndex, node_to_config(node))?;
     }
 
     let whitelist = ProvisionalWhitelist::All;
@@ -490,6 +490,12 @@ fn create_config_disk_image(
             ipv4_config.prefix_length()
         ));
         cmd.arg("--ipv4_gateway").arg(ipv4_config.gateway_ip_addr());
+    }
+
+    // if the node has a domain name, generate a certificate to be used
+    // when the node is an API boundary node.
+    if let Some(domain_name) = &node.node_config.domain {
+        cmd.arg("--generate_ic_boundary_tls_cert").arg(domain_name);
     }
 
     if let Some(domain) = domain {
