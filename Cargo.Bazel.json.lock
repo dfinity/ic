@@ -1,5 +1,5 @@
 {
-  "checksum": "7d6315901415b36b0e75876824e88368a8e546aa1b4aa4caa8c6bd5789443ec2",
+  "checksum": "d58c1f74bfe0c229a35606ef8239233712c7af0371c45bec85d1cffaf5705e5e",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -1652,7 +1652,7 @@
               "target": "serde_json"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -2867,7 +2867,7 @@
               "target": "rusticata_macros"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -3792,7 +3792,7 @@
         "deps": {
           "common": [
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -4100,7 +4100,7 @@
               "target": "rustls_pki_types"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -9469,7 +9469,7 @@
               "target": "once_cell"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -9537,7 +9537,7 @@
               "target": "once_cell"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -9606,7 +9606,7 @@
               "target": "once_cell"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -10111,7 +10111,7 @@
               "target": "serde_bytes"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -10289,7 +10289,7 @@
               "target": "pretty"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -12128,7 +12128,7 @@
               "target": "serde_with"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -18258,7 +18258,7 @@
               "target": "textplots"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -19372,7 +19372,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -20749,7 +20749,7 @@
               "target": "sha3"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -21037,7 +21037,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -21427,7 +21427,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -22553,7 +22553,7 @@
               "target": "nonempty"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -25719,7 +25719,7 @@
               "target": "rustls_pemfile"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -25864,7 +25864,7 @@
               "target": "smallvec"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -27504,7 +27504,7 @@
               "target": "hyper_util"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -28007,7 +28007,7 @@
               "target": "simple_asn1"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -28236,7 +28236,7 @@
               "target": "sync_wrapper"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -28527,7 +28527,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -28590,7 +28590,7 @@
               "target": "nom"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -29351,7 +29351,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -29540,7 +29540,7 @@
               "target": "serde"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -29634,7 +29634,7 @@
               "target": "ic_utils"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -29826,7 +29826,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -30058,7 +30058,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -30156,7 +30156,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -30422,7 +30422,7 @@
               "target": "serde_json"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -30760,7 +30760,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -30822,7 +30822,7 @@
               "target": "serde"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -32849,7 +32849,7 @@
               "target": "serde_json"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -33261,7 +33261,7 @@
               "target": "serde"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -33757,7 +33757,7 @@
               "target": "serde_json"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -34366,7 +34366,7 @@
               "target": "serde_yaml"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -34457,7 +34457,7 @@
               "target": "serde_json"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -36720,7 +36720,7 @@
         "deps": {
           "common": [
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -39531,7 +39531,7 @@
               "target": "tagptr"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -39994,7 +39994,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -42079,7 +42079,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -42397,7 +42397,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -42481,7 +42481,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -42573,7 +42573,7 @@
               "target": "prost"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -42915,7 +42915,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -42998,7 +42998,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -43099,7 +43099,7 @@
               "target": "rand"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -43208,7 +43208,7 @@
               "target": "regex"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -43320,7 +43320,7 @@
               "target": "rand"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -43437,7 +43437,7 @@
               "target": "serde_json"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -44878,7 +44878,7 @@
         "deps": {
           "common": [
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -45891,7 +45891,7 @@
               "target": "socket2"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -46829,7 +46829,7 @@
               "target": "tempfile"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -48373,7 +48373,7 @@
               "target": "protobuf"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -49951,7 +49951,7 @@
               "target": "socket2"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -50039,7 +50039,7 @@
               "target": "slab"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -51346,7 +51346,7 @@
               "target": "parking_lot"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -51842,7 +51842,7 @@
               "target": "syscall"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -55430,7 +55430,7 @@
               "target": "serde_json"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -58496,7 +58496,7 @@
               "target": "serde"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -60051,7 +60051,7 @@
               "target": "num_traits"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -63375,7 +63375,7 @@
               "target": "static_assertions"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -64134,14 +64134,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "thiserror 1.0.64": {
+    "thiserror 1.0.65": {
       "name": "thiserror",
-      "version": "1.0.64",
+      "version": "1.0.65",
       "package_url": "https://github.com/dtolnay/thiserror",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/thiserror/1.0.64/download",
-          "sha256": "d50af8abc119fb8bb6dbabcfa89656f46f84aa0ac7688088608076ad2b459a84"
+          "url": "https://static.crates.io/crates/thiserror/1.0.65/download",
+          "sha256": "5d11abd9594d9b38965ef50805c5e469ca9cc6f197f883f717e0269a3057b3d5"
         }
       },
       "targets": [
@@ -64178,7 +64178,7 @@
         "deps": {
           "common": [
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "build_script_build"
             }
           ],
@@ -64188,13 +64188,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "thiserror-impl 1.0.64",
+              "id": "thiserror-impl 1.0.65",
               "target": "thiserror_impl"
             }
           ],
           "selects": {}
         },
-        "version": "1.0.64"
+        "version": "1.0.65"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -64208,14 +64208,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "thiserror-impl 1.0.64": {
+    "thiserror-impl 1.0.65": {
       "name": "thiserror-impl",
-      "version": "1.0.64",
+      "version": "1.0.65",
       "package_url": "https://github.com/dtolnay/thiserror",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/thiserror-impl/1.0.64/download",
-          "sha256": "08904e7672f5eb876eaaf87e0ce17857500934f4981c4a0ab2b4aa98baac7fc3"
+          "url": "https://static.crates.io/crates/thiserror-impl/1.0.65/download",
+          "sha256": "ae71770322cbd277e69d762a16c444af02aa0575ac0d174f0b9562d3b37f8602"
         }
       },
       "targets": [
@@ -64255,7 +64255,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.0.64"
+        "version": "1.0.65"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -65851,7 +65851,7 @@
               "target": "futures_util"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -67165,7 +67165,7 @@
               "target": "pin_project"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -67299,7 +67299,7 @@
               "target": "crossbeam_channel"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -68127,7 +68127,7 @@
               "target": "smallvec"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -68243,7 +68243,7 @@
               "target": "smallvec"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -68391,7 +68391,7 @@
               "target": "sha1"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -71927,7 +71927,7 @@
               "target": "target_lexicon"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -76064,7 +76064,7 @@
               "target": "rusticata_macros"
             },
             {
-              "id": "thiserror 1.0.64",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -78573,7 +78573,7 @@
     "test-strategy 0.3.1",
     "tester 0.7.0",
     "textplots 0.8.4",
-    "thiserror 1.0.64",
+    "thiserror 1.0.65",
     "thousands 0.2.0",
     "threadpool 1.8.1",
     "tikv-jemalloc-ctl 0.5.4",
