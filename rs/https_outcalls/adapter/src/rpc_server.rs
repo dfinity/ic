@@ -4,24 +4,28 @@ use crate::metrics::{
     LABEL_UPLOAD, LABEL_URL_PARSE,
 };
 use crate::Config;
+use bytes::BytesMut;
 use core::convert::TryFrom;
-use http::{header::USER_AGENT, HeaderName, HeaderValue, Uri};
-use reqwest::{Client, Method, header::{HeaderMap, ToStrError}};
+use http::{header::USER_AGENT, HeaderName, HeaderValue};
 use ic_https_outcalls_service::{
     https_outcalls_service_server::HttpsOutcallsService, HttpHeader, HttpMethod,
     HttpsOutcallRequest, HttpsOutcallResponse,
 };
 use ic_logger::{debug, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
+use reqwest::{
+    header::{HeaderMap, ToStrError},
+    Client, Method,
+};
 use std::str::FromStr;
 use std::time::Duration;
 use tonic::{Request, Response, Status};
 
-/// Hyper only supports a maximum of 32768 headers https://docs.rs/hyper/0.14.23/hyper/header/index.html#limitations-1
-/// and it panics if we try to allocate more headers. And since hyper sometimes grows the map by doubling the entries
+/// Reqwest only supports a maximum of 32768 headers https://docs.rs/reqwest/latest/reqwest/header/index.html#limitations-1
+/// and it panics if we try to allocate more headers. And since reqwest may sometimes grow the map by doubling the entries
 /// we choose a lower value to be safe.
 const HEADERS_LIMIT: usize = 1_024;
-/// Hyper also limits the size of the HeaderName to 32768. https://docs.rs/hyper/0.14.23/hyper/header/index.html#limitations.
+/// Reqwest also limits the size of the HeaderName to 32768. https://docs.rs/reqwest/latest/reqwest/header/index.html#limitations.
 const HEADER_NAME_VALUE_LIMIT: usize = 8_192;
 
 /// By default most higher-level http libs like `curl` set some `User-Agent` so we do the same here to avoid getting rejected due to strict server requirements.
@@ -38,16 +42,27 @@ pub struct CanisterHttp {
 
 impl CanisterHttp {
     pub fn new(config: Config, logger: ReplicaLogger, metrics: &MetricsRegistry) -> Self {
-        let proxy = reqwest::Proxy::http("socks5://192.168.1.1:9000").expect("asdf");
-
         let client = Client::builder()
-            .timeout(Duration::from_secs(config.http_connect_timeout_secs))
+            .connect_timeout(Duration::from_secs(config.http_connect_timeout_secs))
             .build()
             .expect("Failed to create reqwest client");
 
-        let socks_client = Client::builder()
-            .timeout(Duration::from_secs(config.http_connect_timeout_secs))
-            .proxy(proxy)
+        let mut socks_client_builder = Client::builder()
+            .connect_timeout(Duration::from_secs(config.http_connect_timeout_secs));
+
+        // This uses a DNS resolver and results in an error if the proxy is not a valid URL.
+        let maybe_proxy = reqwest::Proxy::http(config.socks_proxy.clone());
+
+        match maybe_proxy {
+            Ok(proxy) => {
+                socks_client_builder = socks_client_builder.proxy(proxy);
+            }
+            Err(e) => {
+                debug!(logger, "Failed to create socks proxy: {}", e);
+            }
+        }
+
+        let socks_client = socks_client_builder
             .build()
             .expect("Failed to create socks reqwest client");
 
@@ -70,7 +85,7 @@ impl HttpsOutcallsService for CanisterHttp {
 
         let req = request.into_inner();
 
-        let uri = req.url.parse::<Uri>().map_err(|err| {
+        let url = reqwest::Url::parse(&req.url).map_err(|err| {
             debug!(self.logger, "Failed to parse URL: {}", err);
             self.metrics
                 .request_errors
@@ -81,13 +96,12 @@ impl HttpsOutcallsService for CanisterHttp {
                 format!("Failed to parse URL: {}", err),
             )
         })?;
-
         #[cfg(not(feature = "http"))]
-        if uri.scheme() != Some(&http::uri::Scheme::HTTPS) {
+        if url.scheme() != "https" {
             use crate::metrics::LABEL_HTTP_SCHEME;
             debug!(
                 self.logger,
-                "Got request with no or http scheme specified. {}", uri
+                "Got request with no or http scheme specified. {}", url
             );
             self.metrics
                 .request_errors
@@ -140,18 +154,19 @@ impl HttpsOutcallsService for CanisterHttp {
             .sum::<usize>();
 
         //TODO(mihailjianu1): figure out if cloning is necessary
-        let resp = self.client
-            .request(method.clone(), req.url.clone())
+        let resp = self
+            .client
+            .request(method.clone(), url)
             .headers(headers.clone())
             .body(req.body.clone())
             .send()
             .await;
-        let http_resp = match resp {
+        let mut http_resp = match resp {
             Ok(resp) => Ok(resp),
             Err(direct_err) => {
                 if req.socks_proxy_allowed {
                     self.socks_client
-                        .request(method, req.url)
+                        .request(method, req.url.clone())
                         .headers(headers)
                         .body(req.body)
                         .send()
@@ -174,7 +189,7 @@ impl HttpsOutcallsService for CanisterHttp {
                 tonic::Code::Unavailable,
                 format!(
                     "Connecting to {:.50} failed: {}",
-                    uri.host().unwrap_or(""),
+                    req.url,
                     err,
                 ),
             )
@@ -186,7 +201,7 @@ impl HttpsOutcallsService for CanisterHttp {
             .inc_by(request_size as u64);
 
         let status = http_resp.status().as_u16() as u32;
-        
+
         let mut headers_size_bytes = 0;
         let headers = http_resp
             .headers()
@@ -198,24 +213,25 @@ impl HttpsOutcallsService for CanisterHttp {
                 headers_size_bytes += name.len() + v.len();
                 let value = v.to_str().unwrap().to_string();
                 Ok(HttpHeader { name, value })
-        }).collect::<Result<Vec<_>, ToStrError>>()
-        .map_err(|err| {
-            debug!(self.logger, "Failed to parse headers: {}", err);
-            self.metrics
-                .request_errors
-                .with_label_values(&[LABEL_RESPONSE_HEADERS])
-                .inc();
-            Status::new(
-                tonic::Code::Unavailable,
-                format!("Failed to parse headers: {}", err),
-            )
-        })?;
+            })
+            .collect::<Result<Vec<_>, ToStrError>>()
+            .map_err(|err| {
+                debug!(self.logger, "Failed to parse headers: {}", err);
+                self.metrics
+                    .request_errors
+                    .with_label_values(&[LABEL_RESPONSE_HEADERS])
+                    .inc();
+                Status::new(
+                    tonic::Code::Unavailable,
+                    format!("Failed to parse headers: {}", err),
+                )
+            })?;
 
         if headers_size_bytes > req.max_response_size_bytes as usize {
             self.metrics
-            .request_errors
-            .with_label_values(&[LABEL_HEADER_RECEIVE_SIZE])
-            .inc();
+                .request_errors
+                .with_label_values(&[LABEL_HEADER_RECEIVE_SIZE])
+                .inc();
             return Err(Status::new(
                 tonic::Code::OutOfRange,
                 format!(
@@ -224,25 +240,49 @@ impl HttpsOutcallsService for CanisterHttp {
                 ),
             ));
         }
-        
-        // We don't need a timeout here because there is a global timeout on the entire request.
-        let body_bytes = http_resp
-            .bytes()
-            .await
-            .map_err(|err| {
-                debug!(self.logger, "Failed to fetch body: {}", err);
-                self.metrics
-                    .request_errors
-                    .with_label_values(&[LABEL_BODY_RECEIVE_SIZE])
-                    .inc();
-                Status::new(
-                    tonic::Code::OutOfRange,
-                    format!(
-                        "Http body exceeds size limit of {} bytes.",
-                        req.max_response_size_bytes
-                    ),
-                )
-            })?;
+
+        // Important: we should not read the whole body at once, because it might be too big.
+        // Once we've confirmed that the body is not too big, we can load it using bytes().
+        // Initialize a mutable BytesMut buffer
+        let mut buffer = BytesMut::new();
+        let mut total_bytes = 0;
+        loop {
+            match http_resp.chunk().await {
+                Ok(Some(chunk)) => {
+                    total_bytes += chunk.len();
+                    if total_bytes + headers_size_bytes > req.max_response_size_bytes as usize {
+                        self.metrics
+                            .request_errors
+                            .with_label_values(&[LABEL_BODY_RECEIVE_SIZE])
+                            .inc();
+                        return Err(Status::new(
+                            tonic::Code::OutOfRange,
+                            format!(
+                                "Http body exceeds size limit of {} bytes.",
+                                req.max_response_size_bytes
+                            ),
+                        ));
+                    }
+                    buffer.extend_from_slice(&chunk);
+                }
+                Ok(None) => {
+                    break;
+                }
+                Err(err) => {
+                    debug!(self.logger, "Failed to fetch body: {}", err);
+                    self.metrics
+                        .request_errors
+                        .with_label_values(&[LABEL_DOWNLOAD])
+                        .inc();
+                    return Err(Status::new(
+                        tonic::Code::Unavailable,
+                        format!("Failed to fetch body: {}", err),
+                    ));
+                }
+            }
+        }
+
+        let body_bytes = buffer.freeze();
 
         self.metrics
             .network_traffic
@@ -320,7 +360,7 @@ mod tests {
     use rand::{thread_rng, Rng};
 
     #[test]
-    // Verify that hyper does not panic within header limits.
+    // Verify that reqwest does not panic within header limits.
     fn test_max_headers() {
         let mut header_vec = Vec::new();
         for _ in 0..HEADERS_LIMIT {
@@ -341,7 +381,7 @@ mod tests {
     }
 
     #[test]
-    // Verify that hyper does not panic within header limits.
+    // Verify that reqwest does not panic within header limits.
     fn test_too_many_headers() {
         let mut header_vec = Vec::new();
         for i in 0..(HEADERS_LIMIT + 1) {
@@ -354,7 +394,7 @@ mod tests {
     }
 
     #[test]
-    // Verify that hyper does not panic within header limits.
+    // Verify that reqwest does not panic within header limits.
     fn test_too_big_header() {
         let mut header_vec = Vec::new();
         for i in 0..10 {

@@ -10,6 +10,7 @@ DEPENDENCIES = [
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "@crate_index//:byte-unit",
+    "@crate_index//:bytes",
     "@crate_index//:clap",
     "@crate_index//:futures",
     "@crate_index//:http",
@@ -34,7 +35,6 @@ MACRO_DEPENDENCIES = []
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:async-stream",
-    "@crate_index//:bytes",
     "@crate_index//:once_cell",
     "@crate_index//:rand",
     "@crate_index//:rstest",

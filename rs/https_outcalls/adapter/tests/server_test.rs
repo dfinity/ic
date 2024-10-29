@@ -405,7 +405,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         assert!(response
             .unwrap_err()
             .message()
-            .contains(&"client error (Connect)".to_string()));
+            .contains(&"error sending request for url".to_string()));
     }
 
     #[tokio::test]
