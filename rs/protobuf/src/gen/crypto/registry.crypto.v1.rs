@@ -261,8 +261,8 @@ impl SchnorrAlgorithm {
 )]
 #[repr(i32)]
 pub enum VetKdCurve {
-    VetkdCurveUnspecified = 0,
-    VetkdCurveBls12381G2 = 1,
+    Unspecified = 0,
+    Bls12381G2 = 1,
 }
 impl VetKdCurve {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -271,15 +271,15 @@ impl VetKdCurve {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            Self::VetkdCurveUnspecified => "VETKD_CURVE_UNSPECIFIED",
-            Self::VetkdCurveBls12381G2 => "VETKD_CURVE_BLS12_381_G2",
+            Self::Unspecified => "VET_KD_CURVE_UNSPECIFIED",
+            Self::Bls12381G2 => "VET_KD_CURVE_BLS12_381_G2",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
     pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
         match value {
-            "VETKD_CURVE_UNSPECIFIED" => Some(Self::VetkdCurveUnspecified),
-            "VETKD_CURVE_BLS12_381_G2" => Some(Self::VetkdCurveBls12381G2),
+            "VET_KD_CURVE_UNSPECIFIED" => Some(Self::Unspecified),
+            "VET_KD_CURVE_BLS12_381_G2" => Some(Self::Bls12381G2),
             _ => None,
         }
     }

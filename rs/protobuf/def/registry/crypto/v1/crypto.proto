@@ -81,8 +81,8 @@ message SchnorrKeyId {
 }
 
 enum VetKdCurve {
-  VETKD_CURVE_UNSPECIFIED = 0;
-  VETKD_CURVE_BLS12_381_G2 = 1;
+  VET_KD_CURVE_UNSPECIFIED = 0;
+  VET_KD_CURVE_BLS12_381_G2 = 1;
 }
 
 message VetKdKeyId {

@@ -2278,7 +2278,7 @@ pub enum VetKdCurve {
 impl From<&VetKdCurve> for pb_registry_crypto::VetKdCurve {
     fn from(item: &VetKdCurve) -> Self {
         match item {
-            VetKdCurve::Bls12_381_G2 => pb_registry_crypto::VetKdCurve::VetkdCurveBls12381G2,
+            VetKdCurve::Bls12_381_G2 => pb_registry_crypto::VetKdCurve::Bls12381G2,
         }
     }
 }
@@ -2288,13 +2288,11 @@ impl TryFrom<pb_registry_crypto::VetKdCurve> for VetKdCurve {
 
     fn try_from(item: pb_registry_crypto::VetKdCurve) -> Result<Self, Self::Error> {
         match item {
-            pb_registry_crypto::VetKdCurve::VetkdCurveBls12381G2 => Ok(VetKdCurve::Bls12_381_G2),
-            pb_registry_crypto::VetKdCurve::VetkdCurveUnspecified => {
-                Err(ProxyDecodeError::ValueOutOfRange {
-                    typ: "VetKdCurve",
-                    err: format!("Unable to convert {:?} to a VetKdCurve", item),
-                })
-            }
+            pb_registry_crypto::VetKdCurve::Bls12381G2 => Ok(VetKdCurve::Bls12_381_G2),
+            pb_registry_crypto::VetKdCurve::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
+                typ: "VetKdCurve",
+                err: format!("Unable to convert {:?} to a VetKdCurve", item),
+            }),
         }
     }
 }
