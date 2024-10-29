@@ -118,6 +118,10 @@ pub struct NeuronInfo {
     /// becomes > 6 months, the amount of voting power that this neuron can
     /// exercise decreases linearly down to 0 over the course of 1 month. After
     /// that, following is cleared, except for ManageNeuron proposals.
+    ///
+    /// This will always be populated. If the underlying neuron was never
+    /// refreshed, this will be set to 2024-11-05T00:00:01 UTC (1730764801 seconds
+    /// after the UNIX epoch), the Following Refreshed Epoch.
     #[prost(uint64, optional, tag = "13")]
     pub following_refreshed_timestamp_seconds: ::core::option::Option<u64>,
 }
@@ -288,6 +292,10 @@ pub struct Neuron {
     /// becomes > 6 months, the amount of voting power that this neuron can
     /// exercise decreases linearly down to 0 over the course of 1 month. After
     /// that, following is cleared, except for ManageNeuron proposals.
+    ///
+    /// When this is not populated (the Rust field is set to None), the Neuron is
+    /// treated as though this is set to 2024-11-05T00:00:01 UTC (1730764801
+    /// seconds after the UNIX epoch), the Following Refreshed Epoch.
     #[prost(uint64, optional, tag = "24")]
     pub following_refreshed_timestamp_seconds: ::core::option::Option<u64>,
     /// At any time, at most one of `when_dissolved` and

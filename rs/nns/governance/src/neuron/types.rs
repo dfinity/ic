@@ -25,8 +25,10 @@ use std::collections::{BTreeSet, HashMap};
 
 /// Value: one second after midnight, 2024-11-05 (UTC).
 ///
-/// How this value was chosen: This is the earliest that "refreshing" the follow
-/// configuration of a neuron can be released.
+/// How this value was chosen: This is around the earliest time when
+/// "refreshing" the follow configuration of a neuron might be released,
+/// (assuming the usual NNS release cycle). Significantly different values could
+/// also work, but this seems like a nice "neutral" value.
 ///
 /// How this value is used: when a neuron does not have a value in the
 /// following_refreshed_timestamp_seconds field (because it was created before
