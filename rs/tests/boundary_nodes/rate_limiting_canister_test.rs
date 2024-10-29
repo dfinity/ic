@@ -1,15 +1,15 @@
 /* tag::catalog[]
-Title:: Certificate orchestrator test
+Title:: Rate-limiting test
 
-Goal:: Verify that the certificate orchestrator interface works.
+Goal:: Verify that the rate-limiting canister works.
 
 Runbook:
-. Set up an certificate orchestrator canister.
-. Test that the certificate orchestrator API works.
+. Set up an rate-limiting canister.
+. Test that the rate-limiting canister API works.
 
-Success:: The certificate orchestrator canister is installed and the API works.
+Success:: The rate-limiting canister is installed and the API works.
 
-Coverage:: The certificate orchestrator interface works as expected.
+Coverage:: The rate-limiting canister interface works as expected.
 
 end::catalog[] */
 
