@@ -57,6 +57,8 @@ pub enum CheckTransactionIrrecoverableError {
     ResponseTooLarge { txid: Vec<u8> },
     /// Invalid transaction id because it fails to decode.
     InvalidTransactionId(String),
+    /// Invalid transaction.
+    InvalidTransaction(String),
 }
 
 impl From<CheckTransactionIrrecoverableError> for CheckTransactionResponse {

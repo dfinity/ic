@@ -1059,6 +1059,7 @@ mod test {
                     MasterPublicKeyId::Schnorr(_) => {
                         SignWithSchnorrReply { signature: vec![] }.encode()
                     }
+                    MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
                 }),
             ));
 
@@ -1092,6 +1093,7 @@ mod test {
                 fake_schnorr_master_public_key_id(SchnorrAlgorithm::Ed25519)
             }
             MasterPublicKeyId::Schnorr(_) => fake_ecdsa_master_public_key_id(),
+            MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
         };
         // Add a pre-signature for the "wrong_key_id"
         insert_test_sig_inputs(

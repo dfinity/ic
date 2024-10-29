@@ -214,8 +214,7 @@ pub struct Summary {
     #[prost(message, repeated, tag = "9")]
     pub initial_dkg_attempts: ::prost::alloc::vec::Vec<InitialDkgAttemptCount>,
     #[prost(message, repeated, tag = "10")]
-    pub transcripts_for_new_subnets_with_callback_ids:
-        ::prost::alloc::vec::Vec<CallbackIdedNiDkgTranscript>,
+    pub transcripts_for_remote_subnets: ::prost::alloc::vec::Vec<CallbackIdedNiDkgTranscript>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TaggedNiDkgTranscript {

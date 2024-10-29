@@ -106,7 +106,7 @@ pub fn get_adjusted_notary_delay(
             &*membership.registry_client,
             membership.subnet_id,
             pool.registry_version(height)?,
-        )?,
+        ),
         pool,
         state_manager,
         rank,
@@ -266,22 +266,25 @@ pub fn get_notarization_delay_settings(
     registry_client: &dyn RegistryClient,
     subnet_id: SubnetId,
     registry_version: RegistryVersion,
-) -> Option<NotarizationDelaySettings> {
+) -> NotarizationDelaySettings {
     match registry_client.get_notarization_delay_settings(subnet_id, registry_version) {
         Ok(None) => {
-            panic!(
+            error!(
+                log,
                 "No subnet record found for registry version={:?} and subnet_id={:?}",
-                registry_version, subnet_id,
+                registry_version,
+                subnet_id,
             );
+            NotarizationDelaySettings::default()
         }
         Err(err) => {
             error!(
                 log,
                 "Could not retrieve notarization delay settings from the registry: {:?}", err
             );
-            None
+            NotarizationDelaySettings::default()
         }
-        Ok(result) => result,
+        Ok(Some(result)) => result,
     }
 }
 
@@ -857,6 +860,7 @@ mod tests {
             MasterPublicKeyId::Schnorr(key_id) => {
                 PreSignatureRef::Schnorr(fake_schnorr_transcript(id, key_id.clone()))
             }
+            MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
         }
     }
 
@@ -877,6 +881,7 @@ mod tests {
                         key_id: key_id.clone(),
                     })
                 }
+                MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
             },
             derivation_path: vec![],
             pseudo_random_id: [0; 32],

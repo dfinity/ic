@@ -1,4 +1,3 @@
-use dfn_candid::candid_one;
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL};
 use ic_nns_common::pb::v1::NeuronId;
@@ -106,7 +105,6 @@ fn test_other_controllers_cannot_reset_root() {
         &state_machine,
         LIFELINE_CANISTER_ID,
         "hard_reset_root_to_version",
-        candid_one,
         payload,
         *TEST_NEURON_1_OWNER_PRINCIPAL,
     );

@@ -58,6 +58,8 @@ use std::{
     time::Duration,
 };
 
+pub mod utils;
+
 pub const TEST_KEY_LOCAL: &str = "dfx_test_key";
 
 pub const ADDRESS_LENGTH: usize = 44;
@@ -139,7 +141,7 @@ docker run  --name=bitcoind-node -d \
     });
 }
 
-pub fn config(env: TestEnv) {
+pub fn setup(env: TestEnv) {
     // Use the btc integration setup.
     btc_config(env.clone());
     check_nodes_health(&env);
@@ -477,7 +479,7 @@ pub async fn install_bitcoin_canister_with_network(
 
     install_rust_canister_from_path(
         &mut bitcoin_canister,
-        get_dependency_path("external/btc_canister/file/ic-btc-canister.wasm.gz"),
+        get_dependency_path(env::var("BTC_WASM_PATH").expect("BTC_WASM_PATH not set")),
         Some(Encode!(&args).unwrap()),
     )
     .await;

@@ -2251,6 +2251,129 @@ impl FromStr for SchnorrKeyId {
     }
 }
 
+/// Types of curves that can be used for threshold key derivation (vetKD).
+/// ```text
+/// (variant { bls12_381_g2; })
+/// ```
+#[derive(
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    Debug,
+    CandidType,
+    Deserialize,
+    EnumIter,
+    Serialize,
+)]
+pub enum VetKdCurve {
+    #[serde(rename = "bls12_381_g2")]
+    #[allow(non_camel_case_types)]
+    Bls12_381_G2,
+}
+
+impl From<&VetKdCurve> for pb_registry_crypto::VetKdCurve {
+    fn from(item: &VetKdCurve) -> Self {
+        match item {
+            VetKdCurve::Bls12_381_G2 => pb_registry_crypto::VetKdCurve::Bls12381G2,
+        }
+    }
+}
+
+impl TryFrom<pb_registry_crypto::VetKdCurve> for VetKdCurve {
+    type Error = ProxyDecodeError;
+
+    fn try_from(item: pb_registry_crypto::VetKdCurve) -> Result<Self, Self::Error> {
+        match item {
+            pb_registry_crypto::VetKdCurve::Bls12381G2 => Ok(VetKdCurve::Bls12_381_G2),
+            pb_registry_crypto::VetKdCurve::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
+                typ: "VetKdCurve",
+                err: format!("Unable to convert {:?} to a VetKdCurve", item),
+            }),
+        }
+    }
+}
+
+impl std::fmt::Display for VetKdCurve {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl FromStr for VetKdCurve {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "bls12_381_g2" => Ok(Self::Bls12_381_G2),
+            _ => Err(format!("{} is not a recognized vetKD curve", s)),
+        }
+    }
+}
+
+/// Unique identifier for a key that can be used for threshold key derivation
+/// (vetKD). The name is just an identifier, but it may be used to convey
+/// some information about the key (e.g. that the key is meant to be used for
+/// testing purposes).
+/// ```text
+/// (record { curve: vetkd_curve; name: text})
+/// ```
+#[derive(
+    Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, CandidType, Deserialize, Serialize,
+)]
+pub struct VetKdKeyId {
+    pub curve: VetKdCurve,
+    pub name: String,
+}
+
+impl From<&VetKdKeyId> for pb_registry_crypto::VetKdKeyId {
+    fn from(item: &VetKdKeyId) -> Self {
+        Self {
+            curve: pb_registry_crypto::VetKdCurve::from(&item.curve) as i32,
+            name: item.name.clone(),
+        }
+    }
+}
+
+impl TryFrom<pb_registry_crypto::VetKdKeyId> for VetKdKeyId {
+    type Error = ProxyDecodeError;
+    fn try_from(item: pb_registry_crypto::VetKdKeyId) -> Result<Self, Self::Error> {
+        Ok(Self {
+            curve: VetKdCurve::try_from(
+                pb_registry_crypto::VetKdCurve::try_from(item.curve).map_err(|_| {
+                    ProxyDecodeError::ValueOutOfRange {
+                        typ: "VetKdKeyId",
+                        err: format!("Unable to convert {} to a VetKdCurve", item.curve),
+                    }
+                })?,
+            )?,
+            name: item.name,
+        })
+    }
+}
+
+impl std::fmt::Display for VetKdKeyId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}:{}", self.curve, self.name)
+    }
+}
+
+impl FromStr for VetKdKeyId {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (curve, name) = s
+            .split_once(':')
+            .ok_or_else(|| format!("vetKD key id {} does not contain a ':'", s))?;
+        Ok(VetKdKeyId {
+            curve: curve.parse::<VetKdCurve>()?,
+            name: name.to_string(),
+        })
+    }
+}
+
 /// Unique identifier for a key that can be used for one of the signature schemes
 /// supported on the IC.
 /// ```text
@@ -2262,6 +2385,7 @@ impl FromStr for SchnorrKeyId {
 pub enum MasterPublicKeyId {
     Ecdsa(EcdsaKeyId),
     Schnorr(SchnorrKeyId),
+    VetKd(VetKdKeyId),
 }
 
 impl From<&MasterPublicKeyId> for pb_registry_crypto::MasterPublicKeyId {
@@ -2270,6 +2394,7 @@ impl From<&MasterPublicKeyId> for pb_registry_crypto::MasterPublicKeyId {
         let key_id_pb = match item {
             MasterPublicKeyId::Schnorr(schnorr_key_id) => KeyId::Schnorr(schnorr_key_id.into()),
             MasterPublicKeyId::Ecdsa(ecdsa_key_id) => KeyId::Ecdsa(ecdsa_key_id.into()),
+            MasterPublicKeyId::VetKd(vetkd_key_id) => KeyId::Vetkd(vetkd_key_id.into()),
         };
         Self {
             key_id: Some(key_id_pb),
@@ -2289,6 +2414,7 @@ impl TryFrom<pb_registry_crypto::MasterPublicKeyId> for MasterPublicKeyId {
                 MasterPublicKeyId::Schnorr(schnorr_key_id.try_into()?)
             }
             KeyId::Ecdsa(ecdsa_key_id) => MasterPublicKeyId::Ecdsa(ecdsa_key_id.try_into()?),
+            KeyId::Vetkd(vetkd_key_id) => MasterPublicKeyId::VetKd(vetkd_key_id.try_into()?),
         };
         Ok(master_public_key_id)
     }
@@ -2305,6 +2431,10 @@ impl std::fmt::Display for MasterPublicKeyId {
                 write!(f, "schnorr:")?;
                 schnorr_key_id.fmt(f)
             }
+            Self::VetKd(vetkd_key_id) => {
+                write!(f, "vetkd:")?;
+                vetkd_key_id.fmt(f)
+            }
         }
     }
 }
@@ -2318,6 +2448,7 @@ impl FromStr for MasterPublicKeyId {
         match scheme.to_lowercase().as_str() {
             "ecdsa" => Ok(Self::Ecdsa(EcdsaKeyId::from_str(key_id)?)),
             "schnorr" => Ok(Self::Schnorr(SchnorrKeyId::from_str(key_id)?)),
+            "vetkd" => Ok(Self::VetKd(VetKdKeyId::from_str(key_id)?)),
             _ => Err(format!(
                 "Scheme {} in master public key id {} is not supported.",
                 scheme, s
@@ -2998,17 +3129,14 @@ impl<'a> Payload<'a> for TakeCanisterSnapshotArgs {
     fn decode(blob: &'a [u8]) -> Result<Self, UserError> {
         let args = Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error)?;
 
-        match &args.replace_snapshot {
-            Some(replace_snapshot) => {
-                // Verify that snapshot ID has the correct format.
-                if let Err(err) = SnapshotId::try_from(&replace_snapshot.clone().into_vec()) {
-                    return Err(UserError::new(
-                        ErrorCode::InvalidManagementPayload,
-                        format!("Payload deserialization error: {err:?}"),
-                    ));
-                }
+        if let Some(replace_snapshot) = &args.replace_snapshot {
+            // Verify that snapshot ID has the correct format.
+            if let Err(err) = SnapshotId::try_from(&replace_snapshot.clone().into_vec()) {
+                return Err(UserError::new(
+                    ErrorCode::InvalidManagementPayload,
+                    format!("Payload deserialization error: {err:?}"),
+                ));
             }
-            None => {}
         }
         Ok(args)
     }
@@ -3347,6 +3475,26 @@ mod tests {
     }
 
     #[test]
+    fn vetkd_curve_round_trip() {
+        for curve in VetKdCurve::iter() {
+            assert_eq!(format!("{}", curve).parse::<VetKdCurve>().unwrap(), curve);
+        }
+    }
+
+    #[test]
+    fn vetkd_key_id_round_trip() {
+        for curve in VetKdCurve::iter() {
+            for name in ["bls12_381_g2", "", "other_key", "other key", "other:key"] {
+                let key = VetKdKeyId {
+                    curve,
+                    name: name.to_string(),
+                };
+                assert_eq!(format!("{}", key).parse::<VetKdKeyId>().unwrap(), key);
+            }
+        }
+    }
+
+    #[test]
     fn master_public_key_id_round_trip() {
         for algorithm in SchnorrAlgorithm::iter() {
             for name in ["Ed25519", "", "other_key", "other key", "other:key"] {
@@ -3364,6 +3512,19 @@ mod tests {
         for curve in EcdsaCurve::iter() {
             for name in ["secp256k1", "", "other_key", "other key", "other:key"] {
                 let key = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                    curve,
+                    name: name.to_string(),
+                });
+                assert_eq!(
+                    format!("{}", key).parse::<MasterPublicKeyId>().unwrap(),
+                    key
+                );
+            }
+        }
+
+        for curve in VetKdCurve::iter() {
+            for name in ["bls12_381_g2", "", "other_key", "other key", "other:key"] {
+                let key = MasterPublicKeyId::VetKd(VetKdKeyId {
                     curve,
                     name: name.to_string(),
                 });

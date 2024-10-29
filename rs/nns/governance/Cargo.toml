@@ -119,7 +119,7 @@ proptest = { workspace = true }
 tempfile = { workspace = true }
 tla_instrumentation = { path = "../../tla_instrumentation/tla_instrumentation" }
 tokio = { workspace = true }
-tokio-test = "0.4.2"
+tokio-test = { workspace = true }
 
 [features]
 test = ["ic-sns-swap/test"]

@@ -1086,6 +1086,7 @@ mod tests {
                         signature: vec![2; 32],
                     })
                 }
+                MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
             },
         );
 
@@ -1928,6 +1929,7 @@ mod tests {
                         &mut rng,
                     ))
                 }
+                MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
             };
             payload_0.available_pre_signatures.insert(
                 payload_0.uid_generator.next_pre_signature_id(),
