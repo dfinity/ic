@@ -225,27 +225,13 @@ impl InternetComputer {
     pub fn setup_and_start(&mut self, env: &TestEnv) -> Result<()> {
         // propagate required host features and resource settings to all vms
         let farm = Farm::from_test_env(env, "Internet Computer");
-        for subnet in self.subnets.iter_mut() {
-            for node in subnet.nodes.iter_mut() {
-                node.required_host_features = node
-                    .required_host_features
-                    .iter()
-                    .chain(self.required_host_features.iter())
-                    .cloned()
-                    .collect();
-                node.vm_resources = node.vm_resources.or(&self.default_vm_resources);
-            }
-        }
-        for node in self.unassigned_nodes.iter_mut() {
-            node.required_host_features = node
-                .required_host_features
-                .iter()
-                .chain(self.required_host_features.iter())
-                .cloned()
-                .collect();
-            node.vm_resources = node.vm_resources.or(&self.default_vm_resources);
-        }
-        for node in self.api_boundary_nodes.iter_mut() {
+        for node in self
+            .subnets
+            .iter_mut()
+            .flat_map(|subnet| subnet.nodes.iter_mut())
+            .chain(self.unassigned_nodes.iter_mut())
+            .chain(self.api_boundary_nodes.iter_mut())
+        {
             node.required_host_features = node
                 .required_host_features
                 .iter()

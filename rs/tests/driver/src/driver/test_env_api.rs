@@ -304,6 +304,21 @@ impl std::fmt::Display for TopologySnapshot {
                 .unwrap();
             });
         });
+        if self.api_boundary_nodes().count() > 0 {
+            writeln!(f, "API boundary nodes:").unwrap();
+        }
+        self.api_boundary_nodes().enumerate().for_each(|(idx, n)| {
+            writeln!(
+                f,
+                "\tNode id={}, ipv6={:<width$}, domain_name={}, index={}",
+                n.node_id,
+                n.get_ip_addr(),
+                n.get_domain().map_or("n/a".to_string(), |domain| domain),
+                idx,
+                width = max_length_ipv6,
+            )
+            .unwrap()
+        });
         if self.unassigned_nodes().count() > 0 {
             writeln!(f, "Unassigned nodes:").unwrap();
         }
