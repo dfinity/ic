@@ -23,7 +23,9 @@ use std::process::Command;
 use tempfile::tempdir;
 use url::Url;
 
-use config::generate_testnet_config::{generate_testnet_config, GenerateTestnetConfigArgs};
+use config::generate_testnet_config::{
+    generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
+};
 
 const FARM_BASE_URL: &str = "https://farm.dfinity.systems";
 
@@ -204,7 +206,7 @@ fn main() {
 
         // Build GuestOS config object
         let config = GenerateTestnetConfigArgs {
-            ipv6_config_type: Some("RouterAdvertisement".to_string()),
+            ipv6_config_type: Some(Ipv6ConfigType::RouterAdvertisement),
             deterministic_prefix: None,
             deterministic_prefix_length: None,
             deterministic_gateway: None,

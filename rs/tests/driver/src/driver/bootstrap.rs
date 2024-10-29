@@ -22,7 +22,9 @@ use crate::k8s::images::*;
 use crate::k8s::tnet::{TNet, TNode};
 use crate::util::block_on;
 use anyhow::{bail, Result};
-use config::generate_testnet_config::{generate_testnet_config, GenerateTestnetConfigArgs};
+use config::generate_testnet_config::{
+    generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
+};
 use ic_base_types::NodeId;
 use ic_prep_lib::{
     internet_computer::{IcConfig, InitializedIc, TopologyConfig},
@@ -414,7 +416,7 @@ fn create_config_disk_image(
 ) -> anyhow::Result<()> {
     // Build GuestOS config object
     let mut config = GenerateTestnetConfigArgs {
-        ipv6_config_type: Some("RouterAdvertisement".to_string()),
+        ipv6_config_type: Some(Ipv6ConfigType::RouterAdvertisement),
         deterministic_prefix: None,
         deterministic_prefix_length: None,
         deterministic_gateway: None,
@@ -448,7 +450,7 @@ fn create_config_disk_image(
     // We've seen k8s nodes fail to pick up RA correctly, so we specify their
     // addresses directly. Ideally, all nodes should do this, to match mainnet.
     if InfraProvider::read_attribute(test_env) == InfraProvider::K8s {
-        config.ipv6_config_type = Some("Fixed".to_string());
+        config.ipv6_config_type = Some(Ipv6ConfigType::Fixed);
         config.fixed_address = Some(format!("{}/64", node.node_config.public_api.ip()));
         config.fixed_gateway = Some("fe80::ecee:eeff:feee:eeee".to_string());
     }
