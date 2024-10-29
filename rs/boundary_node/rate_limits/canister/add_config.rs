@@ -75,13 +75,13 @@ impl<R, A> ConfigAdder<R, A> {
 //   - removed_in_version
 // - ID for a newly submitted rule is generated randomly by the canister.
 // - Rules can persist across config versions, if resubmitted.
-// - Non-resubmitted rules are considered as "deactivated" and their metadata fields are updated.
+// - Non-resubmitted rules are considered as "removed" and their metadata fields are updated.
 // - Individual rules or incidents (a set of rules sharing the same incident_id) can be disclosed. This implies that the context of the rule becomes visible for the callers with `RestrictedRead` access level.
 // - Disclosing rules or incidents multiple times has no additional effect.
 
 // Policies:
 // - Immutability: rule's context (incident_id, rule_raw, description) cannot be modified.
-// - Operation of resubmitting a deactivated rule would result in creation of a rule with a new ID.
+// - Operation of resubmitting a "removed" rule would result in creation of a rule with a new ID.
 // - New rules cannot be linked to already disclosed incidents (LinkingRuleToDisclosedIncident error)
 
 impl<R: Repository, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
@@ -186,7 +186,7 @@ impl<R: Repository, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
         // Note: if any operation below fails canister state can become inconsistent.
         // TODO: maybe it is better to panic to rollback changes
 
-        // Update metadata of the removed rules
+        // Update metadata of the "removed" rules
         for rule_id in current_config.rule_ids.iter() {
             // ID is not present in the submitted rule IDs, thus this rule is removed
             if !rule_ids.iter().any(|id| id == rule_id) {
