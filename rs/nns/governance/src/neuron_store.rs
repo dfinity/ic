@@ -778,6 +778,7 @@ impl NeuronStore {
 
         let range = neuron_id_range_to_u64_range(&range);
 
+        // TODO DO NOT MERGE we need to deal with this usage of heap_neurons
         self.heap_neurons.range(range).map(|(_, neuron)| neuron)
     }
 
@@ -1079,6 +1080,7 @@ impl NeuronStore {
         &self,
         caller: PrincipalId,
     ) -> Vec<NeuronId> {
+        // DO NOT MERGE - we need to handle this usage of heap_neurons
         let is_non_empty = |neuron_id: &NeuronId| {
             // If the neuron does not exist on the heap, then it must be inactive and empty.
             self.heap_neurons
