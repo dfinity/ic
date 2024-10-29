@@ -113,7 +113,7 @@ fn disclose_incidents(
             // TODO: consider aggregating errors
             repository
                 .update_incident(incident_id.clone(), metadata)
-                .then(|| ())
+                .then_some(())
                 .ok_or_else(|| DiscloseRulesError::IncidentIdNotFound(incident_id))?;
         }
     }
