@@ -2253,8 +2253,9 @@ impl StateManagerImpl {
             .chain(latest_manifest_height)
             .collect();
 
-        let mut extra_inmemory_heights_to_keep = extra_inmemory_heights_to_keep;
-        extra_inmemory_heights_to_keep.insert(latest_certified_height);
+        let extra_inmemory_heights_to_keep = std::iter::once(latest_certified_height)
+            .chain(extra_inmemory_heights_to_keep.iter().copied())
+            .collect::<BTreeSet<_>>();
 
         // Send object to deallocation thread if it has capacity.
         let deallocate = |x| {
