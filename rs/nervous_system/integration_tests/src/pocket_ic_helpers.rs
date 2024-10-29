@@ -1269,6 +1269,7 @@ pub mod sns {
         expected_type_to_change: SnsCanisterType,
     ) {
         try_upgrade_sns_to_next_version(pocket_ic, sns_root_canister_id, expected_type_to_change)
+            .await
             .unwrap_or_else(|err| {
                 panic!("Upgrading {:?} failed: {:#?}", expected_type_to_change, err)
             });

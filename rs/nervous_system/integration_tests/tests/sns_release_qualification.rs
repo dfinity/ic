@@ -1,4 +1,5 @@
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_nervous_system_agent::sns::Sns;
 use ic_nervous_system_common::ONE_MONTH_SECONDS;
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
@@ -304,12 +305,25 @@ async fn test_proper_sns_swap_upgrade() {
 
     // Deploy an SNS instance via proposal.
     let sns_instance_label = "1";
-    let (sns, _) = nns::governance::propose_to_deploy_sns_and_wait(
+    let (Sns { swap, root, .. }, _) = nns::governance::propose_to_deploy_sns_and_wait(
         &pocket_ic,
         create_service_nervous_system,
         sns_instance_label,
     )
     .await;
+
+    // Upgrade SNS Governance (this is not yet code under test).
+    {
+        let governance_wasm = build_governance_sns_wasm();
+        let governance_wasm = ensure_sns_wasm_gzipped(governance_wasm);
+        let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, governance_wasm)
+            .await
+            .unwrap();
+        assert_eq!(proposal_info.failure_reason, None);
+        sns::try_upgrade_sns_to_next_version(&pocket_ic, root.canister_id, SnsCanisterType::Governance)
+            .await
+            .unwrap();
+    }
 
     // Add one Swap WASM.
     {
@@ -331,22 +345,18 @@ async fn test_proper_sns_swap_upgrade() {
         assert_eq!(proposal_info.failure_reason, None);
     }
 
-    sns::swap::await_swap_lifecycle(&pocket_ic, sns.swap.canister_id, Lifecycle::Open)
+    sns::swap::await_swap_lifecycle(&pocket_ic, swap.canister_id, Lifecycle::Open)
         .await
         .unwrap();
-    sns::swap::smoke_test_participate_and_finalize(
-        &pocket_ic,
-        sns.swap.canister_id,
-        swap_parameters,
-    )
-    .await;
+    sns::swap::smoke_test_participate_and_finalize(&pocket_ic, swap.canister_id, swap_parameters)
+        .await;
 
     // Every canister we are testing has two upgrades.  We are just making sure the counts match
-    sns::upgrade_sns_to_next_version(&pocket_ic, sns.root.canister_id, SnsCanisterType::Swap)
+    sns::try_upgrade_sns_to_next_version(&pocket_ic, root.canister_id, SnsCanisterType::Swap)
         .await
         .unwrap();
 
-    sns::upgrade_sns_to_next_version(&pocket_ic, sns.root.canister_id, SnsCanisterType::Swap)
+    sns::try_upgrade_sns_to_next_version(&pocket_ic, root.canister_id, SnsCanisterType::Swap)
         .await
         .unwrap()
 }
