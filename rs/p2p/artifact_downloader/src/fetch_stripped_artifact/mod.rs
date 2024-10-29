@@ -2,7 +2,7 @@ mod assembler;
 mod download;
 mod metrics;
 mod stripper;
-mod types;
+pub mod types;
 
 #[cfg(test)]
 mod test_utils;
