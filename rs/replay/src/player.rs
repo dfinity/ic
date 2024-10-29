@@ -701,7 +701,6 @@ impl Player {
                 pool,
                 &*self.registry,
                 self.subnet_id,
-                self.replica_version.clone(),
                 &self.log,
                 replay_target_height,
                 None,
@@ -1241,7 +1240,7 @@ fn find_malicious_nodes(
 ) -> HashSet<NodeId> {
     let mut malicious = HashSet::new();
     if let Some(range) = certification_pool
-        .persistent_pool
+        .validated
         .certification_shares()
         .height_range()
     {
@@ -1497,9 +1496,7 @@ mod tests {
             make_share(3, vec![3], 7),
         ];
 
-        shares
-            .into_iter()
-            .for_each(|s| pool.persistent_pool.insert(s));
+        shares.into_iter().for_each(|s| pool.validated.insert(s));
 
         let malicious = find_malicious_nodes(&pool, Height::new(0), &verify);
         assert_eq!(malicious.len(), 1);
