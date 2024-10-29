@@ -139,6 +139,7 @@ impl<R: Repository, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
 
                 rule_id
             } else {
+                // TODO: check for collisions and regenerate if needed
                 let rule_id = generate_random_uuid()?.to_string();
 
                 // Check if the new rule is linked to an existing incident
