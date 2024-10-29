@@ -1,5 +1,5 @@
 {
-  "checksum": "6ad69f549940b165880fbf28174e3a2436e16203ec2297f336bcbc7a1dabcdd5",
+  "checksum": "7d6315901415b36b0e75876824e88368a8e546aa1b4aa4caa8c6bd5789443ec2",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -15067,7 +15067,7 @@
               "target": "rand_core"
             },
             {
-              "id": "typenum 1.16.0",
+              "id": "typenum 1.17.0",
               "target": "typenum"
             }
           ],
@@ -23704,7 +23704,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "typenum 1.16.0",
+              "id": "typenum 1.17.0",
               "target": "typenum"
             },
             {
@@ -68557,14 +68557,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "typenum 1.16.0": {
+    "typenum 1.17.0": {
       "name": "typenum",
-      "version": "1.16.0",
+      "version": "1.17.0",
       "package_url": "https://github.com/paholg/typenum",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/typenum/1.16.0/download",
-          "sha256": "497961ef93d974e23eb6f433eb5fe1b7930b659f06d12dec6fc44a8f554c0bba"
+          "url": "https://static.crates.io/crates/typenum/1.17.0/download",
+          "sha256": "42ff0bf0c66b8238c6f3b578df37d0b7848e55df8577b3f74f92a69acceeb825"
         }
       },
       "targets": [
@@ -68601,14 +68601,14 @@
         "deps": {
           "common": [
             {
-              "id": "typenum 1.16.0",
+              "id": "typenum 1.17.0",
               "target": "build_script_main"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.16.0"
+        "version": "1.17.0"
       },
       "build_script_attrs": {
         "data_glob": [
