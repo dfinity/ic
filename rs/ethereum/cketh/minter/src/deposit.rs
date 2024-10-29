@@ -12,25 +12,12 @@ use crate::state::eth_logs_scraping::BlockRangeInclusive;
 use crate::state::{
     audit::process_event, event::EventType, mutate_state, read_state, State, TaskType,
 };
-use hex_literal::hex;
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
 use num_traits::ToPrimitive;
 use scopeguard::ScopeGuard;
 use std::collections::VecDeque;
 use std::time::Duration;
-
-// Keccak256("ReceivedEth(address,uint256,bytes32)")
-pub(crate) const RECEIVED_ETH_EVENT_TOPIC: [u8; 32] =
-    hex!("257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435");
-
-// Keccak256("ReceivedErc20(address,address,uint256,bytes32)")
-pub(crate) const RECEIVED_ERC20_EVENT_TOPIC: [u8; 32] =
-    hex!("4d69d0bd4287b7f66c548f90154dc81bc98f65a1b362775df5ae171a2ccd262b");
-
-// Keccak256("ReceivedErc20(address,address,uint256,bytes32,bytes32)")
-pub(crate) const RECEIVED_ERC20_EVENT_WITH_SUBACCOUNT_TOPIC: [u8; 32] =
-    hex!("aef895090c2f5d6e81a70bef80dce496a0558487845aada57822159d5efae5cf");
 
 //TODO XC-220: get rif of this clippy warning
 #[allow(clippy::type_complexity)]

@@ -1,4 +1,4 @@
-use crate::deposit::{RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_EVENT_TOPIC};
+use crate::eth_logs::{RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_EVENT_TOPIC};
 use crate::eth_rpc::{FixedSizeData, Topic};
 use crate::numeric::BlockNumber;
 use crate::state::eth_logs_scraping::ActiveLogScrapingState;

@@ -1,6 +1,8 @@
 use crate::eth_logs::{
     parse_principal_from_slice, EventSource, EventSourceError, LedgerSubaccount,
     ReceivedErc20Event, ReceivedEthEvent, ReceivedEvent, ReceivedEventError,
+    RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ERC20_EVENT_WITH_SUBACCOUNT_TOPIC,
+    RECEIVED_ETH_EVENT_TOPIC,
 };
 use crate::eth_rpc::{Data, FixedSizeData, LogEntry};
 use crate::numeric::{BlockNumber, Erc20Value, Wei};
@@ -23,8 +25,7 @@ impl LogParser for ReceivedEthLogParser {
             &entry,
             |topics| {
                 topics.len() == 3
-                    && topics.first()
-                        == Some(&FixedSizeData(crate::deposit::RECEIVED_ETH_EVENT_TOPIC))
+                    && topics.first() == Some(&FixedSizeData(RECEIVED_ETH_EVENT_TOPIC))
             },
             event_source,
         )?;
@@ -61,8 +62,7 @@ impl LogParser for ReceivedErc20LogParser {
             &entry,
             |topics| {
                 topics.len() == 4
-                    && topics.first()
-                        == Some(&FixedSizeData(crate::deposit::RECEIVED_ERC20_EVENT_TOPIC))
+                    && topics.first() == Some(&FixedSizeData(RECEIVED_ERC20_EVENT_TOPIC))
             },
             event_source,
         )?;
@@ -102,9 +102,7 @@ impl LogParser for Erc20WithSubaccountLogParser {
             |topics| {
                 topics.len() == 4
                     && topics.first()
-                        == Some(&FixedSizeData(
-                            crate::deposit::RECEIVED_ERC20_EVENT_WITH_SUBACCOUNT_TOPIC,
-                        ))
+                        == Some(&FixedSizeData(RECEIVED_ERC20_EVENT_WITH_SUBACCOUNT_TOPIC))
             },
             event_source,
         )?;
