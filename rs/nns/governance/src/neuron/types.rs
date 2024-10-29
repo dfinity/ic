@@ -26,9 +26,9 @@ use std::collections::{BTreeSet, HashMap};
 /// Value: one second after midnight, 2024-11-05 (UTC).
 ///
 /// How this value was chosen: This is around the earliest time when
-/// "refreshing" the follow configuration of a neuron might be released,
-/// (assuming the usual NNS release cycle). Significantly different values could
-/// also work, but this seems like a nice "neutral" value.
+/// "refreshing" a neuron's voting power might be released, (assuming the usual
+/// NNS release cycle). Significantly different values could also work, but this
+/// seems like a nice "neutral" value.
 ///
 /// How this value is used: when a neuron does not have a value in the
 /// voting_power_refreshed_timestamp_seconds field (because it was created before
@@ -125,11 +125,12 @@ pub struct Neuron {
     /// How much unprivileged principals (i.e. is neither controller, nor
     /// hotkey) can see about this neuron.
     visibility: Option<Visibility>,
-    /// The last time that following was "refreshed". There are two ways to refresh
-    /// the following of a neuron: set following, or vote directly. When this
-    /// becomes > 6 months, the amount of voting power that this neuron can
-    /// exercise decreases linearly down to 0 over the course of 1 month. After
-    /// that, following is cleared, except for ManageNeuron proposals.
+    /// The last time that voting power was "refreshed". There are two ways to
+    /// refresh the voting power of a neuron: set following, or vote directly.
+    /// When this becomes > 6 months ago, the amount of voting power that this
+    /// neuron can exercise decreases linearly down to 0 over the course of 1
+    /// month. After that, following is cleared, except for ManageNeuron
+    /// proposals.
     voting_power_refreshed_timestamp_seconds: u64,
 }
 
