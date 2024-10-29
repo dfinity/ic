@@ -85,9 +85,8 @@ sol_register_toolchains(
 
 http_archive(
     name = "rules_rust",
-    patch_args = ["-p1"],
-    sha256 = "24b378ed97006f1f7012be498a26f81ddb9901318b88380aee8522fdfbe8b735",
-    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.42.1/rules_rust-v0.42.1.tar.gz"],
+    sha256 = "85e2013727ab26fb22abdffe4b2ac0c27a2d5b6296167ba63d8f6e13140f51f9",
+    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.53.0/rules_rust-v0.53.0.tar.gz"],
 )
 
 load("@rules_rust//rust:repositories.bzl", "rules_rust_dependencies", "rust_register_toolchains")
