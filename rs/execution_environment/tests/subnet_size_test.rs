@@ -1134,6 +1134,13 @@ fn test_subnet_size_execute_message_cost() {
     );
 
     // Check default cost.
+    //
+    // The below is using `is_almost_eq` because there is a one-off in the instructions
+    // consumed by the `inc` method and what we compute in `inc_instruction_cost`. This one-off
+    // did not matter previously as the division by 2.5 was rounding down to the nearest integer.
+    // Now with the new fee which basically converts every instruction to a cycle charged this
+    // difference can be observed but it does not really affect things so we use `is_almost_eq`
+    // until it's fixed.
     let simulated_cost = simulate_execute_message_cost(subnet_type, reference_subnet_size);
     assert!(
         is_almost_eq(simulated_cost, reference_cost),
