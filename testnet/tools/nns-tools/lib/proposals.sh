@@ -23,10 +23,11 @@ generate_swap_canister_upgrade_proposal_text() {
     ESCAPED_IC_REPO=$(printf '%s\n' "$IC_REPO" | sed -e 's/[]\/$*.^[]/\\&/g')
     RELATIVE_CODE_LOCATION=$(echo "$CANISTER_CODE_LOCATION" | sed "s/$ESCAPED_IC_REPO/./g")
 
-    ROOT_CANISTER_ID=$(dfx \
-        --identity default \
-        canister --network ic \
-        call ${CANISTER_ID} get_init '(record {})' \
+    ROOT_CANISTER_ID=$(
+        dfx \
+            --identity default \
+            canister --network ic \
+            call ${CANISTER_ID} get_init '(record {})' \
             | idl2json \
             | jq -r ".init[0].sns_root_canister_id"
     )
@@ -548,7 +549,7 @@ proposal_field_value() {
     local FIELD=$2
     VALUE=$(cat $FILE | grep "__${FIELD}__" | sed "s/.*__${FIELD}__:[[:space:]]*//")
     if [ -z "$VALUE" ]; then
-        >&2 echo "WARNING: Cannot find field '$FIELD' in '$FILE'."
+        echo >&2 "WARNING: Cannot find field '$FIELD' in '$FILE'."
     fi
     extract_first_markdown_link_display_name "$VALUE"
 }

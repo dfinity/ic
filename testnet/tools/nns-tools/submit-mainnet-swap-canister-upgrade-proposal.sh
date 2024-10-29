@@ -30,10 +30,11 @@ submit_swap_upgrade_proposal_mainnet() {
     NEURON_ID=$2
 
     CANISTER_ID=$(proposal_field_value "$PROPOSAL_FILE" "Target canister")
-    ROOT_CANISTER_ID=$(dfx \
-        --identity default \
-        canister --network ic \
-        call $CANISTER_ID get_init '(record {})' \
+    ROOT_CANISTER_ID=$(
+        dfx \
+            --identity default \
+            canister --network ic \
+            call $CANISTER_ID get_init '(record {})' \
             | idl2json \
             | jq -r ".init[0].sns_root_canister_id"
     )
