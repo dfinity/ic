@@ -116,6 +116,7 @@ mod cbor {
 mod block_range {
 
     use crate::numeric::{BlockNumber, BlockRangeInclusive};
+    use crate::test_fixtures::arb::arb_block_range_inclusive;
     use proptest::{prelude::any, prop_assume, proptest};
 
     #[test]
@@ -153,6 +154,23 @@ mod block_range {
             let mut chunks = singleton_range.clone().into_chunks(1);
             assert_eq!(chunks.next(), Some(singleton_range));
             assert_eq!(chunks.next(), None);
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn should_always_contain_at_most_chunks_elements(block_range in arb_block_range_inclusive(), chunk_size in any::<u16>()) {
+            let chunks = block_range.into_chunks(chunk_size).take(5);
+
+            for subrange in chunks {
+                let (start_sub, end_sub) = subrange.into_inner();
+                let num_elements = end_sub
+                    .checked_sub(start_sub)
+                    .expect("BUG: end >= start")
+                    .checked_increment()
+                    .expect("BUG: should be at most u16::MAX");
+                assert!(num_elements <= chunk_size.into());
+            }
         }
     }
 
