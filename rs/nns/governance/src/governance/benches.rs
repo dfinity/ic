@@ -6,6 +6,7 @@ use crate::{
         neuron::Followees, proposal::Action, Ballot, BallotInfo, Governance as GovernanceProto,
         KnownNeuron, Neuron as NeuronProto, Topic, Vote,
     },
+    temporarily_disable_active_neurons_in_stable_memory,
     temporarily_disable_stable_memory_following_index,
     temporarily_enable_active_neurons_in_stable_memory,
     temporarily_enable_stable_memory_following_index,
@@ -362,6 +363,88 @@ fn make_neuron(
     neuron
 }
 
+/// Initial before changes
+/// ---------------------------------------------------
+//
+// Benchmark: cascading_vote_stable_neurons_with_heap_index (new)
+//   total:
+//     instructions: 2.91 B (new)
+//     heap_increase: 1 pages (new)
+//     stable_memory_increase: 0 pages (new)
+//
+// ---------------------------------------------------
+//
+// Benchmark: cascading_vote_stable_everything (new)
+//   total:
+//     instructions: 2.94 B (new)
+//     heap_increase: 1 pages (new)
+//     stable_memory_increase: 0 pages (new)
+//
+// ---------------------------------------------------
+//
+// Benchmark: cascading_vote_all_heap (new)
+//   total:
+//     instructions: 35.88 M (new)
+//     heap_increase: 0 pages (new)
+//     stable_memory_increase: 0 pages (new)
+//
+// ---------------------------------------------------
+//
+// Benchmark: cascading_vote_heap_neurons_stable_index (new)
+//   total:
+//     instructions: 35.88 M (new)
+//     heap_increase: 0 pages (new)
+//     stable_memory_increase: 0 pages (new)
+//
+// ---------------------------------------------------
+//
+// Benchmark: compute_ballots_for_new_proposal_with_stable_neurons (new)
+//   total:
+//     instructions: 1.56 M (new)
+//     heap_increase: 0 pages (new)
+//     stable_memory_increase: 0 pages (new)
+
+// With NeuronStore.neuron_would_follow_ballots
+//---------------------------------------------------
+//
+// Benchmark: cascading_vote_stable_neurons_with_heap_index (new)
+//   total:
+//     instructions: 2.05 B (new)
+//     heap_increase: 1 pages (new)
+//     stable_memory_increase: 0 pages (new)
+//
+// ---------------------------------------------------
+//
+// Benchmark: cascading_vote_stable_everything (new)
+//   total:
+//     instructions: 2.07 B (new)
+//     heap_increase: 1 pages (new)
+//     stable_memory_increase: 0 pages (new)
+//
+// ---------------------------------------------------
+//
+// Benchmark: cascading_vote_all_heap (new)
+//   total:
+//     instructions: 35.87 M (new)
+//     heap_increase: 0 pages (new)
+//     stable_memory_increase: 0 pages (new)
+//
+// ---------------------------------------------------
+//
+// Benchmark: cascading_vote_heap_neurons_stable_index (new)
+//   total:
+//     instructions: 35.87 M (new)
+//     heap_increase: 0 pages (new)
+//     stable_memory_increase: 0 pages (new)
+//
+// ---------------------------------------------------
+//
+// Benchmark: compute_ballots_for_new_proposal_with_stable_neurons (new)
+//   total:
+//     instructions: 1.56 M (new)
+//     heap_increase: 0 pages (new)
+//     stable_memory_increase: 0 pages (new)
+
 #[bench(raw)]
 fn cascading_vote_stable_neurons_with_heap_index() -> BenchResult {
     let _a = temporarily_enable_active_neurons_in_stable_memory();
@@ -379,6 +462,34 @@ fn cascading_vote_stable_neurons_with_heap_index() -> BenchResult {
 #[bench(raw)]
 fn cascading_vote_stable_everything() -> BenchResult {
     let _a = temporarily_enable_active_neurons_in_stable_memory();
+    let _b = temporarily_enable_stable_memory_following_index();
+
+    cast_vote_cascade_helper(
+        SetUpStrategy::Chain {
+            num_neurons: 151,
+            num_followees: 15,
+        },
+        Topic::NetworkEconomics,
+    )
+}
+
+#[bench(raw)]
+fn cascading_vote_all_heap() -> BenchResult {
+    let _a = temporarily_disable_active_neurons_in_stable_memory();
+    let _b = temporarily_disable_stable_memory_following_index();
+
+    cast_vote_cascade_helper(
+        SetUpStrategy::Chain {
+            num_neurons: 151,
+            num_followees: 15,
+        },
+        Topic::NetworkEconomics,
+    )
+}
+
+#[bench(raw)]
+fn cascading_vote_heap_neurons_stable_index() -> BenchResult {
+    let _a = temporarily_disable_active_neurons_in_stable_memory();
     let _b = temporarily_enable_stable_memory_following_index();
 
     cast_vote_cascade_helper(

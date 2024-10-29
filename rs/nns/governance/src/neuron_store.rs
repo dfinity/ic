@@ -16,7 +16,7 @@ use crate::{
         with_stable_neuron_indexes, with_stable_neuron_indexes_mut, with_stable_neuron_store,
         with_stable_neuron_store_mut,
     },
-    Clock, IcClock,
+    use_stable_memory_following_index, Clock, IcClock,
 };
 use dyn_clone::DynClone;
 use ic_base_types::PrincipalId;
@@ -305,7 +305,13 @@ pub struct NeuronStore {
     // NeuronStore) implements additional traits. Therefore, more elaborate wrapping is needed.
     clock: Box<dyn PracticalClock>,
 
+    // Whether to use stable memory for all neurons. This is a temporary flag to change the mode
+    // of operation for the NeuronStore.  Once all neurons are in stable memory, this will be
+    // removed, as well as heap_neurons.
     use_stable_memory_for_all_neurons: bool,
+
+    // Temporary flag to determine which following index to use
+    use_stable_following_index: bool,
 }
 
 /// Does not use clock, but other than that, behaves as you would expect.
@@ -319,6 +325,7 @@ impl PartialEq for NeuronStore {
             topic_followee_index,
             clock: _,
             use_stable_memory_for_all_neurons: _,
+            use_stable_following_index: _,
         } = self;
 
         *heap_neurons == other.heap_neurons && *topic_followee_index == other.topic_followee_index
@@ -332,6 +339,7 @@ impl Default for NeuronStore {
             topic_followee_index: HeapNeuronFollowingIndex::new(BTreeMap::new()),
             clock: Box::new(IcClock::new()),
             use_stable_memory_for_all_neurons: false,
+            use_stable_following_index: false,
         }
     }
 }
@@ -347,6 +355,7 @@ impl NeuronStore {
             topic_followee_index: HeapNeuronFollowingIndex::new(BTreeMap::new()),
             clock: Box::new(IcClock::new()),
             use_stable_memory_for_all_neurons: is_active_neurons_in_stable_memory_enabled(),
+            use_stable_following_index: use_stable_memory_following_index(),
         };
 
         // Adds the neurons one by one into neuron store.
@@ -378,6 +387,7 @@ impl NeuronStore {
             topic_followee_index: proto_to_heap_topic_followee_index(topic_followee_index),
             clock,
             use_stable_memory_for_all_neurons: is_active_neurons_in_stable_memory_enabled(),
+            use_stable_following_index: use_stable_memory_following_index(),
         }
     }
 
@@ -1007,6 +1017,26 @@ impl NeuronStore {
         Ok(f(neuron.deref()))
     }
 
+    /// Method to efficiently call Neuron.would_follow_ballots without loading all of the
+    /// neuron's data.
+    pub fn neuron_would_follow_ballots(
+        &self,
+        neuron_id: NeuronId,
+        topic: Topic,
+        ballots: &HashMap<u64, Ballot>,
+    ) -> Result<Vote, NeuronStoreError> {
+        let needed_sections = NeuronSections {
+            hot_keys: false,
+            recent_ballots: false,
+            followees: true,
+            known_neuron_data: false,
+            transfer: false,
+        };
+        self.with_neuron_sections(&neuron_id, needed_sections, |neuron| {
+            neuron.would_follow_ballots(topic, ballots)
+        })
+    }
+
     // Below are indexes related methods. They don't have a unified interface yet, but NNS1-2507 will change that.
 
     // Read methods for indexes.
@@ -1017,10 +1047,16 @@ impl NeuronStore {
         followee: NeuronId,
         topic: Topic,
     ) -> Vec<NeuronId> {
-        self.topic_followee_index
-            .get_followers_by_followee_and_category(&followee, topic)
-            .into_iter()
-            .collect()
+        if self.use_stable_following_index {
+            with_stable_neuron_indexes(|indexes| {
+                indexes
+                    .following()
+                    .get_followers_by_followee_and_category(&followee, topic)
+            })
+        } else {
+            self.topic_followee_index
+                .get_followers_by_followee_and_category(&followee, topic)
+        }
     }
 
     // Gets all neuron ids associated with the given principal id (hot-key or controller).
