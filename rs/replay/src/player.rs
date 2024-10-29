@@ -1213,13 +1213,15 @@ impl Player {
         match lookup_replica_version(
             &*self.registry,
             self.subnet_id,
-            &ic_logger::replica_logger::no_op_logger(),
+            &self.log,
             last_cup.content.registry_version(),
         ) {
             Some(replica_version) if replica_version != self.replica_version => {
                 println!(
-                    "⚠️  Please use the replay tool of version {} to continue backup recovery from height {:?}",
-                    replica_version, last_cup.height()
+                    "⚠️  Please use the replay tool of version {} \
+                    to continue backup recovery from height {}",
+                    replica_version,
+                    last_cup.height()
                 );
                 return Err(ReplayError::UpgradeDetected(
                     self.get_latest_state_params(None, Vec::new()),
