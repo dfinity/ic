@@ -9,7 +9,7 @@ on:
   pull_request:
     paths:
       - '.github/workflows/container-mirror.yml'
-      - '.github/container-mirror/images.yml'
+      - '.github/workflows/container-mirror-images.json'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
