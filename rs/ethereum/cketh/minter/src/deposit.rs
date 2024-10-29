@@ -18,201 +18,6 @@ use scopeguard::ScopeGuard;
 use std::collections::VecDeque;
 use std::time::Duration;
 
-//TODO XC-220: get rif of this clippy warning
-#[allow(clippy::type_complexity)]
-async fn scrape_block_range<S: LogScraping, P: LogParser>(
-    rpc_client: &EthRpcClient,
-    contract_address: Address,
-    topics: Vec<Topic>,
-    block_range: BlockRangeInclusive,
-) -> Result<(), MultiCallError<Vec<LogEntry>>> {
-    let mut subranges = VecDeque::new();
-    subranges.push_back(block_range);
-
-    while !subranges.is_empty() {
-        let range = subranges.pop_front().unwrap();
-        let (from_block, to_block) = range.clone().into_inner();
-
-        let request = GetLogsParam {
-            from_block: BlockSpec::from(from_block),
-            to_block: BlockSpec::from(to_block),
-            address: vec![contract_address],
-            topics: topics.clone(),
-        };
-
-        let result: Result<
-            (Vec<ReceivedEvent>, Vec<ReceivedEventError>),
-            MultiCallError<Vec<LogEntry>>,
-        > = {
-            let logs = rpc_client.eth_get_logs(request).await;
-
-            logs.map(|res| {
-                let (ok, not_ok): (Vec<_>, Vec<_>) =
-                    res.into_iter().map(P::parse_log).partition(Result::is_ok);
-                let valid_transactions: Vec<ReceivedEvent> =
-                    ok.into_iter().map(Result::unwrap).collect();
-                let errors: Vec<ReceivedEventError> =
-                    not_ok.into_iter().map(Result::unwrap_err).collect();
-                (valid_transactions, errors)
-            })
-        };
-
-        match result {
-            Ok((events, errors)) => {
-                register_deposit_events(S::display_id(), events, errors);
-                mutate_state(|s| S::update_last_scraped_block_number(s, to_block));
-            }
-            Err(e) => {
-                log!(
-                    INFO,
-                    "Failed to get {} logs in range {range}: {e:?}",
-                    S::display_id()
-                );
-                if e.has_http_outcall_error_matching(HttpOutcallError::is_response_too_large) {
-                    if from_block == to_block {
-                        mutate_state(|s| {
-                            process_event(
-                                s,
-                                EventType::SkippedBlockForContract {
-                                    contract_address,
-                                    block_number: to_block,
-                                },
-                            );
-                        });
-                        mutate_state(|s| S::update_last_scraped_block_number(s, to_block));
-                    } else {
-                        let (left_half, right_half) = range.partition_into_halves();
-                        if let Some(r) = right_half {
-                            let upper_range = subranges
-                                .pop_front()
-                                .map(|current_next| r.clone().join_with(current_next))
-                                .unwrap_or(r);
-                            subranges.push_front(upper_range);
-                        }
-                        if let Some(lower_range) = left_half {
-                            subranges.push_front(lower_range);
-                        }
-                        log!(
-                            INFO,
-                            "Too many logs received. Will with ranges {subranges:?}"
-                        );
-                    }
-                } else {
-                    log!(
-                        INFO,
-                        "Failed to get {} logs in range {range}: {e:?}",
-                        S::display_id()
-                    );
-                    return Err(e);
-                }
-            }
-        }
-    }
-    Ok(())
-}
-
-pub fn register_deposit_events(
-    scraping_display_name: &str,
-    transaction_events: Vec<ReceivedEvent>,
-    errors: Vec<ReceivedEventError>,
-) {
-    for event in transaction_events {
-        log!(
-            INFO,
-            "Received event {event:?}; will mint {} {scraping_display_name} to {}",
-            event.value(),
-            event.principal()
-        );
-        if crate::blocklist::is_blocked(&event.from_address()) {
-            log!(
-                INFO,
-                "Received event from a blocked address: {} for {} {scraping_display_name}",
-                event.from_address(),
-                event.value(),
-            );
-            mutate_state(|s| {
-                process_event(
-                    s,
-                    EventType::InvalidDeposit {
-                        event_source: event.source(),
-                        reason: format!("blocked address {}", event.from_address()),
-                    },
-                )
-            });
-        } else {
-            mutate_state(|s| process_event(s, event.into_deposit()));
-        }
-    }
-    if read_state(State::has_events_to_mint) {
-        ic_cdk_timers::set_timer(Duration::from_secs(0), || ic_cdk::spawn(mint()));
-    }
-    for error in errors {
-        if let ReceivedEventError::InvalidEventSource { source, error } = &error {
-            mutate_state(|s| {
-                process_event(
-                    s,
-                    EventType::InvalidDeposit {
-                        event_source: *source,
-                        reason: error.to_string(),
-                    },
-                )
-            });
-        }
-        report_transaction_error(error);
-    }
-}
-
-async fn scrape_until_block<S: LogScraping, P: LogParser>(
-    last_block_number: BlockNumber,
-    max_block_spread: u16,
-) {
-    let scrape = match read_state(S::next_scrape) {
-        Some(s) => s,
-        None => {
-            log!(
-                DEBUG,
-                "[scrape_contract_logs]: skipping scrapping {} logs: not active",
-                S::display_id()
-            );
-            return;
-        }
-    };
-    let block_range = BlockRangeInclusive::new(
-        scrape
-            .last_scraped_block_number
-            .checked_increment()
-            .unwrap_or(BlockNumber::MAX),
-        last_block_number,
-    );
-    log!(
-        DEBUG,
-        "[scrape_contract_logs]: Scraping {} logs in block range {block_range}",
-        S::display_id()
-    );
-    let topics = read_state(S::event_topics);
-    let rpc_client = read_state(EthRpcClient::from_state);
-    for block_range in block_range.into_chunks(max_block_spread) {
-        match scrape_block_range::<S, P>(
-            &rpc_client,
-            scrape.contract_address,
-            topics.clone(),
-            block_range.clone(),
-        )
-        .await
-        {
-            Ok(()) => {}
-            Err(e) => {
-                log!(
-                    INFO,
-                    "[scrape_contract_logs]: Failed to scrape {} logs in range {block_range}: {e:?}",
-                    S::display_id()
-                );
-                return;
-            }
-        }
-    }
-}
-
 async fn mint() {
     use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
     use icrc_ledger_types::icrc1::transfer::TransferArg;
@@ -371,5 +176,186 @@ pub async fn update_last_observed_block_number() -> Option<BlockNumber> {
             );
             read_state(|s| s.last_observed_block_number)
         }
+    }
+}
+
+async fn scrape_until_block<S: LogScraping, P: LogParser>(
+    last_block_number: BlockNumber,
+    max_block_spread: u16,
+) {
+    let scrape = match read_state(S::next_scrape) {
+        Some(s) => s,
+        None => {
+            log!(
+                DEBUG,
+                "[scrape_contract_logs]: skipping scrapping {} logs: not active",
+                S::display_id()
+            );
+            return;
+        }
+    };
+    let block_range = BlockRangeInclusive::new(
+        scrape
+            .last_scraped_block_number
+            .checked_increment()
+            .unwrap_or(BlockNumber::MAX),
+        last_block_number,
+    );
+    log!(
+        DEBUG,
+        "[scrape_contract_logs]: Scraping {} logs in block range {block_range}",
+        S::display_id()
+    );
+    let topics = read_state(S::event_topics);
+    let rpc_client = read_state(EthRpcClient::from_state);
+    for block_range in block_range.into_chunks(max_block_spread) {
+        match scrape_block_range::<S, P>(
+            &rpc_client,
+            scrape.contract_address,
+            topics.clone(),
+            block_range.clone(),
+        )
+        .await
+        {
+            Ok(()) => {}
+            Err(e) => {
+                log!(
+                    INFO,
+                    "[scrape_contract_logs]: Failed to scrape {} logs in range {block_range}: {e:?}",
+                    S::display_id()
+                );
+                return;
+            }
+        }
+    }
+}
+
+async fn scrape_block_range<S: LogScraping, P: LogParser>(
+    rpc_client: &EthRpcClient,
+    contract_address: Address,
+    topics: Vec<Topic>,
+    block_range: BlockRangeInclusive,
+) -> Result<(), MultiCallError<Vec<LogEntry>>> {
+    let mut subranges = VecDeque::new();
+    subranges.push_back(block_range);
+
+    while !subranges.is_empty() {
+        let range = subranges.pop_front().unwrap();
+        let (from_block, to_block) = range.clone().into_inner();
+
+        let request = GetLogsParam {
+            from_block: BlockSpec::from(from_block),
+            to_block: BlockSpec::from(to_block),
+            address: vec![contract_address],
+            topics: topics.clone(),
+        };
+
+        let result = rpc_client
+            .eth_get_logs(request)
+            .await
+            .map(P::parse_all_logs);
+
+        match result {
+            Ok((events, errors)) => {
+                register_deposit_events(S::display_id(), events, errors);
+                mutate_state(|s| S::update_last_scraped_block_number(s, to_block));
+            }
+            Err(e) => {
+                log!(
+                    INFO,
+                    "Failed to get {} logs in range {range}: {e:?}",
+                    S::display_id()
+                );
+                if e.has_http_outcall_error_matching(HttpOutcallError::is_response_too_large) {
+                    if from_block == to_block {
+                        mutate_state(|s| {
+                            process_event(
+                                s,
+                                EventType::SkippedBlockForContract {
+                                    contract_address,
+                                    block_number: to_block,
+                                },
+                            );
+                        });
+                        mutate_state(|s| S::update_last_scraped_block_number(s, to_block));
+                    } else {
+                        let (left_half, right_half) = range.partition_into_halves();
+                        if let Some(r) = right_half {
+                            let upper_range = subranges
+                                .pop_front()
+                                .map(|current_next| r.clone().join_with(current_next))
+                                .unwrap_or(r);
+                            subranges.push_front(upper_range);
+                        }
+                        if let Some(lower_range) = left_half {
+                            subranges.push_front(lower_range);
+                        }
+                        log!(
+                            INFO,
+                            "Too many logs received. Will with ranges {subranges:?}"
+                        );
+                    }
+                } else {
+                    log!(
+                        INFO,
+                        "Failed to get {} logs in range {range}: {e:?}",
+                        S::display_id()
+                    );
+                    return Err(e);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+pub fn register_deposit_events(
+    scraping_display_name: &str,
+    transaction_events: Vec<ReceivedEvent>,
+    errors: Vec<ReceivedEventError>,
+) {
+    for event in transaction_events {
+        log!(
+            INFO,
+            "Received event {event:?}; will mint {} {scraping_display_name} to {}",
+            event.value(),
+            event.principal()
+        );
+        if crate::blocklist::is_blocked(&event.from_address()) {
+            log!(
+                INFO,
+                "Received event from a blocked address: {} for {} {scraping_display_name}",
+                event.from_address(),
+                event.value(),
+            );
+            mutate_state(|s| {
+                process_event(
+                    s,
+                    EventType::InvalidDeposit {
+                        event_source: event.source(),
+                        reason: format!("blocked address {}", event.from_address()),
+                    },
+                )
+            });
+        } else {
+            mutate_state(|s| process_event(s, event.into_deposit()));
+        }
+    }
+    if read_state(State::has_events_to_mint) {
+        ic_cdk_timers::set_timer(Duration::from_secs(0), || ic_cdk::spawn(mint()));
+    }
+    for error in errors {
+        if let ReceivedEventError::InvalidEventSource { source, error } = &error {
+            mutate_state(|s| {
+                process_event(
+                    s,
+                    EventType::InvalidDeposit {
+                        event_source: *source,
+                        reason: error.to_string(),
+                    },
+                )
+            });
+        }
+        report_transaction_error(error);
     }
 }

@@ -12,6 +12,19 @@ use ic_ethereum_types::Address;
 /// Parse an Ethereum log event into a `ReceivedEvent`.
 pub trait LogParser {
     fn parse_log(log: LogEntry) -> Result<ReceivedEvent, ReceivedEventError>;
+
+    /// Parse a list of Ethereum log events into a list of `ReceivedEvent`s and a list of errors.
+    ///
+    /// All logs are parsed, even if some of them are invalid.
+    fn parse_all_logs(logs: Vec<LogEntry>) -> (Vec<ReceivedEvent>, Vec<ReceivedEventError>) {
+        let (ok, not_ok): (Vec<_>, Vec<_>) = logs
+            .into_iter()
+            .map(Self::parse_log)
+            .partition(Result::is_ok);
+        let valid_transactions: Vec<ReceivedEvent> = ok.into_iter().map(Result::unwrap).collect();
+        let errors: Vec<ReceivedEventError> = not_ok.into_iter().map(Result::unwrap_err).collect();
+        (valid_transactions, errors)
+    }
 }
 
 pub struct ReceivedEthLogParser {}
