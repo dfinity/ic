@@ -620,12 +620,9 @@ impl LocalTestRuntime {
         while self.state_reader.latest_certified_height() < latest {
             thread::sleep(Duration::from_millis(100));
         }
+        let query_svc = self.query_handler.lock().unwrap().clone();
 
-        let result = match self
-            .query_handler
-            .lock()
-            .unwrap()
-            .clone()
+        let result = match query_svc
             .oneshot((query, None))
             .await
             .unwrap()
