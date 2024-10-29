@@ -1,8 +1,8 @@
 use crate::eth_logs::{
     parse_principal_from_slice, EventSource, EventSourceError, LedgerSubaccount,
     ReceivedErc20Event, ReceivedEthEvent, ReceivedEvent, ReceivedEventError,
-    RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ERC20_EVENT_WITH_SUBACCOUNT_TOPIC,
-    RECEIVED_ETH_EVENT_TOPIC,
+    RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_EVENT_TOPIC,
+    RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC,
 };
 use crate::eth_rpc::{Data, FixedSizeData, LogEntry};
 use crate::numeric::{BlockNumber, Erc20Value, Wei};
@@ -103,9 +103,9 @@ impl LogParser for ReceivedErc20LogParser {
     }
 }
 
-pub struct Erc20WithSubaccountLogParser {}
+pub struct ReceivedEthOrErc20LogParser {}
 
-impl LogParser for Erc20WithSubaccountLogParser {
+impl LogParser for ReceivedEthOrErc20LogParser {
     fn parse_log(entry: LogEntry) -> Result<ReceivedEvent, ReceivedEventError> {
         let (block_number, event_source) = ensure_not_pending(&entry)?;
         ensure_not_removed(&entry, event_source)?;
@@ -115,7 +115,9 @@ impl LogParser for Erc20WithSubaccountLogParser {
             |topics| {
                 topics.len() == 4
                     && topics.first()
-                        == Some(&FixedSizeData(RECEIVED_ERC20_EVENT_WITH_SUBACCOUNT_TOPIC))
+                        == Some(&FixedSizeData(
+                            RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC,
+                        ))
             },
             event_source,
         )?;
@@ -124,24 +126,41 @@ impl LogParser for Erc20WithSubaccountLogParser {
         let principal = parse_principal(&entry.topics[3], event_source)?;
         let [value_bytes, subaccount_bytes] =
             parse_data_into_32_byte_words(entry.data, event_source)?;
-        let value = Erc20Value::from_be_bytes(value_bytes);
         let subaccount = LedgerSubaccount::from_bytes(subaccount_bytes);
         let EventSource {
             transaction_hash,
             log_index,
         } = event_source;
 
-        Ok(ReceivedErc20Event {
-            transaction_hash,
-            block_number,
-            log_index,
-            from_address,
-            value,
-            principal,
-            erc20_contract_address,
-            subaccount,
+        match erc20_contract_address {
+            address if address == Address::ZERO => {
+                let value = Wei::from_be_bytes(value_bytes);
+                Ok(ReceivedEthEvent {
+                    transaction_hash,
+                    block_number,
+                    log_index,
+                    from_address,
+                    value,
+                    principal,
+                    subaccount,
+                }
+                .into())
+            }
+            _ => {
+                let value = Erc20Value::from_be_bytes(value_bytes);
+                Ok(ReceivedErc20Event {
+                    transaction_hash,
+                    block_number,
+                    log_index,
+                    from_address,
+                    value,
+                    principal,
+                    erc20_contract_address,
+                    subaccount,
+                }
+                .into())
+            }
         }
-        .into())
     }
 }
 
