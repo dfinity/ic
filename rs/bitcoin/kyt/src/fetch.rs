@@ -17,7 +17,7 @@ use std::convert::Infallible;
 mod tests;
 
 impl HttpGetTxError {
-    pub(crate) fn to_response(self, txid: Txid) -> CheckTransactionResponse {
+    pub(crate) fn into_response(self, txid: Txid) -> CheckTransactionResponse {
         let txid = txid.as_ref().to_vec();
         match self {
             HttpGetTxError::Rejected { message, .. } => {
@@ -263,7 +263,7 @@ pub trait FetchEnv {
                         );
                     }
                 }
-                FetchResult::Error(err) => error = Some(err.to_response(input_txid)),
+                FetchResult::Error(err) => error = Some(err.into_response(input_txid)),
                 FetchResult::RetryWithBiggerBuffer => (),
             }
         }

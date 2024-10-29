@@ -271,7 +271,7 @@ pub async fn check_transaction_inputs(txid: Txid) -> CheckTransactionResponse {
                         Ok(FetchResult::Fetched(fetched)) => {
                             env.check_fetched(txid, &fetched).await
                         }
-                        Ok(FetchResult::Error(err)) => (txid, err).into(),
+                        Ok(FetchResult::Error(err)) => err.into_response(txid),
                         Ok(FetchResult::RetryWithBiggerBuffer) => {
                             CheckTransactionRetriable::Pending.into()
                         }
