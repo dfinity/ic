@@ -1,16 +1,17 @@
 /* tag::catalog[]
 end::catalog[] */
 
-use candid::Principal;
+use candid::{Decode, Principal};
 use ic_agent::{agent::RejectCode, Agent, AgentError};
 use ic_base_types::PrincipalId;
+use ic_management_canister_types::SubnetMetricsResponse;
 use ic_management_canister_types::{self as ic00, EmptyBlob, Method, Payload};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::GetFirstHealthyNodeSnapshot;
 use ic_system_test_driver::driver::test_env_api::HasPublicApiUrl;
 use ic_system_test_driver::driver::test_env_api::IcNodeSnapshot;
 use ic_system_test_driver::util::*;
-use ic_types::Cycles;
+use ic_types::{Cycles, ReplicaVersion};
 use ic_universal_canister::{call_args, wasm};
 
 /// Helper function to setup an application node and an agent.
@@ -432,7 +433,9 @@ pub fn subnet_metrics_update_succeeds(env: TestEnv) {
                 .await;
             // Assert.
             assert!(result.is_ok());
-            assert!(!result.ok().unwrap().is_empty()); // Assert it has some non zero data.
+            let SubnetMetricsResponse { replica_version } =
+                Decode!(&result.unwrap(), SubnetMetricsResponse).unwrap();
+            assert_eq!(replica_version, ReplicaVersion::default().to_string());
         }
     })
 }
