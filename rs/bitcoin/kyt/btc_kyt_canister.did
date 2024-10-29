@@ -44,6 +44,8 @@ type CheckTransactionIrrecoverableError = variant {
     ResponseTooLarge : record { txid: blob };
     // Invalid transaction id.
     InvalidTransactionId : text;
+    // Invalid transaction.
+    InvalidTransaction : text;
 };
 
 type InitArg = record {
