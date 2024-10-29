@@ -12,6 +12,7 @@ mod disclose;
 mod fetcher;
 #[allow(dead_code)]
 mod metrics;
+mod random;
 #[allow(dead_code)]
 mod state;
 mod storage;

@@ -10,7 +10,7 @@ use crate::{
         StorablePrincipal, StorableRuleId, StorableRuleMetadata, StorableVersion,
         AUTHORIZED_PRINCIPAL, CONFIGS, INCIDENTS, RULES,
     },
-    types::{RuleId, Version},
+    types::{InputConfig, InputRule, RuleId, Version},
 };
 
 #[automock]
@@ -18,6 +18,7 @@ pub trait Repository {
     fn get_authorized_principal(&self) -> Option<StorablePrincipal>;
     fn set_authorized_principal(&self, principal: Principal);
     fn get_version(&self) -> Option<StorableVersion>;
+    fn get_full_config(&self, version: Version) -> Option<InputConfig>;
     fn get_config(&self, version: Version) -> Option<StorableConfig>;
     fn get_rule(&self, rule_id: &RuleId) -> Option<StorableRuleMetadata>;
     fn get_incident(&self, incident_id: &IncidentId) -> Option<StorableIncidentMetadata>;
@@ -68,6 +69,26 @@ impl Repository for State {
     fn get_config(&self, version: Version) -> Option<StorableConfig> {
         self.configs
             .with(|cell| cell.borrow().get(&StorableVersion(version)))
+    }
+
+    fn get_full_config(&self, version: Version) -> Option<InputConfig> {
+        let config = self.get_config(version)?;
+
+        let mut rules = vec![];
+
+        for rule_id in config.rule_ids.iter() {
+            let rule = self.get_rule(rule_id)?;
+            rules.push(InputRule {
+                incident_id: rule.incident_id,
+                rule_raw: rule.rule_raw,
+                description: rule.description,
+            })
+        }
+
+        Some(InputConfig {
+            schema_version: config.schema_version,
+            rules,
+        })
     }
 
     fn get_rule(&self, rule_id: &RuleId) -> Option<StorableRuleMetadata> {

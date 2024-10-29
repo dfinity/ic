@@ -1,3 +1,5 @@
+use serde_json::Value;
+
 pub type Version = u64;
 pub type Timestamp = u64;
 pub type SchemaVersion = u64;
@@ -26,10 +28,26 @@ pub struct InputConfig {
     pub rules: Vec<InputRule>,
 }
 
+#[derive(Debug)]
 pub struct InputRule {
     pub incident_id: IncidentId,
     pub rule_raw: Vec<u8>,
     pub description: String,
+}
+
+impl InputRule {
+    fn rule_as_json(&self) -> Option<Value> {
+        serde_json::from_slice(&self.rule_raw).ok()
+    }
+}
+
+// Rules are compared based on incident_id, description, and rule_raw (deserialized as serde::Value for JSON comparison, as raw blobs are not reliably comparable).
+impl PartialEq for InputRule {
+    fn eq(&self, other: &Self) -> bool {
+        self.incident_id == other.incident_id
+            && self.description == other.description
+            && self.rule_as_json().as_ref() == other.rule_as_json().as_ref()
+    }
 }
 
 #[derive(Clone)]

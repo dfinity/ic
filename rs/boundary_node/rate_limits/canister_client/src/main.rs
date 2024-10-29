@@ -9,7 +9,7 @@ use rate_limits_api::{
 };
 use regex::Regex;
 
-const RATE_LIMIT_CANISTER_ID: &str = "x5pps-pqaaa-aaaab-qadbq-cai";
+const RATE_LIMIT_CANISTER_ID: &str = "53qip-2yaaa-aaaab-qac2a-cai";
 const IC_DOMAIN: &str = "https://ic0.app";
 
 use k256::elliptic_curve::SecretKey;
@@ -52,7 +52,11 @@ async fn main() {
     println!("Call 6. Add another config (version = 3) with one newly added rule, one remove rule");
     add_config_2(&agent_full_access, canister_id).await;
 
-    println!("Call 7. Inspect the metadata of the removed rule. All metadata fields should be visible, including versions when the rule was added/removed");
+    println!("Call 7. Read config by privileged user (FullAccess or FullRead caller level). Response will expose rules/descriptions in their full form");
+    let version = 3;
+    let _ = read_config(&agent_full_access, version, canister_id).await;
+
+    println!("Call 8. Inspect the metadata of the removed rule. All metadata fields should be visible, including versions when the rule was added/removed");
     read_rule(&agent_restricted_read, &rule_ids[2], canister_id).await;
 }
 
