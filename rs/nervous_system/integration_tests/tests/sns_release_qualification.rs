@@ -320,9 +320,13 @@ async fn test_proper_sns_swap_upgrade() {
             .await
             .unwrap();
         assert_eq!(proposal_info.failure_reason, None);
-        sns::try_upgrade_sns_to_next_version(&pocket_ic, root.canister_id, SnsCanisterType::Governance)
-            .await
-            .unwrap();
+        sns::try_upgrade_sns_to_next_version(
+            &pocket_ic,
+            root.canister_id,
+            SnsCanisterType::Governance,
+        )
+        .await
+        .unwrap();
     }
 
     // Add one Swap WASM.
@@ -351,12 +355,21 @@ async fn test_proper_sns_swap_upgrade() {
     sns::swap::smoke_test_participate_and_finalize(&pocket_ic, swap.canister_id, swap_parameters)
         .await;
 
-    // Every canister we are testing has two upgrades.  We are just making sure the counts match
-    sns::try_upgrade_sns_to_next_version(&pocket_ic, root.canister_id, SnsCanisterType::Swap)
-        .await
-        .unwrap();
+    // Finally, run code under test (1, 2).
 
-    sns::try_upgrade_sns_to_next_version(&pocket_ic, root.canister_id, SnsCanisterType::Swap)
-        .await
-        .unwrap()
+    // (1) Can we upgrade the Swap canister?
+    sns::upgrade_sns_to_next_version_and_assert_change(
+        &pocket_ic,
+        root.canister_id,
+        SnsCanisterType::Swap,
+    )
+    .await;
+
+    // (2) Does the new pre_upgrade succeed?
+    sns::upgrade_sns_to_next_version_and_assert_change(
+        &pocket_ic,
+        root.canister_id,
+        SnsCanisterType::Swap,
+    )
+    .await;
 }
