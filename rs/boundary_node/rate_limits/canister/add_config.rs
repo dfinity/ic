@@ -41,6 +41,8 @@ pub enum AddConfigError {
     RuleEncodingError(#[from] RuleEncodingError),
     #[error("Rule violates policy: {0}")]
     RulePolicyViolation(#[from] RulePolicyError),
+    #[error("Configuration for version={0} was not found")]
+    NoConfigFound(Version),
     #[error("Unauthorized operation")]
     Unauthorized,
     #[error("An unexpected error occurred: {0}")]
@@ -102,11 +104,15 @@ impl<R: Repository, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
 
         let new_version = current_version + 1;
 
-        // Canister init() ensures that an initial config always exists, so we can safely unwrap here
-        let current_config: StorableConfig = self.repository.get_config(current_version).unwrap();
+        let current_config: StorableConfig = self
+            .repository
+            .get_config(current_version)
+            .ok_or_else(|| AddConfigError::NoConfigFound(current_version))?;
 
-        let current_full_config: InputConfig =
-            self.repository.get_full_config(current_version).unwrap();
+        let current_full_config: InputConfig = self
+            .repository
+            .get_full_config(current_version)
+            .ok_or_else(|| AddConfigError::NoConfigFound(current_version))?;
 
         // IDs of all rules in the submitted config
         let mut rule_ids = Vec::<RuleId>::new();
