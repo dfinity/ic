@@ -22,6 +22,7 @@ use rate_limits_api::{
 const REGISTRY_CANISTER_ID: &str = "rwlgt-iiaaa-aaaaa-aaaaa-cai";
 const REGISTRY_CANISTER_METHOD: &str = "get_api_boundary_node_ids";
 
+// TODO: implement proper canister lifecycle: upgrade, post_upgrade, ...
 #[init]
 #[candid_method(init)]
 fn init(init_arg: InitArg) {
@@ -29,13 +30,11 @@ fn init(init_arg: InitArg) {
     with_state(|state| {
         state.set_authorized_principal(init_arg.authorized_principal);
     });
-
-    // Initialize an empty config with version=1
+    // Initialize an empty config corresponding to version=1
     init_version_and_config(1);
-
-    let interval = Duration::from_secs(init_arg.registry_polling_period_secs);
-
-    periodically_poll_api_boundary_nodes(interval);
+    // Spawn periodic job of fetching latest API boundary node topology
+    // API boundary nodes are authorized readers of all config rules (including not yet disclosed ones)
+    periodically_poll_api_boundary_nodes(init_arg.registry_polling_period_secs);
 }
 
 #[query]
@@ -101,7 +100,9 @@ fn http_request(request: HttpRequest) -> HttpResponse {
     }
 }
 
-fn periodically_poll_api_boundary_nodes(interval: Duration) {
+fn periodically_poll_api_boundary_nodes(interval: u64) {
+    let interval = Duration::from_secs(interval);
+
     ic_cdk_timers::set_timer_interval(interval, || {
         ic_cdk::spawn(async {
             if let Ok(canister_id) = Principal::from_text(REGISTRY_CANISTER_ID) {
