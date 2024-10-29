@@ -151,7 +151,7 @@ where
 /// The code of the replica is the real one, only the interface is changed, with
 /// function calls instead of http calls.
 pub struct LocalTestRuntime {
-    pub query_handler: QueryExecutionService,
+    pub query_handler: Arc<Mutex<QueryExecutionService>>,
     pub ingress_sender: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
     pub ingress_history_reader: Arc<dyn IngressHistoryReader>,
     pub state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
@@ -369,7 +369,7 @@ where
         }
 
         let runtime = LocalTestRuntime {
-            query_handler,
+            query_handler: Arc::new(Mutex::new(query_handler)),
             ingress_sender: ingress_tx,
             ingress_history_reader: Arc::new(ingress_history_reader),
             state_reader,
@@ -623,6 +623,8 @@ impl LocalTestRuntime {
 
         let result = match self
             .query_handler
+            .lock()
+            .unwrap()
             .clone()
             .oneshot((query, None))
             .await
