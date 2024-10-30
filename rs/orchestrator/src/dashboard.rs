@@ -3,7 +3,6 @@ use crate::{
     registry_helper::RegistryHelper, ssh_access_manager::SshAccessParameters,
     upgrade::ReplicaProcess,
 };
-use async_trait::async_trait;
 pub use ic_dashboard::Dashboard;
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_types::{
@@ -32,13 +31,12 @@ pub(crate) struct OrchestratorDashboard {
     logger: ReplicaLogger,
 }
 
-#[async_trait]
 impl Dashboard for OrchestratorDashboard {
     fn port() -> u16 {
         ORCHESTRATOR_DASHBOARD_PORT
     }
 
-    async fn build_response(&self) -> String {
+    fn build_response(&self) -> String {
         format!(
             "node id: {}\n\
              DC id: {}\n\

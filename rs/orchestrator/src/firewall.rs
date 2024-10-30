@@ -769,12 +769,7 @@ mod tests {
 
     #[test]
     fn nftables_golden_test() {
-        let rt = tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()
-            .unwrap();
         golden_test(
-            rt,
             Role::AssignedReplica(subnet_test_id(1)),
             NFTABLES_GOLDEN_BYTES,
             "assigned_replica",
@@ -783,12 +778,7 @@ mod tests {
 
     #[test]
     fn nftables_golden_boundary_node_test() {
-        let rt = tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()
-            .unwrap();
         golden_test(
-            rt,
             Role::BoundaryNode,
             NFTABLES_BOUNDARY_NODE_GOLDEN_BYTES,
             "boundary_node",
@@ -797,7 +787,7 @@ mod tests {
 
     /// Runs [`Firewall::check_for_firewall_config`] and compares the output against the specified
     /// golden output.
-    fn golden_test(rt: tokio::runtime::Runtime, role: Role, golden_bytes: &[u8], label: &str) {
+    fn golden_test(role: Role, golden_bytes: &[u8], label: &str) {
         let tmp_dir = tempfile::tempdir().unwrap();
         let nftables_config_path = tmp_dir.path().join("nftables.conf");
         let config = get_config();
