@@ -420,9 +420,9 @@ pub(crate) fn inspect_chain_key_initializations(
             Some(pb::chain_key_initialization::Initialization::Dealings(dealings)) => dealings,
             Some(pb::chain_key_initialization::Initialization::Transcript(_)) => continue,
             None => {
-                return Err(format!(
-                    "Error: Failed to find dealings in chain_key_initializations"
-                ))
+                return Err(
+                    "Error: Failed to find dealings in chain_key_initializations".to_string(),
+                )
             }
         };
 
