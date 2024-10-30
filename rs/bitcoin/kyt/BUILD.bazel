@@ -16,6 +16,7 @@ rust_library(
     crate_name = "ic_btc_kyt",
     deps = [
         # Keep sorted.
+        "@crate_index//:bitcoin_0_32",
         "@crate_index//:candid",
         "@crate_index//:serde",
     ],
