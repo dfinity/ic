@@ -77,8 +77,7 @@ const NODE_EXPORTER_PROMETHEUS_TARGET: &str = "node_exporter.json";
 const LEDGER_CANISTER_PROMETHEUS_TARGET: &str = "ledger_canister.json";
 const BN_PROMETHEUS_TARGET: &str = "boundary_nodes.json";
 const BN_EXPORTER_PROMETHEUS_TARGET: &str = "boundary_nodes_exporter.json";
-const API_BN_PROMETHEUS_TARGET: &str = "api_boundary_nodes.json";
-const API_BN_EXPORTER_PROMETHEUS_TARGET: &str = "api_boundary_nodes_exporter.json";
+const IC_BOUNDARY_PROMETHEUS_TARGET: &str = "ic_boundary.json";
 
 pub struct PrometheusVm {
     universal_vm: UniversalVm,
@@ -314,8 +313,7 @@ impl HasPrometheus for TestEnv {
             NODE_EXPORTER_PROMETHEUS_TARGET,
             BN_PROMETHEUS_TARGET,
             BN_EXPORTER_PROMETHEUS_TARGET,
-            API_BN_PROMETHEUS_TARGET,
-            API_BN_EXPORTER_PROMETHEUS_TARGET,
+            IC_BOUNDARY_PROMETHEUS_TARGET,
         ];
         if farm_url_for_ledger_canister.is_some() {
             target_json_files.push(LEDGER_CANISTER_PROMETHEUS_TARGET);
@@ -411,10 +409,8 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
         Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(BN_PROMETHEUS_TARGET);
     let boundary_nodes_exporter_scraping_targets_path =
         Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(BN_EXPORTER_PROMETHEUS_TARGET);
-    let api_boundary_nodes_scraping_targets_path =
-        Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(API_BN_PROMETHEUS_TARGET);
-    let api_boundary_nodes_exporter_scraping_targets_path =
-        Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(API_BN_EXPORTER_PROMETHEUS_TARGET);
+    let ic_boundary_scraping_targets_path =
+        Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(IC_BOUNDARY_PROMETHEUS_TARGET);
     let replica_scraping_targets_path =
         Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(REPLICA_PROMETHEUS_TARGET);
     let orchestrator_scraping_targets_path =
@@ -436,14 +432,8 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
                 "file_sd_configs": [{"files": [boundary_nodes_exporter_scraping_targets_path]}],
             },
             {
-                "job_name": "api_boundary_nodes",
-                "file_sd_configs": [{"files": [api_boundary_nodes_scraping_targets_path]}],
-            },
-            {
-                "job_name": "api_boundary_nodes_exporter",
-                "file_sd_configs": [{"files": [api_boundary_nodes_exporter_scraping_targets_path]}],
-                "scheme": "https",
-                "tls_config": {"insecure_skip_verify": true},
+                "job_name": "ic_boundary",
+                "file_sd_configs": [{"files": [ic_boundary_scraping_targets_path]}],
             },
             {"job_name": "replica", "file_sd_configs": [{"files": [replica_scraping_targets_path]}]},
             {"job_name": "orchestrator", "file_sd_configs": [{"files": [orchestrator_scraping_targets_path]}]},
@@ -526,8 +516,7 @@ fn sync_prometheus_config_dir(
     farm_url_for_ledger_canister: &Option<String>,
 ) -> Result<()> {
     let mut replica_p8s_static_configs: Vec<PrometheusStaticConfig> = Vec::new();
-    let mut api_bns_p8s_static_configs: Vec<PrometheusStaticConfig> = Vec::new();
-    let mut api_bns_exporter_p8s_static_configs: Vec<PrometheusStaticConfig> = Vec::new();
+    let mut ic_boundary_p8s_static_configs: Vec<PrometheusStaticConfig> = Vec::new();
     let mut orchestrator_p8s_static_configs: Vec<PrometheusStaticConfig> = Vec::new();
     let mut node_exporter_p8s_static_configs: Vec<PrometheusStaticConfig> = Vec::new();
     for subnet in topology_snapshot.subnets() {
@@ -575,16 +564,21 @@ fn sync_prometheus_config_dir(
     for node in topology_snapshot.api_boundary_nodes() {
         let labels: HashMap<String, String> = [
             ("ic".to_string(), group_name.clone()),
-            ("ic_api_boundary_node".to_string(), node.node_id.to_string()),
+            ("ic_node".to_string(), node.node_id.to_string()),
+            ("ic_api_bn".to_string(), "1".to_string()),
         ]
         .iter()
         .cloned()
         .collect();
-        api_bns_p8s_static_configs.push(PrometheusStaticConfig {
+        orchestrator_p8s_static_configs.push(PrometheusStaticConfig {
+            targets: vec![scraping_target_url(&node, ORCHESTRATOR_METRICS_PORT)],
+            labels: labels.clone(),
+        });
+        ic_boundary_p8s_static_configs.push(PrometheusStaticConfig {
             targets: vec![scraping_target_url(&node, IC_BOUNDARY_METRICS_PORT)],
             labels: labels.clone(),
         });
-        api_bns_exporter_p8s_static_configs.push(PrometheusStaticConfig {
+        node_exporter_p8s_static_configs.push(PrometheusStaticConfig {
             targets: vec![scraping_target_url(&node, NODE_EXPORTER_METRICS_PORT)],
             labels,
         });
@@ -602,10 +596,9 @@ fn sync_prometheus_config_dir(
     }
     for (name, p8s_static_configs) in &[
         (REPLICA_PROMETHEUS_TARGET, replica_p8s_static_configs),
-        (API_BN_PROMETHEUS_TARGET, api_bns_p8s_static_configs),
         (
-            API_BN_EXPORTER_PROMETHEUS_TARGET,
-            api_bns_exporter_p8s_static_configs,
+            IC_BOUNDARY_PROMETHEUS_TARGET,
+            ic_boundary_p8s_static_configs,
         ),
         (
             ORCHESTRATOR_PROMETHEUS_TARGET,
