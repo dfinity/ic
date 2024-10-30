@@ -1769,20 +1769,20 @@ fn max_canisters_per_round() {
             .count()
     }
 
-    // In this test we have 200 canisters with one input messages each. Each
+    // In this test we have 200 canisters with one input message each. Each
     // message uses 10 instructions. The canister overhead is also 10
-    // instructions. The round limit is 100 instructions. We expect that 5
+    // instructions. The round limit is 100 instructions. We expect 5
     // canisters to execute per scheduler core.
     let executed_canisters = run(0, 200);
     assert_eq!(executed_canisters, 2 * 5);
 
-    // As 200 canisters have not enough cycles for the actual execution,
+    // As 200 canisters do not have enough cycles for the actual execution,
     // we expect the scheduler to try to execute them all with no
     // per-canister overhead.
     let executed_canisters = run(200, 0);
     assert_eq!(executed_canisters, 200);
 
-    // As 200 canisters have not enough cycles for the actual execution,
+    // As 200 canisters do not have enough cycles for the actual execution,
     // we expect the scheduler to try to execute them all with no
     // per-canister overhead.
     // Plus, we should be able to execute 5 canisters with overhead 10
