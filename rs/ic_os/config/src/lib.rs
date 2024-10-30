@@ -71,6 +71,7 @@ mod tests {
         };
         let icos_dev_settings = ICOSDevSettings::default();
         let icos_settings = ICOSSettings {
+            config_version: CONFIG_VERSION.to_string(),
             mgmt_mac: FormattedMacAddress::try_from("ec:2a:72:31:a2:0c")?,
             deployment_environment: "Mainnet".to_string(),
             logging,
@@ -133,6 +134,131 @@ mod tests {
         serialize_and_deserialize(&hostos_config_struct);
         serialize_and_deserialize(&guestos_config_struct);
 
+        Ok(())
+    }
+
+    // Test config version 1.0.0
+    const HOSTOS_CONFIG_JSON_V1_0_0: &str = r#"
+    {
+        "network_settings": {
+            "ipv6_config": {
+                "Deterministic": {
+                    "prefix": "2a00:fb01:400:200",
+                    "prefix_length": 64,
+                    "gateway": "2a00:fb01:400:200::1"
+                }
+            },
+            "ipv4_config": {
+                "address": "192.168.0.2",
+                "gateway": "192.168.0.1",
+                "prefix_length": 24,
+                "domain": "example.com"
+            }
+        },
+        "icos_settings": {
+            "config_version": "1.0.0",
+            "mgmt_mac": "ec:2a:72:31:a2:0c",
+            "deployment_environment": "Mainnet",
+            "logging": {
+                "elasticsearch_hosts": "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443",
+                "elasticsearch_tags": "tag1 tag2"
+            },
+            "nns_public_key_exists": true,
+            "nns_urls": [
+                "http://localhost"
+            ],
+            "node_operator_private_key_exists": true,
+            "use_ssh_authorized_keys": false,
+            "icos_dev_settings": {}
+        },
+        "hostos_settings": {
+            "vm_memory": 490,
+            "vm_cpu": "kvm",
+            "verbose": false
+        },
+        "guestos_settings": {
+            "inject_ic_crypto": false,
+            "inject_ic_state": false,
+            "inject_ic_registry_local_store": false,
+            "guestos_dev_settings": {
+                "backup_spool": {
+                    "backup_retention_time_seconds": 3600,
+                    "backup_purging_interval_seconds": 600
+                },
+                "malicious_behavior": null,
+                "query_stats_epoch_length": 1000,
+                "bitcoind_addr": "127.0.0.1:8333",
+                "jaeger_addr": "127.0.0.1:6831",
+                "socks_proxy": "127.0.0.1:1080",
+                "hostname": "my-node"
+            }
+        }
+    }
+    "#;
+
+    const GUESTOS_CONFIG_JSON_V1_0_0: &str = r#"
+    {
+        "network_settings": {
+            "ipv6_config": {
+                "Fixed": {
+                    "address": "2a00:fb01:400:200::2/64",
+                    "gateway": "2a00:fb01:400:200::1"
+                }
+            },
+            "ipv4_config": null
+        },
+        "icos_settings": {
+            "config_version": "1.0.0",
+            "mgmt_mac": "ec:2a:72:31:a2:0c",
+            "deployment_environment": "Mainnet",
+            "logging": {
+                "elasticsearch_hosts": "elasticsearch-node-0.mercury.dfinity.systems:443",
+                "elasticsearch_tags": "tag1 tag2"
+            },
+            "nns_public_key_exists": true,
+            "nns_urls": [
+                "http://localhost"
+            ],
+            "node_operator_private_key_exists": true,
+            "use_ssh_authorized_keys": false,
+            "icos_dev_settings": {}
+        },
+        "guestos_settings": {
+            "inject_ic_crypto": true,
+            "inject_ic_state": true,
+            "inject_ic_registry_local_store": true,
+            "guestos_dev_settings": {
+                "backup_spool": {
+                    "backup_retention_time_seconds": 7200,
+                    "backup_purging_interval_seconds": 1200
+                },
+                "malicious_behavior": null,
+                "query_stats_epoch_length": 2000,
+                "bitcoind_addr": "127.0.0.1:8333",
+                "jaeger_addr": "127.0.0.1:6831",
+                "socks_proxy": "127.0.0.1:1080",
+                "hostname": "guest-node"
+            }
+        }
+    }
+    "#;
+
+    #[test]
+    fn test_deserialize_hostos_config_v1_0_0() -> Result<(), Box<dyn std::error::Error>> {
+        let config: HostOSConfig = serde_json::from_str(HOSTOS_CONFIG_JSON_V1_0_0)?;
+        assert_eq!(config.icos_settings.config_version, "1.0.0");
+        assert_eq!(config.hostos_settings.vm_cpu, "kvm");
+        Ok(())
+    }
+
+    #[test]
+    fn test_deserialize_guestos_config_v1_0_0() -> Result<(), Box<dyn std::error::Error>> {
+        let config: GuestOSConfig = serde_json::from_str(GUESTOS_CONFIG_JSON_V1_0_0)?;
+        assert_eq!(config.icos_settings.config_version, "1.0.0");
+        assert_eq!(
+            config.icos_settings.mgmt_mac.to_string(),
+            "ec:2a:72:31:a2:0c"
+        );
         Ok(())
     }
 }

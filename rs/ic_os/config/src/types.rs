@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 use std::net::{Ipv4Addr, Ipv6Addr};
 use url::Url;
 
+pub const CONFIG_VERSION: &str = "1.0.0";
+
 /// SetupOS configuration. User-facing configuration files
 /// (e.g., `config.ini`, `deployment.json`) are transformed into `SetupOSConfig`.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
@@ -31,6 +33,34 @@ pub struct GuestOSConfig {
     pub icos_settings: ICOSSettings,
     pub guestos_settings: GuestOSSettings,
 }
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
+pub struct ICOSSettings {
+    /// Tracks the config version, set to CONFIG_VERSION at runtime.
+    pub config_version: String,
+    /// In nested testing, mgmt_mac is set in deployment.json.template,
+    /// else found dynamically in call to config tool CreateSetuposConfig
+    pub mgmt_mac: FormattedMacAddress,
+    /// "mainnet" or "testnet"
+    pub deployment_environment: String,
+    pub logging: Logging,
+    pub nns_public_key_exists: bool,
+    /// The URL (HTTP) of the NNS node(s).
+    pub nns_urls: Vec<Url>,
+    pub node_operator_private_key_exists: bool,
+    /// This ssh keys directory contains individual files named `admin`, `backup`, `readonly`.
+    /// The contents of these files serve as `authorized_keys` for their respective role account.
+    /// This means that, for example, `accounts_ssh_authorized_keys/admin`
+    /// is transferred to `~admin/.ssh/authorized_keys` on the target system.
+    /// backup and readonly can only be modified via an NNS proposal
+    /// and are in place for subnet recovery or issue debugging purposes.
+    /// use_ssh_authorized_keys triggers the use of the ssh keys directory
+    pub use_ssh_authorized_keys: bool,
+    pub icos_dev_settings: ICOSDevSettings,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Default)]
+pub struct ICOSDevSettings {}
 
 /// Placeholder for SetupOS-specific settings.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
@@ -84,32 +114,6 @@ pub struct BackupSpoolSettings {
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
-pub struct ICOSSettings {
-    /// in nested testing, mgmt_mac is set in deployment.json.template,
-    /// else found dynamically in call to config tool CreateSetuposConfig
-    pub mgmt_mac: FormattedMacAddress,
-    /// "mainnet" or "testnet"
-    pub deployment_environment: String,
-    pub logging: Logging,
-    pub nns_public_key_exists: bool,
-    /// The URL (HTTP) of the NNS node(s).
-    pub nns_urls: Vec<Url>,
-    pub node_operator_private_key_exists: bool,
-    /// This ssh keys directory contains individual files named `admin`, `backup`, `readonly`.
-    /// The contents of these files serve as `authorized_keys` for their respective role account.
-    /// This means that, for example, `accounts_ssh_authorized_keys/admin`
-    /// is transferred to `~admin/.ssh/authorized_keys` on the target system.
-    /// backup and readonly can only be modified via an NNS proposal
-    /// and are in place for subnet recovery or issue debugging purposes.
-    /// use_ssh_authorized_keys triggers the use of the ssh keys directory
-    pub use_ssh_authorized_keys: bool,
-    pub icos_dev_settings: ICOSDevSettings,
-}
-
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Default)]
-pub struct ICOSDevSettings {}
-
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct Logging {
     /// Space-separated lists of hosts to ship logs to.
     pub elasticsearch_hosts: String,
@@ -147,7 +151,7 @@ pub struct DeterministicIpv6Config {
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct FixedIpv6Config {
-    // fixed ipv6 address includes subnet mask /64
+    // Fixed ipv6 address includes subnet mask /64
     pub address: String,
     pub gateway: Ipv6Addr,
 }
