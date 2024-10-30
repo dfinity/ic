@@ -98,7 +98,11 @@ message EcdsaInitialization {
 
 message ChainKeyInitialization {
   registry.crypto.v1.MasterPublicKeyId key_id = 1;
-  InitialIDkgDealings dealings = 2;
+  //InitialIDkgDealings dealings = 2;
+  oneof initialization {
+    InitialIDkgDealings dealings = 2;
+    InitialNiDkgTranscriptRecord transcript = 3;
+  }
 }
 
 // Contains the initial DKG transcripts for the subnet and materials to construct a base CUP (i.e.
