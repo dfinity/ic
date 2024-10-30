@@ -16,7 +16,7 @@ use phantom_newtype::AmountOf;
 use tokio::{
     runtime::Handle,
     sync::{
-        mpsc::{Receiver, UnboundedSender},
+        mpsc::{Receiver, Sender},
         watch,
     },
 };
@@ -55,7 +55,7 @@ impl ConsensusManagerBuilder {
     >(
         &mut self,
         outbound_artifacts_rx: Receiver<ArtifactTransmit<Artifact>>,
-        inbound_artifacts_tx: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
+        inbound_artifacts_tx: Sender<UnvalidatedArtifactMutation<Artifact>>,
         (assembler, assembler_router): (F, Router),
         slot_limit: usize,
     ) {
@@ -119,7 +119,7 @@ fn start_consensus_manager<Artifact, WireArtifact, Assembler>(
     adverts_to_send: Receiver<ArtifactTransmit<Artifact>>,
     // Adverts received from peers
     adverts_received: Receiver<(SlotUpdate<WireArtifact>, NodeId, ConnId)>,
-    sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
+    sender: Sender<UnvalidatedArtifactMutation<Artifact>>,
     assembler: Assembler,
     transport: Arc<dyn Transport>,
     topology_watcher: watch::Receiver<SubnetTopology>,

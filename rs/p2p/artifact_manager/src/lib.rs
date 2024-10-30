@@ -20,12 +20,12 @@ use std::{
     time::Duration,
 };
 use tokio::{
-    sync::mpsc::{unbounded_channel, Sender, UnboundedReceiver, UnboundedSender},
+    sync::mpsc::{channel, Receiver, Sender},
     time::timeout,
 };
 use tracing::instrument;
 
-type ArtifactEventSender<Artifact> = UnboundedSender<UnvalidatedArtifactMutation<Artifact>>;
+type ArtifactEventSender<Artifact> = Sender<UnvalidatedArtifactMutation<Artifact>>;
 
 /// Metrics for a client artifact processor.
 struct ArtifactProcessorMetrics {
@@ -139,14 +139,7 @@ pub fn run_artifact_processor<Artifact: IdentifiableArtifact>(
     send_advert: Sender<ArtifactTransmit<Artifact>>,
     initial_artifacts: Vec<Artifact>,
 ) -> (Box<dyn JoinGuard>, ArtifactEventSender<Artifact>) {
-    // Making this channel bounded can be problematic since we don't have true multiplexing
-    // of P2P messages.
-    // Possible scenario is - adverts+chunks arrive on the same channel, slow consensus
-    // will result on slow consuption of chunks. Slow consumption of chunks will in turn
-    // result in slower consumptions of adverts. Ideally adverts are consumed at rate
-    // independent of consensus.
-    #[allow(clippy::disallowed_methods)]
-    let (sender, receiver) = unbounded_channel();
+    let (sender, receiver) = channel(10000);
     let shutdown = Arc::new(AtomicBool::new(false));
 
     // Spawn the processor thread
@@ -182,7 +175,7 @@ fn process_messages<Artifact: IdentifiableArtifact + 'static>(
     time_source: Arc<dyn TimeSource>,
     client: Box<dyn ArtifactProcessor<Artifact>>,
     send_advert: Sender<ArtifactTransmit<Artifact>>,
-    mut receiver: UnboundedReceiver<UnvalidatedArtifactMutation<Artifact>>,
+    mut receiver: Receiver<UnvalidatedArtifactMutation<Artifact>>,
     mut metrics: ArtifactProcessorMetrics,
     shutdown: Arc<AtomicBool>,
 ) {
@@ -255,7 +248,7 @@ pub fn create_ingress_handlers<
     >,
     metrics_registry: MetricsRegistry,
 ) -> (
-    UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
+    Sender<UnvalidatedArtifactMutation<SignedIngress>>,
     Box<dyn JoinGuard>,
 ) {
     let client = IngressProcessor::new(ingress_pool.clone(), ingress_handler);
@@ -281,7 +274,7 @@ pub fn create_artifact_handler<
     pool: Arc<RwLock<Pool>>,
     metrics_registry: MetricsRegistry,
 ) -> (
-    UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
+    Sender<UnvalidatedArtifactMutation<Artifact>>,
     Box<dyn JoinGuard>,
 ) {
     let inital_artifacts: Vec<_> = pool.read().unwrap().get_all_for_broadcast().collect();

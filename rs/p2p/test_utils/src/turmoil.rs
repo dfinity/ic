@@ -447,7 +447,7 @@ pub fn start_test_processor(
 ) -> (
     Box<dyn JoinGuard>,
     mpsc::Receiver<ArtifactTransmit<U64Artifact>>,
-    mpsc::UnboundedSender<UnvalidatedArtifactMutation<U64Artifact>>,
+    mpsc::Sender<UnvalidatedArtifactMutation<U64Artifact>>,
 ) {
     let (tx, rx) = tokio::sync::mpsc::channel(1000);
     let time_source = Arc::new(SysTimeSource::new());
