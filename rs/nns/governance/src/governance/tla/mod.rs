@@ -1,4 +1,3 @@
-// use itertools::Itertools;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::hash::Hash;
 use std::sync::mpsc;
@@ -108,7 +107,7 @@ pub fn get_tla_globals(gov: &Governance) -> GlobalState {
     state
 }
 
-fn  extract_common_constants(pid: &str, trace: &[ResolvedStatePair]) -> Vec<(String, TlaValue)> {
+fn extract_common_constants(pid: &str, trace: &[ResolvedStatePair]) -> Vec<(String, TlaValue)> {
     vec![
         (
             format!("{}_Process_Ids", pid),
@@ -248,7 +247,10 @@ pub fn check_traces() {
                 under_limit_len, total_len, t.update.process_id
             );
         }
-        println!("Total of {} state pairs to be checked with Apalache", total_pairs)
+        println!(
+            "Total of {} state pairs to be checked with Apalache; will retain {}",
+            total_pairs, STATE_PAIR_COUNT_LIMIT
+        )
     }
 
     let traces = {
@@ -257,18 +259,23 @@ pub fn check_traces() {
         std::mem::take(&mut (*t))
     };
 
-   print_stats(&traces);
+    print_stats(&traces);
 
-    let mut all_pairs = traces.into_iter().flat_map(|t| {
-        t.state_pairs
-            .into_iter()
-            .filter(is_under_limit)
-            .map(move |p| (t.update.clone(), t.constants.clone(), p))
-    }).collect();
+    let mut all_pairs = traces
+        .into_iter()
+        .flat_map(|t| {
+            t.state_pairs
+                .into_iter()
+                .filter(is_under_limit)
+                .map(move |p| (t.update.clone(), t.constants.clone(), p))
+        })
+        .collect();
 
     // A quick check that we don't have any duplicate state pairs. We assume the constants should
     // be the same anyways and look at just the process ID and the state sthemselves.
-    dedup_by_key(&mut all_pairs, |(u, _c, p)| (u.process_id.clone(), p.start.clone(), p.end.clone()));
+    dedup_by_key(&mut all_pairs, |(u, _c, p)| {
+        (u.process_id.clone(), p.start.clone(), p.end.clone())
+    });
 
     all_pairs.truncate(STATE_PAIR_COUNT_LIMIT);
 
@@ -290,7 +297,8 @@ pub fn check_traces() {
     for (i, (update, constants, pair)) in all_pairs.iter().enumerate() {
         println!("Checking state pair #{}", i + 1);
         if running_threads >= MAX_THREADS {
-            rx.recv().expect("Error while waiting for the thread completion signal");
+            rx.recv()
+                .expect("Error while waiting for the thread completion signal");
             running_threads -= 1;
         }
 
@@ -323,54 +331,14 @@ pub fn check_traces() {
                 println!("Apalache returned:\n{:#?}", e.apalache_error);
                 panic!("Apalache check failed")
             });
-            tx.send(()).expect("Couldn't send the thread completion signal");
-            });
+            tx.send(())
+                .expect("Couldn't send the thread completion signal");
+        });
     }
 
     while running_threads > 0 {
-        rx.recv().expect("Error while waiting for the thread completion signal");
+        rx.recv()
+            .expect("Error while waiting for the thread completion signal");
         running_threads -= 1;
     }
-
-    /*
-    let chunks = all_pairs.chunks(CHUNK_SIZE);
-    for chunk in &chunks {
-        let mut handles = vec![];
-        for (update, constants, pair) in chunk {
-            let apalache = apalache.clone();
-            let constants = constants.clone();
-            let pair = pair.clone();
-            // NOTE: We adopt the convention to reuse the 'process_id" as the tla module name
-            let tla_module = format!("{}_Apalache.tla", update.process_id);
-            let tla_module = get_tla_module_path(&tla_module);
-
-            let handle = thread::spawn(move || {
-                check_tla_code_link(
-                    &apalache,
-                    PredicateDescription {
-                        tla_module,
-                        transition_predicate: "Next".to_string(),
-                        predicate_parameters: Vec::new(),
-                    },
-                    pair,
-                    constants,
-                )
-            });
-            handles.push(handle);
-        }
-        for handle in handles {
-            handle.join().unwrap().unwrap_or_else(|e| {
-                println!("Possible divergence from the TLA model detected when interacting with the ledger!");
-                println!("If you did not expect to change the interaction between governance and the ledger, reconsider whether your change is safe. You can find additional data on the step that triggered the error below.");
-                println!("If you are confident that your change is correct, please contact the #formal-models Slack channel and describe the problem.");
-                println!("You can edit nns/governance/feature_flags.bzl to disable TLA checks in the CI and get on with your business.");
-                println!("-------------------");
-                println!("Error occured while checking the state pair:\n{:#?}\nwith constants:\n{:#?}", e.pair, e.constants);
-                println!("Apalache returned:\n{:#?}", e.apalache_error);
-                panic!("Apalache check failed")
-            });
-        }
-    }
-
-     */
 }
