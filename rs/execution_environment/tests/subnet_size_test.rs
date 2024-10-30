@@ -93,7 +93,9 @@ fn inc_instruction_cost(config: HypervisorConfig) -> u64 {
         0
     };
 
-    5 * cc + cs + cl + ca + 2 * ccall + csys + cd
+    let func_call_cost = 1;
+
+    func_call_cost + 5 * cc + cs + cl + ca + 2 * ccall + csys + cd
 }
 
 /// This is a canister that keeps a counter on the heap and exposes various test
@@ -1127,13 +1129,15 @@ fn test_subnet_size_execute_message_cost() {
     let subnet_type = SubnetType::Application;
     let config = get_cycles_account_manager_config(subnet_type);
     let reference_subnet_size = config.reference_subnet_size;
+    let reference_instructions_cost = inc_instruction_cost(HypervisorConfig::default());
     let reference_cost = calculate_execution_cost(
         &config,
-        NumInstructions::from(inc_instruction_cost(HypervisorConfig::default())),
+        NumInstructions::from(reference_instructions_cost),
         reference_subnet_size,
     );
 
     // Check default cost.
+    assert_eq!(reference_instructions_cost, 2019);
     assert_eq!(
         simulate_execute_message_cost(subnet_type, reference_subnet_size),
         reference_cost
