@@ -69,7 +69,6 @@ impl PerTypeMetrics {
     }
 }
 
-/* FIXME: Remove PoolMetrics import and rename this */
 struct PoolMetrics {
     certification: PerTypeMetrics,
     certification_share: PerTypeMetrics,
