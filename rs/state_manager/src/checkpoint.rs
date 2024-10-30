@@ -334,6 +334,15 @@ pub fn load_checkpoint(
     ))
 }
 
+pub fn validate_eq_checkpoint(
+    checkpoint_layout: &CheckpointLayout<ReadOnly>,
+    own_subnet_type: SubnetType,
+    metrics: &CheckpointMetrics,
+    mut thread_pool: Option<&mut scoped_threadpool::Pool>,
+    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+) {
+}
+
 #[derive(Default)]
 pub struct LoadCanisterMetrics {
     durations: BTreeMap<&'static str, Duration>,
