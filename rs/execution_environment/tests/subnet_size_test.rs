@@ -93,7 +93,7 @@ fn inc_instruction_cost(config: HypervisorConfig) -> u64 {
         0
     };
 
-    let cost_default = 1; // There must be some other unknown operator in the function with a cost of 1.
+    let cost_default = 1; // Default cost of executing a function, even if it is empty.
 
     // Total cost of `(func $inc ...)`:
     cost_default +
