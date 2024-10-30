@@ -416,17 +416,22 @@ pub(crate) fn inspect_chain_key_initializations(
                 )
             })?;
 
-        let dealings = chain_key_init
-            .dealings
-            .as_ref()
-            .expect("Error: Failed to find dealings in chain_key_initializations")
-            .try_into()
-            .map_err(|err| {
-                format!(
-                    "Error reading initial IDkg dealings: {:?}. Setting idkg_summary to None.",
-                    err
-                )
-            })?;
+        let dealings = match &chain_key_init.initialization {
+            Some(pb::chain_key_initialization::Initialization::Dealings(dealings)) => dealings,
+            Some(pb::chain_key_initialization::Initialization::Transcript(_)) => continue,
+            None => {
+                return Err(format!(
+                    "Error: Failed to find dealings in chain_key_initializations"
+                ))
+            }
+        };
+
+        let dealings = dealings.try_into().map_err(|err| {
+            format!(
+                "Error reading initial IDkg dealings: {:?}. Setting idkg_summary to None.",
+                err
+            )
+        })?;
 
         initial_dealings_per_key_id.insert(key_id, dealings);
     }
@@ -661,7 +666,9 @@ mod tests {
         let key_id = fake_ecdsa_master_public_key_id();
         let chain_key_init = ChainKeyInitialization {
             key_id: Some((&key_id).into()),
-            dealings: Some((&initial_dealings).into()),
+            initialization: Some(pb::chain_key_initialization::Initialization::Dealings(
+                (&initial_dealings).into(),
+            )),
         };
 
         let init = inspect_chain_key_initializations(&[], &[chain_key_init])
@@ -696,11 +703,15 @@ mod tests {
         };
         let chain_key_init = ChainKeyInitialization {
             key_id: Some((&master_key_id).into()),
-            dealings: Some((&initial_dealings).into()),
+            initialization: Some(pb::chain_key_initialization::Initialization::Dealings(
+                (&initial_dealings).into(),
+            )),
         };
         let chain_key_init_2 = ChainKeyInitialization {
             key_id: Some((&master_key_id_2).into()),
-            dealings: Some((&initial_dealings_2).into()),
+            initialization: Some(pb::chain_key_initialization::Initialization::Dealings(
+                (&initial_dealings_2).into(),
+            )),
         };
 
         let init =
