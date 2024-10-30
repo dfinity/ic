@@ -70,6 +70,8 @@ function get_network_settings() {
         "Failed to get system's network interfaces.")
 
     if [ -z "${ipv6_capable_interfaces}" ]; then
+        log_and_halt_installation_on_error "1" "No network interfaces with IPv6 addresses found."
+    else
         echo "IPv6-capable interfaces found:"
         echo "${ipv6_capable_interfaces}"
     fi
