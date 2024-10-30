@@ -1,9 +1,9 @@
 use bitcoin::{consensus::Decodable, Address, Transaction};
 use ic_btc_interface::Txid;
 use ic_btc_kyt::{
-    blocklist_contains, get_tx_cycle_cost, providers, BtcNetwork, CheckAddressArgs,
-    CheckAddressResponse, CheckTransactionArgs, CheckTransactionIrrecoverableError,
-    CheckTransactionResponse, CheckTransactionRetriable, CheckTransactionStatus, KytArg, KytMode,
+    blocklist_contains, get_tx_cycle_cost, BtcNetwork, CheckAddressArgs, CheckAddressResponse,
+    CheckTransactionArgs, CheckTransactionIrrecoverableError, CheckTransactionResponse,
+    CheckTransactionRetriable, CheckTransactionStatus, KytArg, KytMode,
     CHECK_TRANSACTION_CYCLES_REQUIRED, CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
 };
 use ic_canisters_http_types as http;
@@ -13,6 +13,7 @@ use std::str::FromStr;
 
 mod dashboard;
 mod fetch;
+mod providers;
 mod state;
 
 use fetch::{FetchEnv, FetchResult, TryFetchResult};

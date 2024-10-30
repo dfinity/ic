@@ -1,7 +1,6 @@
 use bitcoin::Address;
 
 pub mod blocklist;
-pub mod providers;
 mod types;
 
 pub use types::*;

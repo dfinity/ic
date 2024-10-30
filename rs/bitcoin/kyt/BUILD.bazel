@@ -4,25 +4,20 @@ load("//bazel:defs.bzl", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
+LIB_SRCS = [
+    "src/blocklist.rs",
+    "src/lib.rs",
+    "src/types.rs",
+]
+
 rust_library(
     name = "btc_kyt_lib",
-    srcs = [
-        "src/blocklist.rs",
-        "src/lib.rs",
-        "src/providers.rs",
-        "src/types.rs",
-    ],
+    srcs = LIB_SRCS,
     crate_name = "ic_btc_kyt",
     deps = [
         # Keep sorted.
-        "//rs/rust_canisters/http_types",
-        "@crate_index//:base64",
-        "@crate_index//:bitcoin_0_32",
         "@crate_index//:candid",
-        "@crate_index//:ic-btc-interface",
-        "@crate_index//:ic-cdk",
         "@crate_index//:serde",
-        "@crate_index//:url",
     ],
 )
 
@@ -49,15 +44,10 @@ rust_test(
 
 rust_canister(
     name = "btc_kyt_canister",
-    srcs = [
-        "src/dashboard.rs",
-        "src/dashboard/tests.rs",
-        "src/fetch.rs",
-        "src/fetch/tests.rs",
-        "src/main.rs",
-        "src/state.rs",
-        "src/state/tests.rs",
-    ],
+    srcs = glob(
+        ["src/**"],
+        exclude = LIB_SRCS,
+    ),
     compile_data = [
         "templates/dashboard.html",
     ],
@@ -68,6 +58,7 @@ rust_canister(
         ":btc_kyt_lib",
         "//rs/rust_canisters/http_types",
         "@crate_index//:askama",
+        "@crate_index//:base64",
         "@crate_index//:bitcoin_0_32",
         "@crate_index//:candid",
         "@crate_index//:candid_parser",
@@ -80,6 +71,7 @@ rust_canister(
         "@crate_index//:serde",
         "@crate_index//:serde_json",
         "@crate_index//:time",
+        "@crate_index//:url",
     ],
 )
 
