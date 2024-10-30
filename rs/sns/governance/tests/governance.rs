@@ -26,7 +26,7 @@ use ic_sns_governance::{
                 NeuronRecipe, NeuronRecipes,
             },
             claim_swap_neurons_response::{ClaimSwapNeuronsResult, ClaimedSwapNeurons, SwapNeuron},
-            governance::Version,
+            governance::{Version, Versions},
             governance_error::ErrorType,
             manage_neuron::{
                 self, claim_or_refresh, configure::Operation, AddNeuronPermissions, ClaimOrRefresh,
@@ -39,12 +39,13 @@ use ic_sns_governance::{
             },
             neuron::{self, DissolveState, Followees},
             proposal::Action,
-            Account as AccountProto, AddMaturityRequest, Ballot, ClaimSwapNeuronsError,
-            ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus,
-            DeregisterDappCanisters, Empty, GovernanceError, ManageNeuronResponse,
-            MintTokensRequest, MintTokensResponse, Motion, NervousSystemParameters, Neuron,
-            NeuronId, NeuronIds, NeuronPermission, NeuronPermissionList, NeuronPermissionType,
-            Proposal, ProposalData, ProposalId, RegisterDappCanisters, Vote, WaitForQuietState,
+            upgrade_journal_entry, Account as AccountProto, AddMaturityRequest, Ballot,
+            ClaimSwapNeuronsError, ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse,
+            ClaimedSwapNeuronStatus, DeregisterDappCanisters, Empty, GovernanceError,
+            ManageNeuronResponse, MintTokensRequest, MintTokensResponse, Motion,
+            NervousSystemParameters, Neuron, NeuronId, NeuronIds, NeuronPermission,
+            NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData, ProposalId,
+            RegisterDappCanisters, UpgradeJournalEntry, Vote, WaitForQuietState,
         },
     },
     sns_upgrade::{ListUpgradeStep, ListUpgradeStepsResponse, SnsVersion},
@@ -2911,12 +2912,17 @@ async fn test_refresh_cached_upgrade_steps() {
 
     // Set up the fixture state
     {
-        let steps = expected_upgrade_steps
+        let steps: Vec<_> = expected_upgrade_steps
             .iter()
             .map(|v| ListUpgradeStep {
                 version: Some(SnsVersion::from(v.clone())),
             })
             .collect();
+        canister_fixture
+            .environment_fixture
+            .push_mocked_canister_reply(ListUpgradeStepsResponse {
+                steps: steps.clone(),
+            });
         canister_fixture
             .environment_fixture
             .push_mocked_canister_reply(ListUpgradeStepsResponse { steps });
@@ -3005,13 +3011,46 @@ async fn test_refresh_cached_upgrade_steps() {
         assert!(!should_refresh);
     }
 
-    // Check that the canister wants to refresh the cached_upgrade_steps after a while
+    // Check that the canister wants to refresh the cached_upgrade_steps after another second
     {
         canister_fixture.advance_time_by(1);
         let should_refresh = canister_fixture
             .governance
             .should_refresh_cached_upgrade_steps();
         assert!(should_refresh);
+    }
+
+    // Refresh the cached upgrade steps again
+    {
+        canister_fixture
+            .governance
+            .refresh_cached_upgrade_steps()
+            .await;
+    }
+
+    // Check that only one refresh has been recorded in the upgrade journal
+    {
+        let upgrade_journal = canister_fixture
+            .governance
+            .proto
+            .upgrade_journal
+            .clone()
+            .unwrap();
+        assert_eq!(
+            upgrade_journal.entries,
+            vec![UpgradeJournalEntry {
+                // we advanced time by one second after the first refresh
+                timestamp_seconds: Some(DEFAULT_TEST_START_TIMESTAMP_SECONDS + 1),
+                // the event contains the upgrade steps
+                event: Some(upgrade_journal_entry::Event::UpgradeStepsRefreshed(
+                    upgrade_journal_entry::UpgradeStepsRefreshed {
+                        upgrade_steps: Some(Versions {
+                            versions: expected_upgrade_steps
+                        }),
+                    }
+                )),
+            }]
+        );
     }
 }
 
