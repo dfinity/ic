@@ -201,19 +201,25 @@ mod tests {
     {
         "network_settings": {
             "ipv6_config": {
-                "Fixed": {
-                    "address": "2a00:fb01:400:200::2/64",
+                "Deterministic": {
+                    "prefix": "2a00:fb01:400:200",
+                    "prefix_length": 64,
                     "gateway": "2a00:fb01:400:200::1"
                 }
             },
-            "ipv4_config": null
+            "ipv4_config": {
+                "address": "192.168.0.2",
+                "gateway": "192.168.0.1",
+                "prefix_length": 24,
+                "domain": "example.com"
+            }
         },
         "icos_settings": {
             "config_version": "1.0.0",
             "mgmt_mac": "ec:2a:72:31:a2:0c",
             "deployment_environment": "Mainnet",
             "logging": {
-                "elasticsearch_hosts": "elasticsearch-node-0.mercury.dfinity.systems:443",
+                "elasticsearch_hosts": "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443",
                 "elasticsearch_tags": "tag1 tag2"
             },
             "nns_public_key_exists": true,
@@ -225,20 +231,20 @@ mod tests {
             "icos_dev_settings": {}
         },
         "guestos_settings": {
-            "inject_ic_crypto": true,
-            "inject_ic_state": true,
-            "inject_ic_registry_local_store": true,
+            "inject_ic_crypto": false,
+            "inject_ic_state": false,
+            "inject_ic_registry_local_store": false,
             "guestos_dev_settings": {
                 "backup_spool": {
-                    "backup_retention_time_seconds": 7200,
-                    "backup_purging_interval_seconds": 1200
+                    "backup_retention_time_seconds": 3600,
+                    "backup_purging_interval_seconds": 600
                 },
                 "malicious_behavior": null,
-                "query_stats_epoch_length": 2000,
+                "query_stats_epoch_length": 1000,
                 "bitcoind_addr": "127.0.0.1:8333",
                 "jaeger_addr": "127.0.0.1:6831",
                 "socks_proxy": "127.0.0.1:1080",
-                "hostname": "guest-node"
+                "hostname": "my-node"
             }
         }
     }
