@@ -81,7 +81,12 @@ struct ChunkedTaskParams {
 
 #[update]
 async fn test_run_chunked_task(params: ChunkedTaskParams) -> TaskResult {
-    let task = AddFibsTask { sum: 0 };
+    let task = unsafe {
+        AddFibsTask {
+            sum: 0,
+            data: UNSAFE_DATA_FOR_JOB_RUNNER.as_ref().unwrap(),
+        }
+    };
     let initial_value = 0;
 
     let result = run_chunked_task(
@@ -95,11 +100,13 @@ async fn test_run_chunked_task(params: ChunkedTaskParams) -> TaskResult {
     TaskResult { result }
 }
 
-struct AddFibsTask {
+/// This task demonstrates UNSAFE data handling.
+struct AddFibsTask<'a> {
+    data: &'a Data,
     sum: u64,
 }
 
-impl Task<u64, u64> for AddFibsTask {
+impl<'a> Task<u64, u64> for AddFibsTask<'a> {
     fn next_chunk(
         &mut self,
         continuation: u64,
@@ -109,16 +116,11 @@ impl Task<u64, u64> for AddFibsTask {
         // ic_cdk::println!("Continuing from index {}", index);
         while !is_message_over_soft_limit() {
             // println!("Processing index {}", index);
-            let n = unsafe {
-                let values = &UNSAFE_DATA_FOR_JOB_RUNNER
-                    .as_ref()
-                    .expect("Not initialized")
-                    .values;
-                if values.len() <= index as usize {
-                    return None;
-                }
-                values[index as usize]
-            };
+            let values = &self.data.values;
+            if values.len() <= index as usize {
+                return None;
+            }
+            let n = values[index as usize];
             self.sum += fib(n);
             index += 1;
         }
