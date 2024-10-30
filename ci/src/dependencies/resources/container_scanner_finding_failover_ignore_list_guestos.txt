@@ -19,4 +19,3 @@ ocfs2
 samba
 bluetooth
 printer
-dell
