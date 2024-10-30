@@ -296,21 +296,6 @@ impl Block {
         }
     }
 
-    /// Create a BlockLogEntry from this block
-    pub fn log_entry(&self, block_hash: String) -> BlockLogEntry {
-        BlockLogEntry {
-            byte_size: None,
-            certified_height: Some(self.context.certified_height.get()),
-            dkg_payload_type: Some(self.payload.as_ref().payload_type().to_string()),
-            hash: Some(block_hash),
-            height: Some(self.height.get()),
-            parent_hash: Some(hex::encode(self.parent.get_ref().0.clone())),
-            rank: Some(self.rank.0),
-            registry_version: Some(self.context.registry_version.get()),
-            time: Some(self.context.time.as_nanos_since_unix_epoch()),
-            version: Some(self.version().to_string()),
-        }
-    }
 }
 
 impl SignedBytesWithoutDomainSeparator for BlockMetadata {
@@ -321,6 +306,26 @@ impl SignedBytesWithoutDomainSeparator for BlockMetadata {
 
 /// HashedBlock contains a Block together with its hash
 pub type HashedBlock = Hashed<CryptoHashOf<Block>, Block>;
+
+impl HashedBlock {
+    /// Create a BlockLogEntry from this block
+    pub fn log_entry(&self) -> BlockLogEntry {
+        let block = &self.value;
+
+        BlockLogEntry {
+            byte_size: None,
+            certified_height: Some(block.context.certified_height.get()),
+            dkg_payload_type: Some(block.payload.as_ref().payload_type().to_string()),
+            hash: Some(hex::encode(&self.hash.get_ref().0)),
+            height: Some(block.height.get()),
+            parent_hash: Some(hex::encode(&block.parent.get_ref().0)),
+            rank: Some(block.rank.0),
+            registry_version: Some(block.context.registry_version.get()),
+            time: Some(block.context.time.as_nanos_since_unix_epoch()),
+            version: Some(block.version().to_string()),
+        }
+    }
+}
 
 /// BlockMetadata contains the version, height and hash of a block
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]

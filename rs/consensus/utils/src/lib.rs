@@ -381,11 +381,6 @@ pub(crate) fn group_shares<C: Eq + Ord, S: Ord, Shares: Iterator<Item = Signed<C
     })
 }
 
-/// Return the hash of a block as a string.
-pub fn get_block_hash_string(block: &Block) -> String {
-    hex::encode(ic_types::crypto::crypto_hash(block).get().0)
-}
-
 /// Helper function to lookup replica version, and log errors if any.
 pub fn lookup_replica_version(
     registry_client: &(impl RegistryClient + ?Sized),
