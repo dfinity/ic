@@ -93,7 +93,7 @@ fn inc_instruction_cost(config: HypervisorConfig) -> u64 {
         0
     };
 
-    let func_call_cost = 1;
+    let func_call_cost = 1; // Calling a function costs 1 instruction.
 
     func_call_cost + 5 * cc + cs + cl + ca + 2 * ccall + csys + cd
 }
