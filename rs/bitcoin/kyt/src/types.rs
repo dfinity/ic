@@ -57,6 +57,8 @@ pub enum CheckTransactionIrrecoverableError {
     ResponseTooLarge { txid: Vec<u8> },
     /// Invalid transaction id because it fails to decode.
     InvalidTransactionId(String),
+    /// Invalid transaction.
+    InvalidTransaction(String),
 }
 
 impl From<CheckTransactionIrrecoverableError> for CheckTransactionResponse {
@@ -80,6 +82,7 @@ impl From<CheckTransactionStatus> for CheckTransactionResponse {
 #[derive(CandidType, Clone, Debug, Deserialize, Serialize)]
 pub struct InitArg {
     pub btc_network: BtcNetwork,
+    pub kyt_mode: KytMode,
 }
 
 #[derive(CandidType, Clone, Copy, Deserialize, Debug, Eq, PartialEq, Serialize, Hash)]
@@ -88,6 +91,23 @@ pub enum BtcNetwork {
     Mainnet,
     #[serde(rename = "testnet")]
     Testnet,
+}
+
+#[derive(CandidType, Clone, Copy, Deserialize, Debug, Eq, PartialEq, Serialize, Hash)]
+pub enum KytMode {
+    AcceptAll,
+    RejectAll,
+    Normal,
+}
+
+impl fmt::Display for KytMode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::AcceptAll => write!(f, "AcceptAll"),
+            Self::RejectAll => write!(f, "RejectAll"),
+            Self::Normal => write!(f, "Normal"),
+        }
+    }
 }
 
 impl From<BtcNetwork> for bitcoin::Network {
@@ -109,7 +129,9 @@ impl fmt::Display for BtcNetwork {
 }
 
 #[derive(CandidType, Debug, Deserialize, Serialize)]
-pub struct UpgradeArg {}
+pub struct UpgradeArg {
+    pub kyt_mode: Option<KytMode>,
+}
 
 #[derive(CandidType, Debug, Deserialize, Serialize)]
 pub enum KytArg {

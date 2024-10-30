@@ -36,7 +36,7 @@ pub struct CertificationPoolImpl {
     unvalidated_cert_index: HeightIndex<CertificationMessageHash>,
     unvalidated: BTreeMap<CertificationMessageHash, CertificationMessage>,
 
-    pub persistent_pool: Box<dyn MutablePoolSection + Send + Sync>,
+    pub validated: Box<dyn MutablePoolSection + Send + Sync>,
 
     unvalidated_pool_metrics: PoolMetrics,
     validated_pool_metrics: PoolMetrics,
@@ -82,7 +82,7 @@ impl CertificationPoolImpl {
             unvalidated_share_index: HeightIndex::default(),
             unvalidated_cert_index: HeightIndex::default(),
             unvalidated: BTreeMap::default(),
-            persistent_pool,
+            validated: persistent_pool,
             invalidated_artifacts: metrics_registry.int_counter(
                 "certification_invalidated_artifacts",
                 "The number of invalidated certification artifacts",
@@ -102,12 +102,12 @@ impl CertificationPoolImpl {
     }
 
     fn validated_certifications(&self) -> Box<dyn Iterator<Item = Certification> + '_> {
-        self.persistent_pool.certifications().get_all()
+        self.validated.certifications().get_all()
     }
 
     fn insert_validated_certification(&self, certification: Certification) {
         if let Some(existing_certification) = self
-            .persistent_pool
+            .validated
             .certifications()
             .get_by_height(certification.height)
             .next()
@@ -116,7 +116,7 @@ impl CertificationPoolImpl {
                 panic!("Certifications are not expected to be added more than once per height.");
             }
         } else {
-            self.persistent_pool
+            self.validated
                 .insert(CertificationMessage::Certification(certification))
         }
     }
@@ -147,11 +147,11 @@ impl CertificationPoolImpl {
         self.validated_pool_metrics
             .pool_artifacts
             .with_label_values(&[CERTIFICATION_ARTIFACT_TYPE])
-            .set(self.persistent_pool.certifications().size() as i64);
+            .set(self.validated.certifications().size() as i64);
         self.validated_pool_metrics
             .pool_artifacts
             .with_label_values(&[CERTIFICATION_SHARE_ARTIFACT_TYPE])
-            .set(self.persistent_pool.certification_shares().size() as i64);
+            .set(self.validated.certification_shares().size() as i64);
 
         // Unvalidated artifacts metrics
         self.unvalidated_pool_metrics
@@ -216,7 +216,7 @@ impl MutablePool<CertificationMessage> for CertificationPoolImpl {
                     .received_artifact_bytes
                     .with_label_values(&[msg.label()])
                     .observe(std::mem::size_of_val(&msg) as f64);
-                self.persistent_pool.insert(msg);
+                self.validated.insert(msg);
             }
 
             ChangeAction::MoveToValidated(msg) => {
@@ -237,7 +237,7 @@ impl MutablePool<CertificationMessage> for CertificationPoolImpl {
 
                 match msg {
                     CertificationMessage::CertificationShare(share) => {
-                        self.persistent_pool
+                        self.validated
                             .insert(CertificationMessage::CertificationShare(share));
                     }
                     CertificationMessage::Certification(cert) => {
@@ -253,7 +253,7 @@ impl MutablePool<CertificationMessage> for CertificationPoolImpl {
             ChangeAction::RemoveAllBelow(height) => {
                 self.remove_all_unvalidated_below(height);
                 transmits.extend(
-                    self.persistent_pool
+                    self.validated
                         .purge_below(height)
                         .drain(..)
                         .map(ArtifactTransmit::Abort),
@@ -299,23 +299,18 @@ pub trait MutablePoolSection {
 
 impl CertificationPool for CertificationPoolImpl {
     fn certification_at_height(&self, height: Height) -> Option<Certification> {
-        self.persistent_pool
-            .certifications()
-            .get_by_height(height)
-            .next()
+        self.validated.certifications().get_by_height(height).next()
     }
 
     fn shares_at_height(
         &self,
         height: Height,
     ) -> Box<dyn Iterator<Item = CertificationShare> + '_> {
-        self.persistent_pool
-            .certification_shares()
-            .get_by_height(height)
+        self.validated.certification_shares().get_by_height(height)
     }
 
     fn validated_shares(&self) -> Box<dyn Iterator<Item = CertificationShare> + '_> {
-        self.persistent_pool.certification_shares().get_all()
+        self.validated.certification_shares().get_all()
     }
 
     fn unvalidated_shares_at_height(
@@ -394,8 +389,8 @@ impl ValidatedPoolReader<CertificationMessage> for CertificationPoolImpl {
     }
 
     fn get_all_for_broadcast(&self) -> Box<dyn Iterator<Item = CertificationMessage> + '_> {
-        let certification_range = self.persistent_pool.certifications().height_range();
-        let share_range = self.persistent_pool.certification_shares().height_range();
+        let certification_range = self.validated.certifications().height_range();
+        let share_range = self.validated.certification_shares().height_range();
 
         let ranges = [certification_range.as_ref(), share_range.as_ref()]
             .into_iter()
@@ -408,11 +403,11 @@ impl ValidatedPoolReader<CertificationMessage> for CertificationPoolImpl {
         // For all heights above the minimum, return the validated certification of the subnet,
         // or the share signed by this node if we don't have the aggregate.
         let iterator = (min.get()..=max.get()).map(Height::from).flat_map(|h| {
-            let mut certifications = self.persistent_pool.certifications().get_by_height(h);
+            let mut certifications = self.validated.certifications().get_by_height(h);
             if let Some(certification) = certifications.next() {
                 vec![CertificationMessage::Certification(certification)]
             } else {
-                self.persistent_pool
+                self.validated
                     .certification_shares()
                     .get_by_height(h)
                     .filter(|share| share.signed.signature.signer == self.node_id)
@@ -798,11 +793,11 @@ mod tests {
             let cert_msg = fake_cert(8);
 
             assert!(pool
-                .persistent_pool
+                .validated
                 .get(&CertificationMessageId::from(&share_msg))
                 .is_none());
             assert!(pool
-                .persistent_pool
+                .validated
                 .get(&CertificationMessageId::from(&cert_msg))
                 .is_none());
 
@@ -822,13 +817,13 @@ mod tests {
             );
             assert_eq!(
                 share_msg,
-                pool.persistent_pool
+                pool.validated
                     .get(&CertificationMessageId::from(&share_msg))
                     .unwrap()
             );
             assert_eq!(
                 cert_msg,
-                pool.persistent_pool
+                pool.validated
                     .get(&CertificationMessageId::from(&cert_msg))
                     .unwrap()
             );

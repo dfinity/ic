@@ -40,7 +40,7 @@ const OVERALL_TIMEOUT_DELTA: Duration = Duration::from_secs(3600);
 // Network topology
 const NETWORK_SIMULATION: Option<ProductionSubnetTopology> = Some(ProductionSubnetTopology::IO67);
 
-const COUNTER_CANISTER_WAT: &str = "rs/tests/src/counter.wat";
+const COUNTER_CANISTER_WAT: &str = "rs/tests/counter.wat";
 const CANISTER_METHOD: &str = "write";
 // Duration of each request is placed into one of the two categories - below or above this threshold.
 const APP_DURATION_THRESHOLD: Duration = Duration::from_secs(60);
