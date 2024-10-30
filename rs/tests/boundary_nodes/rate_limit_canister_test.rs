@@ -1,11 +1,12 @@
 /* tag::catalog[]
-Title:: Setting rate-limits on the API boundary nodes via rate-limit canister
+Title:: Setting rate-limits on the API boundary nodes via rate-limit canister (status WIP)
 
-Goal:: Verify that API boundary nodes dynamically fetch rate-limit configurations from the canister and enforce them for ingress messages.
+Goal:: NOTE: this is a WIP system-test. Verify that API boundary nodes can dynamically fetch rate-limit configurations from the canister and enforce them for ingress messages.
 
 Runbook:
 . Set up an rate-limit canister.
 . Test that the rate-limit canister API works.
+. TODO: test that API boundary node can successfully fetch/apply rate-limit configurations.
 
 Success:: The rate-limit canister is installed and the API works.
 
