@@ -246,9 +246,12 @@ Service: +node_exporter.service+. Depends on +setup-node_exporter-keys.service+.
 
 Starts the +node_exporter+ service to make machine metrics accessible externally.
 
+== Generate IC config
+
+Service: generate-ic-config.service creates a config file from ic.json.template, which is used by the replica and other ic services
+
 == Start IC replica
 
-Service: +ic-replica.service+, pre-exec scripts +/opt/ic/bin/generate-replica-config.sh+ and
 +/opt/ic/bin/setup-permissions.sh+. Depends on all file system mounts as well
 as having an IPv6 address obtained on primary network interface.
 
