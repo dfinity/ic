@@ -253,8 +253,6 @@ fn test_check_address() {
 #[test]
 fn test_check_transaction_passed() {
     let setup = Setup::new(BtcNetwork::Mainnet);
-    let cycles_before = setup.env.cycle_balance(setup.caller);
-
     let txid =
         Txid::from_str("c80763842edc9a697a2114517cf0c138c5403a761ef63cfad1fa6993fa3475ed").unwrap();
     let env = &setup.env;
@@ -262,6 +260,7 @@ fn test_check_transaction_passed() {
     // Normal operation requires making http outcalls.
     // We'll run this again after testing other KytMode.
     let test_normal_operation = || {
+        let cycles_before = setup.env.cycle_balance(setup.caller);
         let call_id = setup
             .submit_kyt_call(
                 "check_transaction",
@@ -372,7 +371,7 @@ fn test_check_transaction_passed() {
         Some(setup.controller),
     )
     .unwrap();
-    let cycles_before = setup.env.cycle_balance(setup.caller);
+    let cycles_before = env.cycle_balance(setup.caller);
     let call_id = setup
         .submit_kyt_call(
             "check_transaction",
@@ -409,7 +408,7 @@ fn test_check_transaction_passed() {
         Some(setup.controller),
     )
     .unwrap();
-    let cycles_before = setup.env.cycle_balance(setup.caller);
+    let cycles_before = env.cycle_balance(setup.caller);
     let call_id = setup
         .submit_kyt_call(
             "check_transaction",
