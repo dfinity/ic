@@ -21,7 +21,7 @@ async fn make_noop_call() {
 
 fn is_message_over_threshold(message_threshold: u64) -> bool {
     let instructions_used = instruction_counter();
-    ic_cdk::println!("Instruction counter: {}", instructions_used);
+    // ic_cdk::println!("Instruction counter: {}", instructions_used);
     instructions_used >= message_threshold
 }
 

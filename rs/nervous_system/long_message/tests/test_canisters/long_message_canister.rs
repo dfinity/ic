@@ -21,10 +21,9 @@ fn canister_init() {
     ic_cdk_timers::set_timer(Duration::from_millis(1), || unsafe {
         // println!("Setting new values");
         let new_values = vec![18; 6];
-        UNSAFE_DATA_FOR_JOB_RUNNER
+        *UNSAFE_DATA_FOR_JOB_RUNNER
             .as_mut()
-            .expect("data not initialized")
-            .values = new_values;
+            .expect("data not initialized") = Data { values: new_values };
     });
 }
 
@@ -100,7 +99,8 @@ async fn test_run_chunked_task(params: ChunkedTaskParams) -> TaskResult {
     TaskResult { result }
 }
 
-/// This task demonstrates UNSAFE data handling.
+/// This task demonstrates UNSAFE data handling, but in the task it
+/// gets values in a way that is still safe.
 struct AddFibsTask<'a> {
     data: &'a Data,
     sum: u64,
