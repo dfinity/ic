@@ -1,10 +1,10 @@
 use candid::{candid_method, Decode};
 use dfn_candid::{candid, candid_one};
 use dfn_core::{
-    api::{arg_data, caller, data_certificate, reply, trap_with},
+    api::{arg_data, data_certificate, reply, trap_with},
     over, over_async, stable,
 };
-use ic_base_types::{NodeId, PrincipalId, PrincipalIdClass};
+use ic_base_types::{NodeId, PrincipalId};
 use ic_certified_map::{AsHashTree, HashTree};
 use ic_nervous_system_string::clamp_debug_len;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
@@ -188,22 +188,6 @@ ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method
 #[export_name = "canister_query get_changes_since"]
 fn get_changes_since() {
     fn main() -> Result<RegistryGetChangesSinceResponse, (Code, String)> {
-        // Authorize: Only self-authenticating and anonymous principals are allowed to call us.
-        const ALLOWED_CALLER_CLASSES: [Result<PrincipalIdClass, String>; 2] = [
-            Ok(PrincipalIdClass::SelfAuthenticating),
-            Ok(PrincipalIdClass::Anonymous),
-        ];
-        let class = caller().class();
-        if !ALLOWED_CALLER_CLASSES.contains(&class) {
-            return Err((
-                Code::Authorization,
-                format!(
-                    "Caller must be self-authenticating, or anonymous (but was {:?}).",
-                    class,
-                ),
-            ));
-        }
-
         // Parse request.
         let request = deserialize_get_changes_since_request(arg_data())
             .map_err(|err| (Code::MalformedMessage, err.to_string()))?;
