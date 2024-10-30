@@ -1,7 +1,6 @@
 use crate::eth_logs::{
-    report_transaction_error, LogParser, LogScraping, ReceivedErc20LogParser,
-    ReceivedErc20LogScraping, ReceivedEthLogParser, ReceivedEthLogScraping, ReceivedEvent,
-    ReceivedEventError,
+    report_transaction_error, LogParser, LogScraping, ReceivedErc20LogScraping,
+    ReceivedEthLogScraping, ReceivedEvent, ReceivedEventError,
 };
 use crate::eth_rpc::{BlockSpec, GetLogsParam, HttpOutcallError, LogEntry, Topic};
 use crate::eth_rpc_client::{EthRpcClient, MultiCallError};
@@ -146,16 +145,8 @@ pub async fn scrape_logs() {
         }
     };
     let max_block_spread = read_state(|s| s.max_block_spread_for_logs_scraping());
-    scrape_until_block::<ReceivedEthLogScraping, ReceivedEthLogParser>(
-        last_block_number,
-        max_block_spread,
-    )
-    .await;
-    scrape_until_block::<ReceivedErc20LogScraping, ReceivedErc20LogParser>(
-        last_block_number,
-        max_block_spread,
-    )
-    .await;
+    scrape_until_block::<ReceivedEthLogScraping>(last_block_number, max_block_spread).await;
+    scrape_until_block::<ReceivedErc20LogScraping>(last_block_number, max_block_spread).await;
 }
 
 pub async fn update_last_observed_block_number() -> Option<BlockNumber> {
@@ -179,10 +170,10 @@ pub async fn update_last_observed_block_number() -> Option<BlockNumber> {
     }
 }
 
-async fn scrape_until_block<S: LogScraping, P: LogParser>(
-    last_block_number: BlockNumber,
-    max_block_spread: u16,
-) {
+async fn scrape_until_block<S>(last_block_number: BlockNumber, max_block_spread: u16)
+where
+    S: LogScraping,
+{
     let scrape = match read_state(S::next_scrape) {
         Some(s) => s,
         None => {
@@ -208,7 +199,7 @@ async fn scrape_until_block<S: LogScraping, P: LogParser>(
     );
     let rpc_client = read_state(EthRpcClient::from_state);
     for block_range in block_range.into_chunks(max_block_spread) {
-        match scrape_block_range::<S, P>(
+        match scrape_block_range::<S>(
             &rpc_client,
             scrape.contract_address,
             scrape.topics.clone(),
@@ -229,12 +220,15 @@ async fn scrape_until_block<S: LogScraping, P: LogParser>(
     }
 }
 
-async fn scrape_block_range<S: LogScraping, P: LogParser>(
+async fn scrape_block_range<S>(
     rpc_client: &EthRpcClient,
     contract_address: Address,
     topics: Vec<Topic>,
     block_range: BlockRangeInclusive,
-) -> Result<(), MultiCallError<Vec<LogEntry>>> {
+) -> Result<(), MultiCallError<Vec<LogEntry>>>
+where
+    S: LogScraping,
+{
     let mut subranges = VecDeque::new();
     subranges.push_back(block_range);
 
@@ -252,7 +246,7 @@ async fn scrape_block_range<S: LogScraping, P: LogParser>(
         let result = rpc_client
             .eth_get_logs(request)
             .await
-            .map(P::parse_all_logs);
+            .map(<S::Parser>::parse_all_logs);
 
         match result {
             Ok((events, errors)) => {

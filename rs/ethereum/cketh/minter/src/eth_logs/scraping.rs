@@ -1,11 +1,17 @@
-use crate::eth_logs::{RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_EVENT_TOPIC};
+use crate::eth_logs::{
+    LogParser, ReceivedErc20LogParser, ReceivedEthLogParser, RECEIVED_ERC20_EVENT_TOPIC,
+    RECEIVED_ETH_EVENT_TOPIC,
+};
 use crate::eth_rpc::{FixedSizeData, Topic};
 use crate::numeric::BlockNumber;
 use crate::state::State;
 use ic_ethereum_types::Address;
 
-/// Trait for managing the state of a log scraping.
+/// Trait for managing log scraping.
 pub trait LogScraping {
+    /// The parser type that defines how to parse logs found by this log scraping.
+    type Parser: LogParser;
+
     fn next_scrape(state: &State) -> Option<Scrape>;
     fn update_last_scraped_block_number(state: &mut State, block_number: BlockNumber);
     fn display_id() -> &'static str;
@@ -20,6 +26,8 @@ pub struct Scrape {
 pub struct ReceivedEthLogScraping {}
 
 impl LogScraping for ReceivedEthLogScraping {
+    type Parser = ReceivedEthLogParser;
+
     fn next_scrape(state: &State) -> Option<Scrape> {
         let contract_address = *state.eth_log_scraping.contract_address()?;
         let last_scraped_block_number = state.eth_log_scraping.last_scraped_block_number();
@@ -45,6 +53,8 @@ impl LogScraping for ReceivedEthLogScraping {
 pub struct ReceivedErc20LogScraping {}
 
 impl LogScraping for ReceivedErc20LogScraping {
+    type Parser = ReceivedErc20LogParser;
+
     fn next_scrape(state: &State) -> Option<Scrape> {
         if state.ckerc20_tokens.is_empty() {
             return None;
