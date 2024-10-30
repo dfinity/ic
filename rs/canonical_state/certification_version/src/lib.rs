@@ -84,7 +84,7 @@ pub const CURRENT_CERTIFICATION_VERSION: CertificationVersion = CertificationVer
 ///
 /// The replica will panic if requested to certify using a version lower than
 /// this.
-pub const MIN_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V16;
+pub const MIN_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V17;
 
 /// Maximum supported certification version.
 ///
