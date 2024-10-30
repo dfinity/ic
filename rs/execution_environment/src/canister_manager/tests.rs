@@ -5243,7 +5243,7 @@ fn cycles_correct_if_upgrade_succeeds() {
         test.cycles_account_manager().execution_cost(
             NumInstructions::from(5 * *DROP_MEMORY_GROW_CONST_COST) + wasm_compilation_cost(&wasm),
             test.subnet_size(),
-            test.canister_is_wasm64(id),
+            test.canister_wasm_execution_mode(id),
         ),
         Cycles::new(10)
     );
@@ -5261,7 +5261,7 @@ fn cycles_correct_if_upgrade_succeeds() {
         test.cycles_account_manager().execution_cost(
             NumInstructions::from(11 * *DROP_MEMORY_GROW_CONST_COST) + wasm_compilation_cost(&wasm),
             test.subnet_size(),
-            test.canister_is_wasm64(id),
+            test.canister_wasm_execution_mode(id),
         ),
         Cycles::new(10)
     );
@@ -5301,7 +5301,7 @@ fn cycles_correct_if_upgrade_fails_at_validation() {
         test.cycles_account_manager().execution_cost(
             wasm_compilation_cost(&wasm),
             test.subnet_size(),
-            test.canister_is_wasm64(id),
+            test.canister_wasm_execution_mode(id),
         )
     );
 
@@ -5319,7 +5319,7 @@ fn cycles_correct_if_upgrade_fails_at_validation() {
         test.cycles_account_manager().execution_cost(
             NumInstructions::from(0),
             test.subnet_size(),
-            test.canister_is_wasm64(id),
+            test.canister_wasm_execution_mode(id),
         )
     );
 }
@@ -5377,7 +5377,7 @@ fn cycles_correct_if_upgrade_fails_at_start() {
             NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST + *UNREACHABLE_COST)
                 + wasm_compilation_cost(&wasm2),
             test.subnet_size(),
-            test.canister_is_wasm64(id),
+            test.canister_wasm_execution_mode(id),
         ),
         Cycles::new(10)
     );
@@ -5418,7 +5418,7 @@ fn cycles_correct_if_upgrade_fails_at_pre_upgrade() {
         test.cycles_account_manager().execution_cost(
             wasm_compilation_cost(&wasm),
             test.subnet_size(),
-            test.canister_is_wasm64(id),
+            test.canister_wasm_execution_mode(id),
         )
     );
 
@@ -5435,7 +5435,7 @@ fn cycles_correct_if_upgrade_fails_at_pre_upgrade() {
         test.cycles_account_manager().execution_cost(
             NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST + *UNREACHABLE_COST),
             test.subnet_size(),
-            test.canister_is_wasm64(id),
+            test.canister_wasm_execution_mode(id),
         ),
         Cycles::new(10)
     );
@@ -5490,7 +5490,7 @@ fn cycles_correct_if_upgrade_fails_at_post_upgrade() {
             NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST + *UNREACHABLE_COST)
                 + wasm_compilation_cost(&wasm2),
             test.subnet_size(),
-            test.canister_is_wasm64(id),
+            test.canister_wasm_execution_mode(id),
         ),
         Cycles::new(10)
     );
@@ -5530,7 +5530,7 @@ fn cycles_correct_if_install_succeeds() {
         test.cycles_account_manager().execution_cost(
             NumInstructions::from(6 * *DROP_MEMORY_GROW_CONST_COST) + wasm_compilation_cost(&wasm),
             test.subnet_size(),
-            test.canister_is_wasm64(id),
+            test.canister_wasm_execution_mode(id),
         ),
         Cycles::new(4)
     );
@@ -5572,7 +5572,7 @@ fn cycles_correct_if_install_fails_at_validation() {
         test.cycles_account_manager().execution_cost(
             NumInstructions::from(0),
             test.subnet_size(),
-            test.canister_is_wasm64(id),
+            test.canister_wasm_execution_mode(id),
         )
     );
 }
@@ -5614,7 +5614,7 @@ fn cycles_correct_if_install_fails_at_start() {
         test.cycles_account_manager().execution_cost(
             NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST) + wasm_compilation_cost(&wasm),
             test.subnet_size(),
-            test.canister_is_wasm64(id),
+            test.canister_wasm_execution_mode(id),
         ),
         Cycles::new(10)
     );
@@ -5653,7 +5653,7 @@ fn cycles_correct_if_install_fails_at_init() {
             NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST + *UNREACHABLE_COST)
                 + wasm_compilation_cost(&wasm),
             test.subnet_size(),
-            test.canister_is_wasm64(id),
+            test.canister_wasm_execution_mode(id),
         ),
         Cycles::new(10)
     );
@@ -7374,7 +7374,7 @@ fn upload_chunk_fails_when_freeze_threshold_triggered() {
         + test.cycles_account_manager().execution_cost(
             instructions,
             test.subnet_size(),
-            test.canister_is_wasm64(canister_id),
+            test.canister_wasm_execution_mode(canister_id),
         )
         + Cycles::from(1_000_u128);
     let to_remove = test.canister_state(canister_id).system_state.balance() - new_balance;
@@ -7746,7 +7746,7 @@ fn upload_chunk_charges_canister_cycles() {
     let expected_charge = test.cycles_account_manager().execution_cost(
         instructions,
         test.subnet_size(),
-        test.canister_is_wasm64(canister_id),
+        test.canister_wasm_execution_mode(canister_id),
     );
     let _hash = test.subnet_message("upload_chunk", payload).unwrap();
 
@@ -7771,7 +7771,7 @@ fn upload_chunk_charges_if_failing() {
     let expected_charge = test.cycles_account_manager().execution_cost(
         instructions,
         test.subnet_size(),
-        test.canister_is_wasm64(canister_id),
+        test.canister_wasm_execution_mode(canister_id),
     );
 
     let payload = UploadChunkArgs {
@@ -7893,6 +7893,8 @@ fn chunk_store_counts_against_subnet_memory_in_initial_round_computation() {
     assert_eq!(error.code(), ErrorCode::SubnetOversubscribed);
 }
 
+/// Helper function that installs and runs an update call on a canister in
+/// Wasm32 and Wasm64 mode and returns the balance and the cost of the call(s).
 fn run_canister_in_wasm_mode(is_wasm64_mode: bool, execute_ingress: bool) -> (Cycles, Cycles) {
     let memory_type = if is_wasm64_mode { "i64" } else { "" };
     let canister_wat = format!(

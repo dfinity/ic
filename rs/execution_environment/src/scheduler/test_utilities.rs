@@ -197,11 +197,11 @@ impl SchedulerTest {
     }
 
     pub fn execution_cost(&self, num_instructions: NumInstructions) -> Cycles {
-        const IS_WASM64_EXECUTION: bool = false;
+        use ic_cycles_account_manager::WasmExecutionMode;
         self.scheduler.cycles_account_manager.execution_cost(
             num_instructions,
             self.subnet_size(),
-            IS_WASM64_EXECUTION,
+            WasmExecutionMode::Wasm32,
         )
     }
 
@@ -1290,7 +1290,10 @@ impl TestWasmExecutorCore {
         let closure = WasmClosure::new(0, response_message_id.into());
         let prepayment_for_response_execution = self
             .cycles_account_manager
-            .prepayment_for_response_execution(self.subnet_size, system_state.is_wasm64_execution);
+            .prepayment_for_response_execution(
+                self.subnet_size,
+                system_state.is_wasm64_execution.into(),
+            );
         let prepayment_for_response_transmission = self
             .cycles_account_manager
             .prepayment_for_response_transmission(self.subnet_size);

@@ -33,6 +33,7 @@ use crate::{
     execution_environment::{log_dirty_pages, RoundContext},
     CompilationCostHandling, RoundLimits,
 };
+use ic_cycles_account_manager::WasmExecutionMode;
 
 #[cfg(test)]
 mod tests;
@@ -276,7 +277,7 @@ impl InstallCodeHelper {
             original.prepaid_execution_cycles,
             round.counters.execution_refund_error,
             original.subnet_size,
-            is_wasm64_execution,
+            is_wasm64_execution.into(),
             round.log,
         );
 
@@ -310,7 +311,7 @@ impl InstallCodeHelper {
                     round,
                     CanisterManagerError::Hypervisor(self.canister.canister_id(), err),
                     self.take_canister_log(),
-                    is_wasm64_execution,
+                    is_wasm64_execution.into(),
                 );
             }
         }
@@ -355,7 +356,7 @@ impl InstallCodeHelper {
                         round,
                         err,
                         self.take_canister_log(),
-                        is_wasm64_execution,
+                        is_wasm64_execution.into(),
                     );
                 }
             }
@@ -382,7 +383,7 @@ impl InstallCodeHelper {
                     round,
                     err,
                     self.take_canister_log(),
-                    is_wasm64_execution,
+                    is_wasm64_execution.into(),
                 );
             }
         }
@@ -427,7 +428,7 @@ impl InstallCodeHelper {
                         round,
                         err,
                         self.take_canister_log(),
-                        is_wasm64_execution,
+                        is_wasm64_execution.into(),
                     );
                 }
             }
@@ -451,7 +452,7 @@ impl InstallCodeHelper {
                         available: available.max(old_compute_allocation.as_percent()),
                     },
                     self.take_canister_log(),
-                    is_wasm64_execution,
+                    is_wasm64_execution.into(),
                 );
             }
             round_limits.compute_allocation_used = others + new_compute_allocation.as_percent();
@@ -886,7 +887,7 @@ pub(crate) struct OriginalContext {
     pub sender: PrincipalId,
     pub canister_id: CanisterId,
     pub log_dirty_pages: FlagStatus,
-    pub is_wasm64_execution: bool,
+    pub wasm_execution_mode: WasmExecutionMode,
 }
 
 pub(crate) fn validate_controller(
@@ -934,7 +935,7 @@ pub(crate) fn finish_err(
     round: RoundContext,
     err: CanisterManagerError,
     new_canister_log: CanisterLog,
-    is_wasm64_execution: bool,
+    wasm_execution_mode: WasmExecutionMode,
 ) -> DtsInstallCodeResult {
     let mut new_canister = clean_canister;
 
@@ -956,7 +957,7 @@ pub(crate) fn finish_err(
         original.prepaid_execution_cycles,
         round.counters.execution_refund_error,
         original.subnet_size,
-        is_wasm64_execution,
+        wasm_execution_mode,
         round.log,
     );
 

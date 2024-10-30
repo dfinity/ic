@@ -183,7 +183,7 @@ fn dts_update_concurrent_cycles_change_succeeds() {
     let max_execution_cost = test.cycles_account_manager().execution_cost(
         NumInstructions::from(instruction_limit),
         test.subnet_size(),
-        test.canister_is_wasm64(a_id),
+        test.canister_wasm_execution_mode(a_id),
     );
 
     let call_charge = test.call_fee("update", &b)
@@ -289,7 +289,7 @@ fn dts_update_concurrent_cycles_change_fails() {
     let max_execution_cost = test.cycles_account_manager().execution_cost(
         NumInstructions::from(instruction_limit),
         test.subnet_size(),
-        test.canister_is_wasm64(a_id),
+        test.canister_wasm_execution_mode(a_id),
     );
 
     let call_charge = test.call_fee("update", &b)

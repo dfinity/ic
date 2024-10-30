@@ -72,7 +72,7 @@ pub fn execute_update(
                         execution_parameters.instruction_limits.message(),
                         subnet_size,
                         reveal_top_up,
-                        is_wasm64_execution,
+                        is_wasm64_execution.into(),
                     ) {
                         Ok(cycles) => cycles,
                         Err(err) => {
@@ -260,7 +260,7 @@ fn finish_err(
         original.prepaid_execution_cycles,
         round.counters.execution_refund_error,
         original.subnet_size,
-        is_wasm64_execution,
+        is_wasm64_execution.into(),
         round.log,
     );
     let instructions_used = instruction_limit - instructions_left;
@@ -517,7 +517,7 @@ impl UpdateHelper {
             original.prepaid_execution_cycles,
             round.counters.execution_refund_error,
             original.subnet_size,
-            is_wasm64_execution,
+            is_wasm64_execution.into(),
             round.log,
         );
 

@@ -4,6 +4,7 @@ use ic_base_types::NumBytes;
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SubnetConfig;
 use ic_cycles_account_manager::ResourceSaturation;
+use ic_cycles_account_manager::WasmExecutionMode;
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_management_canister_types::{
     self as ic00, CanisterChange, CanisterChangeDetails, CanisterSnapshotResponse,
@@ -33,7 +34,7 @@ use more_asserts::assert_gt;
 use serde_bytes::ByteBuf;
 use std::borrow::Borrow;
 
-const IS_WASM64_EXECUTION: bool = false;
+const WASM_EXECUTION_MODE: WasmExecutionMode = WasmExecutionMode::Wasm32;
 
 #[test]
 fn take_canister_snapshot_decode_round_trip() {
@@ -1002,7 +1003,7 @@ fn take_canister_snapshot_fails_when_canister_would_be_frozen() {
     let expected_charge = test.cycles_account_manager().execution_cost(
         instructions,
         test.subnet_size(),
-        IS_WASM64_EXECUTION,
+        WASM_EXECUTION_MODE,
     );
     test.canister_state_mut(canister_id)
         .system_state
@@ -1772,7 +1773,7 @@ fn take_canister_snapshot_charges_canister_cycles() {
     let expected_charge = test.cycles_account_manager().execution_cost(
         instructions,
         test.subnet_size(),
-        IS_WASM64_EXECUTION,
+        WASM_EXECUTION_MODE,
     );
 
     // Take a snapshot for the canister.
@@ -1834,7 +1835,7 @@ fn load_canister_snapshot_charges_canister_cycles() {
     let expected_charge = test.cycles_account_manager().execution_cost(
         instructions,
         test.subnet_size(),
-        IS_WASM64_EXECUTION,
+        WASM_EXECUTION_MODE,
     );
 
     // Load an existing snapshot will decrease the balance.

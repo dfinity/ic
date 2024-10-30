@@ -82,7 +82,7 @@ pub(crate) fn execute_install(
     // Stage 0: validate input.
     if let Err(err) = helper.validate_input(&original, &round, round_limits) {
         let instructions_left = helper.instructions_left();
-        let is_wasm64_execution = original.is_wasm64_execution;
+        let wasm_execution_mode = original.wasm_execution_mode;
         return finish_err(
             clean_canister,
             instructions_left,
@@ -90,7 +90,7 @@ pub(crate) fn execute_install(
             round,
             err,
             helper.take_canister_log(),
-            is_wasm64_execution,
+            wasm_execution_mode,
         );
     }
 
@@ -104,7 +104,7 @@ pub(crate) fn execute_install(
     let wasm_module = match context.wasm_source.into_canister_module() {
         Ok(wasm_module) => wasm_module,
         Err(err) => {
-            let is_wasm64_execution = original.is_wasm64_execution;
+            let wasm_execution_mode = original.wasm_execution_mode;
             return finish_err(
                 clean_canister,
                 helper.instructions_left(),
@@ -112,7 +112,7 @@ pub(crate) fn execute_install(
                 round,
                 err,
                 helper.take_canister_log(),
-                is_wasm64_execution,
+                wasm_execution_mode,
             );
         }
     };
@@ -134,7 +134,7 @@ pub(crate) fn execute_install(
         &original,
     ) {
         let instructions_left = helper.instructions_left();
-        let is_wasm64_execution = original.is_wasm64_execution;
+        let wasm_execution_mode = original.wasm_execution_mode;
         return finish_err(
             clean_canister,
             instructions_left,
@@ -142,7 +142,7 @@ pub(crate) fn execute_install(
             round,
             err,
             helper.take_canister_log(),
-            is_wasm64_execution,
+            wasm_execution_mode,
         );
     }
     helper.clear_certified_data();
@@ -248,7 +248,7 @@ fn install_stage_2a_process_start_result(
 
     if let Err(err) = result {
         let instructions_left = helper.instructions_left();
-        let is_wasm64_execution = original.is_wasm64_execution;
+        let wasm_execution_mode = original.wasm_execution_mode;
         return finish_err(
             clean_canister,
             instructions_left,
@@ -256,7 +256,7 @@ fn install_stage_2a_process_start_result(
             round,
             err,
             helper.take_canister_log(),
-            is_wasm64_execution,
+            wasm_execution_mode,
         );
     }
 
@@ -361,7 +361,7 @@ fn install_stage_3_process_init_result(
     );
     if let Err(err) = result {
         let instructions_left = helper.instructions_left();
-        let is_wasm64_execution = original.is_wasm64_execution;
+        let wasm_execution_mode = original.wasm_execution_mode;
         return finish_err(
             clean_canister,
             instructions_left,
@@ -369,7 +369,7 @@ fn install_stage_3_process_init_result(
             round,
             err,
             helper.take_canister_log(),
-            is_wasm64_execution,
+            wasm_execution_mode,
         );
     }
     helper.finish(clean_canister, original, round, round_limits)
@@ -412,7 +412,7 @@ impl PausedInstallCodeExecution for PausedInitExecution {
                     err
                 );
                 self.paused_wasm_execution.abort();
-                let is_wasm64_execution = self.original.is_wasm64_execution;
+                let wasm_execution_mode = self.original.wasm_execution_mode;
                 return finish_err(
                     clean_canister,
                     instructions_left,
@@ -420,7 +420,7 @@ impl PausedInstallCodeExecution for PausedInitExecution {
                     round,
                     err,
                     new_canister_log,
-                    is_wasm64_execution,
+                    wasm_execution_mode,
                 );
             }
         };
@@ -517,7 +517,7 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringInstall {
                     err
                 );
                 self.paused_wasm_execution.abort();
-                let is_wasm64_execution = self.original.is_wasm64_execution;
+                let wasm_execution_mode = self.original.wasm_execution_mode;
                 return finish_err(
                     clean_canister,
                     instructions_left,
@@ -525,7 +525,7 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringInstall {
                     round,
                     err,
                     new_canister_log,
-                    is_wasm64_execution,
+                    wasm_execution_mode,
                 );
             }
         };

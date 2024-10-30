@@ -8,6 +8,7 @@ use ic_config::{
     subnet_config::SubnetConfig,
 };
 use ic_cycles_account_manager::CyclesAccountManager;
+use ic_cycles_account_manager::WasmExecutionMode;
 use ic_embedders::{
     wasm_utils::{compile, decoding::decode_wasm},
     WasmtimeEmbedder,
@@ -275,19 +276,21 @@ impl ExecutionTest {
             .unwrap()
     }
 
-    pub fn canister_is_wasm64(&self, canister_id: CanisterId) -> bool {
-        // state(), then canister_state(), then execution_state() need to be Some().
-        self.state.as_ref().map_or(false, |state| {
-            state
-                .canister_state(&canister_id)
-                .as_ref()
-                .map_or(false, |canister| {
-                    canister
-                        .execution_state
-                        .as_ref()
-                        .map_or(false, |execution_state| execution_state.is_wasm64)
-                })
-        })
+    pub fn canister_wasm_execution_mode(&self, canister_id: CanisterId) -> WasmExecutionMode {
+        // In case of any error or missing state, default to Wasm32.
+        match self.state.as_ref() {
+            Some(state) => match state.canister_state(&canister_id).as_ref() {
+                Some(canister) => match canister.execution_state.as_ref() {
+                    Some(execution_state) => {
+                        return execution_state.is_wasm64.into();
+                    }
+                    None => {}
+                },
+                None => {}
+            },
+            None => {}
+        }
+        WasmExecutionMode::Wasm32
     }
 
     pub fn xnet_messages(&self) -> &Vec<RequestOrResponse> {
@@ -432,7 +435,7 @@ impl ExecutionTest {
         self.cycles_account_manager()
             .convert_instructions_to_cycles(
                 cost - CompilationCostHandling::CountReducedAmount.adjusted_compilation_cost(cost),
-                false, // In this case it does not matter if it is a Wasm64 or Wasm32 canister.
+                WasmExecutionMode::Wasm32, // In this case it does not matter if it is a Wasm64 or Wasm32 canister.
             )
     }
 
@@ -441,7 +444,7 @@ impl ExecutionTest {
         self.cycles_account_manager.execution_cost(
             num_instructions,
             self.subnet_size(),
-            false, // For this test, we can assume a Wasm32 execution.
+            WasmExecutionMode::Wasm32, // For this test, we can assume a Wasm32 execution.
         )
     }
 
@@ -1471,7 +1474,7 @@ impl ExecutionTest {
             .entry(canister_id)
             .or_insert(NumInstructions::new(0)) += limit - left;
 
-        let is_wasm64_execution = self.canister_is_wasm64(canister_id);
+        let is_wasm64_execution = self.canister_wasm_execution_mode(canister_id);
 
         // Ideally we would simply add `execution_cost(limit - left)`
         // but that leads to small precision errors because 1 Cycle = 0.4 Instructions.

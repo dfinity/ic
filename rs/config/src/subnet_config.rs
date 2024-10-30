@@ -162,7 +162,8 @@ pub const DEFAULT_CANISTERS_SNAPSHOT_BASELINE_INSTRUCTIONS: NumInstructions =
 
 /// The cycle cost overhead of executing canister instructions when running in Wasm64 mode.
 /// This overhead is a multiplier over the cost of executing the same instructions
-/// in Wasm32 mode.
+/// in Wasm32 mode. The overhead comes from the bound checks perform in Wasm64 mode
+/// as well as larger heap sizes that lead to larger application working sets.
 pub const WASM64_INSTRUCTION_COST_OVERHEAD: u128 = 2;
 
 /// The per subnet type configuration for the scheduler component

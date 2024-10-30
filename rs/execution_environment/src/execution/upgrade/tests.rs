@@ -1,3 +1,4 @@
+use ic_cycles_account_manager::WasmExecutionMode;
 use ic_error_types::ErrorCode;
 use ic_logger::replica_logger::LogEntryLogger;
 use ic_management_canister_types::{CanisterUpgradeOptions, EmptyBlob, Payload};
@@ -222,7 +223,7 @@ fn upgrade_fails_on_not_enough_cycles() {
     let balance_cycles = test.cycles_account_manager().execution_cost(
         (MAX_INSTRUCTIONS_PER_SLICE * 3).into(),
         test.subnet_size(),
-        false,
+        WasmExecutionMode::Wasm32,
     );
 
     let (canister_memory_usage, canister_message_memory_usage) = {

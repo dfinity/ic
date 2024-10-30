@@ -575,7 +575,7 @@ impl ResponseHelper {
             original.callback.prepayment_for_response_execution,
             round.counters.execution_refund_error,
             original.subnet_size,
-            is_wasm64_execution,
+            is_wasm64_execution.into(),
             round.log,
         );
 

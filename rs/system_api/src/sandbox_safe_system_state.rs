@@ -950,7 +950,7 @@ impl SandboxSafeSystemState {
 
     pub fn prepayment_for_response_execution(&self) -> Cycles {
         self.cycles_account_manager
-            .prepayment_for_response_execution(self.subnet_size, self.is_wasm64_execution)
+            .prepayment_for_response_execution(self.subnet_size, self.is_wasm64_execution.into())
     }
 
     pub fn prepayment_for_response_transmission(&self) -> Cycles {

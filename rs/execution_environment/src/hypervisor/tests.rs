@@ -2134,7 +2134,7 @@ fn ic0_call_cycles_add_deducts_cycles() {
         + mgr.execution_cost(
             MAX_NUM_INSTRUCTIONS,
             test.subnet_size(),
-            test.canister_is_wasm64(canister_id),
+            test.canister_wasm_execution_mode(canister_id),
         );
     let transferred_cycles = Cycles::new(10_000_000_000);
     assert_eq!(
@@ -5128,7 +5128,7 @@ fn dts_abort_works_in_update_call() {
             - test.cycles_account_manager().execution_cost(
                 NumInstructions::from(100_000_000),
                 test.subnet_size(),
-                test.canister_is_wasm64(canister_id)
+                test.canister_wasm_execution_mode(canister_id)
             ),
     );
     assert_eq!(
@@ -5161,7 +5161,7 @@ fn dts_abort_works_in_update_call() {
             - test.cycles_account_manager().execution_cost(
                 NumInstructions::from(100_000_000),
                 test.subnet_size(),
-                test.canister_is_wasm64(canister_id)
+                test.canister_wasm_execution_mode(canister_id)
             ),
     );
     assert_eq!(

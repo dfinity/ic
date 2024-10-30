@@ -58,7 +58,7 @@ pub fn execute_replicated_query(
         instruction_limit,
         subnet_size,
         reveal_top_up,
-        is_wasm64_execution,
+        is_wasm64_execution.into(),
     ) {
         Ok(cycles) => cycles,
         Err(err) => {
@@ -82,7 +82,7 @@ pub fn execute_replicated_query(
             prepaid_execution_cycles,
             round.counters.execution_refund_error,
             subnet_size,
-            is_wasm64_execution,
+            is_wasm64_execution.into(),
             round.log,
         );
         let user_error = UserError::new(
@@ -108,7 +108,7 @@ pub fn execute_replicated_query(
             prepaid_execution_cycles,
             round.counters.execution_refund_error,
             subnet_size,
-            is_wasm64_execution,
+            is_wasm64_execution.into(),
             round.log,
         );
         return finish_call_with_error(
@@ -164,7 +164,7 @@ pub fn execute_replicated_query(
         prepaid_execution_cycles,
         round.counters.execution_refund_error,
         subnet_size,
-        is_wasm64_execution,
+        is_wasm64_execution.into(),
         round.log,
     );
 

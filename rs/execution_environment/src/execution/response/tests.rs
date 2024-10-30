@@ -128,8 +128,8 @@ fn execute_response_refunds_cycles() {
         .xnet_call_bytes_transmitted_fee(MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, test.subnet_size());
     mgr.xnet_call_bytes_transmitted_fee(response_payload_size, test.subnet_size());
     let instructions_left = NumInstructions::from(instruction_limit) - instructions_executed;
-    let execution_refund =
-        mgr.convert_instructions_to_cycles(instructions_left, test.canister_is_wasm64(a_id));
+    let execution_refund = mgr
+        .convert_instructions_to_cycles(instructions_left, test.canister_wasm_execution_mode(a_id));
     assert_eq!(
         balance_after,
         balance_before + cycles_sent / 2u64 + response_transmission_refund + execution_refund
@@ -1300,7 +1300,7 @@ fn dts_response_concurrent_cycles_change_succeeds() {
     let max_execution_cost = test.cycles_account_manager().execution_cost(
         NumInstructions::from(instruction_limit),
         test.subnet_size(),
-        test.canister_is_wasm64(a_id),
+        test.canister_wasm_execution_mode(a_id),
     );
 
     let call_charge = test.call_fee("update", &b)
@@ -1419,7 +1419,7 @@ fn dts_response_concurrent_cycles_change_fails() {
     let max_execution_cost = test.cycles_account_manager().execution_cost(
         NumInstructions::from(instruction_limit),
         test.subnet_size(),
-        test.canister_is_wasm64(a_id),
+        test.canister_wasm_execution_mode(a_id),
     );
 
     let call_charge = test.call_fee("update", &b)
@@ -1561,7 +1561,7 @@ fn dts_response_with_cleanup_concurrent_cycles_change_succeeds() {
     let max_execution_cost = test.cycles_account_manager().execution_cost(
         NumInstructions::from(instruction_limit),
         test.subnet_size(),
-        test.canister_is_wasm64(a_id),
+        test.canister_wasm_execution_mode(a_id),
     );
 
     let call_charge = test.call_fee("update", &b)
