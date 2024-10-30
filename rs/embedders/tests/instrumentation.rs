@@ -1048,39 +1048,86 @@ fn charge_for_dirty_stable() {
     run_charge_for_dirty_stable_test(FlagStatus::Disabled);
 }
 
-#[test]
-fn table_modifications_are_unsupported() {
-    fn test(code: &str) -> String {
-        let wat = format!(
-            r#"(module
-                (table $table 101 funcref)
-                (elem func 0)
-                (func $f {code})
-            )"#
-        );
-        let embedder = WasmtimeEmbedder::new(EmbeddersConfig::default(), no_op_logger());
-        let wasm = wat::parse_str(wat).expect("Failed to convert wat to wasm");
+fn test_table_validation(code: &str, is_wasm64: bool) -> String {
+    let execution_mode = if is_wasm64 { "i64" } else { "" };
+    let wat = format!(
+        r#"(module
+            (table $table {execution_mode} 101 funcref)
+            (elem func 0)
+            (func $f {code})
+            
+        )"#
+    );
+    use ic_config::embedders::FeatureFlags;
+    use ic_config::flag_status::FlagStatus;
 
-        wasm_utils::compile(&embedder, &BinaryEncodedWasm::new(wasm))
-            .1
-            .unwrap_err()
-            .to_string()
-    }
+    let embedders_config = EmbeddersConfig {
+        feature_flags: FeatureFlags {
+            wasm64: if is_wasm64 {
+                FlagStatus::Enabled
+            } else {
+                FlagStatus::Disabled
+            },
+            ..Default::default()
+        },
+        ..Default::default()
+    };
 
-    let err = test("(drop (table.grow $table (ref.func 0) (i32.const 0)))");
+    let embedder = WasmtimeEmbedder::new(embedders_config, no_op_logger());
+    let wasm = wat::parse_str(wat).expect("Failed to convert wat to wasm");
+
+    wasm_utils::compile(&embedder, &BinaryEncodedWasm::new(wasm))
+        .1
+        .unwrap_err()
+        .to_string()
+}
+
+fn table_modifications_are_unsupported_for_wasm_version(is_wasm64: bool) {
+    let address_type = if is_wasm64 { "i64" } else { "i32" };
+
+    let err = test_table_validation(
+        &format!("(drop (table.grow $table (ref.func 0) ({address_type}.const 0)))"),
+        is_wasm64,
+    );
     assert!(err.contains("unsupported instruction table.grow"));
 
-    let err = test("(table.set $table (i32.const 0) (ref.func 0))");
+    let err = test_table_validation(
+        &format!("(table.set $table ({address_type}.const 0) (ref.func 0))"),
+        is_wasm64,
+    );
     assert!(err.contains("unsupported instruction table.set"));
 
-    let err = test("(table.fill $table (i32.const 0) (ref.func 0) (i32.const 50))");
+    let err = test_table_validation(
+        &format!(
+            "(table.fill $table ({address_type}.const 0) (ref.func 0) ({address_type}.const 50))"
+        ),
+        is_wasm64,
+    );
     assert!(err.contains("unsupported instruction table.fill"));
 
-    let err = test("(table.copy (i32.const 0) (i32.const 0) (i32.const 0))");
+    let err = test_table_validation(
+        &format!(
+        "(table.copy ({address_type}.const 0) ({address_type}.const 0) ({address_type}.const 0))"
+    ),
+        is_wasm64,
+    );
     assert!(err.contains("unsupported instruction table.copy"));
 
-    let err = test("(table.init 0 (i32.const 0) (i32.const 0) (i32.const 0))");
+    let err = test_table_validation(
+        &format!("(table.init 0 ({address_type}.const 0) (i32.const 0) (i32.const 0))"),
+        is_wasm64,
+    );
     assert!(err.contains("unsupported instruction table.init"));
+}
+
+#[test]
+fn table_modifications_are_unsupported_for_wasm32() {
+    table_modifications_are_unsupported_for_wasm_version(false);
+}
+
+#[test]
+fn table_modifications_are_unsupported_for_wasm64() {
+    table_modifications_are_unsupported_for_wasm_version(true);
 }
 
 #[test]
