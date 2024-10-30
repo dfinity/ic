@@ -27,7 +27,7 @@ pub trait LogParser {
     }
 }
 
-pub struct ReceivedEthLogParser {}
+pub enum ReceivedEthLogParser {}
 
 impl LogParser for ReceivedEthLogParser {
     fn parse_log(entry: LogEntry) -> Result<ReceivedEvent, ReceivedEventError> {
@@ -64,7 +64,7 @@ impl LogParser for ReceivedEthLogParser {
     }
 }
 
-pub struct ReceivedErc20LogParser {}
+pub enum ReceivedErc20LogParser {}
 
 impl LogParser for ReceivedErc20LogParser {
     fn parse_log(entry: LogEntry) -> Result<ReceivedEvent, ReceivedEventError> {

@@ -23,7 +23,7 @@ pub struct Scrape {
     pub topics: Vec<Topic>,
 }
 
-pub struct ReceivedEthLogScraping {}
+pub enum ReceivedEthLogScraping {}
 
 impl LogScraping for ReceivedEthLogScraping {
     type Parser = ReceivedEthLogParser;
@@ -50,7 +50,7 @@ impl LogScraping for ReceivedEthLogScraping {
     }
 }
 
-pub struct ReceivedErc20LogScraping {}
+pub enum ReceivedErc20LogScraping {}
 
 impl LogScraping for ReceivedErc20LogScraping {
     type Parser = ReceivedErc20LogParser;
