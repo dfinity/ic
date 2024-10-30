@@ -64,8 +64,6 @@ jobs:
 
       - name: Mirror Container
         run: |
-          # TODO: remove before merge
-          exit 0
           crane copy \
             ${{ matrix.repo }}/${{ matrix.image }}@sha256:${{ matrix.sha256 }} \
             ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}@sha256:${{ matrix.sha256 }}
