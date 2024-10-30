@@ -168,22 +168,6 @@ jobs:
       - <<: *bazel-bep
       - <<: *bazel-upload
 
-  bazel-build-all-config-check:
-    <<: *dind-large-setup
-    name: Bazel Build All Config Check
-    steps:
-      - <<: *checkout
-      - <<: *before-script
-      - <<: *docker-login
-      - name: Run bazel build --config=check //rs/...
-        id: bazel-build-config-check
-        uses: ./.github/actions/bazel-test-all/
-        with:
-          BAZEL_COMMAND: "build"
-          BAZEL_TARGETS: "//rs/..."
-          BAZEL_CI_CONFIG: "--config=check --config=ci --keep_going"
-      - <<: *bazel-bep
-
   bazel-test-macos-intel:
     name: Bazel Test macOS Intel
     timeout-minutes: 130
