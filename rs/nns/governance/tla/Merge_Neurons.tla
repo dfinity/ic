@@ -1,5 +1,5 @@
 ---- MODULE Merge_Neurons ----
-EXTENDS TLC, Sequences, Naturals, FiniteSets, Variants
+EXTENDS TLC, Sequences, Integers, FiniteSets, Variants
 
 (*
 @typeAlias: proc = Str;
@@ -17,7 +17,6 @@ CONSTANTS
     Merge_Neurons_Process_Ids,
     TRANSACTION_FEE
 
-OP_TRANSFER == "transfer"
 TRANSFER_OK == "Ok"
 TRANSFER_FAIL == "Err"
 DUMMY_ACCOUNT == ""
@@ -65,20 +64,10 @@ macro send_request(caller_id, request_args) {
     governance_to_ledger := Append(governance_to_ledger, request(caller_id, request_args))
 };
 
-macro transfer_minted() {
-    with(minted_stake = Minted_Stake(neuron, source_neuron_id)) {
-        send_request(self,
-                transfer(neuron[source_neuron_id].account,
-                    neuron[target_neuron_id].account,
-                    Minted_Stake(neuron, source_neuron_id) - TRANSACTION_FEE,
-                    TRANSACTION_FEE));
-    }
-}
-
 macro adjust_maturities(neuron_changes) {
     neuron := Decrease_Maturity(
-        Increase_Maturity(neuron_changes, target_neuron_id, neuron[source_neuron_id].maturity),
-        target_neuron_id, neuron[source_neuron_id].maturity);
+        Increase_Maturity(neuron_changes, target_nid, neuron[source_nid].maturity),
+        source_nid, neuron[source_nid].maturity);
 }
 
 macro finish() {
@@ -88,14 +77,19 @@ macro finish() {
 }
 
 macro maybe_transfer_stake(neuron_changes) {
-    if(amount_to_target > 0) {
-        locks := locks \union { source_neuron_id, target_neuron_id };
+    if(att > 0) {
         source_neuron_id := source_nid;
         target_neuron_id := target_nid;
+        locks := locks \union { source_neuron_id, target_neuron_id };
         amount_to_target := att;
-        neuron := neuron_changes;
-        transfer_minted();
-        goto MergeNeurons_Transfer;
+        neuron := Decrease_Stake(neuron_changes, source_neuron_id, amount_to_target + TRANSACTION_FEE);
+        send_request(self,
+                transfer(neuron[source_neuron_id].account,
+                    neuron[target_neuron_id].account,
+                    amount_to_target,
+                    TRANSACTION_FEE)
+        );
+        goto MergeNeurons_Stake_WaitForTransfer;
     } else {
         adjust_maturities(neuron_changes);
         finish();
@@ -128,7 +122,7 @@ process ( Merge_Neurons \in Merge_Neurons_Process_Ids )
 
             \* total stake cannot equal 0
             await (neuron[source_nid].cached_stake - neuron[source_nid].fees) +
-                (neuron[target_neuron_id].cached_stake - neuron[target_neuron_id].fees) /= 0;
+                (neuron[target_nid].cached_stake - neuron[target_nid].fees) /= 0;
 
 
             \* here the impl has a few guards:
@@ -138,8 +132,11 @@ process ( Merge_Neurons \in Merge_Neurons_Process_Ids )
             \* - not_for_profit must match for both source and target
             \* - source neuron cannot be dedicated to community fund
 
-            with(fa = neuron[source_nid].fees; att = Minted_Stake(neuron, source_nid) - TRANSACTION_FEE) {
-                if(fees_amount > TRANSACTION_FEE) {
+            with(fa = neuron[source_nid].fees;
+                att = LET diff == Minted_Stake(neuron, source_nid) - TRANSACTION_FEE
+                      IN IF diff > 0 THEN diff ELSE 0
+            ) {
+                if(fa > TRANSACTION_FEE) {
                     \* This is a bit braindeaad, but seems necessary to work around PlusCal limitations.
                     \* Since we might unlock the neurons in the same message handler if we don't try to
                     \* burn the fees, and since the stupid PlusCal limitation prevents us from updating
@@ -147,11 +144,11 @@ process ( Merge_Neurons \in Merge_Neurons_Process_Ids )
                     \* here conditionally. We'll also explicitly add the neurons to the locks again
                     \* if we want to transfer stake later on. This will be idempotent if they're already
                     \* locked, so it will behave the same as the implementation.
-                    locks := locks \union {source_neuron_id, target_neuron_id};
-                    \* Same for the local variables, they may get reset if the whole
+                    \* And same for the other local variables, they may get reset if the whole
                     \* update completes in a just a single message execution
                     source_neuron_id := source_nid;
                     target_neuron_id := target_nid;
+                    locks := locks \union {source_neuron_id, target_neuron_id};
                     fees_amount := fa;
                     amount_to_target := att;
 
@@ -166,9 +163,9 @@ process ( Merge_Neurons \in Merge_Neurons_Process_Ids )
                 };
             }
         };
-    MergeNeurons_Burn:
+    MergeNeurons_Burn_WaitForTransfer:
         \* Note that we're here only because the fees amount was larger than the
-        \* transaction fee (otherwise, the goto above would have taken us to MergeNeurons_Transfer/MergeNeurons_End)
+        \* transaction fee (otherwise, the goto above would have taken us to MergeNeurons_Stake_WaitForTransfer/MergeNeurons_End)
         with(answer \in { resp \in ledger_to_governance: resp.caller = self}) {
             ledger_to_governance := ledger_to_governance \ {answer};
             if(answer.response = Variant("Fail", UNIT)) {
@@ -178,28 +175,28 @@ process ( Merge_Neurons \in Merge_Neurons_Process_Ids )
                 \* The with here introduces some context to the macro, which reassigns
                 \* source/target_neuron_id to themselves
                 with(source_nid = source_neuron_id; target_nid = target_neuron_id; att = amount_to_target) {
-                    maybe_transfer_stake(Decrease_Stake
-                        (Update_Fees(neuron, source_neuron_id, fees_amount),
-                        source_neuron_id, amount_to_target + TRANSACTION_FEE));
+                    maybe_transfer_stake(Update_Fees(neuron, source_neuron_id, fees_amount));
                 }
             };
         };
 
-    MergeNeurons_Transfer:
+    MergeNeurons_Stake_WaitForTransfer:
         with(answer \in { resp \in ledger_to_governance: resp.caller = self}) {
             ledger_to_governance := ledger_to_governance \ {answer};
             if(answer.response = Variant("Fail", UNIT)) {
                 neuron := Increase_Stake(neuron, source_neuron_id, amount_to_target + TRANSACTION_FEE);
                 finish();
             } else {
-                adjust_maturities(Increase_Stake(neuron, target_neuron_id, amount_to_target));
-                finish();
+                with(source_nid = source_neuron_id; target_nid = target_neuron_id) {
+                    adjust_maturities(Increase_Stake(neuron, target_neuron_id, amount_to_target));
+                    finish();
+                }
             };
         };
     }
 }
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "d2161234" /\ chksum(tla) = "f54eb71c")
+\* BEGIN TRANSLATION (chksum(pcal) = "e673c31c" /\ chksum(tla) = "225bd637")
 VARIABLES pc, neuron, neuron_id_by_account, locks, governance_to_ledger,
           ledger_to_governance, source_neuron_id, target_neuron_id,
           fees_amount, amount_to_target
@@ -230,34 +227,34 @@ MergeNeurons_Start(self) == /\ pc[self] = "MergeNeurons_Start"
                                        \E target_nid \in DOMAIN(neuron) \ locks:
                                          /\ source_nid /= target_nid
                                          /\   (neuron[source_nid].cached_stake - neuron[source_nid].fees) +
-                                            (neuron[target_neuron_id[self]].cached_stake - neuron[target_neuron_id[self]].fees) /= 0
+                                            (neuron[target_nid].cached_stake - neuron[target_nid].fees) /= 0
                                          /\ LET fa == neuron[source_nid].fees IN
-                                              LET att == Minted_Stake(neuron, source_nid) - TRANSACTION_FEE IN
-                                                IF fees_amount[self] > TRANSACTION_FEE
-                                                   THEN /\ locks' = (locks \union {source_neuron_id[self], target_neuron_id[self]})
-                                                        /\ source_neuron_id' = [source_neuron_id EXCEPT ![self] = source_nid]
+                                              LET att == LET diff == Minted_Stake(neuron, source_nid) - TRANSACTION_FEE
+                                                         IN IF diff > 0 THEN diff ELSE 0 IN
+                                                IF fa > TRANSACTION_FEE
+                                                   THEN /\ source_neuron_id' = [source_neuron_id EXCEPT ![self] = source_nid]
                                                         /\ target_neuron_id' = [target_neuron_id EXCEPT ![self] = target_nid]
+                                                        /\ locks' = (locks \union {source_neuron_id'[self], target_neuron_id'[self]})
                                                         /\ fees_amount' = [fees_amount EXCEPT ![self] = fa]
                                                         /\ amount_to_target' = [amount_to_target EXCEPT ![self] = att]
                                                         /\ governance_to_ledger' = Append(governance_to_ledger, request(self, (transfer(neuron[source_neuron_id'[self]].account, Minting_Account_Id, fees_amount'[self], 0))))
-                                                        /\ pc' = [pc EXCEPT ![self] = "MergeNeurons_Burn"]
+                                                        /\ pc' = [pc EXCEPT ![self] = "MergeNeurons_Burn_WaitForTransfer"]
                                                         /\ UNCHANGED neuron
-                                                   ELSE /\ IF amount_to_target[self] > 0
-                                                              THEN /\ locks' = (locks \union { source_neuron_id[self], target_neuron_id[self] })
-                                                                   /\ source_neuron_id' = [source_neuron_id EXCEPT ![self] = source_nid]
+                                                   ELSE /\ IF att > 0
+                                                              THEN /\ source_neuron_id' = [source_neuron_id EXCEPT ![self] = source_nid]
                                                                    /\ target_neuron_id' = [target_neuron_id EXCEPT ![self] = target_nid]
+                                                                   /\ locks' = (locks \union { source_neuron_id'[self], target_neuron_id'[self] })
                                                                    /\ amount_to_target' = [amount_to_target EXCEPT ![self] = att]
-                                                                   /\ neuron' = neuron
-                                                                   /\ LET minted_stake == Minted_Stake(neuron', source_neuron_id'[self]) IN
-                                                                        governance_to_ledger' = Append(governance_to_ledger, request(self, (transfer(neuron'[source_neuron_id'[self]].account,
-                                                                                                                                                neuron'[target_neuron_id'[self]].account,
-                                                                                                                                                Minted_Stake(neuron', source_neuron_id'[self]) - TRANSACTION_FEE,
-                                                                                                                                                TRANSACTION_FEE))))
-                                                                   /\ pc' = [pc EXCEPT ![self] = "MergeNeurons_Transfer"]
+                                                                   /\ neuron' = Decrease_Stake(neuron, source_neuron_id'[self], amount_to_target'[self] + TRANSACTION_FEE)
+                                                                   /\ governance_to_ledger' = Append(governance_to_ledger, request(self, (transfer(neuron'[source_neuron_id'[self]].account,
+                                                                                                                                              neuron'[target_neuron_id'[self]].account,
+                                                                                                                                              amount_to_target'[self],
+                                                                                                                                              TRANSACTION_FEE))))
+                                                                   /\ pc' = [pc EXCEPT ![self] = "MergeNeurons_Stake_WaitForTransfer"]
                                                                    /\ UNCHANGED fees_amount
                                                               ELSE /\ neuron' =       Decrease_Maturity(
-                                                                                Increase_Maturity(neuron, target_neuron_id[self], neuron[source_neuron_id[self]].maturity),
-                                                                                target_neuron_id[self], neuron[source_neuron_id[self]].maturity)
+                                                                                Increase_Maturity(neuron, target_nid, neuron[source_nid].maturity),
+                                                                                source_nid, neuron[source_nid].maturity)
                                                                    /\ locks' = locks \ {source_neuron_id[self], target_neuron_id[self] }
                                                                    /\ source_neuron_id' = [source_neuron_id EXCEPT ![self] = 0]
                                                                    /\ target_neuron_id' = [target_neuron_id EXCEPT ![self] = 0]
@@ -268,75 +265,73 @@ MergeNeurons_Start(self) == /\ pc[self] = "MergeNeurons_Start"
                             /\ UNCHANGED << neuron_id_by_account,
                                             ledger_to_governance >>
 
-MergeNeurons_Burn(self) == /\ pc[self] = "MergeNeurons_Burn"
-                           /\ \E answer \in { resp \in ledger_to_governance: resp.caller = self}:
-                                /\ ledger_to_governance' = ledger_to_governance \ {answer}
-                                /\ IF answer.response = Variant("Fail", UNIT)
-                                      THEN /\ locks' = locks \ {source_neuron_id[self], target_neuron_id[self] }
-                                           /\ source_neuron_id' = [source_neuron_id EXCEPT ![self] = 0]
-                                           /\ target_neuron_id' = [target_neuron_id EXCEPT ![self] = 0]
-                                           /\ fees_amount' = [fees_amount EXCEPT ![self] = 0]
-                                           /\ amount_to_target' = [amount_to_target EXCEPT ![self] = 0]
-                                           /\ pc' = [pc EXCEPT ![self] = "Done"]
-                                           /\ UNCHANGED << neuron,
-                                                           governance_to_ledger >>
-                                      ELSE /\ LET source_nid == source_neuron_id[self] IN
-                                                LET target_nid == target_neuron_id[self] IN
-                                                  LET att == amount_to_target[self] IN
-                                                    IF amount_to_target[self] > 0
-                                                       THEN /\ locks' = (locks \union { source_neuron_id[self], target_neuron_id[self] })
-                                                            /\ source_neuron_id' = [source_neuron_id EXCEPT ![self] = source_nid]
-                                                            /\ target_neuron_id' = [target_neuron_id EXCEPT ![self] = target_nid]
-                                                            /\ amount_to_target' = [amount_to_target EXCEPT ![self] = att]
-                                                            /\ neuron' =                  Decrease_Stake
-                                                                         (Update_Fees(neuron, source_neuron_id'[self], fees_amount[self]),
-                                                                         source_neuron_id'[self], amount_to_target'[self] + TRANSACTION_FEE)
-                                                            /\ LET minted_stake == Minted_Stake(neuron', source_neuron_id'[self]) IN
-                                                                 governance_to_ledger' = Append(governance_to_ledger, request(self, (transfer(neuron'[source_neuron_id'[self]].account,
-                                                                                                                                         neuron'[target_neuron_id'[self]].account,
-                                                                                                                                         Minted_Stake(neuron', source_neuron_id'[self]) - TRANSACTION_FEE,
-                                                                                                                                         TRANSACTION_FEE))))
-                                                            /\ pc' = [pc EXCEPT ![self] = "MergeNeurons_Transfer"]
-                                                            /\ UNCHANGED fees_amount
-                                                       ELSE /\ neuron' =       Decrease_Maturity(
-                                                                         Increase_Maturity((                 Decrease_Stake
-                                                                         (Update_Fees(neuron, source_neuron_id[self], fees_amount[self]),
-                                                                         source_neuron_id[self], amount_to_target[self] + TRANSACTION_FEE)), target_neuron_id[self], neuron[source_neuron_id[self]].maturity),
-                                                                         target_neuron_id[self], neuron[source_neuron_id[self]].maturity)
+MergeNeurons_Burn_WaitForTransfer(self) == /\ pc[self] = "MergeNeurons_Burn_WaitForTransfer"
+                                           /\ \E answer \in { resp \in ledger_to_governance: resp.caller = self}:
+                                                /\ ledger_to_governance' = ledger_to_governance \ {answer}
+                                                /\ IF answer.response = Variant("Fail", UNIT)
+                                                      THEN /\ locks' = locks \ {source_neuron_id[self], target_neuron_id[self] }
+                                                           /\ source_neuron_id' = [source_neuron_id EXCEPT ![self] = 0]
+                                                           /\ target_neuron_id' = [target_neuron_id EXCEPT ![self] = 0]
+                                                           /\ fees_amount' = [fees_amount EXCEPT ![self] = 0]
+                                                           /\ amount_to_target' = [amount_to_target EXCEPT ![self] = 0]
+                                                           /\ pc' = [pc EXCEPT ![self] = "Done"]
+                                                           /\ UNCHANGED << neuron,
+                                                                           governance_to_ledger >>
+                                                      ELSE /\ LET source_nid == source_neuron_id[self] IN
+                                                                LET target_nid == target_neuron_id[self] IN
+                                                                  LET att == amount_to_target[self] IN
+                                                                    IF att > 0
+                                                                       THEN /\ source_neuron_id' = [source_neuron_id EXCEPT ![self] = source_nid]
+                                                                            /\ target_neuron_id' = [target_neuron_id EXCEPT ![self] = target_nid]
+                                                                            /\ locks' = (locks \union { source_neuron_id'[self], target_neuron_id'[self] })
+                                                                            /\ amount_to_target' = [amount_to_target EXCEPT ![self] = att]
+                                                                            /\ neuron' = Decrease_Stake((Update_Fees(neuron, source_neuron_id'[self], fees_amount[self])), source_neuron_id'[self], amount_to_target'[self] + TRANSACTION_FEE)
+                                                                            /\ governance_to_ledger' = Append(governance_to_ledger, request(self, (transfer(neuron'[source_neuron_id'[self]].account,
+                                                                                                                                                       neuron'[target_neuron_id'[self]].account,
+                                                                                                                                                       amount_to_target'[self],
+                                                                                                                                                       TRANSACTION_FEE))))
+                                                                            /\ pc' = [pc EXCEPT ![self] = "MergeNeurons_Stake_WaitForTransfer"]
+                                                                            /\ UNCHANGED fees_amount
+                                                                       ELSE /\ neuron' =       Decrease_Maturity(
+                                                                                         Increase_Maturity((Update_Fees(neuron, source_neuron_id[self], fees_amount[self])), target_nid, neuron[source_nid].maturity),
+                                                                                         source_nid, neuron[source_nid].maturity)
+                                                                            /\ locks' = locks \ {source_neuron_id[self], target_neuron_id[self] }
+                                                                            /\ source_neuron_id' = [source_neuron_id EXCEPT ![self] = 0]
+                                                                            /\ target_neuron_id' = [target_neuron_id EXCEPT ![self] = 0]
+                                                                            /\ fees_amount' = [fees_amount EXCEPT ![self] = 0]
+                                                                            /\ amount_to_target' = [amount_to_target EXCEPT ![self] = 0]
+                                                                            /\ pc' = [pc EXCEPT ![self] = "Done"]
+                                                                            /\ UNCHANGED governance_to_ledger
+                                           /\ UNCHANGED neuron_id_by_account
+
+MergeNeurons_Stake_WaitForTransfer(self) == /\ pc[self] = "MergeNeurons_Stake_WaitForTransfer"
+                                            /\ \E answer \in { resp \in ledger_to_governance: resp.caller = self}:
+                                                 /\ ledger_to_governance' = ledger_to_governance \ {answer}
+                                                 /\ IF answer.response = Variant("Fail", UNIT)
+                                                       THEN /\ neuron' = Increase_Stake(neuron, source_neuron_id[self], amount_to_target[self] + TRANSACTION_FEE)
                                                             /\ locks' = locks \ {source_neuron_id[self], target_neuron_id[self] }
                                                             /\ source_neuron_id' = [source_neuron_id EXCEPT ![self] = 0]
                                                             /\ target_neuron_id' = [target_neuron_id EXCEPT ![self] = 0]
                                                             /\ fees_amount' = [fees_amount EXCEPT ![self] = 0]
                                                             /\ amount_to_target' = [amount_to_target EXCEPT ![self] = 0]
                                                             /\ pc' = [pc EXCEPT ![self] = "Done"]
-                                                            /\ UNCHANGED governance_to_ledger
-                           /\ UNCHANGED neuron_id_by_account
+                                                       ELSE /\ LET source_nid == source_neuron_id[self] IN
+                                                                 LET target_nid == target_neuron_id[self] IN
+                                                                   /\ neuron' =       Decrease_Maturity(
+                                                                                Increase_Maturity((Increase_Stake(neuron, target_neuron_id[self], amount_to_target[self])), target_nid, neuron[source_nid].maturity),
+                                                                                source_nid, neuron[source_nid].maturity)
+                                                                   /\ locks' = locks \ {source_neuron_id[self], target_neuron_id[self] }
+                                                                   /\ source_neuron_id' = [source_neuron_id EXCEPT ![self] = 0]
+                                                                   /\ target_neuron_id' = [target_neuron_id EXCEPT ![self] = 0]
+                                                                   /\ fees_amount' = [fees_amount EXCEPT ![self] = 0]
+                                                                   /\ amount_to_target' = [amount_to_target EXCEPT ![self] = 0]
+                                                                   /\ pc' = [pc EXCEPT ![self] = "Done"]
+                                            /\ UNCHANGED << neuron_id_by_account,
+                                                            governance_to_ledger >>
 
-MergeNeurons_Transfer(self) == /\ pc[self] = "MergeNeurons_Transfer"
-                               /\ \E answer \in { resp \in ledger_to_governance: resp.caller = self}:
-                                    /\ ledger_to_governance' = ledger_to_governance \ {answer}
-                                    /\ IF answer.response = Variant("Fail", UNIT)
-                                          THEN /\ neuron' = Increase_Stake(neuron, source_neuron_id[self], amount_to_target[self] + TRANSACTION_FEE)
-                                               /\ locks' = locks \ {source_neuron_id[self], target_neuron_id[self] }
-                                               /\ source_neuron_id' = [source_neuron_id EXCEPT ![self] = 0]
-                                               /\ target_neuron_id' = [target_neuron_id EXCEPT ![self] = 0]
-                                               /\ fees_amount' = [fees_amount EXCEPT ![self] = 0]
-                                               /\ amount_to_target' = [amount_to_target EXCEPT ![self] = 0]
-                                               /\ pc' = [pc EXCEPT ![self] = "Done"]
-                                          ELSE /\ neuron' =       Decrease_Maturity(
-                                                            Increase_Maturity((Increase_Stake(neuron, target_neuron_id[self], amount_to_target[self])), target_neuron_id[self], neuron[source_neuron_id[self]].maturity),
-                                                            target_neuron_id[self], neuron[source_neuron_id[self]].maturity)
-                                               /\ locks' = locks \ {source_neuron_id[self], target_neuron_id[self] }
-                                               /\ source_neuron_id' = [source_neuron_id EXCEPT ![self] = 0]
-                                               /\ target_neuron_id' = [target_neuron_id EXCEPT ![self] = 0]
-                                               /\ fees_amount' = [fees_amount EXCEPT ![self] = 0]
-                                               /\ amount_to_target' = [amount_to_target EXCEPT ![self] = 0]
-                                               /\ pc' = [pc EXCEPT ![self] = "Done"]
-                               /\ UNCHANGED << neuron_id_by_account,
-                                               governance_to_ledger >>
-
-Merge_Neurons(self) == MergeNeurons_Start(self) \/ MergeNeurons_Burn(self)
-                          \/ MergeNeurons_Transfer(self)
+Merge_Neurons(self) == MergeNeurons_Start(self)
+                          \/ MergeNeurons_Burn_WaitForTransfer(self)
+                          \/ MergeNeurons_Stake_WaitForTransfer(self)
 
 (* Allow infinite stuttering to prevent deadlock on termination. *)
 Terminating == /\ \A self \in ProcSet: pc[self] = "Done"

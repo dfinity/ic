@@ -1,5 +1,7 @@
-use itertools::Itertools;
-use std::collections::{BTreeMap, BTreeSet};
+// use itertools::Itertools;
+use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::hash::Hash;
+use std::sync::mpsc;
 use std::thread;
 
 use super::Governance;
@@ -207,6 +209,15 @@ fn get_tla_module_path(module: &str) -> PathBuf {
         })
 }
 
+fn dedup_by_key<E, K, F>(vec: &mut Vec<E>, mut key_selector: F)
+where
+    F: FnMut(&E) -> K,
+    K: Eq + Hash,
+{
+    let mut seen_keys = HashSet::new();
+    vec.retain(|element| seen_keys.insert(key_selector(element)));
+}
+
 /// Checks a trace against the model.
 ///
 /// It's assumed that the corresponding model is called `<PID>_Apalache.tla`, where PID is the
@@ -216,20 +227,26 @@ pub fn check_traces() {
     // improving that later, for now we introduce a hard limit on the state size, and
     // skip checking states larger than the limit
     const STATE_SIZE_LIMIT: u64 = 500;
+    // Proptests generate lots of traces that make the Apalache testing very long.
+    // Again, limit this to some arbitrary number where checking is still reasonably fast.
+    const STATE_PAIR_COUNT_LIMIT: usize = 20;
     fn is_under_limit(p: &ResolvedStatePair) -> bool {
         p.start.size() < STATE_SIZE_LIMIT && p.end.size() < STATE_SIZE_LIMIT
     }
 
     fn print_stats(traces: &Vec<UpdateTrace>) {
+        let mut total_pairs = 0;
         println!("Checking {} traces with TLA/Apalache", traces.len());
         for t in traces {
             let total_len = t.state_pairs.len();
+            total_pairs += total_len;
             let under_limit_len = t.state_pairs.iter().filter(|p| is_under_limit(p)).count();
             println!(
-                "TLA/Apalache checks: keeping {}/{} states for update {}",
+                "TLA/Apalache checks: keeping {}/{} state pairs for update {}",
                 under_limit_len, total_len, t.update.process_id
             );
         }
+        println!("Total of {} state pairs to be checked with Apalache", total_pairs)
     }
 
     let traces = {
@@ -237,6 +254,21 @@ pub fn check_traces() {
         let mut t = t.borrow_mut();
         std::mem::take(&mut (*t))
     };
+
+   print_stats(&traces);
+
+    let mut all_pairs = traces.into_iter().flat_map(|t| {
+        t.state_pairs
+            .into_iter()
+            .filter(is_under_limit)
+            .map(move |p| (t.update.clone(), t.constants.clone(), p))
+    }).collect();
+
+    // A quick check that we don't have any duplicate state pairs. We assume the constants should
+    // be the same anyways and look at just the process ID and the state sthemselves.
+    dedup_by_key(&mut all_pairs, |(u, _c, p)| (u.process_id.clone(), p.start.clone(), p.end.clone()));
+
+    all_pairs.truncate(STATE_PAIR_COUNT_LIMIT);
 
     set_java_path();
 
@@ -248,16 +280,55 @@ pub fn check_traces() {
         panic!("bad apalache bin from 'TLA_APALACHE_BIN': '{:?}'", apalache);
     }
 
-    print_stats(&traces);
+    const MAX_THREADS: usize = 8;
+    let mut running_threads = 0;
+    let (tx, rx) = mpsc::channel::<()>();
+    for (i, (update, constants, pair)) in all_pairs.iter().enumerate() {
+        println!("Checking state pair #{}", i + 1);
+        if running_threads >= MAX_THREADS {
+            rx.recv().expect("Error while waiting for the thread completion signal");
+            running_threads -= 1;
+        }
 
-    let chunk_size = 20;
-    let all_pairs = traces.into_iter().flat_map(|t| {
-        t.state_pairs
-            .into_iter()
-            .filter(is_under_limit)
-            .map(move |p| (t.update.clone(), t.constants.clone(), p))
-    });
-    let chunks = all_pairs.chunks(chunk_size);
+        let tx = tx.clone();
+        let apalache = apalache.clone();
+        let constants = constants.clone();
+        let pair = pair.clone();
+        // NOTE: We adopt the convention to reuse the 'process_id" as the tla module name
+        let tla_module = format!("{}_Apalache.tla", update.process_id);
+        let tla_module = get_tla_module_path(&tla_module);
+
+        running_threads += 1;
+        let _handle = thread::spawn(move || {
+            let _ = check_tla_code_link(
+                &apalache,
+                PredicateDescription {
+                    tla_module,
+                    transition_predicate: "Next".to_string(),
+                    predicate_parameters: Vec::new(),
+                },
+                pair,
+                constants,
+            ).map_err(|e| {
+                println!("Possible divergence from the TLA model detected when interacting with the ledger!");
+                println!("If you did not expect to change the interaction between governance and the ledger, reconsider whether your change is safe. You can find additional data on the step that triggered the error below.");
+                println!("If you are confident that your change is correct, please contact the #formal-models Slack channel and describe the problem.");
+                println!("You can edit nns/governance/feature_flags.bzl to disable TLA checks in the CI and get on with your business.");
+                println!("-------------------");
+                println!("Error occured while checking the state pair:\n{:#?}\nwith constants:\n{:#?}", e.pair, e.constants);
+                println!("Apalache returned:\n{:#?}", e.apalache_error);
+                panic!("Apalache check failed")
+            });
+            tx.send(()).expect("Couldn't send the thread completion signal");
+            });
+    }
+
+    while running_threads > 0 {
+        rx.recv().expect("Error while waiting for the thread completion signal");
+    }
+
+    /*
+    let chunks = all_pairs.chunks(CHUNK_SIZE);
     for chunk in &chunks {
         let mut handles = vec![];
         for (update, constants, pair) in chunk {
@@ -295,4 +366,6 @@ pub fn check_traces() {
             });
         }
     }
+
+     */
 }

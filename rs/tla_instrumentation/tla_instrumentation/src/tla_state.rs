@@ -66,7 +66,7 @@ and
     }
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, PartialEq, Eq, Hash)]
 pub struct GlobalState(pub VarAssignment);
 
 impl GlobalState {
@@ -106,7 +106,7 @@ impl std::fmt::Debug for GlobalState {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Label(String);
 
 impl Label {

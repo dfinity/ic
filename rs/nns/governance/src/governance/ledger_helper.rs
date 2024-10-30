@@ -8,6 +8,11 @@ use crate::{
 use ic_nervous_system_common::ledger::IcpLedger;
 use ic_nns_common::pb::v1::NeuronId;
 
+#[cfg(feature = "tla")]
+use tla_instrumentation_proc_macros::tla_function;
+#[cfg(feature = "tla")]
+use super::tla::TLA_INSTRUMENTATION_STATE;
+
 /// An object that represents the burning of neuron fees.
 #[derive(Clone, PartialEq, Debug)]
 pub struct BurnNeuronFeesOperation {
@@ -19,6 +24,7 @@ impl BurnNeuronFeesOperation {
     /// Burns the neuron fees by calling ledger and changing the neuron. Recoverable errors are
     /// returned while unrecoverable errors cause a panic. A neuron lock should be held before
     /// calling this.
+    #[cfg_attr(feature = "tla", tla_function)]
     pub async fn burn_neuron_fees_with_ledger(
         self,
         ledger: &dyn IcpLedger,
@@ -80,6 +86,7 @@ pub struct NeuronStakeTransferOperation {
 impl NeuronStakeTransferOperation {
     /// Transfers the stake from one neuron to another by calling ledger and changing the neurons.
     /// Recoverable errors are returned while unrecoverable errors cause a panic.
+    #[cfg_attr(feature = "tla", tla_function)]
     pub async fn transfer_neuron_stake_with_ledger(
         self,
         ledger: &dyn IcpLedger,

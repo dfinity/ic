@@ -2895,6 +2895,10 @@ impl Governance {
     /// The source neuron's stake, maturity and age are moved into the target.
     /// Any fees the source neuron are burned before the transfer occurs.
     ///
+    /// TODO: this is not true if the stake is below the transaction fee
+    /// TODO: not clear what "current fees" are below
+    /// TODO: If the fee is below the transaction fee and the stake isn't,
+    ///       the source stake will not be 0, but the same as fee
     /// On success the target neuron contains all the stake, maturity and age
     /// of both neurons. The source neuron has 0 stake, 0 maturity and 0 age.
     /// Current fees are not affected in either neuron. The dissolve delay of
@@ -2954,6 +2958,7 @@ impl Governance {
                 fees_amount: effect.source_burn_fees().map_or(0, |f| f.amount_e8s),
                 amount_to_target: effect.stake_transfer().map_or(0, |t| t.amount_to_target_e8s)
             }
+            tla_log_label!("MergeNeurons_Burn");
 
             source_burn_fees
                 .burn_neuron_fees_with_ledger(&*self.ledger, &mut self.neuron_store, now)
@@ -2968,6 +2973,7 @@ impl Governance {
                 fees_amount: effect.source_burn_fees().map_or(0, |f| f.amount_e8s),
                 amount_to_target: effect.stake_transfer().map_or(0, |t| t.amount_to_target_e8s)
             }
+            tla_log_label!("MergeNeurons_Stake");
 
             stake_transfer
                 .transfer_neuron_stake_with_ledger(&*self.ledger, &mut self.neuron_store, now)

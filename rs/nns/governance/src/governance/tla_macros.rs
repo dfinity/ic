@@ -28,3 +28,11 @@ macro_rules! tla_get_globals {
         tla::get_tla_globals($self)
     };
 }
+
+#[macro_export]
+macro_rules! tla_log_label {
+    ($label:expr) => {
+        #[cfg(feature = "tla")]
+        tla_instrumentation::tla_log_label!($label);
+    };
+}
