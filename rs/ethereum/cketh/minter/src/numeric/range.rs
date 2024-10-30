@@ -216,7 +216,6 @@ impl Iterator for BlockRangeChunks {
     type Item = BlockRangeInclusive;
 
     fn next(&mut self) -> Option<Self::Item> {
-        println!("before next: {:?}", self);
 
         if self.exhausted {
             return None;
