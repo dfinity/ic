@@ -2160,37 +2160,39 @@ message UpgradeJournalEntry {
   oneof event {
     UpgradeStepsRefreshed upgrade_steps_refreshed = 1;
     TargetVersionSet target_version_set = 2;
-    UpgradeStarted upgrade_started = 3;
-    UpgradeCompleted upgrade_completed = 4;
+    TargetVersionSet target_version_reset = 3;
+    UpgradeStarted upgrade_started = 4;
+    UpgradeOutcome upgrade_outcome = 5;
   }
-  optional uint64 timestamp_seconds = 5;
+  optional uint64 timestamp_seconds = 6;
 
   message UpgradeStepsRefreshed {
     optional Governance.Versions upgrade_steps = 2;
   }
 
   message TargetVersionSet {
-    optional Governance.Version version = 1;
+    optional Governance.Version old_target_version = 1;
+    optional Governance.Version new_target_version = 2;
   }
 
   message UpgradeStarted {
     optional Governance.Version current_version = 1;
     optional Governance.Version expected_version = 2;
-    oneof triggerer {
-      ProposalId upgrade_sns_to_next_version = 3;
+    oneof reason {
+      ProposalId upgrade_sns_to_next_version_proposal = 3;
       Empty behind_target_version = 4;
     }
   }
 
-  message UpgradeCompleted {
+  message UpgradeOutcome {
     optional string human_readable = 1;
 
     oneof status {
-      Empty succeeded = 2;
-      Empty timed_out = 3;
+      Empty success = 2;
+      Empty timeout = 3;
       // The SNS ended up being upgraded to a version that was not the expected one.
       InvalidState invalid_state = 4;
-      Empty canister_call_failure = 5;
+      Empty external_failure = 5;
     }
 
     message InvalidState {

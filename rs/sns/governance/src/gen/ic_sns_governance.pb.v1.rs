@@ -3404,9 +3404,9 @@ pub struct AdvanceTargetVersionResponse {}
     ::prost::Message,
 )]
 pub struct UpgradeJournalEntry {
-    #[prost(uint64, optional, tag = "5")]
+    #[prost(uint64, optional, tag = "6")]
     pub timestamp_seconds: ::core::option::Option<u64>,
-    #[prost(oneof = "upgrade_journal_entry::Event", tags = "1, 2, 3, 4")]
+    #[prost(oneof = "upgrade_journal_entry::Event", tags = "1, 2, 3, 4, 5")]
     pub event: ::core::option::Option<upgrade_journal_entry::Event>,
 }
 /// Nested message and enum types in `UpgradeJournalEntry`.
@@ -3433,7 +3433,9 @@ pub mod upgrade_journal_entry {
     )]
     pub struct TargetVersionSet {
         #[prost(message, optional, tag = "1")]
-        pub version: ::core::option::Option<super::governance::Version>,
+        pub old_target_version: ::core::option::Option<super::governance::Version>,
+        #[prost(message, optional, tag = "2")]
+        pub new_target_version: ::core::option::Option<super::governance::Version>,
     }
     #[derive(
         candid::CandidType,
@@ -3448,8 +3450,8 @@ pub mod upgrade_journal_entry {
         pub current_version: ::core::option::Option<super::governance::Version>,
         #[prost(message, optional, tag = "2")]
         pub expected_version: ::core::option::Option<super::governance::Version>,
-        #[prost(oneof = "upgrade_started::Triggerer", tags = "3, 4")]
-        pub triggerer: ::core::option::Option<upgrade_started::Triggerer>,
+        #[prost(oneof = "upgrade_started::Reason", tags = "3, 4")]
+        pub reason: ::core::option::Option<upgrade_started::Reason>,
     }
     /// Nested message and enum types in `UpgradeStarted`.
     pub mod upgrade_started {
@@ -3462,9 +3464,9 @@ pub mod upgrade_journal_entry {
             PartialEq,
             ::prost::Oneof,
         )]
-        pub enum Triggerer {
+        pub enum Reason {
             #[prost(message, tag = "3")]
-            UpgradeSnsToNextVersion(super::super::ProposalId),
+            UpgradeSnsToNextVersionProposal(super::super::ProposalId),
             #[prost(message, tag = "4")]
             BehindTargetVersion(super::super::Empty),
         }
@@ -3477,14 +3479,14 @@ pub mod upgrade_journal_entry {
         PartialEq,
         ::prost::Message,
     )]
-    pub struct UpgradeCompleted {
+    pub struct UpgradeOutcome {
         #[prost(string, optional, tag = "1")]
         pub human_readable: ::core::option::Option<::prost::alloc::string::String>,
-        #[prost(oneof = "upgrade_completed::Status", tags = "2, 3, 4, 5")]
-        pub status: ::core::option::Option<upgrade_completed::Status>,
+        #[prost(oneof = "upgrade_outcome::Status", tags = "2, 3, 4, 5")]
+        pub status: ::core::option::Option<upgrade_outcome::Status>,
     }
-    /// Nested message and enum types in `UpgradeCompleted`.
-    pub mod upgrade_completed {
+    /// Nested message and enum types in `UpgradeOutcome`.
+    pub mod upgrade_outcome {
         #[derive(
             candid::CandidType,
             candid::Deserialize,
@@ -3507,14 +3509,14 @@ pub mod upgrade_journal_entry {
         )]
         pub enum Status {
             #[prost(message, tag = "2")]
-            Succeeded(super::super::Empty),
+            Success(super::super::Empty),
             #[prost(message, tag = "3")]
-            TimedOut(super::super::Empty),
+            Timeout(super::super::Empty),
             /// The SNS ended up being upgraded to a version that was not the expected one.
             #[prost(message, tag = "4")]
             InvalidState(InvalidState),
             #[prost(message, tag = "5")]
-            CanisterCallFailure(super::super::Empty),
+            ExternalFailure(super::super::Empty),
         }
     }
     #[derive(
@@ -3531,9 +3533,11 @@ pub mod upgrade_journal_entry {
         #[prost(message, tag = "2")]
         TargetVersionSet(TargetVersionSet),
         #[prost(message, tag = "3")]
-        UpgradeStarted(UpgradeStarted),
+        TargetVersionReset(TargetVersionSet),
         #[prost(message, tag = "4")]
-        UpgradeCompleted(UpgradeCompleted),
+        UpgradeStarted(UpgradeStarted),
+        #[prost(message, tag = "5")]
+        UpgradeOutcome(UpgradeOutcome),
     }
 }
 /// Needed to cause prost to generate a type isomorphic to Option<Vec<UpgradeJournalEntry>>.

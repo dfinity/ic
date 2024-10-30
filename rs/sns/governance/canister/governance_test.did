@@ -738,8 +738,9 @@ type UpgradeJournalEntry = record {
   event : opt variant {
     UpgradeStepsRefreshed : UpgradeStepsRefreshed;
     TargetVersionSet : TargetVersionSet;
+    TargetVersionReset : TargetVersionSet;
     UpgradeStarted : UpgradeStarted;
-    UpgradeCompleted : UpgradeCompleted;
+    UpgradeOutcome : UpgradeOutcome;
   };
   timestamp_seconds : opt nat64;
 };
@@ -749,25 +750,26 @@ type UpgradeStepsRefreshed = record {
 };
 
 type TargetVersionSet = record {
-  version : opt Version;
+  new_target_version : opt Version;
+  old_target_version : opt Version;
 };
 
 type UpgradeStarted = record {
   current_version : opt Version;
   expected_version : opt Version;
-  triggerer : opt variant {
-    UpgradeSnsToNextVersion : ProposalId;
+  reason : opt variant {
+    UpgradeSnsToNextVersionProposal : ProposalId;
     BehindTargetVersion : record {};
   }
 };
 
-type UpgradeCompleted = record {
+type UpgradeOutcome = record {
   human_readable : opt text;
   status : opt variant {
-    Succeeded : record {};
-    TimedOut : record {};
+    Success : record {};
+    Timeout : record {};
     InvalidState : record { version : opt Version };
-    CanisterCallFailure : record {};
+    ExternalFailure : record {};
   };
 };
 
