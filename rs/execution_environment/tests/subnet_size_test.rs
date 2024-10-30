@@ -45,11 +45,11 @@ fn inc_instruction_cost(config: HypervisorConfig) -> u64 {
         MeteringType::None => |_op: &wasmparser::Operator, _mem_type: WasmMemoryType| 0u64,
     };
 
-    let cc = instruction_to_cost(
+    let cost_const = instruction_to_cost(
         &wasmparser::Operator::I32Const { value: 1 },
         WasmMemoryType::Wasm32,
     );
-    let cs = instruction_to_cost(
+    let cost_store = instruction_to_cost(
         &wasmparser::Operator::I32Store {
             memarg: wasmparser::MemArg {
                 align: 0,
@@ -60,7 +60,7 @@ fn inc_instruction_cost(config: HypervisorConfig) -> u64 {
         },
         WasmMemoryType::Wasm32,
     );
-    let cl = instruction_to_cost(
+    let cost_load = instruction_to_cost(
         &wasmparser::Operator::I32Load {
             memarg: wasmparser::MemArg {
                 align: 0,
@@ -71,12 +71,12 @@ fn inc_instruction_cost(config: HypervisorConfig) -> u64 {
         },
         WasmMemoryType::Wasm32,
     );
-    let ca = instruction_to_cost(&wasmparser::Operator::I32Add, WasmMemoryType::Wasm32);
-    let ccall = instruction_to_cost(
+    let cost_add = instruction_to_cost(&wasmparser::Operator::I32Add, WasmMemoryType::Wasm32);
+    let cost_call = instruction_to_cost(
         &wasmparser::Operator::Call { function_index: 0 },
         WasmMemoryType::Wasm32,
     );
-    let csys = match config.embedders_config.metering_type {
+    let cost_sys = match config.embedders_config.metering_type {
         MeteringType::New => {
             ic_embedders::wasmtime_embedder::system_api_complexity::overhead::MSG_REPLY_DATA_APPEND
                 .get()
@@ -85,7 +85,7 @@ fn inc_instruction_cost(config: HypervisorConfig) -> u64 {
         MeteringType::None => 0,
     };
 
-    let cd = if let MeteringType::New = config.embedders_config.metering_type {
+    let cost_dirty = if let MeteringType::New = config.embedders_config.metering_type {
         ic_config::subnet_config::SchedulerConfig::application_subnet()
             .dirty_page_overhead
             .get()
@@ -93,9 +93,25 @@ fn inc_instruction_cost(config: HypervisorConfig) -> u64 {
         0
     };
 
-    let func_call_cost = 1; // Calling a function costs 1 instruction.
+    let cost_default = 1; // There must be some other unknown operator in the function with a cost of 1.
 
-    func_call_cost + 5 * cc + cs + cl + ca + 2 * ccall + csys + cd
+    // Total cost of `(func $inc ...)`:
+    cost_default +
+    // (i32.store
+    cost_store + cost_dirty +
+    // (i32.const 0)
+    cost_const +
+    // (i32.add
+    cost_add +
+    // (i32.load (i32.const 0))
+    cost_load + cost_const +
+    // (i32.const 1)
+    cost_const +
+    // (call $msg_reply_data_append (i32.const 0) (i32.const 0))
+    // (call $msg_reply)
+    cost_sys +
+    cost_call + cost_const + cost_const +
+    cost_call
 }
 
 /// This is a canister that keeps a counter on the heap and exposes various test
@@ -127,7 +143,7 @@ const TEST_CANISTER: &str = r#"
     (i32.store
 
         ;; store at the beginning of the heap
-        (i32.const 0) ;; store at the beginning of the heap
+        (i32.const 0)
 
         ;; increment heap[0]
         (i32.add
