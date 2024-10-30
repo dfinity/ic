@@ -312,7 +312,19 @@ mod tests {
 
         mock_repository.expect_get_rule().returning(|_| None);
         mock_repository.expect_get_version().returning(|| None);
-        mock_repository.expect_get_config().returning(|_| None);
+        mock_repository.expect_get_config().returning(|_| {
+            Some(StorableConfig {
+                schema_version: 1,
+                active_since: 1,
+                rule_ids: vec![],
+            })
+        });
+        mock_repository.expect_get_full_config().returning(|_| {
+            Some(InputConfig {
+                schema_version: 1,
+                rules: vec![],
+            })
+        });
         mock_repository.expect_add_config().returning(|_, _| true);
 
         let writer = ConfigAdder::new(mock_repository, mock_access);

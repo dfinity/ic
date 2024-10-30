@@ -1,4 +1,5 @@
 load("//bazel:canisters.bzl", "rust_canister")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -36,5 +37,14 @@ rust_canister(
     crate_root = "canister/lib.rs",
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = "canister/interface.did",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "unit_tests",
+    srcs = glob(["canister/**/*.rs"]),
+    crate_name = "rate_limit_canister",
+    crate_root = "canister/lib.rs",
+    proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
