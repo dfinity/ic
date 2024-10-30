@@ -31,6 +31,9 @@ use ic_sns_wasm::pb::v1::SnsCanisterType;
 /// Note: FI canisters are considered fully tested elsewhere, and have stable APIs.
 
 /// Deployment tests
+//
+// TODO[NNS1-3429]: Re-enable this test after the next SNS-W release.
+#[ignore]
 #[tokio::test]
 async fn test_deployment_all_upgrades() {
     test_sns_deployment(
@@ -46,11 +49,15 @@ async fn test_deployment_all_upgrades() {
     .await;
 }
 
+// TODO[NNS1-3429]: Re-enable this test after the next SNS-W release.
+#[ignore]
 #[tokio::test]
 async fn test_deployment_with_only_nns_upgrades() {
     test_sns_deployment(vec![GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID], vec![]).await;
 }
 
+// TODO[NNS1-3429]: Re-enable this test after the next SNS-W release.
+#[ignore]
 #[tokio::test]
 async fn test_deployment_with_only_sns_upgrades() {
     test_sns_deployment(
@@ -66,6 +73,8 @@ async fn test_deployment_with_only_sns_upgrades() {
     .await;
 }
 
+// TODO[NNS1-3429]: Re-enable this test after the next SNS-W release.
+#[ignore]
 #[tokio::test]
 async fn test_deployment_with_sns_root_and_governance_upgrade() {
     test_sns_deployment(
@@ -75,22 +84,30 @@ async fn test_deployment_with_sns_root_and_governance_upgrade() {
     .await;
 }
 
+// TODO[NNS1-3429]: Re-enable this test after the next SNS-W release.
+#[ignore]
 #[tokio::test]
 async fn test_deployment_swap_upgrade() {
     test_sns_deployment(vec![], vec![SnsCanisterType::Swap]).await;
 }
 
+// TODO[NNS1-3429]: Re-enable this test after the next SNS-W release.
+#[ignore]
 /// Upgrade Tests
 #[tokio::test]
 async fn test_upgrade_sns_gov_root() {
     test_sns_upgrade(vec![SnsCanisterType::Root, SnsCanisterType::Governance]).await;
 }
 
+// TODO[NNS1-3429]: Re-enable this test after the next SNS-W release.
+#[ignore]
 #[tokio::test]
 async fn test_upgrade_upgrade_sns_gov_root() {
     test_sns_upgrade(vec![SnsCanisterType::Governance, SnsCanisterType::Root]).await;
 }
 
+// TODO[NNS1-3429]: Re-enable this test after the next SNS-W release.
+#[ignore]
 #[tokio::test]
 async fn test_upgrade_everything() {
     test_sns_upgrade(vec![
