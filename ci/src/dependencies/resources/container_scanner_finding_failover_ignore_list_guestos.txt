@@ -6,7 +6,8 @@ xen-netback
 wifi
 fbdev
 amdgpu
-libefc / elx
+libefc
+elx
 kirin
 hns
 hisi
