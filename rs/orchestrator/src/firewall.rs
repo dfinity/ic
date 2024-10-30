@@ -816,11 +816,9 @@ mod tests {
             role,
         );
 
-        rt.block_on(async {
-            firewall
-                .check_for_firewall_config(RegistryVersion::new(1))
-                .expect("Should successfully produce a firewall config");
-        });
+        firewall
+            .check_for_firewall_config(RegistryVersion::new(1))
+            .expect("Should successfully produce a firewall config");
 
         let golden = String::from_utf8(golden_bytes.to_vec()).unwrap();
         let nftables = std::fs::read_to_string(&nftables_config_path).unwrap();
