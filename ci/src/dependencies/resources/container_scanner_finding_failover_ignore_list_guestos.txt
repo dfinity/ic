@@ -17,4 +17,3 @@ rtl2832
 samba
 stm
 wifi
-xen-netback
