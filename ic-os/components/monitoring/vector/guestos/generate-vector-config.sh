@@ -81,7 +81,7 @@ if [ "${ELASTICSEARCH_HOSTS}" != "" ]; then
 
     if [ "${PROMETHEUS_HOSTS}" != "" ]; then
 
-        read -r -d '' PROMETHEUS_SINK << EOF
+        read -r -d '' PROMETHEUS_SINK <<EOF
   {{ prometheus_name }}:
     type: prometheus_remote_write
     inputs:
@@ -110,6 +110,6 @@ EOF
             fi
         done)
         INPUT=$(cat "${OUT_FILE}")
-        echo "${INPUT}" | prometheus_sinks=${prometheus_sinks_array} envsubst > "${OUT_FILE}"
+        echo "${INPUT}" | prometheus_sinks=${prometheus_sinks_array} envsubst >"${OUT_FILE}"
     fi
 fi

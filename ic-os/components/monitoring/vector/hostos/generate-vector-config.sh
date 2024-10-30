@@ -66,7 +66,7 @@ PROMETHEUS_HOSTS="${prometheus_hosts}"
 
 if [ "${PROMETHEUS_HOSTS}" != "" ]; then
 
-    read -r -d '' PROMETHEUS_SINK << EOF
+    read -r -d '' PROMETHEUS_SINK <<EOF
   {{ prometheus_name }}:
     type: prometheus_remote_write
     inputs:
@@ -93,5 +93,5 @@ EOF
             echo '      crt_file: '${sink_tls_crt}
         fi
     done)
-    prometheus_sinks=${prometheus_sinks_array} envsubst < "${IN_FILE}" > "${OUT_FILE}"
+    prometheus_sinks=${prometheus_sinks_array} envsubst <"${IN_FILE}" >"${OUT_FILE}"
 fi
