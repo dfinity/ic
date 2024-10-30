@@ -1,4 +1,7 @@
-use crate::{providers::Provider, types::BtcNetwork};
+use crate::{
+    providers::Provider,
+    types::{BtcNetwork, KytMode},
+};
 use bitcoin::{Address, Transaction};
 use ic_btc_interface::Txid;
 use ic_cdk::api::call::RejectionCode;
@@ -258,6 +261,7 @@ impl Drop for FetchGuard {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Config {
     pub btc_network: BtcNetwork,
+    pub kyt_mode: KytMode,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
