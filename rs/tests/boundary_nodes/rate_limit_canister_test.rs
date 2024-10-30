@@ -47,7 +47,7 @@ use rate_limits_api::{
     OutputRuleMetadata, RuleId, Version,
 };
 
-pub fn config(env: TestEnv) {
+pub fn setup(env: TestEnv) {
     InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)
         .add_fast_single_node_subnet(SubnetType::Application)
