@@ -120,14 +120,15 @@ system_test_nns(
         "k8s",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS +
-                   ["//rs/boundary_node/rate_limits:rate_limit_canister"],
+    runtime_deps = GUESTOS_RUNTIME_DEPS + [
+        "//rs/boundary_node/rate_limits:rate_limit_canister",
+    ],
     deps = [
         # Keep sorted.
+        "//rs/boundary_node/rate_limits/api:rate_limits_api",
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
-        "//rs/boundary_node/rate_limits/api:rate_limits_api",
         "@crate_index//:anyhow",
         "@crate_index//:candid",
         "@crate_index//:ic-agent",
