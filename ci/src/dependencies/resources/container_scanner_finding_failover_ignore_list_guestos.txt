@@ -1,1 +1,21 @@
 // one expression per line, if vulnerability description contains the expression of any line it will be ignored
+drm
+stm
+aoe
+xen-netback
+wifi
+fbdev
+amdgpu
+libefc / elx
+kirin
+hns
+hisi
+iommufd
+rtl2832
+f2fs
+bpf
+ocfs2
+samba
+bluetooth
+printer
+dell
