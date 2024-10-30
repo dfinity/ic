@@ -383,7 +383,7 @@ impl Neuron {
         // Main calculation.
         let result = adjustment_factor * Decimal::from(potential_voting_power);
 
-        // Convert back to u64.
+        // Convert (back) to u64.
         let result = result.round();
         u64::try_from(result).unwrap_or_else(|err| {
             // Log and fall back to potential voting power. Assuming
