@@ -245,6 +245,92 @@ mod parser {
     }
 }
 
+mod scraping {
+    mod received_eth_or_erc20_log_scraping {
+        use crate::erc20::CkErc20Token;
+        use crate::eth_logs::scraping::Scrape;
+        use crate::eth_logs::{
+            LogScraping, ReceivedEthOrErc20LogScraping,
+            RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC,
+        };
+        use crate::eth_rpc::{FixedSizeData, Topic};
+        use crate::lifecycle::EthereumNetwork;
+        use crate::numeric::BlockNumber;
+        use crate::test_fixtures::initial_state;
+        use hex_literal::hex;
+        use ic_ethereum_types::Address;
+
+        const CONTRACT_ADDRESS: Address =
+            Address::new(hex!("2D39863d30716aaf2B7fFFd85Dd03Dda2BFC2E38"));
+
+        #[test]
+        fn should_be_no_scrape_when_helper_contract_address_is_none() {
+            let state = initial_state();
+            let scrape = ReceivedEthOrErc20LogScraping::next_scrape(&state);
+            assert_eq!(scrape, None);
+        }
+
+        #[test]
+        fn should_always_contain_the_zero_address_in_second_topic() {
+            let last_scraped_block_number = BlockNumber::from(6_970_446_u32);
+            let state = {
+                let mut state = initial_state();
+                state
+                    .deposit_with_subaccount_log_scraping
+                    .set_contract_address(CONTRACT_ADDRESS)
+                    .unwrap();
+                state
+                    .deposit_with_subaccount_log_scraping
+                    .set_last_scraped_block_number(last_scraped_block_number);
+                state
+            };
+
+            let scrape_without_erc20 = ReceivedEthOrErc20LogScraping::next_scrape(&state).unwrap();
+
+            assert_eq!(scrape_without_erc20.contract_address, CONTRACT_ADDRESS);
+            assert_eq!(
+                scrape_without_erc20.last_scraped_block_number,
+                last_scraped_block_number
+            );
+            assert_eq!(
+                scrape_without_erc20.topics,
+                vec![
+                    Topic::Single(FixedSizeData(
+                        RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC
+                    )),
+                    Topic::Multiple(vec![FixedSizeData::ZERO])
+                ]
+            );
+
+            let mut state = state;
+            state.record_add_ckerc20_token(CkErc20Token {
+                erc20_ethereum_network: EthereumNetwork::Sepolia,
+                erc20_contract_address: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238"
+                    .parse()
+                    .unwrap(),
+                ckerc20_token_symbol: "ckSepoliaUSDC".parse().unwrap(),
+                ckerc20_ledger_id: "yfumr-cyaaa-aaaar-qaela-cai".parse().unwrap(),
+            });
+
+            let scrape_with_erc20 = ReceivedEthOrErc20LogScraping::next_scrape(&state).unwrap();
+            assert_eq!(
+                scrape_with_erc20,
+                Scrape {
+                    topics: {
+                        let mut topics = scrape_without_erc20.topics;
+                        let _ = std::mem::replace(
+                            &mut topics[1],
+                            Topic::Multiple(vec![FixedSizeData::ZERO, FixedSizeData(hex!("0000000000000000000000001c7d4b196cb0c7b01d743fbc6116a902379c7238"))]),
+                        );
+                        topics
+                    },
+                    ..scrape_without_erc20
+                }
+            )
+        }
+    }
+}
+
 mod parse_principal_from_slice {
     use crate::eth_logs::parse_principal_from_slice;
     use crate::eth_rpc::FixedSizeData;

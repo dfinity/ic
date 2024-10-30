@@ -301,7 +301,7 @@ pub struct GetLogsParam {
 }
 
 /// A topic is either a 32 Bytes DATA, or an array of 32 Bytes DATA with "or" options.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(untagged)]
 pub enum Topic {
     Single(FixedSizeData),

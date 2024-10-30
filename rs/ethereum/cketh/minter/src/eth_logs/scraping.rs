@@ -19,6 +19,7 @@ pub trait LogScraping {
     fn display_id() -> &'static str;
 }
 
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Scrape {
     pub contract_address: Address,
     pub last_scraped_block_number: BlockNumber,
