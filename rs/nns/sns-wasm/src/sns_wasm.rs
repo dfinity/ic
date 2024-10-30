@@ -55,7 +55,7 @@ use dfn_core::println;
 
 const LOG_PREFIX: &str = "[SNS-WASM] ";
 
-const INITIAL_CANISTER_CREATION_CYCLES: u64 = 2 * ONE_TRILLION;
+const INITIAL_CANISTER_CREATION_CYCLES: u64 = 3 * ONE_TRILLION;
 
 /// The number of canisters that the SNS-WASM canister will install when deploying
 /// an SNS. This constant is different than `SNS_CANISTER_COUNT` due to the Archive
