@@ -12,6 +12,7 @@ target(value) == Variant("Target_Method", value)
 
 variables 
     counter = 0;
+    empty_fun = [x \in {} |-> CHOOSE y \in {}: TRUE];
     mycan_to_othercan = <<>>;
     othercan_to_mycan = {};
 
@@ -31,15 +32,18 @@ process ( My_Method \in My_Method_Process_Ids )
 }
 
 } *)
-\* BEGIN TRANSLATION (chksum(pcal) = "87a0b4ea" /\ chksum(tla) = "d0aa893")
-VARIABLES counter, mycan_to_othercan, othercan_to_mycan, pc, my_local
+\* BEGIN TRANSLATION (chksum(pcal) = "f0c5512a" /\ chksum(tla) = "5fadb447")
+VARIABLES pc, counter, empty_fun, mycan_to_othercan, othercan_to_mycan, 
+          my_local
 
-vars == << counter, mycan_to_othercan, othercan_to_mycan, pc, my_local >>
+vars == << pc, counter, empty_fun, mycan_to_othercan, othercan_to_mycan, 
+           my_local >>
 
 ProcSet == (My_Method_Process_Ids)
 
 Init == (* Global variables *)
         /\ counter = 0
+        /\ empty_fun = [x \in {} |-> CHOOSE y \in {}: TRUE]
         /\ mycan_to_othercan = <<>>
         /\ othercan_to_mycan = {}
         (* Process My_Method *)
@@ -51,7 +55,7 @@ Start_Label(self) == /\ pc[self] = "Start_Label"
                      /\ my_local' = [my_local EXCEPT ![self] = counter']
                      /\ mycan_to_othercan' = Append(mycan_to_othercan, request(self, target(2)))
                      /\ pc' = [pc EXCEPT ![self] = "WaitForResponse"]
-                     /\ UNCHANGED othercan_to_mycan
+                     /\ UNCHANGED << empty_fun, othercan_to_mycan >>
 
 WaitForResponse(self) == /\ pc[self] = "WaitForResponse"
                          /\ \E resp \in { r \in othercan_to_mycan: r.caller = self }:
@@ -59,7 +63,7 @@ WaitForResponse(self) == /\ pc[self] = "WaitForResponse"
                               /\ counter' = counter + 1
                               /\ my_local' = [my_local EXCEPT ![self] = counter']
                          /\ pc' = [pc EXCEPT ![self] = "Done"]
-                         /\ UNCHANGED mycan_to_othercan
+                         /\ UNCHANGED << empty_fun, mycan_to_othercan >>
 
 My_Method(self) == Start_Label(self) \/ WaitForResponse(self)
 

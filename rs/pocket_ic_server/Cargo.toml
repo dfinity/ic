@@ -4,7 +4,7 @@ version = "6.0.0"
 edition = "2021"
 
 [dependencies]
-aide = { version = "^0.13.0", features = ["axum"] }
+aide = { version = "^0.13.4", features = ["axum"] }
 askama = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
@@ -12,9 +12,11 @@ axum-extra = { version = "^0.9", features = ["typed-header"] }
 axum-server = { version = "0.6.0", features = ["tls-rustls"] }
 backoff = { workspace = true }
 base64 = { workspace = true }
+bitcoin = { version = "0.28.1", features = ["default", "use-serde", "rand"] }
 bytes = { workspace = true }
 candid = { workspace = true }
-clap = { version = "3.2.25", features = ["derive"] }
+clap = { workspace = true }
+ctrlc = { version = "3.4.5", features = ["termination"] }
 flate2 = { workspace = true }
 form_urlencoded = "1"
 fqdn = "0.3.11"
@@ -26,6 +28,7 @@ hyper = { workspace = true }
 hyper-util = { workspace = true }
 ic-agent = { workspace = true }
 ic-boundary = { path = "../boundary_node/ic_boundary" }
+ic-btc-adapter = { path = "../bitcoin/adapter" }
 ic-canister-sandbox-backend-lib = { path = "../canister_sandbox" }
 ic-cdk = { workspace = true }
 ic-config = { path = "../config" }
@@ -77,10 +80,16 @@ tracing-subscriber = { workspace = true }
 wat = { workspace = true }
 
 [dev-dependencies]
+bitcoincore-rpc = "0.15.0"
+ic-btc-interface = { workspace = true }
+ic-config = { path = "../config" }
 ic-registry-transport = { path = "../registry/transport" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
+ic-nns-constants = { path = "../nns/constants" }
+nix = { version = "0.29.0" }
 rcgen = { workspace = true }
 registry-canister = { path = "../registry/canister" }
 reqwest = { workspace = true }
-spec-compliance = { path = "../tests/testing_verification/spec_compliance" }
+serde_json = { workspace = true }
+spec-compliance = { path = "../tests/research/spec_compliance" }
 slog = { workspace = true }

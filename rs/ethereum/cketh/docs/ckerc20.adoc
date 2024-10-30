@@ -1,6 +1,6 @@
 = ckERC20 +
 
-The ckETH minter canister is extended to convert a selected subset of Ethereum ERC-20  tokens to ckERC20 and back, where each ckERC20 is a token issued on the Internet Computer that is backed 1:1 by the corresponding ERC-20 token. For each ckERC20 token, the minter works with a dedicated link:../../../rosetta-api/icrc1/README.md[Ledger Canister], handling the ckERC20 token transfers and with https://internetcomputer.org/https-outcalls[HTTP outcalls], to query multiple JSON-RPC providers to interact with the Ethereum blockchain.
+The ckETH minter canister is extended to convert a selected subset of Ethereum ERC-20  tokens to ckERC20 and back, where each ckERC20 is a token issued on the Internet Computer that is backed 1:1 by the corresponding ERC-20 token. For each ckERC20 token, the minter works with a dedicated link:../../../ledger_suite/icrc1/README.md[Ledger Canister], handling the ckERC20 token transfers and with https://internetcomputer.org/https-outcalls[HTTP outcalls], to query multiple JSON-RPC providers to interact with the Ethereum blockchain.
 
 NOTE: An ERC-20 token denotes a fungible token on the Ethereum blockchain that follows the https://eips.ethereum.org/EIPS/eip-20[ERC-20 token standard].
 

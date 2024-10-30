@@ -29,7 +29,7 @@ ALIASES = {}
 
 rust_library(
     name = "client",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_registry_client",
     proc_macro_deps = MACRO_DEPENDENCIES,

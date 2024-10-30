@@ -23,20 +23,23 @@ use ic_types::{
     },
     CanisterId, PrincipalId,
 };
-use std::convert::{Infallible, TryFrom};
-use std::sync::{Arc, RwLock};
+use std::{
+    convert::{Infallible, TryFrom},
+    sync::Arc,
+};
+use tokio::sync::OnceCell;
 use tower::util::BoxCloneService;
 
 #[derive(Clone)]
 pub(crate) struct SubnetReadStateService {
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
-    delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
+    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
 }
 
 pub struct SubnetReadStateServiceBuilder {
     health_status: Option<Arc<AtomicCell<ReplicaHealthStatus>>>,
-    delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
+    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
 }
 
@@ -48,7 +51,7 @@ impl SubnetReadStateService {
 
 impl SubnetReadStateServiceBuilder {
     pub fn builder(
-        delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
+        delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ) -> Self {
         Self {
@@ -104,7 +107,7 @@ pub(crate) async fn read_state_subnet(
         return (status, text).into_response();
     }
 
-    let delegation_from_nns = delegation_from_nns.read().unwrap().clone();
+    let delegation_from_nns = delegation_from_nns.get().cloned();
     let make_service_unavailable_response = || {
         let status = StatusCode::SERVICE_UNAVAILABLE;
         let text = "Certified state is not available yet. Please try again...".to_string();

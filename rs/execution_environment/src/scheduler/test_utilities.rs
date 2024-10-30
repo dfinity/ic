@@ -58,7 +58,7 @@ use ic_types::{
     },
     methods::{Callback, FuncRef, SystemMethod, WasmClosure, WasmMethod},
     CanisterTimer, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NumInstructions,
-    Randomness, Time, UserId,
+    Randomness, ReplicaVersion, Time, UserId,
 };
 use ic_wasm_types::CanisterModule;
 use maplit::btreemap;
@@ -117,6 +117,8 @@ pub(crate) struct SchedulerTest {
     idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     // Pre-signature IDs.
     idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
+    // Version of the running replica, not the registry's Entry
+    replica_version: ReplicaVersion,
 }
 
 impl std::fmt::Debug for SchedulerTest {
@@ -511,6 +513,7 @@ impl SchedulerTest {
             Randomness::from([0; 32]),
             self.idkg_subnet_public_keys.clone(),
             self.idkg_pre_signature_ids.clone(),
+            &self.replica_version,
             self.round,
             self.round_summary.clone(),
             round_type,
@@ -538,10 +541,7 @@ impl SchedulerTest {
         }
     }
 
-    pub fn drain_subnet_messages(
-        &mut self,
-        long_running_canister_ids: BTreeSet<CanisterId>,
-    ) -> ReplicatedState {
+    pub fn drain_subnet_messages(&mut self) -> ReplicatedState {
         let state = self.state.take().unwrap();
         let compute_allocation_used = state.total_compute_allocation();
         let mut csprng = Csprng::from_seed_and_purpose(
@@ -561,9 +561,8 @@ impl SchedulerTest {
             &mut csprng,
             &mut round_limits,
             &measurements,
-            false,
-            long_running_canister_ids,
             self.registry_settings(),
+            &self.replica_version,
             &BTreeMap::new(),
         )
     }
@@ -664,6 +663,7 @@ pub(crate) struct SchedulerTestBuilder {
     metrics_registry: MetricsRegistry,
     round_summary: Option<ExecutionRoundSummary>,
     canister_snapshot_flag: bool,
+    replica_version: ReplicaVersion,
 }
 
 impl Default for SchedulerTestBuilder {
@@ -689,6 +689,7 @@ impl Default for SchedulerTestBuilder {
             metrics_registry: MetricsRegistry::new(),
             round_summary: None,
             canister_snapshot_flag: true,
+            replica_version: ReplicaVersion::default(),
         }
     }
 }
@@ -761,6 +762,13 @@ impl SchedulerTestBuilder {
     pub fn with_canister_snapshots(self, canister_snapshot_flag: bool) -> Self {
         Self {
             canister_snapshot_flag,
+            ..self
+        }
+    }
+
+    pub fn with_replica_version(self, replica_version: ReplicaVersion) -> Self {
+        Self {
+            replica_version,
             ..self
         }
     }
@@ -933,6 +941,7 @@ impl SchedulerTestBuilder {
             metrics_registry: self.metrics_registry,
             idkg_subnet_public_keys,
             idkg_pre_signature_ids: BTreeMap::new(),
+            replica_version: self.replica_version,
         }
     }
 }

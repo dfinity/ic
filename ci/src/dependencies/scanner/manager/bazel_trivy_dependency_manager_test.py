@@ -116,6 +116,7 @@ def test_return_os_finding():
     assert res[1].score == 7
     assert res[1].more_info is None
 
+
 def test_return_binary_finding():
     binary_finding = {
         "Results": [
@@ -143,9 +144,10 @@ def test_return_binary_finding():
         ]
     }
     executor = Mock()
-    executor.run_trivy_and_parse_data.return_value = binary_finding, {
-        "usr/local/bin/node_exporter": "44f586eee11a2e07fb86afe6d3698925fe4388b7f55abfb29159e7797c87b095"
-    }
+    executor.run_trivy_and_parse_data.return_value = (
+        binary_finding,
+        {"usr/local/bin/node_exporter": "44f586eee11a2e07fb86afe6d3698925fe4388b7f55abfb29159e7797c87b095"},
+    )
     manager = BazelTrivyContainer(executor=executor)
 
     res = manager.get_findings("repo", Project(name="proj", path="/some/path"), None)

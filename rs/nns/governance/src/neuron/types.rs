@@ -16,9 +16,8 @@ use crate::{
         Visibility, Vote,
     },
 };
-#[cfg(target_arch = "wasm32")]
-use dfn_core::println;
 use ic_base_types::PrincipalId;
+use ic_cdk::println;
 use ic_nervous_system_common::ONE_DAY_SECONDS;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use icp_ledger::Subaccount;
@@ -812,13 +811,7 @@ impl Neuron {
             joined_community_fund_timestamp_seconds = self.joined_community_fund_timestamp_seconds;
         }
 
-        let visibility = if !is_private_neuron_enforcement_enabled() {
-            None
-        } else if self.known_neuron_data.is_some() {
-            Some(Visibility::Public as i32)
-        } else {
-            Some(self.visibility.unwrap_or(Visibility::Private) as i32)
-        };
+        let visibility = self.visibility().map(|visibility| visibility as i32);
 
         NeuronInfo {
             retrieved_at_timestamp_seconds: now_seconds,
@@ -955,7 +948,8 @@ impl Neuron {
 
         // 3.2: Now, we know when self is "dissolved" (could be in the past, present, or future).
         // Thus, we can evaluate whether that happened sufficiently long ago.
-        let max_dissolved_at_timestamp_seconds_to_be_inactive = now - 2 * 7 * ONE_DAY_SECONDS;
+        let max_dissolved_at_timestamp_seconds_to_be_inactive =
+            now.saturating_sub(2 * 7 * ONE_DAY_SECONDS);
         if dissolved_at_timestamp_seconds > max_dissolved_at_timestamp_seconds_to_be_inactive {
             return false;
         }
@@ -1026,6 +1020,8 @@ impl Neuron {
 
 impl From<Neuron> for NeuronProto {
     fn from(neuron: Neuron) -> Self {
+        let visibility = neuron.visibility().map(|visibility| visibility as i32);
+
         let Neuron {
             id,
             subaccount,
@@ -1047,7 +1043,7 @@ impl From<Neuron> for NeuronProto {
             joined_community_fund_timestamp_seconds,
             known_neuron_data,
             neuron_type,
-            visibility,
+            visibility: _,
         } = neuron;
 
         let id = Some(id);
@@ -1057,11 +1053,6 @@ impl From<Neuron> for NeuronProto {
             dissolve_state,
             aging_since_timestamp_seconds,
         } = StoredDissolveStateAndAge::from(dissolve_state_and_age);
-        let mut visibility = visibility.map(|visibility| visibility as i32);
-
-        if is_private_neuron_enforcement_enabled() {
-            visibility = visibility.or(Some(Visibility::Private as i32));
-        }
 
         NeuronProto {
             id,

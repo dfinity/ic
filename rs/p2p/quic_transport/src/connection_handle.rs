@@ -90,11 +90,10 @@ impl ConnectionHandle {
             .connection_handle_bytes_received_total
             .with_label_values(&[request.uri().path()]);
 
-        let (send_stream, recv_stream) = self.connection.open_bi().await.map_err(|err| {
+        let (send_stream, recv_stream) = self.connection.open_bi().await.inspect_err(|_| {
             self.metrics
                 .connection_handle_errors_total
                 .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_OPEN]);
-            err
         })?;
 
         let mut send_stream_guard = SendStreamDropGuard::new(send_stream);
@@ -107,36 +106,32 @@ impl ConnectionHandle {
             .unwrap_or_default();
         let _ = send_stream.set_priority(priority.into());
 
-        write_request(send_stream, request).await.map_err(|err| {
+        write_request(send_stream, request).await.inspect_err(|_| {
             self.metrics
                 .connection_handle_errors_total
                 .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_WRITE])
                 .inc();
-            err
         })?;
 
-        send_stream.finish().map_err(|err| {
+        send_stream.finish().inspect_err(|_| {
             self.metrics
                 .connection_handle_errors_total
                 .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_FINISH])
                 .inc();
-            err
         })?;
 
-        send_stream.stopped().await.map_err(|err| {
+        send_stream.stopped().await.inspect_err(|_| {
             self.metrics
                 .connection_handle_errors_total
                 .with_label_values(&[REQUEST_TYPE_PUSH, ERROR_TYPE_STOPPED])
                 .inc();
-            err
         })?;
 
-        let mut response = read_response(recv_stream).await.map_err(|err| {
+        let mut response = read_response(recv_stream).await.inspect_err(|_| {
             self.metrics
                 .connection_handle_errors_total
                 .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_READ])
                 .inc();
-            err
         })?;
 
         // Propagate PeerId from this request to upper layers.
@@ -236,7 +231,7 @@ mod tests {
         net::{Ipv4Addr, SocketAddr},
         sync::Arc,
     };
-    use tokio::sync::Notify;
+    use tokio::sync::Barrier;
     use turmoil::Builder;
 
     use crate::connection_handle::SendStreamDropGuard;
@@ -256,10 +251,10 @@ mod tests {
 
         // If the sender closes the connection immediately after sending, then
         // quinn might abort transmitting the message for the sender.
-        // Thus we wait with closing the sender's quinn endpoint, and killing the connection,
-        // until the receiver has received the message.
-        let receiver_received_message = Arc::new(Notify::new());
-        let receiver_received_message_clone = receiver_received_message.clone();
+        // Thus we wait with closing the endpoints until all client simulations
+        // complete.
+        let client_completed = Arc::new(Barrier::new(2));
+        let client_completed_clone = client_completed.clone();
 
         sim.client(receiver, async move {
             let udp_listener = turmoil::net::UdpSocket::bind(node_addr).await.unwrap();
@@ -286,8 +281,6 @@ mod tests {
                 .unwrap();
 
             let server_result = recv_stream.read_to_end(MAX_READ_SIZE).await;
-            receiver_received_message_clone.notify_one();
-
             if stream_is_finished_and_stopped {
                 assert_matches!(
                     server_result,
@@ -298,6 +291,8 @@ mod tests {
                     Err(ReadToEndError::Read(ReadError::Reset { .. }))
                 );
             }
+            client_completed_clone.wait().await;
+
             Ok(())
         });
 
@@ -356,7 +351,7 @@ mod tests {
             };
 
             drop(drop_guard);
-            receiver_received_message.notified().await;
+            client_completed.wait().await;
 
             Ok(())
         });

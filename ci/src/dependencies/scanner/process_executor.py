@@ -11,7 +11,13 @@ class ProcessExecutor:
         self.command = command
 
     @staticmethod
-    def execute_command(command: str, cwd: Path, environment: typing.Dict[str, str], ignore_return_code_if_stdout_is_set: bool = False, log_error_on_fail = True) -> str:
+    def execute_command(
+        command: str,
+        cwd: Path,
+        environment: typing.Dict[str, str],
+        ignore_return_code_if_stdout_is_set: bool = False,
+        log_error_on_fail=True,
+    ) -> str:
         environ = dict(os.environ)
         environ.update(environment)
         logging.info("Executing : " + command)

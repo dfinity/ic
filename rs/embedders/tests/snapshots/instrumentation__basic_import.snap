@@ -1,6 +1,6 @@
 ---
 source: rs/embedders/tests/instrumentation.rs
-assertion_line: 53
+assertion_line: 62
 expression: out
 ---
 (module
@@ -13,12 +13,12 @@ expression: out
   (type (;6;) (func (param i64) (result i64)))
   (type (;7;) (func (param i32 i32) (result i32 i32)))
   (import "__" "out_of_instructions" (func (;0;) (type 2)))
-  (import "__" "try_grow_wasm_memory" (func $addTwo (;1;) (type $a)))
+  (import "__" "try_grow_wasm_memory" (func (;1;) (type $a)))
   (import "__" "try_grow_stable_memory" (func (;2;) (type 3)))
   (import "__" "internal_trap" (func (;3;) (type 4)))
   (import "__" "stable_read_first_access" (func (;4;) (type 5)))
   (import "ic0" "msg_arg_data_size" (func (;5;) (type $b)))
-  (func (;6;) (type $a) (param i32 i32) (result i32)
+  (func $addTwo (;6;) (type $a) (param i32 i32) (result i32)
     global.get 0
     i64.const 4
     i64.sub
@@ -108,10 +108,11 @@ expression: out
   (global (;0;) (mut i64) i64.const 0)
   (global (;1;) (mut i64) i64.const 0)
   (global (;2;) (mut i64) i64.const 0)
-  (export "addTwo" (func 6))
+  (export "addTwo" (func $addTwo))
   (export "stable_memory" (memory 0))
   (export "stable_bytemap_memory" (memory 1))
   (export "canister counter_instructions" (global 0))
   (export "canister counter_dirty_pages" (global 1))
   (export "canister counter_accessed_pages" (global 2))
 )
+

@@ -24,6 +24,7 @@ tests = { path = "../.." }
 url = { workspace = true }
 xrc-mock = { path = "../../../rosetta-api/tvl/xrc_mock" }
 os_qualification_utils = { path = "../../dre/utils" }
+nns_dapp = { path = "../../nns/nns_dapp" }
 
 [[bin]]
 name = "large"

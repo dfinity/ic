@@ -266,7 +266,7 @@ async fn test_request_with_no_signature_and_no_pubkey<T: Identity + 'static>(
     let body = serde_cbor::ser::to_vec(&envelope).unwrap();
     let client = reqwest::Client::new();
     let res = client
-        .post(&format!(
+        .post(format!(
             "{}api/v2/canister/{}/call",
             malicious_node.get_public_url(),
             canister_id.to_text()
@@ -313,7 +313,7 @@ async fn test_request_with_correct_signature_and_incorrect_pubkey<T: Identity + 
     let body = serde_cbor::ser::to_vec(&envelope).unwrap();
     let client = reqwest::Client::new();
     let res = client
-        .post(&format!(
+        .post(format!(
             "{}api/v2/canister/{}/call",
             malicious_node.get_public_url(),
             canister_id.to_text()
@@ -360,7 +360,7 @@ async fn test_request_with_incorrect_signature_and_correct_pubkey<T: Identity + 
     let body = serde_cbor::ser::to_vec(&envelope).unwrap();
     let client = reqwest::Client::new();
     let res = client
-        .post(&format!(
+        .post(format!(
             "{}api/v2/canister/{}/call",
             malicious_node.get_public_url(),
             canister_id.to_text()
@@ -406,7 +406,7 @@ async fn test_request_with_incorrect_sender<T: Identity + 'static>(
     let body = serde_cbor::ser::to_vec(&envelope).unwrap();
     let client = reqwest::Client::new();
     let res = client
-        .post(&format!(
+        .post(format!(
             "{}api/v2/canister/{}/call",
             malicious_node.get_public_url(),
             canister_id.to_text()
@@ -450,7 +450,7 @@ async fn test_request_with_expired_ingress<T: Identity + 'static>(
     let body = serde_cbor::ser::to_vec(&envelope).unwrap();
     let client = reqwest::Client::new();
     let res = client
-        .post(&format!(
+        .post(format!(
             "{}api/v2/canister/{}/call",
             malicious_node.get_public_url(),
             canister_id.to_text()
@@ -522,7 +522,7 @@ async fn test_request_with_delegation<T: Identity + 'static>(
     let body = serde_cbor::ser::to_vec(&envelope).unwrap();
     let client = reqwest::Client::new();
     let res = client
-        .post(&format!(
+        .post(format!(
             "{}api/v2/canister/{}/call",
             node_url,
             canister_id.to_text()

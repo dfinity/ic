@@ -9,7 +9,7 @@ pub trait Partition: Sized {
     /// Open a partition for writing
     async fn open(image: PathBuf, index: Option<usize>) -> Result<Self>;
 
-    /// Close an partition, and write back to the input disk
+    /// Close a partition, and write back to the input disk
     async fn close(self) -> Result<()>;
 
     /// Copy a file into place

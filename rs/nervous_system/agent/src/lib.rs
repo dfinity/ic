@@ -1,37 +1,24 @@
+mod agent_impl;
 pub mod nns;
+mod pocketic_impl;
 pub mod sns;
 
-use anyhow::{anyhow, Result};
-use candid::{Decode, Encode, Principal};
-use ic_agent::Agent;
+use candid::Principal;
 use ic_nervous_system_clients::Request;
+use std::fmt::Display;
 
-pub(crate) async fn call<R: Request>(
-    agent: &Agent,
-    canister_id: impl Into<Principal>,
-    request: R,
-) -> Result<R::Response> {
-    let canister_id = canister_id.into();
-    let request_bytes = Encode!(&request)?;
-    let response = if R::UPDATE {
-        let request = agent
-            .update(&canister_id, R::METHOD)
-            .with_arg(request_bytes)
-            .call()
-            .await?;
-        match request {
-            ic_agent::agent::CallResponse::Response(response) => response,
-            ic_agent::agent::CallResponse::Poll(request_id) => {
-                agent.wait(&request_id, canister_id).await?
-            }
-        }
-    } else {
-        agent
-            .query(&canister_id, R::METHOD)
-            .with_arg(request_bytes)
-            .call()
-            .await?
-    };
+// This is used to "seal" the CallCanisters trait so that it cannot be implemented outside of this crate.
+// This is useful because it means we can modify the trait in the future without worrying about
+// breaking backwards compatibility with implementations outside of this crate.
+mod sealed {
+    pub trait Sealed {}
+}
 
-    Decode!(response.as_slice(), R::Response).map_err(|e| anyhow!(e))
+pub trait CallCanisters: sealed::Sealed {
+    type Error: Display + Send + std::error::Error + 'static;
+    fn call<R: Request>(
+        &self,
+        canister_id: impl Into<Principal> + Send,
+        request: R,
+    ) -> impl std::future::Future<Output = Result<R::Response, Self::Error>> + Send;
 }

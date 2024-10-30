@@ -6,9 +6,8 @@ use crate::{
 };
 
 use candid::{CandidType, Deserialize};
-#[cfg(target_arch = "wasm32")]
-use dfn_core::println;
 use ic_base_types::PrincipalId;
+use ic_cdk::println;
 use ic_nns_common::pb::v1::NeuronId;
 use icp_ledger::Subaccount;
 use serde::Serialize;
@@ -396,11 +395,10 @@ impl<Validator: CardinalityAndRangeValidator + Send + Sync> ValidationTask
     fn validate_next_chunk(&mut self, neuron_store: &NeuronStore) -> Vec<ValidationIssue> {
         if let Some(next_neuron_id) = self.heap_next_neuron_id.take() {
             neuron_store
-                .heap_neurons()
-                .range(next_neuron_id.id..)
+                .active_neurons_range(next_neuron_id..)
                 .take(Validator::HEAP_NEURON_RANGE_CHUNK_SIZE)
-                .flat_map(|(neuron_id, neuron)| {
-                    self.heap_next_neuron_id = (NeuronId { id: *neuron_id }).next();
+                .flat_map(|neuron| {
+                    self.heap_next_neuron_id = neuron.id().next();
                     Validator::validate_primary_neuron_has_corresponding_index_entries(neuron)
                 })
                 .collect()
@@ -432,10 +430,7 @@ impl CardinalityAndRangeValidator for SubaccountIndexValidator {
     const HEAP_NEURON_RANGE_CHUNK_SIZE: usize = 400;
 
     fn validate_cardinalities(neuron_store: &NeuronStore) -> Option<ValidationIssue> {
-        let cardinality_primary_heap = neuron_store.heap_neurons().len() as u64;
-        let cardinality_primary_stable =
-            with_stable_neuron_store(|stable_neuron_store| stable_neuron_store.len() as u64);
-        let cardinality_primary = cardinality_primary_heap + cardinality_primary_stable;
+        let cardinality_primary = neuron_store.len() as u64;
         let cardinality_index =
             with_stable_neuron_indexes(|indexes| indexes.subaccount().num_entries()) as u64;
         if cardinality_primary != cardinality_index {
@@ -477,8 +472,7 @@ impl CardinalityAndRangeValidator for PrincipalIndexValidator {
 
     fn validate_cardinalities(neuron_store: &NeuronStore) -> Option<ValidationIssue> {
         let cardinality_primary_heap: u64 = neuron_store
-            .heap_neurons()
-            .values()
+            .active_neurons_iter()
             .map(|neuron| neuron.principal_ids_with_special_permissions().len() as u64)
             .sum();
         let cardinality_primary_stable = with_stable_neuron_store(|stable_neuron_store|
@@ -536,8 +530,7 @@ impl CardinalityAndRangeValidator for FollowingIndexValidator {
 
     fn validate_cardinalities(neuron_store: &NeuronStore) -> Option<ValidationIssue> {
         let cardinality_primary_heap: u64 = neuron_store
-            .heap_neurons()
-            .values()
+            .active_neurons_iter()
             .map(|neuron| neuron.topic_followee_pairs().len() as u64)
             .sum();
         let cardinality_primary_stable =
@@ -592,8 +585,7 @@ impl CardinalityAndRangeValidator for KnownNeuronIndexValidator {
     const HEAP_NEURON_RANGE_CHUNK_SIZE: usize = 300000;
     fn validate_cardinalities(neuron_store: &NeuronStore) -> Option<ValidationIssue> {
         let cardinality_primary_heap = neuron_store
-            .heap_neurons()
-            .values()
+            .active_neurons_iter()
             .filter(|neuron| neuron.known_neuron_data.is_some())
             .count() as u64;
         let cardinality_primary_stable = with_stable_neuron_store(|stable_neuron_store| {

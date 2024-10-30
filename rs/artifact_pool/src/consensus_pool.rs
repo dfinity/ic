@@ -186,6 +186,7 @@ struct PoolMetrics {
     notarization_share: PerTypeMetrics<NotarizationShare>,
     finalization_share: PerTypeMetrics<FinalizationShare>,
     catch_up_package_share: PerTypeMetrics<CatchUpPackageShare>,
+    equivocation_proof: PerTypeMetrics<EquivocationProof>,
 }
 
 impl PoolMetrics {
@@ -210,6 +211,7 @@ impl PoolMetrics {
                 pool_portion,
                 "catch_up_package_share",
             ),
+            equivocation_proof: PerTypeMetrics::new(&registry, pool_portion, "equivocation_proof"),
         }
     }
 
@@ -236,6 +238,8 @@ impl PoolMetrics {
             .update_from_height_indexed_pool(pool_section.finalization_share());
         self.catch_up_package_share
             .update_from_height_indexed_pool(pool_section.catch_up_package_share());
+        self.equivocation_proof
+            .update_from_height_indexed_pool(pool_section.equivocation_proof());
     }
 
     fn update_count_per_height<T>(
@@ -263,6 +267,7 @@ impl PoolMetrics {
         update_count_per_height!(random_tape_share);
         update_count_per_height!(notarization_share);
         update_count_per_height!(finalization_share);
+        update_count_per_height!(equivocation_proof);
     }
 }
 
@@ -834,7 +839,7 @@ impl ValidatedPoolReader<ConsensusMessage> for ConsensusPoolImpl {
         self.validated.get(id)
     }
 
-    fn get_all_validated(&self) -> Box<dyn Iterator<Item = ConsensusMessage> + '_> {
+    fn get_all_for_broadcast(&self) -> Box<dyn Iterator<Item = ConsensusMessage> + '_> {
         let node_id = self.node_id;
         let max_catch_up_height = self
             .validated
@@ -895,6 +900,13 @@ impl ValidatedPoolReader<ConsensusMessage> for ConsensusPoolImpl {
             .map(|x| x.max)
             .unwrap_or(min);
         let min_block_proposal_height = min;
+        let max_equivocation_proof_height = self
+            .validated
+            .equivocation_proof()
+            .height_range()
+            .map(|x| x.max)
+            .unwrap_or(min);
+        let min_equivocation_proof_height = min;
 
         // Because random tape & shares do not come in a consecutive sequence, we
         // compute a custom iterator through their height range to either return
@@ -1003,6 +1015,15 @@ impl ValidatedPoolReader<ConsensusMessage> for ConsensusPoolImpl {
                         .get_by_height_range(HeightRange {
                             min: min_block_proposal_height,
                             max: max_block_proposal_height,
+                        })
+                        .map(|x| x.into_message()),
+                )
+                .chain(
+                    self.validated
+                        .equivocation_proof()
+                        .get_by_height_range(HeightRange {
+                            min: min_equivocation_proof_height,
+                            max: max_equivocation_proof_height,
                         })
                         .map(|x| x.into_message()),
                 )
@@ -1459,7 +1480,7 @@ mod tests {
                 _ => panic!("No signer for aggregate artifacts"),
             };
 
-            pool.get_all_validated().for_each(|m| {
+            pool.get_all_for_broadcast().for_each(|m| {
                 if m.height().get() <= height_offset + 15 {
                     assert!(!m.is_share());
                 }
@@ -1469,7 +1490,7 @@ mod tests {
             });
 
             assert_eq!(
-                pool.get_all_validated().count(),
+                pool.get_all_for_broadcast().count(),
                 // 1 CUP, 15 heights of aggregates, 5 heights of shares, 20 heights of proposals
                 1 + 15 * 4 + 5 * 4 + 20 * 5
             );

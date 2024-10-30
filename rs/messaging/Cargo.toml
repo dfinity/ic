@@ -64,8 +64,10 @@ lazy_static = { workspace = true }
 maplit = "1.0.2"
 mockall = { workspace = true }
 pretty_assertions = { workspace = true }
+proptest = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
+random-traffic-test = { path = "../rust_canisters/random_traffic_test" }
 serde = { workspace = true }
 tempfile = { workspace = true }
 xnet-test = { path = "../rust_canisters/xnet_test" }

@@ -25,7 +25,7 @@ ALIASES = {}
 
 rust_library(
     name = "root",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_nervous_system_root",
     proc_macro_deps = MACRO_DEPENDENCIES,

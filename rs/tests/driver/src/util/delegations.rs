@@ -17,9 +17,7 @@ use reqwest::{Client, Response};
 use serde_bytes::ByteBuf;
 use std::time::{Duration, Instant};
 
-pub const INTERNET_IDENTITY_WASM: &str =
-    "external/ii_dev_canister/file/internet_identity_dev.wasm.gz";
-pub const COUNTER_CANISTER_WAT: &str = "rs/tests/src/counter.wat";
+pub const COUNTER_CANISTER_WAT: &str = "rs/tests/counter.wat";
 pub const UPDATE_POLLING_TIMEOUT: Duration = Duration::from_secs(10);
 /// user ids start with 10000 and increase by 1 for each new user
 pub const USER_NUMBER_OFFSET: u64 = 10_000;
@@ -135,7 +133,7 @@ impl<'a> AgentWithDelegation<'a> {
     ) -> Response {
         let client = Client::new();
         client
-            .post(&format!(
+            .post(format!(
                 "{}api/v2/canister/{}/{}",
                 self.node_url.as_str(),
                 canister_id,

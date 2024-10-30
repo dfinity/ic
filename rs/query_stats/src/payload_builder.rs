@@ -375,12 +375,11 @@ impl QueryStatsPayloadBuilderImpl {
                 // Deserialize the payload
                 .filter_map(|past_payload| {
                     QueryStatsPayload::deserialize(past_payload.payload)
-                        .map_err(|err| {
+                        .inspect_err(|_| {
                             error!(
                                 self.log,
                                 "Failed to deserialize past payload, this is a bug"
                             );
-                            err
                         })
                         .ok()
                         .flatten()

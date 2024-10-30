@@ -79,14 +79,13 @@ pub fn execute_non_replicated_query(
             };
             let call_context_id = canister
                 .system_state
-                .call_context_manager_mut()
-                .unwrap()
                 .new_call_context(
                     call_origin,
                     Cycles::zero(),
                     time,
                     RequestMetadata::for_new_call_tree(time),
-                );
+                )
+                .unwrap();
             (
                 ic_system_api::NonReplicatedQueryKind::Stateful {
                     call_context_id,

@@ -3231,6 +3231,8 @@ impl From<pb_api::Governance> for pb::Governance {
                 .collect(),
             xdr_conversion_rate: item.xdr_conversion_rate.map(|x| x.into()),
             restore_aging_summary: item.restore_aging_summary.map(|x| x.into()),
+            // This is not intended to be initialized from outside of canister.
+            rng_seed: None,
         }
     }
 }

@@ -48,7 +48,6 @@ fn make_xnet_client(metrics: &MetricsRegistry, log: ReplicaLogger) -> XNetClient
     let registry = get_empty_registry_for_test();
     XNetClientImpl::new(
         metrics,
-        tokio::runtime::Handle::current(),
         Arc::new(MockTlsConfig::new()) as Arc<_>,
         Arc::new(ProximityMap::new(LOCAL_NODE, registry, metrics, log)),
     )

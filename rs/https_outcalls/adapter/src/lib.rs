@@ -15,36 +15,44 @@ pub use cli::Cli;
 pub use config::{Config, IncomingSource};
 pub use rpc_server::CanisterHttp;
 
-use futures::{Future, Stream};
+use futures::StreamExt;
+use ic_async_utils::{incoming_from_first_systemd_socket, incoming_from_path};
 use ic_https_outcalls_service::https_outcalls_service_server::HttpsOutcallsServiceServer;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use std::time::Duration;
-use tokio::io::{AsyncRead, AsyncWrite};
-use tonic::transport::{
-    server::{Connected, Router},
-    Server,
-};
-use tower::layer::util::Identity;
+use tonic::transport::Server;
 
-/// Start the HttpsOutcallsService server.
-pub struct AdapterServer(Router<Identity>);
+pub fn start_server(
+    log: &ReplicaLogger,
+    metrics_registry: &MetricsRegistry,
+    rt_handle: &tokio::runtime::Handle,
+    config: config::Config,
+) {
+    let log = log.clone();
+    let metrics_registry = metrics_registry.clone();
+    let canister_http = CanisterHttp::new(config.clone(), log, &metrics_registry);
 
-impl AdapterServer {
-    pub fn new(config: Config, logger: ReplicaLogger, metrics: &MetricsRegistry) -> Self {
-        let canister_http = CanisterHttp::new(config.clone(), logger, metrics);
+    let server = Server::builder()
+        .timeout(Duration::from_secs(config.http_request_timeout_secs))
+        .add_service(HttpsOutcallsServiceServer::new(canister_http));
 
-        Self(
-            Server::builder()
-                .timeout(Duration::from_secs(config.http_request_timeout_secs))
-                .add_service(HttpsOutcallsServiceServer::new(canister_http)),
-        )
-    }
+    let incoming = match config.incoming_source {
+        IncomingSource::Path(uds_path) => incoming_from_path(uds_path).boxed(),
 
-    pub fn serve<S: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static>(
-        self,
-        stream: impl Stream<Item = Result<S, std::io::Error>>,
-    ) -> impl Future<Output = Result<(), tonic::transport::Error>> {
-        self.0.serve_with_incoming(stream)
-    }
+        IncomingSource::Systemd =>
+        // SAFETY: We are manged by systemd that is configured to pass socket as FD(3).
+        // Additionally, this is the only call to connect with the systemd socket and
+        // therefore we are sole owner.
+        {
+            unsafe { incoming_from_first_systemd_socket() }.boxed()
+        }
+    };
+
+    rt_handle.spawn(async move {
+        server
+            .serve_with_incoming(incoming)
+            .await
+            .expect("gRPC server crashed")
+    });
 }

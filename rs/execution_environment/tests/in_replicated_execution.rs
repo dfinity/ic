@@ -13,7 +13,7 @@ fn setup() -> (StateMachine, CanisterId) {
         .with_checkpoints_enabled(false)
         .build();
     let canister_id =
-        env.create_canister_with_cycles(None, Cycles::from(100_000_000_000_u128), None);
+        env.create_canister_with_cycles(None, Cycles::from(121_000_000_000_u128), None);
     env.install_wasm_in_mode(
         canister_id,
         CanisterInstallMode::Install,

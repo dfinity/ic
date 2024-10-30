@@ -12,9 +12,12 @@ use ic_interfaces_adapter_client::NonBlockingChannel;
 use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::canister_http::{CanisterHttpRequest, CanisterHttpResponse};
-use std::convert::TryFrom;
-use tokio::net::UnixStream;
+use ic_types::{
+    canister_http::{CanisterHttpRequest, CanisterHttpResponse},
+    messages::CertificateDelegation,
+};
+use std::{convert::TryFrom, sync::Arc};
+use tokio::{net::UnixStream, sync::OnceCell};
 use tonic::transport::{Endpoint, Uri};
 use tower::service_fn;
 
@@ -26,6 +29,7 @@ pub fn setup_canister_http_client(
     max_canister_http_requests_in_flight: usize,
     log: ReplicaLogger,
     subnet_type: SubnetType,
+    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
 ) -> Box<dyn NonBlockingChannel<CanisterHttpRequest, Response = CanisterHttpResponse> + Send> {
     match adapter_config.https_outcalls_uds_path {
         None => {
@@ -48,8 +52,13 @@ pub fn setup_canister_http_client(
                     let endpoint = endpoint.executor(ExecuteOnTokioRuntime(rt_handle.clone()));
                     let channel =
                         endpoint.connect_with_connector_lazy(service_fn(move |_: Uri| {
-                            // Connect to a Uds socket
-                            UnixStream::connect(uds_path.clone())
+                            let uds_path = uds_path.clone();
+                            async move {
+                                // Connect to a Uds socket
+                                Ok::<_, std::io::Error>(hyper_util::rt::TokioIo::new(
+                                    UnixStream::connect(uds_path).await?,
+                                ))
+                            }
                         }));
 
                     // Register canister http adapter metrics with replica metrics. The adapter exposes a
@@ -68,6 +77,7 @@ pub fn setup_canister_http_client(
                         max_canister_http_requests_in_flight,
                         metrics_registry.clone(),
                         subnet_type,
+                        delegation_from_nns,
                     ))
                 }
                 Err(e) => {

@@ -75,10 +75,7 @@ options may be specified:
     Specify an initial denylist of canisters for the Boundary Nodes
 
   --denylist_url url
-    Specify the url for the denylist updater
-
-  --prober-identity path
-    specify an identity file for the prober
+    Specify the url where to download denylist
 
   --system-domains
     comma-delimited list of domains serving system canisters (e.g., ic0.dev or ic0.app)
@@ -153,10 +150,6 @@ options may be specified:
   --certificate_issuer_peek_sleep_sec
     time between peeks by the certificate issuer to fetch a new task from the
     certificate orchestrator.
-
-  --certificate_syncer_polling_interval_sec
-    time between polling the certificate issuer for custom domain updates (i.e.,
-    newly registered, modified, or removed custom domains).
 
   --ic_registry_local_store
     path to a local registry store to be used instead of the one provided by the
@@ -296,9 +289,6 @@ function build_ic_bootstrap_tar() {
             --denylist_url)
                 local DENYLIST_URL="$2"
                 ;;
-            --prober-identity)
-                local PROBER_IDENTITY="$2"
-                ;;
             --system-domains)
                 local SYSTEM_DOMAINS="$2"
                 ;;
@@ -364,9 +354,6 @@ function build_ic_bootstrap_tar() {
                 ;;
             --certificate_issuer_peek_sleep_sec)
                 CERTIFICATE_ISSUER_PEEK_SLEEP_SEC="$2"
-                ;;
-            --certificate_syncer_polling_interval_sec)
-                CERTIFICATE_SYNCER_POLLING_INTERVAL_SEC="$2"
                 ;;
             --ic_registry_local_store)
                 IC_REGISTRY_LOCAL_STORE="$2"
@@ -526,12 +513,6 @@ logging_user=${LOGGING_USER:-"undefined"}
 logging_password=${LOGGING_PASSWORD:-"undefined"}
 EOF
 
-    # setup the prober identity
-    if [[ -n "${PROBER_IDENTITY:-}" ]]; then
-        echo "Using prober identity ${PROBER_IDENTITY}"
-        cp "${PROBER_IDENTITY}" "${BOOTSTRAP_TMPDIR}/prober_identity.pem"
-    fi
-
     # setup the certificates
     if [[ -n "${CERT_DIR:-}" && -f "${CERT_DIR}/fullchain.pem" && -f "${CERT_DIR}/privkey.pem" && -f "${CERT_DIR}/chain.pem" ]]; then
         echo "Using certificates ${CERT_DIR}/fullchain.pem ${CERT_DIR}/privkey.pem ${CERT_DIR}/chain.pem"
@@ -558,12 +539,6 @@ certificate_issuer_cloudflare_api_key=${CERTIFICATE_ISSUER_CLOUDFLARE_API_KEY}
 ${CERTIFICATE_ISSUER_TASK_DELAY_SEC:+certificate_issuer_task_delay_sec=${CERTIFICATE_ISSUER_TASK_DELAY_SEC}}
 ${CERTIFICATE_ISSUER_TASK_ERROR_DELAY_SEC:+certificate_issuer_task_error_delay_sec=${CERTIFICATE_ISSUER_TASK_ERROR_DELAY_SEC}}
 ${CERTIFICATE_ISSUER_PEEK_SLEEP_SEC:+certificate_issuer_peek_sleep_sec=${CERTIFICATE_ISSUER_PEEK_SLEEP_SEC}}
-EOF
-    fi
-
-    if [[ ! -z "${CERTIFICATE_SYNCER_POLLING_INTERVAL_SEC:-}" ]]; then
-        cat >"${BOOTSTRAP_TMPDIR}/certificate_syncer.conf" <<EOF
-certificate_syncer_polling_interval_sec=${CERTIFICATE_SYNCER_POLLING_INTERVAL_SEC}
 EOF
     fi
 

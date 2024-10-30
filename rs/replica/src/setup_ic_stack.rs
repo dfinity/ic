@@ -9,6 +9,7 @@ use ic_consensus::certification::VerifierImpl;
 use ic_crypto::CryptoComponent;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::ExecutionServices;
+use ic_http_endpoints_xnet::XNetEndpoint;
 use ic_https_outcalls_adapter_client::setup_canister_http_client;
 use ic_interfaces::{
     execution_environment::QueryExecutionService, p2p::artifact_manager::JoinGuard,
@@ -31,38 +32,18 @@ use ic_types::{
     artifact::UnvalidatedArtifactMutation,
     consensus::{CatchUpPackage, HasHeight},
     messages::SignedIngress,
-    Height, NodeId, PrincipalId, SubnetId,
+    Height, NodeId, SubnetId,
 };
-use ic_xnet_endpoint::{XNetEndpoint, XNetEndpointConfig};
 use ic_xnet_payload_builder::XNetPayloadBuilderImpl;
-use std::{
-    str::FromStr,
-    sync::{Arc, RwLock},
-};
+use std::sync::{Arc, RwLock};
 use tokio::sync::{
     mpsc::{channel, UnboundedSender},
-    watch,
+    watch, OnceCell,
 };
 
 /// The buffer size for the channel that [`IngressHistoryWriterImpl`] uses to send
 /// the message id and height of messages that complete execution.
 const COMPLETED_EXECUTION_MESSAGES_BUFFER_SIZE: usize = 10_000;
-
-/// The subnets that can serve synchronous responses to update calls received
-/// on the `/api/v3/.../call`` endpoint.
-const WHITELISTED_SUBNETS_FOR_SYNCHRONOUS_CALL_V3: [&str; 1] =
-    ["snjp4-xlbw4-mnbog-ddwy6-6ckfd-2w5a2-eipqo-7l436-pxqkh-l6fuv-vae"];
-
-/// Returns true if the subnet is whitelisted to serve synchronous responses to v3
-/// update calls.
-fn subnet_is_whitelisted_for_synchronous_call_v3(subnet_id: &SubnetId) -> bool {
-    WHITELISTED_SUBNETS_FOR_SYNCHRONOUS_CALL_V3
-        .iter()
-        .any(|s| match PrincipalId::from_str(s) {
-            Ok(principal_id) => SubnetId::from(principal_id) == *subnet_id,
-            Err(_) => false,
-        })
-}
 
 /// Create the consensus pool directory (if none exists)
 fn create_consensus_pool_dir(config: &Config) {
@@ -150,6 +131,9 @@ pub fn construct_ic_stack(
         registry.get_latest_version(),
         registry.as_ref(),
     );
+
+    let delegation_from_nns = Arc::new(OnceCell::new());
+
     // ---------- THE PERSISTED CONSENSUS ARTIFACT POOL DEPS FOLLOW ----------
     // This is the first object that is required for the creation of the IC stack. Initializing the
     // persistent consensus pool is the only way for retrieving the height of the last CUP and/or
@@ -251,14 +235,12 @@ pub fn construct_ic_stack(
             config.malicious_behaviour.malicious_flags.clone(),
         )
     };
-    let message_router = Arc::new(message_router);
-    let xnet_config = XNetEndpointConfig::from(Arc::clone(&registry) as Arc<_>, node_id, log);
     let xnet_endpoint = XNetEndpoint::new(
         rt_handle_xnet.clone(),
         Arc::clone(&certified_stream_store),
         Arc::clone(&crypto) as Arc<_>,
         registry.clone(),
-        xnet_config,
+        config.message_routing,
         metrics_registry,
         log.clone(),
     );
@@ -303,6 +285,7 @@ pub fn construct_ic_stack(
         max_canister_http_requests_in_flight,
         log.clone(),
         subnet_type,
+        delegation_from_nns.clone(),
     );
     // ---------- QUERY STATS DEPS FOLLOW -----------
     let query_stats_payload_builder = execution_services
@@ -330,7 +313,7 @@ pub fn construct_ic_stack(
         xnet_payload_builder,
         self_validating_payload_builder,
         query_stats_payload_builder,
-        message_router,
+        Arc::new(message_router),
         // TODO(SCL-213)
         Arc::clone(&crypto) as Arc<_>,
         Arc::clone(&crypto) as Arc<_>,
@@ -363,12 +346,11 @@ pub fn construct_ic_stack(
         consensus_pool_cache,
         subnet_type,
         config.malicious_behaviour.malicious_flags,
-        None,
+        delegation_from_nns,
         Arc::new(Pprof),
         tracing_handle,
         max_certified_height_rx,
         finalized_ingress_height_rx,
-        subnet_is_whitelisted_for_synchronous_call_v3(&subnet_id),
     );
 
     Ok((

@@ -72,7 +72,9 @@ FINDING_WITH_RISK_NO_PATCH_NO = Finding(
 def test_mr_blocked_event():
     api = MockSlackApi()
     handler = SlackDefaultNotificationHandler(slack_api=api)
-    event = MRBlockedNotificationEvent(scanner_id="scanner_id", ci_job_url="http://ci.job/123", merge_request_url="http://mr.url/321")
+    event = MRBlockedNotificationEvent(
+        scanner_id="scanner_id", ci_job_url="http://ci.job/123", merge_request_url="http://mr.url/321"
+    )
 
     assert handler.can_handle(event)
 
@@ -103,7 +105,9 @@ def test_release_build_blocked_event():
 def test_scan_job_succeeded_event(selected_job_type):
     api = MockSlackApi()
     handler = SlackDefaultNotificationHandler(slack_api=api)
-    event = ScanJobSucceededNotificationEvent(scanner_id="scanner_id", job_type=selected_job_type, ci_job_url="http://ci.job/123")
+    event = ScanJobSucceededNotificationEvent(
+        scanner_id="scanner_id", job_type=selected_job_type, ci_job_url="http://ci.job/123"
+    )
 
     assert handler.can_handle(event)
 
@@ -115,13 +119,16 @@ def test_scan_job_succeeded_event(selected_job_type):
     assert selected_job_type.name in api.messages[0]
     assert "http://ci.job/123" in api.messages[0]
 
+
 @pytest.mark.parametrize(
     "selected_job_type", [ScannerJobType.PERIODIC_SCAN, ScannerJobType.MERGE_SCAN, ScannerJobType.RELEASE_SCAN]
 )
 def test_scan_job_failed_event(selected_job_type):
     api = MockSlackApi()
     handler = SlackDefaultNotificationHandler(slack_api=api)
-    event = ScanJobFailedNotificationEvent(scanner_id="scanner_id", job_type=selected_job_type, ci_job_url="http://ci.job/123", reason="some error reason")
+    event = ScanJobFailedNotificationEvent(
+        scanner_id="scanner_id", job_type=selected_job_type, ci_job_url="http://ci.job/123", reason="some error reason"
+    )
 
     assert handler.can_handle(event)
 
@@ -140,7 +147,9 @@ def test_finding_needs_risk_assessment_event():
     finding = FINDING_WITH_RISK_NO_PATCH_NO
     api = MockSlackApi(finding.risk_assessor)
     handler = SlackDefaultNotificationHandler(slack_api=api)
-    event = FindingNotificationEvent(finding=finding, finding_needs_risk_assessment=True, finding_has_patch_version=False, finding_was_resolved=False)
+    event = FindingNotificationEvent(
+        finding=finding, finding_needs_risk_assessment=True, finding_has_patch_version=False, finding_was_resolved=False
+    )
 
     assert handler.can_handle(event)
 
@@ -151,13 +160,15 @@ def test_finding_needs_risk_assessment_event():
     assert finding.more_info in api.messages[0]
     for user in finding.risk_assessor:
         assert f"<@{api.user_to_slack_id[user.id]}>" in api.messages[0]
+
 
 def test_finding_has_patch_version_event():
     finding = FINDING_WITH_RISK_YES_PATCH_YES
     api = MockSlackApi(finding.risk_assessor)
     handler = SlackDefaultNotificationHandler(slack_api=api)
-    event = FindingNotificationEvent(finding=finding, finding_needs_risk_assessment=False,
-                                     finding_has_patch_version=True, finding_was_resolved=False)
+    event = FindingNotificationEvent(
+        finding=finding, finding_needs_risk_assessment=False, finding_has_patch_version=True, finding_was_resolved=False
+    )
 
     assert handler.can_handle(event)
 
@@ -169,12 +180,14 @@ def test_finding_has_patch_version_event():
     for user in finding.risk_assessor:
         assert f"<@{api.user_to_slack_id[user.id]}>" in api.messages[0]
 
+
 def test_finding_needs_risk_assessment_and_has_patch_version_event():
     finding = FINDING_WITH_RISK_NO_PATCH_YES
     api = MockSlackApi(finding.risk_assessor)
     handler = SlackDefaultNotificationHandler(slack_api=api)
-    event = FindingNotificationEvent(finding=finding, finding_needs_risk_assessment=True,
-                                     finding_has_patch_version=True, finding_was_resolved=False)
+    event = FindingNotificationEvent(
+        finding=finding, finding_needs_risk_assessment=True, finding_has_patch_version=True, finding_was_resolved=False
+    )
 
     assert handler.can_handle(event)
 
@@ -186,13 +199,16 @@ def test_finding_needs_risk_assessment_and_has_patch_version_event():
     assert finding.more_info in api.messages[0]
     for user in finding.risk_assessor:
         assert f"<@{api.user_to_slack_id[user.id]}>" in api.messages[0]
+
 
 def test_notify_channel_if_risk_assessor_is_missing():
     finding = deepcopy(FINDING_WITH_RISK_NO_PATCH_NO)
     finding.risk_assessor = None
     api = MockSlackApi()
     handler = SlackDefaultNotificationHandler(slack_api=api)
-    event = FindingNotificationEvent(finding=finding, finding_needs_risk_assessment=True, finding_has_patch_version=False, finding_was_resolved=False)
+    event = FindingNotificationEvent(
+        finding=finding, finding_needs_risk_assessment=True, finding_has_patch_version=False, finding_was_resolved=False
+    )
 
     assert handler.can_handle(event)
 
@@ -202,11 +218,14 @@ def test_notify_channel_if_risk_assessor_is_missing():
     assert "no risk assessors" in api.messages[0]
     assert "<!channel>" in api.messages[0]
 
+
 def test_notify_channel_if_risk_assessor_ids_are_unknown():
     finding = FINDING_WITH_RISK_NO_PATCH_NO
     api = MockSlackApi()
     handler = SlackDefaultNotificationHandler(slack_api=api)
-    event = FindingNotificationEvent(finding=finding, finding_needs_risk_assessment=True, finding_has_patch_version=False, finding_was_resolved=False)
+    event = FindingNotificationEvent(
+        finding=finding, finding_needs_risk_assessment=True, finding_has_patch_version=False, finding_was_resolved=False
+    )
 
     assert handler.can_handle(event)
 
@@ -222,7 +241,9 @@ def test_finding_was_resolved_event():
     finding = FINDING_WITH_RISK_NO_PATCH_YES
     api = MockSlackApi()
     handler = SlackDefaultNotificationHandler(slack_api=api)
-    event = FindingNotificationEvent(finding=finding, finding_needs_risk_assessment=False, finding_has_patch_version=False, finding_was_resolved=True)
+    event = FindingNotificationEvent(
+        finding=finding, finding_needs_risk_assessment=False, finding_has_patch_version=False, finding_was_resolved=True
+    )
 
     assert handler.can_handle(event)
 
@@ -245,6 +266,7 @@ def test_app_owner_notification_event():
     assert len(api.messages) == 1
     assert APP_OWNERS in api.messages[0]
     assert "some message" in api.messages[0]
+
 
 class MockSlackApi(SlackApi):
     messages: List[str]
