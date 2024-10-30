@@ -467,7 +467,6 @@ impl Step for ValidateReplayStep {
 
         let heights =
             get_node_heights_from_metrics(&self.logger, &self.registry_helper, self.subnet_id)?;
-
         let cert_height = &heights
             .iter()
             .max_by_key(|v| v.certification_height)
