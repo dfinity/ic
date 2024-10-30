@@ -373,7 +373,10 @@ async fn read_rule(
 
     let rule_metadata = Decode!(&response, GetRuleByIdResponse).unwrap().unwrap();
 
-    info!(&logger, "Response to get_rule_by_id() call: {rule_metadata}");
+    info!(
+        &logger,
+        "Response to get_rule_by_id() call: {rule_metadata}"
+    );
 
     rule_metadata
 }
