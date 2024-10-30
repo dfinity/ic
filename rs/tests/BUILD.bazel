@@ -25,7 +25,7 @@ rust_library(
     testonly = True,
     srcs = glob(["src/**/*.rs"]),
     compile_data = [
-        "//ic-os/components:ic/ic.json5.template",
+        "//ic-os/components:ic/generate-ic-conifg/ic.json5.template",
         "src/ledger_tests/transaction_ledger_correctness.wasm",
     ],
     crate_name = "ic_tests",

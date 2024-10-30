@@ -20,7 +20,7 @@ rust_library(
         "//rs/utils": "utils",
     },
     compile_data = [
-        "//ic-os/components:ic/ic.json5.template",
+        "//ic-os/components:ic/generate-ic-conifg/ic.json5.template",
         "src/message.wasm",
     ],
     crate_name = "ic_system_test_driver",
