@@ -148,6 +148,9 @@ pub mod fixtures;
 // https://github.com/rust-lang/rust/issues/46379
 pub mod common;
 
+// Some time in Oct, 2024. There is nothing magical about this value. The only
+// thing special about it is that it is "realistic". This was chosen by simply
+// looking at the clock.
 const START_TIMESTAMP_SECONDS: u64 = 1730132754;
 
 lazy_static! {
