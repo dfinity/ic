@@ -285,7 +285,7 @@ where
                         }
                         log!(
                             INFO,
-                            "Too many logs received. Will with ranges {subranges:?}"
+                            "Too many logs received. Will retry with ranges {subranges:?}"
                         );
                     }
                 } else {
