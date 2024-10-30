@@ -31,7 +31,7 @@ pub struct Membership {
 }
 
 impl Membership {
-    /// Construct a new MembershipImpl instance.
+    /// Construct a new [`MembershipImpl`] instance.
     pub fn new(
         consensus_cache: Arc<dyn ConsensusPoolCache>,
         registry_client: Arc<dyn RegistryClient>,
@@ -94,12 +94,25 @@ impl Membership {
         previous_beacon: &RandomBeacon,
         node_id: NodeId,
     ) -> Result<Option<Rank>, MembershipError> {
+        self.get_block_maker_rank_and_subnet_size(height, previous_beacon, node_id)
+            .map(|maybe_rank_and_size| maybe_rank_and_size.map(|rank_and_size| rank_and_size.0))
+    }
+
+    pub fn get_block_maker_rank_and_subnet_size(
+        &self,
+        height: Height,
+        previous_beacon: &RandomBeacon,
+        node_id: NodeId,
+    ) -> Result<Option<(Rank, usize)>, MembershipError> {
         let shuffled_nodes = self.get_shuffled_nodes(
             height,
             previous_beacon,
             &RandomnessPurpose::BlockmakerRanking,
         )?;
-        Membership::get_block_maker_rank_from_shuffled_nodes(&node_id, &shuffled_nodes)
+
+        let rank = Membership::get_block_maker_rank_from_shuffled_nodes(&node_id, &shuffled_nodes)?;
+
+        Ok(rank.map(|rank| (rank, shuffled_nodes.len())))
     }
 
     fn get_block_maker_rank_from_shuffled_nodes(

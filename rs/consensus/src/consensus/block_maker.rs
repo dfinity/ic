@@ -122,9 +122,9 @@ impl BlockMaker {
         let height = beacon.content.height.increment();
         match self
             .membership
-            .get_block_maker_rank(height, &beacon, my_node_id)
+            .get_block_maker_rank_and_subnet_size(height, &beacon, my_node_id)
         {
-            Ok(Some(rank)) => {
+            Ok(Some((rank, subnet_size))) => {
                 if !already_proposed(pool, height, my_node_id)
                     && !self.is_better_block_proposal_available(pool, height, rank)
                     && is_time_to_make_block(
@@ -135,6 +135,7 @@ impl BlockMaker {
                         parent.get_value().clone(),
                         height,
                         rank,
+                        subnet_size,
                         self.time_source.as_ref(),
                         Some(&self.metrics),
                     )
@@ -538,7 +539,7 @@ pub(crate) fn already_proposed(pool: &PoolReader<'_>, h: Height, this_node: Node
 //    should be enough to transfer a block (of size at most 4MB) to all (at most 39) peers.
 const DYNAMIC_DELAY_LOOK_BACK_DISTANCE: Height = Height::new(29);
 const DYNAMIC_DELAY_MAX_NON_RANK_0_BLOCKS: usize = 10;
-const DYNAMIC_DELAY_EXTRA_DURATION: Duration = Duration::from_secs(10);
+const DYNAMIC_DELAY_EXTRA_DURATION_PER_PEER: Duration = Duration::from_millis(250);
 
 fn count_non_rank_0_blocks(pool: &PoolReader, block: Block) -> usize {
     let max_height = block.height();
@@ -558,6 +559,7 @@ pub(super) fn get_block_maker_delay(
     parent: Block,
     registry_version: RegistryVersion,
     rank: Rank,
+    subnet_size: usize,
     metrics: Option<&BlockMakerMetrics>,
 ) -> Duration {
     let settings =
@@ -570,7 +572,7 @@ pub(super) fn get_block_maker_delay(
         if let Some(metrics) = metrics {
             metrics.dynamic_delay_triggered.inc();
         }
-        DYNAMIC_DELAY_EXTRA_DURATION
+        DYNAMIC_DELAY_EXTRA_DURATION_PER_PEER * (subnet_size as u32)
     } else {
         Duration::ZERO
     };
@@ -588,6 +590,7 @@ pub(super) fn is_time_to_make_block(
     parent: Block,
     height: Height,
     rank: Rank,
+    subnet_size: usize,
     time_source: &dyn TimeSource,
     metrics: Option<&BlockMakerMetrics>,
 ) -> bool {
@@ -602,6 +605,7 @@ pub(super) fn is_time_to_make_block(
         parent,
         registry_version,
         rank,
+        subnet_size,
         metrics,
     );
 
