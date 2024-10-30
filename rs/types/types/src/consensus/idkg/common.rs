@@ -39,6 +39,7 @@ use super::{
         PreSignatureTranscriptRef, ThresholdSchnorrSigInputsError, ThresholdSchnorrSigInputsRef,
         TranscriptInCreation,
     },
+    vet_kd::VetKdInputs,
 };
 
 /// PseudoRandomId is defined in execution context as plain 32-byte vector, we give it a synonym here.
@@ -1085,6 +1086,7 @@ impl TryFrom<&pb::PreSignatureRef> for PreSignatureRef {
 pub enum ThresholdSigInputsError {
     Ecdsa(ThresholdEcdsaSigInputsError),
     Schnorr(ThresholdSchnorrSigInputsError),
+    VetKd,
 }
 
 type ThresholdSigInputsResult = Result<ThresholdSigInputs, ThresholdSigInputsError>;
@@ -1109,6 +1111,7 @@ fn err_schnorr(err: ThresholdSchnorrSigInputsError) -> ThresholdSigInputsResult 
 pub enum ThresholdSigInputsRef {
     Ecdsa(ThresholdEcdsaSigInputsRef),
     Schnorr(ThresholdSchnorrSigInputsRef),
+    VetKd(VetKdInputs),
 }
 
 impl ThresholdSigInputsRef {
@@ -1120,6 +1123,7 @@ impl ThresholdSigInputsRef {
             ThresholdSigInputsRef::Schnorr(inputs) => {
                 PreSignatureRef::Schnorr(inputs.presig_transcript_ref.clone())
             }
+            _ => panic!(),
         }
     }
 
@@ -1127,6 +1131,7 @@ impl ThresholdSigInputsRef {
         match self {
             ThresholdSigInputsRef::Ecdsa(inputs) => inputs.derivation_path.caller,
             ThresholdSigInputsRef::Schnorr(inputs) => inputs.derivation_path.caller,
+            ThresholdSigInputsRef::VetKd(inputs) => inputs.derivation_path.caller,
         }
     }
 
@@ -1134,6 +1139,7 @@ impl ThresholdSigInputsRef {
         match self {
             ThresholdSigInputsRef::Ecdsa(_) => SignatureScheme::Ecdsa,
             ThresholdSigInputsRef::Schnorr(_) => SignatureScheme::Schnorr,
+            ThresholdSigInputsRef::VetKd(_) => SignatureScheme::VetKd,
         }
     }
 
@@ -1145,6 +1151,7 @@ impl ThresholdSigInputsRef {
             ThresholdSigInputsRef::Schnorr(inputs_ref) => inputs_ref
                 .translate(resolver)
                 .map_or_else(err_schnorr, ok_schnorr),
+            ThresholdSigInputsRef::VetKd(inputs) => Ok(ThresholdSigInputs::VetKd(inputs.clone())),
         }
     }
 }
@@ -1152,18 +1159,21 @@ impl ThresholdSigInputsRef {
 pub enum ThresholdSigInputs {
     Ecdsa(ThresholdEcdsaSigInputs),
     Schnorr(ThresholdSchnorrSigInputs),
+    VetKd(VetKdInputs),
 }
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum CombinedSignature {
     Ecdsa(ThresholdEcdsaCombinedSignature),
     Schnorr(ThresholdSchnorrCombinedSignature),
+    VetKd, //TODO
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum SignatureScheme {
     Ecdsa,
     Schnorr,
+    VetKd,
 }
 
 impl Display for SignatureScheme {
@@ -1171,6 +1181,7 @@ impl Display for SignatureScheme {
         match self {
             SignatureScheme::Ecdsa => write!(f, "ECDSA"),
             SignatureScheme::Schnorr => write!(f, "Schnorr"),
+            SignatureScheme::VetKd => write!(f, "VetKd"),
         }
     }
 }

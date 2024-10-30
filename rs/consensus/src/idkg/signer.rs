@@ -21,7 +21,8 @@ use ic_types::consensus::idkg::common::{
     CombinedSignature, SignatureScheme, ThresholdSigInputs, ThresholdSigInputsRef,
 };
 use ic_types::consensus::idkg::{
-    ecdsa_sig_share_prefix, EcdsaSigShare, IDkgBlockReader, IDkgMessage, IDkgStats, RequestId,
+    ecdsa_sig_share_prefix, vet_kd_share_prefix, EcdsaSigShare, IDkgBlockReader, IDkgMessage,
+    IDkgStats, RequestId,
 };
 use ic_types::consensus::idkg::{schnorr_sig_share_prefix, SchnorrSigShare, SigShare};
 use ic_types::crypto::canister_threshold_sig::error::ThresholdEcdsaCombineSigSharesError;
@@ -44,12 +45,14 @@ use super::utils::{build_signature_inputs, update_purge_height};
 enum CreateSigShareError {
     Ecdsa(ThresholdEcdsaCreateSigShareError),
     Schnorr(ThresholdSchnorrCreateSigShareError),
+    VetKd, //TODO
 }
 
 #[derive(Clone, Debug)]
 enum VerifySigShareError {
     Ecdsa(ThresholdEcdsaVerifySigShareError),
     Schnorr(ThresholdSchnorrVerifySigShareError),
+    VetKd, //TODO
     ThresholdSchemeMismatch,
 }
 
@@ -58,6 +61,7 @@ impl VerifySigShareError {
         match self {
             VerifySigShareError::Ecdsa(err) => err.is_reproducible(),
             VerifySigShareError::Schnorr(err) => err.is_reproducible(),
+            VerifySigShareError::VetKd => true, //TODO
             VerifySigShareError::ThresholdSchemeMismatch => true,
         }
     }
@@ -67,6 +71,7 @@ impl VerifySigShareError {
 enum CombineSigSharesError {
     Ecdsa(ThresholdEcdsaCombineSigSharesError),
     Schnorr(ThresholdSchnorrCombineSigSharesError),
+    VetKd, //TODO
 }
 
 impl CombineSigSharesError {
@@ -77,7 +82,7 @@ impl CombineSigSharesError {
                 ThresholdEcdsaCombineSigSharesError::UnsatisfiedReconstructionThreshold { .. }
             ) | CombineSigSharesError::Schnorr(
                 ThresholdSchnorrCombineSigSharesError::UnsatisfiedReconstructionThreshold { .. }
-            )
+            ) //TODO VetKd
         )
     }
 }
@@ -351,6 +356,7 @@ impl ThresholdSignerImpl {
                 inputs.presig_transcript().blinder_unmasked(),
                 inputs.key_transcript(),
             ],
+            ThresholdSigInputs::VetKd(_) => vec![],
         };
         load_transcripts(idkg_pool, transcript_loader, &transcripts)
     }
@@ -415,6 +421,9 @@ impl ThresholdSignerImpl {
                     },
                 )
             }
+            ThresholdSigInputs::VetKd(_inputs) => {
+                todo!("Call crypto endpoint");
+            }
         }
     }
 
@@ -452,6 +461,9 @@ impl ThresholdSignerImpl {
                     |_| Ok(IDkgMessage::SchnorrSigShare(share)),
                 )
             }
+            (ThresholdSigInputs::VetKd(_inputs), SigShare::VetKd(_share)) => {
+                todo!("Call crypto endpoint")
+            }
             _ => Err(VerifySigShareError::ThresholdSchemeMismatch),
         };
 
@@ -485,6 +497,12 @@ impl ThresholdSignerImpl {
                     .any(|(_, share)| {
                         share.request_id == *request_id && share.signer_id == *signer_id
                     })
+            }
+            SignatureScheme::VetKd => {
+                let prefix = vet_kd_share_prefix(request_id, signer_id);
+                validated.vet_kd_shares_by_prefix(prefix).any(|(_, share)| {
+                    share.request_id == *request_id && share.signer_id == *signer_id
+                })
             }
         }
     }
@@ -671,6 +689,16 @@ impl<'a> ThresholdSignatureBuilderImpl<'a> {
                         |err| Err(CombineSigSharesError::Schnorr(err)),
                         |share| Ok(CombinedSignature::Schnorr(share)),
                     )
+            }
+            ThresholdSigInputs::VetKd(_inputs) => {
+                // Collect the signature shares for the request.
+                let mut sig_shares = BTreeMap::new();
+                for (_, share) in self.idkg_pool.validated().vet_kd_shares() {
+                    if share.request_id == *request_id {
+                        sig_shares.insert(share.signer_id, share.share.clone());
+                    }
+                }
+                todo!("Call crypto endpoint");
             }
         };
         stats.record_sig_share_aggregation(request_id, start.elapsed());

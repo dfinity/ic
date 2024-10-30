@@ -141,7 +141,7 @@ pub(crate) fn update_signature_agreements(
                 signature: signature.signature.clone(),
             }
             .encode(),
-            None => continue,
+            _ => continue,
         };
 
         let response = ic_types::batch::ConsensusResponse::new(

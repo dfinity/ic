@@ -1,6 +1,6 @@
 use ic_btc_replica_types::{GetSuccessorsRequestInitial, SendTransactionRequest};
 use ic_logger::{info, ReplicaLogger};
-use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId, SchnorrKeyId};
+use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId, SchnorrKeyId, VetKdKeyId};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     registry::crypto::v1 as pb_crypto,
@@ -803,9 +803,38 @@ impl TryFrom<pb_metadata::SchnorrArguments> for SchnorrArguments {
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
+pub struct VetKdArguments {
+    pub key_id: VetKdKeyId,
+    pub data: Vec<u8>,
+    pub height: Height,
+}
+
+impl From<&VetKdArguments> for pb_metadata::VetKdArguments {
+    fn from(args: &VetKdArguments) -> Self {
+        Self {
+            key_id: Some((&args.key_id).into()),
+            data: args.data.to_vec(),
+            height: args.height.get(),
+        }
+    }
+}
+
+impl TryFrom<pb_metadata::VetKdArguments> for VetKdArguments {
+    type Error = ProxyDecodeError;
+    fn try_from(context: pb_metadata::VetKdArguments) -> Result<Self, Self::Error> {
+        Ok(VetKdArguments {
+            key_id: try_from_option_field(context.key_id, "VetKdArguments::key_id")?,
+            data: context.data.to_vec(),
+            height: Height::from(context.height),
+        })
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum ThresholdArguments {
     Ecdsa(EcdsaArguments),
     Schnorr(SchnorrArguments),
+    VetKd(VetKdArguments),
 }
 
 impl ThresholdArguments {
@@ -814,6 +843,7 @@ impl ThresholdArguments {
         match self {
             ThresholdArguments::Ecdsa(args) => MasterPublicKeyId::Ecdsa(args.key_id.clone()),
             ThresholdArguments::Schnorr(args) => MasterPublicKeyId::Schnorr(args.key_id.clone()),
+            ThresholdArguments::VetKd(args) => MasterPublicKeyId::VetKd(args.key_id.clone()),
         }
     }
 }
@@ -826,6 +856,9 @@ impl From<&ThresholdArguments> for pb_metadata::ThresholdArguments {
             }
             ThresholdArguments::Schnorr(args) => {
                 pb_metadata::threshold_arguments::ThresholdScheme::Schnorr(args.into())
+            }
+            ThresholdArguments::VetKd(args) => {
+                pb_metadata::threshold_arguments::ThresholdScheme::VetKd(args.into())
             }
         };
         Self {
@@ -848,6 +881,9 @@ impl TryFrom<pb_metadata::ThresholdArguments> for ThresholdArguments {
             pb_metadata::threshold_arguments::ThresholdScheme::Schnorr(args) => Ok(
                 ThresholdArguments::Schnorr(SchnorrArguments::try_from(args)?),
             ),
+            pb_metadata::threshold_arguments::ThresholdScheme::VetKd(args) => {
+                Ok(ThresholdArguments::VetKd(VetKdArguments::try_from(args)?))
+            }
         }
     }
 }
@@ -869,6 +905,7 @@ impl SignWithThresholdContext {
         match &self.args {
             ThresholdArguments::Ecdsa(args) => MasterPublicKeyId::Ecdsa(args.key_id.clone()),
             ThresholdArguments::Schnorr(args) => MasterPublicKeyId::Schnorr(args.key_id.clone()),
+            ThresholdArguments::VetKd(args) => MasterPublicKeyId::VetKd(args.key_id.clone()),
         }
     }
 
@@ -880,6 +917,11 @@ impl SignWithThresholdContext {
     /// Returns true if arguments are for Schnorr.
     pub fn is_schnorr(&self) -> bool {
         matches!(&self.args, ThresholdArguments::Schnorr(_))
+    }
+
+    /// Returns true if arguments are for VetKd.
+    pub fn is_vet_kd(&self) -> bool {
+        matches!(&self.args, ThresholdArguments::VetKd(_))
     }
 
     /// Returns ECDSA arguments.
@@ -899,6 +941,16 @@ impl SignWithThresholdContext {
         match &self.args {
             ThresholdArguments::Schnorr(args) => args,
             _ => panic!("Schnorr arguments not found."),
+        }
+    }
+
+    /// Returns Vetkdguments.
+    /// Panics if arguments are not for VetKd
+    /// Should only be called if `is_vet_kd` returns true.
+    pub fn vet_kd_args(&self) -> &VetKdArguments {
+        match &self.args {
+            ThresholdArguments::VetKd(args) => args,
+            _ => panic!("VetKd arguments not found."),
         }
     }
 }

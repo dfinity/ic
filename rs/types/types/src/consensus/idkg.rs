@@ -53,6 +53,7 @@ use self::common::{PreSignatureInCreation, PreSignatureRef};
 pub mod common;
 pub mod ecdsa;
 pub mod schnorr;
+pub mod vet_kd;
 
 /// For completed signature requests, we differentiate between those
 /// that have already been reported and those that have not. This is
@@ -752,6 +753,7 @@ pub enum IDkgMessage {
     DealingSupport(IDkgDealingSupport),
     EcdsaSigShare(EcdsaSigShare),
     SchnorrSigShare(SchnorrSigShare),
+    VetKdShare(VetKdShare),
     Complaint(SignedIDkgComplaint),
     Opening(SignedIDkgOpening),
 }
@@ -778,6 +780,7 @@ impl IDkgMessage {
             IDkgMessage::DealingSupport(x) => x.message_id(),
             IDkgMessage::EcdsaSigShare(x) => x.message_id(),
             IDkgMessage::SchnorrSigShare(x) => x.message_id(),
+            IDkgMessage::VetKdShare(x) => x.message_id(),
             IDkgMessage::Complaint(x) => x.message_id(),
             IDkgMessage::Opening(x) => x.message_id(),
         }
@@ -792,6 +795,7 @@ impl From<IDkgMessage> for pb::IDkgMessage {
             IDkgMessage::DealingSupport(x) => Msg::DealingSupport(x.into()),
             IDkgMessage::EcdsaSigShare(x) => Msg::EcdsaSigShare(x.into()),
             IDkgMessage::SchnorrSigShare(x) => Msg::SchnorrSigShare(x.into()),
+            IDkgMessage::VetKdShare(x) => Msg::VetKdShare(x.into()),
             IDkgMessage::Complaint(x) => Msg::Complaint(x.into()),
             IDkgMessage::Opening(x) => Msg::Opening(x.into()),
         };
@@ -812,6 +816,7 @@ impl TryFrom<pb::IDkgMessage> for IDkgMessage {
             Msg::DealingSupport(x) => IDkgMessage::DealingSupport(x.try_into()?),
             Msg::EcdsaSigShare(x) => IDkgMessage::EcdsaSigShare(x.try_into()?),
             Msg::SchnorrSigShare(x) => IDkgMessage::SchnorrSigShare(x.try_into()?),
+            Msg::VetKdShare(x) => IDkgMessage::VetKdShare(x.try_into()?),
             Msg::Complaint(x) => IDkgMessage::Complaint(x.try_into()?),
             Msg::Opening(x) => IDkgMessage::Opening(x.try_into()?),
         })
@@ -931,7 +936,7 @@ pub fn ecdsa_sig_share_prefix(
     request_id: &RequestId,
     sig_share_node_id: &NodeId,
 ) -> IDkgPrefixOf<EcdsaSigShare> {
-    // Group_tag: quadruple Id, Meta info: <sig share sender>
+    // Group_tag: callback, Meta info: <sig share sender>
     let mut hasher = Sha256::new();
     sig_share_node_id.hash(&mut hasher);
 
@@ -945,9 +950,23 @@ pub fn schnorr_sig_share_prefix(
     request_id: &RequestId,
     sig_share_node_id: &NodeId,
 ) -> IDkgPrefixOf<SchnorrSigShare> {
-    // Group_tag: pre-signature Id, Meta info: <sig share sender>
+    // Group_tag: callback Id, Meta info: <sig share sender>
     let mut hasher = Sha256::new();
     sig_share_node_id.hash(&mut hasher);
+
+    IDkgPrefixOf::new(IDkgPrefix::new(
+        request_id.callback_id.get(),
+        hasher.finish(),
+    ))
+}
+
+pub fn vet_kd_share_prefix(
+    request_id: &RequestId,
+    vet_kd_share_node_id: &NodeId,
+) -> IDkgPrefixOf<VetKdShare> {
+    // Group_tag: callback Id, Meta info: <sig share sender>
+    let mut hasher = Sha256::new();
+    vet_kd_share_node_id.hash(&mut hasher);
 
     IDkgPrefixOf::new(IDkgPrefix::new(
         request_id.callback_id.get(),
@@ -1064,6 +1083,7 @@ pub enum IDkgArtifactId {
         IDkgPrefixOf<SchnorrSigShare>,
         SigShareIdDataOf<SchnorrSigShare>,
     ),
+    VetKdShare(IDkgPrefixOf<VetKdShare>, SigShareIdDataOf<VetKdShare>),
     Complaint(
         IDkgPrefixOf<SignedIDkgComplaint>,
         IDkgArtifactIdDataOf<SignedIDkgComplaint>,
@@ -1081,6 +1101,7 @@ impl IDkgArtifactId {
             IDkgArtifactId::DealingSupport(prefix, _) => prefix.as_ref().clone(),
             IDkgArtifactId::EcdsaSigShare(prefix, _) => prefix.as_ref().clone(),
             IDkgArtifactId::SchnorrSigShare(prefix, _) => prefix.as_ref().clone(),
+            IDkgArtifactId::VetKdShare(prefix, _) => prefix.as_ref().clone(),
             IDkgArtifactId::Complaint(prefix, _) => prefix.as_ref().clone(),
             IDkgArtifactId::Opening(prefix, _) => prefix.as_ref().clone(),
         }
@@ -1092,6 +1113,7 @@ impl IDkgArtifactId {
             IDkgArtifactId::DealingSupport(_, data) => data.as_ref().hash.clone(),
             IDkgArtifactId::EcdsaSigShare(_, data) => data.as_ref().hash.clone(),
             IDkgArtifactId::SchnorrSigShare(_, data) => data.as_ref().hash.clone(),
+            IDkgArtifactId::VetKdShare(_, data) => data.as_ref().hash.clone(),
             IDkgArtifactId::Complaint(_, data) => data.as_ref().hash.clone(),
             IDkgArtifactId::Opening(_, data) => data.as_ref().hash.clone(),
         }
@@ -1103,6 +1125,7 @@ impl IDkgArtifactId {
             IDkgArtifactId::DealingSupport(_, data) => data.as_ref().height,
             IDkgArtifactId::EcdsaSigShare(_, data) => data.as_ref().height,
             IDkgArtifactId::SchnorrSigShare(_, data) => data.as_ref().height,
+            IDkgArtifactId::VetKdShare(_, data) => data.as_ref().height,
             IDkgArtifactId::Complaint(_, data) => data.as_ref().height,
             IDkgArtifactId::Opening(_, data) => data.as_ref().height,
         }
@@ -1138,6 +1161,10 @@ impl From<IDkgArtifactId> for pb::IDkgArtifactId {
                     id_data: Some(pb::SigShareIdData::from(d.get())),
                 })
             }
+            IDkgArtifactId::VetKdShare(p, d) => Kind::VetKdShare(pb::PrefixPairSigShare {
+                prefix: Some((&p.get()).into()),
+                id_data: Some(pb::SigShareIdData::from(d.get())),
+            }),
             IDkgArtifactId::Complaint(p, d) => Kind::Complaint(pb::PrefixPairIDkg {
                 prefix: Some((&p.get()).into()),
                 id_data: Some(pb::IDkgArtifactIdData::from(d.get())),
@@ -1192,6 +1219,13 @@ impl TryFrom<pb::IDkgArtifactId> for IDkgArtifactId {
                     "SchnorrSigShare::id_data",
                 )?),
             ),
+            Kind::VetKdShare(p) => Self::VetKdShare(
+                IDkgPrefixOf::new(try_from_option_field(
+                    p.prefix.as_ref(),
+                    "VetKdShare::prefix",
+                )?),
+                SigShareIdDataOf::new(try_from_option_field(p.id_data, "VetKdShare::id_data")?),
+            ),
             Kind::Complaint(p) => Self::Complaint(
                 IDkgPrefixOf::new(try_from_option_field(
                     p.prefix.as_ref(),
@@ -1215,6 +1249,7 @@ pub enum IDkgMessageType {
     DealingSupport,
     EcdsaSigShare,
     SchnorrSigShare,
+    VetKdShare,
     Complaint,
     Opening,
 }
@@ -1226,6 +1261,7 @@ impl From<&IDkgMessage> for IDkgMessageType {
             IDkgMessage::DealingSupport(_) => IDkgMessageType::DealingSupport,
             IDkgMessage::EcdsaSigShare(_) => IDkgMessageType::EcdsaSigShare,
             IDkgMessage::SchnorrSigShare(_) => IDkgMessageType::SchnorrSigShare,
+            IDkgMessage::VetKdShare(_) => IDkgMessageType::VetKdShare,
             IDkgMessage::Complaint(_) => IDkgMessageType::Complaint,
             IDkgMessage::Opening(_) => IDkgMessageType::Opening,
         }
@@ -1239,6 +1275,7 @@ impl From<&IDkgArtifactId> for IDkgMessageType {
             IDkgArtifactId::DealingSupport(..) => IDkgMessageType::DealingSupport,
             IDkgArtifactId::EcdsaSigShare(..) => IDkgMessageType::EcdsaSigShare,
             IDkgArtifactId::SchnorrSigShare(..) => IDkgMessageType::SchnorrSigShare,
+            IDkgArtifactId::VetKdShare(..) => IDkgMessageType::VetKdShare,
             IDkgArtifactId::Complaint(..) => IDkgMessageType::Complaint,
             IDkgArtifactId::Opening(..) => IDkgMessageType::Opening,
         }
@@ -1252,6 +1289,7 @@ impl IDkgMessageType {
             Self::DealingSupport => "dealing_support",
             Self::EcdsaSigShare => "ecdsa_sig_share",
             Self::SchnorrSigShare => "schnorr_sig_share",
+            Self::VetKdShare => "vet_kd_share",
             Self::Complaint => "complaint",
             Self::Opening => "opening",
         }
@@ -1356,10 +1394,57 @@ impl Display for SchnorrSigShare {
     }
 }
 
+/// The VetKd signature share
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+pub struct VetKdShare {
+    /// The node that signed the share
+    pub signer_id: NodeId,
+
+    /// The request this signature share belongs to
+    pub request_id: RequestId,
+
+    /// The signature share
+    pub share: ThresholdSchnorrSigShare,
+}
+
+impl From<&VetKdShare> for pb::VetKdShare {
+    fn from(value: &VetKdShare) -> Self {
+        Self {
+            signer_id: Some(node_id_into_protobuf(value.signer_id)),
+            request_id: Some(pb::RequestId::from(value.request_id)),
+            sig_share_raw: value.share.sig_share_raw.clone(),
+        }
+    }
+}
+
+impl TryFrom<&pb::VetKdShare> for VetKdShare {
+    type Error = ProxyDecodeError;
+    fn try_from(value: &pb::VetKdShare) -> Result<Self, Self::Error> {
+        Ok(Self {
+            signer_id: node_id_try_from_option(value.signer_id.clone())?,
+            request_id: try_from_option_field(value.request_id.as_ref(), "VetKdShare::request_id")?,
+            share: ThresholdSchnorrSigShare {
+                sig_share_raw: value.sig_share_raw.clone(),
+            },
+        })
+    }
+}
+
+impl Display for VetKdShare {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "VetKdShare[request_id = {:?}, signer_id = {:?}]",
+            self.request_id, self.signer_id,
+        )
+    }
+}
+
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum SigShare {
     Ecdsa(EcdsaSigShare),
     Schnorr(SchnorrSigShare),
+    VetKd(VetKdShare),
 }
 
 impl Display for SigShare {
@@ -1367,6 +1452,7 @@ impl Display for SigShare {
         match self {
             SigShare::Ecdsa(share) => write!(f, "{share}"),
             SigShare::Schnorr(share) => write!(f, "{share}"),
+            SigShare::VetKd(share) => write!(f, "{share}"),
         }
     }
 }
@@ -1376,6 +1462,7 @@ impl SigShare {
         match self {
             SigShare::Ecdsa(share) => share.signer_id,
             SigShare::Schnorr(share) => share.signer_id,
+            SigShare::VetKd(share) => share.signer_id,
         }
     }
 
@@ -1383,6 +1470,7 @@ impl SigShare {
         match self {
             SigShare::Ecdsa(share) => share.request_id,
             SigShare::Schnorr(share) => share.request_id,
+            SigShare::VetKd(share) => share.request_id,
         }
     }
 
@@ -1390,6 +1478,7 @@ impl SigShare {
         match self {
             SigShare::Ecdsa(_) => SignatureScheme::Ecdsa,
             SigShare::Schnorr(_) => SignatureScheme::Schnorr,
+            SigShare::VetKd(_) => SignatureScheme::VetKd,
         }
     }
 }
@@ -1589,6 +1678,16 @@ impl TryFrom<IDkgMessage> for SchnorrSigShare {
     fn try_from(msg: IDkgMessage) -> Result<Self, Self::Error> {
         match msg {
             IDkgMessage::SchnorrSigShare(x) => Ok(x),
+            _ => Err(msg),
+        }
+    }
+}
+
+impl TryFrom<IDkgMessage> for VetKdShare {
+    type Error = IDkgMessage;
+    fn try_from(msg: IDkgMessage) -> Result<Self, Self::Error> {
+        match msg {
+            IDkgMessage::VetKdShare(x) => Ok(x),
             _ => Err(msg),
         }
     }
@@ -1958,6 +2057,20 @@ impl IDkgObject for SchnorrSigShare {
     }
 }
 
+impl IDkgObject for VetKdShare {
+    fn message_prefix(&self) -> IDkgPrefixOf<Self> {
+        vet_kd_share_prefix(&self.request_id, &self.signer_id)
+    }
+
+    fn message_id(&self) -> IDkgArtifactId {
+        let id_data = SigShareIdDataOf::new(SigShareIdData {
+            height: self.request_id.height,
+            hash: crypto_hash(self).get(),
+        });
+        IDkgArtifactId::VetKdShare(self.message_prefix(), id_data)
+    }
+}
+
 impl IDkgObject for SignedIDkgComplaint {
     fn message_prefix(&self) -> IDkgPrefixOf<Self> {
         complaint_prefix(
@@ -2005,6 +2118,7 @@ impl From<&IDkgMessage> for IDkgArtifactId {
             IDkgMessage::DealingSupport(object) => object.message_id(),
             IDkgMessage::EcdsaSigShare(object) => object.message_id(),
             IDkgMessage::SchnorrSigShare(object) => object.message_id(),
+            IDkgMessage::VetKdShare(object) => object.message_id(),
             IDkgMessage::Complaint(object) => object.message_id(),
             IDkgMessage::Opening(object) => object.message_id(),
         }

@@ -595,6 +595,11 @@ fn validate_new_signature_agreements(
                         .map_err(ThresholdSchnorrVerifyCombinedSignatureError)?;
                         new_signatures.insert(*random_id, CombinedSignature::Schnorr(signature));
                     }
+                    ThresholdSigInputsRef::VetKd(_) => {
+                        return Err(
+                            InvalidIDkgPayloadReason::NewSignatureUnexpected(*random_id).into()
+                        )
+                    }
                 }
             }
         }
