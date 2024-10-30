@@ -190,6 +190,7 @@ pub fn generate_testnet_config(
     let use_ssh_authorized_keys = use_ssh_authorized_keys.unwrap_or(true);
 
     let icos_settings = ICOSSettings {
+        config_version: CONFIG_VERSION.to_string(),
         mgmt_mac,
         deployment_environment,
         logging,

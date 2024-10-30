@@ -207,6 +207,7 @@ pub fn main() -> Result<()> {
             };
 
             let icos_settings = ICOSSettings {
+                config_version: CONFIG_VERSION.to_string(),
                 mgmt_mac,
                 deployment_environment: deployment_json_settings.deployment.name,
                 logging,
