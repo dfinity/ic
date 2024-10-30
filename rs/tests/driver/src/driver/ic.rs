@@ -286,52 +286,34 @@ impl InternetComputer {
     }
 
     fn create_secret_key_stores(&mut self, tempdir: &Path) -> Result<()> {
-        for n in self.unassigned_nodes.iter_mut() {
-            let sks = NodeSecretKeyStore::new(tempdir.join(format!("node-{:p}", n)))?;
-            n.secret_key_store = Some(sks);
-        }
-        for n in self.api_boundary_nodes.iter_mut() {
-            let sks = NodeSecretKeyStore::new(tempdir.join(format!("node-{:p}", n)))?;
-            n.secret_key_store = Some(sks);
-        }
-        for s in self.subnets.iter_mut() {
-            for n in s.nodes.iter_mut() {
-                let sks = NodeSecretKeyStore::new(tempdir.join(format!("node-{:p}", n)))?;
-                n.secret_key_store = Some(sks);
-            }
+        for node in self
+            .subnets
+            .iter_mut()
+            .flat_map(|subnet| subnet.nodes.iter_mut())
+            .chain(self.unassigned_nodes.iter_mut())
+            .chain(self.api_boundary_nodes.iter_mut())
+        {
+            let sks = NodeSecretKeyStore::new(tempdir.join(format!("node-{:p}", node)))?;
+            node.secret_key_store = Some(sks);
         }
         Ok(())
     }
 
     fn propagate_ip_addrs(&mut self, res_group: &ResourceGroup) {
-        for n in self.unassigned_nodes.iter_mut() {
-            n.ipv6 = Some(
+        for node in self
+            .subnets
+            .iter_mut()
+            .flat_map(|subnet| subnet.nodes.iter_mut())
+            .chain(self.unassigned_nodes.iter_mut())
+            .chain(self.api_boundary_nodes.iter_mut())
+        {
+            node.ipv6 = Some(
                 res_group
                     .vms
-                    .get(&n.id().to_string())
-                    .unwrap_or_else(|| panic!("no VM found for [node_id = {:?}]", n.id()))
+                    .get(&node.id().to_string())
+                    .unwrap_or_else(|| panic!("no VM found for [node_id = {:?}]", node.id()))
                     .ipv6,
             );
-        }
-        for n in self.api_boundary_nodes.iter_mut() {
-            n.ipv6 = Some(
-                res_group
-                    .vms
-                    .get(&n.id().to_string())
-                    .unwrap_or_else(|| panic!("no VM found for [node_id = {:?}]", n.id()))
-                    .ipv6,
-            );
-        }
-        for s in self.subnets.iter_mut() {
-            for n in s.nodes.iter_mut() {
-                n.ipv6 = Some(
-                    res_group
-                        .vms
-                        .get(n.id().to_string().as_str())
-                        .unwrap_or_else(|| panic!("no VM found for [node_id = {:?}]", n.id()))
-                        .ipv6,
-                );
-            }
         }
     }
 
