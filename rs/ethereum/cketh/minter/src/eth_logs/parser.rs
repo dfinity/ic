@@ -103,7 +103,7 @@ impl LogParser for ReceivedErc20LogParser {
     }
 }
 
-pub struct ReceivedEthOrErc20LogParser {}
+pub enum ReceivedEthOrErc20LogParser {}
 
 impl LogParser for ReceivedEthOrErc20LogParser {
     fn parse_log(entry: LogEntry) -> Result<ReceivedEvent, ReceivedEventError> {

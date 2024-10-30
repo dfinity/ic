@@ -19,7 +19,9 @@ use thiserror::Error;
 pub use parser::{
     LogParser, ReceivedErc20LogParser, ReceivedEthLogParser, ReceivedEthOrErc20LogParser,
 };
-pub use scraping::{LogScraping, ReceivedErc20LogScraping, ReceivedEthLogScraping};
+pub use scraping::{
+    LogScraping, ReceivedErc20LogScraping, ReceivedEthLogScraping, ReceivedEthOrErc20LogScraping,
+};
 
 // Keccak256("ReceivedEth(address,uint256,bytes32)")
 const RECEIVED_ETH_EVENT_TOPIC: [u8; 32] =
