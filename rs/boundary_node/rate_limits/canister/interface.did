@@ -98,7 +98,7 @@ type HttpResponse = record {
 
 // Initialization arguments for the service
 type InitArg = record {
-  authorized_principal: principal;     // Principal authorized to perform write operations, such as adding configurations and disclosing rules
+  authorized_principal: opt principal; // Principal authorized to perform write operations, such as adding configurations and disclosing rules
   registry_polling_period_secs: nat64; // IDs of existing API boundary nodes are polled from the registry with this periodicity
 };
 

@@ -27,9 +27,11 @@ const REGISTRY_CANISTER_METHOD: &str = "get_api_boundary_node_ids";
 #[candid_method(init)]
 fn init(init_arg: InitArg) {
     // Set authorized principal, which performs write operations, such as adding new configurations
-    with_state(|state| {
-        state.set_authorized_principal(init_arg.authorized_principal);
-    });
+    if let Some(principal) = init_arg.authorized_principal {
+        with_state(|state| {
+            state.set_authorized_principal(principal);
+        });
+    }
     // Initialize an empty config corresponding to version=1
     init_version_and_config(1);
     // Spawn periodic job of fetching latest API boundary node topology
