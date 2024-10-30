@@ -64,7 +64,7 @@ function get_network_settings() {
 
     # Full IPv6 address
     ipv6_address_system_full=$(eval_command_with_retries \
-        "ip -6 addr show | awk '(/inet6/) && (!/fe80|::1/) { print \$2 }'" \
+        "ip -6 addr show | awk '(/inet6/) && (!/\sfe80|\s::1/) { print \$2 }'" \
         "Failed to get system's network configuration.")
 
     if [ -z "${ipv6_address_system_full}" ]; then
