@@ -146,6 +146,8 @@ impl BlockRangeInclusive {
 
     /// Join two block ranges into a single range that spans both ranges.
     ///
+    /// The two block ranges need not be adjacent or non-overlapping.
+    ///
     /// # Examples
     ///
     /// ```
@@ -155,6 +157,10 @@ impl BlockRangeInclusive {
     /// let upper_range = BlockRangeInclusive::from(4..=5_u8);
     /// assert_eq!(lower_range.clone().join_with(upper_range.clone()), BlockRangeInclusive::from(1..=5_u8));
     /// assert_eq!(upper_range.join_with(lower_range), BlockRangeInclusive::from(1..=5_u8));
+    ///
+    /// let lower_range = BlockRangeInclusive::from(1..=3_u8);
+    /// let upper_range = BlockRangeInclusive::from(5..=10_u8);
+    /// assert_eq!(lower_range.join_with(upper_range), BlockRangeInclusive::from(1..=10_u8));
     /// ```
     pub fn join_with(self, other: BlockRangeInclusive) -> BlockRangeInclusive {
         let (start, end) = self.0.into_inner();
@@ -216,7 +222,6 @@ impl Iterator for BlockRangeChunks {
     type Item = BlockRangeInclusive;
 
     fn next(&mut self) -> Option<Self::Item> {
-
         if self.exhausted {
             return None;
         }
