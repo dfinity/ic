@@ -257,27 +257,30 @@ fn test_check_transaction_passed() {
 
     let txid =
         Txid::from_str("c80763842edc9a697a2114517cf0c138c5403a761ef63cfad1fa6993fa3475ed").unwrap();
-    let call_id = setup
-        .submit_kyt_call(
-            "check_transaction",
-            Encode!(&CheckTransactionArgs {
-                txid: txid.as_ref().to_vec()
-            })
-            .unwrap(),
-            CHECK_TRANSACTION_CYCLES_REQUIRED,
-        )
-        .expect("submit_call failed to return call id");
     let env = &setup.env;
 
-    // The response body used for testing below is generated from the output of
-    //
-    //   curl -H 'User-Agent: bitcoin-value-collector' https://btcscan.org/api/tx/{txid}/raw
-    //
-    // There wll be two outcalls because the canister will first fetch the above
-    // given txid, and then fetch the vout[0] from the returned transaction body.
+    // Normal operation requires making http outcalls.
+    // We'll run this again after testing other KytMode.
+    let test_normal_operation = || {
+        let call_id = setup
+            .submit_kyt_call(
+                "check_transaction",
+                Encode!(&CheckTransactionArgs {
+                    txid: txid.as_ref().to_vec()
+                })
+                .unwrap(),
+                CHECK_TRANSACTION_CYCLES_REQUIRED,
+            )
+            .expect("submit_call failed to return call id");
+        // The response body used for testing below is generated from the output of
+        //
+        //   curl -H 'User-Agent: bitcoin-value-collector' https://btcscan.org/api/tx/{txid}/raw
+        //
+        // There wll be two outcalls because the canister will first fetch the above
+        // given txid, and then fetch the vout[0] from the returned transaction body.
 
-    let canister_http_requests = tick_until_next_request(env);
-    let body = b"\
+        let canister_http_requests = tick_until_next_request(env);
+        let body = b"\
 \x02\x00\x00\x00\x01\x17\x34\x3a\xab\xa9\x67\x67\x2f\x17\xef\x0a\xbf\x4b\xb1\x14\xad\x19\x63\xe0\
 \x7d\xd2\xf2\x05\xaa\x25\xa4\xda\x50\x3e\xdb\x01\xab\x01\x00\x00\x00\x6a\x47\x30\x44\x02\x20\x21\
 \x81\xb5\x9c\xa7\xed\x7e\x2c\x8e\x06\x96\x52\xb0\x7e\xd2\x10\x24\x9e\x83\x37\xec\xc5\x35\xca\x6b\
@@ -288,20 +291,20 @@ fn test_check_transaction_passed() {
 \xed\xfc\x0a\x8b\x66\xfe\xeb\xae\x5c\x2e\x25\xa7\xb6\xa5\xd1\xcf\x31\x88\xac\x7c\x2e\x00\x00\x00\
 \x00\x00\x00\x19\x76\xa9\x14\xb9\x73\x68\xd8\xbf\x0a\x37\x69\x00\x85\x16\x57\xf3\x7f\xbe\x73\xa6\
 \x56\x61\x33\x88\xac\x14\xa4\x0c\x00"
-        .to_vec();
-    env.mock_canister_http_response(MockCanisterHttpResponse {
-        subnet_id: canister_http_requests[0].subnet_id,
-        request_id: canister_http_requests[0].request_id,
-        response: CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
-            status: 200,
-            headers: vec![],
-            body,
-        }),
-        additional_responses: vec![],
-    });
+            .to_vec();
+        env.mock_canister_http_response(MockCanisterHttpResponse {
+            subnet_id: canister_http_requests[0].subnet_id,
+            request_id: canister_http_requests[0].request_id,
+            response: CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
+                status: 200,
+                headers: vec![],
+                body,
+            }),
+            additional_responses: vec![],
+        });
 
-    let canister_http_requests = tick_until_next_request(env);
-    let body = b"\
+        let canister_http_requests = tick_until_next_request(env);
+        let body = b"\
 \x02\x00\x00\x00\x01\x82\xc8\x5d\xe7\x4d\x19\xbb\x36\x16\x2f\xca\xef\xc7\xe7\x70\x15\x65\xb0\x2d\
 \xf6\x06\x0f\x8e\xcf\x49\x64\x63\x37\xfc\xe8\x59\x37\x07\x00\x00\x00\x6a\x47\x30\x44\x02\x20\x15\
 \xf2\xc7\x7a\x3b\x95\x13\x73\x7a\xa2\x86\xb3\xe6\x06\xf9\xb6\x82\x1c\x6d\x5d\x35\xe5\xa9\x58\xe0\
@@ -312,46 +315,50 @@ fn test_check_transaction_passed() {
 \xb1\x5c\xbf\x27\xd5\x42\x53\x99\xeb\xf6\xf0\xfb\x50\xeb\xb8\x8f\x18\x88\xac\x00\x96\x00\x00\x00\
 \x00\x00\x00\x19\x76\xa9\x14\xb9\x73\x68\xd8\xbf\x0a\x37\x69\x00\x85\x16\x57\xf3\x7f\xbe\x73\xa6\
 \x56\x61\x33\x88\xac\xb3\xa3\x0c\x00"
-        .to_vec();
-    env.mock_canister_http_response(MockCanisterHttpResponse {
-        subnet_id: canister_http_requests[0].subnet_id,
-        request_id: canister_http_requests[0].request_id,
-        response: CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
-            status: 200,
-            headers: vec![],
-            body: body.clone(),
-        }),
-        // Fill additional responses with different headers to test if the transform
-        // function does its job by clearing the headers.
-        additional_responses: (1..13)
-            .map(|i| {
-                CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
-                    status: 200,
-                    headers: vec![CanisterHttpHeader {
-                        name: format!("name-{}", i),
-                        value: format!("{}", i),
-                    }],
-                    body: body.clone(),
+            .to_vec();
+        env.mock_canister_http_response(MockCanisterHttpResponse {
+            subnet_id: canister_http_requests[0].subnet_id,
+            request_id: canister_http_requests[0].request_id,
+            response: CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
+                status: 200,
+                headers: vec![],
+                body: body.clone(),
+            }),
+            // Fill additional responses with different headers to test if the transform
+            // function does its job by clearing the headers.
+            additional_responses: (1..13)
+                .map(|i| {
+                    CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
+                        status: 200,
+                        headers: vec![CanisterHttpHeader {
+                            name: format!("name-{}", i),
+                            value: format!("{}", i),
+                        }],
+                        body: body.clone(),
+                    })
                 })
-            })
-            .collect(),
-    });
+                .collect(),
+        });
 
-    let result = env
-        .await_call(call_id)
-        .expect("the fetch request didn't finish");
+        let result = env
+            .await_call(call_id)
+            .expect("the fetch request didn't finish");
 
-    assert!(matches!(
-        decode::<CheckTransactionResponse>(&result),
-        CheckTransactionResponse::Passed
-    ));
+        assert!(matches!(
+            decode::<CheckTransactionResponse>(&result),
+            CheckTransactionResponse::Passed
+        ));
 
-    let cycles_after = env.cycle_balance(setup.caller);
-    let expected_cost =
-        CHECK_TRANSACTION_CYCLES_SERVICE_FEE + 2 * get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES);
-    let actual_cost = cycles_before - cycles_after;
-    assert!(actual_cost > expected_cost);
-    assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
+        let cycles_after = env.cycle_balance(setup.caller);
+        let expected_cost = CHECK_TRANSACTION_CYCLES_SERVICE_FEE
+            + 2 * get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES);
+        let actual_cost = cycles_before - cycles_after;
+        assert!(actual_cost > expected_cost);
+        assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
+    };
+
+    // With default installation
+    test_normal_operation();
 
     // Test KytMode::RejectAll
     env.tick();
@@ -426,6 +433,21 @@ fn test_check_transaction_passed() {
     let actual_cost = cycles_before - cycles_after;
     assert!(actual_cost > expected_cost);
     assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
+
+    // Test KytMode::Normal
+    env.tick();
+    env.upgrade_canister(
+        setup.kyt_canister,
+        kyt_wasm(),
+        Encode!(&KytArg::UpgradeArg(Some(UpgradeArg {
+            kyt_mode: Some(KytMode::Normal),
+        })))
+        .unwrap(),
+        Some(setup.controller),
+    )
+    .unwrap();
+
+    test_normal_operation();
 }
 
 #[test]
