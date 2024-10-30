@@ -16,7 +16,7 @@ use std::str::FromStr;
 /// May throw error (trap) if the given address is malformed or not a mainnet address.
 fn check_address(args: CheckAddressArgs) -> CheckAddressResponse {
     let config = get_config();
-    let btc_network = config.btc_network;
+    let btc_network = config.btc_network();
     let address = Address::from_str(args.address.trim())
         .unwrap_or_else(|err| ic_cdk::trap(&format!("Invalid bitcoin address: {}", err)))
         .require_network(btc_network.clone().into())
@@ -24,7 +24,7 @@ fn check_address(args: CheckAddressArgs) -> CheckAddressResponse {
             ic_cdk::trap(&format!("Not a bitcoin {} address: {}", btc_network, err))
         });
 
-    match config.kyt_mode {
+    match config.kyt_mode() {
         KytMode::AcceptAll => CheckAddressResponse::Passed,
         KytMode::RejectAll => CheckAddressResponse::Failed,
         KytMode::Normal => {
@@ -86,10 +86,10 @@ fn transform(raw: TransformArgs) -> HttpResponse {
 #[ic_cdk::init]
 fn init(arg: KytArg) {
     match arg {
-        KytArg::InitArg(init_arg) => set_config(Config {
-            btc_network: init_arg.btc_network,
-            kyt_mode: init_arg.kyt_mode,
-        }),
+        KytArg::InitArg(init_arg) => set_config(
+            Config::new_and_validate(init_arg.btc_network, init_arg.kyt_mode)
+                .unwrap_or_else(|err| ic_cdk::trap(&format!("error creating config: {}", err))),
+        ),
         KytArg::UpgradeArg(_) => {
             ic_cdk::trap("cannot init canister state without init args");
         }
@@ -101,10 +101,8 @@ fn post_upgrade(arg: KytArg) {
     match arg {
         KytArg::UpgradeArg(arg) => {
             if let Some(kyt_mode) = arg.and_then(|arg| arg.kyt_mode) {
-                let config = Config {
-                    kyt_mode,
-                    ..get_config()
-                };
+                let config = Config::new_and_validate(get_config().btc_network(), kyt_mode)
+                    .unwrap_or_else(|err| ic_cdk::trap(&format!("error creating config: {}", err)));
                 set_config(config);
             }
         }

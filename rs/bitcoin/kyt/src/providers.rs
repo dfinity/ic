@@ -6,6 +6,9 @@ use ic_cdk::api::management_canister::http_request::{
 use std::cell::RefCell;
 use std::fmt;
 
+#[cfg(test)]
+mod tests;
+
 /// Return the next bitcoin API provider for the given `btc_network`.
 ///
 /// Internally it remembers the previously used provider in a thread local
@@ -158,28 +161,7 @@ fn make_post_request(
     txid: Txid,
     max_response_bytes: u32,
 ) -> Result<CanisterHttpRequestArgument, String> {
-    let mut url = url::Url::parse(json_rpc_url).map_err(|err| err.to_string())?;
-    let username = url.username();
-    let password = url.password().unwrap_or_default();
-    let authorization = base64::encode(format!(
-        "{}:{}",
-        url::form_urlencoded::parse(username.as_bytes())
-            .next()
-            .ok_or(format!("Failed to url_decode {}", username))?
-            .0,
-        url::form_urlencoded::parse(password.as_bytes())
-            .next()
-            .ok_or(format!("Failed to url_decode {}", password))?
-            .0,
-    ));
-    url.set_username("")
-        .map_err(|()| format!("Invalid JSON RPC URL {}", json_rpc_url))?;
-    url.set_password(None)
-        .map_err(|()| format!("Invalid JSON RPC URL {}", json_rpc_url))?;
-    let request_headers = vec![HttpHeader {
-        name: "Authorization".to_string(),
-        value: format!("Basic {}", authorization),
-    }];
+    let (url, header) = parse_authorization_header_from_url(json_rpc_url)?;
     let body = format!(
         "{{\"method\": \"gettransaction\", \"params\": [\"{}\"]}}",
         txid
@@ -190,7 +172,7 @@ fn make_post_request(
         body: Some(body.as_bytes().to_vec()),
         max_response_bytes: Some(max_response_bytes as u64),
         transform: param_transform(),
-        headers: request_headers,
+        headers: vec![header],
     })
 }
 
@@ -202,4 +184,32 @@ fn param_transform() -> Option<TransformContext> {
         }),
         context: vec![],
     })
+}
+
+pub(crate) fn parse_authorization_header_from_url(
+    json_rpc_url: &str,
+) -> Result<(url::Url, HttpHeader), String> {
+    let mut url = url::Url::parse(json_rpc_url).map_err(|err| err.to_string())?;
+    let username = url.username();
+    let password = url.password().unwrap_or_default();
+    let authorization = base64::encode(format!(
+        "{}:{}",
+        url::form_urlencoded::parse(username.as_bytes())
+            .next()
+            .ok_or("Missing username or error in url_decode".to_string())?
+            .0,
+        url::form_urlencoded::parse(password.as_bytes())
+            .next()
+            .ok_or("Missing password or error in url_decode".to_string())?
+            .0,
+    ));
+    url.set_username("")
+        .map_err(|()| format!("Invalid JSON RPC URL {}", json_rpc_url))?;
+    url.set_password(None)
+        .map_err(|()| format!("Invalid JSON RPC URL {}", json_rpc_url))?;
+    let header = HttpHeader {
+        name: "Authorization".to_string(),
+        value: format!("Basic {}", authorization),
+    };
+    Ok((url, header))
 }

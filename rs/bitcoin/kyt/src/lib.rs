@@ -151,7 +151,7 @@ impl FetchEnv for KytCanisterEnv {
 ///    in order to compute their corresponding addresses.
 pub async fn check_transaction_inputs(txid: Txid) -> CheckTransactionResponse {
     let env = &KytCanisterEnv;
-    match env.config().kyt_mode {
+    match env.config().kyt_mode() {
         KytMode::AcceptAll => CheckTransactionResponse::Passed,
         KytMode::RejectAll => CheckTransactionResponse::Failed(Vec::new()),
         KytMode::Normal => {

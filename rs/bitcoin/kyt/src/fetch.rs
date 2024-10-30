@@ -81,13 +81,13 @@ pub trait FetchEnv {
     ) -> TryFetchResult<impl futures::Future<Output = Result<FetchResult, Infallible>>> {
         let (provider, max_response_bytes) = match state::get_fetch_status(txid) {
             None => (
-                providers::next_provider(self.config().btc_network),
+                providers::next_provider(self.config().btc_network()),
                 INITIAL_MAX_RESPONSE_BYTES,
             ),
             Some(FetchTxStatus::PendingRetry {
                 max_response_bytes, ..
             }) => (
-                providers::next_provider(self.config().btc_network),
+                providers::next_provider(self.config().btc_network()),
                 max_response_bytes,
             ),
             Some(FetchTxStatus::PendingOutcall { .. }) => return TryFetchResult::Pending,
