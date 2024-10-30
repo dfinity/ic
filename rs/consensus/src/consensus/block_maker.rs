@@ -158,9 +158,10 @@ impl BlockMaker {
                 None
             }
             Err(err) => {
-                debug!(
+                warn!(
+                    every_n_seconds => 30,
                     self.log,
-                    "Not proposing a block due to get_node_rank error {:?}", err
+                    "Not proposing a block due to `get_block_maker_rank` error {:?}", err
                 );
                 None
             }
@@ -1072,10 +1073,10 @@ mod tests {
         #[case] unit_delay: Duration,
         #[case] expected_block_maker_delay: Duration,
     ) {
-        // there should be 6 non-rank-0 blocks in the past 30 heights
+        // there should be 11 non-rank-0 blocks in the past 30 heights
         let initial = std::iter::repeat(Rank(1)).take(5);
-        let mid = std::iter::repeat(Rank(0)).take(24);
-        let terminal = std::iter::repeat(Rank(2)).take(5);
+        let mid = std::iter::repeat(Rank(0)).take(19);
+        let terminal = std::iter::repeat(Rank(2)).take(8);
 
         let ranks: Vec<Rank> = initial.chain(mid).chain(terminal).collect();
 
@@ -1094,10 +1095,10 @@ mod tests {
         #[case] unit_delay: Duration,
         #[case] expected_block_maker_delay: Duration,
     ) {
-        // there should be 5 non-rank-0 blocks in the past 30 heights
+        // there should be 10 non-rank-0 blocks in the past 30 heights
         let initial = std::iter::repeat(Rank(1)).take(5);
-        let mid = std::iter::repeat(Rank(0)).take(25);
-        let terminal = std::iter::repeat(Rank(2)).take(5);
+        let mid = std::iter::repeat(Rank(0)).take(20);
+        let terminal = std::iter::repeat(Rank(2)).take(8);
 
         let ranks: Vec<Rank> = initial.chain(mid).chain(terminal).collect();
 
@@ -1108,19 +1109,16 @@ mod tests {
     }
 
     #[test]
-    fn get_block_maker_delay_short_chain_few_non_rank_0_blocks_test() {
+    fn get_block_maker_delay_short_chain_many_non_rank_0_blocks_test() {
+        let ranks = std::iter::repeat(Rank(1)).take(11).collect::<Vec<_>>();
         assert_eq!(
-            block_maker_delay_test_case(
-                &[Rank(1), Rank(1), Rank(1), Rank(1), Rank(1), Rank(1)],
-                Rank(1),
-                Duration::from_secs(1)
-            ),
+            block_maker_delay_test_case(&ranks, Rank(1), Duration::from_secs(1)),
             Duration::from_secs(11),
         );
     }
 
     #[test]
-    fn get_block_maker_delay_short_chain_many_non_rank_0_blocks_test() {
+    fn get_block_maker_delay_short_chain_few_non_rank_0_blocks_test() {
         assert_eq!(
             block_maker_delay_test_case(
                 &[Rank(0), Rank(1), Rank(1), Rank(1), Rank(1), Rank(1)],
