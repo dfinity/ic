@@ -252,11 +252,4 @@ Service: generate-ic-config.service creates a config file from ic.json.template,
 
 == Start IC replica
 
-+/opt/ic/bin/setup-permissions.sh+. Depends on all file system mounts as well
-as having an IPv6 address obtained on primary network interface.
-
 Starts the nodemaneger which in turn monitors and starts the IC replica service.
-The first pre-exec script creates the configuration of the replica (which among
-other things contains the IPv6 address). The second pre-exec script fixes up
-permissions for all files and directories used by replica (this should "probably"
-move to a different location, such as "upgrade data store").
