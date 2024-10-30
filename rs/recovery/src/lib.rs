@@ -913,10 +913,14 @@ pub async fn get_node_metrics(logger: &Logger, ip: &IpAddr) -> Option<NodeMetric
         let mut parts = line.split(' ');
         if let (Some(prefix), Some(height)) = (parts.next(), parts.next()) {
             match prefix {
-                "certification_last_certified_height" => match height.trim().parse::<u64>() {
-                    Ok(val) => node_heights.certification_height = Height::from(val),
-                    error => warn!(logger, "Couldn't parse height {}: {:?}", height, error),
-                },
+                r#"artifact_pool_certification_height_stat{pool_type="validated",stat="max",type="certification"}"# => {
+                    match height.trim().parse::<u64>() {
+                        Ok(val) => node_heights.certification_height = Height::from(val),
+                        error => {
+                            warn!(logger, "Couldn't parse height {}: {:?}", height, error)
+                        }
+                    }
+                }
                 r#"artifact_pool_consensus_height_stat{pool_type="validated",stat="max",type="finalization"}"# => {
                     match height.trim().parse::<u64>() {
                         Ok(val) => node_heights.finalization_height = Height::from(val),
