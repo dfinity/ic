@@ -225,11 +225,13 @@ where
 pub fn check_traces() {
     // Large states make Apalache time and memory consumption explode. We'll look at
     // improving that later, for now we introduce a hard limit on the state size, and
-    // skip checking states larger than the limit
+    // skip checking states larger than the limit. The limit is a somewhat arbitrary
+    // number based on what we observed in the tests. States with 1000+ atoms take
+    // a long time to process, whereas most manual tests yield states of size 100 or so.
     const STATE_SIZE_LIMIT: u64 = 500;
     // Proptests generate lots of traces that make the Apalache testing very long.
     // Again, limit this to some arbitrary number where checking is still reasonably fast.
-    const STATE_PAIR_COUNT_LIMIT: usize = 20;
+    const STATE_PAIR_COUNT_LIMIT: usize = 30;
     fn is_under_limit(p: &ResolvedStatePair) -> bool {
         p.start.size() < STATE_SIZE_LIMIT && p.end.size() < STATE_SIZE_LIMIT
     }
@@ -280,7 +282,9 @@ pub fn check_traces() {
         panic!("bad apalache bin from 'TLA_APALACHE_BIN': '{:?}'", apalache);
     }
 
-    const MAX_THREADS: usize = 8;
+    // A poor man's parallel_map; process up to 20 state pairs in parallel. Use mpsc channels
+    // to signal threads becoming available.
+    const MAX_THREADS: usize = 20;
     let mut running_threads = 0;
     let (tx, rx) = mpsc::channel::<()>();
     for (i, (update, constants, pair)) in all_pairs.iter().enumerate() {
@@ -325,6 +329,7 @@ pub fn check_traces() {
 
     while running_threads > 0 {
         rx.recv().expect("Error while waiting for the thread completion signal");
+        running_threads -= 1;
     }
 
     /*
