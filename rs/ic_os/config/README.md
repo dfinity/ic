@@ -6,6 +6,9 @@ SetupOS transforms user-facing configuration files (like `config.ini`, `deployme
 
 All access to configuration and the config partition should go through the config structures.
 
-For testing, IC-OS Config is also used to create HostOS and GuestOS configuration directly.
+For testing, IC-OS Config is also used to create GuestOS configuration directly.
+
+When updating the IC-OS configuration, it's crucial to ensure backwards compatibility.
+For detailed guidelines on updating the configuration, please refer to the documentation in [`types.rs`](src/types.rs).
 
 For details on the IC-OS configuration mechanism, refer to [ic-os/docs/Configuration.adoc](../../../ic-os/docs/Configuration.adoc)

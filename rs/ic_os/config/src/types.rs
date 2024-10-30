@@ -1,3 +1,19 @@
+//! # Configuration Update Protocol
+//!
+//! When updating the IC-OS configuration, it's crucial to maintain backwards compatibility.
+//! Please adhere to the following guidelines when making changes to the configuration structures:
+//!
+//! - **Backwards Compatibility**: All updates should be backwards compatible to ensure that older configuration files are still deserializable.
+//!
+//! - **Updating `CONFIG_VERSION`**: Always update the `CONFIG_VERSION` constant (increment the minor version) whenever you modify the configuration.
+//!
+//! - **Unit Tests**: Add a unit test in `lib.rs` that tests deserialization of your new configuration version.
+//!
+//! - **Adding New Fields**: If adding a new field to a configuration struct, make sure it is optional or has a default value by implementing `Default` or via `#[serde(default)]`.
+//!
+//! - **Removing Fields**: If removing a field, ensure all references to it in the IC-OS codebase are eliminated.
+//!
+//! - **Renaming Fields**: Avoid renaming fields unless absolutely necessary. If you must rename a field, use `#[serde(rename = "old_name")]`.
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 use mac_address::mac_address::FormattedMacAddress;
 use serde::{Deserialize, Serialize};
