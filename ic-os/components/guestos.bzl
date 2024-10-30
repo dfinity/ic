@@ -35,7 +35,7 @@ component_files = {
     Label("ic/ic-https-outcalls-adapter/generate-https-outcalls-adapter-config.sh"): "/opt/ic/bin/generate-https-outcalls-adapter-config.sh",
     Label("ic/ic-replica.service"): "/etc/systemd/system/ic-replica.service",
     Label("ic/generate-ic-config/generate-ic-config.sh"): "/opt/ic/bin/generate-ic-config.sh",
-    Label("ic/generate-ic-config/generate-ic-config.service"): "/opt/ic/bin/generate-ic-config.service",
+    Label("ic/generate-ic-config/generate-ic-config.service"): "/etc/systemd/system/generate-ic-config.service",
     Label("ic/generate-ic-config/ic.json5.template"): "/opt/ic/share/ic.json5.template",
 
     # init
