@@ -608,11 +608,14 @@ pub fn test_http_calls_to_ic_fails(env: TestEnv) {
         },
     ));
 
+    let expected_error_message = "Error(Connect, ConnectError(\"tcp connect error\", Os { code: 111, kind: ConnectionRefused, message: \"Connection refused\" }))";
     let err_response = response.clone().unwrap_err();
     assert_matches!(err_response.0, RejectionCode::SysTransient);
+
     assert!(
-        err_response.1.contains("client error (Connect)"),
-        "Response did not container client error: {}",
+        err_response.1.contains(expected_error_message),
+        "Expected error message to contain, {}, got: {}",
+        expected_error_message,
         err_response.1
     );
 }

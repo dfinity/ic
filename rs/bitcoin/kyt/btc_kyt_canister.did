@@ -44,13 +44,18 @@ type CheckTransactionIrrecoverableError = variant {
     ResponseTooLarge : record { txid: blob };
     // Invalid transaction id.
     InvalidTransactionId : text;
+    // Invalid transaction.
+    InvalidTransaction : text;
 };
 
 type InitArg = record {
-    btc_network : BtcNetwork
+    btc_network : BtcNetwork;
+    kyt_mode: KytMode;
 };
 
-type UpgradeArg = record {};
+type UpgradeArg = record {
+    kyt_mode: opt KytMode;
+};
 
 type KytArg = variant {
     InitArg : InitArg;
@@ -60,6 +65,12 @@ type KytArg = variant {
 type BtcNetwork = variant {
     mainnet;
     testnet
+};
+
+type KytMode = variant {
+    AcceptAll;
+    RejectAll;
+    Normal;
 };
 
 service : (KytArg) -> {
