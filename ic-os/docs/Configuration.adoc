@@ -65,7 +65,8 @@ In the absence of a sealing key (which will be available in SEV-protected truste
 
 === Guidance for adding configuration bits
 
-TODO: update...
+To add or modify a configuration field within the icos config tool, see
+link:../../rs/ic_os/config/README.md[rs/ic_os/config].
 
 To add a new configuration file/directory:
 
