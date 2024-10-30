@@ -179,7 +179,7 @@ where
         None => {
             log!(
                 DEBUG,
-                "[scrape_contract_logs]: skipping scrapping {} logs: not active",
+                "[scrape_contract_logs]: skipping scraping {} logs: not active",
                 S::display_id()
             );
             return;
