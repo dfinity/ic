@@ -1,16 +1,29 @@
+use candid::CandidType;
 use canister_test::Project;
 use ic_config::subnet_config::SubnetConfig;
 use ic_nns_test_utils::state_test_helpers::{create_canister, update_with_sender};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
 use ic_types::{NumInstructions, PrincipalId};
+use serde::Deserialize;
 use std::time::Duration;
 
-#[derive(candid::CandidType, serde::Deserialize)]
-struct TestParameters {
+#[derive(CandidType, Deserialize)]
+struct BreakMessageParams {
     pub use_break: bool,
     pub message_threshold: u64,
     pub upper_bound: Option<u64>,
+}
+
+#[derive(CandidType, Deserialize)]
+struct ChunkedTaskParams {
+    pub message_threshold: u64,
+    pub upper_bound: Option<u64>,
+}
+
+#[derive(CandidType, Deserialize, Debug)]
+struct TaskResult {
+    pub result: u64,
 }
 
 fn state_machine_for_test(instructions_limit: u64) -> StateMachine {
@@ -40,16 +53,15 @@ fn test_next_message_if_over_instructions() {
     let instructions_limit = 500_000;
     let state_machine = state_machine_for_test(instructions_limit);
 
-    let canister_playground_wasm = Project::cargo_bin_maybe_from_env("long-message-canister", &[]);
+    let long_message_wasm = Project::cargo_bin_maybe_from_env("long-message-canister", &[]);
 
-    let playground_id =
-        create_canister(&state_machine, canister_playground_wasm, Some(vec![]), None);
+    let canister_id = create_canister(&state_machine, long_message_wasm, Some(vec![]), None);
 
-    let err: String = update_with_sender::<TestParameters, ()>(
+    let err: String = update_with_sender::<BreakMessageParams, ()>(
         &state_machine,
-        playground_id,
+        canister_id,
         "test_next_message_if_over_instructions",
-        TestParameters {
+        BreakMessageParams {
             use_break: false,
             message_threshold: instructions_limit * 4 / 5,
             upper_bound: None,
@@ -65,11 +77,11 @@ fn test_next_message_if_over_instructions() {
         .as_str()
     ));
 
-    update_with_sender::<TestParameters, ()>(
+    update_with_sender::<BreakMessageParams, ()>(
         &state_machine,
-        playground_id,
+        canister_id,
         "test_next_message_if_over_instructions",
-        TestParameters {
+        BreakMessageParams {
             use_break: true,
             message_threshold: instructions_limit * 4 / 5,
             upper_bound: None,
@@ -84,16 +96,15 @@ fn test_upper_bound() {
     let instructions_limit = 1_000_000;
     let state_machine = state_machine_for_test(instructions_limit);
 
-    let canister_playground_wasm = Project::cargo_bin_maybe_from_env("long-message-canister", &[]);
+    let long_message_wasm = Project::cargo_bin_maybe_from_env("long-message-canister", &[]);
 
-    let playground_id =
-        create_canister(&state_machine, canister_playground_wasm, Some(vec![]), None);
+    let canister_id = create_canister(&state_machine, long_message_wasm, Some(vec![]), None);
 
-    let err: String = update_with_sender::<TestParameters, ()>(
+    let err: String = update_with_sender::<BreakMessageParams, ()>(
         &state_machine,
-        playground_id,
+        canister_id,
         "test_next_message_if_over_instructions",
-        TestParameters {
+        BreakMessageParams {
             use_break: true,
             message_threshold: 400_000,
             upper_bound: Some(700_000),
@@ -113,11 +124,11 @@ fn test_upper_bound() {
         err
     );
 
-    update_with_sender::<TestParameters, ()>(
+    update_with_sender::<BreakMessageParams, ()>(
         &state_machine,
-        playground_id,
+        canister_id,
         "test_next_message_if_over_instructions",
-        TestParameters {
+        BreakMessageParams {
             use_break: true,
             message_threshold: instructions_limit * 4 / 5,
             upper_bound: None,
@@ -125,4 +136,69 @@ fn test_upper_bound() {
         PrincipalId::new_anonymous(),
     )
     .unwrap();
+}
+
+#[test]
+fn test_task_runner() {
+    let instructions_limit = 400_000;
+    let state_machine = state_machine_for_test(instructions_limit);
+
+    let long_message_wasm = Project::cargo_bin_maybe_from_env("long-message-canister", &[]);
+
+    let canister_id = create_canister(&state_machine, long_message_wasm, Some(vec![]), None);
+
+    state_machine.advance_time(Duration::from_secs(1));
+
+    let sum = update_with_sender::<ChunkedTaskParams, TaskResult>(
+        &state_machine,
+        canister_id,
+        "test_run_chunked_task",
+        ChunkedTaskParams {
+            message_threshold: 100_000,
+            upper_bound: Some(4_000_000),
+        },
+        PrincipalId::new_anonymous(),
+    )
+    .unwrap();
+
+    // We should get fib(17) + fib(18) * 5, if the async call interleaves in the expected place.
+    // Otherwise, we would get fib(17) * 12 or
+    // Fib(17) = 1597
+    // Fib(18) = 2584
+    assert_eq!(sum.result, 1597 + 2584 * 5);
+}
+
+#[test]
+fn test_task_runner_upper_bound() {
+    let instructions_limit = 400_000;
+    let state_machine = state_machine_for_test(instructions_limit);
+
+    let long_message_wasm = Project::cargo_bin_maybe_from_env("long-message-canister", &[]);
+
+    let canister_id = create_canister(&state_machine, long_message_wasm, Some(vec![]), None);
+
+    state_machine.advance_time(Duration::from_secs(1));
+
+    let err: String = update_with_sender::<ChunkedTaskParams, TaskResult>(
+        &state_machine,
+        canister_id,
+        "test_run_chunked_task",
+        ChunkedTaskParams {
+            message_threshold: 100_000,
+            upper_bound: Some(400_000),
+        },
+        PrincipalId::new_anonymous(),
+    )
+    .unwrap_err();
+    assert!(
+        err.contains(
+            format!(
+                "Canister call exceeded the limit of {} instructions in the call context.",
+                400_000
+            )
+            .as_str()
+        ),
+        "Error was: {:?}",
+        err
+    );
 }

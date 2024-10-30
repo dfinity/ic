@@ -1,12 +1,31 @@
 use candid::CandidType;
 use ic_cdk::{init, println, update};
-use ic_nervous_system_long_message::break_message_if_over_instructions;
+use ic_nervous_system_long_message::{break_message_if_over_instructions, run_chunked_task, Task};
 use serde::Deserialize;
 use std::time::Duration;
 
+struct Data {
+    values: Vec<u64>,
+}
+
+static mut UNSAFE_DATA_FOR_JOB_RUNNER: Option<Data> = None;
+
 #[init]
 fn canister_init() {
-    println!("long_message_canister init!");
+    unsafe {
+        UNSAFE_DATA_FOR_JOB_RUNNER = Some(Data {
+            values: vec![17; 12],
+        })
+    };
+    // println!("long_message_canister init!");
+    ic_cdk_timers::set_timer(Duration::from_millis(1), || unsafe {
+        // println!("Setting new values");
+        let new_values = vec![18; 6];
+        UNSAFE_DATA_FOR_JOB_RUNNER
+            .as_mut()
+            .expect("data not initialized")
+            .values = new_values;
+    });
 }
 
 #[derive(CandidType, Deserialize)]
@@ -38,12 +57,12 @@ async fn test_next_message_if_over_instructions(params: BreakMessageParams) {
     } = params;
 
     // Doing anything costs about 30k instructions.
-    for x in 0..10 {
-        println!("Invocation number {}", x);
-        println!(
-            "Instruction_counter: {}",
-            ic_cdk::api::instruction_counter()
-        );
+    for _x in 0..10 {
+        // println!("Invocation number {}", x);
+        // println!(
+        //     "Instruction_counter: {}",
+        //     ic_cdk::api::instruction_counter()
+        // );
         // Fib(17) was benchmarked at about 80k instructions
         fib(17);
         if use_break {
@@ -52,9 +71,68 @@ async fn test_next_message_if_over_instructions(params: BreakMessageParams) {
     }
 }
 
+struct SimpleTaskWithReferences {}
+
+#[derive(CandidType, Deserialize)]
+struct ChunkedTaskParams {
+    pub message_threshold: u64,
+    pub upper_bound: Option<u64>,
+}
+
 #[update]
-async fn test_2() {
-    println!("Playground canister test_2 was called");
+async fn test_run_chunked_task(params: ChunkedTaskParams) -> TaskResult {
+    let task = AddFibsTask { sum: 0 };
+    let initial_value = 0;
+
+    let result = run_chunked_task(
+        task,
+        initial_value,
+        params.message_threshold,
+        params.upper_bound,
+    )
+    .await;
+
+    TaskResult { result }
+}
+
+struct AddFibsTask {
+    sum: u64,
+}
+
+impl Task<u64, u64> for AddFibsTask {
+    fn next_chunk(
+        &mut self,
+        continuation: u64,
+        is_message_over_soft_limit: impl Fn() -> bool,
+    ) -> Option<u64> {
+        let mut index = continuation;
+        // ic_cdk::println!("Continuing from index {}", index);
+        while !is_message_over_soft_limit() {
+            // println!("Processing index {}", index);
+            let n = unsafe {
+                let values = &UNSAFE_DATA_FOR_JOB_RUNNER
+                    .as_ref()
+                    .expect("Not initialized")
+                    .values;
+                if values.len() <= index as usize {
+                    return None;
+                }
+                values[index as usize]
+            };
+            self.sum += fib(n);
+            index += 1;
+        }
+        // println!("Breaking at index {}", index);
+        Some(index)
+    }
+    fn result(self) -> u64 {
+        self.sum
+    }
+}
+
+#[derive(CandidType, Deserialize)]
+struct TaskResult {
+    pub result: u64,
 }
 
 fn main() {}
