@@ -2912,7 +2912,7 @@ impl Governance {
     ///   it will be merged into the stake of the target neuron; if it is less
     ///   than the transaction fee, the maturity of the source neuron will
     ///   still be merged into the maturity of the target neuron.
-    #[tla_update_method(merge_neurons_desc())]
+    #[cfg_attr(feature = "tla", tla_update_method(merge_neurons_desc()))]
     pub async fn merge_neurons(
         &mut self,
         id: &NeuronId,
