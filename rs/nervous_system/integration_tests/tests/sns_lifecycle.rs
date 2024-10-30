@@ -1982,6 +1982,8 @@ async fn test_sns_lifecycle(
     }
 }
 
+// TODO[NNS1-3429]: Re-enable this test after the next SNS-W release.
+#[ignore]
 #[tokio::test]
 async fn test_sns_lifecycle_happy_scenario_with_neurons_fund_participation() {
     test_sns_lifecycle(
@@ -1994,6 +1996,8 @@ async fn test_sns_lifecycle_happy_scenario_with_neurons_fund_participation() {
     ).await;
 }
 
+// TODO[NNS1-3429]: Re-enable this test after the next SNS-W release.
+#[ignore]
 #[tokio::test]
 async fn test_sns_lifecycle_happy_scenario_direct_participation_with_and_without_ticketing_with_neurons_fund_participation(
 ) {
@@ -2010,6 +2014,8 @@ async fn test_sns_lifecycle_happy_scenario_direct_participation_with_and_without
     ).await;
 }
 
+// TODO[NNS1-3429]: Re-enable this test after the next SNS-W release.
+#[ignore]
 #[tokio::test]
 async fn test_sns_lifecycle_happy_scenario_without_neurons_fund_participation() {
     test_sns_lifecycle(
@@ -2023,6 +2029,8 @@ async fn test_sns_lifecycle_happy_scenario_without_neurons_fund_participation() 
     ).await;
 }
 
+// TODO[NNS1-3429]: Re-enable this test after the next SNS-W release.
+#[ignore]
 #[tokio::test]
 async fn test_sns_lifecycle_overpayment_scenario() {
     test_sns_lifecycle(
@@ -2038,6 +2046,8 @@ async fn test_sns_lifecycle_overpayment_scenario() {
     ).await;
 }
 
+// TODO[NNS1-3429]: Re-enable this test after the next SNS-W release.
+#[ignore]
 #[tokio::test]
 async fn test_sns_lifecycle_happy_scenario_with_dapp_canisters() {
     test_sns_lifecycle(
@@ -2056,6 +2066,8 @@ async fn test_sns_lifecycle_happy_scenario_with_dapp_canisters() {
     ).await;
 }
 
+// TODO[NNS1-3429]: Re-enable this test after the next SNS-W release.
+#[ignore]
 #[tokio::test]
 async fn test_sns_lifecycle_happy_scenario_with_neurons_fund_participation_same_principal() {
     test_sns_lifecycle(
@@ -2069,6 +2081,8 @@ async fn test_sns_lifecycle_happy_scenario_with_neurons_fund_participation_same_
     ).await;
 }
 
+// TODO[NNS1-3429]: Re-enable this test after the next SNS-W release.
+#[ignore]
 #[tokio::test]
 async fn test_sns_lifecycle_swap_timeout_with_neurons_fund_participation() {
     test_sns_lifecycle(
@@ -2082,6 +2096,8 @@ async fn test_sns_lifecycle_swap_timeout_with_neurons_fund_participation() {
     ).await;
 }
 
+// TODO[NNS1-3429]: Re-enable this test after the next SNS-W release.
+#[ignore]
 #[tokio::test]
 async fn test_sns_lifecycle_swap_timeout_without_neurons_fund_participation() {
     test_sns_lifecycle(
@@ -2095,6 +2111,8 @@ async fn test_sns_lifecycle_swap_timeout_without_neurons_fund_participation() {
     ).await;
 }
 
+// TODO[NNS1-3429]: Re-enable this test after the next SNS-W release.
+#[ignore]
 #[tokio::test]
 async fn test_sns_lifecycle_happy_scenario_with_lots_of_dev_neurons() {
     let num_neurons = MAX_DEVELOPER_DISTRIBUTION_COUNT as u64;
@@ -2137,6 +2155,8 @@ async fn test_sns_lifecycle_happy_scenario_with_lots_of_dev_neurons() {
     ).await;
 }
 
+// TODO[NNS1-3429]: Re-enable this test after the next SNS-W release.
+#[ignore]
 #[tokio::test]
 async fn test_sns_lifecycle_swap_timeout_with_lots_of_dev_neurons() {
     let num_neurons = MAX_DEVELOPER_DISTRIBUTION_COUNT as u64;
