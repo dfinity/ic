@@ -145,9 +145,12 @@ CACHE_MAX_ITEM_SIZE="20MB"
 CACHE_TTL="10s"
 CACHE_LOCK_TIMEOUT="10s"
 CACHE_XFETCH_BETA="3.0"
+SHED_SYSTEM_EWMA="0.9"
 SHED_SYSTEM_CPU="0.95"
 SHED_SYSTEM_MEMORY="0.95"
-SHED_SHARDED_LATENCY="query:600ms,call:300ms,sync_call:13s,read_state:600ms,read_state_subnet:600ms,status:20ms,health:20ms,registrations:5s,http:800ms"
+SHED_SHARDED_EWMA="0.6"
+SHED_SHARDED_PASSTHROUGH="20000"
+SHED_SHARDED_LATENCY="query:1s,call:1s,sync_call:13s,read_state:1s,read_state_subnet:1s,status:100ms,health:100ms,registrations:5s,http:5s"
 EOF
 
     if [ ! -z "${DENYLIST_URL}" ]; then
