@@ -27,8 +27,12 @@ main = do
 
   n <- getNumCapabilities
   let numThreads = lookupOption os :: NumThreads
-  putStrLn $ "ic-ref-test is using " ++ show n ++ " capabilities and "
-    ++ show (getNumThreads numThreads) ++ " threads."
+  putStrLn $
+    "ic-ref-test is using "
+      ++ show n
+      ++ " capabilities and "
+      ++ show (getNumThreads numThreads)
+      ++ " threads."
 
   ac <- preFlight os
   let TestSubnet my_sub = lookupOption os
