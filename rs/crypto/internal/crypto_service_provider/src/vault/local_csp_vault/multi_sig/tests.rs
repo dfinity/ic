@@ -1,5 +1,4 @@
 //! Tests of Multi-Signature operations in the CSP vault.
-#![allow(clippy::unwrap_used)]
 use crate::api::CspSigner;
 use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
 use crate::public_key_store::PublicKeySetOnceError;

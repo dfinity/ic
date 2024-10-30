@@ -7,7 +7,6 @@ DEPENDENCIES = [
     "//rs/crypto/prng",
     "//rs/interfaces",
     "//rs/interfaces/registry",
-    "//rs/interfaces/state_manager",
     "//rs/monitoring/logger",
     "//rs/protobuf",
     "//rs/registry/helpers",
