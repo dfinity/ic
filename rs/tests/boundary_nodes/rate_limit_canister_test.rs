@@ -383,7 +383,7 @@ async fn read_rule(
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(config)
+        .with_setup(setup)
         .add_parallel(SystemTestSubGroup::new().add_test(systest!(complete_flow_test)))
         .execute_from_args()?;
     Ok(())
