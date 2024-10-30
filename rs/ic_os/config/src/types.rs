@@ -3,7 +3,7 @@
 //! When updating the IC-OS configuration, it's crucial to maintain backwards compatibility.
 //! Please adhere to the following guidelines when making changes to the configuration structures:
 //!
-//! - **Backwards Compatibility**: All updates should be backwards compatible to ensure that older configuration files are still deserializable.
+//! - **Backwards Compatibility**: Configuration persists across reboots, so all config updates should be backwards compatible to ensure that older configuration files are still deserializable across GuestOS and HostOS upgrades.
 //!
 //! - **Updating `CONFIG_VERSION`**: Always update the `CONFIG_VERSION` constant (increment the minor version) whenever you modify the configuration.
 //!
