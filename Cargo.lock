@@ -11711,6 +11711,7 @@ dependencies = [
  "ic-nervous-system-common-test-utils",
  "ic-nervous-system-common-validation",
  "ic-nervous-system-governance",
+ "ic-nervous-system-linear-map",
  "ic-nervous-system-lock",
  "ic-nervous-system-proto",
  "ic-nervous-system-root",
