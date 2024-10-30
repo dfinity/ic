@@ -467,6 +467,15 @@ impl Step for ValidateReplayStep {
 
         let heights =
             get_node_heights_from_metrics(&self.logger, &self.registry_helper, self.subnet_id)?;
+
+        let cert_share_height = &heights
+            .iter()
+            .max_by_key(|v| v.certification_share_height)
+            .map(|v| v.certification_share_height)
+            .ok_or_else(|| {
+                RecoveryError::invalid_output_error("No certification share heights found")
+            })?;
+
         let cert_height = &heights
             .iter()
             .max_by_key(|v| v.certification_height)
@@ -479,6 +488,10 @@ impl Step for ValidateReplayStep {
             .map(|v| v.finalization_height)
             .ok_or_else(|| RecoveryError::invalid_output_error("No finalization heights found"))?;
 
+        info!(
+            self.logger,
+            "Certification share height: {}", cert_share_height
+        );
         info!(self.logger, "Certification height: {}", cert_height);
         info!(
             self.logger,
