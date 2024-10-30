@@ -9,9 +9,9 @@ use ic_nervous_system_common::ledger::IcpLedger;
 use ic_nns_common::pb::v1::NeuronId;
 
 #[cfg(feature = "tla")]
-use tla_instrumentation_proc_macros::tla_function;
-#[cfg(feature = "tla")]
 use super::tla::TLA_INSTRUMENTATION_STATE;
+#[cfg(feature = "tla")]
+use tla_instrumentation_proc_macros::tla_function;
 
 /// An object that represents the burning of neuron fees.
 #[derive(Clone, PartialEq, Debug)]
