@@ -9,15 +9,18 @@ use crate::lifecycle::upgrade::UpgradeArg;
 use crate::lifecycle::EthereumNetwork;
 use crate::map::DedupMultiKeyMap;
 use crate::numeric::{
-    wei_from_milli_ether, BlockNumber, CkTokenAmount, Erc20Value, GasAmount, LedgerBurnIndex,
-    LedgerMintIndex, LogIndex, TransactionNonce, Wei, WeiPerGas,
+    BlockNumber, CkTokenAmount, Erc20Value, GasAmount, LedgerBurnIndex, LedgerMintIndex, LogIndex,
+    TransactionNonce, Wei, WeiPerGas,
 };
 use crate::state::audit::apply_state_transition;
 use crate::state::eth_logs_scraping::LogScrapingState;
 use crate::state::event::{Event, EventType};
 use crate::state::transactions::{Erc20WithdrawalRequest, ReimbursementIndex};
 use crate::state::{Erc20Balances, State};
-use crate::test_fixtures::arb::{arb_address, arb_checked_amount_of, arb_hash};
+use crate::test_fixtures::{
+    arb::{arb_address, arb_checked_amount_of, arb_hash},
+    initial_state,
+};
 use crate::tx::{
     AccessList, AccessListItem, Eip1559Signature, Eip1559TransactionRequest, GasFeeEstimate,
     ResubmissionStrategy, SignedEip1559TransactionRequest, StorageKey,
@@ -31,7 +34,7 @@ use proptest::prelude::*;
 use std::collections::BTreeMap;
 
 mod next_request_id {
-    use crate::state::tests::initial_state;
+    use super::*;
 
     #[test]
     fn should_retrieve_and_increment_counter() {
@@ -51,21 +54,6 @@ mod next_request_id {
         assert_eq!(state.next_request_id(), u64::MAX);
         assert_eq!(state.next_request_id(), 0);
     }
-}
-
-fn initial_state() -> State {
-    State::try_from(InitArg {
-        ethereum_network: Default::default(),
-        ecdsa_key_name: "test_key_1".to_string(),
-        ethereum_contract_address: None,
-        ledger_id: Principal::from_text("apia6-jaaaa-aaaar-qabma-cai")
-            .expect("BUG: invalid principal"),
-        ethereum_block_height: Default::default(),
-        minimum_withdrawal_amount: wei_from_milli_ether(10).into(),
-        next_transaction_nonce: Default::default(),
-        last_scraped_block_number: Default::default(),
-    })
-    .expect("init args should be valid")
 }
 
 mod mint_transaction {
@@ -1854,6 +1842,7 @@ mod erc20_balance {
         assert_eq!(balance_after, balance_before);
     }
 }
+
 fn initial_erc20_state() -> State {
     let mut state = initial_state();
     add_erc20_token(&mut state);
