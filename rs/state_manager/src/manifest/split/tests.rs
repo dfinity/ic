@@ -395,6 +395,9 @@ fn expected_split_marker() -> (FileInfo, ChunkInfo) {
 
 /// Returns the expected `FileInfo` and `ChunkInfo` for the system metadata of
 /// `SUBNET_1`.
+///
+/// `SystemMetadata` encodes the `CURRENT_CERTIFICATION_VERSION`, therefore the hashes in this
+/// test must be updated every time the current certification version is bumped.
 fn expected_subnet_1_system_metadata() -> (FileInfo, ChunkInfo) {
     (
         FileInfo {
