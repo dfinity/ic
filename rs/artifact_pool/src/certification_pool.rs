@@ -5,7 +5,7 @@ use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
 use ic_interfaces::p2p::consensus::ArtifactWithOpt;
 use ic_interfaces::{
     certification::{CertificationPool, ChangeAction, Mutations},
-    consensus_pool::HeightIndexedPool,
+    consensus_pool::{HeightIndexedPool, HeightRange},
     p2p::consensus::{
         ArtifactTransmit, ArtifactTransmits, MutablePool, UnvalidatedArtifact, ValidatedPoolReader,
     },
@@ -84,6 +84,18 @@ impl PoolMetrics {
                 "certification_share",
             ),
         }
+    }
+    fn set_certification_range(&self, range: HeightRange) {
+        self.certification.min_height.set(range.min.get() as i64);
+        self.certification.max_height.set(range.max.get() as i64);
+    }
+    fn set_certification_share_range(&self, range: HeightRange) {
+        self.certification_share
+            .min_height
+            .set(range.min.get() as i64);
+        self.certification_share
+            .max_height
+            .set(range.max.get() as i64);
     }
 }
 
@@ -199,28 +211,19 @@ impl CertificationPoolImpl {
 
     fn update_metrics(&self) {
         // Unvalidated section
-        if let (Some(min_cert), Some(max_cert), Some(min_share), Some(max_share)) = (
-            self.unvalidated_cert_index.range(..).next(),
-            self.unvalidated_cert_index.range(..).last(),
-            self.unvalidated_share_index.range(..).next(),
-            self.unvalidated_share_index.range(..).last(),
+        if let (Some(min_cert), Some(max_cert)) = (
+            self.unvalidated_cert_index.range(..).next().map(|x| *x.0),
+            self.unvalidated_cert_index.range(..).last().map(|x| *x.0),
         ) {
             self.unvalidated_pool_metrics
-                .certification
-                .min_height
-                .set(min_cert.0.get() as i64);
+                .set_certification_range(HeightRange::new(min_cert, max_cert));
+        }
+        if let (Some(min_share), Some(max_share)) = (
+            self.unvalidated_share_index.range(..).next().map(|x| *x.0),
+            self.unvalidated_share_index.range(..).last().map(|x| *x.0),
+        ) {
             self.unvalidated_pool_metrics
-                .certification
-                .max_height
-                .set(max_cert.0.get() as i64);
-            self.unvalidated_pool_metrics
-                .certification_share
-                .min_height
-                .set(min_share.0.get() as i64);
-            self.unvalidated_pool_metrics
-                .certification_share
-                .max_height
-                .set(max_share.0.get() as i64);
+                .set_certification_share_range(HeightRange::new(min_share, max_share));
         }
         self.unvalidated_pool_metrics
             .certification
@@ -232,26 +235,12 @@ impl CertificationPoolImpl {
             .set(self.unvalidated_share_index.size() as i64);
 
         // Validated section
-        if let (Some(cert), Some(share)) = (
-            self.validated.certifications().height_range(),
-            self.validated.certification_shares().height_range(),
-        ) {
+        if let Some(range) = self.validated.certifications().height_range() {
+            self.validated_pool_metrics.set_certification_range(range);
+        }
+        if let Some(range) = self.validated.certification_shares().height_range() {
             self.validated_pool_metrics
-                .certification
-                .min_height
-                .set(cert.min.get() as i64);
-            self.validated_pool_metrics
-                .certification
-                .max_height
-                .set(cert.max.get() as i64);
-            self.validated_pool_metrics
-                .certification_share
-                .min_height
-                .set(share.min.get() as i64);
-            self.validated_pool_metrics
-                .certification_share
-                .max_height
-                .set(share.max.get() as i64);
+                .set_certification_share_range(range);
         }
         self.validated_pool_metrics
             .certification
