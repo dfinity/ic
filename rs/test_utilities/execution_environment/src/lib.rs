@@ -278,17 +278,12 @@ impl ExecutionTest {
 
     pub fn canister_wasm_execution_mode(&self, canister_id: CanisterId) -> WasmExecutionMode {
         // In case of any error or missing state, default to Wasm32.
-        match self.state.as_ref() {
-            Some(state) => match state.canister_state(&canister_id).as_ref() {
-                Some(canister) => match canister.execution_state.as_ref() {
-                    Some(execution_state) => {
-                        return execution_state.is_wasm64.into();
-                    }
-                    None => {}
-                },
-                None => {}
-            },
-            None => {}
+        if let Some(state) = self.state.as_ref() {
+            if let Some(canister) = state.canister_state(&canister_id).as_ref() {
+                if let Some(execution_state) = canister.execution_state.as_ref() {
+                    return execution_state.is_wasm64.into();
+                }
+            }
         }
         WasmExecutionMode::Wasm32
     }
