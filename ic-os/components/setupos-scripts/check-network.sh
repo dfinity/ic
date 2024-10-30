@@ -69,13 +69,19 @@ function get_network_settings() {
         "ip -6 addr show | awk '/^[0-9]+: / {print \$2}' | sed 's/://g' | grep -v '^lo$'" \
         "Failed to get system's network interfaces.")
 
-    echo "IPv6-capable interfaces found:"
-    echo "${ipv6_capable_interfaces}"
+    if [ -z "${ipv6_capable_interfaces}" ]; then
+        echo "IPv6-capable interfaces found:"
+        echo "${ipv6_capable_interfaces}"
+    fi
 
     # Full IPv6 address
     ipv6_address_system_full=$(eval_command_with_retries \
         "ip -6 addr show | awk '(/inet6/) && (!/fe80|::1/) { print \$2 }'" \
         "Failed to get system's network configuration.")
+
+    if [ -z "${ipv6_address_system_full}" ]; then
+        log_and_halt_installation_on_error "1" "No IPv6 addresses found."
+    fi
 
     ipv6_prefix_system=$(eval_command_with_retries \
         "echo ${ipv6_address_system_full} | cut -d: -f1-4" \
