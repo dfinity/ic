@@ -1384,7 +1384,7 @@ To download the binary, please visit https://github.com/dfinity/pocketic."
     #[cfg(not(windows))]
     cmd.arg(port_file_path.clone());
     if let Ok(mute_server) = std::env::var("POCKET_IC_MUTE_SERVER") {
-        if mute_server != "" {
+        if !mute_server.is_empty() {
             cmd.stdout(std::process::Stdio::null());
             cmd.stderr(std::process::Stdio::null());
         }
