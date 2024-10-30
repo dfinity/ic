@@ -33,22 +33,24 @@ function eval_command_with_retries() {
     local error_message="${2}"
     local result=""
     local attempt_count=0
+    local exit_code=1
 
-    while [ -z "${result}" ] && [ ${attempt_count} -lt 3 ]; do
+    while [ ${exit_code} -ne 0 ] && [ ${attempt_count} -lt 3 ]; do
         result=$(eval "${command}")
+        exit_code=$?
         ((attempt_count++))
 
-        if [ -z "${result}" ] && [ ${attempt_count} -lt 3 ]; then
+        if [ ${exit_code} -ne 0 ] && [ ${attempt_count} -lt 3 ]; then
             sleep 1
         fi
-    done
+    }
 
-    if [ -z "${result}" ]; then
+    if [ ${exit_code} -ne 0 ]; then
         local ip6_output=$(ip -6 addr show)
         local ip6_route_output=$(ip -6 route show)
-        local dns_servers=$(cat /etc/resolv.conf | grep 'nameserver')
+        local dns_servers=$(grep 'nameserver' /etc/resolv.conf)
 
-        log_and_halt_installation_on_error "1" "${error_message}
+        log_and_halt_installation_on_error "${exit_code}" "${error_message}
 Output of 'ip -6 addr show':
 ${ip6_output}
 
