@@ -1193,9 +1193,9 @@ mod cast_vote_and_cascade_follow {
                                       followees: Vec<u64>,
                                       vote: Vote| {
             let neuron = make_neuron(id, followees);
-            let voting_power = neuron.voting_power(now);
+            let deciding_voting_power = neuron.deciding_voting_power(now);
             neuron_map.insert(id, neuron);
-            ballots.insert(id, make_ballot(voting_power, vote));
+            ballots.insert(id, make_ballot(deciding_voting_power, vote));
         };
 
         let add_neuron_without_ballot =
@@ -1241,15 +1241,20 @@ mod cast_vote_and_cascade_follow {
             &mut neuron_store,
         );
 
+        let deciding_voting_power = |neuron_id| {
+            neuron_store
+                .with_neuron(&neuron_id, |n| n.deciding_voting_power(now))
+                .unwrap()
+        };
         assert_eq!(
             ballots,
             hashmap! {
-                1 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 1}, |n| n.voting_power(now)).unwrap(), Vote::Yes),
-                2 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 2}, |n| n.voting_power(now)).unwrap(), Vote::Unspecified),
-                3 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 3}, |n| n.voting_power(now)).unwrap(), Vote::Unspecified),
-                4 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 4}, |n| n.voting_power(now)).unwrap(), Vote::Unspecified),
-                5 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 5}, |n| n.voting_power(now)).unwrap(), Vote::Unspecified),
-                6 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 6}, |n| n.voting_power(now)).unwrap(), Vote::Unspecified),
+                1 => make_ballot(deciding_voting_power(NeuronId { id: 1}), Vote::Yes),
+                2 => make_ballot(deciding_voting_power(NeuronId { id: 2}), Vote::Unspecified),
+                3 => make_ballot(deciding_voting_power(NeuronId { id: 3}), Vote::Unspecified),
+                4 => make_ballot(deciding_voting_power(NeuronId { id: 4}), Vote::Unspecified),
+                5 => make_ballot(deciding_voting_power(NeuronId { id: 5}), Vote::Unspecified),
+                6 => make_ballot(deciding_voting_power(NeuronId { id: 6}), Vote::Unspecified),
             }
         );
     }
@@ -1269,9 +1274,9 @@ mod cast_vote_and_cascade_follow {
                                       followees: Vec<u64>,
                                       vote: Vote| {
             let neuron = make_neuron(id, followees);
-            let voting_power = neuron.voting_power(now);
+            let deciding_voting_power = neuron.deciding_voting_power(now);
             neuron_map.insert(id, neuron);
-            ballots.insert(id, make_ballot(voting_power, vote));
+            ballots.insert(id, make_ballot(deciding_voting_power, vote));
         };
 
         let add_neuron_without_ballot =
@@ -1305,15 +1310,20 @@ mod cast_vote_and_cascade_follow {
             &mut neuron_store,
         );
 
+        let deciding_voting_power = |neuron_id| {
+            neuron_store
+                .with_neuron(&neuron_id, |n| n.deciding_voting_power(now))
+                .unwrap()
+        };
         assert_eq!(
             ballots,
             hashmap! {
-                1 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 1}, |n| n.voting_power(now)).unwrap(), Vote::Yes),
-                2 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 2}, |n| n.voting_power(now)).unwrap(), Vote::Yes),
-                3 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 3}, |n| n.voting_power(now)).unwrap(), Vote::Yes),
-                4 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 4}, |n| n.voting_power(now)).unwrap(), Vote::Yes),
-                5 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 5}, |n| n.voting_power(now)).unwrap(), Vote::Yes),
-                6 => make_ballot(neuron_store.with_neuron(&NeuronId {id: 6}, |n| n.voting_power(now)).unwrap(), Vote::Unspecified),
+                1 => make_ballot(deciding_voting_power(NeuronId { id: 1 }), Vote::Yes),
+                2 => make_ballot(deciding_voting_power(NeuronId { id: 2 }), Vote::Yes),
+                3 => make_ballot(deciding_voting_power(NeuronId { id: 3 }), Vote::Yes),
+                4 => make_ballot(deciding_voting_power(NeuronId { id: 4 }), Vote::Yes),
+                5 => make_ballot(deciding_voting_power(NeuronId { id: 5 }), Vote::Yes),
+                6 => make_ballot(deciding_voting_power(NeuronId { id: 6 }), Vote::Unspecified),
             }
         );
     }
