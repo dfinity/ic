@@ -43,7 +43,7 @@ function eval_command_with_retries() {
         if [ ${exit_code} -ne 0 ] && [ ${attempt_count} -lt 3 ]; then
             sleep 1
         fi
-    }
+    done
 
     if [ ${exit_code} -ne 0 ]; then
         local ip6_output=$(ip -6 addr show)
