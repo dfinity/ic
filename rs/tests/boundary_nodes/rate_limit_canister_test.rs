@@ -1,15 +1,15 @@
 /* tag::catalog[]
-Title:: Rate-limiting test
+Title:: Setting rate-limits on the API boundary nodes via rate-limit canister
 
-Goal:: Verify that the rate-limiting canister works.
+Goal:: Verify that API boundary nodes dynamically fetch rate-limit configurations from the canister and enforce them for ingress messages.
 
 Runbook:
-. Set up an rate-limiting canister.
-. Test that the rate-limiting canister API works.
+. Set up an rate-limit canister.
+. Test that the rate-limit canister API works.
 
-Success:: The rate-limiting canister is installed and the API works.
+Success:: The rate-limit canister is installed and the API works.
 
-Coverage:: The rate-limiting canister interface works as expected.
+Coverage:: The rate-limit canister interface works as expected.
 
 end::catalog[] */
 
@@ -43,8 +43,8 @@ use ic_system_test_driver::{
 };
 use rate_limits_api::{
     v1::RateLimitRule, AddConfigResponse, DiscloseRulesArg, DiscloseRulesResponse,
-    GetConfigResponse, GetRuleByIdResponse, IncidentId, InitArg, InputConfig, InputRule, RuleId,
-    Version,
+    GetConfigResponse, GetRuleByIdResponse, IncidentId, InitArg, InputConfig, InputRule,
+    OutputRuleMetadata, RuleId, Version,
 };
 
 pub fn config(env: TestEnv) {
@@ -60,13 +60,6 @@ pub fn config(env: TestEnv) {
     });
 }
 
-// Goal: Verify that the access controls of the certificate orchestrator work
-//
-// Runbook:
-// * install the canister with two root identities
-// * check that the list of allowed principals is empty
-// * add allowed principals and remove them
-// * check that non-roots cannot allow/remove principals
 pub fn complete_flow_test(env: TestEnv) {
     let logger = env.logger();
 
@@ -84,8 +77,7 @@ pub fn complete_flow_test(env: TestEnv) {
 
     let app_node = env.get_first_healthy_application_node_snapshot();
     let canister_id = app_node.create_and_install_canister_with_arg(
-        &env::var("RATE_LIMITING_CANISTER_WASM_PATH")
-            .expect("RATE_LIMITING_CANISTER_WASM_PATH not set"),
+        &env::var("RATE_LIMIT_CANISTER_WASM_PATH").expect("RATE_LIMIT_CANISTER_WASM_PATH not set"),
         Some(args),
     );
 
@@ -112,9 +104,9 @@ pub fn complete_flow_test(env: TestEnv) {
         )
         .await
         .unwrap();
-        info!(&logger, "installed rate-limiting canister ({canister_id})");
+        info!(&logger, "installed rate-limit canister ({canister_id})");
 
-        info!(&logger, "creating agents");
+        info!(&logger, "creating two agents with different access rights");
         let app_node_url = app_node.get_public_url().to_string();
         let agent_full_access = create_agent(full_access_identity, app_node_url.clone()).await;
         let agent_restricted_read = create_agent(AnonymousIdentity {}, app_node_url).await;
@@ -129,17 +121,19 @@ pub fn complete_flow_test(env: TestEnv) {
         info!(&logger, "Call 3. Read config by non-privileged user (RestrictedRead level). Rules and descriptions are hidden in the response");
         let rule_ids = read_config(logger.clone(), &agent_restricted_read, version, canister_id).await;
 
-        info!(&logger, "Call 4. Inspect the metadata of a rule before disclosure. All metadata fields should be hidden");
-        read_rule(logger.clone(), &agent_restricted_read, &rule_ids[2], canister_id).await;
+        info!(&logger, "Call 4. Inspect the metadata of a rule before its disclosure. All metadata fields should be hidden");
+        let rule_metadata = read_rule(logger.clone(), &agent_restricted_read, &rule_ids[2], canister_id).await;
+        assert!(rule_metadata.rule_raw.is_none());
+        assert!(rule_metadata.description.is_none());
 
-        info!(&logger, "Call 5. Disclose rules (two rules in this case) linked to a single incident");
+        info!(&logger, "Call 5. Disclose two rules linked to one incident");
         let incident_id = "incident_id_1".to_string();
         disclose_incident(logger.clone(), &agent_full_access, incident_id, canister_id).await;
 
-        info!(&logger, "Call 6. Read config by non-privileged user again. Now rules related to the disclosed incident are fully shown");
+        info!(&logger, "Call 6. Read config by non-privileged user again. Now rules related to the disclosed incident are fully visible");
         let _ = read_config(logger.clone(), &agent_restricted_read, version, canister_id).await;
 
-        info!(&logger, "Call 7. Add another config (version = 3) with one newly added rule, one remove rule");
+        info!(&logger, "Call 7. Add another config (version = 3) with one newly added rule, and one remove rule");
         add_config_2(logger.clone(), &agent_full_access, canister_id).await;
 
         info!(&logger, "Call 8. Read config by privileged user (FullAccess or FullRead caller level). Response will expose rules/descriptions in their full form");
@@ -147,8 +141,11 @@ pub fn complete_flow_test(env: TestEnv) {
         let _ = read_config(logger.clone(), &agent_full_access, version, canister_id).await;
 
         info!(&logger, "Call 9. Inspect the metadata of the removed rule. All metadata fields should be visible, including versions when the rule was added/removed");
-        read_rule(logger.clone(), &agent_restricted_read, &rule_ids[2], canister_id).await;
-
+        let rule_metadata = read_rule(logger.clone(), &agent_restricted_read, &rule_ids[2], canister_id).await;
+        assert!(rule_metadata.rule_raw.is_some());
+        assert!(rule_metadata.description.is_some());
+        assert_eq!(rule_metadata.added_in_version, 2);
+        assert_eq!(rule_metadata.removed_in_version, Some(3));
     });
 }
 
@@ -164,7 +161,7 @@ async fn create_agent<I: Identity + 'static>(identity: I, domain: String) -> Age
 
 async fn add_config_1(logger: Logger, agent: &Agent, canister_id: Principal) {
     // Note two rules (indices = [0, 2]) are linked to the same incident_id_1
-    // RuleIds are generated on the server side based on the hash(rule_raw + description)
+    // RuleIds are generated randomly on the canister side
     let rule_1 = RateLimitRule {
         canister_id: Some(canister_id),
         subnet_id: None,
@@ -359,7 +356,12 @@ async fn disclose_incident(
     info!(&logger, "Response to disclose_rules() call: {decoded:#?}");
 }
 
-async fn read_rule(logger: Logger, agent: &Agent, rule_id: &RuleId, canister_id: Principal) {
+async fn read_rule(
+    logger: Logger,
+    agent: &Agent,
+    rule_id: &RuleId,
+    canister_id: Principal,
+) -> OutputRuleMetadata {
     let args = Encode!(rule_id).unwrap();
 
     let response = agent
@@ -369,9 +371,11 @@ async fn read_rule(logger: Logger, agent: &Agent, rule_id: &RuleId, canister_id:
         .await
         .expect("update call failed");
 
-    let decoded = Decode!(&response, GetRuleByIdResponse).unwrap().unwrap();
+    let rule_metadata = Decode!(&response, GetRuleByIdResponse).unwrap().unwrap();
 
-    info!(&logger, "Response to get_rule_by_id() call: {decoded}");
+    info!(&logger, "Response to get_rule_by_id() call: {rule_metadata}");
+
+    rule_metadata
 }
 
 fn main() -> Result<()> {

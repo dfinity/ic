@@ -111,9 +111,9 @@ system_test_nns(
 )
 
 system_test_nns(
-    name = "rate_limiting_canister_test",
+    name = "rate_limit_canister_test",
     env = {
-        "RATE_LIMITING_CANISTER_WASM_PATH": "$(rootpath //rs/boundary_node/rate_limits:rate_limit_canister)",
+        "RATE_LIMIT_CANISTER_WASM_PATH": "$(rootpath //rs/boundary_node/rate_limits:rate_limit_canister)",
     },
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [

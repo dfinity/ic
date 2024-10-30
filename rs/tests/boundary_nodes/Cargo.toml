@@ -65,5 +65,5 @@ name = "ic-systest-bn-update-workload"
 path = "bn_update_workload_test.rs"
 
 [[bin]]
-name = "ic-systest-rate-limiting-canister"
-path = "rate_limiting_canister_test.rs"
+name = "ic-systest-rate-limit-canister"
+path = "rate_limit_canister_test.rs"
