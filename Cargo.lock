@@ -9887,6 +9887,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-nervous-system-linear-map"
+version = "0.0.1"
+dependencies = [
+ "rust_decimal",
+]
+
+[[package]]
 name = "ic-nervous-system-lock"
 version = "0.0.1"
 dependencies = [
