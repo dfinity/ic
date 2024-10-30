@@ -81,19 +81,25 @@ pub fn setup(env: TestEnv) {
     let vm_resources = VmResources {
         vcpus: Some(NrOfVCPUs::new(64)),
         memory_kibibytes: Some(AmountOfMemoryKiB::new(450 << 20)),
-        boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(3500)),
+        boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(9900)),
     };
     let mut ic = InternetComputer::new().with_default_vm_resources(vm_resources);
-    ic = ic.add_subnet(Subnet::new(SubnetType::System).add_nodes(4));
+    ic = ic.add_subnet(
+        Subnet::new(SubnetType::System)
+            .with_required_host_features(vec![HostFeature::Host(
+                "se1-dll02.se1.dfinity.network".to_string(),
+            )])
+            .add_nodes(1),
+    );
     for _ in 0..NUM_FULL_CONSENSUS_APP_SUBNETS {
         ic = ic.add_subnet(Subnet::new(SubnetType::Application).add_nodes(4));
     }
     for _ in 0..NUM_SINGLE_NODE_APP_SUBNETS {
         ic = ic.add_subnet(
             Subnet::new(SubnetType::Application)
-                .with_required_host_features(vec![HostFeature::Host(
-                    "se1-dll02.se1.dfinity.network".to_string(),
-                )])
+                //.with_required_host_features(vec![HostFeature::Host(
+                //"se1-dll02.se1.dfinity.network".to_string(),
+                //)])
                 .add_nodes(1),
         );
     }

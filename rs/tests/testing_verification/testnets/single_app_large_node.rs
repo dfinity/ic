@@ -37,6 +37,7 @@
 use anyhow::Result;
 
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::farm::HostFeature;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{
     AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources,
@@ -57,12 +58,15 @@ pub fn setup(env: TestEnv) {
         .expect("failed to start prometheus VM");
     InternetComputer::new()
         .add_subnet(
-            Subnet::new(SubnetType::Application)
+            Subnet::new(SubnetType::System)
                 .with_default_vm_resources(VmResources {
                     vcpus: Some(NrOfVCPUs::new(64)),
-                    memory_kibibytes: Some(AmountOfMemoryKiB::new(512142680)),
-                    boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
+                    memory_kibibytes: Some(AmountOfMemoryKiB::new(450 * 1024 * 1024)),
+                    boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(10500)),
                 })
+                .with_required_host_features(vec![HostFeature::Host(
+                    "se1-dll02.se1.dfinity.network".to_string(),
+                )])
                 .add_nodes(1),
         )
         .setup_and_start(&env)
