@@ -32,12 +32,11 @@ impl TryFrom<NeuronResponse> for ObjectMap {
 impl TryFrom<ObjectMap> for NeuronResponse {
     type Error = ApiError;
     fn try_from(o: ObjectMap) -> Result<NeuronResponse, Self::Error> {
-        match serde_json::from_value(Value::Object(o)) {
-            Ok(d) => Ok(d),
-            Err(err) => Err(ApiError::internal_error(format!(
+        serde_json::from_value(Value::Object(o)).map_err(|err| {
+            ApiError::internal_error(format!(
                 "Could not convert ObjectMap to NeuronResponse: {:?}",
                 err
-            ))),
-        }
+            ))
+        })
     }
 }
