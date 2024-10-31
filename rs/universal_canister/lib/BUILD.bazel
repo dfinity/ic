@@ -43,3 +43,16 @@ rust_test(
     data = ["src/universal-canister.wasm.gz"],
     deps = DEV_DEPENDENCIES,
 )
+
+rust_test(
+    name = "hardcoded_module_test",
+    size = "small",
+    srcs = ["tests/tests.rs"],
+    aliases = {},
+    data = ["//rs/universal_canister/impl:universal_canister.wasm.gz"],
+    env = {"UNIVERSAL_CANISTER_WASM": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)"},
+    deps = [
+        ":lib",
+        "//rs/crypto/sha2",
+    ],
+)
