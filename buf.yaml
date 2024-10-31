@@ -8,7 +8,7 @@ modules:
   - path: rs/nervous_system/proto/proto
   - path: rs/nns/common/proto
   - path: rs/nns/governance/proto
-  - path: rs/nns/gtc/proto Temporarily removed because a PR was reverted and then un-reverted
+  - path: rs/nns/gtc/proto 
   - path: rs/nns/handlers/root/impl/proto
   - path: rs/protobuf/def
   - path: rs/sns/governance/proto
