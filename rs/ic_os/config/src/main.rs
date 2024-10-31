@@ -128,6 +128,8 @@ pub struct GenerateTestnetConfigClapArgs {
     pub socks_proxy: Option<String>,
     #[arg(long)]
     pub hostname: Option<String>,
+    #[arg(long)]
+    pub generate_ic_boundary_tls_cert: Option<String>,
 
     // Output path
     #[arg(long)]
@@ -353,6 +355,7 @@ pub fn main() -> Result<()> {
                 jaeger_addr: clap_args.jaeger_addr,
                 socks_proxy: clap_args.socks_proxy,
                 hostname: clap_args.hostname,
+                generate_ic_boundary_tls_cert: clap_args.generate_ic_boundary_tls_cert,
             };
 
             generate_testnet_config(args, clap_args.guestos_config_json_path)
