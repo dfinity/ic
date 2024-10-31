@@ -1,6 +1,9 @@
 use super::*;
 use crate::{
-    blocklist, providers::Provider, types::BtcNetwork, CheckTransactionIrrecoverableError,
+    blocklist,
+    providers::Provider,
+    types::{BtcNetwork, KytMode},
+    CheckTransactionIrrecoverableError,
 };
 use bitcoin::{
     absolute::LockTime, address::Address, hashes::Hash, transaction::Version, Amount, OutPoint,
@@ -33,8 +36,11 @@ impl FetchEnv for MockEnv {
         }
     }
 
-    fn btc_network(&self) -> BtcNetwork {
-        BtcNetwork::Mainnet
+    fn config(&self) -> Config {
+        Config {
+            btc_network: BtcNetwork::Mainnet,
+            kyt_mode: KytMode::Normal,
+        }
     }
 
     async fn http_get_tx(
@@ -124,6 +130,25 @@ fn mock_transaction_with_outputs(num_outputs: usize) -> Transaction {
     tx
 }
 
+fn mock_transaction_with_output_but_no_address(num_outputs: usize) -> Transaction {
+    let mut tx = mock_transaction();
+    // This vout was taken from a regtest transaction. It is equivalent to
+    // "OP_RETURN aa21a9ede2f61c3f71d1defd3fa999dfa36953755c690689799962b48bebd836974e8cf9"
+    let vout = [
+        0x6a, 0x24, 0xaa, 0x21, 0xa9, 0xed, 0xe2, 0xf6, 0x1c, 0x3f, 0x71, 0xd1, 0xde, 0xfd, 0x3f,
+        0xa9, 0x99, 0xdf, 0xa3, 0x69, 0x53, 0x75, 0x5c, 0x69, 0x06, 0x89, 0x79, 0x99, 0x62, 0xb4,
+        0x8b, 0xeb, 0xd8, 0x36, 0x97, 0x4e, 0x8c, 0xf9,
+    ];
+    let output = (0..num_outputs)
+        .map(|_| TxOut {
+            value: Amount::ONE_SAT,
+            script_pubkey: ScriptBuf::from_bytes(vout.clone().to_vec()),
+        })
+        .collect();
+    tx.output = output;
+    tx
+}
+
 fn mock_transaction_with_inputs(input_txids: Vec<(Txid, u32)>) -> Transaction {
     let mut tx = mock_transaction();
     let input = input_txids
@@ -147,7 +172,7 @@ fn mock_transaction_with_inputs(input_txids: Vec<(Txid, u32)>) -> Transaction {
 async fn test_mock_env() {
     // Test cycle mock functions
     let env = MockEnv::new(CHECK_TRANSACTION_CYCLES_REQUIRED);
-    let provider = providers::next_provider(env.btc_network());
+    let provider = providers::next_provider(env.config().btc_network);
     assert_eq!(
         env.cycles_accept(CHECK_TRANSACTION_CYCLES_SERVICE_FEE),
         CHECK_TRANSACTION_CYCLES_SERVICE_FEE
@@ -180,10 +205,13 @@ fn test_try_fetch_tx() {
     let txid_0 = mock_txid(0);
     let txid_1 = mock_txid(1);
     let txid_2 = mock_txid(2);
+    let from_tx = |tx: &bitcoin::Transaction| {
+        TransactionKytData::from_transaction(&env.config().btc_network, tx.clone()).unwrap()
+    };
 
     // case Fetched
     let fetched_0 = FetchTxStatus::Fetched(FetchedTx {
-        tx: mock_transaction().try_into().unwrap(),
+        tx: from_tx(&mock_transaction()),
         input_addresses: vec![None],
     });
     state::set_fetch_status(txid_0, fetched_0.clone());
@@ -223,10 +251,13 @@ fn test_try_fetch_tx() {
 #[tokio::test]
 async fn test_fetch_tx() {
     let env = MockEnv::new(CHECK_TRANSACTION_CYCLES_REQUIRED);
-    let provider = providers::next_provider(env.btc_network());
+    let provider = providers::next_provider(env.config().btc_network);
     let txid_0 = mock_txid(0);
     let txid_1 = mock_txid(1);
     let txid_2 = mock_txid(2);
+    let from_tx = |tx: &bitcoin::Transaction| {
+        TransactionKytData::from_transaction(&env.config().btc_network, tx.clone()).unwrap()
+    };
 
     // case Fetched
     let tx_0 = mock_transaction_with_inputs(vec![(txid_1, 0), (txid_2, 1)]);
@@ -241,7 +272,7 @@ async fn test_fetch_tx() {
         Some(FetchTxStatus::Fetched(_))
     ));
     if let Ok(FetchResult::Fetched(fetched)) = result {
-        assert_eq!(fetched.tx, tx_0.try_into().unwrap());
+        assert_eq!(fetched.tx, from_tx(&tx_0));
         assert_eq!(fetched.input_addresses, vec![None, None]);
     } else {
         unreachable!()
@@ -293,10 +324,14 @@ async fn test_check_fetched() {
     let tx_0 = mock_transaction_with_inputs(vec![(txid_1, 0), (txid_2, 1)]);
     let tx_1 = mock_transaction_with_outputs(1);
     let tx_2 = mock_transaction_with_outputs(2);
+    let network = env.config().btc_network;
+    let from_tx = |tx: &bitcoin::Transaction| {
+        TransactionKytData::from_transaction(&network, tx.clone()).unwrap()
+    };
 
     // case Passed
     let fetched = FetchedTx {
-        tx: tx_0.clone().try_into().unwrap(),
+        tx: from_tx(&tx_0),
         input_addresses: vec![Some(good_address.clone())],
     };
     state::set_fetch_status(txid_0, FetchTxStatus::Fetched(fetched.clone()));
@@ -309,7 +344,7 @@ async fn test_check_fetched() {
 
     // case Failed
     let fetched = FetchedTx {
-        tx: tx_0.clone().try_into().unwrap(),
+        tx: from_tx(&tx_0),
         input_addresses: vec![Some(good_address.clone()), Some(bad_address)],
     };
     state::set_fetch_status(txid_0, FetchTxStatus::Fetched(fetched.clone()));
@@ -323,7 +358,7 @@ async fn test_check_fetched() {
     // case HighLoad
     env.high_load = true;
     let fetched = FetchedTx {
-        tx: tx_0.clone().try_into().unwrap(),
+        tx: from_tx(&tx_0),
         input_addresses: vec![Some(good_address), None],
     };
     state::set_fetch_status(txid_0, FetchTxStatus::Fetched(fetched.clone()));
@@ -349,7 +384,7 @@ async fn test_check_fetched() {
     // case Pending: need 2 inputs, but only able to get 1 for now
     let env = MockEnv::new(get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES) * 3 / 2);
     let fetched = FetchedTx {
-        tx: tx_0.clone().try_into().unwrap(),
+        tx: from_tx(&tx_0),
         input_addresses: vec![None, None],
     };
     state::set_fetch_status(txid_0, FetchTxStatus::Fetched(fetched.clone()));
@@ -375,7 +410,7 @@ async fn test_check_fetched() {
     // case Passed: need 2 inputs, and getting both
     let env = MockEnv::new(CHECK_TRANSACTION_CYCLES_REQUIRED);
     let fetched = FetchedTx {
-        tx: tx_0.clone().try_into().unwrap(),
+        tx: from_tx(&tx_0),
         input_addresses: vec![None, None],
     };
     state::set_fetch_status(txid_0, FetchTxStatus::Fetched(fetched.clone()));
@@ -396,14 +431,14 @@ async fn test_check_fetched() {
     // case Passed: need 2 inputs, and 1 already exists in cache.
     let env = MockEnv::new(CHECK_TRANSACTION_CYCLES_REQUIRED);
     let fetched = FetchedTx {
-        tx: tx_0.clone().try_into().unwrap(),
+        tx: from_tx(&tx_0),
         input_addresses: vec![None, None],
     };
     state::set_fetch_status(txid_0, FetchTxStatus::Fetched(fetched.clone()));
     state::set_fetch_status(
         txid_1,
         FetchTxStatus::Fetched(FetchedTx {
-            tx: tx_1.clone().try_into().unwrap(),
+            tx: from_tx(&tx_1),
             input_addresses: vec![],
         }),
     );
@@ -422,7 +457,7 @@ async fn test_check_fetched() {
     // case Pending: need 2 input, but 1 of them gives RetryWithBiggerBuffer error.
     let env = MockEnv::new(CHECK_TRANSACTION_CYCLES_REQUIRED);
     let fetched = FetchedTx {
-        tx: tx_0.clone().try_into().unwrap(),
+        tx: from_tx(&tx_0),
         input_addresses: vec![None, None],
     };
     state::set_fetch_status(txid_0, FetchTxStatus::Fetched(fetched.clone()));
@@ -453,7 +488,7 @@ async fn test_check_fetched() {
     // case Error: need 2 input, but 1 of them keeps giving RetryWithBiggerBuffer error.
     let env = MockEnv::new(CHECK_TRANSACTION_CYCLES_REQUIRED);
     let fetched = FetchedTx {
-        tx: tx_0.try_into().unwrap(),
+        tx: from_tx(&tx_0),
         input_addresses: vec![None, None],
     };
     state::set_fetch_status(txid_0, FetchTxStatus::Fetched(fetched.clone()));
@@ -484,7 +519,7 @@ async fn test_check_fetched() {
 
     // case HttpGetTxError can be retried.
     let remaining_cycles = env.cycles_available();
-    let provider = providers::next_provider(env.btc_network());
+    let provider = providers::next_provider(env.config().btc_network);
     state::set_fetch_status(
         txid_2,
         FetchTxStatus::Error(FetchTxStatusError {
@@ -508,4 +543,23 @@ async fn test_check_fetched() {
         env.cycles_available(),
         remaining_cycles - get_tx_cycle_cost(RETRY_MAX_RESPONSE_BYTES)
     );
+
+    // case Error: "Tx .. vout .. has no address ...". It should never happen
+    // unless blockdata is corrupted.
+    let env = MockEnv::new(CHECK_TRANSACTION_CYCLES_REQUIRED);
+    let fetched = FetchedTx {
+        tx: from_tx(&tx_0),
+        input_addresses: vec![None, None],
+    };
+    state::set_fetch_status(txid_0, FetchTxStatus::Fetched(fetched.clone()));
+    state::clear_fetch_status(txid_1);
+    state::clear_fetch_status(txid_2);
+    env.expect_get_tx_with_reply(Ok(tx_1.clone()));
+    env.expect_get_tx_with_reply(Ok(mock_transaction_with_output_but_no_address(2)));
+    assert!(matches!(
+        env.check_fetched(txid_0, &fetched).await,
+        CheckTransactionResponse::Unknown(CheckTransactionStatus::Error(
+            CheckTransactionIrrecoverableError::InvalidTransaction(err)
+        )) if err.contains("has no address")
+    ));
 }

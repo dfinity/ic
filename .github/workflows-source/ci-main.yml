@@ -31,11 +31,10 @@ env:
   CI_RUN_ID: ${{ github.run_id }}
   RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
   BUILDEVENT_DATASET: "github-ci-dfinity"
-  RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:ced9611af39119f62feedc8a5ad75a8fac478cb43d2d56b623023766f6ce8ca7
+    image: ghcr.io/dfinity/ic-build@sha256:14f87ab5f58f00929a0adcdbadd025a5d1dc1911b00f8b7e407a5f56966a0ca3
   dind-large-setup: &dind-large-setup
     runs-on:
       labels: dind-large
@@ -148,6 +147,8 @@ jobs:
           fi
           # Export BAZEL_EXTRA_ARGS to environment
           echo "BAZEL_EXTRA_ARGS=$BAZEL_EXTRA_ARGS" >> $GITHUB_ENV
+        env:
+          RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
       - name: Run Bazel Test All
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
@@ -155,6 +156,8 @@ jobs:
           AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
           # Only run ci/bazel-scripts/diff.sh on PRs that are not labeled with "CI_ALL_BAZEL_TARGETS".
           OVERRIDE_DIDC_CHECK: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}
+          CI_OVERRIDE_BUF_BREAKING: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_BUF_BREAKING') }}
+          RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
         with:
           BAZEL_COMMAND: "test"
           BAZEL_TARGETS: "//..."
@@ -293,6 +296,7 @@ jobs:
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
       - name: Upload build-ic.tar
         uses: actions/upload-artifact@v4
         with:

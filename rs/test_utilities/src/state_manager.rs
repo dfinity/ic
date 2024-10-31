@@ -25,7 +25,7 @@ use ic_types::{
     CryptoHashOfPartialState, CryptoHashOfState, Height, RegistryVersion, SubnetId,
 };
 use serde::{Deserialize, Serialize};
-use std::collections::VecDeque;
+use std::collections::{BTreeSet, VecDeque};
 use std::sync::{Arc, Barrier, RwLock};
 
 #[derive(Clone)]
@@ -196,7 +196,11 @@ impl StateManager for FakeStateManager {
             .retain(|snap| snap.height == Height::new(0) || snap.height >= height)
     }
 
-    fn remove_inmemory_states_below(&self, _height: Height) {
+    fn remove_inmemory_states_below(
+        &self,
+        _height: Height,
+        _extra_heights_to_keep: &BTreeSet<Height>,
+    ) {
         // All heights are checkpoints
     }
 
@@ -536,11 +540,6 @@ impl CertifiedStreamStore for FakeStateManager {
             .read()
             .unwrap()
             .wait();
-        use ic_types::{
-            consensus::certification::CertificationContent,
-            crypto::{CombinedThresholdSig, CombinedThresholdSigOf, Signed},
-            signature::ThresholdSignature,
-        };
 
         let state = self.get_latest_state();
         let stream = state
@@ -561,29 +560,11 @@ impl CertifiedStreamStore for FakeStateManager {
             // If `byte_limit == 0 && msg_limit > 0`, return exactly 1 message.
             msg_limit = Some(1);
         }
-        let slice: SerializableStreamSlice = stream.slice(begin_index, msg_limit).into();
 
-        Ok(CertifiedStreamSlice {
-            payload: serde_cbor::to_vec(&slice).expect("failed to serialize stream slice"),
-            merkle_proof: vec![],
-            certification: Certification {
-                height: state.height(),
-                signed: Signed {
-                    signature: ThresholdSignature {
-                        signer: NiDkgId {
-                            start_block_height: Height::from(0),
-                            dealer_subnet: subnet_test_id(0),
-                            dkg_tag: NiDkgTag::HighThreshold,
-                            target_subnet: NiDkgTargetSubnet::Local,
-                        },
-                        signature: CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])),
-                    },
-                    content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(
-                        vec![],
-                    ))),
-                },
-            },
-        })
+        Ok(encode_certified_stream_slice(
+            stream.slice(begin_index, msg_limit),
+            state.height(),
+        ))
     }
 
     fn decode_certified_stream_slice(
@@ -608,6 +589,46 @@ impl CertifiedStreamStore for FakeStateManager {
         self.get_latest_state()
             .get_ref()
             .subnets_with_available_streams()
+    }
+}
+
+/// Encode a `StreamSlice` directly as CBOR, with no witness or certification;
+/// compatible with `FakeStateManager`.
+///
+/// This is useful for generating a `CertifiedStreamSlice` where
+/// `slice.header().begin() != `slice.messages().begin()` for use in tests.
+pub fn encode_certified_stream_slice(
+    slice: StreamSlice,
+    state_height: Height,
+) -> CertifiedStreamSlice {
+    use ic_types::{
+        consensus::certification::CertificationContent,
+        crypto::{CombinedThresholdSig, CombinedThresholdSigOf, Signed},
+        signature::ThresholdSignature,
+    };
+
+    let slice: SerializableStreamSlice = slice.into();
+
+    CertifiedStreamSlice {
+        payload: serde_cbor::to_vec(&slice).expect("failed to serialize stream slice"),
+        merkle_proof: vec![],
+        certification: Certification {
+            height: state_height,
+            signed: Signed {
+                signature: ThresholdSignature {
+                    signer: NiDkgId {
+                        start_block_height: Height::from(0),
+                        dealer_subnet: subnet_test_id(0),
+                        dkg_tag: NiDkgTag::HighThreshold,
+                        target_subnet: NiDkgTargetSubnet::Local,
+                    },
+                    signature: CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])),
+                },
+                content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(
+                    vec![],
+                ))),
+            },
+        },
     }
 }
 
@@ -666,11 +687,15 @@ impl StateManager for RefMockStateManager {
         self.mock.read().unwrap().remove_states_below(height)
     }
 
-    fn remove_inmemory_states_below(&self, height: Height) {
+    fn remove_inmemory_states_below(
+        &self,
+        height: Height,
+        extra_heights_to_keep: &BTreeSet<Height>,
+    ) {
         self.mock
             .read()
             .unwrap()
-            .remove_inmemory_states_below(height)
+            .remove_inmemory_states_below(height, extra_heights_to_keep)
     }
 
     fn commit_and_certify(
