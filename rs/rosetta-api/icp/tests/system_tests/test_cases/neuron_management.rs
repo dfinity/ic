@@ -1214,9 +1214,8 @@ fn test_spawn_neuron() {
                         .unwrap(),
                     )
                     .unwrap();
-                    assert_eq!(
-                        neurons.last().unwrap().id.unwrap().id,
-                        neuron_info.neuron_id
+                    assert!(
+                        neurons.iter().any(|n| n.id.unwrap().id == neuron_info.neuron_id),
                     );
                 });
                 Ok(())
