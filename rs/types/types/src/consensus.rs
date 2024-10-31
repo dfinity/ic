@@ -295,7 +295,6 @@ impl Block {
             context,
         }
     }
-
 }
 
 impl SignedBytesWithoutDomainSeparator for BlockMetadata {
