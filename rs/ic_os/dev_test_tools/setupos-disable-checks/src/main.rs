@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Error};
 use clap::Parser;
+use linux_kernel_command_line::{ImproperlyQuotedValue, KernelCommandLine};
 use regex::Regex;
 use tempfile::NamedTempFile;
 use tokio::fs;
@@ -29,26 +30,78 @@ struct Cli {
     defeat_installer: bool,
 }
 
-fn remove_argument(cmdline: String, argument: String) -> String {
-    let replacements = [
-        (argument.to_string() + "=1"),
-        (argument.to_string() + "=0"),
-        argument,
-    ];
-    let mut existing_args = cmdline.clone();
-    for r in replacements.iter() {
-        existing_args = existing_args.replace(r.as_str(), "");
-        existing_args = existing_args.replace("  ", " ");
-        existing_args = existing_args.trim_matches(' ').to_string();
+/// Munge the kernel command line:
+/// defeat_setup_checks: if true, defeat the checks; if false, ensure they are active
+/// defeat_installer: if true, disable the installer; if false, ensure the installer runs
+fn munge(
+    input: &str,
+    defeat_setup_checks: bool,
+    defeat_installer: bool,
+) -> Result<String, ImproperlyQuotedValue> {
+    let extra_boot_args_re = Regex::new(r"(^|\n)EXTRA_BOOT_ARGS=(.*)(\s+#|\n|$)").unwrap();
+    let (left, prevmatch, mut extra_boot_args, postmatch, right) =
+        match extra_boot_args_re.captures(input) {
+            Some(captures) => {
+                let wholematch = captures.get(0).unwrap();
+                let prevmatch = captures.get(1).unwrap();
+                let thematch = captures.get(2).unwrap();
+                let postmatch = captures.get(3).unwrap();
+                (
+                    wholematch.start(),
+                    prevmatch.as_str().to_string(),
+                    KernelCommandLine::try_from(thematch.as_str().trim_matches('"'))?,
+                    postmatch.as_str().to_string(),
+                    wholematch.end(),
+                )
+            }
+            None => (
+                input.len(),
+                "".to_string(),
+                KernelCommandLine::default(),
+                "\n".to_string(),
+                input.len(),
+            ),
+        };
+
+    for arg in CHECK_DISABLER_CMDLINE_ARGS.iter() {
+        extra_boot_args
+            .ensure_single_argument(
+                arg,
+                match defeat_setup_checks {
+                    true => Some("0"),
+                    false => None,
+                },
+            )
+            .unwrap();
     }
-    existing_args
+    for arg in CHECK_INSTALL_DISABLER_CMDLINE_ARGS.iter() {
+        extra_boot_args
+            .ensure_single_argument(
+                arg,
+                match defeat_installer {
+                    true => None,
+                    false => Some("0"),
+                },
+            )
+            .unwrap();
+    }
+
+    let extra_boot_args_str: String = extra_boot_args.into();
+
+    Ok(format!(
+        "# This file has been modified by setupos-disable-checks.\n{}{}EXTRA_BOOT_ARGS=\"{}\"{}{}",
+        &input[..left],
+        prevmatch,
+        extra_boot_args_str,
+        postmatch,
+        &input[right..],
+    ))
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     let cli = Cli::parse();
     let extra_boot_args_path = Path::new("/extra_boot_args");
-    let extra_boot_args_re = Regex::new(r"EXTRA_BOOT_ARGS=(.*)").unwrap();
 
     // Open boot file system.
     eprintln!("Opening boot file system {}", cli.image_path.display());
@@ -63,47 +116,17 @@ async fn main() -> Result<(), Error> {
         eprintln!("Defeating age, hardware and network checks in SetupOS");
     }
 
-    let mut to_append = "".to_string()
-        + &CHECK_DISABLER_CMDLINE_ARGS
-            .iter()
-            .map(|x| x.to_string() + "=0")
-            .collect::<Vec<String>>()
-            .join(" ");
-    if cli.defeat_installer {
-        to_append = to_append + " " + CHECK_INSTALL_DISABLER_CMDLINE_ARGS[0];
-    }
-
-    let new_args =
-        match extra_boot_args_re.captures(bootfs.read_file(extra_boot_args_path).await?.as_str()) {
-            Some(captures) => {
-                let mut existing_args = captures
-                    .get(1)
-                    .unwrap()
-                    .as_str()
-                    .trim_matches('"')
-                    .to_string();
-                for disabled in CHECK_DISABLER_CMDLINE_ARGS.iter() {
-                    existing_args = remove_argument(existing_args, disabled.to_string());
-                }
-                if cli.defeat_installer {
-                    for disabled in CHECK_INSTALL_DISABLER_CMDLINE_ARGS.iter() {
-                        existing_args = remove_argument(existing_args, disabled.to_string());
-                    }
-                }
-                existing_args.to_owned() + " " + to_append.as_str()
-            }
-            None => to_append,
-        };
-
     let temp_extra_boot_args = NamedTempFile::new()?;
     fs::write(
         temp_extra_boot_args.path(),
-        format!(
-            "# This file has been modified by setupos-disable-checks.
-EXTRA_BOOT_ARGS=\"{}\"
-",
-            new_args
-        ),
+        munge(
+            bootfs.read_file(extra_boot_args_path).await?.as_str(),
+            true,
+            cli.defeat_installer,
+        )
+        .context(
+            "Could not parse the EXTRA_BOOT_ARGS variable in the existing extra_boot_args file",
+        )?,
     )
     .await
     .context("failed to write temporary extra boot args")?;
@@ -117,4 +140,79 @@ EXTRA_BOOT_ARGS=\"{}\"
     bootfs.close().await?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::munge;
+
+    #[test]
+    fn test_munge() {
+        let table = [
+            (
+                "variable gets added when the file does not contain the variable",
+                r#"# This file contains nothing.
+"#,
+                true,
+                true,
+                r#"# This file has been modified by setupos-disable-checks.
+# This file contains nothing.
+EXTRA_BOOT_ARGS="ic.setupos.check_hardware=0 ic.setupos.check_network=0 ic.setupos.check_age=0 ic.setupos.stop_before_installation"
+"#,
+            ),
+            (
+                "munges the variable successfully when present",
+                r#"# Hello hello.
+EXTRA_BOOT_ARGS="security=selinux selinux=1 enforcing=0"
+# Postfix.
+"#,
+                true,
+                true,
+                r#"# This file has been modified by setupos-disable-checks.
+# Hello hello.
+EXTRA_BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardware=0 ic.setupos.check_network=0 ic.setupos.check_age=0 ic.setupos.stop_before_installation"
+# Postfix.
+"#,
+            ),
+            (
+                "munges the variable even at the beginning of the file",
+                r#"EXTRA_BOOT_ARGS="security=selinux selinux=1 enforcing=0"
+"#,
+                true,
+                true,
+                r#"# This file has been modified by setupos-disable-checks.
+EXTRA_BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardware=0 ic.setupos.check_network=0 ic.setupos.check_age=0 ic.setupos.stop_before_installation"
+"#,
+            ),
+            (
+                "variables for defeat installer are set, and checks are prevented from being defeated",
+                r#"EXTRA_BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardware=0"
+"#,
+                false,
+                true,
+                r#"# This file has been modified by setupos-disable-checks.
+EXTRA_BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardware ic.setupos.check_network ic.setupos.check_age ic.setupos.stop_before_installation"
+"#,
+            ),
+            (
+                "variables for defeat checks are set, and installer is prevented from being defeated",
+                r#"EXTRA_BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardware=0 ic.setupos.check_age"
+"#,
+                true,
+                false,
+                r#"# This file has been modified by setupos-disable-checks.
+EXTRA_BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardware=0 ic.setupos.check_age=0 ic.setupos.check_network=0 ic.setupos.stop_before_installation=0"
+"#,
+            ),
+        ];
+        for (tst, input, defeat_checks, defeat_installer, expected) in table.into_iter() {
+            let result = munge(input, defeat_checks, defeat_installer).unwrap();
+            if result != expected {
+                panic!(
+                    "During test {}:\n\nInput:\n[[[{}]]]\n\nExpected:\n[[[{}]]]\n\nActual:\n[[[{}]]]\n",
+                    tst, input, expected, result,
+                );
+            }
+        }
+    }
 }

@@ -151,6 +151,7 @@ members = [
     "rs/interfaces/state_manager",
     "rs/interfaces/state_manager/mocks",
     "rs/limits",
+    "rs/linux_kernel_command_line",
     "rs/memory_tracker",
     "rs/messaging",
     "rs/monitoring/adapter_metrics/client",
