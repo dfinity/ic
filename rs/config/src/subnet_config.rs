@@ -429,8 +429,8 @@ impl CyclesAccountManagerConfig {
             // The following fields are set based on a thought experiment where
             // we estimated how many resources a representative benchmark on a
             // verified subnet is using.
-            update_message_execution_fee: Cycles::new(590_000),
-            ten_update_instructions_execution_fee: Cycles::new(4),
+            update_message_execution_fee: Cycles::new(5_000_000),
+            ten_update_instructions_execution_fee: Cycles::new(10),
             xnet_call_fee: Cycles::new(260_000),
             xnet_byte_transmission_fee: Cycles::new(1_000),
             ingress_message_reception_fee: Cycles::new(1_200_000),

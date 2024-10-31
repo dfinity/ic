@@ -1297,24 +1297,24 @@ mod tests {
         // Everything up to `u128::MAX / 4` should be converted as normal:
         // `(ten_update_instructions_execution_fee * num_instructions) / 10`
 
-        // `(4 * 0) / 10 == 0`
+        // `(10 * 0) / 10 == 0`
         assert_eq!(
             cycles_account_manager.convert_instructions_to_cycles(0.into()),
             0_u64.into()
         );
 
-        // `(4 * 9) / 10 == 3`
+        // `(10 * 9) / 10 == 9`
         assert_eq!(
             cycles_account_manager.convert_instructions_to_cycles(9.into()),
-            ((4 * 9_u64) / 10).into()
+            ((10 * 9_u64) / 10).into()
         );
 
         // As the maximum number of instructions is bounded by its type, i.e. `u64::MAX`,
         // the normal conversion is applied for the whole instructions range.
-        // `convert_instructions_to_cycles(u64::MAX) == (4 * u64::MAX) / 10`
+        // `convert_instructions_to_cycles(u64::MAX) == (10 * u64::MAX) / 10`
         let u64_max_cycles = cycles_account_manager.convert_instructions_to_cycles(u64::MAX.into());
-        assert_eq!(u64_max_cycles, ((4 * u128::from(u64::MAX)) / 10).into());
-        // `convert_instructions_to_cycles(u64::MAX) != 4 * (u64::MAX / 10)`
-        assert_ne!(u64_max_cycles, (4 * (u128::from(u64::MAX) / 10)).into());
+        assert_eq!(u64_max_cycles, ((10 * u128::from(u64::MAX)) / 10).into());
+        // `convert_instructions_to_cycles(u64::MAX) != 10 * (u64::MAX / 10)`
+        assert_ne!(u64_max_cycles, (10 * (u128::from(u64::MAX) / 10)).into());
     }
 }

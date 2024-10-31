@@ -54,8 +54,8 @@ impl FetchEnv for KytCanisterEnv {
         state::FetchGuard::new(txid)
     }
 
-    fn btc_network(&self) -> BtcNetwork {
-        get_config().btc_network
+    fn config(&self) -> Config {
+        get_config()
     }
 
     async fn http_get_tx(
@@ -126,17 +126,27 @@ impl FetchEnv for KytCanisterEnv {
 ///    in order to compute their corresponding addresses.
 pub async fn check_transaction_inputs(txid: Txid) -> CheckTransactionResponse {
     let env = &KytCanisterEnv;
-    match env.try_fetch_tx(txid) {
-        TryFetchResult::Pending => CheckTransactionRetriable::Pending.into(),
-        TryFetchResult::HighLoad => CheckTransactionRetriable::HighLoad.into(),
-        TryFetchResult::NotEnoughCycles => CheckTransactionStatus::NotEnoughCycles.into(),
-        TryFetchResult::Fetched(fetched) => env.check_fetched(txid, &fetched).await,
-        TryFetchResult::ToFetch(do_fetch) => {
-            match do_fetch.await {
-                Ok(FetchResult::Fetched(fetched)) => env.check_fetched(txid, &fetched).await,
-                Ok(FetchResult::Error(err)) => (txid, err).into(),
-                Ok(FetchResult::RetryWithBiggerBuffer) => CheckTransactionRetriable::Pending.into(),
-                Err(_) => unreachable!(), // should never happen
+    match env.config().kyt_mode {
+        KytMode::AcceptAll => CheckTransactionResponse::Passed,
+        KytMode::RejectAll => CheckTransactionResponse::Failed(Vec::new()),
+        KytMode::Normal => {
+            match env.try_fetch_tx(txid) {
+                TryFetchResult::Pending => CheckTransactionRetriable::Pending.into(),
+                TryFetchResult::HighLoad => CheckTransactionRetriable::HighLoad.into(),
+                TryFetchResult::NotEnoughCycles => CheckTransactionStatus::NotEnoughCycles.into(),
+                TryFetchResult::Fetched(fetched) => env.check_fetched(txid, &fetched).await,
+                TryFetchResult::ToFetch(do_fetch) => {
+                    match do_fetch.await {
+                        Ok(FetchResult::Fetched(fetched)) => {
+                            env.check_fetched(txid, &fetched).await
+                        }
+                        Ok(FetchResult::Error(err)) => (txid, err).into(),
+                        Ok(FetchResult::RetryWithBiggerBuffer) => {
+                            CheckTransactionRetriable::Pending.into()
+                        }
+                        Err(_) => unreachable!(), // should never happen
+                    }
+                }
             }
         }
     }

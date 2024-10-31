@@ -50,7 +50,7 @@ mod orthogonal_persistence;
 #[cfg(test)]
 mod canister_snapshots;
 
-const BALANCE_EPSILON: Cycles = Cycles::new(10_000_000);
+const BALANCE_EPSILON: Cycles = Cycles::new(12_000_000);
 const ONE_GIB: i64 = 1 << 30;
 
 // A Wasm module calling call_perform
