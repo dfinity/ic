@@ -1132,7 +1132,7 @@ fn test_spawn_neuron() {
                         env.pocket_ic.url().unwrap().port().unwrap(),
                     )
                     .await;
-                    env.pocket_ic.tick().await;
+
                     let neurons = list_neurons(&controller_agent).await.full_neurons;
                     assert_eq!(neurons.len(), 1);
                     assert_eq!(
@@ -1196,7 +1196,7 @@ fn test_spawn_neuron() {
                             env.rosetta_client
                                 .get_neuron_info(
                                     env.network_identifier.clone(),
-                                    RosettaNeuronInfoArgs::builder(neuron_index)
+                                    RosettaNeuronInfoArgs::builder(spawend_neuron_index)
                                         .with_public_key((&Arc::new(test_identity())).into())
                                         .build(),
                                     &(*TEST_IDENTITY).clone(),
