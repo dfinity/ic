@@ -1,5 +1,5 @@
 use candid::CandidType;
-use ic_cdk::{init, println, update};
+use ic_cdk::{init, update};
 use ic_nervous_system_long_message::{break_message_if_over_instructions, run_chunked_task, Task};
 use serde::Deserialize;
 use std::time::Duration;
@@ -69,8 +69,6 @@ async fn test_next_message_if_over_instructions(params: BreakMessageParams) {
         }
     }
 }
-
-struct SimpleTaskWithReferences {}
 
 #[derive(CandidType, Deserialize)]
 struct ChunkedTaskParams {

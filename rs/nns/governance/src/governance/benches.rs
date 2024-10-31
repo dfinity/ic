@@ -13,16 +13,14 @@ use crate::{
     test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
 };
 use canbench_rs::{bench, bench_fn, BenchResult};
-use futures::StreamExt;
 use ic_base_types::PrincipalId;
-use ic_nervous_system_common::E8;
 use ic_nns_common::{
     pb::v1::{NeuronId as NeuronIdProto, ProposalId},
     types::NeuronId,
 };
 use icp_ledger::Subaccount;
 use maplit::{btreemap, hashmap};
-use rand::{Rng, RngCore, SeedableRng};
+use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use std::collections::{BTreeMap, HashMap};
 
@@ -497,6 +495,28 @@ fn cascading_vote_heap_neurons_stable_index() -> BenchResult {
             num_neurons: 151,
             num_followees: 15,
         },
+        Topic::NetworkEconomics,
+    )
+}
+
+#[bench(raw)]
+fn single_vote_all_stable() -> BenchResult {
+    let _a = temporarily_enable_active_neurons_in_stable_memory();
+    let _b = temporarily_enable_stable_memory_following_index();
+
+    cast_vote_cascade_helper(
+        SetUpStrategy::SingleVote { num_neurons: 1 },
+        Topic::NetworkEconomics,
+    )
+}
+
+#[bench(raw)]
+fn centralized_following_all_stable() -> BenchResult {
+    let _a = temporarily_enable_active_neurons_in_stable_memory();
+    let _b = temporarily_enable_stable_memory_following_index();
+
+    cast_vote_cascade_helper(
+        SetUpStrategy::Centralized { num_neurons: 151 },
         Topic::NetworkEconomics,
     )
 }

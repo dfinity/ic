@@ -1093,10 +1093,7 @@ impl NeuronStore {
     ) -> Vec<NeuronId> {
         // DO NOT MERGE - we need to handle this usage of heap_neurons
         let is_non_empty = |neuron_id: &NeuronId| {
-            // If the neuron does not exist on the heap, then it must be inactive and empty.
-            self.heap_neurons
-                .get(&neuron_id.id)
-                .map(|neuron| neuron.is_funded())
+            self.with_neuron(&neuron_id, |neuron| neuron.is_funded())
                 .unwrap_or(false)
         };
 
@@ -1138,7 +1135,7 @@ impl NeuronStore {
 
                     let is_neuron_inactive = neuron.is_inactive(self.now());
 
-                    if is_neuron_inactive {
+                    if self.use_stable_memory_for_all_neurons || is_neuron_inactive {
                         None
                     } else {
                         // An active neuron in stable neuron store is invalid.
