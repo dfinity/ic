@@ -743,7 +743,7 @@ fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountMa
         },
         SubnetType::Application | SubnetType::VerifiedApplication => CyclesAccountManagerConfig {
             reference_subnet_size: DEFAULT_REFERENCE_SUBNET_SIZE,
-            canister_creation_fee: Cycles::new(100_000_000_000),
+            canister_creation_fee: Cycles::new(500_000_000_000),
             compute_percent_allocated_per_second_fee: Cycles::new(10_000_000),
 
             // The following fields are set based on a thought experiment where
