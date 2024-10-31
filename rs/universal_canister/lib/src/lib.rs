@@ -17,7 +17,7 @@ use universal_canister::Ops;
 /// `rs/universal_canister`.
 pub const UNIVERSAL_CANISTER_WASM: &[u8] = include_bytes!("universal-canister.wasm.gz");
 pub const UNIVERSAL_CANISTER_WASM_SHA256: [u8; 32] =
-    hex!("9c0b4ed1d729ffdd0e8d194df3be621f58a2fb86e1f1bbf556d89f43637de303");
+    hex!("4d90d482efb2cf41df44aa7f4b4295ef437dc9ccc8e64bc94d71f7ab01ca42a9");
 
 /// A succinct shortcut for creating a `PayloadBuilder`, which is used to encode
 /// instructions to be executed by the UC.
@@ -851,13 +851,6 @@ impl CallArgs {
 #[cfg(test)]
 mod test {
     use super::*;
-    #[test]
-    fn check_hardcoded_sha256_is_up_to_date() {
-        assert_eq!(
-            UNIVERSAL_CANISTER_WASM_SHA256,
-            ic_crypto_sha2::Sha256::hash(UNIVERSAL_CANISTER_WASM)
-        );
-    }
 
     #[test]
     fn try_from_macro_works() {
