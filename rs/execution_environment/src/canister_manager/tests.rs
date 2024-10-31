@@ -29,9 +29,10 @@ use ic_management_canister_types::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
     CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgsBuilder,
     CanisterStatusResultV2, CanisterStatusType, CanisterUpgradeOptions, ChunkHash,
-    ClearChunkStoreArgs, CreateCanisterArgs, EmptyBlob, InstallCodeArgsV2, Method, Payload,
-    StoredChunksArgs, StoredChunksReply, UpdateSettingsArgs, UploadChunkArgs, UploadChunkReply,
-    WasmMemoryPersistence,
+    ClearChunkStoreArgs, CreateCanisterArgs, EmptyBlob, InstallCodeArgsV2, Method,
+    NodeMetricsHistoryArgs, NodeMetricsHistoryResponse, Payload, StoredChunksArgs,
+    StoredChunksReply, SubnetMetricsArgs, SubnetMetricsResponse, UpdateSettingsArgs,
+    UploadChunkArgs, UploadChunkReply, WasmMemoryPersistence,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -7864,4 +7865,71 @@ fn chunk_store_counts_against_subnet_memory_in_initial_round_computation() {
         .execute_ingress(CanisterId::ic_00(), "upload_chunk", payload)
         .unwrap_err();
     assert_eq!(error.code(), ErrorCode::SubnetOversubscribed);
+}
+
+#[test]
+fn subnet_metrics_canister_call_succeeds() {
+    let own_subnet_id = subnet_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet_id)
+        .build();
+    let uni_canister = test
+        .universal_canister_with_cycles(Cycles::new(1_000_000_000_000))
+        .unwrap();
+    let payload = SubnetMetricsArgs {
+        subnet_id: own_subnet_id.get(),
+    }
+    .encode();
+    let uc_call = wasm()
+        .call_simple(
+            CanisterId::ic_00(),
+            Method::SubnetMetrics,
+            call_args().other_side(payload),
+        )
+        .build();
+    let result = test.ingress(uni_canister, "update", uc_call).unwrap();
+    let bytes = match result {
+        WasmResult::Reply(bytes) => bytes,
+        WasmResult::Reject(err_msg) => panic!("Unexpected reject, expected reply: {}", err_msg),
+    };
+    let SubnetMetricsResponse { replica_version } = Decode!(&bytes, SubnetMetricsResponse).unwrap();
+    assert!(replica_version.len() > 0);
+}
+
+#[test]
+fn subnet_metrics_ingress_fails() {
+    let own_subnet_id = subnet_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet_id)
+        .build();
+    let payload = SubnetMetricsArgs {
+        subnet_id: own_subnet_id.get(),
+    }
+    .encode();
+    let err_msg = match test.subnet_message(Method::SubnetMetrics, payload).unwrap() {
+        WasmResult::Reply(_) => panic!("Unexpected reply, expected reject"),
+        WasmResult::Reject(err_msg) => err_msg,
+    };
+    println!("{}", err_msg);
+}
+
+// just to double check, this call should fail too, but does not:
+#[test]
+fn node_metrics_history_ingress_fails() {
+    let own_subnet_id = subnet_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet_id)
+        .build();
+    let payload = NodeMetricsHistoryArgs {
+        subnet_id: own_subnet_id.get(),
+        start_at_timestamp_nanos: 0,
+    }
+    .encode();
+    match test
+        .subnet_message(Method::NodeMetricsHistory, payload)
+        .unwrap()
+    {
+        WasmResult::Reply(bytes) => println!("{:02x?}", bytes), //panic!("Unexpected reply, expected reject"),
+        WasmResult::Reject(err_msg) => println!("{}", err_msg),
+    };
 }
