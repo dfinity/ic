@@ -26,7 +26,8 @@ pub struct LinearMap {
 impl LinearMap {
     /// The ends of from must be different.
     pub fn new<N1, N2>(from: Range<N1>, to: Range<N2>) -> Self
-    where Decimal: From<N1> + From<N2>
+    where
+        Decimal: From<N1> + From<N2>,
     {
         let from = Decimal::from(from.start)..Decimal::from(from.end);
         let to = Decimal::from(to.start)..Decimal::from(to.end);
@@ -42,7 +43,8 @@ impl LinearMap {
     /// type, but if worked that way, information could be lost (due to
     /// truncation).
     pub fn apply<In>(&self, x: In) -> Decimal
-    where Decimal: From<In>
+    where
+        Decimal: From<In>,
     {
         let x = Decimal::from(x);
         let Self { from, to } = &self;
