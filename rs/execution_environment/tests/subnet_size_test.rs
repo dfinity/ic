@@ -749,8 +749,8 @@ fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountMa
             // The following fields are set based on a thought experiment where
             // we estimated how many resources a representative benchmark on a
             // verified subnet is using.
-            update_message_execution_fee: Cycles::new(590_000),
-            ten_update_instructions_execution_fee: Cycles::new(4),
+            update_message_execution_fee: Cycles::new(5_000_000),
+            ten_update_instructions_execution_fee: Cycles::new(10),
             xnet_call_fee: Cycles::new(260_000),
             xnet_byte_transmission_fee: Cycles::new(1_000),
             ingress_message_reception_fee: Cycles::new(1_200_000),
@@ -1154,9 +1154,11 @@ fn test_subnet_size_execute_message_cost() {
 
     // Check default cost.
     assert_eq!(reference_instructions_cost, 2019);
+    let simulated_cost = simulate_execute_message_cost(subnet_type, reference_subnet_size);
     assert_eq!(
-        simulate_execute_message_cost(subnet_type, reference_subnet_size),
-        reference_cost
+        simulated_cost,
+        reference_cost,
+        "subnet_size={reference_subnet_size}, simulated_cost={simulated_cost}, reference_cost={reference_cost}"
     );
 
     // Check if cost is increasing with subnet size.
@@ -1249,19 +1251,19 @@ fn test_subnet_size_execute_heartbeat_default_cost() {
 
     // Assert small subnet size costs per single heartbeat and per year.
     let cost = simulate_execute_canister_heartbeat_cost(subnet_type, subnet_size_lo);
-    assert_eq!(cost, Cycles::new(590001));
-    assert_eq!(cost * per_year, Cycles::new(20290372160403));
+    assert_eq!(cost, Cycles::new(5_000_001));
+    assert_eq!(cost * per_year, Cycles::new(171_952_049_390_403));
 
     // Assert big subnet size cost per single heartbeat and per year.
     let cost = simulate_execute_canister_heartbeat_cost(subnet_type, subnet_size_hi);
     // Scaled instrumentation + update message cost.
-    assert_eq!(cost, Cycles::new(1543080));
-    assert_eq!(cost * per_year, Cycles::new(53067143061240));
+    assert_eq!(cost, Cycles::new(13_076_926));
+    assert_eq!(cost * per_year, Cycles::new(449_720_755_141_178));
 
     // Assert big subnet size cost scaled to a small size.
     let adjusted_cost = (cost * subnet_size_lo) / subnet_size_hi;
-    assert_eq!(adjusted_cost, Cycles::new(590001));
-    assert_eq!(adjusted_cost * per_year, Cycles::new(20290372160403));
+    assert_eq!(adjusted_cost, Cycles::new(5_000_001));
+    assert_eq!(adjusted_cost * per_year, Cycles::new(171_952_049_390_403));
 }
 
 #[test]
