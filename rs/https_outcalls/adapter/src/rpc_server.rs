@@ -31,6 +31,10 @@ const HEADER_NAME_VALUE_LIMIT: usize = 8_192;
 /// By default most higher-level http libs like `curl` set some `User-Agent` so we do the same here to avoid getting rejected due to strict server requirements.
 const USER_AGENT_ADAPTER: &str = "ic/1.0";
 
+/// We should support at least 48 KB in headers and values according to the IC spec:
+/// "the total number of bytes representing the header names and values must not exceed 48KiB".
+const MAX_HEADER_LIST_SIZE: u32 = 52 * 1024;
+
 /// Implements HttpsOutcallsService
 // TODO: consider making this private
 pub struct CanisterHttp {
@@ -44,13 +48,16 @@ impl CanisterHttp {
     pub fn new(config: Config, logger: ReplicaLogger, metrics: &MetricsRegistry) -> Self {
         let client = Client::builder()
             .connect_timeout(Duration::from_secs(config.http_connect_timeout_secs))
+            .http2_max_frame_size(MAX_HEADER_LIST_SIZE)
             .build()
             .expect("Failed to create reqwest client");
 
         let mut socks_client_builder = Client::builder()
-            .connect_timeout(Duration::from_secs(config.http_connect_timeout_secs));
+            .connect_timeout(Duration::from_secs(config.http_connect_timeout_secs))
+            .http2_max_frame_size(MAX_HEADER_LIST_SIZE);
 
         // This uses a DNS resolver and results in an error if the proxy is not a valid URL.
+        // We don't want to panic here during test.
         let maybe_proxy = reqwest::Proxy::http(config.socks_proxy.clone());
 
         match maybe_proxy {

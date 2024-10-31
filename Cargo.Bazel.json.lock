@@ -1,5 +1,5 @@
 {
-  "checksum": "1af0a1c776d32823a68c85613fc4dc21dc84e38bda584a3058b479f58c588eaf",
+  "checksum": "b2dd838599349201572474b7ad31f068125ee4b2d666747ff2ade24a1d0b779d",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -18038,7 +18038,7 @@
               "target": "regex"
             },
             {
-              "id": "reqwest 0.12.8",
+              "id": "reqwest 0.12.9",
               "target": "reqwest"
             },
             {
@@ -27975,7 +27975,7 @@
               "target": "rangemap"
             },
             {
-              "id": "reqwest 0.12.8",
+              "id": "reqwest 0.12.9",
               "target": "reqwest"
             },
             {
@@ -28204,7 +28204,7 @@
               "target": "rcgen"
             },
             {
-              "id": "reqwest 0.12.8",
+              "id": "reqwest 0.12.9",
               "target": "reqwest"
             },
             {
@@ -46505,7 +46505,7 @@
               "target": "ic_cdk"
             },
             {
-              "id": "reqwest 0.12.8",
+              "id": "reqwest 0.12.9",
               "target": "reqwest"
             },
             {
@@ -52891,14 +52891,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "reqwest 0.12.8": {
+    "reqwest 0.12.9": {
       "name": "reqwest",
-      "version": "0.12.8",
+      "version": "0.12.9",
       "package_url": "https://github.com/seanmonstar/reqwest",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/reqwest/0.12.8/download",
-          "sha256": "f713147fbe92361e52392c73b8c9e48c04c6625bce969ef54dc901e58e042a7b"
+          "url": "https://static.crates.io/crates/reqwest/0.12.9/download",
+          "sha256": "a77c62af46e79de0a562e1a9849205ffcb7fc1238876e9bd743357570e04046f"
         }
       },
       "targets": [
@@ -52933,7 +52933,9 @@
             "multipart",
             "rustls-tls",
             "rustls-tls-native-roots",
+            "rustls-tls-native-roots-no-provider",
             "rustls-tls-webpki-roots",
+            "rustls-tls-webpki-roots-no-provider",
             "socks",
             "stream"
           ],
@@ -53116,7 +53118,7 @@
           }
         },
         "edition": "2021",
-        "version": "0.12.8"
+        "version": "0.12.9"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -78836,7 +78838,7 @@
     "rayon 1.10.0",
     "rcgen 0.13.1",
     "regex 1.11.0",
-    "reqwest 0.12.8",
+    "reqwest 0.12.9",
     "rgb 0.8.37",
     "ring 0.17.7",
     "ripemd 0.1.3",

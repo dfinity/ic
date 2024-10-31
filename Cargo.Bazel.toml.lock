@@ -3181,7 +3181,7 @@ dependencies = [
  "rayon",
  "rcgen",
  "regex",
- "reqwest 0.12.8",
+ "reqwest 0.12.9",
  "rgb",
  "ring 0.17.7",
  "ripemd",
@@ -4888,7 +4888,7 @@ dependencies = [
  "pkcs8",
  "rand 0.8.5",
  "rangemap",
- "reqwest 0.12.8",
+ "reqwest 0.12.9",
  "ring 0.17.7",
  "rustls-webpki 0.102.8",
  "sec1",
@@ -4937,7 +4937,7 @@ dependencies = [
  "prometheus",
  "rand 0.8.5",
  "rcgen",
- "reqwest 0.12.8",
+ "reqwest 0.12.9",
  "rustls 0.23.15",
  "rustls-acme",
  "rustls-pemfile 2.1.2",
@@ -8000,7 +8000,7 @@ dependencies = [
  "candid",
  "hex",
  "ic-cdk 0.13.5",
- "reqwest 0.12.8",
+ "reqwest 0.12.9",
  "schemars",
  "serde",
  "serde_bytes",
@@ -9056,9 +9056,9 @@ dependencies = [
 
 [[package]]
 name = "reqwest"
-version = "0.12.8"
+version = "0.12.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f713147fbe92361e52392c73b8c9e48c04c6625bce969ef54dc901e58e042a7b"
+checksum = "a77c62af46e79de0a562e1a9849205ffcb7fc1238876e9bd743357570e04046f"
 dependencies = [
  "base64 0.22.0",
  "bytes",
