@@ -242,7 +242,7 @@ fn make_neuron(
 
     let (dissolve_state, aging_since_timestamp_seconds) = if dissolve_delay_seconds == 0 {
         (
-            Some(DissolveState::WhenDissolvedTimestampSeconds(0)),
+            Some(DissolveState::WhenDissolvedTimestampSeconds(1)),
             u64::MAX,
         )
     } else {
@@ -350,11 +350,11 @@ mod tests {
         // The first neuron (for each account) should have dissolve delay 0
         assert_eq!(
             account_a_neurons.first().unwrap().dissolve_delay_seconds(0),
-            0
+            1
         );
         assert_eq!(
             account_b_neurons.first().unwrap().dissolve_delay_seconds(0),
-            0
+            1
         );
         assert_eq!(
             account_a_neurons
