@@ -65,8 +65,8 @@ impl std::fmt::Display for CyclesAccountManagerError {
     }
 }
 
-/// Keeps track of how a canister is executing such that the cycles account
-/// manager can charge cycles accordingly.
+/// Keeps track of how a canister is executing such that the `CyclesAccountManager`
+/// can charge cycles accordingly.
 #[derive(Debug, Copy, Clone)]
 pub enum WasmExecutionMode {
     Wasm32,
