@@ -6,6 +6,7 @@ use ic_cketh_test_utils::{
     DEFAULT_DEPOSIT_LOG_INDEX, DEFAULT_DEPOSIT_TRANSACTION_HASH, DEFAULT_PRINCIPAL_ID,
     DEFAULT_USER_SUBACCOUNT, DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS, EXPECTED_BALANCE,
 };
+use ic_cketh_test_utils::flow::DepositCkEthParams;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
 use icrc_ledger_types::icrc3::transactions::Mint;
@@ -19,9 +20,9 @@ fn should_deposit_and_withdraw_cketh() {
     let destination = DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string();
 
     let cketh = cketh
-        .deposit(DepositParams {
-            recipient_subaccount: Some(DEFAULT_USER_SUBACCOUNT),
-            ..DepositParams::default()
+        .deposit(DepositCkEthParams {
+            // recipient_subaccount: Some(DEFAULT_USER_SUBACCOUNT),
+            ..Default::default()
         })
         .expect_mint()
         .call_ledger_get_transaction(0_u8)

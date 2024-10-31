@@ -5,10 +5,11 @@ use crate::response::{
     transaction_count_response, transaction_receipt, EthLogEntry,
 };
 use crate::{
-    assert_reply, CkEthSetup, JsonRpcProvider, DEFAULT_BLOCK_NUMBER, DEFAULT_DEPOSIT_BLOCK_NUMBER,
-    DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_DEPOSIT_LOG_INDEX, DEFAULT_DEPOSIT_TRANSACTION_HASH,
-    DEFAULT_PRINCIPAL_ID, EFFECTIVE_GAS_PRICE, EXPECTED_BALANCE, GAS_USED, MAX_TICKS,
-    MINTER_ADDRESS,
+    assert_reply, CkEthSetup, JsonRpcProvider, DEFAULT_BLOCK_NUMBER, DEFAULT_DEPOSIT_BLOCK_HASH,
+    DEFAULT_DEPOSIT_BLOCK_NUMBER, DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_DEPOSIT_LOG_INDEX,
+    DEFAULT_DEPOSIT_TRANSACTION_HASH, DEFAULT_DEPOSIT_TRANSACTION_INDEX, DEFAULT_PRINCIPAL_ID,
+    EFFECTIVE_GAS_PRICE, EXPECTED_BALANCE, GAS_USED, MAX_TICKS, MINTER_ADDRESS,
+    RECEIVED_ETH_EVENT_TOPIC,
 };
 use candid::{Decode, Encode, Nat, Principal};
 use ethers_core::utils::{hex, rlp};
@@ -25,6 +26,7 @@ use ic_cketh_minter::{
 };
 use ic_ethereum_types::Address;
 use ic_state_machine_tests::{MessageId, StateMachine};
+use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc2::approve::ApproveError;
 use icrc_ledger_types::icrc3::transactions::{Burn, Mint, Transaction as LedgerTransaction};
 use num_traits::ToPrimitive;
@@ -33,43 +35,149 @@ use std::convert::identity;
 use std::str::FromStr;
 use std::time::Duration;
 
-pub struct DepositParams {
-    pub from_address: Address,
-    pub recipient: Principal,
-    pub recipient_subaccount: Option<[u8; 32]>,
-    pub amount: u64,
-    pub override_rpc_eth_get_block_by_number:
-        Box<dyn FnMut(MockJsonRpcProvidersBuilder) -> MockJsonRpcProvidersBuilder>,
-    pub override_rpc_eth_get_logs:
-        Box<dyn FnMut(MockJsonRpcProvidersBuilder) -> MockJsonRpcProvidersBuilder>,
-    pub override_eth_log_entry: Box<dyn Fn(EthLogEntry) -> EthLogEntry>,
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DepositParams {
+    CkEth(DepositCkEthParams),
 }
 
 impl Default for DepositParams {
     fn default() -> Self {
-        Self {
-            from_address: DEFAULT_DEPOSIT_FROM_ADDRESS.parse().unwrap(),
-            recipient: PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID).into(),
-            recipient_subaccount: None,
-            amount: EXPECTED_BALANCE,
-            override_rpc_eth_get_block_by_number: Box::new(identity),
-            override_rpc_eth_get_logs: Box::new(identity),
-            override_eth_log_entry: Box::new(identity),
-        }
+        Self::CkEth(DepositCkEthParams::default())
     }
 }
 
 impl DepositParams {
-    pub fn eth_log(&self) -> ethers_core::types::Log {
-        ethers_core::types::Log::from((self.override_eth_log_entry)(self.eth_log_entry()))
+    pub fn from_address(&self) -> &Address {
+        match self {
+            Self::CkEth(params) => &params.from_address,
+        }
     }
 
-    pub fn eth_log_entry(&self) -> EthLogEntry {
-        EthLogEntry {
-            encoded_principal: encode_principal(self.recipient),
-            amount: self.amount,
-            from_address: self.from_address,
+    pub fn recipient(&self) -> Account {
+        match self {
+            Self::CkEth(params) => Account {
+                owner: params.recipient,
+                subaccount: None,
+            },
+        }
+    }
+
+    pub fn amount(&self) -> u64 {
+        match self {
+            Self::CkEth(params) => params.amount,
+        }
+    }
+
+    pub fn transaction_data(&self) -> &DepositTransactionData {
+        match self {
+            Self::CkEth(params) => &params.transaction_data,
+        }
+    }
+
+    pub fn to_log_entry(&self) -> ethers_core::types::Log {
+        match self {
+            Self::CkEth(params) => params.to_log_entry(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DepositCkEthParams {
+    pub from_address: Address,
+    pub recipient: Principal,
+    pub amount: u64,
+    pub transaction_data: DepositTransactionData,
+}
+
+impl Default for DepositCkEthParams {
+    fn default() -> Self {
+        Self {
+            from_address: DEFAULT_DEPOSIT_FROM_ADDRESS.parse().unwrap(),
+            recipient: PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID).into(),
+            amount: EXPECTED_BALANCE,
+            transaction_data: DepositTransactionData::default(),
+        }
+    }
+}
+
+impl DepositCkEthParams {
+    pub fn to_log_entry(&self) -> ethers_core::types::Log {
+        let amount_hex = format!("0x{:0>64x}", self.amount);
+        let topics = vec![
+            RECEIVED_ETH_EVENT_TOPIC.to_string(),
+            format!(
+                "0x000000000000000000000000{}",
+                hex::encode(self.from_address.as_ref())
+            ),
+            encode_principal(self.recipient),
+        ];
+
+        let json_value = json!({
+            "address": "0xb44b5e756a894775fc32eddf3314bb1b1944dc34",
+            "blockHash": self.transaction_data.block_hash,
+            "blockNumber": format!("0x{:x}", self.transaction_data.block_number),
+            "data": amount_hex,
+            "logIndex": format!("0x{:x}", self.transaction_data.log_index),
+            "removed": false,
+            "topics": topics,
+            "transactionHash": self.transaction_data.transaction_hash,
+            "transactionIndex": format!("0x{:x}", self.transaction_data.transaction_index),
+        });
+        serde_json::from_value(json_value).expect("BUG: invalid log entry")
+    }
+}
+
+impl From<DepositCkEthParams> for DepositParams {
+    fn from(params: DepositCkEthParams) -> Self {
+        Self::CkEth(params)
+    }
+}
+
+/// Metadata associated with a deposit transaction that is not decided by the user.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DepositTransactionData {
+    pub block_number: u64,
+    pub block_hash: String,
+    pub log_index: u64,
+    pub transaction_hash: String,
+    pub transaction_index: u64,
+}
+
+impl Default for DepositTransactionData {
+    fn default() -> Self {
+        Self {
+            block_number: DEFAULT_DEPOSIT_BLOCK_NUMBER,
+            block_hash: DEFAULT_DEPOSIT_BLOCK_HASH.to_string(),
+            log_index: DEFAULT_DEPOSIT_LOG_INDEX,
             transaction_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.to_string(),
+            transaction_index: DEFAULT_DEPOSIT_TRANSACTION_INDEX,
+        }
+    }
+}
+
+pub struct DepositCkEthWithSubaccountParams {
+    pub from_address: Address,
+    pub recipient: Principal,
+    pub recipient_subaccount: Option<[u8; 32]>,
+    pub amount: u64,
+}
+
+pub struct DepositFlow {
+    pub(crate) setup: CkEthSetup,
+    pub(crate) params: DepositParams,
+    override_rpc_eth_get_block_by_number:
+        Box<dyn FnMut(MockJsonRpcProvidersBuilder) -> MockJsonRpcProvidersBuilder>,
+    override_rpc_eth_get_logs:
+        Box<dyn FnMut(MockJsonRpcProvidersBuilder) -> MockJsonRpcProvidersBuilder>,
+}
+
+impl DepositFlow {
+    pub fn new<T: Into<DepositParams>>(setup: CkEthSetup, params: T) -> Self {
+        Self {
+            setup,
+            params: params.into(),
+            override_rpc_eth_get_block_by_number: Box::new(identity),
+            override_rpc_eth_get_logs: Box::new(identity),
         }
     }
 
@@ -92,19 +200,13 @@ impl DepositParams {
         self.override_rpc_eth_get_logs = Box::new(override_mock);
         self
     }
-}
 
-pub struct DepositFlow {
-    pub(crate) setup: CkEthSetup,
-    pub(crate) params: DepositParams,
-}
-
-impl DepositFlow {
     pub fn expect_mint(mut self) -> CkEthSetup {
-        let balance_before = self.setup.balance_of(self.params.recipient);
+        let recipient = self.params.recipient();
+        let balance_before = self.setup.balance_of(recipient);
         self.handle_deposit();
         let balance_after: Nat = self.updated_balance(&balance_before);
-        assert_eq!(balance_after - balance_before, self.params.amount);
+        assert_eq!(balance_after - balance_before, self.params.amount());
 
         self.setup.check_audit_log();
 
@@ -115,18 +217,18 @@ impl DepositFlow {
                 transaction_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.to_string(),
                 block_number: Nat::from(DEFAULT_DEPOSIT_BLOCK_NUMBER),
                 log_index: Nat::from(DEFAULT_DEPOSIT_LOG_INDEX),
-                from_address: self.params.from_address.to_string(),
-                value: Nat::from(self.params.amount),
-                principal: self.params.recipient,
-                subaccount: None,
+                from_address: self.params.from_address().to_string(),
+                value: Nat::from(self.params.amount()),
+                principal: recipient.owner,
+                subaccount: recipient.subaccount,
             },
         );
         assert_contains_unique_event(
             &events,
             EventPayload::MintedCkEth {
                 event_source: EventSource {
-                    transaction_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.to_string(),
-                    log_index: Nat::from(DEFAULT_DEPOSIT_LOG_INDEX),
+                    transaction_hash: self.params.transaction_data().transaction_hash.clone(),
+                    log_index: Nat::from(self.params.transaction_data().log_index),
                 },
                 mint_block_index: Nat::from(0_u8),
             },
@@ -139,7 +241,7 @@ impl DepositFlow {
         for _ in 0..10 {
             self.setup.env.advance_time(Duration::from_secs(1));
             self.setup.env.tick();
-            current_balance = self.setup.balance_of(self.params.recipient);
+            current_balance = self.setup.balance_of(self.params.recipient());
             if &current_balance != balance_before {
                 break;
             }
@@ -148,7 +250,7 @@ impl DepositFlow {
     }
 
     pub fn expect_no_mint(mut self) -> CkEthSetup {
-        let balance_before = self.setup.balance_of(self.params.recipient);
+        let balance_before = self.setup.balance_of(self.params.recipient());
         self.handle_deposit();
         let balance_after: Nat = self.updated_balance(&balance_before);
         assert_eq!(balance_before, balance_after);
@@ -165,15 +267,15 @@ impl DepositFlow {
         let default_get_block_by_number =
             MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
                 .respond_for_all_with(block_response(block_number));
-        (self.params.override_rpc_eth_get_block_by_number)(default_get_block_by_number)
+        (self.override_rpc_eth_get_block_by_number)(default_get_block_by_number)
             .build()
             .expect_rpc_calls(&self.setup);
 
         self.setup.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
 
         let default_eth_get_logs = MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
-            .respond_for_all_with(vec![self.params.eth_log()]);
-        (self.params.override_rpc_eth_get_logs)(default_eth_get_logs)
+            .respond_for_all_with(vec![self.params.to_log_entry()]);
+        (self.override_rpc_eth_get_logs)(default_eth_get_logs)
             .build()
             .expect_rpc_calls(&self.setup);
     }

@@ -54,11 +54,14 @@ pub const CKETH_TRANSFER_FEE: u64 = 2_000_000_000_000;
 pub const CKETH_MINIMUM_WITHDRAWAL_AMOUNT: u64 = 30_000_000_000_000_000;
 pub const MAX_TICKS: usize = 10;
 pub const DEFAULT_PRINCIPAL_ID: u64 = 10352385;
-pub const DEFAULT_USER_SUBACCOUNT: [u8; 32] = [42;32];
+pub const DEFAULT_USER_SUBACCOUNT: [u8; 32] = [42; 32];
 pub const DEFAULT_DEPOSIT_BLOCK_NUMBER: u64 = 0x9;
+pub const DEFAULT_DEPOSIT_BLOCK_HASH: &str =
+    "0x79cfe76d69337dae199e32c2b6b3d7c2668bfe71a05f303f95385e70031b9ef8";
 pub const DEFAULT_DEPOSIT_FROM_ADDRESS: &str = "0x55654e7405fcb336386ea8f36954a211b2cda764";
 pub const DEFAULT_DEPOSIT_TRANSACTION_HASH: &str =
     "0xcfa48c44dc89d18a898a42b4a5b02b6847a3c2019507d5571a481751c7a2f353";
+pub const DEFAULT_DEPOSIT_TRANSACTION_INDEX: u64 = 0x33;
 pub const DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH: &str =
     "0x2044da6b095d6be2308b868287b8b70d9e01b226c02546b7abcce31dabc34929";
 
@@ -180,11 +183,8 @@ impl CkEthSetup {
         }
     }
 
-    pub fn deposit(self, params: DepositParams) -> DepositFlow {
-        DepositFlow {
-            setup: self,
-            params,
-        }
+    pub fn deposit<T: Into<DepositParams>>(self, params: T) -> DepositFlow {
+        DepositFlow::new(self, params)
     }
 
     pub fn minter_address(&self) -> String {

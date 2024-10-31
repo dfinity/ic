@@ -157,8 +157,8 @@ mod withdraw_erc20 {
     };
     use ic_cketh_test_utils::flow::{
         double_and_increment_base_fee_per_gas, increment_base_fee_per_gas,
-        increment_max_priority_fee_per_gas, DepositParams, FeeHistoryProcessWithdrawal,
-        ProcessWithdrawalParams,
+        increment_max_priority_fee_per_gas, DepositCkEthParams, DepositParams,
+        FeeHistoryProcessWithdrawal, ProcessWithdrawalParams,
     };
     use ic_cketh_test_utils::response::{
         decode_transaction, default_erc20_signed_eip_1559_transaction, hash_transaction,
@@ -312,9 +312,9 @@ mod withdraw_erc20 {
         let ckusdc = ckerc20.find_ckerc20_token("ckUSDC");
 
         ckerc20
-            .deposit_cketh(DepositParams {
+            .deposit_cketh(DepositCkEthParams {
                 amount: DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_FEE + CKETH_TRANSFER_FEE - 1,
-                ..DepositParams::default()
+                ..Default::default()
             })
             .call_cketh_ledger_approve_minter(
                 caller,

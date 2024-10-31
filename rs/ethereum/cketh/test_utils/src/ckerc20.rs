@@ -1,5 +1,5 @@
 use crate::events::MinterEventAssert;
-use crate::flow::{DepositParams, LedgerTransactionAssert, ProcessWithdrawal};
+use crate::flow::{DepositCkEthParams, DepositParams, LedgerTransactionAssert, ProcessWithdrawal};
 use crate::mock::{
     JsonRpcMethod, JsonRpcRequestMatcher, MockJsonRpcProviders, MockJsonRpcProvidersBuilder,
 };
@@ -153,7 +153,7 @@ impl CkErc20Setup {
         }
     }
 
-    pub fn deposit_cketh(mut self, params: DepositParams) -> Self {
+    pub fn deposit_cketh<T: Into<DepositParams>>(mut self, params: T) -> Self {
         self.cketh = self.cketh.deposit(params).expect_mint();
         self
     }
@@ -543,12 +543,12 @@ impl CkErc20DepositFlow {
             .unwrap();
 
         let eth_logs = match self.params.cketh_amount {
-            Some(amount) => vec![DepositParams {
+            Some(amount) => vec![DepositParams::from(DepositCkEthParams {
                 amount,
                 recipient: self.params.recipient,
                 ..Default::default()
-            }
-            .eth_log()],
+            })
+            .to_log_entry()],
             None => empty_logs(),
         };
         MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
