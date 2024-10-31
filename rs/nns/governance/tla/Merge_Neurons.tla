@@ -76,6 +76,7 @@ macro finish() {
     goto Done;
 }
 
+\* This assumes that att, source_nid and target_nid are implicitly available
 macro maybe_transfer_stake(neuron_changes) {
     if(att > 0) {
         source_neuron_id := source_nid;
@@ -137,7 +138,7 @@ process ( Merge_Neurons \in Merge_Neurons_Process_Ids )
                       IN IF diff > 0 THEN diff ELSE 0
             ) {
                 if(fa > TRANSACTION_FEE) {
-                    \* This is a bit braindeaad, but seems necessary to work around PlusCal limitations.
+                    \* This is a bit braindead, but seems to be the best way to work around PlusCal limitations.
                     \* Since we might unlock the neurons in the same message handler if we don't try to
                     \* burn the fees, and since the stupid PlusCal limitation prevents us from updating
                     \* the locks variable twice in the same block, we work around this by only locking
