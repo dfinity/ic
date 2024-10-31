@@ -885,7 +885,6 @@ impl CanisterManager {
     /// In case of errors, we simply return false, assuming Wasm32.
     /// The errors will be caught and handled by the sandbox later.
     fn check_if_wasm64_module(&self, wasm_module_source: WasmSource) -> bool {
-        let _instructions_to_assemble = wasm_module_source.instructions_to_assemble();
         let wasm_module = match wasm_module_source.into_canister_module() {
             Ok(wasm_module) => wasm_module,
             Err(_err) => {
