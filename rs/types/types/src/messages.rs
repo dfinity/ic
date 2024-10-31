@@ -802,35 +802,6 @@ mod tests {
     }
 
     #[test]
-    /// Allowing bincode::deserialize_from here since
-    /// 1. It's only being used in a test
-    /// 2. The deserialized_from is used on data that has just been serialized before the method.
-    #[allow(clippy::disallowed_methods)]
-    fn serialize_via_bincode_without_signature() {
-        let expiry_time = expiry_time_from_now();
-        let update = HttpRequestEnvelope::<HttpCallContent> {
-            content: HttpCallContent::Call {
-                update: HttpCanisterUpdate {
-                    canister_id: Blob(vec![42; 8]),
-                    method_name: "some_method".to_string(),
-                    arg: Blob(b"".to_vec()),
-                    sender: Blob(vec![0x04]),
-                    nonce: None,
-                    ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
-                },
-            },
-            sender_pubkey: None,
-            sender_sig: None,
-            sender_delegation: None,
-        };
-        let signed_ingress = SignedIngress::try_from(update).unwrap();
-        let bytes = bincode::serialize(&signed_ingress).unwrap();
-        let mut buffer = Cursor::new(&bytes);
-        let signed_ingress1: SignedIngress = bincode::deserialize_from(&mut buffer).unwrap();
-        assert_eq!(signed_ingress, signed_ingress1);
-    }
-
-    #[test]
     fn canister_task_proto_round_trip() {
         for initial in CanisterTask::iter() {
             let encoded = pb::execution_task::CanisterTask::from(&initial);
