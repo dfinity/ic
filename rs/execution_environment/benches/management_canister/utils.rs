@@ -1,8 +1,8 @@
 use candid::Decode;
+use ic_base_types::CanisterId;
 use ic_registry_subnet_type::SubnetType;
-use ic_state_machine_tests::{
-    CanisterId, Cycles, ErrorCode, StateMachine, StateMachineBuilder, UserError, WasmResult,
-};
+use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineBuilder, UserError, WasmResult};
+use ic_types::Cycles;
 use serde::Deserialize;
 
 /// This number should not exceed the length of the canister output queue,

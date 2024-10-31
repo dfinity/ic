@@ -32,6 +32,7 @@ use http_body_util::{BodyExt, Full, LengthLimitError, Limited};
 use hyper::body::{Bytes, Incoming};
 use hyper::{Request, Response as HyperResponse};
 use hyper_util::client::legacy::{connect::HttpConnector, Client};
+use ic_error_types::RejectCode;
 use ic_http_endpoints_public::cors_layer;
 use ic_http_gateway::{CanisterRequest, HttpGatewayClient, HttpGatewayRequestArgs};
 use ic_https_outcalls_adapter::CanisterHttp;
@@ -40,7 +41,6 @@ use ic_https_outcalls_service::{
     https_outcalls_service_server::HttpsOutcallsService, HttpHeader, HttpMethod,
     HttpsOutcallRequest, HttpsOutcallResponse,
 };
-use ic_state_machine_tests::RejectCode;
 use ic_types::{
     canister_http::{CanisterHttpRequestId, MAX_CANISTER_HTTP_RESPONSE_BYTES},
     CanisterId, PrincipalId, SubnetId,

@@ -14,11 +14,12 @@ use ic_management_canister_types::{
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::NumWasmPages;
 use ic_state_machine_tests::{
-    ErrorCode, IngressState, IngressStatus, MessageId, StateMachine, StateMachineBuilder,
-    StateMachineConfig, UserError,
+    ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig, UserError,
 };
 use ic_system_api::MAX_CALL_TIMEOUT_SECONDS;
 use ic_test_utilities_metrics::{fetch_gauge, fetch_int_counter};
+use ic_types::ingress::{IngressState, IngressStatus};
+use ic_types::messages::MessageId;
 use ic_types::{ingress::WasmResult, messages::NO_DEADLINE, CanisterId, Cycles, NumBytes, Time};
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use more_asserts::{assert_gt, assert_le, assert_lt};
