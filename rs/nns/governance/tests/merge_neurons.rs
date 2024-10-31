@@ -4,8 +4,7 @@
 //! tests are run.
 
 use comparable::{Changed, U64Change};
-use fixtures::NNSStateChange;
-use fixtures::{NNSBuilder, NeuronBuilder};
+use fixtures::{NNSBuilder, NNSStateChange, NeuronBuilder};
 use futures::future::FutureExt;
 use ic_base_types::PrincipalId;
 use ic_nervous_system_common::ONE_YEAR_SECONDS;
@@ -17,6 +16,7 @@ use ic_nns_governance::{
         manage_neuron_response::{Command as CommandResponse, MergeResponse},
         ManageNeuron, NetworkEconomics, Neuron,
     },
+    storage::reset_stable_memory,
 };
 use proptest::prelude::{proptest, TestCaseError};
 

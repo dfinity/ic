@@ -358,6 +358,14 @@ impl NeuronStore {
             use_stable_following_index: use_stable_memory_following_index(),
         };
 
+        ic_cdk::println!(
+            "flags set to, use stable memory for all neurons: \
+                {} and use stable following index: {}, neuron_ids: {:?}",
+            neuron_store.use_stable_memory_for_all_neurons,
+            neuron_store.use_stable_following_index,
+            neurons.iter().map(|(id, _)| id).collect::<Vec<_>>()
+        );
+
         // Adds the neurons one by one into neuron store.
         for neuron in neurons.into_values() {
             // We are not adding the neuron into the known_neuron_index even if it has known neuron
@@ -599,7 +607,7 @@ impl NeuronStore {
         sections: NeuronSections,
     ) -> Result<(Cow<Neuron>, StorageLocation), NeuronStoreError> {
         let heap_neuron = self.heap_neurons.get(&neuron_id.id).map(Cow::Borrowed);
-
+        println!("load_neuron_with_sections: heap_neuron: {:?}", heap_neuron);
         if let Some(heap_neuron) = heap_neuron.clone() {
             // If the neuron is active on heap, return early to avoid any operation on stable
             // storage. The StableStorageNeuronValidator ensures that active neuron cannot also be
@@ -615,7 +623,10 @@ impl NeuronStore {
                 .ok()
                 .map(Cow::Owned)
         });
-
+        println!(
+            "load_neuron_with_sections: stable_neuron: {:?}",
+            stable_neuron
+        );
         match (stable_neuron, heap_neuron) {
             // 1 copy cases.
             (Some(stable), None) => Ok((stable, StorageLocation::Stable)),
