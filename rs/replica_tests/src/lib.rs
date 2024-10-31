@@ -217,6 +217,7 @@ pub fn get_ic_config() -> IcConfig {
             public_api: SocketAddr::from_str("128.0.0.1:1").expect("can't fail"),
             node_operator_principal_id: None,
             secret_key_store: Some(node_sks),
+            domain: None,
         },
     );
 
