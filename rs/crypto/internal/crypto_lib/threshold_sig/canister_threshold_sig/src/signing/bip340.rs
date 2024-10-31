@@ -291,7 +291,11 @@ impl ThresholdBip340SignatureShareInternal {
             .add_points(&EccPoint::mul_by_g(&rerandomized.presig_randomizer))?;
 
         // Have to account for negating pk and/or R:
-        let node_pk = if rerandomized.flip_key { node_pk.negate() } else { node_pk };
+        let node_pk = if rerandomized.flip_key {
+            node_pk.negate()
+        } else {
+            node_pk
+        };
         let node_r = if flip_r { node_r.negate() } else { node_r };
 
         let lhs = EccPoint::mul_by_g(&self.s);
