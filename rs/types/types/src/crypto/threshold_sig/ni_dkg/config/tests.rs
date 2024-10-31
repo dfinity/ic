@@ -203,7 +203,7 @@ fn should_return_correct_config_values() {
     let resharing_transcript = Some(transcript());
 
     let config_data = NiDkgConfigData {
-        dkg_id,
+        dkg_id: dkg_id.clone(),
         max_corrupt_dealers,
         dealers: dealers.clone(),
         max_corrupt_receivers,
