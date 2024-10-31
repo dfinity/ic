@@ -29,10 +29,9 @@ use ic_management_canister_types::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
     CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgsBuilder,
     CanisterStatusResultV2, CanisterStatusType, CanisterUpgradeOptions, ChunkHash,
-    ClearChunkStoreArgs, CreateCanisterArgs, EmptyBlob, InstallCodeArgsV2, Method,
-    NodeMetricsHistoryArgs, NodeMetricsHistoryResponse, Payload, StoredChunksArgs,
-    StoredChunksReply, SubnetMetricsArgs, SubnetMetricsResponse, UpdateSettingsArgs,
-    UploadChunkArgs, UploadChunkReply, WasmMemoryPersistence,
+    ClearChunkStoreArgs, CreateCanisterArgs, EmptyBlob, InstallCodeArgsV2, Method, Payload,
+    StoredChunksArgs, StoredChunksReply, SubnetMetricsArgs, SubnetMetricsResponse,
+    UpdateSettingsArgs, UploadChunkArgs, UploadChunkReply, WasmMemoryPersistence,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -7893,7 +7892,7 @@ fn subnet_metrics_canister_call_succeeds() {
         WasmResult::Reject(err_msg) => panic!("Unexpected reject, expected reply: {}", err_msg),
     };
     let SubnetMetricsResponse { replica_version } = Decode!(&bytes, SubnetMetricsResponse).unwrap();
-    assert!(replica_version.len() > 0);
+    assert!(!replica_version.is_empty());
 }
 
 #[test]
@@ -7906,30 +7905,10 @@ fn subnet_metrics_ingress_fails() {
         subnet_id: own_subnet_id.get(),
     }
     .encode();
-    let err_msg = match test.subnet_message(Method::SubnetMetrics, payload).unwrap() {
-        WasmResult::Reply(_) => panic!("Unexpected reply, expected reject"),
-        WasmResult::Reject(err_msg) => err_msg,
-    };
-    println!("{}", err_msg);
-}
-
-// just to double check, this call should fail too, but does not:
-#[test]
-fn node_metrics_history_ingress_fails() {
-    let own_subnet_id = subnet_test_id(1);
-    let mut test = ExecutionTestBuilder::new()
-        .with_own_subnet_id(own_subnet_id)
-        .build();
-    let payload = NodeMetricsHistoryArgs {
-        subnet_id: own_subnet_id.get(),
-        start_at_timestamp_nanos: 0,
-    }
-    .encode();
-    match test
-        .subnet_message(Method::NodeMetricsHistory, payload)
-        .unwrap()
-    {
-        WasmResult::Reply(bytes) => println!("{:02x?}", bytes), //panic!("Unexpected reply, expected reject"),
-        WasmResult::Reject(err_msg) => println!("{}", err_msg),
-    };
+    test.subnet_message(Method::SubnetMetrics, payload)
+        .unwrap_err()
+        .assert_contains(
+            ErrorCode::CanisterContractViolation,
+            "cannot be called by a user",
+        );
 }

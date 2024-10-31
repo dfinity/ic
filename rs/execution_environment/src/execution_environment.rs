@@ -1379,14 +1379,19 @@ impl ExecutionEnvironment {
                 }
             }
 
-            Ok(Ic00Method::SubnetMetrics) => {
-                let res = SubnetMetricsArgs::decode(payload)
-                    .and_then(|args| self.subnet_metrics(replica_version, args));
-                ExecuteSubnetMessageResult::Finished {
-                    response: res,
-                    refund: msg.take_cycles(),
+            Ok(Ic00Method::SubnetMetrics) => match &msg {
+                CanisterCall::Ingress(_) => {
+                    self.reject_unexpected_ingress(Ic00Method::CreateCanister)
                 }
-            }
+                CanisterCall::Request(_) => {
+                    let res = SubnetMetricsArgs::decode(payload)
+                        .and_then(|args| self.subnet_metrics(replica_version, args));
+                    ExecuteSubnetMessageResult::Finished {
+                        response: res,
+                        refund: msg.take_cycles(),
+                    }
+                }
+            },
 
             Ok(Ic00Method::FetchCanisterLogs) => ExecuteSubnetMessageResult::Finished {
                 response: Err(UserError::new(
