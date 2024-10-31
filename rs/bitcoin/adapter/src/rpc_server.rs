@@ -14,7 +14,7 @@ use ic_btc_service::{
 use ic_logger::{debug, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use std::convert::{TryFrom, TryInto};
-use std::time::Instant;
+use tokio::time::Instant;
 use tokio::sync::mpsc;
 use tokio::sync::watch;
 use tonic::{transport::Server, Request, Response, Status};
@@ -85,6 +85,7 @@ impl BtcService for BtcServiceImpl {
             .request_duration
             .with_label_values(&[LABEL_GET_SUCCESSOR])
             .start_timer();
+    
         let _ = self.last_received_tx.send(Some(Instant::now()));
         let inner = request.into_inner();
         debug!(self.logger, "Received GetSuccessorsRequest: {:?}", inner);
@@ -110,6 +111,7 @@ impl BtcService for BtcServiceImpl {
             .request_duration
             .with_label_values(&[LABEL_SEND_TRANSACTION])
             .start_timer();
+    
         let _ = self.last_received_tx.send(Some(Instant::now()));
         let transaction = request.into_inner().transaction;
         self.transaction_manager_tx
