@@ -4,6 +4,7 @@ use ic_base_types::NumBytes;
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SubnetConfig;
 use ic_cycles_account_manager::ResourceSaturation;
+use ic_cycles_account_manager::WasmExecutionMode;
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_management_canister_types::{
     self as ic00, CanisterChange, CanisterChangeDetails, CanisterSnapshotResponse,
@@ -32,6 +33,8 @@ use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use more_asserts::assert_gt;
 use serde_bytes::ByteBuf;
 use std::borrow::Borrow;
+
+const WASM_EXECUTION_MODE: WasmExecutionMode = WasmExecutionMode::Wasm32;
 
 #[test]
 fn take_canister_snapshot_decode_round_trip() {
@@ -997,9 +1000,11 @@ fn take_canister_snapshot_fails_when_canister_would_be_frozen() {
     let canister_snapshot_size = test.canister_state(canister_id).snapshot_size_bytes();
     let instructions = scheduler_config.canister_snapshot_baseline_instructions
         + NumInstructions::new(canister_snapshot_size.get());
-    let expected_charge = test
-        .cycles_account_manager()
-        .execution_cost(instructions, test.subnet_size());
+    let expected_charge = test.cycles_account_manager().execution_cost(
+        instructions,
+        test.subnet_size(),
+        WASM_EXECUTION_MODE,
+    );
     test.canister_state_mut(canister_id)
         .system_state
         .add_cycles(expected_charge, CyclesUseCase::NonConsumed);
@@ -1765,9 +1770,11 @@ fn take_canister_snapshot_charges_canister_cycles() {
         + NumInstructions::new(canister_snapshot_size.get());
 
     // Take a snapshot of the canister will decrease the balance.
-    let expected_charge = test
-        .cycles_account_manager()
-        .execution_cost(instructions, test.subnet_size());
+    let expected_charge = test.cycles_account_manager().execution_cost(
+        instructions,
+        test.subnet_size(),
+        WASM_EXECUTION_MODE,
+    );
 
     // Take a snapshot for the canister.
     let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
@@ -1825,9 +1832,11 @@ fn load_canister_snapshot_charges_canister_cycles() {
         + NumInstructions::new(canister_snapshot_size.get());
 
     // Load a snapshot of the canister will decrease the balance.
-    let expected_charge = test
-        .cycles_account_manager()
-        .execution_cost(instructions, test.subnet_size());
+    let expected_charge = test.cycles_account_manager().execution_cost(
+        instructions,
+        test.subnet_size(),
+        WASM_EXECUTION_MODE,
+    );
 
     // Load an existing snapshot will decrease the balance.
     let args: LoadCanisterSnapshotArgs =
