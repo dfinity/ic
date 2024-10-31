@@ -891,9 +891,6 @@ impl Neuron {
             dissolve_delay_seconds: self.dissolve_delay_seconds(now_seconds),
             recent_ballots,
             voting_power: potential_voting_power,
-            // DO NOT MERGE: Add these to the API.
-            // potential_voting_power,
-            // deciding_voting_power,
             created_timestamp_seconds: self.created_timestamp_seconds,
             stake_e8s: self.minted_stake_e8s(),
             joined_community_fund_timestamp_seconds,
