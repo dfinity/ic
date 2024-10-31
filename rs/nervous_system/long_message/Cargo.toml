@@ -9,6 +9,7 @@ path = "tests/test_canisters/long_message_canister.rs"
 
 [dependencies]
 ic-cdk = { workspace = true }
+ic-cdk-timers = { workspace = true }
 candid = { workspace = true }
 serde = { workspace = true }
 
