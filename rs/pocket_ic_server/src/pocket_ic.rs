@@ -2676,44 +2676,49 @@ fn systemtime_to_unix_epoch_nanos(st: SystemTime) -> u64 {
 mod tests {
     use super::*;
 
-    #[test]
-    fn state_label_test() {
-        // State label changes.
-        let mut pic0 = PocketIc::new(
-            Runtime::new().unwrap().into(),
-            0,
-            ExtendedSubnetConfigSet {
-                application: vec![SubnetSpec::default()],
-                ..Default::default()
-            },
-            None,
-            false,
-            None,
-            None,
-        );
-        let mut pic1 = PocketIc::new(
-            Runtime::new().unwrap().into(),
-            1,
-            ExtendedSubnetConfigSet {
-                application: vec![SubnetSpec::default()],
-                ..Default::default()
-            },
-            None,
-            false,
-            None,
-            None,
-        );
-        assert_ne!(pic0.get_state_label(), pic1.get_state_label());
+    #[tokio::test]
+    async fn state_label_test() {
+        let runtime = Arc::new(Runtime::new().unwrap());
+        tokio::task::spawn_blocking(move || {
+            // State label changes.
+            let mut pic0 = PocketIc::new(
+                runtime.clone(),
+                0,
+                ExtendedSubnetConfigSet {
+                    application: vec![SubnetSpec::default()],
+                    ..Default::default()
+                },
+                None,
+                false,
+                None,
+                None,
+            );
+            let mut pic1 = PocketIc::new(
+                runtime.clone(),
+                1,
+                ExtendedSubnetConfigSet {
+                    application: vec![SubnetSpec::default()],
+                    ..Default::default()
+                },
+                None,
+                false,
+                None,
+                None,
+            );
+            assert_ne!(pic0.get_state_label(), pic1.get_state_label());
 
-        let pic0_state_label = pic0.get_state_label();
-        pic0.bump_state_label();
-        assert_ne!(pic0.get_state_label(), pic0_state_label);
-        assert_ne!(pic0.get_state_label(), pic1.get_state_label());
+            let pic0_state_label = pic0.get_state_label();
+            pic0.bump_state_label();
+            assert_ne!(pic0.get_state_label(), pic0_state_label);
+            assert_ne!(pic0.get_state_label(), pic1.get_state_label());
 
-        let pic1_state_label = pic1.get_state_label();
-        pic1.bump_state_label();
-        assert_ne!(pic1.get_state_label(), pic0_state_label);
-        assert_ne!(pic1.get_state_label(), pic1_state_label);
-        assert_ne!(pic1.get_state_label(), pic0.get_state_label());
+            let pic1_state_label = pic1.get_state_label();
+            pic1.bump_state_label();
+            assert_ne!(pic1.get_state_label(), pic0_state_label);
+            assert_ne!(pic1.get_state_label(), pic1_state_label);
+            assert_ne!(pic1.get_state_label(), pic0.get_state_label());
+        })
+        .await
+        .unwrap();
     }
 }
