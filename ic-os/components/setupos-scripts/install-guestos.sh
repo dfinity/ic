@@ -27,7 +27,7 @@ function install_guestos() {
     # Makes a huge difference when running the setup under QEMU with no KVM.
     # In *non-KVM-accelerated* VM, this goes 500 MB/s, three times as fast as before.
     echo "* Writing the GuestOS image to ${LV}"
-    dd if="${TMPDIR}/disk.img" of=${LV} bs=10M conv=sparse status=progress
+    dd if="${TMPDIR}/disk.img" of=${LV} bs=4M conv=sparse status=progress
     log_and_halt_installation_on_error "${?}" "Unable to install GuestOS disk-image."
 
     rm -rf "${TMPDIR}"
