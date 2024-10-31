@@ -12,6 +12,7 @@ use ic_rosetta_api::models::ConstructionPayloadsRequestMetadata;
 use ic_rosetta_api::models::OperationIdentifier;
 use ic_rosetta_api::request_types::ChangeAutoStakeMaturityMetadata;
 use ic_rosetta_api::request_types::DisburseMetadata;
+use ic_rosetta_api::request_types::KeyMetadata;
 use ic_rosetta_api::request_types::NeuronIdentifierMetadata;
 use ic_rosetta_api::request_types::NeuronInfoMetadata;
 use ic_rosetta_api::request_types::PublicKeyOrPrincipal;
@@ -389,6 +390,74 @@ impl RosettaClient {
                             Some(PublicKeyOrPrincipal::Principal(principal_id))
                         }
                         _ => None,
+                    },
+                }
+                .try_into()
+                .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
+            ),
+        }])
+    }
+
+    pub fn build_add_hot_key_operations(
+        signer_principal: Principal,
+        neuron_index: u64,
+        public_key: Option<PublicKey>,
+        principal_id: Option<PrincipalId>,
+    ) -> anyhow::Result<Vec<Operation>> {
+        Ok(vec![Operation {
+            operation_identifier: OperationIdentifier {
+                index: 0,
+                network_index: None,
+            },
+            related_operations: None,
+            type_: "ADD_HOTKEY".to_string(),
+            status: None,
+            account: Some(rosetta_core::identifiers::AccountIdentifier::from(
+                AccountIdentifier::new(PrincipalId(signer_principal), None),
+            )),
+            amount: None,
+            coin_change: None,
+            metadata: Some(
+                KeyMetadata {
+                    neuron_index,
+                    key: match (public_key, principal_id) {
+                        (Some(public_key), None) => PublicKeyOrPrincipal::PublicKey(public_key),
+                        (None, Some(principal_id)) => PublicKeyOrPrincipal::Principal(principal_id),
+                        _ => bail!("Either public key or principal id has to be set"),
+                    },
+                }
+                .try_into()
+                .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
+            ),
+        }])
+    }
+
+    pub fn build_remove_hot_key_operations(
+        signer_principal: Principal,
+        neuron_index: u64,
+        public_key: Option<PublicKey>,
+        principal_id: Option<PrincipalId>,
+    ) -> anyhow::Result<Vec<Operation>> {
+        Ok(vec![Operation {
+            operation_identifier: OperationIdentifier {
+                index: 0,
+                network_index: None,
+            },
+            related_operations: None,
+            type_: "REMOVE_HOTKEY".to_string(),
+            status: None,
+            account: Some(rosetta_core::identifiers::AccountIdentifier::from(
+                AccountIdentifier::new(PrincipalId(signer_principal), None),
+            )),
+            amount: None,
+            coin_change: None,
+            metadata: Some(
+                KeyMetadata {
+                    neuron_index,
+                    key: match (public_key, principal_id) {
+                        (Some(public_key), None) => PublicKeyOrPrincipal::PublicKey(public_key),
+                        (None, Some(principal_id)) => PublicKeyOrPrincipal::Principal(principal_id),
+                        _ => bail!("Either public key or principal id has to be set"),
                     },
                 }
                 .try_into()
@@ -1021,6 +1090,58 @@ impl RosettaClient {
         )
         .await
     }
+
+    /// The management of neurons can be delegated to another principal via a hotkey.
+    /// Adding a hotkey to a specific neuron allows the hotkey holder to manage the neuron.
+    pub async fn add_hot_key<T>(
+        &self,
+        network_identifier: NetworkIdentifier,
+        signer_keypair: &T,
+        add_hotkey_args: RosettaHotKeyArgs,
+    ) -> anyhow::Result<ConstructionSubmitResponse>
+    where
+        T: RosettaSupportedKeyPair,
+    {
+        let add_hotkey_operations = RosettaClient::build_add_hot_key_operations(
+            signer_keypair.generate_principal_id()?.0,
+            add_hotkey_args.neuron_index,
+            add_hotkey_args.hot_key,
+            add_hotkey_args.principal_id,
+        )?;
+        self.make_submit_and_wait_for_transaction(
+            signer_keypair,
+            network_identifier,
+            add_hotkey_operations,
+            None,
+            None,
+        )
+        .await
+    }
+
+    pub async fn remove_hot_key<T>(
+        &self,
+        network_identifier: NetworkIdentifier,
+        signer_keypair: &T,
+        remove_hotkey_args: RosettaHotKeyArgs,
+    ) -> anyhow::Result<ConstructionSubmitResponse>
+    where
+        T: RosettaSupportedKeyPair,
+    {
+        let remove_hotkey_operations = RosettaClient::build_remove_hot_key_operations(
+            signer_keypair.generate_principal_id()?.0,
+            remove_hotkey_args.neuron_index,
+            remove_hotkey_args.hot_key,
+            remove_hotkey_args.principal_id,
+        )?;
+        self.make_submit_and_wait_for_transaction(
+            signer_keypair,
+            network_identifier,
+            remove_hotkey_operations,
+            None,
+            None,
+        )
+        .await
+    }
 }
 
 pub struct RosettaTransferArgs {
@@ -1357,6 +1478,52 @@ impl RosettaNeuronInfoArgsBuilder {
         RosettaNeuronInfoArgs {
             neuron_index: self.neuron_index,
             public_key: self.public_key,
+            principal_id: self.principal_id,
+        }
+    }
+}
+
+pub struct RosettaHotKeyArgs {
+    pub neuron_index: u64,
+    pub hot_key: Option<PublicKey>,
+    pub principal_id: Option<PrincipalId>,
+}
+
+impl RosettaHotKeyArgs {
+    pub fn builder(neuron_index: u64) -> RosettaHotKeyArgsBuilder {
+        RosettaHotKeyArgsBuilder::new(neuron_index)
+    }
+}
+
+pub struct RosettaHotKeyArgsBuilder {
+    neuron_index: u64,
+    hot_key: Option<PublicKey>,
+    principal_id: Option<PrincipalId>,
+}
+
+impl RosettaHotKeyArgsBuilder {
+    pub fn new(neuron_index: u64) -> Self {
+        Self {
+            neuron_index,
+            hot_key: None,
+            principal_id: None,
+        }
+    }
+
+    pub fn with_public_key(mut self, hot_key: PublicKey) -> Self {
+        self.hot_key = Some(hot_key);
+        self
+    }
+
+    pub fn with_principal_id(mut self, principal_id: PrincipalId) -> Self {
+        self.principal_id = Some(principal_id);
+        self
+    }
+
+    pub fn build(self) -> RosettaHotKeyArgs {
+        RosettaHotKeyArgs {
+            neuron_index: self.neuron_index,
+            hot_key: self.hot_key,
             principal_id: self.principal_id,
         }
     }

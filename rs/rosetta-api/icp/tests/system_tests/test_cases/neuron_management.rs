@@ -6,11 +6,13 @@ use crate::common::{
 };
 use ic_agent::{identity::BasicIdentity, Identity};
 use ic_icp_rosetta_client::RosettaChangeAutoStakeMaturityArgs;
+use ic_icp_rosetta_client::RosettaHotKeyArgs;
 use ic_icp_rosetta_client::RosettaIncreaseNeuronStakeArgs;
 use ic_icp_rosetta_client::RosettaNeuronInfoArgs;
 use ic_icp_rosetta_client::{
     RosettaCreateNeuronArgs, RosettaDisburseNeuronArgs, RosettaSetNeuronDissolveDelayArgs,
 };
+use ic_icrc1_test_utils::basic_identity_strategy;
 use ic_nns_governance::pb::v1::neuron::DissolveState;
 use ic_nns_governance::pb::v1::KnownNeuronData;
 use ic_rosetta_api::ledger_client::list_known_neurons_response::ListKnownNeuronsResponse;
@@ -20,6 +22,9 @@ use ic_rosetta_api::request::transaction_operation_results::TransactionOperation
 use ic_types::PrincipalId;
 use icp_ledger::{AccountIdentifier, DEFAULT_TRANSFER_FEE};
 use lazy_static::lazy_static;
+use proptest::strategy::Strategy;
+use proptest::test_runner::Config as TestRunnerConfig;
+use proptest::test_runner::TestRunner;
 use rosetta_core::objects::ObjectMap;
 use rosetta_core::request_types::CallRequest;
 use std::{
@@ -30,6 +35,7 @@ use tokio::runtime::Runtime;
 
 lazy_static! {
     pub static ref TEST_IDENTITY: Arc<BasicIdentity> = Arc::new(test_identity());
+    pub static ref NUM_TEST_CASES: u32 = 1;
 }
 
 #[test]
@@ -815,4 +821,147 @@ fn test_get_neuron_info() {
         assert_eq!(neuron_info.neuron_id, neuron.id.unwrap().id);
         assert_eq!(neuron_info.controller.0, TEST_IDENTITY.sender().unwrap());
     });
+}
+
+#[test]
+fn test_hotkey_management() {
+    let mut runner = TestRunner::new(TestRunnerConfig {
+        max_shrink_iters: 0,
+        cases: *NUM_TEST_CASES,
+        ..Default::default()
+    });
+
+    runner
+        .run(
+            &(basic_identity_strategy().no_shrink()),
+            |hot_key_identity| {
+                let rt = Runtime::new().unwrap();
+                rt.block_on(async {
+                    let env = RosettaTestingEnvironment::builder()
+                        .with_initial_balances(
+                            vec![(
+                                AccountIdentifier::from(TEST_IDENTITY.sender().unwrap()),
+                                // A hundred million ICP should be enough
+                                icp_ledger::Tokens::from_tokens(100_000_000).unwrap(),
+                            )]
+                            .into_iter()
+                            .collect(),
+                        )
+                        .with_governance_canister()
+                        .build()
+                        .await;
+
+                    // Stake the minimum amount 100 million e8s
+                    let staked_amount = 100_000_000u64;
+                    let neuron_index = 0;
+
+                    env.rosetta_client
+                        .create_neuron(
+                            env.network_identifier.clone(),
+                            &(*TEST_IDENTITY).clone(),
+                            RosettaCreateNeuronArgs::builder(staked_amount.into())
+                                .with_neuron_index(neuron_index)
+                                .build(),
+                        )
+                        .await
+                        .unwrap();
+
+                    let agent = get_test_agent(env.pocket_ic.url().unwrap().port().unwrap()).await;
+                    let neuron = list_neurons(&agent)
+                        .await
+                        .full_neurons
+                        .first()
+                        .unwrap()
+                        .to_owned();
+                    // Make sure that the neuron has no hot keys
+                    assert!(neuron.hot_keys.is_empty());
+
+                    // Add a hot key to the neuron
+                    env.rosetta_client
+                        .add_hot_key(
+                            env.network_identifier.clone(),
+                            &(*TEST_IDENTITY).clone(),
+                            RosettaHotKeyArgs::builder(neuron_index)
+                                .with_principal_id(hot_key_identity.sender().unwrap().into())
+                                .build(),
+                        )
+                        .await
+                        .unwrap();
+
+                    let neuron = list_neurons(&agent)
+                        .await
+                        .full_neurons
+                        .first()
+                        .unwrap()
+                        .to_owned();
+                    // Make sure that the neuron has a hot key
+                    assert_eq!(neuron.hot_keys.len(), 1);
+
+                    // Remove the hot key from the neuron
+                    env.rosetta_client
+                        .remove_hot_key(
+                            env.network_identifier.clone(),
+                            &(*TEST_IDENTITY).clone(),
+                            RosettaHotKeyArgs::builder(neuron_index)
+                                .with_principal_id(hot_key_identity.sender().unwrap().into())
+                                .build(),
+                        )
+                        .await
+                        .unwrap();
+
+                    let neuron = list_neurons(&agent)
+                        .await
+                        .full_neurons
+                        .first()
+                        .unwrap()
+                        .to_owned();
+                    // Make sure that the neuron has no hot keys
+                    assert!(neuron.hot_keys.is_empty());
+                    let hote_key_identity = Arc::new(hot_key_identity);
+                    // Now we try the same but with a public key
+                    env.rosetta_client
+                        .add_hot_key(
+                            env.network_identifier.clone(),
+                            &(*TEST_IDENTITY).clone(),
+                            RosettaHotKeyArgs::builder(neuron_index)
+                                .with_public_key((&hote_key_identity).into())
+                                .build(),
+                        )
+                        .await
+                        .unwrap();
+
+                    let neuron = list_neurons(&agent)
+                        .await
+                        .full_neurons
+                        .first()
+                        .unwrap()
+                        .to_owned();
+                    // Make sure that the neuron has a hot key
+                    assert_eq!(neuron.hot_keys.len(), 1);
+
+                    // Remove the hot key from the neuron
+                    env.rosetta_client
+                        .remove_hot_key(
+                            env.network_identifier.clone(),
+                            &(*TEST_IDENTITY).clone(),
+                            RosettaHotKeyArgs::builder(neuron_index)
+                                .with_public_key((&hote_key_identity).into())
+                                .build(),
+                        )
+                        .await
+                        .unwrap();
+
+                    let neuron = list_neurons(&agent)
+                        .await
+                        .full_neurons
+                        .first()
+                        .unwrap()
+                        .to_owned();
+                    // Make sure that the neuron has no hot keys
+                    assert!(neuron.hot_keys.is_empty());
+                });
+                Ok(())
+            },
+        )
+        .unwrap();
 }
