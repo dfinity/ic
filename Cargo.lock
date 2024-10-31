@@ -16809,7 +16809,7 @@ dependencies = [
  "ed25519-dalek",
  "flate2",
  "hex",
- "ic-agent",
+ "ic-certification 2.6.0",
  "ic-transport-types",
  "k256",
  "lazy_static",

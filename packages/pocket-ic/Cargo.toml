@@ -26,7 +26,7 @@ doctest = false
 base64 = { workspace = true }
 candid = { workspace = true }
 hex = { workspace = true }
-ic-agent = { workspace = true }
+ic-certification = { workspace = true }
 ic-transport-types = { workspace = true }
 reqwest = { workspace = true }
 schemars = "0.8.16"
