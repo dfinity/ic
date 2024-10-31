@@ -289,7 +289,7 @@ impl IngressMessageSubmitter {
 
     /// Attempts to submit the ingress message to the ingress pool.
     /// An [`HttpError`] is returned if P2P is not running.
-    pub(crate) async fn try_submit(self) -> Result<(), HttpError> {
+    pub(crate) async fn submit(self) -> Result<(), HttpError> {
         let Self {
             ingress_tx,
             node_id,

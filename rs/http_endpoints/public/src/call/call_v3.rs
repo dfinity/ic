@@ -257,7 +257,7 @@ async fn call_sync_v3(
         }
     };
 
-    let ingres_submission = ingress_submitter.try_submit().await;
+    let ingres_submission = ingress_submitter.submit().await;
 
     if let Err(ingress_submission) = ingres_submission {
         return CallV3Response::HttpError(ingress_submission);
