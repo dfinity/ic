@@ -29,16 +29,10 @@ pub enum RulePolicyError {
     },
 }
 
-#[derive(Debug, Error, Clone)]
-pub enum RuleEncodingError {
-    #[error("Rule doesn't encode a valid JSON object")]
-    InvalidJsonEncoding,
-}
-
 #[derive(Debug, Error)]
 pub enum AddConfigError {
-    #[error("Not all rules encode valid JSON objects: {0}")]
-    RuleEncodingError(#[from] RuleEncodingError),
+    #[error("Rule at index = {0} doesn't encode a valid JSON object")]
+    RuleJsonEncodingError(usize),
     #[error("Rule violates policy: {0}")]
     RulePolicyViolation(#[from] RulePolicyError),
     #[error("Configuration for version={0} was not found")]
@@ -272,9 +266,9 @@ impl From<AddConfigError> for String {
 }
 
 fn validate_config_encoding(config: &InputConfig) -> Result<(), AddConfigError> {
-    for rule in config.rules.iter() {
+    for (idx, rule) in config.rules.iter().enumerate() {
         serde_json::from_slice::<Value>(rule.rule_raw.as_slice())
-            .map_err(|_| RuleEncodingError::InvalidJsonEncoding)?;
+            .map_err(|_| AddConfigError::RuleJsonEncodingError(idx))?;
     }
     Ok(())
 }
