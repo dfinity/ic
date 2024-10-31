@@ -58,7 +58,7 @@ impl CanisterHttp {
 
         // This uses a DNS resolver and results in an error if the proxy is not a valid URL.
         // We don't want to panic here during test.
-        let maybe_proxy = reqwest::Proxy::http(config.socks_proxy.clone());
+        let maybe_proxy = reqwest::Proxy::all(config.socks_proxy.clone());
 
         match maybe_proxy {
             Ok(proxy) => {
