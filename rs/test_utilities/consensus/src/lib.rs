@@ -138,8 +138,8 @@ pub fn make_genesis(summary: dkg::Summary) -> CatchUpPackage {
     // created.
     let registry_version = summary.registry_version;
     let height = summary.height;
-    let low_dkg_id = summary.current_transcript(&NiDkgTag::LowThreshold).dkg_id;
-    let high_dkg_id = summary.current_transcript(&NiDkgTag::HighThreshold).dkg_id;
+    let low_dkg_id = summary.current_transcript(&NiDkgTag::LowThreshold).dkg_id.clone();
+    let high_dkg_id = summary.current_transcript(&NiDkgTag::HighThreshold).dkg_id.clone();
     let block = Block::new(
         Id::from(CryptoHash(Vec::new())),
         Payload::new(

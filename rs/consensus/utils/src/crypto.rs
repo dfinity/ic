@@ -406,7 +406,7 @@ impl<Message: Signable, C: ThresholdSigner<Message> + ThresholdSigVerifier<Messa
                 .iter()
                 .map(|share| (share.signer, share.signature.clone()))
                 .collect(),
-            dkg_id,
+            dkg_id.clone(),
         )
         .map(|signature| ThresholdSignature {
             signer: dkg_id,
@@ -422,7 +422,7 @@ impl<Message: Signable, C: ThresholdSigner<Message> + ThresholdSigVerifier<Messa
         self.verify_threshold_sig_combined(
             &message.signature.signature,
             &message.content,
-            message.signature.signer,
+            message.signature.signer.clone(),
         )
     }
 }

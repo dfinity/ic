@@ -341,7 +341,7 @@ impl StateWithVerifiedDealings {
                 let test_result = if let Some(transcript) = &config.resharing_transcript {
                     ni_dkg_static_api::verify_resharing_dealing(
                         config.algorithm_id,
-                        config.dkg_id,
+                        config.dkg_id.clone(),
                         dealer_index,
                         config.threshold.get(),
                         config.epoch,
@@ -352,7 +352,7 @@ impl StateWithVerifiedDealings {
                 } else {
                     ni_dkg_static_api::verify_dealing(
                         config.algorithm_id,
-                        config.dkg_id,
+                        config.dkg_id.clone(),
                         dealer_index,
                         config.threshold.get(),
                         config.epoch,

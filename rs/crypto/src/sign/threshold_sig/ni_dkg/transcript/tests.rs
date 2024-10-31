@@ -726,7 +726,7 @@ mod load_transcript {
     ) -> Option<TranscriptData> {
         lockable_threshold_sig_data_store
             .read()
-            .transcript_data(dkg_id)
+            .transcript_data(&dkg_id)
             .cloned()
     }
 

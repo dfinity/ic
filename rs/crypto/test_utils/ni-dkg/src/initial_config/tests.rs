@@ -41,7 +41,13 @@ fn should_correctly_create_initial_dkg_config_for_single_node() {
     let dkg_tag = NiDkgTag::LowThreshold;
     let target_id = target_id();
 
-    let config = InitialNiDkgConfig::new(&nodes_set, dealer_subnet, dkg_tag, target_id, REG_V1);
+    let config = InitialNiDkgConfig::new(
+        &nodes_set,
+        dealer_subnet,
+        dkg_tag.clone(),
+        target_id,
+        REG_V1,
+    );
 
     assert_eq!(
         config.get().dkg_id(),
@@ -74,7 +80,13 @@ fn should_correctly_create_initial_dkg_config() {
     let dkg_tag = NiDkgTag::LowThreshold;
     let target_id = target_id();
 
-    let config = InitialNiDkgConfig::new(&nodes_set, dealer_subnet, dkg_tag, target_id, REG_V1);
+    let config = InitialNiDkgConfig::new(
+        &nodes_set,
+        dealer_subnet,
+        dkg_tag.clone(),
+        target_id,
+        REG_V1,
+    );
 
     assert_eq!(
         config.get().dkg_id(),
@@ -131,7 +143,7 @@ fn should_have_stable_internal_csp_transcript_cbor_serialization() {
 fn should_correctly_retrieve_initial_low_threshold_ni_dkg_transcript_from_registry() {
     let mut transcript = transcript();
     let dkg_tag = NiDkgTag::LowThreshold;
-    transcript.dkg_id.dkg_tag = dkg_tag;
+    transcript.dkg_id.dkg_tag = dkg_tag.clone();
     let registry = registry_with_ni_dkg_transcript(
         InitialNiDkgTranscriptRecord::from(transcript.clone()),
         dkg_tag,
@@ -154,7 +166,7 @@ fn should_correctly_retrieve_initial_low_threshold_ni_dkg_transcript_from_regist
 fn should_correctly_retrieve_initial_high_threshold_ni_dkg_transcript_from_registry() {
     let mut transcript = transcript();
     let dkg_tag = NiDkgTag::HighThreshold;
-    transcript.dkg_id.dkg_tag = dkg_tag;
+    transcript.dkg_id.dkg_tag = dkg_tag.clone();
     let registry = registry_with_ni_dkg_transcript(
         InitialNiDkgTranscriptRecord::from(transcript.clone()),
         dkg_tag,

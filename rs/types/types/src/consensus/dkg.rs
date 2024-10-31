@@ -247,7 +247,10 @@ impl Summary {
         let mut next_transcripts = self.next_transcripts;
         self.current_transcripts
             .into_iter()
-            .map(|(tag, current)| (tag, next_transcripts.remove(&tag).unwrap_or(current)))
+            .map(|(tag, current)| {
+                let new_next_transcripts = next_transcripts.remove(&tag).unwrap_or(current);
+                (tag, new_next_transcripts)
+            })
             .collect()
     }
 
@@ -308,7 +311,7 @@ fn build_callback_ided_transcripts_vec(
         .iter()
         .map(
             |(id, callback_id, transcript_result)| pb::CallbackIdedNiDkgTranscript {
-                dkg_id: Some(pb::NiDkgId::from(*id)),
+                dkg_id: Some(pb::NiDkgId::from(id.clone())),
                 transcript_result: match transcript_result {
                     Ok(transcript) => Some(pb::NiDkgTranscriptResult {
                         val: Some(pb::ni_dkg_transcript_result::Val::Transcript(
@@ -452,7 +455,7 @@ impl TryFrom<pb::Summary> for Summary {
             configs: summary
                 .configs
                 .into_iter()
-                .map(|config| NiDkgConfig::try_from(config).map(|c| (c.dkg_id, c)))
+                .map(|config| NiDkgConfig::try_from(config).map(|c| (c.dkg_id.clone(), c)))
                 .collect::<Result<BTreeMap<_, _>, _>>()
                 .map_err(ProxyDecodeError::Other)?,
             current_transcripts: build_tagged_transcripts_map(&summary.current_transcripts)?,

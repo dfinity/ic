@@ -43,7 +43,7 @@ fn should_threshold_sign_if_sufficient_shares() {
             combiner: random_combiner,
         },
         &msg,
-        dkg_id,
+        dkg_id.clone(),
         &crypto_components,
     );
     let random_verifier = random_node_in(config.receivers().get(), rng);
@@ -66,15 +66,19 @@ fn should_produce_valid_signature_shares() {
     let sig_shares = sign_threshold_for_each(
         &config.receivers().get().iter().copied().collect::<Vec<_>>(),
         &msg,
-        dkg_id,
+        dkg_id.clone(),
         &crypto_components,
     );
 
     let verifier = random_node_in(config.receivers().get(), rng);
     sig_shares.iter().for_each(|(signer, sig_share)| {
         assert_eq!(
-            crypto_for(verifier, &crypto_components)
-                .verify_threshold_sig_share(sig_share, &msg, dkg_id, *signer),
+            crypto_for(verifier, &crypto_components).verify_threshold_sig_share(
+                sig_share,
+                &msg,
+                dkg_id.clone(),
+                *signer
+            ),
             Ok(()),
             "node {:?} failed to verify threshold sig share of signer {:?}",
             verifier,
@@ -113,7 +117,7 @@ fn should_load_transcript_and_validate_signature_shares_as_non_receiver_without_
     let sig_shares = sign_threshold_for_each(
         &config.receivers().get().iter().copied().collect::<Vec<_>>(),
         &msg,
-        dkg_id,
+        dkg_id.clone(),
         &crypto_components,
     );
 
@@ -133,7 +137,12 @@ fn should_load_transcript_and_validate_signature_shares_as_non_receiver_without_
     // Verify the signature shares with the node that is not a receiver.
     sig_shares.iter().for_each(|(signer, sig_share)| {
         assert_eq!(
-            other_crypto_component.verify_threshold_sig_share(sig_share, &msg, dkg_id, *signer),
+            other_crypto_component.verify_threshold_sig_share(
+                sig_share,
+                &msg,
+                dkg_id.clone(),
+                *signer
+            ),
             Ok(()),
             "node {:?} failed to verify threshold sig share of signer {:?}",
             other_node_id,
@@ -179,7 +188,7 @@ fn should_fail_to_combine_insufficient_shares() {
     let sig_shares = sign_threshold_for_each(
         &n_random_nodes_in(config.receivers().get(), num_of_shares_to_combine, rng),
         &message(),
-        dkg_id,
+        dkg_id.clone(),
         &crypto_components,
     );
     let combination_result = crypto_for(
@@ -278,7 +287,7 @@ fn threshold_sign_and_combine<H: Signable, C: CryptoComponentRng>(
     let sig_shares = sign_threshold_for_each(
         &signers_and_combiner.signers,
         msg,
-        dkg_id,
+        dkg_id.clone(),
         crypto_components,
     );
     crypto_for(signers_and_combiner.combiner, crypto_components)
@@ -296,7 +305,7 @@ fn sign_threshold_for_each<H: Signable, C: CryptoComponentRng>(
         .iter()
         .map(|signer| {
             let sig_share = crypto_for(*signer, crypto_components)
-                .sign_threshold(msg, dkg_id)
+                .sign_threshold(msg, dkg_id.clone())
                 .unwrap_or_else(|e| panic!("signing by node {:?} failed: {}", signer, e));
             (*signer, sig_share)
         })
@@ -537,29 +546,41 @@ mod non_interactive_distributed_key_generation {
         assert_eq!(epoch1_nodes.difference(&epoch2_nodes).count(), 0);
 
         // Test that all nodes can sign in their own epoch
-        assert!(nodes_can_sign_in_epoch(&epoch0_nodes, dkg_id0, &env));
-        assert!(nodes_can_sign_in_epoch(&epoch1_nodes, dkg_id1, &env));
-        assert!(nodes_can_sign_in_epoch(&epoch2_nodes, dkg_id2, &env));
+        assert!(nodes_can_sign_in_epoch(
+            &epoch0_nodes,
+            dkg_id0.clone(),
+            &env
+        ));
+        assert!(nodes_can_sign_in_epoch(
+            &epoch1_nodes,
+            dkg_id1.clone(),
+            &env
+        ));
+        assert!(nodes_can_sign_in_epoch(
+            &epoch2_nodes,
+            dkg_id2.clone(),
+            &env
+        ));
 
         // Test that nodes added later cannot sign in old epochs
         assert!(
             nodes_cannot_sign_in_epoch_due_to_missing_threshold_sig_data(
                 &new_in_epoch1,
-                dkg_id0,
+                dkg_id0.clone(),
                 &env
             )
         );
         assert!(
             nodes_cannot_sign_in_epoch_due_to_missing_threshold_sig_data(
                 &new_in_epoch2,
-                dkg_id0,
+                dkg_id0.clone(),
                 &env
             )
         );
         assert!(
             nodes_cannot_sign_in_epoch_due_to_missing_threshold_sig_data(
                 &new_in_epoch2,
-                dkg_id1,
+                dkg_id1.clone(),
                 &env
             )
         );
@@ -581,7 +602,7 @@ mod non_interactive_distributed_key_generation {
         // Now nobody can sign in epoch0 since the keys have been removed
         assert!(nodes_cannot_sign_in_epoch_due_to_missing_secret_key(
             &epoch0_nodes,
-            dkg_id0,
+            dkg_id0.clone(),
             &env
         ));
 
@@ -762,7 +783,7 @@ mod non_interactive_distributed_key_generation {
                     rng,
                     subnet_size,
                     dealer_count,
-                    threshold,
+                    threshold.clone(),
                 );
                 let overhead = (record_len as f64) / (expected_size as f64);
 
@@ -809,7 +830,8 @@ mod non_interactive_distributed_key_generation {
         let msg = message();
 
         for node in nodes {
-            let sig = crypto_for(*node, &env.crypto_components).sign_threshold(&msg, dkg_id);
+            let sig =
+                crypto_for(*node, &env.crypto_components).sign_threshold(&msg, dkg_id.clone());
             if sig.is_err() {
                 return false;
             }
@@ -826,7 +848,8 @@ mod non_interactive_distributed_key_generation {
         let msg = message();
 
         for node in nodes {
-            let sig = crypto_for(*node, &env.crypto_components).sign_threshold(&msg, dkg_id);
+            let sig =
+                crypto_for(*node, &env.crypto_components).sign_threshold(&msg, dkg_id.clone());
             match sig {
                 Ok(_) => return false,
                 Err(CryptoError::SecretKeyNotFound {
@@ -850,7 +873,8 @@ mod non_interactive_distributed_key_generation {
         let msg = message();
 
         for node in nodes {
-            let sig = crypto_for(*node, &env.crypto_components).sign_threshold(&msg, dkg_id);
+            let sig =
+                crypto_for(*node, &env.crypto_components).sign_threshold(&msg, dkg_id.clone());
             match sig {
                 Ok(_) => return false,
                 Err(CryptoError::ThresholdSigDataNotFound {

@@ -272,7 +272,7 @@ impl StateWithDealings {
                     .expect("Could not find dealer in nodes");
                 let dealing = node.create_dealing(
                     config.algorithm_id,
-                    config.dkg_id,
+                    config.dkg_id.clone(),
                     config
                         .dealers
                         .position(node.node_id)
@@ -319,7 +319,7 @@ impl StateWithVerifiedDealings {
                 let test_result = if let Some(transcript) = &config.resharing_transcript {
                     static_api::verify_resharing_dealing(
                         config.algorithm_id,
-                        config.dkg_id,
+                        config.dkg_id.clone(),
                         dealer_index,
                         config.threshold.get(),
                         config.epoch,
@@ -330,7 +330,7 @@ impl StateWithVerifiedDealings {
                 } else {
                     static_api::verify_dealing(
                         config.algorithm_id,
-                        config.dkg_id,
+                        config.dkg_id.clone(),
                         dealer_index,
                         config.threshold.get(),
                         config.epoch,
@@ -438,7 +438,7 @@ impl StateWithTranscript {
             node.csp
                 .load_threshold_signing_key(
                     self.config.algorithm_id,
-                    self.config.dkg_id,
+                    self.config.dkg_id.clone(),
                     self.config.epoch,
                     self.transcript.clone(),
                     node_index,

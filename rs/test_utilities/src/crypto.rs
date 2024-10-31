@@ -270,7 +270,7 @@ impl NiDkgAlgorithm for CryptoReturningOk {
         self.loaded_transcripts
             .write()
             .unwrap()
-            .insert(transcript.dkg_id);
+            .insert(transcript.dkg_id.clone());
         Ok(LoadTranscriptResult::SigningKeyAvailable)
     }
 
@@ -281,7 +281,7 @@ impl NiDkgAlgorithm for CryptoReturningOk {
         self.retained_transcripts
             .write()
             .unwrap()
-            .push(transcripts.iter().map(|t| t.dkg_id).collect());
+            .push(transcripts.into_iter().map(|t| t.dkg_id).collect());
         Ok(())
     }
 }

@@ -181,7 +181,7 @@ pub fn sign_threshold_for_each<H: Signable, R: CryptoComponentRng>(
         .iter()
         .map(|signer| {
             let sig_share = crypto_for(*signer, crypto_components)
-                .sign_threshold(msg, dkg_id)
+                .sign_threshold(msg, dkg_id.clone())
                 .unwrap_or_else(|_| panic!("signing by node {:?} failed", signer));
             (*signer, sig_share)
         })
@@ -566,8 +566,11 @@ impl RandomNiDkgConfig {
                 receivers
             }
         };
-        let dkg_tag = transcript.dkg_id.dkg_tag;
+        let dkg_tag = transcript.dkg_id.dkg_tag.clone();
         let config_data = NiDkgConfigData {
+            threshold: Self::number_of_nodes_from_usize(
+                dkg_tag.threshold_for_subnet_of_size(new_subnet_size),
+            ),
             dkg_id: NiDkgId {
                 start_block_height: Height::new(transcript.dkg_id.start_block_height.get() + 1),
                 // Theoretically the subnet ID should change on the _first_ DKG in the new
@@ -584,9 +587,6 @@ impl RandomNiDkgConfig {
                 Self::number_of_nodes_from_usize(get_faults_tolerated(new_subnet_size))
             },
             receivers,
-            threshold: Self::number_of_nodes_from_usize(
-                dkg_tag.threshold_for_subnet_of_size(new_subnet_size),
-            ),
             registry_version,
             resharing_transcript: Some(transcript),
         };
@@ -607,6 +607,9 @@ impl RandomNiDkgConfig {
         let receivers = transcript.committee.get().clone();
         let dkg_tag = transcript.dkg_id.dkg_tag;
         let config_data = NiDkgConfigData {
+            threshold: Self::number_of_nodes_from_usize(
+                dkg_tag.threshold_for_subnet_of_size(subnet_size),
+            ),
             dkg_id: NiDkgId {
                 start_block_height: Height::new(transcript.dkg_id.start_block_height.get() + 1),
                 // Theoretically the subnet ID should change on the _first_ DKG in the new
@@ -623,9 +626,6 @@ impl RandomNiDkgConfig {
                 Self::number_of_nodes_from_usize(get_faults_tolerated(subnet_size))
             },
             receivers,
-            threshold: Self::number_of_nodes_from_usize(
-                dkg_tag.threshold_for_subnet_of_size(subnet_size),
-            ),
             registry_version,
             resharing_transcript: None,
         };

@@ -37,7 +37,7 @@ pub struct NiDkgConfig {
 impl From<&NiDkgConfig> for pb::NiDkgConfig {
     fn from(config: &NiDkgConfig) -> Self {
         Self {
-            dkg_id: Some(pb::NiDkgId::from(config.dkg_id)),
+            dkg_id: Some(pb::NiDkgId::from(config.dkg_id.clone())),
             max_corrupt_dealers: config.max_corrupt_dealers.get(),
             dealers: config
                 .dealers
@@ -169,7 +169,10 @@ impl NiDkgConfig {
     }
 
     pub fn dkg_id(&self) -> NiDkgId {
-        self.dkg_id
+        ////////////////////////////
+        // TODO: ideally now a reference is returned, but there are many callers...
+        ////////////////////////////
+        self.dkg_id.clone()
     }
 
     pub fn max_corrupt_dealers(&self) -> NumberOfNodes {

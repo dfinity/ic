@@ -41,13 +41,13 @@ pub trait ThresholdSigDataStore {
     );
 
     /// Returns the transcript data for the node_id if it has been loaded.
-    fn transcript_data(&self, dkg_id: NiDkgId) -> Option<&TranscriptData>;
+    fn transcript_data(&self, dkg_id: &NiDkgId) -> Option<&TranscriptData>;
 
     /// Returns a reference to the individual public key of the node with ID
     /// `node_id` for the given `dkg_id`.
     fn individual_public_key(
         &self,
-        dkg_id: NiDkgId,
+        dkg_id: &NiDkgId,
         node_id: NodeId,
     ) -> Option<&CspThresholdSigPublicKey>;
 }
@@ -135,13 +135,16 @@ impl ThresholdSigDataStoreImpl {
     #[allow(clippy::map_entry)]
     fn entry_for(&mut self, dkg_id: NiDkgId) -> &mut ThresholdSigData {
         if !self.store.contains_key(&dkg_id) {
-            self.store.insert(dkg_id, ThresholdSigData::default());
+            self.store
+                .insert(dkg_id.clone(), ThresholdSigData::default());
             match dkg_id.dkg_tag {
                 NiDkgTag::LowThreshold => {
-                    self.low_threshold_dkg_id_insertion_order.push_back(dkg_id);
+                    self.low_threshold_dkg_id_insertion_order
+                        .push_back(dkg_id.clone());
                 }
                 NiDkgTag::HighThreshold => {
-                    self.high_threshold_dkg_id_insertion_order.push_back(dkg_id);
+                    self.high_threshold_dkg_id_insertion_order
+                        .push_back(dkg_id.clone());
                 }
             }
         }
@@ -181,13 +184,14 @@ impl ThresholdSigDataStore for ThresholdSigDataStoreImpl {
         public_coefficients: CspPublicCoefficients,
         indices: BTreeMap<NodeId, NodeIndex>,
     ) {
+        let dkg_tag = dkg_id.dkg_tag.clone();
         let data = self.entry_for(dkg_id);
         data.transcript_data = Some(TranscriptData {
             public_coeffs: public_coefficients,
             indices,
         });
 
-        self.purge_entry_for_oldest_dkg_id_if_necessary(dkg_id.dkg_tag);
+        self.purge_entry_for_oldest_dkg_id_if_necessary(dkg_tag);
         self.assert_length_invariant();
     }
 
@@ -197,27 +201,28 @@ impl ThresholdSigDataStore for ThresholdSigDataStoreImpl {
         node_id: NodeId,
         public_key: CspThresholdSigPublicKey,
     ) {
+        let dkg_tag = dkg_id.dkg_tag.clone();
         self.entry_for(dkg_id)
             .public_keys
             .get_or_insert_with(BTreeMap::new)
             .insert(node_id, public_key);
 
-        self.purge_entry_for_oldest_dkg_id_if_necessary(dkg_id.dkg_tag);
+        self.purge_entry_for_oldest_dkg_id_if_necessary(dkg_tag);
         self.assert_length_invariant();
     }
 
-    fn transcript_data(&self, dkg_id: NiDkgId) -> Option<&TranscriptData> {
+    fn transcript_data(&self, dkg_id: &NiDkgId) -> Option<&TranscriptData> {
         self.store
-            .get(&dkg_id)
+            .get(dkg_id)
             .and_then(|data| data.transcript_data.as_ref())
     }
 
     fn individual_public_key(
         &self,
-        dkg_id: NiDkgId,
+        dkg_id: &NiDkgId,
         node_id: NodeId,
     ) -> Option<&CspThresholdSigPublicKey> {
-        self.store.get(&dkg_id).and_then(|data| {
+        self.store.get(dkg_id).and_then(|data| {
             data.public_keys
                 .as_ref()
                 .and_then(|public_key_map| public_key_map.get(&node_id))

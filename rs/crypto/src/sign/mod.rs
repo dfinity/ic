@@ -524,6 +524,9 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifier<T> for CryptoCo
         result
     }
 
+    //////////////////////////////////////////////
+    // TODO: dkg_id as reference
+    //////////////////////////////////////////////
     fn combine_threshold_sig_shares(
         &self,
         shares: BTreeMap<NodeId, ThresholdSigShareOf<T>>,
@@ -545,7 +548,7 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifier<T> for CryptoCo
             &self.lockable_threshold_sig_data_store,
             &self.csp,
             shares,
-            dkg_id,
+            &dkg_id,
         );
         self.metrics.observe_duration_seconds(
             MetricsDomain::ThresholdSignature,
@@ -563,6 +566,9 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifier<T> for CryptoCo
         result
     }
 
+    //////////////////////////////////////////////
+    // TODO: dkg_id as reference
+    //////////////////////////////////////////////
     fn verify_threshold_sig_combined(
         &self,
         signature: &CombinedThresholdSigOf<T>,
@@ -587,7 +593,7 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifier<T> for CryptoCo
             &self.csp,
             signature,
             message,
-            dkg_id,
+            &dkg_id,
         );
         self.metrics.observe_duration_seconds(
             MetricsDomain::ThresholdSignature,

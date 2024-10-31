@@ -60,7 +60,8 @@ mod sign_threshold {
             .return_const(Ok(individual_csp_threshold_sig(
                 [42; IndividualSignatureBytes::SIZE],
             )));
-        let threshold_sig_data_store = threshold_sig_data_store_with_coeffs(pub_coeffs, dkg_id);
+        let threshold_sig_data_store =
+            threshold_sig_data_store_with_coeffs(pub_coeffs, dkg_id.clone());
 
         let _ = ThresholdSignerInternal::sign_threshold(
             &threshold_sig_data_store,
@@ -241,8 +242,11 @@ mod verify_threshold_sig_share {
     fn should_call_csp_with_correct_params_if_public_key_in_store() {
         let dkg_id = NI_DKG_ID_1;
         let (sig_share, message, csp_public_key) = (sig_share(), signable_mock(), csp_public_key());
-        let threshold_sig_data_store =
-            threshold_sig_data_store_with_coeffs_and_pubkey(dkg_id, NODE_ID, csp_public_key);
+        let threshold_sig_data_store = threshold_sig_data_store_with_coeffs_and_pubkey(
+            dkg_id.clone(),
+            NODE_ID,
+            csp_public_key,
+        );
         let mut csp = MockAllCryptoServiceProvider::new();
         let (expected_msg, expected_sig) = (message.clone(), sig_share.clone());
         csp.expect_threshold_verify_individual_signature()
@@ -424,7 +428,9 @@ mod verify_threshold_sig_share {
     fn should_have_correct_public_key_in_store_after_sig_verification_if_not_in_store_before() {
         let (sig_share, message, csp_public_key) = (sig_share(), signable_mock(), csp_public_key());
         let threshold_sig_data_store =
-            threshold_sig_data_store_with_non_empty_coeffs_and_indices_for_dkg_id(NI_DKG_ID_1);
+            threshold_sig_data_store_with_non_empty_coeffs_and_indices_for_dkg_id(
+                NI_DKG_ID_1.clone(),
+            );
         let mut csp = MockAllCryptoServiceProvider::new();
         csp.expect_threshold_individual_public_key()
             .times(1)
@@ -438,14 +444,14 @@ mod verify_threshold_sig_share {
             &csp,
             &sig_share,
             &message,
-            NI_DKG_ID_1,
+            NI_DKG_ID_1.clone(),
             NODE_ID,
         );
 
         assert_eq!(
             threshold_sig_data_store
                 .read()
-                .individual_public_key(NI_DKG_ID_1, NODE_ID),
+                .individual_public_key(&NI_DKG_ID_1.clone(), NODE_ID),
             Some(&csp_public_key)
         );
     }
@@ -675,13 +681,14 @@ mod combine_threshold_sig_shares {
             .return_const(Ok(combined_csp_threshold_sig(
                 [42; CombinedSignatureBytes::SIZE],
             )));
-        let threshold_sig_data_store = threshold_sig_data_store_with(dkg_id, pub_coeffs, indices);
+        let threshold_sig_data_store =
+            threshold_sig_data_store_with(dkg_id.clone(), pub_coeffs, indices);
 
         let _ = ThresholdSigVerifierInternal::combine_threshold_sig_shares(
             &threshold_sig_data_store,
             &csp,
             shares,
-            dkg_id,
+            &dkg_id,
         );
     }
 
@@ -701,7 +708,7 @@ mod combine_threshold_sig_shares {
             &threshold_sig_data_store,
             &csp,
             shares,
-            NI_DKG_ID_1,
+            &NI_DKG_ID_1,
         );
 
         assert_eq!(
@@ -727,7 +734,7 @@ mod combine_threshold_sig_shares {
             &threshold_sig_data_store,
             &csp,
             shares,
-            NI_DKG_ID_1,
+            &NI_DKG_ID_1,
         );
     }
 
@@ -768,7 +775,7 @@ mod combine_threshold_sig_shares {
             &threshold_sig_data_store,
             &csp,
             shares,
-            NI_DKG_ID_1,
+            &NI_DKG_ID_1,
         );
     }
 
@@ -784,7 +791,7 @@ mod combine_threshold_sig_shares {
             &threshold_sig_data_store,
             &csp,
             shares,
-            NI_DKG_ID_1,
+            &NI_DKG_ID_1,
         );
 
         assert_eq!(
@@ -808,7 +815,7 @@ mod combine_threshold_sig_shares {
             &threshold_sig_data_store,
             &csp,
             shares,
-            NI_DKG_ID_1,
+            &NI_DKG_ID_1,
         );
 
         assert_eq!(
@@ -834,7 +841,7 @@ mod combine_threshold_sig_shares {
             &threshold_sig_data_store,
             &csp,
             shares,
-            NI_DKG_ID_1,
+            &NI_DKG_ID_1,
         );
 
         assert_eq!(
@@ -867,7 +874,7 @@ mod combine_threshold_sig_shares {
             &threshold_sig_data_store,
             &csp,
             shares,
-            NI_DKG_ID_1,
+            &NI_DKG_ID_1,
         );
     }
 
@@ -887,7 +894,7 @@ mod combine_threshold_sig_shares {
             &threshold_sig_data_store,
             &csp,
             shares,
-            NI_DKG_ID_1,
+            &NI_DKG_ID_1,
         );
 
         assert!(result.unwrap_err().is_malformed_signature());
@@ -908,7 +915,7 @@ mod combine_threshold_sig_shares {
             &threshold_sig_data_store,
             &csp,
             shares,
-            NI_DKG_ID_1,
+            &NI_DKG_ID_1,
         );
 
         assert!(result.unwrap_err().is_malformed_signature());
@@ -929,7 +936,7 @@ mod combine_threshold_sig_shares {
             &threshold_sig_data_store,
             &csp,
             shares,
-            NI_DKG_ID_1,
+            &NI_DKG_ID_1,
         );
 
         assert_eq!(result.unwrap_err(), invalid_argument());
@@ -950,7 +957,7 @@ mod combine_threshold_sig_shares {
             &threshold_sig_data_store,
             &csp,
             shares,
-            NI_DKG_ID_1,
+            &NI_DKG_ID_1,
         );
 
         let expected_error = CryptoError::InternalError {
@@ -1015,11 +1022,11 @@ mod verify_threshold_sig_combined {
         );
 
         let _ = ThresholdSigVerifierInternal::verify_threshold_sig_combined(
-            &threshold_sig_data_store_with_coeffs(pub_coeffs, dkg_id),
+            &threshold_sig_data_store_with_coeffs(pub_coeffs, dkg_id.clone()),
             &csp,
             &combined_sig,
             &message,
-            dkg_id,
+            &dkg_id,
         );
     }
 
@@ -1033,7 +1040,7 @@ mod verify_threshold_sig_combined {
             &csp,
             &combined_sig,
             &message,
-            NI_DKG_ID_1,
+            &NI_DKG_ID_1,
         );
 
         assert!(result.is_ok());
@@ -1050,7 +1057,7 @@ mod verify_threshold_sig_combined {
             &csp,
             &combined_sig,
             &message,
-            NI_DKG_ID_1,
+            &NI_DKG_ID_1,
         );
 
         assert_eq!(
@@ -1072,7 +1079,7 @@ mod verify_threshold_sig_combined {
             &csp,
             &invalid_sig,
             &message,
-            NI_DKG_ID_1,
+            &NI_DKG_ID_1,
         );
 
         assert!(result.unwrap_err().is_malformed_signature());
@@ -1089,7 +1096,7 @@ mod verify_threshold_sig_combined {
             &csp,
             &combined_sig,
             &message,
-            NI_DKG_ID_1,
+            &NI_DKG_ID_1,
         );
 
         assert_eq!(result.unwrap_err(), verification_error);
@@ -1106,7 +1113,7 @@ mod verify_threshold_sig_combined {
             &csp,
             &combined_sig,
             &message,
-            NI_DKG_ID_1,
+            &NI_DKG_ID_1,
         );
 
         assert_eq!(result.unwrap_err(), malformed_sig_error);
@@ -1122,7 +1129,7 @@ mod verify_threshold_sig_combined {
             &csp,
             &combined_sig,
             &message,
-            NI_DKG_ID_1,
+            &NI_DKG_ID_1,
         );
         assert_eq!(result.unwrap_err(), invalid_argument());
     }
@@ -1137,7 +1144,7 @@ mod verify_threshold_sig_combined {
             &csp,
             &combined_sig,
             &message,
-            NI_DKG_ID_1,
+            &NI_DKG_ID_1,
         );
         assert_eq!(result.unwrap_err(), malformed_public_key());
     }
@@ -1152,7 +1159,7 @@ mod verify_threshold_sig_combined {
             &csp,
             &combined_sig,
             &message,
-            NI_DKG_ID_1,
+            &NI_DKG_ID_1,
         );
 
         let expected_error = CryptoError::InternalError {
@@ -1247,7 +1254,7 @@ mod verify_combined_threshold_sig_by_public_key {
             &csp_2,
             &combined_sig,
             &message,
-            NI_DKG_ID_1,
+            &NI_DKG_ID_1,
         );
     }
 
@@ -1640,7 +1647,7 @@ fn threshold_sig_data_store_with_coeffs_and_pubkey(
     let threshold_sig_data_store = LockableThresholdSigDataStore::new();
     {
         let mut locked_store = threshold_sig_data_store.write();
-        locked_store.insert_transcript_data(dkg_id, pub_coeffs(), BTreeMap::new());
+        locked_store.insert_transcript_data(dkg_id.clone(), pub_coeffs(), BTreeMap::new());
         locked_store.insert_individual_public_key(dkg_id, node_id, public_key);
     }
     threshold_sig_data_store

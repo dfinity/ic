@@ -102,7 +102,7 @@ pub fn create_payload(
             // Make sure the message relates to one of the ongoing DKGs and it's from a unique
             // dealer.
             last_dkg_summary.configs.contains_key(&msg.content.dkg_id)
-                && !dealers_from_chain.contains(&(msg.content.dkg_id, msg.signature.signer))
+                && !dealers_from_chain.contains(&(msg.content.dkg_id.clone(), msg.signature.signer))
         })
         .take(max_dealings_per_block)
         .cloned()
@@ -160,11 +160,11 @@ pub(super) fn create_summary_payload(
             Ok(transcript) => {
                 let previous_value_found = if dkg_id.target_subnet == NiDkgTargetSubnet::Local {
                     next_transcripts
-                        .insert(dkg_id.dkg_tag, transcript)
+                        .insert(dkg_id.dkg_tag.clone(), transcript)
                         .is_some()
                 } else {
                     transcripts_for_remote_subnets
-                        .insert(*dkg_id, Ok(transcript))
+                        .insert(dkg_id.clone(), Ok(transcript))
                         .is_some()
                 };
                 if previous_value_found {
@@ -199,7 +199,7 @@ pub(super) fn create_summary_payload(
             &last_summary
                 .transcripts_for_remote_subnets
                 .iter()
-                .map(|(id, _, result)| (*id, result.clone()))
+                .map(|(id, _, result)| (id.clone(), result.clone()))
                 .collect(),
             &last_summary.initial_dkg_attempts,
             &logger,
@@ -314,7 +314,7 @@ fn compute_remote_dkg_data(
                 .iter()
                 .find(|(id, _)| eq_sans_height(id, &dkg_id))
             {
-                new_transcripts.insert(*id, transcript.clone());
+                new_transcripts.insert(id.clone(), transcript.clone());
             }
             // If not, we check if we computed a transcript for this config in the last round. And
             // if not, we move the config into the new summary so that we try again in
@@ -493,7 +493,7 @@ pub(crate) fn get_configs_for_local_transcripts(
         let dkg_id = NiDkgId {
             start_block_height,
             dealer_subnet: subnet_id,
-            dkg_tag: *tag,
+            dkg_tag: tag.clone(),
             target_subnet: NiDkgTargetSubnet::Local,
         };
         let (dealers, resharing_transcript) = match tag {
@@ -701,9 +701,13 @@ fn create_remote_dkg_configs(
     };
 
     let low_thr_config =
-        do_create_remote_dkg_config(&low_thr_dkg_id, dealers, receivers, registry_version);
-    let high_thr_config =
-        do_create_remote_dkg_config(&high_thr_dkg_id, dealers, receivers, registry_version);
+        do_create_remote_dkg_config(low_thr_dkg_id.clone(), dealers, receivers, registry_version);
+    let high_thr_config = do_create_remote_dkg_config(
+        high_thr_dkg_id.clone(),
+        dealers,
+        receivers,
+        registry_version,
+    );
     let sibl_err = String::from("Failed to create the sibling config");
     match (low_thr_config, high_thr_config) {
         (Ok(config0), Ok(config1)) => Ok((config0, config1)),
@@ -733,20 +737,20 @@ fn create_remote_dkg_configs(
 }
 
 fn do_create_remote_dkg_config(
-    dkg_id: &NiDkgId,
+    dkg_id: NiDkgId,
     dealers: &BTreeSet<NodeId>,
     receivers: &BTreeSet<NodeId>,
     registry_version: &RegistryVersion,
 ) -> Result<NiDkgConfig, NiDkgConfigValidationError> {
     NiDkgConfig::new(NiDkgConfigData {
-        dkg_id: *dkg_id,
+        threshold: NumberOfNodes::from(
+            dkg_id.dkg_tag.threshold_for_subnet_of_size(receivers.len()) as u32,
+        ),
+        dkg_id,
         max_corrupt_dealers: NumberOfNodes::from(get_faults_tolerated(dealers.len()) as u32),
         max_corrupt_receivers: NumberOfNodes::from(get_faults_tolerated(receivers.len()) as u32),
         dealers: dealers.clone(),
         receivers: receivers.clone(),
-        threshold: NumberOfNodes::from(
-            dkg_id.dkg_tag.threshold_for_subnet_of_size(receivers.len()) as u32,
-        ),
         registry_version: *registry_version,
         resharing_transcript: None,
     })
@@ -845,7 +849,7 @@ mod tests {
                 NiDkgId {
                     start_block_height,
                     dealer_subnet: subnet_id,
-                    dkg_tag: *tag,
+                    dkg_tag: tag.clone(),
                     target_subnet: NiDkgTargetSubnet::Local,
                 }
             );
@@ -1180,7 +1184,7 @@ mod tests {
                     &NiDkgId {
                         start_block_height: Height::from(0),
                         dealer_subnet: subnet_id,
-                        dkg_tag: *tag,
+                        dkg_tag: tag.clone(),
                         target_subnet: NiDkgTargetSubnet::Local,
                     }
                 );
@@ -1285,7 +1289,7 @@ mod tests {
                         &NiDkgId {
                             start_block_height: Height::from(expected_height),
                             dealer_subnet: subnet_id,
-                            dkg_tag: *tag,
+                            dkg_tag: tag.clone(),
                             target_subnet: NiDkgTargetSubnet::Local,
                         }
                     );
