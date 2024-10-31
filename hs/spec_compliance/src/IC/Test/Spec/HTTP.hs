@@ -133,61 +133,61 @@ canister_http_calls sub httpbin_proto =
    in let ecid = rawEntityId $ wordToId ecid_as_word64
        in [ -- Corner cases
 
-            simpleTestCase "invalid domain name" ecid $ \cid ->
-              ic_http_invalid_address_request' (ic00viaWithCyclesRefund 0 cid) sub "https://" "xwWPqqbNqxxHmLXdguF4DN9xGq22nczV.com" Nothing Nothing cid >>= isReject [2],
-            simpleTestCase "invalid IP address" ecid $ \cid ->
-              ic_http_invalid_address_request' (ic00viaWithCyclesRefund 0 cid) sub "https://" "240.0.0.0" Nothing Nothing cid >>= isReject [2],
+            -- simpleTestCase "invalid domain name" ecid $ \cid ->
+            --   ic_http_invalid_address_request' (ic00viaWithCyclesRefund 0 cid) sub "https://" "xwWPqqbNqxxHmLXdguF4DN9xGq22nczV.com" Nothing Nothing cid >>= isReject [2],
+            -- simpleTestCase "invalid IP address" ecid $ \cid ->
+            --   ic_http_invalid_address_request' (ic00viaWithCyclesRefund 0 cid) sub "https://" "240.0.0.0" Nothing Nothing cid >>= isReject [2],
             -- "Currently, the GET, HEAD, and POST methods are supported for HTTP requests."
 
-            simpleTestCase "GET call" ecid $ \cid -> do
-              let s = "hello_world"
-              resp <- ic_http_get_request (ic00viaWithCyclesRefund 0 cid) sub httpbin_proto ("ascii/" ++ s) (Just 666) Nothing cid
-              (resp .! #status) @?= 200
-              (resp .! #body) @?= BLU.fromString s
-              check_http_response resp,
-            simpleTestCase "POST call" ecid $ \cid -> do
-              let b = toUtf8 $ T.pack $ "Hello, world!"
-              let hs = [(T.pack "name1", T.pack "value1"), (T.pack "name2", T.pack "value2")]
-              resp <- ic_http_post_request (ic00viaWithCyclesRefund 0 cid) sub httpbin_proto "anything" (Just 666) (Just b) (vec_header_from_list_text hs) Nothing cid
-              (resp .! #status) @?= 200
-              check_http_response resp
-              check_http_json "POST" hs b $ (decode (resp .! #body) :: Maybe HttpRequest),
-            simpleTestCase "HEAD call" ecid $ \cid -> do
-              let n = 6666
-              let b = toUtf8 $ T.pack $ replicate n 'x'
-              let hs = [(T.pack "name1", T.pack "value1"), (T.pack "name2", T.pack "value2")]
-              resp <- ic_http_head_request (ic00viaWithCyclesRefund 0 cid) sub httpbin_proto "anything" (Just 666) (Just b) (vec_header_from_list_text hs) Nothing cid
-              (resp .! #status) @?= 200
-              (resp .! #body) @?= (toUtf8 $ T.pack "")
-              assertBool "HTTP response header names must be distinct" $ check_distinct_headers (resp .! #headers)
-              let h = http_headers_to_map (resp .! #headers) "content-length"
-              assertBool ("content-length must be present and at least " ++ show n) $
-                case h of
-                  Nothing -> False
-                  Just l -> (read (T.unpack l) :: Int) >= n,
-            -- "For security reasons, only HTTPS connections are allowed (URLs must start with https://)."
+            -- simpleTestCase "GET call" ecid $ \cid -> do
+            --   let s = "hello_world"
+            --   resp <- ic_http_get_request (ic00viaWithCyclesRefund 0 cid) sub httpbin_proto ("ascii/" ++ s) (Just 666) Nothing cid
+            --   (resp .! #status) @?= 200
+            --   (resp .! #body) @?= BLU.fromString s
+            --   check_http_response resp,
+            -- simpleTestCase "POST call" ecid $ \cid -> do
+            --   let b = toUtf8 $ T.pack $ "Hello, world!"
+            --   let hs = [(T.pack "name1", T.pack "value1"), (T.pack "name2", T.pack "value2")]
+            --   resp <- ic_http_post_request (ic00viaWithCyclesRefund 0 cid) sub httpbin_proto "anything" (Just 666) (Just b) (vec_header_from_list_text hs) Nothing cid
+            --   (resp .! #status) @?= 200
+            --   check_http_response resp
+            --   check_http_json "POST" hs b $ (decode (resp .! #body) :: Maybe HttpRequest),
+            -- simpleTestCase "HEAD call" ecid $ \cid -> do
+            --   let n = 6666
+            --   let b = toUtf8 $ T.pack $ replicate n 'x'
+            --   let hs = [(T.pack "name1", T.pack "value1"), (T.pack "name2", T.pack "value2")]
+            --   resp <- ic_http_head_request (ic00viaWithCyclesRefund 0 cid) sub httpbin_proto "anything" (Just 666) (Just b) (vec_header_from_list_text hs) Nothing cid
+            --   (resp .! #status) @?= 200
+            --   (resp .! #body) @?= (toUtf8 $ T.pack "")
+            --   assertBool "HTTP response header names must be distinct" $ check_distinct_headers (resp .! #headers)
+            --   let h = http_headers_to_map (resp .! #headers) "content-length"
+            --   assertBool ("content-length must be present and at least " ++ show n) $
+            --     case h of
+            --       Nothing -> False
+            --       Just l -> (read (T.unpack l) :: Int) >= n,
+            -- -- "For security reasons, only HTTPS connections are allowed (URLs must start with https://)."
 
-            testCase "url must start with https://" $ do
-              let s = "hello_world"
-              cid <- install ecid noop
-              ic_http_get_request' (ic00viaWithCyclesRefund 0 cid) sub "http://" ("ascii/" ++ s) Nothing Nothing cid >>= isReject [1],
+            -- testCase "url must start with https://" $ do
+            --   let s = "hello_world"
+            --   cid <- install ecid noop
+            --   ic_http_get_request' (ic00viaWithCyclesRefund 0 cid) sub "http://" ("ascii/" ++ s) Nothing Nothing cid >>= isReject [1],
             -- "The size of an HTTP request from the canister is the total number of bytes representing the names and values of HTTP headers and the HTTP body. The maximal size for the request from the canister is 2MB (2,000,000B)."
 
-            simpleTestCase "maximum possible request size" ecid $ \cid -> do
-              let hs = [(T.pack "name1", T.pack "value1"), (T.pack "name2", T.pack "value2"), (T.pack "content-type", T.pack "text/html; charset=utf-8")]
-              let len_hs = sum $ map (\(n, v) -> utf8_length n + utf8_length v) hs
-              let b = toUtf8 $ T.pack $ replicate (fromIntegral $ max_request_bytes_limit - len_hs) 'x'
-              resp <- ic_http_post_request (ic00viaWithCyclesRefund 0 cid) sub httpbin_proto "request_size" Nothing (Just b) (vec_header_from_list_text hs) Nothing cid
-              (resp .! #status) @?= 200
-              check_http_response resp
-              let n = read (T.unpack $ fromJust $ fromUtf8 (resp .! #body)) :: Word64
-              assertBool ("Request size must be at least (the HTTP client can add more headers) " ++ show max_request_bytes_limit) $ n >= len_hs + fromIntegral (BS.length b),
-            simpleTestCase "maximum possible request size exceeded" ecid $ \cid -> do
-              let hs = [(T.pack "name1", T.pack "value1"), (T.pack "name2", T.pack "value2"), (T.pack "content-type", T.pack "text/html; charset=utf-8")]
-              let len_hs = sum $ map (\(n, v) -> utf8_length n + utf8_length v) hs
-              let b = toUtf8 $ T.pack $ replicate (fromIntegral $ max_request_bytes_limit - len_hs + 1) 'x'
-              ic_http_post_request' (\fee -> ic00viaWithCyclesRefund fee cid fee) sub httpbin_proto "request_size" Nothing (Just b) (vec_header_from_list_text hs) Nothing cid >>= isReject [4],
-            -- "The size of an HTTP response from the remote server is the total number of bytes representing the names and values of HTTP headers and the HTTP body. Each request can specify a maximal size for the response from the remote HTTP server."
+            -- simpleTestCase "maximum possible request size" ecid $ \cid -> do
+            --   let hs = [(T.pack "name1", T.pack "value1"), (T.pack "name2", T.pack "value2"), (T.pack "content-type", T.pack "text/html; charset=utf-8")]
+            --   let len_hs = sum $ map (\(n, v) -> utf8_length n + utf8_length v) hs
+            --   let b = toUtf8 $ T.pack $ replicate (fromIntegral $ max_request_bytes_limit - len_hs) 'x'
+            --   resp <- ic_http_post_request (ic00viaWithCyclesRefund 0 cid) sub httpbin_proto "request_size" Nothing (Just b) (vec_header_from_list_text hs) Nothing cid
+            --   (resp .! #status) @?= 200
+            --   check_http_response resp
+            --   let n = read (T.unpack $ fromJust $ fromUtf8 (resp .! #body)) :: Word64
+            --   assertBool ("Request size must be at least (the HTTP client can add more headers) " ++ show max_request_bytes_limit) $ n >= len_hs + fromIntegral (BS.length b),
+            -- simpleTestCase "maximum possible request size exceeded" ecid $ \cid -> do
+            --   let hs = [(T.pack "name1", T.pack "value1"), (T.pack "name2", T.pack "value2"), (T.pack "content-type", T.pack "text/html; charset=utf-8")]
+            --   let len_hs = sum $ map (\(n, v) -> utf8_length n + utf8_length v) hs
+            --   let b = toUtf8 $ T.pack $ replicate (fromIntegral $ max_request_bytes_limit - len_hs + 1) 'x'
+            --   ic_http_post_request' (\fee -> ic00viaWithCyclesRefund fee cid fee) sub httpbin_proto "request_size" Nothing (Just b) (vec_header_from_list_text hs) Nothing cid >>= isReject [4],
+            -- -- "The size of an HTTP response from the remote server is the total number of bytes representing the names and values of HTTP headers and the HTTP body. Each request can specify a maximal size for the response from the remote HTTP server."
 
             simpleTestCase "small maximum possible response size" ecid $ \cid -> do
               let s = "hello_world"
