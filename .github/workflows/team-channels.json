@@ -6,6 +6,7 @@
     "DRE": "eng-release-bots",
     "execution": "eng-execution-mrs",
     "FinInt": "eng-fi-mrs",
+    "idx": "eng-idx-alerts",
     "ic-support": "ic-support-notifications",
     "ic-interface-owners": "interface-owners",
     "ic-message-routing-owners": "eng-message-routing-mr",
