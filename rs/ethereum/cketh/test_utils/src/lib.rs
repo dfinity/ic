@@ -70,7 +70,7 @@ pub const DEFAULT_ERC20_DEPOSIT_LOG_INDEX: u64 = 0x42;
 pub const DEFAULT_BLOCK_HASH: &str =
     "0x82005d2f17b251900968f01b0ed482cb49b7e1d797342bc504904d442b64dbe4";
 pub const LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL: u64 = 3_956_206;
-pub const DEFAULT_BLOCK_NUMBER: u64 = 0x4132ec;
+pub const DEFAULT_BLOCK_NUMBER: u64 = 0x4132ec; //4_272_876
 pub const EXPECTED_BALANCE: u64 = 100_000_000_000_000_000 + CKETH_TRANSFER_FEE - 10_u64;
 pub const CKETH_WITHDRAWAL_AMOUNT: u64 = EXPECTED_BALANCE - CKETH_TRANSFER_FEE;
 pub const EFFECTIVE_GAS_PRICE: u64 = 4_277_923_390;
@@ -91,10 +91,14 @@ pub const DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS: &str =
     "0x221E931fbFcb9bd54DdD26cE6f5e29E98AdD01C0";
 pub const ETH_HELPER_CONTRACT_ADDRESS: &str = "0x907b6efc1a398fd88a8161b3ca02eec8eaf72ca1";
 pub const ERC20_HELPER_CONTRACT_ADDRESS: &str = "0xe1788e4834c896f1932188645cc36c54d1b80ac1";
+pub const DEPOSIT_WITH_SUBACCOUNT_HELPER_CONTRACT_ADDRESS: &str =
+    "0x2D39863d30716aaf2B7fFFd85Dd03Dda2BFC2E38";
 const RECEIVED_ETH_EVENT_TOPIC: &str =
     "0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435";
 const RECEIVED_ERC20_EVENT_TOPIC: &str =
     "0x4d69d0bd4287b7f66c548f90154dc81bc98f65a1b362775df5ae171a2ccd262b";
+const RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC: &str =
+    "0x918adbebdb8f3b36fc337ab76df10b147b2def5c9dd62cb3456d9aeca40e0b07";
 pub const HEADER_SIZE_LIMIT: u64 = 2 * 1024;
 
 pub struct CkEthSetup {
@@ -181,6 +185,12 @@ impl CkEthSetup {
         } else {
             CkEthSetup::new(env)
         }
+    }
+
+    pub fn add_support_for_subaccount(self) -> Self {
+        self.upgrade_minter_to_add_deposit_with_subaccount_helper_contract(
+            DEPOSIT_WITH_SUBACCOUNT_HELPER_CONTRACT_ADDRESS.to_string(),
+        )
     }
 
     pub fn deposit<T: Into<DepositParams>>(self, params: T) -> DepositFlow {
@@ -555,6 +565,17 @@ impl CkEthSetup {
     pub fn upgrade_minter_to_add_erc20_helper_contract(self, contract_address: String) -> Self {
         self.upgrade_minter(UpgradeArg {
             erc20_helper_contract_address: Some(contract_address),
+            ..Default::default()
+        });
+        self
+    }
+
+    pub fn upgrade_minter_to_add_deposit_with_subaccount_helper_contract(
+        self,
+        contract_address: String,
+    ) -> Self {
+        self.upgrade_minter(UpgradeArg {
+            deposit_with_subaccount_helper_contract_address: Some(contract_address),
             ..Default::default()
         });
         self

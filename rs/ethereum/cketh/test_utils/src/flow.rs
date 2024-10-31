@@ -1,16 +1,10 @@
 use crate::events::MinterEventAssert;
 use crate::mock::{JsonRpcMethod, MockJsonRpcProviders, MockJsonRpcProvidersBuilder};
 use crate::response::{
-    block_response, encode_transaction, fee_history, send_raw_transaction_response,
+    block_response, empty_logs, encode_transaction, fee_history, send_raw_transaction_response,
     transaction_count_response, transaction_receipt, EthLogEntry,
 };
-use crate::{
-    assert_reply, CkEthSetup, JsonRpcProvider, DEFAULT_BLOCK_NUMBER, DEFAULT_DEPOSIT_BLOCK_HASH,
-    DEFAULT_DEPOSIT_BLOCK_NUMBER, DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_DEPOSIT_LOG_INDEX,
-    DEFAULT_DEPOSIT_TRANSACTION_HASH, DEFAULT_DEPOSIT_TRANSACTION_INDEX, DEFAULT_PRINCIPAL_ID,
-    EFFECTIVE_GAS_PRICE, EXPECTED_BALANCE, GAS_USED, MAX_TICKS, MINTER_ADDRESS,
-    RECEIVED_ETH_EVENT_TOPIC,
-};
+use crate::{assert_reply, CkEthSetup, JsonRpcProvider, DEFAULT_BLOCK_NUMBER, DEFAULT_DEPOSIT_BLOCK_HASH, DEFAULT_DEPOSIT_BLOCK_NUMBER, DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_DEPOSIT_LOG_INDEX, DEFAULT_DEPOSIT_TRANSACTION_HASH, DEFAULT_DEPOSIT_TRANSACTION_INDEX, DEFAULT_PRINCIPAL_ID, DEFAULT_USER_SUBACCOUNT, EFFECTIVE_GAS_PRICE, EXPECTED_BALANCE, GAS_USED, LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MAX_TICKS, MINTER_ADDRESS, RECEIVED_ETH_EVENT_TOPIC, RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC};
 use candid::{Decode, Encode, Nat, Principal};
 use ethers_core::utils::{hex, rlp};
 use ic_base_types::{CanisterId, PrincipalId};
@@ -38,6 +32,7 @@ use std::time::Duration;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DepositParams {
     CkEth(DepositCkEthParams),
+    CkEthWithSubaccount(DepositCkEthWithSubaccountParams),
 }
 
 impl Default for DepositParams {
@@ -50,6 +45,7 @@ impl DepositParams {
     pub fn from_address(&self) -> &Address {
         match self {
             Self::CkEth(params) => &params.from_address,
+            Self::CkEthWithSubaccount(params) => &params.from_address,
         }
     }
 
@@ -59,24 +55,31 @@ impl DepositParams {
                 owner: params.recipient,
                 subaccount: None,
             },
+            Self::CkEthWithSubaccount(params) => Account {
+                owner: params.recipient,
+                subaccount: params.recipient_subaccount,
+            },
         }
     }
 
     pub fn amount(&self) -> u64 {
         match self {
             Self::CkEth(params) => params.amount,
+            Self::CkEthWithSubaccount(params) => params.amount,
         }
     }
 
     pub fn transaction_data(&self) -> &DepositTransactionData {
         match self {
             Self::CkEth(params) => &params.transaction_data,
+            Self::CkEthWithSubaccount(params) => &params.transaction_data,
         }
     }
 
     pub fn to_log_entry(&self) -> ethers_core::types::Log {
         match self {
             Self::CkEth(params) => params.to_log_entry(),
+            Self::CkEthWithSubaccount(params) => params.to_log_entry(),
         }
     }
 }
@@ -155,11 +158,66 @@ impl Default for DepositTransactionData {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DepositCkEthWithSubaccountParams {
     pub from_address: Address,
     pub recipient: Principal,
     pub recipient_subaccount: Option<[u8; 32]>,
     pub amount: u64,
+    pub transaction_data: DepositTransactionData,
+}
+
+impl Default for DepositCkEthWithSubaccountParams {
+    fn default() -> Self {
+        Self {
+            from_address: DEFAULT_DEPOSIT_FROM_ADDRESS.parse().unwrap(),
+            recipient: PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID).into(),
+            recipient_subaccount: Some(DEFAULT_USER_SUBACCOUNT),
+            amount: EXPECTED_BALANCE,
+            transaction_data: DepositTransactionData::default(),
+        }
+    }
+}
+
+impl DepositCkEthWithSubaccountParams {
+    pub fn to_log_entry(&self) -> ethers_core::types::Log {
+        let data = {
+            let amount_hex = format!("{:0>64x}", self.amount);
+            assert_eq!(amount_hex.len(), 64);
+            let subaccount = hex::encode(self.recipient_subaccount.unwrap_or([0; 32]));
+            assert_eq!(amount_hex.len(), 64);
+            format!("0x{}{}", amount_hex, subaccount)
+        };
+
+        let topics = vec![
+            RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC.to_string(),
+            "0x0000000000000000000000000000000000000000000000000000000000000000".to_string(), //erc20Address is set to 0
+            format!(
+                "0x000000000000000000000000{}",
+                hex::encode(self.from_address.as_ref())
+            ),
+            encode_principal(self.recipient),
+        ];
+
+        let json_value = json!({
+            "address": "0xb44b5e756a894775fc32eddf3314bb1b1944dc34",
+            "blockHash": self.transaction_data.block_hash,
+            "blockNumber": format!("0x{:x}", self.transaction_data.block_number),
+            "data": data,
+            "logIndex": format!("0x{:x}", self.transaction_data.log_index),
+            "removed": false,
+            "topics": topics,
+            "transactionHash": self.transaction_data.transaction_hash,
+            "transactionIndex": format!("0x{:x}", self.transaction_data.transaction_index),
+        });
+        serde_json::from_value(json_value).expect("BUG: invalid log entry")
+    }
+}
+
+impl From<DepositCkEthWithSubaccountParams> for DepositParams {
+    fn from(value: DepositCkEthWithSubaccountParams) -> Self {
+        Self::CkEthWithSubaccount(value)
+    }
 }
 
 pub struct DepositFlow {
@@ -262,16 +320,29 @@ impl DepositFlow {
     }
 
     fn handle_deposit_until_block(&mut self, block_number: u64) {
+        let max_eth_logs_block_range = self.setup.max_logs_block_range();
+        let latest_finalized_block =
+            LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1 + max_eth_logs_block_range;
         self.setup.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
 
         let default_get_block_by_number =
             MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
-                .respond_for_all_with(block_response(block_number));
+                .respond_for_all_with(block_response(latest_finalized_block));
         (self.override_rpc_eth_get_block_by_number)(default_get_block_by_number)
             .build()
             .expect_rpc_calls(&self.setup);
 
         self.setup.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+
+        MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
+            .respond_for_all_with(empty_logs())
+            .build()
+            .expect_rpc_calls(&self.setup);
+
+        // MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
+        //     .respond_for_all_with(empty_logs())
+        //     .build()
+        //     .expect_rpc_calls(&self.setup);
 
         let default_eth_get_logs = MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
             .respond_for_all_with(vec![self.params.to_log_entry()]);

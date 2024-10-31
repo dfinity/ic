@@ -1,27 +1,27 @@
 use candid::{Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_cketh_minter::memo::MintMemo;
+use ic_cketh_test_utils::flow::{DepositCkEthParams, DepositCkEthWithSubaccountParams};
 use ic_cketh_test_utils::{
     flow::DepositParams, CkEthSetup, CKETH_WITHDRAWAL_AMOUNT, DEFAULT_DEPOSIT_FROM_ADDRESS,
     DEFAULT_DEPOSIT_LOG_INDEX, DEFAULT_DEPOSIT_TRANSACTION_HASH, DEFAULT_PRINCIPAL_ID,
     DEFAULT_USER_SUBACCOUNT, DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS, EXPECTED_BALANCE,
 };
-use ic_cketh_test_utils::flow::DepositCkEthParams;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
 use icrc_ledger_types::icrc3::transactions::Mint;
 
 #[test]
 fn should_deposit_and_withdraw_cketh() {
-    let cketh = CkEthSetup::default_with_maybe_evm_rpc();
+    let cketh = CkEthSetup::default_with_maybe_evm_rpc().add_support_for_subaccount();
     let minter: Principal = cketh.minter_id.into();
     let caller: Principal = cketh.caller.into();
     let withdrawal_amount = Nat::from(CKETH_WITHDRAWAL_AMOUNT);
     let destination = DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string();
 
     let cketh = cketh
-        .deposit(DepositCkEthParams {
-            // recipient_subaccount: Some(DEFAULT_USER_SUBACCOUNT),
+        .deposit(DepositCkEthWithSubaccountParams {
+            recipient_subaccount: Some(DEFAULT_USER_SUBACCOUNT),
             ..Default::default()
         })
         .expect_mint()
