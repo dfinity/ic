@@ -898,7 +898,7 @@ fn test_hotkey_management() {
                     assert_eq!(neuron.hot_keys.len(), 1);
                     assert_eq!(
                         neuron.hot_keys.first().unwrap().0,
-                        hot_key_identity.sender().unwrap().into()
+                        hot_key_identity.sender().unwrap()
                     );
 
                     // Remove the hot key from the neuron
@@ -944,7 +944,7 @@ fn test_hotkey_management() {
                     assert_eq!(neuron.hot_keys.len(), 1);
                     assert_eq!(
                         neuron.hot_keys.first().unwrap().0,
-                        hot_key_identity.sender().unwrap().into()
+                        hot_key_identity.sender().unwrap()
                     );
 
                     // Remove the hot key from the neuron
