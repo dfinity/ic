@@ -5982,8 +5982,8 @@ impl Governance {
 
         if let Err(err) = result {
             println!(
-                "{}WARNING: Tried to update the voting power of {}, \
-                 but where neuron? {}",
+                "{}WARNING: Tried to refresh the voting power of neuron {}, \
+                 but was unable to find it: {}",
                 LOG_PREFIX, neuron_id.id, err,
             );
         }
