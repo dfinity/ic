@@ -46,7 +46,7 @@ rust_library(
 
 rust_test_suite(
     name = "test",
-    size = "medium",
+    size = "small",
     srcs = ["tests/tests.rs"],
     data = [
         "//packages/pocket-ic/test_canister:test_canister.wasm",

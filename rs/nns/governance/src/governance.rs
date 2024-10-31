@@ -5786,7 +5786,7 @@ impl Governance {
                                     neuron_store.get_followers_by_followee_and_topic(*k, topic),
                                 );
                                 // Default following doesn't apply to governance or SNS
-                                // decentralization sale proposals.
+                                // decentralization swap proposals.
                                 if ![Topic::Governance, Topic::SnsAndCommunityFund].contains(&topic)
                                 {
                                     // Insert followers from 'Unspecified' (default followers)

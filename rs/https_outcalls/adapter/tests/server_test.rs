@@ -402,10 +402,18 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             response.as_ref().unwrap_err().code(),
             tonic::Code::Unavailable
         );
-        assert!(response
-            .unwrap_err()
-            .message()
-            .contains(&"error sending request for url".to_string()));
+
+        let response_error = response.unwrap_err();
+        let actual_error_message = response_error.message();
+
+        let expected_error_message = "Error(Connect, ConnectError(\"tcp connect error\", Custom { kind: TimedOut, error: Elapsed(()) }))";
+
+        assert!(
+            actual_error_message.contains(expected_error_message),
+            "Expected error message to contain, {}, got: {}",
+            expected_error_message,
+            actual_error_message
+        );
     }
 
     #[tokio::test]

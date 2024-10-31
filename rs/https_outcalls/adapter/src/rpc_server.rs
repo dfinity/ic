@@ -249,8 +249,6 @@ impl HttpsOutcallsService for CanisterHttp {
         }
 
         // Important: we should not read the whole body at once, because it might be too big.
-        // Once we've confirmed that the body is not too big, we can load it using bytes().
-        // Initialize a mutable BytesMut buffer
         let mut buffer = BytesMut::new();
         let mut total_bytes = 0;
         loop {

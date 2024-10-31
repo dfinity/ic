@@ -148,6 +148,11 @@ pub mod fixtures;
 // https://github.com/rust-lang/rust/issues/46379
 pub mod common;
 
+// Some time in Oct, 2024. There is nothing magical about this value. The only
+// thing special about it is that it is "realistic". This was chosen by simply
+// looking at the clock.
+const START_TIMESTAMP_SECONDS: u64 = 1730132754;
+
 lazy_static! {
     static ref RANDOM_PRINCIPAL_ID: PrincipalId = PrincipalId::new_user_test_id(0xDEAD_BEEF);
 }
@@ -4271,7 +4276,7 @@ fn governance_with_staked_neuron(
     });
 
     let driver = fake::FakeDriver::default()
-        .at(56)
+        .at(START_TIMESTAMP_SECONDS)
         .with_ledger_accounts(vec![fake::FakeAccount {
             id: AccountIdentifier::new(
                 ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID),
@@ -4360,6 +4365,7 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(dissolve_delay_seconds)),
             kyc_verified: true,
             visibility,
+            voting_power_refreshed_timestamp_seconds: Some(START_TIMESTAMP_SECONDS),
             ..Default::default()
         }
     );
@@ -10051,6 +10057,8 @@ fn test_include_public_neurons_in_full_neurons() {
             controller: Some(controller),
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(ONE_YEAR_SECONDS)),
             aging_since_timestamp_seconds: 1_721_727_936,
+            voting_power_refreshed_timestamp_seconds: Some(START_TIMESTAMP_SECONDS),
+
             ..Default::default()
         }
     };
@@ -10080,7 +10088,7 @@ fn test_include_public_neurons_in_full_neurons() {
 
     let total_icp_suppply = Tokens::new(200, 0).unwrap();
     let driver = fake::FakeDriver::default()
-        .at(60 * 60 * 24 * 30)
+        .at(START_TIMESTAMP_SECONDS)
         .with_supply(total_icp_suppply);
     let governance = Governance::new(
         governance_proto,
@@ -10122,6 +10130,9 @@ fn test_include_public_neurons_in_full_neurons() {
 
     if is_private_neuron_enforcement_enabled() {
         for neuron in &mut expected_full_neurons {
+            if neuron.known_neuron_data.is_some() {
+                neuron.visibility = Some(Visibility::Public as i32);
+            }
             let visibility = &mut neuron.visibility;
             if visibility.is_none() {
                 *visibility = Some(Visibility::Private as i32);
@@ -10129,7 +10140,7 @@ fn test_include_public_neurons_in_full_neurons() {
         }
     }
 
-    assert_eq!(list_neurons_response.full_neurons, expected_full_neurons,);
+    assert_eq!(list_neurons_response.full_neurons, expected_full_neurons);
 }
 
 /// Struct to help with the wait for quiet tests.
@@ -14138,15 +14149,20 @@ fn test_neuron_info_private_enforcement() {
         ];
         main(neuron_id_to_expect_redact);
 
-        // Insepct visibility. This time, it should always be None.
-        for neuron_id in [
-            no_explicit_visibility_neuron.id.unwrap(),
-            private_neuron.id.unwrap(),
-            public_neuron.id.unwrap(),
-            known_neuron.id.unwrap(),
+        // Insepct visibility. This time, the no explicit visibility neuron is shown as such.
+        for (neuron_id, expected_visibility) in [
+            (no_explicit_visibility_neuron.id.unwrap(), None),
+            (private_neuron.id.unwrap(), Some(Visibility::Private)),
+            (public_neuron.id.unwrap(), Some(Visibility::Public)),
+            (known_neuron.id.unwrap(), Some(Visibility::Public)),
         ] {
             let neuron_info = governance.get_neuron_info(&neuron_id, controller).unwrap();
-            assert_eq!(neuron_info.visibility, None, "{:?}", neuron_info,);
+            assert_eq!(
+                neuron_info.visibility,
+                expected_visibility.map(|visibility| visibility as i32),
+                "{:?}",
+                neuron_info,
+            );
         }
     }
 }

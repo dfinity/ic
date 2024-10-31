@@ -28,14 +28,14 @@ use ic_types::{
     batch::{Batch, BatchMessages, BatchSummary, BlockmakerMetrics, ConsensusResponse},
     consensus::{
         idkg::{self, CompletedSignature},
-        Block,
+        Block, HasVersion,
     },
     crypto::threshold_sig::{
         ni_dkg::{NiDkgId, NiDkgTag, NiDkgTranscript},
         ThresholdSigPublicKey,
     },
     messages::{CallbackId, Payload, RejectContext},
-    Height, PrincipalId, Randomness, ReplicaVersion, SubnetId,
+    Height, PrincipalId, Randomness, SubnetId,
 };
 use std::collections::BTreeMap;
 
@@ -49,7 +49,6 @@ pub fn deliver_batches(
     pool: &PoolReader<'_>,
     registry_client: &dyn RegistryClient,
     subnet_id: SubnetId,
-    current_replica_version: ReplicaVersion,
     log: &ReplicaLogger,
     // This argument should only be used by the ic-replay tool. If it is set to `None`, we will
     // deliver all batches until the finalized height. If it is set to `Some(h)`, we will
@@ -92,6 +91,7 @@ pub fn deliver_batches(
             );
             break;
         };
+        let replica_version = block.version().clone();
         debug!(
             every_n_seconds => 5,
             log,
@@ -99,7 +99,7 @@ pub fn deliver_batches(
             consensus => ConsensusLogEntry {
                 height: Some(height.get()),
                 hash: Some(get_block_hash_string(&block)),
-                replica_version: Some(String::from(current_replica_version.clone()))
+                replica_version: Some(String::from(&replica_version))
             }
         );
 
@@ -233,15 +233,9 @@ pub fn deliver_batches(
             time: block.context.time,
             consensus_responses,
             blockmaker_metrics,
+            replica_version,
         };
 
-        debug!(
-            log,
-            "replica {:?} delivered batch {:?} for block_hash {:?}",
-            current_replica_version,
-            batch_stats.batch_height,
-            block_stats.block_hash
-        );
         let result = message_routing.deliver_batch(batch);
         if let Some(f) = result_processor {
             f(&result, block_stats, batch_stats);

@@ -1101,6 +1101,7 @@ mod tests {
                 fake_schnorr_master_public_key_id(SchnorrAlgorithm::Ed25519)
             }
             MasterPublicKeyId::Schnorr(_) => fake_ecdsa_master_public_key_id(),
+            MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
         };
 
         // Set up the signature requests
@@ -1288,6 +1289,7 @@ mod tests {
                 let expected_complaints_count = match key_id {
                     MasterPublicKeyId::Ecdsa(_) => requested_signatures_count * 5,
                     MasterPublicKeyId::Schnorr(_) => requested_signatures_count * 2,
+                    MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
                 };
                 let complaints = transcript_loader.returned_complaints();
                 assert_eq!(change_set.len(), complaints.len());
@@ -1368,6 +1370,7 @@ mod tests {
                             ThresholdSigInputs::Schnorr(inputs),
                         )
                     }
+                    MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
                 };
                 let crypto = env
                     .nodes
@@ -1548,6 +1551,7 @@ mod tests {
                 fake_schnorr_master_public_key_id(SchnorrAlgorithm::Ed25519)
             }
             MasterPublicKeyId::Schnorr(_) => fake_ecdsa_master_public_key_id(),
+            MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
         };
         let message = create_signature_share(&key_id_wrong_scheme, NODE_2, id_2.clone());
         let msg_id_2 = message.message_id();
