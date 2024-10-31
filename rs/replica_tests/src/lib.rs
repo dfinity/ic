@@ -1,6 +1,6 @@
 use core::future::Future;
 use ic_base_types::{PrincipalId, SubnetId};
-use ic_canister_client_sender::Sender;
+use ic_canister_client_sender::{Sender as CanisterSender};
 use ic_config::{crypto::CryptoConfig, transport::TransportConfig, Config};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_execution_environment::IngressHistoryReaderImpl;
@@ -53,7 +53,7 @@ use std::{
     thread::sleep,
     time::{Duration, Instant},
 };
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::Sender;
 use tower::{buffer::Buffer as TowerBuffer, ServiceExt};
 
 const CYCLES_BALANCE: u128 = 1 << 120;
@@ -72,7 +72,7 @@ fn process_ingress(
 ) -> Result<WasmResult, UserError> {
     let msg_id = msg.id();
     ingress_tx
-        .send(UnvalidatedArtifactMutation::Insert((msg, node_test_id(1))))
+        .blocking_send(UnvalidatedArtifactMutation::Insert((msg, node_test_id(1))))
         .unwrap();
 
     let start = Instant::now();
@@ -666,7 +666,7 @@ impl LocalTestRuntime {
         canister_id: CanisterId,
         method_name: M,
         payload: P,
-        sender: &Sender,
+        sender: &CanisterSender,
     ) -> Result<WasmResult, UserError> {
         process_ingress(
             &self.ingress_sender,
