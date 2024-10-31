@@ -1,5 +1,3 @@
-#![allow(clippy::unwrap_used)]
-
 use ic_crypto_internal_basic_sig_ecdsa_secp256k1::{types, *};
 
 // SECP256K1_PK_1_DER_HEX was generated via the following commands:

@@ -50,7 +50,7 @@ use std::mem::size_of;
 use std::time::Duration;
 
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000);
-const BALANCE_EPSILON: Cycles = Cycles::new(10_000_000);
+const BALANCE_EPSILON: Cycles = Cycles::new(12_000_000);
 
 #[test]
 fn ic0_canister_status_works() {
@@ -2110,7 +2110,7 @@ fn ic0_call_cycles_add_deducts_cycles() {
             (data (i32.const 0) "some_remote_method XYZ")
             (data (i32.const 100) "\09\03\00\00\00\00\00\00\ff\01")
         )"#;
-    let initial_cycles = Cycles::new(121_000_000_000);
+    let initial_cycles = Cycles::new(301_000_000_000);
     let canister_id = test
         .canister_from_cycles_and_wat(initial_cycles, wat)
         .unwrap();
@@ -2131,7 +2131,11 @@ fn ic0_call_cycles_add_deducts_cycles() {
             MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
             test.subnet_size(),
         )
-        + mgr.execution_cost(MAX_NUM_INSTRUCTIONS, test.subnet_size());
+        + mgr.execution_cost(
+            MAX_NUM_INSTRUCTIONS,
+            test.subnet_size(),
+            test.canister_wasm_execution_mode(canister_id),
+        );
     let transferred_cycles = Cycles::new(10_000_000_000);
     assert_eq!(
         initial_cycles - messaging_fee - transferred_cycles - test.execution_cost(),
@@ -2169,7 +2173,7 @@ fn ic0_call_cycles_add_has_no_effect_without_ic0_call_perform() {
             (data (i32.const 100) "\09\03\00\00\00\00\00\00\ff\01")
         )"#;
 
-    let initial_cycles = Cycles::new(121_000_000_000);
+    let initial_cycles = Cycles::new(301_000_000_000);
     let canister_id = test
         .canister_from_cycles_and_wat(initial_cycles, wat)
         .unwrap();
@@ -5121,9 +5125,11 @@ fn dts_abort_works_in_update_call() {
     assert_eq!(
         test.canister_state(canister_id).system_state.balance(),
         original_system_state.balance()
-            - test
-                .cycles_account_manager()
-                .execution_cost(NumInstructions::from(100_000_000), test.subnet_size()),
+            - test.cycles_account_manager().execution_cost(
+                NumInstructions::from(100_000_000),
+                test.subnet_size(),
+                test.canister_wasm_execution_mode(canister_id)
+            ),
     );
     assert_eq!(
         test.canister_state(canister_id)
@@ -5152,9 +5158,11 @@ fn dts_abort_works_in_update_call() {
     assert_eq!(
         test.canister_state(canister_id).system_state.balance(),
         original_system_state.balance()
-            - test
-                .cycles_account_manager()
-                .execution_cost(NumInstructions::from(100_000_000), test.subnet_size()),
+            - test.cycles_account_manager().execution_cost(
+                NumInstructions::from(100_000_000),
+                test.subnet_size(),
+                test.canister_wasm_execution_mode(canister_id)
+            ),
     );
     assert_eq!(
         test.canister_state(canister_id)
@@ -7834,12 +7842,10 @@ fn ic0_mint_cycles_u64() {
     }
     let result = test.ingress(canister_id, "test", vec![]);
     assert_empty_reply(result);
-    assert!(
-        test.canister_state(canister_id)
-            .system_state
-            .balance()
-            .get()
-            >= 2 * (1 << 64) - 10_000_000
+    assert_balance_equals(
+        test.canister_state(canister_id).system_state.balance(),
+        Cycles::new(2 * (1 << 64)),
+        BALANCE_EPSILON,
     );
 }
 
