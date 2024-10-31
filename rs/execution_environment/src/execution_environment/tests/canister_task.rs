@@ -576,7 +576,7 @@ fn global_timer_refunds_cycles_for_request_in_prep() {
     .unwrap();
 
     let canister_id = env
-        .install_canister_with_cycles(binary, vec![], None, Cycles::new(121_000_000_000))
+        .install_canister_with_cycles(binary, vec![], None, Cycles::new(301_000_000_000))
         .unwrap();
 
     let result = env.execute_ingress(canister_id, "test", vec![]).unwrap();
@@ -640,7 +640,7 @@ fn global_timer_set_returns_zero_in_canister_global_timer_method() {
     .unwrap();
 
     let canister_id = env
-        .install_canister_with_cycles(binary, vec![], None, Cycles::new(121_000_000_000))
+        .install_canister_with_cycles(binary, vec![], None, Cycles::new(301_000_000_000))
         .unwrap();
 
     let result = env

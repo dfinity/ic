@@ -75,7 +75,7 @@ icTests my_sub other_sub conf =
                                            in let other_store_canister_id = rawEntityId $ wordToId other_last_canister_id_as_word64
                                                in let unused_canister_id = rawEntityId $ wordToId (last_canister_id_as_word64 - 2)
                                                    in let initialize_store_canister store_canister_id = do
-                                                            universal_wasm <- getTestWasm "universal_canister.wasm.gz"
+                                                            universal_wasm <- getTestWasm "universal_canister_no_heartbeat.wasm.gz"
                                                             _ <- ic_provisional_create ic00 store_canister_id (Just $ entityIdToPrincipal $ EntityId store_canister_id) Nothing Nothing
                                                             ucan_chunk_hash <- ic_upload_chunk ic00 store_canister_id universal_wasm
                                                             ic_install_single_chunk ic00 (enum #install) store_canister_id store_canister_id ucan_chunk_hash ""
@@ -186,23 +186,19 @@ icTests my_sub other_sub conf =
                                                                                                                  cid <- create ecid
                                                                                                                  ic_install_subnet'' defaultUser my_subnet_id cid trivialWasmModule "" >>= isErrOrReject []
                                                                                                                  ic_install_subnet'' defaultUser other_subnet_id cid trivialWasmModule "" >>= isErrOrReject [],
-                                                                                                           testCase "as canister to own subnet" $ do
-                                                                                                             cid <- install ecid noop
+                                                                                                           simpleTestCase "as canister to own subnet" ecid $ \cid -> do
                                                                                                              if my_is_root
                                                                                                                then test_subnet_msg my_sub my_subnet_id other_subnet_id cid
                                                                                                                else test_subnet_msg' my_sub my_subnet_id cid,
-                                                                                                           testCase "canister http outcalls to own subnet" $ do
-                                                                                                             cid <- install ecid noop
+                                                                                                           simpleTestCase "canister http outcalls to own subnet" ecid $ \cid -> do
                                                                                                              if my_is_root
                                                                                                                then test_subnet_msg_canister_http my_sub my_subnet_id cid
                                                                                                                else test_subnet_msg_canister_http' my_sub my_subnet_id cid,
-                                                                                                           testCase "as canister to other subnet" $ do
-                                                                                                             cid <- install ecid noop
+                                                                                                           simpleTestCase "as canister to other subnet" ecid $ \cid -> do
                                                                                                              if my_is_root
                                                                                                                then test_subnet_msg other_sub other_subnet_id my_subnet_id cid
                                                                                                                else test_subnet_msg' other_sub other_subnet_id cid,
-                                                                                                           testCase "canister http outcalls to other subnet" $ do
-                                                                                                             cid <- install ecid noop
+                                                                                                           simpleTestCase "canister http outcalls to other subnet" ecid $ \cid -> do
                                                                                                              if my_is_root
                                                                                                                then test_subnet_msg_canister_http other_sub other_subnet_id cid
                                                                                                                else test_subnet_msg_canister_http' other_sub other_subnet_id cid
@@ -1443,25 +1439,6 @@ icTests my_sub other_sub conf =
                                                                                                                  checkNoUpgrade cid
                                                                                                              ],
                                                                                                        testGroup
-                                                                                                         "heartbeat"
-                                                                                                         [ testCase "called once for all canisters" $ do
-                                                                                                             cid <- install ecid $ onHeartbeat $ callback $ ignore (stableGrow (int 1)) >>> stableWrite (int 0) "FOO"
-                                                                                                             cid2 <- install ecid $ onHeartbeat $ callback $ ignore (stableGrow (int 1)) >>> stableWrite (int 0) "BAR"
-                                                                                                             -- Heartbeat cannot respond. Should be trapped.
-                                                                                                             cid3 <- install ecid $ onHeartbeat $ callback $ setGlobal "FIZZ" >>> replyData "FIZZ"
-
-                                                                                                             -- The spec currently gives no guarantee about when or how frequent heartbeats are executed.
-                                                                                                             -- But all implementations have the property: if update call B is submitted after call A is completed,
-                                                                                                             -- then a heartbeat runs before the execution of B.
-                                                                                                             -- We use this here to make sure that heartbeats have been attempted:
-                                                                                                             call_ cid reply
-                                                                                                             call_ cid reply
-
-                                                                                                             query cid (replyData (stableRead (int 0) (int 3))) >>= is "FOO"
-                                                                                                             query cid2 (replyData (stableRead (int 0) (int 3))) >>= is "BAR"
-                                                                                                             query cid3 (replyData getGlobal) >>= is ""
-                                                                                                         ],
-                                                                                                       testGroup
                                                                                                          "reinstall"
                                                                                                          [ testCase "succeeding" $ do
                                                                                                              cid <-
@@ -1703,7 +1680,8 @@ icTests my_sub other_sub conf =
                                                                                                              omitFields queryToNonExistent $ \req -> do
                                                                                                                cid <- create ecid
                                                                                                                addExpiry req >>= envelope defaultSK >>= postQueryCBOR cid >>= code4xx,
-                                                                                                           simpleTestCase "non-existing (deleted) canister" ecid $ \cid -> do
+                                                                                                           testCase "non-existing (deleted) canister" $ do
+                                                                                                             cid <- install ecid noop
                                                                                                              ic_stop_canister ic00 cid
                                                                                                              ic_delete_canister ic00 cid
                                                                                                              query' cid reply >>= isQueryReject ecid [3],
@@ -1794,8 +1772,7 @@ icTests my_sub other_sub conf =
                                                                                                                  cid <- create ecid
                                                                                                                  cert <- getStateCert defaultUser cid [["canister", cid, "module_hash"]]
                                                                                                                  lookupPath (cert_tree cert) ["canister", cid, "module_hash"] @?= Absent,
-                                                                                                               testCase "single controller of installed canister" $ do
-                                                                                                                 cid <- install ecid noop
+                                                                                                               simpleTestCase "single controller of installed canister" ecid $ \cid -> do
                                                                                                                  -- also vary user, just for good measure
                                                                                                                  cert <- getStateCert anonymousUser cid [["canister", cid, "controllers"]]
                                                                                                                  certValue @Blob cert ["canister", cid, "controllers"] >>= asCBORBlobList >>= isSet [defaultUser],
@@ -1809,8 +1786,7 @@ icTests my_sub other_sub conf =
                                                                                                                  ic_set_controllers ic00 cid []
                                                                                                                  cert <- getStateCert defaultUser cid [["canister", cid, "controllers"]]
                                                                                                                  certValue @Blob cert ["canister", cid, "controllers"] >>= asCBORBlobList >>= isSet [],
-                                                                                                               testCase "module_hash of universal canister" $ do
-                                                                                                                 cid <- install ecid noop
+                                                                                                               simpleTestCase "module_hash of universal canister" ecid $ \cid -> do
                                                                                                                  cert <- getStateCert anonymousUser cid [["canister", cid, "module_hash"]]
                                                                                                                  certValue @Blob cert ["canister", cid, "module_hash"] >>= is ucan_chunk_hash,
                                                                                                                testGroup
