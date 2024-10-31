@@ -1,6 +1,6 @@
 use core::future::Future;
 use ic_base_types::{PrincipalId, SubnetId};
-use ic_canister_client_sender::{Sender as CanisterSender};
+use ic_canister_client_sender::Sender as CanisterSender;
 use ic_config::{crypto::CryptoConfig, transport::TransportConfig, Config};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_execution_environment::IngressHistoryReaderImpl;
