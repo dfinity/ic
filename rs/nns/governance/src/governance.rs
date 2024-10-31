@@ -119,6 +119,7 @@ use std::{
     future::Future,
     ops::RangeInclusive,
     string::ToString,
+    time::Duration,
 };
 
 mod ledger_helper;
@@ -1788,6 +1789,18 @@ fn spawn_in_canister_env(future: impl Future<Output = ()> + Sized + 'static) {
         future
             .now_or_never()
             .expect("Future could not execute in non-WASM environment");
+    }
+}
+
+fn set_timer_in_canister_env(_duration: Duration, callback: impl FnOnce() + Send + 'static) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        ic_cdk_timers::set_timer(_duration, callback);
+    }
+    // This is needed for tests
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        callback();
     }
 }
 
@@ -5075,13 +5088,7 @@ impl Governance {
     ///
     /// This is a low-level function that makes no verification whatsoever.
     fn insert_proposal(&mut self, pid: u64, data: ProposalData) {
-        let voting_period_seconds = self.voting_period_seconds()(data.topic());
-        self.closest_proposal_deadline_timestamp_seconds = std::cmp::min(
-            data.proposal_timestamp_seconds + voting_period_seconds,
-            self.closest_proposal_deadline_timestamp_seconds,
-        );
         self.heap_data.proposals.insert(pid, data);
-        self.process_proposal(pid);
     }
 
     /// The proposal id of the next proposal.
@@ -5592,19 +5599,28 @@ impl Governance {
         })
         .expect("Proposer not found.");
 
-        // Cast self-vote, including following.
-        Governance::cast_vote_and_cascade_follow(
-            &proposal_id,
-            &mut proposal_data.ballots,
-            proposer_id,
-            Vote::Yes,
-            topic,
-            &mut self.neuron_store,
-        );
         // Finally, add this proposal as an open proposal.
+        let topic = proposal_data.topic();
+        let proposal_timestamp_seconds = proposal_data.proposal_timestamp_seconds;
+
         self.insert_proposal(proposal_num, proposal_data);
 
         self.refresh_voting_power(proposer_id);
+
+        match self.record_neuron_vote(proposer_id, proposal_id, Vote::Yes) {
+            Ok(_) => {}
+            Err(e) => {
+                self.heap_data.proposals.remove(&proposal_num);
+                return Err(e);
+            }
+        };
+
+        let voting_period_seconds = self.voting_period_seconds()(topic);
+        self.closest_proposal_deadline_timestamp_seconds = std::cmp::min(
+            proposal_timestamp_seconds + voting_period_seconds,
+            self.closest_proposal_deadline_timestamp_seconds,
+        );
+        self.process_proposal(proposal_id.id);
 
         Ok(proposal_id)
     }
@@ -5723,6 +5739,51 @@ impl Governance {
         }
     }
 
+    pub(crate) fn record_neuron_vote(
+        &mut self,
+        neuron_id: &NeuronId,
+        proposal_id: ProposalId,
+        vote: Vote,
+    ) -> Result<(), GovernanceError> {
+        let proposal = self
+            .heap_data
+            .proposals
+            .get_mut(&proposal_id.id)
+            .ok_or_else(||
+                // Proposal not found.
+                GovernanceError::new_with_message(ErrorType::NotFound, "Can't find proposal."))?;
+
+        let topic = proposal.topic();
+
+        let votes_cast = Self::cast_vote_and_cascade_follow(
+            &mut proposal.ballots,
+            neuron_id,
+            vote,
+            topic,
+            &mut self.neuron_store,
+        );
+
+        let governance: &'static mut Governance = unsafe { std::mem::transmute(self) };
+        set_timer_in_canister_env(Duration::from_millis(0), move || {
+            for (k, v) in votes_cast.iter() {
+                match governance
+                    .neuron_store
+                    .with_neuron_mut(&NeuronId { id: *k }, |neuron| {
+                        // Register the neuron's ballot in the
+                        // neuron itself.
+                        neuron.register_recent_ballot(topic, &proposal_id, *v);
+                    }) {
+                    Ok(_) => {}
+                    Err(_) => {
+                        println!("error in record_neuron_vote when registering recent ballot: Neuron not found");
+                    }
+                };
+            }
+        });
+
+        Ok(())
+    }
+
     /// Register `voting_neuron_id` voting according to
     /// `vote_of_neuron` (which must be `yes` or `no`) in 'ballots' and
     /// cascade voting according to the following relationships
@@ -5732,13 +5793,12 @@ impl Governance {
     /// Cascading only occurs for proposal topics that support following (i.e.,
     /// all topics except Topic::NeuronManagement).
     pub(crate) fn cast_vote_and_cascade_follow(
-        proposal_id: &ProposalId,
         ballots: &mut HashMap<u64, Ballot>,
         voting_neuron_id: &NeuronId,
         vote_of_neuron: Vote,
         topic: Topic,
         neuron_store: &mut NeuronStore,
-    ) {
+    ) -> BTreeMap<u64, Vote> {
         assert!(topic != Topic::Unspecified);
 
         // This is the induction variable of the loop: a map from
@@ -5763,6 +5823,7 @@ impl Governance {
             });
         }
 
+        let mut votes_cast = BTreeMap::new();
         loop {
             // First, we cast the specified votes (in the first round,
             // this will be a single vote) and collect all neurons
@@ -5774,44 +5835,35 @@ impl Governance {
                 if let Some(k_ballot) = ballots.get_mut(&k.id) {
                     // Neuron with ID k is eligible to vote.
                     if k_ballot.vote == (Vote::Unspecified as i32) {
-                        let register_ballot_result =
-                            neuron_store.with_neuron_mut(&NeuronId { id: k.id }, |k_neuron| {
-                                // Register the neuron's ballot in the
-                                // neuron itself.
-                                k_neuron.register_recent_ballot(topic, proposal_id, *v);
-                            });
-                        match register_ballot_result {
-                            Ok(_) => {
-                                // Only update a vote if it was previously unspecified. Following
-                                // can trigger votes for neurons that have already voted (manually)
-                                // and we don't change these votes.
-                                k_ballot.vote = *v as i32;
-                                // Here k is the followee, i.e., the neuron that has just cast a
-                                // vote that may be followed by other neurons.
-                                //
-                                // Insert followers from 'topic'
+                        if neuron_store.contains(NeuronId { id: k.id }) {
+                            votes_cast.insert(k.id, *v);
+                            // Only update a vote if it was previously unspecified. Following
+                            // can trigger votes for neurons that have already voted (manually)
+                            // and we don't change these votes.
+                            k_ballot.vote = *v as i32;
+                            // Here k is the followee, i.e., the neuron that has just cast a
+                            // vote that may be followed by other neurons.
+                            //
+                            // Insert followers from 'topic'
+                            all_followers.extend(
+                                neuron_store.get_followers_by_followee_and_topic(*k, topic),
+                            );
+                            // Default following doesn't apply to governance or SNS
+                            // decentralization swap proposals.
+                            if ![Topic::Governance, Topic::SnsAndCommunityFund].contains(&topic) {
+                                // Insert followers from 'Unspecified' (default followers)
                                 all_followers.extend(
-                                    neuron_store.get_followers_by_followee_and_topic(*k, topic),
+                                    neuron_store.get_followers_by_followee_and_topic(
+                                        *k,
+                                        Topic::Unspecified,
+                                    ),
                                 );
-                                // Default following doesn't apply to governance or SNS
-                                // decentralization swap proposals.
-                                if ![Topic::Governance, Topic::SnsAndCommunityFund].contains(&topic)
-                                {
-                                    // Insert followers from 'Unspecified' (default followers)
-                                    all_followers.extend(
-                                        neuron_store.get_followers_by_followee_and_topic(
-                                            *k,
-                                            Topic::Unspecified,
-                                        ),
-                                    );
-                                }
                             }
-                            Err(e) => {
-                                // The voting neuron not found in the neurons table. This is a bad
-                                // inconsistency, but there is nothing that can be done about it at
-                                // this place.
-                                eprintln!("error in cast_vote_and_cascade_follow when attempting to cast ballot: {:?}", e);
-                            }
+                        } else {
+                            // The voting neuron not found in the neurons table. This is a bad
+                            // inconsistency, but there is nothing that can be done about it at
+                            // this place.
+                            eprintln!("error in cast_vote_and_cascade_follow when attempting to cast ballot: Neuron not found", );
                         }
                     }
                 } else {
@@ -5827,7 +5879,7 @@ impl Governance {
 
             // Following is not enabled for neuron management proposals
             if topic == Topic::NeuronManagement {
-                return;
+                return votes_cast;
             }
 
             // Calling "would_follow_ballots" for neurons that cannot vote is wasteful.
@@ -5858,7 +5910,7 @@ impl Governance {
             // If induction_votes is empty, the loop will terminate
             // here.
             if induction_votes.is_empty() {
-                return;
+                return votes_cast;
             }
             // We now continue to the next iteration of the loop.
             // Because induction_votes is not empty, either at least
@@ -5964,15 +6016,7 @@ impl Governance {
             ));
         }
 
-        Governance::cast_vote_and_cascade_follow(
-            // Actually update the ballot, including following.
-            proposal_id,
-            &mut proposal.ballots,
-            neuron_id,
-            vote,
-            topic,
-            &mut self.neuron_store,
-        );
+        self.record_neuron_vote(neuron_id, *proposal_id, vote)?;
 
         self.process_proposal(proposal_id.id);
 

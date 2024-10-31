@@ -608,7 +608,7 @@ impl NeuronStore {
         sections: NeuronSections,
     ) -> Result<(Cow<Neuron>, StorageLocation), NeuronStoreError> {
         let heap_neuron = self.heap_neurons.get(&neuron_id.id).map(Cow::Borrowed);
-        println!("load_neuron_with_sections: heap_neuron: {:?}", heap_neuron);
+
         if let Some(heap_neuron) = heap_neuron.clone() {
             // If the neuron is active on heap, return early to avoid any operation on stable
             // storage. The StableStorageNeuronValidator ensures that active neuron cannot also be
@@ -624,10 +624,7 @@ impl NeuronStore {
                 .ok()
                 .map(Cow::Owned)
         });
-        println!(
-            "load_neuron_with_sections: stable_neuron: {:?}",
-            stable_neuron
-        );
+
         match (stable_neuron, heap_neuron) {
             // 1 copy cases.
             (Some(stable), None) => Ok((stable, StorageLocation::Stable)),

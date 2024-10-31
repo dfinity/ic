@@ -289,7 +289,6 @@ fn cast_vote_cascade_helper(strategy: SetUpStrategy, topic: Topic) -> BenchResul
     let proposal_id = ProposalId { id: 1 };
     bench_fn(|| {
         Governance::cast_vote_and_cascade_follow(
-            &proposal_id,
             &mut ballots,
             &neuron_id.into(),
             Vote::Yes,
