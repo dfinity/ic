@@ -62,6 +62,9 @@ pub(crate) const DEFAULT_MAX_DIRTY_PAGES_WITHOUT_OPTIMIZATION: usize = (GiB as u
 /// Scheduling overhead for copying dirty pages, in instructions.
 pub(crate) const DIRTY_PAGE_COPY_OVERHEAD: NumInstructions = NumInstructions::new(3_000);
 
+/// The overhead for dirty pages in Wasm64.
+pub const WASM64_DIRTY_PAGE_OVERHEAD_MULTIPLIER: u64 = 4;
+
 #[allow(non_upper_case_globals)]
 const KiB: u64 = 1024;
 #[allow(non_upper_case_globals)]
@@ -94,9 +97,6 @@ const STABLE_MEMORY_ACCESSED_PAGE_LIMIT_QUERY: NumOsPages =
 /// The maximum size in bytes for an uncompressed Wasm module. This value is
 /// also used as the maximum size for the Wasm chunk store of each canister.
 pub const WASM_MAX_SIZE: NumBytes = NumBytes::new(100 * 1024 * 1024); // 100 MiB
-
-/// The overhead for dirty pages in Wasm64.
-pub const WASM64_DIRTY_PAGE_OVERHEAD_MULTIPLIER: u64 = 4;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct FeatureFlags {
@@ -233,6 +233,9 @@ pub struct Config {
     /// The dirty page copying overhead, in instructions.
     pub dirty_page_copy_overhead: NumInstructions,
 
+    /// The dirty page overhead factor for Wasm64.
+    pub wasm64_dirty_page_overhead_multiplier: u64,
+
     /// The maximum allowed size for an uncompressed canister Wasm module.
     pub wasm_max_size: NumBytes,
 
@@ -241,9 +244,6 @@ pub struct Config {
 
     /// The maximum size of the stable memory.
     pub max_stable_memory_size: NumBytes,
-
-    /// The dirty page overhead factor for Wasm64.
-    pub wasm64_dirty_page_overhead_multiplier: u64,
 }
 
 impl Config {
