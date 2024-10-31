@@ -2,9 +2,16 @@ use crate::events::MinterEventAssert;
 use crate::mock::{JsonRpcMethod, MockJsonRpcProviders, MockJsonRpcProvidersBuilder};
 use crate::response::{
     block_response, empty_logs, encode_transaction, fee_history, send_raw_transaction_response,
-    transaction_count_response, transaction_receipt, EthLogEntry,
+    transaction_count_response, transaction_receipt,
 };
-use crate::{assert_reply, CkEthSetup, JsonRpcProvider, DEFAULT_BLOCK_NUMBER, DEFAULT_DEPOSIT_BLOCK_HASH, DEFAULT_DEPOSIT_BLOCK_NUMBER, DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_DEPOSIT_LOG_INDEX, DEFAULT_DEPOSIT_TRANSACTION_HASH, DEFAULT_DEPOSIT_TRANSACTION_INDEX, DEFAULT_PRINCIPAL_ID, DEFAULT_USER_SUBACCOUNT, EFFECTIVE_GAS_PRICE, EXPECTED_BALANCE, GAS_USED, LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MAX_TICKS, MINTER_ADDRESS, RECEIVED_ETH_EVENT_TOPIC, RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC};
+use crate::{
+    assert_reply, CkEthSetup, JsonRpcProvider, DEFAULT_DEPOSIT_BLOCK_HASH,
+    DEFAULT_DEPOSIT_BLOCK_NUMBER, DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_DEPOSIT_LOG_INDEX,
+    DEFAULT_DEPOSIT_TRANSACTION_HASH, DEFAULT_DEPOSIT_TRANSACTION_INDEX, DEFAULT_PRINCIPAL_ID,
+    DEFAULT_USER_SUBACCOUNT, EFFECTIVE_GAS_PRICE, EXPECTED_BALANCE, GAS_USED,
+    LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MAX_TICKS, MINTER_ADDRESS, RECEIVED_ETH_EVENT_TOPIC,
+    RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC,
+};
 use candid::{Decode, Encode, Nat, Principal};
 use ethers_core::utils::{hex, rlp};
 use ic_base_types::{CanisterId, PrincipalId};
@@ -316,10 +323,6 @@ impl DepositFlow {
     }
 
     fn handle_deposit(&mut self) {
-        self.handle_deposit_until_block(DEFAULT_BLOCK_NUMBER)
-    }
-
-    fn handle_deposit_until_block(&mut self, block_number: u64) {
         let max_eth_logs_block_range = self.setup.max_logs_block_range();
         let latest_finalized_block =
             LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1 + max_eth_logs_block_range;
@@ -334,21 +337,31 @@ impl DepositFlow {
 
         self.setup.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
 
-        MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
-            .respond_for_all_with(empty_logs())
-            .build()
-            .expect_rpc_calls(&self.setup);
+        match &self.params {
+            DepositParams::CkEth(_) => {
+                // 1st scrape for ckETH deposit without subaccount
+                let default_eth_get_logs = MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
+                    .respond_for_all_with(vec![self.params.to_log_entry()]);
+                (self.override_rpc_eth_get_logs)(default_eth_get_logs)
+                    .build()
+                    .expect_rpc_calls(&self.setup);
+            }
+            DepositParams::CkEthWithSubaccount(_) => {
+                // 1st scrape for ckETH deposit without subaccount
+                MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
+                    .respond_for_all_with(empty_logs())
+                    .build()
+                    .expect_rpc_calls(&self.setup);
 
-        // MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
-        //     .respond_for_all_with(empty_logs())
-        //     .build()
-        //     .expect_rpc_calls(&self.setup);
-
-        let default_eth_get_logs = MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
-            .respond_for_all_with(vec![self.params.to_log_entry()]);
-        (self.override_rpc_eth_get_logs)(default_eth_get_logs)
-            .build()
-            .expect_rpc_calls(&self.setup);
+                // 2nd scrape for ckERC20 deposit: NOP since no ERC-20
+                // 3rd scrape: ckETH deposit with subaccount
+                let default_eth_get_logs = MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
+                    .respond_for_all_with(vec![self.params.to_log_entry()]);
+                (self.override_rpc_eth_get_logs)(default_eth_get_logs)
+                    .build()
+                    .expect_rpc_calls(&self.setup);
+            }
+        }
     }
 }
 

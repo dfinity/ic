@@ -1082,7 +1082,7 @@ fn should_retrieve_minter_info() {
     assert_eq!(
         info_after_deposit,
         MinterInfo {
-            last_observed_block_number: Some(Nat::from(DEFAULT_BLOCK_NUMBER)),
+            last_observed_block_number: Some(Nat::from(new_eth_scraped_block_number)),
             eth_balance: Some(Nat::from(EXPECTED_BALANCE)),
             last_eth_scraped_block_number: Some(new_eth_scraped_block_number.into()),
             ..info_at_start

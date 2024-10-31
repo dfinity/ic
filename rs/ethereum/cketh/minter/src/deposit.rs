@@ -65,7 +65,7 @@ async fn mint() {
         let block_index = match client
             .transfer(TransferArg {
                 from_subaccount: None,
-                to: (event.beneficiary()).into(),
+                to: event.beneficiary(),
                 fee: None,
                 created_at_time: None,
                 memo: Some((&event).into()),
