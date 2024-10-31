@@ -27,7 +27,7 @@ impl Partition for ExtPartition {
     /// Open an ext4 partition for writing, via debugfs
     async fn open(image: PathBuf, index: Option<usize>) -> Result<Self> {
         if !Path::new("/usr/sbin/debugfs").exists() {
-            return Err(std::io::Error::from(std::io::ErrorKind::NotFound))
+            return Err(std::io::Error::from(std::io::ErrorKind::Unsupported))
                 .context("/usr/sbin/debugfs is needed to open ext4 partitions");
         }
 
@@ -80,7 +80,7 @@ impl Partition for ExtPartition {
     /// Copy a file into place
     async fn write_file(&mut self, input: &Path, output: &Path) -> Result<()> {
         if !Path::new("/usr/bin/faketime").exists() {
-            return Err(std::io::Error::from(std::io::ErrorKind::NotFound))
+            return Err(std::io::Error::from(std::io::ErrorKind::Unsupported))
                 .context("/usr/bin/faketime is needed to fix metadata in files");
         }
         let mut cmd = Command::new("/usr/bin/faketime")
