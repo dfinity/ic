@@ -15,10 +15,6 @@ DEPENDENCIES = [
     "@crate_index//:futures",
     "@crate_index//:http",
     "@crate_index//:http-body-util",
-    "@crate_index//:hyper",
-    "@crate_index//:hyper-rustls",
-    "@crate_index//:hyper-socks2",
-    "@crate_index//:hyper-util",
     "@crate_index//:prometheus",
     "@crate_index//:reqwest",
     "@crate_index//:serde",
@@ -35,6 +31,10 @@ MACRO_DEPENDENCIES = []
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:async-stream",
+    "@crate_index//:hyper",
+    "@crate_index//:hyper-rustls",
+    "@crate_index//:hyper-socks2",
+    "@crate_index//:hyper-util",
     "@crate_index//:once_cell",
     "@crate_index//:rand",
     "@crate_index//:rstest",

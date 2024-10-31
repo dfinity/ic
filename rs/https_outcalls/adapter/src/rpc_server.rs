@@ -48,13 +48,13 @@ impl CanisterHttp {
     pub fn new(config: Config, logger: ReplicaLogger, metrics: &MetricsRegistry) -> Self {
         let client = Client::builder()
             .connect_timeout(Duration::from_secs(config.http_connect_timeout_secs))
-            .http2_max_frame_size(MAX_HEADER_LIST_SIZE)
+            //.http2_max_header_list_size(MAX_HEADER_LIST_SIZE)
             .build()
             .expect("Failed to create reqwest client");
 
         let mut socks_client_builder = Client::builder()
             .connect_timeout(Duration::from_secs(config.http_connect_timeout_secs))
-            .http2_max_frame_size(MAX_HEADER_LIST_SIZE);
+            //.http2_max_header_list_size(MAX_HEADER_LIST_SIZE);
 
         // This uses a DNS resolver and results in an error if the proxy is not a valid URL.
         // We don't want to panic here during test.
@@ -160,7 +160,7 @@ impl HttpsOutcallsService for CanisterHttp {
             .map(|(name, value)| name.as_str().len() + value.len())
             .sum::<usize>();
 
-        //TODO(mihailjianu1): figure out if cloning is necessary
+        //TODO(mihailjianu1): figure out if cloning is necessary / how expensive
         let resp = self
             .client
             .request(method.clone(), url)

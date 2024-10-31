@@ -11,10 +11,6 @@ clap = { workspace = true }
 futures = { workspace = true }
 http = { workspace = true }
 http-body-util = { workspace = true }
-hyper = { workspace = true }
-hyper-util = { workspace = true }
-hyper-rustls = { workspace = true }
-hyper-socks2 = { workspace = true }
 ic-adapter-metrics-server = { path = "../../monitoring/adapter_metrics/server" }
 ic-async-utils = { path = "../../async_utils" }
 ic-config = { path = "../../config" }
@@ -34,6 +30,10 @@ tower = { workspace = true }
 [dev-dependencies]
 async-stream = { workspace = true }
 bytes = { workspace = true }
+hyper = { workspace = true }
+hyper-util = { workspace = true }
+hyper-rustls = { workspace = true }
+hyper-socks2 = { workspace = true }
 once_cell = "1.13.1"
 rand = { workspace = true }
 rustls = { workspace = true }
