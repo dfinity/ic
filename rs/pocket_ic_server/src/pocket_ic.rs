@@ -1672,8 +1672,7 @@ impl Operation for CallRequest {
             Ok(subnet) => {
                 let node = &subnet.nodes[0];
                 #[allow(clippy::disallowed_methods)]
-                let (s, mut r) =
-                    mpsc::channel::<UnvalidatedArtifactMutation<SignedIngress>>(1000);
+                let (s, mut r) = mpsc::channel::<UnvalidatedArtifactMutation<SignedIngress>>(1000);
                 let ingress_filter = subnet.ingress_filter.clone();
 
                 let ingress_validator = IngressValidatorBuilder::builder(
