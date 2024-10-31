@@ -14,7 +14,7 @@ use crate::{
 };
 
 #[automock]
-pub trait Repository {
+pub trait CanisterStateApi {
     fn get_authorized_principal(&self) -> Option<StorablePrincipal>;
     fn set_authorized_principal(&self, principal: Principal);
     fn get_version(&self) -> Option<StorableVersion>;
@@ -30,14 +30,14 @@ pub trait Repository {
 }
 
 #[derive(Clone)]
-pub struct State {
+pub struct CanisterState {
     configs: LocalRef<StableMap<StorableVersion, StorableConfig>>,
     rules: LocalRef<StableMap<StorableRuleId, StorableRuleMetadata>>,
     incidents: LocalRef<StableMap<StorableIncidentId, StorableIncidentMetadata>>,
     authorized_principal: LocalRef<StableMap<(), StorablePrincipal>>,
 }
 
-impl State {
+impl CanisterState {
     pub fn from_static() -> Self {
         Self {
             configs: &CONFIGS,
@@ -48,7 +48,7 @@ impl State {
     }
 }
 
-impl Repository for State {
+impl CanisterStateApi for CanisterState {
     fn get_authorized_principal(&self) -> Option<StorablePrincipal> {
         self.authorized_principal
             .with(|cell| cell.borrow().get(&()))
@@ -168,7 +168,7 @@ impl Repository for State {
 }
 
 pub fn init_version_and_config(version: Version) {
-    with_state(|state| {
+    with_canister_state(|state| {
         let config = StorableConfig {
             schema_version: 1,
             active_since: time(),
@@ -181,7 +181,7 @@ pub fn init_version_and_config(version: Version) {
     })
 }
 
-pub fn with_state<R>(f: impl FnOnce(State) -> R) -> R {
-    let state = State::from_static();
+pub fn with_canister_state<R>(f: impl FnOnce(CanisterState) -> R) -> R {
+    let state = CanisterState::from_static();
     f(state)
 }

@@ -1,6 +1,6 @@
 use crate::{
     confidentiality_formatting::ConfidentialityFormatting,
-    state::Repository,
+    state::CanisterStateApi,
     types::{ConfigResponse, OutputConfig, OutputRule, OutputRuleMetadata, RuleId, Version},
 };
 
@@ -13,28 +13,28 @@ pub trait EntityFetcher {
 }
 
 pub struct ConfigFetcher<R, F> {
-    pub repository: R,
+    pub canister_state_api: R,
     pub formatter: F,
 }
 
 pub struct RuleFetcher<R, F> {
-    pub repository: R,
+    pub canister_state_api: R,
     pub formatter: F,
 }
 
 impl<R, F> RuleFetcher<R, F> {
-    pub fn new(repository: R, formatter: F) -> Self {
+    pub fn new(canister_state_api: R, formatter: F) -> Self {
         Self {
-            repository,
+            canister_state_api,
             formatter,
         }
     }
 }
 
 impl<R, F> ConfigFetcher<R, F> {
-    pub fn new(repository: R, formatter: F) -> Self {
+    pub fn new(canister_state_api: R, formatter: F) -> Self {
         Self {
-            repository,
+            canister_state_api,
             formatter,
         }
     }
@@ -58,7 +58,7 @@ pub enum FetchRuleError {
     UnexpectedError(#[from] anyhow::Error),
 }
 
-impl<R: Repository, F: ConfidentialityFormatting<Input = OutputConfig>> EntityFetcher
+impl<R: CanisterStateApi, F: ConfidentialityFormatting<Input = OutputConfig>> EntityFetcher
     for ConfigFetcher<R, F>
 {
     type Input = Option<Version>;
@@ -67,21 +67,21 @@ impl<R: Repository, F: ConfidentialityFormatting<Input = OutputConfig>> EntityFe
 
     fn fetch(&self, version: Option<Version>) -> Result<ConfigResponse, FetchConfigError> {
         let current_version = self
-            .repository
+            .canister_state_api
             .get_version()
             .ok_or_else(|| FetchConfigError::NoExistingVersions)?;
 
         let version = version.unwrap_or(current_version.0);
 
         let stored_config = self
-            .repository
+            .canister_state_api
             .get_config(version)
             .ok_or_else(|| FetchConfigError::NotFound(version))?;
 
         let mut rules: Vec<OutputRule> = vec![];
 
         for rule_id in stored_config.rule_ids.iter() {
-            let rule = self.repository.get_rule(rule_id).ok_or_else(|| {
+            let rule = self.canister_state_api.get_rule(rule_id).ok_or_else(|| {
                 FetchConfigError::Unexpected(anyhow::anyhow!("Rule with id = {rule_id} not found"))
             })?;
 
@@ -113,7 +113,7 @@ impl<R: Repository, F: ConfidentialityFormatting<Input = OutputConfig>> EntityFe
     }
 }
 
-impl<R: Repository, F: ConfidentialityFormatting<Input = OutputRuleMetadata>> EntityFetcher
+impl<R: CanisterStateApi, F: ConfidentialityFormatting<Input = OutputRuleMetadata>> EntityFetcher
     for RuleFetcher<R, F>
 {
     type Input = RuleId;
@@ -122,7 +122,7 @@ impl<R: Repository, F: ConfidentialityFormatting<Input = OutputRuleMetadata>> En
 
     fn fetch(&self, rule_id: RuleId) -> Result<OutputRuleMetadata, FetchRuleError> {
         let stored_metadata = self
-            .repository
+            .canister_state_api
             .get_rule(&rule_id)
             .ok_or_else(|| FetchRuleError::NotFound(rule_id.clone()))?;
 
@@ -157,7 +157,7 @@ impl From<FetchRuleError> for String {
 #[cfg(test)]
 mod tests {
     use crate::confidentiality_formatting::MockConfidentialityFormatting;
-    use crate::state::MockRepository;
+    use crate::state::MockCanisterStateApi;
     use crate::storage::{StorableConfig, StorableVersion};
 
     use super::*;
@@ -171,11 +171,11 @@ mod tests {
             rules: vec![],
         });
 
-        let mut mock_repository = MockRepository::new();
-        mock_repository
+        let mut mock_canister_api = MockCanisterStateApi::new();
+        mock_canister_api
             .expect_get_version()
             .returning(|| Some(StorableVersion(1)));
-        mock_repository.expect_get_config().returning(|_| {
+        mock_canister_api.expect_get_config().returning(|_| {
             Some(StorableConfig {
                 schema_version: 1,
                 active_since: 1,
@@ -183,7 +183,7 @@ mod tests {
             })
         });
 
-        let fetcher = ConfigFetcher::new(mock_repository, mock_formatter);
+        let fetcher = ConfigFetcher::new(mock_canister_api, mock_formatter);
         // Act + assert
         fetcher.fetch(Some(1)).expect("failed to get a config");
     }

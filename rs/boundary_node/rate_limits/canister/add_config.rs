@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use crate::{
     access_control::{AccessLevel, ResolveAccessLevel},
-    state::Repository,
+    state::CanisterStateApi,
     storage::{StorableConfig, StorableRuleMetadata},
     types::{InputConfig, RuleId, Version},
 };
@@ -44,14 +44,14 @@ pub enum AddConfigError {
 }
 
 pub struct ConfigAdder<R, A> {
-    pub repository: R,
+    pub canister_state_api: R,
     pub access_resolver: A,
 }
 
 impl<R, A> ConfigAdder<R, A> {
-    pub fn new(repository: R, access_resolver: A) -> Self {
+    pub fn new(canister_state_api: R, access_resolver: A) -> Self {
         Self {
-            repository,
+            canister_state_api,
             access_resolver,
         }
     }
@@ -80,7 +80,7 @@ impl<R, A> ConfigAdder<R, A> {
 // - Operation of resubmitting a "removed" rule would result in creation of a rule with a new ID.
 // - New rules cannot be linked to already disclosed incidents (LinkingRuleToDisclosedIncident error)
 
-impl<R: Repository, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
+impl<R: CanisterStateApi, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
     fn add_config(&self, new_config: InputConfig, time: Timestamp) -> Result<(), AddConfigError> {
         // Only privileged users can perform this operation
         if self.access_resolver.get_access_level() != AccessLevel::FullAccess {
@@ -91,7 +91,7 @@ impl<R: Repository, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
         validate_config_encoding(&new_config)?;
 
         let current_version = self
-            .repository
+            .canister_state_api
             .get_version()
             .unwrap_or(INIT_VERSION.into())
             .0;
@@ -99,12 +99,12 @@ impl<R: Repository, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
         let new_version = current_version + 1;
 
         let current_config: StorableConfig = self
-            .repository
+            .canister_state_api
             .get_config(current_version)
             .ok_or_else(|| AddConfigError::NoConfigFound(current_version))?;
 
         let current_full_config: InputConfig = self
-            .repository
+            .canister_state_api
             .get_full_config(current_version)
             .ok_or_else(|| AddConfigError::NoConfigFound(current_version))?;
 
@@ -143,7 +143,9 @@ impl<R: Repository, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
                 let rule_id = generate_random_uuid()?.to_string();
 
                 // Check if the new rule is linked to an existing incident
-                let existing_incident = self.repository.get_incident(&input_rule.incident_id);
+                let existing_incident = self
+                    .canister_state_api
+                    .get_incident(&input_rule.incident_id);
 
                 if let Some(incident) = existing_incident {
                     // A new rule can't be linked to a disclosed incident
@@ -191,9 +193,12 @@ impl<R: Repository, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
         for rule_id in current_config.rule_ids.iter() {
             // ID is not present in the submitted rule IDs, thus this rule is removed
             if !rule_ids.iter().any(|id| id == rule_id) {
-                if let Some(mut metadata) = self.repository.get_rule(rule_id) {
+                if let Some(mut metadata) = self.canister_state_api.get_rule(rule_id) {
                     metadata.removed_in_version = Some(new_version);
-                    if !self.repository.update_rule(rule_id.clone(), metadata) {
+                    if !self
+                        .canister_state_api
+                        .update_rule(rule_id.clone(), metadata)
+                    {
                         return Err(AddConfigError::Unexpected(anyhow::anyhow!(
                             "rule_id={rule_id} didn't exist, failed to update rule"
                         )));
@@ -204,7 +209,7 @@ impl<R: Repository, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
 
         // Add new rules
         for (rule_id, metadata) in new_rules_metadata.iter().cloned() {
-            if !self.repository.add_rule(rule_id.clone(), metadata) {
+            if !self.canister_state_api.add_rule(rule_id.clone(), metadata) {
                 return Err(AddConfigError::Unexpected(anyhow::anyhow!(
                     "rule_id={rule_id} already existed, failed to add rule"
                 )));
@@ -218,7 +223,7 @@ impl<R: Repository, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
                 rule_ids,
             };
             if !self
-                .repository
+                .canister_state_api
                 .add_incident(incident_id.clone(), incident_metadata)
             {
                 return Err(AddConfigError::Unexpected(anyhow::anyhow!(
@@ -229,10 +234,11 @@ impl<R: Repository, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
 
         // Update rule IDs for existing incidents
         for (incident_id, rule_ids) in existing_incidents {
-            if let Some(mut incident_metadata) = self.repository.get_incident(&incident_id) {
+            if let Some(mut incident_metadata) = self.canister_state_api.get_incident(&incident_id)
+            {
                 incident_metadata.rule_ids = rule_ids;
                 if !self
-                    .repository
+                    .canister_state_api
                     .update_incident(incident_id.clone(), incident_metadata)
                 {
                     return Err(AddConfigError::Unexpected(anyhow::anyhow!(
@@ -249,7 +255,10 @@ impl<R: Repository, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
             rule_ids,
         };
 
-        if !self.repository.add_config(new_version, storable_config) {
+        if !self
+            .canister_state_api
+            .add_config(new_version, storable_config)
+        {
             return Err(AddConfigError::Unexpected(anyhow::anyhow!(
                 "Config for version {new_version} already exists, failed to add"
             )));
@@ -286,7 +295,7 @@ fn generate_random_uuid() -> Result<Uuid, anyhow::Error> {
 #[cfg(test)]
 mod tests {
     use crate::access_control::MockResolveAccessLevel;
-    use crate::state::MockRepository;
+    use crate::state::MockCanisterStateApi;
 
     use super::*;
 
@@ -302,26 +311,26 @@ mod tests {
         mock_access
             .expect_get_access_level()
             .returning(|| AccessLevel::FullAccess);
-        let mut mock_repository = MockRepository::new();
+        let mut mock_state_api = MockCanisterStateApi::new();
 
-        mock_repository.expect_get_rule().returning(|_| None);
-        mock_repository.expect_get_version().returning(|| None);
-        mock_repository.expect_get_config().returning(|_| {
+        mock_state_api.expect_get_rule().returning(|_| None);
+        mock_state_api.expect_get_version().returning(|| None);
+        mock_state_api.expect_get_config().returning(|_| {
             Some(StorableConfig {
                 schema_version: 1,
                 active_since: 1,
                 rule_ids: vec![],
             })
         });
-        mock_repository.expect_get_full_config().returning(|_| {
+        mock_state_api.expect_get_full_config().returning(|_| {
             Some(InputConfig {
                 schema_version: 1,
                 rules: vec![],
             })
         });
-        mock_repository.expect_add_config().returning(|_, _| true);
+        mock_state_api.expect_add_config().returning(|_, _| true);
 
-        let writer = ConfigAdder::new(mock_repository, mock_access);
+        let writer = ConfigAdder::new(mock_state_api, mock_access);
 
         writer
             .add_config(config, current_time)

@@ -2,7 +2,7 @@ use ic_cdk::api::time;
 
 use crate::{
     access_control::{AccessLevel, ResolveAccessLevel},
-    state::Repository,
+    state::CanisterStateApi,
     types::{DiscloseRulesArg, IncidentId, RuleId, Timestamp},
 };
 
@@ -36,7 +36,7 @@ impl<S, A> RulesDiscloser<S, A> {
     }
 }
 
-impl<S: Repository, A: ResolveAccessLevel> DisclosesRules for RulesDiscloser<S, A> {
+impl<S: CanisterStateApi, A: ResolveAccessLevel> DisclosesRules for RulesDiscloser<S, A> {
     fn disclose_rules(&self, arg: DiscloseRulesArg) -> Result<(), DiscloseRulesError> {
         if self.access_resolver.get_access_level() == AccessLevel::FullAccess {
             match arg {
@@ -54,7 +54,7 @@ impl<S: Repository, A: ResolveAccessLevel> DisclosesRules for RulesDiscloser<S, 
 }
 
 fn disclose_rules(
-    repository: &impl Repository,
+    canister_state_api: &impl CanisterStateApi,
     time: Timestamp,
     rule_ids: &[RuleId],
 ) -> Result<(), DiscloseRulesError> {
@@ -62,7 +62,7 @@ fn disclose_rules(
 
     // Return the first error found while assembling metadata
     for rule_id in rule_ids.iter() {
-        match repository.get_rule(rule_id) {
+        match canister_state_api.get_rule(rule_id) {
             Some(rule_metadata) => {
                 rules.push((rule_id.clone(), rule_metadata));
             }
@@ -76,7 +76,7 @@ fn disclose_rules(
         if metadata.disclosed_at.is_none() {
             metadata.disclosed_at = Some(time);
             assert!(
-                repository.update_rule(rule_id, metadata),
+                canister_state_api.update_rule(rule_id, metadata),
                 "rule id not found"
             );
         }
@@ -86,7 +86,7 @@ fn disclose_rules(
 }
 
 fn disclose_incidents(
-    repository: &impl Repository,
+    canister_state_api: &impl CanisterStateApi,
     time: Timestamp,
     incident_ids: &[IncidentId],
 ) -> Result<(), DiscloseRulesError> {
@@ -94,7 +94,7 @@ fn disclose_incidents(
 
     // Return the first error while assembling the metadata
     for incident_id in incident_ids.iter() {
-        match repository.get_incident(incident_id) {
+        match canister_state_api.get_incident(incident_id) {
             Some(incident_metadata) => {
                 incidents_metadata.push((incident_id.clone(), incident_metadata));
             }
@@ -108,10 +108,10 @@ fn disclose_incidents(
 
     for (incident_id, mut metadata) in incidents_metadata {
         if !metadata.is_disclosed {
-            disclose_rules(repository, time, &metadata.rule_ids)?;
+            disclose_rules(canister_state_api, time, &metadata.rule_ids)?;
             metadata.is_disclosed = true;
             // TODO: consider aggregating errors
-            repository
+            canister_state_api
                 .update_incident(incident_id.clone(), metadata)
                 .then_some(())
                 .ok_or_else(|| DiscloseRulesError::IncidentIdNotFound(incident_id))?;
