@@ -110,6 +110,11 @@ fn emit_preupgrade_events() {
         storage::record_event(EventType::SyncedErc20ToBlock {
             block_number: s.erc20_log_scraping.last_scraped_block_number(),
         });
+        storage::record_event(EventType::SyncedDepositWithSubaccountToBlock {
+            block_number: s
+                .deposit_with_subaccount_log_scraping
+                .last_scraped_block_number(),
+        });
     });
 }
 
@@ -686,6 +691,11 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                 EventType::SyncedErc20ToBlock { block_number } => EP::SyncedErc20ToBlock {
                     block_number: block_number.into(),
                 },
+                EventType::SyncedDepositWithSubaccountToBlock { block_number } => {
+                    EP::SyncedDepositWithSubaccountToBlock {
+                        block_number: block_number.into(),
+                    }
+                }
                 EventType::AcceptedEthWithdrawalRequest(EthWithdrawalRequest {
                     withdrawal_amount,
                     destination,
