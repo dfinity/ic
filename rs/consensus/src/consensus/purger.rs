@@ -739,7 +739,7 @@ mod tests {
         })
     }
 
-    /// Create the next block and initize it with an empty IDKG payload,
+    /// Create the next block and initialize it with an empty IDKG payload,
     /// then insert it into the test pool.
     fn init_idkg_in_next_round(pool: &mut TestConsensusPool, subnet_id: SubnetId) {
         let mut block: BlockProposal = pool.make_next_block();
