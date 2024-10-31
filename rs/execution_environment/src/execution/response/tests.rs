@@ -2592,7 +2592,7 @@ fn cycles_balance_changes_applied_correctly() {
         .universal_canister_with_cycles(Cycles::new(10_000_000_000_000))
         .unwrap();
     let b_id = test
-        .universal_canister_with_cycles(Cycles::new(121_000_000_000))
+        .universal_canister_with_cycles(Cycles::new(301_000_000_000))
         .unwrap();
 
     test.ingress(
@@ -2622,7 +2622,7 @@ fn cycles_balance_changes_applied_correctly() {
             b_id,
             "update",
             call_args().other_side(b.clone()),
-            Cycles::new(5_000_000_000_000),
+            Cycles::new(10_000_000_000_000),
         )
         .build();
     let a_balance_old = test.canister_state(a_id).system_state.balance();

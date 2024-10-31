@@ -59,7 +59,7 @@ fn setup(settings: CanisterSettingsArgs) -> (StateMachine, CanisterId) {
         .with_checkpoints_enabled(false)
         .build();
     let canister_id =
-        env.create_canister_with_cycles(None, Cycles::from(121_000_000_000_u128), Some(settings));
+        env.create_canister_with_cycles(None, Cycles::from(301_000_000_000_u128), Some(settings));
 
     (env, canister_id)
 }
@@ -280,8 +280,7 @@ fn test_log_visibility_of_fetch_canister_logs() {
         (
             LogVisibilityV2::AllowedViewers(allowed_viewers.clone()),
             allowed_viewer,
-            // TODO(EXC-1675): when disabled works as for controllers, change to ok when enabled.
-            not_allowed_error(&allowed_viewer),
+            ok.clone(),
         ),
         (
             LogVisibilityV2::AllowedViewers(allowed_viewers.clone()),

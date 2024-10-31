@@ -4828,7 +4828,7 @@ fn create_canister_makes_subnet_oversubscribed() {
 
     test.canister_state_mut(uc)
         .system_state
-        .set_balance(Cycles::new(1_000_000_000_000));
+        .set_balance(Cycles::new(u128::MAX));
 
     let settings = CanisterSettingsArgsBuilder::new()
         .with_freezing_threshold(1)
