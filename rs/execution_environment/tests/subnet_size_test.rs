@@ -45,11 +45,11 @@ fn inc_instruction_cost(config: HypervisorConfig) -> u64 {
         MeteringType::None => |_op: &wasmparser::Operator, _mem_type: WasmMemoryType| 0u64,
     };
 
-    let cc = instruction_to_cost(
+    let cost_const = instruction_to_cost(
         &wasmparser::Operator::I32Const { value: 1 },
         WasmMemoryType::Wasm32,
     );
-    let cs = instruction_to_cost(
+    let cost_store = instruction_to_cost(
         &wasmparser::Operator::I32Store {
             memarg: wasmparser::MemArg {
                 align: 0,
@@ -60,7 +60,7 @@ fn inc_instruction_cost(config: HypervisorConfig) -> u64 {
         },
         WasmMemoryType::Wasm32,
     );
-    let cl = instruction_to_cost(
+    let cost_load = instruction_to_cost(
         &wasmparser::Operator::I32Load {
             memarg: wasmparser::MemArg {
                 align: 0,
@@ -71,12 +71,12 @@ fn inc_instruction_cost(config: HypervisorConfig) -> u64 {
         },
         WasmMemoryType::Wasm32,
     );
-    let ca = instruction_to_cost(&wasmparser::Operator::I32Add, WasmMemoryType::Wasm32);
-    let ccall = instruction_to_cost(
+    let cost_add = instruction_to_cost(&wasmparser::Operator::I32Add, WasmMemoryType::Wasm32);
+    let cost_call = instruction_to_cost(
         &wasmparser::Operator::Call { function_index: 0 },
         WasmMemoryType::Wasm32,
     );
-    let csys = match config.embedders_config.metering_type {
+    let cost_sys = match config.embedders_config.metering_type {
         MeteringType::New => {
             ic_embedders::wasmtime_embedder::system_api_complexity::overhead::MSG_REPLY_DATA_APPEND
                 .get()
@@ -85,7 +85,7 @@ fn inc_instruction_cost(config: HypervisorConfig) -> u64 {
         MeteringType::None => 0,
     };
 
-    let cd = if let MeteringType::New = config.embedders_config.metering_type {
+    let cost_dirty = if let MeteringType::New = config.embedders_config.metering_type {
         ic_config::subnet_config::SchedulerConfig::application_subnet()
             .dirty_page_overhead
             .get()
@@ -93,7 +93,25 @@ fn inc_instruction_cost(config: HypervisorConfig) -> u64 {
         0
     };
 
-    5 * cc + cs + cl + ca + 2 * ccall + csys + cd
+    let cost_default = 1; // Default cost of executing a function, even if it is empty.
+
+    // Total cost of `(func $inc ...)`:
+    cost_default +
+    // (i32.store
+    cost_store + cost_dirty +
+    // (i32.const 0)
+    cost_const +
+    // (i32.add
+    cost_add +
+    // (i32.load (i32.const 0))
+    cost_load + cost_const +
+    // (i32.const 1)
+    cost_const +
+    // (call $msg_reply_data_append (i32.const 0) (i32.const 0))
+    // (call $msg_reply)
+    cost_sys +
+    cost_call + cost_const + cost_const +
+    cost_call
 }
 
 /// This is a canister that keeps a counter on the heap and exposes various test
@@ -125,7 +143,7 @@ const TEST_CANISTER: &str = r#"
     (i32.store
 
         ;; store at the beginning of the heap
-        (i32.const 0) ;; store at the beginning of the heap
+        (i32.const 0)
 
         ;; increment heap[0]
         (i32.add
@@ -1127,23 +1145,19 @@ fn test_subnet_size_execute_message_cost() {
     let subnet_type = SubnetType::Application;
     let config = get_cycles_account_manager_config(subnet_type);
     let reference_subnet_size = config.reference_subnet_size;
+    let reference_instructions_cost = inc_instruction_cost(HypervisorConfig::default());
     let reference_cost = calculate_execution_cost(
         &config,
-        NumInstructions::from(inc_instruction_cost(HypervisorConfig::default())),
+        NumInstructions::from(reference_instructions_cost),
         reference_subnet_size,
     );
 
     // Check default cost.
-    //
-    // The below is using `is_almost_eq` because there is a one-off in the instructions
-    // consumed by the `inc` method and what we compute in `inc_instruction_cost`. This one-off
-    // did not matter previously as the division by 2.5 was rounding down to the nearest integer.
-    // Now with the new fee which basically converts every instruction to a cycle charged this
-    // difference can be observed but it does not really affect things so we use `is_almost_eq`
-    // until it's fixed.
+    assert_eq!(reference_instructions_cost, 2019);
     let simulated_cost = simulate_execute_message_cost(subnet_type, reference_subnet_size);
-    assert!(
-        is_almost_eq(simulated_cost, reference_cost),
+    assert_eq!(
+        simulated_cost,
+        reference_cost,
         "subnet_size={reference_subnet_size}, simulated_cost={simulated_cost}, reference_cost={reference_cost}"
     );
 
