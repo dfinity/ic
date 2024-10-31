@@ -56,8 +56,7 @@ pub(crate) fn evict(
         return evicted;
     }
 
-    non_idle.sort_by_key(|x| x.scheduler_priority);
-    non_idle.reverse();
+    non_idle.sort_by_key(|x| (x.scheduler_priority, x.last_used));
 
     for candidate in non_idle.into_iter() {
         if evicted.len() >= evict_at_least
