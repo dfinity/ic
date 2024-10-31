@@ -9,7 +9,7 @@ use crate::metrics::{encode_metrics, serve_metrics};
 use crate::state::Repository;
 use crate::state::{init_version_and_config, with_state};
 use crate::storage::API_BOUNDARY_NODE_PRINCIPALS;
-use candid::{candid_method, Principal};
+use candid::Principal;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::call::call;
 use ic_cdk_macros::{init, query, update};
@@ -24,7 +24,6 @@ const REGISTRY_CANISTER_METHOD: &str = "get_api_boundary_node_ids";
 
 // TODO: implement proper canister lifecycle: upgrade, post_upgrade, ...
 #[init]
-#[candid_method(init)]
 fn init(init_arg: InitArg) {
     // Set authorized principal, which performs write operations, such as adding new configurations
     if let Some(principal) = init_arg.authorized_principal {
@@ -40,7 +39,6 @@ fn init(init_arg: InitArg) {
 }
 
 #[query]
-#[candid_method(query)]
 fn get_config(version: Option<Version>) -> GetConfigResponse {
     let caller_id = ic_cdk::api::caller();
     let response = with_state(|state| {
@@ -54,7 +52,6 @@ fn get_config(version: Option<Version>) -> GetConfigResponse {
 }
 
 #[query]
-#[candid_method(query)]
 fn get_rule_by_id(rule_id: RuleId) -> GetRuleByIdResponse {
     let caller_id = ic_cdk::api::caller();
     let response = with_state(|state| {
@@ -68,7 +65,6 @@ fn get_rule_by_id(rule_id: RuleId) -> GetRuleByIdResponse {
 }
 
 #[update]
-#[candid_method(update)]
 fn add_config(config: InputConfig) -> AddConfigResponse {
     let caller_id = ic_cdk::api::caller();
     let current_time = ic_cdk::api::time();
@@ -81,7 +77,6 @@ fn add_config(config: InputConfig) -> AddConfigResponse {
 }
 
 #[update]
-#[candid_method(update)]
 fn disclose_rules(args: DiscloseRulesArg) -> DiscloseRulesResponse {
     let caller_id = ic_cdk::api::caller();
     with_state(|state| {
@@ -94,7 +89,6 @@ fn disclose_rules(args: DiscloseRulesArg) -> DiscloseRulesResponse {
 
 // TODO: adjust quota
 #[query(decoding_quota = 10000)]
-#[candid_method(query)]
 fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
         "/metrics" => serve_metrics(ic_cdk::api::time() as i64, encode_metrics),
