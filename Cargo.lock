@@ -1760,6 +1760,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "canister_client"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "ic-agent",
+ "k256",
+ "rate-limits-api",
+ "regex",
+ "tokio",
+]
+
+[[package]]
 name = "canister_http"
 version = "0.9.0"
 dependencies = [
@@ -1879,7 +1891,7 @@ dependencies = [
  "sha2 0.10.8",
  "thiserror",
  "tokio",
- "tower 0.4.13",
+ "tower 0.5.1",
  "tracing",
  "tracing-subscriber",
  "trust-dns-resolver",
@@ -4948,7 +4960,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tokio-rustls 0.26.0",
- "tower 0.4.13",
+ "tower 0.5.1",
 ]
 
 [[package]]
@@ -5163,7 +5175,7 @@ dependencies = [
  "slog",
  "tokio",
  "tonic",
- "tower 0.4.13",
+ "tower 0.5.1",
 ]
 
 [[package]]
@@ -5346,7 +5358,7 @@ dependencies = [
  "slog",
  "thiserror",
  "tokio",
- "tower 0.4.13",
+ "tower 0.5.1",
  "tracing",
 ]
 
@@ -5644,8 +5656,8 @@ dependencies = [
  "tikv-jemallocator",
  "tokio",
  "tokio-util",
- "tower 0.4.13",
- "tower-http",
+ "tower 0.5.1",
+ "tower-http 0.6.1",
  "tower_governor",
  "tracing",
  "tracing-serde",
@@ -5781,7 +5793,7 @@ dependencies = [
  "tokio",
  "tokio-socks",
  "tonic",
- "tower 0.4.13",
+ "tower 0.5.1",
 ]
 
 [[package]]
@@ -5803,7 +5815,7 @@ dependencies = [
  "slog",
  "tokio",
  "tonic",
- "tower 0.4.13",
+ "tower 0.5.1",
  "tracing",
 ]
 
@@ -5869,11 +5881,13 @@ name = "ic-btc-kyt"
 version = "0.9.0"
 dependencies = [
  "askama",
+ "base64 0.13.1",
  "bitcoin 0.32.3",
  "candid",
  "candid_parser",
  "ciborium",
  "futures",
+ "hex",
  "ic-base-types",
  "ic-btc-interface",
  "ic-canisters-http-types",
@@ -5885,8 +5899,10 @@ dependencies = [
  "pocket-ic",
  "scraper",
  "serde",
+ "serde_json",
  "time",
  "tokio",
+ "url",
 ]
 
 [[package]]
@@ -5962,7 +5978,7 @@ dependencies = [
  "serde_cbor",
  "tokio",
  "tokio-test",
- "tower 0.4.13",
+ "tower 0.5.1",
  "tree-deserializer",
  "url",
 ]
@@ -6690,7 +6706,7 @@ dependencies = [
  "slog",
  "tokio",
  "tokio-util",
- "tower 0.4.13",
+ "tower 0.5.1",
  "tracing",
  "turmoil",
 ]
@@ -8051,7 +8067,7 @@ dependencies = [
  "slog",
  "slog-term",
  "tokio",
- "tower 0.4.13",
+ "tower 0.5.1",
  "wasmparser 0.217.0",
 ]
 
@@ -8193,6 +8209,7 @@ dependencies = [
  "ic-universal-canister",
  "ic-utils 0.9.0",
  "ic-utils-lru-cache",
+ "ic-wasm-transform",
  "ic-wasm-types",
  "itertools 0.12.1",
  "lazy_static",
@@ -8216,7 +8233,7 @@ dependencies = [
  "test-strategy 0.3.1",
  "threadpool",
  "tokio",
- "tower 0.4.13",
+ "tower 0.5.1",
  "tracing",
  "wasmparser 0.217.0",
  "wat",
@@ -8277,7 +8294,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-io-timeout",
- "tower 0.4.13",
+ "tower 0.5.1",
 ]
 
 [[package]]
@@ -8356,8 +8373,8 @@ dependencies = [
  "tokio-io-timeout",
  "tokio-rustls 0.26.0",
  "tokio-util",
- "tower 0.4.13",
- "tower-http",
+ "tower 0.5.1",
+ "tower-http 0.6.1",
  "tower-test",
  "tracing-flame",
  "tracing-subscriber",
@@ -8399,7 +8416,7 @@ dependencies = [
  "slog",
  "tokio",
  "tokio-rustls 0.26.0",
- "tower 0.4.13",
+ "tower 0.5.1",
  "url",
 ]
 
@@ -8476,7 +8493,7 @@ dependencies = [
  "tokio",
  "tokio-rustls 0.26.0",
  "tonic",
- "tower 0.4.13",
+ "tower 0.5.1",
  "uuid",
  "warp",
 ]
@@ -8506,7 +8523,7 @@ dependencies = [
  "slog",
  "tokio",
  "tonic",
- "tower 0.4.13",
+ "tower 0.5.1",
  "tower-test",
  "tracing",
 ]
@@ -8687,7 +8704,7 @@ dependencies = [
  "strum_macros",
  "tempfile",
  "tokio",
- "tower-http",
+ "tower-http 0.6.1",
  "tower-request-id",
  "tracing",
  "tracing-appender",
@@ -9097,7 +9114,7 @@ dependencies = [
  "strum",
  "strum_macros",
  "thiserror",
- "tower 0.4.13",
+ "tower 0.5.1",
 ]
 
 [[package]]
@@ -9481,7 +9498,7 @@ dependencies = [
  "ic-quic-transport",
  "ic-types",
  "tokio",
- "tower 0.4.13",
+ "tower 0.5.1",
 ]
 
 [[package]]
@@ -10762,7 +10779,7 @@ dependencies = [
  "tokio",
  "tokio-metrics",
  "tokio-util",
- "tower 0.4.13",
+ "tower 0.5.1",
  "tracing",
  "turmoil",
 ]
@@ -11165,7 +11182,7 @@ dependencies = [
  "slog-async",
  "tempfile",
  "tokio",
- "tower 0.4.13",
+ "tower 0.5.1",
  "url",
 ]
 
@@ -11269,7 +11286,7 @@ dependencies = [
  "ic-types",
  "slog",
  "tokio",
- "tower-http",
+ "tower-http 0.6.1",
 ]
 
 [[package]]
@@ -11320,7 +11337,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tonic",
- "tower 0.4.13",
+ "tower 0.5.1",
  "tracing-subscriber",
  "wat",
 ]
@@ -12259,7 +12276,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tokio-util",
- "tower 0.4.13",
+ "tower 0.5.1",
  "wat",
 ]
 
@@ -12711,7 +12728,7 @@ dependencies = [
  "socket2 0.5.7",
  "tempfile",
  "tokio",
- "tower 0.4.13",
+ "tower 0.5.1",
  "wasmprinter",
  "wat",
 ]
@@ -13386,7 +13403,7 @@ dependencies = [
  "ic-xnet-uri",
  "tokio",
  "tokio-rustls 0.26.0",
- "tower 0.4.13",
+ "tower 0.5.1",
 ]
 
 [[package]]
@@ -13524,6 +13541,8 @@ dependencies = [
  "k256",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
+ "rate-limits-api",
+ "regex",
  "registry-canister",
  "slog",
  "tokio",
@@ -14501,7 +14520,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tower 0.4.13",
- "tower-http",
+ "tower-http 0.5.2",
  "tracing",
 ]
 
@@ -16913,8 +16932,8 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tonic",
- "tower 0.4.13",
- "tower-http",
+ "tower 0.5.1",
+ "tower-http 0.6.1",
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
@@ -17738,6 +17757,42 @@ name = "rangemap"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f60fcc7d6849342eff22c4350c8b9a989ee8ceabc4b481253e8946b9fe83d684"
+
+[[package]]
+name = "rate-limits-api"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "regex",
+ "serde",
+ "serde_bytes",
+ "serde_json",
+]
+
+[[package]]
+name = "rate_limits"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "bincode",
+ "candid",
+ "getrandom",
+ "hex",
+ "ic-canisters-http-types",
+ "ic-cdk 0.16.0",
+ "ic-cdk-macros 0.9.0",
+ "ic-cdk-timers",
+ "ic-metrics-encoder",
+ "ic-stable-structures",
+ "mockall 0.13.0",
+ "rand_chacha 0.3.1",
+ "rate-limits-api",
+ "serde",
+ "serde_json",
+ "sha2 0.10.8",
+ "thiserror",
+ "uuid",
+]
 
 [[package]]
 name = "ratelimit"
@@ -20727,7 +20782,6 @@ checksum = "b8fa9be0de6cf49e536ce1851f987bd21a43b771b09473c3549a6c853db37c1c"
 dependencies = [
  "futures-core",
  "futures-util",
- "hdrhistogram",
  "indexmap 1.9.3",
  "pin-project",
  "pin-project-lite",
@@ -20748,9 +20802,13 @@ checksum = "2873938d487c3cfb9aed7546dc9f2711d867c9f90c46b889989a2cb84eba6b4f"
 dependencies = [
  "futures-core",
  "futures-util",
+ "hdrhistogram",
+ "indexmap 2.6.0",
  "pin-project-lite",
+ "slab",
  "sync_wrapper 0.1.2",
  "tokio",
+ "tokio-util",
  "tower-layer",
  "tower-service",
  "tracing",
@@ -20762,19 +20820,36 @@ version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e9cd434a998747dd2c4276bc96ee2e0c7a2eadf3cae88e52be55a05fa9053f5"
 dependencies = [
- "async-compression",
  "base64 0.21.7",
+ "bitflags 2.6.0",
+ "bytes",
+ "http 1.1.0",
+ "http-body 1.0.1",
+ "http-body-util",
+ "mime",
+ "pin-project-lite",
+ "tower-layer",
+ "tower-service",
+ "tracing",
+]
+
+[[package]]
+name = "tower-http"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8437150ab6bbc8c5f0f519e3d5ed4aa883a83dd4cdd3d1b21f9482936046cb97"
+dependencies = [
+ "async-compression",
  "bitflags 2.6.0",
  "bytes",
  "futures-core",
  "http 1.1.0",
  "http-body 1.0.1",
  "http-body-util",
- "mime",
  "pin-project-lite",
  "tokio",
  "tokio-util",
- "tower 0.4.13",
+ "tower 0.5.1",
  "tower-layer",
  "tower-service",
  "tracing",

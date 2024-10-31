@@ -66,7 +66,7 @@ fn test_api_for_update(
         call_context_test_id(13),
     );
 
-    let static_system_state = SandboxSafeSystemState::new(
+    let static_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         *cycles_account_manager,
         &NetworkTopology::default(),

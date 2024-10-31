@@ -60,25 +60,50 @@ impl FetchEnv for KytCanisterEnv {
 
     async fn http_get_tx(
         &self,
-        provider: providers::Provider,
+        provider: &providers::Provider,
         txid: Txid,
         max_response_bytes: u32,
     ) -> Result<Transaction, HttpGetTxError> {
-        let request = provider.create_request(txid, max_response_bytes);
+        let request = provider
+            .create_request(txid, max_response_bytes)
+            .map_err(|err| HttpGetTxError::Rejected {
+                code: RejectionCode::SysFatal,
+                message: err,
+            })?;
         let url = request.url.clone();
         let cycles = get_tx_cycle_cost(max_response_bytes);
-        match http_request(request, cycles).await {
+        match http_request(request.clone(), cycles).await {
             Ok((response,)) => {
                 // Ensure response is 200 before decoding
                 if response.status != 200u32 {
                     // All non-200 status are treated as transient errors
                     return Err(HttpGetTxError::Rejected {
                         code: RejectionCode::SysTransient,
-                        message: format!("HTTP GET {} received code {}", url, response.status),
+                        message: format!("HTTP call {} received code {}", url, response.status),
                     });
                 }
-                let tx = Transaction::consensus_decode(&mut response.body.as_slice())
-                    .map_err(|err| HttpGetTxError::TxEncoding(err.to_string()))?;
+                let tx = match provider.btc_network() {
+                    BtcNetwork::Regtest { .. } => {
+                        use serde_json::{from_slice, from_value, Value};
+                        let json: Value = from_slice(response.body.as_slice()).map_err(|err| {
+                            HttpGetTxError::TxEncoding(format!("JSON parsing error {}", err))
+                        })?;
+                        let hex: String =
+                            from_value(json["result"]["hex"].clone()).map_err(|_| {
+                                HttpGetTxError::TxEncoding(
+                                    "Missing result.hex field in JSON response".to_string(),
+                                )
+                            })?;
+                        let raw = hex::decode(&hex).map_err(|err| {
+                            HttpGetTxError::TxEncoding(format!("decode hex error: {}", err))
+                        })?;
+                        Transaction::consensus_decode(&mut raw.as_slice()).map_err(|err| {
+                            HttpGetTxError::TxEncoding(format!("decode tx error: {}", err))
+                        })?
+                    }
+                    _ => Transaction::consensus_decode(&mut response.body.as_slice())
+                        .map_err(|err| HttpGetTxError::TxEncoding(err.to_string()))?,
+                };
                 // Verify the correctness of the transaction by recomputing the transaction ID.
                 let decoded_txid = tx.compute_txid();
                 if decoded_txid.as_ref() as &[u8; 32] != txid.as_ref() {
@@ -126,7 +151,7 @@ impl FetchEnv for KytCanisterEnv {
 ///    in order to compute their corresponding addresses.
 pub async fn check_transaction_inputs(txid: Txid) -> CheckTransactionResponse {
     let env = &KytCanisterEnv;
-    match env.config().kyt_mode {
+    match env.config().kyt_mode() {
         KytMode::AcceptAll => CheckTransactionResponse::Passed,
         KytMode::RejectAll => CheckTransactionResponse::Failed(Vec::new()),
         KytMode::Normal => {
