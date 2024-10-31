@@ -1,7 +1,6 @@
 use rust_decimal::Decimal;
 use std::ops::Range;
 
-// DO NOT MERGE - Migrate SNS rewards to this.
 /// A function that maps from one interval to another.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct LinearMap {
