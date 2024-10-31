@@ -254,7 +254,7 @@ mod tests {
         ];
         for (name, input, argument_to_remove, expected) in table.iter() {
             let mut cmdline = KernelCommandLine::try_from(*input).unwrap();
-            cmdline.remove_argument(*argument_to_remove);
+            cmdline.remove_argument(argument_to_remove);
             let result: String = cmdline.into();
             if result != *expected {
                 panic!(
@@ -283,12 +283,11 @@ mod tests {
             ),
         ];
         for (name, input) in table.iter() {
-            match KernelCommandLine::try_from(*input) {
-                Ok(_) => panic!(
+            if let Ok(_) = KernelCommandLine::try_from(*input) {
+                panic!(
                     "During test {}:\ninput:    {:?}\nintentionally misquoted argument did not trigger error",
                     name, input
-                ),
-                Err(_) => (),
+                )
             }
         }
     }
