@@ -3,7 +3,6 @@ use ic_base_types::{NumBytes, NumSeconds};
 use ic_config::flag_status::FlagStatus;
 use ic_error_types::ErrorCode;
 use ic_error_types::UserError;
-use ic_interfaces::execution_environment::HypervisorError;
 use ic_management_canister_types::CanisterStatusType;
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::testing::SystemStateTesting;
@@ -265,25 +264,23 @@ fn execute_response_traps() {
     // Execute response returns failed status due to trap.
     let result = test.execute_response(a_id, response);
     match result {
-        ExecutionResponse::Ingress((_, ingress_status)) => {
-            let user_id = ingress_status.user_id().unwrap();
-            assert_eq!(
-                ingress_status,
-                IngressStatus::Known {
-                    state: IngressState::Failed(
-                        HypervisorError::CalledTrap {
-                            message: String::new(),
-                            backtrace: None
-                        }
-                        .into_user_error(&a_id)
-                    ),
-                    receiver: a_id.get(),
-                    time: Time::from_nanos_since_unix_epoch(0),
-                    user_id
-                }
+        ExecutionResponse::Ingress((
+            _,
+            IngressStatus::Known {
+                state: IngressState::Failed(user_error),
+                receiver,
+                time,
+                user_id: _,
+            },
+        )) => {
+            assert_eq!(time, Time::from_nanos_since_unix_epoch(0));
+            assert_eq!(receiver, a_id.get());
+            user_error.assert_contains(
+                ErrorCode::CanisterCalledTrap,
+                "Canister called `ic0.trap` with message: ",
             );
         }
-        ExecutionResponse::Request(_) | ExecutionResponse::Empty => {
+        _ => {
             panic!("Wrong execution result.")
         }
     }
@@ -324,29 +321,25 @@ fn execute_response_with_trapping_cleanup() {
     // Execute response returns failed status due to trap.
     let result = test.execute_response(a_id, response);
     match result {
-        ExecutionResponse::Ingress((_, ingress_status)) => {
-            let user_id = ingress_status.user_id().unwrap();
-            let err_trapped = Box::new(HypervisorError::CalledTrap {
-                message: String::new(),
-                backtrace: None,
-            });
-            assert_eq!(
-                ingress_status,
-                IngressStatus::Known {
-                    state: IngressState::Failed(
-                        HypervisorError::Cleanup {
-                            callback_err: err_trapped.clone(),
-                            cleanup_err: err_trapped
-                        }
-                        .into_user_error(&a_id)
-                    ),
-                    receiver: a_id.get(),
-                    time: Time::from_nanos_since_unix_epoch(0),
-                    user_id
-                }
+        ExecutionResponse::Ingress((
+            _,
+            IngressStatus::Known {
+                state: IngressState::Failed(user_error),
+                receiver,
+                time,
+                user_id: _,
+            },
+        )) => {
+            assert_eq!(time, Time::from_nanos_since_unix_epoch(0));
+            assert_eq!(receiver, a_id.get());
+            user_error.assert_contains(
+                ErrorCode::CanisterCalledTrap,
+                "Canister called `ic0.trap` with message: ",
             );
+            user_error
+                .assert_contains(ErrorCode::CanisterCalledTrap, "all_on_cleanup also failed:");
         }
-        ExecutionResponse::Request(_) | ExecutionResponse::Empty => {
+        _ => {
             panic!("Wrong execution result.")
         }
     }
