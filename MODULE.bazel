@@ -119,6 +119,9 @@ use_repo(
 )
 
 # Docker/OCI & archive rules with image definitions
+# Mirror image to GHCR if image is in DockerHub:
+#   1st PR: add it to the list .github/workflows/container-mirror-images.json
+#   2nd PR: add it below
 
 bazel_dep(name = "rules_pkg", version = "1.0.1")
 bazel_dep(name = "rules_oci", version = "2.0.0")
