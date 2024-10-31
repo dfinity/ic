@@ -1,41 +1,27 @@
 use pocket_ic::PocketIcBuilder;
 use rate_limits_api::{
-    v1::{RateLimitRule, RequestType},
-    AddConfigResponse, DiscloseRulesArg, DiscloseRulesResponse, GetConfigResponse,
-    GetRuleByIdResponse, IncidentId, InputConfig, InputRule, RuleId, Version,
+    AddConfigResponse, GetConfigResponse,
+    InputConfig, InputRule, Version,
 };
-use canister_test::Project;
-use canister_test::Wasm;
-use candid::{Decode, Encode, Nat, Principal};
-use ic_base_types::CanisterId;
+use canister_test::{Project, Wasm};
+use candid::{Decode, Encode, Principal};
 use ic_base_types::PrincipalId;
 use rate_limits_api::InitArg;
 use pocket_ic::nonblocking::PocketIc;
-use ic_base_types::SubnetId;
 use pocket_ic::CanisterSettings;
+use ic_crypto_sha2::Sha256;
 
 // TODO: Should be factored out
 use ic_nns_constants::{
-    self, ALL_NNS_CANISTER_IDS, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID,
-    REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    self, 
+    REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
 };
-use ic_nns_test_utils::{
-    common::{
-        build_governance_wasm, build_ledger_wasm, build_lifeline_wasm,
-        build_mainnet_governance_wasm, build_mainnet_ledger_wasm, build_mainnet_lifeline_wasm,
-        build_mainnet_registry_wasm, build_mainnet_root_wasm, build_mainnet_sns_wasms_wasm,
-        build_registry_wasm, build_root_wasm, build_sns_wasms_wasm, NnsInitPayloadsBuilder,
-    },
-    sns_wasm::{
-        build_archive_sns_wasm, build_governance_sns_wasm, build_index_ng_sns_wasm,
-        build_ledger_sns_wasm, build_mainnet_archive_sns_wasm, build_mainnet_governance_sns_wasm,
-        build_mainnet_index_ng_sns_wasm, build_mainnet_ledger_sns_wasm,
-        build_mainnet_root_sns_wasm, build_mainnet_swap_sns_wasm, build_root_sns_wasm,
-        build_swap_sns_wasm, ensure_sns_wasm_gzipped,
-    },
+use ic_nns_test_utils::common::{
+    modify_wasm_bytes,
+    build_mainnet_registry_wasm,
+    build_registry_wasm, NnsInitPayloadsBuilder,
 };
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
-use prost::Message;
 use pocket_ic::WasmResult;
 
 pub const STARTING_CYCLES_PER_CANISTER: u128 = 2_000_000_000_000_000;
@@ -60,72 +46,12 @@ pub async fn install_nns_canisters(
 
     let nns_init_payload = nns_init_payload_builder.build();
 
-    let (governance_wasm, ledger_wasm, root_wasm, lifeline_wasm, sns_wasm_wasm, registry_wasm) =
-        if with_mainnet_nns_canister_versions {
-            (
-                build_mainnet_governance_wasm(),
-                build_mainnet_ledger_wasm(),
-                build_mainnet_root_wasm(),
-                build_mainnet_lifeline_wasm(),
-                build_mainnet_sns_wasms_wasm(),
-                build_mainnet_registry_wasm(),
-            )
-        } else {
-            (
-                build_governance_wasm(),
-                build_ledger_wasm(),
-                build_root_wasm(),
-                build_lifeline_wasm(),
-                build_sns_wasms_wasm(),
-                build_registry_wasm(),
-            )
-        };
+    let registry_wasm = if with_mainnet_nns_canister_versions {
+        build_mainnet_registry_wasm()
+    } else {
+        build_registry_wasm()
+    };
 
-    ic_nervous_system_integration_tests::pocket_ic_helpers::install_canister(
-        pocket_ic,
-        "ICP Ledger",
-        LEDGER_CANISTER_ID,
-        Encode!(&nns_init_payload.ledger).unwrap(),
-        ledger_wasm,
-        Some(ROOT_CANISTER_ID.get()),
-    )
-    .await;
-    ic_nervous_system_integration_tests::pocket_ic_helpers::install_canister(
-        pocket_ic,
-        "NNS Root",
-        ROOT_CANISTER_ID,
-        Encode!(&nns_init_payload.root).unwrap(),
-        root_wasm,
-        Some(LIFELINE_CANISTER_ID.get()),
-    )
-    .await;
-    ic_nervous_system_integration_tests::pocket_ic_helpers::install_canister(
-        pocket_ic,
-        "NNS Governance",
-        GOVERNANCE_CANISTER_ID,
-        nns_init_payload.governance.encode_to_vec(),
-        governance_wasm,
-        Some(ROOT_CANISTER_ID.get()),
-    )
-    .await;
-    ic_nervous_system_integration_tests::pocket_ic_helpers::install_canister(
-        pocket_ic,
-        "Lifeline",
-        LIFELINE_CANISTER_ID,
-        Encode!(&nns_init_payload.lifeline).unwrap(),
-        lifeline_wasm,
-        Some(ROOT_CANISTER_ID.get()),
-    )
-    .await;
-    ic_nervous_system_integration_tests::pocket_ic_helpers::install_canister(
-        pocket_ic,
-        "NNS SNS-W",
-        SNS_WASM_CANISTER_ID,
-        Encode!(&nns_init_payload.sns_wasms).unwrap(),
-        sns_wasm_wasm,
-        Some(ROOT_CANISTER_ID.get()),
-    )
-    .await;
     ic_nervous_system_integration_tests::pocket_ic_helpers::install_canister(
         pocket_ic,
         "Registry",
@@ -165,6 +91,26 @@ pub async fn install_canister(
         name, canister_id, subnet_id
     );
     PrincipalId::from(canister_id)
+}
+
+pub async fn get_installed_wasm_hash(
+    pocket_ic: &PocketIc,
+    canister_id: PrincipalId,
+) -> [u8; 32] {
+    let module_hash = pocket_ic.canister_status(
+        canister_id.into(),
+        None,
+    )
+    .await
+    .unwrap()
+    .module_hash
+    .unwrap();
+
+    module_hash
+        .try_into()
+        .unwrap_or_else(|v: Vec<_>| {
+            panic!("Expected a Vec of length 32 but it has {} bytes.", v.len())
+        })
 }
 
 pub async fn add_config(
@@ -218,7 +164,7 @@ pub async fn get_config(
 
 #[tokio::test]
 async fn test() {
-    // 1. Prepare the world
+    // 1. Prepare the world.
     let pocket_ic = PocketIcBuilder::new()
         .with_nns_subnet()
         .with_ii_subnet()
@@ -240,23 +186,26 @@ async fn test() {
 
     let wasm = build_rate_limits_wasm();
 
-    let rate_limits_canister = pocket_ic.create_canister().await;
-
-
     let initial_payload = InitArg {
         authorized_principal: None,
         registry_polling_period_secs: 1,
     };
-
-    println!("rate_limits_canister = {:?}", rate_limits_canister);
 
     let rate_limit_canister = install_canister(
         &pocket_ic, 
         "Rate Limits Canister", 
         ii_subnet_id,
         Encode!(&initial_payload).unwrap(), 
-        wasm,
+        wasm.clone(),
     ).await;
+
+    let wasm_hash = Sha256::hash(&wasm.clone().bytes());
+    assert_eq!(
+        get_installed_wasm_hash(&pocket_ic, rate_limit_canister).await,
+        wasm_hash,
+    );
+
+    // 2. Run code under test.
 
     let add_config_response = add_config(
         &pocket_ic,
@@ -277,5 +226,22 @@ async fn test() {
 
     println!("get_config_response = {:#?}", get_config_response);
 
-    panic!("Hello Rate Limits!");
+    let new_wasm_bytes = modify_wasm_bytes(&wasm.clone().bytes(), 42);
+    let new_wasm_hash = Sha256::hash(&new_wasm_bytes[..]);
+    assert_ne!(wasm_hash, new_wasm_hash);
+
+    pocket_ic.upgrade_canister(
+        rate_limit_canister.into(),
+        new_wasm_bytes,
+        Encode!(&initial_payload).unwrap(),
+        None,
+    ).await
+    .unwrap();
+
+    assert_eq!(
+        get_installed_wasm_hash(&pocket_ic, rate_limit_canister).await,
+        new_wasm_hash,
+    );
+
+    // panic!("Hello Rate Limits!");
 }

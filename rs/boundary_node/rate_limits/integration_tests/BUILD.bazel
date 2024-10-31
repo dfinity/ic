@@ -3,76 +3,28 @@ load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 
 package(default_visibility = ["//visibility:public"])
 
-BASE_DEPENDENCIES = [
+DEPENDENCIES = [
     # Keep sorted.
-    "//rs/ledger_suite/common/ledger_core",
-    "//rs/ledger_suite/icp:icp_ledger",
-    "//rs/ledger_suite/icrc1",
-    "//rs/ledger_suite/icrc1/index-ng",
-    "//rs/ledger_suite/icrc1/tokens_u64",
-    "//rs/nervous_system/agent",
-    "//rs/nervous_system/clients",
-    "//rs/nervous_system/common",
-    # "//rs/nervous_system/proto",
-    "//rs/nervous_system/root",
-    "//rs/nns/common",
-    "//rs/nns/governance/api",
-    "//rs/nns/sns-wasm",
-    "//rs/sns/governance",
-    "//rs/sns/init",
-    "//rs/sns/root",
-    "//rs/sns/swap",
-    "//rs/nervous_system/integration_tests:nervous_system_integration_tests",
     "//rs/boundary_node/rate_limits/api:rate_limits_api",
-    "//rs/test_utilities/load_wasm",
+    "//rs/nervous_system/integration_tests:nervous_system_integration_tests",
     "//rs/types/base_types",
-    "//rs/types/management_canister_types",
     "@crate_index//:assert_matches",
     "@crate_index//:candid",
-    "@crate_index//:futures",
-    "@crate_index//:lazy_static",
-    "@crate_index//:prost",
-    "@crate_index//:rust_decimal",
     "@crate_index//:tokio",
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
     "//conditions:default": [
-        "//packages/icrc-ledger-types:icrc_ledger_types",
         "//packages/pocket-ic",
         "//rs/crypto/sha2",
-        "//rs/nervous_system/common/test_keys",
         "//rs/nns/constants",
-        "//rs/protobuf",
-        "//rs/registry/canister",
         "//rs/registry/keys",
-        "//rs/registry/routing_table",
-        "//rs/registry/subnet_type",
         "//rs/registry/transport",
         "//rs/rust_canisters/canister_test",
-        "//rs/test_utilities",
-        "@crate_index//:maplit",
-        "@crate_index//:num-traits",
-        "@crate_index//:rustc-hash",
-        "@crate_index//:serde",
+        "//rs/nns/test_utils:test_utils",
     ],
 })
 
-DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
-    "//rs/nns/governance:governance--test_feature",
-    "//rs/nns/handlers/root/impl:root--test_feature",
-] + select({
-    "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
-    "//conditions:default": [
-        "//rs/nns/test_utils:test_utils--test_feature",
-        "//rs/nns/gtc:gtc--test_feature",
-        "//rs/sns/test_utils:test_utils--test_feature",
-    ],
-})
-
-MACRO_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:rust_decimal_macros",
-]
+MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = []
 
@@ -81,71 +33,16 @@ MACRO_DEV_DEPENDENCIES = []
 ALIASES = {}
 
 DEV_DATA = [
-    "//rs/nns/cmc:cycles-minting-canister",
-    "//rs/nns/governance:governance-canister",
-    "//rs/nns/gtc:genesis-token-canister",
-    "//rs/nns/handlers/root/impl:root-canister",
-    "//rs/nns/sns-wasm:sns-wasm-canister",
-    "@mainnet_nns_sns-wasm-canister//file",
-    "@mainnet_icp_ledger_canister//file",
-    "@mainnet_nns_governance_canister//file",
-    "@mainnet_nns_lifeline_canister//file",
-    "@mainnet_nns_root-canister//file",
     "@mainnet_nns_registry_canister//file",
     "//rs/registry/canister:registry-canister",
-    "//rs/ledger_suite/icp/archive:ledger-archive-node-canister-wasm",
-    "//rs/ledger_suite/icp/ledger:ledger-canister-wasm",
-    "//rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method",
-    "@mainnet_ic-icrc1-ledger//file",
-    "@mainnet_ic-icrc1-archive//file",
-    "@mainnet_ic-icrc1-index-ng//file",
-    "//rs/ledger_suite/icrc1/archive:archive_canister",
-    "//rs/ledger_suite/icrc1/index-ng:index_ng_canister",
-    "//rs/ledger_suite/icrc1/ledger:ledger_canister",
-    "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister",
     "//rs/pocket_ic_server:pocket-ic-server",
-    "//rs/sns/governance:sns-governance-canister-test",
-    "@mainnet_sns-governance-canister//file",
-    "//rs/sns/root:sns-root-canister",
-    "@mainnet_sns-root-canister//file",
-    "//rs/sns/swap:sns-swap-canister",
-    "@mainnet_sns-swap-canister//file",
-    "@cycles-ledger.wasm.gz//file",
     "//rs/boundary_node/rate_limits:rate_limit_canister",
 ]
 
 DEV_ENV = {
     "CARGO_MANIFEST_DIR": "rs/nns/integration_tests",
-    "CYCLES_LEDGER_WASM_PATH": "$(rootpath @cycles-ledger.wasm.gz//file)",
-    "CYCLES_MINTING_CANISTER_WASM_PATH": "$(rootpath //rs/nns/cmc:cycles-minting-canister)",
-    "GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister)",
     "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
-    "IC_ICRC1_ARCHIVE_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/archive:archive_canister)",
-    "IC_ICRC1_INDEX_NG_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/index-ng:index_ng_canister)",
-    "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
-    "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm)",
-    "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method)",
-    "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/archive:ledger-archive-node-canister-wasm)",
-    "MAINNET_IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath @mainnet_ic-icrc1-ledger//file)",
-    "MAINNET_IC_ICRC1_ARCHIVE_WASM_PATH": "$(rootpath @mainnet_ic-icrc1-archive//file)",
-    "MAINNET_IC_ICRC1_INDEX_NG_WASM_PATH": "$(rootpath @mainnet_ic-icrc1-index-ng//file)",
-    "MAINNET_SNS_WASM_CANISTER_WASM_PATH": "$(rootpath @mainnet_nns_sns-wasm-canister//file)",
-    "MAINNET_ICP_LEDGER_CANISTER_WASM_PATH": "$(rootpath @mainnet_icp_ledger_canister//file)",
-    "MAINNET_GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath @mainnet_nns_governance_canister//file)",
-    "MAINNET_LIFELINE_CANISTER_WASM_PATH": "$(rootpath @mainnet_nns_lifeline_canister//file)",
-    "MAINNET_ROOT_CANISTER_WASM_PATH": "$(rootpath @mainnet_nns_root-canister//file)",
     "MAINNET_REGISTRY_CANISTER_WASM_PATH": "$(rootpath @mainnet_nns_registry_canister//file)",
-    "NEURON_CSV_PATH": "rs/nns/integration_tests/src/neurons.csv",
-    "GENESIS_TOKEN_CANISTER_WASM_PATH": "$(rootpath //rs/nns/gtc:genesis-token-canister)",
-    "SNS_WASM_CANISTER_WASM_PATH": "$(rootpath //rs/nns/sns-wasm:sns-wasm-canister)",
-    "SNS_GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/sns/governance:sns-governance-canister-test)",
-    "MAINNET_SNS_GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath @mainnet_sns-governance-canister//file)",
-    "SNS_ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/sns/root:sns-root-canister)",
-    "MAINNET_SNS_ROOT_CANISTER_WASM_PATH": "$(rootpath @mainnet_sns-root-canister//file)",
-    "SNS_SWAP_CANISTER_WASM_PATH": "$(rootpath //rs/sns/swap:sns-swap-canister)",
-    "MAINNET_SNS_SWAP_CANISTER_WASM_PATH": "$(rootpath @mainnet_sns-swap-canister//file)",
-    "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:root-canister)",
-    "XRC_MOCK_WASM_PATH": "$(rootpath //rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister)",
     "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
     "RATE_LIMITS_CANISTER_WASM_PATH": "$(rootpath //rs/boundary_node/rate_limits:rate_limit_canister)",
 }
@@ -157,8 +54,7 @@ rust_library(
     aliases = ALIASES,
     crate_name = "ic_rate_limit_canister_integration_tests",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.9.0",
-    deps = DEPENDENCIES_WITH_TEST_FEATURES,
+    deps = DEPENDENCIES,
 )
 
 rust_test_suite_with_extra_srcs(
@@ -170,10 +66,8 @@ rust_test_suite_with_extra_srcs(
     data = DEV_DATA,
     env = DEV_ENV,
     extra_srcs = [],
-    flaky = True,
+    flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    tags = [
-        "cpu:6",
-    ],
-    deps = [":rate_limit_canister_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
+    tags = [],
+    deps = [":rate_limit_canister_integration_tests"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

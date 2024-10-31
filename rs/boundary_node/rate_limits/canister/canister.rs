@@ -12,7 +12,7 @@ use crate::storage::API_BOUNDARY_NODE_PRINCIPALS;
 use candid::Principal;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::call::call;
-use ic_cdk_macros::{init, query, update};
+use ic_cdk_macros::{init, post_upgrade, query, update};
 use rate_limits_api::{
     AddConfigResponse, ApiBoundaryNodeIdRecord, DiscloseRulesArg, DiscloseRulesResponse,
     GetApiBoundaryNodeIdsRequest, GetConfigResponse, GetRuleByIdResponse, InitArg, InputConfig,
@@ -22,7 +22,6 @@ use rate_limits_api::{
 const REGISTRY_CANISTER_ID: &str = "rwlgt-iiaaa-aaaaa-aaaaa-cai";
 const REGISTRY_CANISTER_METHOD: &str = "get_api_boundary_node_ids";
 
-// TODO: implement proper canister lifecycle: upgrade, post_upgrade, ...
 #[init]
 fn init(init_arg: InitArg) {
     ic_cdk::println!("Starting canister init");
@@ -32,11 +31,26 @@ fn init(init_arg: InitArg) {
             state.set_authorized_principal(principal);
         });
     }
-    // Initialize an empty config corresponding to version=1
-    init_version_and_config(1);
+    with_canister_state(|state| {
+        if state.get_version().is_none() {
+            let version = 1;
+            ic_cdk::println!("Initializing config and version {version}");
+            init_version_and_config(version);
+        } else {
+            ic_cdk::println!("Canister config is already initialized");
+        }
+    });
     // Spawn periodic job of fetching latest API boundary node topology
     // API boundary nodes are authorized readers of all config rules (including not yet disclosed ones)
     periodically_poll_api_boundary_nodes(init_arg.registry_polling_period_secs);
+    ic_cdk::println!("Finished canister init");
+}
+
+#[post_upgrade]
+fn post_upgrade(init_arg: InitArg) {
+    ic_cdk::println!("Starting canister post_upgrade");
+    init(init_arg);
+    ic_cdk::println!("Finished canister post_upgrade");
 }
 
 #[query]
@@ -97,35 +111,37 @@ fn http_request(request: HttpRequest) -> HttpResponse {
     }
 }
 
+async fn poll_api_boundary_nodes() {
+    if let Ok(canister_id) = Principal::from_text(REGISTRY_CANISTER_ID) {
+        match call::<_, (Result<Vec<ApiBoundaryNodeIdRecord>, String>,)>(
+            canister_id,
+            REGISTRY_CANISTER_METHOD,
+            (&GetApiBoundaryNodeIdsRequest {},),
+        )
+        .await
+        {
+            Ok((Ok(api_bn_records),)) => {
+                API_BOUNDARY_NODE_PRINCIPALS.with(|cell| {
+                    *cell.borrow_mut() =
+                        HashSet::from_iter(api_bn_records.into_iter().filter_map(|n| n.id))
+                });
+            }
+            Ok((Err(err),)) => {
+                ic_cdk::println!("Error fetching API boundary nodes: {}", err);
+            }
+            Err(err) => {
+                ic_cdk::println!("Error calling registry canister: {:?}", err);
+            }
+        }
+    } else {
+        ic_cdk::println!("Failed to parse registry_canister_id");
+    }
+}
+
 fn periodically_poll_api_boundary_nodes(interval: u64) {
     let interval = Duration::from_secs(interval);
 
     ic_cdk_timers::set_timer_interval(interval, || {
-        ic_cdk::spawn(async {
-            if let Ok(canister_id) = Principal::from_text(REGISTRY_CANISTER_ID) {
-                match call::<_, (Result<Vec<ApiBoundaryNodeIdRecord>, String>,)>(
-                    canister_id,
-                    REGISTRY_CANISTER_METHOD,
-                    (&GetApiBoundaryNodeIdsRequest {},),
-                )
-                .await
-                {
-                    Ok((Ok(api_bn_records),)) => {
-                        API_BOUNDARY_NODE_PRINCIPALS.with(|cell| {
-                            *cell.borrow_mut() =
-                                HashSet::from_iter(api_bn_records.into_iter().filter_map(|n| n.id))
-                        });
-                    }
-                    Ok((Err(err),)) => {
-                        ic_cdk::println!("Error fetching API boundary nodes: {}", err);
-                    }
-                    Err(err) => {
-                        ic_cdk::println!("Error calling registry canister: {:?}", err);
-                    }
-                }
-            } else {
-                ic_cdk::println!("Failed to parse registry_canister_id");
-            }
-        });
+        ic_cdk::spawn(poll_api_boundary_nodes());
     });
 }
