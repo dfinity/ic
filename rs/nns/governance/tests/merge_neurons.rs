@@ -16,7 +16,6 @@ use ic_nns_governance::{
         manage_neuron_response::{Command as CommandResponse, MergeResponse},
         ManageNeuron, NetworkEconomics, Neuron,
     },
-    storage::reset_stable_memory,
 };
 use proptest::prelude::{proptest, TestCaseError};
 

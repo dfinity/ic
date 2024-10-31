@@ -254,7 +254,7 @@ fn set_up_chain<R: Rng>(
         let neuron_id = neuron_ids[neuron_index as usize];
         let previous_neuron_indices = (neuron_index - num_half_followees - 1)..neuron_index;
         let followee_neuron_ids = previous_neuron_indices
-            .map(|index| neuron_ids[index as usize].into())
+            .map(|index| neuron_ids[index as usize])
             .chain(not_voting_neuron_ids.clone().into_iter())
             .collect::<Vec<_>>();
 
@@ -325,9 +325,7 @@ fn make_neuron(
         aging_since_timestamp_seconds: now - MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
     };
 
-    let hot_keys = (0..15)
-        .map(|id| PrincipalId::new_user_test_id(id))
-        .collect();
+    let hot_keys = (0..15).map(PrincipalId::new_user_test_id).collect();
 
     let followees = if followees.is_empty() {
         hashmap! {

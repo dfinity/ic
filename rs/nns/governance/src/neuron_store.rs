@@ -358,12 +358,13 @@ impl NeuronStore {
             use_stable_following_index: use_stable_memory_following_index(),
         };
 
+        // DO NOT MERGE - debug println
         ic_cdk::println!(
             "flags set to, use stable memory for all neurons: \
                 {} and use stable following index: {}, neuron_ids: {:?}",
             neuron_store.use_stable_memory_for_all_neurons,
             neuron_store.use_stable_following_index,
-            neurons.iter().map(|(id, _)| id).collect::<Vec<_>>()
+            neurons.keys()
         );
 
         // Adds the neurons one by one into neuron store.
@@ -1093,7 +1094,7 @@ impl NeuronStore {
     ) -> Vec<NeuronId> {
         // DO NOT MERGE - we need to handle this usage of heap_neurons
         let is_non_empty = |neuron_id: &NeuronId| {
-            self.with_neuron(&neuron_id, |neuron| neuron.is_funded())
+            self.with_neuron(neuron_id, |neuron| neuron.is_funded())
                 .unwrap_or(false)
         };
 
