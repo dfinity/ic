@@ -2,6 +2,21 @@ use rust_decimal::Decimal;
 use std::ops::Range;
 
 /// A function that maps from one interval to another.
+///
+/// For example suppose you have a linear function that passes though two points
+/// in the x-y plane: (6, 100) and (8, 50). Of course, you would want to know
+/// the y value corresponding to any random x value. Here's how to do that:
+///
+/// ```
+/// use ic_nervous_system_linear_map::LinearMap;
+/// use rust_decimal::Decimal;
+///
+/// let example = LinearMap::new(6..8, 100..50);
+/// assert_eq!(
+///     example.apply(7),  // Since the input is half way between 6 and 8,
+///     Decimal::from(75), // the output must be half way between 100 and 50.
+/// );
+/// ```
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct LinearMap {
     from: Range<Decimal>,
