@@ -81,6 +81,7 @@ message SchnorrArguments {
 
 message VetKdArguments {
   registry.crypto.v1.VetKdKeyId key_id = 1;
+  // TODO: Use correct arguments
   bytes data = 2;
   uint64 height = 3;
 }

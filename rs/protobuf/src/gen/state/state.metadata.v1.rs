@@ -104,6 +104,7 @@ pub struct SchnorrArguments {
 pub struct VetKdArguments {
     #[prost(message, optional, tag = "1")]
     pub key_id: ::core::option::Option<super::super::super::registry::crypto::v1::VetKdKeyId>,
+    /// TODO: Use correct arguments
     #[prost(bytes = "vec", tag = "2")]
     pub data: ::prost::alloc::vec::Vec<u8>,
     #[prost(uint64, tag = "3")]

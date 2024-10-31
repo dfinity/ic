@@ -1,4 +1,3 @@
-//! Threshold Schnorr transcripts and references related definitions.
 use crate::crypto::canister_threshold_sig::ExtendedDerivationPath;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
@@ -11,6 +10,7 @@ use std::hash::Hash;
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct VetKdInputs {
     pub derivation_path: ExtendedDerivationPath,
+    // TODO: Use correct data
     pub data: Vec<u8>,
 }
 

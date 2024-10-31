@@ -60,6 +60,10 @@ pub(crate) fn update_signature_agreements(
 
     // Then we collect new signatures into the signature_agreements
     for (callback_id, context) in all_requests {
+        if context.is_vet_kd() {
+            // Don't build vet KD responses in the IDKG payload builder.
+            continue;
+        }
         if payload
             .signature_agreements
             .contains_key(&context.pseudo_random_id)
@@ -141,7 +145,13 @@ pub(crate) fn update_signature_agreements(
                 signature: signature.signature.clone(),
             }
             .encode(),
-            _ => continue,
+            Some(CombinedSignature::VetKd) => {
+                if let Some(metrics) = idkg_payload_metrics {
+                    metrics.payload_errors_inc("vet_kd_in_idkg_payload");
+                }
+                continue;
+            }
+            None => continue,
         };
 
         let response = ic_types::batch::ConsensusResponse::new(

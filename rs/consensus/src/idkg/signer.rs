@@ -45,14 +45,14 @@ use super::utils::{build_signature_inputs, update_purge_height};
 enum CreateSigShareError {
     Ecdsa(ThresholdEcdsaCreateSigShareError),
     Schnorr(ThresholdSchnorrCreateSigShareError),
-    VetKd, //TODO
+    VetKd, // TODO: Fill with crypto error once it exists
 }
 
 #[derive(Clone, Debug)]
 enum VerifySigShareError {
     Ecdsa(ThresholdEcdsaVerifySigShareError),
     Schnorr(ThresholdSchnorrVerifySigShareError),
-    VetKd, //TODO
+    VetKd, // TODO: Fill with crypto error once it exists
     ThresholdSchemeMismatch,
 }
 
@@ -61,7 +61,7 @@ impl VerifySigShareError {
         match self {
             VerifySigShareError::Ecdsa(err) => err.is_reproducible(),
             VerifySigShareError::Schnorr(err) => err.is_reproducible(),
-            VerifySigShareError::VetKd => true, //TODO
+            VerifySigShareError::VetKd => true, // TODO: Check if crypto error is reproducible, once it exists
             VerifySigShareError::ThresholdSchemeMismatch => true,
         }
     }
@@ -71,7 +71,7 @@ impl VerifySigShareError {
 enum CombineSigSharesError {
     Ecdsa(ThresholdEcdsaCombineSigSharesError),
     Schnorr(ThresholdSchnorrCombineSigSharesError),
-    VetKd, //TODO
+    VetKd, // TODO: Fill with crypto error once it exists
 }
 
 impl CombineSigSharesError {
@@ -82,7 +82,7 @@ impl CombineSigSharesError {
                 ThresholdEcdsaCombineSigSharesError::UnsatisfiedReconstructionThreshold { .. }
             ) | CombineSigSharesError::Schnorr(
                 ThresholdSchnorrCombineSigSharesError::UnsatisfiedReconstructionThreshold { .. }
-            ) //TODO VetKd
+            ) // TODO: Check if Vet KD crypto error is `UnsatisfiedReconstructionThreshold`, once it exists
         )
     }
 }
@@ -356,6 +356,7 @@ impl ThresholdSignerImpl {
                 inputs.presig_transcript().blinder_unmasked(),
                 inputs.key_transcript(),
             ],
+            // No dependencies for Vet KD
             ThresholdSigInputs::VetKd(_) => vec![],
         };
         load_transcripts(idkg_pool, transcript_loader, &transcripts)
@@ -422,7 +423,7 @@ impl ThresholdSignerImpl {
                 )
             }
             ThresholdSigInputs::VetKd(_inputs) => {
-                todo!("Call crypto endpoint");
+                todo!("Call crypto endpoint to create a vet KD share");
             }
         }
     }
@@ -462,7 +463,7 @@ impl ThresholdSignerImpl {
                 )
             }
             (ThresholdSigInputs::VetKd(_inputs), SigShare::VetKd(_share)) => {
-                todo!("Call crypto endpoint")
+                todo!("Call crypto endpoint to verify a vet KD share")
             }
             _ => Err(VerifySigShareError::ThresholdSchemeMismatch),
         };
@@ -698,7 +699,7 @@ impl<'a> ThresholdSignatureBuilderImpl<'a> {
                         sig_shares.insert(share.signer_id, share.share.clone());
                     }
                 }
-                todo!("Call crypto endpoint");
+                todo!("Call crypto endpoint to combine vet KD shares");
             }
         };
         stats.record_sig_share_aggregation(request_id, start.elapsed());

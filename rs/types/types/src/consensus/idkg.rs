@@ -1404,6 +1404,7 @@ pub struct VetKdShare {
     pub request_id: RequestId,
 
     /// The signature share
+    /// TODO: use correct Vet KD share, once it exists
     pub share: ThresholdSchnorrSigShare,
 }
 

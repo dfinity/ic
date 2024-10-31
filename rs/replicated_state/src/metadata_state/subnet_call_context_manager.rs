@@ -805,6 +805,7 @@ impl TryFrom<pb_metadata::SchnorrArguments> for SchnorrArguments {
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct VetKdArguments {
     pub key_id: VetKdKeyId,
+    // TODO: Use correct arguments
     pub data: Vec<u8>,
     pub height: Height,
 }

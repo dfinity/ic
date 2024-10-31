@@ -1086,7 +1086,6 @@ impl TryFrom<&pb::PreSignatureRef> for PreSignatureRef {
 pub enum ThresholdSigInputsError {
     Ecdsa(ThresholdEcdsaSigInputsError),
     Schnorr(ThresholdSchnorrSigInputsError),
-    VetKd,
 }
 
 type ThresholdSigInputsResult = Result<ThresholdSigInputs, ThresholdSigInputsError>;
@@ -1123,6 +1122,8 @@ impl ThresholdSigInputsRef {
             ThresholdSigInputsRef::Schnorr(inputs) => {
                 PreSignatureRef::Schnorr(inputs.presig_transcript_ref.clone())
             }
+            // TODO: this function is actually only used by tests, so move it into
+            // test-only scope. Then panicking should be fine.
             _ => panic!(),
         }
     }
@@ -1166,7 +1167,7 @@ pub enum ThresholdSigInputs {
 pub enum CombinedSignature {
     Ecdsa(ThresholdEcdsaCombinedSignature),
     Schnorr(ThresholdSchnorrCombinedSignature),
-    VetKd, //TODO
+    VetKd, // TODO: Fill with vet KD combined signature, once it exists
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
