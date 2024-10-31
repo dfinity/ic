@@ -1822,15 +1822,6 @@ impl Scheduler for SchedulerImpl {
                 // as is currently the case. If this logic is moved elsewhere (e.g. at the
                 // beginning of the round), then canister deletion logic should be revised.
                 {
-                    let mut canisters = state.take_canister_states();
-                    let _ = self.apply_scheduling_strategy(
-                        &round_log,
-                        self.config.scheduler_cores,
-                        current_round,
-                        self.config.accumulated_priority_reset_interval,
-                        &mut canisters,
-                    );
-                    state.put_canister_states(canisters);
                     let _timer = self.metrics.round_finalization_stop_canisters.start_timer();
                     final_state = self.exec_env.process_stopping_canisters(state);
                 }
