@@ -139,7 +139,7 @@ pub fn run_artifact_processor<Artifact: IdentifiableArtifact>(
     send_advert: Sender<ArtifactTransmit<Artifact>>,
     initial_artifacts: Vec<Artifact>,
 ) -> (Box<dyn JoinGuard>, ArtifactEventSender<Artifact>) {
-    // We picked fairly big value here so effectively the channel is unbounded so no wakers run. 
+    // We picked fairly big value here so effectively the channel is unbounded so no wakers run.
     // The number should be the same order of magnitute as the max number of validated artifacts (e.g. the max slot table size)
     let (sender, receiver) = channel(50000);
     let shutdown = Arc::new(AtomicBool::new(false));
