@@ -171,6 +171,7 @@ impl FetchEnv for KytCanisterEnv {
         txid: Txid,
         max_response_bytes: u32,
     ) -> Result<Transaction, HttpGetTxError> {
+        use ic_cdk::api::management_canister::http_request::http_request;
         let request = provider
             .create_request(txid, max_response_bytes)
             .map_err(|err| HttpGetTxError::Rejected {
