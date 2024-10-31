@@ -128,6 +128,9 @@ pub mod test_data;
 #[cfg(test)]
 mod tests;
 
+#[cfg(feature = "canbench-rs")]
+mod benches;
+
 #[macro_use]
 pub mod tla_macros;
 #[cfg(feature = "tla")]
@@ -1907,8 +1910,8 @@ impl Governance {
         )
     }
 
-    pub fn clone_proto(&self) -> GovernanceProto {
-        let neurons = self.neuron_store.clone_neurons();
+    pub fn __get_state_for_test(&self) -> GovernanceProto {
+        let neurons = self.neuron_store.__get_neurons_for_tests();
         let heap_topic_followee_index = self.neuron_store.clone_topic_followee_index();
         let heap_governance_proto = self.heap_data.clone();
         let rng_seed = self.env.get_rng_seed();
@@ -3441,6 +3444,17 @@ impl Governance {
             MAX_DISSOLVE_DELAY_SECONDS,
         );
 
+        let dissolve_state_and_age = if dissolve_delay_seconds > 0 {
+            DissolveStateAndAge::NotDissolving {
+                dissolve_delay_seconds,
+                aging_since_timestamp_seconds: created_timestamp_seconds,
+            }
+        } else {
+            DissolveStateAndAge::DissolvingOrDissolved {
+                when_dissolved_timestamp_seconds: created_timestamp_seconds,
+            }
+        };
+
         // Before we do the transfer, we need to save the neuron in the map
         // otherwise a trap after the transfer is successful but before this
         // method finishes would cause the funds to be lost.
@@ -3451,10 +3465,7 @@ impl Governance {
             child_nid,
             to_subaccount,
             child_controller,
-            DissolveStateAndAge::NotDissolving {
-                dissolve_delay_seconds,
-                aging_since_timestamp_seconds: created_timestamp_seconds,
-            },
+            dissolve_state_and_age,
             created_timestamp_seconds,
         )
         .with_followees(self.heap_data.default_followees.clone())
@@ -4205,15 +4216,24 @@ impl Governance {
                     reward_to_neuron.dissolve_delay_seconds,
                     MAX_DISSOLVE_DELAY_SECONDS,
                 );
+
+                let dissolve_state_and_age = if dissolve_delay_seconds > 0 {
+                    DissolveStateAndAge::NotDissolving {
+                        dissolve_delay_seconds,
+                        aging_since_timestamp_seconds: now,
+                    }
+                } else {
+                    DissolveStateAndAge::DissolvingOrDissolved {
+                        when_dissolved_timestamp_seconds: now,
+                    }
+                };
+
                 // Transfer successful.
                 let neuron = NeuronBuilder::new(
                     nid,
                     to_subaccount,
                     *np_principal,
-                    DissolveStateAndAge::NotDissolving {
-                        dissolve_delay_seconds,
-                        aging_since_timestamp_seconds: now,
-                    },
+                    dissolve_state_and_age,
                     now,
                 )
                 .with_followees(self.heap_data.default_followees.clone())
@@ -5649,23 +5669,9 @@ impl Governance {
             // vote, with a voting power determined at the
             // time of the proposal (i.e., now).
             _ => {
-                let mut ballots = HashMap::<u64, Ballot>::new();
-                let mut total_power: u128 = 0;
-                // No neuron in the stable storage should have maturity.
-
-                for neuron in self.neuron_store.voting_eligible_neurons(now_seconds) {
-                    let voting_power = neuron.voting_power(now_seconds);
-
-                    total_power += voting_power as u128;
-
-                    ballots.insert(
-                        neuron.id().id,
-                        Ballot {
-                            vote: Vote::Unspecified as i32,
-                            voting_power,
-                        },
-                    );
-                }
+                let (ballots, total_power) = self
+                    .neuron_store
+                    .create_ballots_for_standard_proposal(now_seconds);
 
                 if total_power >= (u64::MAX as u128) {
                     // The way the neurons are configured, the total voting
@@ -5725,7 +5731,7 @@ impl Governance {
     /// to followees).
     /// Cascading only occurs for proposal topics that support following (i.e.,
     /// all topics except Topic::NeuronManagement).
-    fn cast_vote_and_cascade_follow(
+    pub(crate) fn cast_vote_and_cascade_follow(
         proposal_id: &ProposalId,
         ballots: &mut HashMap<u64, Ballot>,
         voting_neuron_id: &NeuronId,
@@ -5828,9 +5834,11 @@ impl Governance {
             retain_neurons_with_castable_ballots(&mut all_followers, ballots);
 
             for f in all_followers.iter() {
-                let f_vote = match neuron_store.with_neuron(&NeuronId { id: f.id }, |n| {
-                    n.would_follow_ballots(topic, ballots)
-                }) {
+                let f_vote = match neuron_store.neuron_would_follow_ballots(
+                    NeuronId { id: f.id },
+                    topic,
+                    ballots,
+                ) {
                     Ok(vote) => vote,
                     Err(e) => {
                         // This is a bad inconsistency, but there is

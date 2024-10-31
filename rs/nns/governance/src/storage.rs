@@ -217,6 +217,7 @@ where
 // thread.
 #[cfg(any(feature = "test", test))]
 pub fn reset_stable_memory() {
+    ic_cdk::println!("Resetting stable memory");
     MEMORY_MANAGER.with(|mm| *mm.borrow_mut() = MemoryManager::init(DefaultMemoryImpl::default()));
     STATE.with(|cell| *cell.borrow_mut() = State::new());
 }
