@@ -896,6 +896,10 @@ fn test_hotkey_management() {
                         .to_owned();
                     // Make sure that the neuron has a hot key
                     assert_eq!(neuron.hot_keys.len(), 1);
+                    assert_eq!(
+                        neuron.hot_keys.first().unwrap().0,
+                        hot_key_identity.sender().unwrap().into()
+                    );
 
                     // Remove the hot key from the neuron
                     env.rosetta_client
@@ -917,14 +921,14 @@ fn test_hotkey_management() {
                         .to_owned();
                     // Make sure that the neuron has no hot keys
                     assert!(neuron.hot_keys.is_empty());
-                    let hote_key_identity = Arc::new(hot_key_identity);
+                    let hot_key_identity = Arc::new(hot_key_identity);
                     // Now we try the same but with a public key
                     env.rosetta_client
                         .add_hot_key(
                             env.network_identifier.clone(),
                             &(*TEST_IDENTITY).clone(),
                             RosettaHotKeyArgs::builder(neuron_index)
-                                .with_public_key((&hote_key_identity).into())
+                                .with_public_key((&hot_key_identity).into())
                                 .build(),
                         )
                         .await
@@ -938,6 +942,10 @@ fn test_hotkey_management() {
                         .to_owned();
                     // Make sure that the neuron has a hot key
                     assert_eq!(neuron.hot_keys.len(), 1);
+                    assert_eq!(
+                        neuron.hot_keys.first().unwrap().0,
+                        hot_key_identity.sender().unwrap().into()
+                    );
 
                     // Remove the hot key from the neuron
                     env.rosetta_client
@@ -945,7 +953,7 @@ fn test_hotkey_management() {
                             env.network_identifier.clone(),
                             &(*TEST_IDENTITY).clone(),
                             RosettaHotKeyArgs::builder(neuron_index)
-                                .with_public_key((&hote_key_identity).into())
+                                .with_public_key((&hot_key_identity).into())
                                 .build(),
                         )
                         .await
