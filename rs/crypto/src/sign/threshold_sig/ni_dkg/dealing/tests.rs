@@ -1,5 +1,3 @@
-#![allow(clippy::unwrap_used)]
-
 use super::*;
 use crate::sign::tests::{
     dealing_encryption_pk_record_with, registry_with_records, REG_V1, REG_V2,

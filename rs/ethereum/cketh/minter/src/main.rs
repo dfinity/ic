@@ -105,10 +105,10 @@ fn init(arg: MinterArg) {
 fn emit_preupgrade_events() {
     read_state(|s| {
         storage::record_event(EventType::SyncedToBlock {
-            block_number: s.last_scraped_block_number,
+            block_number: s.eth_log_scraping.last_scraped_block_number(),
         });
         storage::record_event(EventType::SyncedErc20ToBlock {
-            block_number: s.last_erc20_scraped_block_number,
+            block_number: s.erc20_log_scraping.last_scraped_block_number(),
         });
     });
 }
@@ -138,7 +138,7 @@ async fn minter_address() -> String {
 
 #[query]
 async fn smart_contract_address() -> String {
-    read_state(|s| s.eth_helper_contract_address)
+    read_state(|s| s.eth_log_scraping.contract_address().cloned())
         .map(|a| a.to_string())
         .unwrap_or("N/A".to_string())
 }
@@ -205,11 +205,16 @@ async fn get_minter_info() -> MinterInfo {
             (None, None)
         };
 
+        let eth_helper_contract_address =
+            s.eth_log_scraping.contract_address().map(|a| a.to_string());
         MinterInfo {
             minter_address: s.minter_address().map(|a| a.to_string()),
-            smart_contract_address: s.eth_helper_contract_address.map(|a| a.to_string()),
-            eth_helper_contract_address: s.eth_helper_contract_address.map(|a| a.to_string()),
-            erc20_helper_contract_address: s.erc20_helper_contract_address.map(|a| a.to_string()),
+            smart_contract_address: eth_helper_contract_address.clone(),
+            eth_helper_contract_address,
+            erc20_helper_contract_address: s
+                .erc20_log_scraping
+                .contract_address()
+                .map(|a| a.to_string()),
             supported_ckerc20_tokens,
             minimum_withdrawal_amount: Some(s.cketh_minimum_withdrawal_amount.into()),
             ethereum_block_height: Some(s.ethereum_block_height.into()),
@@ -223,8 +228,12 @@ async fn get_minter_info() -> MinterInfo {
                 },
             ),
             erc20_balances,
-            last_eth_scraped_block_number: Some(s.last_scraped_block_number.into()),
-            last_erc20_scraped_block_number: Some(s.last_erc20_scraped_block_number.into()),
+            last_eth_scraped_block_number: Some(
+                s.eth_log_scraping.last_scraped_block_number().into(),
+            ),
+            last_erc20_scraped_block_number: Some(
+                s.erc20_log_scraping.last_scraped_block_number().into(),
+            ),
             cketh_ledger_id: Some(s.cketh_ledger_id),
             evm_rpc_id: s.evm_rpc_id,
         }
@@ -868,13 +877,13 @@ fn http_request(req: HttpRequest) -> HttpResponse {
 
                 w.encode_gauge(
                     "cketh_minter_last_processed_block",
-                    s.last_scraped_block_number.as_f64(),
+                    s.eth_log_scraping.last_scraped_block_number().as_f64(),
                     "The last Ethereum block the ckETH minter checked for ckETH deposits.",
                 )?;
 
                 w.encode_gauge(
                     "ckerc20_minter_last_processed_block",
-                    s.last_erc20_scraped_block_number.as_f64(),
+                    s.erc20_log_scraping.last_scraped_block_number().as_f64(),
                     "The last Ethereum block the ckETH minter checked for ckERC20 deposits.",
                 )?;
 

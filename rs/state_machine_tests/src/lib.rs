@@ -133,7 +133,7 @@ use ic_types::{
     messages::{
         Blob, Certificate, CertificateDelegation, HttpCallContent, HttpCanisterUpdate,
         HttpRequestEnvelope, Payload as MsgPayload, Query, QuerySource, RejectContext,
-        SignedIngress, SignedIngressContent, EXPECTED_MESSAGE_ID_LENGTH,
+        SignedIngress, EXPECTED_MESSAGE_ID_LENGTH,
     },
     signature::ThresholdSignature,
     time::GENESIS,
@@ -183,7 +183,7 @@ use tokio::{
     runtime::Runtime,
     sync::{mpsc, watch},
 };
-use tower::{buffer::Buffer as TowerBuffer, ServiceExt};
+use tower::ServiceExt;
 
 /// The size of the channel used to communicate between the [`IngressWatcher`] and
 /// execution. Mirrors the size used in production defined in `setup_ic_stack.rs`
@@ -823,14 +823,12 @@ pub struct StateMachine {
     consensus_time: Arc<PocketConsensusTime>,
     ingress_pool: Arc<RwLock<PocketIngressPool>>,
     ingress_manager: Arc<IngressManager>,
-    pub ingress_filter:
-        tower::buffer::Buffer<IngressFilterService, (ProvisionalWhitelist, SignedIngressContent)>,
+    pub ingress_filter: Arc<Mutex<IngressFilterService>>,
     payload_builder: Arc<RwLock<Option<PayloadBuilderImpl>>>,
     message_routing: SyncMessageRouting,
     pub metrics_registry: MetricsRegistry,
     ingress_history_reader: Box<dyn IngressHistoryReader>,
-    pub query_handler:
-        tower::buffer::Buffer<QueryExecutionService, (Query, Option<CertificateDelegation>)>,
+    pub query_handler: Arc<Mutex<QueryExecutionService>>,
     runtime: Arc<Runtime>,
     // The atomicity is required for internal mutability and sending across threads.
     checkpoint_interval_length: AtomicU64,
@@ -1763,6 +1761,9 @@ impl StateMachine {
                         (public_key, private_key)
                     }
                 },
+                MasterPublicKeyId::VetKd(_vetkd_key_id) => {
+                    todo!("CRP-2629: Support vetKD in state machine tests")
+                }
             };
 
             idkg_subnet_secret_keys.insert(key_id.clone(), private_key);
@@ -1819,15 +1820,12 @@ impl StateMachine {
             consensus_time,
             ingress_pool,
             ingress_manager: ingress_manager.clone(),
-            ingress_filter: runtime
-                .block_on(async { TowerBuffer::new(execution_services.ingress_filter, 1) }),
+            ingress_filter: Arc::new(Mutex::new(execution_services.ingress_filter)),
             payload_builder: Arc::new(RwLock::new(None)), // set by `StateMachineBuilder::build_with_subnets`
             ingress_history_reader: execution_services.ingress_history_reader,
             message_routing,
             metrics_registry: metrics_registry.clone(),
-            query_handler: runtime.block_on(async {
-                TowerBuffer::new(execution_services.query_execution_service, 1)
-            }),
+            query_handler: Arc::new(Mutex::new(execution_services.query_execution_service)),
             ingress_watcher_handle,
             _ingress_watcher_drop_guard: ingress_watcher_drop_guard,
             certified_height_tx,
@@ -2078,7 +2076,7 @@ impl StateMachine {
         }
 
         // Run `IngressFilter` on the ingress message.
-        let ingress_filter = self.ingress_filter.clone();
+        let ingress_filter = self.ingress_filter.lock().unwrap().clone();
         self.runtime
             .block_on(ingress_filter.oneshot((provisional_whitelist, msg.clone().into())))
             .unwrap()
@@ -3079,9 +3077,10 @@ impl StateMachine {
             method_name: method.to_string(),
             method_payload,
         };
+        let query_svc = self.query_handler.lock().unwrap().clone();
         if let Ok((result, _)) = self
             .runtime
-            .block_on(self.query_handler.clone().oneshot((user_query, delegation)))
+            .block_on(query_svc.oneshot((user_query, delegation)))
             .unwrap()
         {
             result
@@ -3178,7 +3177,7 @@ impl StateMachine {
             .unwrap();
 
         // Run `IngressFilter` on the ingress message.
-        let ingress_filter = self.ingress_filter.clone();
+        let ingress_filter = self.ingress_filter.lock().unwrap().clone();
         self.runtime
             .block_on(ingress_filter.oneshot((provisional_whitelist, msg.clone().into())))
             .unwrap()?;

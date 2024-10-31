@@ -113,6 +113,21 @@ pub struct NeuronInfo {
     /// See the Visibility enum.
     #[prost(enumeration = "Visibility", optional, tag = "12")]
     pub visibility: ::core::option::Option<i32>,
+    /// The last time that voting power was "refreshed". There are two ways to
+    /// refresh the voting power of a neuron: set following, or vote directly. In
+    /// the future, there will be a dedicated API for refreshing. Note that direct
+    /// voting implies that refresh also occurs when a proposal is created, because
+    /// direct voting is part of proposal creation.
+    ///
+    /// Effect: When this becomes > 6 months ago, the amount of voting power that
+    /// this neuron can exercise decreases linearly down to 0 over the course of 1
+    /// month. After that, following is cleared, except for ManageNeuron proposals.
+    ///
+    /// This will always be populated. If the underlying neuron was never
+    /// refreshed, this will be set to 2024-11-05T00:00:01 UTC (1730764801 seconds
+    /// after the UNIX epoch).
+    #[prost(uint64, optional, tag = "13")]
+    pub voting_power_refreshed_timestamp_seconds: ::core::option::Option<u64>,
 }
 /// A transfer performed from some account to stake a new neuron.
 #[derive(
@@ -276,6 +291,21 @@ pub struct Neuron {
     /// See the Visibility enum.
     #[prost(enumeration = "Visibility", optional, tag = "23")]
     pub visibility: ::core::option::Option<i32>,
+    /// The last time that voting power was "refreshed". There are two ways to
+    /// refresh the voting power of a neuron: set following, or vote directly. In
+    /// the future, there will be a dedicated API for refreshing. Note that direct
+    /// voting implies that refresh also occurs when a proposal is created, because
+    /// direct voting is part of proposal creation.
+    ///
+    /// Effect: When this becomes > 6 months ago, the amount of voting power that
+    /// this neuron can exercise decreases linearly down to 0 over the course of 1
+    /// month. After that, following is cleared, except for ManageNeuron proposals.
+    ///
+    /// This will always be populated. If the underlying neuron was never
+    /// refreshed, this will be set to 2024-11-05T00:00:01 UTC (1730764801 seconds
+    /// after the UNIX epoch).
+    #[prost(uint64, optional, tag = "24")]
+    pub voting_power_refreshed_timestamp_seconds: ::core::option::Option<u64>,
     /// At any time, at most one of `when_dissolved` and
     /// `dissolve_delay` are specified.
     ///
@@ -401,6 +431,8 @@ pub struct AbridgedNeuron {
     pub neuron_type: ::core::option::Option<i32>,
     #[prost(enumeration = "Visibility", optional, tag = "23")]
     pub visibility: ::core::option::Option<i32>,
+    #[prost(uint64, optional, tag = "24")]
+    pub voting_power_refreshed_timestamp_seconds: ::core::option::Option<u64>,
     #[prost(oneof = "abridged_neuron::DissolveState", tags = "9, 10")]
     pub dissolve_state: ::core::option::Option<abridged_neuron::DissolveState>,
 }

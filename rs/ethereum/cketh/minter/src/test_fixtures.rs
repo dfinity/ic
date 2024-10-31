@@ -28,6 +28,7 @@ pub mod arb {
     use crate::checked_amount::CheckedAmountOf;
     use crate::eth_rpc::{Block, Data, FeeHistory, FixedSizeData, Hash, LogEntry};
     use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
+    use crate::numeric::BlockRangeInclusive;
     use evm_rpc_client::{
         Hex, Hex20, Hex256, Hex32, HexByte, HttpOutcallError as EvmHttpOutcallError,
         JsonRpcError as EvmJsonRpcError, Nat256, ProviderError as EvmProviderError,
@@ -47,6 +48,11 @@ pub mod arb {
         use proptest::arbitrary::any;
         use proptest::array::uniform32;
         uniform32(any::<u8>()).prop_map(CheckedAmountOf::from_be_bytes)
+    }
+
+    pub fn arb_block_range_inclusive() -> impl Strategy<Value = BlockRangeInclusive> {
+        (arb_checked_amount_of(), arb_checked_amount_of())
+            .prop_map(|(start, end)| BlockRangeInclusive::new(start, end))
     }
 
     pub fn arb_nat_256() -> impl Strategy<Value = Nat256> {
