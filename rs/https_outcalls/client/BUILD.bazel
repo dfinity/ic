@@ -22,6 +22,7 @@ DEPENDENCIES = [
     "//rs/types/types",
     "@crate_index//:candid",
     "@crate_index//:futures",
+    "@crate_index//:hyper-util",
     "@crate_index//:prometheus",
     "@crate_index//:slog",
     "@crate_index//:tokio",

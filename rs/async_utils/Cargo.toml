@@ -14,7 +14,7 @@ byte-unit = "4.0.14"
 bytes = { workspace = true }
 futures = { workspace = true }
 futures-util = { workspace = true }
-hyper = { version = "0.14.16", features = ["full"] }
+hyper = { workspace = true }
 slog = { workspace = true }
 sync_wrapper = { workspace = true }
 thiserror = { workspace = true }

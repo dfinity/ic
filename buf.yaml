@@ -11,7 +11,7 @@ build:
     - rs/nns/handlers/root/impl/proto
     - rs/nns/governance/proto
     - rs/protobuf/def
-    - rs/rosetta-api/icp_ledger/proto
+    - rs/ledger_suite/icp/proto
     - rs/sns/governance/proto
     - rs/sns/root/proto
     - rs/sns/swap/proto

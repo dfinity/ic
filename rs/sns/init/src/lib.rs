@@ -646,6 +646,7 @@ impl SnsInitPayload {
             archive_canister_ids: vec![],
             index_canister_id: Some(sns_canister_ids.index),
             testflight,
+            timers: None,
         }
     }
 
@@ -685,9 +686,7 @@ impl SnsInitPayload {
             swap_start_timestamp_seconds: self.swap_start_timestamp_seconds,
             swap_due_timestamp_seconds: self.swap_due_timestamp_seconds,
             sns_token_e8s: sns_tokens_e8s,
-            neuron_basket_construction_parameters: self
-                .neuron_basket_construction_parameters
-                .clone(),
+            neuron_basket_construction_parameters: self.neuron_basket_construction_parameters,
             nns_proposal_id: self.nns_proposal_id,
             should_auto_finalize: Some(true),
             neurons_fund_participation_constraints: self

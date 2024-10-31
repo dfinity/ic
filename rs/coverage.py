@@ -2,6 +2,7 @@
 #! nix-shell -i python3 shell.nix
 # see go/code-coverage for documentation and instructions.
 """Generate a coverage report for the workspace."""
+
 import argparse
 import os
 import subprocess
@@ -89,7 +90,6 @@ def handle_multiple_tests(base_dir, crate_path, pkg, error_msg):
     assert len(error_msg) >= 2
     error_msg = error_msg.split("\n")
     if error_msg[1] == "No tests available.":
-
         return []
     assert error_msg[1] == "Available tests:"
     pkg_exes = list(map(lambda pkg_exe: pkg_exe.lstrip(" "), error_msg[2:-3]))

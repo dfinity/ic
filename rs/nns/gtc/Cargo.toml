@@ -32,7 +32,7 @@ ic-nns-common = { path = "../common" }
 ic-nns-constants = { path = "../constants" }
 ic-nns-gtc-accounts = { path = "../gtc_accounts" }
 lazy_static = { workspace = true }
-icp-ledger = { path = "../../rosetta-api/icp_ledger" }
+icp-ledger = { path = "../../ledger_suite/icp" }
 prost = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }

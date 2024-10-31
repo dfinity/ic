@@ -1,5 +1,6 @@
 use candid::{CandidType, Deserialize};
 use serde::Serialize;
+use std::fmt;
 
 #[derive(CandidType, Debug, Deserialize, Serialize)]
 pub struct CheckAddressArgs {
@@ -54,7 +55,9 @@ pub enum CheckTransactionRetriable {
 pub enum CheckTransactionIrrecoverableError {
     /// Response size is too large (> `RETRY_MAX_RESPONSE_BYTES`) when fetching the transaction data of a txid.
     ResponseTooLarge { txid: Vec<u8> },
-    /// Invalid transaction, e.g. error decoding transaction or transaction id mismatch, etc.
+    /// Invalid transaction id because it fails to decode.
+    InvalidTransactionId(String),
+    /// Invalid transaction.
     InvalidTransaction(String),
 }
 
@@ -74,4 +77,64 @@ impl From<CheckTransactionStatus> for CheckTransactionResponse {
     fn from(status: CheckTransactionStatus) -> CheckTransactionResponse {
         CheckTransactionResponse::Unknown(status)
     }
+}
+
+#[derive(CandidType, Clone, Debug, Deserialize, Serialize)]
+pub struct InitArg {
+    pub btc_network: BtcNetwork,
+    pub kyt_mode: KytMode,
+}
+
+#[derive(CandidType, Clone, Copy, Deserialize, Debug, Eq, PartialEq, Serialize, Hash)]
+pub enum BtcNetwork {
+    #[serde(rename = "mainnet")]
+    Mainnet,
+    #[serde(rename = "testnet")]
+    Testnet,
+}
+
+#[derive(CandidType, Clone, Copy, Deserialize, Debug, Eq, PartialEq, Serialize, Hash)]
+pub enum KytMode {
+    AcceptAll,
+    RejectAll,
+    Normal,
+}
+
+impl fmt::Display for KytMode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::AcceptAll => write!(f, "AcceptAll"),
+            Self::RejectAll => write!(f, "RejectAll"),
+            Self::Normal => write!(f, "Normal"),
+        }
+    }
+}
+
+impl From<BtcNetwork> for bitcoin::Network {
+    fn from(btc_network: BtcNetwork) -> Self {
+        match btc_network {
+            BtcNetwork::Mainnet => Self::Bitcoin,
+            BtcNetwork::Testnet => Self::Testnet,
+        }
+    }
+}
+
+impl fmt::Display for BtcNetwork {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Mainnet => write!(f, "mainnet"),
+            Self::Testnet => write!(f, "testnet"),
+        }
+    }
+}
+
+#[derive(CandidType, Debug, Deserialize, Serialize)]
+pub struct UpgradeArg {
+    pub kyt_mode: Option<KytMode>,
+}
+
+#[derive(CandidType, Debug, Deserialize, Serialize)]
+pub enum KytArg {
+    InitArg(InitArg),
+    UpgradeArg(Option<UpgradeArg>),
 }

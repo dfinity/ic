@@ -1,4 +1,3 @@
-#![allow(clippy::unwrap_used)]
 #![allow(clippy::redundant_clone)]
 use ic_crypto_tree_hash::{flatmap, Digest, FlatMap, Label, LabeledTree, Witness};
 use ic_protobuf::messaging::xnet::v1;

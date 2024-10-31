@@ -260,7 +260,7 @@ impl Registry {
         if let Some(old_features) = subnet_record.features {
             // Compare as `SubnetFeatures`, to avoid having to worry about
             // `None` vs `Some(false)`.
-            let new_features: SubnetFeatures = payload.features.clone().unwrap().into();
+            let new_features: SubnetFeatures = payload.features.unwrap().into();
             let old_features: SubnetFeatures = old_features.into();
             if new_features.sev_enabled == old_features.sev_enabled {
                 return;

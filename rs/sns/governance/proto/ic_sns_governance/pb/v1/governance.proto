@@ -1048,10 +1048,9 @@ message VotingRewardsParameters {
   //
   // Must be > 0.
   //
-  // During such periods, proposals enter the ReadyToSettle state. Once the
-  // round is over, voting for those proposals entitle voters to voting
-  // rewards. Such rewards are calculated by the governance canister's
-  // heartbeat.
+  // During such periods, proposals enter the ReadyToSettle state. Once the round is over, voting
+  // for those proposals entitle voters to voting rewards. Such rewards are calculated in
+  // the governance canister's run_periodic_tasks function.
   //
   // This is a nominal amount. That is, the actual time between reward
   // calculations and distribution cannot be guaranteed to be perfectly
@@ -1165,8 +1164,8 @@ message RewardEvent {
   // reasons that rewards might not be distributed in a given round.
   //
   // 1. "Missed" rounds: there was a long period when we did calculate rewards
-  //    (longer than 1 round). (I.e. distribute_rewards was not called by
-  //    heartbeat for whatever reason, most likely some kind of bug.)
+  //    (longer than 1 round). (I.e. distribute_rewards was not called from
+  //    run_periodic_tasks, for whatever reason, most likely some kind of bug.)
   //
   // 2. Rollover: We tried to distribute rewards, but there were no proposals
   //    settled to distribute rewards for.
@@ -1408,6 +1407,10 @@ message Governance {
     bytes index_wasm_hash = 6;
   }
 
+  message Versions {
+    repeated Governance.Version versions = 1;
+  }
+
   // Current version that this SNS is running.
   Version deployed_version = 23;
 
@@ -1426,8 +1429,9 @@ message Governance {
 
   // Version SNS is in process of upgrading to.
   UpgradeInProgress pending_version = 24;
+  Version target_version = 30;
 
-  // True if the heartbeat function is currently finalizing disburse maturity, meaning
+  // True if the run_periodic_tasks function is currently finalizing disburse maturity, meaning
   // that it should finish before being called again.
   optional bool is_finalizing_disburse_maturity = 25;
 
@@ -1447,7 +1451,43 @@ message Governance {
 
   MaturityModulation maturity_modulation = 26;
 
-  optional bool migrated_root_wasm_memory_limit = 27;
+  reserved "migrated_root_wasm_memory_limit";
+  reserved 27;
+
+  // The sns's local cache of the upgrade steps recieved from SNS-W.
+  message CachedUpgradeSteps {
+    // The upgrade steps that have been returned from SNS-W the last time we
+    // called list_upgrade_steps.
+    Governance.Versions upgrade_steps = 1;
+    // The timestamp of the request we sent to list_upgrade_steps.
+    // It's possible that this is greater than the response_timestamp_seconds, because
+    // we update it as soon as we send the request, and only update the
+    // response_timestamp and the upgrade_steps when we receive the response.
+    // The primary use of this is that we can avoid calling list_upgrade_steps
+    // more frequently than necessary.
+    optional uint64 requested_timestamp_seconds = 2;
+    // The timestamp of the response we received from list_upgrade_steps (stored in upgrade_steps).
+    optional uint64 response_timestamp_seconds = 3;
+  }
+  CachedUpgradeSteps cached_upgrade_steps = 29;
+
+  // Information about the timers that perform periodic tasks of this Governance canister.
+  optional ic_nervous_system.pb.v1.Timers timers = 31;
+
+  UpgradeJournal upgrade_journal = 32;
+}
+
+message Timers {
+  optional uint64 last_reset_timestamp_seconds = 1;
+  optional uint64 last_spawned_timestamp_seconds = 2;
+}
+
+message ResetTimersRequest {}
+message ResetTimersResponse {}
+
+message GetTimersRequest {}
+message GetTimersResponse {
+  optional Timers timers = 1;
 }
 
 // Request message for 'get_metadata'.
@@ -2105,6 +2145,81 @@ message AddMaturityRequest {
 // available when governance is compiled with the `test` feature enabled.
 message AddMaturityResponse {
   optional uint64 new_maturity_e8s = 1;
+}
+
+// A test-only API that advances the target version of the SNS.
+message AdvanceTargetVersionRequest {
+  optional Governance.Version target_version = 1;
+}
+
+// The response to a request to advance the target version of the SNS.
+message AdvanceTargetVersionResponse {}
+
+// Represents a single entry in the upgrade journal.
+message UpgradeJournalEntry {
+  oneof event {
+    UpgradeStepsRefreshed upgrade_steps_refreshed = 1;
+    TargetVersionSet target_version_set = 2;
+    TargetVersionSet target_version_reset = 3;
+    UpgradeStarted upgrade_started = 4;
+    UpgradeOutcome upgrade_outcome = 5;
+  }
+  optional uint64 timestamp_seconds = 6;
+
+  message UpgradeStepsRefreshed {
+    optional Governance.Versions upgrade_steps = 2;
+  }
+
+  message TargetVersionSet {
+    optional Governance.Version old_target_version = 1;
+    optional Governance.Version new_target_version = 2;
+  }
+
+  message UpgradeStarted {
+    optional Governance.Version current_version = 1;
+    optional Governance.Version expected_version = 2;
+    oneof reason {
+      ProposalId upgrade_sns_to_next_version_proposal = 3;
+      Empty behind_target_version = 4;
+    }
+  }
+
+  message UpgradeOutcome {
+    optional string human_readable = 1;
+
+    oneof status {
+      Empty success = 2;
+      Empty timeout = 3;
+      // The SNS ended up being upgraded to a version that was not the expected one.
+      InvalidState invalid_state = 4;
+      Empty external_failure = 5;
+    }
+
+    message InvalidState {
+      Governance.Version version = 1;
+    }
+  }
+}
+
+// Needed to cause prost to generate a type isomorphic to Option<Vec<UpgradeJournalEntry>>.
+message UpgradeJournal {
+  // The entries in the upgrade journal.
+  repeated UpgradeJournalEntry entries = 1;
+}
+
+// The upgrade journal contains all the information neede to audit previous SNS upgrades and understand its current state.
+// It is being implemented as part of the "effortless SNS upgrade" feature.
+message GetUpgradeJournalRequest {}
+
+message GetUpgradeJournalResponse {
+  Governance.Versions upgrade_steps = 1;
+  optional uint64 response_timestamp_seconds = 2;
+  // The target version that the SNS will be upgraded to.
+  // Currently, this field is always None, but in the "effortless SNS upgrade"
+  // feature, it reflect the version of the SNS that the community has decided to upgrade to.
+  Governance.Version target_version = 3;
+
+  UpgradeJournal upgrade_journal = 4;
 }
 
 // A request to mint tokens for a particular principal. The associated endpoint

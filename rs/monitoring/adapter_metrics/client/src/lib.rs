@@ -44,8 +44,13 @@ impl AdapterMetrics {
             .unwrap()
             .executor(ExecuteOnTokioRuntime(rt_handle));
         let channel = endpoint.connect_with_connector_lazy(service_fn(move |_: Uri| {
-            // Connect to a Uds socket
-            UnixStream::connect(uds_path.clone())
+            let uds_path = uds_path.clone();
+            async move {
+                // Connect to a Uds socket
+                Ok::<_, std::io::Error>(hyper_util::rt::TokioIo::new(
+                    UnixStream::connect(uds_path).await?,
+                ))
+            }
         }));
 
         Self {

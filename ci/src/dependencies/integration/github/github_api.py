@@ -55,7 +55,6 @@ class GithubApi:
         else:
             pull_request.create_issue_comment(comment_body)
 
-
     def run_workflow(self, workflow: GithubWorklow) -> bool:
         try:
             repo = self.github.get_repo(workflow.value.project)

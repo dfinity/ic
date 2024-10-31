@@ -118,7 +118,7 @@ impl From<&SubnetRecordProto> for SubnetRecord {
             dkg_interval_length: value.dkg_interval_length,
             start_as_nns: value.start_as_nns,
             subnet_type: SubnetType::try_from(value.subnet_type).unwrap(),
-            features: value.features.clone().unwrap_or_default().into(),
+            features: value.features.unwrap_or_default().into(),
             max_number_of_canisters: value.max_number_of_canisters,
             ssh_readonly_access: value.ssh_readonly_access.clone(),
             ssh_backup_access: value.ssh_backup_access.clone(),

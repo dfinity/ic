@@ -93,7 +93,7 @@ impl<Rt: Runtime + Sync> ManagementCanisterClient for ManagementCanisterClientIm
     }
 
     fn canister_version(&self) -> Option<u64> {
-        Some(dfn_core::api::canister_version())
+        Some(Rt::canister_version())
     }
 }
 

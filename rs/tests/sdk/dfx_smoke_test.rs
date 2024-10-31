@@ -9,7 +9,7 @@ use ic_system_test_driver::driver::{
     test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, RetrieveIpv4Addr},
 };
 use ic_system_test_driver::systest;
-use ic_tests::nns_dapp::nns_dapp_customizations;
+use nns_dapp::nns_dapp_customizations;
 use sdk_system_tests::{
     asset::get_asset_as_string,
     config::configure_local_network,

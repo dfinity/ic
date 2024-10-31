@@ -2,10 +2,11 @@ use candid::{decode_one, CandidType, Deserialize, Encode, Principal};
 use ic_base_types::PrincipalId;
 use ic_btc_interface::Txid;
 use ic_btc_kyt::{
-    blocklist, get_tx_cycle_cost, CheckAddressArgs, CheckAddressResponse, CheckTransactionArgs,
-    CheckTransactionIrrecoverableError, CheckTransactionResponse, CheckTransactionRetriable,
-    CheckTransactionStatus, CHECK_TRANSACTION_CYCLES_REQUIRED,
-    CHECK_TRANSACTION_CYCLES_SERVICE_FEE, INITIAL_MAX_RESPONSE_BYTES,
+    blocklist, get_tx_cycle_cost, BtcNetwork, CheckAddressArgs, CheckAddressResponse,
+    CheckTransactionArgs, CheckTransactionIrrecoverableError, CheckTransactionResponse,
+    CheckTransactionRetriable, CheckTransactionStatus, InitArg, KytArg, KytMode, UpgradeArg,
+    CHECK_TRANSACTION_CYCLES_REQUIRED, CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
+    INITIAL_MAX_RESPONSE_BYTES,
 };
 use ic_test_utilities_load_wasm::load_wasm;
 use ic_types::Cycles;
@@ -15,7 +16,7 @@ use pocket_ic::{
         CanisterHttpHeader, CanisterHttpReply, CanisterHttpRequest, CanisterHttpResponse,
         MockCanisterHttpResponse, RawMessageId,
     },
-    query_candid, PocketIc, UserError, WasmResult,
+    query_candid, PocketIc, PocketIcBuilder, UserError, WasmResult,
 };
 use std::str::FromStr;
 
@@ -26,11 +27,11 @@ const MAX_TICKS: usize = 10;
 // by a small margin. Namely, the universal_canister itself would consume
 // some cycle for decoding args and sending the call.
 //
-// The number 7_000_000 is obtained empirically by running tests with pocket-ic
+// The number 42_000_000 is obtained empirically by running tests with pocket-ic
 // and checking the actual consumptions. It is both big enough to allow tests to
 // succeed, and small enough not to interfere with the expected cycle cost we
 // are testing for.
-const UNIVERSAL_CANISTER_CYCLE_MARGIN: u128 = 7_000_000;
+const UNIVERSAL_CANISTER_CYCLE_MARGIN: u128 = 42_000_000;
 
 struct Setup {
     // Owner of canisters created for the setup.
@@ -50,10 +51,19 @@ fn kyt_wasm() -> Vec<u8> {
 }
 
 impl Setup {
-    fn new() -> Setup {
+    fn new(btc_network: BtcNetwork) -> Setup {
         let controller = PrincipalId::new_user_test_id(1).0;
-        let env = PocketIc::new();
+        // Enable nonmainnet_features to avoid CanisterInstallCodeRateLimited error
+        // for canister upgrades
+        let env = PocketIcBuilder::new()
+            .with_application_subnet()
+            .with_nonmainnet_features(true)
+            .build();
 
+        let init_arg = InitArg {
+            btc_network,
+            kyt_mode: KytMode::Normal,
+        };
         let caller = env.create_canister_with_settings(Some(controller), None);
         env.add_cycles(caller, 100_000_000_000_000);
         env.install_canister(
@@ -63,9 +73,14 @@ impl Setup {
             Some(controller),
         );
 
-        let kyt_canister = env.create_canister();
+        let kyt_canister = env.create_canister_with_settings(Some(controller), None);
         env.add_cycles(kyt_canister, 100_000_000_000_000);
-        env.install_canister(kyt_canister, kyt_wasm(), vec![], None);
+        env.install_canister(
+            kyt_canister,
+            kyt_wasm(),
+            Encode!(&KytArg::InitArg(init_arg)).unwrap(),
+            Some(controller),
+        );
 
         Setup {
             controller,
@@ -105,18 +120,23 @@ fn decode<'a, T: CandidType + Deserialize<'a>>(result: &'a WasmResult) -> T {
 
 #[test]
 fn test_check_address() {
+    let blocklist_len = blocklist::BTC_ADDRESS_BLOCKLIST.len();
+    let blocked_address = blocklist::BTC_ADDRESS_BLOCKLIST[blocklist_len / 2].to_string();
+
     let Setup {
-        kyt_canister, env, ..
-    } = Setup::new();
+        kyt_canister,
+        env,
+        controller,
+        ..
+    } = Setup::new(BtcNetwork::Mainnet);
 
     // Choose an address from the blocklist
-    let blocklist_len = blocklist::BTC_ADDRESS_BLOCKLIST.len();
     let result = query_candid(
         &env,
         kyt_canister,
         "check_address",
         (CheckAddressArgs {
-            address: blocklist::BTC_ADDRESS_BLOCKLIST[blocklist_len / 2].to_string(),
+            address: blocked_address.clone(),
         },),
     );
     assert!(
@@ -161,36 +181,105 @@ fn test_check_address() {
         },),
     );
     assert!(result.is_err_and(|err| format!("{:?}", err).contains("Not a bitcoin mainnet address")));
+
+    // Test KytMode::AcceptAll
+    env.upgrade_canister(
+        kyt_canister,
+        kyt_wasm(),
+        Encode!(&KytArg::UpgradeArg(Some(UpgradeArg {
+            kyt_mode: Some(KytMode::AcceptAll),
+        })))
+        .unwrap(),
+        Some(controller),
+    )
+    .unwrap();
+
+    let result = query_candid(
+        &env,
+        kyt_canister,
+        "check_address",
+        (CheckAddressArgs {
+            address: blocked_address.clone(),
+        },),
+    );
+    assert!(
+        matches!(result, Ok((CheckAddressResponse::Passed,))),
+        "result = {:?}",
+        result
+    );
+
+    // Test a mainnet address against testnet setup
+    let Setup {
+        kyt_canister, env, ..
+    } = Setup::new(BtcNetwork::Testnet);
+
+    let result = query_candid::<_, (CheckAddressResponse,)>(
+        &env,
+        kyt_canister,
+        "check_address",
+        (CheckAddressArgs {
+            address: blocked_address,
+        },),
+    );
+    assert!(result.is_err_and(|err| format!("{:?}", err).contains("Not a bitcoin testnet address")));
+
+    // Test KytMode::RejectAll
+    env.upgrade_canister(
+        kyt_canister,
+        kyt_wasm(),
+        Encode!(&KytArg::UpgradeArg(Some(UpgradeArg {
+            kyt_mode: Some(KytMode::RejectAll),
+        })))
+        .unwrap(),
+        Some(controller),
+    )
+    .unwrap();
+
+    let result = query_candid(
+        &env,
+        kyt_canister,
+        "check_address",
+        (CheckAddressArgs {
+            address: "n47QBape2PcisN2mkHR2YnhqoBr56iPhJh".to_string(),
+        },),
+    );
+    assert!(
+        matches!(result, Ok((CheckAddressResponse::Failed,))),
+        "result = {:?}",
+        result
+    );
 }
 
 #[test]
 fn test_check_transaction_passed() {
-    let setup = Setup::new();
-    let cycles_before = setup.env.cycle_balance(setup.caller);
-
+    let setup = Setup::new(BtcNetwork::Mainnet);
     let txid =
         Txid::from_str("c80763842edc9a697a2114517cf0c138c5403a761ef63cfad1fa6993fa3475ed").unwrap();
-    let call_id = setup
-        .submit_kyt_call(
-            "check_transaction",
-            Encode!(&CheckTransactionArgs {
-                txid: txid.as_ref().to_vec()
-            })
-            .unwrap(),
-            CHECK_TRANSACTION_CYCLES_REQUIRED,
-        )
-        .expect("submit_call failed to return call id");
     let env = &setup.env;
 
-    // The response body used for testing below is generated from the output of
-    //
-    //   curl -H 'User-Agent: bitcoin-value-collector' https://btcscan.org/api/tx/{txid}/raw
-    //
-    // There wll be two outcalls because the canister will first fetch the above
-    // given txid, and then fetch the vout[0] from the returned transaction body.
+    // Normal operation requires making http outcalls.
+    // We'll run this again after testing other KytMode.
+    let test_normal_operation = || {
+        let cycles_before = setup.env.cycle_balance(setup.caller);
+        let call_id = setup
+            .submit_kyt_call(
+                "check_transaction",
+                Encode!(&CheckTransactionArgs {
+                    txid: txid.as_ref().to_vec()
+                })
+                .unwrap(),
+                CHECK_TRANSACTION_CYCLES_REQUIRED,
+            )
+            .expect("submit_call failed to return call id");
+        // The response body used for testing below is generated from the output of
+        //
+        //   curl -H 'User-Agent: bitcoin-value-collector' https://btcscan.org/api/tx/{txid}/raw
+        //
+        // There wll be two outcalls because the canister will first fetch the above
+        // given txid, and then fetch the vout[0] from the returned transaction body.
 
-    let canister_http_requests = tick_until_next_request(env);
-    let body = b"\
+        let canister_http_requests = tick_until_next_request(env);
+        let body = b"\
 \x02\x00\x00\x00\x01\x17\x34\x3a\xab\xa9\x67\x67\x2f\x17\xef\x0a\xbf\x4b\xb1\x14\xad\x19\x63\xe0\
 \x7d\xd2\xf2\x05\xaa\x25\xa4\xda\x50\x3e\xdb\x01\xab\x01\x00\x00\x00\x6a\x47\x30\x44\x02\x20\x21\
 \x81\xb5\x9c\xa7\xed\x7e\x2c\x8e\x06\x96\x52\xb0\x7e\xd2\x10\x24\x9e\x83\x37\xec\xc5\x35\xca\x6b\
@@ -201,20 +290,20 @@ fn test_check_transaction_passed() {
 \xed\xfc\x0a\x8b\x66\xfe\xeb\xae\x5c\x2e\x25\xa7\xb6\xa5\xd1\xcf\x31\x88\xac\x7c\x2e\x00\x00\x00\
 \x00\x00\x00\x19\x76\xa9\x14\xb9\x73\x68\xd8\xbf\x0a\x37\x69\x00\x85\x16\x57\xf3\x7f\xbe\x73\xa6\
 \x56\x61\x33\x88\xac\x14\xa4\x0c\x00"
-        .to_vec();
-    env.mock_canister_http_response(MockCanisterHttpResponse {
-        subnet_id: canister_http_requests[0].subnet_id,
-        request_id: canister_http_requests[0].request_id,
-        response: CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
-            status: 200,
-            headers: vec![],
-            body,
-        }),
-        additional_responses: vec![],
-    });
+            .to_vec();
+        env.mock_canister_http_response(MockCanisterHttpResponse {
+            subnet_id: canister_http_requests[0].subnet_id,
+            request_id: canister_http_requests[0].request_id,
+            response: CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
+                status: 200,
+                headers: vec![],
+                body,
+            }),
+            additional_responses: vec![],
+        });
 
-    let canister_http_requests = tick_until_next_request(env);
-    let body = b"\
+        let canister_http_requests = tick_until_next_request(env);
+        let body = b"\
 \x02\x00\x00\x00\x01\x82\xc8\x5d\xe7\x4d\x19\xbb\x36\x16\x2f\xca\xef\xc7\xe7\x70\x15\x65\xb0\x2d\
 \xf6\x06\x0f\x8e\xcf\x49\x64\x63\x37\xfc\xe8\x59\x37\x07\x00\x00\x00\x6a\x47\x30\x44\x02\x20\x15\
 \xf2\xc7\x7a\x3b\x95\x13\x73\x7a\xa2\x86\xb3\xe6\x06\xf9\xb6\x82\x1c\x6d\x5d\x35\xe5\xa9\x58\xe0\
@@ -225,31 +314,111 @@ fn test_check_transaction_passed() {
 \xb1\x5c\xbf\x27\xd5\x42\x53\x99\xeb\xf6\xf0\xfb\x50\xeb\xb8\x8f\x18\x88\xac\x00\x96\x00\x00\x00\
 \x00\x00\x00\x19\x76\xa9\x14\xb9\x73\x68\xd8\xbf\x0a\x37\x69\x00\x85\x16\x57\xf3\x7f\xbe\x73\xa6\
 \x56\x61\x33\x88\xac\xb3\xa3\x0c\x00"
-        .to_vec();
-    env.mock_canister_http_response(MockCanisterHttpResponse {
-        subnet_id: canister_http_requests[0].subnet_id,
-        request_id: canister_http_requests[0].request_id,
-        response: CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
-            status: 200,
-            headers: vec![],
-            body: body.clone(),
-        }),
-        // Fill additional responses with different headers to test if the transform
-        // function does its job by clearing the headers.
-        additional_responses: (1..13)
-            .map(|i| {
-                CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
-                    status: 200,
-                    headers: vec![CanisterHttpHeader {
-                        name: format!("name-{}", i),
-                        value: format!("{}", i),
-                    }],
-                    body: body.clone(),
+            .to_vec();
+        env.mock_canister_http_response(MockCanisterHttpResponse {
+            subnet_id: canister_http_requests[0].subnet_id,
+            request_id: canister_http_requests[0].request_id,
+            response: CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
+                status: 200,
+                headers: vec![],
+                body: body.clone(),
+            }),
+            // Fill additional responses with different headers to test if the transform
+            // function does its job by clearing the headers.
+            additional_responses: (1..13)
+                .map(|i| {
+                    CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
+                        status: 200,
+                        headers: vec![CanisterHttpHeader {
+                            name: format!("name-{}", i),
+                            value: format!("{}", i),
+                        }],
+                        body: body.clone(),
+                    })
                 })
-            })
-            .collect(),
-    });
+                .collect(),
+        });
 
+        let result = env
+            .await_call(call_id)
+            .expect("the fetch request didn't finish");
+
+        assert!(matches!(
+            decode::<CheckTransactionResponse>(&result),
+            CheckTransactionResponse::Passed
+        ));
+
+        let cycles_after = env.cycle_balance(setup.caller);
+        let expected_cost = CHECK_TRANSACTION_CYCLES_SERVICE_FEE
+            + 2 * get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES);
+        let actual_cost = cycles_before - cycles_after;
+        assert!(actual_cost > expected_cost);
+        assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
+    };
+
+    // With default installation
+    test_normal_operation();
+
+    // Test KytMode::RejectAll
+    env.tick();
+    env.upgrade_canister(
+        setup.kyt_canister,
+        kyt_wasm(),
+        Encode!(&KytArg::UpgradeArg(Some(UpgradeArg {
+            kyt_mode: Some(KytMode::RejectAll),
+        })))
+        .unwrap(),
+        Some(setup.controller),
+    )
+    .unwrap();
+    let cycles_before = env.cycle_balance(setup.caller);
+    let call_id = setup
+        .submit_kyt_call(
+            "check_transaction",
+            Encode!(&CheckTransactionArgs {
+                txid: txid.as_ref().to_vec()
+            })
+            .unwrap(),
+            CHECK_TRANSACTION_CYCLES_REQUIRED,
+        )
+        .expect("submit_call failed to return call id");
+    let result = env
+        .await_call(call_id)
+        .expect("the fetch request didn't finish");
+
+    assert!(matches!(
+        decode::<CheckTransactionResponse>(&result),
+        CheckTransactionResponse::Failed(addresses) if addresses.is_empty()
+    ),);
+    let cycles_after = env.cycle_balance(setup.caller);
+    let expected_cost = CHECK_TRANSACTION_CYCLES_SERVICE_FEE;
+    let actual_cost = cycles_before - cycles_after;
+    assert!(actual_cost > expected_cost);
+    assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
+
+    // Test KytMode::AcceptAll
+    env.tick();
+    env.upgrade_canister(
+        setup.kyt_canister,
+        kyt_wasm(),
+        Encode!(&KytArg::UpgradeArg(Some(UpgradeArg {
+            kyt_mode: Some(KytMode::AcceptAll),
+        })))
+        .unwrap(),
+        Some(setup.controller),
+    )
+    .unwrap();
+    let cycles_before = env.cycle_balance(setup.caller);
+    let call_id = setup
+        .submit_kyt_call(
+            "check_transaction",
+            Encode!(&CheckTransactionArgs {
+                txid: txid.as_ref().to_vec()
+            })
+            .unwrap(),
+            CHECK_TRANSACTION_CYCLES_REQUIRED,
+        )
+        .expect("submit_call failed to return call id");
     let result = env
         .await_call(call_id)
         .expect("the fetch request didn't finish");
@@ -257,19 +426,35 @@ fn test_check_transaction_passed() {
     assert!(matches!(
         decode::<CheckTransactionResponse>(&result),
         CheckTransactionResponse::Passed
-    ));
-
+    ),);
     let cycles_after = env.cycle_balance(setup.caller);
-    let expected_cost =
-        CHECK_TRANSACTION_CYCLES_SERVICE_FEE + 2 * get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES);
+    let expected_cost = CHECK_TRANSACTION_CYCLES_SERVICE_FEE;
     let actual_cost = cycles_before - cycles_after;
     assert!(actual_cost > expected_cost);
-    assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
+    assert!(
+        actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN,
+        "actual_cost: {actual_cost}, expected_cost: {expected_cost}"
+    );
+
+    // Test KytMode::Normal
+    env.tick();
+    env.upgrade_canister(
+        setup.kyt_canister,
+        kyt_wasm(),
+        Encode!(&KytArg::UpgradeArg(Some(UpgradeArg {
+            kyt_mode: Some(KytMode::Normal),
+        })))
+        .unwrap(),
+        Some(setup.controller),
+    )
+    .unwrap();
+
+    test_normal_operation();
 }
 
 #[test]
 fn test_check_transaction_error() {
-    let setup = Setup::new();
+    let setup = Setup::new(BtcNetwork::Mainnet);
     let cycles_before = setup.env.cycle_balance(setup.caller);
     let mut txid =
         Txid::from_str("a80763842edc9a697a2114517cf0c138c5403a761ef63cfad1fa6993fa3475ed")
@@ -326,11 +511,92 @@ fn test_check_transaction_error() {
         .env
         .await_call(call_id)
         .expect("the fetch request didn't finish");
+    // 500 error is retriable
     assert!(matches!(
-        dbg!(decode::<CheckTransactionResponse>(&result)),
+        decode::<CheckTransactionResponse>(&result),
         CheckTransactionResponse::Unknown(CheckTransactionStatus::Retriable(
-            CheckTransactionRetriable::TransientInternalError(_)
-        ))
+            CheckTransactionRetriable::TransientInternalError(msg)
+        )) if msg.contains("received code 500")
+    ));
+    let cycles_after = setup.env.cycle_balance(setup.caller);
+    let expected_cost =
+        CHECK_TRANSACTION_CYCLES_SERVICE_FEE + get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES);
+    let actual_cost = cycles_before - cycles_after;
+    assert!(actual_cost > expected_cost);
+    assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
+
+    // Test for 404 error
+    let cycles_before = setup.env.cycle_balance(setup.caller);
+    let call_id = setup
+        .submit_kyt_call(
+            "check_transaction",
+            Encode!(&CheckTransactionArgs { txid: txid.clone() }).unwrap(),
+            CHECK_TRANSACTION_CYCLES_REQUIRED,
+        )
+        .expect("submit_call failed to return call id");
+    let canister_http_requests = tick_until_next_request(&setup.env);
+    setup
+        .env
+        .mock_canister_http_response(MockCanisterHttpResponse {
+            subnet_id: canister_http_requests[0].subnet_id,
+            request_id: canister_http_requests[0].request_id,
+            response: CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
+                status: 404,
+                headers: vec![],
+                body: vec![],
+            }),
+            additional_responses: vec![],
+        });
+    let result = setup
+        .env
+        .await_call(call_id)
+        .expect("the fetch request didn't finish");
+    // 404 error is retriable too
+    assert!(matches!(
+        decode::<CheckTransactionResponse>(&result),
+        CheckTransactionResponse::Unknown(CheckTransactionStatus::Retriable(
+            CheckTransactionRetriable::TransientInternalError(msg)
+        )) if msg.contains("received code 404")
+    ));
+    let cycles_after = setup.env.cycle_balance(setup.caller);
+    let expected_cost =
+        CHECK_TRANSACTION_CYCLES_SERVICE_FEE + get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES);
+    let actual_cost = cycles_before - cycles_after;
+    assert!(actual_cost > expected_cost);
+    assert!(actual_cost - expected_cost < UNIVERSAL_CANISTER_CYCLE_MARGIN);
+
+    // Test for malformatted transaction data
+    let cycles_before = setup.env.cycle_balance(setup.caller);
+    let call_id = setup
+        .submit_kyt_call(
+            "check_transaction",
+            Encode!(&CheckTransactionArgs { txid: txid.clone() }).unwrap(),
+            CHECK_TRANSACTION_CYCLES_REQUIRED,
+        )
+        .expect("submit_call failed to return call id");
+    let canister_http_requests = tick_until_next_request(&setup.env);
+    setup
+        .env
+        .mock_canister_http_response(MockCanisterHttpResponse {
+            subnet_id: canister_http_requests[0].subnet_id,
+            request_id: canister_http_requests[0].request_id,
+            response: CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
+                status: 200,
+                headers: vec![],
+                body: vec![2, 0, 0, 0],
+            }),
+            additional_responses: vec![],
+        });
+    let result = setup
+        .env
+        .await_call(call_id)
+        .expect("the fetch request didn't finish");
+    // malformated tx error is retriable
+    assert!(matches!(
+        decode::<CheckTransactionResponse>(&result),
+        CheckTransactionResponse::Unknown(CheckTransactionStatus::Retriable(
+            CheckTransactionRetriable::TransientInternalError(msg)
+        )) if msg.contains("TxEncoding")
     ));
     let cycles_after = setup.env.cycle_balance(setup.caller);
     let expected_cost =
@@ -356,7 +622,7 @@ fn test_check_transaction_error() {
     assert!(matches!(
         decode::<CheckTransactionResponse>(&result),
         CheckTransactionResponse::Unknown(CheckTransactionStatus::Error(
-            CheckTransactionIrrecoverableError::InvalidTransaction(_)
+            CheckTransactionIrrecoverableError::InvalidTransactionId(_)
         ))
     ));
 

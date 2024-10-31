@@ -1,4 +1,4 @@
-use ic_crypto_internal_threshold_sig_ecdsa::IDkgTranscriptInternal;
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::IDkgTranscriptInternal;
 use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscript;
 use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptType::{Masked, Unmasked};
 use ic_types::crypto::canister_threshold_sig::MasterPublicKey;

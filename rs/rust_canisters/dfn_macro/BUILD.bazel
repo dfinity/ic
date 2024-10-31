@@ -4,7 +4,7 @@ load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_proc_macro")
 package(default_visibility = [
     # Keep sorted.
     "//rs/nns/handlers/root:__subpackages__",
-    "//rs/rosetta-api:__pkg__",
+    "//rs/rosetta-api/icp:__pkg__",
     "//rs/rust_canisters:__subpackages__",
 ])
 

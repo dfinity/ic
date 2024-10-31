@@ -42,11 +42,38 @@ type CheckTransactionRetriable = variant {
 type CheckTransactionIrrecoverableError = variant {
     // Response size is too large (>400kB) when fetching transaction data.
     ResponseTooLarge : record { txid: blob };
-    // Invalid transaction, e.g. error decoding transaction or transaction id mismatch, etc.
+    // Invalid transaction id.
+    InvalidTransactionId : text;
+    // Invalid transaction.
     InvalidTransaction : text;
 };
 
-service : {
+type InitArg = record {
+    btc_network : BtcNetwork;
+    kyt_mode: KytMode;
+};
+
+type UpgradeArg = record {
+    kyt_mode: opt KytMode;
+};
+
+type KytArg = variant {
+    InitArg : InitArg;
+    UpgradeArg: opt UpgradeArg;
+};
+
+type BtcNetwork = variant {
+    mainnet;
+    testnet
+};
+
+type KytMode = variant {
+    AcceptAll;
+    RejectAll;
+    Normal;
+};
+
+service : (KytArg) -> {
     // Check input addresses of a transaction matching the given transaction id.
     // See `CheckTransactionResponse` for more details on the return result.
     //

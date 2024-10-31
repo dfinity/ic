@@ -9,8 +9,10 @@ use ic_config::{
     execution_environment::Config as HypervisorConfig, flag_status::FlagStatus,
     state_manager::LsmtConfig, subnet_config::SubnetConfig,
 };
-use ic_consensus::consensus::payload_builder::PayloadBuilderImpl;
-use ic_consensus::dkg::{make_registry_cup, make_registry_cup_from_cup_contents};
+use ic_consensus::{
+    consensus::payload_builder::PayloadBuilderImpl,
+    dkg::{make_registry_cup, make_registry_cup_from_cup_contents},
+};
 use ic_consensus_utils::crypto::SignVerify;
 use ic_crypto_test_utils_ni_dkg::{
     dummy_initial_dkg_transcript_with_master_key, sign_message, SecretKeyBytes,
@@ -23,17 +25,16 @@ use ic_execution_environment::{ExecutionServices, IngressHistoryReaderImpl};
 use ic_http_endpoints_public::{metrics::HttpHandlerMetrics, IngressWatcher, IngressWatcherHandle};
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl;
 use ic_ingress_manager::{IngressManager, RandomStateKind};
-use ic_interfaces::batch_payload::BatchPayloadBuilder;
-use ic_interfaces::ingress_pool::IngressPoolObject;
 use ic_interfaces::{
-    batch_payload::{IntoMessages, PastPayload, ProposalContext},
+    batch_payload::{BatchPayloadBuilder, IntoMessages, PastPayload, ProposalContext},
     canister_http::{CanisterHttpChangeAction, CanisterHttpPool},
     certification::{Verifier, VerifierError},
     consensus::{PayloadBuilder as ConsensusPayloadBuilder, PayloadValidationError},
     consensus_pool::ConsensusTime,
     execution_environment::{IngressFilterService, IngressHistoryReader, QueryExecutionService},
     ingress_pool::{
-        IngressPool, PoolSection, UnvalidatedIngressArtifact, ValidatedIngressArtifact,
+        IngressPool, IngressPoolObject, PoolSection, UnvalidatedIngressArtifact,
+        ValidatedIngressArtifact,
     },
     p2p::consensus::MutablePool,
     validation::ValidationResult,
@@ -56,7 +57,6 @@ pub use ic_management_canister_types::{
 };
 use ic_messaging::SyncMessageRouting;
 use ic_metrics::MetricsRegistry;
-use ic_protobuf::types::v1 as pb;
 use ic_protobuf::{
     registry::{
         crypto::v1::{ChainKeySigningSubnetList, PublicKey as PublicKeyProto, X509PublicKeyCert},
@@ -68,7 +68,10 @@ use ic_protobuf::{
         },
         subnet::v1::CatchUpPackageContents,
     },
-    types::v1::{PrincipalId as PrincipalIdIdProto, SubnetId as SubnetIdProto},
+    types::{
+        v1 as pb,
+        v1::{PrincipalId as PrincipalIdIdProto, SubnetId as SubnetIdProto},
+    },
 };
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_client_helpers::{
@@ -130,7 +133,7 @@ use ic_types::{
     messages::{
         Blob, Certificate, CertificateDelegation, HttpCallContent, HttpCanisterUpdate,
         HttpRequestEnvelope, Payload as MsgPayload, Query, QuerySource, RejectContext,
-        SignedIngress, SignedIngressContent, EXPECTED_MESSAGE_ID_LENGTH,
+        SignedIngress, EXPECTED_MESSAGE_ID_LENGTH,
     },
     signature::ThresholdSignature,
     time::GENESIS,
@@ -143,8 +146,7 @@ pub use ic_types::{
         CanisterHttpMethod, CanisterHttpRequestContext, CanisterHttpRequestId,
         CanisterHttpResponseMetadata,
     },
-    crypto::threshold_sig::ThresholdSigPublicKey,
-    crypto::{CryptoHash, CryptoHashOf},
+    crypto::{threshold_sig::ThresholdSigPublicKey, CryptoHash, CryptoHashOf},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{CallbackId, HttpRequestError, MessageId},
     signature::BasicSignature,
@@ -181,7 +183,7 @@ use tokio::{
     runtime::Runtime,
     sync::{mpsc, watch},
 };
-use tower::{buffer::Buffer as TowerBuffer, ServiceExt};
+use tower::ServiceExt;
 
 /// The size of the channel used to communicate between the [`IngressWatcher`] and
 /// execution. Mirrors the size used in production defined in `setup_ic_stack.rs`
@@ -329,6 +331,7 @@ fn make_nodes_registry(
             chip_id: None,
             public_ipv4_config: None,
             domain: None,
+            node_reward_type: None,
         };
         registry_data_provider
             .add(
@@ -776,8 +779,12 @@ impl StateMachineNode {
             ic_crypto_ed25519::PrivateKey::deserialize_raw_32(&rng.gen());
         let idkg_mega_encryption_key =
             ic_crypto_ed25519::PrivateKey::deserialize_raw_32(&rng.gen());
-        let http_ip_addr = Ipv6Addr::from(rng.gen::<[u16; 8]>());
-        let xnet_ip_addr = Ipv6Addr::from(rng.gen::<[u16; 8]>());
+        let mut http_ip_addr_bytes = rng.gen::<[u8; 16]>();
+        http_ip_addr_bytes[0] = 0xe0; // make sure the ipv6 address has no special form
+        let http_ip_addr = Ipv6Addr::from(http_ip_addr_bytes);
+        let mut xnet_ip_addr_bytes = rng.gen::<[u8; 16]>();
+        xnet_ip_addr_bytes[0] = 0xe0; // make sure the ipv6 address has no special form
+        let xnet_ip_addr = Ipv6Addr::from(xnet_ip_addr_bytes);
         Self {
             node_id: PrincipalId::new_self_authenticating(
                 &node_signing_key.public_key().serialize_rfc8410_der(),
@@ -816,19 +823,23 @@ pub struct StateMachine {
     consensus_time: Arc<PocketConsensusTime>,
     ingress_pool: Arc<RwLock<PocketIngressPool>>,
     ingress_manager: Arc<IngressManager>,
-    pub ingress_filter:
-        tower::buffer::Buffer<IngressFilterService, (ProvisionalWhitelist, SignedIngressContent)>,
+    pub ingress_filter: Arc<Mutex<IngressFilterService>>,
     payload_builder: Arc<RwLock<Option<PayloadBuilderImpl>>>,
     message_routing: SyncMessageRouting,
     pub metrics_registry: MetricsRegistry,
     ingress_history_reader: Box<dyn IngressHistoryReader>,
-    pub query_handler:
-        tower::buffer::Buffer<QueryExecutionService, (Query, Option<CertificateDelegation>)>,
+    pub query_handler: Arc<Mutex<QueryExecutionService>>,
     runtime: Arc<Runtime>,
     // The atomicity is required for internal mutability and sending across threads.
     checkpoint_interval_length: AtomicU64,
     nonce: AtomicU64,
+    // the time used to derive the time of the next round:
+    //  - equal to `time` + 1ns if `time` = `time_of_last_round`;
+    //  - equal to `time`       otherwise.
     time: AtomicU64,
+    // the time of the last round
+    // (equal to `time` when this `StateMachine` is initialized)
+    time_of_last_round: RwLock<SystemTime>,
     idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     idkg_subnet_secret_keys: BTreeMap<MasterPublicKeyId, SignatureSecretKey>,
     pub replica_logger: ReplicaLogger,
@@ -1694,7 +1705,10 @@ impl StateMachine {
                     let path =
                         DerivationPath::new(vec![DerivationIndex(id.name.as_bytes().to_vec())]);
 
-                    let private_key = PrivateKey::generate_from_seed(&seed).derive_subkey(&path).0;
+                    // We use a fixed seed here so that all subnets in PocketIC share the same keys.
+                    let private_key = PrivateKey::generate_from_seed(&[42; 32])
+                        .derive_subkey(&path)
+                        .0;
 
                     let public_key = MasterPublicKey {
                         algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
@@ -1712,8 +1726,10 @@ impl StateMachine {
                         let path =
                             DerivationPath::new(vec![DerivationIndex(id.name.as_bytes().to_vec())]);
 
-                        let private_key =
-                            PrivateKey::generate_from_seed(&seed).derive_subkey(&path).0;
+                        // We use a fixed seed here so that all subnets in PocketIC share the same keys.
+                        let private_key = PrivateKey::generate_from_seed(&[42; 32])
+                            .derive_subkey(&path)
+                            .0;
 
                         let public_key = MasterPublicKey {
                             algorithm_id: AlgorithmId::ThresholdSchnorrBip340,
@@ -1730,8 +1746,10 @@ impl StateMachine {
                         let path =
                             DerivationPath::new(vec![DerivationIndex(id.name.as_bytes().to_vec())]);
 
-                        let private_key =
-                            PrivateKey::generate_from_seed(&seed).derive_subkey(&path).0;
+                        // We use a fixed seed here so that all subnets in PocketIC share the same keys.
+                        let private_key = PrivateKey::generate_from_seed(&[42; 32])
+                            .derive_subkey(&path)
+                            .0;
 
                         let public_key = MasterPublicKey {
                             algorithm_id: AlgorithmId::ThresholdEd25519,
@@ -1743,6 +1761,9 @@ impl StateMachine {
                         (public_key, private_key)
                     }
                 },
+                MasterPublicKeyId::VetKd(_vetkd_key_id) => {
+                    todo!("CRP-2629: Support vetKD in state machine tests")
+                }
             };
 
             idkg_subnet_secret_keys.insert(key_id.clone(), private_key);
@@ -1799,15 +1820,12 @@ impl StateMachine {
             consensus_time,
             ingress_pool,
             ingress_manager: ingress_manager.clone(),
-            ingress_filter: runtime
-                .block_on(async { TowerBuffer::new(execution_services.ingress_filter, 1) }),
+            ingress_filter: Arc::new(Mutex::new(execution_services.ingress_filter)),
             payload_builder: Arc::new(RwLock::new(None)), // set by `StateMachineBuilder::build_with_subnets`
             ingress_history_reader: execution_services.ingress_history_reader,
             message_routing,
             metrics_registry: metrics_registry.clone(),
-            query_handler: runtime.block_on(async {
-                TowerBuffer::new(execution_services.query_execution_service, 1)
-            }),
+            query_handler: Arc::new(Mutex::new(execution_services.query_execution_service)),
             ingress_watcher_handle,
             _ingress_watcher_drop_guard: ingress_watcher_drop_guard,
             certified_height_tx,
@@ -1818,6 +1836,7 @@ impl StateMachine {
             checkpoint_interval_length: checkpoint_interval_length.into(),
             nonce: AtomicU64::new(nonce),
             time: AtomicU64::new(time.as_nanos_since_unix_epoch()),
+            time_of_last_round: RwLock::new(time.into()),
             idkg_subnet_public_keys,
             idkg_subnet_secret_keys,
             replica_logger: replica_logger.clone(),
@@ -2057,7 +2076,7 @@ impl StateMachine {
         }
 
         // Run `IngressFilter` on the ingress message.
-        let ingress_filter = self.ingress_filter.clone();
+        let ingress_filter = self.ingress_filter.lock().unwrap().clone();
         self.runtime
             .block_on(ingress_filter.oneshot((provisional_whitelist, msg.clone().into())))
             .unwrap()
@@ -2171,21 +2190,8 @@ impl StateMachine {
                 );
                 let (dk, _cc) = k.derive_subkey(&path);
 
-                let message = {
-                    if context.schnorr_args().message.len() == 32 {
-                        let mut message = [0u8; 32];
-                        message.copy_from_slice(&context.schnorr_args().message);
-                        message
-                    } else {
-                        error!(
-                            self.replica_logger,
-                            "Currently BIP340 signing of messages != 32 bytes not supported"
-                        );
-                        return None;
-                    }
-                };
-
-                dk.sign_message_with_bip340_no_rng(&message).to_vec()
+                dk.sign_message_with_bip340_no_rng(&context.schnorr_args().message)
+                    .to_vec()
             }
             Some(SignatureSecretKey::Ed25519(k)) => {
                 let path = ic_crypto_ed25519::DerivationPath::from_canister_id_and_path(
@@ -2291,8 +2297,6 @@ impl StateMachine {
     /// Advances time by 1ns (to make sure time is strictly monotone)
     /// and triggers a single round of execution with block payload as an input.
     pub fn execute_payload(&self, payload: PayloadBuilder) -> Height {
-        self.advance_time(Self::EXECUTE_ROUND_TIME_INCREMENT);
-
         let batch_number = self.message_routing.expected_batch_height();
 
         let mut seed = [0u8; 32];
@@ -2329,9 +2333,10 @@ impl StateMachine {
             idkg_subnet_public_keys: self.idkg_subnet_public_keys.clone(),
             idkg_pre_signature_ids: BTreeMap::new(),
             registry_version: self.registry_client.get_latest_version(),
-            time: Time::from_nanos_since_unix_epoch(self.time.load(Ordering::Relaxed)),
+            time: self.get_time_of_next_round(),
             consensus_responses: payload.consensus_responses,
             blockmaker_metrics: BlockmakerMetrics::new_for_test(),
+            replica_version: ReplicaVersion::default(),
         };
 
         self.message_routing
@@ -2348,6 +2353,10 @@ impl StateMachine {
         );
 
         self.check_critical_errors();
+
+        let time_of_next_round = self.time_of_next_round();
+        self.set_time(time_of_next_round);
+        *self.time_of_last_round.write().unwrap() = time_of_next_round;
 
         batch_number
     }
@@ -2438,9 +2447,16 @@ impl StateMachine {
         SystemTime::UNIX_EPOCH + Duration::from_nanos(self.time.load(Ordering::Relaxed))
     }
 
-    /// Returns the state machine time at the beginning of next round.
+    /// Returns the state machine time at the beginning of next round
+    /// under the assumption that time won't be advanced before that
+    /// round is finalized.
     pub fn time_of_next_round(&self) -> SystemTime {
-        self.time() + Self::EXECUTE_ROUND_TIME_INCREMENT
+        let time = self.time();
+        if time == *self.time_of_last_round.read().unwrap() {
+            time + Self::EXECUTE_ROUND_TIME_INCREMENT
+        } else {
+            time
+        }
     }
 
     /// Returns the current state machine time.
@@ -3061,9 +3077,10 @@ impl StateMachine {
             method_name: method.to_string(),
             method_payload,
         };
+        let query_svc = self.query_handler.lock().unwrap().clone();
         if let Ok((result, _)) = self
             .runtime
-            .block_on(self.query_handler.clone().oneshot((user_query, delegation)))
+            .block_on(query_svc.oneshot((user_query, delegation)))
             .unwrap()
         {
             result
@@ -3160,7 +3177,7 @@ impl StateMachine {
             .unwrap();
 
         // Run `IngressFilter` on the ingress message.
-        let ingress_filter = self.ingress_filter.clone();
+        let ingress_filter = self.ingress_filter.lock().unwrap().clone();
         self.runtime
             .block_on(ingress_filter.oneshot((provisional_whitelist, msg.clone().into())))
             .unwrap()?;

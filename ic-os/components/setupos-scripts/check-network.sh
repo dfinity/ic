@@ -6,6 +6,8 @@ set -o pipefail
 SHELL="/bin/bash"
 PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 
+source /opt/ic/bin/functions.sh
+
 CONFIG="${CONFIG:=/var/ic/config/config.ini}"
 DEPLOYMENT="${DEPLOYMENT:=/data/deployment.json}"
 
@@ -31,18 +33,32 @@ function eval_command_with_retries() {
     local error_message="${2}"
     local result=""
     local attempt_count=0
+    local exit_code=1
 
-    while [ -z "${result}" ] && [ ${attempt_count} -lt 3 ]; do
+    while [ ${exit_code} -ne 0 ] && [ ${attempt_count} -lt 3 ]; do
         result=$(eval "${command}")
+        exit_code=$?
         ((attempt_count++))
 
-        if [ -z "${result}" ] && [ ${attempt_count} -lt 3 ]; then
+        if [ ${exit_code} -ne 0 ] && [ ${attempt_count} -lt 3 ]; then
             sleep 1
         fi
     done
 
-    if [ -z "${result}" ]; then
-        log_and_halt_installation_on_error "1" "${error_message}"
+    if [ ${exit_code} -ne 0 ]; then
+        local ip6_output=$(ip -6 addr show)
+        local ip6_route_output=$(ip -6 route show)
+        local dns_servers=$(grep 'nameserver' /etc/resolv.conf)
+
+        log_and_halt_installation_on_error "${exit_code}" "${error_message}
+Output of 'ip -6 addr show':
+${ip6_output}
+
+Output of 'ip -6 route show':
+${ip6_route_output}
+
+Configured DNS servers:
+${dns_servers}"
     fi
 
     echo "${result}"
@@ -62,7 +78,7 @@ function get_network_settings() {
 
     # Full IPv6 address
     ipv6_address_system_full=$(eval_command_with_retries \
-        "ip -6 addr show | awk '(/inet6/) && (!/fe80|::1/) { print \$2 }'" \
+        "ip -6 addr show | awk '(/inet6/) && (!/\sfe80|\s::1/) { print \$2 }'" \
         "Failed to get system's network configuration.")
 
     if [ -z "${ipv6_address_system_full}" ]; then
@@ -121,20 +137,20 @@ function validate_domain_name() {
     IFS='.' read -ra domain_parts <<<"${domain}"
 
     if [ ${#domain_parts[@]} -lt 2 ]; then
-        log_and_halt_installation_on_error 1 "Domain validation error: less than two domain parts in domain"
+        log_and_halt_installation_on_error 1 "Domain validation error: less than two domain parts in domain: ${domain}"
     fi
 
     for domain_part in "${domain_parts[@]}"; do
         if [ -z "$domain_part" ] || [ ${#domain_part} -gt 63 ]; then
-            log_and_halt_installation_on_error 1 "Domain validation error: domain part length violation"
+            log_and_halt_installation_on_error 1 "Domain validation error: domain part length violation: ${domain_part}"
         fi
 
         if [[ $domain_part == -* ]] || [[ $domain_part == *- ]]; then
-            log_and_halt_installation_on_error 1 "Domain validation error: domain part starts or ends with a hyphen"
+            log_and_halt_installation_on_error 1 "Domain validation error: domain part starts or ends with a hyphen: ${domain_part}"
         fi
 
         if ! [[ $domain_part =~ ^[a-zA-Z0-9-]+$ ]]; then
-            log_and_halt_installation_on_error 1 "Domain validation error: invalid characters in domain part"
+            log_and_halt_installation_on_error 1 "Domain validation error: invalid characters in domain part: ${domain_part}"
         fi
     done
 }
@@ -200,7 +216,6 @@ function query_nns_nodes() {
 
 # Establish run order
 main() {
-    source /opt/ic/bin/functions.sh
     log_start "$(basename $0)"
     read_variables
     get_network_settings

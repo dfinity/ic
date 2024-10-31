@@ -11,6 +11,7 @@ mkdir -p /var/lib/ic/data/benchmark
 fio --filename=/var/lib/ic/data/benchmark/testfile --io_size=10GB --size=60GB --direct=1 --buffered=0 --invalidate 1 --norandommap --random_generator=lfsr --rw=write --bs=4m --ioengine=libaio --iodepth=32 --numjobs=16 --group_reporting --name=throughput-sw-job --eta-newline=1 >results/fio.log
 
 ./benchmark.sh
-./stress.sh
+# Can hang system, too unreliable to run on nightly CI
+# ./stress.sh
 
 exit 0

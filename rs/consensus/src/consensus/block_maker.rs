@@ -31,6 +31,7 @@ use ic_types::{
     time::current_time,
     CountBytes, Height, NodeId, RegistryVersion, SubnetId,
 };
+use num_traits::ops::saturating::SaturatingSub;
 use std::{
     sync::{Arc, RwLock},
     time::Duration,
@@ -157,9 +158,10 @@ impl BlockMaker {
                 None
             }
             Err(err) => {
-                debug!(
+                warn!(
+                    every_n_seconds => 30,
                     self.log,
-                    "Not proposing a block due to get_node_rank error {:?}", err
+                    "Not proposing a block due to `get_block_maker_rank` error {:?}", err
                 );
                 None
             }
@@ -225,7 +227,7 @@ impl BlockMaker {
             &*self.registry_client,
             self.replica_config.subnet_id,
             registry_version,
-        )?
+        )
         .initial_notary_delay
             + Duration::from_nanos(1);
 
@@ -524,10 +526,10 @@ pub(crate) fn already_proposed(pool: &PoolReader<'_>, h: Height, this_node: Node
 // Notes:
 // 1) if we assume that the "dynamic delay" is never triggered, then we expect the chain
 //    quality (defined as the fraction of blocks proposed by honest nodes which were eventually
-//    finalized) to be at least 50%: if we look at any random height `h`, then we expect
+//    finalized) to be at least 33%: if we look at any random height `h`, then we expect
 //    around 10 rank-0 blocks to be proposed by malicious nodes (assuming f = n/3) in the past
-//    30 rounds, and at most 5 non-rank-0 blocks from malicious nodes to be finalized, thus we
-//    expect at least 15 blocks from honest replica to be finalized in the last 30 rounds.
+//    30 rounds, and at most 10 non-rank-0 blocks from malicious nodes to be finalized, thus we
+//    expect at least 10 blocks from honest replica to be finalized in the last 30 rounds.
 // 2) `DYNAMIC_DELAY_LOOK_BACK_DISTANCE` cannot be too large for performance reasons.
 // 3) `DYNAMIC_DELAY_MAX_NON_RANK_0_BLOCKS` cannot be too small, otherwise the condition could be
 //    triggered too easily, and lead to average round duration of more than 3s (due to 1/3 of the
@@ -535,17 +537,12 @@ pub(crate) fn already_proposed(pool: &PoolReader<'_>, h: Height, this_node: Node
 // 4) Under "good" networking conditions (at least 300Mbit/s bandwidth and low latency), 10 seconds
 //    should be enough to transfer a block (of size at most 4MB) to all (at most 39) peers.
 const DYNAMIC_DELAY_LOOK_BACK_DISTANCE: Height = Height::new(29);
-const DYNAMIC_DELAY_MAX_NON_RANK_0_BLOCKS: usize = 5;
+const DYNAMIC_DELAY_MAX_NON_RANK_0_BLOCKS: usize = 10;
 const DYNAMIC_DELAY_EXTRA_DURATION: Duration = Duration::from_secs(10);
 
 fn count_non_rank_0_blocks(pool: &PoolReader, block: Block) -> usize {
     let max_height = block.height();
-    let min_height = if max_height > DYNAMIC_DELAY_LOOK_BACK_DISTANCE {
-        max_height - DYNAMIC_DELAY_LOOK_BACK_DISTANCE
-    } else {
-        Height::new(0)
-    };
-
+    let min_height = max_height.saturating_sub(&DYNAMIC_DELAY_LOOK_BACK_DISTANCE);
     pool.get_range(block, min_height, max_height)
         .filter(|block| block.rank > Rank(0))
         .count()
@@ -562,9 +559,9 @@ pub(super) fn get_block_maker_delay(
     registry_version: RegistryVersion,
     rank: Rank,
     metrics: Option<&BlockMakerMetrics>,
-) -> Option<Duration> {
+) -> Duration {
     let settings =
-        get_notarization_delay_settings(log, registry_client, subnet_id, registry_version)?;
+        get_notarization_delay_settings(log, registry_client, subnet_id, registry_version);
     // If this is not a Rank-0 block maker, check how many non-rank-0 blocks have been notarized in
     // the past, and increase the delay if there have been too many.
     let dynamic_delay = if rank > Rank(0)
@@ -578,7 +575,7 @@ pub(super) fn get_block_maker_delay(
         Duration::ZERO
     };
 
-    Some(settings.unit_delay * rank.0 as u32 + dynamic_delay)
+    settings.unit_delay * rank.0 as u32 + dynamic_delay
 }
 
 /// Return true if the time since round start is greater than the required block
@@ -597,7 +594,7 @@ pub(super) fn is_time_to_make_block(
     let Some(registry_version) = pool.registry_version(height) else {
         return false;
     };
-    let Some(block_maker_delay) = get_block_maker_delay(
+    let block_maker_delay = get_block_maker_delay(
         log,
         registry_client,
         subnet_id,
@@ -606,9 +603,7 @@ pub(super) fn is_time_to_make_block(
         registry_version,
         rank,
         metrics,
-    ) else {
-        return false;
-    };
+    );
 
     // If the relative time indicates that not enough time has passed, we fall
     // back to the the monotonic round start time. We do this to safeguard
@@ -730,8 +725,7 @@ mod tests {
                     RegistryVersion::from(10),
                     Rank(4),
                     /*metrics=*/ None,
-                )
-                .unwrap();
+                );
             let expected_context = ValidationContext {
                 certified_height,
                 registry_version: RegistryVersion::from(10),
@@ -1079,10 +1073,10 @@ mod tests {
         #[case] unit_delay: Duration,
         #[case] expected_block_maker_delay: Duration,
     ) {
-        // there should be 6 non-rank-0 blocks in the past 30 heights
+        // there should be 11 non-rank-0 blocks in the past 30 heights
         let initial = std::iter::repeat(Rank(1)).take(5);
-        let mid = std::iter::repeat(Rank(0)).take(24);
-        let terminal = std::iter::repeat(Rank(2)).take(5);
+        let mid = std::iter::repeat(Rank(0)).take(19);
+        let terminal = std::iter::repeat(Rank(2)).take(8);
 
         let ranks: Vec<Rank> = initial.chain(mid).chain(terminal).collect();
 
@@ -1101,10 +1095,10 @@ mod tests {
         #[case] unit_delay: Duration,
         #[case] expected_block_maker_delay: Duration,
     ) {
-        // there should be 5 non-rank-0 blocks in the past 30 heights
+        // there should be 10 non-rank-0 blocks in the past 30 heights
         let initial = std::iter::repeat(Rank(1)).take(5);
-        let mid = std::iter::repeat(Rank(0)).take(25);
-        let terminal = std::iter::repeat(Rank(2)).take(5);
+        let mid = std::iter::repeat(Rank(0)).take(20);
+        let terminal = std::iter::repeat(Rank(2)).take(8);
 
         let ranks: Vec<Rank> = initial.chain(mid).chain(terminal).collect();
 
@@ -1115,19 +1109,16 @@ mod tests {
     }
 
     #[test]
-    fn get_block_maker_delay_short_chain_few_non_rank_0_blocks_test() {
+    fn get_block_maker_delay_short_chain_many_non_rank_0_blocks_test() {
+        let ranks = std::iter::repeat(Rank(1)).take(11).collect::<Vec<_>>();
         assert_eq!(
-            block_maker_delay_test_case(
-                &[Rank(1), Rank(1), Rank(1), Rank(1), Rank(1), Rank(1)],
-                Rank(1),
-                Duration::from_secs(1)
-            ),
+            block_maker_delay_test_case(&ranks, Rank(1), Duration::from_secs(1)),
             Duration::from_secs(11),
         );
     }
 
     #[test]
-    fn get_block_maker_delay_short_chain_many_non_rank_0_blocks_test() {
+    fn get_block_maker_delay_short_chain_few_non_rank_0_blocks_test() {
         assert_eq!(
             block_maker_delay_test_case(
                 &[Rank(0), Rank(1), Rank(1), Rank(1), Rank(1), Rank(1)],
@@ -1179,7 +1170,6 @@ mod tests {
                 block_maker_rank,
                 /*metrics=*/ None,
             )
-            .expect("Should successfully compute the block maker delay with valid inputs")
         })
     }
 }

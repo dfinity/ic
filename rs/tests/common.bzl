@@ -15,12 +15,11 @@ DEPENDENCIES = [
     "//rs/boundary_node/discower_bowndary:discower-bowndary",
     "//rs/canister_client",
     "//rs/canister_client/sender",
-    "//rs/rosetta-api/icrc1/test_utils",
+    "//rs/ledger_suite/icrc1/test_utils",
     "//rs/certification",
     "//rs/config",
     "//rs/limits",
     "//rs/crypto/sha2",
-    "//rs/crypto/test_utils/reproducible_rng",
     "//rs/crypto/tree_hash",
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/cup_explorer",
@@ -28,7 +27,6 @@ DEPENDENCIES = [
     "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator",
     "//rs/http_utils",
     "//rs/ic_os/dev_test_tools/deterministic_ips",
-    "//rs/ic_os/fstrim_tool",
     "//rs/interfaces",
     "//rs/interfaces/registry",
     "//rs/nervous_system/clients",
@@ -64,15 +62,15 @@ DEPENDENCIES = [
     "//rs/registry/subnet_type",
     "//rs/registry/transport",
     "//rs/replay",
-    "//rs/rosetta-api",
-    "//rs/rosetta-api/icp_ledger",
-    "//rs/rosetta-api/icrc1",
-    "//rs/rosetta-api/icrc1/index-ng",
-    "//rs/rosetta-api/icrc1/ledger",
-    "//rs/rosetta-api/ledger_canister_blocks_synchronizer/test_utils",
-    "//rs/rosetta-api/ledger_core",
-    "//rs/rosetta-api/rosetta_core:rosetta-core",
-    "//rs/rosetta-api/test_utils",
+    "//rs/rosetta-api/icp:rosetta-api",
+    "//rs/ledger_suite/icp:icp_ledger",
+    "//rs/ledger_suite/icrc1",
+    "//rs/ledger_suite/icrc1/index-ng",
+    "//rs/ledger_suite/icrc1/ledger",
+    "//rs/rosetta-api/icp/ledger_canister_blocks_synchronizer/test_utils",
+    "//rs/ledger_suite/common/ledger_core",
+    "//rs/rosetta-api/common/rosetta_core:rosetta-core",
+    "//rs/rosetta-api/icp/test_utils",
     "//rs/rust_canisters/canister_test",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_json",
@@ -118,7 +116,6 @@ DEPENDENCIES = [
     "@crate_index//:flate2",
     "@crate_index//:futures",
     "@crate_index//:hex",
-    "@crate_index//:http_0_2_12",
     "@crate_index//:humantime",
     "@crate_index//:ic-agent",
     "@crate_index//:ic-btc-interface",
@@ -147,10 +144,8 @@ DEPENDENCIES = [
     "@crate_index//:rcgen",
     "@crate_index//:regex",
     "@crate_index//:reqwest",
-    "@crate_index//:ring",
     "@crate_index//:rsa",
     "@crate_index//:rust_decimal",
-    "@crate_index//:schnorr_fun",
     "@crate_index//:serde_bytes",
     "@crate_index//:serde_cbor",
     "@crate_index//:serde_json",
@@ -200,7 +195,7 @@ NNS_CANISTER_WASM_PROVIDERS = {
         "mainnet": "@mainnet_nns_governance_canister//file",
     },
     "ledger-canister_notify-method": {
-        "tip-of-branch": "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method",
+        "tip-of-branch": "//rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method",
         "mainnet": "@mainnet_icp_ledger_canister//file",
     },
     "root-canister": {
@@ -239,15 +234,15 @@ SNS_CANISTER_WASM_PROVIDERS = {
         "mainnet": "@mainnet_sns-swap-canister//file",
     },
     "ic-icrc1-ledger": {
-        "tip-of-branch": "//rs/rosetta-api/icrc1/ledger:ledger_canister",
+        "tip-of-branch": "//rs/ledger_suite/icrc1/ledger:ledger_canister",
         "mainnet": "@mainnet_ic-icrc1-ledger//file",
     },
     "ic-icrc1-archive": {
-        "tip-of-branch": "//rs/rosetta-api/icrc1/archive:archive_canister",
+        "tip-of-branch": "//rs/ledger_suite/icrc1/archive:archive_canister",
         "mainnet": "@mainnet_ic-icrc1-archive//file",
     },
     "ic-icrc1-index-ng": {
-        "tip-of-branch": "//rs/rosetta-api/icrc1/index-ng:index_ng_canister",
+        "tip-of-branch": "//rs/ledger_suite/icrc1/index-ng:index_ng_canister",
         "mainnet": "@mainnet_ic-icrc1-index-ng//file",
     },
 }
@@ -325,15 +320,10 @@ BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS = [
     "//ic-os/boundary-guestos:scripts/build-bootstrap-config-image.sh",
 ]
 
-COUNTER_CANISTER_RUNTIME_DEPS = ["//rs/tests:src/counter.wat"]
+COUNTER_CANISTER_RUNTIME_DEPS = ["//rs/tests:counter.wat"]
 
 CANISTER_HTTP_RUNTIME_DEPS = [
     "//rs/tests/networking/canister_http:http_uvm_config_image",
-]
-
-CUSTOM_DOMAINS_RUNTIME_DEPS = [
-    "//rs/tests:custom_domains_uvm_config_image",
-    "@asset_canister//file",
 ]
 
 XNET_TEST_CANISTER_RUNTIME_DEPS = ["//rs/rust_canisters/xnet_test:xnet-test-canister"]
