@@ -1,3 +1,5 @@
+#![allow(clippy::reversed_empty_ranges)]
+
 use ic_nervous_system_linear_map::LinearMap;
 use rust_decimal::Decimal;
 
