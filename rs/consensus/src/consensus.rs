@@ -199,7 +199,7 @@ impl ConsensusImpl {
                 membership.clone(),
                 crypto.clone(),
                 state_manager.clone(),
-                metrics_registry.clone(),
+                &metrics_registry,
                 logger.clone(),
             ),
             finalizer: Finalizer::new(

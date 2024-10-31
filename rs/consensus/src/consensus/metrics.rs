@@ -16,7 +16,7 @@ use ic_types::{
 use prometheus::{
     GaugeVec, Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec,
 };
-use std::sync::RwLock;
+use std::{sync::RwLock, time::Duration};
 
 use crate::idkg::metrics::{
     count_by_master_public_key_id, expected_keys, key_id_label, CounterPerMasterPublicKeyId,
@@ -385,29 +385,52 @@ impl FinalizerMetrics {
     }
 }
 
-pub struct NotaryMetrics {
-    pub time_to_notary_sign: HistogramVec,
+pub(crate) struct NotaryMetrics {
+    time_to_notary_sign: HistogramVec,
+    adjusted_notary_delay: HistogramVec,
 }
 
 impl NotaryMetrics {
-    pub fn new(metrics_registry: MetricsRegistry) -> Self {
+    pub(crate) fn new(metrics_registry: &MetricsRegistry) -> Self {
         Self {
             time_to_notary_sign: metrics_registry.histogram_vec(
                 "consensus_time_to_notary_sign",
-                "The duration since round start for replicas to notary-sign a block, labelled by ranks",
-                vec![0.0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.2, 2.4, 2.6, 2.8, 3.0, 3.5, 4.0, 4.5, 5.0, 6.0, 8.0, 10.0, 15.0, 20.0],
+                "The duration since round start for replicas to notary-sign a block, \
+                labelled by ranks",
+                vec![
+                    0.0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.2, 2.4, 2.6, 2.8, 3.0,
+                    3.5, 4.0, 4.5, 5.0, 6.0, 8.0, 10.0, 15.0, 20.0,
+                ],
+                &["rank"],
+            ),
+            adjusted_notary_delay: metrics_registry.histogram_vec(
+                "consensus_adjusted_notary_delay",
+                "The adjusted notary delay used when creating a notarization share for a block, \
+                labelled by ranks",
+                vec![
+                    0.0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.2, 2.4, 2.6, 2.8, 3.0,
+                    3.5, 4.0, 4.5, 5.0, 6.0, 8.0, 10.0, 15.0, 20.0,
+                ],
                 &["rank"],
             ),
         }
     }
 
     /// Report metrics after notarizing `block`
-    pub fn report_notarization(&self, block: &Block, elapsed: std::time::Duration) {
+    pub(crate) fn report_notarization(
+        &self,
+        block: &Block,
+        elapsed: Duration,
+        adjusted_notary_delay: Duration,
+    ) {
         let rank = block.rank().0 as usize;
         if rank < RANKS_TO_RECORD.len() {
             self.time_to_notary_sign
                 .with_label_values(&[RANKS_TO_RECORD[rank]])
-                .observe(elapsed.as_secs_f64())
+                .observe(elapsed.as_secs_f64());
+            self.adjusted_notary_delay
+                .with_label_values(&[RANKS_TO_RECORD[rank]])
+                .observe(adjusted_notary_delay.as_secs_f64());
         }
     }
 }

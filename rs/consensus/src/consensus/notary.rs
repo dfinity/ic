@@ -76,7 +76,7 @@ impl Notary {
         membership: Arc<Membership>,
         crypto: Arc<dyn ConsensusCrypto>,
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
-        metrics_registry: MetricsRegistry,
+        metrics_registry: &MetricsRegistry,
         log: ReplicaLogger,
     ) -> Notary {
         Notary {
@@ -86,7 +86,7 @@ impl Notary {
             crypto,
             state_manager,
             log,
-            metrics: NotaryMetrics::new(metrics_registry),
+            metrics: NotaryMetrics::new(&metrics_registry),
         }
     }
 
@@ -103,10 +103,16 @@ impl Notary {
             }
             let height = notarized_height.increment();
             for proposal in find_lowest_ranked_non_disqualified_proposals(pool, height) {
-                if let Some(elapsed) = self.time_to_notarize(pool, height, proposal.rank()) {
+                if let Some((elapsed, adjusted_notary_delay)) =
+                    self.time_to_notarize(pool, height, proposal.rank())
+                {
                     if !self.is_proposal_already_notarized_by_me(pool, &proposal) {
                         if let Some(s) = self.notarize_block(pool, &proposal.content) {
-                            self.metrics.report_notarization(proposal.as_ref(), elapsed);
+                            self.metrics.report_notarization(
+                                proposal.as_ref(),
+                                elapsed,
+                                adjusted_notary_delay,
+                            );
                             notarization_shares.push(s);
                         }
                     }
@@ -123,7 +129,7 @@ impl Notary {
         pool: &PoolReader<'_>,
         height: Height,
         rank: Rank,
-    ) -> Option<Duration> {
+    ) -> Option<(Duration, Duration)> {
         let adjusted_notary_delay = get_adjusted_notary_delay(
             self.membership.as_ref(),
             pool,
@@ -136,7 +142,8 @@ impl Notary {
         let now_relative = self.time_source.get_relative_time();
         let now_instant = self.time_source.get_instant();
 
-        pool.get_round_start_time(height)
+        let time_since_round_start = pool
+            .get_round_start_time(height)
             .filter(|&start| now_relative >= start + adjusted_notary_delay)
             .map(|start| now_relative.saturating_duration_since(start))
             // If the relative time indicates that not enough time has passed, we fall
@@ -145,7 +152,9 @@ impl Notary {
             .or(pool
                 .get_round_start_instant(height, self.time_source.get_origin_instant())
                 .filter(|&start| now_instant >= start + adjusted_notary_delay)
-                .map(|start| now_instant.saturating_duration_since(start)))
+                .map(|start| now_instant.saturating_duration_since(start)))?;
+
+        Some((time_since_round_start, adjusted_notary_delay))
     }
 
     /// Return `true` if this node is a member of the notary group for the
@@ -413,7 +422,7 @@ mod tests {
                 membership.clone(),
                 crypto,
                 state_manager.clone(),
-                metrics_registry,
+                &metrics_registry,
                 no_op_logger(),
             );
             // Time has not expired for rank 0 initially
@@ -603,7 +612,7 @@ mod tests {
                 membership.clone(),
                 crypto,
                 state_manager.clone(),
-                metrics_registry,
+                &metrics_registry,
                 no_op_logger(),
             );
             let run_notary = |pool: &dyn ConsensusPool| {
