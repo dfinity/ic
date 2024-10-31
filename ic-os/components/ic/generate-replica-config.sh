@@ -161,8 +161,8 @@ sed -e "s@{{ ipv6_address }}@${IPV6_ADDRESS}@" \
 # for the given domain name. To be used in system tests only.
 if [[ -n "${GENERATE_IC_BOUNDARY_TLS_CERT}" ]] && [ "${GENERATE_IC_BOUNDARY_TLS_CERT}" != "null" ]; then
     openssl req -x509 -newkey rsa:2048 \
-        -keyout /var/lib/ic/ic-boundary-tls.key \
-        -out /var/lib/ic/ic-boundary-tls.crt -sha256 -days 3650 -nodes \
+        -keyout /var/lib/ic/data/ic-boundary-tls.key \
+        -out /var/lib/ic/data/ic-boundary-tls.crt -sha256 -days 3650 -nodes \
         -subj /C=CH/ST=Zurich/L=Zurich/O=InternetComputer/OU=ApiBoundaryNodes/CN=${GENERATE_IC_BOUNDARY_TLS_CERT}
 fi
 
