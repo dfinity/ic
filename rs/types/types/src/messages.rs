@@ -557,7 +557,7 @@ mod tests {
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use maplit::btreemap;
     use serde_cbor::Value;
-    use std::{convert::TryFrom, io::Cursor};
+    use std::convert::TryFrom;
     use strum::IntoEnumIterator;
 
     fn debug_blob(v: Vec<u8>) -> String {
