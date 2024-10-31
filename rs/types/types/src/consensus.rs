@@ -303,11 +303,11 @@ impl SignedBytesWithoutDomainSeparator for BlockMetadata {
     }
 }
 
-/// HashedBlock contains a Block together with its hash
+/// [`HashedBlock`] contains a [`Block`] together with its hash
 pub type HashedBlock = Hashed<CryptoHashOf<Block>, Block>;
 
 impl HashedBlock {
-    /// Create a BlockLogEntry from this block
+    /// Create a [`BlockLogEntry`] from this block
     pub fn log_entry(&self) -> BlockLogEntry {
         let block = &self.value;
 
@@ -315,15 +315,19 @@ impl HashedBlock {
             byte_size: None,
             certified_height: Some(block.context.certified_height.get()),
             dkg_payload_type: Some(block.payload.as_ref().payload_type().to_string()),
-            hash: Some(hex::encode(&self.hash.get_ref().0)),
+            hash: Some(block_hash_to_string(&self.hash)),
             height: Some(block.height.get()),
-            parent_hash: Some(hex::encode(&block.parent.get_ref().0)),
+            parent_hash: Some(block_hash_to_string(&block.parent)),
             rank: Some(block.rank.0),
             registry_version: Some(block.context.registry_version.get()),
             time: Some(block.context.time.as_nanos_since_unix_epoch()),
             version: Some(block.version().to_string()),
         }
     }
+}
+
+fn block_hash_to_string(hash: &CryptoHashOf<Block>) -> String {
+    hex::encode(&hash.get_ref().0)
 }
 
 /// BlockMetadata contains the version, height and hash of a block
