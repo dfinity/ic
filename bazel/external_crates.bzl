@@ -996,6 +996,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "multipart",
                     "rustls-tls",
                     "rustls-tls-native-roots",
+                    "socks",
                     "stream",
                 ],
             ),
