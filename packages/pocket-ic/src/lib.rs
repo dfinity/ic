@@ -85,7 +85,7 @@ pub struct PocketIcBuilder {
     state_dir: Option<PathBuf>,
     nonmainnet_features: bool,
     log_level: Option<Level>,
-    bitcoind_addr: Option<SocketAddr>,
+    bitcoind_addr: Option<Vec<SocketAddr>>,
 }
 
 #[allow(clippy::new_without_default)]
@@ -162,7 +162,7 @@ impl PocketIcBuilder {
 
     pub fn with_bitcoind_addr(self, bitcoind_addr: SocketAddr) -> Self {
         Self {
-            bitcoind_addr: Some(bitcoind_addr),
+            bitcoind_addr: Some(vec![bitcoind_addr]),
             ..self
         }
     }
@@ -359,7 +359,7 @@ impl PocketIc {
         state_dir: Option<PathBuf>,
         nonmainnet_features: bool,
         log_level: Option<Level>,
-        bitcoind_addr: Option<SocketAddr>,
+        bitcoind_addr: Option<Vec<SocketAddr>>,
     ) -> Self {
         let (tx, rx) = channel();
         let thread = thread::spawn(move || {

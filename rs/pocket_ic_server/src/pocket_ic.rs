@@ -173,7 +173,7 @@ struct BitcoinAdapterParts {
 
 impl BitcoinAdapterParts {
     fn new(
-        bitcoind_addr: SocketAddr,
+        bitcoind_addr: Vec<SocketAddr>,
         uds_path: PathBuf,
         log_level: Option<Level>,
         replica_logger: ReplicaLogger,
@@ -194,7 +194,7 @@ impl BitcoinAdapterParts {
         };
         let bitcoin_adapter_config = BitcoinAdapterConfig {
             network: Network::Regtest,
-            nodes: vec![bitcoind_addr],
+            nodes: bitcoind_addr,
             socks_proxy: None,
             ipv6_only: false,
             logger: logger_config,
@@ -234,7 +234,7 @@ pub struct PocketIc {
     runtime: Arc<Runtime>,
     nonmainnet_features: bool,
     log_level: Option<Level>,
-    bitcoind_addr: Option<SocketAddr>,
+    bitcoind_addr: Option<Vec<SocketAddr>>,
     _bitcoin_adapter_parts: Option<BitcoinAdapterParts>,
 }
 
@@ -388,7 +388,7 @@ impl PocketIc {
         state_dir: Option<PathBuf>,
         nonmainnet_features: bool,
         log_level: Option<Level>,
-        bitcoind_addr: Option<SocketAddr>,
+        bitcoind_addr: Option<Vec<SocketAddr>>,
     ) -> Self {
         let mut range_gen = RangeGen::new();
         let mut routing_table = RoutingTable::new();
@@ -572,7 +572,7 @@ impl PocketIc {
 
             if let Some(bitcoin_adapter_uds_path) = bitcoin_adapter_uds_path {
                 _bitcoin_adapter_parts = Some(BitcoinAdapterParts::new(
-                    bitcoind_addr.unwrap(),
+                    bitcoind_addr.clone().unwrap(),
                     bitcoin_adapter_uds_path,
                     log_level,
                     sm.replica_logger.clone(),
@@ -2366,7 +2366,7 @@ fn route(
                     // If applicable, we start a new bitcoin adapter.
                     if let Some(bitcoin_adapter_uds_path) = bitcoin_adapter_uds_path {
                         pic._bitcoin_adapter_parts = Some(BitcoinAdapterParts::new(
-                            pic.bitcoind_addr.unwrap(),
+                            pic.bitcoind_addr.clone().unwrap(),
                             bitcoin_adapter_uds_path,
                             pic.log_level,
                             sm.replica_logger.clone(),
