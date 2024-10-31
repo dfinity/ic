@@ -1,7 +1,7 @@
 use candid::Principal;
 use mockall::automock;
 
-use crate::{state::CanisterStateApi, storage::API_BOUNDARY_NODE_PRINCIPALS};
+use crate::{state::CanisterApi, storage::API_BOUNDARY_NODE_PRINCIPALS};
 
 #[automock]
 pub trait ResolveAccessLevel {
@@ -16,23 +16,23 @@ pub enum AccessLevel {
 }
 
 #[derive(Clone)]
-pub struct AccessLevelResolver<R: CanisterStateApi> {
+pub struct AccessLevelResolver<R: CanisterApi> {
     pub caller_id: Principal,
-    pub canister_state_api: R,
+    pub canister_api: R,
 }
 
-impl<R: CanisterStateApi> AccessLevelResolver<R> {
-    pub fn new(caller_id: Principal, canister_state_api: R) -> Self {
+impl<R: CanisterApi> AccessLevelResolver<R> {
+    pub fn new(caller_id: Principal, canister_api: R) -> Self {
         Self {
             caller_id,
-            canister_state_api,
+            canister_api,
         }
     }
 }
 
-impl<R: CanisterStateApi> ResolveAccessLevel for AccessLevelResolver<R> {
+impl<R: CanisterApi> ResolveAccessLevel for AccessLevelResolver<R> {
     fn get_access_level(&self) -> AccessLevel {
-        if let Some(authorized_principal) = self.canister_state_api.get_authorized_principal() {
+        if let Some(authorized_principal) = self.canister_api.get_authorized_principal() {
             if self.caller_id == authorized_principal.0 {
                 return AccessLevel::FullAccess;
             }

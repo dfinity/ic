@@ -1,6 +1,6 @@
 use crate::{
     confidentiality_formatting::ConfidentialityFormatting,
-    state::CanisterStateApi,
+    state::CanisterApi,
     types::{ConfigResponse, OutputConfig, OutputRule, OutputRuleMetadata, RuleId, Version},
 };
 
@@ -13,28 +13,28 @@ pub trait EntityFetcher {
 }
 
 pub struct ConfigFetcher<R, F> {
-    pub canister_state_api: R,
+    pub canister_api: R,
     pub formatter: F,
 }
 
 pub struct RuleFetcher<R, F> {
-    pub canister_state_api: R,
+    pub canister_api: R,
     pub formatter: F,
 }
 
 impl<R, F> RuleFetcher<R, F> {
-    pub fn new(canister_state_api: R, formatter: F) -> Self {
+    pub fn new(canister_api: R, formatter: F) -> Self {
         Self {
-            canister_state_api,
+            canister_api,
             formatter,
         }
     }
 }
 
 impl<R, F> ConfigFetcher<R, F> {
-    pub fn new(canister_state_api: R, formatter: F) -> Self {
+    pub fn new(canister_api: R, formatter: F) -> Self {
         Self {
-            canister_state_api,
+            canister_api,
             formatter,
         }
     }
@@ -58,7 +58,7 @@ pub enum FetchRuleError {
     UnexpectedError(#[from] anyhow::Error),
 }
 
-impl<R: CanisterStateApi, F: ConfidentialityFormatting<Input = OutputConfig>> EntityFetcher
+impl<R: CanisterApi, F: ConfidentialityFormatting<Input = OutputConfig>> EntityFetcher
     for ConfigFetcher<R, F>
 {
     type Input = Option<Version>;
@@ -67,21 +67,21 @@ impl<R: CanisterStateApi, F: ConfidentialityFormatting<Input = OutputConfig>> En
 
     fn fetch(&self, version: Option<Version>) -> Result<ConfigResponse, FetchConfigError> {
         let current_version = self
-            .canister_state_api
+            .canister_api
             .get_version()
             .ok_or_else(|| FetchConfigError::NoExistingVersions)?;
 
         let version = version.unwrap_or(current_version.0);
 
         let stored_config = self
-            .canister_state_api
+            .canister_api
             .get_config(version)
             .ok_or_else(|| FetchConfigError::NotFound(version))?;
 
         let mut rules: Vec<OutputRule> = vec![];
 
         for rule_id in stored_config.rule_ids.iter() {
-            let rule = self.canister_state_api.get_rule(rule_id).ok_or_else(|| {
+            let rule = self.canister_api.get_rule(rule_id).ok_or_else(|| {
                 FetchConfigError::Unexpected(anyhow::anyhow!("Rule with id = {rule_id} not found"))
             })?;
 
@@ -113,7 +113,7 @@ impl<R: CanisterStateApi, F: ConfidentialityFormatting<Input = OutputConfig>> En
     }
 }
 
-impl<R: CanisterStateApi, F: ConfidentialityFormatting<Input = OutputRuleMetadata>> EntityFetcher
+impl<R: CanisterApi, F: ConfidentialityFormatting<Input = OutputRuleMetadata>> EntityFetcher
     for RuleFetcher<R, F>
 {
     type Input = RuleId;
@@ -122,7 +122,7 @@ impl<R: CanisterStateApi, F: ConfidentialityFormatting<Input = OutputRuleMetadat
 
     fn fetch(&self, rule_id: RuleId) -> Result<OutputRuleMetadata, FetchRuleError> {
         let stored_metadata = self
-            .canister_state_api
+            .canister_api
             .get_rule(&rule_id)
             .ok_or_else(|| FetchRuleError::NotFound(rule_id.clone()))?;
 
@@ -157,7 +157,7 @@ impl From<FetchRuleError> for String {
 #[cfg(test)]
 mod tests {
     use crate::confidentiality_formatting::MockConfidentialityFormatting;
-    use crate::state::MockCanisterStateApi;
+    use crate::state::MockCanisterApi;
     use crate::storage::{StorableConfig, StorableVersion};
 
     use super::*;
@@ -171,7 +171,7 @@ mod tests {
             rules: vec![],
         });
 
-        let mut mock_canister_api = MockCanisterStateApi::new();
+        let mut mock_canister_api = MockCanisterApi::new();
         mock_canister_api
             .expect_get_version()
             .returning(|| Some(StorableVersion(1)));

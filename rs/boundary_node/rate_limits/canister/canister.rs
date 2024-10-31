@@ -6,7 +6,7 @@ use crate::confidentiality_formatting::ConfidentialityFormatterFactory;
 use crate::disclose::{DisclosesRules, RulesDiscloser};
 use crate::fetcher::{ConfigFetcher, EntityFetcher, RuleFetcher};
 use crate::metrics::{encode_metrics, serve_metrics};
-use crate::state::CanisterStateApi;
+use crate::state::CanisterApi;
 use crate::state::{init_version_and_config, with_canister_state};
 use crate::storage::API_BOUNDARY_NODE_PRINCIPALS;
 use candid::Principal;
@@ -25,6 +25,7 @@ const REGISTRY_CANISTER_METHOD: &str = "get_api_boundary_node_ids";
 // TODO: implement proper canister lifecycle: upgrade, post_upgrade, ...
 #[init]
 fn init(init_arg: InitArg) {
+    ic_cdk::println!("Starting canister init");
     // Set authorized principal, which performs write operations, such as adding new configurations
     if let Some(principal) = init_arg.authorized_principal {
         with_canister_state(|state| {
@@ -70,8 +71,8 @@ fn add_config(config: InputConfig) -> AddConfigResponse {
     let current_time = ic_cdk::api::time();
     with_canister_state(|state| {
         let access_resolver = AccessLevelResolver::new(caller_id, state.clone());
-        let writer = ConfigAdder::new(state, access_resolver);
-        writer.add_config(config.into(), current_time)
+        let config_adder = ConfigAdder::new(state, access_resolver);
+        config_adder.add_config(config.into(), current_time)
     })?;
     Ok(())
 }

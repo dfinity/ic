@@ -14,7 +14,7 @@ use crate::{
 };
 
 #[automock]
-pub trait CanisterStateApi {
+pub trait CanisterApi {
     fn get_authorized_principal(&self) -> Option<StorablePrincipal>;
     fn set_authorized_principal(&self, principal: Principal);
     fn get_version(&self) -> Option<StorableVersion>;
@@ -48,7 +48,7 @@ impl CanisterState {
     }
 }
 
-impl CanisterStateApi for CanisterState {
+impl CanisterApi for CanisterState {
     fn get_authorized_principal(&self) -> Option<StorablePrincipal> {
         self.authorized_principal
             .with(|cell| cell.borrow().get(&()))

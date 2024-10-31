@@ -10,7 +10,7 @@ use rate_limits_api::{
 };
 
 // Set this principal ID
-const RATE_LIMIT_CANISTER_ID: &str = "3l4c5-2qaaa-aaaab-qacpq-cai";
+const RATE_LIMIT_CANISTER_ID: &str = "2uurk-ziaaa-aaaab-qacla-cai";
 const IC_DOMAIN: &str = "https://ic0.app";
 
 use k256::elliptic_curve::SecretKey;
