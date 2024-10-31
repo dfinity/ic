@@ -152,7 +152,7 @@ impl RerandomizedPresignature {
         // Now some adjustments to handle BIP340's even-y convention
         let (derived_key, flip_key, key_tweak) = if let Some(ttr) = taproot_tree_root {
             // If taproot we have to perform yet another additive tweak
-            let tap_tweak = compute_taproot_tweak(&derived_key, &ttr)?;
+            let tap_tweak = compute_taproot_tweak(&derived_key, ttr)?;
             let rr_even = derived_key.is_y_even()?;
             let g_tweak = EccPoint::mul_by_g(&tap_tweak);
 
