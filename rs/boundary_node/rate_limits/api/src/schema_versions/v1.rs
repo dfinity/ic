@@ -1,16 +1,22 @@
 use candid::Principal;
-use regex::Regex;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 
 const DOUBLE_INDENT: &str = "      ";
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum RequestType {
+    Call,
+    Query,
+    ReadState,
+}
 
 // Defines the rate-limit rule to be stored in the canister
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RateLimitRule {
     pub canister_id: Option<Principal>,
     pub subnet_id: Option<Principal>,
-    #[serde(with = "regex_serde")]
-    pub methods: Regex,
+    pub methods_regex: Option<String>,
+    pub request_type: Option<RequestType>,
     pub limit: String,
 }
 
@@ -26,7 +32,11 @@ impl std::fmt::Display for RateLimitRule {
             "{DOUBLE_INDENT}Subnet ID: {}",
             format_principal_option(&self.subnet_id)
         )?;
-        writeln!(f, "{DOUBLE_INDENT}Methods: {}", &self.methods)?;
+        writeln!(
+            f,
+            "{DOUBLE_INDENT}Methods: {}",
+            &self.methods_regex.clone().unwrap_or("None".to_string())
+        )?;
         write!(f, "{DOUBLE_INDENT}Limit: {}", &self.limit)?;
         Ok(())
     }
@@ -36,25 +46,6 @@ fn format_principal_option(principal: &Option<Principal>) -> String {
     match principal {
         Some(p) => p.to_string(),
         None => "None".to_string(),
-    }
-}
-
-mod regex_serde {
-    use super::*;
-
-    pub fn serialize<S>(regex: &Regex, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        regex.as_str().serialize(serializer)
-    }
-
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<Regex, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-        Regex::new(&s).map_err(serde::de::Error::custom)
     }
 }
 

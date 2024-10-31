@@ -4,12 +4,13 @@ use ic_agent::{
     Agent, Identity,
 };
 use rate_limits_api::{
-    v1::RateLimitRule, AddConfigResponse, DiscloseRulesArg, DiscloseRulesResponse,
-    GetConfigResponse, GetRuleByIdResponse, IncidentId, InputConfig, InputRule, RuleId, Version,
+    v1::{RateLimitRule, RequestType},
+    AddConfigResponse, DiscloseRulesArg, DiscloseRulesResponse, GetConfigResponse,
+    GetRuleByIdResponse, IncidentId, InputConfig, InputRule, RuleId, Version,
 };
-use regex::Regex;
 
-const RATE_LIMIT_CANISTER_ID: &str = "53qip-2yaaa-aaaab-qac2a-cai";
+// Set this principal ID
+const RATE_LIMIT_CANISTER_ID: &str = "3l4c5-2qaaa-aaaab-qacpq-cai";
 const IC_DOMAIN: &str = "https://ic0.app";
 
 use k256::elliptic_curve::SecretKey;
@@ -42,14 +43,14 @@ async fn main() {
     println!("Call 3. Read config by non-privileged user (RestrictedRead level). Rules and descriptions are hidden in the response");
     let rule_ids = read_config(&agent_restricted_read, version, canister_id).await;
 
-    println!("Call 4. Inspect the metadata of a rule before disclosure. All metadata fields should be hidden");
+    println!("Call 4. Inspect the metadata of a rule before disclosure. Some metadata fields should be hidden");
     read_rule(&agent_restricted_read, &rule_ids[2], canister_id).await;
 
     println!("Call 5. Disclose rules (two rules in this case) linked to a single incident");
     let incident_id = "incident_id_1".to_string();
     disclose_incident(&agent_full_access, incident_id, canister_id).await;
 
-    println!("Call 6. Read config by non-privileged user again. Now rules related to the disclosed incident are fully shown");
+    println!("Call 6. Read config by non-privileged user again. Now rules related to the disclosed incident are fully visible");
     let _ = read_config(&agent_restricted_read, version, canister_id).await;
 
     println!("Call 7. Add another config (version = 3) with one newly added rule, one remove rule");
@@ -79,28 +80,32 @@ async fn add_config_1(agent: &Agent, canister_id: Principal) {
     let rule_1 = RateLimitRule {
         canister_id: Some(canister_id),
         subnet_id: None,
-        methods: Regex::new(r"^(method_1)$").unwrap(),
+        methods_regex: Some(r"^(method_1)$".to_string()),
+        request_type: Some(RequestType::Call),
         limit: "1req/s".to_string(),
     };
 
     let rule_2 = RateLimitRule {
         canister_id: Some(canister_id),
         subnet_id: None,
-        methods: Regex::new(r"^(method_2)$").unwrap(),
+        methods_regex: Some(r"^(method_2)$".to_string()),
+        request_type: Some(RequestType::Query),
         limit: "2req/s".to_string(),
     };
 
     let rule_3 = RateLimitRule {
         canister_id: Some(canister_id),
         subnet_id: None,
-        methods: Regex::new(r"^(method_3)$").unwrap(),
+        methods_regex: Some(r"^(method_3)$".to_string()),
+        request_type: None,
         limit: "3req/s".to_string(),
     };
 
     let rule_4 = RateLimitRule {
         canister_id: Some(canister_id),
         subnet_id: None,
-        methods: Regex::new(r"^(method_4)$").unwrap(),
+        methods_regex: Some(r"^(method_4)$".to_string()),
+        request_type: Some(RequestType::ReadState),
         limit: "4req/s".to_string(),
     };
 
@@ -152,28 +157,33 @@ async fn add_config_2(agent: &Agent, canister_id: Principal) {
     let rule_1 = RateLimitRule {
         canister_id: Some(canister_id),
         subnet_id: None,
-        methods: Regex::new(r"^(method_1)$").unwrap(),
+        methods_regex: Some(r"^(method_1)$".to_string()),
+        request_type: Some(RequestType::Call),
         limit: "1req/s".to_string(),
     };
 
     let rule_2 = RateLimitRule {
         canister_id: Some(canister_id),
         subnet_id: None,
-        methods: Regex::new(r"^(method_2)$").unwrap(),
+        methods_regex: Some(r"^(method_2)$".to_string()),
+        request_type: Some(RequestType::Query),
         limit: "2req/s".to_string(),
     };
 
+    // only this rule is different from config_1
     let rule_3 = RateLimitRule {
         canister_id: Some(canister_id),
         subnet_id: None,
-        methods: Regex::new(r"^(method_3)$").unwrap(),
-        limit: "3req/s".to_string(),
+        methods_regex: Some(r"^(method_33)$".to_string()),
+        request_type: None,
+        limit: "33req/s".to_string(),
     };
 
     let rule_4 = RateLimitRule {
         canister_id: Some(canister_id),
         subnet_id: None,
-        methods: Regex::new(r"^(method_4)$").unwrap(),
+        methods_regex: Some(r"^(method_4)$".to_string()),
+        request_type: Some(RequestType::ReadState),
         limit: "4req/s".to_string(),
     };
 
@@ -192,7 +202,7 @@ async fn add_config_2(agent: &Agent, canister_id: Principal) {
                 rule_raw: rule_2.to_bytes_json().unwrap(),
                 description: "Some vulnerability #2 discovered".to_string(),
             },
-            // Only this rule is different from config 1.
+            // Only this rule is different from config 1, it also has another incident_id and description
             // It means that the old rule is removed (not mutated) and this new rule is applied instead.
             InputRule {
                 incident_id: "incident_id_4".to_string(),
