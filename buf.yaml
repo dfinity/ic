@@ -1,20 +1,5 @@
 version: v2
 modules:
-  - path: bazel-ic/rs/bitcoin/service/proto
-  - path: bazel-ic/rs/crypto/internal/crypto_service_provider/proto
-  - path: bazel-ic/rs/https_outcalls/service/proto
-  - path: bazel-ic/rs/ledger_suite/icp/proto
-  - path: bazel-ic/rs/monitoring/adapter_metrics_service/proto
-  - path: bazel-ic/rs/nervous_system/proto/proto
-  - path: bazel-ic/rs/nns/common/proto
-  - path: bazel-ic/rs/nns/governance/proto
-  - path: bazel-ic/rs/nns/gtc/proto Temporarily removed because a PR was reverted and then un-reverted
-  - path: bazel-ic/rs/nns/handlers/root/impl/proto
-  - path: bazel-ic/rs/protobuf/def
-  - path: bazel-ic/rs/sns/governance/proto
-  - path: bazel-ic/rs/sns/root/proto
-  - path: bazel-ic/rs/sns/swap/proto
-  - path: bazel-ic/rs/types/base_types/proto
   - path: rs/bitcoin/service/proto
   - path: rs/crypto/internal/crypto_service_provider/proto
   - path: rs/https_outcalls/service/proto
