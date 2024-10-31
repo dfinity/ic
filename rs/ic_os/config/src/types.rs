@@ -118,6 +118,9 @@ pub struct GuestOSDevSettings {
     pub socks_proxy: Option<String>,
     // An optional hostname to override the deterministically generated hostname
     pub hostname: Option<String>,
+    // Generate and inject a self-signed TLS certificate and key for ic-boundary
+    // for the given domain name. To be used in system tests only.
+    pub generate_ic_boundary_tls_cert: Option<String>,
 }
 
 /// Configures the usage of the backup spool directory.

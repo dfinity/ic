@@ -236,6 +236,7 @@ fn main() {
             jaeger_addr: None,
             socks_proxy: None,
             hostname: None,
+            generate_ic_boundary_tls_cert: None,
         };
 
         // populate guestos_config_json_path with serialized guestos config object

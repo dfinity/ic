@@ -99,12 +99,6 @@ function process_bootstrap() {
             cp -rL -T "${TMPDIR}/${ITEM}" "${STATE_ROOT}/data/${ITEM}"
         fi
     done
-    if [ -e "${TMPDIR}/ic-boundary-tls.key" ]; then
-        echo "Setting up self-signed certificate of ic-boundary"
-        cp -L "${TMPDIR}/ic-boundary-tls.key" "${STATE_ROOT}/data/ic-boundary-tls.key"
-        cp -L "${TMPDIR}/ic-boundary-tls.crt" "${STATE_ROOT}/data/ic-boundary-tls.crt"
-        sudo chmod +r ${STATE_ROOT}/data/ic-boundary-tls.key
-    fi
 
     for FILE in config.json; do
         if [ -e "${TMPDIR}/${FILE}" ]; then

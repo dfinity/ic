@@ -45,6 +45,7 @@ pub struct GenerateTestnetConfigArgs {
     pub jaeger_addr: Option<String>,
     pub socks_proxy: Option<String>,
     pub hostname: Option<String>,
+    pub generate_ic_boundary_tls_cert: Option<String>,
 }
 
 #[derive(Clone, clap::ValueEnum)]
@@ -90,6 +91,7 @@ pub fn generate_testnet_config(
         jaeger_addr,
         socks_proxy,
         hostname,
+        generate_ic_boundary_tls_cert,
     } = config;
 
     // Construct the NetworkSettings
@@ -226,6 +228,7 @@ pub fn generate_testnet_config(
         jaeger_addr,
         socks_proxy,
         hostname,
+        generate_ic_boundary_tls_cert,
     };
 
     // Construct GuestOSSettings

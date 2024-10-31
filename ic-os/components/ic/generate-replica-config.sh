@@ -26,6 +26,8 @@ function read_config_variables() {
 
     # Compact the JSON and escape special characters
     MALICIOUS_BEHAVIOR=$(get_config_value '.guestos_settings.guestos_dev_settings.malicious_behavior' | jq -c '.' | sed 's/[&\/]/\\&/g')
+
+    GENERATE_IC_BOUNDARY_TLS_CERT=$(get_config_value '.guestos_settings.guestos_dev_settings.generate_ic_boundary_tls_cert')
 }
 
 function configure_ipv6() {
@@ -154,6 +156,15 @@ sed -e "s@{{ ipv6_address }}@${IPV6_ADDRESS}@" \
     -e "s@{{ query_stats_epoch_length }}@${QUERY_STATS_EPOCH_LENGTH}@" \
     -e "s@{{ jaeger_addr }}@${JAEGER_ADDR}@" \
     "${IN_FILE}" >"${OUT_FILE}"
+
+# Generate and inject a self-signed TLS certificate and key for ic-boundary
+# for the given domain name. To be used in system tests only.
+if [[ -n "${GENERATE_IC_BOUNDARY_TLS_CERT}" ]] && [ "${GENERATE_IC_BOUNDARY_TLS_CERT}" != "null" ]; then
+    openssl req -x509 -newkey rsa:2048 \
+        -keyout /var/lib/ic/ic-boundary-tls.key \
+        -out /var/lib/ic/ic-boundary-tls.crt -sha256 -days 3650 -nodes \
+        -subj /C=CH/ST=Zurich/L=Zurich/O=InternetComputer/OU=ApiBoundaryNodes/CN=${GENERATE_IC_BOUNDARY_TLS_CERT}
+fi
 
 # umask for service is set to be restricted, but this file needs to be
 # world-readable

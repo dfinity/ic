@@ -454,6 +454,7 @@ fn create_config_disk_image(
         jaeger_addr: None,
         socks_proxy: None,
         hostname: None,
+        generate_ic_boundary_tls_cert: None,
     };
 
     // We've seen k8s nodes fail to pick up RA correctly, so we specify their
@@ -505,7 +506,7 @@ fn create_config_disk_image(
     // if the node has a domain name, generate a certificate to be used
     // when the node is an API boundary node.
     if let Some(domain_name) = &node.node_config.domain {
-        cmd.arg("--generate_ic_boundary_tls_cert").arg(domain_name);
+        config.generate_ic_boundary_tls_cert = Some(domain_name);
     }
 
     if let Some(domain) = domain {
