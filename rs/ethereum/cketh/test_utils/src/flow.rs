@@ -36,6 +36,7 @@ use std::time::Duration;
 pub struct DepositParams {
     pub from_address: Address,
     pub recipient: Principal,
+    pub recipient_subaccount: Option<[u8; 32]>,
     pub amount: u64,
     pub override_rpc_eth_get_block_by_number:
         Box<dyn FnMut(MockJsonRpcProvidersBuilder) -> MockJsonRpcProvidersBuilder>,
@@ -49,6 +50,7 @@ impl Default for DepositParams {
         Self {
             from_address: DEFAULT_DEPOSIT_FROM_ADDRESS.parse().unwrap(),
             recipient: PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID).into(),
+            recipient_subaccount: None,
             amount: EXPECTED_BALANCE,
             override_rpc_eth_get_block_by_number: Box::new(identity),
             override_rpc_eth_get_logs: Box::new(identity),
