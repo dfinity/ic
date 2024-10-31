@@ -100,7 +100,8 @@ async fn test_run_chunked_task(params: ChunkedTaskParams) -> TaskResult {
 }
 
 /// This task demonstrates UNSAFE data handling, but in the task it
-/// gets values in a way that is still safe.
+/// gets values in a way that is still safe.  
+/// Generally you should get your data in another way.
 struct AddFibsTask<'a> {
     data: &'a Data,
     sum: u64,

@@ -52,18 +52,22 @@ fn test_cant_increase_dissolve_delay_while_disbursing() {
     // Once we're done with disbursing, we will need to manually close the above
     // channel to terminate the test.
     let finish_tx = tx.clone();
-
+    let neuron_builder = NeuronBuilder::new(neuron_id_u64, 10, owner)
+        .set_dissolve_state(Some(DissolveState::WhenDissolvedTimestampSeconds(0)))
+        .set_kyc_verified(true);
     let nns = NNSBuilder::new()
-        .add_neuron(
-            NeuronBuilder::new(neuron_id_u64, 10, owner)
-                .set_dissolve_state(Some(DissolveState::WhenDissolvedTimestampSeconds(0)))
-                .set_kyc_verified(true),
-        )
+        .add_neuron(neuron_builder.clone())
         .add_ledger_transform(Box::new(move |l| {
             Box::new(InterleavingTestLedger::new(l, tx))
         }))
         .set_economics(NetworkEconomics::default())
         .create();
+
+    let neuron_1 = nns
+        .governance
+        .neuron_store
+        .with_neuron(&NeuronId::from_u64(neuron_id_u64), |neuron| neuron.clone())
+        .expect("Could not find the neuron we just added!");
 
     let now = nns.now();
 
@@ -83,6 +87,12 @@ fn test_cant_increase_dissolve_delay_while_disbursing() {
     // for the signal that the ledger transfer has been initiated
     let neuron_id_clone = neuron_id;
     thread::spawn(move || {
+        // DO NOT MERGE - this is a hack
+        // We have to re-add neurons because of thread_local
+        boxed
+            .neuron_store
+            .add_neuron(neuron_1)
+            .expect("Could not add neuron!");
         let disburse = Disburse {
             amount: None,
             to_account: Some(AccountIdentifier::new(owner, None).into()),
@@ -291,7 +301,22 @@ fn test_cant_interleave_calls_to_settle_neurons_fund() {
     // Clone the request so it can be moved into the closure
     let settle_nf_request_clone = settle_nf_request.clone();
 
+    let neuron_1 = boxed
+        .governance
+        .neuron_store
+        .with_neuron(&NeuronId::from_u64(nf_neuron_id_u64), |neuron| {
+            neuron.clone()
+        })
+        .expect("Could not find the neuron we just added!");
+
     let thread_handle = thread::spawn(move || {
+        // DO NOT MERGE - this is a hack
+        // We have to re-add neurons because of thread_local
+        boxed
+            .governance
+            .neuron_store
+            .add_neuron(neuron_1)
+            .expect("Could not add neuron!");
         let settle_nf_future = boxed
             .governance
             .settle_neurons_fund_participation(swap_canister_id, settle_nf_request_clone.clone());
