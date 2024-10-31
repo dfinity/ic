@@ -36,25 +36,31 @@ pub(crate) fn evict(
 ) -> Vec<EvictionCandidate> {
     let evict_at_least: usize = candidates.len().saturating_sub(max_count_threshold);
 
-    // Evict all idle canididates.
-    let (mut evicted, mut non_idle): (_, Vec<_>) = candidates
+    let (mut idle, mut non_idle): (_, Vec<_>) = candidates
         .into_iter()
         .partition(|candidate| candidate.last_used < last_used_threshold);
 
+    // Evict as many idle candidates as required.
+    idle.sort_by_key(|x| x.last_used);
     let mut evicted_rss = NumBytes::new(0);
+    let mut evicted_num = 0;
 
-    for evicted_candidate in evicted.iter() {
-        evicted_rss = evicted_rss.saturating_add(&evicted_candidate.rss);
+    for candidate in idle.iter() {
+        evicted_num += 1;
+        evicted_rss = evicted_rss.saturating_add(&candidate.rss);
+
+        if evicted_num >= evict_at_least
+            && total_rss <= max_sandboxes_rss.saturating_add(&evicted_rss)
+        {
+            // We have already evicted the minimum required number of candidates.
+            // No need to evict more.
+            idle.truncate(evicted_num);
+            return idle;
+        }
     }
 
-    if evicted.len() >= evict_at_least
-        && total_rss <= max_sandboxes_rss.saturating_add(&evicted_rss)
-    {
-        // We have already evicted the minimum required number of candidates
-        // and all the remaining candidates were not idle the recent
-        // `last_used_threshold` time window. No need to evict more.
-        return evicted;
-    }
+    // All idle candidates are evicted.
+    let mut evicted = idle;
 
     non_idle.sort_by_key(|x| (x.scheduler_priority, x.last_used));
 
@@ -62,9 +68,8 @@ pub(crate) fn evict(
         if evicted.len() >= evict_at_least
             && total_rss <= max_sandboxes_rss.saturating_add(&evicted_rss)
         {
-            // We have already evicted the minimum required number of candidates
-            // and all the remaining candidates were not idle the recent
-            // `last_used_threshold` time window. No need to evict more.
+            // We have already evicted the minimum required number of candidates.
+            // No need to evict more.
             break;
         }
         evicted_rss = evicted_rss.saturating_add(&candidate.rss);
