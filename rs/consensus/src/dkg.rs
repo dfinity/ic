@@ -8,7 +8,7 @@ use crate::{
     idkg::{
         make_bootstrap_summary,
         payload_builder::make_bootstrap_summary_with_initial_dealings,
-        utils::{get_chain_key_config_if_enabled, inspect_chain_key_initializations},
+        utils::{get_idkg_chain_key_config_if_enabled, inspect_chain_key_initializations},
     },
 };
 use ic_consensus_utils::crypto::ConsensusCrypto;
@@ -591,7 +591,7 @@ fn bootstrap_idkg_summary(
         return Ok(Some(summary));
     }
 
-    match get_chain_key_config_if_enabled(subnet_id, registry_version, registry_client)
+    match get_idkg_chain_key_config_if_enabled(subnet_id, registry_version, registry_client)
         .map_err(|err| format!("Failed getting the chain key config: {:?}", err))?
     {
         Some(chain_key_config) => Ok(make_bootstrap_summary(

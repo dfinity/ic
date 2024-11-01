@@ -449,7 +449,7 @@ pub(crate) fn algorithm_for_key_id(key_id: &MasterPublicKeyId) -> AlgorithmId {
     }
 }
 
-pub(crate) fn get_chain_key_config_if_enabled(
+pub(crate) fn get_idkg_chain_key_config_if_enabled(
     subnet_id: SubnetId,
     registry_version: RegistryVersion,
     registry_client: &dyn RegistryClient,
@@ -457,10 +457,12 @@ pub(crate) fn get_chain_key_config_if_enabled(
     if let Some(chain_key_config) =
         registry_client.get_chain_key_config(subnet_id, registry_version)?
     {
-        // A key that has `presignatures_to_create_in_advance` set to 0 is not active
         let num_active_key_ids = chain_key_config
             .key_configs
             .iter()
+            // Skip keys that don't need to run IDKG protocol
+            .filter(|key_config| is_idkg_key(&key_config.key_id))
+            // A key that has `presignatures_to_create_in_advance` set to 0 is not active
             .filter(|key_config| key_config.pre_signatures_to_create_in_advance != 0)
             .count();
 
@@ -587,6 +589,13 @@ pub(crate) fn update_purge_height(cell: &RefCell<Height>, new_height: Height) ->
     new_height > prev_purge_height
 }
 
+/// Check whether this type of [`MasterPublicKeyId`] requires to run on the IDKG protocol
+pub(super) fn is_idkg_key(key: &MasterPublicKeyId) -> bool {
+    match key {
+        MasterPublicKeyId::Ecdsa(_) | MasterPublicKeyId::Schnorr(_) => true,
+        MasterPublicKeyId::VetKd(_) => false,
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -763,8 +772,9 @@ mod tests {
             let (subnet_id, registry, version) =
                 set_up_get_chain_key_config_test(&chain_key_config_with_no_keys, pool_config);
 
-            let config = get_chain_key_config_if_enabled(subnet_id, version, registry.as_ref())
-                .expect("Should successfully get the config");
+            let config =
+                get_idkg_chain_key_config_if_enabled(subnet_id, version, registry.as_ref())
+                    .expect("Should successfully get the config");
 
             assert!(config.is_none());
         })
@@ -787,8 +797,9 @@ mod tests {
             let (subnet_id, registry, version) =
                 set_up_get_chain_key_config_test(&chain_key_config_with_one_key, pool_config);
 
-            let config = get_chain_key_config_if_enabled(subnet_id, version, registry.as_ref())
-                .expect("Should successfully get the config");
+            let config =
+                get_idkg_chain_key_config_if_enabled(subnet_id, version, registry.as_ref())
+                    .expect("Should successfully get the config");
 
             assert_eq!(config, Some(chain_key_config_with_one_key));
         })
@@ -820,8 +831,9 @@ mod tests {
             let (subnet_id, registry, version) =
                 set_up_get_chain_key_config_test(&chain_key_config_with_two_keys, pool_config);
 
-            let config = get_chain_key_config_if_enabled(subnet_id, version, registry.as_ref())
-                .expect("Should successfully get the config");
+            let config =
+                get_idkg_chain_key_config_if_enabled(subnet_id, version, registry.as_ref())
+                    .expect("Should successfully get the config");
 
             assert_eq!(
                 config,
@@ -849,8 +861,9 @@ mod tests {
             let (subnet_id, registry, version) =
                 set_up_get_chain_key_config_test(&malformed_chain_key_config, pool_config);
 
-            let config = get_chain_key_config_if_enabled(subnet_id, version, registry.as_ref())
-                .expect("Should successfully get the config");
+            let config =
+                get_idkg_chain_key_config_if_enabled(subnet_id, version, registry.as_ref())
+                    .expect("Should successfully get the config");
 
             assert!(config.is_none());
         })

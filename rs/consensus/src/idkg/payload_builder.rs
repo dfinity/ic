@@ -1,7 +1,9 @@
 //! This module implements the IDKG payload builder.
 use super::pre_signer::{IDkgTranscriptBuilder, IDkgTranscriptBuilderImpl};
 use super::signer::{ThresholdSignatureBuilder, ThresholdSignatureBuilderImpl};
-use super::utils::{block_chain_reader, get_chain_key_config_if_enabled, InvalidChainCacheError};
+use super::utils::{
+    block_chain_reader, get_idkg_chain_key_config_if_enabled, InvalidChainCacheError,
+};
 use crate::idkg::metrics::{IDkgPayloadMetrics, CRITICAL_ERROR_MASTER_KEY_TRANSCRIPT_MISSING};
 pub(super) use errors::IDkgPayloadError;
 use errors::MembershipError;
@@ -128,7 +130,7 @@ pub(crate) fn create_summary_payload(
     let next_interval_registry_version = context.registry_version;
 
     // Get chain_key_config from registry if it exists
-    let Some(chain_key_config) = get_chain_key_config_if_enabled(
+    let Some(chain_key_config) = get_idkg_chain_key_config_if_enabled(
         subnet_id,
         curr_interval_registry_version,
         registry_client,
@@ -508,7 +510,7 @@ pub(crate) fn create_data_payload_helper(
     // For next interval: context.registry_version from the new summary block
     let next_interval_registry_version = summary_block.context.registry_version;
 
-    let Some(chain_key_config) = get_chain_key_config_if_enabled(
+    let Some(chain_key_config) = get_idkg_chain_key_config_if_enabled(
         subnet_id,
         curr_interval_registry_version,
         registry_client,

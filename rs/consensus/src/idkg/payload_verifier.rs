@@ -25,7 +25,7 @@ use super::payload_builder::IDkgPayloadError;
 use super::pre_signer::IDkgTranscriptBuilder;
 use super::signer::ThresholdSignatureBuilder;
 use super::utils::{
-    block_chain_cache, get_chain_key_config_if_enabled, BuildSignatureInputsError,
+    block_chain_cache, get_idkg_chain_key_config_if_enabled, BuildSignatureInputsError,
     IDkgBlockReaderImpl, InvalidChainCacheError,
 };
 use crate::idkg::metrics::timed_call;
@@ -238,7 +238,7 @@ fn validate_summary_payload(
         InvalidIDkgPayloadReason::ConsensusRegistryVersionNotFound(height),
     )?;
     let chain_key_config =
-        get_chain_key_config_if_enabled(subnet_id, registry_version, registry_client)
+        get_idkg_chain_key_config_if_enabled(subnet_id, registry_version, registry_client)
             .map_err(IDkgPayloadValidationFailure::from)?;
     if chain_key_config.is_none() {
         if summary_payload.is_some() {
