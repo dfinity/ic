@@ -1221,7 +1221,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.8",
             ),
             "thiserror": crate.spec(
-                version = "^1.0.62",
+                version = "^1.0.65",
             ),
             "thousands": crate.spec(
                 version = "^0.2.0",
@@ -1286,11 +1286,11 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.12.3",
             ),
             "tower": crate.spec(
-                version = "^0.4.13",
+                version = "^0.5.1",
                 features = ["full"],
             ),
             "tower-http": crate.spec(
-                version = "^0.5.2",
+                version = "^0.6.1",
                 features = [
                     "cors",
                     "limit",

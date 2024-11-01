@@ -339,15 +339,15 @@ fn setup_dts_install_code(
 // These numbers were obtained by running the test and printing the costs.
 // They need to be adjusted if we change fees or the Wasm source code.
 const INSTALL_CODE_INGRESS_COST: u128 = 1_952_000;
-const INSTALL_CODE_EXECUTION_COST: u128 = 984_490;
+const INSTALL_CODE_EXECUTION_COST: u128 = 5_986_224;
 const NORMAL_INGRESS_COST: u128 = 1_224_000;
-const MAX_EXECUTION_COST: u128 = 990_000;
+const MAX_EXECUTION_COST: u128 = 6_000_000;
 const ACTUAL_EXECUTION_COST: u128 = match EmbeddersConfig::new()
     .feature_flags
     .wasm_native_stable_memory
 {
-    FlagStatus::Enabled => 984_090,
-    FlagStatus::Disabled => 864_092,
+    FlagStatus::Enabled => 5_985_224,
+    FlagStatus::Disabled => 5_685_230,
 };
 
 #[test]

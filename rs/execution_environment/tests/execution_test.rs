@@ -1344,7 +1344,7 @@ fn canister_with_reserved_balance_is_not_uninstalled_too_early() {
         HypervisorConfig::default(),
     ));
 
-    let initial_cycles = Cycles::new(121 * B);
+    let initial_cycles = Cycles::new(301 * B);
     let canister_a = create_universal_canister_with_cycles(
         &env,
         Some(
@@ -1402,7 +1402,7 @@ fn canister_with_reserved_balance_is_not_frozen_too_early() {
         HypervisorConfig::default(),
     ));
 
-    let initial_cycles = Cycles::new(240 * B);
+    let initial_cycles = Cycles::new(420 * B);
 
     let canister_id = create_universal_canister_with_cycles(
         &env,
@@ -1436,7 +1436,7 @@ fn canister_with_reserved_balance_is_not_frozen_too_early() {
     // The amount of remaining cycles in the main balance should be large enough
     // to start message execution but should be lower than the freezing
     // threshold.
-    let reserved_cycles = Cycles::new(180 * B);
+    let reserved_cycles = Cycles::new(360 * B);
     {
         let mut state = env.get_latest_state().as_ref().clone();
         let canister = state.canister_state_mut(&canister_id).unwrap();
@@ -1754,7 +1754,7 @@ fn heap_delta_initial_reserve_allows_round_executions_right_after_checkpoint() {
 
     fn install_canister(env: &StateMachine) -> Result<CanisterId, UserError> {
         let wasm = wat::parse_str(TEST_CANISTER).expect("invalid WAT");
-        env.install_canister_with_cycles(wasm, vec![], None, Cycles::new(121 * B))
+        env.install_canister_with_cycles(wasm, vec![], None, Cycles::new(301 * B))
     }
 
     fn send_ingress(env: &StateMachine, canister_id: &CanisterId) -> MessageId {
@@ -1917,7 +1917,7 @@ fn current_interval_length_works_on_app_subnets() {
 
     let wasm = wat::parse_str(DIRTY_PAGE_CANISTER).unwrap();
     let _canister_id = env
-        .install_canister_with_cycles(wasm, vec![], None, Cycles::new(121 * B))
+        .install_canister_with_cycles(wasm, vec![], None, Cycles::new(301 * B))
         .unwrap();
 
     // Canister install takes 2 rounds.
@@ -2614,7 +2614,7 @@ fn canister_create_with_default_wasm_memory_limit() {
         .with_subnet_type(SubnetType::Application)
         .build();
 
-    let initial_cycles = Cycles::new(200 * B);
+    let initial_cycles = Cycles::new(301 * B);
     let canister_id = create_universal_canister_with_cycles(&env, None, initial_cycles);
 
     let wasm_memory_limit = fetch_wasm_memory_limit(&env, canister_id);
@@ -2627,7 +2627,7 @@ fn initialize_default_wasm_memory_limit_with_low_memory_usage() {
         .with_subnet_type(SubnetType::Application)
         .build();
 
-    let initial_cycles = Cycles::new(200 * B);
+    let initial_cycles = Cycles::new(301 * B);
     let canister_id = create_universal_canister_with_cycles(&env, None, initial_cycles);
 
     let wasm_memory_limit = fetch_wasm_memory_limit(&env, canister_id);

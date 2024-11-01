@@ -6,7 +6,7 @@ use crate::types::{
     CheckTransactionIrrecoverableError, CheckTransactionResponse, CheckTransactionRetriable,
     CheckTransactionStatus,
 };
-use crate::{blocklist_contains, providers, state, BtcNetwork};
+use crate::{blocklist_contains, providers, state, Config};
 use bitcoin::Transaction;
 use futures::future::try_join_all;
 use ic_btc_interface::Txid;
@@ -59,11 +59,11 @@ pub enum TryFetchResult<F> {
 pub trait FetchEnv {
     type FetchGuard;
     fn new_fetch_guard(&self, txid: Txid) -> Result<Self::FetchGuard, FetchGuardError>;
-    fn btc_network(&self) -> BtcNetwork;
+    fn config(&self) -> Config;
 
     async fn http_get_tx(
         &self,
-        provider: providers::Provider,
+        provider: &providers::Provider,
         txid: Txid,
         max_response_bytes: u32,
     ) -> Result<Transaction, HttpGetTxError>;
@@ -81,13 +81,13 @@ pub trait FetchEnv {
     ) -> TryFetchResult<impl futures::Future<Output = Result<FetchResult, Infallible>>> {
         let (provider, max_response_bytes) = match state::get_fetch_status(txid) {
             None => (
-                providers::next_provider(self.btc_network()),
+                providers::next_provider(self.config().btc_network()),
                 INITIAL_MAX_RESPONSE_BYTES,
             ),
             Some(FetchTxStatus::PendingRetry {
                 max_response_bytes, ..
             }) => (
-                providers::next_provider(self.btc_network()),
+                providers::next_provider(self.config().btc_network()),
                 max_response_bytes,
             ),
             Some(FetchTxStatus::PendingOutcall { .. }) => return TryFetchResult::Pending,
@@ -127,7 +127,7 @@ pub trait FetchEnv {
         txid: Txid,
         max_response_bytes: u32,
     ) -> Result<FetchResult, Infallible> {
-        match self.http_get_tx(provider, txid, max_response_bytes).await {
+        match self.http_get_tx(&provider, txid, max_response_bytes).await {
             Ok(tx) => {
                 let input_addresses = tx.input.iter().map(|_| None).collect();
                 match TransactionKytData::from_transaction(provider.btc_network(), tx.clone()) {

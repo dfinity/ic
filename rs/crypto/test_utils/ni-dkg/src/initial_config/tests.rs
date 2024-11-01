@@ -1,5 +1,3 @@
-#![allow(clippy::unwrap_used)]
-
 use super::*;
 use ic_crypto_internal_bls12_381_type::{verify_bls_signature, G1Affine, G2Affine};
 use ic_crypto_test_utils::{map_of, set_of};

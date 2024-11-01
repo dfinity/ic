@@ -246,6 +246,20 @@ message NeuronInfo {
   optional NeuronType neuron_type = 11;
   // See the Visibility enum.
   optional Visibility visibility = 12;
+  // The last time that voting power was "refreshed". There are two ways to
+  // refresh the voting power of a neuron: set following, or vote directly. In
+  // the future, there will be a dedicated API for refreshing. Note that direct
+  // voting implies that refresh also occurs when a proposal is created, because
+  // direct voting is part of proposal creation.
+  //
+  // Effect: When this becomes > 6 months ago, the amount of voting power that
+  // this neuron can exercise decreases linearly down to 0 over the course of 1
+  // month. After that, following is cleared, except for ManageNeuron proposals.
+  //
+  // This will always be populated. If the underlying neuron was never
+  // refreshed, this will be set to 2024-11-05T00:00:01 UTC (1730764801 seconds
+  // after the UNIX epoch).
+  optional uint64 voting_power_refreshed_timestamp_seconds = 13;
 }
 
 // A transfer performed from some account to stake a new neuron.
@@ -429,6 +443,21 @@ message Neuron {
 
   // See the Visibility enum.
   optional Visibility visibility = 23;
+
+  // The last time that voting power was "refreshed". There are two ways to
+  // refresh the voting power of a neuron: set following, or vote directly. In
+  // the future, there will be a dedicated API for refreshing. Note that direct
+  // voting implies that refresh also occurs when a proposal is created, because
+  // direct voting is part of proposal creation.
+  //
+  // Effect: When this becomes > 6 months ago, the amount of voting power that
+  // this neuron can exercise decreases linearly down to 0 over the course of 1
+  // month. After that, following is cleared, except for ManageNeuron proposals.
+  //
+  // This will always be populated. If the underlying neuron was never
+  // refreshed, this will be set to 2024-11-05T00:00:01 UTC (1730764801 seconds
+  // after the UNIX epoch).
+  optional uint64 voting_power_refreshed_timestamp_seconds = 24;
 }
 
 // Subset of Neuron that has no collections or big fields that might not exist in most neurons, and
@@ -454,6 +483,7 @@ message AbridgedNeuron {
   optional uint64 joined_community_fund_timestamp_seconds = 17;
   optional NeuronType neuron_type = 22;
   optional Visibility visibility = 23;
+  optional uint64 voting_power_refreshed_timestamp_seconds = 24;
 
   reserved 1;
   reserved "id";

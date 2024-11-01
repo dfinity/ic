@@ -18,7 +18,7 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:ced9611af39119f62feedc8a5ad75a8fac478cb43d2d56b623023766f6ce8ca7
+    image: ghcr.io/dfinity/ic-build@sha256:80e976b63af2b1b352c8c5959cb6c6b02aaa56a4efa327569d8c85c9c81a2cec
   dind-large-setup: &dind-large-setup
     runs-on:
       labels: dind-large
@@ -98,18 +98,3 @@ jobs:
           BAZEL_EXTRA_ARGS: "--keep_going --test_tag_filters=system_test_hourly"
           BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
       - <<: *bazel-bep
-
-  # CI job is also executed in PR on use of 'CI_COVERAGE' label
-  bazel-test-coverage:
-    name: Bazel Test Coverage
-    <<: *dind-large-setup
-    steps:
-      - <<: *checkout
-      - <<: *before-script
-      - name: Run Bazel Test Coverage
-        shell: bash
-        run: |
-          ./ci/scripts/bazel-coverage.sh
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
