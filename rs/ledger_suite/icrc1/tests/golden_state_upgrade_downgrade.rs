@@ -359,13 +359,14 @@ impl LedgerState {
                 ledger_id,
                 num_blocks_to_fetch,
             );
+        ledger_state.verify_balances_and_allowances(state_machine, ledger_id);
+        // Verify parity between the blocks in the ledger+archive, and those in the index
         verify_ledger_archive_and_index_block_parity(
             state_machine,
             ledger_and_archive_blocks,
             ledger_id,
             index_id,
         );
-        ledger_state.verify_balances_and_allowances(state_machine, ledger_id);
         // Verify the reconstructed ledger state matches the previous state
         if let Some(previous_ledger_state) = &previous_ledger_state {
             ledger_state.assert_eq(previous_ledger_state);
