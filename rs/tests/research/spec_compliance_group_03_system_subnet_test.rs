@@ -16,7 +16,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::systest;
-use spec_compliance::{setup_impl, test_subnet, group_03};
+use spec_compliance::{group_03, setup_impl, test_subnet};
 
 pub fn setup(env: TestEnv) {
     setup_impl(env, false, false);
