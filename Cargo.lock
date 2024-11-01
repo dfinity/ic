@@ -5869,11 +5869,13 @@ name = "ic-btc-kyt"
 version = "0.9.0"
 dependencies = [
  "askama",
+ "base64 0.13.1",
  "bitcoin 0.32.3",
  "candid",
  "candid_parser",
  "ciborium",
  "futures",
+ "hex",
  "ic-base-types",
  "ic-btc-interface",
  "ic-canisters-http-types",
@@ -5885,8 +5887,10 @@ dependencies = [
  "pocket-ic",
  "scraper",
  "serde",
+ "serde_json",
  "time",
  "tokio",
+ "url",
 ]
 
 [[package]]

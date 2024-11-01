@@ -85,12 +85,14 @@ pub struct InitArg {
     pub kyt_mode: KytMode,
 }
 
-#[derive(CandidType, Clone, Copy, Deserialize, Debug, Eq, PartialEq, Serialize, Hash)]
+#[derive(CandidType, Clone, Deserialize, Debug, Eq, PartialEq, Serialize, Hash)]
 pub enum BtcNetwork {
     #[serde(rename = "mainnet")]
     Mainnet,
     #[serde(rename = "testnet")]
     Testnet,
+    #[serde(rename = "regtest")]
+    Regtest { json_rpc_url: String },
 }
 
 #[derive(CandidType, Clone, Copy, Deserialize, Debug, Eq, PartialEq, Serialize, Hash)]
@@ -115,6 +117,7 @@ impl From<BtcNetwork> for bitcoin::Network {
         match btc_network {
             BtcNetwork::Mainnet => Self::Bitcoin,
             BtcNetwork::Testnet => Self::Testnet,
+            BtcNetwork::Regtest { .. } => Self::Regtest,
         }
     }
 }
@@ -124,6 +127,7 @@ impl fmt::Display for BtcNetwork {
         match self {
             Self::Mainnet => write!(f, "mainnet"),
             Self::Testnet => write!(f, "testnet"),
+            Self::Regtest { .. } => write!(f, "regtest"),
         }
     }
 }
