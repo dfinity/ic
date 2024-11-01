@@ -2439,6 +2439,16 @@ impl std::fmt::Display for MasterPublicKeyId {
     }
 }
 
+impl MasterPublicKeyId {
+    /// Check whether this type of [`MasterPublicKeyId`] requires to run on the IDKG protocol
+    pub fn is_idkg_key(&self) -> bool {
+        match self {
+            Self::Ecdsa(_) | Self::Schnorr(_) => true,
+            Self::VetKd(_) => false,
+        }
+    }
+}
+
 impl FromStr for MasterPublicKeyId {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, Self::Err> {

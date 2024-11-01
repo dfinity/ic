@@ -461,7 +461,7 @@ pub(crate) fn get_idkg_chain_key_config_if_enabled(
             .key_configs
             .iter()
             // Skip keys that don't need to run IDKG protocol
-            .filter(|key_config| is_idkg_key(&key_config.key_id))
+            .filter(|key_config| key_config.key_id.is_idkg_key())
             // A key that has `presignatures_to_create_in_advance` set to 0 is not active
             .filter(|key_config| key_config.pre_signatures_to_create_in_advance != 0)
             .count();
@@ -589,13 +589,6 @@ pub(crate) fn update_purge_height(cell: &RefCell<Height>, new_height: Height) ->
     new_height > prev_purge_height
 }
 
-/// Check whether this type of [`MasterPublicKeyId`] requires to run on the IDKG protocol
-pub(super) fn is_idkg_key(key: &MasterPublicKeyId) -> bool {
-    match key {
-        MasterPublicKeyId::Ecdsa(_) | MasterPublicKeyId::Schnorr(_) => true,
-        MasterPublicKeyId::VetKd(_) => false,
-    }
-}
 #[cfg(test)]
 mod tests {
     use super::*;
