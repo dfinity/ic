@@ -36,6 +36,7 @@ DEPENDENCIES = [
     "//rs/types/wasm_types",
     "//rs/utils",
     "//rs/utils/lru_cache",
+    "//rs/wasm_transform",
     "@crate_index//:candid",
     "@crate_index//:hex",
     "@crate_index//:ic-btc-interface",
