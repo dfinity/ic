@@ -2,7 +2,6 @@
 pub use crate::encrypt::forward_secure::{CspFsEncryptionPop, CspFsEncryptionPublicKey};
 use crate::sign::threshold_sig::public_coefficients::CspPublicCoefficients;
 use ic_protobuf::registry::subnet::v1::InitialNiDkgTranscriptRecord;
-use phantom_newtype::AmountOf;
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
 use strum_macros::IntoStaticStr;
@@ -97,6 +96,7 @@ pub mod ni_dkg_groth20_bls12_381 {
     //! scheme.
 
     use arrayvec::ArrayVec;
+    use phantom_newtype::AmountOf;
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
     use std::collections::BTreeMap;
     use std::convert::TryFrom;
