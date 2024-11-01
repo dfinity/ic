@@ -36,6 +36,8 @@ pub fn test(env: TestEnv) {
             "($0 ~ /canister global timer/)",
             "($0 ~ /canister http/)",
             "($0 ~ /WebAssembly module validation/)",
+            "($0 ~ /stable memory/)",
+            "($0 ~ /inter-canister calls/)",
         ],
         vec![],
     );
