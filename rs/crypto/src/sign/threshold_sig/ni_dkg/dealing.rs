@@ -161,7 +161,6 @@ mod verification {
         if let Some(transcript) = config.resharing_transcript() {
             Ok(ni_dkg_csp_client.verify_resharing_dealing(
                 AlgorithmId::NiDkg_Groth20_Bls12_381,
-                config.dkg_id().clone(),
                 index_in_resharing_committee_or_panic(dealer, &transcript.committee),
                 config.threshold().get(),
                 epoch,

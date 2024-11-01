@@ -7,7 +7,6 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
     CspFsEncryptionPublicKey, CspNiDkgDealing, CspNiDkgTranscript, Epoch,
 };
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
-use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
 use ic_types::crypto::{AlgorithmId, CryptoResult};
 use ic_types::{NodeIndex, NumberOfNodes};
 use serde::{Deserialize, Serialize};
@@ -348,10 +347,6 @@ pub trait NiDkgCspClient {
     fn verify_resharing_dealing(
         &self,
         algorithm_id: AlgorithmId,
-        ///////////////////////////////////////
-        // TODO: dkg_id as ref
-        ///////////////////////////////////////
-        dkg_id: NiDkgId,
         dealer_resharing_index: NodeIndex,
         threshold: NumberOfNodes,
         epoch: Epoch,
