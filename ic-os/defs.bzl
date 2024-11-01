@@ -573,9 +573,10 @@ EOF
 #!/usr/bin/env bash
 set -eo pipefail
 IMG=$$1
-VIRT=$$2
-PREPROC=$$3
-PREPROC_FLAGS=$$4
+INSTALLABLE=$$2
+VIRT=$$3
+PREPROC=$$4
+PREPROC_FLAGS=$$5
 set -u
 TEMP=$$(mktemp -d --suffix=.qemu-launch-remote-vm)
 # Clean up after ourselves when exiting.
@@ -586,12 +587,18 @@ cp --reflink=auto --sparse=always --no-preserve=mode,ownership "$$IMG" disk.img
 if [ "$$PREPROC" != "" ] ; then
     "$$PREPROC" $$PREPROC_FLAGS --image-path disk.img
 fi
-truncate -s 128G target.img
+if [ "$$INSTALLABLE" == "yes" ]
+then
+    truncate -s 128G target.img
+    add_disk="-drive file=target.img,format=raw,if=virtio"
+else
+    add_disk=
+fi
 if [ "$$VIRT" == "kvm" ]; then
-    qemu-system-x86_64 -machine type=q35,accel=kvm -enable-kvm -nographic -m 4G -bios /usr/share/ovmf/OVMF.fd -device vhost-vsock-pci,guest-cid=$$CID -boot c -drive file=target.img,format=raw,if=virtio -drive file=disk.img,format=raw,if=virtio -netdev user,id=user.0,hostfwd=tcp::2222-:22 -device virtio-net,netdev=user.0
+    qemu-system-x86_64 -machine type=q35,accel=kvm -enable-kvm -nographic -m 4G -bios /usr/share/ovmf/OVMF.fd -device vhost-vsock-pci,guest-cid=$$CID -boot c $$add_disk -drive file=disk.img,format=raw,if=virtio -netdev user,id=user.0,hostfwd=tcp::2222-:22 -device virtio-net,netdev=user.0
     exit $$?
 else
-    qemu-system-x86_64 -machine type=q35 -nographic -m 4G -bios /usr/share/ovmf/OVMF.fd -boot c -drive file=target.img,format=raw,if=virtio -drive file=disk.img,format=raw,if=virtio -netdev user,id=user.0,hostfwd=tcp::2222-:22 -device virtio-net,netdev=user.0
+    qemu-system-x86_64 -machine type=q35 -nographic -m 4G -bios /usr/share/ovmf/OVMF.fd -boot c $$add_disk -drive file=disk.img,format=raw,if=virtio -netdev user,id=user.0,hostfwd=tcp::2222-:22 -device virtio-net,netdev=user.0
     exit $$?
 fi
 EOF
@@ -622,7 +629,7 @@ EOF
             cat <<"EOF" > $@
 #!/usr/bin/env bash
 set -euo pipefail
-exec $(location :launch-local-vm-script) "$$PWD/$(location :disk.img)" """ + accel + """ "$$PWD/$(location //rs/ic_os/dev_test_tools/setupos-disable-checks:setupos-disable-checks)" """ + action_flags + """>&2
+exec $(location :launch-local-vm-script) "$$PWD/$(location :disk.img)" yes """ + accel + """ "$$PWD/$(location //rs/ic_os/dev_test_tools/setupos-disable-checks:setupos-disable-checks)" """ + action_flags + """>&2
 EOF
                     """,
                     executable = True,
@@ -644,7 +651,7 @@ EOF
                 cat <<"EOF" > $@
 #!/usr/bin/env bash
 set -euo pipefail
-exec $(location :launch-local-vm-script) "$$PWD/$(location :disk.img)" """ + accel + """ >&2
+exec $(location :launch-local-vm-script) "$$PWD/$(location :disk.img)" no """ + accel + """ >&2
 EOF
                 """,
                 executable = True,
