@@ -1552,7 +1552,6 @@ impl StateMachine {
         }
 
         if !dts {
-            hypervisor_config.canister_sandboxing_flag = FlagStatus::Disabled;
             hypervisor_config.deterministic_time_slicing = FlagStatus::Disabled;
         }
 
