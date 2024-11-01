@@ -327,9 +327,9 @@ where
         }
         debug_assert!(
             self.slot_table
-                .iter()
-                .flat_map(|(_, v)| v.iter())
-                .all(|(_, v)| self.active_assembles.contains_key(&v.id)),
+                .values()
+                .flat_map(HashMap::values)
+                .all(|v| self.active_assembles.contains_key(&v.id)),
             "Every entry in the slot table should have an active assemble task."
         );
     }
