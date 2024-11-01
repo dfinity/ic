@@ -210,10 +210,7 @@ RUN addgroup node_exporter && \
                /etc/node_exporter/web.yml
 
 # TEMP: this is only for testing and will be removed after PR #2231 has been merged
-RUN \
-    apt-get update && \
-    apt-get -y dist-upgrade && \
-    apt-get -y --no-install-recommends install \
+RUN apt-get -y --no-install-recommends install \
         dante-server
 
 # The user to run the SOCKS proxy

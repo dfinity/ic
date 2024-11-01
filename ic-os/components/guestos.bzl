@@ -107,6 +107,9 @@ component_files = {
     Label("networking/socks-proxy/generate-dante-config.sh"): "/opt/ic/bin/generate-dante-config.sh",
 
     # SELinux
+    Label("selinux/dante/dante.fc"): "/prep/dante/dante.fc",
+    Label("selinux/dante/dante.if"): "/prep/dante/dante.if",
+    Label("selinux/dante/dante.te"): "/prep/dante/dante.te",
     Label("selinux/filebeat/filebeat.fc"): "/prep/filebeat/filebeat.fc",
     Label("selinux/filebeat/filebeat.if"): "/prep/filebeat/filebeat.if",
     Label("selinux/filebeat/filebeat.te"): "/prep/filebeat/filebeat.te",
