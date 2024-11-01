@@ -15,7 +15,7 @@ function read_config_variables() {
     ipv4_address=$(get_config_value '.network_settings.ipv4_config.address')
     ipv4_prefix_length=$(get_config_value '.network_settings.ipv4_config.prefix_length')
     ipv4_gateway=$(get_config_value '.network_settings.ipv4_config.gateway')
-    domain=$(get_config_value '.network_settings.ipv4_config.domain')
+    domain_name=$(get_config_value '.network_settings.domain_name')
 }
 
 # WARNING: Uses 'eval' for command execution.
@@ -101,11 +101,13 @@ function print_network_settings() {
     echo "* Printing user defined network settings..."
     echo "  IPv6 Prefix : ${ipv6_prefix}"
     echo "  IPv6 Gateway: ${ipv6_gateway}"
-    if [[ -n ${ipv4_address} && -n ${ipv4_prefix_length} && -n ${ipv4_gateway} && -n ${domain} ]]; then
+    if [[ -n ${ipv4_address} && -n ${ipv4_prefix_length} && -n ${ipv4_gateway} ]]; then
         echo "  IPv4 Address: ${ipv4_address}"
         echo "  IPv4 Prefix Length: ${ipv4_prefix_length}"
         echo "  IPv4 Gateway: ${ipv4_gateway}"
-        echo "  Domain name : ${domain}"
+    fi
+    if [[ -n ${domain_name} ]]; then
+        echo "  Domain name : ${domain_name}"
     fi
     echo " "
 
@@ -126,10 +128,10 @@ function validate_domain_name() {
     local domain_part
     local -a domain_parts
 
-    IFS='.' read -ra domain_parts <<<"${domain}"
+    IFS='.' read -ra domain_parts <<<"${domain_name}"
 
     if [ ${#domain_parts[@]} -lt 2 ]; then
-        log_and_halt_installation_on_error 1 "Domain validation error: less than two domain parts in domain: ${domain}"
+        log_and_halt_installation_on_error 1 "Domain validation error: less than two domain parts in domain: ${domain_name}"
     fi
 
     for domain_part in "${domain_parts[@]}"; do

@@ -23,6 +23,7 @@ function read_config_variables() {
     BACKUP_PURGING_INTERVAL_SECS=$(get_config_value '.guestos_settings.guestos_dev_settings.backup_spool.backup_purging_interval_seconds')
     QUERY_STATS_EPOCH_LENGTH=$(get_config_value '.guestos_settings.guestos_dev_settings.query_stats_epoch_length')
     JAEGER_ADDR=$(get_config_value '.guestos_settings.guestos_dev_settings.jaeger_addr')
+    DOMAIN_NAME=$(get_config_value '.network_settings.domain_name')
 
     # Compact the JSON and escape special characters
     MALICIOUS_BEHAVIOR=$(get_config_value '.guestos_settings.guestos_dev_settings.malicious_behavior' | jq -c '.' | sed 's/[&\/]/\\&/g')
@@ -59,14 +60,13 @@ function configure_ipv6() {
 }
 
 function configure_ipv4() {
-    IPV4_ADDRESS="" IPV4_GATEWAY="" DOMAIN=""
+    IPV4_ADDRESS="" IPV4_GATEWAY=""
     ipv4_config_present=$(get_config_value '.network_settings.ipv4_config != null')
     if [ "$ipv4_config_present" = "true" ]; then
         ipv4_address=$(get_config_value '.network_settings.ipv4_config.address')
         ipv4_prefix_length=$(get_config_value '.network_settings.ipv4_config.prefix_length')
         IPV4_ADDRESS="${ipv4_address}/${ipv4_prefix_length}"
         IPV4_GATEWAY=$(get_config_value '.network_settings.ipv4_config.gateway')
-        DOMAIN=$(get_config_value '.network_settings.ipv4_config.domain')
     fi
 }
 
@@ -113,6 +113,7 @@ function set_default_config_values() {
     [ "${BACKUP_PURGING_INTERVAL_SECS}" = "null" ] && BACKUP_PURGING_INTERVAL_SECS="3600" # Default is 1h
     [ "${QUERY_STATS_EPOCH_LENGTH}" = "null" ] && QUERY_STATS_EPOCH_LENGTH="600"          # Default is 600 blocks (around 10min)
     [ "${JAEGER_ADDR}" = "null" ] && JAEGER_ADDR=""
+    [ "${DOMAIN_NAME}" = "null" ] && DOMAIN_NAME=""
 
     # todo: remove node_index variable and hard-code into ic.json5.template
     NODE_INDEX="0"
@@ -147,7 +148,7 @@ set_default_config_values
 sed -e "s@{{ ipv6_address }}@${IPV6_ADDRESS}@" \
     -e "s@{{ ipv4_address }}@${IPV4_ADDRESS}@" \
     -e "s@{{ ipv4_gateway }}@${IPV4_GATEWAY}@" \
-    -e "s@{{ domain }}@${DOMAIN}@" \
+    -e "s@{{ domain_name }}@${DOMAIN_NAME}@" \
     -e "s@{{ nns_urls }}@${NNS_URLS}@" \
     -e "s@{{ node_index }}@${NODE_INDEX}@" \
     -e "s@{{ backup_retention_time_secs }}@${BACKUP_RETENTION_TIME_SECS}@" \
