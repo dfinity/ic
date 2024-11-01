@@ -1464,7 +1464,7 @@ mod test {
         );
         for ic_error_code in ic_error_types::ErrorCode::iter() {
             let error_code: ErrorCode = (ic_error_code as u64).try_into().unwrap();
-            assert_eq!(ic_error_code as u64, error_code as u64);
+            assert_eq!(format!("{:?}", error_code), format!("{:?}", ic_error_code));
         }
     }
 }
