@@ -205,11 +205,11 @@ EXTRA_BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardwar
 "#,
             ),
         ];
-        for (tst, input, defeat_checks, defeat_installer, expected) in table.into_iter() {
+        for (test_name, input, defeat_checks, defeat_installer, expected) in table.into_iter() {
             let result = munge(input, defeat_checks, defeat_installer).unwrap();
             if result != expected {
                 panic!(
-                    "During test {tst}:
+                    "During test {test_name}:
 
 Input:
 [[[{input}]]]

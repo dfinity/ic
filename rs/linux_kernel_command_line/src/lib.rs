@@ -342,13 +342,13 @@ actual:   {:?}",
                 "origparm parm=2 some=\"another quoted value\" parm=4",
             ),
         ];
-        for (tst, input, argument, value, expected) in table.into_iter() {
+        for (test_name, input, argument, value, expected) in table.into_iter() {
             let mut cmdline = KernelCommandLine::try_from(input).unwrap();
             cmdline.ensure_single_argument(argument, value).unwrap();
             let result: String = cmdline.into();
             if result != *expected {
                 panic!(
-                    "During test {tst}:
+                    "During test {test_name}:
 Input:
 [[[{input}]]]
 
