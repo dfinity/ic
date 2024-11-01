@@ -286,7 +286,7 @@ actual:   {:?}",
             ),
         ];
         for (name, input) in table.iter() {
-            if let Ok(_) = KernelCommandLine::try_from(*input) {
+            if KernelCommandLine::try_from(*input).is_ok() {
                 panic!(
                     "During test {}: input {:?} intentionally misquoted argument did not trigger error",
                     name, input
