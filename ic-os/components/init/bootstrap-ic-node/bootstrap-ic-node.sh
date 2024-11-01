@@ -101,6 +101,12 @@ function process_bootstrap() {
             cp -rL -T "${TMPDIR}/${ITEM}" "${STATE_ROOT}/data/${ITEM}"
         fi
     done
+    if [ -e "${TMPDIR}/ic-boundary-tls.key" ]; then
+        echo "Setting up self-signed certificate of ic-boundary"
+        cp -L "${TMPDIR}/ic-boundary-tls.key" "${STATE_ROOT}/data/ic-boundary-tls.key"
+        cp -L "${TMPDIR}/ic-boundary-tls.crt" "${STATE_ROOT}/data/ic-boundary-tls.crt"
+        sudo chmod +r ${STATE_ROOT}/data/ic-boundary-tls.key
+    fi
 
     # stash the following configuration files to config store
     # note: keep this list in sync with configurations supported in build-bootstrap-config-image.sh

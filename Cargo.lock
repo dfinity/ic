@@ -1760,6 +1760,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "canister_client"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "ic-agent",
+ "k256",
+ "rate-limits-api",
+ "regex",
+ "tokio",
+]
+
+[[package]]
 name = "canister_http"
 version = "0.9.0"
 dependencies = [
@@ -5869,11 +5881,13 @@ name = "ic-btc-kyt"
 version = "0.9.0"
 dependencies = [
  "askama",
+ "base64 0.13.1",
  "bitcoin 0.32.3",
  "candid",
  "candid_parser",
  "ciborium",
  "futures",
+ "hex",
  "ic-base-types",
  "ic-btc-interface",
  "ic-canisters-http-types",
@@ -5885,8 +5899,10 @@ dependencies = [
  "pocket-ic",
  "scraper",
  "serde",
+ "serde_json",
  "time",
  "tokio",
+ "url",
 ]
 
 [[package]]
@@ -6727,7 +6743,6 @@ name = "ic-consensus-utils"
 version = "0.9.0"
 dependencies = [
  "assert_matches",
- "hex",
  "ic-consensus-mocks",
  "ic-crypto-prng",
  "ic-interfaces",
@@ -8193,6 +8208,7 @@ dependencies = [
  "ic-universal-canister",
  "ic-utils 0.9.0",
  "ic-utils-lru-cache",
+ "ic-wasm-transform",
  "ic-wasm-types",
  "itertools 0.12.1",
  "lazy_static",
@@ -9884,6 +9900,13 @@ dependencies = [
  "serde",
  "tokio",
  "xrc-mock",
+]
+
+[[package]]
+name = "ic-nervous-system-linear-map"
+version = "0.0.1"
+dependencies = [
+ "rust_decimal",
 ]
 
 [[package]]
@@ -11704,6 +11727,7 @@ dependencies = [
  "ic-nervous-system-common-test-utils",
  "ic-nervous-system-common-validation",
  "ic-nervous-system-governance",
+ "ic-nervous-system-linear-map",
  "ic-nervous-system-lock",
  "ic-nervous-system-proto",
  "ic-nervous-system-root",
@@ -13524,6 +13548,8 @@ dependencies = [
  "k256",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
+ "rate-limits-api",
+ "regex",
  "registry-canister",
  "slog",
  "tokio",
@@ -16809,7 +16835,7 @@ dependencies = [
  "ed25519-dalek",
  "flate2",
  "hex",
- "ic-agent",
+ "ic-certification 2.6.0",
  "ic-error-types",
  "ic-transport-types",
  "k256",
@@ -17741,6 +17767,42 @@ name = "rangemap"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f60fcc7d6849342eff22c4350c8b9a989ee8ceabc4b481253e8946b9fe83d684"
+
+[[package]]
+name = "rate-limits-api"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "regex",
+ "serde",
+ "serde_bytes",
+ "serde_json",
+]
+
+[[package]]
+name = "rate_limits"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "bincode",
+ "candid",
+ "getrandom",
+ "hex",
+ "ic-canisters-http-types",
+ "ic-cdk 0.16.0",
+ "ic-cdk-macros 0.9.0",
+ "ic-cdk-timers",
+ "ic-metrics-encoder",
+ "ic-stable-structures",
+ "mockall 0.13.0",
+ "rand_chacha 0.3.1",
+ "rate-limits-api",
+ "serde",
+ "serde_json",
+ "sha2 0.10.8",
+ "thiserror",
+ "uuid",
+]
 
 [[package]]
 name = "ratelimit"

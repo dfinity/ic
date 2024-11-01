@@ -1,3 +1,4 @@
+#![allow(clippy::test_attr_in_doctest)]
 //! # PocketIC: A Canister Testing Platform
 //!
 //! PocketIC is the local canister smart contract testing platform for the [Internet Computer](https://internetcomputer.org/).
@@ -6,9 +7,9 @@
 //!
 //! With PocketIC, testing canisters is as simple as calling rust functions. Here is a minimal example:
 //!
-//! ```rust,no_run
-//! use candid::encode_one;
-//! use pocket_ic::PocketIc;
+//! ```rust
+//! use candid::{Principal, encode_one};
+//! use pocket_ic::{WasmResult, PocketIc};
 //!
 //!  #[test]
 //!  fn test_counter_canister() {
@@ -17,7 +18,7 @@
 //!     let canister_id = pic.create_canister();
 //!     pic.add_cycles(canister_id, 2_000_000_000_000);
 //!  
-//!     let wasm_bytes = load_counter_wasm(...);
+//!     let wasm_bytes = todo!();
 //!     pic.install_canister(canister_id, wasm_bytes, vec![], None);
 //!     // 'inc' is a counter canister method.
 //!     call_counter_canister(&pic, canister_id, "inc");
@@ -26,21 +27,23 @@
 //!     assert_eq!(reply, WasmResult::Reply(vec![0, 0, 0, 1]));
 //!  }
 //!
-//! fn call_counter_canister(pic: &PocketIc, canister_id: CanisterId, method: &str) -> WasmResult {
+//! fn call_counter_canister(pic: &PocketIc, canister_id: Principal, method: &str) -> WasmResult {
 //!     pic.update_call(canister_id, Principal::anonymous(), method, encode_one(()).unwrap())
 //!         .expect("Failed to call counter canister")
 //! }
 //! ```
 //! For more information, see the [README](https://crates.io/crates/pocket-ic).
 //!
-use crate::common::rest::{
-    BlobCompression, BlobId, CanisterHttpRequest, DtsFlag, ExtendedSubnetConfigSet, HttpsConfig,
-    InstanceId, MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId, SubnetId,
-    SubnetKind, SubnetSpec, Topology,
-};
 pub use crate::management_canister::CanisterSettings;
-use crate::management_canister::{CanisterId, CanisterStatusResult};
-use crate::nonblocking::PocketIc as PocketIcAsync;
+use crate::{
+    common::rest::{
+        BlobCompression, BlobId, CanisterHttpRequest, DtsFlag, ExtendedSubnetConfigSet,
+        HttpsConfig, InstanceId, MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId,
+        SubnetId, SubnetKind, SubnetSpec, Topology,
+    },
+    management_canister::{CanisterId, CanisterStatusResult},
+    nonblocking::PocketIc as PocketIcAsync,
+};
 use candid::{
     decode_args, encode_args,
     utils::{ArgumentDecoder, ArgumentEncoder},
@@ -51,14 +54,13 @@ use reqwest::Url;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use slog::Level;
-use std::sync::mpsc::channel;
-use std::thread;
-use std::thread::JoinHandle;
 use std::{
     net::SocketAddr,
     path::{Path, PathBuf},
     process::Command,
-    sync::Arc,
+    sync::{mpsc::channel, Arc},
+    thread,
+    thread::JoinHandle,
     time::{Duration, SystemTime},
 };
 use strum_macros::EnumIter;
@@ -196,13 +198,11 @@ impl PocketIcBuilder {
     /// `nns_subnet_id` should be the subnet ID of the NNS subnet in the state under
     /// `path_to_state`, e.g.:
     /// ```rust
-    /// PrincipalId(
-    ///     candid::Principal::from_text(
-    ///         "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe",
-    ///     )
-    ///     .unwrap(),
-    /// )
-    /// .into();
+    /// use pocket_ic::common::rest::SubnetId;
+    ///
+    /// let nns_subnet_id: SubnetId = candid::Principal::from_text(
+    ///     "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe",
+    /// ).unwrap().into();
     /// ```
     ///
     /// The value can be obtained, e.g., via the following command:
@@ -1386,9 +1386,11 @@ To download the binary, please visit https://github.com/dfinity/pocketic."
     ));
     #[cfg(not(windows))]
     cmd.arg(port_file_path.clone());
-    if std::env::var("POCKET_IC_MUTE_SERVER").is_ok() {
-        cmd.stdout(std::process::Stdio::null());
-        cmd.stderr(std::process::Stdio::null());
+    if let Ok(mute_server) = std::env::var("POCKET_IC_MUTE_SERVER") {
+        if !mute_server.is_empty() {
+            cmd.stdout(std::process::Stdio::null());
+            cmd.stderr(std::process::Stdio::null());
+        }
     }
     cmd.spawn()
         .unwrap_or_else(|_| panic!("Failed to start PocketIC binary ({:?})", bin_path));
