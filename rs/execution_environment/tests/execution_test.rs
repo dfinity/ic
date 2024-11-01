@@ -3,7 +3,6 @@ use candid::Encode;
 use ic_base_types::PrincipalId;
 use ic_config::{
     execution_environment::{Config as HypervisorConfig, DEFAULT_WASM_MEMORY_LIMIT},
-    flag_status::FlagStatus,
     subnet_config::{CyclesAccountManagerConfig, SubnetConfig},
 };
 use ic_management_canister_types::{
@@ -728,7 +727,6 @@ fn take_canister_snapshot_request_fails_when_subnet_capacity_reached() {
         HypervisorConfig {
             subnet_memory_capacity: NumBytes::from(100 * MIB),
             subnet_memory_reservation: NumBytes::from(0),
-            canister_snapshots: FlagStatus::Enabled,
             ..Default::default()
         },
     ));
@@ -795,7 +793,6 @@ fn canister_snapshot_metrics_are_observed() {
         HypervisorConfig {
             subnet_memory_capacity: NumBytes::from(100 * MIB),
             subnet_memory_reservation: NumBytes::from(0),
-            canister_snapshots: FlagStatus::Enabled,
             ..Default::default()
         },
     ));
