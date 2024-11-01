@@ -42,6 +42,10 @@ use strum::IntoEnumIterator;
 
 const POOL_IDKG: &str = "idkg";
 
+/// Workaround for `IDkgMessage` not implementing `CountBytes`.
+#[allow(dead_code)]
+const MESSAGE_SIZE_BYTES: usize = 0;
+
 /// The per-artifact type object pool
 struct IDkgObjectPool {
     objects: BTreeMap<IDkgMessageId, IDkgMessage>,

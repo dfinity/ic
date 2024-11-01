@@ -386,7 +386,8 @@ impl Backup {
     /// Blocks the current thread until all artifacts have been written to disk.
     ///
     /// Mainly useful for testing.
-    pub fn sync_backup(&self) {
+    #[allow(dead_code)]
+    pub(crate) fn sync_backup(&self) {
         let (tx, rx) = sync_channel(0);
         // NOTE: If we have an error here we will also have one in the next line
         let _ = self.backup_queue.send(BackupRequest::Await(tx));
@@ -400,7 +401,8 @@ impl Backup {
     /// finished.
     ///
     /// Mainly useful for testing.
-    pub fn sync_purging(&self) {
+    #[allow(dead_code)]
+    pub(crate) fn sync_purging(&self) {
         let (tx, rx) = sync_channel(0);
         // NOTE: If we have an error here we will also have one in the next line
         let _ = self.purging_queue.send(PurgingRequest::Await(tx));
