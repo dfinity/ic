@@ -6743,7 +6743,6 @@ name = "ic-consensus-utils"
 version = "0.9.0"
 dependencies = [
  "assert_matches",
- "hex",
  "ic-consensus-mocks",
  "ic-crypto-prng",
  "ic-interfaces",
