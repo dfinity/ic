@@ -43,7 +43,6 @@ main() {
     /opt/ic/bin/check-network.sh
     if kernel_cmdline_bool_default_true ic.setupos.perform_installation; then
         true
-    fi
     else
         echo "* Installation skipped by request via kernel command line; stopping here"
         exit
@@ -54,7 +53,6 @@ main() {
     /opt/ic/bin/setup-hostos-config.sh
     if kernel_cmdline_bool_default_true ic.setupos.reboot_after_installation; then
         true
-    fi
     else
         echo "* Reboot skipped by request via kernel command line; stopping here"
         exit
