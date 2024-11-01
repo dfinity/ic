@@ -204,7 +204,7 @@ impl<T: Signable> ThresholdSigVerifier<T> for CryptoReturningOk {
         &self,
         _signature: &CombinedThresholdSigOf<T>,
         _message: &T,
-        _dkg_id: NiDkgId,
+        _dkg_id: &NiDkgId,
     ) -> CryptoResult<()> {
         Ok(())
     }

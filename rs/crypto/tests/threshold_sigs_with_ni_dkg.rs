@@ -48,7 +48,7 @@ fn should_threshold_sign_if_sufficient_shares() {
     );
     let random_verifier = random_node_in(config.receivers().get(), rng);
     let verify_combined_result = crypto_for(random_verifier, &crypto_components)
-        .verify_threshold_sig_combined(&combined_sig, &msg, dkg_id);
+        .verify_threshold_sig_combined(&combined_sig, &msg, &dkg_id);
 
     assert_eq!(verify_combined_result, Ok(()));
 }

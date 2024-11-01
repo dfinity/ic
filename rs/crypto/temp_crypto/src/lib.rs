@@ -870,7 +870,7 @@ pub mod internal {
             &self,
             signature: &CombinedThresholdSigOf<T>,
             message: &T,
-            dkg_id: NiDkgId,
+            dkg_id: &NiDkgId,
         ) -> CryptoResult<()> {
             self.crypto_component
                 .verify_threshold_sig_combined(signature, message, dkg_id)

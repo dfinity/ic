@@ -422,7 +422,7 @@ impl<Message: Signable, C: ThresholdSigner<Message> + ThresholdSigVerifier<Messa
         self.verify_threshold_sig_combined(
             &message.signature.signature,
             &message.content,
-            message.signature.signer.clone(),
+            &message.signature.signer,
         )
     }
 }

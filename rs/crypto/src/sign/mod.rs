@@ -563,14 +563,11 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifier<T> for CryptoCo
         result
     }
 
-    //////////////////////////////////////////////
-    // TODO: dkg_id as reference
-    //////////////////////////////////////////////
     fn verify_threshold_sig_combined(
         &self,
         signature: &CombinedThresholdSigOf<T>,
         message: &T,
-        dkg_id: NiDkgId,
+        dkg_id: &NiDkgId,
     ) -> CryptoResult<()> {
         let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
@@ -590,7 +587,7 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifier<T> for CryptoCo
             &self.csp,
             signature,
             message,
-            &dkg_id,
+            dkg_id,
         );
         self.metrics.observe_duration_seconds(
             MetricsDomain::ThresholdSignature,

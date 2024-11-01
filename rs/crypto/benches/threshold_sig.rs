@@ -345,7 +345,7 @@ fn bench_verify_threshold_sig_combined<M: Measurement, R: Rng + CryptoRng>(
                 },
                 |(threshold_sig, message, verifier)| {
                     assert!(verifier
-                        .verify_threshold_sig_combined(&threshold_sig, &message, dkg_id.clone())
+                        .verify_threshold_sig_combined(&threshold_sig, &message, &dkg_id)
                         .is_ok());
                 },
                 SmallInput,

@@ -111,7 +111,7 @@ pub trait ThresholdSigVerifier<T: Signable> {
         &self,
         signature: &CombinedThresholdSigOf<T>,
         message: &T,
-        dkg_id: NiDkgId,
+        dkg_id: &NiDkgId,
     ) -> CryptoResult<()>;
 }
 
