@@ -7,12 +7,8 @@ package(default_visibility = ["//rs:system-tests-pkg"])
 [
     system_test_nns(
         name = name,
-        extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
         flaky = True,
-        tags = [
-            "cpu:4",
-            "long_test",  # since it takes longer than 5 minutes.
-        ],
+        tags = ["cpu:4"],
         target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
         runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + CANISTER_HTTP_RUNTIME_DEPS + [
             ":ic-hs",
