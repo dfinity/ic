@@ -16,7 +16,7 @@ const CHECK_DISABLER_CMDLINE_ARGS: [&str; 3] = [
     "ic.setupos.check_network",
     "ic.setupos.check_age",
 ];
-const CHECK_INSTALL_DISABLER_CMDLINE_ARGS: [&str; 1] = ["ic.setupos.stop_before_installation"];
+const CHECK_INSTALL_DISABLER_CMDLINE_ARGS: [&str; 1] = ["ic.setupos.perform_installation"];
 const SERVICE_NAME: &str = "setupos-disable-checks";
 
 #[derive(Parser)]
@@ -70,7 +70,7 @@ fn munge(
     }
     for arg in CHECK_INSTALL_DISABLER_CMDLINE_ARGS.iter() {
         extra_boot_args
-            .ensure_single_argument(arg, (!defeat_installer).then_some("0"))
+            .ensure_single_argument(arg, defeat_installer.then_some("0"))
             .unwrap();
     }
 
@@ -145,7 +145,7 @@ mod tests {
                 true,
                 r#"# This file has been modified by setupos-disable-checks.
 # This file contains nothing.
-EXTRA_BOOT_ARGS="ic.setupos.check_hardware=0 ic.setupos.check_network=0 ic.setupos.check_age=0 ic.setupos.stop_before_installation"
+EXTRA_BOOT_ARGS="ic.setupos.check_hardware=0 ic.setupos.check_network=0 ic.setupos.check_age=0 ic.setupos.perform_installation=0"
 "#,
             ),
             (
@@ -158,7 +158,7 @@ EXTRA_BOOT_ARGS="security=selinux selinux=1 enforcing=0"
                 true,
                 r#"# This file has been modified by setupos-disable-checks.
 # Hello hello.
-EXTRA_BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardware=0 ic.setupos.check_network=0 ic.setupos.check_age=0 ic.setupos.stop_before_installation"
+EXTRA_BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardware=0 ic.setupos.check_network=0 ic.setupos.check_age=0 ic.setupos.perform_installation=0"
 # Postfix.
 "#,
             ),
@@ -169,7 +169,7 @@ EXTRA_BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardwar
                 true,
                 true,
                 r#"# This file has been modified by setupos-disable-checks.
-EXTRA_BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardware=0 ic.setupos.check_network=0 ic.setupos.check_age=0 ic.setupos.stop_before_installation"
+EXTRA_BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardware=0 ic.setupos.check_network=0 ic.setupos.check_age=0 ic.setupos.perform_installation=0"
 "#,
             ),
             (
@@ -179,7 +179,7 @@ EXTRA_BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardwar
                 false,
                 true,
                 r#"# This file has been modified by setupos-disable-checks.
-EXTRA_BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardware ic.setupos.check_network ic.setupos.check_age ic.setupos.stop_before_installation"
+EXTRA_BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardware ic.setupos.check_network ic.setupos.check_age ic.setupos.perform_installation=0"
 "#,
             ),
             (
@@ -189,7 +189,7 @@ EXTRA_BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardwar
                 true,
                 false,
                 r#"# This file has been modified by setupos-disable-checks.
-EXTRA_BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardware=0 ic.setupos.check_age=0 ic.setupos.check_network=0 ic.setupos.stop_before_installation=0"
+EXTRA_BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardware=0 ic.setupos.check_age=0 ic.setupos.check_network=0 ic.setupos.perform_installation"
 "#,
             ),
         ];
