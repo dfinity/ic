@@ -4,7 +4,7 @@ Title:: Specification compliance test
 Goal:: Ensure that the replica implementation is compliant with the formal specification.
 
 Runbook::
-. Set up system system and application subnet containing two nodes each
+. Set up system and application subnet containing two nodes each
 . Run ic-ref-test against application subnet
 
 Success:: The ic-ref-test binary does not return an error.
@@ -34,7 +34,7 @@ pub fn test(env: TestEnv) {
             "($0 ~ /canister history/)",
             "($0 ~ /canister version/)",
             "($0 ~ /canister global timer/)",
-            "($0 ~ /canister http outcalls/)",
+            "($0 ~ /canister http/)",
             "($0 ~ /WebAssembly module validation/)",
         ],
     );

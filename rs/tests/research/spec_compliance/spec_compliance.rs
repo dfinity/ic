@@ -337,7 +337,7 @@ pub fn with_endpoint(
         peer_subnet_config,
         excluded_tests,
         included_tests,
-        64,
+        32,
     );
 }
 
