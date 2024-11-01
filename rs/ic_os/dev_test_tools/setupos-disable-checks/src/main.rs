@@ -65,24 +65,12 @@ fn munge(
 
     for arg in CHECK_DISABLER_CMDLINE_ARGS.iter() {
         extra_boot_args
-            .ensure_single_argument(
-                arg,
-                match defeat_setup_checks {
-                    true => Some("0"),
-                    false => None,
-                },
-            )
+            .ensure_single_argument(arg, defeat_setup_checks.then_some("0"))
             .unwrap();
     }
     for arg in CHECK_INSTALL_DISABLER_CMDLINE_ARGS.iter() {
         extra_boot_args
-            .ensure_single_argument(
-                arg,
-                match defeat_installer {
-                    true => None,
-                    false => Some("0"),
-                },
-            )
+            .ensure_single_argument(arg, (!defeat_installer).then_some("0"))
             .unwrap();
     }
 
