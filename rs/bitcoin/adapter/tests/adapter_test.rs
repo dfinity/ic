@@ -657,7 +657,7 @@ fn idle_adapter_does_not_connect_to_peers() {
         bitcoin::Network::Regtest,
     );
 
-    // All clients are still connected to exactly
+    // All clients are still connected to exactly 2 peers.
     exact_connections(&client1, 2);
     exact_connections(&client2, 2);
     exact_connections(&client3, 2);
