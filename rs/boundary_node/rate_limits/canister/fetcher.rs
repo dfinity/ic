@@ -169,7 +169,7 @@ impl From<FetchRuleError> for String {
 mod tests {
     use crate::confidentiality_formatting::MockConfidentialityFormatting;
     use crate::state::MockCanisterApi;
-    use crate::storage::{StorableConfig, StorableVersion};
+    use crate::storage::StorableConfig;
 
     use super::*;
 
@@ -183,9 +183,7 @@ mod tests {
         });
 
         let mut mock_canister_api = MockCanisterApi::new();
-        mock_canister_api
-            .expect_get_version()
-            .returning(|| Some(StorableVersion(1)));
+        mock_canister_api.expect_get_version().returning(|| Some(1));
         mock_canister_api.expect_get_config().returning(|_| {
             Some(StorableConfig {
                 schema_version: 1,

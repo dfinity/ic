@@ -98,10 +98,7 @@ impl<R: CanisterApi, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
 
         let new_config = types::InputConfig::try_from(input_config)?;
 
-        let current_version = self
-            .canister_api
-            .get_version()
-            .unwrap_or(INIT_VERSION.into());
+        let current_version = self.canister_api.get_version().unwrap_or(INIT_VERSION);
 
         let new_version = current_version + 1;
 
