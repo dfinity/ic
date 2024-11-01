@@ -1506,6 +1506,10 @@ impl SystemApiImpl {
                 ..SystemStateChanges::default()
             },
             ApiType::ReplicatedQuery { .. } => SystemStateChanges {
+                consumed_cycles_by_use_case: self
+                    .sandbox_safe_system_state
+                    .system_state_changes
+                    .consumed_cycles_by_use_case,
                 cycles_balance_change: self
                     .sandbox_safe_system_state
                     .system_state_changes
