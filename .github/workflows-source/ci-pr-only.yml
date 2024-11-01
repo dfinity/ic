@@ -17,7 +17,7 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:2c6fc0aa92ada647e42790cbdac3199b27a1407d9e90ff6e5a97a69acac24041
+    image: ghcr.io/dfinity/ic-build@sha256:80e976b63af2b1b352c8c5959cb6c6b02aaa56a4efa327569d8c85c9c81a2cec
   dind-small-setup: &dind-small-setup
     timeout-minutes: 30
     runs-on:
@@ -108,18 +108,6 @@ jobs:
         id: lock-generate
         if: steps.filter.outputs.lock-generate == 'true'
         run: ./ci/scripts/lock-generate.sh
-
-  pre-commit:
-    name: Pre Commit Test
-    <<: *dind-small-setup
-    steps:
-      - <<: *checkout
-        with:
-          fetch-depth: 256
-      - name: Pre-Commit
-        id: pre-commit
-        shell: bash
-        run: ./ci/scripts/pre-commit.sh
 
   dependencies-check:
     name: Dependency Scan for PR

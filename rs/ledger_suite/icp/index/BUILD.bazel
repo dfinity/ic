@@ -98,6 +98,7 @@ rust_ic_test(
     ],
     edition = "2018",
     env = {
+        "RUST_TEST_THREADS": "4",
         "CARGO_MANIFEST_DIR": "rs/ledger_suite/icp/index",
         "IC_ICP_INDEX_WASM_PATH": "$(rootpath :ic-icp-index-canister.wasm)",
         "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method)",

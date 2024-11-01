@@ -45,11 +45,7 @@ fn start_server_helper(
         NamedTempFile::new().unwrap().into_temp_path().to_path_buf()
     };
     let mut cmd = Command::new(PathBuf::from(bin_path));
-    if let Some(test_driver_pid) = test_driver_pid {
-        cmd.arg("--pid").arg(test_driver_pid.to_string());
-    } else {
-        cmd.arg("--port-file").arg(port_file_path.clone());
-    }
+    cmd.arg("--port-file").arg(port_file_path.clone());
     // use a long TTL of 5 mins (the bazel test timeout for medium tests)
     // so that the server doesn't die during the test if the runner
     // is overloaded

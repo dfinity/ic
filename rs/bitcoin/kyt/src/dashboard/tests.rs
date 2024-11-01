@@ -1,7 +1,7 @@
 use crate::dashboard::tests::assertions::DashboardAssert;
 use crate::dashboard::{filters, DashboardTemplate, Fetched, Status, DEFAULT_TX_TABLE_PAGE_SIZE};
-use crate::state::Timestamp;
-use crate::{blocklist::BTC_ADDRESS_BLOCKLIST, dashboard, state, BtcNetwork};
+use crate::state::{Config, Timestamp, TransactionKytData};
+use crate::{blocklist::BTC_ADDRESS_BLOCKLIST, dashboard, state, BtcNetwork, KytMode};
 use bitcoin::Address;
 use bitcoin::{absolute::LockTime, transaction::Version, Transaction};
 use ic_btc_interface::Txid;
@@ -16,13 +16,13 @@ fn mock_txid(v: usize) -> Txid {
 
 #[test]
 fn should_display_metadata() {
-    let btc_network = BtcNetwork::Mainnet;
+    let config = Config::new_and_validate(BtcNetwork::Mainnet, KytMode::Normal).unwrap();
     let outcall_capacity = 50;
     let cached_entries = 0;
     let oldest_entry_time = 0;
     let latest_entry_time = 1_000_000_000_000;
     let dashboard = DashboardTemplate {
-        btc_network,
+        config: config.clone(),
         outcall_capacity,
         cached_entries,
         tx_table_page_size: 10,
@@ -33,7 +33,8 @@ fn should_display_metadata() {
     };
 
     DashboardAssert::assert_that(dashboard)
-        .has_btc_network_in_title(btc_network)
+        .has_btc_network_in_title(config.btc_network())
+        .has_kyt_mode(config.kyt_mode())
         .has_outcall_capacity(outcall_capacity)
         .has_cached_entries(cached_entries)
         .has_oldest_entry_time(oldest_entry_time)
@@ -73,7 +74,7 @@ fn should_display_statuses() {
     });
 
     let dashboard = DashboardTemplate {
-        btc_network: BtcNetwork::Mainnet,
+        config: Config::new_and_validate(BtcNetwork::Mainnet, KytMode::Normal).unwrap(),
         outcall_capacity: 50,
         cached_entries: 6,
         tx_table_page_size: 10,
@@ -113,15 +114,19 @@ fn test_pagination() {
     use askama::Template;
     use scraper::{Html, Selector};
 
-    state::set_config(state::Config {
-        btc_network: BtcNetwork::Mainnet,
-    });
-    let mock_transaction = Transaction {
-        version: Version::ONE,
-        lock_time: LockTime::ZERO,
-        input: Vec::new(),
-        output: Vec::new(),
-    };
+    state::set_config(
+        state::Config::new_and_validate(BtcNetwork::Mainnet, KytMode::Normal).unwrap(),
+    );
+    let mock_transaction = TransactionKytData::from_transaction(
+        &BtcNetwork::Mainnet,
+        Transaction {
+            version: Version::ONE,
+            lock_time: LockTime::ZERO,
+            input: Vec::new(),
+            output: Vec::new(),
+        },
+    )
+    .unwrap();
     let mut expected_txids = vec![];
     // Generate entries to fill one and half pages
     for i in 0..DEFAULT_TX_TABLE_PAGE_SIZE * 3 / 2 {
@@ -130,7 +135,7 @@ fn test_pagination() {
         state::set_fetch_status(
             txid,
             state::FetchTxStatus::Fetched(state::FetchedTx {
-                tx: mock_transaction.clone().try_into().unwrap(),
+                tx: mock_transaction.clone(),
                 input_addresses: vec![],
             }),
         );
@@ -186,6 +191,14 @@ mod assertions {
                 "title",
                 &format!("KYT Canister Dashboard for Bitcoin ({})", btc_network),
                 "wrong btc_network",
+            )
+        }
+
+        pub fn has_kyt_mode(&self, kyt_mode: KytMode) -> &Self {
+            self.has_string_value(
+                "#kyt-mode > td > code",
+                &format!("{}", kyt_mode),
+                "wrong KYT mode",
             )
         }
 

@@ -242,6 +242,7 @@ fn main() {
             "canister_inspect_message",
             "canister_heartbeat",
             "canister_global_timer",
+            "canister_on_low_wasm_memory",
             "canister_update upd",
             "canister_query que",
             "canister_composite_query cq",

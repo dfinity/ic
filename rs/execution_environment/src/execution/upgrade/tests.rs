@@ -1,3 +1,4 @@
+use ic_cycles_account_manager::WasmExecutionMode;
 use ic_error_types::ErrorCode;
 use ic_logger::replica_logger::LogEntryLogger;
 use ic_management_canister_types::{CanisterUpgradeOptions, EmptyBlob, Payload};
@@ -219,9 +220,11 @@ fn upgrade_fails_on_invalid_input() {
 fn upgrade_fails_on_not_enough_cycles() {
     let mut test = execution_test_with_max_rounds(1);
     // Should be enough cycles to create the canister, but not enough to upgrade it
-    let balance_cycles = test
-        .cycles_account_manager()
-        .execution_cost((MAX_INSTRUCTIONS_PER_SLICE * 3).into(), test.subnet_size());
+    let balance_cycles = test.cycles_account_manager().execution_cost(
+        (MAX_INSTRUCTIONS_PER_SLICE * 3).into(),
+        test.subnet_size(),
+        WasmExecutionMode::Wasm32,
+    );
 
     let (canister_memory_usage, canister_message_memory_usage) = {
         // Create a dummy canister just to get its memory usage.

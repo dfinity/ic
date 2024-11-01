@@ -97,6 +97,7 @@ fn fake_signature_request_args(key_id: MasterPublicKeyId) -> ThresholdArguments 
             key_id,
             message: Arc::new(vec![1; 48]),
         }),
+        MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
     }
 }
 
@@ -1152,6 +1153,7 @@ pub(crate) fn create_sig_inputs_with_args(
         MasterPublicKeyId::Schnorr(key_id) => {
             create_schnorr_sig_inputs_with_args(caller, receivers, key_unmasked, height, key_id)
         }
+        MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
     }
 }
 
@@ -1356,6 +1358,7 @@ pub(crate) fn create_signature_share_with_nonce(
                 sig_share_raw: vec![nonce],
             },
         }),
+        MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
     }
 }
 
@@ -1617,6 +1620,7 @@ pub(crate) fn key_id_with_name(key_id: &MasterPublicKeyId, name: &str) -> Master
     match key_id {
         MasterPublicKeyId::Ecdsa(ref mut key_id) => key_id.name = name.into(),
         MasterPublicKeyId::Schnorr(ref mut key_id) => key_id.name = name.into(),
+        MasterPublicKeyId::VetKd(ref mut key_id) => key_id.name = name.into(),
     }
     key_id
 }

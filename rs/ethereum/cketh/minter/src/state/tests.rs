@@ -1,5 +1,7 @@
 use crate::endpoints::CandidBlockTag;
-use crate::eth_logs::{EventSource, ReceivedErc20Event, ReceivedEthEvent, ReceivedEvent};
+use crate::eth_logs::{
+    EventSource, LedgerSubaccount, ReceivedErc20Event, ReceivedEthEvent, ReceivedEvent,
+};
 use crate::eth_rpc::BlockTag;
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::init::InitArg;
@@ -11,6 +13,7 @@ use crate::numeric::{
     LedgerMintIndex, LogIndex, TransactionNonce, Wei, WeiPerGas,
 };
 use crate::state::audit::apply_state_transition;
+use crate::state::eth_logs_scraping::LogScrapingState;
 use crate::state::event::{Event, EventType};
 use crate::state::transactions::{Erc20WithdrawalRequest, ReimbursementIndex};
 use crate::state::{Erc20Balances, State};
@@ -266,6 +269,7 @@ fn received_eth_event() -> ReceivedEthEvent {
         principal: "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae"
             .parse()
             .unwrap(),
+        subaccount: None,
     }
 }
 
@@ -287,6 +291,7 @@ fn received_erc20_event() -> ReceivedErc20Event {
         erc20_contract_address: "0x1c7d4b196cb0c7b01d743fbc6116a902379c7238"
             .parse()
             .unwrap(),
+        subaccount: None,
     }
 }
 
@@ -391,8 +396,8 @@ mod upgrade {
             Wei::new(10_000_000_000_000_000)
         );
         assert_eq!(
-            state.eth_helper_contract_address,
-            Some(Address::from_str("0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34").unwrap())
+            state.eth_log_scraping.contract_address(),
+            Some(&Address::from_str("0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34").unwrap())
         );
         assert_eq!(state.ethereum_block_height, BlockTag::Safe);
     }
@@ -531,6 +536,10 @@ fn arb_principal() -> impl Strategy<Value = Principal> {
     pvec(any::<u8>(), 0..=29).prop_map(|bytes| Principal::from_slice(&bytes))
 }
 
+fn arb_ledger_subaccount() -> impl Strategy<Value = Option<LedgerSubaccount>> {
+    uniform32(any::<u8>()).prop_map(LedgerSubaccount::from_bytes)
+}
+
 fn arb_u256() -> impl Strategy<Value = u256> {
     uniform32(any::<u8>()).prop_map(u256::from_be_bytes)
 }
@@ -626,6 +635,7 @@ prop_compose! {
         from_address in arb_address(),
         value in arb_checked_amount_of(),
         principal in arb_principal(),
+        subaccount in arb_ledger_subaccount(),
     ) -> ReceivedEthEvent {
         ReceivedEthEvent {
             transaction_hash,
@@ -634,6 +644,7 @@ prop_compose! {
             from_address,
             value,
             principal,
+            subaccount
         }
     }
 }
@@ -647,6 +658,7 @@ prop_compose! {
         value in arb_checked_amount_of(),
         principal in arb_principal(),
         erc20_contract_address in arb_address(),
+        subaccount in arb_ledger_subaccount(),
     ) -> ReceivedErc20Event {
         ReceivedErc20Event {
             transaction_hash,
@@ -656,6 +668,7 @@ prop_compose! {
             value,
             principal,
             erc20_contract_address,
+            subaccount
         }
     }
 }
@@ -981,20 +994,34 @@ fn state_equivalence() {
             "ckUSDC".parse().unwrap(),
         )
         .unwrap();
+
+    let eth_log_scraping = {
+        let mut s = LogScrapingState::new(BlockNumber::new(1_000_000));
+        s.set_contract_address(
+            "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34"
+                .parse()
+                .unwrap(),
+        )
+        .unwrap();
+        s
+    };
+    let erc20_log_scraping = {
+        let mut s = LogScrapingState::new(BlockNumber::new(1_000_000));
+        s.set_contract_address(
+            "0xe1788e4834c896f1932188645cc36c54d1b80ac1"
+                .parse()
+                .unwrap(),
+        )
+        .unwrap();
+        s
+    };
+
     let state = State {
         ethereum_network: EthereumNetwork::Mainnet,
         ecdsa_key_name: "test_key".to_string(),
         cketh_ledger_id: "apia6-jaaaa-aaaar-qabma-cai".parse().unwrap(),
-        eth_helper_contract_address: Some(
-            "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34"
-                .parse()
-                .unwrap(),
-        ),
-        erc20_helper_contract_address: Some(
-            "0xe1788e4834c896f1932188645cc36c54d1b80ac1"
-                .parse()
-                .unwrap(),
-        ),
+        eth_log_scraping: eth_log_scraping.clone(),
+        erc20_log_scraping: erc20_log_scraping.clone(),
         ecdsa_public_key: Some(EcdsaPublicKeyResponse {
             public_key: vec![1; 32],
             chain_code: vec![2; 32],
@@ -1002,8 +1029,6 @@ fn state_equivalence() {
         cketh_minimum_withdrawal_amount: Wei::new(1_000_000_000_000_000),
         ethereum_block_height: BlockTag::Finalized,
         first_scraped_block_number: BlockNumber::new(1_000_001),
-        last_scraped_block_number: BlockNumber::new(1_000_000),
-        last_erc20_scraped_block_number: BlockNumber::new(1_000_000),
         last_observed_block_number: Some(BlockNumber::new(2_000_000)),
         events_to_mint: btreemap! {
             source("0xac493fb20c93bd3519a4a5d90ce72d69455c41c5b7e229dafee44344242ba467", 100) => ReceivedEthEvent {
@@ -1013,6 +1038,7 @@ fn state_equivalence() {
                 from_address: "0x9d68bd6F351bE62ed6dBEaE99d830BECD356Ed25".parse().unwrap(),
                 value: Wei::new(500_000_000_000_000_000),
                 principal: "lsywz-sl5vm-m6tct-7fhwt-6gdrw-4uzsg-ibknl-44d6d-a2oyt-c2cxu-7ae".parse().unwrap(),
+                subaccount: None,
             }.into()
         },
         minted_events: btreemap! {
@@ -1024,6 +1050,7 @@ fn state_equivalence() {
                     from_address: "0x9d68bd6F351bE62ed6dBEaE99d830BECD356Ed25".parse().unwrap(),
                     value: Wei::new(10_000_000_000_000_000),
                     principal: "2chl6-4hpzw-vqaaa-aaaaa-c".parse().unwrap(),
+                    subaccount: None,
                 }.into(),
                 mint_block_index: LedgerMintIndex::new(1),
                 erc20_contract_address: None,
@@ -1069,7 +1096,24 @@ fn state_equivalence() {
     assert_ne!(
         Ok(()),
         state.is_equivalent_to(&State {
-            last_scraped_block_number: BlockNumber::new(100_000_000_000),
+            eth_log_scraping: {
+                let mut s = eth_log_scraping.clone();
+                s.set_last_scraped_block_number(BlockNumber::new(100_000_000_000));
+                s
+            },
+            ..state.clone()
+        }),
+        "changing essential fields should break equivalence",
+    );
+
+    assert_ne!(
+        Ok(()),
+        state.is_equivalent_to(&State {
+            erc20_log_scraping: {
+                let mut s = erc20_log_scraping.clone();
+                s.set_last_scraped_block_number(BlockNumber::new(100_000_000_000));
+                s
+            },
             ..state.clone()
         }),
         "changing essential fields should break equivalence",
@@ -1087,7 +1131,16 @@ fn state_equivalence() {
     assert_ne!(
         Ok(()),
         state.is_equivalent_to(&State {
-            eth_helper_contract_address: None,
+            eth_log_scraping: LogScrapingState::new(BlockNumber::new(1_000_000)),
+            ..state.clone()
+        }),
+        "changing essential fields should break equivalence",
+    );
+
+    assert_ne!(
+        Ok(()),
+        state.is_equivalent_to(&State {
+            erc20_log_scraping: LogScrapingState::new(BlockNumber::new(1_000_000)),
             ..state.clone()
         }),
         "changing essential fields should break equivalence",

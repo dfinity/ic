@@ -232,8 +232,8 @@ fn should_consume_expected_amount_of_cycles() {
             initial_interval: Some(DEFAULT_MAX_WAIT_TIME_IN_SECS),
             upgrade_interval: Some(DEFAULT_MAX_WAIT_TIME_IN_SECS),
             assert_cost: |initial, upgrade| {
-                const EXPECTED_LEDGER_CYCLES_CONSUMPTION: i128 = 124_445_767;
-                const EXPECTED_INDEX_CYCLES_CONSUMPTION: i128 = 449_388_554;
+                const EXPECTED_LEDGER_CYCLES_CONSUMPTION: i128 = 706_075_016;
+                const EXPECTED_INDEX_CYCLES_CONSUMPTION: i128 = 2_783_783_209;
                 for ledger_consumption in [initial.ledger, upgrade.ledger] {
                     assert!(
                         abs_relative_difference(

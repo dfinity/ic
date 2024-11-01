@@ -33,39 +33,43 @@
 //! ```
 //! For more information, see the [README](https://crates.io/crates/pocket-ic).
 //!
-use crate::common::rest::{
-    BlobCompression, BlobId, CanisterHttpRequest, DtsFlag, ExtendedSubnetConfigSet, HttpsConfig,
-    InstanceId, MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId, SubnetId,
-    SubnetKind, SubnetSpec, Topology,
+pub use crate::management_canister::CanisterSettings;
+use crate::{
+    common::rest::{
+        BlobCompression, BlobId, CanisterHttpRequest, DtsFlag, ExtendedSubnetConfigSet,
+        HttpsConfig, InstanceId, MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId,
+        SubnetId, SubnetKind, SubnetSpec, Topology,
+    },
+    management_canister::{CanisterId, CanisterStatusResult},
+    nonblocking::PocketIc as PocketIcAsync,
 };
-use crate::nonblocking::PocketIc as PocketIcAsync;
 use candid::{
     decode_args, encode_args,
     utils::{ArgumentDecoder, ArgumentEncoder},
     Principal,
 };
-pub use ic_cdk::api::management_canister::main::CanisterSettings;
-use ic_cdk::api::management_canister::main::{CanisterId, CanisterStatusResponse};
 use ic_transport_types::SubnetMetrics;
 use reqwest::Url;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use slog::Level;
-use std::sync::mpsc::channel;
-use std::thread;
-use std::thread::JoinHandle;
 use std::{
     net::SocketAddr,
     path::{Path, PathBuf},
     process::Command,
-    sync::Arc,
+    sync::{mpsc::channel, Arc},
+    thread,
+    thread::JoinHandle,
     time::{Duration, SystemTime},
 };
 use thiserror::Error;
 use tokio::runtime::Runtime;
 use tracing::{instrument, warn};
+#[cfg(windows)]
+use wslpath::windows_to_wsl;
 
 pub mod common;
+pub mod management_canister;
 pub mod nonblocking;
 
 const EXPECTED_SERVER_VERSION: &str = "pocket-ic-server 6.0.0";
@@ -668,7 +672,7 @@ impl PocketIc {
         &self,
         canister_id: CanisterId,
         sender: Option<Principal>,
-    ) -> Result<CanisterStatusResponse, CallError> {
+    ) -> Result<CanisterStatusResult, CallError> {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.canister_status(canister_id, sender).await })
     }
@@ -1297,15 +1301,36 @@ pub enum WasmResult {
     Reject(String),
 }
 
+#[cfg(windows)]
+fn wsl_path(path: &std::ffi::OsStr, desc: &str) -> String {
+    windows_to_wsl(
+        path.to_str()
+            .unwrap_or_else(|| panic!("Could not convert {} path ({:?}) to String", desc, path)),
+    )
+    .unwrap_or_else(|e| {
+        panic!(
+            "Could not convert {} path ({:?}) to WSL path: {:?}",
+            desc, path, e
+        )
+    })
+}
+
+#[cfg(windows)]
+fn pocket_ic_server_cmd(bin_path: &std::ffi::OsStr) -> Command {
+    let mut cmd = Command::new("wsl");
+    cmd.arg(wsl_path(bin_path, "PocketIC binary"));
+    cmd
+}
+
+#[cfg(not(windows))]
+fn pocket_ic_server_cmd(bin_path: &std::ffi::OsStr) -> Command {
+    Command::new(bin_path)
+}
+
 /// Attempt to start a new PocketIC server if it's not already running.
 pub fn start_or_reuse_server() -> Url {
-    let bin_path = match std::env::var_os("POCKET_IC_BIN") {
-        None => "./pocket-ic".to_string(),
-        Some(path) => path
-            .clone()
-            .into_string()
-            .unwrap_or_else(|_| panic!("Invalid string path for {path:?}")),
-    };
+    let bin_path: std::ffi::OsString =
+        std::env::var_os("POCKET_IC_BIN").unwrap_or("./pocket-ic".into());
 
     if !Path::new(&bin_path).is_file() {
         let is_dir = if Path::new(&bin_path).is_dir() {
@@ -1324,13 +1349,13 @@ To download the binary, please visit https://github.com/dfinity/pocketic."
     }
 
     // check PocketIC server version compatibility
-    let mut cmd = Command::new(PathBuf::from(bin_path.clone()));
+    let mut cmd = pocket_ic_server_cmd(&bin_path);
     cmd.arg("--version");
     let version = cmd
         .output()
         .unwrap_or_else(|e| {
             panic!(
-                "Failed to get version of PocketIC binary ({}): {}",
+                "Failed to get version of PocketIC binary ({:?}): {}",
                 bin_path, e
             )
         })
@@ -1349,14 +1374,23 @@ To download the binary, please visit https://github.com/dfinity/pocketic."
     // launched by the same test driver.
     let test_driver_pid = std::process::id();
     let port_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.port", test_driver_pid));
-    let mut cmd = Command::new(PathBuf::from(bin_path.clone()));
-    cmd.arg("--pid").arg(test_driver_pid.to_string());
-    if std::env::var("POCKET_IC_MUTE_SERVER").is_ok() {
-        cmd.stdout(std::process::Stdio::null());
-        cmd.stderr(std::process::Stdio::null());
+    let mut cmd = pocket_ic_server_cmd(&bin_path);
+    cmd.arg("--port-file");
+    #[cfg(windows)]
+    cmd.arg(wsl_path(
+        port_file_path.as_path().as_os_str(),
+        "PocketIC port file",
+    ));
+    #[cfg(not(windows))]
+    cmd.arg(port_file_path.clone());
+    if let Ok(mute_server) = std::env::var("POCKET_IC_MUTE_SERVER") {
+        if !mute_server.is_empty() {
+            cmd.stdout(std::process::Stdio::null());
+            cmd.stderr(std::process::Stdio::null());
+        }
     }
     cmd.spawn()
-        .unwrap_or_else(|_| panic!("Failed to start PocketIC binary ({})", bin_path));
+        .unwrap_or_else(|_| panic!("Failed to start PocketIC binary ({:?})", bin_path));
 
     loop {
         if let Ok(port_string) = std::fs::read_to_string(port_file_path.clone()) {
