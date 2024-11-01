@@ -129,7 +129,6 @@ impl NiDkgCspClient for Csp {
     fn verify_dealing(
         &self,
         algorithm_id: AlgorithmId,
-        dkg_id: NiDkgId,
         dealer_index: NodeIndex,
         threshold: NumberOfNodes,
         epoch: Epoch,
@@ -138,7 +137,6 @@ impl NiDkgCspClient for Csp {
     ) -> Result<(), ni_dkg_errors::CspDkgVerifyDealingError> {
         static_api::verify_dealing(
             algorithm_id,
-            dkg_id,
             dealer_index,
             threshold,
             epoch,
@@ -335,7 +333,6 @@ pub mod static_api {
     /// Verifies a CSP dealing
     pub fn verify_dealing(
         algorithm_id: AlgorithmId,
-        _dkg_id: NiDkgId,
         dealer_index: NodeIndex,
         threshold: NumberOfNodes,
         epoch: Epoch,

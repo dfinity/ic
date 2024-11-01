@@ -129,7 +129,6 @@ mock! {
         fn verify_dealing(
             &self,
             algorithm_id: AlgorithmId,
-            dkg_id: NiDkgId,
             dealer_index: NodeIndex,
             threshold: NumberOfNodes,
             epoch: Epoch,

@@ -292,14 +292,9 @@ pub trait NiDkgCspClient {
     ///   error. (`InvalidDealingError`)
     /// * the number of receiver keys is unsupported by this machine.
     ///   (`SizeError`)
-    #[allow(clippy::too_many_arguments)]
     fn verify_dealing(
         &self,
         algorithm_id: AlgorithmId,
-        ///////////////////////////////////////
-        // TODO: dkg_id as ref
-        ///////////////////////////////////////
-        dkg_id: NiDkgId,
         dealer_index: NodeIndex,
         threshold: NumberOfNodes,
         epoch: Epoch,
@@ -350,7 +345,6 @@ pub trait NiDkgCspClient {
     ///   (`InvalidDealingError`)
     /// * the number of receiver keys is unsupported by this machine.
     ///   (`SizeError`)
-    #[allow(clippy::too_many_arguments)] // The arguments are per the spec.
     fn verify_resharing_dealing(
         &self,
         algorithm_id: AlgorithmId,

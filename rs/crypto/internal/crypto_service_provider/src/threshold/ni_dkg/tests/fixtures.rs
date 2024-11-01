@@ -321,7 +321,6 @@ impl StateWithVerifiedDealings {
                 } else {
                     static_api::verify_dealing(
                         config.algorithm_id,
-                        config.dkg_id.clone(),
                         dealer_index,
                         config.threshold.get(),
                         config.epoch,

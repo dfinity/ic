@@ -172,7 +172,6 @@ mod verification {
         } else {
             Ok(ni_dkg_csp_client.verify_dealing(
                 AlgorithmId::NiDkg_Groth20_Bls12_381,
-                config.dkg_id().clone(),
                 dealer_index_in_dealers_or_panic(config.dealers(), *dealer),
                 config.threshold().get(),
                 epoch,
