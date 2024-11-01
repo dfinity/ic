@@ -7951,7 +7951,7 @@ fn check_install_code_in_wasm64_mode_is_charged_correctly() {
 }
 
 #[test]
-fn subnet_metrics_canister_call_succeeds() {
+fn subnet_info_canister_call_succeeds() {
     let own_subnet_id = subnet_test_id(1);
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet_id)
@@ -7980,7 +7980,7 @@ fn subnet_metrics_canister_call_succeeds() {
 }
 
 #[test]
-fn subnet_metrics_ingress_fails() {
+fn subnet_info_ingress_fails() {
     let own_subnet_id = subnet_test_id(1);
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet_id)
