@@ -287,7 +287,7 @@ where
                         self.slot_table
                             .values()
                             .flat_map(HashMap::values)
-                            .map(| s| s.id.clone())
+                            .map(|s| s.id.clone())
                     )
                     .len(),
                 "Number of assemble tasks should always be the same or exceed the number of distinct ids stored."
