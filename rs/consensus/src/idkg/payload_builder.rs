@@ -702,6 +702,7 @@ mod tests {
     use ic_types::batch::BatchPayload;
     use ic_types::consensus::dkg::{Dealings, Summary};
     use ic_types::consensus::idkg::IDkgPayload;
+    use ic_types::consensus::idkg::KeyTranscriptCreation;
     use ic_types::consensus::idkg::PreSigId;
     use ic_types::consensus::idkg::ReshareOfUnmaskedParams;
     use ic_types::consensus::idkg::TranscriptRef;
@@ -822,6 +823,19 @@ mod tests {
             contexts.insert(callback_id, context);
         }
         contexts
+    }
+
+    fn master_key_transcript_with_current(
+        key: IdkgMasterPublicKeyId,
+        current: UnmaskedTranscriptWithAttributes,
+        next: UnmaskedTranscriptWithAttributes,
+    ) -> MasterKeyTranscript {
+        let mut transcript = MasterKeyTranscript::new(
+            key,
+            KeyTranscriptCreation::Created(next.unmasked_transcript()),
+        );
+        transcript.current = Some(current);
+        transcript
     }
 
     #[test]
@@ -1750,13 +1764,11 @@ mod tests {
             registry.update_to_latest_version();
 
             // We only have the current transcript initially
-            let key_transcript = idkg::MasterKeyTranscript {
-                current: Some(current_key_transcript.clone()),
-                next_in_creation: idkg::KeyTranscriptCreation::Created(
-                    current_key_transcript.unmasked_transcript(),
-                ),
-                master_key_id: key_id.clone().into(),
-            };
+            let key_transcript = master_key_transcript_with_current(
+                key_id.clone(),
+                current_key_transcript.clone(),
+                current_key_transcript.clone(),
+            );
 
             // Initial bootstrap payload should be created successfully
             let mut payload_0 =
@@ -1787,13 +1799,11 @@ mod tests {
             );
 
             // Simulate successful creation of the next key transcript
-            let key_transcript = idkg::MasterKeyTranscript {
-                current: Some(current_key_transcript.clone()),
-                next_in_creation: idkg::KeyTranscriptCreation::Created(
-                    next_key_transcript.unmasked_transcript(),
-                ),
-                master_key_id: key_id.clone().into(),
-            };
+            let key_transcript = master_key_transcript_with_current(
+                key_id.clone(),
+                current_key_transcript.clone(),
+                next_key_transcript.clone(),
+            );
 
             let mut payload_2 = payload_1.clone();
             *payload_2.single_key_transcript_mut() = key_transcript;
@@ -1802,13 +1812,11 @@ mod tests {
                 .add_transcript(*reshare_key_transcript_ref.as_ref(), reshare_key_transcript);
 
             // After the next key transcript was created, it should be carried over into the next payload.
-            let expected = idkg::MasterKeyTranscript {
-                current: Some(next_key_transcript.clone()),
-                next_in_creation: idkg::KeyTranscriptCreation::Created(
-                    next_key_transcript.unmasked_transcript(),
-                ),
-                master_key_id: key_id.clone().into(),
-            };
+            let expected = master_key_transcript_with_current(
+                key_id.clone(),
+                next_key_transcript.clone(),
+                next_key_transcript.clone(),
+            );
 
             let payload_3 = create_summary_payload_helper(
                 subnet_id,
@@ -1883,13 +1891,11 @@ mod tests {
             registry.update_to_latest_version();
 
             // We only have the current transcript initially
-            let key_transcripts = idkg::MasterKeyTranscript {
-                current: Some(current_key_transcript.clone()),
-                next_in_creation: idkg::KeyTranscriptCreation::Created(
-                    current_key_transcript.unmasked_transcript(),
-                ),
-                master_key_id: key_id.clone().into(),
-            };
+            let key_transcripts = master_key_transcript_with_current(
+                key_id.clone(),
+                current_key_transcript.clone(),
+                current_key_transcript.clone(),
+            );
 
             let mut payload_0 =
                 make_bootstrap_summary(subnet_id, vec![key_id.clone()], Height::from(0)).unwrap();

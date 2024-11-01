@@ -248,11 +248,10 @@ mod tests {
             idkg::UnmaskedTranscript::try_from((Height::from(0), &key_transcript)).unwrap();
         block_reader.add_transcript(*key_transcript_ref.as_ref(), key_transcript.clone());
         let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
-        let current_key_transcript = idkg::MasterKeyTranscript {
-            current: None,
-            next_in_creation: idkg::KeyTranscriptCreation::Created(key_transcript_ref),
-            master_key_id: MasterPublicKeyId::Ecdsa(key_id),
-        };
+        let current_key_transcript = idkg::MasterKeyTranscript::new(
+            MasterPublicKeyId::Ecdsa(key_id).try_into().unwrap(),
+            idkg::KeyTranscriptCreation::Created(key_transcript_ref),
+        );
 
         let created_key_transcript =
             get_created_key_transcript(&current_key_transcript, &block_reader)
@@ -271,11 +270,10 @@ mod tests {
     fn get_created_key_transcript_returns_none_test() {
         let block_reader = TestIDkgBlockReader::new();
         let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
-        let key_transcript = idkg::MasterKeyTranscript {
-            current: None,
-            next_in_creation: idkg::KeyTranscriptCreation::Begin,
-            master_key_id: MasterPublicKeyId::Ecdsa(key_id),
-        };
+        let key_transcript = idkg::MasterKeyTranscript::new(
+            MasterPublicKeyId::Ecdsa(key_id).try_into().unwrap(),
+            idkg::KeyTranscriptCreation::Begin,
+        );
 
         let created_key_transcript =
             get_created_key_transcript(&key_transcript, &block_reader).expect("Should not fail");
