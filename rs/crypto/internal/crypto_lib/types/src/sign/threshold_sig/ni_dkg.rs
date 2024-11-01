@@ -92,12 +92,6 @@ impl TryFrom<&InitialNiDkgTranscriptRecord> for CspNiDkgTranscript {
     }
 }
 
-/// A tag for defining the `Epoch` as `AmountOf`.
-pub struct EpochTag;
-/// A unit of DKG time.
-#[allow(unused)]
-pub type Epoch = AmountOf<EpochTag, u32>;
-
 pub mod ni_dkg_groth20_bls12_381 {
     //! Data types for the Groth20 non-interactive distributed key generation
     //! scheme.
@@ -110,7 +104,6 @@ pub mod ni_dkg_groth20_bls12_381 {
 
     // These are all the types used together with this scheme, made public in one
     // place for ease of use:
-    pub use super::Epoch;
     pub use crate::curves::bls12_381::{FrBytes, G1Bytes, G2Bytes};
     pub use crate::encrypt::forward_secure::groth20_bls12_381::{
         FsEncryptionCiphertextBytes, FsEncryptionPop, FsEncryptionPublicKey, NUM_CHUNKS,
@@ -118,6 +111,12 @@ pub mod ni_dkg_groth20_bls12_381 {
     pub use crate::sign::eddsa::ed25519::{PublicKey, Signature};
     pub use crate::sign::threshold_sig::public_coefficients::bls12_381::PublicCoefficientsBytes;
     pub use crate::NodeIndex;
+
+    /// A tag for defining the `Epoch` as `AmountOf`.
+    pub struct EpochTag;
+    /// A unit of DKG time.
+    pub type Epoch = AmountOf<EpochTag, u32>;
+
 
     /// Threshold signature key material with proofs of correctness.
     #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
