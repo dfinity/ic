@@ -5,7 +5,7 @@ Goal:: Ensure that the replica implementation is compliant with the formal speci
 
 Runbook::
 . Set up system and application subnet containing two nodes each
-. Run ic-ref-test against system subnet
+. Run ic-ref-test against application subnet
 
 Success:: The ic-ref-test binary does not return an error.
 
@@ -19,23 +19,20 @@ use ic_system_test_driver::systest;
 use spec_compliance::{setup_impl, test_subnet};
 
 pub fn setup(env: TestEnv) {
-    setup_impl(env, true, true);
+    setup_impl(env, true, false);
 }
 
 pub fn test(env: TestEnv) {
     test_subnet(
         env,
         true,
-        true,
-        None,
+        false,
         Some(SubnetType::Application),
+        None,
         vec![],
         vec![
-            "($0 ~ /canister history/)",
-            "($0 ~ /canister version/)",
-            "($0 ~ /canister global timer/)",
-            "($0 ~ /canister http/)",
-            "($0 ~ /WebAssembly module validation/)",
+            "($0 ~ /stable memory/)",
+            "($0 ~ /inter-canister calls/)",
         ],
     );
 }

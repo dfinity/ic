@@ -19,24 +19,18 @@ use ic_system_test_driver::systest;
 use spec_compliance::{setup_impl, test_subnet};
 
 pub fn setup(env: TestEnv) {
-    setup_impl(env, true, true);
+    setup_impl(env, false, false);
 }
 
 pub fn test(env: TestEnv) {
     test_subnet(
         env,
-        true,
-        true,
+        false,
+        false,
         None,
         Some(SubnetType::Application),
         vec![],
-        vec![
-            "($0 ~ /canister history/)",
-            "($0 ~ /canister version/)",
-            "($0 ~ /canister global timer/)",
-            "($0 ~ /canister http/)",
-            "($0 ~ /WebAssembly module validation/)",
-        ],
+        vec!["($0 ~ /NNS canisters/)"],
     );
 }
 
