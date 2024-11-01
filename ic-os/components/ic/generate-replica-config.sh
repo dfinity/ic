@@ -157,15 +157,19 @@ sed -e "s@{{ ipv6_address }}@${IPV6_ADDRESS}@" \
     -e "s@{{ jaeger_addr }}@${JAEGER_ADDR}@" \
     "${IN_FILE}" >"${OUT_FILE}"
 
-# Generate and inject a self-signed TLS certificate and key for ic-boundary
-# for the given domain name. To be used in system tests only.
-if [[ -n "${GENERATE_IC_BOUNDARY_TLS_CERT}" ]] && [ "${GENERATE_IC_BOUNDARY_TLS_CERT}" != "null" ]; then
-    openssl req -x509 -newkey rsa:2048 \
-        -keyout /var/lib/ic/data/ic-boundary-tls.key \
-        -out /var/lib/ic/data/ic-boundary-tls.crt -sha256 -days 3650 -nodes \
-        -subj /C=CH/ST=Zurich/L=Zurich/O=InternetComputer/OU=ApiBoundaryNodes/CN=${GENERATE_IC_BOUNDARY_TLS_CERT}
-fi
-
 # umask for service is set to be restricted, but this file needs to be
 # world-readable
 chmod 644 "${OUT_FILE}"
+
+# Generate and inject a self-signed TLS certificate and key for ic-boundary
+# for the given domain name. To be used in system tests only.
+if [[ -n "${GENERATE_IC_BOUNDARY_TLS_CERT}" ]] && [ "${GENERATE_IC_BOUNDARY_TLS_CERT}" != "null" ]; then
+    TLS_KEY_PATH="/var/lib/ic/data/ic-boundary-tls.key"
+    TLS_CERT_PATH="/var/lib/ic/data/ic-boundary-tls.crt"
+
+    openssl req -x509 -newkey rsa:2048 \
+        -keyout "${TLS_KEY_PATH}" \
+        -out "${TLS_CERT_PATH}" -sha256 -days 3650 -nodes \
+        -subj /C=CH/ST=Zurich/L=Zurich/O=InternetComputer/OU=ApiBoundaryNodes/CN=${GENERATE_IC_BOUNDARY_TLS_CERT}
+    chmod 644 "${TLS_KEY_PATH}" "${TLS_CERT_PATH}"
+fi
