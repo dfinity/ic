@@ -467,7 +467,7 @@ pub struct InstanceConfig {
     pub state_dir: Option<PathBuf>,
     pub nonmainnet_features: bool,
     pub log_level: Option<String>,
-    pub bitcoind_addr: Option<SocketAddr>,
+    pub bitcoind_addr: Option<Vec<SocketAddr>>,
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]

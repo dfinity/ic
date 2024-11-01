@@ -246,22 +246,6 @@ impl From<Result<ic_state_machine_tests::WasmResult, ic_state_machine_tests::Use
     }
 }
 
-// TODO: Remove this Into: It's only used in the InstallCanisterAsController Operation, which also should be removed.
-impl From<Result<(), ic_state_machine_tests::UserError>> for OpOut {
-    fn from(r: Result<(), ic_state_machine_tests::UserError>) -> Self {
-        let res = {
-            match r {
-                Ok(_) => Ok(WasmResult::Reply(vec![])),
-                Err(user_err) => Err(UserError {
-                    code: ErrorCode::try_from(user_err.code() as u64).unwrap(),
-                    description: user_err.description().to_string(),
-                }),
-            }
-        };
-        OpOut::CanisterResult(res)
-    }
-}
-
 impl std::fmt::Debug for OpOut {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
