@@ -261,7 +261,7 @@ pub fn generate_testnet_config(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
+    use tempfile::NamedTempFile;
 
     #[test]
     fn test_valid_configuration() {
@@ -272,8 +272,13 @@ mod tests {
             ..Default::default()
         };
 
-        let result = generate_testnet_config(args, PathBuf::from("/tmp/guestos_config.json"));
-        assert!(result.is_ok());
+        let temp_file_path = NamedTempFile::new()
+            .expect("Failed to create temp file")
+            .path()
+            .to_path_buf();
+
+        generate_testnet_config(args, temp_file_path)
+            .expect("Expected valid configuration to succeed");
     }
 
     #[test]
@@ -286,10 +291,16 @@ mod tests {
             ..Default::default()
         };
 
-        let result = generate_testnet_config(args, PathBuf::from("/dev/null"));
-        assert!(result.is_err());
+        let temp_file_path = NamedTempFile::new()
+            .expect("Failed to create temp file")
+            .path()
+            .to_path_buf();
+
+        let err = generate_testnet_config(args, temp_file_path)
+            .expect_err("Expected an error due to missing deterministic_prefix");
+
         assert_eq!(
-            result.unwrap_err().to_string(),
+            err.to_string(),
             "deterministic_prefix is required when ipv6_config_type is 'Deterministic'"
         );
     }
@@ -304,10 +315,16 @@ mod tests {
             ..Default::default()
         };
 
-        let result = generate_testnet_config(args, PathBuf::from("/dev/null"));
-        assert!(result.is_err());
+        let temp_file_path = NamedTempFile::new()
+            .expect("Failed to create temp file")
+            .path()
+            .to_path_buf();
+
+        let err = generate_testnet_config(args, temp_file_path)
+            .expect_err("Expected an error due to missing deterministic_prefix_length");
+
         assert_eq!(
-            result.unwrap_err().to_string(),
+            err.to_string(),
             "deterministic_prefix_length is required when ipv6_config_type is 'Deterministic'"
         );
     }
@@ -322,10 +339,16 @@ mod tests {
             ..Default::default()
         };
 
-        let result = generate_testnet_config(args, PathBuf::from("/dev/null"));
-        assert!(result.is_err());
+        let temp_file_path = NamedTempFile::new()
+            .expect("Failed to create temp file")
+            .path()
+            .to_path_buf();
+
+        let err = generate_testnet_config(args, temp_file_path)
+            .expect_err("Expected an error due to missing deterministic_gateway");
+
         assert_eq!(
-            result.unwrap_err().to_string(),
+            err.to_string(),
             "deterministic_gateway is required when ipv6_config_type is 'Deterministic'"
         );
     }
@@ -340,12 +363,20 @@ mod tests {
             ..Default::default()
         };
 
-        let result = generate_testnet_config(args, PathBuf::from("/dev/null"));
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Failed to parse deterministic_gateway"));
+        let temp_file_path = NamedTempFile::new()
+            .expect("Failed to create temp file")
+            .path()
+            .to_path_buf();
+
+        let err = generate_testnet_config(args, temp_file_path)
+            .expect_err("Expected parsing error due to invalid deterministic_gateway");
+
+        assert!(
+            err.to_string()
+                .contains("Failed to parse deterministic_gateway"),
+            "Expected parsing error, got: {}",
+            err
+        );
     }
 
     #[test]
@@ -357,10 +388,16 @@ mod tests {
             ..Default::default()
         };
 
-        let result = generate_testnet_config(args, PathBuf::from("/dev/null"));
-        assert!(result.is_err());
+        let temp_file_path = NamedTempFile::new()
+            .expect("Failed to create temp file")
+            .path()
+            .to_path_buf();
+
+        let err = generate_testnet_config(args, temp_file_path)
+            .expect_err("Expected an error due to missing fixed_address");
+
         assert_eq!(
-            result.unwrap_err().to_string(),
+            err.to_string(),
             "fixed_address is required when ipv6_config_type is 'Fixed'"
         );
     }
@@ -374,10 +411,16 @@ mod tests {
             ..Default::default()
         };
 
-        let result = generate_testnet_config(args, PathBuf::from("/dev/null"));
-        assert!(result.is_err());
+        let temp_file_path = NamedTempFile::new()
+            .expect("Failed to create temp file")
+            .path()
+            .to_path_buf();
+
+        let err = generate_testnet_config(args, temp_file_path)
+            .expect_err("Expected an error due to missing fixed_gateway");
+
         assert_eq!(
-            result.unwrap_err().to_string(),
+            err.to_string(),
             "fixed_gateway is required when ipv6_config_type is 'Fixed'"
         );
     }
@@ -391,12 +434,19 @@ mod tests {
             ..Default::default()
         };
 
-        let result = generate_testnet_config(args, PathBuf::from("/dev/null"));
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Failed to parse fixed_gateway"));
+        let temp_file_path = NamedTempFile::new()
+            .expect("Failed to create temp file")
+            .path()
+            .to_path_buf();
+
+        let err = generate_testnet_config(args, temp_file_path)
+            .expect_err("Expected parsing error due to invalid fixed_gateway");
+
+        assert!(
+            err.to_string().contains("Failed to parse fixed_gateway"),
+            "Expected parsing error, got: {}",
+            err
+        );
     }
 
     #[test]
@@ -408,10 +458,16 @@ mod tests {
             ..Default::default()
         };
 
-        let result = generate_testnet_config(args, PathBuf::from("/dev/null"));
-        assert!(result.is_err());
+        let temp_file_path = NamedTempFile::new()
+            .expect("Failed to create temp file")
+            .path()
+            .to_path_buf();
+
+        let err = generate_testnet_config(args, temp_file_path)
+            .expect_err("Expected an error due to incomplete IPv4 configuration");
+
         assert_eq!(
-            result.unwrap_err().to_string(),
+            err.to_string(),
             "Incomplete IPv4 configuration provided. All parameters (ipv4_address, ipv4_gateway, ipv4_prefix_length) are required for IPv4 configuration."
         );
     }
@@ -425,12 +481,19 @@ mod tests {
             ..Default::default()
         };
 
-        let result = generate_testnet_config(args, PathBuf::from("/dev/null"));
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Failed to parse ipv4_address"));
+        let temp_file_path = NamedTempFile::new()
+            .expect("Failed to create temp file")
+            .path()
+            .to_path_buf();
+
+        let err = generate_testnet_config(args, temp_file_path)
+            .expect_err("Expected parsing error due to invalid ipv4_address");
+
+        assert!(
+            err.to_string().contains("Failed to parse ipv4_address"),
+            "Expected parsing error, got: {}",
+            err
+        );
     }
 
     #[test]
@@ -442,11 +505,18 @@ mod tests {
             ..Default::default()
         };
 
-        let result = generate_testnet_config(args, PathBuf::from("/dev/null"));
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Failed to parse ipv4_gateway"));
+        let temp_file_path = NamedTempFile::new()
+            .expect("Failed to create temp file")
+            .path()
+            .to_path_buf();
+
+        let err = generate_testnet_config(args, temp_file_path)
+            .expect_err("Expected parsing error due to invalid ipv4_gateway");
+
+        assert!(
+            err.to_string().contains("Failed to parse ipv4_gateway"),
+            "Expected parsing error, got: {}",
+            err
+        );
     }
 }
