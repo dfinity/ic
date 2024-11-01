@@ -311,10 +311,6 @@ mod loading {
     ) -> Result<(), CspDkgLoadPrivateKeyError> {
         ni_dkg_csp_client.load_threshold_signing_key(
             AlgorithmId::NiDkg_Groth20_Bls12_381,
-            ///////////////////////////////////////
-            // TODO: this param is actually not needed/used
-            ///////////////////////////////////////
-            transcript.dkg_id.clone(),
             epoch(transcript.registry_version),
             csp_transcript.clone(),
             self_index_in_committee,

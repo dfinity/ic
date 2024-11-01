@@ -438,7 +438,6 @@ impl StateWithTranscript {
             node.csp
                 .load_threshold_signing_key(
                     self.config.algorithm_id,
-                    self.config.dkg_id.clone(),
                     self.config.epoch,
                     self.transcript.clone(),
                     node_index,

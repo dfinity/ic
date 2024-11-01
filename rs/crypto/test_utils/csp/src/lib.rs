@@ -171,7 +171,6 @@ mock! {
         fn load_threshold_signing_key(
             &self,
             algorithm_id: AlgorithmId,
-            dkg_id: NiDkgId,
             epoch: Epoch,
             csp_transcript: CspNiDkgTranscript,
             receiver_index: u32,
