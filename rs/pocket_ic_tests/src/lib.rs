@@ -4,7 +4,7 @@ pub use ic_types::ingress::WasmResult;
 pub use ic_types::time::Time;
 pub use ic_types::{CanisterId, Cycles, PrincipalId};
 
-use ic_config::execution_environment::Config;
+use ic_config::execution_environment::{BitcoinConfig, Config};
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SubnetConfig;
 use ic_registry_subnet_type::SubnetType;
@@ -13,6 +13,7 @@ use ic_state_machine_tests::{
     StateMachineConfig, SubnetId,
 };
 use pocket_ic::common::rest::SubnetKind;
+use std::str::FromStr;
 use std::time::{Duration, SystemTime};
 
 #[derive(Default)]
@@ -33,12 +34,38 @@ impl StateMachineBuilder {
     }
 
     pub fn with_ii_subnet(self) -> Self {
+        let bitcoin_testnet_canister_id: CanisterId =
+            CanisterId::from_str("g4xu7-jiaaa-aaaan-aaaaq-cai").unwrap();
+        let bitcoin_mainnet_canister_id: CanisterId =
+            CanisterId::from_str("ghsi2-tqaaa-aaaan-aaaca-cai").unwrap();
         Self {
             sm_builder: self
                 .sm_builder
                 .with_extra_canister_range(std::ops::RangeInclusive::<CanisterId>::new(
                     CanisterId::from_u64(0x2100000),
                     CanisterId::from_u64(0x21FFFFE),
+                ))
+                .with_config(Some(StateMachineConfig::new(
+                    SubnetConfig::new(SubnetType::System),
+                    Config {
+                        bitcoin: BitcoinConfig {
+                            testnet_canister_id: Some(bitcoin_testnet_canister_id),
+                            mainnet_canister_id: Some(bitcoin_mainnet_canister_id),
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    },
+                ))),
+        }
+    }
+
+    pub fn with_bitcoin_subnet(self) -> Self {
+        Self {
+            sm_builder: self
+                .sm_builder
+                .with_extra_canister_range(std::ops::RangeInclusive::<CanisterId>::new(
+                    CanisterId::from_u64(0x1A00000),
+                    CanisterId::from_u64(0x1AFFFFE),
                 )),
         }
     }
@@ -234,6 +261,19 @@ impl StateMachine {
     ) -> Result<(), UserError> {
         self.sm
             .install_existing_canister(canister_id, module, payload)
+    }
+
+    pub fn install_existing_canister_wat(
+        &self,
+        canister_id: CanisterId,
+        wat: &str,
+        payload: Vec<u8>,
+    ) -> Result<(), UserError> {
+        self.sm.install_existing_canister(
+            canister_id,
+            wat::parse_str(wat).expect("invalid WAT"),
+            payload,
+        )
     }
 
     pub fn reinstall_canister(
