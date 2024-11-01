@@ -51,7 +51,6 @@ REPO_COMPONENTS = glob(
         "**/*.bzl",
         "**/*.md",
         "**/*.adoc",
-        "setupos-scripts/*",
     ],
 )
 
