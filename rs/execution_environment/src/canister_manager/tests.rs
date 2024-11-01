@@ -29,9 +29,9 @@ use ic_management_canister_types::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
     CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgsBuilder,
     CanisterStatusResultV2, CanisterStatusType, CanisterUpgradeOptions, ChunkHash,
-    ClearChunkStoreArgs, CreateCanisterArgs, EmptyBlob, InstallCodeArgsV2, Method, Payload,
-    StoredChunksArgs, StoredChunksReply, UpdateSettingsArgs, UploadChunkArgs, UploadChunkReply,
-    WasmMemoryPersistence,
+    ClearChunkStoreArgs, CreateCanisterArgs, EmptyBlob, InstallCodeArgsV2, Method,
+    NodeMetricsHistoryArgs, Payload, StoredChunksArgs, StoredChunksReply, UpdateSettingsArgs,
+    UploadChunkArgs, UploadChunkReply, WasmMemoryPersistence,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -7948,4 +7948,24 @@ fn check_install_code_in_wasm64_mode_is_charged_correctly() {
 
     assert_lt!(balance64, balance32);
     assert_lt!(execution_cost32, execution_cost64);
+}
+
+#[test]
+fn node_metrics_history_ingress_fails() {
+    let own_subnet_id = subnet_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet_id)
+        .build();
+    let payload = NodeMetricsHistoryArgs {
+        subnet_id: own_subnet_id.get(),
+        start_at_timestamp_nanos: 0,
+    }
+    .encode();
+    match test
+        .subnet_message(Method::NodeMetricsHistory, payload)
+        .unwrap()
+    {
+        WasmResult::Reply(bytes) => println!("{:02x?}", bytes), //panic!("Unexpected reply, expected reject"),
+        WasmResult::Reject(err_msg) => println!("{}", err_msg),
+    };
 }
