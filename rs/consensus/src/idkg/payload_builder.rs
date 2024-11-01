@@ -2010,7 +2010,7 @@ mod tests {
 
             let payload_2 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone().into()],
+                &[key_id.clone()],
                 registry.as_ref(),
                 &block_reader,
                 Height::from(1),
