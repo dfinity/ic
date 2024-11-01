@@ -268,7 +268,7 @@ impl CanisterRuntime for IcCanisterRuntime {
             sender_canister_version: None,
         };
 
-        self.call("install_code", 0, &install_code).await?;
+        () = self.call("install_code", 0, &install_code).await?;
 
         Ok(())
     }
@@ -288,7 +288,7 @@ impl CanisterRuntime for IcCanisterRuntime {
             sender_canister_version: None,
         };
 
-        self.call("install_code", 0, &install_code).await?;
+        () = self.call("install_code", 0, &install_code).await?;
 
         Ok(())
     }

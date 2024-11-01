@@ -24,7 +24,10 @@ use ic_types::{
 use rand::{rngs::SmallRng, seq::IteratorRandom, SeedableRng};
 use tokio::time::{sleep_until, timeout_at, Instant};
 
-use super::types::rpc::{GetIngressMessageInBlockRequest, GetIngressMessageInBlockResponse};
+use super::{
+    metrics::{FetchStrippedConsensusArtifactMetrics, IngressSenderMetrics},
+    types::rpc::{GetIngressMessageInBlockRequest, GetIngressMessageInBlockResponse},
+};
 
 type ValidatedPoolReaderRef<T> = Arc<RwLock<dyn ValidatedPoolReader<T> + Send + Sync>>;
 
@@ -36,6 +39,7 @@ const MAX_ARTIFACT_RPC_TIMEOUT: Duration = Duration::from_secs(120);
 pub(super) struct Pools {
     pub(super) consensus_pool: ValidatedPoolReaderRef<ConsensusMessage>,
     pub(super) ingress_pool: ValidatedPoolReaderRef<SignedIngress>,
+    pub(super) metrics: IngressSenderMetrics,
 }
 
 #[derive(Debug)]
@@ -59,12 +63,14 @@ impl Pools {
     ) -> Result<SignedIngress, PoolsAccessError> {
         // First check if the requested ingress message exists in the Ingress Pool.
         if let Some(ingress_message) = self.ingress_pool.read().unwrap().get(ingress_message_id) {
+            self.metrics.ingress_messages_in_ingress_pool.inc();
             return Ok(ingress_message);
         }
 
         // Otherwise find the block which should contain the ingress message.
         let Some(consensus_artifact) = self.consensus_pool.read().unwrap().get(block_proposal_id)
         else {
+            self.metrics.ingress_messages_not_found.inc();
             return Err(PoolsAccessError::BlockNotFound);
         };
 
@@ -77,11 +83,16 @@ impl Pools {
             return Err(PoolsAccessError::SummaryBlock);
         };
 
-        data_payload
-            .batch
-            .ingress
-            .get_by_id(ingress_message_id)
-            .ok_or(PoolsAccessError::IngressMessageNotFound)
+        match data_payload.batch.ingress.get_by_id(ingress_message_id) {
+            Some(ingress_message) => {
+                self.metrics.ingress_messages_in_block.inc();
+                Ok(ingress_message)
+            }
+            None => {
+                self.metrics.ingress_messages_not_found.inc();
+                Err(PoolsAccessError::IngressMessageNotFound)
+            }
+        }
     }
 }
 
@@ -129,8 +140,10 @@ pub(crate) async fn download_ingress<P: Peers>(
     ingress_message_id: IngressMessageId,
     block_proposal_id: ConsensusMessageId,
     log: &ReplicaLogger,
+    metrics: &FetchStrippedConsensusArtifactMetrics,
     peer_rx: P,
 ) -> (SignedIngress, NodeId) {
+    metrics.active_ingress_message_downloads.inc();
     let mut artifact_download_timeout = ExponentialBackoffBuilder::new()
         .with_initial_interval(MIN_ARTIFACT_RPC_TIMEOUT)
         .with_max_interval(MAX_ARTIFACT_RPC_TIMEOUT)
@@ -161,6 +174,7 @@ pub(crate) async fn download_ingress<P: Peers>(
                         })
                     {
                         if IngressMessageId::from(&response.ingress_message) == ingress_message_id {
+                            metrics.active_ingress_message_downloads.dec();
                             return (response.ingress_message, peer);
                         } else {
                             warn!(
@@ -170,7 +184,9 @@ pub(crate) async fn download_ingress<P: Peers>(
                         }
                     }
                 }
-                _ => {}
+                _ => {
+                    metrics.total_ingress_message_download_errors.inc();
+                }
             }
         }
 
@@ -180,20 +196,18 @@ pub(crate) async fn download_ingress<P: Peers>(
 
 #[cfg(test)]
 mod tests {
+    use crate::fetch_stripped_artifact::test_utils::{
+        fake_block_proposal_with_ingresses, fake_summary_block_proposal,
+    };
+
     use super::*;
 
     use http_body_util::Full;
     use ic_logger::no_op_logger;
+    use ic_metrics::MetricsRegistry;
     use ic_p2p_test_utils::mocks::{MockPeers, MockTransport, MockValidatedPoolReader};
-    use ic_test_utilities_consensus::{
-        fake::{Fake, FakeContentSigner},
-        make_genesis,
-    };
     use ic_test_utilities_types::messages::SignedIngressBuilder;
-    use ic_types::batch::{BatchPayload, IngressPayload};
-    use ic_types::consensus::{dkg::Dealings, Block, BlockProposal, DataPayload, Payload, Rank};
-    use ic_types::Height;
-    use ic_types_test_utils::ids::{node_test_id, NODE_1};
+    use ic_types_test_utils::ids::NODE_1;
     use tower::ServiceExt;
 
     fn mock_pools(
@@ -231,6 +245,7 @@ mod tests {
         Pools {
             consensus_pool: Arc::new(RwLock::new(consensus_pool)),
             ingress_pool: Arc::new(RwLock::new(ingress_pool)),
+            metrics: IngressSenderMetrics::new(&MetricsRegistry::new()),
         }
     }
 
@@ -354,6 +369,7 @@ mod tests {
             IngressMessageId::from(&ingress_message),
             ConsensusMessageId::from(&block),
             &no_op_logger(),
+            &FetchStrippedConsensusArtifactMetrics::new(&MetricsRegistry::new()),
             mock_peers,
         )
         .await;
@@ -364,40 +380,9 @@ mod tests {
     // Utility functions below
 
     fn fake_block_proposal(ingress_messages: Vec<SignedIngress>) -> ConsensusMessage {
-        let parent = make_genesis(ic_types::consensus::dkg::Summary::fake())
-            .content
-            .block
-            .into_inner();
+        let block_proposal = fake_block_proposal_with_ingresses(ingress_messages);
 
-        let batch = BatchPayload {
-            ingress: IngressPayload::from(ingress_messages),
-            ..Default::default()
-        };
-
-        let block = Block::new(
-            ic_types::crypto::crypto_hash(&parent),
-            Payload::new(
-                ic_types::crypto::crypto_hash,
-                BlockPayload::Data(DataPayload {
-                    batch,
-                    dealings: Dealings::new_empty(Height::from(0)),
-                    idkg: None,
-                }),
-            ),
-            parent.height.increment(),
-            Rank(0),
-            parent.context.clone(),
-        );
-        ConsensusMessage::BlockProposal(BlockProposal::fake(block, node_test_id(0)))
-    }
-
-    fn fake_summary_block_proposal() -> ConsensusMessage {
-        let block = make_genesis(ic_types::consensus::dkg::Summary::fake())
-            .content
-            .block
-            .into_inner();
-
-        ConsensusMessage::BlockProposal(BlockProposal::fake(block, node_test_id(0)))
+        ConsensusMessage::BlockProposal(block_proposal)
     }
 
     fn request(

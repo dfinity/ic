@@ -5,7 +5,7 @@ package(default_visibility = ["//rs/nervous_system:default_visibility"])
 
 filegroup(
     name = "protos",
-    srcs = glob(["proto/**"]),
+    srcs = glob(["proto/**/*.proto"]),
 )
 
 DEPENDENCIES = [
@@ -46,7 +46,7 @@ rust_library(
 
 rust_test(
     name = "proto_test",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEV_DEPENDENCIES + MACRO_DEPENDENCIES,
     version = "0.0.1",

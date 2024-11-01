@@ -5,7 +5,7 @@ use super::{
 use crate::{
     canister_snapshots::CanisterSnapshots,
     canister_state::{
-        queues::CanisterQueuesLoopDetector,
+        queues::{CanisterInput, CanisterQueuesLoopDetector},
         system_state::{push_input, CanisterOutputQueuesIterator},
     },
     metadata_state::{
@@ -97,12 +97,6 @@ pub enum StateError {
 
     /// Canister is stopping, only accepting responses.
     CanisterStopping(CanisterId),
-
-    /// Message enqueuing failed due to canister migration.
-    CanisterMigrating {
-        canister_id: CanisterId,
-        host_subnet: SubnetId,
-    },
 
     /// Message enqueuing failed due to full in/out queue.
     QueueFull { capacity: usize },
@@ -259,7 +253,6 @@ impl PeekableOutputIterator for OutputIterator<'_> {
     }
 }
 
-pub const LABEL_VALUE_CANISTER_MIGRATING: &str = "CanisterMigrating";
 pub const LABEL_VALUE_QUEUE_FULL: &str = "QueueFull";
 pub const LABEL_VALUE_OUT_OF_MEMORY: &str = "OutOfMemory";
 pub const LABEL_VALUE_INVALID_RESPONSE: &str = "InvalidResponse";
@@ -273,13 +266,24 @@ impl StateError {
             StateError::CanisterNotFound(_) => LABEL_VALUE_CANISTER_NOT_FOUND,
             StateError::CanisterStopped(_) => LABEL_VALUE_CANISTER_STOPPED,
             StateError::CanisterStopping(_) => LABEL_VALUE_CANISTER_STOPPING,
-            StateError::CanisterMigrating { .. } => LABEL_VALUE_CANISTER_MIGRATING,
             StateError::QueueFull { .. } => LABEL_VALUE_QUEUE_FULL,
             StateError::OutOfMemory { .. } => LABEL_VALUE_OUT_OF_MEMORY,
             StateError::NonMatchingResponse { .. } => LABEL_VALUE_INVALID_RESPONSE,
             StateError::BitcoinNonMatchingResponse { .. } => {
                 LABEL_VALUE_BITCOIN_NON_MATCHING_RESPONSE
             }
+        }
+    }
+
+    /// Creates a `StateError::CanisterNotFound` variant with the given error
+    /// message for the given `Response`.
+    pub fn non_matching_response(err_str: impl ToString, response: &Response) -> Self {
+        Self::NonMatchingResponse {
+            err_str: err_str.to_string(),
+            originator: response.originator,
+            callback_id: response.originator_reply_callback,
+            respondent: response.respondent,
+            deadline: response.deadline,
         }
     }
 }
@@ -298,9 +302,6 @@ impl std::fmt::Display for StateError {
             StateError::CanisterStopping(canister_id) => {
                 write!(f, "Canister {} is stopping", canister_id)
             }
-            StateError::CanisterMigrating { canister_id, host_subnet } => {
-                write!(f, "Canister {} is being migrated to/from {}", canister_id, host_subnet)
-            }
             StateError::QueueFull { capacity } => {
                 write!(f, "Maximum queue capacity {} reached", capacity)
             }
@@ -314,13 +315,13 @@ impl std::fmt::Display for StateError {
             ),
             StateError::NonMatchingResponse {err_str, originator, callback_id, respondent, deadline} => write!(
                 f,
-                "Cannot enqueue response with callback id {} due to {} : originator => {}, respondent => {}, deadline => {}",
+                "Cannot enqueue response with callback ID {} due to {} : originator => {}, respondent => {}, deadline => {}",
                 callback_id, err_str, originator, respondent, Time::from(*deadline)
             ),
             StateError::BitcoinNonMatchingResponse { callback_id } => {
                 write!(
                     f,
-                    "Bitcoin: Attempted to push a response for callback id {} without an in-flight corresponding request",
+                    "Bitcoin: Attempted to push a response for callback ID {} without an in-flight corresponding request",
                     callback_id
                 )
             }
@@ -460,7 +461,7 @@ impl ReplicatedState {
     }
 
     /// Insert the canister state into the replicated state. If a canister
-    /// already exists for the given canister id, it will be replaced. It is the
+    /// already exists for the given canister ID, it will be replaced. It is the
     /// responsibility of the caller of this function to ensure that any
     /// relevant state associated with the older canister state are properly
     /// cleaned up.
@@ -707,14 +708,17 @@ impl ReplicatedState {
         subnet_available_memory: &mut i64,
     ) -> Result<(), (StateError, RequestOrResponse)> {
         let own_subnet_type = self.metadata.own_subnet_type;
-        let input_queue_type = if msg.sender().get_ref() == self.metadata.own_subnet_id.get_ref()
-            || self.canister_states.contains_key(&msg.sender())
+        let sender = msg.sender();
+        let input_queue_type = if sender.get_ref() == self.metadata.own_subnet_id.get_ref()
+            || self.canister_states.contains_key(&sender)
         {
             InputQueueType::LocalSubnet
         } else {
             InputQueueType::RemoteSubnet
         };
-        match self.canister_state_mut(&msg.receiver()) {
+
+        let receiver = msg.receiver();
+        match self.canister_state_mut(&receiver) {
             Some(receiver_canister) => receiver_canister.push_input(
                 msg,
                 subnet_available_memory,
@@ -723,17 +727,26 @@ impl ReplicatedState {
             ),
             None => {
                 let subnet_id = self.metadata.own_subnet_id.get_ref();
-                if msg.receiver().get_ref() == subnet_id {
-                    // TODO(MR-523) Assert that this is a request; else check for a matching `Callback`.
-                    push_input(
-                        &mut self.subnet_queues,
-                        msg,
-                        subnet_available_memory,
-                        own_subnet_type,
-                        input_queue_type,
-                    )
+                if receiver.get_ref() == subnet_id {
+                    match &msg {
+                        RequestOrResponse::Request(_) => push_input(
+                            &mut self.subnet_queues,
+                            msg,
+                            subnet_available_memory,
+                            own_subnet_type,
+                            input_queue_type,
+                        ),
+
+                        RequestOrResponse::Response(response) => Err((
+                            StateError::non_matching_response(
+                                "Management canister does not accept canister responses",
+                                response,
+                            ),
+                            msg,
+                        )),
+                    }
                 } else {
-                    Err((StateError::CanisterNotFound(msg.receiver()), msg))
+                    Err((StateError::CanisterNotFound(receiver), msg))
                 }
             }
         }
@@ -758,13 +771,17 @@ impl ReplicatedState {
     /// Extracts the next inter-canister or ingress message (round-robin) from
     /// `self.subnet_queues`.
     pub fn pop_subnet_input(&mut self) -> Option<CanisterMessage> {
-        self.subnet_queues.pop_input()
+        self.subnet_queues
+            .pop_input()
+            .map(subnet_input_into_canister_message)
     }
 
     /// Peeks the next inter-canister or ingress message (round-robin) from
     /// `self.subnet_queues`.
     pub fn peek_subnet_input(&mut self) -> Option<CanisterMessage> {
-        self.subnet_queues.peek_input()
+        self.subnet_queues
+            .peek_input()
+            .map(subnet_input_into_canister_message)
     }
 
     /// Skips the next inter-canister or ingress message from `self.subnet_queues`.
@@ -874,7 +891,7 @@ impl ReplicatedState {
         // Because the borrow checker requires us to remove each canister before
         // calling `time_out_messages()` on it and replace it afterwards; and removing
         // and replacing every canister on a large subnet is very costly; we first
-        // filter for the (usually much fewer) canisters with timed requests and only
+        // filter for the (usually much fewer) canisters with timed out requests and only
         // apply the costly remove-call-replace to those.
         let canister_ids_with_expired_deadlines = self
             .canister_states
@@ -882,7 +899,7 @@ impl ReplicatedState {
             .filter(|(_, canister_state)| {
                 canister_state
                     .system_state
-                    .has_expired_deadlines(current_time)
+                    .has_expired_message_deadlines(current_time)
             })
             .map(|(canister_id, _)| *canister_id)
             .collect::<Vec<_>>();
@@ -899,6 +916,45 @@ impl ReplicatedState {
         }
 
         timed_out_messages_count
+    }
+
+    /// Times out all callbacks with expired deadlines (given the state time) that
+    /// have not already been timed out. Returns the number of timed out callbacks
+    /// and any errors that prevented a `DeadlineExpired` response from being
+    /// enqueued (which would signal a bug).
+    ///
+    /// See `CanisterQueues::time_out_callbacks` for further details.
+    pub fn time_out_callbacks(&mut self) -> (usize, Vec<StateError>) {
+        let current_time = CoarseTime::floor(self.metadata.time());
+        // Because the borrow checker requires us to remove each canister before
+        // calling `time_out_callbacks()` on it and replace it afterwards; and removing
+        // and replacing every canister on a large subnet is very costly; we first
+        // filter for the (usually much fewer) canisters with timed out callbacks and
+        // only apply the costly remove-call-replace to those.
+        let canister_ids_with_expired_callbacks = self
+            .canister_states
+            .iter()
+            .filter(|(_, canister_state)| {
+                canister_state
+                    .system_state
+                    .has_expired_callbacks(current_time)
+            })
+            .map(|(canister_id, _)| *canister_id)
+            .collect::<Vec<_>>();
+
+        let mut expired_callback_count = 0;
+        let mut errors = Vec::new();
+        for canister_id in canister_ids_with_expired_callbacks {
+            let mut canister = self.canister_states.remove(&canister_id).unwrap();
+            let (canister_expired_callback_count, canister_errors) = canister
+                .system_state
+                .time_out_callbacks(current_time, &canister_id, &self.canister_states);
+            expired_callback_count += canister_expired_callback_count;
+            errors.extend(canister_errors);
+            self.canister_states.insert(canister_id, canister);
+        }
+
+        (expired_callback_count, errors)
     }
 
     /// Splits the replicated state as part of subnet splitting phase 1, retaining
@@ -1041,6 +1097,24 @@ impl ReplicatedState {
         );
 
         self.update_stream_guaranteed_responses_size_bytes();
+    }
+}
+
+/// Converts a `CanisterInput` popped from a subnet input queue into a
+/// `CanisterMessage`.
+///
+/// As opposed to actual canister queues, subnet input queues should never hold
+/// any kind of response (because the management canister does not make any
+/// outbound calls as itself).
+fn subnet_input_into_canister_message(input: CanisterInput) -> CanisterMessage {
+    match input {
+        CanisterInput::Ingress(ingress) => CanisterMessage::Ingress(ingress),
+        CanisterInput::Request(request) => CanisterMessage::Request(request),
+        CanisterInput::Response(_)
+        | CanisterInput::DeadlineExpired(_)
+        | CanisterInput::ResponseDropped(_) => {
+            unreachable!("Subnet input queues should never hold responses")
+        }
     }
 }
 

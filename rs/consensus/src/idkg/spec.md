@@ -1,52 +1,63 @@
-# Threshold ECDSA signatures
+# Canister Threshold Signatures
 
 ## Goal
 
-We want canisters to be able to hold BTC, ETH, and for them to create
-bitcoin and ethereum transactions. Since those networks use ECDSA, a
-canister must be able to create ECDSA signatures. Since a canister cannot
+We want canisters to be able to hold BTC, ETH, SOL and other tokens, and 
+for them to create transactions on other networks, such as bitcoin, ethereum.
+solana, etc. Since those networks use specific signature schemes, a canister
+must be able to create signatures adhering to these schemes. Since a canister cannot
 hold the secret key itself, the secret key will be shared among the replicas
-of the subnet, and they must be able to collaboratively create ECDSA
-signatures.
+of the subnet, and they must be able to collaboratively create threshold
+signatures. Currently, we support threshold ECDSA and threshold Schnorr.
 
 ## High-level design
 
-Eventually, each subnet may have several threshold ECDSA keys, indexed by a key ID.
-However, this spec currently only applies to a single key, and the current
-implementation only has very partial support for multiple keys. 
-So for now, we will assume just a single key.
-From this key, we will
-derive per-canister keys. A canister can via a system API request an ECDSA
-signature, and this request is stored in the replicated state. Consensus
-will observe these requests and store in blocks which signatures should be
-created.
+Each subnet may have several threshold master keys, indexed by a key ID.
+However, the process for each key individually is largely the same. Therefore 
+for now, we will assume just a single key. From this key, we will derive per-canister keys. 
+
+A canister can via a system API request an ECDSA or Schnorr signature.
+The correpsonding request context is stored in the replicated state. 
+Consensus will observe the new request context and begin working on it as soon as the context is "completed".
+By "completed" we mean that the context was matched to a "pre-signature" and assigned a random nonce. 
+This is done by the DSM, which updates signature request contexts with pre-signatures that were delivered by consensus.
+
+Once the request context contains the pre-signature and the random nonce,
+the IDKG client of consensus will broadcast signature shares for the request. 
+As soon as enough signature shares exist, a blockmaker will combine the signature shares,
+and include the aggregated signature in the block.
+
+The block (batch) containing the aggregated signature is subsequently delivered to execution,
+where the request context is removed and a response to the requesting canister is inducted.
 
 ### Distributed Key Generation & Transcripts
-To create threshold ECDSA signatures we need a *transcript* that gives all
-replicas shares of an ECDSA secret key. However, this is not sufficient: we
-need additional transcripts to share the ephemeral values used in an ECDSA
-signature. The creation of one ECDSA signature requires a transcript that
+To create threshold signatures we need a *transcript* that gives all
+replicas shares of a secret key. However, this is not sufficient: we
+need additional transcripts to share the ephemeral values used in a
+signature. 
+
+The creation of one ECDSA signature requires a transcript that
 shares the ECDSA signing key `x`, and additionally four DKG transcripts,
 with a special structure: we need transcripts `t1`, `t2`, `t3`, `t4`, such
 that `t1` and `t2` share random values `r1` and `r2` respectively, `t3`
 shares the product `r1 * r2`, and `t4` shares `x * r2`.
 
-Such transcripts are created via a 
-*distributed key generation protocol (DKG)*. 
+Similarly, the creation of one Schnorr signature requires a transcript that
+shares the Schnorr signing key `x`, and one additional DKG transcript `t`,
+where `t` shares a random value `r`.
+
+Such transcripts are created via an 
+*interactive distributed key generation protocol (IDKG)*. 
 The DKG for these transcripts must be computationally efficient,
 because we need four transcripts per signature, and we want to be able to
 create many signatures. 
-Because of this,
-we used an interactive DKG for ECDSA
-related things, instead of non-interactive DKG like we do for our threshold
-BLS signatures.
+Because of this, we used an interactive DKG, instead of non-interactive DKG like we do for our threshold BLS signatures.
 
 Consensus orchestrates the creation of these transcripts (here called a `Transcript`),
 which will be stored in blocks.
 Blocks will also contain
 parameter specs (here called a `TranscriptParam`) indicating which transcripts should be created. 
-Such 
-parameter specs come in
+Such parameter specs come in
 different types, because some transcripts should share a random value, while
 others need to share the product of two other transcripts. 
 Since transcripts are fairly large objects, in order to reduce the on-chain storage,
@@ -131,8 +142,8 @@ struct TranscriptId {
 
     source_height: Height  
     // height at which the construction of the transcript was initiated, i.e., the height
-    // at the corresponding transcript param was added to the quadruples_under_construction
-    // field in the ECDSA payload
+    // at the corresponding transcript param was added to the pre_signatures_under_construction
+    // field in the payload
 
 
 }
@@ -148,7 +159,7 @@ the node may choose to
 delay downloading of the artifact.
 If `transcript_id.source_height < h`, the node may choose to purge the artifact, 
 unless the
-`transcript_id` appears in an object contained in the ECDSA 
+`transcript_id` appears in an object contained in the 
 payload of the finalized tip.
 This does not apply when we are doing xnet resharing on the target subnet,
 as the `source_height` field refers to a a height on the source subnet,
@@ -160,6 +171,7 @@ enum Operation<M,U=M> {
 // An explicit parameter U is only used to define the type 
 // TranscriptDependencies below.
     Random,                    // masked
+    RandomUnmasked,            // unmasked
     UnmaskedTimesMasked(U, M), // masked
     ReshareOfMasked(M),        // unmasked
     ReshareOfUnmasked(U),      // unmasked
@@ -171,6 +183,7 @@ fn get_op_type<M,U>(Operation<M,U> op) -> OperationType
 {
     match (op) {
         Random =>                   return Masked;
+        RandomUnmasked =>           return Unmasked;
         UnmaskedTimesMasked(_,_) => return Masked;
         ReshareofMasked(_) =>       return Unmasked;
         ReshsareOfUnmasked(_) =>    return Unmaksed;
@@ -299,6 +312,21 @@ fn build_random_param_ref(
                     TranscriptXBase<TranscriptRef>(
                         TranscriptBase(transcript_id, registry_version, None), 
                         Operation<TranscriptRef>::Random));
+    return (param_ref, uid_generator);
+    
+}
+
+fn build_random_unmaskef_param_ref(
+    uid_generator: UIDGenerator,
+    registry_version: RegistryVersion,
+    height: Height,
+) -> (TranscriptParamRef, UIDGenerator)
+{
+     uid_generator.next_transcript_id(height);
+     param_ref= TranscriptParamRef(
+                    TranscriptXBase<TranscriptRef>(
+                        TranscriptBase(transcript_id, registry_version, None), 
+                        Operation<TranscriptRef>::RandomUnmasked));
     return (param_ref, uid_generator);
     
 }
@@ -844,7 +872,7 @@ fn compute_polynomial_commitment(
 // and the supplied dealings
 ````
 
-#### ECDSA signature shares
+#### Signature shares
 
 ````rust
 struct EcdsaSigShare {
@@ -863,6 +891,22 @@ struct EcdsaSigShare {
     fn key() -> (SigRequestId, NodeId) { return (sig_request_id, signer_id); }
 }
 
+struct SchnorrSigShare {
+
+    sig_request_id: SigRequestId,
+    // ID of the request
+
+    signer_id: NodeId,
+    // node that generated the share
+    
+    // internal share ...
+}
+
+enum SigShare {
+    Ecdsa(EcdsaSigShare),
+    Schnorr(SchnorrSigShare),
+}
+
 struct SigRequestId { 
 
     nonce: Nonce, // typedef'd to [u8; 32]
@@ -871,19 +915,18 @@ struct SigRequestId {
     // In the code this is sometimes called a pseudo_random_id or a random_id.
 
     height: Height, 
-    // height at which the corresponding entry was added to ongoing_signatures 
-    // field in the ECDSA payload
+    // height at which the corresponding signature request was matched with
+    // a pre-signature
 
-    // DIFF: code also contains the corresponding quadruple_id. This is not necessary
-    // but is also not a problem.
+    pre_sig_id: PreSignatureId,
+    // Id of the pre-signature this request was matched with
 
     // NOTE: the height field may be used to manage purging and downloading 
-    // of related artifacts --- namely, ECDSA signature shares ---
-    // each of which contains a sig_request_id.  Let h be the current finalized height of a nodes.
+    // of related artifacts --- namely, signature shares ---
+    // each of which contains a sig_request_id.  Let h be the current certified state height of a nodes.
     // If sig_request_id.height > h + c for some small constant c >= 0, the node may choose to
     // delay downloading of the artifact.
-    // If sig_request_id.height < h, the node may choose to purge the artifact, unless the domain of the
-    // ongoing_signatures field of the ECDSA payload at the finalized tip contains sig_request_id.
+    // If sig_request_id.height < h, the node may choose to purge the artifact, unless the context in certified state still requests this signature
 
 }
 
@@ -891,7 +934,7 @@ struct EcdsaSigInput {
     path: Vec<Vec<u8>>,
     hash: Hash,
     nonce: Nonce,
-    quadruple: Quadruple,
+    quadruple: PreSigQuadruple,
     key: Transcript,
 
     // INVARIANT: all transcripts in quadruple have the same registry_version, 
@@ -904,29 +947,74 @@ struct EcdsaSigInputRef {
     path: Vec<Vec<u8>>,
     hash: Hash,
     nonce: Nonce,
-    quadruple_ref: QuadrupleRef,
+    quadruple_ref: PreSigQuadrupleRef,
     key_ref: TranscriptRef,
 
     fn signers() -> Set<NodeId> { return key.receivers(); }
 }
 
-type QuadrupleId = u64;
-// It is assumed that quadruple IDs are sorted in order of the time the construction of the quadruple
-// was initiated.
+struct SchnorrSigInput {
+    path: Vec<Vec<u8>>,
+    message: Vec<u8>,
+    nonce: Nonce,
+    pre_sig: PreSigTranscript,
+    key: Transcript,
 
-struct QuadrupleRef {
+    // INVARIANT: all transcripts in pre-signature have the same registry_version, 
+    // and hence the same receiver set, as the key
+
+    fn signers() -> Set<NodeId> { return key.receivers(); }
+}
+
+struct SchnorrSigInputRef {
+    path: Vec<Vec<u8>>,
+    message: Vec<u8>,
+    nonce: Nonce,
+    pre_sig_ref: PreSigTranscriptRef,
+    key_ref: TranscriptRef,
+
+    fn signers() -> Set<NodeId> { return key.receivers(); }
+}
+
+enum SigInput {
+    Ecdsa(EcdsaSigInput)
+    Schnorr(SchnorrSigInput)
+}
+
+type PreSignatureId = u64;
+// It is assumed that pre-signature IDs are sorted in order of the time the
+// construction of the pre-signature was initiated.
+
+struct PreSigQuadrupleRef {
     kappa_unmasked_ref: TranscriptRef,
     lambda_ref: TranscriptRef,
     kappa_unmasked_times_lambda_ref: TranscriptRef,
     key_times_lambda_ref: TranscriptRef,
+    key_unmasked_ref: TranscriptRef,
 }
 
 
-struct Quadruple {
+struct PreSigQuadruple {
     kappa_unmasked: Transcript,
     lambda: Transcript,
     kappa_unmasked_times_lambda: Transcript,
     key_times_lambda: Transcript,
+}
+
+struct PreSigTranscriptRef {
+    blinder_unmasked_ref: TranscriptRef,
+    key_unmasked_ref: TranscriptRef,
+}
+
+
+struct PreSigTranscript {
+    blinder_unmasked: Transcript,
+    lambda: Transcript,
+}
+
+enum PreSigRef {
+    Ecdsa(PreSigQuadrupleRef),
+    Schnorr(PreSigTranscriptRef)
 }
 
 // NOTE: to generate a signature share, we only need the secret shares for
@@ -942,51 +1030,51 @@ struct EcdsaSigInputDependencies {
 
 
 ````rust
-fn add_ecdsa_sig_shares_to_validated_pool(
+fn add_sig_shares_to_validated_pool(
     my_node_id: NodeId,
     validated_pool: Pool,
     finalized_chain: Chain,
-) -> Set<EcdsaSigShare>
+) -> Set<SigShare>
 // Returns a set of new self-generated signature shares to add to the validated pool. 
 {
-    requested_sig_inputs:  Map<SigRequestId, EcdsaSigInput>
-        = get_requested_sig_inputs(finalized_chain);
+    requested_sig_inputs:  Map<SigRequestId, SigInput>
+        = get_requested_sig_inputs(certified_state, finalized_tip);
 
     // keep only sig inputs for which my_node_id is among the signers
     S0 = { (sig_request_id, sig_input)  in requested_sig_inputs: my_node_id in sig_input.signers() };
 
     // filter out sig inputs for which a corresponding sig share has already been generated
     S1 = { (sig_request_id, sig_input)  in S0:
-                !(exists share in validated_pool of type EcdsaSigShare: 
+                !(exists share in validated_pool of type SigShare: 
                       share.key() == (sig_request_id, my_node_id)) }
 
     return union over (sig_request_id, sig_input) in S1: 
-               generate_ecdsa_sig_share_or_complaints(sig_request_id, sig_input, my_node_id, validated_pool);
+               generate_sig_share_or_complaints(sig_request_id, sig_input, my_node_id, validated_pool);
 
 }
 
-fn generate_ecdsa_sig_share_or_complaints(
+fn generate_sig_share_or_complaints(
     sig_request_id: SigRequestId,
-    sig_input: EcdsaSigInput,
+    sig_input: SigInput,
     my_node_id: NodeId,
     validated_pool: Pool,
-) -> (Set<EcdsaSigShare>)|(Set<Complaint>)
+) -> (Set<SigShare>)|(Set<Complaint>)
 // Attempt to generate a sig share, which is returned as a singleton set.
 // However, before that happens, we must load the shares of the input transcripts (if any).
 // This may fail and may result in the generation of complaints.
 {
     match (load_input_dependencies(sig_input, my_node_id, validated_pool)) { 
-        Ok(dependencies) => return generate_ecdsa_sig_share(sig_request_id, sig_input, my_node_id, dependencies);
+        Ok(dependencies) => return generate_sig_share(sig_request_id, sig_input, my_node_id, dependencies);
         Err(complaints) => return complaints; 
     }
 }
 
-fn generate_ecdsa_sig_share(
+fn generate_sig_share(
     sig_request_id: SigRequestId, 
-    sig_input: EcdsaSigInput, 
+    sig_input: SigInput, 
     my_node_id: NodeId,  
-    dependencies: EcdsaSigInputDependencies
-) -> Set<EcdsaSigShare>
+    dependencies: SigInputDependencies
+) -> Set<SigShare>
 // Generates the corresponding signature share.
 // May return empty set if crypto layer fails for any reason.
 // Otherwise returns singleton set.
@@ -995,10 +1083,10 @@ fn generate_ecdsa_sig_share(
 }
 
 fn load_input_dependencies(
-    sig_input: EcdsaSigInput,
+    sig_input: SigInput,
     my_node_id: NodeId,
     validated_pool: Pool,
-) -> Result<EcdsaSigInputDependencies,Set<Complaint>>
+) -> Result<SigInputDependencies,Set<Complaint>>
 // Tries to compute the secret shares for the input transcripts.
 // If this fails, a set of complaints is returned.
 // Whenever secret shares are successfully computed, these shares may be cached for future use.
@@ -1014,7 +1102,7 @@ fn move_sig_shares_to_validated_pool(
     unvalidated_pool: Pool,
     validated_pool: Pool,
     finalized_chain: Chain,
-) -> (Set<EcdsaSigShare>, Set<EcdsaSigShare>, Set<EcdsaSigShare>)
+) -> (Set<SigShare>, Set<SigShare>, Set<SigShare>)
 // Returns (V, I, R), where 
 //    V is the set of signature shares to be moved from the unvalidated pool to the validated pool,
 //    I is the set of signature shares to be be removed from the unvalidated pool and processed as HandleInvalid,
@@ -1026,14 +1114,14 @@ fn move_sig_shares_to_validated_pool(
 // of such a signature share from a replica implicates that replica as corrupt. 
 // Signature shares in R are valid except that adding them to the validated pool would invalidate the above invariant.
 {
-    requested_sig_inputs:  Map<SigRequestId, EcdsaSigInput>
-        = get_requested_sig_inputs(finalized_chain);
+    requested_sig_inputs:  Map<SigRequestId, SigInput>
+        = get_requested_sig_inputs(certified_state, finalized_tip);
 
-    validated_shares = { share: share in validated_pool of type EcdsaSigShare };
+    validated_shares = { share: share in validated_pool of type SigShare };
 
     V=I=R={};
-    for (each share in unvalidated_pool of type EcdsaSigShare) {
-        is_valid = validate_ecdsa_sig_share(share, requested_sig_inputs);
+    for (each share in unvalidated_pool of type SigShare) {
+        is_valid = validate_sig_share(share, requested_sig_inputs);
         if (is_valid == Some(false))
             I += {share};  // invalid
         else if (exists share1 in (validated_shares + V): share1.key() == share.key())
@@ -1046,24 +1134,24 @@ fn move_sig_shares_to_validated_pool(
     return (V, I, R);
 }
 
-fn validate_ecdsa_sig_share(
-    share: EcdsaSigShare,
-    requested_sig_inputs: Map<SigRequestId,EcdsaSigInput>,
+fn validate_sig_share(
+    share: SigShare,
+    requested_sig_inputs: Map<SigRequestId,SigInput>,
 ) ->  Option<bool>
 {
     if (exists (sig_request_id, sig_input) in requested_sig_inputs:
              sig_request_id == share.sig_request_id) {
 
         // we can only determine the validity of share if we have a corresponding requested input
-        return validate_ecdsa_sig_share_content(share, sig_input);
+        return validate_sig_share_content(share, sig_input);
     }
 
     return None;
 }
 
-fn validate_ecdsa_sig_share_content(
-    share: EcdsaSigShare,
-    inputs: EcdsaSigInput,
+fn validate_sig_share_content(
+    share: SigShare,
+    inputs: SigInput,
 ) ->  Option<bool>;
 // This does the low-level validation of the (numer, denom) components of share
 // with respect to inputs. 
@@ -1471,10 +1559,14 @@ fn get_active_transcripts(chain: Chain) -> Set<Transcript>
    // TODO
 }
 
-fn get_requested_sig_inputs(chain: Chain) -> Map<SigRequestId,EcdsaSigInput>
+fn get_requested_sig_inputs(certified_state: State, tip: Block) -> Map<SigRequestId,SigInput>
 // gets the input data for all ongoing signatures at the tip of the chain
 {
-   // TODO
+   // Skip sinature requests that haven't been completed yet (not matched
+   // to a pre-signature or no assigned random nonce)
+
+   // Create the Siginputs by getting the matched pre-signature
+   // from the finalized tip
 }
 
 fn get_requested_reshare_params(chain: Chain) -> Map<ReshareRequestId, TranscriptParam>
@@ -1487,9 +1579,8 @@ fn get_requested_reshare_params(chain: Chain) -> Map<ReshareRequestId, Transcrip
 
 ````rust
 type SignatureAgreements = Map<SigRequestId, CompletedSignature>;
-type OngoingSignatures = Map<SigRequestId, EcdsaSigInputRef>;
-type AvailableQuadruples = Map<QuadrupleId, QuadrupleRef>;
-type QuadruplesInCreation = Map<QuadrupleId, QuadrupleInCreation>;
+type AvailablePreSigs = Map<PreSigId, PreSigRef>;
+type PreSigsInCreation = Map<PreSigId, PreSigInCreation>;
 type OngoingReshareRequests = Map<ReshareRequestId,TranscriptParamRef>;
 type ReshareAgreements = Map<ReshareRequestId,CompletedReshareRequest>;
 
@@ -1497,14 +1588,11 @@ struct IDkgPayload {
     signature_agreements: SignatureAgreements,
     // collection of completed signatures
 
-    ongoing_signatures: OngoingSignatures,
-    // signatures that are being constructed
+    available_pre_signatures: AvailablePreSigs,
+    // pre-signatures that are fully constructed
 
-    available_quadruples: AvailableQuadruples,
-    // quadruples that are fully constructed
-
-    quadruples_in_creation: QuadruplesInCreation,
-    // quadruples that are under construction
+    pre_signatures_in_creation: PreSigsInCreation,
+    // pre-signatures that are under construction
 
     uid_generator: UIDGenerator,
     // "next" UID
@@ -1525,8 +1613,9 @@ struct IDkgPayload {
     // transcripts created at this height -- TranscriptRef's point here
 
     // INVARIANT: the function oldest_registry_version_in_use function takes into account
-    // registry versions in ongoing_signatures, current_key_state, next_key_state,
-    // and ongoing_reshare_requests.
+    // registry versions in current_key_state, next_key_state,
+    // and ongoing_reshare_requests and signature requests in certified state, that were 
+    // already matched to available pre-signatures.
     // This ensures that when subnet membership changes, replicas that are leaving will
     // stay around long enough for them to play their assigned roles in the protocol.
 
@@ -1535,7 +1624,7 @@ struct IDkgPayload {
 
 enum CompletedSignature {
     Reported,
-    Unreported(EcdsaSignature), // EcdsaSignature is a Vec<u8>
+    Unreported(Signature), // Signature is a Vec<u8>
 
 // NOTE: the reason for this enum type is to allow signatures to be reported to execution exactly once. 
 // When a signature is freshly constructed, it is added a block as Unreported.
@@ -1547,24 +1636,23 @@ enum CompletedSignature {
 // consensus will not attempt to generate another signature if the signing request persists in the call context.
 }
 
-struct QuadrupleInCreation {
-    kappa_param_ref: Option<TranscriptParamRef>, 
-    kappa_ref: Option<TranscriptRef>,
-
-    lambda_param_ref: Option<TranscriptParamRef>,
-    lambda_ref: Option<TranscriptRef>,
-
-    // DIFF: for kappa_param_ref and lambda_param_ref, code does not use Option. 
-    // We do this to streamline the logic.
-
-    kappa_unmasked_param_ref: Option<TranscriptParamRef>,
+struct PreSigQuadrupleInCreation {
+    kappa_unmasked_param_ref: TranscriptParamRef,
     kappa_unmasked_ref: Option<TranscriptRef>,
+
+    lambda_param_ref: TranscriptParamRef,
+    lambda_ref: Option<TranscriptRef>,
 
     kappa_unmasked_times_lambda_param_ref: Option<TranscriptParamRef>,
     kappa_unmasked_times_lambda_ref: Option<TranscriptRef>,
 
     key_times_lambda_param_ref: Option<TranscriptParamRef>,
     key_times_lambda_ref: Option<TranscriptRef>,
+}
+
+struct PreSigTranscriptInCreation {
+    blinder_unmasked_param_ref: TranscriptParamRef,
+    blinder_unmasked_ref: Option<TranscriptRef>,
 }
 
 
@@ -1603,13 +1691,13 @@ enum NextKeyState {
 struct UIDGenerator {
     my_subnet_id: SubnetId;
     next_unused_transcript_id: u64;
-    next_unused_quadruple_id: u64;
+    next_unused_pre_sig_id: u64;
 
     fn next_transcript_id(height: Height) -> TranscriptId
     {  return TranscriptId(next_unused_transcript_id++, my_subnet_id, height); } 
     // DIFF:  unlike the code, we explicitly pass in the height.
 
-    fn next_quadruple_id() -> QuadrupleId { return QuadrupleId(next_unused_quadruple_id++); }
+    fn next_pre_sig_id() -> PreSigId { return PreSigId(next_unused_pre_sig_id++); }
 }
 
 struct SigningRequestCall {
@@ -1617,15 +1705,22 @@ struct SigningRequestCall {
     // We assume path here is a complete derivation path,
     // including the signer's CanisterId as the first component
 
-    hash: Hash,
-    // This is the hash of the message.
+    payload: HashOrMessage,
+    // This is the hash of the message for Ecdsa or the message itself for Schnorr.
 
-    nonce: Nonce,
+    matched_pre_signature: Option<(Height, PreSigId)>
+    // The request context will be updated (this field set to some value), as
+    // soon as the DSM matches it with a pre-signature delivered by consensus
+
+    nonce: Option<Nonce>,
     // This is a random nonce that should be generated by the RandomTape in
     // such a way that it is unpredictable before such time as the rest of the
     // SigningRequestCall is committed.  This is also used as unique ID to
     // identify the signing request.  In the code this is sometimes called a
     // pseudo_random_id or a random_id.
+    // The DSM assignes the random nonce to the context by using the random tape
+    // of the round immediately subsequent to the round at which this context was
+    // matched to a pre-signature.
 }
 
 
@@ -1646,9 +1741,9 @@ enum CompletedReshareRequest {
 
 
 type TranscriptCache = Set<Transcript>;
-type SignatureCache = Map<SigRequestId, EcdsaSignature>;
+type SignatureCache = Map<SigRequestId, Signature>;
 type ReshareCash = Map<ReshareRequestId, Set<Dealing>>;
-// Used for ecdsa payload validation -- see below
+// Used for payload validation -- see below
 ````
 
 ````rust
@@ -1659,7 +1754,7 @@ fn build_idkg_payload(
     next_registry_version: RegistryVersion,
     validated_pool: Pool,
 ) -> IDkgPayload
-// Builds a new ecdsa payload for a block that extends the block at the tip of notarized_chain.
+// Builds a new payload for a block that extends the block at the tip of notarized_chain.
 // signing_request_calls is obtained from the certified state of the validation context
 // to be used for the new block. 
 // It is assumed that this list orders the calls in the order in which they were made by execution.
@@ -1675,7 +1770,7 @@ fn build_idkg_payload(
 
 fn validate_idkg_payload(
     payload: IDkgPayload,
-    notarized_chain: Chain,
+    finalized_chain: Chain,
     signing_request_calls: List<SigningRequestCall>,
     reshare_request_calls: Map<ReshareRequestId,ReshareRequestCall>,
     next_registry_version: RegistryVersion,
@@ -1694,7 +1789,7 @@ fn validate_idkg_payload(
                           (reshare_request, Unreported(param_ref,dealings)) in payload.reshare_agreeents; };
 
     (computed_payload, test) = 
-        build_idkg_payload_common(notarized_chain, signing_request_calls, reshare_request_calls,
+        build_idkg_payload_common(finalized_chain, signing_request_calls, reshare_request_calls,
                                    next_registry_version, 
                                    None, Some(transcript_cache), Some(signature_cache), Some(reshare_cache));
 
@@ -1722,7 +1817,7 @@ fn build_idkg_payload_common(
     opt_signature_cache: Option<SignatureCache>,   
     opt_reshare_cache: Option<ReshareCache>,
 ) -> (IDkgPayload, Option<bool>)
-// Builds a new ecdsa payload for a block that extends the block at the tip of notarized_chain.
+// Builds a new payload for a block that extends the block at the tip of notarized_chain.
 // signing_requests is obtained from the certified state of the validation context
 // to be used for the new block. 
 // It is assumed that this list orders the calls in the order in which they were made by execution.
@@ -1740,9 +1835,8 @@ fn build_idkg_payload_common(
     parent_height = parent_block.height();
  
     signature_agreements     = parent_payload.signature_agreements;
-    ongoing_signatures       = parent_payload.ongoing_signatures;
-    available_quadruples     = parent_payload.available_quadruples;
-    quadruples_in_creation   = parent_payload.quadruples_in_creation;
+    available_pre_signatures     = parent_payload.available_pre_signatures;
+    pre_signatures_in_creation   = parent_payload.pre_signatures_in_creation;
     uid_generator            = parent_payload.uid_generator;
     current_key_state        = parent_payload.current_key_state;
     next_key_state           = parent_payload.next_key_state;
@@ -1754,22 +1848,21 @@ fn build_idkg_payload_common(
 
     test = None;
 
-    (signature_agreements, ongoing_signatures, test) =
-        update_signature_agreements(signature_agreements, ongoing_signatures, 
-                                    notarized_chain, signing_request_calls, opt_validated_pool, opt_signature_cache);
+    (signature_agreements, test) =
+        update_signature_agreements(signature_agreements, available_pre_signatures, finalized_chain, signing_request_calls, opt_validated_pool, opt_signature_cache);
 
     match (current_key_state) {
         Some(current_key_ref) => {
 
-            (ongoing_signatures, available_quadruples) = 
-                update_ongoing_signatures(signature_agreements, ongoing_signatures, available_quadruples,
-                                          quadruples_in_creation, signing_request_calls, current_key_ref, height);
+            if certified_state_height >= last_summary_height {
+                purge_old_key_pre_signatures(available_pre_signatures, signing_request_calls, current_key_ref);
+            }
 
-            (quadruples_in_creation, uid_generator) = 
-                make_new_quadruples_if_needed(available_quadruples, quadruples_in_creation, uid_generator, current_key_ref.registry_version, height); 
+            (pre_signatures_in_creation, uid_generator) = 
+                make_new_pre_sigs_if_needed(available_pre_signatures, pre_signatures_in_creation, uid_generator, current_key_ref, height); 
 
-            (quadruples_in_creation, available_quadruples, uid_generator, new_transcripts, test) =
-                update_quadruples_in_creation(quadruples_in_creation, available_quadruples, uid_generator,
+            (pre_signatures_in_creation, available_pre_signatures, uid_generator, new_transcripts, test) =
+                update_pre_signatures_in_creation(pre_signatures_in_creation, available_pre_signatures, uid_generator,
                                               current_key_ref, height, opt_validated_pool, opt_transcript_cache, test);
             transcripts += new_transcripts;
 
@@ -1785,7 +1878,7 @@ fn build_idkg_payload_common(
 
     (reshare_agreements, ongoing_reshare_requests, test) =
         update_reshare_agreements(reshare_agreements, ongoing_reshare_requests, 
-                                  notarized_chain, reshare_request_calls, opt_validated_pool, opt_reshare_cache);
+                                  finalized_chain, reshare_request_calls, opt_validated_pool, opt_reshare_cache);
 
     match (current_key_state) {
         Some(current_key_ref) => {
@@ -1800,8 +1893,8 @@ fn build_idkg_payload_common(
     transcripts += new_transcripts;
 
 
-    return (IDkgPayload(signature_agreements, ongoing_signatures, available_quadruples, 
-                        quadruples_in_creation, uid_generator, current_key_state, next_key_state, 
+    return (IDkgPayload(signature_agreements, available_pre_signatures, 
+                        pre_signatures_in_creation, uid_generator, current_key_state, next_key_state, 
                         reshare_agreements, ongoing_reshare_requests, transcripts),
             test);
 
@@ -1813,8 +1906,8 @@ fn build_idkg_payload_common(
 ````rust
 fn update_signature_agreements(
     signature_agreements: SignatureAgreements,
-    ongoing_signatures: OngoingSignatures,
-    notarized_chain: Chain,
+    available_pre_signatures: AvailablePreSignatures,
+    finalized_chain: Chain,
     signing_request_calls: List<SigningRequestCall>,
     opt_validated_pool: Option<Pool>,
     opt_signature_cache: Option<SignatureCache>,
@@ -1830,38 +1923,44 @@ fn update_signature_agreements(
                                  sig_request_id in Domain(signature_agreements) && 
                                  sig_request_id.nonce in signing_request_nonces }
 
-    // second, try to construct signatures for requests in ongoing_signatures
-    (completed_sigs, test) = 
-      = get_completed_signatures(notarized_chain, opt_validated_pool, opt_signature_cache, test); 
-
-    // third, move any newly constructed sigs from ongoing_signatures to signature_agreements 
-    for (each sig_request_id in Domain(completed_sigs)) {
-        signature_agreements[sig_request_id] = Unreported(completed_sig[sig_request_id]);
-        Delete(ongoing_signatures[sig_request_id]);
+    for (each (sig_request_id, sig_input) in get_requested_sig_inputs(certified_state, finalized_chain.tip() )) {
+        // reject requests that
+        // 1. request an invalid key
+        // 2. have expired
+        // 3. were matched to non-existant pre-signature (i.e. after recovery)
     }
 
-    return (signature_agreements, ongoing_signatures, test);
+    // second, try to construct signatures for open requests
+    (completed_sigs, test) = 
+      = get_completed_signatures(finalized_chain, opt_validated_pool, opt_signature_cache, test); 
+
+    // third, move any newly constructed sigs to signature_agreements 
+    for (each sig_request_id in Domain(completed_sigs)) {
+        signature_agreements[sig_request_id] = Unreported(completed_sig[sig_request_id]);
+    }
+
+    return (signature_agreements, , test);
 }
 
 fn get_completed_signatures(
-    notarized_chain: Chain, 
+    finalized_chain: Chain, 
     opt_validated_pool: Option<Pool>, 
     opt_signature_cache: Option<SignatureCache>,
     test: Option<bool>,
-) -> (Map<SigRequestId, EcdsaSignature>, Option<bool>)
+) -> (Map<SigRequestId, Signature>, Option<bool>)
 {
-    // Gather all requested signatures from notarized_chain.
-    // This gathers the data for all ongoing signatures at the tip of notarized_chain,
+    // Gather all requested signatures from finalized_chain.
+    // This gathers the data for all ongoing signatures at the tip of finalized_chain,
     // which is the same as the ongoing_signatures value in the caller (update_signature_agreements).
-    requested_sig_inputs:  Map<SigRequestId, EcdsaSigInput>
-        = get_requested_sig_inputs(notarized_chain);
+    requested_sig_inputs:  Map<SigRequestId, SigInput>
+        = get_requested_sig_inputs(finalized_chain);
 
-    sig_map: Map<SigRequestId, EcdsaSignature> = { };
+    sig_map: Map<SigRequestId, Signature> = { };
     for (each (sig_request_id, sig_input) in requested_sig_inputs) {
         match (opt_signature_cache) {
             None => { // block builder path
-                shares = { share in opt_validated_pool.unwrap() of type EcdsaSigShare: share.sig_request_id == sig_request_id };
-                match (combine_ecdsa_sig_shares(sig_input, shares)) {
+                shares = { share in opt_validated_pool.unwrap() of type SigShare: share.sig_request_id == sig_request_id };
+                match (combine_sig_shares(sig_input, shares)) {
                     Some(sig) => sig_map[sig_request_id] = sig;
                     None => { }
                 }
@@ -1869,7 +1968,7 @@ fn get_completed_signatures(
             Some(signature_cache) => { // block validator path
                 if (exists sig_request_id in Domain(signature_cache)) {
                     sig = signature_cache[sig_request_id];
-                    match (validate_ecdsa_sig(sig_input, sig)) {
+                    match (validate_sig(sig_input, sig)) {
                         Some(true) => sig_map[sig_request_id] = sig;
                         Some(false) => { test = Some(true); }
                         None => { if (test == None) test = Some(false); }
@@ -1882,226 +1981,164 @@ fn get_completed_signatures(
     return (sig_map, test);
 }
 
-fn combine_ecdsa_sig_shares(
-    sig_input: EcdsaSigInput, 
-    shares: Set<EcdsaSigShare>,
-) -> Option<EcdsaSignature>;
+fn combine_sig_shares(
+    sig_input: SigInput, 
+    shares: Set<SigShare>,
+) -> Option<Signature>;
 // Crypto-layer function to combine shares and compute a signature.
 
-fn validate_ecdsa_sig(
-    sig_input: EcdsaSigInput, 
-    sig: EcdsaSignature,
+fn validate_sig(
+    sig_input: SigInput, 
+    sig: Signature,
 ) -> Option<bool>;
 // Crypto-layer function to validate a signature.
 ````
 
-
 ````rust
-type RequestPairing = (SigningRequestCall, QuadrupleId);
-
-
-fn update_ongoing_signatures(
-    signature_agreements: SignatureAgreements,
-    ongoing_signatures: OngoingSignatures,
-    available_quadruples: AvailableQuadruples,
-    quadruples_in_creation: QuadruplesInCreation,
+// Delete all unmatched, available pre-signatures that 
+// reference a non-existant key transcript (i.e. because it was rotated)
+fn purge_old_key_pre_signatures(
+    available_pre_signatures: AvailablePreSignatures,
     signing_request_calls: List<SigningRequestCall>,
-    current_key_ref: TranscriptRef,
-    height: Height,
-) -> (OngoingSignatures, AvailableQuadruples)
-{
-    request_pairings: List<RequestPairing> =
-        make_request_pairings(signature_agreements, ongoing_signatures, available_quadruples, 
-                              quadruples_in_creation, signing_request_calls);
-
-    for (each (call,quadruple_id) in request_pairings) {
-         if (quadruple_id in Domain(available_quadruples)) {
-             sig_request_id = SigRequestId(call.nonce, height);
-             ongoing_signatures[sig_request_id] = 
-                 EcdsaSigInputRef(call.path, call.hash, call.nonce, 
-                                  available_quadruples[quadruple_id], current_key_ref);
-             Delete(available_quadruples[quadruple_id]);
-         }
+    key_transcript: KeyTranscript,
+) {
+    for (pre_sig_id, pre_sig) in available_pre_signatures {
+        if not pre_sig_id matched in signing_request_calls
+            && pre_sig.key_transcript () != key_transcript {
+            
+            Delete(available_pre_signatures[pre_sig_id]);
+        }
     }
 }
-
-fn make_request_pairings(
-    signature_agreements: SignatureAgreements,
-    ongoing_signatures: OngoingSignatures,
-    available_quadruples: AvailableQuadruples, 
-    quadruples_in_creation: QuadruplesInCreation, 
-    signing_request_calls: List<SigningRequestCall>,
-) -> List<RequestPairing>
-// The logic enforces the requirements set forth in Section A.5 of the ECDSA
-// design doc. Suppose we have signing request calls SRC_1, SRC_2, ...  and
-// quadruples Q_1, Q_2, ... .  The SRC_i's are ordered in the order the signing
-// requests were made by execution.  The Q_i's are ordered in the order
-// quadruple construction is initiated.  As in the design doc, we want to pair
-// SRC_i with Q_i.
-//
-// For example, say in one round we have signing request calls SRC_1, SRC_2,
-// SRC_3, SRC_4, none of which are as yet ongoing, and quadruples Q_1, Q_2, Q3,
-// which are either in construction or available at this time.  So the domain
-// of the return value of the function would be ((SRC_1,Q_1), (SRC_2,Q_2),
-// (SRC_3,Q_3)).  In this same round, the function update_ongoing_signatures
-// could move, say, (SRC_2,Q_2) to the ongoing signatures state if Q2 were
-// currently available.  In the next round, we have unpaired signing request
-// calls SRC_1, SRC_3, SRC_4 in the signing requests contexts, with SRC_2 now
-// removed because it is in the ongoing signatures state.  We would also have
-// unpaired quadruples Q_1, Q_3, Q_4.  The domain of the return value of the
-// function would be ((SRC_1,Q_1), (SRC_3,Q_3)).  In this same round, we could
-// move, say, (SRC_1,Q_1) to the ongoing signatures state if Q1 were available.
-//
-// The above logic ensures that the pairing of SRC_i with Q_i is deterministic,
-// and cannot be manipulated by the adversary, as discussed in Section A.5 of
-// the ECDSA design doc. However, as discussed in Section A.5.1 of the ECDSA
-// design doc, it is allowed to essentially dispose of Q_i and replace it with
-// a fresh quadruple Q'_i.  In the implementation, this may happen at a summary
-// block.  The logic in create_summary_payload will ensure that all quadruples
-// that are either in creation or available or disposed of (currently, if a key
-// reshare occurs) or retained (currently, if a key reshare does not occur).
-// This logic of either either disposing of or retaining all quadruples that
-// are either in creation or available guarantees that the invariants in
-// Section A.5.1 of the ECDSA design doc are maintained.  However, the
-// following logic would also be acceptable: if we dispose of a quadruple Q_i
-// that is in creation or available, then we must dispose of all quadruples Q_j
-// for j > i that are in creation or available.  This logic may be useful if
-// and when we implement pro-active resharing of the signing key without subnet
-// membership changes.  In this case, in create_summary_payload, if Q_i is the
-// first quadruple that is in creation, we can retain Q_1, ..., Q_{i-1} and
-// dispose of all quadruples Q_j for j >= i that are in creation or available.
-// This logic will allow us to continue using at least some (and typically
-// most) of the quadruples that were already available when we pro-actively
-// reshare the signing key.
-{
-    paired_nonces = { sig_request_id.nonce: sig_request_id in 
-                                             Union(Domain(signature_agreements), Domain(ongoing_signatures)) };
-
-    unpaired_signing_request_calls: List<SigningRequestCall> = 
-        (call in signing_request_calls: !(call.nonce in paired_nonces));
-
-    unpaired_quadruple_ids = List<QuadrupleId>
-        sort(Union(Domain(available_quadruples), Domain(quadruples_in_creation)));
-    // DIFF: the code performs an extra set difference to remove quadruples that 
-    // are in the ongoing signatures or signature agreement state.
-    // However, these sets should always be disjoint, so there is no need for this AFAICT.
-
-    return pair_up_corresponding_elts(unpaired_signing_request_calls, unpaired_quadruple_ids);
-}
-
-fn pair_up_corresponding_elts<S,T>(A: List<S>, B: List<T>) -> List<(S,T)>;
-// If A = (a_1, ..., a_m) and B = (b_1, ..., b_n), return ((a_1,b_1), ..., (a_k,b_k)), where k = min(m,n).  
 ````
 
+
 ````rust
-fn make_new_quadruples_if_needed(
-    available_quadruples: AvailableQuadruples,
-    quadruples_in_creation: QuadruplesInCreation,
+fn make_new_pre_sigs_if_needed(
+    available_pre_signatures: AvailablePreSignatures,
+    pre_signatures_in_creation: PreSignaturesInCreation,
     uid_generator: UIDGenerator,
     registry_version: RegistryVersion,
     height: Height,
-) -> (QuadruplesInCreation, UIDGenerator)
-// initiates construction of new quadruples, so that the total number of "extant" quadruples
-// (i.e., those available and in creation) is equal to MAX_EXTANT_QUADRUPLES. 
+    key_transcript: KeyTranscript,
+) -> (PreSignaturesInCreation, UIDGenerator)
+// initiates construction of new pre-signatures, so that the total number of "extant" pre-signatures
+// (i.e., those available and in creation) is equal to MAX_EXTANT_PRESIGS. 
 {
-    num_extant_quadruples = Card(Domain(available_quadruples)) + Card(Domain(quadruples_in_creation));
-    // FIXME: maybe we should add in Card(Domain(ongoing_signatures)) to bound the total number 
-    // of "active" transcripts
+    num_extant_pre_signatures = Card(Domain(available_pre_signatures)) + Card(Domain(pre_signatures_in_creation));
 
-    if (num_extant_quadruples < MAX_EXTANT_QUADRUPLES) {
-        for (i in [1..MAX_EXTANT_QUADRUPLES-num_extant_quadruples]) {
-            (quadruple_id, quadruple, uid_generator) = make_new_quadruple(uid_generator, registry_version, height);
-            quadruples_in_creation += { (quadruple_id, quadruple) } ;
+    if (num_extant_pre_signatures < MAX_EXTANT_PRESIGS) {
+        for (i in [1..MAX_EXTANT_PRESIGS-num_extant_pre_signatures]) {
+            (pre_sig_id, pre_signature, uid_generator) = if key_transcript of type ECDSA {
+                make_new_ecdsa_quadruple(uid_generator, registry_version, height)
+            } else if key_transcript of type Schnorr {
+                make_new_schnorr_pre_sig(uid_generator, registry_version, height)
+            }
+            pre_signatures_in_creation += { (pre_sig_id, pre_signature) } ;
         }
     }
 
-    return (quadruples_in_creation, uid_generator);
+    return (pre_signatures_in_creation, uid_generator);
 }
 
-fn make_new_quadruple(
+fn make_new_ecdsa_quadruple(
     uid_generator: UIDGenerator,
     registry_version,
     height: Height,
-) -> (QuadrupleId, QuadrupleInCreation, UIDGenerator)
+) -> (PreSigId, PreSignatureInCreation, UIDGenerator)
 
 {
-    (kappa_param_ref, uid_generator) = build_random_param_ref(uid_generator, registry_version, height);
+    (kappa_param_ref, uid_generator) = build_random_unmasked_param_ref(uid_generator, registry_version, height);
     (lambda_param_ref, uid_generator) = build_random_param_ref(uid_generator, registry_version, height);
 
-    quadruple = QuadrupleInCreation(Some(kappa_param_ref), None, Some(lambda_param_ref), None, 
-                                    None, None, None, None, None, None);
+    quadruple = QuadrupleInCreation(kappa_param_ref, None, lambda_param_ref, None, None, None, None, None);
     quadruple_id = uid_generator.next_quadruple_id();
 
     return (quadruple_id, quadruple, uid_generator); 
 }
+
+fn make_new_schnorr_pre_sig(
+    uid_generator: UIDGenerator,
+    registry_version,
+    height: Height,
+) -> (PreSigId, PreSignatureInCreation, UIDGenerator)
+
+{
+    (blinder_param_ref, uid_generator) = build_random_unmasked param_ref(uid_generator, registry_version, height);
+
+    pre_sig = TranscriptInCreation(blinder_param_ref, None);
+    pre_sig_id = uid_generator.next_pre_sig_id();
+
+    return (pre_sig_id, pre_sig, uid_generator); 
+}
 ````
 
 ````rust
-fn update_quadruples_in_creation(
-    quadruples_in_creation: QuadruplesInCreation,
-    available_quadruples: AvailableQuadruples,
+fn update_pre_signatures_in_creation(
+    pre_signatures_in_creation: PreSignaturesInCreation,
+    available_pre_signatures: AvailablePreSignatures,
     uid_generator: UIDGenerator,
     current_key_ref: TranscriptRef,
     height: Height,
     opt_validated_pool: Option<Pool>,
     opt_transcript_cache: Option<TranscriptCache>,
     test: Option<bool>,
-) -> (QuadruplesInCreation, AvailableQuadruples, UIDGenerator, Set<Transcript>, Option<bool>)
-// Returns updated versions of quadruples_in_creation, available_quadruples, and uid_generator,
+) -> (PreSignaturesInCreation, AvailablePreSignatures, UIDGenerator, Set<Transcript>, Option<bool>)
+// Returns updated versions of pre_signatures_in_creation, available_pre_signatures, and uid_generator,
 // along with any newly created transcripts.
 {
     registry_version = current_key_ref.registry_version;
 
     new_transcripts: Set<Transcript> = { };
 
-    for (each quadruple_id in Domain(quadruples_in_creation)) {
-
-        quadruple = quadruples_in_creation[quadruple_id];
-
-        // ******** update transcripts
-
-        (quadruple.kappa_ref, new_transcripts, test) =  
-            update_transcript(quadruple.kappa_param_ref, quadruple.kappa_ref,
-                              height, new_transcripts, opt_validated_pool, opt_transcript_cache, test);
-
-        (quadruple.lambda_ref, new_transcripts, test) =  
-            update_transcript(quadruple.lambda_param_ref, quadruple.lambda_ref,
-                              height, new_transcripts, opt_validated_pool, opt_transcript_cache, test);
-
-        (quadruple.kappa_unmasked_ref, new_transcripts, test) =  
-            update_transcript(quadruple.kappa_unmasked_param_ref, quadruple.kappa_unmasked_ref,
-                              height, new_transcripts, opt_validated_pool, opt_transcript_cache, test);
-
-        (quadruple.kappa_unmasked_times_lambda_ref, new_transcripts, test) =  
-            update_transcript(quadruple.kappa_unmasked_times_lambda_param_ref, quadruple.kappa_unmasked_times_lambda_ref,
-                              height, new_transcripts, opt_validated_pool, opt_transcript_cache, test);
-
-        (quadruple.key_times_lambda_ref, new_transcripts, test) =  
-            update_transcript(quadruple.key_times_lambda_param_ref, quadruple.key_times_lambda_ref,
-                              height, new_transcripts, opt_validated_pool, opt_transcript_cache, test);
-
-        // ******** update params
-
-        // **** update quadruple.kappa_unmasked_param_ref 
-        match (quadruple.kappa_unmasked_param_ref) {
-            None => {
-                match (quadruple.kappa_ref) {
-                    Some(kappa_ref) => {
-                        (kappa_unmasked_param_ref, uid_generator) =  
-                            build_reshare_of_masked_param_ref(uid_generator, registry_version, height, kappa_ref); 
-                        quadruple.kappa_unmasked_param_ref = Some(kappa_unmasked_param_ref);
-                    }
-                    None => { }
-                }
-            }
-            Some(_) => { }
+    for (each pre_sig_id in Domain(pre_signatures_in_creation)) {
+        if current_key_ref of type ECDSA {
+            update_ecdsa_pre_sig_in_creation(pre_sig_id, ...)
+        } else if current_key_ref of type Schnorr {
+            update_schnorr_pre_sig_in_creation(pre_sig_id, ...)
         }
+    }
 
+    return (pre_signatures_in_creation, available_pre_signatures, uid_generator, new_transcripts, test);
+}
 
-        // **** update quadruple.kappa_unmasked_times_lambda_param_ref
-        match (quadruple.kappa_unmasked_times_lambda_param_ref) {
-            None => {
-                match (quadruple.kappa_unmasked_ref) {
+fn update_ecdsa_pre_sig_in_creation(
+    pre_sig_id: PreSigId,
+    pre_signatures_in_creation: PreSignaturesInCreation,
+    available_pre_signatures: AvailablePreSignatures,
+    uid_generator: UIDGenerator,
+    current_key_ref: TranscriptRef,
+    height: Height,
+    opt_validated_pool: Option<Pool>,
+    opt_transcript_cache: Option<TranscriptCache>,
+    test: Option<bool>,
+) {
+    quadruple = pre_signatures_in_creation[pre_sig_id];
+
+    // ******** update transcripts
+
+    (quadruple.lambda_ref, new_transcripts, test) =  
+        update_transcript(quadruple.lambda_param_ref, quadruple.lambda_ref,
+                          height, new_transcripts, opt_validated_pool, opt_transcript_cache, test);
+
+    (quadruple.kappa_unmasked_ref, new_transcripts, test) =  
+        update_transcript(quadruple.kappa_unmasked_param_ref, quadruple.kappa_unmasked_ref,
+                          height, new_transcripts, opt_validated_pool, opt_transcript_cache, test);
+
+    (quadruple.kappa_unmasked_times_lambda_ref, new_transcripts, test) =  
+        update_transcript(quadruple.kappa_unmasked_times_lambda_param_ref, quadruple.kappa_unmasked_times_lambda_ref,
+                          height, new_transcripts, opt_validated_pool, opt_transcript_cache, test);
+
+    (quadruple.key_times_lambda_ref, new_transcripts, test) =  
+        update_transcript(quadruple.key_times_lambda_param_ref, quadruple.key_times_lambda_ref,
+                          height, new_transcripts, opt_validated_pool, opt_transcript_cache, test);
+
+    // ******** update params
+
+    // **** update quadruple.kappa_unmasked_times_lambda_param_ref
+    match (quadruple.kappa_unmasked_times_lambda_param_ref) {
+        None => {
+            match (quadruple.kappa_unmasked_ref) {
                     Some(kappa_unmasked_ref) => {
                         (kappa_unmasked_times_lambda_param_ref, uid_generator) = 
                             build_unmasked_times_masked_param_ref(uid_generator, registry_version, height, kappa_unmasked_ref, lambda_ref);
@@ -2110,42 +2147,72 @@ fn update_quadruples_in_creation(
                     None => { }
                 }
             }
-            Some(_) => { }
-        }
-
-        // **** update quadruple.key_times_lambda_param_ref
-        match (quadruple.key_times_lambda_param_ref)
-            None => {
-                match (quadruple.lambda_ref) {
-                    Some(lambda_ref) => {
-                        (key_times_lambda_param_ref, uid_generator) = 
-                            build_unmasked_times_masked_param_ref(uid_generator, registry_version, height, current_key_ref, lambda_ref);
-                        quadruple.key_times_lambda_param_ref = Some(key_times_lambda_param_ref);
-                    }
-                    None => { }
-                }
-            }
-            Some(_) => { }
-        }
-
-
-        quadruples_in_creation[quadruple_id] = quadruple;
-
-        // ******** now see if this quadruple is complete, and if so, move to available_quadruples
-        match ((quadruple.kappa_unmasked_ref, quadruple.lambda_ref, 
-               quadruple.kappa_unmasked_times_lambda_ref, quadruple.key_times_lambda_ref)) {
-
-            (Some(kappa_unmasked_ref), Some(lambda_ref), Some(kappa_unmasked_times_lambda_ref), Some(key_times_lambda_ref)) => {
-
-                completed_quadruple = QuadrupleRef(kappa_unmasked_ref, lambda_ref, kappa_unmasked_times_lambda_ref, key_times_lambda_ref);
-                available_quadruples[quadruple_id] = completed_quadruple;
-                Delete(quadruples_in_creation[quadruple_id]);
-            }
-            _ => { }
-        }
+        Some(_) => { }
     }
 
-    return (quadruples_in_creation, available_quadruples, uid_generator, new_transcripts, test);
+    // **** update quadruple.key_times_lambda_param_ref
+    match (quadruple.key_times_lambda_param_ref) {
+        None => {
+            match (quadruple.lambda_ref) {
+                Some(lambda_ref) => {
+                    (key_times_lambda_param_ref, uid_generator) = 
+                        build_unmasked_times_masked_param_ref(uid_generator, registry_version, height, current_key_ref, lambda_ref);
+                    quadruple.key_times_lambda_param_ref = Some(key_times_lambda_param_ref);
+                }
+                None => { }
+            }
+        }
+        Some(_) => { }
+    }
+
+
+    pre_signatures_in_creation[pre_sig_id] = quadruple;
+
+    // ******** now see if this quadruple is complete, and if so, move to available_pre_signatures
+    match ((quadruple.kappa_unmasked_ref, quadruple.lambda_ref, 
+           quadruple.kappa_unmasked_times_lambda_ref, quadruple.key_times_lambda_ref)) {
+
+        (Some(kappa_unmasked_ref), Some(lambda_ref), Some(kappa_unmasked_times_lambda_ref), Some(key_times_lambda_ref)) => {
+
+            completed_quadruple = QuadrupleRef(kappa_unmasked_ref, lambda_ref, kappa_unmasked_times_lambda_ref, key_times_lambda_ref);
+            available_pre_signatures[pre_sig_id] = completed_quadruple;
+            Delete(pre_signatures_in_creation[pre_sig_id]);
+        }
+        _ => { }
+    }
+}
+
+fn update_schnorr_pre_sig_in_creation()(
+    pre_signatures_in_creation: PreSignaturesInCreation,
+    available_pre_signatures: AvailablePreSignatures,
+    uid_generator: UIDGenerator,
+    current_key_ref: TranscriptRef,
+    height: Height,
+    opt_validated_pool: Option<Pool>,
+    opt_transcript_cache: Option<TranscriptCache>,
+    test: Option<bool>,
+) {
+    pre_sig = pre_signatures_in_creation[pre_sig_id];
+
+    // ******** update transcripts
+
+    (pre_sig.blinder_ref, new_transcripts, test) =  
+        update_transcript(pre_sig.blinder_param_ref, pre_sig.blinder_ref,
+                          height, new_transcripts, opt_validated_pool, opt_transcript_cache, test);
+
+
+    pre_signatures_in_creation[pre_sig_id] = pre_sig;
+
+    // ******** now see if this pre_sig is complete, and if so, move to available_pre_signatures
+    match (pre_sig.blinder_ref) {
+
+        Some(blinder_unmasked_ref) => {
+            completed_pre_sig = SchnorrPreSigRef(blinder_unmasked_ref);
+            available_pre_signatures[pre_sig_id] = completed_pre_sig;
+            Delete(pre_signatures_in_creation[pre_sig_id]);
+        }
+        _ => { }
+    }
 }
 
 fn update_transcript(
@@ -2339,7 +2406,7 @@ fn update_next_key_state(
 fn update_reshare_agreements(
     reshare_agreements: ReshareAgreements,
     ongoing_reshare_requests: OngoingReshareRequests,
-    notarized_chain: Chain,
+    finalized_chain: Chain,
     reshare_request_calls: Map<ReshareRequestId,ReshareRequestCall>,
     opt_validated_pool: Option<Pool>,
     opt_reshare_cache: Option<ReshareCache>,
@@ -2356,7 +2423,7 @@ fn update_reshare_agreements(
 
     // second, try to satisfy requests in ongoing_reshare_requests
     (completed_reshare_requests, test) = 
-      = get_completed_reshare_requests(notarized_chain, opt_validated_pool, opt_reshare_cache, test); 
+      = get_completed_reshare_requests(finalized_chain, opt_validated_pool, opt_reshare_cache, test); 
 
     // third, move any newly satisfied requests from ongoing_reshare_requests to reshare_agreements 
     for (each reshare_request_id in Domain(completed_reshare_requests)) {
@@ -2369,7 +2436,7 @@ fn update_reshare_agreements(
 }
 
 fn get_completed_reshare_requests(
-    notarized_chain: Chain, 
+    finalized_chain: Chain, 
     opt_validated_pool: Option<Pool>, 
     opt_reshare_cache: Option<ReshareCache>,
     test: Option<bool>,
@@ -2380,7 +2447,7 @@ fn get_completed_reshare_requests(
     // NOTE: on the block builder path, we only need the corresponding transcript_id's,
     // while on the block validator path, we need the full transcript to carry out dealing validation
     requested_reshare_params:  Map<ReshareRequestId, TranscriptParam>
-        = get_requested_reshare_params(notarized_chain);
+        = get_requested_reshare_params(finalized_chain);
 
     reshare_map: Map<ReshareRequestId, Set<Dealing>> = { };
     for (each (reshare_request_id, transcript_param) in requested_reshare_params) {
@@ -2463,7 +2530,7 @@ fn build_idkg_summary_payload(
     registry_version: RegistryVersion,
     next_registry_version: RegistryVersion,
 ) -> IDkgPayload
-// Builds a new ecdsa summary payload for a block that extends the block at the tip of notarized_chain.
+// Builds a new summary payload for a block that extends the block at the tip of notarized_chain.
 // registry_version is the registry version to be used in this interval.
 // next_registry_version is the registry version to be used in the next interval.
 {
@@ -2472,9 +2539,8 @@ fn build_idkg_summary_payload(
     parent_height = parent_block.height();
 
     signature_agreements     = parent_payload.signature_agreements;
-    ongoing_signatures       = parent_payload.ongoing_signatures;
-    available_quadruples     = parent_payload.available_quadruples;
-    quadruples_in_creation   = parent_payload.quadruples_in_creation;
+    available_pre_signatures     = parent_payload.available_pre_signatures;
+    pre_signatures_in_creation   = parent_payload.pre_signatures_in_creation;
     uid_generator            = parent_payload.uid_generator;
     current_key_state        = parent_payload.current_key_state;
     next_key_state           = parent_payload.next_key_state;
@@ -2511,16 +2577,20 @@ fn build_idkg_summary_payload(
         }
     }
 
-    // *** update next_key_state, as well as available_quadruples, quadruples_in_creation,
+    // *** update next_key_state, as well as available_pre_signatures, pre_signatures_in_creation,
     // and ongoing_reshare_requests, if necessary
     match (next_key_state) {
         Created(_) => {
-            // we have created a new key, so we toss out quadruples and
+            // we have created a new key, so we toss out pre-signatures in creation and
             // ongoing reshare requests associated with the old key
-            available_quadruples = { };
-            quadruples_in_creation = { };
+            pre_signatures_in_creation = { };
             ongoing_reshare_requests = { };
             next_key_state = Ibid; // default construction path is path #3
+
+            // Note that we don't purge available pre-signatures at this point,
+            // as we cannot be sure that they weren't already matched to new
+            // signature requests at the latest certified state height (which
+            // is lagging behind the finalized height).
         }
         _ => { } // default is to continue whatever construction path were on
     }
@@ -2543,11 +2613,11 @@ fn build_idkg_summary_payload(
     }
 
     // *** update active transcript refs
-    result = IDkgPayload(signature_agreements, ongoing_signatures, available_quadruples, 
-                          quadruples_in_creation, uid_generator, current_key_state, next_key_state, 
+    result = IDkgPayload(signature_agreements, available_pre_signatures, 
+                          pre_signatures_in_creation, uid_generator, current_key_state, next_key_state, 
                           reshare_agreements, ongoing_reshare_requests, transcripts);
 
-    updated_result = update_transcript_refs(result, notarized_chain);
+    updated_result = update_transcript_refs(result, finalized_chain);
 
     return updated_result;
 }
@@ -2583,11 +2653,11 @@ fn update_transcript_refs(
 ````
 
 ````rust
-fn build_ecdsa_bootstrap_summary_payload(
+fn build_bootstrap_summary_payload(
     my_subnet_id: SubnetId,
     opt_xnet_reshared_param_ref: Option<TranscriptParamRef>,
 ) -> IDkgPayload
-// Builds a new ecdsa summary payload for a genesis block.
+// Builds a new summary payload for a genesis block.
 //
 // If this subnet is being initialized an xnet resharing, the optional
 // TranscriptParamRef for that resharing is passed in here;  
@@ -2598,9 +2668,8 @@ fn build_ecdsa_bootstrap_summary_payload(
 // a TranscriptParam. 
 {
     signature_agreements     = { };
-    ongoing_signatures       = { };
-    available_quadruples     = { };
-    quadruples_in_creation   = { };
+    available_pre_signatures     = { };
+    pre_signatures_in_creation   = { };
     uid_generator            = UIDGenerator(my_subnet_id, 0, 0);
     current_key_state        = None;
     reshare_agreements       = { };
@@ -2612,8 +2681,8 @@ fn build_ecdsa_bootstrap_summary_payload(
         Some(xnet_reshared_param_ref) =>  next_key_state = NextKeyState::MakingReshared(xnet_reshared_param_ref);
     }
 
-    return IDkgPayload(signature_agreements, ongoing_signatures, available_quadruples, 
-                        quadruples_in_creation, uid_generator, current_key_state, next_key_state, 
+    return IDkgPayload(signature_agreements, available_pre_signatures, 
+                        pre_signatures_in_creation, uid_generator, current_key_state, next_key_state, 
                         reshare_agreements, ongoing_reshare_requests, transcripts);
 }
 ````

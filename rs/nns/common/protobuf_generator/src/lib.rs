@@ -30,13 +30,12 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     // decorating needs.
     config.type_attribute(
         "ic_nns_common.pb.v1.NeuronId",
-        "#[derive(PartialOrd, Ord, Copy, std::hash::Hash)]",
+        "#[derive(PartialOrd, Ord, std::hash::Hash)]",
     );
     config.type_attribute(
         "ic_nns_common.pb.v1.PrincipalId",
         "#[derive(PartialOrd, Ord, std::hash::Hash)]",
     );
-    config.type_attribute("ic_nns_common.pb.v1.ProposalId", "#[derive(Copy)]");
 
     std::fs::create_dir_all(out).expect("failed to create output directory");
     config.out_dir(out);

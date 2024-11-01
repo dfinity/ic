@@ -121,9 +121,8 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> InMemoryPoolSection<
 
     /// Get a consensus message by its hash
     pub fn remove_by_hash(&mut self, hash: &CryptoHash) -> Option<T> {
-        self.artifacts.remove(hash).map(|artifact| {
+        self.artifacts.remove(hash).inspect(|artifact| {
             self.indexes.remove(artifact.as_ref(), hash);
-            artifact
         })
     }
 
@@ -180,7 +179,6 @@ where
 
         // returning the iterator directly isn't trusted due to the use of `self` in the
         // closure
-        #[allow(clippy::needless_collect)]
         let vec: Vec<T> = heights.flat_map(|h| self.get_by_height(*h)).collect();
         Box::new(vec.into_iter())
     }

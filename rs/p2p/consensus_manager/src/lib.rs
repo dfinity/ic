@@ -7,7 +7,7 @@ use crate::{
 };
 use axum::Router;
 use ic_base_types::NodeId;
-use ic_interfaces::p2p::consensus::{ArtifactAssembler, ArtifactMutation};
+use ic_interfaces::p2p::consensus::{ArtifactAssembler, ArtifactTransmit};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_quic_transport::{ConnId, Shutdown, SubnetTopology, Transport};
@@ -54,9 +54,10 @@ impl ConsensusManagerBuilder {
         D: ArtifactAssembler<Artifact, WireArtifact>,
     >(
         &mut self,
-        outbound_artifacts_rx: Receiver<ArtifactMutation<Artifact>>,
+        outbound_artifacts_rx: Receiver<ArtifactTransmit<Artifact>>,
         inbound_artifacts_tx: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
         (assembler, assembler_router): (F, Router),
+        slot_limit: usize,
     ) {
         assert!(uri_prefix::<WireArtifact>()
             .chars()
@@ -78,6 +79,7 @@ impl ConsensusManagerBuilder {
                 assembler(transport.clone()),
                 transport,
                 topology_watcher,
+                slot_limit,
             )
         };
 
@@ -114,13 +116,14 @@ fn start_consensus_manager<Artifact, WireArtifact, Assembler>(
     metrics_registry: &MetricsRegistry,
     rt_handle: Handle,
     // Locally produced adverts to send to the node's peers.
-    adverts_to_send: Receiver<ArtifactMutation<Artifact>>,
+    adverts_to_send: Receiver<ArtifactTransmit<Artifact>>,
     // Adverts received from peers
     adverts_received: Receiver<(SlotUpdate<WireArtifact>, NodeId, ConnId)>,
     sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
     assembler: Assembler,
     transport: Arc<dyn Transport>,
     topology_watcher: watch::Receiver<SubnetTopology>,
+    slot_limit: usize,
 ) -> Vec<Shutdown>
 where
     Artifact: IdentifiableArtifact,
@@ -146,6 +149,7 @@ where
         assembler,
         sender,
         topology_watcher,
+        slot_limit,
     );
     vec![shutdown_send_side, shutdown_receive_side]
 }

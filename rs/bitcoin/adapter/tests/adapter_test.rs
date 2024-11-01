@@ -3,7 +3,7 @@ use bitcoincore_rpc::{bitcoincore_rpc_json::CreateRawTransactionInput, Auth, Cli
 use bitcoind::{BitcoinD, Conf, P2P};
 use ic_btc_adapter::{
     config::{Config, IncomingSource},
-    start_grpc_server_and_router, AdapterState,
+    start_server,
 };
 use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
 use ic_btc_interface::Network;
@@ -86,9 +86,10 @@ fn make_send_tx_request(
     )
 }
 
-async fn start_adapter(
-    logger: ReplicaLogger,
-    metrics_registry: MetricsRegistry,
+fn start_adapter(
+    logger: &ReplicaLogger,
+    metrics_registry: &MetricsRegistry,
+    rt_handle: &tokio::runtime::Handle,
     nodes: Vec<SocketAddr>,
     uds_path: &Path,
     network: bitcoin::Network,
@@ -102,12 +103,7 @@ async fn start_adapter(
         ..Default::default()
     };
 
-    let adapter_state = AdapterState::new(config.idle_seconds);
-
-    // make sure that the adapter is not idle
-    adapter_state.received_now();
-
-    start_grpc_server_and_router(&config, &metrics_registry, logger, adapter_state);
+    start_server(logger, metrics_registry, rt_handle, config);
 }
 
 fn get_default_bitcoind() -> BitcoinD {
@@ -120,24 +116,21 @@ fn get_default_bitcoind() -> BitcoinD {
     bitcoind::BitcoinD::with_conf(path, &conf).unwrap()
 }
 
-async fn start_client(
-    metrics_registry: MetricsRegistry,
-    logger: ReplicaLogger,
+fn start_client(
+    logger: &ReplicaLogger,
+    metrics_registry: &MetricsRegistry,
+    rt_handle: &tokio::runtime::Handle,
     uds_path: &Path,
 ) -> BitcoinAdapterClient {
     let adapters_config = AdaptersConfig {
         bitcoin_mainnet_uds_path: Some(uds_path.into()),
-        bitcoin_mainnet_uds_metrics_path: None,
-        bitcoin_testnet_uds_path: None,
-        bitcoin_testnet_uds_metrics_path: None,
-        https_outcalls_uds_path: None,
-        https_outcalls_uds_metrics_path: None,
+        ..Default::default()
     };
 
     setup_bitcoin_adapter_clients(
-        logger,
-        &metrics_registry,
-        tokio::runtime::Handle::current(),
+        logger.clone(),
+        metrics_registry,
+        rt_handle.clone(),
         adapters_config,
     )
     .btc_mainnet_client
@@ -166,25 +159,34 @@ fn start_adapter_and_client(
     logger: ReplicaLogger,
     network: bitcoin::Network,
 ) -> (BitcoinAdapterClient, TempPath) {
-    Builder::new()
+    let metrics_registry = MetricsRegistry::new();
+    let res = Builder::new()
         .make(|uds_path| {
-            Ok(rt.block_on(async {
-                let metrics_registry = MetricsRegistry::new();
-
-                start_adapter(
-                    logger.clone(),
-                    metrics_registry.clone(),
-                    urls.clone(),
-                    uds_path,
-                    network,
-                )
-                .await;
-
-                start_client(metrics_registry, logger.clone(), uds_path).await
-            }))
+            start_adapter(
+                &logger,
+                &metrics_registry,
+                rt.handle(),
+                urls.clone(),
+                uds_path,
+                network,
+            );
+            Ok(start_client(
+                &logger,
+                &metrics_registry,
+                rt.handle(),
+                uds_path,
+            ))
         })
         .unwrap()
-        .into_parts()
+        .into_parts();
+
+    let anchor: BlockHash = "0000000000000000035908aacac4c97fb4e172a1758bbbba2ee2b188765780eb"
+        .parse()
+        .unwrap();
+    // We send this request to make sure the adapter is not idle.
+    let _ = make_get_successors_request(&res.0, anchor.to_vec(), vec![]);
+
+    res
 }
 
 fn wait_for_blocks(client: &Client, blocks: u64) {
@@ -550,21 +552,13 @@ fn test_connection_to_multiple_peers() {
     assert_eq!(client3.get_connection_count().unwrap(), 2);
 
     let rt = tokio::runtime::Runtime::new().unwrap();
-    let _temp = Builder::new()
-        .make(|uds_path| {
-            rt.block_on(async {
-                start_adapter(
-                    logger.clone(),
-                    MetricsRegistry::new(),
-                    vec![url1, url2, url3],
-                    uds_path,
-                    bitcoin::Network::Regtest,
-                )
-                .await;
-            });
-            Ok(())
-        })
-        .unwrap();
+
+    let _r = start_adapter_and_client(
+        &rt,
+        vec![url1, url2, url3],
+        logger,
+        bitcoin::Network::Regtest,
+    );
 
     wait_for_connection(&client1, 3);
     wait_for_connection(&client2, 3);

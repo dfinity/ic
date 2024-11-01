@@ -96,7 +96,7 @@ fn wat_writing_to_each_stable_memory_page_query(memory_amount: u64) -> String {
                 )
                 (call $msg_reply)
             )
-            (func (export "canister_query read") 
+            (func (export "canister_query read")
                 (local i64)
                 (local i64)
                 (local.set 0 (i64.const 0))
@@ -180,9 +180,11 @@ fn dts_update_concurrent_cycles_change_succeeds() {
     // an upper bound on the additional freezing threshold.
     let additional_freezing_threshold = Cycles::new(500);
 
-    let max_execution_cost = test
-        .cycles_account_manager()
-        .execution_cost(NumInstructions::from(instruction_limit), test.subnet_size());
+    let max_execution_cost = test.cycles_account_manager().execution_cost(
+        NumInstructions::from(instruction_limit),
+        test.subnet_size(),
+        test.canister_wasm_execution_mode(a_id),
+    );
 
     let call_charge = test.call_fee("update", &b)
         + max_execution_cost
@@ -284,9 +286,11 @@ fn dts_update_concurrent_cycles_change_fails() {
     // an upper bound on the additional freezing threshold.
     let additional_freezing_threshold = Cycles::new(500);
 
-    let max_execution_cost = test
-        .cycles_account_manager()
-        .execution_cost(NumInstructions::from(instruction_limit), test.subnet_size());
+    let max_execution_cost = test.cycles_account_manager().execution_cost(
+        NumInstructions::from(instruction_limit),
+        test.subnet_size(),
+        test.canister_wasm_execution_mode(a_id),
+    );
 
     let call_charge = test.call_fee("update", &b)
         + max_execution_cost
@@ -700,14 +704,13 @@ fn dts_update_resume_fails_due_to_call_context_change() {
     let time = test.time();
     test.canister_state_mut(a_id)
         .system_state
-        .call_context_manager_mut()
-        .unwrap()
         .new_call_context(
             CallOrigin::SystemTask,
             Cycles::new(0),
             time,
             RequestMetadata::for_new_call_tree(time),
-        );
+        )
+        .unwrap();
 
     test.execute_slice(a_id);
 

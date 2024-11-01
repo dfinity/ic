@@ -8,6 +8,7 @@ from scanner.scanner_job_type import ScannerJobType
 class NotificationEvent:
     pass
 
+
 @dataclass
 class MRBlockedNotificationEvent(NotificationEvent):
     scanner_id: str
@@ -31,6 +32,7 @@ class ReleaseBlockedNotificationEvent(NotificationEvent):
         assert self.scanner_id is not None and len(self.scanner_id) > 0
         assert self.ci_job_url is not None and len(self.ci_job_url) > 0
 
+
 @dataclass
 class ScanJobSucceededNotificationEvent(NotificationEvent):
     scanner_id: str
@@ -42,6 +44,7 @@ class ScanJobSucceededNotificationEvent(NotificationEvent):
         assert self.scanner_id is not None and len(self.scanner_id) > 0
         assert self.job_type is not None
         assert self.ci_job_url is not None and len(self.ci_job_url) > 0
+
 
 @dataclass
 class ScanJobFailedNotificationEvent(NotificationEvent):
@@ -56,6 +59,7 @@ class ScanJobFailedNotificationEvent(NotificationEvent):
         assert self.job_type is not None
         assert self.ci_job_url is not None and len(self.ci_job_url) > 0
         assert self.reason is not None and len(self.reason) > 0
+
 
 @dataclass
 class FindingNotificationEvent(NotificationEvent):
@@ -75,6 +79,7 @@ class FindingNotificationEvent(NotificationEvent):
             assert boolean_field is True or boolean_field is False
 
         assert self.finding is not None
+
 
 @dataclass
 class AppOwnerNotificationEvent(NotificationEvent):

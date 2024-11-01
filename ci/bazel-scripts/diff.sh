@@ -13,9 +13,9 @@ set -euo pipefail
 set -x
 cd "$(git rev-parse --show-toplevel)"
 
-git fetch origin "$CI_PULL_REQUEST_TARGET_BRANCH_NAME" --quiet
-MERGE_BASE="$(git merge-base HEAD origin/$CI_PULL_REQUEST_TARGET_BRANCH_NAME)"
-COMMIT_RANGE=${COMMIT_RANGE:-$MERGE_BASE".."}
+MERGE_BASE="${MERGE_BASE_SHA:-HEAD}"
+# we can't use HEAD here because that is the merge commit which contains the changes of the current HEAD of master
+COMMIT_RANGE="$MERGE_BASE..${BRANCH_HEAD_SHA:-}"
 DIFF_FILES=$(git diff --name-only "${COMMIT_RANGE}")
 
 if grep -qE "(.*\.bazel|.*\.bzl|\.bazelrc|\.bazelversion)" <<<"$DIFF_FILES"; then
@@ -32,7 +32,7 @@ for file in $DIFF_FILES; do
 done
 
 if grep -qE ".*\.sh" <<<"$DIFF_FILES"; then
-    files+=(//pre-commit:shfmt-lint)
+    files+=(//pre-commit:shfmt-check)
 fi
 
 if grep -qE ".*\.py" <<<"$DIFF_FILES"; then
@@ -55,7 +55,12 @@ fi
 if [ "${BAZEL_COMMAND:-}" == "build" ]; then
     TARGETS=$(bazel query "rdeps(//..., set(${files[*]}))")
 elif [ "${BAZEL_COMMAND:-}" == "test" ]; then
-    TARGETS=$(bazel query "kind(test, rdeps(//..., set(${files[*]}))) except attr('tags', 'manual|system_test_hourly|system_test_nightly|system_test_staging|system_test_hotfix|system_test_nightly_nns', //...)")
+    EXCLUDED_TAGS=(manual $EXCLUDED_TEST_TAGS)
+    EXCLUDED_TAGS=$(
+        IFS='|'
+        echo "${EXCLUDED_TAGS[*]}"
+    )
+    TARGETS=$(bazel query "kind(test, rdeps(//..., set(${files[*]}))) except attr('tags', '$EXCLUDED_TAGS', //...)")
 else
     echo "Unknown BAZEL_COMMAND: ${BAZEL_COMMAND:-}" >&2
     exit 1

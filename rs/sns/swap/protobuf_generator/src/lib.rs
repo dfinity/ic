@@ -42,7 +42,6 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         ["#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]"].join(" "),
     );
 
-    config.type_attribute(".ic_sns_swap.pb.v1.TimeWindow", "#[derive(Copy)]");
     config.type_attribute(".ic_sns_swap.pb.v1.CfParticipant", "#[derive(Eq)]");
     config.type_attribute(".ic_sns_swap.pb.v1.CfNeuron", "#[derive(Eq)]");
     config.type_attribute(
@@ -60,10 +59,6 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     config.type_attribute(
         ".ic_sns_swap.pb.v1.IdealMatchedParticipationFunction",
         "#[derive(Eq)]",
-    );
-    config.type_attribute(
-        ".ic_sns_swap.pb.v1.NeuronId",
-        "#[derive(Eq, Ord, PartialOrd)]",
     );
 
     // Add serde_bytes for efficiently parsing blobs.

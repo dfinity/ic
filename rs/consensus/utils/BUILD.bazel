@@ -7,7 +7,6 @@ DEPENDENCIES = [
     "//rs/crypto/prng",
     "//rs/interfaces",
     "//rs/interfaces/registry",
-    "//rs/interfaces/state_manager",
     "//rs/monitoring/logger",
     "//rs/protobuf",
     "//rs/registry/helpers",
@@ -20,7 +19,6 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/consensus",
     "//rs/consensus/mocks",
     "//rs/test_utilities",
     "//rs/test_utilities/registry",

@@ -6,6 +6,8 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/artifact_pool",
+    "//rs/bitcoin/client",
+    "//rs/bitcoin/consensus",
     "//rs/config",
     "//rs/consensus",
     "//rs/consensus/utils",
@@ -90,7 +92,7 @@ BIN_DEPENDENCIES = [
     "//rs/types/types",
     "@crate_index//:candid",
     "@crate_index//:ciborium",
-    "@crate_index//:clap_3_2_25",
+    "@crate_index//:clap",
     "@crate_index//:hex",
     "@crate_index//:ic-test-state-machine-client",
     "@crate_index//:serde",

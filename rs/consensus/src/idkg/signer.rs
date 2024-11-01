@@ -941,7 +941,7 @@ mod tests {
                     IDkgChangeAction::AddToValidated(share1),
                     IDkgChangeAction::AddToValidated(share2),
                 ];
-                idkg_pool.apply_changes(change_set);
+                idkg_pool.apply(change_set);
 
                 // Certified height doesn't increase, so share1 shouldn't be purged
                 let change_set = signer.on_state_change(&idkg_pool, &transcript_loader);
@@ -954,7 +954,7 @@ mod tests {
                 assert_eq!(*signer.prev_certified_height.borrow(), new_height);
                 assert_eq!(change_set.len(), 1);
                 assert!(is_removed_from_validated(&change_set, &msg_id1));
-                idkg_pool.apply_changes(change_set);
+                idkg_pool.apply(change_set);
 
                 // Certified height increases above share2, so it is purged
                 let new_height = expected_state_snapshot.write().unwrap().inc_height_by(1);
@@ -1020,7 +1020,7 @@ mod tests {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, signer) = create_signer_dependencies(pool_config, logger);
 
-                idkg_pool.apply_changes(
+                idkg_pool.apply(
                     shares
                         .iter()
                         .map(|s| IDkgChangeAction::AddToValidated(s.clone()))
@@ -1058,7 +1058,7 @@ mod tests {
                     Some(crypto_without_keys()),
                 );
 
-                idkg_pool.apply_changes(
+                idkg_pool.apply(
                     shares
                         .iter()
                         .map(|s| IDkgChangeAction::AddToValidated(s.clone()))
@@ -1101,6 +1101,7 @@ mod tests {
                 fake_schnorr_master_public_key_id(SchnorrAlgorithm::Ed25519)
             }
             MasterPublicKeyId::Schnorr(_) => fake_ecdsa_master_public_key_id(),
+            MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
         };
 
         // Set up the signature requests
@@ -1288,6 +1289,7 @@ mod tests {
                 let expected_complaints_count = match key_id {
                     MasterPublicKeyId::Ecdsa(_) => requested_signatures_count * 5,
                     MasterPublicKeyId::Schnorr(_) => requested_signatures_count * 2,
+                    MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
                 };
                 let complaints = transcript_loader.returned_complaints();
                 assert_eq!(change_set.len(), complaints.len());
@@ -1368,6 +1370,7 @@ mod tests {
                             ThresholdSigInputs::Schnorr(inputs),
                         )
                     }
+                    MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
                 };
                 let crypto = env
                     .nodes
@@ -1548,6 +1551,7 @@ mod tests {
                 fake_schnorr_master_public_key_id(SchnorrAlgorithm::Ed25519)
             }
             MasterPublicKeyId::Schnorr(_) => fake_ecdsa_master_public_key_id(),
+            MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
         };
         let message = create_signature_share(&key_id_wrong_scheme, NODE_2, id_2.clone());
         let msg_id_2 = message.message_id();
@@ -1705,7 +1709,7 @@ mod tests {
                 // Validated pool has: {signature share 2, signer = NODE_2}
                 let share = create_signature_share(&key_id, NODE_2, id_2.clone());
                 let change_set = vec![IDkgChangeAction::AddToValidated(share)];
-                idkg_pool.apply_changes(change_set);
+                idkg_pool.apply(change_set);
 
                 // Unvalidated pool has: {signature share 2, signer = NODE_2, height = 100}
                 let message = create_signature_share(&key_id, NODE_2, id_2.clone());
@@ -1904,18 +1908,18 @@ mod tests {
                 // Share 1: height <= current_height, in_progress (not purged)
                 let share = create_signature_share(&key_id, NODE_2, id_1);
                 let change_set = vec![IDkgChangeAction::AddToValidated(share)];
-                idkg_pool.apply_changes(change_set);
+                idkg_pool.apply(change_set);
 
                 // Share 2: height <= current_height, !in_progress (purged)
                 let share = create_signature_share(&key_id, NODE_2, id_2);
                 let msg_id_2 = share.message_id();
                 let change_set = vec![IDkgChangeAction::AddToValidated(share)];
-                idkg_pool.apply_changes(change_set);
+                idkg_pool.apply(change_set);
 
                 // Share 3: height > current_height (not purged)
                 let share = create_signature_share(&key_id, NODE_2, id_3);
                 let change_set = vec![IDkgChangeAction::AddToValidated(share)];
-                idkg_pool.apply_changes(change_set);
+                idkg_pool.apply(change_set);
 
                 let change_set = signer.purge_artifacts(&idkg_pool, &state);
                 assert_eq!(change_set.len(), 1);
@@ -2021,7 +2025,7 @@ mod tests {
                         IDkgChangeAction::AddToValidated(IDkgMessage::EcdsaSigShare(share))
                     })
                     .collect::<Vec<_>>();
-                idkg_pool.apply_changes(change_set);
+                idkg_pool.apply(change_set);
 
                 let sig_builder = ThresholdSignatureBuilderImpl::new(
                     &block_reader,
@@ -2158,7 +2162,7 @@ mod tests {
                         IDkgChangeAction::AddToValidated(IDkgMessage::SchnorrSigShare(share))
                     })
                     .collect::<Vec<_>>();
-                idkg_pool.apply_changes(change_set);
+                idkg_pool.apply(change_set);
 
                 let sig_builder = ThresholdSignatureBuilderImpl::new(
                     &block_reader,

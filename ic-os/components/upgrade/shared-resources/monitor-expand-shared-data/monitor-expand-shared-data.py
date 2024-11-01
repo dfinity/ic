@@ -10,6 +10,7 @@ then performing an online resize operation on the target filesystem. Both
 xfs and ext4 filesystems are supported by this script (even though only
 xfs is used at present).
 """
+
 import json
 import os
 import subprocess

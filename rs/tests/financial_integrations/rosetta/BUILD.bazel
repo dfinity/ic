@@ -12,102 +12,7 @@ system_test_nns(
     test_timeout = "long",
     runtime_deps =
         GUESTOS_RUNTIME_DEPS + [
-            "//rs/rosetta-api:ic-rosetta-api",
-            "//rs/tests:rosetta_workspace",
-            "@rosetta-cli//:rosetta-cli",
-        ],
-    deps = DEPENDENCIES + ["//rs/tests"],
-)
-
-system_test_nns(
-    name = "rosetta_derive_test",
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "k8s",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS + [
-            "//rs/rosetta-api:ic-rosetta-api",
-            "//rs/rosetta-api:rosetta_image.tar",
-            "//rs/tests:rosetta_workspace",
-            "@rosetta-cli//:rosetta-cli",
-        ],
-    deps = DEPENDENCIES + ["//rs/tests"],
-)
-
-system_test_nns(
-    name = "rosetta_make_transactions_test",
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "k8s",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS + [
-            "//rs/rosetta-api:ic-rosetta-api",
-            "//rs/rosetta-api:rosetta_image.tar",
-            "//rs/tests:rosetta_workspace",
-            "@rosetta-cli//:rosetta-cli",
-        ],
-    deps = DEPENDENCIES + ["//rs/tests"],
-)
-
-system_test_nns(
-    name = "rosetta_network_test",
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "k8s",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS + [
-            "//rs/rosetta-api:ic-rosetta-api",
-            "//rs/rosetta-api:rosetta_image.tar",
-            "//rs/tests:rosetta_workspace",
-            "@rosetta-cli//:rosetta-cli",
-        ],
-    deps = DEPENDENCIES + ["//rs/tests"],
-)
-
-system_test_nns(
-    name = "rosetta_neuron_disburse_test",
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "k8s",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS + [
-            "//rs/rosetta-api:ic-rosetta-api",
-            "//rs/rosetta-api:rosetta_image.tar",
-            "//rs/tests:rosetta_workspace",
-            "@rosetta-cli//:rosetta-cli",
-        ],
-    deps = DEPENDENCIES + ["//rs/tests"],
-)
-
-system_test_nns(
-    name = "rosetta_neuron_dissolve_test",
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "k8s",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS + [
-            "//rs/rosetta-api:ic-rosetta-api",
-            "//rs/rosetta-api:rosetta_image.tar",
+            "//rs/rosetta-api/icp:ic-rosetta-api",
             "//rs/tests:rosetta_workspace",
             "@rosetta-cli//:rosetta-cli",
         ],
@@ -116,17 +21,19 @@ system_test_nns(
 
 system_test_nns(
     name = "rosetta_neuron_follow_test",
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
+        "long_test",  # since it takes longer than 5 minutes.
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS + [
-            "//rs/rosetta-api:ic-rosetta-api",
-            "//rs/rosetta-api:rosetta_image.tar",
+            "//rs/rosetta-api/icp:ic-rosetta-api",
+            "//rs/rosetta-api/icp:rosetta_image.tar",
             "//rs/tests:rosetta_workspace",
             "@rosetta-cli//:rosetta-cli",
         ],
@@ -135,17 +42,19 @@ system_test_nns(
 
 system_test_nns(
     name = "rosetta_neuron_hotkey_test",
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
+        "long_test",  # since it takes longer than 5 minutes.
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS + [
-            "//rs/rosetta-api:ic-rosetta-api",
-            "//rs/rosetta-api:rosetta_image.tar",
+            "//rs/rosetta-api/icp:ic-rosetta-api",
+            "//rs/rosetta-api/icp:rosetta_image.tar",
             "//rs/tests:rosetta_workspace",
             "@rosetta-cli//:rosetta-cli",
         ],
@@ -154,17 +63,19 @@ system_test_nns(
 
 system_test_nns(
     name = "rosetta_neuron_info_test",
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
+        "long_test",  # since it takes longer than 5 minutes.
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS + [
-            "//rs/rosetta-api:ic-rosetta-api",
-            "//rs/rosetta-api:rosetta_image.tar",
+            "//rs/rosetta-api/icp:ic-rosetta-api",
+            "//rs/rosetta-api/icp:rosetta_image.tar",
             "//rs/tests:rosetta_workspace",
             "@rosetta-cli//:rosetta-cli",
         ],
@@ -173,17 +84,19 @@ system_test_nns(
 
 system_test_nns(
     name = "rosetta_neuron_maturity_test",
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
+        "long_test",  # since it takes longer than 5 minutes.
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS + [
-            "//rs/rosetta-api:ic-rosetta-api",
-            "//rs/rosetta-api:rosetta_image.tar",
+            "//rs/rosetta-api/icp:ic-rosetta-api",
+            "//rs/rosetta-api/icp:rosetta_image.tar",
             "//rs/tests:rosetta_workspace",
             "@rosetta-cli//:rosetta-cli",
         ],
@@ -192,36 +105,19 @@ system_test_nns(
 
 system_test_nns(
     name = "rosetta_neuron_spawn_test",
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
+        "long_test",  # since it takes longer than 5 minutes.
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS + [
-            "//rs/rosetta-api:ic-rosetta-api",
-            "//rs/rosetta-api:rosetta_image.tar",
-            "//rs/tests:rosetta_workspace",
-            "@rosetta-cli//:rosetta-cli",
-        ],
-    deps = DEPENDENCIES + ["//rs/tests"],
-)
-
-system_test_nns(
-    name = "rosetta_neuron_staking_test",
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "k8s",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS + [
-            "//rs/rosetta-api:ic-rosetta-api",
-            "//rs/rosetta-api:rosetta_image.tar",
+            "//rs/rosetta-api/icp:ic-rosetta-api",
+            "//rs/rosetta-api/icp:rosetta_image.tar",
             "//rs/tests:rosetta_workspace",
             "@rosetta-cli//:rosetta-cli",
         ],
@@ -230,17 +126,19 @@ system_test_nns(
 
 system_test_nns(
     name = "rosetta_neuron_voting_test",
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
+        "long_test",  # since it takes longer than 5 minutes.
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS + [
-            "//rs/rosetta-api:ic-rosetta-api",
-            "//rs/rosetta-api:rosetta_image.tar",
+            "//rs/rosetta-api/icp:ic-rosetta-api",
+            "//rs/rosetta-api/icp:rosetta_image.tar",
             "//rs/tests:rosetta_workspace",
             "@rosetta-cli//:rosetta-cli",
         ],
@@ -258,27 +156,8 @@ system_test_nns(
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS + [
-            "//rs/rosetta-api:ic-rosetta-api",
-            "//rs/rosetta-api:rosetta_image.tar",
-            "//rs/tests:rosetta_workspace",
-            "@rosetta-cli//:rosetta-cli",
-        ],
-    deps = DEPENDENCIES + ["//rs/tests"],
-)
-
-system_test_nns(
-    name = "rosetta_list_known_neurons_test",
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "k8s",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS + [
-            "//rs/rosetta-api:ic-rosetta-api",
-            "//rs/rosetta-api:rosetta_image.tar",
+            "//rs/rosetta-api/icp:ic-rosetta-api",
+            "//rs/rosetta-api/icp:rosetta_image.tar",
             "//rs/tests:rosetta_workspace",
             "@rosetta-cli//:rosetta-cli",
         ],

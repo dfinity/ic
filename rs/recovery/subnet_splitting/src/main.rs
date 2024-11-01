@@ -28,15 +28,15 @@ struct SplitArgs {
     nns_url: Url,
 
     /// replica version of ic-admin binary
-    #[clap(long, parse(try_from_str=::std::convert::TryFrom::try_from))]
+    #[clap(long)]
     replica_version: Option<ReplicaVersion>,
 
     /// The directory to the subnet splitting in
-    #[clap(long, parse(from_os_str))]
+    #[clap(long)]
     dir: PathBuf,
 
     /// The path to a private key to be considered for SSH connections
-    #[clap(long, parse(from_os_str))]
+    #[clap(long)]
     key_file: Option<PathBuf>,
 
     /// Flag to enter test mode
@@ -54,24 +54,24 @@ struct SplitArgs {
 #[derive(Parser)]
 struct ValidateArgs {
     /// Path to the State Tree signed by the NNS
-    #[clap(long, parse(from_os_str))]
+    #[clap(long)]
     state_tree_path: PathBuf,
 
     /// (Optional) path to the NNS public key. If not set, the built-in public key is used.
-    #[clap(long, parse(from_os_str))]
+    #[clap(long)]
     nns_public_key_path: Option<PathBuf>,
 
     /// Path to the original, pre-split, CUP retrieved from the Source Subnet.
-    #[clap(long, parse(from_os_str))]
+    #[clap(long)]
     cup_path: PathBuf,
 
     /// Path to the original, pre-split, state manifest computed from the state on the Source
     /// Subnet.
-    #[clap(long, parse(from_os_str))]
+    #[clap(long)]
     state_manifest_path: PathBuf,
 
     /// SubnetId of the subnet being split.
-    #[clap(long, parse(try_from_str=ic_recovery::util::subnet_id_from_str))]
+    #[clap(long, value_parser=ic_recovery::util::subnet_id_from_str)]
     source_subnet_id: SubnetId,
 }
 

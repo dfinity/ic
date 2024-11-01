@@ -46,4 +46,4 @@ Following the execution of these commands, the system will reboot into the newly
 
     manageboot.sh confirm
 
-For more information on the upgrade commands, see https://github.com/dfinity/ic/blob/master/ic-os/components/upgrade/manageboot[components/upgrade/manageboot]
+For more information on the upgrade commands, see ic-os/components/upgrade/manageboot

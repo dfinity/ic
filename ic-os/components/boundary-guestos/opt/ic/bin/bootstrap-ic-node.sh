@@ -64,7 +64,6 @@ function process_bootstrap() {
         certificate_issuer_enc_key.pem
         certificate_issuer_identity.pem
         certificate_issuer.conf
-        certificate_syncer.conf
         denylist.json
         ic_boundary.conf
         canister-ratelimit.yml
@@ -72,7 +71,6 @@ function process_bootstrap() {
         nns_public_key.pem
         nns.conf
         pre_isolation_canisters.txt
-        prober_identity.pem
     )
 
     for FILE in ${FILES[@]}; do

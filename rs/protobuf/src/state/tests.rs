@@ -32,25 +32,25 @@ fn huge_proto_encoding_roundtrip() {
             deadline_seconds: 0,
         })),
     };
-    // A queue of 2K requests with 2 MB payloads.
-    let queue = vec![msg; 2 << 10];
+    let entry = message_pool::Entry {
+        id: 13,
+        message: Some(msg.clone()),
+    };
 
-    let q = InputOutputQueue {
-        queue,
-        begin: 2197,
-        capacity: 500,
-        num_slots_reserved: 14,
-        deadline_range_ends: Vec::new(),
-        timeout_index: 15,
+    // A pool of 2K requests with 2 MB payloads.
+    let pool = MessagePool {
+        messages: vec![entry; 2 << 10],
+        outbound_guaranteed_request_deadlines: vec![],
+        message_id_generator: 42,
     };
 
     let mut buf = vec![];
-    q.encode(&mut buf).unwrap();
-    // Expecting the encoded queue to be larger than 4 GB.
+    pool.encode(&mut buf).unwrap();
+    // Expecting the encoded pool to be larger than 4 GB.
     assert!(buf.len() > 4 << 30);
 
-    let decoded_q = InputOutputQueue::decode(buf.as_slice()).unwrap();
+    let decoded_pool = MessagePool::decode(buf.as_slice()).unwrap();
 
-    // Ensure that decoding results in the same queue that we just encoded.
-    assert_eq!(q, decoded_q);
+    // Ensure that decoding results in the same pool that we just encoded.
+    assert_eq!(pool, decoded_pool);
 }

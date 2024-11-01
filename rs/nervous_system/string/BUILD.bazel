@@ -15,7 +15,7 @@ MACRO_DEV_DEPENDENCIES = [
 ]
 
 LIB_SRCS = glob(
-    ["src/**"],
+    ["src/**/*.rs"],
     # Ensures that we do not need to rebuild just because a _test.rs file
     # changed.
     exclude = ["**/*tests.rs"],
@@ -32,7 +32,7 @@ rust_library(
 
 rust_test(
     name = "string_test",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

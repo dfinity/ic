@@ -4,7 +4,6 @@ use crate::{
 };
 use candid::{Decode, Encode};
 use canister_test::Project;
-use dfn_candid::candid_one;
 use ic_base_types::CanisterId;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL};
 use ic_nervous_system_common_test_utils::wasm_helpers;
@@ -123,7 +122,8 @@ pub fn add_wasm_via_proposal(env: &StateMachine, wasm: SnsWasm) -> SnsWasm {
     let proposal_id = ProposalId(wasm.proposal_id.unwrap());
 
     while get_proposal_info(env, proposal_id).unwrap().status == (ProposalStatus::Open as i32) {
-        std::thread::sleep(Duration::from_millis(100));
+        env.tick();
+        env.advance_time(Duration::from_millis(100));
     }
 
     wasm
@@ -185,7 +185,6 @@ fn make_proposal_with_test_neuron_1(env: &StateMachine, proposal: Proposal) -> P
         env,
         GOVERNANCE_CANISTER_ID,
         "manage_neuron",
-        candid_one,
         ManageNeuron {
             id: None,
             command: Some(Command::MakeProposal(Box::new(proposal))),
@@ -239,7 +238,8 @@ pub fn update_sns_subnet_list_via_proposal(
     let pid = make_proposal_with_test_neuron_1(env, proposal);
 
     while get_proposal_info(env, pid).unwrap().status == (ProposalStatus::Open as i32) {
-        std::thread::sleep(Duration::from_millis(100));
+        env.tick();
+        env.advance_time(Duration::from_millis(100));
     }
 }
 
@@ -283,7 +283,6 @@ pub fn deploy_new_sns(
         env,
         sns_wasm_canister_id,
         "deploy_new_sns",
-        candid_one,
         DeployNewSnsRequest {
             sns_init_payload: Some(sns_init_payload),
         },
@@ -391,7 +390,8 @@ pub fn wait_for_proposal_status(
         if is_status_achieved(status) {
             return;
         }
-        std::thread::sleep(Duration::from_millis(100));
+        machine.tick();
+        machine.advance_time(Duration::from_secs(1));
     }
     panic!("Proposal {} never exited the Open state.", proposal_id);
 }
@@ -410,11 +410,11 @@ pub fn add_freshly_built_sns_wasms(
     for (sns_canister_type, (proposal_id, sns_wasm)) in
         add_freshly_built_sns_wasms_and_return_immediately(machine, filter_wasm)
     {
-        fn is_not_open(status: i32) -> bool {
-            status != ProposalStatus::Open as i32
+        fn is_executed(status: i32) -> bool {
+            status == ProposalStatus::Executed as i32
         }
         let timeout = Duration::from_secs(120);
-        wait_for_proposal_status(machine, proposal_id, is_not_open, timeout);
+        wait_for_proposal_status(machine, proposal_id, is_executed, timeout);
 
         result.insert(sns_canister_type, sns_wasm);
     }

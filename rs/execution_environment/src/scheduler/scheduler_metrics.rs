@@ -37,6 +37,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) instructions_consumed_per_message: Histogram,
     pub(super) instructions_consumed_per_round: Histogram,
     pub(super) executable_canisters_per_round: Histogram,
+    pub(super) executed_canisters_per_round: Histogram,
     pub(super) expired_ingress_messages_count: IntCounter,
     pub(super) ingress_history_length: IntGauge,
     pub(super) msg_execution_duration: Histogram,
@@ -114,6 +115,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) stop_canister_calls_without_call_id: IntGauge,
     pub(super) canister_snapshots_memory_usage: IntGauge,
     pub(super) num_canister_snapshots: IntGauge,
+    pub(super) zero_instruction_messages: IntCounter,
 }
 
 const LABEL_MESSAGE_KIND: &str = "kind";
@@ -216,6 +218,12 @@ impl SchedulerMetrics {
             executable_canisters_per_round: metrics_registry.histogram(
                 "scheduler_executable_canisters_per_round",
                 "Number of canisters that can be executed per round.",
+                // 1, 2, 5, …, 10000, 20000, 50000
+                decimal_buckets(0, 4),
+            ),
+            executed_canisters_per_round: metrics_registry.histogram(
+                "scheduler_executed_canisters_per_round",
+                "Number of canisters that were actually executed in the last round.",
                 // 1, 2, 5, …, 10000, 20000, 50000
                 decimal_buckets(0, 4),
             ),
@@ -710,6 +718,12 @@ impl SchedulerMetrics {
                 "scheduler_num_canister_snapshots",
                 "Total number of canister snapshots on this subnet.",
             ),
+            zero_instruction_messages: metrics_registry.int_counter(
+                "scheduler_zero_instruction_messages",
+                "Number of messages that were scheduled to be \
+                executed, but didn't end up using any cycles. Possibly \
+                because the canister couldn't prepay for the execution."
+            )
         }
     }
 

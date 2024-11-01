@@ -77,6 +77,9 @@ def image_deps(mode, _malicious = False):
 
     deps.update(image_variants[mode])
 
+    if "dev" in mode:
+        deps["rootfs"].update({"//ic-os/components:hostos-scripts/generate-guestos-config/dev-generate-guestos-config.sh": "/opt/ic/bin/generate-guestos-config.sh:0755"})
+
     return deps
 
 # Inject a step building an LVM partition. This depends on boot and root built

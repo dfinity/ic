@@ -1,5 +1,5 @@
 use crate::{
-    governance::{Environment, HeapGrowthPotential},
+    governance::{Environment, HeapGrowthPotential, RngError},
     pb::v1::{ExecuteNnsFunction, GovernanceError, OpenSnsTokenSwap},
 };
 use async_trait::async_trait;
@@ -44,7 +44,7 @@ lazy_static! {
     pub static ref TARGET_SWAP_CANISTER_ID: CanisterId = CanisterId::from_u64(435106);
     pub static ref OPEN_SNS_TOKEN_SWAP: OpenSnsTokenSwap = OpenSnsTokenSwap {
         target_swap_canister_id: Some((*TARGET_SWAP_CANISTER_ID).into()),
-        params: Some(TEST_SWAP_PARAMS.clone()),
+        params: Some(TEST_SWAP_PARAMS),
         community_fund_investment_e8s: Some(500),
     };
     pub static ref SWAP_INIT: sns_swap_pb::Init = sns_swap_pb::Init {
@@ -193,12 +193,18 @@ impl Environment for MockEnvironment {
         *self.now.lock().unwrap()
     }
 
-    fn random_u64(&mut self) -> u64 {
+    fn random_u64(&mut self) -> Result<u64, RngError> {
         unimplemented!();
     }
 
-    fn random_byte_array(&mut self) -> [u8; 32] {
+    fn random_byte_array(&mut self) -> Result<[u8; 32], RngError> {
         unimplemented!();
+    }
+
+    fn seed_rng(&mut self, _seed: [u8; 32]) {}
+
+    fn get_rng_seed(&self) -> Option<[u8; 32]> {
+        Some([0; 32])
     }
 
     fn execute_nns_function(
@@ -214,7 +220,7 @@ impl Environment for MockEnvironment {
     }
 
     async fn call_canister_method(
-        &mut self,
+        &self,
         target: CanisterId,
         method_name: &str,
         request: Vec<u8>,

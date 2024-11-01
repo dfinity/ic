@@ -982,6 +982,7 @@ fn serialize_canister_to_tip(
                 metadata: execution_state.metadata.clone(),
                 binary_hash: Some(execution_state.wasm_binary.binary.module_hash().into()),
                 next_scheduled_method: execution_state.next_scheduled_method,
+                is_wasm64: execution_state.is_wasm64,
             })
         }
         None => {
@@ -1003,8 +1004,6 @@ fn serialize_canister_to_tip(
             metrics,
         )?;
 
-    // Priority credit must be zero at this point
-    assert_eq!(canister_state.scheduler_state.priority_credit.get(), 0);
     canister_layout.canister().serialize(
         CanisterStateBits {
             controllers: canister_state.system_state.controllers.clone(),
@@ -1022,7 +1021,7 @@ fn serialize_canister_to_tip(
             reserved_balance: canister_state.system_state.reserved_balance(),
             reserved_balance_limit: canister_state.system_state.reserved_balance_limit(),
             execution_state_bits,
-            status: canister_state.system_state.status.clone(),
+            status: canister_state.system_state.get_status().clone(),
             scheduled_as_first: canister_state
                 .system_state
                 .canister_metrics
@@ -1049,12 +1048,7 @@ fn serialize_canister_to_tip(
                 .scheduler_state
                 .time_of_last_allocation_charge
                 .as_nanos_since_unix_epoch(),
-            task_queue: canister_state
-                .system_state
-                .task_queue
-                .clone()
-                .into_iter()
-                .collect(),
+            task_queue: canister_state.system_state.task_queue.get_queue().into(),
             global_timer_nanos: canister_state
                 .system_state
                 .global_timer
@@ -1077,6 +1071,10 @@ fn serialize_canister_to_tip(
             wasm_memory_limit: canister_state.system_state.wasm_memory_limit,
             next_snapshot_id: canister_state.system_state.next_snapshot_id,
             snapshots_memory_usage: canister_state.system_state.snapshots_memory_usage,
+            on_low_wasm_memory_hook_status: canister_state
+                .system_state
+                .task_queue
+                .peek_hook_status(),
         }
         .into(),
     )?;

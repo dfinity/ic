@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests;
 
+use crate::git::ArgsHash;
 use candid::types::{Type, TypeInner};
 use candid::TypeEnv;
 use std::path::Path;
@@ -12,6 +13,7 @@ pub struct UpgradeArgs {
     constructor_types: Vec<Type>,
     upgrade_args: String,
     encoded_upgrade_args: Vec<u8>,
+    args_sha256: ArgsHash,
     candid_file_name: String,
 }
 
@@ -22,6 +24,10 @@ impl UpgradeArgs {
 
     pub fn upgrade_args_hex(&self) -> String {
         hex::encode(&self.encoded_upgrade_args)
+    }
+
+    pub fn args_sha256_hex(&self) -> String {
+        self.args_sha256.to_string()
     }
 
     pub fn didc_encode_cmd(&self) -> String {
@@ -49,6 +55,7 @@ pub fn encode_upgrade_args<F: Into<String>>(candid_file: &Path, upgrade_args: F)
         .expect("fail to parse upgrade args")
         .to_bytes_with_types(&env, &upgrade_types)
         .expect("failed to encode");
+    let args_sha256 = ArgsHash::sha256(&encoded_upgrade_args);
     let candid_file_name = candid_file
         .file_name()
         .expect("missing file name")
@@ -58,6 +65,7 @@ pub fn encode_upgrade_args<F: Into<String>>(candid_file: &Path, upgrade_args: F)
         constructor_types: upgrade_types,
         upgrade_args,
         encoded_upgrade_args,
+        args_sha256,
         candid_file_name,
     }
 }

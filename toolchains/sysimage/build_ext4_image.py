@@ -99,9 +99,10 @@ def strip_files(fs_basedir, fakeroot_statefile, strip_paths):
     for batch_start in range(0, len(flattened_paths), BATCH_SIZE):
         batch_end = min(batch_start + BATCH_SIZE, len(flattened_paths))
         subprocess.run(
-            ["fakeroot", "-s", fakeroot_statefile, "-i", fakeroot_statefile, "rm", "-rf"] +
-            flattened_paths[batch_start:batch_end],
-            check=True)
+            ["fakeroot", "-s", fakeroot_statefile, "-i", fakeroot_statefile, "rm", "-rf"]
+            + flattened_paths[batch_start:batch_end],
+            check=True,
+        )
 
 
 def prepare_tree_from_tar(in_file, fakeroot_statefile, fs_basedir, dir_to_extract):
@@ -207,27 +208,60 @@ def main():
     # ownership will be preserved while unpacking (see below).
     prepare_tree_from_tar(in_file, fakeroot_statefile, fs_basedir, limit_prefix)
     strip_files(fs_basedir, fakeroot_statefile, strip_paths)
-    subprocess.run(['sync'], check=True)
+    subprocess.run(["sync"], check=True)
 
     # Now build the basic filesystem image. Wrap again in fakeroot
     # so correct permissions are read for all files etc.
-    mke2fs_args = ["faketime", "-f", "1970-1-1 0:0:0", "/usr/sbin/mkfs.ext4", "-E", "hash_seed=c61251eb-100b-48fe-b089-57dea7368612", "-U", "clear", "-F", image_file, str(image_size)]
+    mke2fs_args = [
+        "faketime",
+        "-f",
+        "1970-1-1 0:0:0",
+        "/usr/sbin/mkfs.ext4",
+        "-E",
+        "hash_seed=c61251eb-100b-48fe-b089-57dea7368612",
+        "-U",
+        "clear",
+        "-F",
+        image_file,
+        str(image_size),
+    ]
     subprocess.run(mke2fs_args, check=True, env={"E2FSPROGS_FAKE_TIME": "0"})
 
     # Use our tool, diroid, to create an fs_config file to be used by e2fsdroid.
     # This file is a simple list of files with their desired uid, gid, and mode.
     fs_config_path = os.path.join(tmpdir, "fs_config")
-    diroid_args=[args.diroid, "--fakeroot", fakeroot_statefile, "--input-dir", os.path.join(fs_basedir, limit_prefix), "--output", fs_config_path]
+    diroid_args = [
+        args.diroid,
+        "--fakeroot",
+        fakeroot_statefile,
+        "--input-dir",
+        os.path.join(fs_basedir, limit_prefix),
+        "--output",
+        fs_config_path,
+    ]
     subprocess.run(diroid_args, check=True)
 
-    e2fsdroid_args= ["faketime", "-f", "1970-1-1 0:0:0", "fakeroot", "-i", fakeroot_statefile, "e2fsdroid", "-e", "-a", "/", "-T", "0"]
+    e2fsdroid_args = [
+        "faketime",
+        "-f",
+        "1970-1-1 0:0:0",
+        "fakeroot",
+        "-i",
+        fakeroot_statefile,
+        "e2fsdroid",
+        "-e",
+        "-a",
+        "/",
+        "-T",
+        "0",
+    ]
     e2fsdroid_args += ["-C", fs_config_path]
     if file_contexts_file:
         e2fsdroid_args += ["-S", file_contexts_file]
     e2fsdroid_args += ["-f", os.path.join(fs_basedir, limit_prefix), image_file]
     subprocess.run(e2fsdroid_args, check=True, env={"E2FSPROGS_FAKE_TIME": "0"})
 
-    subprocess.run(['sync'], check=True)
+    subprocess.run(["sync"], check=True)
 
     # We use our tool, dflate, to quickly create a sparse, deterministic, tar.
     # If dflate is ever misbehaving, it can be replaced with:

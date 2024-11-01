@@ -1,7 +1,7 @@
 //! The execution environment public interface.
 mod errors;
 
-pub use errors::{CanisterOutOfCyclesError, HypervisorError, TrapCode};
+pub use errors::{CanisterBacktrace, CanisterOutOfCyclesError, HypervisorError, TrapCode};
 use ic_base_types::NumBytes;
 use ic_error_types::UserError;
 use ic_management_canister_types::MasterPublicKeyId;
@@ -13,7 +13,8 @@ use ic_types::{
     crypto::canister_threshold_sig::MasterPublicKey,
     ingress::{IngressStatus, WasmResult},
     messages::{CertificateDelegation, MessageId, Query, SignedIngressContent},
-    CanisterLog, Cycles, ExecutionRound, Height, NumInstructions, NumOsPages, Randomness, Time,
+    CanisterLog, Cycles, ExecutionRound, Height, NumInstructions, NumOsPages, Randomness,
+    ReplicaVersion, Time,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -1249,6 +1250,7 @@ pub trait Scheduler: Send {
         randomness: Randomness,
         idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
         idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
+        replica_version: &ReplicaVersion,
         current_round: ExecutionRound,
         round_summary: Option<ExecutionRoundSummary>,
         current_round_type: ExecutionRoundType,

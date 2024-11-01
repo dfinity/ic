@@ -442,6 +442,31 @@ impl ResponseHelper {
             .system_state
             .canister_log
             .append(&mut output.canister_log);
+
+        // The ingress induction debit can interfere with cycles changes that happened concurrently
+        // during the cleanup callback execution. If the balance of the canister is not enough to
+        // cover the debit + the amount of removed cycles during execution, the canister might end
+        // up with an incorrect balance. To avoid this, we check if the balance is enough to cover
+        // the debit + the removed cycles to ensure that the cycles change can be performed.
+        //
+        // This allows the cleanup callback to always succeed at the expense of some ingress
+        // messages being inducted for free in this edge case. This is acceptable because the cleanup
+        // callback is expected to always run and allow the canister to perform important cleanup tasks,
+        // like releasing locks or undoing other state changes.
+        if let Some(state_changes) = &canister_state_changes {
+            let ingress_induction_cycles_debit =
+                self.canister.system_state.ingress_induction_cycles_debit();
+            let removed_cycles = state_changes.system_state_changes.removed_cycles();
+            if self.canister.system_state.balance()
+                < ingress_induction_cycles_debit + removed_cycles
+            {
+                self.canister
+                    .system_state
+                    .remove_charge_from_ingress_induction_cycles_debit(
+                        ingress_induction_cycles_debit - removed_cycles,
+                    );
+            }
+        }
         self.canister
             .system_state
             .apply_ingress_induction_cycles_debit(
@@ -449,10 +474,6 @@ impl ResponseHelper {
                 round.log,
                 round.counters.charging_from_balance_error,
             );
-
-        let requested = canister_state_changes.system_state_changes.removed_cycles();
-        // A cleanup callback cannot accept and send cycles.
-        assert_eq!(requested.get(), 0);
 
         apply_canister_state_changes(
             canister_state_changes,
@@ -523,14 +544,13 @@ impl ResponseHelper {
         let (action, call_context) = self
             .canister
             .system_state
-            .call_context_manager_mut()
-            .unwrap()
             .on_canister_result(
                 original.call_context_id,
                 Some(original.callback_id),
                 result,
                 instructions_used,
-            );
+            )
+            .unwrap();
         let response = action_to_response(
             &self.canister,
             action,
@@ -540,6 +560,12 @@ impl ResponseHelper {
             round.counters.ingress_with_cycles_error,
         );
 
+        let is_wasm64_execution = self
+            .canister
+            .execution_state
+            .as_ref()
+            .map_or(false, |es| es.is_wasm64);
+
         round.cycles_account_manager.refund_unused_execution_cycles(
             &mut self.canister.system_state,
             instructions_left,
@@ -547,6 +573,7 @@ impl ResponseHelper {
             original.callback.prepayment_for_response_execution,
             round.counters.execution_refund_error,
             original.subnet_size,
+            is_wasm64_execution.into(),
             round.log,
         );
 

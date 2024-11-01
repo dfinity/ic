@@ -35,7 +35,7 @@ prost = { workspace = true }
 rand = { workspace = true }
 registry-canister = { path = "../../../registry/canister" }
 reqwest = { workspace = true }
-rsa = { version = "0.9.2", features = ["sha2"] }
+rsa = { workspace = true }
 slog = { workspace = true }
 ssh2 = "0.9.4"
 tempfile = { workspace = true }

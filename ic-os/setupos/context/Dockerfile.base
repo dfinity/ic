@@ -16,7 +16,7 @@
 # 1. Get your MR approved and merged into master
 # 2. On the next hourly master pipeline, click the "deploy-setup-os-baseimg" job
 # 3. Note the sha256 and update the sha256 reference in the neighboring Dockerfiles.
-FROM ubuntu:20.04
+FROM ubuntu:24.04
 
 USER root:root
 
@@ -54,6 +54,3 @@ RUN curl -LsSf --remote-name https://github.com/dfinity/AMDSEV/releases/download
     -o -name "System*generic" \
     | xargs rm \
     && find /usr/lib/modules -maxdepth 1 -type d -name "*generic" | xargs rm -rf
-
-# build-time checked in setupOS installation to verify images < six weeks old
-RUN date +%s > build-time

@@ -34,7 +34,6 @@ use ic_test_utilities_consensus::fake::FakeVerifier;
 use ic_test_utilities_registry::{
     add_subnet_record, insert_initial_dkg_transcript, SubnetRecordBuilder,
 };
-use ic_types::batch::{BatchMessages, BlockmakerMetrics};
 use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::{
     batch::Batch,
@@ -42,6 +41,10 @@ use ic_types::{
     messages::{MessageId, SignedIngress},
     replica_config::ReplicaConfig,
     time, CanisterId, NodeId, NumInstructions, PrincipalId, Randomness, RegistryVersion, SubnetId,
+};
+use ic_types::{
+    batch::{BatchMessages, BlockmakerMetrics},
+    ReplicaVersion,
 };
 use rand::distributions::{Distribution, Uniform};
 use rand::rngs::StdRng;
@@ -58,7 +61,7 @@ mod message;
 
 // drun will panic if it takes more than this many batches
 // until a response for a message is received
-const MAX_BATCHES_UNTIL_RESPONSE: u64 = 10000;
+const MAX_BATCHES_UNTIL_RESPONSE: u64 = 100_000;
 // how long to wait between batches
 const WAIT_PER_BATCH: Duration = Duration::from_millis(5);
 
@@ -183,6 +186,14 @@ pub async fn run_drun(uo: DrunOptions) -> Result<(), String> {
             .scheduler_config
             .max_instructions_per_message_without_dts = instruction_limit;
         cfg.hypervisor.max_query_call_graph_instructions = instruction_limit;
+    }
+
+    // DTS aborts uncompleted messsages if they reach a checkpoint and retries them
+    // later. However, debug prints of such DTS-aborted executions leak, which leads
+    // to non-deterministic debug outputs and disturbs testing.
+    // Therefore, disable DTS on system subnets for deterministic debug outputs.
+    if subnet_type == SubnetType::System {
+        disable_dts(&mut subnet_config);
     }
 
     let subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(0));
@@ -310,6 +321,15 @@ pub async fn run_drun(uo: DrunOptions) -> Result<(), String> {
     Ok(())
 }
 
+fn disable_dts(subnet_config: &mut SubnetConfig) {
+    let scheduler_config = &mut subnet_config.scheduler_config;
+    scheduler_config.max_instructions_per_slice = scheduler_config.max_instructions_per_message;
+    scheduler_config.max_instructions_per_install_code_slice =
+        scheduler_config.max_instructions_per_install_code;
+    scheduler_config.max_instructions_per_round =
+        scheduler_config.max_instructions_per_install_code;
+}
+
 fn print_query_result(res: Result<WasmResult, UserError>) {
     match res {
         Ok(payload) => {
@@ -369,6 +389,7 @@ fn build_batch(message_routing: &dyn MessageRouting, msgs: Vec<SignedIngress>) -
         time: time::current_time(),
         consensus_responses: vec![],
         blockmaker_metrics: BlockmakerMetrics::new_for_test(),
+        replica_version: ReplicaVersion::default(),
     }
 }
 /// Block till the given ingress message has finished executing and

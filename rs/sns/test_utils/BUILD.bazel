@@ -10,22 +10,25 @@ BASE_DEPENDENCIES = [
     "//rs/canister_client/sender",
     "//rs/config",
     "//rs/crypto/sha2",
+    "//rs/ledger_suite/common/ledger_canister_core",
+    "//rs/ledger_suite/common/ledger_core",
+    "//rs/ledger_suite/icp:icp_ledger",
+    "//rs/ledger_suite/icrc1",
+    "//rs/ledger_suite/icrc1/index-ng",
+    "//rs/ledger_suite/icrc1/ledger",
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
     "//rs/nervous_system/common/test_keys",
     "//rs/nervous_system/root",
     "//rs/nns/constants",
-    "//rs/rosetta-api/icp_ledger",
-    "//rs/rosetta-api/icrc1",
-    "//rs/rosetta-api/icrc1/index-ng",
-    "//rs/rosetta-api/icrc1/ledger",
-    "//rs/rosetta-api/ledger_canister_core",
-    "//rs/rosetta-api/ledger_core",
     "//rs/rust_canisters/canister_test",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/on_wire",
+    "//rs/sns/governance",
+    "//rs/sns/init",
     "//rs/sns/root",
+    "//rs/sns/swap",
     "//rs/state_machine_tests",
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
@@ -44,16 +47,10 @@ BASE_DEPENDENCIES = [
 # dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
 DEPENDENCIES = BASE_DEPENDENCIES + [
     "//rs/nns/test_utils",
-    "//rs/sns/governance",
-    "//rs/sns/init",
-    "//rs/sns/swap",
 ]
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
     "//rs/nns/test_utils:test_utils--test_feature",
-    "//rs/sns/governance:governance--test_feature",
-    "//rs/sns/init:init--test_feature",
-    "//rs/sns/swap:swap--test_feature",
 ]
 
 MACRO_DEPENDENCIES = [
@@ -70,7 +67,7 @@ ALIASES = {}
 rust_library(
     name = "test_utils",
     testonly = True,
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_sns_test_utils",
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -81,7 +78,7 @@ rust_library(
 rust_library(
     name = "test_utils--test_feature",
     testonly = True,
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_features = ["test"],
     crate_name = "ic_sns_test_utils",
