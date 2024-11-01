@@ -154,42 +154,6 @@ fn get_bitcoind_url(bitcoind: &BitcoinD) -> Option<SocketAddrV4> {
     }
 }
 
-fn start_adapter_and_client1(
-    rt: &Runtime,
-    urls: Vec<SocketAddr>,
-    logger: ReplicaLogger,
-    network: bitcoin::Network,
-) -> (BitcoinAdapterClient, TempPath) {
-    let metrics_registry = MetricsRegistry::new();
-    let res = Builder::new()
-        .make(|uds_path| {
-            start_adapter(
-                &logger,
-                &metrics_registry,
-                rt.handle(),
-                urls.clone(),
-                uds_path,
-                network,
-            );
-            Ok(start_client(
-                &logger,
-                &metrics_registry,
-                rt.handle(),
-                uds_path,
-            ))
-        })
-        .unwrap()
-        .into_parts();
-
-    let anchor: BlockHash = "0000000000000000035908aacac4c97fb4e172a1758bbbba2ee2b188765780eb"
-        .parse()
-        .unwrap();
-    // We send this request to make sure the adapter is not idle.
-    let _ = make_get_successors_request(&res.0, anchor.to_vec(), vec![]);
-
-    res
-}
-
 fn start_adapter_and_client(
     rt: &Runtime,
     urls: Vec<SocketAddr>,
@@ -563,7 +527,7 @@ fn test_receives_blocks() {
 
     let rt = tokio::runtime::Runtime::new().unwrap();
 
-    let (adapter_client, _path) = start_adapter_and_client1(
+    let (adapter_client, _path) = start_active_adapter_and_client(
         &rt,
         vec![SocketAddr::V4(get_bitcoind_url(&bitcoind).unwrap())],
         logger,
