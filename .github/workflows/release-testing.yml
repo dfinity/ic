@@ -44,12 +44,6 @@ jobs:
         shell: bash
         run: |
           [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
-      - name: Login to Dockerhub
-        shell: bash
-        run: ./ci/scripts/docker-login.sh
-        env:
-          DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
-          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run Bazel System Test Nightly
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
@@ -92,12 +86,6 @@ jobs:
         shell: bash
         run: |
           [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
-      - name: Login to Dockerhub
-        shell: bash
-        run: ./ci/scripts/docker-login.sh
-        env:
-          DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
-          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run Bazel System Test Staging
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
@@ -140,12 +128,6 @@ jobs:
         shell: bash
         run: |
           [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
-      - name: Login to Dockerhub
-        shell: bash
-        run: ./ci/scripts/docker-login.sh
-        env:
-          DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
-          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run Bazel Test All
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
@@ -197,12 +179,6 @@ jobs:
         shell: bash
         run: |
           [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
-      - name: Login to Dockerhub
-        shell: bash
-        run: ./ci/scripts/docker-login.sh
-        env:
-          DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
-          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -268,12 +244,6 @@ jobs:
         shell: bash
         run: |
           [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
-      - name: Login to Dockerhub
-        shell: bash
-        run: ./ci/scripts/docker-login.sh
-        env:
-          DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
-          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run qualification for version ${{ matrix.version }} from the tip of the branch
         uses: ./.github/actions/bazel-test-all/
         with:
