@@ -7980,6 +7980,37 @@ fn subnet_info_canister_call_succeeds() {
 }
 
 #[test]
+fn subnet_info_canister_call_other_subnet_fails() {
+    let own_subnet_id = subnet_test_id(1);
+    let other_subnet_id = subnet_test_id(2);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet_id)
+        .build();
+    let uni_canister = test
+        .universal_canister_with_cycles(Cycles::new(1_000_000_000_000))
+        .unwrap();
+    let payload = SubnetInfoArgs {
+        subnet_id: other_subnet_id.get(),
+    }
+    .encode();
+    let uc_call = wasm()
+        .call_simple(
+            CanisterId::ic_00(),
+            Method::SubnetInfo,
+            call_args()
+                .other_side(payload)
+                .on_reject(wasm().reject_message().reject()),
+        )
+        .build();
+    test.ingress(uni_canister, "update", uc_call)
+        .unwrap_err()
+        .assert_contains(
+            ErrorCode::CanisterContractViolation,
+            "cannot be called by a user",
+        );
+}
+
+#[test]
 fn subnet_info_ingress_fails() {
     let own_subnet_id = subnet_test_id(1);
     let mut test = ExecutionTestBuilder::new()
