@@ -9,8 +9,10 @@ use ic_config::{
     execution_environment::Config as HypervisorConfig, flag_status::FlagStatus,
     state_manager::LsmtConfig, subnet_config::SubnetConfig,
 };
-use ic_consensus::consensus::payload_builder::PayloadBuilderImpl;
-use ic_consensus::dkg::{make_registry_cup, make_registry_cup_from_cup_contents};
+use ic_consensus::{
+    consensus::payload_builder::PayloadBuilderImpl,
+    dkg::{make_registry_cup, make_registry_cup_from_cup_contents},
+};
 use ic_consensus_utils::crypto::SignVerify;
 use ic_crypto_test_utils_ni_dkg::{
     dummy_initial_dkg_transcript_with_master_key, sign_message, SecretKeyBytes,
@@ -23,17 +25,16 @@ use ic_execution_environment::{ExecutionServices, IngressHistoryReaderImpl};
 use ic_http_endpoints_public::{metrics::HttpHandlerMetrics, IngressWatcher, IngressWatcherHandle};
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl;
 use ic_ingress_manager::{IngressManager, RandomStateKind};
-use ic_interfaces::batch_payload::BatchPayloadBuilder;
-use ic_interfaces::ingress_pool::IngressPoolObject;
 use ic_interfaces::{
-    batch_payload::{IntoMessages, PastPayload, ProposalContext},
+    batch_payload::{BatchPayloadBuilder, IntoMessages, PastPayload, ProposalContext},
     canister_http::{CanisterHttpChangeAction, CanisterHttpPool},
     certification::{Verifier, VerifierError},
     consensus::{PayloadBuilder as ConsensusPayloadBuilder, PayloadValidationError},
     consensus_pool::ConsensusTime,
     execution_environment::{IngressFilterService, IngressHistoryReader, QueryExecutionService},
     ingress_pool::{
-        IngressPool, PoolSection, UnvalidatedIngressArtifact, ValidatedIngressArtifact,
+        IngressPool, IngressPoolObject, PoolSection, UnvalidatedIngressArtifact,
+        ValidatedIngressArtifact,
     },
     p2p::consensus::MutablePool,
     validation::ValidationResult,
@@ -56,7 +57,6 @@ pub use ic_management_canister_types::{
 };
 use ic_messaging::SyncMessageRouting;
 use ic_metrics::MetricsRegistry;
-use ic_protobuf::types::v1 as pb;
 use ic_protobuf::{
     registry::{
         crypto::v1::{ChainKeySigningSubnetList, PublicKey as PublicKeyProto, X509PublicKeyCert},
@@ -68,7 +68,10 @@ use ic_protobuf::{
         },
         subnet::v1::CatchUpPackageContents,
     },
-    types::v1::{PrincipalId as PrincipalIdIdProto, SubnetId as SubnetIdProto},
+    types::{
+        v1 as pb,
+        v1::{PrincipalId as PrincipalIdIdProto, SubnetId as SubnetIdProto},
+    },
 };
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_client_helpers::{
@@ -130,7 +133,7 @@ use ic_types::{
     messages::{
         Blob, Certificate, CertificateDelegation, HttpCallContent, HttpCanisterUpdate,
         HttpRequestEnvelope, Payload as MsgPayload, Query, QuerySource, RejectContext,
-        SignedIngress, SignedIngressContent, EXPECTED_MESSAGE_ID_LENGTH,
+        SignedIngress, EXPECTED_MESSAGE_ID_LENGTH,
     },
     signature::ThresholdSignature,
     time::GENESIS,
@@ -143,8 +146,7 @@ pub use ic_types::{
         CanisterHttpMethod, CanisterHttpRequestContext, CanisterHttpRequestId,
         CanisterHttpResponseMetadata,
     },
-    crypto::threshold_sig::ThresholdSigPublicKey,
-    crypto::{CryptoHash, CryptoHashOf},
+    crypto::{threshold_sig::ThresholdSigPublicKey, CryptoHash, CryptoHashOf},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{CallbackId, HttpRequestError, MessageId},
     signature::BasicSignature,
@@ -181,7 +183,7 @@ use tokio::{
     runtime::Runtime,
     sync::{mpsc, watch},
 };
-use tower::{buffer::Buffer as TowerBuffer, ServiceExt};
+use tower::ServiceExt;
 
 /// The size of the channel used to communicate between the [`IngressWatcher`] and
 /// execution. Mirrors the size used in production defined in `setup_ic_stack.rs`
@@ -329,6 +331,7 @@ fn make_nodes_registry(
             chip_id: None,
             public_ipv4_config: None,
             domain: None,
+            node_reward_type: None,
         };
         registry_data_provider
             .add(
@@ -820,14 +823,12 @@ pub struct StateMachine {
     consensus_time: Arc<PocketConsensusTime>,
     ingress_pool: Arc<RwLock<PocketIngressPool>>,
     ingress_manager: Arc<IngressManager>,
-    pub ingress_filter:
-        tower::buffer::Buffer<IngressFilterService, (ProvisionalWhitelist, SignedIngressContent)>,
+    pub ingress_filter: Arc<Mutex<IngressFilterService>>,
     payload_builder: Arc<RwLock<Option<PayloadBuilderImpl>>>,
     message_routing: SyncMessageRouting,
     pub metrics_registry: MetricsRegistry,
     ingress_history_reader: Box<dyn IngressHistoryReader>,
-    pub query_handler:
-        tower::buffer::Buffer<QueryExecutionService, (Query, Option<CertificateDelegation>)>,
+    pub query_handler: Arc<Mutex<QueryExecutionService>>,
     runtime: Arc<Runtime>,
     // The atomicity is required for internal mutability and sending across threads.
     checkpoint_interval_length: AtomicU64,
@@ -911,7 +912,6 @@ pub struct StateMachineBuilder {
     nns_subnet_id: Option<SubnetId>,
     subnet_id: Option<SubnetId>,
     routing_table: RoutingTable,
-    enable_canister_snapshots: bool,
     idkg_keys_signing_enabled_status: BTreeMap<MasterPublicKeyId, bool>,
     ecdsa_signature_fee: Option<Cycles>,
     schnorr_signature_fee: Option<Cycles>,
@@ -938,7 +938,6 @@ impl StateMachineBuilder {
             config: None,
             checkpoint_interval_length: None,
             subnet_type: SubnetType::System,
-            enable_canister_snapshots: false,
             subnet_size: SMALL_APP_SUBNET_MAX_SIZE,
             nns_subnet_id: None,
             subnet_id: None,
@@ -1053,13 +1052,6 @@ impl StateMachineBuilder {
         }
     }
 
-    pub fn with_canister_snapshots(self, enable_canister_snapshots: bool) -> Self {
-        Self {
-            enable_canister_snapshots,
-            ..self
-        }
-    }
-
     pub fn with_master_ecdsa_public_key(self) -> Self {
         self.with_idkg_key(MasterPublicKeyId::Ecdsa(EcdsaKeyId {
             curve: EcdsaCurve::Secp256k1,
@@ -1163,7 +1155,6 @@ impl StateMachineBuilder {
             self.subnet_type,
             self.subnet_size,
             self.subnet_id,
-            self.enable_canister_snapshots,
             self.idkg_keys_signing_enabled_status,
             self.ecdsa_signature_fee,
             self.schnorr_signature_fee,
@@ -1485,7 +1476,6 @@ impl StateMachine {
         subnet_type: SubnetType,
         subnet_size: usize,
         subnet_id: Option<SubnetId>,
-        enable_canister_snapshots: bool,
         idkg_keys_signing_enabled_status: BTreeMap<MasterPublicKeyId, bool>,
         ecdsa_signature_fee: Option<Cycles>,
         schnorr_signature_fee: Option<Cycles>,
@@ -1551,12 +1541,7 @@ impl StateMachine {
         }
 
         if !dts {
-            hypervisor_config.canister_sandboxing_flag = FlagStatus::Disabled;
             hypervisor_config.deterministic_time_slicing = FlagStatus::Disabled;
-        }
-
-        if enable_canister_snapshots {
-            hypervisor_config.canister_snapshots = FlagStatus::Enabled;
         }
 
         // We are not interested in ingress signature validation.
@@ -1760,6 +1745,9 @@ impl StateMachine {
                         (public_key, private_key)
                     }
                 },
+                MasterPublicKeyId::VetKd(_vetkd_key_id) => {
+                    todo!("CRP-2629: Support vetKD in state machine tests")
+                }
             };
 
             idkg_subnet_secret_keys.insert(key_id.clone(), private_key);
@@ -1816,15 +1804,12 @@ impl StateMachine {
             consensus_time,
             ingress_pool,
             ingress_manager: ingress_manager.clone(),
-            ingress_filter: runtime
-                .block_on(async { TowerBuffer::new(execution_services.ingress_filter, 1) }),
+            ingress_filter: Arc::new(Mutex::new(execution_services.ingress_filter)),
             payload_builder: Arc::new(RwLock::new(None)), // set by `StateMachineBuilder::build_with_subnets`
             ingress_history_reader: execution_services.ingress_history_reader,
             message_routing,
             metrics_registry: metrics_registry.clone(),
-            query_handler: runtime.block_on(async {
-                TowerBuffer::new(execution_services.query_execution_service, 1)
-            }),
+            query_handler: Arc::new(Mutex::new(execution_services.query_execution_service)),
             ingress_watcher_handle,
             _ingress_watcher_drop_guard: ingress_watcher_drop_guard,
             certified_height_tx,
@@ -2075,7 +2060,7 @@ impl StateMachine {
         }
 
         // Run `IngressFilter` on the ingress message.
-        let ingress_filter = self.ingress_filter.clone();
+        let ingress_filter = self.ingress_filter.lock().unwrap().clone();
         self.runtime
             .block_on(ingress_filter.oneshot((provisional_whitelist, msg.clone().into())))
             .unwrap()
@@ -2189,21 +2174,8 @@ impl StateMachine {
                 );
                 let (dk, _cc) = k.derive_subkey(&path);
 
-                let message = {
-                    if context.schnorr_args().message.len() == 32 {
-                        let mut message = [0u8; 32];
-                        message.copy_from_slice(&context.schnorr_args().message);
-                        message
-                    } else {
-                        error!(
-                            self.replica_logger,
-                            "Currently BIP340 signing of messages != 32 bytes not supported"
-                        );
-                        return None;
-                    }
-                };
-
-                dk.sign_message_with_bip340_no_rng(&message).to_vec()
+                dk.sign_message_with_bip340_no_rng(&context.schnorr_args().message)
+                    .to_vec()
             }
             Some(SignatureSecretKey::Ed25519(k)) => {
                 let path = ic_crypto_ed25519::DerivationPath::from_canister_id_and_path(
@@ -2348,6 +2320,7 @@ impl StateMachine {
             time: self.get_time_of_next_round(),
             consensus_responses: payload.consensus_responses,
             blockmaker_metrics: BlockmakerMetrics::new_for_test(),
+            replica_version: ReplicaVersion::default(),
         };
 
         self.message_routing
@@ -3088,9 +3061,10 @@ impl StateMachine {
             method_name: method.to_string(),
             method_payload,
         };
+        let query_svc = self.query_handler.lock().unwrap().clone();
         if let Ok((result, _)) = self
             .runtime
-            .block_on(self.query_handler.clone().oneshot((user_query, delegation)))
+            .block_on(query_svc.oneshot((user_query, delegation)))
             .unwrap()
         {
             result
@@ -3187,7 +3161,7 @@ impl StateMachine {
             .unwrap();
 
         // Run `IngressFilter` on the ingress message.
-        let ingress_filter = self.ingress_filter.clone();
+        let ingress_filter = self.ingress_filter.lock().unwrap().clone();
         self.runtime
             .block_on(ingress_filter.oneshot((provisional_whitelist, msg.clone().into())))
             .unwrap()?;

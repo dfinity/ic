@@ -1,7 +1,6 @@
 use crate::common::EXPECTED_SNS_CREATION_FEE;
 use candid::{Decode, Encode, Nat};
 use canister_test::Project;
-use dfn_candid::candid_one;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_ledger::LedgerArgument;
 use ic_management_canister_types::{CanisterIdRecord, CanisterInstallMode};
@@ -187,7 +186,6 @@ fn test_governance_restarts_root_if_root_cannot_stop_during_upgrade() {
             &machine,
             CanisterId::ic_00(),
             "canister_status",
-            candid_one,
             CanisterIdRecord::from(root),
             governance.get(),
         )
@@ -645,7 +643,6 @@ fn upgrade_archive_sns_canister_via_sns_wasms() {
         &machine,
         ledger,
         "icrc1_transfer",
-        candid_one,
         TransferArg {
             from_subaccount: None,
             to: Account {
@@ -907,7 +904,6 @@ fn test_out_of_sync_version_still_allows_upgrade_to_succeed() {
         &machine,
         ledger,
         "icrc1_transfer",
-        candid_one,
         TransferArg {
             from_subaccount: None,
             to: Account {
@@ -1226,7 +1222,6 @@ fn insert_upgrade_path_entries_only_callable_by_governance_when_access_controls_
         &machine,
         SNS_WASM_CANISTER_ID,
         "insert_upgrade_path_entries",
-        candid_one,
         InsertUpgradePathEntriesRequest {
             upgrade_path: vec![],
             sns_governance_canister_id: None,
@@ -1261,7 +1256,6 @@ fn insert_upgrade_path_entries_callable_by_anyone_when_access_controls_disabled(
         &machine,
         SNS_WASM_CANISTER_ID,
         "insert_upgrade_path_entries",
-        candid_one,
         InsertUpgradePathEntriesRequest {
             upgrade_path: vec![],
             sns_governance_canister_id: None,

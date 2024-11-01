@@ -2488,6 +2488,9 @@ mod tests {
             is_finalizing_disburse_maturity: None,
             maturity_modulation: None,
             cached_upgrade_steps: None,
+            target_version: None,
+            timers: None,
+            upgrade_journal: None,
         }
     }
 

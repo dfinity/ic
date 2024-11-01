@@ -1,11 +1,9 @@
-#![allow(clippy::unwrap_used)]
-
 use super::*;
 use assert_matches::assert_matches;
 use ic_crypto_internal_csp_test_utils::types::{
     csp_pk_ed25519_from_hex, csp_pk_multi_bls12381_from_hex, csp_pop_multi_bls12381_from_hex,
 };
-use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, MEGaPublicKey};
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::{EccCurveType, MEGaPublicKey};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspFsEncryptionPop;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspFsEncryptionPublicKey;
 use ic_crypto_node_key_validation::ValidNodeSigningPublicKey;
@@ -97,7 +95,7 @@ mod generate_dkg_dealing_encryption_keys {
 mod generate_idkg_dealing_encryption_keys {
     use super::*;
     use crate::IDkgDealingEncryptionKeysGenerationError;
-    use ic_crypto_internal_threshold_sig_ecdsa::CanisterThresholdSerializationError;
+    use ic_crypto_internal_threshold_sig_canister_threshold_sig::CanisterThresholdSerializationError;
 
     #[test]
     fn should_delegate_to_vault() {

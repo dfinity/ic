@@ -3,17 +3,22 @@ use anyhow::Context;
 use candid::Nat;
 use candid::Principal;
 use ic_base_types::PrincipalId;
+use ic_rosetta_api::models::seconds::Seconds;
 use ic_rosetta_api::models::AccountType;
 use ic_rosetta_api::models::BlockIdentifier;
 use ic_rosetta_api::models::ConstructionDeriveRequestMetadata;
 use ic_rosetta_api::models::ConstructionMetadataRequestOptions;
 use ic_rosetta_api::models::ConstructionPayloadsRequestMetadata;
 use ic_rosetta_api::models::OperationIdentifier;
+use ic_rosetta_api::request_types::ChangeAutoStakeMaturityMetadata;
+use ic_rosetta_api::request_types::DisburseMetadata;
 use ic_rosetta_api::request_types::NeuronIdentifierMetadata;
 use ic_rosetta_api::request_types::RequestType;
+use ic_rosetta_api::request_types::SetDissolveTimestampMetadata;
 use icp_ledger::AccountIdentifier;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::account::Subaccount;
+use icrc_ledger_types::icrc1::account::DEFAULT_SUBACCOUNT;
 use num_bigint::BigInt;
 use reqwest::{Client, Url};
 use rosetta_core::identifiers::NetworkIdentifier;
@@ -30,6 +35,7 @@ use rosetta_core::response_types::*;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use url::ParseError;
+
 pub struct RosettaClient {
     pub url: Url,
     pub http_client: Client,
@@ -194,13 +200,159 @@ impl RosettaClient {
             related_operations: None,
             type_: "STAKE".to_string(),
             status: None,
-            account: Some(AccountIdentifier::new(PrincipalId(signer_principal), None).into()),
+            account: Some(rosetta_core::identifiers::AccountIdentifier::from(
+                AccountIdentifier::new(PrincipalId(signer_principal), None),
+            )),
             amount: None,
             coin_change: None,
             metadata: Some(
                 NeuronIdentifierMetadata { neuron_index }
                     .try_into()
                     .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
+            ),
+        }])
+    }
+
+    pub async fn call(&self, req: CallRequest) -> anyhow::Result<CallResponse> {
+        self.call_endpoint("/call", &req).await
+    }
+
+    pub async fn build_set_dissolve_timestamp_operations(
+        signer_principal: Principal,
+        neuron_index: u64,
+        // The number of seconds since Unix epoch.
+        // The dissolve delay will be set to this value
+        // The timestamp has to be in the future and greater or equal to the currently set timestamp
+        timestamp: u64,
+    ) -> anyhow::Result<Vec<Operation>> {
+        Ok(vec![Operation {
+            operation_identifier: OperationIdentifier {
+                index: 0,
+                network_index: None,
+            },
+            related_operations: None,
+            type_: "SET_DISSOLVE_TIMESTAMP".to_string(),
+            status: None,
+            account: Some(rosetta_core::identifiers::AccountIdentifier::from(
+                AccountIdentifier::new(PrincipalId(signer_principal), None),
+            )),
+            amount: None,
+            coin_change: None,
+            metadata: Some(
+                SetDissolveTimestampMetadata {
+                    neuron_index,
+                    timestamp: Seconds(timestamp),
+                }
+                .try_into()
+                .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
+            ),
+        }])
+    }
+
+    pub async fn build_start_dissolving_operations(
+        signer_principal: Principal,
+        neuron_index: u64,
+    ) -> anyhow::Result<Vec<Operation>> {
+        Ok(vec![Operation {
+            operation_identifier: OperationIdentifier {
+                index: 0,
+                network_index: None,
+            },
+            related_operations: None,
+            type_: "START_DISSOLVING".to_string(),
+            status: None,
+            account: Some(rosetta_core::identifiers::AccountIdentifier::from(
+                AccountIdentifier::new(PrincipalId(signer_principal), None),
+            )),
+            amount: None,
+            coin_change: None,
+            metadata: Some(
+                NeuronIdentifierMetadata { neuron_index }
+                    .try_into()
+                    .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
+            ),
+        }])
+    }
+
+    pub async fn build_stop_dissolving_operations(
+        signer_principal: Principal,
+        neuron_index: u64,
+    ) -> anyhow::Result<Vec<Operation>> {
+        Ok(vec![Operation {
+            operation_identifier: OperationIdentifier {
+                index: 0,
+                network_index: None,
+            },
+            related_operations: None,
+            type_: "STOP_DISSOLVING".to_string(),
+            status: None,
+            account: Some(rosetta_core::identifiers::AccountIdentifier::from(
+                AccountIdentifier::new(PrincipalId(signer_principal), None),
+            )),
+            amount: None,
+            coin_change: None,
+            metadata: Some(
+                NeuronIdentifierMetadata { neuron_index }
+                    .try_into()
+                    .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
+            ),
+        }])
+    }
+
+    pub async fn build_change_auto_stake_maturity_operations(
+        signer_principal: Principal,
+        neuron_index: u64,
+        requested_setting_for_auto_stake_maturity: bool,
+    ) -> anyhow::Result<Vec<Operation>> {
+        Ok(vec![Operation {
+            operation_identifier: OperationIdentifier {
+                index: 0,
+                network_index: None,
+            },
+            related_operations: None,
+            type_: "CHANGE_AUTO_STAKE_MATURITY".to_string(),
+            status: None,
+            account: Some(rosetta_core::identifiers::AccountIdentifier::from(
+                AccountIdentifier::new(PrincipalId(signer_principal), None),
+            )),
+            amount: None,
+            coin_change: None,
+            metadata: Some(
+                ChangeAutoStakeMaturityMetadata {
+                    neuron_index,
+                    requested_setting_for_auto_stake_maturity,
+                }
+                .try_into()
+                .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
+            ),
+        }])
+    }
+
+    pub async fn build_disburse_neuron_operations(
+        signer_principal: Principal,
+        neuron_index: u64,
+        recipient: Option<AccountIdentifier>,
+    ) -> anyhow::Result<Vec<Operation>> {
+        Ok(vec![Operation {
+            operation_identifier: OperationIdentifier {
+                index: 0,
+                network_index: None,
+            },
+            related_operations: None,
+            type_: "DISBURSE".to_string(),
+            status: None,
+            account: Some(rosetta_core::identifiers::AccountIdentifier::from(
+                AccountIdentifier::new(PrincipalId(signer_principal), None),
+            )),
+            amount: None,
+            coin_change: None,
+            metadata: Some(
+                DisburseMetadata {
+                    neuron_index,
+                    recipient,
+                }
+                .try_into()
+                .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
             ),
         }])
     }
@@ -545,7 +697,7 @@ impl RosettaClient {
         &self,
         transfer_args: RosettaTransferArgs,
         network_identifier: NetworkIdentifier,
-        signer_keypair: T,
+        signer_keypair: &T,
     ) -> anyhow::Result<ConstructionSubmitResponse>
     where
         T: RosettaSupportedKeyPair,
@@ -562,7 +714,7 @@ impl RosettaClient {
 
         // This submit wrapper will also wait for the transaction to be finalized
         self.make_submit_and_wait_for_transaction(
-            &signer_keypair,
+            signer_keypair,
             network_identifier,
             transfer_operations,
             // We don't care about the specific memo, only that there exists a memo
@@ -575,7 +727,7 @@ impl RosettaClient {
     pub async fn create_neuron<T>(
         &self,
         network_identifier: NetworkIdentifier,
-        signer_keypair: T,
+        signer_keypair: &T,
         create_neuron_args: RosettaCreateNeuronArgs,
     ) -> anyhow::Result<ConstructionSubmitResponse>
     where
@@ -585,7 +737,7 @@ impl RosettaClient {
         let neuron_account_id = self
             .construction_derive(ConstructionDeriveRequest {
                 network_identifier: network_identifier.clone(),
-                public_key: (&signer_keypair).into(),
+                public_key: PublicKey::from(signer_keypair),
                 metadata: Some(
                     ConstructionDeriveRequestMetadata {
                         account_type: AccountType::Neuron {
@@ -615,7 +767,7 @@ impl RosettaClient {
 
         // This submit wrapper will also wait for the transaction to be finalized
         self.make_submit_and_wait_for_transaction(
-            &signer_keypair,
+            signer_keypair,
             network_identifier.clone(),
             transfer_operations,
             // We don't care about the specific memo, only that there exists a memo
@@ -631,9 +783,174 @@ impl RosettaClient {
         .await?;
 
         self.make_submit_and_wait_for_transaction(
-            &signer_keypair,
+            signer_keypair,
             network_identifier,
             stake_operations,
+            None,
+            None,
+        )
+        .await
+    }
+
+    /// You can increase the amount of ICP that is staked in a neuron.
+    pub async fn increase_neuron_stake<T>(
+        &self,
+        network_identifier: NetworkIdentifier,
+        signer_keypair: &T,
+        args: RosettaIncreaseNeuronStakeArgs,
+    ) -> anyhow::Result<ConstructionSubmitResponse>
+    where
+        T: RosettaSupportedKeyPair,
+    {
+        // Create Neuron and Increase Stake are functionally identical
+        self.create_neuron(
+            network_identifier,
+            signer_keypair,
+            RosettaCreateNeuronArgs::builder(args.additional_stake)
+                .with_neuron_index(args.neuron_index.unwrap_or(0))
+                .with_from_subaccount(args.from_subaccount.unwrap_or(*DEFAULT_SUBACCOUNT))
+                .build(),
+        )
+        .await
+    }
+
+    /// The amount of rewards you can expect to receive are amongst other factors dependent on the amount of time a neuron is locked up for.
+    /// If the dissolve timestamp is set to a value that is before 6 months in the future you will not be getting any rewards for the locked period.
+    /// This is because the last 6 months of a dissolving neuron, the neuron will not get any rewards.
+    /// If you set the dissolve timestamp to 1 year in the future and start dissolving the neuron right away, you will receive rewards for the next 6 months.
+    /// The dissolve timestamp always increases monotonically.
+    /// If the neuron is in the DISSOLVING state, this operation can move the dissolve timestamp further into the future.
+    /// If the neuron is in the NOT_DISSOLVING state, invoking SET_DISSOLVE_TIMESTAMP with time T will attempt to increase the neuron’s dissolve delay (the minimal time it will take to dissolve the neuron) to T - current_time.
+    /// If the neuron is in the DISSOLVED state, invoking SET_DISSOLVE_TIMESTAMP will move it to the NOT_DISSOLVING state and will set the dissolve delay accordingly.
+    pub async fn set_neuron_dissolve_delay<T>(
+        &self,
+        network_identifier: NetworkIdentifier,
+        signer_keypair: &T,
+        set_neuron_dissolve_delay_args: RosettaSetNeuronDissolveDelayArgs,
+    ) -> anyhow::Result<ConstructionSubmitResponse>
+    where
+        T: RosettaSupportedKeyPair,
+    {
+        let set_dissolve_delay_operations = RosettaClient::build_set_dissolve_timestamp_operations(
+            signer_keypair.generate_principal_id()?.0,
+            set_neuron_dissolve_delay_args.neuron_index.unwrap_or(0),
+            set_neuron_dissolve_delay_args.dissolve_delay_seconds,
+        )
+        .await?;
+
+        self.make_submit_and_wait_for_transaction(
+            signer_keypair,
+            network_identifier,
+            set_dissolve_delay_operations,
+            None,
+            None,
+        )
+        .await
+    }
+
+    /// If a neuron is in the state NOT_DISSOLVING you start the dissolving process with this function.
+    /// The neuron will then move to the DISSOLVING state.
+    pub async fn start_dissolving_neuron<T>(
+        &self,
+        network_identifier: NetworkIdentifier,
+        signer_keypair: &T,
+        neuron_index: u64,
+    ) -> anyhow::Result<ConstructionSubmitResponse>
+    where
+        T: RosettaSupportedKeyPair,
+    {
+        let start_dissolving_operations = RosettaClient::build_start_dissolving_operations(
+            signer_keypair.generate_principal_id()?.0,
+            neuron_index,
+        )
+        .await?;
+
+        self.make_submit_and_wait_for_transaction(
+            signer_keypair,
+            network_identifier,
+            start_dissolving_operations,
+            None,
+            None,
+        )
+        .await
+    }
+
+    /// If a neuron is in the state DISSOLVING you can stop the dissolving process with this function.
+    /// The neuron will then move to the NOT_DISSOLVING state.
+    pub async fn stop_dissolving_neuron<T>(
+        &self,
+        network_identifier: NetworkIdentifier,
+        signer_keypair: &T,
+        neuron_index: u64,
+    ) -> anyhow::Result<ConstructionSubmitResponse>
+    where
+        T: RosettaSupportedKeyPair,
+    {
+        let stop_dissolving_operations = RosettaClient::build_stop_dissolving_operations(
+            signer_keypair.generate_principal_id()?.0,
+            neuron_index,
+        )
+        .await?;
+
+        self.make_submit_and_wait_for_transaction(
+            signer_keypair,
+            network_identifier,
+            stop_dissolving_operations,
+            None,
+            None,
+        )
+        .await
+    }
+
+    /// A neuron can be set to automatically restake its maturity.
+    pub async fn change_auto_stake_maturity<T>(
+        &self,
+        network_identifier: NetworkIdentifier,
+        signer_keypair: &T,
+        change_auto_stake_maturity_args: RosettaChangeAutoStakeMaturityArgs,
+    ) -> anyhow::Result<ConstructionSubmitResponse>
+    where
+        T: RosettaSupportedKeyPair,
+    {
+        let change_auto_stake_maturity_operations =
+            RosettaClient::build_change_auto_stake_maturity_operations(
+                signer_keypair.generate_principal_id()?.0,
+                change_auto_stake_maturity_args.neuron_index.unwrap_or(0),
+                change_auto_stake_maturity_args.requested_setting_for_auto_stake_maturity,
+            )
+            .await?;
+
+        self.make_submit_and_wait_for_transaction(
+            signer_keypair,
+            network_identifier,
+            change_auto_stake_maturity_operations,
+            None,
+            None,
+        )
+        .await
+    }
+
+    /// If a neuron is in the state DISSOLVED you can disburse the neuron with this function.
+    pub async fn disburse_neuron<T>(
+        &self,
+        network_identifier: NetworkIdentifier,
+        signer_keypair: &T,
+        disburse_neuron_args: RosettaDisburseNeuronArgs,
+    ) -> anyhow::Result<ConstructionSubmitResponse>
+    where
+        T: RosettaSupportedKeyPair,
+    {
+        let disburse_neuron_operations = RosettaClient::build_disburse_neuron_operations(
+            signer_keypair.generate_principal_id()?.0,
+            disburse_neuron_args.neuron_index,
+            disburse_neuron_args.recipient,
+        )
+        .await?;
+
+        self.make_submit_and_wait_for_transaction(
+            signer_keypair,
+            network_identifier,
+            disburse_neuron_operations,
             None,
             None,
         )
@@ -770,6 +1087,166 @@ impl RosettaCreateNeuronArgsBuilder {
             staked_amount: self.staked_amount,
             from_subaccount: self.from_subaccount,
             neuron_index: self.neuron_index,
+        }
+    }
+}
+
+pub struct RosettaSetNeuronDissolveDelayArgs {
+    pub neuron_index: Option<u64>,
+    pub dissolve_delay_seconds: u64,
+}
+
+impl RosettaSetNeuronDissolveDelayArgs {
+    pub fn builder(dissolve_delay_seconds: u64) -> RosettaSetNeuronDissolveDelayArgsBuilder {
+        RosettaSetNeuronDissolveDelayArgsBuilder::new(dissolve_delay_seconds)
+    }
+}
+
+pub struct RosettaSetNeuronDissolveDelayArgsBuilder {
+    dissolve_delay_seconds: u64,
+    neuron_index: Option<u64>,
+}
+
+impl RosettaSetNeuronDissolveDelayArgsBuilder {
+    pub fn new(dissolve_delay_seconds: u64) -> Self {
+        Self {
+            dissolve_delay_seconds,
+            neuron_index: None,
+        }
+    }
+
+    pub fn with_neuron_index(mut self, neuron_index: u64) -> Self {
+        self.neuron_index = Some(neuron_index);
+        self
+    }
+
+    pub fn build(self) -> RosettaSetNeuronDissolveDelayArgs {
+        RosettaSetNeuronDissolveDelayArgs {
+            dissolve_delay_seconds: self.dissolve_delay_seconds,
+            neuron_index: self.neuron_index,
+        }
+    }
+}
+
+pub struct RosettaIncreaseNeuronStakeArgs {
+    pub neuron_index: Option<u64>,
+    pub additional_stake: Nat,
+    pub from_subaccount: Option<Subaccount>,
+}
+
+impl RosettaIncreaseNeuronStakeArgs {
+    pub fn builder(additional_stake: Nat) -> RosettaIncreaseNeuronStakeArgsBuilder {
+        RosettaIncreaseNeuronStakeArgsBuilder::new(additional_stake)
+    }
+}
+
+pub struct RosettaIncreaseNeuronStakeArgsBuilder {
+    additional_stake: Nat,
+    neuron_index: Option<u64>,
+    // The subaccount from which the ICP should be transferred
+    from_subaccount: Option<[u8; 32]>,
+}
+
+impl RosettaIncreaseNeuronStakeArgsBuilder {
+    pub fn new(additional_stake: Nat) -> Self {
+        Self {
+            additional_stake,
+            neuron_index: None,
+            from_subaccount: None,
+        }
+    }
+
+    pub fn with_neuron_index(mut self, neuron_index: u64) -> Self {
+        self.neuron_index = Some(neuron_index);
+        self
+    }
+
+    pub fn with_from_subaccount(mut self, from_subaccount: Subaccount) -> Self {
+        self.from_subaccount = Some(from_subaccount);
+        self
+    }
+
+    pub fn build(self) -> RosettaIncreaseNeuronStakeArgs {
+        RosettaIncreaseNeuronStakeArgs {
+            additional_stake: self.additional_stake,
+            neuron_index: self.neuron_index,
+            from_subaccount: self.from_subaccount,
+        }
+    }
+}
+
+pub struct RosettaChangeAutoStakeMaturityArgs {
+    pub neuron_index: Option<u64>,
+    pub requested_setting_for_auto_stake_maturity: bool,
+}
+
+impl RosettaChangeAutoStakeMaturityArgs {
+    pub fn builder(
+        requested_setting_for_auto_stake_maturity: bool,
+    ) -> RosettaChangeAutoStakeMaturityArgsBuilder {
+        RosettaChangeAutoStakeMaturityArgsBuilder::new(requested_setting_for_auto_stake_maturity)
+    }
+}
+
+pub struct RosettaChangeAutoStakeMaturityArgsBuilder {
+    requested_setting_for_auto_stake_maturity: bool,
+    neuron_index: Option<u64>,
+}
+
+impl RosettaChangeAutoStakeMaturityArgsBuilder {
+    pub fn new(requested_setting_for_auto_stake_maturity: bool) -> Self {
+        Self {
+            requested_setting_for_auto_stake_maturity,
+            neuron_index: None,
+        }
+    }
+
+    pub fn with_neuron_index(mut self, neuron_index: u64) -> Self {
+        self.neuron_index = Some(neuron_index);
+        self
+    }
+
+    pub fn build(self) -> RosettaChangeAutoStakeMaturityArgs {
+        RosettaChangeAutoStakeMaturityArgs {
+            requested_setting_for_auto_stake_maturity: self
+                .requested_setting_for_auto_stake_maturity,
+            neuron_index: self.neuron_index,
+        }
+    }
+}
+pub struct RosettaDisburseNeuronArgs {
+    pub neuron_index: u64,
+    pub recipient: Option<AccountIdentifier>,
+}
+
+impl RosettaDisburseNeuronArgs {
+    pub fn builder(neuron_index: u64) -> RosettaDisburseNeuronArgsBuilder {
+        RosettaDisburseNeuronArgsBuilder::new(neuron_index)
+    }
+}
+
+pub struct RosettaDisburseNeuronArgsBuilder {
+    neuron_index: u64,
+    recipient: Option<AccountIdentifier>,
+}
+
+impl RosettaDisburseNeuronArgsBuilder {
+    pub fn new(neuron_index: u64) -> Self {
+        Self {
+            neuron_index,
+            recipient: None,
+        }
+    }
+
+    pub fn with_recipient(mut self, recipient: AccountIdentifier) -> Self {
+        self.recipient = Some(recipient);
+        self
+    }
+
+    pub fn build(self) -> RosettaDisburseNeuronArgs {
+        RosettaDisburseNeuronArgs {
+            neuron_index: self.neuron_index,
+            recipient: self.recipient,
         }
     }
 }

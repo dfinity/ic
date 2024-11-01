@@ -1,5 +1,5 @@
 use crate::common::{
-    default_archive_options, index_ng_wasm, install_index_ng, install_ledger,
+    account, default_archive_options, index_ng_wasm, install_index_ng, install_ledger,
     ledger_get_all_blocks, ledger_wasm, wait_until_sync_is_completed, ARCHIVE_TRIGGER_THRESHOLD,
     FEE, MAX_BLOCKS_FROM_ARCHIVE,
 };
@@ -73,15 +73,6 @@ fn install_index(env: &StateMachine, ledger_id: CanisterId) -> CanisterId {
     let args = ic_icrc1_index::InitArgs { ledger_id };
     env.install_canister(index_wasm(), Encode!(&args).unwrap(), None)
         .unwrap()
-}
-
-fn account(owner: u64, subaccount: u128) -> Account {
-    let mut sub: [u8; 32] = [0; 32];
-    sub[..16].copy_from_slice(&subaccount.to_be_bytes());
-    Account {
-        owner: PrincipalId::new_user_test_id(owner).0,
-        subaccount: Some(sub),
-    }
 }
 
 fn icrc1_balance_of(env: &StateMachine, canister_id: CanisterId, account: Account) -> u64 {
@@ -1362,7 +1353,7 @@ mod metrics {
 
     #[test]
     fn should_export_total_memory_usage_bytes_metrics() {
-        ic_icrc1_ledger_sm_tests::metrics::assert_existence_of_index_total_memory_bytes_metric(
+        ic_ledger_suite_state_machine_tests::metrics::assert_existence_of_index_total_memory_bytes_metric(
             index_wasm(),
             encode_init_args,
         );

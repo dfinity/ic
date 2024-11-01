@@ -28,7 +28,7 @@ pub(crate) struct ProposeToCreateSubnetCmd {
     /// Obsolete. Does nothing. Exists for compatibility with legacy scripts.
     subnet_handler_id: Option<String>,
 
-    #[clap(name = "NODE_ID", multiple_values(true), required = true)]
+    #[clap(name = "NODE_ID", num_args(1..), required = true)]
     /// The node IDs of the nodes that will be part of the new subnet.
     pub node_ids: Vec<PrincipalId>,
 
@@ -58,7 +58,7 @@ pub(crate) struct ProposeToCreateSubnetCmd {
     /// propagation.
     pub initial_notary_delay_millis: Option<u64>,
 
-    #[clap(long, parse(try_from_str = ReplicaVersion::try_from))]
+    #[clap(long)]
     /// ID of the Replica version to run.
     pub replica_version_id: Option<ReplicaVersion>,
 
@@ -128,11 +128,11 @@ pub(crate) struct ProposeToCreateSubnetCmd {
 
     /// The list of public keys whose owners have "readonly" SSH access to all
     /// replicas on this subnet.
-    #[clap(long, multiple_values(true))]
+    #[clap(long, num_args(1..))]
     ssh_readonly_access: Vec<String>,
     /// The list of public keys whose owners have "backup" SSH access to nodes
     /// on the NNS subnet.
-    #[clap(long, multiple_values(true))]
+    #[clap(long, num_args(1..))]
     ssh_backup_access: Vec<String>,
 
     /// The maximum number of canisters that are allowed to be created in this

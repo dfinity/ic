@@ -34,9 +34,19 @@ use std::time::Duration;
 
 pub mod ckerc20;
 pub mod events;
+#[cfg(feature = "evm-rpc")]
+mod evm_rpc_provider;
 pub mod flow;
 pub mod mock;
+#[cfg(not(feature = "evm-rpc"))]
+mod provider;
 pub mod response;
+
+#[cfg(feature = "evm-rpc")]
+pub use evm_rpc_provider::JsonRpcProvider;
+#[cfg(not(feature = "evm-rpc"))]
+pub use provider::JsonRpcProvider;
+
 #[cfg(test)]
 mod tests;
 
@@ -584,9 +594,9 @@ impl CkEthSetup {
 
     pub fn max_logs_block_range(&self) -> u64 {
         if self.evm_rpc_id.is_none() {
-            799
+            798
         } else {
-            500
+            499
         }
     }
 

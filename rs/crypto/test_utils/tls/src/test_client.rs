@@ -1,4 +1,3 @@
-#![allow(clippy::unwrap_used)]
 use crate::registry::REG_V1;
 use crate::temp_crypto_component_with_tls_keys;
 use ic_crypto_temp_crypto::TempCryptoComponent;

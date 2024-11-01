@@ -4,14 +4,10 @@ set -e
 
 function usage() {
     cat >&2 <<EOF
-build-bootstrap-config-image.sh [-t] out_file [parameters]
+build-bootstrap-config-image.sh out_file [parameters]
 
-Build the configuration image injected into the guest OS
+Build the configuration image injected into the guestOS
 during bootstrap.
-
-The first argument may optionally be "-t" to instruct the script to just build
-the tar file that contains the config information. Otherwise, it will build the
-disk image that will be injected as removable media into the bootstrap process.
 
 The output file needs to be given next. The script will either write a
 disk image or tar file as output file (see above).
@@ -63,7 +59,7 @@ options may be specified:
     (make sure to quote the argument string so it appears as a single argument
     to the script, e.g. --elasticsearch_tags "testnet1 slo")
 
-  --nns_url url
+  --nns_urls urls
     URL of NNS nodes for sign up or registry access. Can be multiple nodes
     separated by commas.
 
@@ -110,6 +106,10 @@ options may be specified:
   --socks_proxy url
     The URL of the socks proxy to use. To be used in
     systems tests only.
+
+  --generate_ic_boundary_tls_cert domain_name
+    Generate and inject a self-signed TLS certificate and key for ic-boundary
+    for the given domain name. To be used in system tests only.
 EOF
 }
 
@@ -122,7 +122,7 @@ function build_ic_bootstrap_tar() {
 
     local IPV6_ADDRESS IPV6_GATEWAY DOMAIN HOSTNAME
     local IC_CRYPTO IC_STATE IC_REGISTRY_LOCAL_STORE
-    local NNS_URL NNS_PUBLIC_KEY NODE_OPERATOR_PRIVATE_KEY
+    local NNS_URLS NNS_PUBLIC_KEY NODE_OPERATOR_PRIVATE_KEY
     local BACKUP_RETENTION_TIME_SECS BACKUP_PURGING_INTERVAL_SECS
     local ELASTICSEARCH_HOSTS ELASTICSEARCH_TAGS
     local ACCOUNTS_SSH_AUTHORIZED_KEYS
@@ -170,8 +170,8 @@ function build_ic_bootstrap_tar() {
             --elasticsearch_tags)
                 ELASTICSEARCH_TAGS="$2"
                 ;;
-            --nns_url)
-                NNS_URL="$2"
+            --nns_urls)
+                NNS_URLS="$2"
                 ;;
             --nns_public_key)
                 NNS_PUBLIC_KEY="$2"
@@ -202,6 +202,9 @@ function build_ic_bootstrap_tar() {
                 ;;
             --socks_proxy)
                 SOCKS_PROXY="$2"
+                ;;
+            --generate_ic_boundary_tls_cert)
+                IC_BOUNDARY_TLS_CERT_DOMAIN_NAME="$2"
                 ;;
             *)
                 echo "Unrecognized option: $1"
@@ -237,8 +240,8 @@ EOF
     if [ "${NNS_PUBLIC_KEY}" != "" ]; then
         cp "${NNS_PUBLIC_KEY}" "${BOOTSTRAP_TMPDIR}/nns_public_key.pem"
     fi
-    if [ "${NNS_URL}" != "" ]; then
-        echo "nns_url=${NNS_URL}" >"${BOOTSTRAP_TMPDIR}/nns.conf"
+    if [ "${NNS_URLS}" != "" ]; then
+        echo "nns_url=${NNS_URLS}" >"${BOOTSTRAP_TMPDIR}/nns.conf"
     fi
     if [ "${BACKUP_RETENTION_TIME_SECS}" != "" ] || [ "${BACKUP_PURGING_INTERVAL_SECS}" != "" ]; then
         echo "backup_retention_time_secs=${BACKUP_RETENTION_TIME_SECS}" >"${BOOTSTRAP_TMPDIR}/backup.conf"
@@ -274,6 +277,12 @@ EOF
     if [ "${NODE_OPERATOR_PRIVATE_KEY}" != "" ]; then
         cp "${NODE_OPERATOR_PRIVATE_KEY}" "${BOOTSTRAP_TMPDIR}/node_operator_private_key.pem"
     fi
+    if [[ -n "$IC_BOUNDARY_TLS_CERT_DOMAIN_NAME" ]]; then
+        openssl req -x509 -newkey rsa:2048 \
+            -keyout ${BOOTSTRAP_TMPDIR}/ic-boundary-tls.key \
+            -out ${BOOTSTRAP_TMPDIR}/ic-boundary-tls.crt -sha256 -days 3650 -nodes \
+            -subj /C=CH/ST=Zurich/L=Zurich/O=InternetComputer/OU=ApiBoundaryNodes/CN=${IC_BOUNDARY_TLS_CERT_DOMAIN_NAME}
+    fi
 
     tar cf "${OUT_FILE}" \
         --sort=name \
@@ -307,19 +316,9 @@ function build_ic_bootstrap_diskimage() {
     rm -rf "${TMPDIR}"
 }
 
-BUILD_TAR_ONLY=0
-if [ "$1" == "-t" -o "$1" == "--tar" ]; then
-    BUILD_TAR_ONLY=1
-    shift
-fi
-
 if [ "$#" -lt 2 ]; then
     usage
     exit 1
 fi
 
-if [ "${BUILD_TAR_ONLY}" == 0 ]; then
-    build_ic_bootstrap_diskimage "$@"
-else
-    build_ic_bootstrap_tar "$@"
-fi
+build_ic_bootstrap_diskimage "$@"

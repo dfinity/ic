@@ -100,7 +100,7 @@
         create_funds_whitelist: "5o66h-77qch-43oup-7aaui-kz5ty-tww4j-t2wmx-e3lym-cbtct-l3gpw-wae",
 
         // Enable Query Stats
-        query_stats_aggregation: {{ query_stats_aggregation }},
+        query_stats_aggregation: "Enabled",
 
         // Length of an epoch for query stats collection.
         query_stats_epoch_length: {{ query_stats_epoch_length }},
@@ -504,7 +504,7 @@ table ip6 filter {\n\
     },
 
     registration: {
-        nns_url: "{{ nns_url }}",
+        nns_url: "{{ nns_urls }}",
         nns_pub_key_pem: "/var/lib/ic/data/nns_public_key.pem",
         node_operator_pem: "/var/lib/ic/data/node_operator_private_key.pem"
     },

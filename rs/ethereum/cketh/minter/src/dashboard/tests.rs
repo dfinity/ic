@@ -966,6 +966,7 @@ fn initial_state_with_usdc_support() -> State {
     state
 }
 
+// TODO XC-222: add subaccounts to dashboard
 fn received_eth_event() -> ReceivedEthEvent {
     ReceivedEthEvent {
         transaction_hash: "0xf1ac37d920fa57d9caeebc7136fea591191250309ffca95ae0e8a7739de89cc2"
@@ -980,6 +981,7 @@ fn received_eth_event() -> ReceivedEthEvent {
         principal: "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae"
             .parse()
             .unwrap(),
+        subaccount: None,
     }
 }
 
@@ -1000,6 +1002,7 @@ fn received_erc20_event() -> ReceivedErc20Event {
         erc20_contract_address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
             .parse()
             .unwrap(),
+        subaccount: None,
     }
 }
 
