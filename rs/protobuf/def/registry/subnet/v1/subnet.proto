@@ -98,7 +98,6 @@ message EcdsaInitialization {
 
 message ChainKeyInitialization {
   registry.crypto.v1.MasterPublicKeyId key_id = 1;
-  //InitialIDkgDealings dealings = 2;
   oneof initialization {
     InitialIDkgDealings dealings = 2;
     InitialNiDkgTranscriptRecord transcript = 3;

@@ -89,13 +89,11 @@ pub struct EcdsaInitialization {
 pub struct ChainKeyInitialization {
     #[prost(message, optional, tag = "1")]
     pub key_id: ::core::option::Option<super::super::crypto::v1::MasterPublicKeyId>,
-    /// InitialIDkgDealings dealings = 2;
     #[prost(oneof = "chain_key_initialization::Initialization", tags = "2, 3")]
     pub initialization: ::core::option::Option<chain_key_initialization::Initialization>,
 }
 /// Nested message and enum types in `ChainKeyInitialization`.
 pub mod chain_key_initialization {
-    /// InitialIDkgDealings dealings = 2;
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Initialization {
         #[prost(message, tag = "2")]
