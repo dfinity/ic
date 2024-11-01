@@ -344,8 +344,7 @@ mod tests {
             let result: String = cmdline.into();
             if result != *expected {
                 panic!(
-                    "During test {}:\n\nInput:\n[[[{}]]]\n\nExpected:\n[[[{}]]]\n\nActual:\n[[[{}]]]\n",
-                    tst, input, expected, result,
+                    "During test {tst}:\n\nInput:\n[[[{input}]]]\n\nExpected:\n[[[{expected}]]]\n\nActual:\n[[[{result}]]]\n"
                 );
             }
         }

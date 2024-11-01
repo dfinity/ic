@@ -209,8 +209,7 @@ EXTRA_BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardwar
             let result = munge(input, defeat_checks, defeat_installer).unwrap();
             if result != expected {
                 panic!(
-                    "During test {}:\n\nInput:\n[[[{}]]]\n\nExpected:\n[[[{}]]]\n\nActual:\n[[[{}]]]\n",
-                    tst, input, expected, result,
+                    "During test {tst}:\n\nInput:\n[[[{input}]]]\n\nExpected:\n[[[{expected}]]]\n\nActual:\n[[[{result}]]]\n"
                 );
             }
         }
