@@ -188,13 +188,13 @@ impl StateMachine for StateMachineImpl {
         self.observe_phase_duration(PHASE_EXECUTION, &since);
 
         let since = Instant::now();
-        // Postprocess the state and consolidate the Streams.
+        // Postprocess the state: route messages into streams.
         let mut state_after_stream_builder =
             self.stream_builder.build_streams(state_after_execution);
         self.observe_phase_duration(PHASE_MESSAGE_ROUTING, &since);
 
         let since = Instant::now();
-        // Shed some messages if above the best-effort message memory limit.
+        // Shed enough messages to stay below the best-effort message memory limit.
         let (shed_messages, shed_message_bytes) = state_after_stream_builder
             .enforce_best_effort_message_limit(self.best_effort_message_memory_capacity);
         self.metrics.shed_messages_total.inc_by(shed_messages);

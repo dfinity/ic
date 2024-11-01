@@ -977,15 +977,10 @@ impl ReplicatedState {
     ///
     /// Time complexity: `O(n * log(n))`.
     pub fn enforce_best_effort_message_limit(&mut self, limit: NumBytes) -> (u64, NumBytes) {
-        const ZERO: NumBytes = NumBytes::new(0);
+        const ZERO_BYTES: NumBytes = NumBytes::new(0);
 
         // Check if we need to do anything at all before constructing a priority queue.
-        let mut memory_usage = self
-            .canister_states
-            .values()
-            .fold(NumBytes::new(0), |acc, canister| {
-                acc + canister.system_state.best_effort_message_memory_usage()
-            });
+        let mut memory_usage = self.best_effort_message_memory_taken();
         if memory_usage <= limit {
             // No need to do anything.
             return (0, 0.into());
@@ -997,7 +992,7 @@ impl ReplicatedState {
             .iter()
             .filter_map(|(canister_id, canister)| {
                 let memory_usage = canister.system_state.best_effort_message_memory_usage();
-                if memory_usage > ZERO {
+                if memory_usage > ZERO_BYTES {
                     Some((memory_usage, *canister_id))
                 } else {
                     None
@@ -1010,12 +1005,11 @@ impl ReplicatedState {
 
         // Shed messages from the canisters with the largest memory usage until we are
         // below the limit.
+        //
+        // The `is_empty()` check is a safety net, in case a canister somehow reports
+        // non-zero best-effort memory usage but then fails to shed a message.
         while memory_usage > limit && !priority_queue.is_empty() {
-            let Some((memory_usage_before, canister_id)) = priority_queue.pop_last() else {
-                // Safety net, in case a canister somehow reports non-zero best-effort memory
-                // usage but then fails to shed a message.
-                break;
-            };
+            let (memory_usage_before, canister_id) = priority_queue.pop_last().unwrap();
 
             // Remove the canister, shed its largest message, replace it.
             let mut canister = self.canister_states.remove(&canister_id).unwrap();
@@ -1028,17 +1022,18 @@ impl ReplicatedState {
 
             // Replace the canister in the priority queue iff its memory usage is still
             // non-zero AND a message was actually shed.
-            if memory_usage_after > ZERO && message_shed {
+            if memory_usage_after > ZERO_BYTES && message_shed {
                 priority_queue.insert((memory_usage_after, canister_id));
             }
 
             // Update the total memory usage.
             let memory_usage_delta = memory_usage_before - memory_usage_after;
-            debug_assert!(memory_usage_delta > ZERO);
+            debug_assert!(memory_usage_delta > ZERO_BYTES);
             memory_usage -= memory_usage_delta;
 
             shed_messages += message_shed as u64;
             shed_message_bytes += memory_usage_delta;
+            debug_assert_eq!(self.best_effort_message_memory_taken(), memory_usage);
         }
         (shed_messages, shed_message_bytes)
     }
