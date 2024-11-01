@@ -157,13 +157,14 @@ impl TryFrom<&str> for KernelCommandLine {
                 }
             }
         }
-        if !curr.is_empty() {
-            if !is_quoted {
-                res.push(curr.iter().collect());
-            } else {
+        if curr.is_empty() {
+        } else {
+            if is_quoted {
                 return Err(ImproperlyQuotedValue {
                     val: curr.iter().collect(),
                 });
+            } else {
+                res.push(curr.iter().collect());
             }
         }
         Ok(Self {
