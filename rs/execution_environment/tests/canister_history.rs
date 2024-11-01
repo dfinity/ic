@@ -999,9 +999,7 @@ fn canister_history_load_snapshot_fails_incorrect_sender_version() {
     let (_, test_canister, test_canister_sha256) = test_setup(SubnetType::Application, now);
 
     // Set up StateMachine
-    let env = StateMachineBuilder::new()
-        .with_canister_snapshots(true)
-        .build();
+    let env = StateMachineBuilder::new().build();
     // Set time of StateMachine to current system time
     env.set_time(now);
 
