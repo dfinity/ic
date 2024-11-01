@@ -203,6 +203,9 @@ pub trait NiDkgCspClient {
     fn create_dealing(
         &self,
         algorithm_id: AlgorithmId,
+        ///////////////////////////////////////
+        // TODO: dkg_id as ref
+        ///////////////////////////////////////
         dkg_id: NiDkgId,
         dealer_index: NodeIndex,
         threshold: NumberOfNodes,
@@ -298,6 +301,9 @@ pub trait NiDkgCspClient {
     fn verify_dealing(
         &self,
         algorithm_id: AlgorithmId,
+        ///////////////////////////////////////
+        // TODO: dkg_id as ref
+        ///////////////////////////////////////
         dkg_id: NiDkgId,
         dealer_index: NodeIndex,
         threshold: NumberOfNodes,
@@ -353,6 +359,9 @@ pub trait NiDkgCspClient {
     fn verify_resharing_dealing(
         &self,
         algorithm_id: AlgorithmId,
+        ///////////////////////////////////////
+        // TODO: dkg_id as ref
+        ///////////////////////////////////////
         dkg_id: NiDkgId,
         dealer_resharing_index: NodeIndex,
         threshold: NumberOfNodes,

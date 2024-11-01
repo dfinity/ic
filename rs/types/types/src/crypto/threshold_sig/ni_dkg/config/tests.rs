@@ -215,7 +215,7 @@ fn should_return_correct_config_values() {
 
     let config = NiDkgConfig::new(config_data).unwrap();
 
-    assert_eq!(config.dkg_id(), dkg_id);
+    assert_eq!(config.dkg_id(), &dkg_id);
     assert_eq!(config.max_corrupt_dealers(), max_corrupt_dealers);
     assert_eq!(config.dealers().get(), &dealers);
     assert_eq!(config.max_corrupt_receivers(), max_corrupt_receivers);

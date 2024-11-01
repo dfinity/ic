@@ -255,11 +255,11 @@ impl NiDkgAlgorithm for CryptoReturningOk {
     ) -> Result<NiDkgTranscript, DkgCreateTranscriptError> {
         let mut transcript = dummy_transcript_for_tests_with_params(
             config.receivers().get().clone().into_iter().collect(),
-            config.dkg_id().dkg_tag,
+            config.dkg_id().dkg_tag.clone(),
             config.threshold().get().get(),
             config.registry_version().get(),
         );
-        transcript.dkg_id = config.dkg_id();
+        transcript.dkg_id = config.dkg_id().clone();
         Ok(transcript)
     }
 

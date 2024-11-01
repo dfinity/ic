@@ -168,11 +168,8 @@ impl NiDkgConfig {
         })
     }
 
-    pub fn dkg_id(&self) -> NiDkgId {
-        ////////////////////////////
-        // TODO: ideally now a reference is returned, but there are many callers...
-        ////////////////////////////
-        self.dkg_id.clone()
+    pub fn dkg_id(&self) -> &NiDkgId {
+        &self.dkg_id
     }
 
     pub fn max_corrupt_dealers(&self) -> NumberOfNodes {

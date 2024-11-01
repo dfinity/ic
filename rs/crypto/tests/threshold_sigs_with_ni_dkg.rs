@@ -212,7 +212,7 @@ fn setup_with_random_ni_dkg_config<R: Rng + CryptoRng>(
         .subnet_size(subnet_size)
         .build(rng)
         .into_config();
-    let dkg_id = config.dkg_id();
+    let dkg_id = config.dkg_id().clone();
     let crypto_components = NiDkgTestEnvironment::new_for_config(&config, rng).crypto_components;
     (config, dkg_id, crypto_components)
 }
@@ -795,7 +795,7 @@ mod non_interactive_distributed_key_generation {
 
         load_transcript_for_receivers(config.get(), &transcript, &env.crypto_components);
 
-        let dkg_id = config.get().dkg_id();
+        let dkg_id = config.get().dkg_id().clone();
         let nodes = config.receiver_ids();
 
         (transcript, dkg_id, nodes)

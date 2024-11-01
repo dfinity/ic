@@ -51,7 +51,7 @@ fn should_correctly_create_initial_dkg_config_for_single_node() {
 
     assert_eq!(
         config.get().dkg_id(),
-        NiDkgId {
+        &NiDkgId {
             start_block_height: Height::new(0),
             dealer_subnet,
             dkg_tag,
@@ -90,7 +90,7 @@ fn should_correctly_create_initial_dkg_config() {
 
     assert_eq!(
         config.get().dkg_id(),
-        NiDkgId {
+        &NiDkgId {
             start_block_height: Height::new(0),
             dealer_subnet,
             dkg_tag,

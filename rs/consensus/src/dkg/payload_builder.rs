@@ -261,7 +261,7 @@ fn create_transcript(
     _logger: &ReplicaLogger,
 ) -> Result<NiDkgTranscript, DkgCreateTranscriptError> {
     let no_dealings = BTreeMap::new();
-    let dealings = all_dealings.get(&config.dkg_id()).unwrap_or(&no_dealings);
+    let dealings = all_dealings.get(config.dkg_id()).unwrap_or(&no_dealings);
 
     ic_interfaces::crypto::NiDkgAlgorithm::create_transcript(crypto, config, dealings)
 }
@@ -312,7 +312,7 @@ fn compute_remote_dkg_data(
             // if we do, move it to the new summary.
             if let Some((id, transcript)) = previous_transcripts
                 .iter()
-                .find(|(id, _)| eq_sans_height(id, &dkg_id))
+                .find(|(id, _)| eq_sans_height(id, dkg_id))
             {
                 new_transcripts.insert(id.clone(), transcript.clone());
             }
@@ -321,7 +321,7 @@ fn compute_remote_dkg_data(
             // the next round.
             else if !new_transcripts
                 .iter()
-                .any(|(id, _)| eq_sans_height(id, &dkg_id))
+                .any(|(id, _)| eq_sans_height(id, dkg_id))
             {
                 expected_configs.push(config)
             }
@@ -364,7 +364,7 @@ fn compute_remote_dkg_data(
             if failed_target_ids.contains(&id) {
                 for config in config_group.iter() {
                     new_transcripts.insert(
-                        config.dkg_id(),
+                        config.dkg_id().clone(),
                         Err(REMOTE_DKG_REPEATED_FAILURE_ERROR.to_string()),
                     );
                 }
@@ -846,7 +846,7 @@ mod tests {
             let config = configs[index].clone();
             assert_eq!(
                 config.dkg_id(),
-                NiDkgId {
+                &NiDkgId {
                     start_block_height,
                     dealer_subnet: subnet_id,
                     dkg_tag: tag.clone(),
@@ -1189,7 +1189,7 @@ mod tests {
                     }
                 );
 
-                assert_eq!(&conf.dkg_id(), id);
+                assert_eq!(conf.dkg_id(), id);
                 assert_eq!(
                     conf.registry_version(),
                     RegistryVersion::from(initial_registry_version)
@@ -1294,7 +1294,7 @@ mod tests {
                         }
                     );
 
-                    assert_eq!(&conf.dkg_id(), id);
+                    assert_eq!(conf.dkg_id(), id);
                     assert_eq!(
                         conf.registry_version(),
                         RegistryVersion::from(initial_registry_version)

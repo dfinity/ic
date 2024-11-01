@@ -148,7 +148,7 @@ impl DkgImpl {
 
         let content =
             match ic_interfaces::crypto::NiDkgAlgorithm::create_dealing(&*self.crypto, config) {
-                Ok(dealing) => DealingContent::new(dealing, config.dkg_id()),
+                Ok(dealing) => DealingContent::new(dealing, config.dkg_id().clone()),
                 Err(err) => {
                     match config.dkg_id().target_subnet {
                         NiDkgTargetSubnet::Local => error!(
@@ -311,7 +311,7 @@ impl DkgImpl {
 
 fn contains_dkg_messages(dkg_pool: &dyn DkgPool, config: &NiDkgConfig, replica_id: NodeId) -> bool {
     dkg_pool.get_validated().any(|message| {
-        message.content.dkg_id == config.dkg_id() && message.signature.signer == replica_id
+        &message.content.dkg_id == config.dkg_id() && message.signature.signer == replica_id
     })
 }
 

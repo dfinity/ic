@@ -182,7 +182,7 @@ impl Summary {
         Self {
             configs: configs
                 .into_iter()
-                .map(|config| (config.dkg_id(), config))
+                .map(|config| (config.dkg_id().clone(), config))
                 .collect(),
             current_transcripts,
             next_transcripts,

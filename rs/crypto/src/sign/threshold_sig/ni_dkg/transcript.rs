@@ -30,7 +30,7 @@ mod creation {
         ensure_dealing_node_ids_in_dealers(config.dealers(), &verified_dealings);
         let csp_transcript = create_csp_transcript(ni_dkg_csp_client, config, &verified_dealings)?;
         Ok(NiDkgTranscript {
-            dkg_id: config.dkg_id(),
+            dkg_id: config.dkg_id().clone(),
             threshold: config.threshold(),
             committee: config.receivers().clone(),
             registry_version: config.registry_version(),
