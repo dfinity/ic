@@ -1163,12 +1163,7 @@ pub mod sns {
             SnsCanisterType::Root => (sns_root_canister_id, sns_governance_canister_id),
             SnsCanisterType::Governance => (sns_governance_canister_id, sns_root_canister_id),
             SnsCanisterType::Ledger => (sns_ledger_canister_id, sns_root_canister_id),
-            SnsCanisterType::Swap => {
-                // The Swap canister is special in that it is controlled by the NNS, not SNS.
-                //
-                // TODO[NNS1-3425]: Swap should no longer be a special case.
-                (swap_canister_id, ROOT_CANISTER_ID.get())
-            }
+            SnsCanisterType::Swap => (swap_canister_id, sns_root_canister_id),
             SnsCanisterType::Archive => {
                 let archive_canister_id = archives.last().expect(
                     "Testing Archive canister upgrade requires some Archive canisters \

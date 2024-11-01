@@ -84,6 +84,11 @@ async fn test_deployment_swap_upgrade() {
 
 /// Upgrade Tests
 #[tokio::test]
+async fn test_upgrade_swap() {
+    test_sns_upgrade(vec![SnsCanisterType::Swap]).await;
+}
+
+#[tokio::test]
 async fn test_upgrade_sns_gov_root() {
     test_sns_upgrade(vec![SnsCanisterType::Root, SnsCanisterType::Governance]).await;
 }
@@ -282,6 +287,11 @@ async fn test_sns_upgrade(sns_canisters_to_upgrade: Vec<SnsCanisterType>) {
     }
 }
 
+// DO NOT MERGE
+//
+// TODO: Replace this test with test_upgrade_swap and test_upgrade_everything once they self-heal.
+// TODO: The should self-heal after the mainnet SNS-W canister starts setting SNS Root as controller
+// TODO: of newly created Swap canisters during SNS deployment.
 #[tokio::test]
 async fn test_proper_sns_swap_upgrade() {
     let pocket_ic = pocket_ic_helpers::pocket_ic_for_sns_tests_with_mainnet_versions().await;
