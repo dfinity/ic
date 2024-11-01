@@ -216,7 +216,7 @@ fn main() {
             ipv4_address: None,
             ipv4_gateway: None,
             ipv4_prefix_length: None,
-            ipv4_domain: None,
+            domain_name: None,
             mgmt_mac: None,
             deployment_environment: Some("testnet".to_string()),
             elasticsearch_hosts: None,

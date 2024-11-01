@@ -419,7 +419,7 @@ fn create_config_disk_image(
     malicious_behavior: Option<MaliciousBehaviour>,
     query_stats_epoch_length: Option<u64>,
     ipv4_config: Option<IPv4Config>,
-    domain: Option<String>,
+    domain_name: Option<String>,
     test_env: &TestEnv,
     group_name: &str,
 ) -> anyhow::Result<()> {
@@ -434,7 +434,7 @@ fn create_config_disk_image(
         ipv4_address: None,
         ipv4_gateway: None,
         ipv4_prefix_length: None,
-        ipv4_domain: None,
+        domain_name: None,
         mgmt_mac: None,
         deployment_environment: Some("testnet".to_string()),
         elasticsearch_hosts: None,
@@ -509,12 +509,12 @@ fn create_config_disk_image(
         config.generate_ic_boundary_tls_cert = Some(domain_name.to_string());
     }
 
-    if let Some(domain) = domain {
+    if let Some(domain_name) = domain_name {
         info!(
             test_env.logger(),
-            "Node with id={} has domain_name {}", node.node_id, domain,
+            "Node with id={} has domain_name {}", node.node_id, domain_name,
         );
-        config.ipv4_domain = Some(domain);
+        config.domain_name = Some(domain_name);
     }
 
     let elasticsearch_hosts: Vec<String> = get_elasticsearch_hosts()?;
