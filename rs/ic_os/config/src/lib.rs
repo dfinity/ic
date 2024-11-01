@@ -58,6 +58,7 @@ mod tests {
         let network_settings = NetworkSettings {
             ipv6_config,
             ipv4_config: None,
+            domain_name: None,
         };
         let logging = Logging {
             elasticsearch_hosts: [
@@ -151,9 +152,9 @@ mod tests {
             "ipv4_config": {
                 "address": "192.168.0.2",
                 "gateway": "192.168.0.1",
-                "prefix_length": 24,
-                "domain": "example.com"
-            }
+                "prefix_length": 24
+            },
+            "domain_name": "example.com"
         },
         "icos_settings": {
             "config_version": "1.0.0",
@@ -210,9 +211,9 @@ mod tests {
             "ipv4_config": {
                 "address": "192.168.0.2",
                 "gateway": "192.168.0.1",
-                "prefix_length": 24,
-                "domain": "example.com"
-            }
+                "prefix_length": 24
+            },
+            "domain_name": "example.com"
         },
         "icos_settings": {
             "config_version": "1.0.0",

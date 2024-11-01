@@ -83,7 +83,7 @@ pub struct GenerateTestnetConfigClapArgs {
     #[arg(long)]
     pub ipv4_prefix_length: Option<u8>,
     #[arg(long)]
-    pub ipv4_domain: Option<String>,
+    pub domain_name: Option<String>,
 
     // ICOSSettings arguments
     #[arg(long)]
@@ -156,7 +156,7 @@ pub fn main() -> Result<()> {
                 ipv4_address,
                 ipv4_gateway,
                 ipv4_prefix_length,
-                domain,
+                domain_name,
                 verbose,
             } = get_config_ini_settings(&config_ini_path)?;
 
@@ -167,16 +167,13 @@ pub fn main() -> Result<()> {
                 gateway: ipv6_gateway,
             };
 
-            let ipv4_config = match (ipv4_address, ipv4_gateway, ipv4_prefix_length, domain) {
-                (Some(address), Some(gateway), Some(prefix_length), Some(domain)) => {
-                    Some(Ipv4Config {
-                        address,
-                        gateway,
-                        prefix_length,
-                        domain,
-                    })
-                }
-                (None, None, None, None) => None,
+            let ipv4_config = match (ipv4_address, ipv4_gateway, ipv4_prefix_length) {
+                (Some(address), Some(gateway), Some(prefix_length)) => Some(Ipv4Config {
+                    address,
+                    gateway,
+                    prefix_length,
+                }),
+                (None, None, None) => None,
                 _ => {
                     println!("Warning: Partial IPv4 configuration provided. All parameters are required for IPv4 configuration.");
                     None
@@ -186,6 +183,7 @@ pub fn main() -> Result<()> {
             let network_settings = NetworkSettings {
                 ipv6_config: Ipv6Config::Deterministic(deterministic_config),
                 ipv4_config,
+                domain_name,
             };
 
             // get deployment.json variables
@@ -335,7 +333,7 @@ pub fn main() -> Result<()> {
                 ipv4_address: clap_args.ipv4_address,
                 ipv4_gateway: clap_args.ipv4_gateway,
                 ipv4_prefix_length: clap_args.ipv4_prefix_length,
-                ipv4_domain: clap_args.ipv4_domain,
+                domain_name: clap_args.domain_name,
                 mgmt_mac: clap_args.mgmt_mac,
                 deployment_environment: clap_args.deployment_environment,
                 elasticsearch_hosts: clap_args.elasticsearch_hosts,
