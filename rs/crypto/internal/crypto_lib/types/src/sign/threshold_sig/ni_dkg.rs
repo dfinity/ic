@@ -117,7 +117,6 @@ pub mod ni_dkg_groth20_bls12_381 {
     /// A unit of DKG time.
     pub type Epoch = AmountOf<EpochTag, u32>;
 
-
     /// Threshold signature key material with proofs of correctness.
     #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
     pub struct Dealing {
