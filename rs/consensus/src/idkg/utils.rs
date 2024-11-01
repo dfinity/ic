@@ -43,6 +43,35 @@ use std::{
     sync::Arc,
 };
 
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
+pub(super) struct IdkgMasterPublicKeyId(MasterPublicKeyId);
+
+impl TryFrom<MasterPublicKeyId> for IdkgMasterPublicKeyId {
+    type Error = String;
+
+    fn try_from(val: MasterPublicKeyId) -> Result<Self, Self::Error> {
+        if !val.is_idkg_key() {
+            Err("This key is not an idkg key".to_string())
+        } else {
+            Ok(Self(val))
+        }
+    }
+}
+
+impl From<IdkgMasterPublicKeyId> for MasterPublicKeyId {
+    fn from(val: IdkgMasterPublicKeyId) -> Self {
+        val.0
+    }
+}
+
+impl std::ops::Deref for IdkgMasterPublicKeyId {
+    type Target = MasterPublicKeyId;
+
+    fn deref(&self) -> &<Self as std::ops::Deref>::Target {
+        &self.0
+    }
+}
+
 #[derive(Clone, PartialEq, Debug)]
 pub(crate) struct InvalidChainCacheError(String);
 
