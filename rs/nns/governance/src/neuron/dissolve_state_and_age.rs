@@ -31,7 +31,7 @@ impl DissolveStateAndAge {
 
         if validated_dissolve_state_and_age != original {
             return Err( format!(
-                    "Dissolve state and age is not valid, as it does not serialize/deserialize symmetrically. In: {:?}, Out: {:?}",
+                    "Dissolve state and age is not valid, as roundtrip conversion did not result in same value. In: {:?}, Out: {:?}",
                     original, validated_dissolve_state_and_age
                 ));
         }

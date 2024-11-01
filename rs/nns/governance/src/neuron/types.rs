@@ -1680,13 +1680,9 @@ impl TryFrom<StoredDissolveStateAndAge> for DissolveStateAndAge {
                 when_dissolved_timestamp_seconds,
             ) => {
                 if aging_since_timestamp_seconds == u64::MAX {
-                    if when_dissolved_timestamp_seconds > 0 {
-                        Ok(DissolveStateAndAge::DissolvingOrDissolved {
-                            when_dissolved_timestamp_seconds,
-                        })
-                    } else {
-                        Err("Dissolve delay must be greater than 0".to_string())
-                    }
+                    Ok(DissolveStateAndAge::DissolvingOrDissolved {
+                        when_dissolved_timestamp_seconds,
+                    })
                 } else {
                     Err("Aging since timestamp must be u64::MAX for dissolving or dissolved neurons".to_string())
                 }

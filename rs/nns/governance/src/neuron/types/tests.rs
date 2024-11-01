@@ -6,7 +6,6 @@ use crate::{
 };
 use ic_cdk::println;
 
-use crate::pb::v1::neuron::DissolveState;
 use ic_nervous_system_common::{E8, ONE_YEAR_SECONDS};
 use ic_stable_structures::Storable;
 use icp_ledger::Subaccount;
@@ -86,13 +85,6 @@ fn test_dissolve_state_and_age_conversion_failure() {
             StoredDissolveStateAndAge {
                 dissolve_state: Some(NeuronDissolveState::DissolveDelaySeconds(0)),
                 aging_since_timestamp_seconds: 200,
-            },
-            "Dissolve delay must be greater than 0",
-        ),
-        (
-            StoredDissolveStateAndAge {
-                dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(0)),
-                aging_since_timestamp_seconds: u64::MAX,
             },
             "Dissolve delay must be greater than 0",
         ),
