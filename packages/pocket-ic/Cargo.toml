@@ -19,9 +19,6 @@ include = [
 authors.workspace = true
 edition.workspace = true
 
-[lib]
-doctest = false
-
 [dependencies]
 base64 = { workspace = true }
 candid = { workspace = true }
