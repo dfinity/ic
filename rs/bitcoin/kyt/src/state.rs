@@ -1,5 +1,5 @@
 use crate::{
-    providers::Provider,
+    providers::{parse_authorization_header_from_url, Provider},
     types::{BtcNetwork, KytMode},
 };
 use bitcoin::{Address, Transaction};
@@ -92,8 +92,11 @@ impl TransactionKytData {
             // Some outputs do not have addresses. These outputs will never be
             // inputs of other transactions, so it is okay to treat them as `None`.
             outputs.push(
-                Address::from_script(&output.script_pubkey, bitcoin::Network::from(*btc_network))
-                    .ok(),
+                Address::from_script(
+                    &output.script_pubkey,
+                    bitcoin::Network::from(btc_network.clone()),
+                )
+                .ok(),
             )
         }
         Ok(Self { inputs, outputs })
@@ -260,8 +263,28 @@ impl Drop for FetchGuard {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Config {
-    pub btc_network: BtcNetwork,
-    pub kyt_mode: KytMode,
+    btc_network: BtcNetwork,
+    kyt_mode: KytMode,
+}
+
+impl Config {
+    pub fn new_and_validate(btc_network: BtcNetwork, kyt_mode: KytMode) -> Result<Self, String> {
+        if let BtcNetwork::Regtest { json_rpc_url } = &btc_network {
+            let _ = parse_authorization_header_from_url(json_rpc_url)?;
+        }
+        Ok(Self {
+            btc_network,
+            kyt_mode,
+        })
+    }
+
+    pub fn btc_network(&self) -> BtcNetwork {
+        self.btc_network.clone()
+    }
+
+    pub fn kyt_mode(&self) -> KytMode {
+        self.kyt_mode
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
