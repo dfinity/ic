@@ -999,6 +999,13 @@ impl ReplicatedState {
                 }
             })
             .collect();
+        let subnet_queues_memory_usage = self.subnet_queues.best_effort_message_memory_usage();
+        if subnet_queues_memory_usage > 0 {
+            priority_queue.insert((
+                (subnet_queues_memory_usage as u64).into(),
+                self.metadata.own_subnet_id.into(),
+            ));
+        }
 
         let mut shed_messages = 0;
         let mut shed_message_bytes = 0.into();
@@ -1011,14 +1018,26 @@ impl ReplicatedState {
         while memory_usage > limit && !priority_queue.is_empty() {
             let (memory_usage_before, canister_id) = priority_queue.pop_last().unwrap();
 
-            // Remove the canister, shed its largest message, replace it.
-            let mut canister = self.canister_states.remove(&canister_id).unwrap();
-            let message_shed = canister
-                .system_state
-                .shed_largest_message(&canister_id, &self.canister_states);
+            let message_shed;
+            let memory_usage_after;
+            if canister_id.get() == self.metadata.own_subnet_id.get() {
+                // Shed from the subnet queues.
+                message_shed = self
+                    .subnet_queues
+                    .shed_largest_message(&canister_id, &self.canister_states);
+                memory_usage_after =
+                    (self.subnet_queues.best_effort_message_memory_usage() as u64).into();
+            } else {
+                // Shed from a canister's queues: remove the canister, shed its largest message,
+                // replace it.
+                let mut canister = self.canister_states.remove(&canister_id).unwrap();
+                message_shed = canister
+                    .system_state
+                    .shed_largest_message(&canister_id, &self.canister_states);
+                memory_usage_after = canister.system_state.best_effort_message_memory_usage();
+                self.canister_states.insert(canister_id, canister);
+            }
             debug_assert!(message_shed);
-            let memory_usage_after = canister.system_state.best_effort_message_memory_usage();
-            self.canister_states.insert(canister_id, canister);
 
             // Replace the canister in the priority queue iff its memory usage is still
             // non-zero AND a message was actually shed.

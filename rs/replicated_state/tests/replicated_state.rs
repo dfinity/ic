@@ -717,9 +717,10 @@ fn time_out_messages_updates_subnet_input_schedules_correctly() {
 fn enforce_best_effort_message_limit() {
     let mut fixture = ReplicatedStateFixture::with_canisters(&[CANISTER_ID, OTHER_CANISTER_ID]);
 
-    // Enqueue 3 best-effort incoming requests of increasing sizes for `CANISTER_ID`
-    // and `OTHER_CANISTER_ID`.
-    for (i, receiver) in [CANISTER_ID, OTHER_CANISTER_ID, CANISTER_ID]
+    // Enqueue 4 best-effort incoming requests of increasing sizes for
+    // `CANISTER_ID`, `OTHER_CANISTER_ID` and `own_subnet_id` (i.e. subnet queues).
+    let own_subnet_id = CanisterId::from(fixture.state.metadata.own_subnet_id);
+    for (i, receiver) in [CANISTER_ID, OTHER_CANISTER_ID, CANISTER_ID, own_subnet_id]
         .iter()
         .enumerate()
     {
@@ -744,11 +745,11 @@ fn enforce_best_effort_message_limit() {
             .enforce_best_effort_message_limit(best_effort_memory_usage),
     );
 
-    // Enforce a limit equal to the mean message size. This should shed the second
-    // and third message (with byte sizes of `mean` and respectively `mean + 100`).
-    let mean_message_size = best_effort_memory_usage / 3;
+    // Enforce a limit equal to the mean message size. This should shed everything
+    // but the first message we enqueued.
+    let mean_message_size = best_effort_memory_usage / 4;
     assert_eq!(
-        (2, mean_message_size * 2 + 10.into()),
+        (3, mean_message_size * 3 + 15.into()),
         fixture
             .state
             .enforce_best_effort_message_limit(mean_message_size),
