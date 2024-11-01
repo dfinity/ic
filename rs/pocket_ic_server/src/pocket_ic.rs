@@ -1,4 +1,3 @@
-#![allow(clippy::disallowed_types)]
 use crate::state_api::state::{HasStateLabel, OpOut, PocketIcError, StateLabel};
 use crate::{async_trait, copy_dir, BlobStore, OpId, Operation};
 use askama::Template;
@@ -812,11 +811,11 @@ impl PocketIc {
         if let Some(nns_subnet) = nns_subnet {
             for subnet in subnets.get_all() {
                 if subnet.state_machine.get_subnet_id() != nns_subnet.get_subnet_id() {
-                    subnet.set_delegation_from_nns(
-                        nns_subnet
-                            .get_delegation_for_subnet(subnet.state_machine.get_subnet_id())
-                            .unwrap(),
-                    );
+                    if let Ok(delegation) =
+                        nns_subnet.get_delegation_for_subnet(subnet.state_machine.get_subnet_id())
+                    {
+                        subnet.set_delegation_from_nns(delegation);
+                    }
                 }
             }
         }
@@ -2587,11 +2586,11 @@ fn route(
                     // We initialize delegation from NNS.
                     if let Some(nns_subnet) = pic.nns_subnet() {
                         let new_subnet = pic.subnets.get_subnet(sm.get_subnet_id()).unwrap();
-                        new_subnet.set_delegation_from_nns(
-                            nns_subnet
-                                .get_delegation_for_subnet(sm.get_subnet_id())
-                                .unwrap(),
-                        );
+                        if let Ok(delegation) =
+                            nns_subnet.get_delegation_for_subnet(sm.get_subnet_id())
+                        {
+                            new_subnet.set_delegation_from_nns(delegation);
+                        }
                     }
                     Ok(sm)
                 } else {
