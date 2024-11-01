@@ -19,7 +19,7 @@ pub struct GenerateTestnetConfigArgs {
     pub ipv4_address: Option<String>,
     pub ipv4_gateway: Option<String>,
     pub ipv4_prefix_length: Option<u8>,
-    pub ipv4_domain: Option<String>,
+    pub domain_name: Option<String>,
 
     // ICOSSettings arguments
     pub mgmt_mac: Option<String>,
@@ -71,7 +71,7 @@ pub fn generate_testnet_config(
         ipv4_address,
         ipv4_gateway,
         ipv4_prefix_length,
-        ipv4_domain,
+        domain_name,
         mgmt_mac,
         deployment_environment,
         elasticsearch_hosts,
@@ -139,8 +139,8 @@ pub fn generate_testnet_config(
         Some(Ipv6ConfigType::RouterAdvertisement) | None => Ipv6Config::RouterAdvertisement,
     };
 
-    let ipv4_config = match (ipv4_address, ipv4_gateway, ipv4_prefix_length, ipv4_domain) {
-        (Some(addr_str), Some(gw_str), Some(prefix_len), Some(domain)) => Some(Ipv4Config {
+    let ipv4_config = match (ipv4_address, ipv4_gateway, ipv4_prefix_length) {
+        (Some(addr_str), Some(gw_str), Some(prefix_len)) => Some(Ipv4Config {
             address: addr_str
                 .parse::<Ipv4Addr>()
                 .map_err(|e| anyhow::anyhow!("Failed to parse ipv4_address: {}", e))?,
@@ -148,17 +148,17 @@ pub fn generate_testnet_config(
                 .parse::<Ipv4Addr>()
                 .map_err(|e| anyhow::anyhow!("Failed to parse ipv4_gateway: {}", e))?,
             prefix_length: prefix_len,
-            domain,
         }),
-        (None, None, None, None) => None,
+        (None, None, None) => None,
         _ => {
-            anyhow::bail!("Incomplete IPv4 configuration provided. All parameters (ipv4_address, ipv4_gateway, ipv4_prefix_length, ipv4_domain) are required for IPv4 configuration.");
+            anyhow::bail!("Incomplete IPv4 configuration provided. All parameters (ipv4_address, ipv4_gateway, ipv4_prefix_length) are required for IPv4 configuration.");
         }
     };
 
     let network_settings = NetworkSettings {
         ipv6_config,
         ipv4_config,
+        domain_name,
     };
 
     // Construct ICOSSettings
@@ -405,7 +405,6 @@ mod tests {
             ipv4_address: Some("192.0.2.1".to_string()),
             ipv4_gateway: Some("192.0.2.254".to_string()),
             ipv4_prefix_length: None,
-            ipv4_domain: Some("example.com".to_string()),
             ..Default::default()
         };
 
@@ -413,7 +412,7 @@ mod tests {
         assert!(result.is_err());
         assert_eq!(
             result.unwrap_err().to_string(),
-            "Incomplete IPv4 configuration provided. All parameters (ipv4_address, ipv4_gateway, ipv4_prefix_length, ipv4_domain) are required for IPv4 configuration."
+            "Incomplete IPv4 configuration provided. All parameters (ipv4_address, ipv4_gateway, ipv4_prefix_length) are required for IPv4 configuration."
         );
     }
 
@@ -423,7 +422,6 @@ mod tests {
             ipv4_address: Some("invalid_ip".to_string()),
             ipv4_gateway: Some("192.0.2.254".to_string()),
             ipv4_prefix_length: Some(24),
-            ipv4_domain: Some("example.com".to_string()),
             ..Default::default()
         };
 
@@ -441,7 +439,6 @@ mod tests {
             ipv4_address: Some("192.0.2.1".to_string()),
             ipv4_gateway: Some("invalid_ip".to_string()),
             ipv4_prefix_length: Some(24),
-            ipv4_domain: Some("example.com".to_string()),
             ..Default::default()
         };
 

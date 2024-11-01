@@ -144,6 +144,7 @@ pub struct Logging {
 pub struct NetworkSettings {
     pub ipv6_config: Ipv6Config,
     pub ipv4_config: Option<Ipv4Config>,
+    pub domain_name: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
@@ -151,7 +152,6 @@ pub struct Ipv4Config {
     pub address: Ipv4Addr,
     pub gateway: Ipv4Addr,
     pub prefix_length: u8,
-    pub domain: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
