@@ -195,7 +195,7 @@ fn should_fail_to_combine_insufficient_shares() {
         random_node_in(config.receivers().get(), rng),
         &crypto_components,
     )
-    .combine_threshold_sig_shares(sig_shares, dkg_id);
+    .combine_threshold_sig_shares(sig_shares, &dkg_id);
 
     assert_eq!(
         combination_result.unwrap_err(),
@@ -291,7 +291,7 @@ fn threshold_sign_and_combine<H: Signable, C: CryptoComponentRng>(
         crypto_components,
     );
     crypto_for(signers_and_combiner.combiner, crypto_components)
-        .combine_threshold_sig_shares(sig_shares, dkg_id)
+        .combine_threshold_sig_shares(sig_shares, &dkg_id)
         .expect("failed to combine signature shares")
 }
 

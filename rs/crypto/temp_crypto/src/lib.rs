@@ -860,7 +860,7 @@ pub mod internal {
         fn combine_threshold_sig_shares(
             &self,
             shares: BTreeMap<NodeId, ThresholdSigShareOf<T>>,
-            dkg_id: NiDkgId,
+            dkg_id: &NiDkgId,
         ) -> CryptoResult<CombinedThresholdSigOf<T>> {
             self.crypto_component
                 .combine_threshold_sig_shares(shares, dkg_id)

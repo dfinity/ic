@@ -195,7 +195,7 @@ impl<T: Signable> ThresholdSigVerifier<T> for CryptoReturningOk {
     fn combine_threshold_sig_shares(
         &self,
         _shares: BTreeMap<NodeId, ThresholdSigShareOf<T>>,
-        _dkg_id: NiDkgId,
+        _dkg_id: &NiDkgId,
     ) -> CryptoResult<CombinedThresholdSigOf<T>> {
         Ok(CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])))
     }

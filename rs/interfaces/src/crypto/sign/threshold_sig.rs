@@ -89,7 +89,7 @@ pub trait ThresholdSigVerifier<T: Signable> {
     fn combine_threshold_sig_shares(
         &self,
         shares: BTreeMap<NodeId, ThresholdSigShareOf<T>>,
-        dkg_id: NiDkgId,
+        dkg_id: &NiDkgId,
     ) -> CryptoResult<CombinedThresholdSigOf<T>>;
 
     /// Verifies a combined threshold signature.

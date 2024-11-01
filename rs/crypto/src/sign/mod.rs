@@ -524,13 +524,10 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifier<T> for CryptoCo
         result
     }
 
-    //////////////////////////////////////////////
-    // TODO: dkg_id as reference
-    //////////////////////////////////////////////
     fn combine_threshold_sig_shares(
         &self,
         shares: BTreeMap<NodeId, ThresholdSigShareOf<T>>,
-        dkg_id: NiDkgId,
+        dkg_id: &NiDkgId,
     ) -> CryptoResult<CombinedThresholdSigOf<T>> {
         let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
@@ -548,7 +545,7 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifier<T> for CryptoCo
             &self.lockable_threshold_sig_data_store,
             &self.csp,
             shares,
-            &dkg_id,
+            dkg_id,
         );
         self.metrics.observe_duration_seconds(
             MetricsDomain::ThresholdSignature,

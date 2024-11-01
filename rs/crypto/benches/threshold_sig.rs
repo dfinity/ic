@@ -312,7 +312,7 @@ fn bench_combine_threshold_sig_shares<M: Measurement, R: Rng + CryptoRng>(
                 },
                 |(sig_shares, combiner)| {
                     assert!(combiner
-                        .combine_threshold_sig_shares(sig_shares, dkg_id.clone())
+                        .combine_threshold_sig_shares(sig_shares, &dkg_id)
                         .is_ok());
                 },
                 SmallInput,
@@ -338,7 +338,7 @@ fn bench_verify_threshold_sig_combined<M: Measurement, R: Rng + CryptoRng>(
                     let sig_shares =
                         sign_threshold_for_each(nodes, &message, dkg_id.clone(), crypto_components);
                     let threshold_sig = crypto_for(random_node(nodes, rng), crypto_components)
-                        .combine_threshold_sig_shares(sig_shares, dkg_id.clone())
+                        .combine_threshold_sig_shares(sig_shares, &dkg_id)
                         .expect("failed to combine threshold signature shares");
                     let verifier = crypto_for(random_node(nodes, rng), crypto_components);
                     (threshold_sig, message, verifier)
