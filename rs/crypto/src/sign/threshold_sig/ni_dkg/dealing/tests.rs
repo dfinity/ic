@@ -47,9 +47,8 @@ mod create_dealing {
         let mut csp = MockAllCryptoServiceProvider::new();
         csp.expect_create_dealing()
             .withf(
-                move |algorithm_id, dkg_id, dealer_index, threshold, epoch_, receiver_keys| {
-                    *dkg_id == DKG_ID
-                        && *dealer_index == 0
+                move |algorithm_id, dealer_index, threshold, epoch_, receiver_keys| {
+                    *dealer_index == 0
                         && *algorithm_id == AlgorithmId::NiDkg_Groth20_Bls12_381
                         && *threshold == THRESHOLD
                         && *epoch_ == epoch(REG_V2)
@@ -305,9 +304,8 @@ mod create_dealing {
         let mut csp = MockAllCryptoServiceProvider::new();
         csp.expect_create_dealing()
             .withf(
-                move |algorithm_id, dkg_id, dealer_index, threshold, epoch_, receiver_keys| {
-                    *dkg_id == DKG_ID
-                        && *dealer_index == expected_index
+                move |algorithm_id, dealer_index, threshold, epoch_, receiver_keys| {
+                    *dealer_index == expected_index
                         && *algorithm_id == AlgorithmId::NiDkg_Groth20_Bls12_381
                         && *threshold == THRESHOLD
                         && *epoch_ == epoch(REG_V2)

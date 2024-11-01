@@ -104,7 +104,6 @@ mod creation {
     ) -> Result<CspNiDkgDealing, DkgCreateDealingError> {
         Ok(ni_dkg_csp_client.create_dealing(
             AlgorithmId::NiDkg_Groth20_Bls12_381,
-            config.dkg_id().clone(),
             dealer_index_in_dealers_or_panic(config.dealers(), *self_node_id),
             config.threshold().get(),
             epoch(config.registry_version()),

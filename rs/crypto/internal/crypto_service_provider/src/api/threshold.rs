@@ -179,7 +179,6 @@ pub trait NiDkgCspClient {
     ///
     /// # Arguments
     /// * `algorithm_id` selects the algorithm suite to use for the scheme.
-    /// * `dkg_id` is the identifier for the distributed key being generated.
     /// * `dealer_index` the index associated with the dealer.
     /// * `threshold` is the minimum number of nodes required to generate a
     ///   valid threshold signature.
@@ -203,10 +202,6 @@ pub trait NiDkgCspClient {
     fn create_dealing(
         &self,
         algorithm_id: AlgorithmId,
-        ///////////////////////////////////////
-        // TODO: dkg_id as ref
-        ///////////////////////////////////////
-        dkg_id: NiDkgId,
         dealer_index: NodeIndex,
         threshold: NumberOfNodes,
         epoch: Epoch,

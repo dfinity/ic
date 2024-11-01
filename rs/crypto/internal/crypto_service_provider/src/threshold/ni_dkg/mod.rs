@@ -81,7 +81,6 @@ impl NiDkgCspClient for Csp {
     fn create_dealing(
         &self,
         algorithm_id: AlgorithmId,
-        _dkg_id: NiDkgId,
         dealer_index: NodeIndex,
         threshold: NumberOfNodes,
         epoch: Epoch,

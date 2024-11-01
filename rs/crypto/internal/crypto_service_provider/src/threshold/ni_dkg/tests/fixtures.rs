@@ -67,7 +67,6 @@ impl MockNode {
     pub fn create_dealing(
         &self,
         algorithm_id: AlgorithmId,
-        dkg_id: NiDkgId,
         dealer_index: NodeIndex,
         threshold: NumberOfNodes,
         epoch: Epoch,
@@ -85,14 +84,7 @@ impl MockNode {
             )
         } else {
             self.csp
-                .create_dealing(
-                    algorithm_id,
-                    dkg_id,
-                    dealer_index,
-                    threshold,
-                    epoch,
-                    receiver_keys,
-                )
+                .create_dealing(algorithm_id, dealer_index, threshold, epoch, receiver_keys)
                 .map_err(ni_dkg_errors::CspDkgCreateReshareDealingError::from)
         }
     }
@@ -272,7 +264,6 @@ impl StateWithDealings {
                     .expect("Could not find dealer in nodes");
                 let dealing = node.create_dealing(
                     config.algorithm_id,
-                    config.dkg_id.clone(),
                     config
                         .dealers
                         .position(node.node_id)
