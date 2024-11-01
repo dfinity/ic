@@ -132,35 +132,32 @@ impl LogParser for ReceivedEthOrErc20LogParser {
             log_index,
         } = event_source;
 
-        match erc20_contract_address {
-            address if address == Address::ZERO => {
-                let value = Wei::from_be_bytes(value_bytes);
-                Ok(ReceivedEthEvent {
-                    transaction_hash,
-                    block_number,
-                    log_index,
-                    from_address,
-                    value,
-                    principal,
-                    subaccount,
-                }
-                .into())
+        if erc20_contract_address == Address::ZERO {
+            let value = Wei::from_be_bytes(value_bytes);
+            return Ok(ReceivedEthEvent {
+                transaction_hash,
+                block_number,
+                log_index,
+                from_address,
+                value,
+                principal,
+                subaccount,
             }
-            _ => {
-                let value = Erc20Value::from_be_bytes(value_bytes);
-                Ok(ReceivedErc20Event {
-                    transaction_hash,
-                    block_number,
-                    log_index,
-                    from_address,
-                    value,
-                    principal,
-                    erc20_contract_address,
-                    subaccount,
-                }
-                .into())
-            }
+            .into());
         }
+
+        let value = Erc20Value::from_be_bytes(value_bytes);
+        Ok(ReceivedErc20Event {
+            transaction_hash,
+            block_number,
+            log_index,
+            from_address,
+            value,
+            principal,
+            erc20_contract_address,
+            subaccount,
+        }
+        .into())
     }
 }
 
