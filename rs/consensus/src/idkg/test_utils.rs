@@ -1606,10 +1606,11 @@ pub(crate) fn empty_idkg_payload_with_key_ids(
         subnet_id,
         key_ids
             .into_iter()
-            .map(|key_id| MasterKeyTranscript {
-                current: None,
-                next_in_creation: KeyTranscriptCreation::Begin,
-                master_key_id: key_id.clone(),
+            .map(|key_id| {
+                MasterKeyTranscript::new(
+                    key_id.clone().try_into().unwrap(),
+                    KeyTranscriptCreation::Begin,
+                )
             })
             .collect(),
     )

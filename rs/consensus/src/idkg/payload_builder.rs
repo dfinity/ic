@@ -1693,11 +1693,11 @@ mod tests {
     fn test_no_creation_after_successful_creation_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_no_creation_after_successful_creation(key_id);
+            test_no_creation_after_successful_creation(key_id.try_into().unwrap());
         }
     }
 
-    fn test_no_creation_after_successful_creation(key_id: MasterPublicKeyId) {
+    fn test_no_creation_after_successful_creation(key_id: IdkgMasterPublicKeyId) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let mut rng = reproducible_rng();
             let Dependencies {
@@ -1755,7 +1755,7 @@ mod tests {
                 next_in_creation: idkg::KeyTranscriptCreation::Created(
                     current_key_transcript.unmasked_transcript(),
                 ),
-                master_key_id: key_id.clone(),
+                master_key_id: key_id.clone().into(),
             };
 
             // Initial bootstrap payload should be created successfully
@@ -1792,7 +1792,7 @@ mod tests {
                 next_in_creation: idkg::KeyTranscriptCreation::Created(
                     next_key_transcript.unmasked_transcript(),
                 ),
-                master_key_id: key_id.clone(),
+                master_key_id: key_id.clone().into(),
             };
 
             let mut payload_2 = payload_1.clone();
@@ -1807,7 +1807,7 @@ mod tests {
                 next_in_creation: idkg::KeyTranscriptCreation::Created(
                     next_key_transcript.unmasked_transcript(),
                 ),
-                master_key_id: key_id.clone(),
+                master_key_id: key_id.clone().into(),
             };
 
             let payload_3 = create_summary_payload_helper(
@@ -1833,11 +1833,11 @@ mod tests {
     fn test_incomplete_reshare_doesnt_purge_pre_signatures_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_incomplete_reshare_doesnt_purge_pre_signatures(key_id);
+            test_incomplete_reshare_doesnt_purge_pre_signatures(key_id.try_into().unwrap());
         }
     }
 
-    fn test_incomplete_reshare_doesnt_purge_pre_signatures(key_id: MasterPublicKeyId) {
+    fn test_incomplete_reshare_doesnt_purge_pre_signatures(key_id: IdkgMasterPublicKeyId) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let mut rng = reproducible_rng();
             let Dependencies {
@@ -1847,7 +1847,7 @@ mod tests {
             } = dependencies(pool_config, 1);
             let subnet_id = subnet_test_id(1);
             let mut valid_keys = BTreeSet::new();
-            valid_keys.insert(key_id.clone());
+            valid_keys.insert(key_id.clone().into());
             let mut block_reader = TestIDkgBlockReader::new();
 
             // Create a key transcript
@@ -1888,7 +1888,7 @@ mod tests {
                 next_in_creation: idkg::KeyTranscriptCreation::Created(
                     current_key_transcript.unmasked_transcript(),
                 ),
-                master_key_id: key_id.clone(),
+                master_key_id: key_id.clone().into(),
             };
 
             let mut payload_0 =
@@ -1901,7 +1901,7 @@ mod tests {
                 derivation_path: vec![],
             };
             let algorithm = algorithm_for_key_id(&key_id);
-            let test_inputs = match key_id {
+            let test_inputs = match key_id.deref() {
                 MasterPublicKeyId::Ecdsa(_) => {
                     TestSigInputs::from(&generate_tecdsa_protocol_inputs(
                         &env,
@@ -1941,11 +1941,11 @@ mod tests {
                 &env.nodes.ids::<Vec<_>>(),
                 env.newest_registry_version,
                 &mut payload_0.uid_generator,
-                key_id.clone(),
+                key_id.clone().into(),
                 &mut payload_0.pre_signatures_in_creation,
             );
             payload_0.ongoing_xnet_reshares.insert(
-                create_reshare_request(key_id.clone(), 1, 1),
+                create_reshare_request(key_id.clone().into(), 1, 1),
                 ReshareOfUnmaskedParams::new(
                     key_transcript.transcript_id,
                     BTreeSet::new(),
@@ -2004,7 +2004,7 @@ mod tests {
 
             let payload_2 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone()],
+                &[key_id.clone().into()],
                 registry.as_ref(),
                 &block_reader,
                 Height::from(1),
@@ -2115,7 +2115,7 @@ mod tests {
             let signature_builder = TestThresholdSignatureBuilder::new();
             let chain_key_config = ChainKeyConfig {
                 key_configs: vec![KeyConfig {
-                    key_id: key_id.clone(),
+                    key_id: key_id.clone().into(),
                     pre_signatures_to_create_in_advance: 1,
                     max_queue_size: 1,
                 }],
@@ -2181,11 +2181,11 @@ mod tests {
     fn test_if_next_in_creation_continues_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_if_next_in_creation_continues(key_id);
+            test_if_next_in_creation_continues(key_id.try_into().unwrap());
         }
     }
 
-    fn test_if_next_in_creation_continues(key_id: MasterPublicKeyId) {
+    fn test_if_next_in_creation_continues(key_id: IdkgMasterPublicKeyId) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let Dependencies {
                 registry,
@@ -2201,13 +2201,13 @@ mod tests {
             registry.update_to_latest_version();
             let registry_version = registry.get_latest_version();
             let mut valid_keys = BTreeSet::new();
-            valid_keys.insert(key_id.clone());
+            valid_keys.insert(key_id.clone().into());
             let block_reader = TestIDkgBlockReader::new();
             let transcript_builder = TestIDkgTranscriptBuilder::new();
             let signature_builder = TestThresholdSignatureBuilder::new();
             let chain_key_config = ChainKeyConfig {
                 key_configs: vec![KeyConfig {
-                    key_id: key_id.clone(),
+                    key_id: key_id.clone().into(),
                     pre_signatures_to_create_in_advance: 1,
                     max_queue_size: 1,
                 }],
@@ -2331,11 +2331,11 @@ mod tests {
     fn test_next_in_creation_with_initial_dealings_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_next_in_creation_with_initial_dealings(key_id);
+            test_next_in_creation_with_initial_dealings(key_id.try_into().unwrap());
         }
     }
 
-    fn test_next_in_creation_with_initial_dealings(key_id: MasterPublicKeyId) {
+    fn test_next_in_creation_with_initial_dealings(key_id: IdkgMasterPublicKeyId) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let mut rng = reproducible_rng();
             let Dependencies {
@@ -2349,13 +2349,13 @@ mod tests {
                 .with_dkg_interval_length(9)
                 .build();
             let mut valid_keys = BTreeSet::new();
-            valid_keys.insert(key_id.clone());
+            valid_keys.insert(key_id.clone().into());
             let mut block_reader = TestIDkgBlockReader::new();
             let transcript_builder = TestIDkgTranscriptBuilder::new();
             let signature_builder = TestThresholdSignatureBuilder::new();
             let chain_key_config = ChainKeyConfig {
                 key_configs: vec![KeyConfig {
-                    key_id: key_id.clone(),
+                    key_id: key_id.clone().into(),
                     pre_signatures_to_create_in_advance: 1,
                     max_queue_size: 1,
                 }],
@@ -2559,7 +2559,7 @@ mod tests {
             let key_id_2 = key_id_with_name(&key_id, "some_other_key");
             let payload_7 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone(), key_id_2.clone()],
+                &[key_id.clone(), key_id_2.clone().try_into().unwrap()],
                 registry.as_ref(),
                 &block_reader,
                 Height::from(5),
