@@ -4,7 +4,7 @@ use crate::{
     LedgerArgument, UpgradeArgs, FEE, MINTER,
 };
 use candid::{CandidType, Encode};
-use ic_state_machine_tests::StateMachine;
+use ic_pocket_ic_tests::StateMachine;
 use icrc_ledger_types::icrc3::blocks::GenericBlock;
 use proptest::prelude::Strategy;
 use proptest::test_runner::TestRunner;

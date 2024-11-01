@@ -4,13 +4,13 @@ use ic_nervous_system_proto::pb::v1::{
     GetTimersRequest, GetTimersResponse, ResetTimersRequest, ResetTimersResponse, Timers,
 };
 use ic_nns_test_utils::sns_wasm::{build_governance_sns_wasm, build_root_sns_wasm};
+use ic_pocket_ic_tests::StateMachine;
 use ic_sns_governance::{init::GovernanceCanisterInitPayloadBuilder, pb::v1::Governance};
 use ic_sns_root::pb::v1::SnsRootCanister;
 use ic_sns_swap::pb::v1::{
     GetStateRequest, GetStateResponse, Init, Lifecycle, NeuronBasketConstructionParameters,
 };
 use ic_sns_test_utils::state_test_helpers::state_machine_builder_for_sns_tests;
-use ic_state_machine_tests::StateMachine;
 use ic_types::{CanisterId, PrincipalId};
 use pretty_assertions::assert_eq;
 use std::time::{Duration, SystemTime};

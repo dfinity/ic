@@ -5,7 +5,7 @@ use candid::{Encode, Principal};
 use ic_agent::identity::Identity;
 use ic_icrc1_index_ng::{IndexArg, InitArg as IndexInitArg};
 use ic_icrc1_test_utils::minter_identity;
-use ic_state_machine_tests::StateMachine;
+use ic_pocket_ic_tests::StateMachine;
 
 mod common;
 
