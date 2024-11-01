@@ -92,7 +92,7 @@ fn setup_wasm_execution_input(func_ref: FuncRef) -> WasmExecutionInput {
     let dirty_page_overhead = SchedulerConfig::application_subnet().dirty_page_overhead;
     let network_topology = NetworkTopology::default();
 
-    let sandbox_safe_system_state = SandboxSafeSystemState::new(
+    let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         cycles_account_manager,
         &network_topology,

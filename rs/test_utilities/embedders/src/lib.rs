@@ -131,7 +131,7 @@ impl WasmtimeInstanceBuilder {
             HypervisorConfig::default().subnet_callback_soft_cap as u64;
         let canister_callback_quota = HypervisorConfig::default().canister_callback_quota as u64;
 
-        let sandbox_safe_system_state = SandboxSafeSystemState::new(
+        let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
             &system_state,
             cycles_account_manager,
             &self.network_topology,

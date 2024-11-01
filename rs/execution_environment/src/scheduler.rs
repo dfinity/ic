@@ -37,8 +37,8 @@ use ic_types::{
     ingress::{IngressState, IngressStatus},
     messages::{CanisterMessage, Ingress, MessageId, Response, NO_DEADLINE},
     AccumulatedPriority, CanisterId, ComputeAllocation, Cycles, ExecutionRound, LongExecutionMode,
-    MemoryAllocation, NumBytes, NumInstructions, NumSlices, Randomness, SubnetId, Time,
-    MAX_WASM_MEMORY_IN_BYTES,
+    MemoryAllocation, NumBytes, NumInstructions, NumSlices, Randomness, ReplicaVersion, SubnetId,
+    Time, MAX_WASM_MEMORY_IN_BYTES,
 };
 use ic_types::{nominal_cycles::NominalCycles, NumMessages};
 use num_rational::Ratio;
@@ -489,6 +489,7 @@ impl SchedulerImpl {
         round_limits: &mut RoundLimits,
         measurement_scope: &MeasurementScope,
         registry_settings: &RegistryExecutionSettings,
+        replica_version: &ReplicaVersion,
         idkg_subnet_public_keys: &BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     ) -> ReplicatedState {
         let ongoing_long_install_code =
@@ -525,6 +526,7 @@ impl SchedulerImpl {
                     csprng,
                     round_limits,
                     registry_settings,
+                    replica_version,
                     measurement_scope,
                     idkg_subnet_public_keys,
                 );
@@ -556,6 +558,7 @@ impl SchedulerImpl {
         csprng: &mut Csprng,
         round_limits: &mut RoundLimits,
         registry_settings: &RegistryExecutionSettings,
+        replica_version: &ReplicaVersion,
         measurement_scope: &MeasurementScope,
         idkg_subnet_public_keys: &BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     ) -> (ReplicatedState, Option<NumInstructions>) {
@@ -572,6 +575,7 @@ impl SchedulerImpl {
             instruction_limits,
             csprng,
             idkg_subnet_public_keys,
+            replica_version,
             registry_settings,
             round_limits,
         );
@@ -651,6 +655,7 @@ impl SchedulerImpl {
         root_measurement_scope: &MeasurementScope<'a>,
         scheduler_round_limits: &mut SchedulerRoundLimits,
         registry_settings: &RegistryExecutionSettings,
+        replica_version: &ReplicaVersion,
         idkg_subnet_public_keys: &BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     ) -> (ReplicatedState, BTreeSet<CanisterId>, BTreeSet<CanisterId>) {
         let measurement_scope =
@@ -691,6 +696,7 @@ impl SchedulerImpl {
                         &mut subnet_round_limits,
                         &subnet_measurement_scope,
                         registry_settings,
+                        replica_version,
                         idkg_subnet_public_keys,
                     );
                     scheduler_round_limits.update_subnet_round_limits(&subnet_round_limits);
@@ -1418,6 +1424,7 @@ impl Scheduler for SchedulerImpl {
         randomness: Randomness,
         idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
         idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
+        replica_version: &ReplicaVersion,
         current_round: ExecutionRound,
         round_summary: Option<ExecutionRoundSummary>,
         current_round_type: ExecutionRoundType,
@@ -1576,6 +1583,7 @@ impl Scheduler for SchedulerImpl {
                     &mut csprng,
                     &mut subnet_round_limits,
                     registry_settings,
+                    replica_version,
                     &measurement_scope,
                     &idkg_subnet_public_keys,
                 );
@@ -1634,6 +1642,7 @@ impl Scheduler for SchedulerImpl {
                     &mut csprng,
                     &mut subnet_round_limits,
                     registry_settings,
+                    replica_version,
                     &measurement_scope,
                     &idkg_subnet_public_keys,
                 );
@@ -1694,6 +1703,7 @@ impl Scheduler for SchedulerImpl {
             &root_measurement_scope,
             &mut scheduler_round_limits,
             registry_settings,
+            replica_version,
             &idkg_subnet_public_keys,
         );
 
@@ -1989,6 +1999,7 @@ fn execute_canisters_on_thread(
         // - or the canister is blocked by a long-running install code.
         // - or the instruction limit is reached.
         // - or the canister finishes a long execution
+        let mut total_instructions_used = NumInstructions::new(0);
         loop {
             match canister.next_execution() {
                 NextExecution::None | NextExecution::ContinueInstallCode => {
@@ -2047,6 +2058,7 @@ fn execute_canisters_on_thread(
                 messages,
             );
             if let Some(instructions_used) = instructions_used {
+                total_instructions_used += instructions_used;
                 total_messages_executed.inc_assign();
                 observe_instructions_consumed_per_message(
                     &logger,
@@ -2100,8 +2112,11 @@ fn execute_canisters_on_thread(
         );
         canister.system_state.canister_metrics.executed += 1;
         canisters.push(canister);
-        round_limits.instructions -=
-            as_round_instructions(config.instruction_overhead_per_canister);
+        // Skip per-canister overhead for canisters with not enough cycles.
+        if total_instructions_used > 0.into() {
+            round_limits.instructions -=
+                as_round_instructions(config.instruction_overhead_per_canister);
+        }
     }
 
     ExecutionThreadResult {

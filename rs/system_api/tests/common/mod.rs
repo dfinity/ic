@@ -183,7 +183,7 @@ pub fn get_system_api(
     cycles_account_manager: CyclesAccountManager,
 ) -> SystemApiImpl {
     let execution_mode = api_type.execution_mode();
-    let sandbox_safe_system_state = SandboxSafeSystemState::new(
+    let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
