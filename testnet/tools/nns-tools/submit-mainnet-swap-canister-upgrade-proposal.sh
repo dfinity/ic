@@ -7,7 +7,7 @@ source "$NNS_TOOLS_DIR/lib/include.sh"
 help() {
     print_green "
 Usage: $0 <PROPOSAL_FILE> <NEURON_ID>
-    PROPOSAL_FILE: File with proposal created by ./prepare-mainnet-sale-canister-upgrade-proposal-text.sh (or formatted in that way)
+    PROPOSAL_FILE: File with proposal created by ./prepare-mainnet-swap-canister-upgrade-proposal-text.sh (or formatted in that way)
     NEURON_ID: Your mainnet neuron ID, associated with your HSM
 
   This script will create a proposal on mainnet from a given proposal text.
@@ -23,15 +23,25 @@ fi
 PROPOSAL_FILE=$1
 NEURON_ID=$2
 
-submit_sale_upgrade_proposal_mainnet() {
+submit_swap_upgrade_proposal_mainnet() {
     ensure_variable_set IC_ADMIN
 
     PROPOSAL_FILE=$1
     NEURON_ID=$2
 
-    CANISTER_ID=$(proposal_header_field_value "$PROPOSAL_FILE" "Target canister:")
-    VERSION=$(proposal_header_field_value "$PROPOSAL_FILE" "Git Hash:")
-    PROPOSAL_SHA=$(proposal_header_field_value "$PROPOSAL_FILE" "New Wasm Hash:")
+    CANISTER_ID=$(proposal_field_value "$PROPOSAL_FILE" "Target canister")
+    ROOT_CANISTER_ID=$(
+        dfx \
+            --identity default \
+            canister --network ic \
+            call $CANISTER_ID get_init '(record {})' \
+            | idl2json \
+            | jq -r ".init[0].sns_root_canister_id"
+    )
+    SNS_PROJECT_NAME=$(curl -s "https://sns-api.internetcomputer.org/api/v1/snses/$ROOT_CANISTER_ID" | jq -r ".name")
+
+    VERSION=$(proposal_field_value "$PROPOSAL_FILE" "Source code")
+    PROPOSAL_SHA=$(proposal_field_value "$PROPOSAL_FILE" "New wasm hash")
 
     # Functions that exit if error
     validate_sns_version_wasm_sha "swap" "$VERSION" "$PROPOSAL_SHA"
@@ -46,9 +56,8 @@ submit_sale_upgrade_proposal_mainnet() {
     print_green "End Proposal Text"
     echo
     print_green "Summary of action:
-  You are proposing to update canister $CANISTER_ID (A Sale Canister for an SNS) to commit $VERSION.
-  Please verify additionally you are targeting the correct Canister ID for your intended SNS.
-  The WASM hash is $WASM_SHA.
+  You are proposing to update canister $CANISTER_ID (A Swap Canister for $SNS_PROJECT_NAME)
+  to commit $VERSION. The WASM hash is $WASM_SHA.
     "
 
     check_or_set_dfx_hsm_pin
@@ -70,10 +79,10 @@ submit_sale_upgrade_proposal_mainnet() {
 
 if ! is_variable_set IC_ADMIN; then
     if [ ! -f "$MY_DOWNLOAD_DIR/ic-admin" ]; then
-        PREVIOUS_VERSION=$(extract_previous_version "$PROPOSAL_FILE")
-        install_binary ic-admin "$PREVIOUS_VERSION" "$MY_DOWNLOAD_DIR"
+        VERSION=$(proposal_field_value "$PROPOSAL_FILE" "Source code")
+        install_binary ic-admin "$VERSION" "$MY_DOWNLOAD_DIR"
     fi
     IC_ADMIN=$MY_DOWNLOAD_DIR/ic-admin
 fi
 
-submit_sale_upgrade_proposal_mainnet $PROPOSAL_FILE $NEURON_ID
+submit_swap_upgrade_proposal_mainnet $PROPOSAL_FILE $NEURON_ID

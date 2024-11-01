@@ -37,7 +37,7 @@ use slog::{debug, info, Logger};
 use std::process::Command;
 use std::time::Duration;
 
-const COUNTER_CANISTER_WAT: &str = "rs/tests/src/counter.wat";
+const COUNTER_CANISTER_WAT: &str = "rs/tests/counter.wat";
 const CANISTER_METHOD: &str = "read";
 // Size of the payload sent to the counter canister in query("write") call.
 const PAYLOAD_SIZE_BYTES: usize = 1024;

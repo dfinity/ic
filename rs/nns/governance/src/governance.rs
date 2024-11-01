@@ -5584,6 +5584,8 @@ impl Governance {
         // Finally, add this proposal as an open proposal.
         self.insert_proposal(proposal_num, proposal_data);
 
+        self.refresh_voting_power(proposer_id);
+
         Ok(proposal_id)
     }
 
@@ -5786,7 +5788,7 @@ impl Governance {
                                     neuron_store.get_followers_by_followee_and_topic(*k, topic),
                                 );
                                 // Default following doesn't apply to governance or SNS
-                                // decentralization sale proposals.
+                                // decentralization swap proposals.
                                 if ![Topic::Governance, Topic::SnsAndCommunityFund].contains(&topic)
                                 {
                                     // Insert followers from 'Unspecified' (default followers)
@@ -5966,7 +5968,25 @@ impl Governance {
 
         self.process_proposal(proposal_id.id);
 
+        self.refresh_voting_power(neuron_id);
+
         Ok(())
+    }
+
+    fn refresh_voting_power(&mut self, neuron_id: &NeuronId) {
+        let now_seconds = self.env.now();
+
+        let result = self.with_neuron_mut(neuron_id, |neuron| {
+            neuron.refresh_voting_power(now_seconds);
+        });
+
+        if let Err(err) = result {
+            println!(
+                "{}WARNING: Tried to refresh the voting power of neuron {}, \
+                 but was unable to find it: {}",
+                LOG_PREFIX, neuron_id.id, err,
+            );
+        }
     }
 
     /// Add or remove followees for this neuron for a specified topic.
@@ -6031,17 +6051,20 @@ impl Governance {
             )
         })?;
 
+        let now_seconds = self.env.now();
         self.with_neuron_mut(id, |neuron| {
             if follow_request.followees.is_empty() {
-                neuron.followees.remove(&(topic as i32))
+                neuron.followees.remove(&(topic as i32));
             } else {
                 neuron.followees.insert(
                     topic as i32,
                     Followees {
                         followees: follow_request.followees.clone(),
                     },
-                )
+                );
             }
+
+            neuron.refresh_voting_power(now_seconds);
         })?;
 
         Ok(())

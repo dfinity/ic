@@ -1,4 +1,7 @@
-use crate::{providers::Provider, types::BtcNetwork};
+use crate::{
+    providers::{parse_authorization_header_from_url, Provider},
+    types::{BtcNetwork, KytMode},
+};
 use bitcoin::{Address, Transaction};
 use ic_btc_interface::Txid;
 use ic_cdk::api::call::RejectionCode;
@@ -8,7 +11,6 @@ use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, VecDeque};
-use std::convert::TryFrom;
 
 #[cfg(test)]
 mod tests;
@@ -63,7 +65,7 @@ pub struct FetchedTx {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TransactionKytData {
     pub inputs: Vec<PreviousOutput>,
-    pub outputs: Vec<Address>,
+    pub outputs: Vec<Option<Address>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -72,10 +74,11 @@ pub struct PreviousOutput {
     pub vout: u32,
 }
 
-impl TryFrom<Transaction> for TransactionKytData {
-    type Error = bitcoin::address::FromScriptError;
-
-    fn try_from(tx: Transaction) -> Result<Self, Self::Error> {
+impl TransactionKytData {
+    pub fn from_transaction(
+        btc_network: &BtcNetwork,
+        tx: Transaction,
+    ) -> Result<Self, bitcoin::address::FromScriptError> {
         let inputs = tx
             .input
             .iter()
@@ -86,10 +89,15 @@ impl TryFrom<Transaction> for TransactionKytData {
             .collect();
         let mut outputs = Vec::new();
         for output in tx.output.iter() {
-            outputs.push(Address::from_script(
-                &output.script_pubkey,
-                bitcoin::Network::Bitcoin,
-            )?)
+            // Some outputs do not have addresses. These outputs will never be
+            // inputs of other transactions, so it is okay to treat them as `None`.
+            outputs.push(
+                Address::from_script(
+                    &output.script_pubkey,
+                    bitcoin::Network::from(btc_network.clone()),
+                )
+                .ok(),
+            )
         }
         Ok(Self { inputs, outputs })
     }
@@ -255,7 +263,28 @@ impl Drop for FetchGuard {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Config {
-    pub btc_network: BtcNetwork,
+    btc_network: BtcNetwork,
+    kyt_mode: KytMode,
+}
+
+impl Config {
+    pub fn new_and_validate(btc_network: BtcNetwork, kyt_mode: KytMode) -> Result<Self, String> {
+        if let BtcNetwork::Regtest { json_rpc_url } = &btc_network {
+            let _ = parse_authorization_header_from_url(json_rpc_url)?;
+        }
+        Ok(Self {
+            btc_network,
+            kyt_mode,
+        })
+    }
+
+    pub fn btc_network(&self) -> BtcNetwork {
+        self.btc_network.clone()
+    }
+
+    pub fn kyt_mode(&self) -> KytMode {
+        self.kyt_mode
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
