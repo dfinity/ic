@@ -49,7 +49,7 @@ pub(crate) fn make_bootstrap_summary(
 ) -> idkg::Summary {
     let key_transcripts = key_ids
         .into_iter()
-        .map(|key_id| MasterKeyTranscript::new(key_id, idkg::KeyTranscriptCreation::Begin))
+        .filter_map(|key_id| MasterKeyTranscript::new(key_id, idkg::KeyTranscriptCreation::Begin))
         .collect();
 
     Some(IDkgPayload::empty(height, subnet_id, key_transcripts))
@@ -71,13 +71,20 @@ pub(crate) fn make_bootstrap_summary_with_initial_dealings(
             Some((params, transcript)) => {
                 idkg_transcripts.insert(transcript.transcript_id, transcript);
 
-                key_transcripts.push(MasterKeyTranscript::new(
+                if let Some(transcript) = MasterKeyTranscript::new(
                     key_id,
                     idkg::KeyTranscriptCreation::XnetReshareOfUnmaskedParams((
                         Box::new(initial_dealings),
                         params,
                     )),
-                ));
+                ) {
+                    key_transcripts.push(transcript);
+                } else {
+                    error!(
+                        log,
+                        "Called idkg::make_bootstrap_summary_with_initial_dealings with non-idkg key_id"
+                    );
+                }
             }
             None => {
                 // Leave the feature disabled if the initial dealings are incorrect.
@@ -143,6 +150,7 @@ pub(crate) fn create_summary_payload(
         .key_configs
         .iter()
         .map(|key_config| key_config.key_id.clone())
+        .filter(|key_id| key_id.is_idkg_key())
         .collect();
 
     // Get idkg_payload from parent block if it exists
@@ -279,10 +287,18 @@ fn create_summary_payload_helper(
     for key_id in key_ids {
         #[allow(clippy::map_entry)]
         if !idkg_summary.key_transcripts.contains_key(key_id) {
-            idkg_summary.key_transcripts.insert(
-                key_id.clone(),
-                MasterKeyTranscript::new(key_id.clone(), idkg::KeyTranscriptCreation::Begin),
-            );
+            if let Some(transcript) =
+                MasterKeyTranscript::new(key_id.clone(), idkg::KeyTranscriptCreation::Begin)
+            {
+                idkg_summary
+                    .key_transcripts
+                    .insert(key_id.clone(), transcript);
+            } else {
+                error!(
+                    log,
+                    "Called idkg::create_summary_payload_helper with non-idkg key_id"
+                );
+            }
         }
     }
 

@@ -371,12 +371,16 @@ pub struct MasterKeyTranscript {
 }
 
 impl MasterKeyTranscript {
-    pub fn new(key_id: MasterPublicKeyId, next_in_creation: KeyTranscriptCreation) -> Self {
-        Self {
+    pub fn new(key_id: MasterPublicKeyId, next_in_creation: KeyTranscriptCreation) -> Option<Self> {
+        if !key_id.is_idkg_key() {
+            return None;
+        }
+
+        Some(Self {
             current: None,
             next_in_creation,
             master_key_id: key_id,
-        }
+        })
     }
 
     pub fn update(

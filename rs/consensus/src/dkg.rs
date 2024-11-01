@@ -8,7 +8,7 @@ use crate::{
     idkg::{
         make_bootstrap_summary,
         payload_builder::make_bootstrap_summary_with_initial_dealings,
-        utils::{get_idkg_chain_key_config_if_enabled, inspect_chain_key_initializations},
+        utils::{get_idkg_chain_key_config_if_enabled, inspect_idkg_chain_key_initializations},
     },
 };
 use ic_consensus_utils::crypto::ConsensusCrypto;
@@ -561,7 +561,7 @@ fn bootstrap_idkg_summary_from_cup_contents(
     subnet_id: SubnetId,
     logger: &ReplicaLogger,
 ) -> Result<idkg::Summary, String> {
-    let initial_dealings = inspect_chain_key_initializations(
+    let initial_dealings = inspect_idkg_chain_key_initializations(
         &cup_contents.ecdsa_initializations,
         &cup_contents.chain_key_initializations,
     )?;

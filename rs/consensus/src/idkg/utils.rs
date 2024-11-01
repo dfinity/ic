@@ -361,7 +361,7 @@ pub(super) fn transcript_op_summary(op: &IDkgTranscriptOperation) -> String {
 
 /// Inspect chain_key_initializations field in the CUPContent.
 /// Return key_id and dealings.
-pub(crate) fn inspect_chain_key_initializations(
+pub(crate) fn inspect_idkg_chain_key_initializations(
     ecdsa_initializations: &[pb::EcdsaInitialization],
     chain_key_initializations: &[pb::ChainKeyInitialization],
 ) -> Result<BTreeMap<MasterPublicKeyId, InitialIDkgDealings>, String> {
@@ -404,7 +404,7 @@ pub(crate) fn inspect_chain_key_initializations(
 
     // TODO(CON-1332): Do not panic if fields are missing
     for chain_key_init in chain_key_initializations {
-        let key_id = chain_key_init
+        let key_id: MasterPublicKeyId = chain_key_init
             .key_id
             .clone()
             .expect("Error: Failed to find key_id in chain_key_initializations")
@@ -415,6 +415,11 @@ pub(crate) fn inspect_chain_key_initializations(
                     err
                 )
             })?;
+
+        // Skip non-idkg keys
+        if !key_id.is_idkg_key() {
+            continue;
+        }
 
         let dealings = chain_key_init
             .dealings
@@ -625,7 +630,7 @@ mod tests {
 
     #[test]
     fn test_inspect_chain_key_initializations_no_keys() {
-        let init = inspect_chain_key_initializations(&[], &[])
+        let init = inspect_idkg_chain_key_initializations(&[], &[])
             .expect("Should successfully get initializations");
 
         assert!(init.is_empty());
@@ -644,7 +649,7 @@ mod tests {
             dealings: Some((&initial_dealings).into()),
         };
 
-        let init = inspect_chain_key_initializations(&[ecdsa_init], &[])
+        let init = inspect_idkg_chain_key_initializations(&[ecdsa_init], &[])
             .expect("Should successfully get initializations");
 
         assert_eq!(
@@ -666,7 +671,7 @@ mod tests {
             dealings: Some((&initial_dealings).into()),
         };
 
-        let init = inspect_chain_key_initializations(&[], &[chain_key_init])
+        let init = inspect_idkg_chain_key_initializations(&[], &[chain_key_init])
             .expect("Should successfully get initializations");
 
         assert_eq!(init, BTreeMap::from([(key_id, initial_dealings)]));
@@ -705,9 +710,11 @@ mod tests {
             dealings: Some((&initial_dealings_2).into()),
         };
 
-        let init =
-            inspect_chain_key_initializations(&[ecdsa_init.clone(), ecdsa_init_2.clone()], &[])
-                .expect("Should successfully inspect initializations");
+        let init = inspect_idkg_chain_key_initializations(
+            &[ecdsa_init.clone(), ecdsa_init_2.clone()],
+            &[],
+        )
+        .expect("Should successfully inspect initializations");
         assert_eq!(
             init,
             BTreeMap::from([
@@ -716,7 +723,7 @@ mod tests {
             ])
         );
 
-        let init = inspect_chain_key_initializations(
+        let init = inspect_idkg_chain_key_initializations(
             &[],
             &[chain_key_init.clone(), chain_key_init_2.clone()],
         )
@@ -729,7 +736,7 @@ mod tests {
             ])
         );
 
-        inspect_chain_key_initializations(&[ecdsa_init.clone()], &[chain_key_init_2.clone()])
+        inspect_idkg_chain_key_initializations(&[ecdsa_init.clone()], &[chain_key_init_2.clone()])
             .expect_err("Should fail when both arguments are non-empty");
     }
 
