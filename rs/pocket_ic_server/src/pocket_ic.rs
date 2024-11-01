@@ -36,8 +36,8 @@ use ic_interfaces_adapter_client::NonBlockingChannel;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
 use ic_management_canister_types::{
-    CanisterIdRecord, CanisterInstallMode, EcdsaCurve, EcdsaKeyId, MasterPublicKeyId,
-    Method as Ic00Method, ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, SchnorrKeyId,
+    CanisterIdRecord, EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, Method as Ic00Method,
+    ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, SchnorrKeyId,
 };
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::routing_table::v1::RoutingTable as PbRoutingTable;
@@ -2252,36 +2252,6 @@ impl std::fmt::Debug for Digest {
 impl std::fmt::Display for Digest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self)
-    }
-}
-
-// TODO: deprecate this as an Op; implement it as a client library convenience function
-
-/// A convenience method that installs the given wasm module at the given canister id. The first
-/// controller of the given canister is set as the sender. If the canister has no controller set,
-/// the anynmous user is used.
-pub struct InstallCanisterAsController {
-    pub canister_id: CanisterId,
-    pub mode: CanisterInstallMode,
-    pub module: Vec<u8>,
-    pub payload: Vec<u8>,
-}
-
-impl Operation for InstallCanisterAsController {
-    fn compute(&self, pic: &mut PocketIc) -> OpOut {
-        pic.try_route_canister(self.canister_id)
-            .unwrap()
-            .install_wasm_in_mode(
-                self.canister_id,
-                self.mode,
-                self.module.clone(),
-                self.payload.clone(),
-            )
-            .into()
-    }
-
-    fn id(&self) -> OpId {
-        OpId("".into())
     }
 }
 
