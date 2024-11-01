@@ -1,8 +1,9 @@
-use crate::{storage::StorableIncidentMetadata, types::Timestamp};
+use crate::{
+    storage::StorableIncidentMetadata,
+    types::{self, IncidentId, InputConfigError, Timestamp},
+};
 use anyhow::Context;
 use getrandom::getrandom;
-use rate_limits_api::IncidentId;
-use serde_json::Value;
 use std::collections::HashMap;
 use thiserror::Error;
 use uuid::Uuid;
@@ -17,7 +18,11 @@ use crate::{
 pub const INIT_VERSION: Version = 1;
 
 pub trait AddsConfig {
-    fn add_config(&self, config: InputConfig, time: Timestamp) -> Result<(), AddConfigError>;
+    fn add_config(
+        &self,
+        config: rate_limits_api::InputConfig,
+        time: Timestamp,
+    ) -> Result<(), AddConfigError>;
 }
 
 #[derive(Debug, Error, Clone)]
@@ -31,8 +36,8 @@ pub enum RulePolicyError {
 
 #[derive(Debug, Error)]
 pub enum AddConfigError {
-    #[error("Rule at index = {0} doesn't encode a valid JSON object")]
-    RuleJsonEncodingError(usize),
+    #[error("Invalid input configuration: {0}")]
+    InvalidInputConfig(#[from] InputConfigError),
     #[error("Rule violates policy: {0}")]
     RulePolicyViolation(#[from] RulePolicyError),
     #[error("Configuration for version={0} was not found")]
@@ -81,14 +86,17 @@ impl<R, A> ConfigAdder<R, A> {
 // - New rules cannot be linked to already disclosed incidents (LinkingRuleToDisclosedIncident error)
 
 impl<R: CanisterApi, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
-    fn add_config(&self, new_config: InputConfig, time: Timestamp) -> Result<(), AddConfigError> {
+    fn add_config(
+        &self,
+        input_config: rate_limits_api::InputConfig,
+        time: Timestamp,
+    ) -> Result<(), AddConfigError> {
         // Only privileged users can perform this operation
         if self.access_resolver.get_access_level() != AccessLevel::FullAccess {
             return Err(AddConfigError::Unauthorized);
         }
 
-        // Verify that all rules in the config are valid JSON-encoded blobs
-        validate_config_encoding(&new_config)?;
+        let new_config = types::InputConfig::try_from(input_config)?;
 
         let current_version = self
             .canister_api
@@ -130,17 +138,17 @@ impl<R: CanisterApi, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
                 };
 
             let rule_id = if let Some(rule_idx) = existing_rule_idx {
-                let rule_id = current_config.rule_ids[rule_idx].clone();
+                let rule_id = current_config.rule_ids[rule_idx];
 
                 existing_incidents
-                    .entry(input_rule.incident_id.clone())
-                    .and_modify(|value| value.push(rule_id.clone()))
-                    .or_insert(vec![rule_id.clone()]);
+                    .entry(input_rule.incident_id)
+                    .and_modify(|value| value.push(rule_id))
+                    .or_insert(vec![rule_id]);
 
                 rule_id
             } else {
                 // TODO: check for collisions and regenerate if needed
-                let rule_id = generate_random_uuid()?.to_string();
+                let rule_id = RuleId(generate_random_uuid()?);
 
                 // Check if the new rule is linked to an existing incident
                 let existing_incident = self.canister_api.get_incident(&input_rule.incident_id);
@@ -151,23 +159,23 @@ impl<R: CanisterApi, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
                         Err(AddConfigError::RulePolicyViolation(
                             RulePolicyError::LinkingRuleToDisclosedIncident {
                                 index: rule_idx,
-                                incident_id: input_rule.incident_id.clone(),
+                                incident_id: input_rule.incident_id,
                             },
                         ))?;
                     }
                     existing_incidents
-                        .entry(input_rule.incident_id.clone())
-                        .and_modify(|value| value.push(rule_id.clone()))
-                        .or_insert(vec![rule_id.clone()]);
+                        .entry(input_rule.incident_id)
+                        .and_modify(|value| value.push(rule_id))
+                        .or_insert(vec![rule_id]);
                 } else {
                     new_incidents
-                        .entry(input_rule.incident_id.clone())
-                        .and_modify(|value| value.push(rule_id.clone()))
-                        .or_insert(vec![rule_id.clone()]);
+                        .entry(input_rule.incident_id)
+                        .and_modify(|value| value.push(rule_id))
+                        .or_insert(vec![rule_id]);
                 }
 
                 let rule_metadata = StorableRuleMetadata {
-                    incident_id: input_rule.incident_id.clone(),
+                    incident_id: input_rule.incident_id,
                     rule_raw: input_rule.rule_raw.clone(),
                     description: input_rule.description.clone(),
                     disclosed_at: None,
@@ -175,7 +183,7 @@ impl<R: CanisterApi, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
                     removed_in_version: None,
                 };
 
-                new_rules_metadata.push((rule_id.clone(), rule_metadata));
+                new_rules_metadata.push((rule_id, rule_metadata));
 
                 rule_id
             };
@@ -193,9 +201,10 @@ impl<R: CanisterApi, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
             if !rule_ids.iter().any(|id| id == rule_id) {
                 if let Some(mut metadata) = self.canister_api.get_rule(rule_id) {
                     metadata.removed_in_version = Some(new_version);
-                    if !self.canister_api.update_rule(rule_id.clone(), metadata) {
+                    if !self.canister_api.update_rule(*rule_id, metadata) {
                         return Err(AddConfigError::Unexpected(anyhow::anyhow!(
-                            "rule_id={rule_id} didn't exist, failed to update rule"
+                            "rule_id = {} didn't exist, failed to update rule",
+                            rule_id.0
                         )));
                     }
                 }
@@ -204,9 +213,10 @@ impl<R: CanisterApi, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
 
         // Add new rules
         for (rule_id, metadata) in new_rules_metadata.iter().cloned() {
-            if !self.canister_api.add_rule(rule_id.clone(), metadata) {
+            if !self.canister_api.add_rule(rule_id, metadata) {
                 return Err(AddConfigError::Unexpected(anyhow::anyhow!(
-                    "rule_id={rule_id} already existed, failed to add rule"
+                    "rule_id = {} already existed, failed to add rule",
+                    rule_id.0
                 )));
             }
         }
@@ -219,7 +229,7 @@ impl<R: CanisterApi, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
             };
             if !self
                 .canister_api
-                .add_incident(incident_id.clone(), incident_metadata)
+                .add_incident(incident_id, incident_metadata)
             {
                 return Err(AddConfigError::Unexpected(anyhow::anyhow!(
                     "incident_id={incident_id} already exists, failed to add incident"
@@ -233,7 +243,7 @@ impl<R: CanisterApi, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
                 incident_metadata.rule_ids = rule_ids;
                 if !self
                     .canister_api
-                    .update_incident(incident_id.clone(), incident_metadata)
+                    .update_incident(incident_id, incident_metadata)
                 {
                     return Err(AddConfigError::Unexpected(anyhow::anyhow!(
                         "incident={incident_id} doesn't exist, failed to update"
@@ -265,14 +275,6 @@ impl From<AddConfigError> for String {
     }
 }
 
-fn validate_config_encoding(config: &InputConfig) -> Result<(), AddConfigError> {
-    for (idx, rule) in config.rules.iter().enumerate() {
-        serde_json::from_slice::<Value>(rule.rule_raw.as_slice())
-            .map_err(|_| AddConfigError::RuleJsonEncodingError(idx))?;
-    }
-    Ok(())
-}
-
 // TODO: make it work with canister upgrade, post_upgrade
 fn generate_random_uuid() -> Result<Uuid, anyhow::Error> {
     let mut buf = [0u8; 16];
@@ -292,7 +294,7 @@ mod tests {
 
     #[test]
     fn test_add_config_success() {
-        let config = InputConfig {
+        let config = rate_limits_api::InputConfig {
             schema_version: 1,
             rules: vec![],
         };

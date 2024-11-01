@@ -7,6 +7,7 @@ use ic_stable_structures::{
 use rate_limits_api::SchemaVersion;
 use serde::{Deserialize, Serialize};
 use std::{borrow::Cow, cell::RefCell, collections::HashSet, thread::LocalKey};
+use uuid::Uuid;
 
 use crate::types::{IncidentId, RuleId, Timestamp, Version};
 
@@ -29,10 +30,10 @@ pub struct StorablePrincipal(pub Principal);
 pub struct StorableVersion(pub Version);
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialOrd, Ord, PartialEq, Eq)]
-pub struct StorableRuleId(pub String);
+pub struct StorableRuleId(pub Uuid);
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialOrd, Ord, PartialEq, Eq)]
-pub struct StorableIncidentId(pub String);
+pub struct StorableIncidentId(pub Uuid);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StorableRuleMetadata {
@@ -89,7 +90,7 @@ impl Storable for StorableVersion {
 
 impl Storable for StorableRuleId {
     fn to_bytes(&self) -> Cow<[u8]> {
-        Cow::Owned(bincode::serialize(&self.0).expect("StorableRuleId serialization failed"))
+        Cow::Owned(bincode::serialize(&self).expect("StorableRuleId serialization failed"))
     }
 
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
@@ -104,7 +105,7 @@ impl Storable for StorableRuleId {
 
 impl Storable for StorableIncidentId {
     fn to_bytes(&self) -> Cow<[u8]> {
-        Cow::Owned(bincode::serialize(&self.0).expect("StorableIncidentId serialization failed"))
+        Cow::Owned(bincode::serialize(&self).expect("StorableIncidentId serialization failed"))
     }
 
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
@@ -206,6 +207,12 @@ impl From<Version> for StorableVersion {
 
 impl From<RuleId> for StorableRuleId {
     fn from(rule_id: RuleId) -> Self {
-        StorableRuleId(rule_id)
+        StorableRuleId(rule_id.0)
+    }
+}
+
+impl From<IncidentId> for StorableIncidentId {
+    fn from(incident_id: IncidentId) -> Self {
+        StorableIncidentId(incident_id.0)
     }
 }

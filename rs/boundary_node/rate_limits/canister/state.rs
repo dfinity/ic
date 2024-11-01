@@ -1,7 +1,6 @@
 use candid::Principal;
 use ic_cdk::api::time;
 use mockall::automock;
-use rate_limits_api::IncidentId;
 
 use crate::{
     add_config::INIT_VERSION,
@@ -10,7 +9,7 @@ use crate::{
         StorablePrincipal, StorableRuleId, StorableRuleMetadata, StorableVersion,
         AUTHORIZED_PRINCIPAL, CONFIGS, INCIDENTS, RULES,
     },
-    types::{InputConfig, InputRule, RuleId, Version},
+    types::{IncidentId, InputConfig, InputRule, RuleId, Version},
 };
 
 #[automock]
@@ -93,12 +92,12 @@ impl CanisterApi for CanisterState {
 
     fn get_rule(&self, rule_id: &RuleId) -> Option<StorableRuleMetadata> {
         self.rules
-            .with(|cell| cell.borrow().get(&StorableRuleId(rule_id.clone())))
+            .with(|cell| cell.borrow().get(&StorableRuleId(rule_id.0)))
     }
 
     fn get_incident(&self, incident_id: &IncidentId) -> Option<StorableIncidentMetadata> {
         self.incidents
-            .with(|cell| cell.borrow().get(&StorableIncidentId(incident_id.clone())))
+            .with(|cell| cell.borrow().get(&StorableIncidentId(incident_id.0)))
     }
 
     fn add_config(&self, version: Version, config: StorableConfig) -> bool {
@@ -119,7 +118,7 @@ impl CanisterApi for CanisterState {
             || {
                 self.rules.with(|cell| {
                     let mut rules = cell.borrow_mut();
-                    rules.insert(StorableRuleId(rule_id), rule);
+                    rules.insert(StorableRuleId(rule_id.0), rule);
                 });
                 true // Successfully inserted
             },
@@ -132,7 +131,7 @@ impl CanisterApi for CanisterState {
             || {
                 self.incidents.with(|cell| {
                     let mut incidents = cell.borrow_mut();
-                    incidents.insert(StorableIncidentId(incident_id), rule_ids);
+                    incidents.insert(StorableIncidentId(incident_id.0), rule_ids);
                 });
                 true // Successfully inserted
             },
@@ -146,7 +145,7 @@ impl CanisterApi for CanisterState {
             |_| {
                 self.rules.with(|cell| {
                     let mut rules = cell.borrow_mut();
-                    rules.insert(StorableRuleId(rule_id), rule);
+                    rules.insert(StorableRuleId(rule_id.0), rule);
                 });
                 true // Successfully updated
             },
@@ -159,7 +158,7 @@ impl CanisterApi for CanisterState {
             |_| {
                 self.incidents.with(|cell| {
                     let mut incidents = cell.borrow_mut();
-                    incidents.insert(StorableIncidentId(incident_id), incident);
+                    incidents.insert(StorableIncidentId(incident_id.0), incident);
                 });
                 true // Successfully updated
             },
