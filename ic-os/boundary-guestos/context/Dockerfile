@@ -2,7 +2,7 @@
 #
 # Build step for example:
 # - `docker build --pull -t dfinity/boundaryos-main --build-arg BUILD_TYPE=dev \ `
-#   `--build-arg BASE_IMAGE=docker.io/dfinity/boundaryos-base@sha256:dc1a2892b0241131dd97ddd4dce560ab274d00a90110a4b5fc4cb2245ff1f0db -f Dockerfile .`
+#   `--build-arg BASE_IMAGE=ghcr.io/dfinity/boundaryos-base@sha256:dc1a2892b0241131dd97ddd4dce560ab274d00a90110a4b5fc4cb2245ff1f0db -f Dockerfile .`
 #
 #
 # The base images are defined in docker-base.prod and docker-base.dev. Update
