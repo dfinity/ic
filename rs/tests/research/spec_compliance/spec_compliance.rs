@@ -50,7 +50,13 @@ pub fn group_01() -> Vec<&'static str> {
 }
 
 pub fn group_02() -> Vec<&'static str> {
-    vec!["($0 ~ /stable memory/)", "($0 ~ /inter-canister calls/)"]
+    vec![
+        "($0 ~ /stable memory/)",
+        "($0 ~ /inter-canister calls/)",
+        "($0 ~ /uninstall/)",
+        "($0 ~ /read state/)",
+        "($0 ~ /cycles/)",
+    ]
 }
 
 pub fn group_03() -> Vec<&'static str> {
