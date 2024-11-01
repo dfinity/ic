@@ -453,19 +453,15 @@ impl ResponseHelper {
         // messages being inducted for free in this edge case. This is acceptable because the cleanup
         // callback is expected to always run and allow the canister to perform important cleanup tasks,
         // like releasing locks or undoing other state changes.
-        if let Some(state_changes) = &canister_state_changes {
-            let ingress_induction_cycles_debit =
-                self.canister.system_state.ingress_induction_cycles_debit();
-            let removed_cycles = state_changes.system_state_changes.removed_cycles();
-            if self.canister.system_state.balance()
-                < ingress_induction_cycles_debit + removed_cycles
-            {
-                self.canister
-                    .system_state
-                    .remove_charge_from_ingress_induction_cycles_debit(
-                        ingress_induction_cycles_debit - removed_cycles,
-                    );
-            }
+        let ingress_induction_cycles_debit =
+            self.canister.system_state.ingress_induction_cycles_debit();
+        let removed_cycles = canister_state_changes.system_state_changes.removed_cycles();
+        if self.canister.system_state.balance() < ingress_induction_cycles_debit + removed_cycles {
+            self.canister
+                .system_state
+                .remove_charge_from_ingress_induction_cycles_debit(
+                    ingress_induction_cycles_debit - removed_cycles,
+                );
         }
         self.canister
             .system_state

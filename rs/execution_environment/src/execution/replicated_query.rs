@@ -136,9 +136,8 @@ pub fn execute_replicated_query(
     };
     let call_context_id = canister
         .system_state
-        .call_context_manager_mut()
-        .unwrap()
-        .new_call_context(call_origin.clone(), req.cycles(), time, request_metadata);
+        .new_call_context(call_origin.clone(), req.cycles(), time, request_metadata)
+        .unwrap();
 
     let api_type = ApiType::replicated_query(
         time,
@@ -190,14 +189,13 @@ pub fn execute_replicated_query(
 
     let (action, _) = canister
         .system_state
-        .call_context_manager_mut()
-        .unwrap()
         .on_canister_result(
             call_context_id,
             None,
             output.wasm_result.clone(),
             instructions_used,
-        );
+        )
+        .unwrap();
 
     let result = output.wasm_result;
     let log = round.log;
