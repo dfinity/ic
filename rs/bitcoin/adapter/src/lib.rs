@@ -10,8 +10,9 @@ use ic_metrics::MetricsRegistry;
 use std::{
     net::SocketAddr,
     sync::{Arc, Mutex},
+    time::Instant,
 };
-use tokio::{sync::{mpsc::channel, watch}, time::Instant};
+use tokio::sync::{mpsc::channel, watch};
 /// This module contains the AddressManager struct. The struct stores addresses
 /// that will be used to create new connections. It also tracks addresses that
 /// are in current use to encourage use from non-utilized addresses.
@@ -188,13 +189,9 @@ impl AdapterState {
     /// Returns whether the adapter is idle.
     pub fn is_idle(&self) -> bool {
         match *self.last_received_rx.borrow() {
-            Some(last) => {
-                last.elapsed().as_secs() >= self.idle_seconds
-            },
+            Some(last) => last.elapsed().as_secs() >= self.idle_seconds,
             // Nothing received yet still in idle from startup.
-            None => {
-                true
-            }
+            None => true,
         }
     }
 }
