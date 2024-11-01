@@ -92,6 +92,7 @@ fn test_sum_weighted_voting_power() {
                 // Similar to previous, but voted No, and has different (more) voting power.
                 NeuronId { id: 1044 } => (2 * 30_000 + 20 * 30_000) as f64,
             },
+            #[rustfmt::skip]
             (
                 (100 + 2_000 + 30_000) // First proposal.
                 + 40_000               // Second proposal
