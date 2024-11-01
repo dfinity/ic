@@ -16,7 +16,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::systest;
-use spec_compliance::{setup_impl, test_subnet};
+use spec_compliance::{setup_impl, test_subnet, group_03};
 
 pub fn setup(env: TestEnv) {
     setup_impl(env, false, false);
@@ -30,7 +30,7 @@ pub fn test(env: TestEnv) {
         None,
         Some(SubnetType::Application),
         vec![],
-        vec!["($0 ~ /NNS canisters/)"],
+        group_03(),
     );
 }
 

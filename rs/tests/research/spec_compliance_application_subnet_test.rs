@@ -16,7 +16,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::systest;
-use spec_compliance::{setup_impl, test_subnet};
+use spec_compliance::{group_all, setup_impl, test_subnet};
 
 pub fn setup(env: TestEnv) {
     setup_impl(env, true, false);
@@ -29,16 +29,7 @@ pub fn test(env: TestEnv) {
         false,
         Some(SubnetType::Application),
         None,
-        vec![
-            "($0 ~ /NNS canisters/)",
-            "($0 ~ /canister history/)",
-            "($0 ~ /canister version/)",
-            "($0 ~ /canister global timer/)",
-            "($0 ~ /canister http/)",
-            "($0 ~ /WebAssembly module validation/)",
-            "($0 ~ /stable memory/)",
-            "($0 ~ /inter-canister calls/)",
-        ],
+        group_all(),
         vec![],
     );
 }
