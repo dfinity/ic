@@ -23,7 +23,7 @@ pub trait ThresholdSigDataStore {
     /// before.
     fn insert_transcript_data(
         &mut self,
-        dkg_id: NiDkgId,
+        dkg_id: &NiDkgId,
         public_coefficients: CspPublicCoefficients,
         indices: BTreeMap<NodeId, NodeIndex>,
     );
@@ -35,7 +35,7 @@ pub trait ThresholdSigDataStore {
     /// with the given `dkg_id`, this key will be overwritten.
     fn insert_individual_public_key(
         &mut self,
-        dkg_id: NiDkgId,
+        dkg_id: &NiDkgId,
         node_id: NodeId,
         individual_public_key: CspThresholdSigPublicKey,
     );
@@ -133,8 +133,8 @@ impl ThresholdSigDataStoreImpl {
     }
 
     #[allow(clippy::map_entry)]
-    fn entry_for(&mut self, dkg_id: NiDkgId) -> &mut ThresholdSigData {
-        if !self.store.contains_key(&dkg_id) {
+    fn entry_for(&mut self, dkg_id: &NiDkgId) -> &mut ThresholdSigData {
+        if !self.store.contains_key(dkg_id) {
             self.store
                 .insert(dkg_id.clone(), ThresholdSigData::default());
             match dkg_id.dkg_tag {
@@ -149,11 +149,11 @@ impl ThresholdSigDataStoreImpl {
             }
         }
         self.store
-            .get_mut(&dkg_id)
+            .get_mut(dkg_id)
             .expect("Missing dkg id from store")
     }
 
-    fn purge_entry_for_oldest_dkg_id_if_necessary(&mut self, tag: NiDkgTag) {
+    fn purge_entry_for_oldest_dkg_id_if_necessary(&mut self, tag: &NiDkgTag) {
         let dkg_id_insertion_order = match tag {
             NiDkgTag::LowThreshold => &mut self.low_threshold_dkg_id_insertion_order,
             NiDkgTag::HighThreshold => &mut self.high_threshold_dkg_id_insertion_order,
@@ -180,34 +180,32 @@ impl ThresholdSigDataStoreImpl {
 impl ThresholdSigDataStore for ThresholdSigDataStoreImpl {
     fn insert_transcript_data(
         &mut self,
-        dkg_id: NiDkgId,
+        dkg_id: &NiDkgId,
         public_coefficients: CspPublicCoefficients,
         indices: BTreeMap<NodeId, NodeIndex>,
     ) {
-        let dkg_tag = dkg_id.dkg_tag.clone();
         let data = self.entry_for(dkg_id);
         data.transcript_data = Some(TranscriptData {
             public_coeffs: public_coefficients,
             indices,
         });
 
-        self.purge_entry_for_oldest_dkg_id_if_necessary(dkg_tag);
+        self.purge_entry_for_oldest_dkg_id_if_necessary(&dkg_id.dkg_tag);
         self.assert_length_invariant();
     }
 
     fn insert_individual_public_key(
         &mut self,
-        dkg_id: NiDkgId,
+        dkg_id: &NiDkgId,
         node_id: NodeId,
         public_key: CspThresholdSigPublicKey,
     ) {
-        let dkg_tag = dkg_id.dkg_tag.clone();
         self.entry_for(dkg_id)
             .public_keys
             .get_or_insert_with(BTreeMap::new)
             .insert(node_id, public_key);
 
-        self.purge_entry_for_oldest_dkg_id_if_necessary(dkg_tag);
+        self.purge_entry_for_oldest_dkg_id_if_necessary(&dkg_id.dkg_tag);
         self.assert_length_invariant();
     }
 

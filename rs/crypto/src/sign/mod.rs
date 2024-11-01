@@ -443,7 +443,11 @@ impl<C: CryptoServiceProvider, H: Signable> MultiSigVerifier<H> for CryptoCompon
 impl<C: CryptoServiceProvider, T: Signable> ThresholdSigner<T> for CryptoComponentImpl<C> {
     // TODO (CRP-479): switch to Result<ThresholdSigShareOf<T>,
     // ThresholdSigDataNotFoundError>
-    fn sign_threshold(&self, message: &T, dkg_id: NiDkgId) -> CryptoResult<ThresholdSigShareOf<T>> {
+    fn sign_threshold(
+        &self,
+        message: &T,
+        dkg_id: &NiDkgId,
+    ) -> CryptoResult<ThresholdSigShareOf<T>> {
         let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
@@ -484,7 +488,7 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifier<T> for CryptoCo
         &self,
         signature: &ThresholdSigShareOf<T>,
         message: &T,
-        dkg_id: NiDkgId,
+        dkg_id: &NiDkgId,
         signer: NodeId,
     ) -> CryptoResult<()> {
         let log_id = get_log_id(&self.logger);

@@ -175,7 +175,7 @@ impl<T: Signable> ThresholdSigner<T> for CryptoReturningOk {
     fn sign_threshold(
         &self,
         _message: &T,
-        _dkg_id: NiDkgId,
+        _dkg_id: &NiDkgId,
     ) -> CryptoResult<ThresholdSigShareOf<T>> {
         Ok(ThresholdSigShareOf::new(ThresholdSigShare(vec![])))
     }
@@ -186,7 +186,7 @@ impl<T: Signable> ThresholdSigVerifier<T> for CryptoReturningOk {
         &self,
         _signature: &ThresholdSigShareOf<T>,
         _message: &T,
-        _dkg_id: NiDkgId,
+        _dkg_id: &NiDkgId,
         _signer: NodeId,
     ) -> CryptoResult<()> {
         Ok(())

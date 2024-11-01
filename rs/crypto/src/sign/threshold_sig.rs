@@ -22,23 +22,20 @@ mod tests;
 pub struct ThresholdSignerInternal {}
 
 impl ThresholdSignerInternal {
-    //////////////////////////////////////////////
-    // TODO: dkg_id as reference (assuming error is unlikely)
-    //////////////////////////////////////////////
     pub fn sign_threshold<C: ThresholdSignatureCspClient, H: Signable>(
         lockable_threshold_sig_data_store: &LockableThresholdSigDataStore,
         threshold_sig_csp_client: &C,
         message: &H,
-        dkg_id: NiDkgId,
+        dkg_id: &NiDkgId,
     ) -> Result<ThresholdSigShareOf<H>, ThresholdSignError> {
-        let pub_coeffs = pub_coeffs_from_store(&dkg_id, lockable_threshold_sig_data_store)?;
+        let pub_coeffs = pub_coeffs_from_store(dkg_id, lockable_threshold_sig_data_store)?;
         let csp_signature = threshold_sig_csp_client
             .threshold_sign(
                 AlgorithmId::from(&pub_coeffs),
                 message.as_signed_bytes(),
                 pub_coeffs,
             )
-            .map_err(|error| map_threshold_sign_error_or_panic(error, dkg_id))?;
+            .map_err(|error| map_threshold_sign_error_or_panic(error, dkg_id.clone()))?;
         threshold_sig_share_or_panic(csp_signature)
     }
 }
@@ -143,7 +140,7 @@ impl ThresholdSigVerifierInternal {
         threshold_sig_csp_client: &C,
         signature: &ThresholdSigShareOf<H>,
         message: &H,
-        dkg_id: NiDkgId,
+        dkg_id: &NiDkgId,
         signer: NodeId,
     ) -> CryptoResult<()> {
         let csp_signature = CspSignature::try_from(signature)?;
@@ -194,10 +191,10 @@ impl ThresholdSigVerifierInternal {
 fn lazily_calculated_public_key_from_store<C: ThresholdSignatureCspClient>(
     lockable_threshold_sig_data_store: &LockableThresholdSigDataStore,
     threshold_sig_csp_client: &C,
-    dkg_id: NiDkgId,
+    dkg_id: &NiDkgId,
     node_id: NodeId,
 ) -> CryptoResult<CspThresholdSigPublicKey> {
-    match public_key_from_store(lockable_threshold_sig_data_store, &dkg_id, node_id) {
+    match public_key_from_store(lockable_threshold_sig_data_store, dkg_id, node_id) {
         Some(public_key) => Ok(public_key),
         None => calculate_and_store_public_key_or_panic(
             lockable_threshold_sig_data_store,
@@ -222,11 +219,11 @@ fn public_key_from_store(
 fn calculate_and_store_public_key_or_panic<C: ThresholdSignatureCspClient>(
     lockable_threshold_sig_data_store: &LockableThresholdSigDataStore,
     threshold_sig_csp_client: &C,
-    dkg_id: NiDkgId,
+    dkg_id: &NiDkgId,
     node_id: NodeId,
 ) -> CryptoResult<CspThresholdSigPublicKey> {
-    let transcript_data = transcript_data_from_store(&dkg_id, lockable_threshold_sig_data_store)?;
-    let (public_coeffs, node_index) = coeffs_and_index(transcript_data, &dkg_id, node_id)?;
+    let transcript_data = transcript_data_from_store(dkg_id, lockable_threshold_sig_data_store)?;
+    let (public_coeffs, node_index) = coeffs_and_index(transcript_data, dkg_id, node_id)?;
     let public_key = threshold_sig_csp_client
         .threshold_individual_public_key(
             AlgorithmId::from(&public_coeffs),

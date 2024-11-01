@@ -174,14 +174,14 @@ pub fn retain_only_active_keys<R: CryptoComponentRng>(
 pub fn sign_threshold_for_each<H: Signable, R: CryptoComponentRng>(
     signers: &[NodeId],
     msg: &H,
-    dkg_id: NiDkgId,
+    dkg_id: &NiDkgId,
     crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<R>>,
 ) -> BTreeMap<NodeId, ThresholdSigShareOf<H>> {
     signers
         .iter()
         .map(|signer| {
             let sig_share = crypto_for(*signer, crypto_components)
-                .sign_threshold(msg, dkg_id.clone())
+                .sign_threshold(msg, dkg_id)
                 .unwrap_or_else(|_| panic!("signing by node {:?} failed", signer));
             (*signer, sig_share)
         })

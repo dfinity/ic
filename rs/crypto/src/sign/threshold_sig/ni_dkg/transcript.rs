@@ -239,7 +239,7 @@ mod loading {
         insert_transcript_data_into_store(
             lockable_threshold_sig_data_store,
             &csp_transcript,
-            transcript.dkg_id.clone(),
+            &transcript.dkg_id,
             &transcript.committee,
         );
         let epoch = epoch(transcript.registry_version);
@@ -324,7 +324,7 @@ mod loading {
     fn insert_transcript_data_into_store(
         lockable_threshold_sig_data_store: &LockableThresholdSigDataStore,
         csp_transcript: &CspNiDkgTranscript,
-        dkg_id: NiDkgId,
+        dkg_id: &NiDkgId,
         committee: &NiDkgReceivers,
     ) {
         lockable_threshold_sig_data_store

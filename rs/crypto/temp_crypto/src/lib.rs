@@ -850,7 +850,7 @@ pub mod internal {
             &self,
             signature: &ThresholdSigShareOf<T>,
             message: &T,
-            dkg_id: NiDkgId,
+            dkg_id: &NiDkgId,
             signer: NodeId,
         ) -> CryptoResult<()> {
             self.crypto_component
@@ -972,7 +972,7 @@ pub mod internal {
         fn sign_threshold(
             &self,
             message: &T,
-            dkg_id: NiDkgId,
+            dkg_id: &NiDkgId,
         ) -> CryptoResult<ThresholdSigShareOf<T>> {
             self.crypto_component.sign_threshold(message, dkg_id)
         }

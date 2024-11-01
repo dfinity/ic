@@ -584,7 +584,7 @@ impl TestConsensusPool {
             let content = RandomBeaconContent::new(height, ic_types::crypto::crypto_hash(&beacon));
             let share = RandomBeaconShare {
                 signature: crypto
-                    .sign_threshold(&content, dkg_id.clone())
+                    .sign_threshold(&content, &dkg_id)
                     .map(|signature| ThresholdSignatureShare {
                         signature,
                         signer: node_id,
