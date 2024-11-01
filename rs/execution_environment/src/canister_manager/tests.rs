@@ -30,8 +30,8 @@ use ic_management_canister_types::{
     CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgsBuilder,
     CanisterStatusResultV2, CanisterStatusType, CanisterUpgradeOptions, ChunkHash,
     ClearChunkStoreArgs, CreateCanisterArgs, EmptyBlob, InstallCodeArgsV2, Method, Payload,
-    StoredChunksArgs, StoredChunksReply, SubnetMetricsArgs, SubnetMetricsResponse,
-    UpdateSettingsArgs, UploadChunkArgs, UploadChunkReply, WasmMemoryPersistence,
+    StoredChunksArgs, StoredChunksReply, SubnetInfoArgs, SubnetInfoResponse, UpdateSettingsArgs,
+    UploadChunkArgs, UploadChunkReply, WasmMemoryPersistence,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -7959,14 +7959,14 @@ fn subnet_metrics_canister_call_succeeds() {
     let uni_canister = test
         .universal_canister_with_cycles(Cycles::new(1_000_000_000_000))
         .unwrap();
-    let payload = SubnetMetricsArgs {
+    let payload = SubnetInfoArgs {
         subnet_id: own_subnet_id.get(),
     }
     .encode();
     let uc_call = wasm()
         .call_simple(
             CanisterId::ic_00(),
-            Method::SubnetMetrics,
+            Method::SubnetInfo,
             call_args().other_side(payload),
         )
         .build();
@@ -7975,7 +7975,7 @@ fn subnet_metrics_canister_call_succeeds() {
         WasmResult::Reply(bytes) => bytes,
         WasmResult::Reject(err_msg) => panic!("Unexpected reject, expected reply: {}", err_msg),
     };
-    let SubnetMetricsResponse { replica_version } = Decode!(&bytes, SubnetMetricsResponse).unwrap();
+    let SubnetInfoResponse { replica_version } = Decode!(&bytes, SubnetInfoResponse).unwrap();
     assert!(!replica_version.is_empty());
 }
 
@@ -7985,11 +7985,11 @@ fn subnet_metrics_ingress_fails() {
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet_id)
         .build();
-    let payload = SubnetMetricsArgs {
+    let payload = SubnetInfoArgs {
         subnet_id: own_subnet_id.get(),
     }
     .encode();
-    test.subnet_message(Method::SubnetMetrics, payload)
+    test.subnet_message(Method::SubnetInfo, payload)
         .unwrap_err()
         .assert_contains(
             ErrorCode::CanisterContractViolation,

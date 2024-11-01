@@ -570,7 +570,7 @@ pub fn extract_effective_canister_id(
         | Ok(Method::BitcoinGetSuccessors)
         | Ok(Method::BitcoinGetCurrentFeePercentiles)
         | Ok(Method::NodeMetricsHistory)
-        | Ok(Method::SubnetMetrics)
+        | Ok(Method::SubnetInfo)
         | Ok(Method::FetchCanisterLogs) => {
             // Subnet method not allowed for ingress.
             Err(ParseIngressError::SubnetMethodNotAllowed)

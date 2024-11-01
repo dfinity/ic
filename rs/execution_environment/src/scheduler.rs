@@ -2418,7 +2418,7 @@ fn can_execute_subnet_msg(
         | Ic00Method::BitcoinSendTransactionInternal
         | Ic00Method::BitcoinGetSuccessors
         | Ic00Method::NodeMetricsHistory
-        | Ic00Method::SubnetMetrics
+        | Ic00Method::SubnetInfo
         | Ic00Method::FetchCanisterLogs
         | Ic00Method::ProvisionalCreateCanisterWithCycles
         | Ic00Method::ProvisionalTopUpCanister
@@ -2482,7 +2482,7 @@ fn get_instructions_limits_for_subnet_message(
             | BitcoinGetCurrentFeePercentiles
             | BitcoinGetSuccessors
             | NodeMetricsHistory
-            | SubnetMetrics
+            | SubnetInfo
             | FetchCanisterLogs
             | ProvisionalCreateCanisterWithCycles
             | ProvisionalTopUpCanister

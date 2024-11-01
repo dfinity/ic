@@ -39,7 +39,7 @@ use ic_management_canister_types::{
     LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs,
     Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
     SchnorrPublicKeyArgs, SchnorrPublicKeyResponse, SetupInitialDKGArgs, SignWithECDSAArgs,
-    SignWithSchnorrArgs, StoredChunksArgs, SubnetMetricsArgs, SubnetMetricsResponse,
+    SignWithSchnorrArgs, StoredChunksArgs, SubnetInfoArgs, SubnetInfoResponse,
     TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs, IC_00,
 };
 use ic_metrics::MetricsRegistry;
@@ -1379,13 +1379,13 @@ impl ExecutionEnvironment {
                 }
             }
 
-            Ok(Ic00Method::SubnetMetrics) => match &msg {
+            Ok(Ic00Method::SubnetInfo) => match &msg {
                 CanisterCall::Ingress(_) => {
                     self.reject_unexpected_ingress(Ic00Method::CreateCanister)
                 }
                 CanisterCall::Request(_) => {
-                    let res = SubnetMetricsArgs::decode(payload)
-                        .and_then(|args| self.subnet_metrics(replica_version, args));
+                    let res = SubnetInfoArgs::decode(payload)
+                        .and_then(|args| self.subnet_info(replica_version, args));
                     ExecuteSubnetMessageResult::Finished {
                         response: res,
                         refund: msg.take_cycles(),
@@ -2240,12 +2240,11 @@ impl ExecutionEnvironment {
         Ok(Encode!(&result).unwrap())
     }
 
-    fn subnet_metrics(
+    fn subnet_info(
         &self,
         replica_version: &ReplicaVersion,
-        args: SubnetMetricsArgs,
+        args: SubnetInfoArgs,
     ) -> Result<Vec<u8>, UserError> {
-        // TODO: Check taken from node_metric_history; but is this actually needed? Can such a call be routed wrong?
         if args.subnet_id != self.own_subnet_id.get() {
             return Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
@@ -2255,7 +2254,7 @@ impl ExecutionEnvironment {
                 ),
             ));
         }
-        let res = SubnetMetricsResponse {
+        let res = SubnetInfoResponse {
             replica_version: replica_version.to_string(),
         };
         Ok(Encode!(&res).unwrap())
