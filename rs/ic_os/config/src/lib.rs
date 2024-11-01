@@ -191,7 +191,8 @@ mod tests {
                 "bitcoind_addr": "127.0.0.1:8333",
                 "jaeger_addr": "127.0.0.1:6831",
                 "socks_proxy": "127.0.0.1:1080",
-                "hostname": "my-node"
+                "hostname": "my-node",
+                "generate_ic_boundary_tls_cert": "domain"
             }
         }
     }
@@ -244,7 +245,8 @@ mod tests {
                 "bitcoind_addr": "127.0.0.1:8333",
                 "jaeger_addr": "127.0.0.1:6831",
                 "socks_proxy": "127.0.0.1:1080",
-                "hostname": "my-node"
+                "hostname": "my-node",
+                "generate_ic_boundary_tls_cert": "domain"
             }
         }
     }
