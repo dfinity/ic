@@ -3,6 +3,7 @@ use clap::{Args, Parser, Subcommand};
 use config::config_ini::{get_config_ini_settings, ConfigIniSettings};
 use config::deployment_json::get_deployment_settings;
 use config::serialize_and_write_config;
+use config::update_config::update_guestos_config;
 use mac_address::mac_address::{get_ipmi_mac, FormattedMacAddress};
 use std::fs::File;
 use std::path::{Path, PathBuf};
@@ -53,6 +54,11 @@ pub enum Commands {
     },
     /// Creates a GuestOSConfig object directly from GenerateTestnetConfigClapArgs. Only used for testing purposes.
     GenerateTestnetConfig(GenerateTestnetConfigClapArgs),
+    /// Creates a GuestOSConfig object from existing guestos configuration files
+    UpdateGuestosConfig {
+        #[arg(long, value_name = "output_file")]
+        output_file: PathBuf,
+    },
 }
 
 #[derive(Parser)]
@@ -358,6 +364,7 @@ pub fn main() -> Result<()> {
 
             generate_testnet_config(args, clap_args.guestos_config_json_path)
         }
+        Some(Commands::UpdateGuestosConfig { output_file }) => update_guestos_config(output_file),
         None => {
             println!("No command provided. Use --help for usage information.");
             Ok(())

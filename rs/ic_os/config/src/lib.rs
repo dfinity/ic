@@ -2,6 +2,7 @@ pub mod config_ini;
 pub mod deployment_json;
 pub mod generate_testnet_config;
 pub mod types;
+pub mod update_config;
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};

@@ -1,0 +1,11 @@
+[Unit]
+Description=Update GuestOS Configuration
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/update-config /boot/config/config.json
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
