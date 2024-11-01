@@ -12,12 +12,12 @@ use ic_ledger_suite_orchestrator::state::{
     ArchiveWasm, IndexWasm, LedgerSuiteVersion, LedgerWasm, Wasm, WasmHash,
 };
 use ic_management_canister_types::{
-    CanisterInstallMode, CanisterStatusType, InstallCodeArgs, Method, Payload,
+    CanisterInstallMode, CanisterStatusResultV2, CanisterStatusType, InstallCodeArgs, Method,
+    Payload,
 };
-use ic_state_machine_tests::{
-    CanisterStatusResultV2, Cycles, StateMachine, StateMachineBuilder, UserError, WasmResult,
-};
+use ic_state_machine_tests::{StateMachine, StateMachineBuilder, UserError, WasmResult};
 use ic_test_utilities_load_wasm::load_wasm;
+use ic_types::Cycles;
 pub use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as LedgerMetadataValue;
 pub use icrc_ledger_types::icrc1::account::Account as LedgerAccount;
 use std::sync::Arc;

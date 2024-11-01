@@ -32,6 +32,7 @@ use http_body_util::{BodyExt, Full, LengthLimitError, Limited};
 use hyper::body::{Bytes, Incoming};
 use hyper::{Request, Response as HyperResponse};
 use hyper_util::client::legacy::{connect::HttpConnector, Client};
+use ic_error_types::RejectCode;
 use ic_http_endpoints_public::cors_layer;
 use ic_http_gateway::{CanisterRequest, HttpGatewayClient, HttpGatewayRequestArgs};
 use ic_https_outcalls_adapter::CanisterHttp;
@@ -40,7 +41,6 @@ use ic_https_outcalls_service::{
     https_outcalls_service_server::HttpsOutcallsService, HttpHeader, HttpMethod,
     HttpsOutcallRequest, HttpsOutcallResponse,
 };
-use ic_state_machine_tests::RejectCode;
 use ic_types::{
     canister_http::{CanisterHttpRequestId, MAX_CANISTER_HTTP_RESPONSE_BYTES},
     CanisterId, PrincipalId, SubnetId,
@@ -248,22 +248,6 @@ impl From<Result<ic_state_machine_tests::WasmResult, ic_state_machine_tests::Use
             match r {
                 Ok(ic_state_machine_tests::WasmResult::Reply(wasm)) => Ok(WasmResult::Reply(wasm)),
                 Ok(ic_state_machine_tests::WasmResult::Reject(s)) => Ok(WasmResult::Reject(s)),
-                Err(user_err) => Err(UserError {
-                    code: ErrorCode::try_from(user_err.code() as u64).unwrap(),
-                    description: user_err.description().to_string(),
-                }),
-            }
-        };
-        OpOut::CanisterResult(res)
-    }
-}
-
-// TODO: Remove this Into: It's only used in the InstallCanisterAsController Operation, which also should be removed.
-impl From<Result<(), ic_state_machine_tests::UserError>> for OpOut {
-    fn from(r: Result<(), ic_state_machine_tests::UserError>) -> Self {
-        let res = {
-            match r {
-                Ok(_) => Ok(WasmResult::Reply(vec![])),
                 Err(user_err) => Err(UserError {
                     code: ErrorCode::try_from(user_err.code() as u64).unwrap(),
                     description: user_err.description().to_string(),
