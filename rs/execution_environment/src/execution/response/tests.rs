@@ -128,7 +128,8 @@ fn execute_response_refunds_cycles() {
         .xnet_call_bytes_transmitted_fee(MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, test.subnet_size());
     mgr.xnet_call_bytes_transmitted_fee(response_payload_size, test.subnet_size());
     let instructions_left = NumInstructions::from(instruction_limit) - instructions_executed;
-    let execution_refund = mgr.convert_instructions_to_cycles(instructions_left);
+    let execution_refund = mgr
+        .convert_instructions_to_cycles(instructions_left, test.canister_wasm_execution_mode(a_id));
     assert_eq!(
         balance_after,
         balance_before + cycles_sent / 2u64 + response_transmission_refund + execution_refund
@@ -1296,9 +1297,11 @@ fn dts_response_concurrent_cycles_change_succeeds() {
     // an upper bound on the additional freezing threshold.
     let additional_freezing_threshold = Cycles::new(500);
 
-    let max_execution_cost = test
-        .cycles_account_manager()
-        .execution_cost(NumInstructions::from(instruction_limit), test.subnet_size());
+    let max_execution_cost = test.cycles_account_manager().execution_cost(
+        NumInstructions::from(instruction_limit),
+        test.subnet_size(),
+        test.canister_wasm_execution_mode(a_id),
+    );
 
     let call_charge = test.call_fee("update", &b)
         + max_execution_cost
@@ -1413,9 +1416,11 @@ fn dts_response_concurrent_cycles_change_fails() {
     // an upper bound on the additional freezing threshold.
     let additional_freezing_threshold = Cycles::new(500);
 
-    let max_execution_cost = test
-        .cycles_account_manager()
-        .execution_cost(NumInstructions::from(instruction_limit), test.subnet_size());
+    let max_execution_cost = test.cycles_account_manager().execution_cost(
+        NumInstructions::from(instruction_limit),
+        test.subnet_size(),
+        test.canister_wasm_execution_mode(a_id),
+    );
 
     let call_charge = test.call_fee("update", &b)
         + max_execution_cost
@@ -1553,9 +1558,11 @@ fn dts_response_with_cleanup_concurrent_cycles_change_succeeds() {
     // an upper bound on the additional freezing threshold.
     let additional_freezing_threshold = Cycles::new(500);
 
-    let max_execution_cost = test
-        .cycles_account_manager()
-        .execution_cost(NumInstructions::from(instruction_limit), test.subnet_size());
+    let max_execution_cost = test.cycles_account_manager().execution_cost(
+        NumInstructions::from(instruction_limit),
+        test.subnet_size(),
+        test.canister_wasm_execution_mode(a_id),
+    );
 
     let call_charge = test.call_fee("update", &b)
         + max_execution_cost
@@ -2585,7 +2592,7 @@ fn cycles_balance_changes_applied_correctly() {
         .universal_canister_with_cycles(Cycles::new(10_000_000_000_000))
         .unwrap();
     let b_id = test
-        .universal_canister_with_cycles(Cycles::new(121_000_000_000))
+        .universal_canister_with_cycles(Cycles::new(301_000_000_000))
         .unwrap();
 
     test.ingress(
@@ -2615,7 +2622,7 @@ fn cycles_balance_changes_applied_correctly() {
             b_id,
             "update",
             call_args().other_side(b.clone()),
-            Cycles::new(5_000_000_000_000),
+            Cycles::new(10_000_000_000_000),
         )
         .build();
     let a_balance_old = test.canister_state(a_id).system_state.balance();

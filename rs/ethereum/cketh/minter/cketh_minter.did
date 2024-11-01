@@ -110,6 +110,12 @@ type UpgradeArg = record {
     // The principal of the EVM RPC canister that handles the communication
     // with the Ethereum blockchain.
     evm_rpc_id : opt principal;
+
+    // Change the deposit with subaccount helper smart contract address.
+    deposit_with_subaccount_helper_contract_address : opt text;
+
+    // Change the last scraped block number of the deposit with subaccount helper smart contract.
+    last_deposit_with_subaccount_scraped_block_number : opt nat;
 };
 
 type MinterArg = variant { UpgradeArg : UpgradeArg; InitArg : InitArg };

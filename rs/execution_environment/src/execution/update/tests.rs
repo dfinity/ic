@@ -13,10 +13,11 @@ use ic_replicated_state::{
     canister_state::{NextExecution, WASM_PAGE_SIZE_IN_BYTES},
     CallOrigin,
 };
-use ic_state_machine_tests::{Cycles, IngressStatus, WasmResult};
+use ic_state_machine_tests::WasmResult;
 use ic_sys::PAGE_SIZE;
+use ic_types::ingress::IngressStatus;
 use ic_types::messages::{CallbackId, RequestMetadata};
-use ic_types::{NumInstructions, NumOsPages};
+use ic_types::{Cycles, NumInstructions, NumOsPages};
 use ic_universal_canister::{call_args, wasm};
 
 use ic_config::embedders::StableMemoryPageLimit;
@@ -180,9 +181,11 @@ fn dts_update_concurrent_cycles_change_succeeds() {
     // an upper bound on the additional freezing threshold.
     let additional_freezing_threshold = Cycles::new(500);
 
-    let max_execution_cost = test
-        .cycles_account_manager()
-        .execution_cost(NumInstructions::from(instruction_limit), test.subnet_size());
+    let max_execution_cost = test.cycles_account_manager().execution_cost(
+        NumInstructions::from(instruction_limit),
+        test.subnet_size(),
+        test.canister_wasm_execution_mode(a_id),
+    );
 
     let call_charge = test.call_fee("update", &b)
         + max_execution_cost
@@ -284,9 +287,11 @@ fn dts_update_concurrent_cycles_change_fails() {
     // an upper bound on the additional freezing threshold.
     let additional_freezing_threshold = Cycles::new(500);
 
-    let max_execution_cost = test
-        .cycles_account_manager()
-        .execution_cost(NumInstructions::from(instruction_limit), test.subnet_size());
+    let max_execution_cost = test.cycles_account_manager().execution_cost(
+        NumInstructions::from(instruction_limit),
+        test.subnet_size(),
+        test.canister_wasm_execution_mode(a_id),
+    );
 
     let call_charge = test.call_fee("update", &b)
         + max_execution_cost

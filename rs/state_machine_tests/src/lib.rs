@@ -47,10 +47,9 @@ use ic_logger::{error, ReplicaLogger};
 use ic_management_canister_types::{
     self as ic00, CanisterIdRecord, InstallCodeArgs, MasterPublicKeyId, Method, Payload,
 };
-pub use ic_management_canister_types::{
+use ic_management_canister_types::{
     CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs,
-    CanisterSettingsArgsBuilder, CanisterSnapshotResponse, CanisterStatusResultV2,
-    CanisterStatusType, ClearChunkStoreArgs, EcdsaCurve, EcdsaKeyId, HttpHeader, HttpMethod,
+    CanisterSnapshotResponse, CanisterStatusResultV2, ClearChunkStoreArgs, EcdsaCurve, EcdsaKeyId,
     InstallChunkedCodeArgs, LoadCanisterSnapshotArgs, SchnorrAlgorithm, SignWithECDSAReply,
     SignWithSchnorrReply, TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs,
     UploadChunkReply,
@@ -112,6 +111,7 @@ use ic_test_utilities_registry::{
     add_single_subnet_record, add_subnet_key_record, add_subnet_list_record, SubnetRecordBuilder,
 };
 use ic_test_utilities_time::FastForwardTimeSource;
+pub use ic_types::ingress::WasmResult;
 use ic_types::{
     artifact::IngressMessageId,
     batch::{
@@ -133,7 +133,7 @@ use ic_types::{
     messages::{
         Blob, Certificate, CertificateDelegation, HttpCallContent, HttpCanisterUpdate,
         HttpRequestEnvelope, Payload as MsgPayload, Query, QuerySource, RejectContext,
-        SignedIngress, SignedIngressContent, EXPECTED_MESSAGE_ID_LENGTH,
+        SignedIngress, EXPECTED_MESSAGE_ID_LENGTH,
     },
     signature::ThresholdSignature,
     time::GENESIS,
@@ -141,15 +141,13 @@ use ic_types::{
     CanisterLog, CountBytes, CryptoHashOfPartialState, Height, NodeId, Randomness, RegistryVersion,
     ReplicaVersion,
 };
-pub use ic_types::{
+use ic_types::{
     canister_http::{
-        CanisterHttpMethod, CanisterHttpRequestContext, CanisterHttpRequestId,
-        CanisterHttpResponseMetadata,
+        CanisterHttpRequestContext, CanisterHttpRequestId, CanisterHttpResponseMetadata,
     },
-    crypto::{threshold_sig::ThresholdSigPublicKey, CryptoHash, CryptoHashOf},
-    ingress::{IngressState, IngressStatus, WasmResult},
-    messages::{CallbackId, HttpRequestError, MessageId},
-    signature::BasicSignature,
+    crypto::threshold_sig::ThresholdSigPublicKey,
+    ingress::{IngressState, IngressStatus},
+    messages::{CallbackId, MessageId},
     time::Time,
     CanisterId, CryptoHashOfState, Cycles, NumBytes, PrincipalId, SubnetId, UserId,
 };
@@ -161,11 +159,11 @@ use ic_xnet_payload_builder::{
 use rcgen::{CertificateParams, KeyPair};
 use serde::Deserialize;
 
-pub use ic_error_types::RejectCode;
+use ic_error_types::RejectCode;
 use maplit::btreemap;
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use serde::Serialize;
-pub use slog::Level;
+use slog::Level;
 use std::{
     collections::{BTreeMap, BTreeSet},
     convert::TryFrom,
@@ -183,7 +181,7 @@ use tokio::{
     runtime::Runtime,
     sync::{mpsc, watch},
 };
-use tower::{buffer::Buffer as TowerBuffer, ServiceExt};
+use tower::ServiceExt;
 
 /// The size of the channel used to communicate between the [`IngressWatcher`] and
 /// execution. Mirrors the size used in production defined in `setup_ic_stack.rs`
@@ -823,14 +821,12 @@ pub struct StateMachine {
     consensus_time: Arc<PocketConsensusTime>,
     ingress_pool: Arc<RwLock<PocketIngressPool>>,
     ingress_manager: Arc<IngressManager>,
-    pub ingress_filter:
-        tower::buffer::Buffer<IngressFilterService, (ProvisionalWhitelist, SignedIngressContent)>,
+    pub ingress_filter: Arc<Mutex<IngressFilterService>>,
     payload_builder: Arc<RwLock<Option<PayloadBuilderImpl>>>,
     message_routing: SyncMessageRouting,
     pub metrics_registry: MetricsRegistry,
     ingress_history_reader: Box<dyn IngressHistoryReader>,
-    pub query_handler:
-        tower::buffer::Buffer<QueryExecutionService, (Query, Option<CertificateDelegation>)>,
+    pub query_handler: Arc<Mutex<QueryExecutionService>>,
     runtime: Arc<Runtime>,
     // The atomicity is required for internal mutability and sending across threads.
     checkpoint_interval_length: AtomicU64,
@@ -914,7 +910,6 @@ pub struct StateMachineBuilder {
     nns_subnet_id: Option<SubnetId>,
     subnet_id: Option<SubnetId>,
     routing_table: RoutingTable,
-    enable_canister_snapshots: bool,
     idkg_keys_signing_enabled_status: BTreeMap<MasterPublicKeyId, bool>,
     ecdsa_signature_fee: Option<Cycles>,
     schnorr_signature_fee: Option<Cycles>,
@@ -941,7 +936,6 @@ impl StateMachineBuilder {
             config: None,
             checkpoint_interval_length: None,
             subnet_type: SubnetType::System,
-            enable_canister_snapshots: false,
             subnet_size: SMALL_APP_SUBNET_MAX_SIZE,
             nns_subnet_id: None,
             subnet_id: None,
@@ -1056,13 +1050,6 @@ impl StateMachineBuilder {
         }
     }
 
-    pub fn with_canister_snapshots(self, enable_canister_snapshots: bool) -> Self {
-        Self {
-            enable_canister_snapshots,
-            ..self
-        }
-    }
-
     pub fn with_master_ecdsa_public_key(self) -> Self {
         self.with_idkg_key(MasterPublicKeyId::Ecdsa(EcdsaKeyId {
             curve: EcdsaCurve::Secp256k1,
@@ -1166,7 +1153,6 @@ impl StateMachineBuilder {
             self.subnet_type,
             self.subnet_size,
             self.subnet_id,
-            self.enable_canister_snapshots,
             self.idkg_keys_signing_enabled_status,
             self.ecdsa_signature_fee,
             self.schnorr_signature_fee,
@@ -1488,7 +1474,6 @@ impl StateMachine {
         subnet_type: SubnetType,
         subnet_size: usize,
         subnet_id: Option<SubnetId>,
-        enable_canister_snapshots: bool,
         idkg_keys_signing_enabled_status: BTreeMap<MasterPublicKeyId, bool>,
         ecdsa_signature_fee: Option<Cycles>,
         schnorr_signature_fee: Option<Cycles>,
@@ -1554,12 +1539,7 @@ impl StateMachine {
         }
 
         if !dts {
-            hypervisor_config.canister_sandboxing_flag = FlagStatus::Disabled;
             hypervisor_config.deterministic_time_slicing = FlagStatus::Disabled;
-        }
-
-        if enable_canister_snapshots {
-            hypervisor_config.canister_snapshots = FlagStatus::Enabled;
         }
 
         // We are not interested in ingress signature validation.
@@ -1822,15 +1802,12 @@ impl StateMachine {
             consensus_time,
             ingress_pool,
             ingress_manager: ingress_manager.clone(),
-            ingress_filter: runtime
-                .block_on(async { TowerBuffer::new(execution_services.ingress_filter, 1) }),
+            ingress_filter: Arc::new(Mutex::new(execution_services.ingress_filter)),
             payload_builder: Arc::new(RwLock::new(None)), // set by `StateMachineBuilder::build_with_subnets`
             ingress_history_reader: execution_services.ingress_history_reader,
             message_routing,
             metrics_registry: metrics_registry.clone(),
-            query_handler: runtime.block_on(async {
-                TowerBuffer::new(execution_services.query_execution_service, 1)
-            }),
+            query_handler: Arc::new(Mutex::new(execution_services.query_execution_service)),
             ingress_watcher_handle,
             _ingress_watcher_drop_guard: ingress_watcher_drop_guard,
             certified_height_tx,
@@ -2081,7 +2058,7 @@ impl StateMachine {
         }
 
         // Run `IngressFilter` on the ingress message.
-        let ingress_filter = self.ingress_filter.clone();
+        let ingress_filter = self.ingress_filter.lock().unwrap().clone();
         self.runtime
             .block_on(ingress_filter.oneshot((provisional_whitelist, msg.clone().into())))
             .unwrap()
@@ -3082,9 +3059,10 @@ impl StateMachine {
             method_name: method.to_string(),
             method_payload,
         };
+        let query_svc = self.query_handler.lock().unwrap().clone();
         if let Ok((result, _)) = self
             .runtime
-            .block_on(self.query_handler.clone().oneshot((user_query, delegation)))
+            .block_on(query_svc.oneshot((user_query, delegation)))
             .unwrap()
         {
             result
@@ -3181,7 +3159,7 @@ impl StateMachine {
             .unwrap();
 
         // Run `IngressFilter` on the ingress message.
-        let ingress_filter = self.ingress_filter.clone();
+        let ingress_filter = self.ingress_filter.lock().unwrap().clone();
         self.runtime
             .block_on(ingress_filter.oneshot((provisional_whitelist, msg.clone().into())))
             .unwrap()?;

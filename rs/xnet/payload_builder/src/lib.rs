@@ -224,6 +224,10 @@ impl XNetPayloadBuilderMetrics {
     }
 }
 
+// TODO(MR-636): Consider making this an argument to allow for testing without generating so many
+// messages; or else at least unify this constant and `MAX_STREAM_MESSAGES` in the stream builder.
+pub const MAX_STREAM_MESSAGES: usize = 10_000;
+
 /// Implementation of `XNetPayloadBuilder` that uses a `StateManager`,
 /// `RegistryClient` and `XNetClient` to build and validate `XNetPayloads`.
 pub struct XNetPayloadBuilderImpl {
@@ -526,6 +530,8 @@ impl XNetPayloadBuilderImpl {
         }
 
         if !reject_signals.is_empty() {
+            // TODO(MR-635): Change this check to use the same mechanism used for capping
+            // the number of signals in streams instead.
             // Given the minimum message size (zero-length sender and receiver, no cycles,
             // no payload) of 17 bytes; plus 16 bytes for `LabelTree` encoding plus label;
             // and 16+6 bytes for a `Witness::Known` and a `Witness::Fork` node; we have
@@ -704,6 +710,22 @@ impl XNetPayloadBuilderImpl {
                         subnet_id
                     ));
                 }
+            }
+
+            // Ensure the signal limit is respected.
+            let max_message_index = max_message_index(slice.header().begin());
+            if messages.end() > max_message_index {
+                warn!(
+                    self.log,
+                    "Stream from {}: slice end ({}) exceeds max index ({})",
+                    subnet_id,
+                    messages.end(),
+                    max_message_index
+                );
+                return SliceValidationResult::Invalid(format!(
+                    "Stream from {}: inducting slice would produce too many signals",
+                    subnet_id
+                ));
             }
         }
 
@@ -901,6 +923,16 @@ pub fn get_msg_limit(subnet_id: SubnetId, state: &ReplicatedState) -> Option<usi
                 .map(|len| SYSTEM_SUBNET_STREAM_MSG_LIMIT.saturating_sub(len))
         }
     }
+}
+
+/// The stream index up to which messages can be inducted while limiting the
+/// number of signals in the reverse stream to `MAX_STREAM_MESSAGES`.
+///
+/// `stream_begin` is the `begin` in the `StreamHeader` contained in the (same) stream slice.
+///  It reflects the status on the remote subnet as far as we know at present. Up to this index
+///  signals can be gc'ed in the reverse stream.
+pub fn max_message_index(stream_begin: StreamIndex) -> StreamIndex {
+    stream_begin + (MAX_STREAM_MESSAGES as u64).into()
 }
 
 /// Resolves a stream index and byte limit to an `EndpointLocator`, consisting

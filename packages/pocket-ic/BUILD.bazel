@@ -1,4 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test_suite")
+load("//bazel:defs.bzl", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -7,7 +8,7 @@ DEPENDENCIES = [
     "@crate_index//:base64",
     "@crate_index//:candid",
     "@crate_index//:hex",
-    "@crate_index//:ic-agent",
+    "@crate_index//:ic-certification",
     "@crate_index//:ic-transport-types",
     "@crate_index//:reqwest",
     "@crate_index//:schemars",
@@ -17,6 +18,7 @@ DEPENDENCIES = [
     "@crate_index//:serde_json",
     "@crate_index//:sha2",
     "@crate_index//:slog",
+    "@crate_index//:strum",
     "@crate_index//:thiserror",
     "@crate_index//:tokio",
     "@crate_index//:tracing",
@@ -24,10 +26,13 @@ DEPENDENCIES = [
     "@crate_index//:tracing-subscriber",
 ]
 
-MACRO_DEPENDENCIES = []
+MACRO_DEPENDENCIES = [
+    "@crate_index//:strum_macros",
+]
 
 TEST_DEPENDENCIES = [
     # Keep sorted.
+    "//rs/types/error_types",
     "@crate_index//:candid_parser",
     "@crate_index//:ed25519-dalek",
     "@crate_index//:flate2",
@@ -42,6 +47,13 @@ rust_library(
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "5.0.0",
     deps = DEPENDENCIES,
+)
+
+rust_ic_test(
+    name = "pocket-ic-test",
+    srcs = glob(["src/**/*.rs"]),
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + TEST_DEPENDENCIES,
 )
 
 rust_test_suite(
