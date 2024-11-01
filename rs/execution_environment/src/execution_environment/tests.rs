@@ -3363,6 +3363,44 @@ fn replicated_query_can_accept_cycles() {
 }
 
 #[test]
+fn replicated_query_can_burn_cycles() {
+    let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+    let canister_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let cycles_to_burn = Cycles::new(10_000_000u128);
+
+    let payload = wasm().cycles_burn128(cycles_to_burn).reply().build();
+    let (message_id, _) = test.ingress_raw(canister_id, "query", payload);
+    test.execute_message(canister_id);
+
+    let ingress_state = test.ingress_state(&message_id);
+    if let IngressState::Completed(wasm_result) = ingress_state {
+        match wasm_result {
+            WasmResult::Reject(_) => panic!("expected result"),
+            WasmResult::Reply(_) => (),
+        }
+    } else {
+        panic!("unexpected ingress state {:?}", ingress_state);
+    };
+
+    // Canister A loses `cycles_to_burn` from its balance...
+    assert_eq!(
+        test.canister_state(canister_id).system_state.balance(),
+        initial_cycles - test.canister_execution_cost(canister_id) - cycles_to_burn
+    );
+
+    // ...and the burned cycles are accounted for in the canister's metrics.
+    let burned_cycles = *test
+        .canister_state(canister_id)
+        .system_state
+        .canister_metrics
+        .get_consumed_cycles_by_use_cases()
+        .get(&CyclesUseCase::BurnedCycles)
+        .unwrap();
+    assert_eq!(burned_cycles, NominalCycles::from(cycles_to_burn));
+}
+
+#[test]
 fn test_consumed_cycles_by_use_case_with_refund() {
     let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
     let initial_cycles = Cycles::new(1_000_000_000_000);
