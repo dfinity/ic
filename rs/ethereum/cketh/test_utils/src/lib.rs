@@ -107,6 +107,7 @@ pub struct CkEthSetup {
     pub ledger_id: CanisterId,
     pub minter_id: CanisterId,
     pub evm_rpc_id: Option<CanisterId>,
+    pub support_subaccount: bool,
 }
 
 impl Default for CkEthSetup {
@@ -151,6 +152,7 @@ impl CkEthSetup {
             ledger_id,
             minter_id,
             evm_rpc_id: None,
+            support_subaccount: false,
         };
 
         assert_eq!(
@@ -571,13 +573,14 @@ impl CkEthSetup {
     }
 
     pub fn upgrade_minter_to_add_deposit_with_subaccount_helper_contract(
-        self,
+        mut self,
         contract_address: String,
     ) -> Self {
         self.upgrade_minter(UpgradeArg {
             deposit_with_subaccount_helper_contract_address: Some(contract_address),
             ..Default::default()
         });
+        self.support_subaccount = true;
         self
     }
 

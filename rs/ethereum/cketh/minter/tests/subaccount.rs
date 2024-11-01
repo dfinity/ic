@@ -1,9 +1,12 @@
+use candid::Nat;
 use ic_base_types::PrincipalId;
 use ic_cketh_minter::memo::MintMemo;
+use ic_cketh_test_utils::ckerc20::{CkErc20Setup, DepositCkErc20WithSubaccountParams, ONE_USDC};
 use ic_cketh_test_utils::flow::DepositCkEthWithSubaccountParams;
 use ic_cketh_test_utils::{
     CkEthSetup, DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_DEPOSIT_LOG_INDEX,
-    DEFAULT_DEPOSIT_TRANSACTION_HASH, DEFAULT_PRINCIPAL_ID, DEFAULT_USER_SUBACCOUNT,
+    DEFAULT_DEPOSIT_TRANSACTION_HASH, DEFAULT_ERC20_DEPOSIT_LOG_INDEX,
+    DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH, DEFAULT_PRINCIPAL_ID, DEFAULT_USER_SUBACCOUNT,
     EXPECTED_BALANCE,
 };
 use icrc_ledger_types::icrc1::account::Account;
@@ -31,6 +34,41 @@ fn should_deposit_and_withdraw_cketh() {
                 from_address: DEFAULT_DEPOSIT_FROM_ADDRESS.parse().unwrap(),
                 tx_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.parse().unwrap(),
                 log_index: DEFAULT_DEPOSIT_LOG_INDEX.into(),
+            })),
+            created_at_time: None,
+        });
+    //TODO XC-221: continue test to withdraw from subaccount
+}
+
+#[test]
+fn should_deposit_ckerc20() {
+    let ckerc20 = CkErc20Setup::default()
+        .add_supported_erc20_tokens()
+        .add_support_for_subaccount();
+    let ckusdc = ckerc20.find_ckerc20_token("ckUSDC");
+    let caller = ckerc20.caller();
+
+    ckerc20
+        .deposit(DepositCkErc20WithSubaccountParams::new(
+            ONE_USDC,
+            ckusdc.clone(),
+            Account {
+                owner: caller,
+                subaccount: Some(DEFAULT_USER_SUBACCOUNT),
+            },
+        ))
+        .expect_mint()
+        .call_ckerc20_ledger_get_transaction(ckusdc.ledger_canister_id, 0_u8)
+        .expect_mint(Mint {
+            amount: Nat::from(ONE_USDC),
+            to: Account {
+                owner: caller,
+                subaccount: Some(DEFAULT_USER_SUBACCOUNT),
+            },
+            memo: Some(Memo::from(MintMemo::Convert {
+                from_address: DEFAULT_DEPOSIT_FROM_ADDRESS.parse().unwrap(),
+                tx_hash: DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH.parse().unwrap(),
+                log_index: DEFAULT_ERC20_DEPOSIT_LOG_INDEX.into(),
             })),
             created_at_time: None,
         });

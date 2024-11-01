@@ -5,10 +5,10 @@ use crate::response::{
     transaction_count_response, transaction_receipt,
 };
 use crate::{
-    assert_reply, CkEthSetup, JsonRpcProvider, DEFAULT_DEPOSIT_BLOCK_HASH,
-    DEFAULT_DEPOSIT_BLOCK_NUMBER, DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_DEPOSIT_LOG_INDEX,
-    DEFAULT_DEPOSIT_TRANSACTION_HASH, DEFAULT_DEPOSIT_TRANSACTION_INDEX, DEFAULT_PRINCIPAL_ID,
-    DEFAULT_USER_SUBACCOUNT, EFFECTIVE_GAS_PRICE, EXPECTED_BALANCE, GAS_USED,
+    assert_reply, format_ethereum_address_to_eip_55, CkEthSetup, JsonRpcProvider,
+    DEFAULT_DEPOSIT_BLOCK_HASH, DEFAULT_DEPOSIT_BLOCK_NUMBER, DEFAULT_DEPOSIT_FROM_ADDRESS,
+    DEFAULT_DEPOSIT_LOG_INDEX, DEFAULT_DEPOSIT_TRANSACTION_HASH, DEFAULT_DEPOSIT_TRANSACTION_INDEX,
+    DEFAULT_PRINCIPAL_ID, DEFAULT_USER_SUBACCOUNT, EFFECTIVE_GAS_PRICE, EXPECTED_BALANCE, GAS_USED,
     LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MAX_TICKS, MINTER_ADDRESS, RECEIVED_ETH_EVENT_TOPIC,
     RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC,
 };
@@ -276,13 +276,16 @@ impl DepositFlow {
         self.setup.check_audit_log();
 
         let events = self.setup.get_all_events();
+        let tx_data = self.params.transaction_data();
         assert_contains_unique_event(
             &events,
             EventPayload::AcceptedDeposit {
-                transaction_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.to_string(),
-                block_number: Nat::from(DEFAULT_DEPOSIT_BLOCK_NUMBER),
-                log_index: Nat::from(DEFAULT_DEPOSIT_LOG_INDEX),
-                from_address: self.params.from_address().to_string(),
+                transaction_hash: tx_data.transaction_hash.to_string(),
+                block_number: Nat::from(tx_data.block_number),
+                log_index: Nat::from(tx_data.log_index),
+                from_address: format_ethereum_address_to_eip_55(
+                    &self.params.from_address().to_string(),
+                ),
                 value: Nat::from(self.params.amount()),
                 principal: recipient.owner,
                 subaccount: recipient.subaccount,
@@ -292,8 +295,8 @@ impl DepositFlow {
             &events,
             EventPayload::MintedCkEth {
                 event_source: EventSource {
-                    transaction_hash: self.params.transaction_data().transaction_hash.clone(),
-                    log_index: Nat::from(self.params.transaction_data().log_index),
+                    transaction_hash: tx_data.transaction_hash.clone(),
+                    log_index: Nat::from(tx_data.log_index),
                 },
                 mint_block_index: Nat::from(0_u8),
             },
