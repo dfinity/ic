@@ -17,7 +17,7 @@ use ic_types::{
 use maplit::btreemap;
 use std::collections::BTreeSet;
 use std::sync::Arc;
-use xnet_test::Metrics;
+use xnet_test::{Metrics, StartArgs};
 
 const MAX_TICKS: u64 = 100;
 
@@ -96,14 +96,14 @@ impl SubnetPairProxy {
         payload_size_bytes: u64,
     ) -> Result<Vec<u8>, candid::Error> {
         let network_topology = vec![
-            vec![self.local_canister_id.get().to_vec()],
-            vec![self.remote_canister_id.get().to_vec()],
+            vec![self.local_canister_id.get().into()],
+            vec![self.remote_canister_id.get().into()],
         ];
-        Encode!(
-            &network_topology,
-            &canister_to_subnet_rate,
-            &payload_size_bytes
-        )
+        Encode!(&StartArgs {
+            network_topology,
+            canister_to_subnet_rate,
+            payload_size_bytes,
+        })
     }
 
     /// Calls the 'start' method on the local canister.

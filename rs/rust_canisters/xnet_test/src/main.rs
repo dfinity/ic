@@ -6,6 +6,7 @@
 //! cargo build --target wasm32-unknown-unknown --release
 //! ```
 use candid::{CandidType, Deserialize, Principal};
+use ic_cdk::api::management_canister::provisional::CanisterId;
 use ic_cdk::{
     api::{
         call::{call, call_with_payment},
@@ -21,7 +22,7 @@ use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::str::FromStr;
 use std::time::Duration;
-use xnet_test::{CanisterId, Metrics, NetworkTopology};
+use xnet_test::{Metrics, NetworkTopology, StartArgs};
 
 thread_local! {
     /// Whether this canister is generating traffic.
@@ -144,13 +145,14 @@ fn log(message: &str) {
 /// Initializes network topology and instructs this canister to start sending
 /// requests to other canisters.
 #[update]
-fn start(network_topology: NetworkTopology, rate: u64, payload_size: u64) -> String {
-    NETWORK_TOPOLOGY.with(move |canisters| {
-        *canisters.borrow_mut() = network_topology;
-    });
+fn start(start_args: StartArgs) -> String {
+    ic_cdk::setup();
 
-    PER_SUBNET_RATE.with(|r| *r.borrow_mut() = rate);
-    PAYLOAD_SIZE.with(|r| *r.borrow_mut() = payload_size);
+    NETWORK_TOPOLOGY.with(move |canisters| {
+        *canisters.borrow_mut() = start_args.network_topology;
+    });
+    PER_SUBNET_RATE.with(|r| *r.borrow_mut() = start_args.canister_to_subnet_rate);
+    PAYLOAD_SIZE.with(|r| *r.borrow_mut() = start_args.payload_size_bytes);
 
     RUNNING.with(|r| *r.borrow_mut() = true);
 
@@ -178,7 +180,7 @@ async fn fanout() {
             continue;
         }
 
-        if canisters.contains(&self_id.as_slice().to_vec()) {
+        if canisters.contains(&self_id) {
             // Same subnet
             continue;
         }
@@ -225,10 +227,7 @@ async fn fanout() {
 #[update]
 fn handle_request(req: Request) -> Reply {
     let caller = caller();
-    let in_seq_no = STATE.with(|s| {
-        s.borrow_mut()
-            .set_in_seq_no(caller.as_slice().to_vec(), req.seq_no)
-    });
+    let in_seq_no = STATE.with(|s| s.borrow_mut().set_in_seq_no(caller, req.seq_no));
 
     if req.seq_no <= in_seq_no {
         METRICS.with(|m| m.borrow_mut().seq_errors += 1);

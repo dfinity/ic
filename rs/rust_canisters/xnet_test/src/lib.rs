@@ -1,15 +1,21 @@
 use candid::{CandidType, Deserialize};
+use ic_cdk::api::management_canister::provisional::CanisterId;
 use serde::Serialize;
 use std::time::Duration;
-
-/// Id of a canister is an opaque blob.
-pub type CanisterId = Vec<u8>;
 
 /// Configuration of the network: the outer vector enumerates canisters
 /// installed on the same subnet.
 ///
 /// This message is used as request payload for "start" call.
 pub type NetworkTopology = Vec<Vec<CanisterId>>;
+
+/// Arguments for the "start" call of this canister.
+#[derive(Default, Clone, CandidType, Deserialize, Debug)]
+pub struct StartArgs {
+    pub network_topology: NetworkTopology,
+    pub canister_to_subnet_rate: u64,
+    pub payload_size_bytes: u64,
+}
 
 /// Metrics observed by this canister.
 ///
