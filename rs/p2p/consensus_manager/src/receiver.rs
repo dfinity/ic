@@ -496,7 +496,7 @@ where
                         }
 
                         // wait for deletion from peers
-                        // TODO: handle the error appropriately
+                        // TODO: NET-1774
                         let _ = peer_rx.wait_for(|p| p.is_empty()).await;
 
                         // Purge from the unvalidated pool
@@ -510,7 +510,7 @@ where
                     }
                     Err(Aborted) => {
                         // wait for deletion from peers
-                        // TODO: handle the error appropriately
+                        // TODO: NET-1774
                         let _ = peer_rx.wait_for(|p| p.is_empty()).await;
                         metrics
                             .assemble_task_result_total
