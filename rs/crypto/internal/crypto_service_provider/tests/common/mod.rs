@@ -8,6 +8,7 @@ use rand::rngs::OsRng;
 use std::sync::Arc;
 use tempfile::TempDir;
 
+#[allow(unused)]
 pub fn local_vault_in_temp_dir() -> (
     LocalCspVault<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore, ProtoPublicKeyStore>,
     TempDir,
@@ -23,6 +24,7 @@ pub fn local_vault_in_temp_dir() -> (
     (local_vault, _temp_dir)
 }
 
+#[allow(unused)]
 pub fn proptest_config_for_delegation() -> ProptestConfig {
     ProptestConfig {
         //default uses FileFailurePersistence::SourceParallel which expects a main.rs or a lib.rs,
