@@ -15,5 +15,4 @@ ic-types = { path = "../../../../../../types/types" }
 k256 = { workspace = true }
 p256 = { workspace = true }
 rand = { workspace = true }
-schnorr_fun = "0.10"
 sha2 = { workspace = true }

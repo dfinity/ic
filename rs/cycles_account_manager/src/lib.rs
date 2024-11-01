@@ -65,6 +65,24 @@ impl std::fmt::Display for CyclesAccountManagerError {
     }
 }
 
+/// Keeps track of how a canister is executing such that the `CyclesAccountManager`
+/// can charge cycles accordingly.
+#[derive(Debug, Copy, Clone)]
+pub enum WasmExecutionMode {
+    Wasm32,
+    Wasm64,
+}
+
+impl From<bool> for WasmExecutionMode {
+    fn from(is_wasm64: bool) -> Self {
+        if is_wasm64 {
+            WasmExecutionMode::Wasm64
+        } else {
+            WasmExecutionMode::Wasm32
+        }
+    }
+}
+
 /// Measures how much a resource such as compute or storage is being used.
 /// It will be used in resource reservation to scale reservation parameters
 /// depending on the resource usage.
@@ -469,11 +487,12 @@ impl CyclesAccountManager {
         canister: &mut CanisterState,
         amount: NumInstructions,
         subnet_size: usize,
+        execution_mode: WasmExecutionMode,
     ) -> Result<(), CanisterOutOfCyclesError> {
         let memory_usage = canister.memory_usage();
         let message_memory = canister.message_memory_usage();
         let compute_allocation = canister.compute_allocation();
-        let cycles = self.execution_cost(amount, subnet_size);
+        let cycles = self.execution_cost(amount, subnet_size, execution_mode);
         let reveal_top_up = canister.controllers().contains(sender);
         self.consume_cycles(
             &mut canister.system_state,
@@ -506,8 +525,9 @@ impl CyclesAccountManager {
         num_instructions: NumInstructions,
         subnet_size: usize,
         reveal_top_up: bool,
+        execution_mode: WasmExecutionMode,
     ) -> Result<Cycles, CanisterOutOfCyclesError> {
-        let cost = self.execution_cost(num_instructions, subnet_size);
+        let cost = self.execution_cost(num_instructions, subnet_size, execution_mode);
         self.consume_with_threshold(
             system_state,
             cost,
@@ -536,6 +556,7 @@ impl CyclesAccountManager {
         prepaid_execution_cycles: Cycles,
         error_counter: &IntCounter,
         subnet_size: usize,
+        execution_mode: WasmExecutionMode,
         log: &ReplicaLogger,
     ) {
         debug_assert!(num_instructions <= num_instructions_initially_charged);
@@ -553,7 +574,7 @@ impl CyclesAccountManager {
             std::cmp::min(num_instructions, num_instructions_initially_charged);
         let cycles_to_refund = self
             .scale_cost(
-                self.convert_instructions_to_cycles(num_instructions_to_refund),
+                self.convert_instructions_to_cycles(num_instructions_to_refund, execution_mode),
                 subnet_size,
             )
             .min(prepaid_execution_cycles);
@@ -790,8 +811,12 @@ impl CyclesAccountManager {
 
     /// Returns the amount of cycles required for executing the longest-running
     /// response callback.
-    pub fn prepayment_for_response_execution(&self, subnet_size: usize) -> Cycles {
-        self.execution_cost(self.max_num_instructions, subnet_size)
+    pub fn prepayment_for_response_execution(
+        &self,
+        subnet_size: usize,
+        execution_mode: WasmExecutionMode,
+    ) -> Cycles {
+        self.execution_cost(self.max_num_instructions, subnet_size, execution_mode)
     }
 
     /// Returns the amount of cycles required for transmitting the largest
@@ -1040,8 +1065,16 @@ impl CyclesAccountManager {
     /// Note that this function is made public to facilitate some logistic in
     /// tests.
     #[doc(hidden)]
-    pub fn convert_instructions_to_cycles(&self, num_instructions: NumInstructions) -> Cycles {
-        let fee = self.config.ten_update_instructions_execution_fee;
+    pub fn convert_instructions_to_cycles(
+        &self,
+        num_instructions: NumInstructions,
+        execution_mode: WasmExecutionMode,
+    ) -> Cycles {
+        let fee = match execution_mode {
+            WasmExecutionMode::Wasm64 => self.config.ten_update_instructions_execution_fee_wasm64,
+            WasmExecutionMode::Wasm32 => self.config.ten_update_instructions_execution_fee,
+        };
+
         match fee.checked_mul(num_instructions.get()) {
             Some(value) => value / 10_u64,
             // The multiplication should never overflow, as the maximum number of instructions
@@ -1056,10 +1089,15 @@ impl CyclesAccountManager {
     /// instructions. The cost consists of:
     /// - the fixed fee to start executing a message.
     /// - the fee that depends on the number of instructions.
-    pub fn execution_cost(&self, num_instructions: NumInstructions, subnet_size: usize) -> Cycles {
+    pub fn execution_cost(
+        &self,
+        num_instructions: NumInstructions,
+        subnet_size: usize,
+        execution_mode: WasmExecutionMode,
+    ) -> Cycles {
         self.scale_cost(
             self.config.update_message_execution_fee
-                + self.convert_instructions_to_cycles(num_instructions),
+                + self.convert_instructions_to_cycles(num_instructions, execution_mode),
             subnet_size,
         )
     }
@@ -1167,6 +1205,8 @@ mod tests {
     use candid::Encode;
     use ic_management_canister_types::{CanisterSettingsArgsBuilder, UpdateSettingsArgs};
     use ic_test_utilities_types::ids::subnet_test_id;
+
+    const WASM_EXECUTION_MODE: WasmExecutionMode = WasmExecutionMode::Wasm32;
 
     fn create_cycles_account_manager(reference_subnet_size: usize) -> CyclesAccountManager {
         let mut config = CyclesAccountManagerConfig::application_subnet();
@@ -1297,24 +1337,25 @@ mod tests {
         // Everything up to `u128::MAX / 4` should be converted as normal:
         // `(ten_update_instructions_execution_fee * num_instructions) / 10`
 
-        // `(4 * 0) / 10 == 0`
+        // `(10 * 0) / 10 == 0`
         assert_eq!(
-            cycles_account_manager.convert_instructions_to_cycles(0.into()),
+            cycles_account_manager.convert_instructions_to_cycles(0.into(), WASM_EXECUTION_MODE),
             0_u64.into()
         );
 
-        // `(4 * 9) / 10 == 3`
+        // `(10 * 9) / 10 == 9`
         assert_eq!(
-            cycles_account_manager.convert_instructions_to_cycles(9.into()),
-            ((4 * 9_u64) / 10).into()
+            cycles_account_manager.convert_instructions_to_cycles(9.into(), WASM_EXECUTION_MODE),
+            ((10 * 9_u64) / 10).into()
         );
 
         // As the maximum number of instructions is bounded by its type, i.e. `u64::MAX`,
         // the normal conversion is applied for the whole instructions range.
-        // `convert_instructions_to_cycles(u64::MAX) == (4 * u64::MAX) / 10`
-        let u64_max_cycles = cycles_account_manager.convert_instructions_to_cycles(u64::MAX.into());
-        assert_eq!(u64_max_cycles, ((4 * u128::from(u64::MAX)) / 10).into());
-        // `convert_instructions_to_cycles(u64::MAX) != 4 * (u64::MAX / 10)`
-        assert_ne!(u64_max_cycles, (4 * (u128::from(u64::MAX) / 10)).into());
+        // `convert_instructions_to_cycles(u64::MAX) == (10 * u64::MAX) / 10`
+        let u64_max_cycles = cycles_account_manager
+            .convert_instructions_to_cycles(u64::MAX.into(), WASM_EXECUTION_MODE);
+        assert_eq!(u64_max_cycles, ((10 * u128::from(u64::MAX)) / 10).into());
+        // `convert_instructions_to_cycles(u64::MAX) != 10 * (u64::MAX / 10)`
+        assert_ne!(u64_max_cycles, (10 * (u128::from(u64::MAX) / 10)).into());
     }
 }

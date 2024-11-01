@@ -54,12 +54,11 @@ build --flag_alias=timeout_value=//bazel:timeout_value
 # Exclude system tests by default
 # https://github.com/bazelbuild/bazel/issues/8439
 build --build_tag_filters="-system_test,-upload,-fuzz_test"
-test --test_tag_filters="-system_test,-post_master,-fuzz_test"
+test --test_tag_filters="-system_test,-fuzz_test"
 test:alltests --test_tag_filters=""
 test:paritytests --test_tag_filters="-system_test"
 build:ci --build_tag_filters="-system_test,-fuzz_test"
 build:ci --verbose_failures
-test:ci --test_tag_filters="-post_master,-system_test_hourly,-system_test_nightly,-system_test_nightly_nns,-system_test_staging,-system_test_hotfix,-system_test_benchmark,-fuzz_test,-fi_tests_nightly,-nns_tests_nightly"
 
 test --test_output=errors
 test --test_env=RUST_BACKTRACE=full
