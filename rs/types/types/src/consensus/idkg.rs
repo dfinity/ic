@@ -64,6 +64,35 @@ pub enum CompletedSignature {
     Unreported(crate::batch::ConsensusResponse),
 }
 
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
+pub struct IdkgMasterPublicKeyId(MasterPublicKeyId);
+
+impl TryFrom<MasterPublicKeyId> for IdkgMasterPublicKeyId {
+    type Error = String;
+
+    fn try_from(val: MasterPublicKeyId) -> Result<Self, Self::Error> {
+        if !val.is_idkg_key() {
+            Err("This key is not an idkg key".to_string())
+        } else {
+            Ok(Self(val))
+        }
+    }
+}
+
+impl From<IdkgMasterPublicKeyId> for MasterPublicKeyId {
+    fn from(val: IdkgMasterPublicKeyId) -> Self {
+        val.0
+    }
+}
+
+impl std::ops::Deref for IdkgMasterPublicKeyId {
+    type Target = MasterPublicKeyId;
+
+    fn deref(&self) -> &<Self as std::ops::Deref>::Target {
+        &self.0
+    }
+}
+
 /// Common data that is carried in both `IDkgSummaryPayload` and `IDkgDataPayload`.
 /// published on every consensus round. It represents the current state of the
 /// protocol since the summary block.
@@ -367,20 +396,16 @@ pub struct MasterKeyTranscript {
     /// Progress of creating the next key transcript.
     pub next_in_creation: KeyTranscriptCreation,
     /// Master key Id allowing different signature schemes.
-    pub master_key_id: MasterPublicKeyId,
+    master_key_id: MasterPublicKeyId,
 }
 
 impl MasterKeyTranscript {
-    pub fn new(key_id: MasterPublicKeyId, next_in_creation: KeyTranscriptCreation) -> Option<Self> {
-        if !key_id.is_idkg_key() {
-            return None;
-        }
-
-        Some(Self {
+    pub fn new(key_id: IdkgMasterPublicKeyId, next_in_creation: KeyTranscriptCreation) -> Self {
+        Self {
             current: None,
             next_in_creation,
-            master_key_id: key_id,
-        })
+            master_key_id: key_id.into(),
+        }
     }
 
     pub fn update(

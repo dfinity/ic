@@ -600,6 +600,7 @@ fn bootstrap_idkg_summary(
                 .key_configs
                 .iter()
                 .map(|key_config| key_config.key_id.clone())
+                .filter_map(|key_id| key_id.try_into().ok())
                 .collect(),
             Height::new(cup_contents.height),
         )),

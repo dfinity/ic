@@ -18,7 +18,7 @@ use ic_management_canister_types::MasterPublicKeyId;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_features::ChainKeyConfig;
 use ic_replicated_state::{metadata_state::subnet_call_context_manager::*, ReplicatedState};
-use ic_types::consensus::idkg::HasMasterPublicKeyId;
+use ic_types::consensus::idkg::{HasMasterPublicKeyId, IdkgMasterPublicKeyId};
 use ic_types::{
     batch::ValidationContext,
     consensus::{
@@ -44,12 +44,12 @@ pub(super) mod signatures;
 /// data blocks to create the initial key transcript.
 pub(crate) fn make_bootstrap_summary(
     subnet_id: SubnetId,
-    key_ids: Vec<MasterPublicKeyId>,
+    key_ids: Vec<IdkgMasterPublicKeyId>,
     height: Height,
 ) -> idkg::Summary {
     let key_transcripts = key_ids
         .into_iter()
-        .filter_map(|key_id| MasterKeyTranscript::new(key_id, idkg::KeyTranscriptCreation::Begin))
+        .map(|key_id| MasterKeyTranscript::new(key_id, idkg::KeyTranscriptCreation::Begin))
         .collect();
 
     Some(IDkgPayload::empty(height, subnet_id, key_transcripts))
@@ -60,7 +60,7 @@ pub(crate) fn make_bootstrap_summary(
 pub(crate) fn make_bootstrap_summary_with_initial_dealings(
     subnet_id: SubnetId,
     height: Height,
-    initial_dealings_per_key_id: BTreeMap<MasterPublicKeyId, InitialIDkgDealings>,
+    initial_dealings_per_key_id: BTreeMap<IdkgMasterPublicKeyId, InitialIDkgDealings>,
     log: &ReplicaLogger,
 ) -> Result<idkg::Summary, IDkgPayloadError> {
     let mut idkg_transcripts = BTreeMap::new();
@@ -71,20 +71,13 @@ pub(crate) fn make_bootstrap_summary_with_initial_dealings(
             Some((params, transcript)) => {
                 idkg_transcripts.insert(transcript.transcript_id, transcript);
 
-                if let Some(transcript) = MasterKeyTranscript::new(
+                key_transcripts.push(MasterKeyTranscript::new(
                     key_id,
                     idkg::KeyTranscriptCreation::XnetReshareOfUnmaskedParams((
                         Box::new(initial_dealings),
                         params,
                     )),
-                ) {
-                    key_transcripts.push(transcript);
-                } else {
-                    error!(
-                        log,
-                        "Called idkg::make_bootstrap_summary_with_initial_dealings with non-idkg key_id"
-                    );
-                }
+                ));
             }
             None => {
                 // Leave the feature disabled if the initial dealings are incorrect.
@@ -146,11 +139,11 @@ pub(crate) fn create_summary_payload(
         return Ok(None);
     };
 
-    let key_ids: Vec<_> = chain_key_config
+    let key_ids: Vec<IdkgMasterPublicKeyId> = chain_key_config
         .key_configs
         .iter()
         .map(|key_config| key_config.key_id.clone())
-        .filter(|key_id| key_id.is_idkg_key())
+        .filter_map(|key_id| key_id.try_into().ok())
         .collect();
 
     // Get idkg_payload from parent block if it exists
@@ -196,7 +189,7 @@ pub(crate) fn create_summary_payload(
 
 fn create_summary_payload_helper(
     subnet_id: SubnetId,
-    key_ids: &[MasterPublicKeyId],
+    key_ids: &[IdkgMasterPublicKeyId],
     registry_client: &dyn RegistryClient,
     block_reader: &dyn IDkgBlockReader,
     height: Height,
@@ -287,18 +280,10 @@ fn create_summary_payload_helper(
     for key_id in key_ids {
         #[allow(clippy::map_entry)]
         if !idkg_summary.key_transcripts.contains_key(key_id) {
-            if let Some(transcript) =
-                MasterKeyTranscript::new(key_id.clone(), idkg::KeyTranscriptCreation::Begin)
-            {
-                idkg_summary
-                    .key_transcripts
-                    .insert(key_id.clone(), transcript);
-            } else {
-                error!(
-                    log,
-                    "Called idkg::create_summary_payload_helper with non-idkg key_id"
-                );
-            }
+            idkg_summary.key_transcripts.insert(
+                key_id.clone().into(),
+                MasterKeyTranscript::new(key_id.clone(), idkg::KeyTranscriptCreation::Begin),
+            );
         }
     }
 

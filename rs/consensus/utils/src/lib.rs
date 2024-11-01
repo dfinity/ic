@@ -523,7 +523,10 @@ mod tests {
         IDkgPayload::empty(
             Height::new(0),
             subnet_test_id(0),
-            vec![MasterKeyTranscript::new(key_id, KeyTranscriptCreation::Begin).unwrap()],
+            vec![MasterKeyTranscript::new(
+                key_id.try_into().unwrap(),
+                KeyTranscriptCreation::Begin,
+            )],
         )
     }
 

@@ -18,7 +18,7 @@ use ic_replicated_state::metadata_state::subnet_call_context_manager::{
 use ic_types::consensus::idkg::common::{PreSignatureRef, SignatureScheme, ThresholdSigInputsRef};
 use ic_types::consensus::idkg::ecdsa::ThresholdEcdsaSigInputsRef;
 use ic_types::consensus::idkg::schnorr::ThresholdSchnorrSigInputsRef;
-use ic_types::consensus::idkg::HasMasterPublicKeyId;
+use ic_types::consensus::idkg::{HasMasterPublicKeyId, IdkgMasterPublicKeyId};
 use ic_types::consensus::Block;
 use ic_types::consensus::{
     idkg::{
@@ -42,35 +42,6 @@ use std::{
     fmt::{self, Display, Formatter},
     sync::Arc,
 };
-
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
-pub(super) struct IdkgMasterPublicKeyId(MasterPublicKeyId);
-
-impl TryFrom<MasterPublicKeyId> for IdkgMasterPublicKeyId {
-    type Error = String;
-
-    fn try_from(val: MasterPublicKeyId) -> Result<Self, Self::Error> {
-        if !val.is_idkg_key() {
-            Err("This key is not an idkg key".to_string())
-        } else {
-            Ok(Self(val))
-        }
-    }
-}
-
-impl From<IdkgMasterPublicKeyId> for MasterPublicKeyId {
-    fn from(val: IdkgMasterPublicKeyId) -> Self {
-        val.0
-    }
-}
-
-impl std::ops::Deref for IdkgMasterPublicKeyId {
-    type Target = MasterPublicKeyId;
-
-    fn deref(&self) -> &<Self as std::ops::Deref>::Target {
-        &self.0
-    }
-}
 
 #[derive(Clone, PartialEq, Debug)]
 pub(crate) struct InvalidChainCacheError(String);
@@ -393,7 +364,7 @@ pub(super) fn transcript_op_summary(op: &IDkgTranscriptOperation) -> String {
 pub(crate) fn inspect_idkg_chain_key_initializations(
     ecdsa_initializations: &[pb::EcdsaInitialization],
     chain_key_initializations: &[pb::ChainKeyInitialization],
-) -> Result<BTreeMap<MasterPublicKeyId, InitialIDkgDealings>, String> {
+) -> Result<BTreeMap<IdkgMasterPublicKeyId, InitialIDkgDealings>, String> {
     let mut initial_dealings_per_key_id = BTreeMap::new();
 
     if !ecdsa_initializations.is_empty() && !chain_key_initializations.is_empty() {
@@ -428,7 +399,10 @@ pub(crate) fn inspect_idkg_chain_key_initializations(
                 )
             })?;
 
-        initial_dealings_per_key_id.insert(MasterPublicKeyId::Ecdsa(ecdsa_key_id), dealings);
+        initial_dealings_per_key_id.insert(
+            MasterPublicKeyId::Ecdsa(ecdsa_key_id).try_into().unwrap(),
+            dealings,
+        );
     }
 
     // TODO(CON-1332): Do not panic if fields are missing
@@ -446,9 +420,10 @@ pub(crate) fn inspect_idkg_chain_key_initializations(
             })?;
 
         // Skip non-idkg keys
-        if !key_id.is_idkg_key() {
-            continue;
-        }
+        let key_id = match key_id.try_into() {
+            Ok(key_id) => key_id,
+            Err(_) => continue,
+        };
 
         let dealings = chain_key_init
             .dealings
@@ -683,7 +658,10 @@ mod tests {
 
         assert_eq!(
             init,
-            BTreeMap::from([(MasterPublicKeyId::Ecdsa(key_id), initial_dealings)])
+            BTreeMap::from([(
+                MasterPublicKeyId::Ecdsa(key_id).try_into().unwrap(),
+                initial_dealings
+            )])
         );
     }
 
@@ -703,7 +681,10 @@ mod tests {
         let init = inspect_idkg_chain_key_initializations(&[], &[chain_key_init])
             .expect("Should successfully get initializations");
 
-        assert_eq!(init, BTreeMap::from([(key_id, initial_dealings)]));
+        assert_eq!(
+            init,
+            BTreeMap::from([(key_id.try_into().unwrap(), initial_dealings)])
+        );
     }
 
     #[test]
@@ -747,8 +728,14 @@ mod tests {
         assert_eq!(
             init,
             BTreeMap::from([
-                (master_key_id.clone(), initial_dealings.clone()),
-                (master_key_id_2.clone(), initial_dealings_2.clone()),
+                (
+                    master_key_id.clone().try_into().unwrap(),
+                    initial_dealings.clone()
+                ),
+                (
+                    master_key_id_2.clone().try_into().unwrap(),
+                    initial_dealings_2.clone()
+                ),
             ])
         );
 
@@ -760,8 +747,14 @@ mod tests {
         assert_eq!(
             init,
             BTreeMap::from([
-                (master_key_id.clone(), initial_dealings.clone()),
-                (master_key_id_2.clone(), initial_dealings_2.clone()),
+                (
+                    master_key_id.clone().try_into().unwrap(),
+                    initial_dealings.clone()
+                ),
+                (
+                    master_key_id_2.clone().try_into().unwrap(),
+                    initial_dealings_2.clone()
+                ),
             ])
         );
 
