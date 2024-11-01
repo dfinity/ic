@@ -489,7 +489,7 @@ where
                     Ok((artifact, peer_id)) => {
                         let id = artifact.id();
                         // Send artifact to pool
-                        if sender.send(UnvalidatedArtifactMutation::Insert((artifact, peer_id))).is_err() {
+                        if sender.send(UnvalidatedArtifactMutation::Insert((artifact, peer_id))).await.is_err() {
                             error!(log, "The receiving side of the channel, owned by the consensus thread, was closed. This should be infallible situation since a cancellation token should be received. If this happens then most likely there is very subnet synchonization bug.");
                         }
 
@@ -498,7 +498,7 @@ where
                         let _ = peer_rx.wait_for(|p| p.is_empty()).await;
 
                         // Purge from the unvalidated pool
-                        if sender.send(UnvalidatedArtifactMutation::Remove(id)).is_err() {
+                        if sender.send(UnvalidatedArtifactMutation::Remove(id)).await.is_err() {
                             error!(log, "The receiving side of the channel, owned by the consensus thread, was closed. This should be infallible situation since a cancellation token should be received. If this happens then most likely there is very subnet synchonization bug.");
                         }
                         metrics
