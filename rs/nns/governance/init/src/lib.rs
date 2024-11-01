@@ -253,7 +253,8 @@ impl GovernanceCanisterInitPayloadBuilder {
                     "created_ts_ns",
                     "staked_icpt",
                     "follows",
-                    "not_for_profit"
+                    "not_for_profit",
+                    "maturity_e8s_equivalent",
                 ]
             );
         }
@@ -293,25 +294,17 @@ impl GovernanceCanisterInitPayloadBuilder {
                 .parse::<bool>()
                 .expect("couldn't read the neuron's not-for-profit flag");
 
-            let memo = if record.len() < 9 {
-                self.rng.next_u64()
-            } else {
-                record[6].parse::<u64>().expect("could not parse memo")
-            };
+            let memo = self.rng.next_u64();
 
-            let maturity_e8s_equivalent = if record.len() < 10 {
+            let maturity_e8s_equivalent = if record.len() < 7 {
                 0
             } else {
-                record[7].parse::<u64>().expect("could not parse maturity")
+                record[6]
+                    .parse::<u64>()
+                    .expect("could not parse maturity_e8s_equivalent")
             };
 
-            let kyc_verified = if record.len() < 11 {
-                false
-            } else {
-                record[8]
-                    .parse::<bool>()
-                    .expect("could not parse kyc_verified")
-            };
+            let kyc_verified = false;
 
             let neuron = Neuron {
                 id: Some(neuron_id),
