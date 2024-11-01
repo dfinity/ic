@@ -13,7 +13,7 @@ use futures::FutureExt;
 use hyper::body::Bytes;
 use hyper::header::{HeaderValue, CONTENT_TYPE};
 use hyper::{Method, StatusCode};
-use ic_boundary::{Health, RootKey};
+use ic_boundary::{status, Health, RootKey};
 use ic_btc_adapter::config::{Config as BitcoinAdapterConfig, IncomingSource};
 use ic_btc_adapter::start_server;
 use ic_config::{
@@ -36,8 +36,8 @@ use ic_interfaces_adapter_client::NonBlockingChannel;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
 use ic_management_canister_types::{
-    CanisterIdRecord, CanisterInstallMode, EcdsaCurve, EcdsaKeyId, MasterPublicKeyId,
-    Method as Ic00Method, ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, SchnorrKeyId,
+    CanisterIdRecord, EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, Method as Ic00Method,
+    ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, SchnorrKeyId,
 };
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::routing_table::v1::RoutingTable as PbRoutingTable;
@@ -95,6 +95,12 @@ use tower::{service_fn, util::ServiceExt};
 
 // See build.rs
 include!(concat!(env!("OUT_DIR"), "/dashboard.rs"));
+
+// Clippy complains that these are interior-mutable.
+// We don't mutate them, so silence it.
+// https://rust-lang.github.io/rust-clippy/master/index.html#/declare_interior_mutable_const
+#[allow(clippy::declare_interior_mutable_const)]
+const CONTENT_TYPE_CBOR: HeaderValue = HeaderValue::from_static("application/cbor");
 
 /// The response type for `/api/v2` and `/api/v3` IC endpoint operations.
 pub(crate) type ApiResponse = BoxFuture<'static, (u16, BTreeMap<String, Vec<u8>>, Vec<u8>)>;
@@ -173,7 +179,7 @@ struct BitcoinAdapterParts {
 
 impl BitcoinAdapterParts {
     fn new(
-        bitcoind_addr: SocketAddr,
+        bitcoind_addr: Vec<SocketAddr>,
         uds_path: PathBuf,
         log_level: Option<Level>,
         replica_logger: ReplicaLogger,
@@ -194,7 +200,7 @@ impl BitcoinAdapterParts {
         };
         let bitcoin_adapter_config = BitcoinAdapterConfig {
             network: Network::Regtest,
-            nodes: vec![bitcoind_addr],
+            nodes: bitcoind_addr,
             socks_proxy: None,
             ipv6_only: false,
             logger: logger_config,
@@ -234,7 +240,7 @@ pub struct PocketIc {
     runtime: Arc<Runtime>,
     nonmainnet_features: bool,
     log_level: Option<Level>,
-    bitcoind_addr: Option<SocketAddr>,
+    bitcoind_addr: Option<Vec<SocketAddr>>,
     _bitcoin_adapter_parts: Option<BitcoinAdapterParts>,
 }
 
@@ -388,7 +394,7 @@ impl PocketIc {
         state_dir: Option<PathBuf>,
         nonmainnet_features: bool,
         log_level: Option<Level>,
-        bitcoind_addr: Option<SocketAddr>,
+        bitcoind_addr: Option<Vec<SocketAddr>>,
     ) -> Self {
         let mut range_gen = RangeGen::new();
         let mut routing_table = RoutingTable::new();
@@ -572,7 +578,7 @@ impl PocketIc {
 
             if let Some(bitcoin_adapter_uds_path) = bitcoin_adapter_uds_path {
                 _bitcoin_adapter_parts = Some(BitcoinAdapterParts::new(
-                    bitcoind_addr.unwrap(),
+                    bitcoind_addr.clone().unwrap(),
                     bitcoin_adapter_uds_path,
                     log_level,
                     sm.replica_logger.clone(),
@@ -1559,51 +1565,6 @@ impl RootKey for PocketRootKey {
     }
 }
 
-// START COPY from rs/boundary_node/ic_boundary/src/routes.rs
-// TODO: reshare once ic_boundary upgrades to axum 0.7.
-
-const IC_API_VERSION: &str = "0.18.0";
-// Clippy complains that these are interior-mutable.
-// We don't mutate them, so silence it.
-// https://rust-lang.github.io/rust-clippy/master/index.html#/declare_interior_mutable_const
-#[allow(clippy::declare_interior_mutable_const)]
-const CONTENT_TYPE_CBOR: HeaderValue = HeaderValue::from_static("application/cbor");
-
-pub async fn status(
-    State((rk, h)): State<(Arc<dyn RootKey>, Arc<dyn Health>)>,
-) -> impl IntoResponse {
-    use ic_types::messages::HttpStatusResponse;
-
-    let health = h.health().await;
-
-    let status = HttpStatusResponse {
-        ic_api_version: IC_API_VERSION.to_string(),
-        root_key: rk.root_key().await.map(|x| x.into()),
-        impl_version: None,
-        impl_hash: None,
-        replica_health_status: Some(health),
-        certified_height: None,
-    };
-
-    // Serialize to CBOR
-    let mut ser = serde_cbor::Serializer::new(Vec::new());
-    // These should not really fail, better to panic if something in serde changes which would cause them to fail
-    ser.self_describe().unwrap();
-    status.serialize(&mut ser).unwrap();
-    let cbor = ser.into_inner();
-
-    // Construct response and inject health status for middleware
-    let mut response = cbor.into_response();
-    response.extensions_mut().insert(health);
-    response
-        .headers_mut()
-        .insert(CONTENT_TYPE, CONTENT_TYPE_CBOR);
-
-    response
-}
-
-// END COPY
-
 impl Operation for StatusRequest {
     fn compute(&self, pic: &mut PocketIc) -> OpOut {
         let root_key_bytes = pic.nns_subnet().map(|nns_subnet| nns_subnet.root_key_der());
@@ -2255,36 +2216,6 @@ impl std::fmt::Display for Digest {
     }
 }
 
-// TODO: deprecate this as an Op; implement it as a client library convenience function
-
-/// A convenience method that installs the given wasm module at the given canister id. The first
-/// controller of the given canister is set as the sender. If the canister has no controller set,
-/// the anynmous user is used.
-pub struct InstallCanisterAsController {
-    pub canister_id: CanisterId,
-    pub mode: CanisterInstallMode,
-    pub module: Vec<u8>,
-    pub payload: Vec<u8>,
-}
-
-impl Operation for InstallCanisterAsController {
-    fn compute(&self, pic: &mut PocketIc) -> OpOut {
-        pic.try_route_canister(self.canister_id)
-            .unwrap()
-            .install_wasm_in_mode(
-                self.canister_id,
-                self.mode,
-                self.module.clone(),
-                self.payload.clone(),
-            )
-            .into()
-    }
-
-    fn id(&self) -> OpId {
-        OpId("".into())
-    }
-}
-
 // ================================================================================================================= //
 // Helpers
 
@@ -2366,7 +2297,7 @@ fn route(
                     // If applicable, we start a new bitcoin adapter.
                     if let Some(bitcoin_adapter_uds_path) = bitcoin_adapter_uds_path {
                         pic._bitcoin_adapter_parts = Some(BitcoinAdapterParts::new(
-                            pic.bitcoind_addr.unwrap(),
+                            pic.bitcoind_addr.clone().unwrap(),
                             bitcoin_adapter_uds_path,
                             pic.log_level,
                             sm.replica_logger.clone(),
