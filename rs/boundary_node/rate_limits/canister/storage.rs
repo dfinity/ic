@@ -23,11 +23,8 @@ const MEMORY_ID_INCIDENTS: MemoryId = MemoryId::new(2);
 const MEMORY_ID_AUTHORIZED_PRINCIPAL: MemoryId = MemoryId::new(3);
 
 // Storables
-#[derive(Clone, Debug, Serialize, Deserialize, PartialOrd, Ord, PartialEq, Eq)]
-pub struct StorablePrincipal(pub Principal);
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialOrd, Ord, PartialEq, Eq)]
-pub struct StorableVersion(pub Version);
+pub type StorablePrincipal = Principal;
+pub type StorableVersion = Version;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialOrd, Ord, PartialEq, Eq)]
 pub struct StorableRuleId(pub Uuid);
@@ -58,36 +55,6 @@ pub struct StorableIncidentMetadata {
     pub rule_ids: Vec<RuleId>,
 }
 
-impl Storable for StorablePrincipal {
-    fn to_bytes(&self) -> Cow<[u8]> {
-        Cow::Owned(bincode::serialize(&self.0).expect("StorablePrincipal serialization failed"))
-    }
-
-    fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        Self(bincode::deserialize(&bytes).expect("StorablePrincipal deserialization failed"))
-    }
-
-    const BOUND: Bound = Bound::Bounded {
-        max_size: 256,
-        is_fixed_size: false,
-    };
-}
-
-impl Storable for StorableVersion {
-    fn to_bytes(&self) -> Cow<[u8]> {
-        Cow::Owned(bincode::serialize(&self.0).expect("StorableVersion serialization failed"))
-    }
-
-    fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        Self(bincode::deserialize(&bytes).expect("StorableVersion deserialization failed"))
-    }
-
-    const BOUND: Bound = Bound::Bounded {
-        max_size: std::mem::size_of::<Version>() as u32,
-        is_fixed_size: true,
-    };
-}
-
 impl Storable for StorableRuleId {
     fn to_bytes(&self) -> Cow<[u8]> {
         Cow::Owned(bincode::serialize(&self).expect("StorableRuleId serialization failed"))
@@ -97,10 +64,7 @@ impl Storable for StorableRuleId {
         Self(bincode::deserialize(&bytes).expect("StorableRuleId deserialization failed"))
     }
 
-    const BOUND: Bound = Bound::Bounded {
-        max_size: 256,
-        is_fixed_size: false,
-    };
+    const BOUND: Bound = Bound::Unbounded;
 }
 
 impl Storable for StorableIncidentId {
@@ -112,10 +76,7 @@ impl Storable for StorableIncidentId {
         Self(bincode::deserialize(&bytes).expect("StorableIncidentId deserialization failed"))
     }
 
-    const BOUND: Bound = Bound::Bounded {
-        max_size: 256,
-        is_fixed_size: false,
-    };
+    const BOUND: Bound = Bound::Unbounded;
 }
 
 impl Storable for StorableConfig {
@@ -127,11 +88,7 @@ impl Storable for StorableConfig {
         bincode::deserialize(&bytes).expect("StorableConfig deserialization failed")
     }
 
-    // TODO: adjust these bounds
-    const BOUND: Bound = Bound::Bounded {
-        max_size: 1024,
-        is_fixed_size: false,
-    };
+    const BOUND: Bound = Bound::Unbounded;
 }
 
 impl Storable for StorableIncidentMetadata {
@@ -143,11 +100,7 @@ impl Storable for StorableIncidentMetadata {
         bincode::deserialize(&bytes).expect("StorableIncidentMetadata deserialization failed")
     }
 
-    // TODO: adjust these bounds
-    const BOUND: Bound = Bound::Bounded {
-        max_size: 2048,
-        is_fixed_size: false,
-    };
+    const BOUND: Bound = Bound::Unbounded;
 }
 
 impl Storable for StorableRuleMetadata {
@@ -159,11 +112,7 @@ impl Storable for StorableRuleMetadata {
         bincode::deserialize(&bytes).expect("StorableRuleMetadata deserialization failed")
     }
 
-    // TODO: adjust these bounds
-    const BOUND: Bound = Bound::Bounded {
-        max_size: 4096,
-        is_fixed_size: false,
-    };
+    const BOUND: Bound = Bound::Unbounded;
 }
 
 // Declare storage variables
@@ -197,12 +146,6 @@ thread_local! {
     );
 
     pub static API_BOUNDARY_NODE_PRINCIPALS: RefCell<HashSet<Principal>> = RefCell::new(HashSet::new());
-}
-
-impl From<Version> for StorableVersion {
-    fn from(version: Version) -> Self {
-        StorableVersion(version)
-    }
 }
 
 impl From<RuleId> for StorableRuleId {

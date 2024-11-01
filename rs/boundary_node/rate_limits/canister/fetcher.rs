@@ -76,7 +76,7 @@ impl<R: CanisterApi, F: ConfidentialityFormatting<Input = OutputConfig>> EntityF
             .get_version()
             .ok_or_else(|| FetchConfigError::NoExistingVersions)?;
 
-        let version = version.unwrap_or(current_version.0);
+        let version = version.unwrap_or(current_version);
 
         let stored_config = self
             .canister_api

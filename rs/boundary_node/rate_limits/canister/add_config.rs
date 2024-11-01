@@ -101,8 +101,7 @@ impl<R: CanisterApi, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
         let current_version = self
             .canister_api
             .get_version()
-            .unwrap_or(INIT_VERSION.into())
-            .0;
+            .unwrap_or(INIT_VERSION.into());
 
         let new_version = current_version + 1;
 

@@ -55,7 +55,7 @@ impl CanisterApi for CanisterState {
 
     fn set_authorized_principal(&self, principal: Principal) {
         self.authorized_principal
-            .with(|cell| cell.borrow_mut().insert((), StorablePrincipal(principal)));
+            .with(|cell| cell.borrow_mut().insert((), principal));
     }
 
     fn get_version(&self) -> Option<StorableVersion> {
@@ -66,8 +66,7 @@ impl CanisterApi for CanisterState {
     }
 
     fn get_config(&self, version: Version) -> Option<StorableConfig> {
-        self.configs
-            .with(|cell| cell.borrow().get(&StorableVersion(version)))
+        self.configs.with(|cell| cell.borrow().get(&version))
     }
 
     fn get_full_config(&self, version: Version) -> Option<InputConfig> {
@@ -105,7 +104,7 @@ impl CanisterApi for CanisterState {
             || {
                 self.configs.with(|cell| {
                     let mut configs = cell.borrow_mut();
-                    configs.insert(StorableVersion(version), config);
+                    configs.insert(version, config);
                 });
                 true // Successfully inserted
             },
