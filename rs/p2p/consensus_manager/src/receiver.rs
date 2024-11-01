@@ -285,9 +285,9 @@ where
                 self.artifact_processor_tasks.len()
                     >= HashSet::<WireArtifact::Id>::from_iter(
                         self.slot_table
-                            .iter()
-                            .flat_map(|(_, v)| v.iter())
-                            .map(|(_, s)| s.id.clone())
+                            .values()
+                            .flat_map(HashMap::values)
+                            .map(| s| s.id.clone())
                     )
                     .len(),
                 "Number of assemble tasks should always be the same or exceed the number of distinct ids stored."
@@ -492,7 +492,7 @@ where
                         let id = artifact.id();
                         // Send artifact to pool
                         if sender.send(UnvalidatedArtifactMutation::Insert((artifact, peer_id))).is_err() {
-                            error!(log, "The receiving side of the channel was closed. This should be infallible situation since a cancellation token should be received. If this happens then most likely there is very subnet synchonization bug.");
+                            error!(log, "The receiving side of the channel, owned by the consensus thread, was closed. This should be infallible situation since a cancellation token should be received. If this happens then most likely there is very subnet synchonization bug.");
                         }
 
                         // wait for deletion from peers
@@ -501,7 +501,7 @@ where
 
                         // Purge from the unvalidated pool
                         if sender.send(UnvalidatedArtifactMutation::Remove(id)).is_err() {
-                            error!(log, "The receiving side of the channel was closed. This should be infallible situation since a cancellation token should be received. If this happens then most likely there is very subnet synchonization bug.");
+                            error!(log, "The receiving side of the channel, owned by the consensus thread, was closed. This should be infallible situation since a cancellation token should be received. If this happens then most likely there is very subnet synchonization bug.");
                         }
                         metrics
                             .assemble_task_result_total
