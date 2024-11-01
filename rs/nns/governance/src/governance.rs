@@ -63,7 +63,7 @@ use crate::{
         StopOrStartCanister, Tally, Topic, UpdateCanisterSettings, UpdateNodeProvider, Visibility,
         Vote, WaitForQuietState, XdrConversionRate as XdrConversionRatePb,
     },
-    proposals::call_canister::CallCanister,
+    proposals::{call_canister::CallCanister, sum_weighted_voting_power},
 };
 use async_trait::async_trait;
 use candid::{Decode, Encode};
@@ -366,7 +366,7 @@ impl From<Result<NeuronsFundAuditInfo, GovernanceError>> for GetNeuronsFundAudit
 
 impl Vote {
     /// Returns whether this vote is eligible for voting reward.
-    fn eligible_for_rewards(&self) -> bool {
+    pub fn eligible_for_rewards(&self) -> bool {
         match self {
             Vote::Unspecified => false,
             Vote::Yes => true,
@@ -1413,7 +1413,7 @@ impl Topic {
     /// neurons voting on proposals are weighted by this amount. The
     /// weights are designed to encourage active participation from
     /// neuron holders.
-    fn reward_weight(&self) -> f64 {
+    pub fn reward_weight(&self) -> f64 {
         match self {
             // We provide higher voting rewards for neuron holders
             // who vote on Governance and SnsAndCommunityFund proposals.
@@ -8366,88 +8366,6 @@ impl From<ic_nervous_system_clients::canister_status::CanisterStatusType>
             Src::Stopped => Self::Stopped,
         }
     }
-}
-
-// DO NOT MERGE - Move to where proposal stuff is.
-/// Weighted voting power is just voting power * the proposal's (topic's) weight.
-///
-/// For example, suppose this returns ({42 => 3.14}, 99.9). This means that
-/// neuron 42 should get 3.14/99.9 of today's reward purse.
-///
-/// Non-essential fact: It is highly unusual for result.1 to be the sum of the
-/// values in result.0. The main reason they would not be equal is that not all
-/// neurons vote. Another (less imporant reason) is that some neurons lose
-/// voting power due to inactivity.
-// TODO(DO NOT MERGE - ticket): Switch from float to Decimal.
-fn sum_weighted_voting_power<'a>(proposals: impl Iterator<Item = (ProposalId, Option<&'a ProposalData>)>)
-    -> (HashMap<NeuronId, /* exercised */ f64>, /* total */ f64)
-{
-    // Results.
-    let mut neuron_id_to_exercised_weighted_voting_power: HashMap<NeuronId, f64> = HashMap::new();
-    let mut total_weighted_voting_power = 0.0;
-
-    for (proposal_id, proposal) in proposals {
-        let proposal = match proposal {
-            Some(ok) => ok,
-            None => {
-                println!(
-                    "{}ERROR: Trying to give voting rewards for proposal {}, \
-                     but it was not found.",
-                    LOG_PREFIX, proposal_id.id,
-                );
-                continue;
-            }
-        };
-
-        let reward_weight = proposal.topic().reward_weight();
-
-        // This is used in lieu of total_potential_voting_power. That is, this
-        // gets used if proposal does not have total_potential_voting_power.
-        // This fall back will only be used during a short transition period
-        // when there is a backlog of "old" proposals that were created without
-        // total_potential_voting_power, but all new proposals have it. In the
-        // case of such legacy proposals, their total potential voting power
-        // would have been equal to this anyway, so this is a sound substitute
-        // for total_potential_voting_power.
-        let mut total_ballots_voting_power = 0;
-
-        for (neuron_id, ballot) in &proposal.ballots {
-            total_ballots_voting_power += ballot.voting_power;
-
-            // Don't reward neurons that did not actually vote. (Whereas, ALL
-            // eligible neuron gets an "empty" ballot when the proposal is first
-            // created. An "empty" ballot is one where the vote field is set to
-            // Unspecified.)
-            let vote = Vote::try_from(ballot.vote)
-                .unwrap_or_else(|err| {
-                    println!(
-                        "{}ERROR: Unrecognized Vote {} in ballot by \
-                         neuron {} on proposal {:?}: {:?}",
-                        LOG_PREFIX, ballot.vote, neuron_id, proposal.id, err,
-                    );
-                    Vote::Unspecified
-                });
-            if !vote.eligible_for_rewards() {
-                continue;
-            }
-
-            // Increment neuron.
-            *neuron_id_to_exercised_weighted_voting_power
-                .entry(NeuronId { id: *neuron_id })
-                .or_insert(0.0)
-                += (ballot.voting_power as f64) * reward_weight;
-        }
-
-        // Increment global total.
-        total_weighted_voting_power +=
-            reward_weight *
-            proposal
-            .total_potential_voting_power
-            .unwrap_or(total_ballots_voting_power)
-            as f64;
-    }
-
-    (neuron_id_to_exercised_weighted_voting_power, total_weighted_voting_power)
 }
 
 /// Affects the perception of time by users of CanisterEnv (i.e. Governance).
