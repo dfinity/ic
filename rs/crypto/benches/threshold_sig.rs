@@ -109,13 +109,13 @@ fn bench_threshold_sig_n_nodes<M: Measurement>(
     for &node_id in &nodes_in_subnet {
         load_transcript(&transcript, &env.crypto_components, node_id);
     }
-    let dkg_id = transcript.dkg_id.clone();
+    let dkg_id = &transcript.dkg_id;
 
     bench_threshold_sign(
         group,
         &nodes_in_subnet,
         &env.crypto_components,
-        &dkg_id,
+        dkg_id,
         message_size,
         rng,
     );
@@ -125,7 +125,7 @@ fn bench_threshold_sig_n_nodes<M: Measurement>(
             group,
             &nodes_in_subnet,
             &env.crypto_components,
-            &dkg_id,
+            dkg_id,
             message_size,
             rng,
         );
@@ -133,7 +133,7 @@ fn bench_threshold_sig_n_nodes<M: Measurement>(
             group,
             &nodes_in_subnet,
             &env.crypto_components,
-            &dkg_id,
+            dkg_id,
             &transcript,
             message_size,
             rng,
@@ -143,7 +143,7 @@ fn bench_threshold_sig_n_nodes<M: Measurement>(
             group,
             &threshold_many_random_subnet_nodes,
             &env.crypto_components,
-            &dkg_id,
+            dkg_id,
             message_size,
             rng,
         );
@@ -151,7 +151,7 @@ fn bench_threshold_sig_n_nodes<M: Measurement>(
             group,
             &threshold_many_random_subnet_nodes,
             &env.crypto_components,
-            &dkg_id,
+            dkg_id,
             message_size,
             rng,
         );
