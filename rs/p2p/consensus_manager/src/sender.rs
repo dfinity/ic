@@ -1,5 +1,3 @@
-#![allow(clippy::disallowed_methods)]
-
 use std::{
     collections::{hash_map::Entry, HashMap},
     marker::PhantomData,

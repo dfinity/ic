@@ -1,5 +1,3 @@
-#![allow(clippy::disallowed_methods)]
-
 use std::collections::{hash_map::Entry, HashMap, HashSet};
 
 use crate::{
@@ -38,7 +36,6 @@ use tracing::instrument;
 
 type ReceivedAdvertSender<A> = Sender<(SlotUpdate<A>, NodeId, ConnId)>;
 
-#[allow(unused)]
 pub fn build_axum_router<Artifact: PbArtifact>(
     log: ReplicaLogger,
 ) -> (Router, Receiver<(SlotUpdate<Artifact>, NodeId, ConnId)>) {
@@ -174,7 +171,6 @@ impl PeerCounter {
     }
 }
 
-#[allow(unused)]
 pub(crate) struct ConsensusManagerReceiver<
     Artifact: IdentifiableArtifact,
     WireArtifact: IdentifiableArtifact,
@@ -201,7 +197,6 @@ pub(crate) struct ConsensusManagerReceiver<
     slot_limit: usize,
 }
 
-#[allow(unused)]
 impl<Artifact, WireArtifact, Assembler>
     ConsensusManagerReceiver<
         Artifact,
