@@ -224,6 +224,12 @@ impl BitcoinAdapterParts {
                 bitcoin_adapter_config,
             )
         });
+        loop {
+            if let Ok(true) = std::fs::exists(uds_path.clone()) {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
         BitcoinAdapterParts { adapter, uds_path }
     }
 }
@@ -274,6 +280,12 @@ impl CanisterHttpAdapterParts {
                 canister_http_adapter_config,
             )
         });
+        loop {
+            if let Ok(true) = std::fs::exists(uds_path.clone()) {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
         CanisterHttpAdapterParts { adapter, uds_path }
     }
 }
@@ -281,7 +293,7 @@ impl CanisterHttpAdapterParts {
 impl Drop for CanisterHttpAdapterParts {
     fn drop(&mut self) {
         self.adapter.abort();
-        let _ = remove_file(self.uds_path.clone()); // TODO
+        remove_file(self.uds_path.clone()).unwrap();
     }
 }
 
