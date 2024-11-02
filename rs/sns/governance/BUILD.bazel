@@ -60,6 +60,7 @@ DEPENDENCIES = [
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
     "@crate_index//:strum",
+    "@crate_index//:syn",
 ]
 
 MACRO_DEPENDENCIES = [
