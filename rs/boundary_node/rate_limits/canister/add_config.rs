@@ -4,7 +4,7 @@ use crate::{
 };
 use anyhow::Context;
 use getrandom::getrandom;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -116,10 +116,8 @@ impl<R: CanisterApi, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
         let mut rule_ids = Vec::<RuleId>::new();
         // Metadata of the newly submitted rules
         let mut new_rules_metadata = Vec::<(RuleId, StorableRuleMetadata)>::new();
-        // Hashmap of the newly submitted incident IDs
-        let mut new_incidents = HashMap::<IncidentId, Vec<RuleId>>::new();
-        // Hashmap of the already existing incident IDs
-        let mut existing_incidents = HashMap::<IncidentId, Vec<RuleId>>::new();
+        // Hashmap of the submitted incident IDs
+        let mut incidents_map = HashMap::<IncidentId, Vec<RuleId>>::new();
 
         for (rule_idx, input_rule) in new_config.rules.iter().enumerate() {
             // Check if the rule is resubmitted or if it is a new rule
@@ -134,14 +132,7 @@ impl<R: CanisterApi, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
                 };
 
             let rule_id = if let Some(rule_idx) = existing_rule_idx {
-                let rule_id = current_config.rule_ids[rule_idx];
-
-                existing_incidents
-                    .entry(input_rule.incident_id)
-                    .and_modify(|value| value.push(rule_id))
-                    .or_insert(vec![rule_id]);
-
-                rule_id
+                current_config.rule_ids[rule_idx]
             } else {
                 // TODO: check for collisions and regenerate if needed
                 let rule_id = RuleId(generate_random_uuid()?);
@@ -159,15 +150,6 @@ impl<R: CanisterApi, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
                             },
                         ))?;
                     }
-                    existing_incidents
-                        .entry(input_rule.incident_id)
-                        .and_modify(|value| value.push(rule_id))
-                        .or_insert(vec![rule_id]);
-                } else {
-                    new_incidents
-                        .entry(input_rule.incident_id)
-                        .and_modify(|value| value.push(rule_id))
-                        .or_insert(vec![rule_id]);
                 }
 
                 let rule_metadata = StorableRuleMetadata {
@@ -184,68 +166,58 @@ impl<R: CanisterApi, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
                 rule_id
             };
 
+            incidents_map
+                .entry(input_rule.incident_id)
+                .and_modify(|value| value.push(rule_id))
+                .or_insert(vec![rule_id]);
+
             rule_ids.push(rule_id);
         }
 
         // Commit all changes to stable memory.
-        // Note: if any operation below fails canister state can become inconsistent.
-        // TODO: maybe it is better to panic to rollback changes
 
         // Update metadata of the "removed" rules
-        for rule_id in current_config.rule_ids.iter() {
-            // ID is not present in the submitted rule IDs, thus this rule is removed
-            if !rule_ids.iter().any(|id| id == rule_id) {
-                if let Some(mut metadata) = self.canister_api.get_rule(rule_id) {
-                    metadata.removed_in_version = Some(new_version);
-                    if !self.canister_api.update_rule(*rule_id, metadata) {
-                        return Err(AddConfigError::Unexpected(anyhow::anyhow!(
-                            "rule_id = {} didn't exist, failed to update rule",
-                            rule_id.0
-                        )));
-                    }
-                }
-            }
+        // If ID is not present in the submitted rule IDs, this rule is removed
+        let rule_ids_set: HashSet<RuleId> = HashSet::from_iter(rule_ids.clone());
+        for rule_id in current_config
+            .rule_ids
+            .into_iter()
+            .filter(|&rule_id| !rule_ids_set.contains(&rule_id))
+        {
+            let mut rule_metadata = self
+                .canister_api
+                .get_rule(&rule_id)
+                .expect("rule_id = {rule_id} not found");
+
+            rule_metadata.removed_in_version = Some(new_version);
+
+            assert!(
+                self.canister_api
+                    .upsert_rule(rule_id, rule_metadata)
+                    .is_some(),
+                "Rule with rule_id = {rule_id} not found, failed to update"
+            );
         }
 
         // Add new rules
-        for (rule_id, metadata) in new_rules_metadata.iter().cloned() {
-            if !self.canister_api.add_rule(rule_id, metadata) {
-                return Err(AddConfigError::Unexpected(anyhow::anyhow!(
-                    "rule_id = {} already existed, failed to add rule",
-                    rule_id.0
-                )));
-            }
+        for (rule_id, rule_metadata) in new_rules_metadata.iter().cloned() {
+            assert!(
+                self.canister_api
+                    .upsert_rule(rule_id, rule_metadata)
+                    .is_none(),
+                "Rule with rule_id = {rule_id} already exists, failed to add"
+            );
         }
 
-        // Add new incidents
-        for (incident_id, rule_ids) in new_incidents {
+        // Upsert incidents, some of the incidents can be new, some already existed before
+        for (incident_id, rule_ids) in incidents_map {
             let incident_metadata = StorableIncidentMetadata {
                 is_disclosed: false,
                 rule_ids,
             };
-            if !self
+            let _ = self
                 .canister_api
-                .add_incident(incident_id, incident_metadata)
-            {
-                return Err(AddConfigError::Unexpected(anyhow::anyhow!(
-                    "incident_id={incident_id} already exists, failed to add incident"
-                )));
-            }
-        }
-
-        // Update rule IDs for existing incidents
-        for (incident_id, rule_ids) in existing_incidents {
-            if let Some(mut incident_metadata) = self.canister_api.get_incident(&incident_id) {
-                incident_metadata.rule_ids = rule_ids;
-                if !self
-                    .canister_api
-                    .update_incident(incident_id, incident_metadata)
-                {
-                    return Err(AddConfigError::Unexpected(anyhow::anyhow!(
-                        "incident={incident_id} doesn't exist, failed to update"
-                    )));
-                }
-            }
+                .upsert_incident(incident_id, incident_metadata);
         }
 
         // Add new config
@@ -255,11 +227,12 @@ impl<R: CanisterApi, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
             rule_ids,
         };
 
-        if !self.canister_api.add_config(new_version, storable_config) {
-            return Err(AddConfigError::Unexpected(anyhow::anyhow!(
-                "Config for version {new_version} already exists, failed to add"
-            )));
-        }
+        assert!(
+            self.canister_api
+                .upsert_config(new_version, storable_config)
+                .is_none(),
+            "Failed to add config for version {new_version}, config already exists"
+        );
 
         Ok(())
     }
@@ -317,7 +290,9 @@ mod tests {
                 rules: vec![],
             })
         });
-        mock_canister_api.expect_add_config().returning(|_, _| true);
+        mock_canister_api
+            .expect_upsert_config()
+            .returning(|_, _| None);
 
         let writer = ConfigAdder::new(mock_canister_api, mock_access);
 

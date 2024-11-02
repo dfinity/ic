@@ -1,5 +1,3 @@
-use ic_cdk::api::time;
-
 use crate::{
     access_control::{AccessLevel, ResolveAccessLevel},
     state::CanisterApi,
@@ -10,6 +8,7 @@ pub trait DisclosesRules {
     fn disclose_rules(
         &self,
         arg: rate_limits_api::DiscloseRulesArg,
+        current_time: Timestamp,
     ) -> Result<(), DiscloseRulesError>;
 }
 
@@ -28,14 +27,14 @@ pub enum DiscloseRulesError {
 }
 
 pub struct RulesDiscloser<S, A> {
-    pub state: S,
+    pub canister_api: S,
     pub access_resolver: A,
 }
 
 impl<S, A> RulesDiscloser<S, A> {
-    pub fn new(state: S, access_resolver: A) -> Self {
+    pub fn new(canister_api: S, access_resolver: A) -> Self {
         Self {
-            state,
+            canister_api,
             access_resolver,
         }
     }
@@ -45,16 +44,16 @@ impl<S: CanisterApi, A: ResolveAccessLevel> DisclosesRules for RulesDiscloser<S,
     fn disclose_rules(
         &self,
         arg: rate_limits_api::DiscloseRulesArg,
+        current_time: Timestamp,
     ) -> Result<(), DiscloseRulesError> {
-        let arg = DiscloseRulesArg::try_from(arg)?;
-
         if self.access_resolver.get_access_level() == AccessLevel::FullAccess {
+            let arg = DiscloseRulesArg::try_from(arg)?;
             match arg {
                 DiscloseRulesArg::RuleIds(rule_ids) => {
-                    disclose_rules(&self.state, time(), &rule_ids)?;
+                    disclose_rules(&self.canister_api, current_time, &rule_ids)?;
                 }
                 DiscloseRulesArg::IncidentIds(incident_ids) => {
-                    disclose_incidents(&self.state, time(), &incident_ids)?;
+                    disclose_incidents(&self.canister_api, current_time, &incident_ids)?;
                 }
             }
             return Ok(());
@@ -86,8 +85,8 @@ fn disclose_rules(
         if metadata.disclosed_at.is_none() {
             metadata.disclosed_at = Some(time);
             assert!(
-                canister_api.update_rule(*rule_id, metadata),
-                "rule id not found"
+                canister_api.upsert_rule(*rule_id, metadata).is_some(),
+                "Rule with rule_id = {rule_id} not found, failed to update"
             );
         }
     }
@@ -118,11 +117,12 @@ fn disclose_incidents(
         if !metadata.is_disclosed {
             disclose_rules(canister_api, time, &metadata.rule_ids)?;
             metadata.is_disclosed = true;
-            // TODO: consider aggregating errors
-            canister_api
-                .update_incident(incident_id, metadata)
-                .then_some(())
-                .ok_or_else(|| DiscloseRulesError::IncidentIdNotFound(incident_id))?;
+            assert!(
+                canister_api
+                    .upsert_incident(incident_id, metadata)
+                    .is_some(),
+                "failed to update incident, incident_id = {incident_id} not found"
+            )
         }
     }
 

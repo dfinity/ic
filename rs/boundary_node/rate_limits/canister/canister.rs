@@ -80,10 +80,11 @@ fn add_config(config: InputConfig) -> AddConfigResponse {
 #[update]
 fn disclose_rules(args: DiscloseRulesArg) -> DiscloseRulesResponse {
     let caller_id = ic_cdk::api::caller();
+    let current_time = ic_cdk::api::time();
     with_canister_state(|state| {
         let access_resolver = AccessLevelResolver::new(caller_id, state.clone());
         let discloser = RulesDiscloser::new(state, access_resolver);
-        discloser.disclose_rules(args)
+        discloser.disclose_rules(args, current_time)
     })?;
     Ok(())
 }
