@@ -183,6 +183,21 @@ impl SubnetConfigInternal {
     }
 }
 
+fn logger_config_from_level(log_level: Option<Level>) -> LoggerConfig {
+    let level = match log_level.unwrap_or(Level::Warning) {
+        Level::Critical => ic_config::logger::Level::Critical,
+        Level::Error => ic_config::logger::Level::Error,
+        Level::Warning => ic_config::logger::Level::Warning,
+        Level::Info => ic_config::logger::Level::Info,
+        Level::Debug => ic_config::logger::Level::Debug,
+        Level::Trace => ic_config::logger::Level::Trace,
+    };
+    LoggerConfig {
+        level,
+        ..Default::default()
+    }
+}
+
 struct BitcoinAdapterParts {
     adapter: JoinHandle<()>,
     uds_path: PathBuf,
@@ -197,24 +212,12 @@ impl BitcoinAdapterParts {
         metrics_registry: MetricsRegistry,
         runtime: Arc<Runtime>,
     ) -> Self {
-        let level = match log_level.unwrap_or(Level::Warning) {
-            Level::Critical => ic_config::logger::Level::Critical,
-            Level::Error => ic_config::logger::Level::Error,
-            Level::Warning => ic_config::logger::Level::Warning,
-            Level::Info => ic_config::logger::Level::Info,
-            Level::Debug => ic_config::logger::Level::Debug,
-            Level::Trace => ic_config::logger::Level::Trace,
-        };
-        let logger_config = LoggerConfig {
-            level,
-            ..Default::default()
-        };
         let bitcoin_adapter_config = BitcoinAdapterConfig {
             network: Network::Regtest,
             nodes: bitcoind_addr,
             socks_proxy: None,
             ipv6_only: false,
-            logger: logger_config,
+            logger: logger_config_from_level(log_level),
             incoming_source: BtcIncomingSource::Path(uds_path.clone()),
             address_limits: (1, 1),
             ..Default::default()
@@ -264,24 +267,11 @@ impl CanisterHttpAdapterParts {
         metrics_registry: MetricsRegistry,
         runtime: Arc<Runtime>,
     ) -> Self {
-        let level = match log_level.unwrap_or(Level::Warning) {
-            Level::Critical => ic_config::logger::Level::Critical,
-            Level::Error => ic_config::logger::Level::Error,
-            Level::Warning => ic_config::logger::Level::Warning,
-            Level::Info => ic_config::logger::Level::Info,
-            Level::Debug => ic_config::logger::Level::Debug,
-            Level::Trace => ic_config::logger::Level::Trace,
-        };
-        let logger_config = LoggerConfig {
-            level,
-            ..Default::default()
-        };
         let canister_http_adapter_config = HttpsOutcallsConfig {
             incoming_source: CanisterHttpIncomingSource::Path(uds_path.clone()),
-            logger: logger_config,
+            logger: logger_config_from_level(log_level),
             ..Default::default()
         };
-
         let adapter = tokio::spawn(async move {
             start_canister_http_server(
                 &replica_logger,
