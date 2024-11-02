@@ -106,6 +106,9 @@ use tower::{service_fn, util::ServiceExt};
 // See build.rs
 include!(concat!(env!("OUT_DIR"), "/dashboard.rs"));
 
+// Maximum duration of waiting for bitcoin/canister http adapter server to start.
+const MAX_START_SERVER_DURATION: Duration = Duration::from_secs(60);
+
 // Clippy complains that these are interior-mutable.
 // We don't mutate them, so silence it.
 // https://rust-lang.github.io/rust-clippy/master/index.html#/declare_interior_mutable_const
@@ -224,9 +227,16 @@ impl BitcoinAdapterParts {
                 bitcoin_adapter_config,
             )
         });
+        let start = std::time::Instant::now();
         loop {
             if let Ok(true) = std::fs::exists(uds_path.clone()) {
                 break;
+            }
+            if start.elapsed() > MAX_START_SERVER_DURATION {
+                panic!(
+                    "Bitcoin adapter server took more than {:?} to start.",
+                    MAX_START_SERVER_DURATION
+                );
             }
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
@@ -280,9 +290,16 @@ impl CanisterHttpAdapterParts {
                 canister_http_adapter_config,
             )
         });
+        let start = std::time::Instant::now();
         loop {
             if let Ok(true) = std::fs::exists(uds_path.clone()) {
                 break;
+            }
+            if start.elapsed() > MAX_START_SERVER_DURATION {
+                panic!(
+                    "Canister http adapter server took more than {:?} to start.",
+                    MAX_START_SERVER_DURATION
+                );
             }
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
