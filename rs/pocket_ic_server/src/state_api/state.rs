@@ -1075,22 +1075,24 @@ impl ApiState {
             if let InstanceState::Available(pocket_ic) = &instance.state {
                 for subnet in pocket_ic.subnets.get_all() {
                     let sm = subnet.state_machine.clone();
-                    let canister_http = subnet.canister_http.lock().unwrap();
+                    let mut canister_http = subnet.canister_http.lock().unwrap();
                     let new_requests: Vec<_> = sm
                         .canister_http_request_contexts()
                         .into_iter()
                         .filter(|(id, _)| !canister_http.pending.contains(id))
                         .collect();
-                    let mut client = canister_http.client.lock().unwrap();
+                    let client = canister_http.client.clone();
+                    let mut client = client.lock().unwrap();
                     for (id, context) in &new_requests {
-                        client
-                            .send(AdapterCanisterHttpRequest {
-                                timeout: context.time + Duration::from_secs(5 * 60),
-                                id: *id,
-                                context: context.clone(),
-                            })
-                            .unwrap();
+                        if let Ok(()) = client.send(AdapterCanisterHttpRequest {
+                            timeout: context.time + Duration::from_secs(5 * 60),
+                            id: *id,
+                            context: context.clone(),
+                        }) {
+                            canister_http.pending.push(*id);
+                        }
                     }
+                    let mut received = vec![];
                     loop {
                         match client.try_receive() {
                             Err(_) => {
@@ -1103,6 +1105,7 @@ impl ApiState {
                                     .unwrap()
                                     .request
                                     .sender;
+                                received.push(response.id);
                                 sm.mock_canister_http_response(
                                     response.id.get(),
                                     response.timeout,
@@ -1112,12 +1115,9 @@ impl ApiState {
                             }
                         }
                     }
+                    canister_http.pending.retain(|id| !received.contains(id));
                     drop(client);
                     drop(canister_http);
-                    let mut canister_http = subnet.canister_http.lock().unwrap();
-                    let mut new_request_ids: Vec<_> =
-                        new_requests.into_iter().map(|(id, _)| id).collect();
-                    canister_http.pending.append(&mut new_request_ids);
                 }
                 break Some(());
             }
