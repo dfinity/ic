@@ -85,7 +85,7 @@ git checkout $NEXT_COMMIT
 ./ci/container/build-ic.sh -c
 
 # 3. Fingerprint the result.
-sha256sum ./artifacts/canisters/$(_canister_download_name_for_nns_canister_type "$CANISTER_NAME").wasm.gz
+sha256sum ./artifacts/canisters/$(_canister_download_name_for_sns_canister_type "$CANISTER_NAME").wasm.gz
 \`\`\`
 
 This should match \`wasm_module_hash\` field of this proposal.
@@ -191,7 +191,7 @@ git checkout $NEXT_COMMIT
 ./ci/container/build-ic.sh -c
 
 # 3. Fingerprint the result.
-sha256sum ./artifacts/canisters/$(_canister_download_name_for_sns_canister_type "$CANISTER_NAME").wasm.gz
+sha256sum ./artifacts/canisters/$(_canister_download_name_for_nns_canister_type "$CANISTER_NAME").wasm.gz
 \`\`\`
 
 This should match \`wasm_module_hash\` field of this proposal.$(if [ ! -z "$CANDID_ARGS" ]; then
