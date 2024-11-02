@@ -1185,14 +1185,17 @@ fn http_header_from(
 }
 
 fn get_canister_http_requests(pic: &PocketIc) -> Vec<CanisterHttpRequest> {
-    let mut canister_http = vec![];
+    let mut res = vec![];
     for subnet in pic.subnets.get_all() {
+        let subnet_id = subnet.state_machine.get_subnet_id().get().0;
+        let canister_http = subnet.canister_http.lock().unwrap();
         let mut cur: Vec<_> = subnet
             .state_machine
             .canister_http_request_contexts()
             .into_iter()
+            .filter(|(id, _)| !canister_http.pending.contains(id))
             .map(|(id, c)| CanisterHttpRequest {
-                subnet_id: subnet.state_machine.get_subnet_id().get().0,
+                subnet_id,
                 request_id: id.get(),
                 http_method: http_method_from(&c.http_method),
                 url: c.url,
@@ -1201,9 +1204,9 @@ fn get_canister_http_requests(pic: &PocketIc) -> Vec<CanisterHttpRequest> {
                 max_response_bytes: c.max_response_bytes.map(|b| b.get()),
             })
             .collect();
-        canister_http.append(&mut cur);
+        res.append(&mut cur);
     }
-    canister_http
+    res
 }
 
 impl Operation for GetCanisterHttp {
