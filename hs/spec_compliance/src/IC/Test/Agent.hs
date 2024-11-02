@@ -82,7 +82,6 @@ module IC.Test.Agent
     ic00as,
     ic00',
     ic00WithSubnetas',
-    ingressDelay,
     is2xx,
     isErr4xx,
     isErrOrReject,
@@ -764,11 +763,6 @@ isPendingOrProcessing r = assertFailure $ "Expected pending or processing, got "
 
 pollDelay :: IO ()
 pollDelay = threadDelay $ 10 * 1000 -- 10 milliseconds
-
--- How long to wait before checking if a request that should _not_ show up on
--- the system indeed did not show up
-ingressDelay :: IO ()
-ingressDelay = threadDelay $ 2 * 1000 * 1000 -- 2 seconds
 
 -- * HTTP Response predicates
 
