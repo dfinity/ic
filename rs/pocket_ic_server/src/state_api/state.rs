@@ -42,7 +42,12 @@ use pocket_ic::common::rest::{
 use pocket_ic::{ErrorCode, UserError, WasmResult};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::HashMap, fmt, path::PathBuf, str::FromStr, sync::atomic::AtomicU64, sync::Arc,
+    collections::{BTreeSet, HashMap},
+    fmt,
+    path::PathBuf,
+    str::FromStr,
+    sync::atomic::AtomicU64,
+    sync::Arc,
     time::Duration,
 };
 use tokio::{
@@ -1083,16 +1088,16 @@ impl ApiState {
                         .collect();
                     let client = canister_http.client.clone();
                     let mut client = client.lock().unwrap();
-                    for (id, context) in &new_requests {
+                    for (id, context) in new_requests {
                         if let Ok(()) = client.send(AdapterCanisterHttpRequest {
                             timeout: context.time + Duration::from_secs(5 * 60),
-                            id: *id,
-                            context: context.clone(),
+                            id,
+                            context,
                         }) {
-                            canister_http.pending.push(*id);
+                            canister_http.pending.insert(id);
                         }
                     }
-                    let mut received = vec![];
+                    let mut received = BTreeSet::new();
                     loop {
                         match client.try_receive() {
                             Err(_) => {
@@ -1105,7 +1110,7 @@ impl ApiState {
                                     .unwrap()
                                     .request
                                     .sender;
-                                received.push(response.id);
+                                received.insert(response.id);
                                 sm.mock_canister_http_response(
                                     response.id.get(),
                                     response.timeout,

@@ -86,7 +86,7 @@ use std::hash::Hash;
 use std::str::FromStr;
 use std::{
     cmp::max,
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fs::{remove_file, File},
     io::{BufReader, Write},
     net::SocketAddr,
@@ -317,7 +317,7 @@ pub(crate) type CanisterHttpClient = Arc<
 
 pub(crate) struct CanisterHttp {
     pub client: CanisterHttpClient,
-    pub pending: Vec<CanisterHttpRequestId>,
+    pub pending: BTreeSet<CanisterHttpRequestId>,
 }
 
 pub(crate) struct Subnet {
@@ -330,10 +330,9 @@ pub(crate) struct Subnet {
 impl Subnet {
     fn new(state_machine: Arc<StateMachine>) -> Self {
         let uds_path = NamedTempFile::new().unwrap().into_temp_path().to_path_buf();
-        let log_level = state_machine.log_level;
         let canister_http_adapter_parts = CanisterHttpAdapterParts::new(
             uds_path.clone(),
-            log_level,
+            state_machine.log_level,
             state_machine.replica_logger.clone(),
             state_machine.metrics_registry.clone(),
             state_machine.runtime.clone(),
@@ -355,7 +354,7 @@ impl Subnet {
         );
         let canister_http = Arc::new(Mutex::new(CanisterHttp {
             client: Arc::new(Mutex::new(client)),
-            pending: vec![],
+            pending: BTreeSet::new(),
         }));
         Self {
             state_machine,
@@ -836,11 +835,11 @@ impl PocketIc {
 
         // We initialize delegation from NNS.
         if let Some(nns_subnet) = nns_subnet {
+            let nns_subnet_id = nns_subnet.get_subnet_id();
             for subnet in subnets.get_all() {
-                if subnet.state_machine.get_subnet_id() != nns_subnet.get_subnet_id() {
-                    if let Ok(delegation) =
-                        nns_subnet.get_delegation_for_subnet(subnet.state_machine.get_subnet_id())
-                    {
+                let subnet_id = subnet.state_machine.get_subnet_id();
+                if subnet_id != nns_subnet_id {
+                    if let Ok(delegation) = nns_subnet.get_delegation_for_subnet(subnet_id) {
                         subnet.set_delegation_from_nns(delegation);
                     }
                 }
@@ -2537,9 +2536,9 @@ fn route(
                     }
                     // We initialize delegation from NNS.
                     if let Some(nns_subnet) = pic.nns_subnet() {
-                        let new_subnet = pic.subnets.get_subnet(sm.get_subnet_id()).unwrap();
-                        if let Ok(delegation) =
-                            nns_subnet.get_delegation_for_subnet(sm.get_subnet_id())
+                        let new_subnet_id = sm.get_subnet_id();
+                        let new_subnet = pic.subnets.get_subnet(new_subnet_id).unwrap();
+                        if let Ok(delegation) = nns_subnet.get_delegation_for_subnet(new_subnet_id)
                         {
                             new_subnet.set_delegation_from_nns(delegation);
                         }
