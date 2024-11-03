@@ -23,7 +23,7 @@ pub fn empty_zero_registry_record(key: &str) -> RegistryTransportRecord {
 /// The RegistryClient provides methods to query the _local_ state of the
 /// registry. All methods on this trait return immediately (i.e. there are no
 /// side-effects on the critical path).
-pub trait RegistryClient: Send + Sync {
+pub trait RegistryClient {
     /// The following holds:
     ///
     /// (1) ∀ k: get_value(k, get_latest_version()).is_ok()
