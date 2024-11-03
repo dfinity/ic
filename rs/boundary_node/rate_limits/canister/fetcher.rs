@@ -55,7 +55,7 @@ pub enum FetchRuleError {
     #[error("Rule with id = {0} not found")]
     NotFound(String),
     #[error("The provided id = {0} is not a valid UUID")]
-    InvalidUuid(String),
+    InvalidUuidFormat(String),
     #[error(transparent)]
     UnexpectedError(#[from] anyhow::Error),
 }
@@ -129,8 +129,8 @@ impl<R: CanisterApi, F: ConfidentialityFormatting<Input = OutputRuleMetadata>> E
         &self,
         rule_id: rate_limits_api::RuleId,
     ) -> Result<rate_limits_api::OutputRuleMetadata, FetchRuleError> {
-        let rule_id =
-            RuleId::try_from(rule_id.clone()).map_err(|_| FetchRuleError::InvalidUuid(rule_id))?;
+        let rule_id = RuleId::try_from(rule_id.clone())
+            .map_err(|_| FetchRuleError::InvalidUuidFormat(rule_id))?;
 
         let stored_metadata = self
             .canister_api

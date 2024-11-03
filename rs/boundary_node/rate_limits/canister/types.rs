@@ -81,10 +81,10 @@ impl From<OutputRule> for rate_limits_api::OutputRule {
 
 #[derive(Debug, Error, Clone)]
 pub enum InputConfigError {
-    #[error("Invalid JSON encoding for rule at index = {0}")]
-    RuleJsonEncodingError(usize),
-    #[error("Invalid incident UUID for rule at index = {0}")]
-    InvalidUuidIncidentId(usize),
+    #[error("Invalid JSON encoding of rule_raw for rule at index = {0}")]
+    InvalidRuleJsonEncoding(usize),
+    #[error("Invalid UUID format of incident_id for rule at index = {0}")]
+    InvalidUuidFormatForIncident(usize),
 }
 
 impl TryFrom<rate_limits_api::InputConfig> for InputConfig {
@@ -94,15 +94,17 @@ impl TryFrom<rate_limits_api::InputConfig> for InputConfig {
         let mut rules = Vec::with_capacity(value.rules.len());
 
         for (idx, rule) in value.rules.into_iter().enumerate() {
-            // Validate rule blob encodes a valid JSON object
+            // Validate that rule_raw blob encodes a valid JSON object
             serde_json::from_slice::<Value>(rule.rule_raw.as_slice())
-                .map_err(|_| InputConfigError::RuleJsonEncodingError(idx))?;
+                .map_err(|_| InputConfigError::InvalidRuleJsonEncoding(idx))?;
+
             let rule = InputRule {
                 incident_id: IncidentId::try_from(rule.incident_id)
                     .map_err(|_| InputConfigError::InvalidUuidIncidentId(idx))?,
                 rule_raw: rule.rule_raw,
                 description: rule.description,
             };
+
             rules.push(rule);
         }
 
