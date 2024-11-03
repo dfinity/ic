@@ -40,8 +40,8 @@ pub enum AddConfigError {
     InvalidInputConfig(#[from] InputConfigError),
     #[error("Rule violates policy: {0}")]
     RulePolicyViolation(#[from] RulePolicyError),
-    #[error("Configuration for version={0} was not found")]
-    NoConfigFound(Version),
+    #[error("Initial version and configuration were not set")]
+    NoInitConfigVersion,
     #[error("Unauthorized operation")]
     Unauthorized,
     #[error("An unexpected error occurred: {0}")]
@@ -96,21 +96,25 @@ impl<R: CanisterApi, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
             return Err(AddConfigError::Unauthorized);
         }
 
-        let new_config = types::InputConfig::try_from(input_config)?;
+        // Convert config from api type
+        let next_config = types::InputConfig::try_from(input_config)?;
 
-        let current_version = self.canister_api.get_version().unwrap_or(INIT_VERSION);
+        let current_version = self
+            .canister_api
+            .get_version()
+            .ok_or_else(|| AddConfigError::NoInitConfigVersion)?;
 
-        let new_version = current_version + 1;
+        let next_version = current_version + 1;
 
         let current_config: StorableConfig = self
             .canister_api
             .get_config(current_version)
-            .ok_or_else(|| AddConfigError::NoConfigFound(current_version))?;
+            .ok_or_else(|| AddConfigError::NoInitConfigVersion)?;
 
         let current_full_config: InputConfig =
             self.canister_api
                 .get_full_config(current_version)
-                .ok_or_else(|| AddConfigError::NoConfigFound(current_version))?;
+                .ok_or_else(|| AddConfigError::NoInitConfigVersion)?;
 
         // IDs of all rules in the submitted config
         let mut rule_ids = Vec::<RuleId>::new();
@@ -119,10 +123,10 @@ impl<R: CanisterApi, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
         // Hashmap of the submitted incident IDs
         let mut incidents_map = HashMap::<IncidentId, Vec<RuleId>>::new();
 
-        for (rule_idx, input_rule) in new_config.rules.iter().enumerate() {
+        for (rule_idx, input_rule) in next_config.rules.iter().enumerate() {
             // Check if the rule is resubmitted or if it is a new rule
             let existing_rule_idx =
-                if current_full_config.schema_version != new_config.schema_version {
+                if current_full_config.schema_version != next_config.schema_version {
                     None
                 } else {
                     current_full_config
@@ -157,7 +161,7 @@ impl<R: CanisterApi, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
                     rule_raw: input_rule.rule_raw.clone(),
                     description: input_rule.description.clone(),
                     disclosed_at: None,
-                    added_in_version: new_version,
+                    added_in_version: next_version,
                     removed_in_version: None,
                 };
 
@@ -174,64 +178,28 @@ impl<R: CanisterApi, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
             rule_ids.push(rule_id);
         }
 
-        // Commit all changes to stable memory.
+        let removed_rule_ids = {
+            let rule_ids_set: HashSet<RuleId> = HashSet::from_iter(rule_ids.clone());
+            current_config
+                .rule_ids
+                .into_iter()
+                .filter(|&rule_id| !rule_ids_set.contains(&rule_id))
+                .collect()
+        };
 
-        // Update metadata of the "removed" rules
-        // If ID is not present in the submitted rule IDs, this rule is removed
-        let rule_ids_set: HashSet<RuleId> = HashSet::from_iter(rule_ids.clone());
-        for rule_id in current_config
-            .rule_ids
-            .into_iter()
-            .filter(|&rule_id| !rule_ids_set.contains(&rule_id))
-        {
-            let mut rule_metadata = self
-                .canister_api
-                .get_rule(&rule_id)
-                .expect("rule_id = {rule_id} not found");
-
-            rule_metadata.removed_in_version = Some(new_version);
-
-            assert!(
-                self.canister_api
-                    .upsert_rule(rule_id, rule_metadata)
-                    .is_some(),
-                "Rule with rule_id = {rule_id} not found, failed to update"
-            );
-        }
-
-        // Add new rules
-        for (rule_id, rule_metadata) in new_rules_metadata.iter().cloned() {
-            assert!(
-                self.canister_api
-                    .upsert_rule(rule_id, rule_metadata)
-                    .is_none(),
-                "Rule with rule_id = {rule_id} already exists, failed to add"
-            );
-        }
-
-        // Upsert incidents, some of the incidents can be new, some already existed before
-        for (incident_id, rule_ids) in incidents_map {
-            let incident_metadata = StorableIncidentMetadata {
-                is_disclosed: false,
-                rule_ids,
-            };
-            let _ = self
-                .canister_api
-                .upsert_incident(incident_id, incident_metadata);
-        }
-
-        // Add new config
         let storable_config = StorableConfig {
-            schema_version: new_config.schema_version,
+            schema_version: next_config.schema_version,
             active_since: time,
             rule_ids,
         };
 
-        assert!(
-            self.canister_api
-                .upsert_config(new_version, storable_config)
-                .is_none(),
-            "Failed to add config for version {new_version}, config already exists"
+        commit_changes(
+            &self.canister_api,
+            next_version,
+            storable_config,
+            removed_rule_ids,
+            new_rules_metadata,
+            incidents_map,
         );
 
         Ok(())
@@ -252,6 +220,53 @@ fn generate_random_uuid() -> Result<Uuid, anyhow::Error> {
         .context("Failed to generate random bytes")?;
     let uuid = Uuid::from_slice(&buf).context("Failed to create UUID from bytes")?;
     Ok(uuid)
+}
+
+fn commit_changes(
+    canister_api: &impl CanisterApi,
+    next_version: u64,
+    storable_config: StorableConfig,
+    removed_rules: Vec<RuleId>,
+    new_rules_metadata: Vec<(RuleId, StorableRuleMetadata)>,
+    incidents_map: HashMap<IncidentId, Vec<RuleId>>,
+) {
+    // Update metadata of the removed rules
+    for rule_id in removed_rules {
+        let mut rule_metadata = canister_api
+            .get_rule(&rule_id)
+            .expect("rule_id = {rule_id} not found");
+
+        rule_metadata.removed_in_version = Some(next_version);
+
+        assert!(
+            canister_api.upsert_rule(rule_id, rule_metadata).is_some(),
+            "Rule with rule_id = {rule_id} not found, failed to update"
+        );
+    }
+
+    // Add new rules
+    for (rule_id, rule_metadata) in new_rules_metadata {
+        assert!(
+            canister_api.upsert_rule(rule_id, rule_metadata).is_none(),
+            "Rule with rule_id = {rule_id} already exists, failed to add"
+        );
+    }
+
+    // Upsert incidents, some of the incidents can be new, some already existed before
+    for (incident_id, rule_ids) in incidents_map {
+        let incident_metadata = StorableIncidentMetadata {
+            is_disclosed: false,
+            rule_ids,
+        };
+        let _ = canister_api.upsert_incident(incident_id, incident_metadata);
+    }
+
+    assert!(
+        canister_api
+            .upsert_config(next_version, storable_config)
+            .is_none(),
+        "Failed to add config for version {next_version}, config already exists"
+    );
 }
 
 #[cfg(test)]
@@ -276,7 +291,7 @@ mod tests {
         let mut mock_canister_api = MockCanisterApi::new();
 
         mock_canister_api.expect_get_rule().returning(|_| None);
-        mock_canister_api.expect_get_version().returning(|| None);
+        mock_canister_api.expect_get_version().returning(|| Some(1));
         mock_canister_api.expect_get_config().returning(|_| {
             Some(StorableConfig {
                 schema_version: 1,
