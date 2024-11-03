@@ -1963,11 +1963,6 @@ impl IngressHistoryState {
     /// called from within `insert` to ensure that `next_terminal_time`
     /// is consistently updated and we don't miss any completed statuses.
     fn forget_terminal_statuses(&mut self, target_size: NumBytes) {
-        // Before certification version 8 no done statuses are produced
-        if CURRENT_CERTIFICATION_VERSION < CertificationVersion::V8 {
-            return;
-        }
-
         // In debug builds we store the length of the statuses map here so that
         // we can later debug_assert that no status disappeared.
         #[cfg(debug_assertions)]
