@@ -83,18 +83,23 @@ impl Set {
             return Err(anyhow!("Unexpected nft object len"));
         }
 
-        if let schema::NfObject::ListObject(NfListObject::Set(v)) = &nft.objects[1] {
-            let mut set = HashSet::new();
+        if let schema::NfObject::ListObject(item) = &nft.objects[1] {
+            match item.as_ref() {
+                NfListObject::Set(v) => {
+                    let mut set = HashSet::new();
 
-            if let Some(elem) = &v.elem {
-                for x in elem {
-                    if let Expression::String(ip) = x {
-                        set.insert(IpAddr::from_str(ip)?);
+                    if let Some(elem) = &v.elem {
+                        for x in elem {
+                            if let Expression::String(ip) = x {
+                                set.insert(IpAddr::from_str(ip)?);
+                            }
+                        }
                     }
-                }
-            }
 
-            return Ok(set);
+                    return Ok(set);
+                }
+                _ => {}
+            };
         }
 
         Err(anyhow!("Unexpected output from nft"))
