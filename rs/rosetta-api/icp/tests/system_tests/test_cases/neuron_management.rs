@@ -814,5 +814,18 @@ fn test_get_neuron_info() {
 
         assert_eq!(neuron_info.neuron_id, neuron.id.unwrap().id);
         assert_eq!(neuron_info.controller.0, TEST_IDENTITY.sender().unwrap());
+
+        assert!(env
+            .rosetta_client
+            .get_neuron_info(
+                env.network_identifier.clone(),
+                // Ask for a neuron that does not exist
+                RosettaNeuronInfoArgs::builder(neuron_index + 1)
+                    .with_public_key((&Arc::new(test_identity())).into())
+                    .build(),
+                &(*TEST_IDENTITY).clone(),
+            )
+            .await
+            .is_err());
     });
 }
