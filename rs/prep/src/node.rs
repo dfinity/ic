@@ -302,6 +302,10 @@ pub struct NodeConfiguration {
     /// directory chosen by ic-prep.
     #[serde(skip_serializing, skip_deserializing)]
     pub secret_key_store: Option<NodeSecretKeyStore>,
+
+    /// The domain name of the node
+    #[serde(skip_serializing, skip_deserializing)]
+    pub domain: Option<String>,
 }
 
 impl From<NodeConfiguration> for pbNodeRecord {
@@ -319,6 +323,7 @@ impl From<NodeConfiguration> for pbNodeRecord {
                 .node_operator_principal_id
                 .map(|id| id.to_vec())
                 .unwrap_or_default(),
+            domain: node_configuration.domain,
             ..Default::default()
         }
     }
@@ -434,6 +439,7 @@ mod node_configuration {
             public_api: SocketAddr::from_str("1.2.3.4:8081").unwrap(),
             node_operator_principal_id: None,
             secret_key_store: None,
+            domain: None,
         };
 
         let got = pbNodeRecord::from(node_configuration);

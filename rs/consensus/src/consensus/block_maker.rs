@@ -9,9 +9,8 @@ use crate::{
     idkg::{self, metrics::IDkgPayloadMetrics},
 };
 use ic_consensus_utils::{
-    find_lowest_ranked_non_disqualified_proposals, get_block_hash_string,
-    get_notarization_delay_settings, get_subnet_record, membership::Membership,
-    pool_reader::PoolReader,
+    find_lowest_ranked_non_disqualified_proposals, get_notarization_delay_settings,
+    get_subnet_record, membership::Membership, pool_reader::PoolReader,
 };
 use ic_interfaces::{
     consensus::PayloadBuilder, dkg::DkgPool, idkg::IDkgPool, time_source::TimeSource,
@@ -139,16 +138,8 @@ impl BlockMaker {
                         Some(&self.metrics),
                     )
                 {
-                    self.propose_block(pool, rank, parent).inspect(|proposal| {
-                        debug!(
-                            self.log,
-                            "Make proposal {:?} {:?} {:?}",
-                            proposal.content.get_hash(),
-                            proposal.as_ref().payload.get_hash(),
-                            proposal.as_ref().payload.as_ref()
-                        );
-                        self.log_block(proposal.as_ref());
-                    })
+                    self.propose_block(pool, rank, parent)
+                        .inspect(|block| self.log_block(block))
                 } else {
                     None
                 }
@@ -449,27 +440,26 @@ impl BlockMaker {
     }
 
     /// Log an entry for the proposed block and each of its ingress messages
-    fn log_block(&self, block: &Block) {
-        let hash = get_block_hash_string(block);
-        let block_log_entry = block.log_entry(hash.clone());
+    fn log_block(&self, block: &BlockProposal) {
+        let block_log_entry = block.content.log_entry();
         debug!(
             self.log,
             "block_proposal";
             block => block_log_entry
         );
         let empty_batch = BatchPayload::default();
-        let batch = if block.payload.is_summary() {
+        let batch = if block.as_ref().payload.is_summary() {
             &empty_batch
         } else {
-            &block.payload.as_ref().as_data().batch
+            &block.as_ref().payload.as_ref().as_data().batch
         };
 
         for message_id in batch.ingress.message_ids() {
             debug!(
                 self.log,
                 "ingress_message_insert_into_block";
-                ingress_message.message_id => format!("{}", message_id),
-                block.hash => hash,
+                ingress_message.message_id => message_id.to_string(),
+                block.hash => format!("{:?}", block.content.get_hash()),
             );
         }
     }
@@ -534,11 +524,8 @@ pub(crate) fn already_proposed(pool: &PoolReader<'_>, h: Height, this_node: Node
 // 3) `DYNAMIC_DELAY_MAX_NON_RANK_0_BLOCKS` cannot be too small, otherwise the condition could be
 //    triggered too easily, and lead to average round duration of more than 3s (due to 1/3 of the
 //    blocks arriving after 9s or later)
-// 4) Under "good" networking conditions (at least 300Mbit/s bandwidth and low latency), 10 seconds
-//    should be enough to transfer a block (of size at most 4MB) to all (at most 39) peers.
 const DYNAMIC_DELAY_LOOK_BACK_DISTANCE: Height = Height::new(29);
 const DYNAMIC_DELAY_MAX_NON_RANK_0_BLOCKS: usize = 10;
-const DYNAMIC_DELAY_EXTRA_DURATION: Duration = Duration::from_secs(10);
 
 fn count_non_rank_0_blocks(pool: &PoolReader, block: Block) -> usize {
     let max_height = block.height();
@@ -570,7 +557,7 @@ pub(super) fn get_block_maker_delay(
         if let Some(metrics) = metrics {
             metrics.dynamic_delay_triggered.inc();
         }
-        DYNAMIC_DELAY_EXTRA_DURATION
+        settings.unit_delay
     } else {
         Duration::ZERO
     };
@@ -1066,8 +1053,8 @@ mod tests {
 
     #[rstest]
     #[case(Rank(0), Duration::from_secs(1), Duration::from_secs(0))]
-    #[case(Rank(1), Duration::from_secs(7), Duration::from_secs(7 + 10))]
-    #[case(Rank(2), Duration::from_secs(3), Duration::from_secs(2 * 3 + 10))]
+    #[case(Rank(1), Duration::from_secs(7), Duration::from_secs(7 + 7))]
+    #[case(Rank(2), Duration::from_secs(3), Duration::from_secs(2 * 3 + 3))]
     fn get_block_maker_delay_many_non_rank_0_blocks(
         #[case] rank: Rank,
         #[case] unit_delay: Duration,
@@ -1110,10 +1097,14 @@ mod tests {
 
     #[test]
     fn get_block_maker_delay_short_chain_many_non_rank_0_blocks_test() {
-        let ranks = std::iter::repeat(Rank(1)).take(11).collect::<Vec<_>>();
+        let previous_ranks = std::iter::repeat(Rank(1)).take(11).collect::<Vec<_>>();
         assert_eq!(
-            block_maker_delay_test_case(&ranks, Rank(1), Duration::from_secs(1)),
-            Duration::from_secs(11),
+            block_maker_delay_test_case(
+                &previous_ranks,
+                Rank(1),
+                /*unit_delay*/ Duration::from_secs(1)
+            ),
+            Duration::from_secs(2),
         );
     }
 
@@ -1123,7 +1114,7 @@ mod tests {
             block_maker_delay_test_case(
                 &[Rank(0), Rank(1), Rank(1), Rank(1), Rank(1), Rank(1)],
                 Rank(1),
-                Duration::from_secs(1)
+                /*unit_delay*/ Duration::from_secs(1)
             ),
             Duration::from_secs(1),
         );

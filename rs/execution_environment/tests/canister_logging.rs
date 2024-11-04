@@ -1,3 +1,4 @@
+use ic_base_types::PrincipalId;
 use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::subnet_config::SubnetConfig;
 use ic_management_canister_types::{
@@ -7,8 +8,7 @@ use ic_management_canister_types::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
-    ErrorCode, PrincipalId, StateMachine, StateMachineBuilder, StateMachineConfig,
-    SubmitIngressError, UserError,
+    ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig, SubmitIngressError, UserError,
 };
 use ic_test_utilities::universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use ic_test_utilities_execution_environment::{get_reply, wat_canister, wat_fn};
