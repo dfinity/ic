@@ -6,6 +6,7 @@ use ic_stable_structures::{
 };
 use rate_limits_api::SchemaVersion;
 use serde::{Deserialize, Serialize};
+use serde_cbor::{from_slice, to_vec};
 use std::{borrow::Cow, cell::RefCell, collections::HashSet, thread::LocalKey};
 use uuid::Uuid;
 
@@ -57,11 +58,11 @@ pub struct StorableIncidentMetadata {
 
 impl Storable for StorableRuleId {
     fn to_bytes(&self) -> Cow<[u8]> {
-        Cow::Owned(bincode::serialize(&self).expect("StorableRuleId serialization failed"))
+        Cow::Owned(to_vec(&self).expect("StorableRuleId serialization failed"))
     }
 
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        Self(bincode::deserialize(&bytes).expect("StorableRuleId deserialization failed"))
+        Self(from_slice(&bytes).expect("StorableRuleId deserialization failed"))
     }
 
     const BOUND: Bound = Bound::Unbounded;
@@ -69,11 +70,11 @@ impl Storable for StorableRuleId {
 
 impl Storable for StorableIncidentId {
     fn to_bytes(&self) -> Cow<[u8]> {
-        Cow::Owned(bincode::serialize(&self).expect("StorableIncidentId serialization failed"))
+        Cow::Owned(to_vec(&self).expect("StorableIncidentId serialization failed"))
     }
 
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        Self(bincode::deserialize(&bytes).expect("StorableIncidentId deserialization failed"))
+        Self(from_slice(&bytes).expect("StorableIncidentId deserialization failed"))
     }
 
     const BOUND: Bound = Bound::Unbounded;
@@ -81,11 +82,11 @@ impl Storable for StorableIncidentId {
 
 impl Storable for StorableConfig {
     fn to_bytes(&self) -> Cow<[u8]> {
-        Cow::Owned(bincode::serialize(self).expect("StorableConfig serialization failed"))
+        Cow::Owned(to_vec(&self).expect("StorableConfig serialization failed"))
     }
 
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        bincode::deserialize(&bytes).expect("StorableConfig deserialization failed")
+        from_slice(&bytes).expect("StorableConfig deserialization failed")
     }
 
     const BOUND: Bound = Bound::Unbounded;
@@ -93,11 +94,11 @@ impl Storable for StorableConfig {
 
 impl Storable for StorableIncidentMetadata {
     fn to_bytes(&self) -> Cow<[u8]> {
-        Cow::Owned(bincode::serialize(self).expect("StorableIncidentMetadata serialization failed"))
+        Cow::Owned(to_vec(&self).expect("StorableIncidentMetadata serialization failed"))
     }
 
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        bincode::deserialize(&bytes).expect("StorableIncidentMetadata deserialization failed")
+        from_slice(&bytes).expect("StorableIncidentMetadata deserialization failed")
     }
 
     const BOUND: Bound = Bound::Unbounded;
@@ -105,11 +106,11 @@ impl Storable for StorableIncidentMetadata {
 
 impl Storable for StorableRuleMetadata {
     fn to_bytes(&self) -> Cow<[u8]> {
-        Cow::Owned(bincode::serialize(self).expect("StorableRuleMetadata serialization failed"))
+        Cow::Owned(to_vec(&self).expect("StorableRuleMetadata serialization failed"))
     }
 
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        bincode::deserialize(&bytes).expect("StorableRuleMetadata deserialization failed")
+        from_slice(&bytes).expect("StorableRuleMetadata deserialization failed")
     }
 
     const BOUND: Bound = Bound::Unbounded;

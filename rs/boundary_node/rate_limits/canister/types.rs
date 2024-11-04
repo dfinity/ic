@@ -100,7 +100,7 @@ impl TryFrom<rate_limits_api::InputConfig> for InputConfig {
 
             let rule = InputRule {
                 incident_id: IncidentId::try_from(rule.incident_id)
-                    .map_err(|_| InputConfigError::InvalidUuidIncidentId(idx))?,
+                    .map_err(|_| InputConfigError::InvalidUuidFormatForIncident(idx))?,
                 rule_raw: rule.rule_raw,
                 description: rule.description,
             };
