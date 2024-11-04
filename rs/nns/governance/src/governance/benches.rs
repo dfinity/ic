@@ -289,6 +289,7 @@ fn cast_vote_cascade_helper(strategy: SetUpStrategy, topic: Topic) -> BenchResul
     let proposal_id = ProposalId { id: 1 };
     bench_fn(|| {
         Governance::cast_vote_and_cascade_follow(
+            &ProposalId { id: 1 },
             &mut ballots,
             &neuron_id.into(),
             Vote::Yes,
@@ -391,14 +392,6 @@ fn make_neuron(
 //     heap_increase: 0 pages (new)
 //     stable_memory_increase: 0 pages (new)
 //
-// ---------------------------------------------------
-//
-// Benchmark: compute_ballots_for_new_proposal_with_stable_neurons (new)
-//   total:
-//     instructions: 1.56 M (new)
-//     heap_increase: 0 pages (new)
-//     stable_memory_increase: 0 pages (new)
-
 // With NeuronStore.neuron_would_follow_ballots
 //---------------------------------------------------
 //
@@ -432,14 +425,6 @@ fn make_neuron(
 //     heap_increase: 0 pages (new)
 //     stable_memory_increase: 0 pages (new)
 //
-// ---------------------------------------------------
-//
-// Benchmark: compute_ballots_for_new_proposal_with_stable_neurons (new)
-//   total:
-//     instructions: 1.56 M (new)
-//     heap_increase: 0 pages (new)
-//     stable_memory_increase: 0 pages (new)
-
 #[bench(raw)]
 fn cascading_vote_stable_neurons_with_heap_index() -> BenchResult {
     let _a = temporarily_enable_active_neurons_in_stable_memory();
@@ -454,6 +439,7 @@ fn cascading_vote_stable_neurons_with_heap_index() -> BenchResult {
     )
 }
 
+#[test]
 #[bench(raw)]
 fn cascading_vote_stable_everything() -> BenchResult {
     let _a = temporarily_enable_active_neurons_in_stable_memory();
@@ -502,7 +488,7 @@ fn single_vote_all_stable() -> BenchResult {
     let _b = temporarily_enable_stable_memory_following_index();
 
     cast_vote_cascade_helper(
-        SetUpStrategy::SingleVote { num_neurons: 1 },
+        SetUpStrategy::SingleVote { num_neurons: 151 },
         Topic::NetworkEconomics,
     )
 }

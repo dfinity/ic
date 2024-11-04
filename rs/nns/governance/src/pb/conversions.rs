@@ -179,6 +179,8 @@ impl From<pb_api::Neuron> for pb::Neuron {
             dissolve_state: item.dissolve_state.map(|x| x.into()),
             visibility: item.visibility,
             voting_power_refreshed_timestamp_seconds: item.voting_power_refreshed_timestamp_seconds,
+            // This field is internal only and should not be read from API types.
+            recent_ballots_next_entry_index: None,
         }
     }
 }
@@ -286,6 +288,7 @@ impl From<pb_api::AbridgedNeuron> for pb::AbridgedNeuron {
             dissolve_state: item.dissolve_state.map(|x| x.into()),
             visibility: item.visibility,
             voting_power_refreshed_timestamp_seconds: item.voting_power_refreshed_timestamp_seconds,
+            recent_ballots_next_entry_index: None,
         }
     }
 }

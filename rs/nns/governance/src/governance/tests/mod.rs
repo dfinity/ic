@@ -1233,6 +1233,7 @@ mod cast_vote_and_cascade_follow {
         let mut neuron_store = NeuronStore::new(heap_neurons);
 
         Governance::cast_vote_and_cascade_follow(
+            &ProposalId { id: 1 },
             &mut ballots,
             &NeuronId { id: 1 },
             Vote::Yes,
@@ -1296,6 +1297,7 @@ mod cast_vote_and_cascade_follow {
         let mut neuron_store = NeuronStore::new(neurons);
 
         Governance::cast_vote_and_cascade_follow(
+            &ProposalId { id: 1 },
             &mut ballots,
             &NeuronId { id: 1 },
             Vote::Yes,

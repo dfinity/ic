@@ -458,6 +458,11 @@ message Neuron {
   // refreshed, this will be set to 2024-11-05T00:00:01 UTC (1730764801 seconds
   // after the UNIX epoch).
   optional uint64 voting_power_refreshed_timestamp_seconds = 24;
+
+  // The index of the next entry in the recent_ballots list that will be
+  // used for the circular buffer. This is used to determine which entry
+  // to overwrite next.
+  optional uint32 recent_ballots_next_entry_index = 25;
 }
 
 // Subset of Neuron that has no collections or big fields that might not exist in most neurons, and
@@ -484,6 +489,7 @@ message AbridgedNeuron {
   optional NeuronType neuron_type = 22;
   optional Visibility visibility = 23;
   optional uint64 voting_power_refreshed_timestamp_seconds = 24;
+  optional uint32 recent_ballots_next_entry_index = 25;
 
   reserved 1;
   reserved "id";
