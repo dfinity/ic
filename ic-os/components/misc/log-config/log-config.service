@@ -1,5 +1,5 @@
 [Unit]
-Description=Log HostOS config partition
+Description=Log config partition
 
 [Service]
 Type=oneshot
