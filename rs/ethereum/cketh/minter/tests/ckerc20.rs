@@ -26,8 +26,8 @@ use ic_cketh_test_utils::{
 use ic_ethereum_types::Address;
 use ic_ledger_suite_orchestrator_test_utils::flow::call_ledger_icrc1_total_supply;
 use ic_ledger_suite_orchestrator_test_utils::{supported_erc20_tokens, usdc};
-use ic_state_machine_tests::ErrorCode;
-use ic_state_machine_tests::{CanisterStatusType, WasmResult};
+use ic_management_canister_types::CanisterStatusType;
+use ic_state_machine_tests::{ErrorCode, WasmResult};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
 use icrc_ledger_types::icrc3::transactions::Mint;

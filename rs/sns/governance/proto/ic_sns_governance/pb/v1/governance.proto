@@ -1477,19 +1477,6 @@ message Governance {
   UpgradeJournal upgrade_journal = 32;
 }
 
-message Timers {
-  optional uint64 last_reset_timestamp_seconds = 1;
-  optional uint64 last_spawned_timestamp_seconds = 2;
-}
-
-message ResetTimersRequest {}
-message ResetTimersResponse {}
-
-message GetTimersRequest {}
-message GetTimersResponse {
-  optional Timers timers = 1;
-}
-
 // Request message for 'get_metadata'.
 message GetMetadataRequest {}
 

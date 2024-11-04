@@ -47,10 +47,9 @@ use ic_logger::{error, ReplicaLogger};
 use ic_management_canister_types::{
     self as ic00, CanisterIdRecord, InstallCodeArgs, MasterPublicKeyId, Method, Payload,
 };
-pub use ic_management_canister_types::{
+use ic_management_canister_types::{
     CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs,
-    CanisterSettingsArgsBuilder, CanisterSnapshotResponse, CanisterStatusResultV2,
-    CanisterStatusType, ClearChunkStoreArgs, EcdsaCurve, EcdsaKeyId, HttpHeader, HttpMethod,
+    CanisterSnapshotResponse, CanisterStatusResultV2, ClearChunkStoreArgs, EcdsaCurve, EcdsaKeyId,
     InstallChunkedCodeArgs, LoadCanisterSnapshotArgs, SchnorrAlgorithm, SignWithECDSAReply,
     SignWithSchnorrReply, TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs,
     UploadChunkReply,
@@ -112,6 +111,7 @@ use ic_test_utilities_registry::{
     add_single_subnet_record, add_subnet_key_record, add_subnet_list_record, SubnetRecordBuilder,
 };
 use ic_test_utilities_time::FastForwardTimeSource;
+pub use ic_types::ingress::WasmResult;
 use ic_types::{
     artifact::IngressMessageId,
     batch::{
@@ -141,15 +141,13 @@ use ic_types::{
     CanisterLog, CountBytes, CryptoHashOfPartialState, Height, NodeId, Randomness, RegistryVersion,
     ReplicaVersion,
 };
-pub use ic_types::{
+use ic_types::{
     canister_http::{
-        CanisterHttpMethod, CanisterHttpRequestContext, CanisterHttpRequestId,
-        CanisterHttpResponseMetadata,
+        CanisterHttpRequestContext, CanisterHttpRequestId, CanisterHttpResponseMetadata,
     },
-    crypto::{threshold_sig::ThresholdSigPublicKey, CryptoHash, CryptoHashOf},
-    ingress::{IngressState, IngressStatus, WasmResult},
-    messages::{CallbackId, HttpRequestError, MessageId},
-    signature::BasicSignature,
+    crypto::threshold_sig::ThresholdSigPublicKey,
+    ingress::{IngressState, IngressStatus},
+    messages::{CallbackId, MessageId},
     time::Time,
     CanisterId, CryptoHashOfState, Cycles, NumBytes, PrincipalId, SubnetId, UserId,
 };
@@ -161,11 +159,11 @@ use ic_xnet_payload_builder::{
 use rcgen::{CertificateParams, KeyPair};
 use serde::Deserialize;
 
-pub use ic_error_types::RejectCode;
+use ic_error_types::RejectCode;
 use maplit::btreemap;
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use serde::Serialize;
-pub use slog::Level;
+use slog::Level;
 use std::{
     collections::{BTreeMap, BTreeSet},
     convert::TryFrom,

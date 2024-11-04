@@ -26,7 +26,8 @@ use ic_cketh_minter::{
     SCRAPING_ETH_LOGS_INTERVAL,
 };
 use ic_ethereum_types::Address;
-use ic_state_machine_tests::{MessageId, StateMachine};
+use ic_state_machine_tests::StateMachine;
+use ic_types::messages::MessageId;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc2::approve::ApproveError;
 use icrc_ledger_types::icrc3::transactions::{Burn, Mint, Transaction as LedgerTransaction};

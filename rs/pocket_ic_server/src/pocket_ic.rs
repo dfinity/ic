@@ -21,6 +21,7 @@ use ic_config::{
     subnet_config::SubnetConfig,
 };
 use ic_crypto_sha2::Sha256;
+use ic_error_types::RejectCode;
 use ic_http_endpoints_public::{
     call_v2, call_v3, metrics::HttpHandlerMetrics, CanisterReadStateServiceBuilder,
     IngressValidatorBuilder, QueryServiceBuilder, SubnetReadStateServiceBuilder,
@@ -45,13 +46,12 @@ use ic_registry_keys::make_routing_table_record_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
 use ic_registry_subnet_type::SubnetType;
-use ic_state_machine_tests::Level;
 use ic_state_machine_tests::{
-    finalize_registry, IngressState, IngressStatus, RejectCode, StateMachine, StateMachineBuilder,
-    StateMachineConfig, StateMachineStateDir, SubmitIngressError, Time,
+    finalize_registry, StateMachine, StateMachineBuilder, StateMachineConfig, StateMachineStateDir,
+    SubmitIngressError,
 };
 use ic_test_utilities_registry::add_subnet_list_record;
-use ic_types::NumBytes;
+use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
     canister_http::{CanisterHttpReject, CanisterHttpRequestId, CanisterHttpResponseContent},
@@ -63,6 +63,7 @@ use ic_types::{
     time::GENESIS,
     CanisterId, Height, NodeId, NumInstructions, PrincipalId, RegistryVersion, SubnetId,
 };
+use ic_types::{NumBytes, Time};
 use ic_validator_ingress_message::StandaloneIngressSigVerifier;
 use itertools::Itertools;
 use pocket_ic::common::rest::{
@@ -72,6 +73,7 @@ use pocket_ic::common::rest::{
     SubnetInstructionConfig, SubnetKind, SubnetSpec, Topology,
 };
 use serde::{Deserialize, Serialize};
+use slog::Level;
 use std::hash::Hash;
 use std::str::FromStr;
 use std::{
