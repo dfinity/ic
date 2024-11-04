@@ -1,11 +1,14 @@
 //! An implementation of RegistryClient intended to be used in canister
 //! where polling in the background is not required because handed over to a timer.
+//! The code is entirely copied from `ic-registry-client-fake` and more tests added.
 
 use ic_interfaces_registry::{
     empty_zero_registry_record, RegistryClient, RegistryClientVersionedResult,
     RegistryDataProvider, RegistryTransportRecord, ZERO_REGISTRY_VERSION,
 };
-use ic_types::{registry::RegistryClientError, RegistryVersion, Time};
+use ic_types::{
+    registry::RegistryClientError, time::current_time as system_current_time, RegistryVersion, Time,
+};
 use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock, RwLockReadGuard};
 
@@ -20,6 +23,17 @@ pub struct CanisterRegistryClient {
     cache: Arc<RwLock<CacheState>>,
 }
 
+#[cfg(target_arch = "wasm32")]
+pub fn current_time() -> Time {
+    let current_time = ic_cdk::api::time();
+    Time::from_nanos_since_unix_epoch(current_time)
+}
+
+#[cfg(not(any(target_arch = "wasm32")))]
+pub fn current_time() -> Time {
+    system_current_time()
+}
+
 impl CanisterRegistryClient {
     pub fn new(data_provider: Arc<dyn RegistryDataProvider>) -> Self {
         Self {
@@ -27,7 +41,7 @@ impl CanisterRegistryClient {
             cache: Arc::new(RwLock::new(Default::default())),
         }
     }
-    
+
     pub fn update_to_latest_version(&self) {
         let mut cache = self.cache.write().unwrap();
         let latest_version = cache.0;
@@ -38,14 +52,12 @@ impl CanisterRegistryClient {
             Err(e) => panic!("Failed to query data provider: {}", e),
         };
 
-        // perform update
         assert!(!new_records.is_empty());
         let mut timestamps = cache.1.clone();
         let mut new_version = ZERO_REGISTRY_VERSION;
         for record in new_records {
             assert!(record.version > latest_version);
-            let current_time = ic_cdk::api::time();
-            timestamps.insert(new_version, Time::from_nanos_since_unix_epoch(current_time));
+            timestamps.insert(new_version, current_time());
             new_version = new_version.max(record.version);
             let search_key = (&record.key, &record.version);
             match cache

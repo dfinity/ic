@@ -10,13 +10,13 @@ const DELETED_KEY: &str = "\
     2hkvg-f3qgx-b5zoa-nz4k4-7q5v2-fiohf-x7o45-v6hds-5gf6w-o6lf6-gae";
 
 struct DummyRegistryDataProvider {
-    data: Arc<RwLock<Vec<RegistryTransportRecord>>>
+    data: Arc<RwLock<Vec<RegistryTransportRecord>>>,
 }
 
 impl DummyRegistryDataProvider {
     pub fn new() -> Self {
         Self {
-            data: Arc::new(RwLock::new(vec![]))
+            data: Arc::new(RwLock::new(vec![])),
         }
     }
 
@@ -59,7 +59,6 @@ impl DummyRegistryDataProvider {
                 value: Some(vec![0xCA, 0xFE]),
             },
         ];
-
     }
 
     pub fn add(&self, key: &str, version: u64, value: Option<u64>) {
@@ -71,7 +70,6 @@ impl DummyRegistryDataProvider {
             value: value.map(|v| vec![v as u8]),
         });
     }
-    
 }
 
 impl RegistryDataProvider for DummyRegistryDataProvider {
@@ -95,6 +93,17 @@ impl RegistryDataProvider for DummyRegistryDataProvider {
     }
 }
 
+#[derive(PartialEq, Eq, Debug)]
+struct TestValue {
+    test_value: Vec<u8>,
+}
+
+fn value(value: u64) -> TestValue {
+    TestValue {
+        test_value: vec![value as u8],
+    }
+}
+
 fn v(v: u64) -> RegistryVersion {
     RegistryVersion::new(v)
 }
@@ -106,8 +115,7 @@ fn test_absent_after_delete() {
     dummy_registry.add_dummy_data();
     client.update_to_latest_version();
 
-    let result =
-        client.get_key_family(NODE_RECORD_KEY_PREFIX, RegistryVersion::new(39_972));
+    let result = client.get_key_family(NODE_RECORD_KEY_PREFIX, RegistryVersion::new(39_972));
 
     assert_eq!(
         result,
@@ -133,10 +141,12 @@ fn can_retrieve_entries_correctly() {
 
     let set = |key: &str, ver: u64| dummy_registry.add(key, ver, Some(ver));
     let rem = |key: &str, ver: u64| dummy_registry.add(key, ver, None);
-    let get = |key: &str, ver: u64| client.get_versioned_value(key, v(ver));
-    let family =
-        |key_prefix: &str, t: u64| client.get_key_family(key_prefix, v(t));
-
+    let get = |key: &str, ver: u64| {
+        client
+            .get_versioned_value(key, v(ver))
+            .map(|ok_record| ok_record.map(|test_value| TestValue { test_value }))
+    };
+    let family = |key_prefix: &str, t: u64| client.get_key_family(key_prefix, v(t));
 
     set("A", 1);
     set("A", 3);
@@ -169,7 +179,25 @@ fn can_retrieve_entries_correctly() {
     assert_eq!(client.get_latest_version(), v(latest_version));
 
     assert!(get("A", 0).unwrap().is_none());
+    assert_eq!(get("A", 1).unwrap().as_ref().unwrap(), &value(1));
+    assert_eq!(get("A", 2).unwrap().as_ref().unwrap(), &value(1));
+    assert_eq!(get("A", 3).unwrap().as_ref().unwrap(), &value(3));
+    assert_eq!(get("A", 4).unwrap().as_ref().unwrap(), &value(3));
+    assert_eq!(get("A", 5).unwrap().as_ref().unwrap(), &value(3));
+    assert_eq!(get("A", 6).unwrap().as_ref().unwrap(), &value(6));
+    assert!(get("A", latest_version + 1).is_err());
 
+    for t in 0..6 {
+        assert!(get("B", t).unwrap().is_none());
+    }
+    assert_eq!(get("B", 6).unwrap().as_ref().unwrap(), &value(6));
+    assert!(get("B", latest_version + 1).is_err());
+
+    for t in 0..4 {
+        assert!(get("B2", t).unwrap().is_none());
+    }
+    assert_eq!(get("B2", 4).unwrap().as_ref().unwrap(), &value(4));
+    assert_eq!(get("B2", 5).unwrap().as_ref().unwrap(), &value(5));
     assert!(get("B2", 6).unwrap().is_none());
     assert!(get("B2", latest_version + 1).is_err());
 
