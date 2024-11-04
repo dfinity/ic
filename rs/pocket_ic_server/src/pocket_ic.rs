@@ -1271,8 +1271,6 @@ impl Operation for ProcessCanisterHttpInternal {
                 }
             }
             canister_http.pending.retain(|id| !received.contains(id));
-            drop(client);
-            drop(canister_http);
         }
         OpOut::NoOutput
     }
