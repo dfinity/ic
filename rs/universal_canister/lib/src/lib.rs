@@ -12,7 +12,8 @@ use universal_canister::Ops;
 
 /// The binary of the universal canister as compiled from `rs/universal_canister/impl`.
 pub const UNIVERSAL_CANISTER_WASM: &[u8] = include_bytes!(env!("UNIVERSAL_CANISTER_WASM_PATH"));
-pub const UNIVERSAL_CANISTER_WASM_SHA256: [u8; 32] = hex_to_bytes(env!("UNIVERSAL_CANISTER_WASM_SHA256"));
+pub const UNIVERSAL_CANISTER_WASM_SHA256: [u8; 32] =
+    hex_to_bytes(env!("UNIVERSAL_CANISTER_WASM_SHA256"));
 
 /// Convert a hexadecimal string to a [u8; 32] array
 const fn hex_to_bytes(hex: &str) -> [u8; 32] {
