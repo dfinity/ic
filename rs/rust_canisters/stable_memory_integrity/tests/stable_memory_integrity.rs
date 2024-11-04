@@ -3,8 +3,8 @@ use candid::{Decode, Encode};
 use proptest::prelude::*;
 
 use ic_base_types::CanisterId;
-use ic_stable_memory_integrity::StableOperationResult;
 use ic_pocket_ic_tests::StateMachine;
+use ic_stable_memory_integrity::StableOperationResult;
 use ic_types::{ingress::WasmResult, Cycles, MAX_STABLE_MEMORY_IN_BYTES};
 
 const KB: u64 = 1024;
