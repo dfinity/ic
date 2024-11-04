@@ -53,7 +53,7 @@ pub struct StorableConfig {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StorableIncidentMetadata {
     pub is_disclosed: bool,
-    pub rule_ids: Vec<RuleId>,
+    pub rule_ids: HashSet<RuleId>,
 }
 
 impl Storable for StorableRuleId {

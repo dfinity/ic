@@ -116,12 +116,12 @@ impl<R: CanisterApi, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
                 .get_full_config(current_version)
                 .ok_or_else(|| AddConfigError::NoInitConfigVersion)?;
 
-        // IDs of all rules in the submitted config
+        // Ordered IDs of all rules in the submitted config
         let mut rule_ids = Vec::<RuleId>::new();
         // Metadata of the newly submitted rules
         let mut new_rules_metadata = Vec::<(RuleId, StorableRuleMetadata)>::new();
         // Hashmap of the submitted incident IDs
-        let mut incidents_map = HashMap::<IncidentId, Vec<RuleId>>::new();
+        let mut incidents_map = HashMap::<IncidentId, HashSet<RuleId>>::new();
 
         for (rule_idx, input_rule) in next_config.rules.iter().enumerate() {
             // Check if the rule is resubmitted or if it is a new rule
@@ -172,8 +172,10 @@ impl<R: CanisterApi, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
 
             incidents_map
                 .entry(input_rule.incident_id)
-                .and_modify(|value| value.push(rule_id))
-                .or_insert(vec![rule_id]);
+                .and_modify(|value| {
+                    value.insert(rule_id);
+                })
+                .or_default;
 
             rule_ids.push(rule_id);
         }
@@ -228,7 +230,7 @@ fn commit_changes(
     storable_config: StorableConfig,
     removed_rules: Vec<RuleId>,
     new_rules_metadata: Vec<(RuleId, StorableRuleMetadata)>,
-    incidents_map: HashMap<IncidentId, Vec<RuleId>>,
+    incidents_map: HashMap<IncidentId, HashSet<RuleId>>,
 ) {
     // Update metadata of the removed rules
     for rule_id in removed_rules {
@@ -254,10 +256,17 @@ fn commit_changes(
 
     // Upsert incidents, some of the incidents can be new, some already existed before
     for (incident_id, rule_ids) in incidents_map {
-        let incident_metadata = StorableIncidentMetadata {
-            is_disclosed: false,
-            rule_ids,
-        };
+        let incident_metadata = canister_api
+            .get_incident(&incident_id)
+            .map(|mut metadata| {
+                metadata.rule_ids.extend(rule_ids.clone());
+                metadata
+            })
+            .unwrap_or_else(|| StorableIncidentMetadata {
+                is_disclosed: false,
+                rule_ids: rule_ids.clone(),
+            });
+
         let _ = canister_api.upsert_incident(incident_id, incident_metadata);
     }
 

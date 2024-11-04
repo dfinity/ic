@@ -115,7 +115,8 @@ fn disclose_incidents(
 
     for (incident_id, mut metadata) in incidents_metadata {
         if !metadata.is_disclosed {
-            disclose_rules(canister_api, time, &metadata.rule_ids)?;
+            let rule_ids: Vec<RuleId> = metadata.rule_ids.iter().cloned().collect();
+            disclose_rules(canister_api, time, &rule_ids)?;
             metadata.is_disclosed = true;
             assert!(
                 canister_api
