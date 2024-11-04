@@ -148,3 +148,19 @@ jobs:
           export PYTHONPATH=$PWD/ci/src:$PWD/ci/src/dependencies
           cd ci/src/dependencies/
           $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_merge_job.py
+
+  # CI job is also executed in Schedule Hourly
+  bazel-test-coverage:
+    name: Bazel Test Coverage
+    <<: *dind-large-setup
+    if: contains(github.event.pull_request.labels.*.name, 'CI_COVERAGE')
+    steps:
+      - <<: *checkout
+      - <<: *before-script
+      - name: Run Bazel Test Coverage
+        shell: bash
+        run: |
+          ./ci/scripts/bazel-coverage.sh
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
