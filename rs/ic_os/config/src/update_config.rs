@@ -14,19 +14,14 @@ pub static CONFIG_ROOT: &str = "/boot/config";
 pub static STATE_ROOT: &str = "/var/lib/ic";
 
 pub fn update_guestos_config(output_file: PathBuf) -> Result<()> {
-    let network_conf_path_str = format!("{CONFIG_ROOT}/network.conf");
-    let network_conf_path = Path::new(&network_conf_path_str);
-    let network_settings_result = read_network_conf(network_conf_path)?;
+    let config_dir = Path::new(CONFIG_ROOT);
+
+    let network_settings_result = read_network_conf(config_dir)?;
     let network_settings = network_settings_result.network_settings;
     let hostname = network_settings_result.hostname.clone();
 
-    let filebeat_conf_path_str = format!("{CONFIG_ROOT}/filebeat.conf");
-    let filebeat_conf_path = Path::new(&filebeat_conf_path_str);
-    let logging = read_filebeat_conf(filebeat_conf_path)?;
-
-    let nns_conf_path_str = format!("{CONFIG_ROOT}/nns.conf");
-    let nns_conf_path = Path::new(&nns_conf_path_str);
-    let nns_urls = read_nns_conf(nns_conf_path)?;
+    let logging = read_filebeat_conf(config_dir)?;
+    let nns_urls = read_nns_conf(config_dir)?;
 
     let nns_public_key_exists = Path::new(STATE_ROOT)
         .join("data/nns_public_key.pem")
