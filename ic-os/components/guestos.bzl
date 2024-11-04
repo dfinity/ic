@@ -150,6 +150,6 @@ component_files = {
     Label("upgrade/manageboot/manageboot.sh"): "/opt/ic/bin/manageboot.sh",
     Label("upgrade/shared-resources/monitor-expand-shared-data/monitor-expand-shared-data.py"): "/opt/ic/bin/monitor-expand-shared-data.py",
 
-    # todo: delete update-config after switch to new icos config
+    # TODO(NODE-1519): delete update-config.service after switch to new icos config
     Label("misc/update-config/update-guestos-config.service"): "/etc/systemd/system/update-config.service",
 }

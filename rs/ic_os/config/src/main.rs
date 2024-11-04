@@ -374,7 +374,7 @@ pub fn main() -> Result<()> {
 
             generate_testnet_config(args, clap_args.guestos_config_json_path)
         }
-        // TODO: delete UpdateGuestosConfig and UpdateHostosConfig after moved to new config format
+        // TODO(NODE-1519): delete UpdateGuestosConfig and UpdateHostosConfig after moved to new config format
         Some(Commands::UpdateGuestosConfig { output_file }) => update_guestos_config(output_file),
         Some(Commands::UpdateHostosConfig {
             config_ini_path,
