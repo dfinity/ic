@@ -1105,6 +1105,10 @@ fn test_canister_http() {
     };
     pic.mock_canister_http_response(mock_canister_http_response);
 
+    // There should be no more pending canister http outcalls.
+    let canister_http_requests = pic.get_canister_http();
+    assert_eq!(canister_http_requests.len(), 0);
+
     // Now the test canister will receive the http outcall response
     // and reply to the ingress message from the test driver.
     let reply = pic.await_call(call_id).unwrap();
@@ -1116,10 +1120,6 @@ fn test_canister_http() {
         }
         WasmResult::Reject(msg) => panic!("Unexpected reject {}", msg),
     };
-
-    // There should be no more pending canister http outcalls.
-    let canister_http_requests = pic.get_canister_http();
-    assert_eq!(canister_http_requests.len(), 0);
 }
 
 #[test]
@@ -1167,6 +1167,10 @@ fn test_canister_http_with_transform() {
     };
     pic.mock_canister_http_response(mock_canister_http_response);
 
+    // There should be no more pending canister http outcalls.
+    let canister_http_requests = pic.get_canister_http();
+    assert_eq!(canister_http_requests.len(), 0);
+
     // Now the test canister will receive the http outcall response
     // and reply to the ingress message from the test driver.
     let reply = pic.await_call(call_id).unwrap();
@@ -1181,10 +1185,6 @@ fn test_canister_http_with_transform() {
         }
         WasmResult::Reject(msg) => panic!("Unexpected reject {}", msg),
     };
-
-    // There should be no more pending canister http outcalls.
-    let canister_http_requests = pic.get_canister_http();
-    assert_eq!(canister_http_requests.len(), 0);
 }
 
 #[test]
@@ -1233,6 +1233,10 @@ fn test_canister_http_with_diverging_responses() {
     };
     pic.mock_canister_http_response(mock_canister_http_response);
 
+    // There should be no more pending canister http outcalls.
+    let canister_http_requests = pic.get_canister_http();
+    assert_eq!(canister_http_requests.len(), 0);
+
     // Now the test canister will receive an error
     // and reply to the ingress message from the test driver
     // relaying the error.
@@ -1248,10 +1252,6 @@ fn test_canister_http_with_diverging_responses() {
         }
         WasmResult::Reject(msg) => panic!("Unexpected reject {}", msg),
     };
-
-    // There should be no more pending canister http outcalls.
-    let canister_http_requests = pic.get_canister_http();
-    assert_eq!(canister_http_requests.len(), 0);
 }
 
 #[test]

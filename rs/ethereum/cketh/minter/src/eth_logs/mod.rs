@@ -13,12 +13,15 @@ use ic_canister_log::log;
 use ic_ethereum_types::Address;
 use minicbor::{Decode, Encode};
 use std::fmt;
+use std::fmt::{Debug, Formatter};
 use thiserror::Error;
 
 pub use parser::{
-    Erc20WithSubaccountLogParser, LogParser, ReceivedErc20LogParser, ReceivedEthLogParser,
+    LogParser, ReceivedErc20LogParser, ReceivedEthLogParser, ReceivedEthOrErc20LogParser,
 };
-pub use scraping::{LogScraping, ReceivedErc20LogScraping, ReceivedEthLogScraping};
+pub use scraping::{
+    LogScraping, ReceivedErc20LogScraping, ReceivedEthLogScraping, ReceivedEthOrErc20LogScraping,
+};
 
 // Keccak256("ReceivedEth(address,uint256,bytes32)")
 const RECEIVED_ETH_EVENT_TOPIC: [u8; 32] =
@@ -28,9 +31,9 @@ const RECEIVED_ETH_EVENT_TOPIC: [u8; 32] =
 const RECEIVED_ERC20_EVENT_TOPIC: [u8; 32] =
     hex!("4d69d0bd4287b7f66c548f90154dc81bc98f65a1b362775df5ae171a2ccd262b");
 
-// Keccak256("ReceivedErc20(address,address,uint256,bytes32,bytes32)")
-const RECEIVED_ERC20_EVENT_WITH_SUBACCOUNT_TOPIC: [u8; 32] =
-    hex!("aef895090c2f5d6e81a70bef80dce496a0558487845aada57822159d5efae5cf");
+// Keccak256("ReceivedEthOrErc20(address,address,uint256,bytes32,bytes32)")
+const RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC: [u8; 32] =
+    hex!("918adbebdb8f3b36fc337ab76df10b147b2def5c9dd62cb3456d9aeca40e0b07");
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Decode, Encode)]
 pub struct ReceivedEthEvent {
@@ -97,6 +100,7 @@ impl fmt::Debug for ReceivedEthEvent {
             .field("from_address", &self.from_address)
             .field("value", &self.value)
             .field("principal", &format_args!("{}", self.principal))
+            .field("subaccount", &self.subaccount)
             .finish()
     }
 }
@@ -111,6 +115,7 @@ impl fmt::Debug for ReceivedErc20Event {
             .field("value", &self.value)
             .field("principal", &format_args!("{}", self.principal))
             .field("contract_address", &self.erc20_contract_address)
+            .field("subaccount", &self.subaccount)
             .finish()
     }
 }
@@ -286,7 +291,7 @@ type InternalLedgerSubaccount = CheckedAmountOf<InternalLedgerSubaccountTag>;
 ///
 /// Internally represented as a u256 to optimize cbor encoding for low values,
 /// which can be represented as a u32 or a u64.
-#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, Decode, Encode)]
+#[derive(Clone, Eq, PartialEq, PartialOrd, Ord, Decode, Encode)]
 pub struct LedgerSubaccount(#[n(0)] InternalLedgerSubaccount);
 
 impl LedgerSubaccount {
@@ -300,5 +305,11 @@ impl LedgerSubaccount {
 
     pub fn to_bytes(self) -> [u8; 32] {
         self.0.to_be_bytes()
+    }
+}
+
+impl Debug for LedgerSubaccount {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "LedgerSubaccount({:x?})", self.0.to_be_bytes())
     }
 }

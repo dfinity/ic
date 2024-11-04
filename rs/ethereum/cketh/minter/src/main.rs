@@ -850,13 +850,13 @@ fn http_request(req: HttpRequest) -> HttpResponse {
 
             read_state(|s| {
                 w.encode_gauge(
-                    "cketh_minter_stable_memory_bytes",
+                    "stable_memory_bytes",
                     ic_cdk::api::stable::stable_size() as f64 * WASM_PAGE_SIZE_IN_BYTES,
                     "Size of the stable memory allocated by this canister.",
                 )?;
 
                 w.encode_gauge(
-                    "cketh_minter_heap_memory_bytes",
+                    "heap_memory_bytes",
                     heap_memory_size_bytes() as f64,
                     "Size of the heap memory allocated by this canister.",
                 )?;
