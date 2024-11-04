@@ -1171,6 +1171,7 @@ impl CanisterManager {
         let reserved_cycles_limit = canister.system_state.reserved_balance_limit();
         let log_visibility = canister.system_state.log_visibility.clone();
         let wasm_memory_limit = canister.system_state.wasm_memory_limit;
+        let wasm_memory_threshold = canister.system_state.wasm_memory_threshold;
 
         Ok(CanisterStatusResultV2::new(
             canister.status(),
@@ -1208,6 +1209,7 @@ impl CanisterManager {
                 .total_query_stats
                 .egress_payload_size,
             wasm_memory_limit.map(|x| x.get()),
+            wasm_memory_threshold.get(),
         ))
     }
 
