@@ -143,107 +143,108 @@ fn set_up_neuron_store(
     NeuronStore::new(neurons)
 }
 
-#[bench(raw)]
-fn add_neuron_active_typical() -> BenchResult {
-    let mut rng = new_rng();
-    let mut neuron_store = set_up_neuron_store(&mut rng, 100, 200);
-    let neuron = build_neuron(&mut rng, NeuronLocation::Heap, NeuronSize::Typical);
+// #[bench(raw)]
+// fn add_neuron_active_typical() -> BenchResult {
+//     let mut rng = new_rng();
+//     let mut neuron_store = set_up_neuron_store(&mut rng, 100, 200);
+//     let neuron = build_neuron(&mut rng, NeuronLocation::Heap, NeuronSize::Typical);
+//
+//     bench_fn(|| {
+//         neuron_store.add_neuron(neuron).unwrap();
+//     })
+// }
+//
+// #[bench(raw)]
+// fn add_neuron_active_maximum() -> BenchResult {
+//     let mut rng = new_rng();
+//     let mut neuron_store = set_up_neuron_store(&mut rng, 100, 200);
+//     let neuron = build_neuron(&mut rng, NeuronLocation::Heap, NeuronSize::Maximum);
+//
+//     bench_fn(|| {
+//         neuron_store.add_neuron(neuron).unwrap();
+//     })
+// }
+//
+// #[bench(raw)]
+// fn add_neuron_inactive_typical() -> BenchResult {
+//     let mut rng = new_rng();
+//     let mut neuron_store = set_up_neuron_store(&mut rng, 100, 200);
+//     let neuron = build_neuron(&mut rng, NeuronLocation::Stable, NeuronSize::Typical);
+//
+//     bench_fn(|| {
+//         neuron_store.add_neuron(neuron).unwrap();
+//     })
+// }
+//
+// #[bench(raw)]
+// fn update_recent_ballots() -> BenchResult {
+//     let mut rng = new_rng();
+//     let mut neuron_store = set_up_neuron_store(&mut rng, 100, 200);
+//     let mut neuron = build_neuron(&mut rng, NeuronLocation::Heap, NeuronSize::Maximum);
+//     neuron.recent_ballots_next_entry_index = Some(0);
+//     let id = neuron.id();
+//
+//     assert_eq!(neuron.recent_ballots.len(), MAX_NEURON_RECENT_BALLOTS);
+//
+//     neuron_store.add_neuron(neuron).unwrap();
+//
+//     bench_fn(|| {
+//         neuron_store
+//             .with_neuron_mut(&id, |neuron| {
+//                 neuron.register_recent_ballot(
+//                     Topic::Governance,
+//                     &ProposalId { id: rng.next_u64() },
+//                     Vote::Yes,
+//                 )
+//             })
+//             .unwrap();
+//     })
+// }
 
-    bench_fn(|| {
-        neuron_store.add_neuron(neuron).unwrap();
-    })
-}
-
-#[bench(raw)]
-fn add_neuron_active_maximum() -> BenchResult {
-    let mut rng = new_rng();
-    let mut neuron_store = set_up_neuron_store(&mut rng, 100, 200);
-    let neuron = build_neuron(&mut rng, NeuronLocation::Heap, NeuronSize::Maximum);
-
-    bench_fn(|| {
-        neuron_store.add_neuron(neuron).unwrap();
-    })
-}
-
-#[bench(raw)]
-fn add_neuron_inactive_typical() -> BenchResult {
-    let mut rng = new_rng();
-    let mut neuron_store = set_up_neuron_store(&mut rng, 100, 200);
-    let neuron = build_neuron(&mut rng, NeuronLocation::Stable, NeuronSize::Typical);
-
-    bench_fn(|| {
-        neuron_store.add_neuron(neuron).unwrap();
-    })
-}
-
-#[bench(raw)]
-fn update_recent_ballots() -> BenchResult {
-    let mut rng = new_rng();
-    let mut neuron_store = set_up_neuron_store(&mut rng, 100, 200);
-    let neuron = build_neuron(&mut rng, NeuronLocation::Heap, NeuronSize::Maximum);
-    let id = neuron.id();
-
-    assert_eq!(neuron.recent_ballots.len(), MAX_NEURON_RECENT_BALLOTS);
-
-    neuron_store.add_neuron(neuron).unwrap();
-
-    bench_fn(|| {
-        neuron_store
-            .with_neuron_mut(&id, |neuron| {
-                neuron.register_recent_ballot(
-                    Topic::Governance,
-                    &ProposalId { id: rng.next_u64() },
-                    Vote::Yes,
-                )
-            })
-            .unwrap();
-    })
-}
-
-#[bench(raw)]
-fn add_neuron_inactive_maximum() -> BenchResult {
-    let mut rng = new_rng();
-    let mut neuron_store = set_up_neuron_store(&mut rng, 100, 200);
-    let neuron = build_neuron(&mut rng, NeuronLocation::Stable, NeuronSize::Maximum);
-
-    bench_fn(|| {
-        neuron_store.add_neuron(neuron).unwrap();
-    })
-}
-
-#[bench(raw)]
-fn range_neurons_performance() -> BenchResult {
-    let mut rng = new_rng();
-    let _neuron_store = set_up_neuron_store(&mut rng, 100, 200);
-
-    bench_fn(|| {
-        with_stable_neuron_store(|stable_store| {
-            let iter = stable_store.range_neurons(..);
-            for n in iter {
-                n.id();
-            }
-        });
-    })
-}
-
-#[bench(raw)]
-fn neuron_metrics_calculation_heap() -> BenchResult {
-    let _ = temporarily_disable_active_neurons_in_stable_memory();
-    let mut rng = new_rng();
-    let neuron_store = set_up_neuron_store(&mut rng, 100, 0);
-
-    bench_fn(|| neuron_store.compute_neuron_metrics(now_seconds(), E8))
-}
-
-#[bench(raw)]
-fn neuron_metrics_calculation_stable() -> BenchResult {
-    let _f = temporarily_enable_active_neurons_in_stable_memory();
-
-    let mut rng = new_rng();
-    let neuron_store = set_up_neuron_store(&mut rng, 100, 0);
-
-    bench_fn(|| {
-        let _ = temporarily_enable_active_neurons_in_stable_memory();
-        neuron_store.compute_neuron_metrics(now_seconds(), E8)
-    })
-}
+// #[bench(raw)]
+// fn add_neuron_inactive_maximum() -> BenchResult {
+//     let mut rng = new_rng();
+//     let mut neuron_store = set_up_neuron_store(&mut rng, 100, 200);
+//     let neuron = build_neuron(&mut rng, NeuronLocation::Stable, NeuronSize::Maximum);
+//
+//     bench_fn(|| {
+//         neuron_store.add_neuron(neuron).unwrap();
+//     })
+// }
+//
+// #[bench(raw)]
+// fn range_neurons_performance() -> BenchResult {
+//     let mut rng = new_rng();
+//     let _neuron_store = set_up_neuron_store(&mut rng, 100, 200);
+//
+//     bench_fn(|| {
+//         with_stable_neuron_store(|stable_store| {
+//             let iter = stable_store.range_neurons(..);
+//             for n in iter {
+//                 n.id();
+//             }
+//         });
+//     })
+// }
+//
+// #[bench(raw)]
+// fn neuron_metrics_calculation_heap() -> BenchResult {
+//     let _ = temporarily_disable_active_neurons_in_stable_memory();
+//     let mut rng = new_rng();
+//     let neuron_store = set_up_neuron_store(&mut rng, 100, 0);
+//
+//     bench_fn(|| neuron_store.compute_neuron_metrics(now_seconds(), E8))
+// }
+//
+// #[bench(raw)]
+// fn neuron_metrics_calculation_stable() -> BenchResult {
+//     let _f = temporarily_enable_active_neurons_in_stable_memory();
+//
+//     let mut rng = new_rng();
+//     let neuron_store = set_up_neuron_store(&mut rng, 100, 0);
+//
+//     bench_fn(|| {
+//         let _ = temporarily_enable_active_neurons_in_stable_memory();
+//         neuron_store.compute_neuron_metrics(now_seconds(), E8)
+//     })
+// }

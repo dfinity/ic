@@ -8,6 +8,7 @@ use crate::{
 };
 use candid::Principal;
 use ic_base_types::PrincipalId;
+use ic_cdk::api::instruction_counter;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_stable_structures::{storable::Bound, StableBTreeMap, Storable};
 use itertools::Itertools;
@@ -238,6 +239,7 @@ where
         old_neuron: &Neuron,
         new_neuron: Neuron,
     ) -> Result<(), NeuronStoreError> {
+        let start = instruction_counter();
         let DecomposedNeuron {
             // The original neuron is consumed near the end of this
             // statement. This abridged one takes its place.
@@ -263,6 +265,8 @@ where
             neuron.clone(),
         );
 
+        let after_main_update = instruction_counter();
+
         // Make sure that we changed an existing entry, not created a new entry.
         let _previous_neuron = previous_neuron.ok_or_else(|| {
             // Yikes! There was no entry before. Abort!
@@ -273,9 +277,10 @@ where
             NeuronStoreError::not_found(neuron_id)
         })?;
 
+        let before_hotkeys_update = instruction_counter();
         // Auxiliary Data
         // --------------
-
+        let hotkeys_updated = hot_keys != old_neuron.hot_keys;
         if hot_keys != old_neuron.hot_keys {
             update_repeated_field(
                 neuron_id,
@@ -286,13 +291,18 @@ where
                 &mut self.hot_keys_map,
             );
         }
+        let after_hotkeys_update = instruction_counter();
+        let recent_ballots_updated = recent_ballots != old_neuron.recent_ballots;
         if recent_ballots != old_neuron.recent_ballots {
             update_repeated_field(neuron_id, recent_ballots, &mut self.recent_ballots_map);
         }
+        let after_recent_ballots_update = instruction_counter();
+        let followees_updated = followees != old_neuron.followees;
         if followees != old_neuron.followees {
             self.update_followees(neuron_id, followees);
         }
-
+        let after_followees_update = instruction_counter();
+        let known_neuron_data_updated = known_neuron_data != old_neuron.known_neuron_data;
         if known_neuron_data != old_neuron.known_neuron_data {
             update_singleton_field(
                 neuron_id,
@@ -300,10 +310,23 @@ where
                 &mut self.known_neuron_data_map,
             );
         }
+        let after_known_neuron_data_update = instruction_counter();
         if transfer != old_neuron.transfer {
             update_singleton_field(neuron_id, transfer, &mut self.transfer_map);
         }
-
+        //
+        // panic!("What was updated? hotkeys_updated? {hotkeys_updated}\n\
+        //         recentBallots? {recent_ballots_updated}\
+        //         followees? {followees_updated} \
+        //         knownkneurons? {known_neuron_data_updated} \
+        //         Incremental update instruction counts: main: {}, hotkeys: {}, recent_ballots: {}, followees: {}, known_neuron_data: {}",
+        //     after_main_update - start,
+        //     before_hotkeys_update - after_main_update,
+        //     after_recent_ballots_update - after_hotkeys_update,
+        //     after_followees_update - after_recent_ballots_update,
+        //     after_known_neuron_data_update - after_followees_update
+        // );
+        //
         Ok(())
     }
 
@@ -798,7 +821,7 @@ fn update_repeated_field<Element, Memory>(
     new_elements: Vec<Element>,
     map: &mut StableBTreeMap<(NeuronId, /* index */ u64), Element, Memory>,
 ) where
-    Element: Storable,
+    Element: Storable + PartialEq,
     Memory: ic_stable_structures::Memory,
 {
     let new_entries = new_elements
@@ -823,27 +846,31 @@ fn update_repeated_field<Element, Memory>(
 // TODO(NNS1-2513): To avoid the caller passing an incorrect range (e.g. too
 // small, or to big), derive range from NeuronId.
 fn update_range<Key, Value, Memory>(
-    new_entries: HeapBTreeMap<Key, Value>,
+    mut new_entries: HeapBTreeMap<Key, Value>,
     range: impl RangeBounds<Key>,
     map: &mut StableBTreeMap<Key, Value, Memory>,
 ) where
     Key: Storable + Ord + Clone,
-    Value: Storable,
+    Value: Storable + PartialEq,
     Memory: ic_stable_structures::Memory,
 {
     let new_keys = new_entries.keys().cloned().collect::<HeapBTreeSet<Key>>();
+
+    let mut to_remove = vec![];
+    for (key, value) in map.range(range) {
+        if !new_keys.contains(&key) {
+            to_remove.push(key.clone());
+        }
+        if new_entries.get(&key).expect("We just checked it's there") == &value {
+            new_entries.remove(&key);
+        }
+    }
 
     for (new_key, new_value) in new_entries {
         map.insert(new_key, new_value);
     }
 
-    let obsolete_keys = map
-        .range(range)
-        .filter(|(key, _value)| !new_keys.contains(key))
-        .map(|(key, _value)| key)
-        .collect::<Vec<_>>();
-
-    for obsolete_key in obsolete_keys {
+    for obsolete_key in to_remove {
         map.remove(&obsolete_key);
     }
 }

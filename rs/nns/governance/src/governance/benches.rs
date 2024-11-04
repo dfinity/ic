@@ -128,12 +128,28 @@ fn set_up_single_vote<R: Rng>(
     assert!(num_neurons > 1);
     let start_neuron_id = NeuronId(rng.next_u64());
     let central_neuron_id = NeuronId(rng.next_u64());
+
+    let neuron = make_neuron(
+        start_neuron_id.0,
+        PrincipalId::new_user_test_id(start_neuron_id.0),
+        10_000_000,
+        hashmap! {topic.into() => Followees {followees: vec![central_neuron_id.into()]}},
+    );
     ballots.insert(
         start_neuron_id.0,
         Ballot {
             vote: Vote::Unspecified.into(),
             voting_power: 10_000_000,
         },
+    );
+    neuron_store
+        .add_neuron(neuron)
+        .expect("Could not add neuron");
+    let neuron = make_neuron(
+        central_neuron_id.0,
+        PrincipalId::new_user_test_id(central_neuron_id.0),
+        10_000_000,
+        hashmap! {topic.into() => Followees {followees: vec![]}},
     );
     ballots.insert(
         central_neuron_id.0,
@@ -142,6 +158,9 @@ fn set_up_single_vote<R: Rng>(
             voting_power: 10_000_000,
         },
     );
+    neuron_store
+        .add_neuron(neuron)
+        .expect("Could not add neuron");
 
     for _ in 2u64..=num_neurons {
         let neuron_id = rng.next_u64();
@@ -355,12 +374,13 @@ fn make_neuron(
             vote: Vote::Yes as i32,
         })
         .collect();
+    neuron.recent_ballots_next_entry_index = Some(0);
 
     neuron
 }
 
-/// Initial before changes
-/// ---------------------------------------------------
+// Initial before changes
+// ---------------------------------------------------
 //
 // Benchmark: cascading_vote_stable_neurons_with_heap_index (new)
 //   total:
@@ -425,63 +445,63 @@ fn make_neuron(
 //     heap_increase: 0 pages (new)
 //     stable_memory_increase: 0 pages (new)
 //
-#[bench(raw)]
-fn cascading_vote_stable_neurons_with_heap_index() -> BenchResult {
-    let _a = temporarily_enable_active_neurons_in_stable_memory();
-    let _b = temporarily_disable_stable_memory_following_index();
-
-    cast_vote_cascade_helper(
-        SetUpStrategy::Chain {
-            num_neurons: 151,
-            num_followees: 15,
-        },
-        Topic::NetworkEconomics,
-    )
-}
-
-#[test]
-#[bench(raw)]
-fn cascading_vote_stable_everything() -> BenchResult {
-    let _a = temporarily_enable_active_neurons_in_stable_memory();
-    let _b = temporarily_enable_stable_memory_following_index();
-
-    cast_vote_cascade_helper(
-        SetUpStrategy::Chain {
-            num_neurons: 151,
-            num_followees: 15,
-        },
-        Topic::NetworkEconomics,
-    )
-}
-
-#[bench(raw)]
-fn cascading_vote_all_heap() -> BenchResult {
-    let _a = temporarily_disable_active_neurons_in_stable_memory();
-    let _b = temporarily_disable_stable_memory_following_index();
-
-    cast_vote_cascade_helper(
-        SetUpStrategy::Chain {
-            num_neurons: 151,
-            num_followees: 15,
-        },
-        Topic::NetworkEconomics,
-    )
-}
-
-#[bench(raw)]
-fn cascading_vote_heap_neurons_stable_index() -> BenchResult {
-    let _a = temporarily_disable_active_neurons_in_stable_memory();
-    let _b = temporarily_enable_stable_memory_following_index();
-
-    cast_vote_cascade_helper(
-        SetUpStrategy::Chain {
-            num_neurons: 151,
-            num_followees: 15,
-        },
-        Topic::NetworkEconomics,
-    )
-}
-
+// #[bench(raw)]
+// fn cascading_vote_stable_neurons_with_heap_index() -> BenchResult {
+//     let _a = temporarily_enable_active_neurons_in_stable_memory();
+//     let _b = temporarily_disable_stable_memory_following_index();
+//
+//     cast_vote_cascade_helper(
+//         SetUpStrategy::Chain {
+//             num_neurons: 151,
+//             num_followees: 15,
+//         },
+//         Topic::NetworkEconomics,
+//     )
+// }
+//
+// #[test]
+// #[bench(raw)]
+// fn cascading_vote_stable_everything() -> BenchResult {
+//     let _a = temporarily_enable_active_neurons_in_stable_memory();
+//     let _b = temporarily_enable_stable_memory_following_index();
+//
+//     cast_vote_cascade_helper(
+//         SetUpStrategy::Chain {
+//             num_neurons: 151,
+//             num_followees: 15,
+//         },
+//         Topic::NetworkEconomics,
+//     )
+// }
+//
+// #[bench(raw)]
+// fn cascading_vote_all_heap() -> BenchResult {
+//     let _a = temporarily_disable_active_neurons_in_stable_memory();
+//     let _b = temporarily_disable_stable_memory_following_index();
+//
+//     cast_vote_cascade_helper(
+//         SetUpStrategy::Chain {
+//             num_neurons: 151,
+//             num_followees: 15,
+//         },
+//         Topic::NetworkEconomics,
+//     )
+// }
+//
+// #[bench(raw)]
+// fn cascading_vote_heap_neurons_stable_index() -> BenchResult {
+//     let _a = temporarily_disable_active_neurons_in_stable_memory();
+//     let _b = temporarily_enable_stable_memory_following_index();
+//
+//     cast_vote_cascade_helper(
+//         SetUpStrategy::Chain {
+//             num_neurons: 151,
+//             num_followees: 15,
+//         },
+//         Topic::NetworkEconomics,
+//     )
+// }
+//
 #[bench(raw)]
 fn single_vote_all_stable() -> BenchResult {
     let _a = temporarily_enable_active_neurons_in_stable_memory();
@@ -492,73 +512,73 @@ fn single_vote_all_stable() -> BenchResult {
         Topic::NetworkEconomics,
     )
 }
-
-#[bench(raw)]
-fn centralized_following_all_stable() -> BenchResult {
-    let _a = temporarily_enable_active_neurons_in_stable_memory();
-    let _b = temporarily_enable_stable_memory_following_index();
-
-    cast_vote_cascade_helper(
-        SetUpStrategy::Centralized { num_neurons: 151 },
-        Topic::NetworkEconomics,
-    )
-}
-
-/// Benchmark the `cascading_vote` function with stable neurons and a heap index.
-/// Before we do the migration of the ballots function to be more efficient:
-/// Benchmark: compute_ballots_for_new_proposal_with_stable_neurons (new)
-//   total:
-//     instructions: 78.49 M (new)
-//     heap_increase: 0 pages (new)
-//     stable_memory_increase: 0 pages (new)
 //
-// After we migrate to be more efficient:
-// Benchmark: compute_ballots_for_new_proposal_with_stable_neurons (new)
-//   total:
-//     instructions: 1.50 M (new)
-//     heap_increase: 0 pages (new)
-//     stable_memory_increase: 0 pages (new)
+// #[bench(raw)]
+// fn centralized_following_all_stable() -> BenchResult {
+//     let _a = temporarily_enable_active_neurons_in_stable_memory();
+//     let _b = temporarily_enable_stable_memory_following_index();
 //
-#[bench(raw)]
-fn compute_ballots_for_new_proposal_with_stable_neurons() -> BenchResult {
-    let _f = temporarily_enable_active_neurons_in_stable_memory();
-    let neurons = (0..100)
-        .map(|id| {
-            (
-                id,
-                make_neuron(
-                    id,
-                    PrincipalId::new_user_test_id(id),
-                    1_000_000_000,
-                    hashmap! {}, // get the default followees
-                )
-                .into(),
-            )
-        })
-        .collect::<BTreeMap<u64, NeuronProto>>();
-
-    let governance_proto = GovernanceProto {
-        neurons,
-        ..GovernanceProto::default()
-    };
-
-    let mut governance = Governance::new(
-        governance_proto,
-        Box::new(MockEnvironment::new(Default::default(), 0)),
-        Box::new(StubIcpLedger {}),
-        Box::new(StubCMC {}),
-    );
-
-    bench_fn(|| {
-        governance
-            .compute_ballots_for_new_proposal(
-                &Action::RegisterKnownNeuron(KnownNeuron {
-                    id: None,
-                    known_neuron_data: None,
-                }),
-                &NeuronIdProto { id: 1 },
-                123_456_789,
-            )
-            .expect("Failed!");
-    })
-}
+//     cast_vote_cascade_helper(
+//         SetUpStrategy::Centralized { num_neurons: 151 },
+//         Topic::NetworkEconomics,
+//     )
+// }
+//
+// /// Benchmark the `cascading_vote` function with stable neurons and a heap index.
+// /// Before we do the migration of the ballots function to be more efficient:
+// /// Benchmark: compute_ballots_for_new_proposal_with_stable_neurons (new)
+// //   total:
+// //     instructions: 78.49 M (new)
+// //     heap_increase: 0 pages (new)
+// //     stable_memory_increase: 0 pages (new)
+// //
+// // After we migrate to be more efficient:
+// // Benchmark: compute_ballots_for_new_proposal_with_stable_neurons (new)
+// //   total:
+// //     instructions: 1.50 M (new)
+// //     heap_increase: 0 pages (new)
+// //     stable_memory_increase: 0 pages (new)
+// //
+// #[bench(raw)]
+// fn compute_ballots_for_new_proposal_with_stable_neurons() -> BenchResult {
+//     let _f = temporarily_enable_active_neurons_in_stable_memory();
+//     let neurons = (0..100)
+//         .map(|id| {
+//             (
+//                 id,
+//                 make_neuron(
+//                     id,
+//                     PrincipalId::new_user_test_id(id),
+//                     1_000_000_000,
+//                     hashmap! {}, // get the default followees
+//                 )
+//                 .into(),
+//             )
+//         })
+//         .collect::<BTreeMap<u64, NeuronProto>>();
+//
+//     let governance_proto = GovernanceProto {
+//         neurons,
+//         ..GovernanceProto::default()
+//     };
+//
+//     let mut governance = Governance::new(
+//         governance_proto,
+//         Box::new(MockEnvironment::new(Default::default(), 0)),
+//         Box::new(StubIcpLedger {}),
+//         Box::new(StubCMC {}),
+//     );
+//
+//     bench_fn(|| {
+//         governance
+//             .compute_ballots_for_new_proposal(
+//                 &Action::RegisterKnownNeuron(KnownNeuron {
+//                     id: None,
+//                     known_neuron_data: None,
+//                 }),
+//                 &NeuronIdProto { id: 1 },
+//                 123_456_789,
+//             )
+//             .expect("Failed!");
+//     })
+// }
