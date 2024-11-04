@@ -969,7 +969,6 @@ fn initial_state_with_usdc_support() -> State {
     state
 }
 
-// TODO XC-222: add subaccounts to dashboard
 fn received_eth_event() -> ReceivedEthEvent {
     ReceivedEthEvent {
         transaction_hash: "0xf1ac37d920fa57d9caeebc7136fea591191250309ffca95ae0e8a7739de89cc2"
