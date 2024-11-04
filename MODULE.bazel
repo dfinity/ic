@@ -612,13 +612,6 @@ http_file(
 
 # Financial Integration artifacts for upgrade testing
 
-# first ic-icrc1-ledger release (see https://dashboard.internetcomputer.org/proposal/104499)
-http_file(
-    name = "ic-icrc1-ledger-first-version.wasm.gz",
-    sha256 = "7af4f7308c883c286d4a5c0448b6bd03bd4d8bffebd58c4fc7114761ad652932",
-    url = "https://download.dfinity.systems/ic/0456f740295aabdd287811f1ed51829082b3df01/canisters/ic-icrc1-ledger.wasm.gz",
-)
-
 # ic-icrc1-ledger releases without ICRC-3
 http_file(
     name = "ic-icrc1-ledger-wo-icrc-3.wasm.gz",
