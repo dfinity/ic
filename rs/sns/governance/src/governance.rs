@@ -38,24 +38,24 @@ use crate::{
             proposal_data::ActionAuxiliary as ActionAuxiliaryPb,
             transfer_sns_treasury_funds::TransferFrom,
             upgrade_journal_entry, Account as AccountProto, AddMaturityRequest,
-            AddMaturityResponse, Ballot, ClaimSwapNeuronsError, ClaimSwapNeuronsRequest,
-            ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus, DefaultFollowees,
-            DeregisterDappCanisters, DisburseMaturityInProgress, Empty,
-            ExecuteGenericNervousSystemFunction, FailStuckUpgradeInProgressRequest,
-            FailStuckUpgradeInProgressResponse, GetMaturityModulationRequest,
-            GetMaturityModulationResponse, GetMetadataRequest, GetMetadataResponse, GetMode,
-            GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
-            GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
-            GetUpgradeJournalResponse, Governance as GovernanceProto, GovernanceError,
-            ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
-            ListProposalsResponse, ManageDappCanisterSettings, ManageLedgerParameters,
-            ManageNeuron, ManageNeuronResponse, ManageSnsMetadata, MintSnsTokens,
-            MintTokensRequest, MintTokensResponse, NervousSystemFunction, NervousSystemParameters,
-            Neuron, NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType,
-            Proposal, ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus,
-            RegisterDappCanisters, RewardEvent, Tally, TransferSnsTreasuryFunds, UpgradeJournal,
-            UpgradeJournalEntry, UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote,
-            WaitForQuietState,
+            AddMaturityResponse, AdvanceTargetVersionRequest, AdvanceTargetVersionResponse, Ballot,
+            ClaimSwapNeuronsError, ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse,
+            ClaimedSwapNeuronStatus, DefaultFollowees, DeregisterDappCanisters,
+            DisburseMaturityInProgress, Empty, ExecuteGenericNervousSystemFunction,
+            FailStuckUpgradeInProgressRequest, FailStuckUpgradeInProgressResponse,
+            GetMaturityModulationRequest, GetMaturityModulationResponse, GetMetadataRequest,
+            GetMetadataResponse, GetMode, GetModeResponse, GetNeuron, GetNeuronResponse,
+            GetProposal, GetProposalResponse, GetSnsInitializationParametersRequest,
+            GetSnsInitializationParametersResponse, GetUpgradeJournalResponse,
+            Governance as GovernanceProto, GovernanceError, ListNervousSystemFunctionsResponse,
+            ListNeurons, ListNeuronsResponse, ListProposals, ListProposalsResponse,
+            ManageDappCanisterSettings, ManageLedgerParameters, ManageNeuron, ManageNeuronResponse,
+            ManageSnsMetadata, MintSnsTokens, MintTokensRequest, MintTokensResponse,
+            NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId, NeuronPermission,
+            NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
+            ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RegisterDappCanisters,
+            RewardEvent, Tally, TransferSnsTreasuryFunds, UpgradeJournal, UpgradeJournalEntry,
+            UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote, WaitForQuietState,
         },
     },
     proposal::{
@@ -4805,9 +4805,13 @@ impl Governance {
         }
     }
 
-    pub fn push_to_upgrade_journal(&mut self, event: impl Into<upgrade_journal_entry::Event>) {
+    pub fn push_to_upgrade_journal<Event>(&mut self, event: Event)
+    where
+        upgrade_journal_entry::Event: From<Event>,
+    {
+        let event = upgrade_journal_entry::Event::from(event);
         let upgrade_journal_entry = UpgradeJournalEntry {
-            event: Some(event.into()),
+            event: Some(event),
             timestamp_seconds: Some(self.env.now()),
         };
         match self.proto.upgrade_journal {
@@ -4840,6 +4844,22 @@ impl Governance {
                 upgrade_journal: self.proto.upgrade_journal.clone(),
             },
         }
+    }
+
+    pub fn advance_target_version(
+        &mut self,
+        request: AdvanceTargetVersionRequest,
+    ) -> AdvanceTargetVersionResponse {
+        self.push_to_upgrade_journal(upgrade_journal_entry::Event::TargetVersionSet(
+            upgrade_journal_entry::TargetVersionSet {
+                old_target_version: self.proto.target_version.clone(),
+                new_target_version: request.target_version.clone(),
+            },
+        ));
+
+        self.proto.target_version = request.target_version;
+
+        AdvanceTargetVersionResponse {}
     }
 
     fn should_update_maturity_modulation(&self) -> bool {
@@ -5382,7 +5402,7 @@ impl Governance {
 
                 if self.env.now() > mark_failed_at {
                     let error = format!(
-                        "Upgrade marked as failed at {} seconds from genesis. \
+                        "Upgrade marked as failed at {} seconds from unix epoch. \
                              Governance could not determine running version from root: {}. \
                              Setting upgrade to failed to unblock retry.",
                         self.env.now(),
@@ -5423,7 +5443,9 @@ impl Governance {
 
                 self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome {
                     status: Some(
-                        upgrade_journal_entry::upgrade_outcome::Status::ExternalFailure(Empty {}),
+                        upgrade_journal_entry::upgrade_outcome::Status::InvalidState(
+                            upgrade_journal_entry::upgrade_outcome::InvalidState { version: None },
+                        ),
                     ),
                     human_readable: Some(error.to_string()),
                 });
@@ -8166,7 +8188,7 @@ mod tests {
             GovernanceError::new_with_message(
                 ErrorType::External,
                 format!(
-                    "Upgrade marked as failed at {} seconds from genesis. \
+                    "Upgrade marked as failed at {} seconds from unix epoch. \
                 Governance could not determine running version from root: Root had no status. \
                 Setting upgrade to failed to unblock retry.",
                     now
@@ -8465,8 +8487,10 @@ mod tests {
                     upgrade_journal_entry::UpgradeOutcome {
                         human_readable: Some(_),
                         status: Some(
-                            upgrade_journal_entry::upgrade_outcome::Status::ExternalFailure(
-                                Empty {}
+                            upgrade_journal_entry::upgrade_outcome::Status::InvalidState(
+                                upgrade_journal_entry::upgrade_outcome::InvalidState {
+                                    version: None,
+                                }
                             )
                         ),
                     }
