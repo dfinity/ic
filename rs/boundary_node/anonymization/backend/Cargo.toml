@@ -3,8 +3,9 @@ name = "anonymization-backend"
 version = "0.1.0"
 edition = "2021"
 
-[lib]
-crate-type = ["cdylib"]
+[[bin]]
+name = "anonymization-backend"
+path = "src/lib.rs"
 
 [dependencies]
 anyhow = { workspace = true }

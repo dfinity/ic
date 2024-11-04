@@ -79,6 +79,8 @@ fn timers() {
 
 // Service
 
+fn main() {}
+
 #[ic_cdk::init]
 fn init(_arg: InitArg) {
     // Self-authorize
