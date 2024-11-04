@@ -12,7 +12,7 @@ use ic_ledger_suite_state_machine_tests::{
     get_allowance, send_approval, send_transfer_from, setup, supported_standards, total_supply,
     transfer, FEE, MINTER,
 };
-use ic_state_machine_tests::{ErrorCode, StateMachine, UserError};
+use ic_pocket_ic_tests::{ErrorCode, StateMachine, UserError};
 use icp_ledger::{
     AccountIdBlob, AccountIdentifier, ArchiveOptions, ArchivedBlocksRange, Block, CandidBlock,
     CandidOperation, CandidTransaction, FeatureFlags, GetBlocksArgs, GetBlocksRes, GetBlocksResult,

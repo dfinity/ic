@@ -7,8 +7,7 @@ use ic_agent::Identity;
 use ic_base_types::CanisterId;
 use ic_icrc1_index_ng::{IndexArg, InitArg, UpgradeArg};
 use ic_icrc1_test_utils::minter_identity;
-use ic_registry_subnet_type::SubnetType;
-use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineBuilder, UserError};
+use ic_pocket_ic_tests::{ErrorCode, StateMachine, StateMachineBuilder, UserError};
 use ic_types::Time;
 use std::time::{Duration, SystemTime};
 

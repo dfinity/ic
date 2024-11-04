@@ -1,17 +1,18 @@
 pub use ic_error_types::{ErrorCode, UserError};
 pub use ic_state_machine_tests::StateMachineStateDir;
 pub use ic_types::ingress::WasmResult;
-pub use ic_types::time::Time;
-pub use ic_types::{CanisterId, Cycles, PrincipalId};
 
 use ic_config::execution_environment::{BitcoinConfig, Config};
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SubnetConfig;
-use ic_registry_subnet_type::SubnetType;
-use ic_state_machine_tests::{
-    CanisterInstallMode, CanisterSettingsArgs, CanisterStatusResultV2, MessageId,
-    StateMachineConfig, SubnetId,
+use ic_management_canister_types::{
+    CanisterInstallMode, CanisterSettingsArgs, CanisterStatusResultV2,
 };
+use ic_registry_subnet_type::SubnetType;
+use ic_state_machine_tests::StateMachineConfig;
+use ic_types::messages::MessageId;
+use ic_types::time::Time;
+use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
 use pocket_ic::common::rest::SubnetKind;
 use std::str::FromStr;
 use std::time::{Duration, SystemTime};

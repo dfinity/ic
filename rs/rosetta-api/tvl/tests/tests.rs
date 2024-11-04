@@ -3,7 +3,7 @@ use candid::{Decode, Encode, Nat};
 use ic_base_types::CanisterId;
 use ic_nns_test_utils::common::NnsInitPayloadsBuilder;
 use ic_nns_test_utils::state_test_helpers::setup_nns_canisters;
-use ic_state_machine_tests::StateMachine;
+use ic_pocket_ic_tests::StateMachine;
 use ic_tvl_canister::types::{TvlArgs as TVLInitArgs, TvlResult, TvlResultError};
 use ic_tvl_canister::{
     multiply_e8s, FiatCurrency, TvlRequest, DEFAULT_UPDATE_PERIOD, ONE_DAY, OTHER_CURRENCIES,

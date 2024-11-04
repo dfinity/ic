@@ -777,7 +777,7 @@ mod index {
     use super::*;
     use candid::Decode;
     use ic_icrc1_index_ng::Status;
-    use ic_state_machine_tests::WasmResult;
+    use ic_pocket_ic_tests::WasmResult;
     use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
     use std::time::{Duration, Instant};
 
