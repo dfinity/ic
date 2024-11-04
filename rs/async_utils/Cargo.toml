@@ -15,7 +15,6 @@ futures = { workspace = true }
 futures-util = { workspace = true }
 hyper = { workspace = true }
 slog = { workspace = true }
-thiserror = { workspace = true }
 tokio = { workspace = true }
 tonic = { workspace = true }
 
