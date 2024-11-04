@@ -10894,6 +10894,7 @@ version = "0.9.0"
 dependencies = [
  "ic-cdk 0.16.0",
  "ic-interfaces-registry",
+ "ic-registry-keys",
  "ic-types",
 ]
 

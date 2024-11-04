@@ -1,16 +1,13 @@
-//! An implementation of RegistryClient intended to be used in canisters
-//! where polling of new registry versions is handed over to a timer.
-//! Most of the code is copied from ic-registry-client-fake lib restricting
-//! the attributes types of RegistryCanisterClient for single thread execution.
+//! An implementation of RegistryClient intended to be used in canister
+//! where polling in the background is not required because handed over to a timer.
 
 use ic_interfaces_registry::{
     empty_zero_registry_record, RegistryClient, RegistryClientVersionedResult,
     RegistryDataProvider, RegistryTransportRecord, ZERO_REGISTRY_VERSION,
 };
 use ic_types::{registry::RegistryClientError, RegistryVersion, Time};
-use std::cell::{Ref, RefCell};
 use std::collections::BTreeMap;
-use std::rc::Rc;
+use std::sync::{Arc, RwLock, RwLockReadGuard};
 
 type CacheState = (
     RegistryVersion,
@@ -18,21 +15,28 @@ type CacheState = (
     Vec<RegistryTransportRecord>,
 );
 
-pub struct RegistryCanisterClient {
-    data_provider: Rc<dyn RegistryDataProvider>,
-    cache: Rc<RefCell<CacheState>>,
+pub struct CanisterRegistryClient {
+    data_provider: Arc<dyn RegistryDataProvider>,
+    cache: Arc<RwLock<CacheState>>,
+    current_time: fn() -> Time
 }
 
-impl RegistryCanisterClient {
-    pub fn new(data_provider: Rc<dyn RegistryDataProvider>) -> Self {
+impl CanisterRegistryClient {
+    pub fn new(data_provider: Arc<dyn RegistryDataProvider>) -> Self {
+        let current_time = || {
+            let current_time = ic_cdk::api::time();
+            Time::from_nanos_since_unix_epoch(current_time)
+        };
+
         Self {
             data_provider,
-            cache: Rc::new(RefCell::new(Default::default())),
+            cache: Arc::new(RwLock::new(Default::default())),
+            current_time
         }
     }
 
     pub fn update_to_latest_version(&self) {
-        let mut cache = self.cache.borrow_mut();
+        let mut cache = self.cache.write().unwrap();
         let latest_version = cache.0;
 
         let new_records = match self.data_provider.get_updates_since(latest_version) {
@@ -41,14 +45,14 @@ impl RegistryCanisterClient {
             Err(e) => panic!("Failed to query data provider: {}", e),
         };
 
+        // perform update
         assert!(!new_records.is_empty());
         let mut timestamps = cache.1.clone();
         let mut new_version = ZERO_REGISTRY_VERSION;
         for record in new_records {
             assert!(record.version > latest_version);
-            let current_ts = ic_cdk::api::time();
+            timestamps.insert(new_version, (self.current_time)());
             new_version = new_version.max(record.version);
-            timestamps.insert(new_version, Time::from_nanos_since_unix_epoch(current_ts));
             let search_key = (&record.key, &record.version);
             match cache
                 .2
@@ -64,7 +68,7 @@ impl RegistryCanisterClient {
     }
 
     pub fn reload(&self) {
-        let mut cache = self.cache.borrow_mut();
+        let mut cache = self.cache.write().unwrap();
         cache.0 = ZERO_REGISTRY_VERSION;
         cache.1.clear();
         drop(cache);
@@ -74,17 +78,17 @@ impl RegistryCanisterClient {
     fn check_version(
         &self,
         version: RegistryVersion,
-    ) -> Result<Ref<CacheState>, RegistryClientError> {
-        let cache_state = self.cache.borrow();
-        let (latest_version, _, _) = *cache_state;
-        if version > latest_version {
+    ) -> Result<RwLockReadGuard<CacheState>, RegistryClientError> {
+        let cache_state = self.cache.read().unwrap();
+        let (latest_version, _, _) = &*cache_state;
+        if &version > latest_version {
             return Err(RegistryClientError::VersionNotAvailable { version });
         }
         Ok(cache_state)
     }
 }
 
-impl RegistryClient for RegistryCanisterClient {
+impl RegistryClient for CanisterRegistryClient {
     fn get_versioned_value(
         &self,
         key: &str,
@@ -94,7 +98,7 @@ impl RegistryClient for RegistryCanisterClient {
             return Ok(empty_zero_registry_record(key));
         }
         let cache_state = self.check_version(version)?;
-        let records = &cache_state.2;
+        let (_, _, records) = &*cache_state;
 
         let search_key = &(key, &version);
         let record = match records.binary_search_by_key(search_key, |r| (&r.key, &r.version)) {
@@ -115,7 +119,7 @@ impl RegistryClient for RegistryCanisterClient {
             return Ok(vec![]);
         }
         let cache_state = self.check_version(version)?;
-        let records = &cache_state.2;
+        let (_, _, records) = &*cache_state;
 
         let first_registry_version = RegistryVersion::from(1);
         let search_key = &(key_prefix, &first_registry_version);
@@ -133,9 +137,9 @@ impl RegistryClient for RegistryCanisterClient {
 
         let records = records
             .iter()
-            .skip(first_match_index)
-            .filter(|r| r.version <= version)
-            .take_while(|r| r.key.starts_with(key_prefix));
+            .skip(first_match_index) // (1)
+            .filter(|r| r.version <= version) // (2)
+            .take_while(|r| r.key.starts_with(key_prefix)); // (3)
 
         let mut effective_records = BTreeMap::new();
         for record in records {
@@ -149,10 +153,13 @@ impl RegistryClient for RegistryCanisterClient {
     }
 
     fn get_latest_version(&self) -> RegistryVersion {
-        self.cache.borrow().0
+        self.cache.read().unwrap().0
     }
 
     fn get_version_timestamp(&self, registry_version: RegistryVersion) -> Option<Time> {
-        self.cache.borrow().1.get(&registry_version).cloned()
+        self.cache.read().unwrap().1.get(&registry_version).cloned()
     }
 }
+
+#[cfg(test)]
+mod tests;
