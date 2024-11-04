@@ -46,6 +46,5 @@ rust_test(
     rustc_env = {
         "UNIVERSAL_CANISTER_WASM_PATH": "$(location //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
-    rustc_env_files = [":universal_canister_wasm_sha256_env_file"],
     deps = DEV_DEPENDENCIES,
 )
