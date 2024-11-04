@@ -36,6 +36,7 @@ DEPENDENCIES = [
     "//rs/types/wasm_types",
     "//rs/utils",
     "//rs/utils/lru_cache",
+    "//rs/wasm_transform",
     "@crate_index//:candid",
     "@crate_index//:hex",
     "@crate_index//:ic-btc-interface",
@@ -167,6 +168,7 @@ BENCH_DEPENDENCIES = [
     "//rs/test_utilities/state",
     "//rs/test_utilities/time",
     "//rs/test_utilities/types",
+    "//rs/types/base_types",
     "//rs/types/error_types",
     "//rs/types/management_canister_types",
     "//rs/types/types",
@@ -220,7 +222,6 @@ rust_ic_bench(
         # Keep sorted.
         "//rs/execution_environment/benches/lib:execution_environment_bench",
         "//rs/state_machine_tests",
-        "//rs/types/base_types",
         "//rs/types/types_test_utils",
     ] + BENCH_DEPENDENCIES,
 )
@@ -236,7 +237,6 @@ rust_ic_bench(
         # Keep sorted.
         "//rs/execution_environment/benches/lib:execution_environment_bench",
         "//rs/state_machine_tests",
-        "//rs/types/base_types",
         "//rs/types/types_test_utils",
     ] + BENCH_DEPENDENCIES,
 )

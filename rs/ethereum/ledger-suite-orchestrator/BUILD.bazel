@@ -170,6 +170,7 @@ rust_ic_test(
         "//rs/rust_canisters/http_types",
         "//rs/state_machine_tests",
         "//rs/types/base_types",
+        "//rs/types/management_canister_types",
         "@crate_index//:assert_matches",
         "@crate_index//:candid",
         "@crate_index//:proptest",

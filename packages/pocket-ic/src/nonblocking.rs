@@ -20,6 +20,9 @@ use candid::{
     utils::{ArgumentDecoder, ArgumentEncoder},
     Principal,
 };
+use ic_certification::{Certificate, Label, LookupResult};
+use ic_transport_types::Envelope;
+use ic_transport_types::EnvelopeContent::ReadState;
 use ic_transport_types::{ReadStateResponse, SubnetMetrics};
 use reqwest::{StatusCode, Url};
 use serde::{de::DeserializeOwned, Serialize};
@@ -93,7 +96,7 @@ impl PocketIc {
         state_dir: Option<PathBuf>,
         nonmainnet_features: bool,
         log_level: Option<Level>,
-        bitcoind_addr: Option<SocketAddr>,
+        bitcoind_addr: Option<Vec<SocketAddr>>,
     ) -> Self {
         let subnet_config_set = subnet_config_set.into();
         if state_dir.is_none()
@@ -1005,11 +1008,11 @@ impl PocketIc {
     pub async fn get_subnet_metrics(&self, subnet_id: Principal) -> Option<SubnetMetrics> {
         let path = vec![
             "subnet".into(),
-            ic_agent::hash_tree::Label::from_bytes(subnet_id.as_slice()),
+            Label::from_bytes(subnet_id.as_slice()),
             "metrics".into(),
         ];
         let paths = vec![path.clone()];
-        let content = ic_agent::agent::EnvelopeContent::ReadState {
+        let content = ReadState {
             ingress_expiry: self
                 .get_time()
                 .await
@@ -1020,7 +1023,7 @@ impl PocketIc {
             sender: Principal::anonymous(),
             paths,
         };
-        let envelope = ic_agent::agent::Envelope {
+        let envelope = Envelope {
             content: std::borrow::Cow::Borrowed(&content),
             sender_pubkey: None,
             sender_sig: None,
@@ -1043,10 +1046,12 @@ impl PocketIc {
             .unwrap();
         let read_state_response: ReadStateResponse =
             serde_cbor::from_slice(&resp.bytes().await.unwrap()).ok()?;
-        let cert: ic_agent::Certificate =
-            serde_cbor::from_slice(&read_state_response.certificate).unwrap();
+        let cert: Certificate = serde_cbor::from_slice(&read_state_response.certificate).unwrap();
 
-        let metrics = ic_agent::lookup_value(&cert, path).ok()?;
+        let metrics = match cert.tree.lookup_path(path) {
+            LookupResult::Found(value) => Some(value),
+            _ => None,
+        }?;
         serde_cbor::from_slice(metrics).unwrap()
     }
 
