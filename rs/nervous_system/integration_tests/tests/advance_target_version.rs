@@ -11,10 +11,43 @@ use ic_sns_governance::{
 };
 use ic_sns_swap::pb::v1::Lifecycle;
 use ic_sns_wasm::pb::v1::SnsCanisterType;
+use pocket_ic::nonblocking::PocketIc;
 use pocket_ic::PocketIcBuilder;
 use std::time::Duration;
 
-const TICKS_PER_TASK: u64 = 2;
+/// Advances time by up to `timeout_seconds` seconds and `timeout_seconds` tickets (1 tick = 1 second).
+/// Each tick, it observes the state using the provided `observe` function.
+/// If the observed state matches the `expected` state, it returns `Ok(())`.
+/// If the timeout is reached, it returns an error.
+async fn await_with_timeout<'a, T, F, Fut>(
+    pocket_ic: &'a PocketIc,
+    timeout_seconds: u64,
+    observe: F,
+    expected: &T,
+) -> Result<(), String>
+where
+    T: std::cmp::PartialEq + std::fmt::Debug,
+    F: Fn(&'a PocketIc) -> Fut,
+    Fut: std::future::Future<Output = T>,
+{
+    let mut counter = 0;
+    loop {
+        pocket_ic.advance_time(Duration::from_secs(1)).await;
+        pocket_ic.tick().await;
+
+        let observed = observe(pocket_ic).await;
+        if observed == *expected {
+            return Ok(());
+        }
+        if counter == timeout_seconds {
+            return Err(format!(
+                "Observed state: {:?}\n!= Expected state {:?}\nafter {} seconds / rounds",
+                observed, expected, timeout_seconds,
+            ));
+        }
+        counter += 1;
+    }
+}
 
 #[tokio::test]
 async fn test_get_upgrade_journal() {
@@ -23,24 +56,6 @@ async fn test_get_upgrade_journal() {
         .with_sns_subnet()
         .build_async()
         .await;
-
-    let wait_for_next_periodic_task = |sleep_duration_seconds| {
-        let pocket_ic = &pocket_ic;
-        async move {
-            let now = pocket_ic.get_time().await;
-            pocket_ic
-                .advance_time(Duration::from_secs(sleep_duration_seconds))
-                .await;
-            for _ in 0..TICKS_PER_TASK {
-                pocket_ic.tick().await;
-            }
-            assert_eq!(
-                pocket_ic.get_time().await,
-                now + Duration::from_secs(sleep_duration_seconds)
-                    + Duration::from_nanos(TICKS_PER_TASK.saturating_sub(1))
-            );
-        }
-    };
 
     // Install the (master) NNS canisters.
     let with_mainnet_nns_canisters = false;
@@ -95,17 +110,20 @@ async fn test_get_upgrade_journal() {
         assert_eq!(response_timestamp_seconds, Some(1620501459));
     }
 
-    wait_for_next_periodic_task(UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS).await;
-
-    // State B: after the first periodic task's completion. No changes expected yet.
-    {
-        let sns_pb::GetUpgradeJournalResponse { upgrade_steps, .. } =
-            sns::governance::get_upgrade_journal(&pocket_ic, sns.governance.canister_id).await;
-        let upgrade_steps = upgrade_steps
-            .expect("upgrade_steps should be Some")
-            .versions;
-        assert_eq!(upgrade_steps, vec![initial_sns_version.clone()]);
-    }
+    await_with_timeout(
+        &pocket_ic,
+        UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS,
+        |pocket_ic| async {
+            sns::governance::get_upgrade_journal(pocket_ic, sns.governance.canister_id)
+                .await
+                .upgrade_steps
+                .unwrap()
+                .versions
+        },
+        &vec![initial_sns_version.clone()],
+    )
+    .await
+    .unwrap();
 
     // Publish a new SNS version.
     let (new_sns_version_1, new_sns_version_2) = {
@@ -143,23 +161,24 @@ async fn test_get_upgrade_journal() {
         (new_sns_version_1, new_sns_version_2)
     };
 
-    wait_for_next_periodic_task(UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS).await;
-
-    // State C: after the second periodic task's completion.
-    {
-        let sns_pb::GetUpgradeJournalResponse { upgrade_steps, .. } =
-            sns::governance::get_upgrade_journal(&pocket_ic, sns.governance.canister_id).await;
-        let upgrade_steps = upgrade_steps.expect("cached_upgrade_steps should be Some");
-
-        assert_eq!(
-            upgrade_steps.versions,
-            vec![
-                initial_sns_version,
-                new_sns_version_1,
-                new_sns_version_2.clone()
-            ]
-        );
-    }
+    await_with_timeout(
+        &pocket_ic,
+        UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS,
+        |pocket_ic| async {
+            sns::governance::get_upgrade_journal(pocket_ic, sns.governance.canister_id)
+                .await
+                .upgrade_steps
+                .unwrap()
+                .versions
+        },
+        &vec![
+            initial_sns_version,
+            new_sns_version_1,
+            new_sns_version_2.clone(),
+        ],
+    )
+    .await
+    .unwrap();
 
     // Advance the target version.
     {
@@ -169,10 +188,8 @@ async fn test_get_upgrade_journal() {
             new_sns_version_2.clone(),
         )
         .await;
-    }
 
-    // Check that the target version is set to the new version.
-    {
+        // Check that the target version is set to the new version.
         let sns_pb::GetUpgradeJournalResponse { target_version, .. } =
             sns::governance::get_upgrade_journal(&pocket_ic, sns.governance.canister_id).await;
 

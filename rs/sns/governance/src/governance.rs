@@ -37,24 +37,25 @@ use crate::{
             proposal::Action,
             proposal_data::ActionAuxiliary as ActionAuxiliaryPb,
             transfer_sns_treasury_funds::TransferFrom,
-            Account as AccountProto, AddMaturityRequest, AddMaturityResponse, Ballot,
-            ClaimSwapNeuronsError, ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse,
-            ClaimedSwapNeuronStatus, DefaultFollowees, DeregisterDappCanisters,
-            DisburseMaturityInProgress, Empty, ExecuteGenericNervousSystemFunction,
-            FailStuckUpgradeInProgressRequest, FailStuckUpgradeInProgressResponse,
-            GetMaturityModulationRequest, GetMaturityModulationResponse, GetMetadataRequest,
-            GetMetadataResponse, GetMode, GetModeResponse, GetNeuron, GetNeuronResponse,
-            GetProposal, GetProposalResponse, GetSnsInitializationParametersRequest,
-            GetSnsInitializationParametersResponse, GetUpgradeJournalResponse,
-            Governance as GovernanceProto, GovernanceError, ListNervousSystemFunctionsResponse,
-            ListNeurons, ListNeuronsResponse, ListProposals, ListProposalsResponse,
-            ManageDappCanisterSettings, ManageLedgerParameters, ManageNeuron, ManageNeuronResponse,
-            ManageSnsMetadata, MintSnsTokens, MintTokensRequest, MintTokensResponse,
-            NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId, NeuronPermission,
-            NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
-            ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RegisterDappCanisters,
-            RewardEvent, Tally, TransferSnsTreasuryFunds, UpgradeSnsControlledCanister,
-            UpgradeSnsToNextVersion, Vote, WaitForQuietState,
+            upgrade_journal_entry, Account as AccountProto, AddMaturityRequest,
+            AddMaturityResponse, Ballot, ClaimSwapNeuronsError, ClaimSwapNeuronsRequest,
+            ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus, DefaultFollowees,
+            DeregisterDappCanisters, DisburseMaturityInProgress, Empty,
+            ExecuteGenericNervousSystemFunction, FailStuckUpgradeInProgressRequest,
+            FailStuckUpgradeInProgressResponse, GetMaturityModulationRequest,
+            GetMaturityModulationResponse, GetMetadataRequest, GetMetadataResponse, GetMode,
+            GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
+            GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
+            GetUpgradeJournalResponse, Governance as GovernanceProto, GovernanceError,
+            ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
+            ListProposalsResponse, ManageDappCanisterSettings, ManageLedgerParameters,
+            ManageNeuron, ManageNeuronResponse, ManageSnsMetadata, MintSnsTokens,
+            MintTokensRequest, MintTokensResponse, NervousSystemFunction, NervousSystemParameters,
+            Neuron, NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType,
+            Proposal, ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus,
+            RegisterDappCanisters, RewardEvent, Tally, TransferSnsTreasuryFunds, UpgradeJournal,
+            UpgradeJournalEntry, UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote,
+            WaitForQuietState,
         },
     },
     proposal::{
@@ -157,8 +158,12 @@ pub fn log_prefix() -> String {
 /// The static MEMO used when calculating the SNS Treasury subaccount.
 pub const TREASURY_SUBACCOUNT_NONCE: u64 = 0;
 
-// How frequently the canister should attempt to refresh the cached_upgrade_steps
+/// How frequently the canister should attempt to refresh the cached_upgrade_steps
 pub const UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS: u64 = 60 * 60; // 1 hour
+
+/// The maximum duration for which the upgrade periodic task lock may be held.
+/// Past this duration, the lock will be automatically released.
+const UPGRADE_PERIODIC_TASK_LOCK_TIMEOUT_SECONDS: u64 = 600;
 
 /// Converts bytes to a subaccountpub fn bytes_to_subaccount(bytes: &[u8]) -> Result<icrc_ledger_types::icrc1::account::Subaccount, GovernanceError> {
 pub fn bytes_to_subaccount(
@@ -696,6 +701,12 @@ pub struct Governance {
     /// The number of proposals after the last time "garbage collection" was run.
     pub latest_gc_num_proposals: usize,
 
+    /// Global lock for all periodic tasks that relate to upgrades - this is used to
+    /// guarantee that they don't interleave with one another outside of rare circumstances (e.g. timeouts).
+    /// `None` means that the lock is not currently held by any task.
+    /// `Some(x)` means that a task is has been holding the lock since timestamp `x`.
+    pub upgrade_periodic_task_lock: Option<u64>,
+
     /// Whether test features are enabled.
     /// Test features should not be exposed in production. But, code that should
     /// not run in production can be gated behind a check for this flag as an
@@ -777,6 +788,7 @@ impl Governance {
             closest_proposal_deadline_timestamp_seconds: 0,
             latest_gc_timestamp_seconds: 0,
             latest_gc_num_proposals: 0,
+            upgrade_periodic_task_lock: None,
             test_features_enabled: false,
         };
 
@@ -938,15 +950,11 @@ impl Governance {
 
     /// Releases the lock on a given neuron.
     pub(crate) fn unlock_neuron(&mut self, id: &str) {
-        match self.proto.in_flight_commands.remove(id) {
-            None => {
-                log!(ERROR,
-                    "Unexpected condition when unlocking neuron {}: the neuron was not registered as 'in flight'",
-                    id
-                );
-            }
-            // This is the expected case...
-            Some(_) => (),
+        if self.proto.in_flight_commands.remove(id).is_none() {
+            log!(ERROR,
+                "Unexpected condition when unlocking neuron {}: the neuron was not registered as 'in flight'",
+                id
+            );
         }
     }
 
@@ -2061,11 +2069,12 @@ impl Governance {
                 // If the upgrade returned `Ok(true)` that means the upgrade completed successfully
                 // and the proposal can be marked as "executed". If the upgrade returned `Ok(false)`
                 // that means the upgrade has successfully been kicked-off asynchronously, but not
-                // completed. Governance's heartbeat logic will continuously check the status of the
-                // upgrade and mark the proposal as either executed or failed. So we call `return`
-                // in the `Ok(false)` branch so that `set_proposal_execution_status` doesn't get
-                // called and set the proposal status prematurely. If the result is `Err`, we do
-                // want to set the proposal status, and passing the value through is sufficient.
+                // completed. Governance's run_periodic_tasks logic will continuously check
+                // the status of the upgrade and mark the proposal as either executed or failed.
+                // So we call `return` in the `Ok(false)` branch so that
+                // `set_proposal_execution_status` doesn't get called and set the proposal status
+                // prematurely. If the result is `Err`, we do want to set the proposal status,
+                // and passing the value through is sufficient.
                 match upgrade_sns_result {
                     Ok(true) => Ok(()),
                     Ok(false) => return,
@@ -2587,7 +2596,8 @@ impl Governance {
         }
 
         // A canister upgrade has been successfully kicked-off. Set the pending upgrade-in-progress
-        // field so that Governance's heartbeat logic can check on the status of this upgrade.
+        // field so that Governance's run_periodic_tasks logic can check on the status of
+        // this upgrade.
         self.proto.pending_version = Some(UpgradeInProgress {
             target_version: Some(next_version),
             mark_failed_at_seconds: self.env.now() + 5 * 60,
@@ -3035,7 +3045,7 @@ impl Governance {
             self.proto.ledger_canister_id_or_panic(),
             self.env.canister_id(),
             // TODO add ledger archives
-            // TODO add sale (swap) canister here?
+            // TODO add swap canister here?
         };
 
         self.mode().allows_proposal_action_or_err(
@@ -4620,19 +4630,35 @@ impl Governance {
     }
 
     /// Runs periodic tasks that are not directly triggered by user input.
-    pub async fn heartbeat(&mut self) {
+    pub async fn run_periodic_tasks(&mut self) {
         use ic_cdk::println;
 
         self.process_proposals();
 
-        if self.should_check_upgrade_status() {
-            self.check_upgrade_status().await;
+        // None of the upgrade-related tasks should interleave with one another or themselves, so we acquire a global
+        // lock for the duration of their execution. This will return `false` if the lock has already been acquired less
+        // than 10 minutes ago by a previous invocation of `run_periodic_tasks`, in which case we skip the
+        // upgrade-related tasks.
+        if self.acquire_upgrade_periodic_task_lock() {
+            // We only want to check the upgrade status if we are currently executing an upgrade.
+            if self.should_check_upgrade_status() {
+                self.check_upgrade_status().await;
+            }
+
+            if self.should_refresh_cached_upgrade_steps() {
+                // We only want to refresh the cached_upgrade_steps every UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS
+                // seconds, so we first lock the refresh operation (which will automatically unlock after that interval)
+                self.temporarily_lock_refresh_cached_upgrade_steps();
+                self.refresh_cached_upgrade_steps().await;
+            }
+
+            self.release_upgrade_periodic_task_lock();
         }
 
         let should_distribute_rewards = self.should_distribute_rewards();
 
         // Getting the total governance token supply from the ledger is expensive enough
-        // that we don't want to do it on every call to `heartbeat`. So
+        // that we don't want to do it on every call to `run_periodic_tasks`. So
         // we only fetch it when it's needed, which is when rewards should be
         // distributed
         if should_distribute_rewards {
@@ -4658,22 +4684,41 @@ impl Governance {
         self.maybe_move_staked_maturity();
 
         self.maybe_gc();
+    }
 
-        if self.should_refresh_cached_upgrade_steps() {
-            self.temporarily_lock_refresh_cached_upgrade_steps();
-            self.refresh_cached_upgrade_steps().await;
+    // Acquires the "upgrade periodic task lock" (a lock shared between all periodic tasks that relate to upgrades)
+    // if it is currently released or was last acquired over UPGRADE_PERIODIC_TASK_LOCK_TIMEOUT_SECONDS ago.
+    fn acquire_upgrade_periodic_task_lock(&mut self) -> bool {
+        let now = self.env.now();
+        match self.upgrade_periodic_task_lock {
+            Some(time_acquired)
+                if now
+                    > time_acquired.saturating_add(UPGRADE_PERIODIC_TASK_LOCK_TIMEOUT_SECONDS) =>
+            {
+                self.upgrade_periodic_task_lock = Some(now);
+                true
+            }
+            Some(_) => false,
+            None => {
+                self.upgrade_periodic_task_lock = Some(now);
+                true
+            }
         }
     }
 
+    fn release_upgrade_periodic_task_lock(&mut self) {
+        self.upgrade_periodic_task_lock = None;
+    }
+
     pub fn temporarily_lock_refresh_cached_upgrade_steps(&mut self) {
-        if let Some(ref mut cached_upgrade_steps) = self.proto.cached_upgrade_steps {
-            cached_upgrade_steps.requested_timestamp_seconds = Some(self.env.now());
-        } else {
-            self.proto.cached_upgrade_steps = Some(CachedUpgradeSteps {
-                requested_timestamp_seconds: Some(self.env.now()),
-                ..Default::default()
-            });
-        }
+        let upgrade_steps =
+            self.proto
+                .cached_upgrade_steps
+                .get_or_insert_with(|| CachedUpgradeSteps {
+                    requested_timestamp_seconds: Some(self.env.now()),
+                    ..Default::default()
+                });
+        upgrade_steps.requested_timestamp_seconds = Some(self.env.now());
     }
 
     pub fn should_refresh_cached_upgrade_steps(&mut self) -> bool {
@@ -4724,21 +4769,40 @@ impl Governance {
             versions: upgrade_steps,
         };
 
-        // The following code must remain after the async call.
-        if let Some(ref mut cached_upgrade_steps) = self.proto.cached_upgrade_steps {
-            cached_upgrade_steps.response_timestamp_seconds = Some(self.env.now());
-            cached_upgrade_steps.upgrade_steps = Some(upgrade_steps);
+        // Ensure `cached_upgrade_steps` is initialized
+        let cached_upgrade_steps = self
+            .proto
+            .cached_upgrade_steps
+            .get_or_insert_with(Default::default);
+
+        // Update `response_timestamp_seconds`
+        cached_upgrade_steps.response_timestamp_seconds = Some(self.env.now());
+
+        // Refresh the upgrade steps if they have changed
+        if cached_upgrade_steps.upgrade_steps != Some(upgrade_steps.clone()) {
+            cached_upgrade_steps.upgrade_steps = Some(upgrade_steps.clone());
+            self.push_to_upgrade_journal(upgrade_journal_entry::Event::UpgradeStepsRefreshed(
+                upgrade_journal_entry::UpgradeStepsRefreshed {
+                    upgrade_steps: Some(upgrade_steps),
+                },
+            ));
         }
-        // It's unlikely that cached_upgrade_steps is None, the caller is
-        // supposed to set the lock (by setting request_timestamp_seconds) before this function is called,
-        // and that requires cached_upgrade_steps != None.
-        // However, we handle it just in case.
-        else {
-            self.proto.cached_upgrade_steps = Some(CachedUpgradeSteps {
-                response_timestamp_seconds: Some(self.env.now()),
-                upgrade_steps: Some(upgrade_steps),
-                ..Default::default()
-            });
+    }
+
+    pub fn push_to_upgrade_journal(&mut self, event: upgrade_journal_entry::Event) {
+        let upgrade_journal_entry = UpgradeJournalEntry {
+            event: Some(event),
+            timestamp_seconds: Some(self.env.now()),
+        };
+        match self.proto.upgrade_journal {
+            None => {
+                self.proto.upgrade_journal = Some(UpgradeJournal {
+                    entries: vec![upgrade_journal_entry],
+                });
+            }
+            Some(ref mut journal) => {
+                journal.entries.push(upgrade_journal_entry);
+            }
         }
     }
 
@@ -4749,11 +4813,15 @@ impl Governance {
                 upgrade_steps: cached_upgrade_steps.upgrade_steps,
                 response_timestamp_seconds: cached_upgrade_steps.response_timestamp_seconds,
                 target_version: self.proto.target_version.clone(),
+                // TODO(NNS1-3416): Bound the size of the response.
+                upgrade_journal: self.proto.upgrade_journal.clone(),
             },
             None => GetUpgradeJournalResponse {
                 upgrade_steps: None,
                 response_timestamp_seconds: None,
                 target_version: None,
+                // TODO(NNS1-3416): Bound the size of the response.
+                upgrade_journal: self.proto.upgrade_journal.clone(),
             },
         }
     }
@@ -4887,7 +4955,7 @@ impl Governance {
         // This guard is needed, because we'll divide by this amount shortly.
         if round_duration_seconds == 0 {
             // This is important, but emitting this every time will be spammy, because this gets
-            // called during heartbeat.
+            // called during run_periodic_tasks.
             log!(
                 ERROR,
                 "round_duration_seconds ({}) is not positive. \
@@ -7469,7 +7537,7 @@ mod tests {
         // Assert that the rewards should not be distributed, and trigger the periodic tasks to
         // try to distribute them.
         assert!(!governance.should_distribute_rewards());
-        governance.heartbeat().now_or_never();
+        governance.run_periodic_tasks().now_or_never();
 
         // Get the latest reward event and assert that its equal to the initial reward event. This
         // puts governance in the state that the OC-SNS was in for NNS1-2105.
@@ -7506,11 +7574,11 @@ mod tests {
             current_version.into()
         );
 
-        // Check that both conditions in `heartbeat` will be triggered on this heartbeat
+        // Check that both conditions in `run_periodic_tasks` will be triggered on this instance.
         // and run the tasks.
         assert!(governance.should_distribute_rewards());
         assert!(governance.should_check_upgrade_status());
-        governance.heartbeat().now_or_never();
+        governance.run_periodic_tasks().now_or_never();
 
         // These asserts would fail before the change in NNS1-2105. Now, even though
         // there was an attempt to distribute rewards, the status of the upgrade was still checked.
@@ -7597,7 +7665,7 @@ mod tests {
         );
         // After we run our periodic tasks, the version should be marked as failed because of time
         // constraint.
-        governance.heartbeat().now_or_never();
+        governance.run_periodic_tasks().now_or_never();
 
         // A failed deployment is when pending is erased but deployed_version is not updated.
         assert!(governance.proto.pending_version.is_none());
@@ -7703,7 +7771,7 @@ mod tests {
             current_version.into()
         );
         // After we run our periodic tasks, the version should be marked as successful
-        governance.heartbeat().now_or_never();
+        governance.run_periodic_tasks().now_or_never();
 
         assert!(governance.proto.pending_version.is_none());
         assert_eq!(
@@ -7828,7 +7896,7 @@ mod tests {
             current_version.into()
         );
         // After we run our periodic tasks, the version should be marked as successful
-        governance.heartbeat().now_or_never();
+        governance.run_periodic_tasks().now_or_never();
 
         // We still have pending version
         assert_eq!(
@@ -7961,7 +8029,7 @@ mod tests {
             current_version.into()
         );
         // After we run our periodic tasks, the version should be marked as successful
-        governance.heartbeat().now_or_never();
+        governance.run_periodic_tasks().now_or_never();
 
         assert!(governance.proto.pending_version.is_none());
         assert_ne!(
@@ -8080,7 +8148,7 @@ mod tests {
         );
 
         // After we run our periodic tasks, the version should be marked as successful
-        governance.heartbeat().now_or_never();
+        governance.run_periodic_tasks().now_or_never();
 
         assert!(governance.proto.pending_version.is_none());
         assert_ne!(
@@ -8206,7 +8274,7 @@ mod tests {
 
         assert_eq!(governance.proto.deployed_version, None);
         // After we run our periodic tasks, the version should be marked as successful
-        governance.heartbeat().now_or_never();
+        governance.run_periodic_tasks().now_or_never();
 
         assert!(governance.proto.pending_version.is_none());
         // This is set to the running version to avoid non-recoverable state
@@ -8239,6 +8307,59 @@ mod tests {
                 )
             )
         );
+    }
+
+    #[test]
+    fn test_upgrade_periodic_task_lock() {
+        let env = NativeEnvironment::new(Some(*TEST_GOVERNANCE_CANISTER_ID));
+        let mut gov = Governance::new(
+            basic_governance_proto().try_into().unwrap(),
+            Box::new(env),
+            Box::new(DoNothingLedger {}),
+            Box::new(DoNothingLedger {}),
+            Box::new(FakeCmc::new()),
+        );
+
+        // The lock is initially None
+        assert!(gov.upgrade_periodic_task_lock.is_none());
+
+        // Test acquiring it
+        assert!(gov.acquire_upgrade_periodic_task_lock());
+        assert!(gov.upgrade_periodic_task_lock.is_some()); // the lock is now engaged
+        assert!(!gov.acquire_upgrade_periodic_task_lock()); // acquiring it twice fails
+        assert!(!gov.acquire_upgrade_periodic_task_lock()); // acquiring it a third time fails
+        assert!(gov.upgrade_periodic_task_lock.is_some()); // the lock is still engaged
+
+        // Test releasing it
+        gov.release_upgrade_periodic_task_lock();
+        assert!(gov.upgrade_periodic_task_lock.is_none());
+
+        // Releasing twice is fine
+        gov.release_upgrade_periodic_task_lock();
+        assert!(gov.upgrade_periodic_task_lock.is_none());
+    }
+
+    #[test]
+    fn test_upgrade_periodic_task_lock_times_out() {
+        let env = NativeEnvironment::new(Some(*TEST_GOVERNANCE_CANISTER_ID));
+        let mut gov = Governance::new(
+            basic_governance_proto().try_into().unwrap(),
+            Box::new(env),
+            Box::new(DoNothingLedger {}),
+            Box::new(DoNothingLedger {}),
+            Box::new(FakeCmc::new()),
+        );
+
+        assert!(gov.acquire_upgrade_periodic_task_lock());
+        assert!(!gov.acquire_upgrade_periodic_task_lock());
+        assert!(gov.upgrade_periodic_task_lock.is_some());
+
+        // advance time
+        gov.env.set_time_warp(TimeWarp {
+            delta_s: UPGRADE_PERIODIC_TASK_LOCK_TIMEOUT_SECONDS as i64 + 1,
+        });
+        assert!(gov.acquire_upgrade_periodic_task_lock()); // The lock should successfully be acquired, since the previous one timed out
+        assert!(!gov.acquire_upgrade_periodic_task_lock());
     }
 
     #[test]
@@ -8314,7 +8435,7 @@ mod tests {
             current_version.into()
         );
         // After we run our periodic tasks, the version should succeed
-        governance.heartbeat().now_or_never();
+        governance.run_periodic_tasks().now_or_never();
 
         assert!(governance.proto.pending_version.is_none());
         assert_eq!(
@@ -8392,7 +8513,7 @@ mod tests {
             current_version.into()
         );
         // After we run our periodic tasks, the version should be marked as successful
-        governance.heartbeat().now_or_never();
+        governance.run_periodic_tasks().now_or_never();
 
         assert!(governance.proto.pending_version.is_none());
         assert_eq!(

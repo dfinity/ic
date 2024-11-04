@@ -1,3 +1,4 @@
+#![allow(clippy::test_attr_in_doctest)]
 //! # PocketIC: A Canister Testing Platform
 //!
 //! PocketIC is the local canister smart contract testing platform for the [Internet Computer](https://internetcomputer.org/).
@@ -6,9 +7,9 @@
 //!
 //! With PocketIC, testing canisters is as simple as calling rust functions. Here is a minimal example:
 //!
-//! ```rust,no_run
-//! use candid::encode_one;
-//! use pocket_ic::PocketIc;
+//! ```rust
+//! use candid::{Principal, encode_one};
+//! use pocket_ic::{WasmResult, PocketIc};
 //!
 //!  #[test]
 //!  fn test_counter_canister() {
@@ -17,7 +18,7 @@
 //!     let canister_id = pic.create_canister();
 //!     pic.add_cycles(canister_id, 2_000_000_000_000);
 //!  
-//!     let wasm_bytes = load_counter_wasm(...);
+//!     let wasm_bytes = todo!();
 //!     pic.install_canister(canister_id, wasm_bytes, vec![], None);
 //!     // 'inc' is a counter canister method.
 //!     call_counter_canister(&pic, canister_id, "inc");
@@ -26,46 +27,51 @@
 //!     assert_eq!(reply, WasmResult::Reply(vec![0, 0, 0, 1]));
 //!  }
 //!
-//! fn call_counter_canister(pic: &PocketIc, canister_id: CanisterId, method: &str) -> WasmResult {
+//! fn call_counter_canister(pic: &PocketIc, canister_id: Principal, method: &str) -> WasmResult {
 //!     pic.update_call(canister_id, Principal::anonymous(), method, encode_one(()).unwrap())
 //!         .expect("Failed to call counter canister")
 //! }
 //! ```
 //! For more information, see the [README](https://crates.io/crates/pocket-ic).
 //!
-use crate::common::rest::{
-    BlobCompression, BlobId, CanisterHttpRequest, DtsFlag, ExtendedSubnetConfigSet, HttpsConfig,
-    InstanceId, MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId, SubnetId,
-    SubnetKind, SubnetSpec, Topology,
+pub use crate::management_canister::CanisterSettings;
+use crate::{
+    common::rest::{
+        BlobCompression, BlobId, CanisterHttpRequest, DtsFlag, ExtendedSubnetConfigSet,
+        HttpsConfig, InstanceId, MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId,
+        SubnetId, SubnetKind, SubnetSpec, Topology,
+    },
+    management_canister::{CanisterId, CanisterStatusResult},
+    nonblocking::PocketIc as PocketIcAsync,
 };
-use crate::nonblocking::PocketIc as PocketIcAsync;
 use candid::{
     decode_args, encode_args,
     utils::{ArgumentDecoder, ArgumentEncoder},
     Principal,
 };
-pub use ic_cdk::api::management_canister::main::CanisterSettings;
-use ic_cdk::api::management_canister::main::{CanisterId, CanisterStatusResponse};
 use ic_transport_types::SubnetMetrics;
 use reqwest::Url;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use slog::Level;
-use std::sync::mpsc::channel;
-use std::thread;
-use std::thread::JoinHandle;
 use std::{
     net::SocketAddr,
     path::{Path, PathBuf},
     process::Command,
-    sync::Arc,
+    sync::{mpsc::channel, Arc},
+    thread,
+    thread::JoinHandle,
     time::{Duration, SystemTime},
 };
+use strum_macros::EnumIter;
 use thiserror::Error;
 use tokio::runtime::Runtime;
 use tracing::{instrument, warn};
+#[cfg(windows)]
+use wslpath::windows_to_wsl;
 
 pub mod common;
+pub mod management_canister;
 pub mod nonblocking;
 
 const EXPECTED_SERVER_VERSION: &str = "pocket-ic-server 6.0.0";
@@ -82,7 +88,7 @@ pub struct PocketIcBuilder {
     state_dir: Option<PathBuf>,
     nonmainnet_features: bool,
     log_level: Option<Level>,
-    bitcoind_addr: Option<SocketAddr>,
+    bitcoind_addr: Option<Vec<SocketAddr>>,
 }
 
 #[allow(clippy::new_without_default)]
@@ -159,7 +165,7 @@ impl PocketIcBuilder {
 
     pub fn with_bitcoind_addr(self, bitcoind_addr: SocketAddr) -> Self {
         Self {
-            bitcoind_addr: Some(bitcoind_addr),
+            bitcoind_addr: Some(vec![bitcoind_addr]),
             ..self
         }
     }
@@ -192,13 +198,11 @@ impl PocketIcBuilder {
     /// `nns_subnet_id` should be the subnet ID of the NNS subnet in the state under
     /// `path_to_state`, e.g.:
     /// ```rust
-    /// PrincipalId(
-    ///     candid::Principal::from_text(
-    ///         "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe",
-    ///     )
-    ///     .unwrap(),
-    /// )
-    /// .into();
+    /// use pocket_ic::common::rest::SubnetId;
+    ///
+    /// let nns_subnet_id: SubnetId = candid::Principal::from_text(
+    ///     "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe",
+    /// ).unwrap().into();
     /// ```
     ///
     /// The value can be obtained, e.g., via the following command:
@@ -356,7 +360,7 @@ impl PocketIc {
         state_dir: Option<PathBuf>,
         nonmainnet_features: bool,
         log_level: Option<Level>,
-        bitcoind_addr: Option<SocketAddr>,
+        bitcoind_addr: Option<Vec<SocketAddr>>,
     ) -> Self {
         let (tx, rx) = channel();
         let thread = thread::spawn(move || {
@@ -668,7 +672,7 @@ impl PocketIc {
         &self,
         canister_id: CanisterId,
         sender: Option<Principal>,
-    ) -> Result<CanisterStatusResponse, CallError> {
+    ) -> Result<CanisterStatusResult, CallError> {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.canister_status(canister_id, sender).await })
     }
@@ -1104,7 +1108,18 @@ pub enum TryFromError {
 /// code and the rest is just a sequentially assigned two-digit
 /// number.
 #[derive(
-    PartialOrd, Ord, Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema,
+    PartialOrd,
+    Ord,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    EnumIter,
 )]
 pub enum ErrorCode {
     // 1xx -- `RejectCode::SysFatal`
@@ -1120,13 +1135,11 @@ pub enum ErrorCode {
     CanisterOutOfCycles = 207,
     CertifiedStateUnavailable = 208,
     CanisterInstallCodeRateLimited = 209,
+    CanisterHeapDeltaRateLimited = 210,
     // 3xx -- `RejectCode::DestinationInvalid`
     CanisterNotFound = 301,
-    // 302 (previously `CanisterMethodNotFound`)
-    // 303 (previously `CanisterAlreadyInstalled`)
-    // 304 (previously `CanisterWasmModuleNotFound`)
+    CanisterSnapshotNotFound = 305,
     // 4xx -- `RejectCode::CanisterReject`
-    // 401
     InsufficientMemoryAllocation = 402,
     InsufficientCyclesForCreateCanister = 403,
     SubnetNotFound = 404,
@@ -1135,7 +1148,6 @@ pub enum ErrorCode {
     UnknownManagementMessage = 407,
     InvalidManagementPayload = 408,
     // 5xx -- `RejectCode::CanisterError`
-    // 501 (previously `CanisterOutOfCycles`)
     CanisterTrapped = 502,
     CanisterCalledTrap = 503,
     CanisterContractViolation = 504,
@@ -1149,15 +1161,10 @@ pub enum ErrorCode {
     CanisterInvalidController = 512,
     CanisterFunctionNotFound = 513,
     CanisterNonEmpty = 514,
-    // 515 (previously `CertifiedStateUnavailable`)
-    // 516 (previously `CanisterRejectedMessage`)
     QueryCallGraphLoopDetected = 517,
-    // 518 (previously `UnknownManagementMessage`)
-    // 519 (previously `InvalidManagementPayload`)
     InsufficientCyclesInCall = 520,
     CanisterWasmEngineError = 521,
     CanisterInstructionLimitExceeded = 522,
-    // 523 (previously `CanisterInstallCodeRateLimited`)
     CanisterMemoryAccessLimitExceeded = 524,
     QueryCallGraphTooDeep = 525,
     QueryCallGraphTotalInstructionLimitExceeded = 526,
@@ -1173,6 +1180,11 @@ pub enum ErrorCode {
     CanisterMethodNotFound = 536,
     CanisterWasmModuleNotFound = 537,
     CanisterAlreadyInstalled = 538,
+    CanisterWasmMemoryLimitExceeded = 539,
+    ReservedCyclesLimitIsTooLow = 540,
+    // 6xx -- `RejectCode::SysUnknown`
+    DeadlineExpired = 601,
+    ResponseDropped = 602,
 }
 
 impl TryFrom<u64> for ErrorCode {
@@ -1192,14 +1204,11 @@ impl TryFrom<u64> for ErrorCode {
             207 => Ok(ErrorCode::CanisterOutOfCycles),
             208 => Ok(ErrorCode::CertifiedStateUnavailable),
             209 => Ok(ErrorCode::CanisterInstallCodeRateLimited),
+            210 => Ok(ErrorCode::CanisterHeapDeltaRateLimited),
             // 3xx -- `RejectCode::DestinationInvalid`
             301 => Ok(ErrorCode::CanisterNotFound),
-            // TODO: RUN-948: Backward compatibility
-            302 => Ok(ErrorCode::CanisterMethodNotFound),
-            303 => Ok(ErrorCode::CanisterAlreadyInstalled),
-            304 => Ok(ErrorCode::CanisterWasmModuleNotFound),
+            305 => Ok(ErrorCode::CanisterSnapshotNotFound),
             // 4xx -- `RejectCode::CanisterReject`
-            // 401
             402 => Ok(ErrorCode::InsufficientMemoryAllocation),
             403 => Ok(ErrorCode::InsufficientCyclesForCreateCanister),
             404 => Ok(ErrorCode::SubnetNotFound),
@@ -1208,7 +1217,6 @@ impl TryFrom<u64> for ErrorCode {
             407 => Ok(ErrorCode::UnknownManagementMessage),
             408 => Ok(ErrorCode::InvalidManagementPayload),
             // 5xx -- `RejectCode::CanisterError`
-            // 501 (previously `CanisterOutOfCycles`)
             502 => Ok(ErrorCode::CanisterTrapped),
             503 => Ok(ErrorCode::CanisterCalledTrap),
             504 => Ok(ErrorCode::CanisterContractViolation),
@@ -1222,16 +1230,10 @@ impl TryFrom<u64> for ErrorCode {
             512 => Ok(ErrorCode::CanisterInvalidController),
             513 => Ok(ErrorCode::CanisterFunctionNotFound),
             514 => Ok(ErrorCode::CanisterNonEmpty),
-            // TODO: RUN-948: Backward compatibility
-            515 => Ok(ErrorCode::CertifiedStateUnavailable),
-            516 => Ok(ErrorCode::CanisterRejectedMessage),
             517 => Ok(ErrorCode::QueryCallGraphLoopDetected),
-            518 => Ok(ErrorCode::UnknownManagementMessage),
-            519 => Ok(ErrorCode::InvalidManagementPayload),
             520 => Ok(ErrorCode::InsufficientCyclesInCall),
             521 => Ok(ErrorCode::CanisterWasmEngineError),
             522 => Ok(ErrorCode::CanisterInstructionLimitExceeded),
-            523 => Ok(ErrorCode::CanisterInstallCodeRateLimited),
             524 => Ok(ErrorCode::CanisterMemoryAccessLimitExceeded),
             525 => Ok(ErrorCode::QueryCallGraphTooDeep),
             526 => Ok(ErrorCode::QueryCallGraphTotalInstructionLimitExceeded),
@@ -1247,6 +1249,11 @@ impl TryFrom<u64> for ErrorCode {
             536 => Ok(ErrorCode::CanisterMethodNotFound),
             537 => Ok(ErrorCode::CanisterWasmModuleNotFound),
             538 => Ok(ErrorCode::CanisterAlreadyInstalled),
+            539 => Ok(ErrorCode::CanisterWasmMemoryLimitExceeded),
+            540 => Ok(ErrorCode::ReservedCyclesLimitIsTooLow),
+            // 6xx -- `RejectCode::SysUnknown`
+            601 => Ok(ErrorCode::DeadlineExpired),
+            602 => Ok(ErrorCode::ResponseDropped),
             _ => Err(TryFromError::ValueOutOfRange(err)),
         }
     }
@@ -1297,15 +1304,36 @@ pub enum WasmResult {
     Reject(String),
 }
 
+#[cfg(windows)]
+fn wsl_path(path: &std::ffi::OsStr, desc: &str) -> String {
+    windows_to_wsl(
+        path.to_str()
+            .unwrap_or_else(|| panic!("Could not convert {} path ({:?}) to String", desc, path)),
+    )
+    .unwrap_or_else(|e| {
+        panic!(
+            "Could not convert {} path ({:?}) to WSL path: {:?}",
+            desc, path, e
+        )
+    })
+}
+
+#[cfg(windows)]
+fn pocket_ic_server_cmd(bin_path: &std::ffi::OsStr) -> Command {
+    let mut cmd = Command::new("wsl");
+    cmd.arg(wsl_path(bin_path, "PocketIC binary"));
+    cmd
+}
+
+#[cfg(not(windows))]
+fn pocket_ic_server_cmd(bin_path: &std::ffi::OsStr) -> Command {
+    Command::new(bin_path)
+}
+
 /// Attempt to start a new PocketIC server if it's not already running.
 pub fn start_or_reuse_server() -> Url {
-    let bin_path = match std::env::var_os("POCKET_IC_BIN") {
-        None => "./pocket-ic".to_string(),
-        Some(path) => path
-            .clone()
-            .into_string()
-            .unwrap_or_else(|_| panic!("Invalid string path for {path:?}")),
-    };
+    let bin_path: std::ffi::OsString =
+        std::env::var_os("POCKET_IC_BIN").unwrap_or("./pocket-ic".into());
 
     if !Path::new(&bin_path).is_file() {
         let is_dir = if Path::new(&bin_path).is_dir() {
@@ -1324,13 +1352,13 @@ To download the binary, please visit https://github.com/dfinity/pocketic."
     }
 
     // check PocketIC server version compatibility
-    let mut cmd = Command::new(PathBuf::from(bin_path.clone()));
+    let mut cmd = pocket_ic_server_cmd(&bin_path);
     cmd.arg("--version");
     let version = cmd
         .output()
         .unwrap_or_else(|e| {
             panic!(
-                "Failed to get version of PocketIC binary ({}): {}",
+                "Failed to get version of PocketIC binary ({:?}): {}",
                 bin_path, e
             )
         })
@@ -1349,14 +1377,23 @@ To download the binary, please visit https://github.com/dfinity/pocketic."
     // launched by the same test driver.
     let test_driver_pid = std::process::id();
     let port_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.port", test_driver_pid));
-    let mut cmd = Command::new(PathBuf::from(bin_path.clone()));
-    cmd.arg("--pid").arg(test_driver_pid.to_string());
-    if std::env::var("POCKET_IC_MUTE_SERVER").is_ok() {
-        cmd.stdout(std::process::Stdio::null());
-        cmd.stderr(std::process::Stdio::null());
+    let mut cmd = pocket_ic_server_cmd(&bin_path);
+    cmd.arg("--port-file");
+    #[cfg(windows)]
+    cmd.arg(wsl_path(
+        port_file_path.as_path().as_os_str(),
+        "PocketIC port file",
+    ));
+    #[cfg(not(windows))]
+    cmd.arg(port_file_path.clone());
+    if let Ok(mute_server) = std::env::var("POCKET_IC_MUTE_SERVER") {
+        if !mute_server.is_empty() {
+            cmd.stdout(std::process::Stdio::null());
+            cmd.stderr(std::process::Stdio::null());
+        }
     }
     cmd.spawn()
-        .unwrap_or_else(|_| panic!("Failed to start PocketIC binary ({})", bin_path));
+        .unwrap_or_else(|_| panic!("Failed to start PocketIC binary ({:?})", bin_path));
 
     loop {
         if let Ok(port_string) = std::fs::read_to_string(port_file_path.clone()) {
@@ -1405,4 +1442,31 @@ pub fn get_default_effective_canister_id(
     runtime.block_on(crate::nonblocking::get_default_effective_canister_id(
         pocket_ic_url,
     ))
+}
+
+#[cfg(test)]
+mod test {
+    use crate::ErrorCode;
+    use strum::IntoEnumIterator;
+
+    #[test]
+    fn error_code_round_trip() {
+        for initial in ErrorCode::iter() {
+            let round_trip = ErrorCode::try_from(initial as u64).unwrap();
+
+            assert_eq!(initial, round_trip);
+        }
+    }
+
+    #[test]
+    fn error_code_matches_ic_error_code() {
+        assert_eq!(
+            ErrorCode::iter().len(),
+            ic_error_types::ErrorCode::iter().len()
+        );
+        for ic_error_code in ic_error_types::ErrorCode::iter() {
+            let error_code: ErrorCode = (ic_error_code as u64).try_into().unwrap();
+            assert_eq!(format!("{:?}", error_code), format!("{:?}", ic_error_code));
+        }
+    }
 }

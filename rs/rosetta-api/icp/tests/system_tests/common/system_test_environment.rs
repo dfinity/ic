@@ -1,5 +1,6 @@
 use crate::common::utils::get_custom_agent;
-use crate::common::utils::wait_for_rosetta_to_sync_up_to_block;
+use crate::common::utils::get_test_agent;
+use crate::common::utils::wait_for_rosetta_to_catch_up_with_icp_ledger;
 use crate::common::{
     constants::{DEFAULT_INITIAL_BALANCE, STARTING_CYCLES_PER_CANISTER},
     utils::test_identity,
@@ -16,12 +17,16 @@ use ic_icrc1_test_utils::LedgerEndpointArg;
 use ic_icrc1_tokens_u256::U256;
 use ic_ledger_test_utils::build_ledger_wasm;
 use ic_ledger_test_utils::pocket_ic_helpers::ledger::LEDGER_CANISTER_ID;
+use ic_nns_common::init::LifelineCanisterInitPayloadBuilder;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_constants::LIFELINE_CANISTER_ID;
+use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_nns_constants::ROOT_CANISTER_ID;
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_nns_handler_root::init::RootCanisterInitPayloadBuilder;
 use ic_nns_test_utils::common::build_governance_wasm;
+use ic_nns_test_utils::common::build_lifeline_wasm;
+use ic_nns_test_utils::common::build_registry_wasm;
 use ic_nns_test_utils::common::build_root_wasm;
 use ic_rosetta_test_utils::path_from_env;
 use ic_types::PrincipalId;
@@ -32,6 +37,7 @@ use num_traits::cast::ToPrimitive;
 use pocket_ic::CanisterSettings;
 use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder};
 use prost::Message;
+use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 use rosetta_core::identifiers::NetworkIdentifier;
 use std::collections::HashMap;
 use tempfile::TempDir;
@@ -132,14 +138,6 @@ impl RosettaTestingEnvironment {
     }
 
     pub async fn restart_rosetta_node(mut self, options: RosettaOptions) -> Self {
-        let ledger_tip = self
-            .rosetta_client
-            .network_status(self.network_identifier.clone())
-            .await
-            .unwrap()
-            .current_block_identifier
-            .index;
-
         self.rosetta_context.kill_rosetta_process();
 
         let rosetta_bin = path_from_env("ROSETTA_BIN_PATH");
@@ -149,13 +147,12 @@ impl RosettaTestingEnvironment {
         self.rosetta_client =
             RosettaClient::from_str_url(&format!("http://localhost:{}", self.rosetta_context.port))
                 .expect("Unable to parse url");
-        wait_for_rosetta_to_sync_up_to_block(
+        wait_for_rosetta_to_catch_up_with_icp_ledger(
             &self.rosetta_client,
             self.network_identifier.clone(),
-            ledger_tip,
+            &get_test_agent(self.pocket_ic.url().unwrap().port().unwrap()).await,
         )
-        .await
-        .unwrap();
+        .await;
         self
     }
 }
@@ -280,7 +277,9 @@ impl RosettaTestingEnvironmentBuilder {
                     Some(nns_root_canister_controller),
                 )
                 .await;
-
+            pocket_ic
+                .add_cycles(nns_root_canister_id, STARTING_CYCLES_PER_CANISTER)
+                .await;
             let governance_canister_wasm = build_governance_wasm();
             let governance_canister_id = Principal::from(GOVERNANCE_CANISTER_ID);
             let governance_canister_controller = ROOT_CANISTER_ID.get().0;
@@ -316,6 +315,61 @@ impl RosettaTestingEnvironmentBuilder {
                 .advance_time(std::time::Duration::from_secs(60))
                 .await;
             pocket_ic.tick().await;
+
+            let nns_lifeline_canister_wasm = build_lifeline_wasm();
+            let nns_lifeline_canister_id = Principal::from(LIFELINE_CANISTER_ID);
+            let nns_lifeline_canister_controller = ROOT_CANISTER_ID.get().0;
+            let nns_lifeline_canister = pocket_ic
+                .create_canister_with_id(
+                    Some(nns_lifeline_canister_controller),
+                    Some(CanisterSettings {
+                        controllers: Some(vec![nns_lifeline_canister_controller]),
+                        ..Default::default()
+                    }),
+                    nns_lifeline_canister_id,
+                )
+                .await
+                .expect("Unable to create the NNS Lifeline canister");
+
+            pocket_ic
+                .install_canister(
+                    nns_lifeline_canister,
+                    nns_lifeline_canister_wasm.bytes().to_vec(),
+                    Encode!(&LifelineCanisterInitPayloadBuilder::new().build()).unwrap(),
+                    Some(nns_lifeline_canister_controller),
+                )
+                .await;
+            pocket_ic
+                .add_cycles(nns_lifeline_canister_id, STARTING_CYCLES_PER_CANISTER)
+                .await;
+
+            let nns_registry_canister_wasm = build_registry_wasm();
+            let nns_registry_canister_id = Principal::from(REGISTRY_CANISTER_ID);
+            let nns_registry_canister_controller = ROOT_CANISTER_ID.get().0;
+            let nns_registry_canister = pocket_ic
+                .create_canister_with_id(
+                    Some(nns_registry_canister_controller),
+                    Some(CanisterSettings {
+                        controllers: Some(vec![nns_registry_canister_controller]),
+                        ..Default::default()
+                    }),
+                    nns_registry_canister_id,
+                )
+                .await
+                .expect("Unable to create the NNS Registry canister");
+
+            pocket_ic
+                .install_canister(
+                    nns_registry_canister,
+                    nns_registry_canister_wasm.bytes().to_vec(),
+                    Encode!(&RegistryCanisterInitPayloadBuilder::new().build()).unwrap(),
+                    Some(nns_registry_canister_controller),
+                )
+                .await;
+
+            pocket_ic
+                .add_cycles(nns_registry_canister_id, STARTING_CYCLES_PER_CANISTER)
+                .await;
         }
 
         let replica_url = pocket_ic.make_live(None).await;
@@ -384,19 +438,12 @@ impl RosettaTestingEnvironmentBuilder {
             .unwrap();
 
         // Wait for rosetta to catch up with the ledger
-        if let Some(last_block_idx) = block_idxes.last() {
-            let rosetta_last_block_idx = wait_for_rosetta_to_sync_up_to_block(
-                &rosetta_client,
-                network_identifier.clone(),
-                *last_block_idx,
-            )
-            .await;
-            assert_eq!(
-                Some(*last_block_idx),
-                rosetta_last_block_idx,
-                "Wait for rosetta sync failed."
-            );
-        }
+        wait_for_rosetta_to_catch_up_with_icp_ledger(
+            &rosetta_client,
+            network_identifier.clone(),
+            &get_test_agent(replica_port).await,
+        )
+        .await;
 
         RosettaTestingEnvironment {
             pocket_ic,

@@ -290,7 +290,19 @@ type Governance = record {
   sns_metadata : opt ManageSnsMetadata;
   neurons : vec record { text; Neuron };
   genesis_timestamp_seconds : nat64;
-  target_version: opt Version;
+  target_version : opt Version;
+  timers : opt Timers;
+  upgrade_journal : opt UpgradeJournal;
+};
+
+type Timers = record {
+  requires_periodic_tasks : opt bool;
+  last_reset_timestamp_seconds : opt nat64;
+  last_spawned_timestamp_seconds : opt nat64;
+};
+
+type GetTimersResponse = record {
+  timers : opt Timers;
 };
 
 type GovernanceCachedMetrics = record {
@@ -708,12 +720,56 @@ type WaitForQuietState = record {
   current_deadline_timestamp_seconds : nat64;
 };
 
+type UpgradeJournalEntry = record {
+  event : opt variant {
+    UpgradeStepsRefreshed : UpgradeStepsRefreshed;
+    TargetVersionSet : TargetVersionSet;
+    TargetVersionReset : TargetVersionSet;
+    UpgradeStarted : UpgradeStarted;
+    UpgradeOutcome : UpgradeOutcome;
+  };
+  timestamp_seconds : opt nat64;
+};
+
+type UpgradeStepsRefreshed = record {
+  upgrade_steps : opt Versions;
+};
+
+type TargetVersionSet = record {
+  new_target_version : opt Version;
+  old_target_version : opt Version;
+};
+
+type UpgradeStarted = record {
+  current_version : opt Version;
+  expected_version : opt Version;
+  reason : opt variant {
+    UpgradeSnsToNextVersionProposal : ProposalId;
+    BehindTargetVersion : record {};
+  }
+};
+
+type UpgradeOutcome = record {
+  human_readable : opt text;
+  status : opt variant {
+    Success : record {};
+    Timeout : record {};
+    InvalidState : record { version : opt Version };
+    ExternalFailure : record {};
+  };
+};
+
+type UpgradeJournal = record {
+  entries : vec UpgradeJournalEntry;
+};
+
 type GetUpgradeJournalRequest = record {};
 
 type GetUpgradeJournalResponse = record {
   upgrade_steps : opt Versions;
   response_timestamp_seconds : opt nat64;
   target_version : opt Version;
+  upgrade_journal : opt UpgradeJournal;
 };
 
 service : (Governance) -> {
@@ -729,15 +785,13 @@ service : (Governance) -> {
   get_proposal : (GetProposal) -> (GetProposalResponse) query;
   get_root_canister_status : (null) -> (CanisterStatusResultV2);
   get_running_sns_version : (record {}) -> (GetRunningSnsVersionResponse) query;
-  get_sns_initialization_parameters : (record {}) -> (
-      GetSnsInitializationParametersResponse,
-    ) query;
+  get_sns_initialization_parameters : (record {}) -> (GetSnsInitializationParametersResponse) query;
   get_upgrade_journal : (GetUpgradeJournalRequest) -> (GetUpgradeJournalResponse) query;
-  list_nervous_system_functions : () -> (
-      ListNervousSystemFunctionsResponse,
-    ) query;
+  list_nervous_system_functions : () -> (ListNervousSystemFunctionsResponse) query;
   list_neurons : (ListNeurons) -> (ListNeuronsResponse) query;
   list_proposals : (ListProposals) -> (ListProposalsResponse) query;
   manage_neuron : (ManageNeuron) -> (ManageNeuronResponse);
   set_mode : (SetMode) -> (record {});
+  reset_timers : (record {}) -> (record {});
+  get_timers : (record {}) -> (GetTimersResponse) query;
 }

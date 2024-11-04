@@ -33,8 +33,11 @@ use std::sync::Arc;
 mod common;
 use common::*;
 
+use ic_cycles_account_manager::WasmExecutionMode;
+
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1 << 30);
 const INITIAL_CYCLES: Cycles = Cycles::new(5_000_000_000_000);
+const WASM_EXECUTION_MODE: WasmExecutionMode = WasmExecutionMode::Wasm32;
 
 #[test]
 fn push_output_request_fails_not_enough_cycles_for_request() {
@@ -58,7 +61,7 @@ fn push_output_request_fails_not_enough_cycles_for_request() {
         NumSeconds::from(100_000),
     );
 
-    let mut sandbox_safe_system_state = SandboxSafeSystemState::new(
+    let mut sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
@@ -94,8 +97,8 @@ fn push_output_request_fails_not_enough_cycles_for_response() {
     let xnet_cost = cycles_account_manager.xnet_call_performed_fee(SMALL_APP_SUBNET_MAX_SIZE);
     let request_payload_cost = cycles_account_manager
         .xnet_call_bytes_transmitted_fee(request.payload_size_bytes(), SMALL_APP_SUBNET_MAX_SIZE);
-    let prepayment_for_response_execution =
-        cycles_account_manager.prepayment_for_response_execution(SMALL_APP_SUBNET_MAX_SIZE);
+    let prepayment_for_response_execution = cycles_account_manager
+        .prepayment_for_response_execution(SMALL_APP_SUBNET_MAX_SIZE, WASM_EXECUTION_MODE);
     let prepayment_for_response_transmission =
         cycles_account_manager.prepayment_for_response_transmission(SMALL_APP_SUBNET_MAX_SIZE);
     let total_cost = xnet_cost
@@ -112,7 +115,7 @@ fn push_output_request_fails_not_enough_cycles_for_response() {
         NumSeconds::from(100_000),
     );
 
-    let mut sandbox_safe_system_state = SandboxSafeSystemState::new(
+    let mut sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
@@ -149,7 +152,7 @@ fn push_output_request_succeeds_with_enough_cycles() {
     );
 
     let caller = None;
-    let mut sandbox_safe_system_state = SandboxSafeSystemState::new(
+    let mut sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
@@ -160,8 +163,8 @@ fn push_output_request_succeeds_with_enough_cycles() {
         None,
     );
 
-    let prepayment_for_response_execution =
-        cycles_account_manager.prepayment_for_response_execution(SMALL_APP_SUBNET_MAX_SIZE);
+    let prepayment_for_response_execution = cycles_account_manager
+        .prepayment_for_response_execution(SMALL_APP_SUBNET_MAX_SIZE, WASM_EXECUTION_MODE);
     let prepayment_for_response_transmission =
         cycles_account_manager.prepayment_for_response_transmission(SMALL_APP_SUBNET_MAX_SIZE);
 
@@ -200,7 +203,7 @@ fn correct_charging_source_canister_for_a_request() {
         .receiver(canister_test_id(1))
         .build();
 
-    let mut sandbox_safe_system_state = SandboxSafeSystemState::new(
+    let mut sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
@@ -214,8 +217,8 @@ fn correct_charging_source_canister_for_a_request() {
     let xnet_cost = cycles_account_manager.xnet_call_performed_fee(SMALL_APP_SUBNET_MAX_SIZE);
     let request_payload_cost = cycles_account_manager
         .xnet_call_bytes_transmitted_fee(request.payload_size_bytes(), SMALL_APP_SUBNET_MAX_SIZE);
-    let prepayment_for_response_execution =
-        cycles_account_manager.prepayment_for_response_execution(SMALL_APP_SUBNET_MAX_SIZE);
+    let prepayment_for_response_execution = cycles_account_manager
+        .prepayment_for_response_execution(SMALL_APP_SUBNET_MAX_SIZE, WASM_EXECUTION_MODE);
     let prepayment_for_response_transmission =
         cycles_account_manager.prepayment_for_response_transmission(SMALL_APP_SUBNET_MAX_SIZE);
     let total_cost = xnet_cost
@@ -347,7 +350,7 @@ fn is_controller_test() {
     system_state.controllers = BTreeSet::from([user_test_id(1).get(), user_test_id(2).get()]);
 
     let caller = None;
-    let sandbox_safe_system_state = SandboxSafeSystemState::new(
+    let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         CyclesAccountManagerBuilder::new().build(),
         &NetworkTopology::default(),
@@ -428,7 +431,7 @@ fn test_inter_canister_call(
         NumSeconds::from(100_000),
     );
 
-    let mut sandbox_safe_system_state = SandboxSafeSystemState::new(
+    let mut sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         cycles_account_manager,
         topo,
@@ -446,8 +449,8 @@ fn test_inter_canister_call(
         .method_payload(arg)
         .build();
 
-    let prepayment_for_response_execution =
-        cycles_account_manager.prepayment_for_response_execution(SMALL_APP_SUBNET_MAX_SIZE);
+    let prepayment_for_response_execution = cycles_account_manager
+        .prepayment_for_response_execution(SMALL_APP_SUBNET_MAX_SIZE, WASM_EXECUTION_MODE);
     let prepayment_for_response_transmission =
         cycles_account_manager.prepayment_for_response_transmission(SMALL_APP_SUBNET_MAX_SIZE);
 
