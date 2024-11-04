@@ -1,9 +1,8 @@
 mod client;
 mod metrics;
 
-pub use crate::client::{
-    grpc_status_code_to_reject, BrokenCanisterHttpClient, CanisterHttpAdapterClientImpl,
-};
+use crate::client::BrokenCanisterHttpClient;
+pub use crate::client::CanisterHttpAdapterClientImpl;
 use ic_adapter_metrics_client::AdapterMetrics;
 use ic_async_utils::ExecuteOnTokioRuntime;
 use ic_config::adapters::AdaptersConfig;
