@@ -1,5 +1,3 @@
-#![allow(clippy::unwrap_used)]
-
 use crate::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
 use crate::public_key_store::PublicKeyAddError;
 use crate::public_key_store::{PublicKeySetOnceError, PublicKeyStore};
