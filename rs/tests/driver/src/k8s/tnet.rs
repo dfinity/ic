@@ -471,6 +471,7 @@ spec:
             &k8s_client.api_vm,
             &vm_name.clone(),
             &vm_req.vcpus.to_string(),
+            &(vm_req.vcpus / 2).to_string(),
             &vm_req.memory_kibibytes.to_string(),
             &(vm_req.memory_kibibytes / 2).to_string(),
             ipv4,

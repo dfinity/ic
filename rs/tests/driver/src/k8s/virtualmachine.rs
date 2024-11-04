@@ -189,6 +189,7 @@ pub async fn create_vm(
     api: &Api<DynamicObject>,
     name: &str,
     cpus: &str,
+    cpus_request: &str,
     memory: &str,
     memory_request: &str,
     ipv4: Ipv4Addr,
@@ -210,6 +211,7 @@ pub async fn create_vm(
         .replace("{memory}", memory)
         .replace("{memory_request}", memory_request)
         .replace("{cpus}", cpus)
+        // .replace("{cpus_request}", cpus_request)
         .replace("{ipv4}", &ipv4.to_string())
         .replace("{ipv6}", &ipv6.to_string());
     let mut data: DynamicObject = serde_yaml::from_str(&yaml)?;
