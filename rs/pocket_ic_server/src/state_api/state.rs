@@ -2,7 +2,9 @@
 /// This module contains the core state of the PocketIc server.
 /// Axum handlers operate on a global state of type ApiState, whose
 /// interface guarantees consistency and determinism.
-use crate::pocket_ic::{AdvanceTimeAndTick, ApiResponse, EffectivePrincipal, PocketIc};
+use crate::pocket_ic::{
+    AdvanceTimeAndTick, ApiResponse, EffectivePrincipal, PocketIc, ProcessCanisterHttpInternal,
+};
 use crate::state_api::canister_id::{self, DomainResolver, ResolvesDomain};
 use crate::state_api::routes::verify_cbor_content_header;
 use crate::{InstanceId, OpId, Operation};
@@ -31,10 +33,7 @@ use hyper::{Request, Response as HyperResponse};
 use hyper_util::client::legacy::{connect::HttpConnector, Client};
 use ic_http_endpoints_public::cors_layer;
 use ic_http_gateway::{CanisterRequest, HttpGatewayClient, HttpGatewayRequestArgs};
-use ic_types::{
-    canister_http::{CanisterHttpRequest as AdapterCanisterHttpRequest, CanisterHttpRequestId},
-    CanisterId, SubnetId,
-};
+use ic_types::{canister_http::CanisterHttpRequestId, CanisterId, SubnetId};
 use pocket_ic::common::rest::{
     CanisterHttpRequest, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayDetails,
     HttpGatewayInfo, Topology,
@@ -42,12 +41,7 @@ use pocket_ic::common::rest::{
 use pocket_ic::{ErrorCode, UserError, WasmResult};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{BTreeSet, HashMap},
-    fmt,
-    path::PathBuf,
-    str::FromStr,
-    sync::atomic::AtomicU64,
-    sync::Arc,
+    collections::HashMap, fmt, path::PathBuf, str::FromStr, sync::atomic::AtomicU64, sync::Arc,
     time::Duration,
 };
 use tokio::{
@@ -1069,72 +1063,6 @@ impl ApiState {
         }
     }
 
-    async fn process_canister_http_requests(
-        instances: Arc<RwLock<Vec<Mutex<Instance>>>>,
-        instance_id: InstanceId,
-        rx: &mut Receiver<()>,
-    ) -> Option<()> {
-        loop {
-            let instances = instances.read().await;
-            let instance = instances[instance_id].lock().await;
-            if let InstanceState::Available(pocket_ic) = &instance.state {
-                for subnet in pocket_ic.subnets.get_all() {
-                    let sm = subnet.state_machine.clone();
-                    let mut canister_http = subnet.canister_http.lock().unwrap();
-                    let new_requests: Vec<_> = sm
-                        .canister_http_request_contexts()
-                        .into_iter()
-                        .filter(|(id, _)| !canister_http.pending.contains(id))
-                        .collect();
-                    let client = canister_http.client.clone();
-                    let mut client = client.lock().unwrap();
-                    for (id, context) in new_requests {
-                        if let Ok(()) = client.send(AdapterCanisterHttpRequest {
-                            timeout: context.time + Duration::from_secs(5 * 60),
-                            id,
-                            context,
-                        }) {
-                            canister_http.pending.insert(id);
-                        }
-                    }
-                    let mut received = BTreeSet::new();
-                    loop {
-                        match client.try_receive() {
-                            Err(_) => {
-                                break;
-                            }
-                            Ok(response) => {
-                                let canister_id = sm
-                                    .canister_http_request_contexts()
-                                    .get(&response.id)
-                                    .unwrap()
-                                    .request
-                                    .sender;
-                                received.insert(response.id);
-                                sm.mock_canister_http_response(
-                                    response.id.get(),
-                                    response.timeout,
-                                    canister_id,
-                                    vec![response.content; sm.nodes.len()],
-                                );
-                            }
-                        }
-                    }
-                    canister_http.pending.retain(|id| !received.contains(id));
-                    drop(client);
-                    drop(canister_http);
-                }
-                break Some(());
-            }
-            drop(instance);
-            drop(instances);
-            if received_stop_signal(rx) {
-                break None;
-            }
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-    }
-
     pub async fn auto_progress(
         &self,
         instance_id: InstanceId,
@@ -1165,9 +1093,12 @@ impl ApiState {
                     {
                         return;
                     }
-                    if Self::process_canister_http_requests(
+                    let op = ProcessCanisterHttpInternal;
+                    if Self::execute_operation(
                         instances_clone.clone(),
+                        graph.clone(),
                         instance_id,
+                        op,
                         &mut rx,
                     )
                     .await

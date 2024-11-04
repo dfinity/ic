@@ -1220,6 +1220,68 @@ impl Operation for GetCanisterHttp {
     }
 }
 
+/// The operation `ProcessCanisterHttpInternal` changes the instance state in a non-deterministic way!
+/// It should only be used internally in auto-progress mode
+/// which changes the instance state in a non-deterministic way anyway.
+#[derive(Copy, Clone, Debug)]
+pub struct ProcessCanisterHttpInternal;
+
+impl Operation for ProcessCanisterHttpInternal {
+    fn compute(&self, pic: &mut PocketIc) -> OpOut {
+        for subnet in pic.subnets.get_all() {
+            let sm = subnet.state_machine.clone();
+            let mut canister_http = subnet.canister_http.lock().unwrap();
+            let new_requests: Vec<_> = sm
+                .canister_http_request_contexts()
+                .into_iter()
+                .filter(|(id, _)| !canister_http.pending.contains(id))
+                .collect();
+            let client = canister_http.client.clone();
+            let mut client = client.lock().unwrap();
+            for (id, context) in new_requests {
+                if let Ok(()) = client.send(AdapterCanisterHttpRequest {
+                    timeout: context.time + Duration::from_secs(5 * 60),
+                    id,
+                    context,
+                }) {
+                    canister_http.pending.insert(id);
+                }
+            }
+            let mut received = BTreeSet::new();
+            loop {
+                match client.try_receive() {
+                    Err(_) => {
+                        break;
+                    }
+                    Ok(response) => {
+                        let canister_id = sm
+                            .canister_http_request_contexts()
+                            .get(&response.id)
+                            .unwrap()
+                            .request
+                            .sender;
+                        received.insert(response.id);
+                        sm.mock_canister_http_response(
+                            response.id.get(),
+                            response.timeout,
+                            canister_id,
+                            vec![response.content; sm.nodes.len()],
+                        );
+                    }
+                }
+            }
+            canister_http.pending.retain(|id| !received.contains(id));
+            drop(client);
+            drop(canister_http);
+        }
+        OpOut::NoOutput
+    }
+
+    fn id(&self) -> OpId {
+        OpId("process_canister_http_internal".into())
+    }
+}
+
 // START COPY from rs/https_outcalls/client/src/client.rs
 
 #[derive(Clone)]
