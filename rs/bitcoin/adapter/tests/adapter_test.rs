@@ -544,63 +544,33 @@ fn test_receives_blocks() {
 fn test_adapter_disconnects_when_idle() {
     let logger = no_op_logger();
 
-    let bitcoind1 = get_default_bitcoind();
-    let client1 = Client::new(
-        bitcoind1.rpc_url().as_str(),
-        Auth::CookieFile(bitcoind1.params.cookie_file.clone()),
+    let bitcoind = get_default_bitcoind();
+    let client = Client::new(
+        bitcoind.rpc_url().as_str(),
+        Auth::CookieFile(bitcoind.params.cookie_file.clone()),
     )
     .unwrap();
 
-    let bitcoind2 = get_default_bitcoind();
-    let client2 = Client::new(
-        bitcoind2.rpc_url().as_str(),
-        Auth::CookieFile(bitcoind2.params.cookie_file.clone()),
-    )
-    .unwrap();
-
-    let bitcoind3 = get_default_bitcoind();
-    let client3 = Client::new(
-        bitcoind3.rpc_url().as_str(),
-        Auth::CookieFile(bitcoind3.params.cookie_file.clone()),
-    )
-    .unwrap();
-
-    let url1 = SocketAddr::V4(get_bitcoind_url(&bitcoind1).unwrap());
-    let url2 = SocketAddr::V4(get_bitcoind_url(&bitcoind2).unwrap());
-    let url3 = SocketAddr::V4(get_bitcoind_url(&bitcoind3).unwrap());
-
-    client1
-        .add_node(&url2.to_string())
-        .expect("Failed to connect to peer");
-    client2
-        .add_node(&url3.to_string())
-        .expect("Failed to connect to peer");
-    client3
-        .add_node(&url1.to_string())
-        .expect("Failed to connect to peer");
+    let url = SocketAddr::V4(get_bitcoind_url(&bitcoind).unwrap());
 
     let rt: Runtime = tokio::runtime::Runtime::new().unwrap();
 
     let _r = start_active_adapter_and_client(
         &rt,
-        vec![url1, url2, url3],
+        vec![url],
         logger,
         bitcoin::Network::Regtest,
     );
 
-    // Each client is connected to 3 peers: 2 peers from the other clients and 1 peer from the adapter.
-    wait_for_connection(&client1, 3);
-    wait_for_connection(&client2, 3);
-    wait_for_connection(&client3, 3);
+    // The client should be connected to the adapter
+    wait_for_connection(&client, 1);
 
     // it takes 6 seconds for the adapter to become idle (in the test config).
     std::thread::sleep(std::time::Duration::from_secs(7)); // wait for the adapter to become idle.
 
-    // As the adapter is now idle, the connection with the clients should be dropped.
-    // Hence each client should now be connected to just 2 peers.
-    exact_connections(&client1, 2);
-    exact_connections(&client2, 2);
-    exact_connections(&client3, 2);
+    // As the adapter is now idle, the connection with the client should be dropped.
+    // Hence the client should not have any connections.
+    exact_connections(&client, 0);
 }
 
 /// Checks that an idle adapter does not connect to any peers.
@@ -608,59 +578,29 @@ fn test_adapter_disconnects_when_idle() {
 fn idle_adapter_does_not_connect_to_peers() {
     let logger = no_op_logger();
 
-    let bitcoind1 = get_default_bitcoind();
-    let client1 = Client::new(
-        bitcoind1.rpc_url().as_str(),
-        Auth::CookieFile(bitcoind1.params.cookie_file.clone()),
+    let bitcoind = get_default_bitcoind();
+    let client = Client::new(
+        bitcoind.rpc_url().as_str(),
+        Auth::CookieFile(bitcoind.params.cookie_file.clone()),
     )
     .unwrap();
 
-    let bitcoind2 = get_default_bitcoind();
-    let client2 = Client::new(
-        bitcoind2.rpc_url().as_str(),
-        Auth::CookieFile(bitcoind2.params.cookie_file.clone()),
-    )
-    .unwrap();
+    let url = SocketAddr::V4(get_bitcoind_url(&bitcoind).unwrap());
 
-    let bitcoind3 = get_default_bitcoind();
-    let client3 = Client::new(
-        bitcoind3.rpc_url().as_str(),
-        Auth::CookieFile(bitcoind3.params.cookie_file.clone()),
-    )
-    .unwrap();
-
-    let url1 = SocketAddr::V4(get_bitcoind_url(&bitcoind1).unwrap());
-    let url2 = SocketAddr::V4(get_bitcoind_url(&bitcoind2).unwrap());
-    let url3 = SocketAddr::V4(get_bitcoind_url(&bitcoind3).unwrap());
-
-    client1
-        .add_node(&url2.to_string())
-        .expect("Failed to connect to peer");
-    client2
-        .add_node(&url3.to_string())
-        .expect("Failed to connect to peer");
-    client3
-        .add_node(&url1.to_string())
-        .expect("Failed to connect to peer");
-
-    // Each client is connected to the two other clients.
-    wait_for_connection(&client1, 2);
-    wait_for_connection(&client2, 2);
-    wait_for_connection(&client3, 2);
+    // The client does not have any connections
+    wait_for_connection(&client, 0);
 
     let rt = tokio::runtime::Runtime::new().unwrap();
 
     let _r = start_idle_adapter_and_client(
         &rt,
-        vec![url1, url2, url3],
+        vec![url],
         logger,
         bitcoin::Network::Regtest,
     );
 
-    // All clients are still connected to exactly 2 peers.
-    exact_connections(&client1, 2);
-    exact_connections(&client2, 2);
-    exact_connections(&client3, 2);
+    // The client still does not have any connections
+    exact_connections(&client, 0);
 }
 
 /// Checks that the adapter can connect to multiple BitcoinD peers.
