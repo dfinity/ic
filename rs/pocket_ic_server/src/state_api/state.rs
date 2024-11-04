@@ -3,8 +3,7 @@
 /// Axum handlers operate on a global state of type ApiState, whose
 /// interface guarantees consistency and determinism.
 use crate::pocket_ic::{
-    AdvanceTimeAndTick, ApiResponse, EffectivePrincipal, GetCanisterHttp, MockCanisterHttp,
-    PocketIc,
+    AdvanceTimeAndTick, ApiResponse, EffectivePrincipal, PocketIc, ProcessCanisterHttpInternal,
 };
 use crate::state_api::canister_id::{self, DomainResolver, ResolvesDomain};
 use crate::state_api::routes::verify_cbor_content_header;
@@ -32,23 +31,12 @@ use http_body_util::{BodyExt, Full, LengthLimitError, Limited};
 use hyper::body::{Bytes, Incoming};
 use hyper::{Request, Response as HyperResponse};
 use hyper_util::client::legacy::{connect::HttpConnector, Client};
-use ic_error_types::RejectCode;
 use ic_http_endpoints_public::cors_layer;
 use ic_http_gateway::{CanisterRequest, HttpGatewayClient, HttpGatewayRequestArgs};
-use ic_https_outcalls_adapter::CanisterHttp;
-use ic_https_outcalls_adapter_client::grpc_status_code_to_reject;
-use ic_https_outcalls_service::{
-    https_outcalls_service_server::HttpsOutcallsService, HttpHeader, HttpMethod,
-    HttpsOutcallRequest, HttpsOutcallResponse,
-};
-use ic_types::{
-    canister_http::{CanisterHttpRequestId, MAX_CANISTER_HTTP_RESPONSE_BYTES},
-    CanisterId, PrincipalId, SubnetId,
-};
+use ic_types::{canister_http::CanisterHttpRequestId, CanisterId, SubnetId};
 use pocket_ic::common::rest::{
-    CanisterHttpHeader, CanisterHttpMethod, CanisterHttpReject, CanisterHttpReply,
-    CanisterHttpRequest, CanisterHttpResponse, HttpGatewayBackend, HttpGatewayConfig,
-    HttpGatewayDetails, HttpGatewayInfo, MockCanisterHttpResponse, Topology,
+    CanisterHttpRequest, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayDetails,
+    HttpGatewayInfo, Topology,
 };
 use pocket_ic::{ErrorCode, UserError, WasmResult};
 use serde::{Deserialize, Serialize};
@@ -63,7 +51,6 @@ use tokio::{
     task::{spawn, spawn_blocking, JoinHandle, JoinSet},
     time::{self, sleep, Instant},
 };
-use tonic::Request as TonicRequest;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::{debug, error, trace};
 
@@ -1076,133 +1063,6 @@ impl ApiState {
         }
     }
 
-    async fn make_http_request(
-        canister_http_request: CanisterHttpRequest,
-        canister_http_adapter: &CanisterHttp,
-    ) -> Result<CanisterHttpReply, (RejectCode, String)> {
-        let canister_http_request = HttpsOutcallRequest {
-            url: canister_http_request.url,
-            method: match canister_http_request.http_method {
-                CanisterHttpMethod::GET => HttpMethod::Get.into(),
-                CanisterHttpMethod::POST => HttpMethod::Post.into(),
-                CanisterHttpMethod::HEAD => HttpMethod::Head.into(),
-            },
-            max_response_size_bytes: canister_http_request
-                .max_response_bytes
-                .unwrap_or(MAX_CANISTER_HTTP_RESPONSE_BYTES),
-            headers: canister_http_request
-                .headers
-                .into_iter()
-                .map(|h| HttpHeader {
-                    name: h.name,
-                    value: h.value,
-                })
-                .collect(),
-            body: canister_http_request.body,
-            socks_proxy_allowed: false,
-        };
-        let request = TonicRequest::new(canister_http_request);
-        canister_http_adapter
-            .https_outcall(request)
-            .await
-            .map(|adapter_response| {
-                let HttpsOutcallResponse {
-                    status,
-                    headers,
-                    content: body,
-                } = adapter_response.into_inner();
-                CanisterHttpReply {
-                    status: status.try_into().unwrap(),
-                    headers: headers
-                        .into_iter()
-                        .map(|HttpHeader { name, value }| CanisterHttpHeader { name, value })
-                        .collect(),
-                    body,
-                }
-            })
-            .map_err(|grpc_status| {
-                (
-                    grpc_status_code_to_reject(grpc_status.code()),
-                    grpc_status.message().to_string(),
-                )
-            })
-    }
-
-    async fn process_canister_http_requests(
-        instances: Arc<RwLock<Vec<Mutex<Instance>>>>,
-        graph: Arc<RwLock<HashMap<StateLabel, Computations>>>,
-        instance_id: InstanceId,
-        rx: &mut Receiver<()>,
-    ) -> Option<()> {
-        let get_canister_http_op = GetCanisterHttp;
-        let canister_http_requests = match Self::execute_operation(
-            instances.clone(),
-            graph.clone(),
-            instance_id,
-            get_canister_http_op,
-            rx,
-        )
-        .await?
-        {
-            OpOut::CanisterHttp(canister_http) => canister_http,
-            out => panic!("Unexpected OpOut: {:?}", out),
-        };
-        let mut mock_canister_http_responses = vec![];
-        for canister_http_request in canister_http_requests {
-            let subnet_id = canister_http_request.subnet_id;
-            let request_id = canister_http_request.request_id;
-            let response = loop {
-                let instances = instances.read().await;
-                let instance = instances[instance_id].lock().await;
-                if let InstanceState::Available(pocket_ic) = &instance.state {
-                    let canister_http_adapters = pocket_ic.canister_http_adapters();
-                    let canister_http_adapters = canister_http_adapters.lock().await;
-                    let canister_http_adapter = canister_http_adapters
-                        .get(&SubnetId::from(PrincipalId::from(subnet_id)))
-                        .unwrap();
-                    break match Self::make_http_request(
-                        canister_http_request,
-                        canister_http_adapter,
-                    )
-                    .await
-                    {
-                        Ok(reply) => CanisterHttpResponse::CanisterHttpReply(reply),
-                        Err((reject_code, e)) => {
-                            CanisterHttpResponse::CanisterHttpReject(CanisterHttpReject {
-                                reject_code: reject_code as u64,
-                                message: e,
-                            })
-                        }
-                    };
-                }
-                drop(instance);
-                drop(instances);
-                tokio::time::sleep(Duration::from_millis(10)).await;
-            };
-            let mock_canister_http_response = MockCanisterHttpResponse {
-                subnet_id,
-                request_id,
-                response,
-                additional_responses: vec![],
-            };
-            mock_canister_http_responses.push(mock_canister_http_response);
-        }
-        for mock_canister_http_response in mock_canister_http_responses {
-            let mock_canister_http_op = MockCanisterHttp {
-                mock_canister_http_response,
-            };
-            Self::execute_operation(
-                instances.clone(),
-                graph.clone(),
-                instance_id,
-                mock_canister_http_op,
-                rx,
-            )
-            .await?;
-        }
-        Some(())
-    }
-
     pub async fn auto_progress(
         &self,
         instance_id: InstanceId,
@@ -1233,10 +1093,12 @@ impl ApiState {
                     {
                         return;
                     }
-                    if Self::process_canister_http_requests(
+                    let op = ProcessCanisterHttpInternal;
+                    if Self::execute_operation(
                         instances_clone.clone(),
                         graph.clone(),
                         instance_id,
+                        op,
                         &mut rx,
                     )
                     .await
