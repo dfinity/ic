@@ -298,7 +298,7 @@ fn log_message(msg: &str) {
 }
 
 fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
-    w.encode_gauge( 
+    w.encode_gauge(
         "ledger_stable_memory_pages",
         ic_cdk::api::stable::stable_size() as f64,
         "Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
