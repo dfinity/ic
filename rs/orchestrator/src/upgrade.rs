@@ -925,13 +925,15 @@ mod tests {
             .map(|t| BTreeMap::from_iter(vec![(t.transcript_id, t.clone())]))
             .unwrap_or_default();
 
-        let mut transcript = MasterKeyTranscript::new(
-            key_id.clone().try_into().unwrap(),
-            idkg::KeyTranscriptCreation::Begin,
+        let mut idkg = idkg::IDkgPayload::empty(
+            h,
+            subnet_test_id(0),
+            vec![MasterKeyTranscript {
+                current: unmasked,
+                next_in_creation: idkg::KeyTranscriptCreation::Begin,
+                master_key_id: key_id.clone().try_into().unwrap(),
+            }],
         );
-        transcript.current = unmasked;
-
-        let mut idkg = idkg::IDkgPayload::empty(h, subnet_test_id(0), vec![transcript]);
         idkg.idkg_transcripts = idkg_transcripts;
 
         let block = Block::new(

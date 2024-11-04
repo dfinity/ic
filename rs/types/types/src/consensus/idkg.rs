@@ -422,7 +422,7 @@ pub struct MasterKeyTranscript {
     /// Progress of creating the next key transcript.
     pub next_in_creation: KeyTranscriptCreation,
     /// Master key Id allowing different signature schemes.
-    master_key_id: MasterPublicKeyId,
+    pub master_key_id: IDkgMasterPublicKeyId,
 }
 
 impl MasterKeyTranscript {
@@ -430,7 +430,7 @@ impl MasterKeyTranscript {
         Self {
             current: None,
             next_in_creation,
-            master_key_id: key_id.into(),
+            master_key_id: key_id,
         }
     }
 
@@ -542,7 +542,7 @@ impl From<MasterKeyTranscript> for pb::MasterKeyTranscript {
                 &transcript.next_in_creation,
             )),
             master_key_id: Some(crypto_pb::MasterPublicKeyId::from(
-                &transcript.master_key_id,
+                &transcript.master_key_id.into(),
             )),
         }
     }
@@ -569,8 +569,11 @@ impl TryFrom<pb::MasterKeyTranscript> for MasterKeyTranscript {
             "KeyTranscript::next_in_creation",
         )?;
 
-        let master_key_id =
+        let master_key_id: MasterPublicKeyId =
             try_from_option_field(proto.master_key_id, "KeyTranscript::master_key_id")?;
+        let master_key_id = master_key_id
+            .try_into()
+            .map_err(|err| ProxyDecodeError::Other(err))?;
 
         Ok(Self {
             current,
@@ -2115,7 +2118,7 @@ impl HasMasterPublicKeyId for IDkgReshareRequest {
 
 impl HasMasterPublicKeyId for MasterKeyTranscript {
     fn key_id(&self) -> MasterPublicKeyId {
-        self.master_key_id.clone()
+        self.master_key_id.clone().into()
     }
 }
 
