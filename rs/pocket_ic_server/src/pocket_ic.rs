@@ -1247,20 +1247,19 @@ impl Operation for ProcessCanisterHttpInternal {
                     canister_http.pending.insert(id);
                 }
             }
-            let mut received = BTreeSet::new();
             loop {
                 match client.try_receive() {
                     Err(_) => {
                         break;
                     }
                     Ok(response) => {
+                        canister_http.pending.remove(&response.id);
                         let canister_id = sm
                             .canister_http_request_contexts()
                             .get(&response.id)
                             .unwrap()
                             .request
                             .sender;
-                        received.insert(response.id);
                         sm.mock_canister_http_response(
                             response.id.get(),
                             response.timeout,
@@ -1270,7 +1269,6 @@ impl Operation for ProcessCanisterHttpInternal {
                     }
                 }
             }
-            canister_http.pending.retain(|id| !received.contains(id));
         }
         OpOut::NoOutput
     }
