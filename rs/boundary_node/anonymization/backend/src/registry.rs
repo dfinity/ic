@@ -1,7 +1,10 @@
 use anyhow::anyhow;
 use async_trait::async_trait;
 use candid::{CandidType, Principal};
+use prometheus::labels;
 use serde::Deserialize;
+
+use crate::{WithLogs, WithMetrics};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ListError {
@@ -51,5 +54,50 @@ impl List for Client {
                 .collect();
 
         return Ok(ids);
+    }
+}
+
+#[async_trait]
+impl<T: List> List for WithLogs<T> {
+    async fn list(&self) -> Result<Vec<Principal>, ListError> {
+        let out = self.0.list().await;
+
+        let status = match &out {
+            Ok(_) => "ok",
+            Err(err) => match err {
+                ListError::UnexpectedError(_) => "fail",
+            },
+        };
+
+        ic_cdk::println!(
+            "action = '{}', status = {}, error = {:?}",
+            "list",
+            status,
+            out.as_ref().err()
+        );
+
+        out
+    }
+}
+
+#[async_trait]
+impl<T: List> List for WithMetrics<T> {
+    async fn list(&self) -> Result<Vec<Principal>, ListError> {
+        let out = self.0.list().await;
+
+        self.1.with(|c| {
+            c.borrow()
+                .with(&labels! {
+                    "status" => match &out {
+                        Ok(_) => "ok",
+                        Err(err) => match err {
+                            ListError::UnexpectedError(_) => "fail",
+                        },
+                    },
+                })
+                .inc()
+        });
+
+        out
     }
 }

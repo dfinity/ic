@@ -1,10 +1,11 @@
 use anonymization_interface::{self as ifc};
 use candid::Principal;
 use ic_cdk::caller;
+use prometheus::labels;
 
 use crate::{
     acl::{Authorize, AuthorizeError, WithAuthorize},
-    LocalRef, StableMap, StableSet, StableValue,
+    LocalRef, StableMap, StableSet, StableValue, WithLogs, WithMetrics,
 };
 
 #[derive(Clone)]
@@ -143,6 +144,51 @@ impl<T: Register, A: Authorize> Register for WithAuthorize<T, A> {
     }
 }
 
+impl<T: Register> Register for WithLogs<T> {
+    fn register(&self, pubkey: &[u8]) -> Result<(), RegisterError> {
+        let out = self.0.register(pubkey);
+
+        let status = match &out {
+            Ok(_) => "ok",
+            Err(err) => match err {
+                RegisterError::Unauthorized => "unauthorized",
+                RegisterError::UnexpectedError(_) => "fail",
+            },
+        };
+
+        ic_cdk::println!(
+            "action = '{}', status = {}, error = {:?}",
+            "register",
+            status,
+            out.as_ref().err()
+        );
+
+        out
+    }
+}
+
+impl<T: Register> Register for WithMetrics<T> {
+    fn register(&self, pubkey: &[u8]) -> Result<(), RegisterError> {
+        let out = self.0.register(pubkey);
+
+        self.1.with(|c| {
+            c.borrow()
+                .with(&labels! {
+                    "status" => match &out {
+                        Ok(_) => "ok",
+                        Err(err) => match err {
+                            RegisterError::Unauthorized => "unauthorized",
+                            RegisterError::UnexpectedError(_) => "fail",
+                        },
+                    },
+                })
+                .inc()
+        });
+
+        out
+    }
+}
+
 // Query
 
 #[derive(Debug)]
@@ -262,6 +308,34 @@ impl<T: Query, A: Authorize> Query for WithAuthorize<T, A> {
     }
 }
 
+impl<T: Query> Query for WithLogs<T> {
+    fn query(&self) -> Result<Vec<u8>, QueryError> {
+        let out = self.0.query();
+
+        let status = match &out {
+            Ok(_) => "ok",
+            Err(err) => match err {
+                QueryError::Unauthorized => "unauthorized",
+                QueryError::Unavailable => "unavailable",
+                QueryError::LeaderMode(mode, _) => match mode {
+                    LeaderMode::Bootstrap => "leader-bootstrap",
+                    LeaderMode::Refresh => "leader-refresh",
+                },
+                QueryError::UnexpectedError(_) => "fail",
+            },
+        };
+
+        ic_cdk::println!(
+            "action = '{}', status = {}, error = {:?}",
+            "query",
+            status,
+            out.as_ref().err()
+        );
+
+        out
+    }
+}
+
 // Submit
 
 #[derive(Debug, thiserror::Error)]
@@ -354,5 +428,50 @@ impl<T: Submit, A: Authorize> Submit for WithAuthorize<T, A> {
         };
 
         self.0.submit(ps)
+    }
+}
+
+impl<T: Submit> Submit for WithLogs<T> {
+    fn submit(&self, ps: &[Pair]) -> Result<(), SubmitError> {
+        let out = self.0.submit(ps);
+
+        let status = match &out {
+            Ok(_) => "ok",
+            Err(err) => match err {
+                SubmitError::Unauthorized => "unauthorized",
+                SubmitError::UnexpectedError(_) => "fail",
+            },
+        };
+
+        ic_cdk::println!(
+            "action = '{}', status = {}, error = {:?}",
+            "submit",
+            status,
+            out.as_ref().err()
+        );
+
+        out
+    }
+}
+
+impl<T: Submit> Submit for WithMetrics<T> {
+    fn submit(&self, ps: &[Pair]) -> Result<(), SubmitError> {
+        let out = self.0.submit(ps);
+
+        self.1.with(|c| {
+            c.borrow()
+                .with(&labels! {
+                    "status" => match &out {
+                        Ok(_) => "ok",
+                        Err(err) => match err {
+                            SubmitError::Unauthorized => "unauthorized",
+                            SubmitError::UnexpectedError(_) => "fail",
+                        },
+                    },
+                })
+                .inc()
+        });
+
+        out
     }
 }

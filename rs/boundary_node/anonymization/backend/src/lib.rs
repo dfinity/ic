@@ -2,10 +2,11 @@ use std::{cell::RefCell, thread::LocalKey, time::Duration};
 
 use acl::{Authorize, Authorizer, WithAuthorize};
 use anonymization_interface::{
-    self as ifc, InitArg, QueryResponse, RegisterResponse, SubmitResponse,
+    self as ifc, HeaderField, HttpRequest, HttpResponse, InitArg, QueryResponse, RegisterResponse,
+    SubmitResponse,
 };
 use candid::Principal;
-use ic_cdk::{id, spawn};
+use ic_cdk::{id, spawn, trap};
 use ic_cdk_timers::set_timer_interval;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_stable_structures::{
@@ -13,6 +14,7 @@ use ic_stable_structures::{
     DefaultMemoryImpl, StableBTreeMap,
 };
 use lazy_static::lazy_static;
+use prometheus::{CounterVec, Encoder, Gauge, Opts, Registry, TextEncoder};
 use queue::{
     Pair, Querier, Query, QueryError, Register, RegisterError, Registrator, Submit, SubmitError,
     Submitter, WithDedupe, WithLeaderAssignment, WithLeaderCheck, WithUnassignLeader,
@@ -41,11 +43,112 @@ const MEMORY_ID_QUEUE: u8 = 2;
 const MEMORY_ID_ENCRYPTTED_VALUES: u8 = 3;
 const MEMORY_ID_LEADER_ASSIGNMENT: u8 = 4;
 
+// Metrics
+
+const SERVICE_NAME: &str = "backend";
+
+thread_local! {
+    static COUNTER_AUTHORIZE_TOTAL: RefCell<CounterVec> = RefCell::new({
+        CounterVec::new(Opts::new(
+            format!("{SERVICE_NAME}_authorize_total"), // name
+            "number of times authorize was called", // help
+        ), &["status"]).unwrap()
+    });
+
+    static COUNTER_REGISTER_TOTAL: RefCell<CounterVec> = RefCell::new({
+        CounterVec::new(Opts::new(
+            format!("{SERVICE_NAME}_register_total"), // name
+            "number of times register was called", // help
+        ), &["status"]).unwrap()
+    });
+
+    static COUNTER_SUBMIT_TOTAL: RefCell<CounterVec> = RefCell::new({
+        CounterVec::new(Opts::new(
+            format!("{SERVICE_NAME}_submit_total"), // name
+            "number of times submit was called", // help
+        ), &["status"]).unwrap()
+    });
+
+    static COUNTER_LIST_TOTAL: RefCell<CounterVec> = RefCell::new({
+        CounterVec::new(Opts::new(
+            format!("{SERVICE_NAME}_list_total"), // name
+            "number of times list was called", // help
+        ), &["status"]).unwrap()
+    });
+
+    static GAUGE_ALLOWED_PRINCIPALS_TOTAL: RefCell<Gauge> = RefCell::new({
+        Gauge::new(
+            format!("{SERVICE_NAME}_allowed_principals_total"), // name
+            "total number of allowed principals", // help
+        ).unwrap()
+    });
+
+    static GAUGE_QUEUE_TOTAL: RefCell<Gauge> = RefCell::new({
+        Gauge::new(
+            format!("{SERVICE_NAME}_queue_total"), // name
+            "total number of queue entries", // help
+        ).unwrap()
+    });
+
+    static GAUGE_CANISTER_CYCLES_BALANCE: RefCell<Gauge> = RefCell::new({
+        Gauge::new(
+            format!("{SERVICE_NAME}_canister_cycles_balance"), // name
+            "cycles balance available to the canister", // help
+        ).unwrap()
+    });
+
+    static METRICS_REGISTRY: RefCell<Registry> = RefCell::new({
+        let r = Registry::new();
+
+        COUNTER_REGISTER_TOTAL.with(|c| {
+            let c = Box::new(c.borrow().to_owned());
+            r.register(c).unwrap();
+        });
+
+        COUNTER_AUTHORIZE_TOTAL.with(|c| {
+            let c = Box::new(c.borrow().to_owned());
+            r.register(c).unwrap();
+        });
+
+        COUNTER_SUBMIT_TOTAL.with(|c| {
+            let c = Box::new(c.borrow().to_owned());
+            r.register(c).unwrap();
+        });
+
+        COUNTER_LIST_TOTAL.with(|c| {
+            let c = Box::new(c.borrow().to_owned());
+            r.register(c).unwrap();
+        });
+
+        GAUGE_QUEUE_TOTAL.with(|g| {
+            let g = Box::new(g.borrow().to_owned());
+            r.register(g).unwrap();
+        });
+
+        GAUGE_ALLOWED_PRINCIPALS_TOTAL.with(|g| {
+            let g = Box::new(g.borrow().to_owned());
+            r.register(g).unwrap();
+        });
+
+        GAUGE_CANISTER_CYCLES_BALANCE.with(|g| {
+            let g = Box::new(g.borrow().to_owned());
+            r.register(g).unwrap();
+        });
+
+        r
+    });
+}
+
+pub struct WithLogs<T>(pub T);
+pub struct WithMetrics<T>(pub T, LocalRef<CounterVec>);
+
 lazy_static! {
     static ref API_BOUNDARY_NODES_LISTER: Box<dyn List> = {
         let cid = Principal::from(REGISTRY_CANISTER_ID);
 
         let v = Client::new(cid);
+        let v = WithLogs(v);
+        let v = WithMetrics(v, &COUNTER_LIST_TOTAL);
         Box::new(v)
     };
 }
@@ -59,6 +162,7 @@ thread_local! {
 
     static AUTHORIZER: RefCell<Box<dyn Authorize>> = RefCell::new({
         let v = Authorizer::new(&ALLOWED_PRINCIPALS);
+        let v = WithMetrics(v, &COUNTER_AUTHORIZE_TOTAL);
         Box::new(v)
     });
 }
@@ -95,6 +199,8 @@ thread_local! {
         let v = WithUnassignLeader(v, &LEADER_ASSIGNMENT);
         let v = WithDedupe(v, &PUBLIC_KEYS);
         let v = WithAuthorize(v, &AUTHORIZER);
+        let v = WithMetrics(v, &COUNTER_REGISTER_TOTAL);
+        let v = WithLogs(v);
         Box::new(v)
     });
 
@@ -102,6 +208,7 @@ thread_local! {
         let v = Querier::new(&ENCRYPTED_VALUES);
         let v = WithLeaderAssignment(v, &LEADER_ASSIGNMENT, &QUEUE, &PUBLIC_KEYS, &ENCRYPTED_VALUES);
         let v = WithAuthorize(v, &AUTHORIZER);
+        let v = WithLogs(v);
         Box::new(v)
     });
 
@@ -109,6 +216,8 @@ thread_local! {
         let v = Submitter::new(&QUEUE, &ENCRYPTED_VALUES);
         let v = WithLeaderCheck(v, &LEADER_ASSIGNMENT);
         let v = WithAuthorize(v, &AUTHORIZER);
+        let v = WithMetrics(v, &COUNTER_SUBMIT_TOTAL);
+        let v = WithLogs(v);
         Box::new(v)
     });
 }
@@ -284,5 +393,58 @@ fn submit(vs: Vec<ifc::Pair>) -> SubmitResponse {
             SubmitError::Unauthorized => ifc::SubmitError::Unauthorized,
             SubmitError::UnexpectedError(err) => ifc::SubmitError::UnexpectedError(err.to_string()),
         }),
+    }
+}
+
+// Metrics
+
+#[ic_cdk::query]
+fn http_request(request: HttpRequest) -> HttpResponse {
+    if request.url != "/metrics" {
+        return HttpResponse {
+            status_code: 404,
+            headers: vec![],
+            body: "404 Not Found".as_bytes().to_owned(),
+        };
+    }
+
+    if request.method.to_lowercase() != "get" {
+        return HttpResponse {
+            status_code: 405,
+            headers: vec![HeaderField("Allow".into(), "GET".into())],
+            body: "405 Method Not Allowed".as_bytes().to_owned(),
+        };
+    }
+
+    // Set Gauges
+    QUEUE.with(|q| {
+        GAUGE_QUEUE_TOTAL.with(|g| g.borrow_mut().set(q.borrow().len() as f64));
+    });
+
+    ALLOWED_PRINCIPALS.with(|ps| {
+        GAUGE_ALLOWED_PRINCIPALS_TOTAL.with(|g| g.borrow_mut().set(ps.borrow().len() as f64));
+    });
+
+    GAUGE_CANISTER_CYCLES_BALANCE
+        .with(|g| g.borrow_mut().set(ic_cdk::api::canister_balance() as f64));
+
+    // Export metrics
+    let bs = METRICS_REGISTRY.with(|r| {
+        let mfs = r.borrow().gather();
+
+        let mut buffer = vec![];
+        let enc = TextEncoder::new();
+
+        if let Err(err) = enc.encode(&mfs, &mut buffer) {
+            trap(&format!("failed to encode metrics: {err}"));
+        };
+
+        buffer
+    });
+
+    HttpResponse {
+        status_code: 200,
+        headers: vec![],
+        body: bs,
     }
 }
