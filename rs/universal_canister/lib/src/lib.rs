@@ -12,31 +12,9 @@ use universal_canister::Ops;
 
 /// The binary of the universal canister as compiled from `rs/universal_canister/impl`.
 pub const UNIVERSAL_CANISTER_WASM: &[u8] = include_bytes!(env!("UNIVERSAL_CANISTER_WASM_PATH"));
-pub const UNIVERSAL_CANISTER_WASM_SHA256: [u8; 32] =
-    hex_to_bytes(env!("UNIVERSAL_CANISTER_WASM_SHA256"));
 
-/// Convert a hexadecimal string to a [u8; 32] array
-const fn hex_to_bytes(hex: &str) -> [u8; 32] {
-    let hex_bytes = hex.as_bytes();
-    let mut bytes = [0u8; 32];
-    let mut i = 0;
-
-    while i < 32 {
-        bytes[i] = (hex_to_byte(hex_bytes[i * 2]) << 4) | hex_to_byte(hex_bytes[i * 2 + 1]);
-        i += 1;
-    }
-
-    bytes
-}
-
-/// Helper function to convert a single hexadecimal character to a u8
-const fn hex_to_byte(hex: u8) -> u8 {
-    match hex {
-        b'0'..=b'9' => hex - b'0',
-        b'a'..=b'f' => hex - b'a' + 10,
-        b'A'..=b'F' => hex - b'A' + 10,
-        _ => panic!("Invalid hex character"),
-    }
+pub fn get_universal_canister_wasm_sha256() -> [u8; 32] {
+    ic_crypto_sha2::Sha256::hash(UNIVERSAL_CANISTER_WASM)
 }
 
 /// A succinct shortcut for creating a `PayloadBuilder`, which is used to encode
@@ -871,14 +849,6 @@ impl CallArgs {
 #[cfg(test)]
 mod test {
     use super::*;
-    #[test]
-    fn check_hardcoded_sha256_is_up_to_date() {
-        assert_eq!(
-            UNIVERSAL_CANISTER_WASM_SHA256,
-            ic_crypto_sha2::Sha256::hash(UNIVERSAL_CANISTER_WASM)
-        );
-    }
-
     #[test]
     fn try_from_macro_works() {
         assert_eq!(Ops::GetGlobalCounter, Ops::try_from(65).unwrap());

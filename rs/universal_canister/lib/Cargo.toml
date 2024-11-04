@@ -9,10 +9,10 @@ documentation.workspace = true
 [dependencies]
 candid = { workspace = true }
 hex-literal = "0.4.1"
+ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-types = { path = "../../types/types" }
 serde = { workspace = true }
 universal-canister = { path = "../impl" }
 
 [dev-dependencies]
-ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-types = { path = "../../types/types" }

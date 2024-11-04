@@ -20,7 +20,7 @@ use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConf
 use ic_types::{ingress::WasmResult, CanisterId, Cycles};
 use ic_types_test_utils::ids::user_test_id;
 use ic_universal_canister::{
-    call_args, wasm, UNIVERSAL_CANISTER_WASM, UNIVERSAL_CANISTER_WASM_SHA256,
+    call_args, get_universal_canister_wasm_sha256, wasm, UNIVERSAL_CANISTER_WASM,
 };
 use std::time::Duration;
 use std::time::UNIX_EPOCH;
@@ -212,7 +212,7 @@ fn canister_history_tracks_create_install_reinstall() {
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         2,
         CanisterChangeOrigin::from_user(user_id1),
-        CanisterChangeDetails::code_deployment(Reinstall, UNIVERSAL_CANISTER_WASM_SHA256),
+        CanisterChangeDetails::code_deployment(Reinstall, get_universal_canister_wasm_sha256()),
     ));
     let history = get_canister_history(&env, canister_id);
     assert_eq!(
@@ -311,7 +311,7 @@ fn canister_history_tracks_upgrade() {
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         2,
         CanisterChangeOrigin::from_user(user_id1),
-        CanisterChangeDetails::code_deployment(Upgrade, UNIVERSAL_CANISTER_WASM_SHA256),
+        CanisterChangeDetails::code_deployment(Upgrade, get_universal_canister_wasm_sha256()),
     ));
     let history = get_canister_history(&env, canister_id);
     assert_eq!(
@@ -878,7 +878,7 @@ fn canister_info_retrieval() {
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         2,
         CanisterChangeOrigin::from_user(user_id1),
-        CanisterChangeDetails::code_deployment(Upgrade, UNIVERSAL_CANISTER_WASM_SHA256),
+        CanisterChangeDetails::code_deployment(Upgrade, get_universal_canister_wasm_sha256()),
     ));
 
     // create and install universal_canister
@@ -918,7 +918,7 @@ fn canister_info_retrieval() {
     assert_eq!(canister_info.changes(), vec![]);
     assert_eq!(
         canister_info.module_hash(),
-        Some(UNIVERSAL_CANISTER_WASM_SHA256.to_vec())
+        Some(get_universal_canister_wasm_sha256().to_vec())
     );
     assert_eq!(canister_info.controllers(), vec![user_id1, user_id2]);
 
@@ -931,7 +931,7 @@ fn canister_info_retrieval() {
     assert_eq!(canister_info.changes(), reference_change_entries);
     assert_eq!(
         canister_info.module_hash(),
-        Some(UNIVERSAL_CANISTER_WASM_SHA256.to_vec())
+        Some(get_universal_canister_wasm_sha256().to_vec())
     );
     assert_eq!(canister_info.controllers(), vec![user_id1, user_id2]);
 
@@ -946,7 +946,7 @@ fn canister_info_retrieval() {
     assert_eq!(canister_info.changes(), history_suffix);
     assert_eq!(
         canister_info.module_hash(),
-        Some(UNIVERSAL_CANISTER_WASM_SHA256.to_vec())
+        Some(get_universal_canister_wasm_sha256().to_vec())
     );
     assert_eq!(canister_info.controllers(), vec![user_id1, user_id2]);
 
@@ -959,7 +959,7 @@ fn canister_info_retrieval() {
     assert_eq!(canister_info.changes(), reference_change_entries);
     assert_eq!(
         canister_info.module_hash(),
-        Some(UNIVERSAL_CANISTER_WASM_SHA256.to_vec())
+        Some(get_universal_canister_wasm_sha256().to_vec())
     );
     assert_eq!(canister_info.controllers(), vec![user_id1, user_id2]);
 

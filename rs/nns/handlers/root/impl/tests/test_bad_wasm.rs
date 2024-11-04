@@ -14,7 +14,7 @@ use ic_nns_test_utils::itest_helpers::{
     forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_root_canister,
     set_up_universal_canister,
 };
-use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM_SHA256;
+use ic_test_utilities::universal_canister::get_universal_canister_wasm_sha256;
 
 fn assert_is_running_universal_canister(status: &CanisterStatusResult) {
     let hash = status
@@ -23,10 +23,10 @@ fn assert_is_running_universal_canister(status: &CanisterStatusResult) {
         .expect("This is not the universal canister: it has no wasm module.");
     assert_eq!(
         hash,
-        &UNIVERSAL_CANISTER_WASM_SHA256,
+        &get_universal_canister_wasm_sha256(),
         "This is not the universal canister: its wasm hash is {} instead of {}.",
         hex::encode(hash),
-        hex::encode(UNIVERSAL_CANISTER_WASM_SHA256)
+        hex::encode(get_universal_canister_wasm_sha256())
     );
     assert_eq!(status.status, CanisterStatusType::Running);
 }
