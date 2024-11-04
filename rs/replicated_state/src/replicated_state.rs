@@ -970,8 +970,8 @@ impl ReplicatedState {
     }
 
     /// Enforces the best-effort message limit by repeatedly shedding the largest
-    /// best-effort messages of the canisters with the largest best-effort memory
-    /// usage until the memory usage drops below the limit.
+    /// best-effort message of the canister with the highest best-effort message
+    /// memory usage until the total memory usage drops below the limit.
     ///
     /// Returns the number of messages and message bytes that were shed.
     ///
@@ -1046,8 +1046,8 @@ impl ReplicatedState {
             }
 
             // Update the total memory usage.
+            debug_assert!(memory_usage_before > memory_usage_after);
             let memory_usage_delta = memory_usage_before - memory_usage_after;
-            debug_assert!(memory_usage_delta > ZERO_BYTES);
             memory_usage -= memory_usage_delta;
 
             shed_messages += message_shed as u64;

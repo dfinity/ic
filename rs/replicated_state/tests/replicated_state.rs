@@ -755,6 +755,14 @@ fn enforce_best_effort_message_limit() {
             .enforce_best_effort_message_limit(mean_message_size),
     );
 
+    // A second identical call should be a no-op.
+    assert_eq!(
+        (0, 0.into()),
+        fixture
+            .state
+            .enforce_best_effort_message_limit(mean_message_size),
+    );
+
     // Pop the remaining message.
     assert!(fixture.pop_input().is_some());
 
