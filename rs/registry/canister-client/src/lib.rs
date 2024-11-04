@@ -2,7 +2,7 @@
 //! where polling is handed over to a timer
 
 use ic_interfaces_registry::{
-    empty_zero_registry_record, RegistryClientResult, RegistryClientVersionedResult, RegistryDataProvider, RegistryTransportRecord, ZERO_REGISTRY_VERSION,
+    empty_zero_registry_record, RegistryClientVersionedResult, RegistryDataProvider, RegistryTransportRecord, ZERO_REGISTRY_VERSION,
     RegistryClient
 };
 use ic_types::{registry::RegistryClientError, RegistryVersion, Time};
@@ -17,12 +17,12 @@ type CacheState = (
 );
 
 pub struct RegistryCanisterClient {
-    data_provider: Box<dyn RegistryDataProvider>,
+    data_provider: Rc<dyn RegistryDataProvider>,
     cache: Rc<RefCell<CacheState>>,
 }
 
 impl RegistryCanisterClient {
-    pub fn new(data_provider: Box<dyn RegistryDataProvider>) -> Self {
+    pub fn new(data_provider: Rc<dyn RegistryDataProvider>) -> Self {
         Self {
             data_provider,
             cache: Rc::new(RefCell::new(Default::default())),
