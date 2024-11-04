@@ -1,9 +1,11 @@
+load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    ":build_script",
     "//rs/crypto/sha2",
     "//rs/types/types",
     "//rs/universal_canister/impl:lib",
@@ -16,14 +18,19 @@ DEV_DEPENDENCIES = [
     "//rs/types/types",
 ]
 
-rust_library(
-    name = "lib",
-    srcs = glob(["src/*.rs"]),
-    crate_name = "ic_universal_canister",
+cargo_build_script(
+    name = "build_script",
+    srcs = ["build.rs"],
     data = ["//rs/universal_canister/impl:universal_canister.wasm.gz"],
     rustc_env = {
         "UNIVERSAL_CANISTER_WASM_PATH": "$(location //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
+)
+
+rust_library(
+    name = "lib",
+    srcs = glob(["src/*.rs"]),
+    crate_name = "ic_universal_canister",
     version = "0.9.0",
     deps = DEPENDENCIES,
 )
