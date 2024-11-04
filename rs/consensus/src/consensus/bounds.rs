@@ -231,7 +231,10 @@ mod tests {
         };
         assert_eq!(get_maximum_validated_artifacts(40, 499), max_counts);
         // Make sure limits.rs is kept in sync
-        assert_eq!(ic_limits::MAX_VALIDATED_ARTIFACTS, max_counts.sum());
+        assert_eq!(
+            ic_limits::MAX_VALIDATED_CONSENSUS_ARTIFACTS,
+            max_counts.sum()
+        );
 
         // Simple check: advance pool without purging, until we have too many
         // finalized blocks.
