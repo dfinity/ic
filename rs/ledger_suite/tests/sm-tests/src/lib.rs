@@ -553,7 +553,7 @@ pub fn wait_ledger_ready(env: &StateMachine, ledger: CanisterId, num_waits: u16)
                 .bytes(),
             bool
         )
-        .expect("failed to decode balance_of response")
+        .expect("failed to decode is_ledger_ready response")
     };
     for i in 0..num_waits {
         if is_ledger_ready() {
