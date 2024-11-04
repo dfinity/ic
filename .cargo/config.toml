@@ -1,0 +1,5 @@
+[env]
+# The following environment variables are used in rs/universal_canister/lib/src/lib.rs
+# and are set in bazel to their correct values. Here they're set to fake values to ensure cargo clippy and cargo build passes:
+UNIVERSAL_CANISTER_WASM_PATH = { value = "lib.rs" }
+UNIVERSAL_CANISTER_WASM_SHA256 = { value = "0000000000000000000000000000000000000000000000000000000000000000" }
