@@ -1070,6 +1070,6 @@ impl AllowancesData for StableAllowancesData {
     }
 
     fn clear_arrivals(&mut self) {
-        panic!("The method should not be called for StableAllowancesData")
+        panic!("The method `clear_arrivals` should not be called for StableAllowancesData")
     }
 }
