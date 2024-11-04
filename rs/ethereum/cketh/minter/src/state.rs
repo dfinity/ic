@@ -57,6 +57,7 @@ pub struct State {
     pub cketh_ledger_id: Principal,
     pub eth_log_scraping: LogScrapingState,
     pub erc20_log_scraping: LogScrapingState,
+    pub deposit_with_subaccount_log_scraping: LogScrapingState,
     pub ecdsa_public_key: Option<EcdsaPublicKeyResponse>,
     pub cketh_minimum_withdrawal_amount: Wei,
     pub ethereum_block_height: BlockTag,
@@ -462,6 +463,8 @@ impl State {
             erc20_helper_contract_address,
             last_erc20_scraped_block_number,
             evm_rpc_id,
+            deposit_with_subaccount_helper_contract_address,
+            last_deposit_with_subaccount_scraped_block_number,
         } = upgrade_args;
         if let Some(nonce) = next_transaction_nonce {
             let nonce = TransactionNonce::try_from(nonce)
@@ -501,6 +504,27 @@ impl State {
                 })?,
             );
         }
+        if let Some(address) = deposit_with_subaccount_helper_contract_address {
+            let address = Address::from_str(&address).map_err(|e| {
+                InvalidStateError::InvalidErc20HelperContractAddress(format!("ERROR: {}", e))
+            })?;
+            self.deposit_with_subaccount_log_scraping
+                .set_contract_address(address)
+                .map_err(|e| {
+                    InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {:?}", e))
+                })?;
+        }
+        if let Some(block_number) = last_deposit_with_subaccount_scraped_block_number {
+            self.deposit_with_subaccount_log_scraping
+                .set_last_scraped_block_number(BlockNumber::try_from(block_number).map_err(
+                    |e| {
+                        InvalidStateError::InvalidLastErc20ScrapedBlockNumber(format!(
+                            "ERROR: {}",
+                            e
+                        ))
+                    },
+                )?);
+        }
         if let Some(block_height) = ethereum_block_height {
             self.ethereum_block_height = block_height.into();
         }
@@ -533,6 +557,10 @@ impl State {
         ensure_eq!(self.ecdsa_key_name, other.ecdsa_key_name);
         ensure_eq!(self.eth_log_scraping, other.eth_log_scraping);
         ensure_eq!(self.erc20_log_scraping, other.erc20_log_scraping);
+        ensure_eq!(
+            self.deposit_with_subaccount_log_scraping,
+            other.deposit_with_subaccount_log_scraping
+        );
         ensure_eq!(
             self.cketh_minimum_withdrawal_amount,
             other.cketh_minimum_withdrawal_amount

@@ -1,3 +1,7 @@
+use crate::lifecycle::init::InitArg;
+use crate::state::State;
+use candid::{Nat, Principal};
+
 pub fn expect_panic_with_message<F: FnOnce() -> R, R: std::fmt::Debug>(
     f: F,
     expected_message: &str,
@@ -22,6 +26,24 @@ pub fn expect_panic_with_message<F: FnOnce() -> R, R: std::fmt::Debug>(
         expected_message,
         panic_message
     );
+}
+
+pub fn initial_state() -> State {
+    State::try_from(valid_init_arg()).expect("BUG: invalid init arg")
+}
+
+pub fn valid_init_arg() -> InitArg {
+    InitArg {
+        ethereum_network: Default::default(),
+        ecdsa_key_name: "test_key_1".to_string(),
+        ethereum_contract_address: None,
+        ledger_id: Principal::from_text("apia6-jaaaa-aaaar-qabma-cai")
+            .expect("BUG: invalid principal"),
+        ethereum_block_height: Default::default(),
+        minimum_withdrawal_amount: Nat::from(10_000_000_000_000_000_u64),
+        next_transaction_nonce: Default::default(),
+        last_scraped_block_number: Default::default(),
+    }
 }
 
 pub mod arb {

@@ -24,8 +24,7 @@ use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use icp_ledger::Subaccount;
 use std::collections::{BTreeSet, HashMap};
 
-/// A neuron type internal to the governance crate. Currently, this type is identical to the
-/// prost-generated Neuron type (except for derivations for prost). Gradually, this type will evolve
+/// A neuron type internal to the governance crate. Gradually, this type will evolve
 /// towards having all private fields while exposing methods for mutations, which allows it to hold
 /// invariants.
 #[derive(Clone, Debug)]

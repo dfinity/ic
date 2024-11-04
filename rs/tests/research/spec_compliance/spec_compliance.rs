@@ -35,6 +35,34 @@ const EXCLUDED: &[&str] = &[
     "$0 ~ /Call from query method traps (in query call)/",
 ];
 
+pub fn group_all() -> Vec<&'static str> {
+    [group_01(), group_02(), group_03()].concat()
+}
+
+pub fn group_01() -> Vec<&'static str> {
+    vec![
+        "($0 ~ /canister history/)",
+        "($0 ~ /canister version/)",
+        "($0 ~ /canister global timer/)",
+        "($0 ~ /canister http/)",
+        "($0 ~ /WebAssembly module validation/)",
+    ]
+}
+
+pub fn group_02() -> Vec<&'static str> {
+    vec![
+        "($0 ~ /stable memory/)",
+        "($0 ~ /inter-canister calls/)",
+        "($0 ~ /uninstall/)",
+        "($0 ~ /read state/)",
+        "($0 ~ /cycles/)",
+    ]
+}
+
+pub fn group_03() -> Vec<&'static str> {
+    vec!["($0 ~ /NNS canisters/)"]
+}
+
 pub fn setup_impl(env: TestEnv, deploy_bn_and_nns_canisters: bool, http_requests: bool) {
     use ic_system_test_driver::driver::test_env_api::secs;
     use ic_system_test_driver::util::block_on;
@@ -337,7 +365,7 @@ pub fn with_endpoint(
         peer_subnet_config,
         excluded_tests,
         included_tests,
-        64,
+        32,
     );
 }
 
