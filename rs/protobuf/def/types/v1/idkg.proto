@@ -34,7 +34,7 @@ message MasterKeyTranscript {
   reserved 1;
   UnmaskedTranscriptWithAttributes current = 2;
   KeyTranscriptCreation next_in_creation = 3;
-  registry.crypto.v1.MasterPublicKeyId master_key_id = 4;
+  types.v1.MasterPublicKeyId master_key_id = 4;
 }
 
 message AvailablePreSignature {
@@ -155,7 +155,7 @@ message QuadrupleInCreation {
   UnmaskedTimesMaskedParams kappa_times_lambda_config = 9;
   MaskedTranscript kappa_times_lambda = 10;
 
-  registry.crypto.v1.EcdsaKeyId key_id = 12;
+  types.v1.EcdsaKeyId key_id = 12;
 }
 
 message PreSignatureQuadrupleRef {
@@ -164,17 +164,17 @@ message PreSignatureQuadrupleRef {
   MaskedTranscript kappa_times_lambda_ref = 3;
   MaskedTranscript key_times_lambda_ref = 4;
   UnmaskedTranscript key_unmasked_ref = 5;
-  registry.crypto.v1.EcdsaKeyId key_id = 6;
+  types.v1.EcdsaKeyId key_id = 6;
 }
 
 message TranscriptInCreation {
-  registry.crypto.v1.SchnorrKeyId key_id = 1;
+  types.v1.SchnorrKeyId key_id = 1;
   RandomUnmaskedTranscriptParams blinder_unmasked_config = 2;
   UnmaskedTranscript blinder_unmasked = 3;
 }
 
 message PreSignatureTranscriptRef {
-  registry.crypto.v1.SchnorrKeyId key_id = 1;
+  types.v1.SchnorrKeyId key_id = 1;
   UnmaskedTranscript blinder_unmasked_ref = 2;
   UnmaskedTranscript key_unmasked_ref = 3;
 }
@@ -190,7 +190,7 @@ message IDkgReshareRequest {
   reserved 1, 4;
   repeated types.v1.NodeId receiving_node_ids = 2;
   uint64 registry_version = 3;
-  registry.crypto.v1.MasterPublicKeyId master_key_id = 5;
+  types.v1.MasterPublicKeyId master_key_id = 5;
 }
 
 enum KeyTranscriptCreationState {

@@ -29,7 +29,7 @@ message SubnetTopology {
   registry.subnet.v1.SubnetFeatures subnet_features = 4;
   reserved 5;
   reserved "ecdsa_keys_held";
-  repeated registry.crypto.v1.MasterPublicKeyId idkg_keys_held = 6;
+  repeated types.v1.MasterPublicKeyId idkg_keys_held = 6;
 }
 
 message SubnetsEntry {
@@ -38,7 +38,7 @@ message SubnetsEntry {
 }
 
 message IDkgKeyEntry {
-  registry.crypto.v1.MasterPublicKeyId key_id = 1;
+  types.v1.MasterPublicKeyId key_id = 1;
   repeated types.v1.SubnetId subnet_ids = 2;
 }
 
@@ -70,12 +70,12 @@ message SetupInitialDkgContextTree {
 }
 
 message EcdsaArguments {
-  registry.crypto.v1.EcdsaKeyId key_id = 1;
+  types.v1.EcdsaKeyId key_id = 1;
   bytes message_hash = 2;
 }
 
 message SchnorrArguments {
-  registry.crypto.v1.SchnorrKeyId key_id = 1;
+  types.v1.SchnorrKeyId key_id = 1;
   bytes message = 2;
 }
 
@@ -134,7 +134,7 @@ message CanisterHttpRequestContextTree {
 
 message IDkgDealingsContext {
   state.queues.v1.Request request = 1;
-  registry.crypto.v1.MasterPublicKeyId key_id = 2;
+  types.v1.MasterPublicKeyId key_id = 2;
   repeated types.v1.NodeId nodes = 3;
   uint64 registry_version = 4;
   Time time = 5;
@@ -277,7 +277,7 @@ message ApiBoundaryNodeEntry {
 }
 
 message ThresholdSignatureAgreementsEntry {
-  registry.crypto.v1.MasterPublicKeyId key_id = 1;
+  types.v1.MasterPublicKeyId key_id = 1;
   uint64 count = 2;
 }
 
