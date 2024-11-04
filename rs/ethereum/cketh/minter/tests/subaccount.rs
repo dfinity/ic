@@ -77,6 +77,7 @@ fn should_deposit_ckerc20() {
     //TODO XC-221: continue test to withdraw from subaccount
 }
 
+#[test]
 fn should_deposit_cketh_without_subaccount_and_ckerc20_with_subaccount() {
     let ckerc20 = CkErc20Setup::default()
         .add_supported_erc20_tokens()
