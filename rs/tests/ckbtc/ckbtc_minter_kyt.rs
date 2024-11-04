@@ -314,8 +314,7 @@ pub fn test_kyt(env: TestEnv) {
         );
         let retrieve_amount: u64 = 35_000_000;
 
-        // Put the kyt canister into reject all utxos mode.
-        // upgrade_kyt(&mut kyt_canister, KytMode::RejectAll).await;
+        // Put the new kyt canister into reject all utxos mode.
         upgrade_new_kyt(&mut new_kyt_canister, NewKytMode::RejectAll).await;
 
         let retrieve_result = minter_agent
@@ -336,9 +335,7 @@ pub fn test_kyt(env: TestEnv) {
         } else {
             panic!("Expected to see a tainted destination address.")
         }
-        //assert_burn_transaction(&ledger_agent, &logger, 4, &withdrawal_account, KYT_FEE).await;
 
-        // upgrade_kyt(&mut kyt_canister, KytMode::AcceptAll).await;
         upgrade_new_kyt(&mut new_kyt_canister, NewKytMode::AcceptAll).await;
 
         // This should do nothing since retrieve_btc no longer charges KYT fee
