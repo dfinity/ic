@@ -95,4 +95,7 @@ component_files = {
     Label("upgrade/systemd-generators/hostos/mount-generator"): "/etc/systemd/system-generators/mount-generator",
     Label("upgrade/systemd-generators/systemd-gpt-auto-generator"): "/etc/systemd/system-generators/systemd-gpt-auto-generator",
     Label("upgrade/install-upgrade.sh"): "/opt/ic/bin/install-upgrade.sh",
+
+    # todo: delete update-config after switch to new icos config
+    Label("misc/update-config/update-hostos-config.service"): "/etc/systemd/system/update-config.service",
 }
