@@ -10,6 +10,7 @@ DEPENDENCIES = [
     "//rs/types/base_types",
     "@crate_index//:assert_matches",
     "@crate_index//:candid",
+    "@crate_index//:serde",
     "@crate_index//:tokio",
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],

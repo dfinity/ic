@@ -12,6 +12,7 @@ ic-nervous-system-integration-tests = { path = "../../../nervous_system/integrat
 ic-base-types = { path = "../../../types/base_types" }
 assert_matches = { workspace = true }
 candid = { workspace = true }
+serde = { workspace = true }
 tokio = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
