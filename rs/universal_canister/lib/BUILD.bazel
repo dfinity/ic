@@ -15,6 +15,7 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    ":build_script",
     "//rs/types/types",
 ]
 
@@ -49,9 +50,5 @@ rust_doc_test(
 rust_test(
     name = "lib_test",
     crate = ":lib",
-    data = ["//rs/universal_canister/impl:universal_canister.wasm.gz"],
-    rustc_env = {
-        "UNIVERSAL_CANISTER_WASM_PATH": "$(location //rs/universal_canister/impl:universal_canister.wasm.gz)",
-    },
     deps = DEV_DEPENDENCIES,
 )
