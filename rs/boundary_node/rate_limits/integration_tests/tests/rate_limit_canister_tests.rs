@@ -1,10 +1,14 @@
-use candid::{Encode ,Principal};
-use ic_rate_limit_canister_integration_tests::pocket_ic_helpers::{setup_subnets_and_registry_canister, install_rate_limit_canister_on_ii_subnet, canister_call, get_installed_wasm_hash};
-use rate_limits_api::{AddConfigResponse, InputConfig, InitArg, Version, GetConfigResponse};
-use ic_nns_test_utils::common::modify_wasm_bytes;
+use candid::{Encode, Principal};
 use ic_crypto_sha2::Sha256;
+use ic_nns_test_utils::common::modify_wasm_bytes;
+use ic_rate_limit_canister_integration_tests::pocket_ic_helpers::{
+    canister_call, get_installed_wasm_hash, install_rate_limit_canister_on_ii_subnet,
+    setup_subnets_and_registry_canister,
+};
+use rate_limits_api::{AddConfigResponse, GetConfigResponse, InitArg, InputConfig, Version};
 
-const AUTHORIZED_PRINCIPAL: &str = "imx2d-dctwe-ircfz-emzus-bihdn-aoyzy-lkkdi-vi5vw-npnik-noxiy-mae";
+const AUTHORIZED_PRINCIPAL: &str =
+    "imx2d-dctwe-ircfz-emzus-bihdn-aoyzy-lkkdi-vi5vw-npnik-noxiy-mae";
 
 #[tokio::test]
 async fn test() {
@@ -18,7 +22,8 @@ async fn test() {
         registry_polling_period_secs: 1,
     };
     let pocket_ic = setup_subnets_and_registry_canister().await;
-    let (canister_id, wasm) = install_rate_limit_canister_on_ii_subnet(&pocket_ic, initial_payload.clone()).await;
+    let (canister_id, wasm) =
+        install_rate_limit_canister_on_ii_subnet(&pocket_ic, initial_payload.clone()).await;
 
     // Read config by non-authorized principal
     let input_version = Encode!(&None::<Version>).unwrap();
@@ -29,7 +34,9 @@ async fn test() {
         canister_id,
         Principal::anonymous(),
         input_version,
-    ).await.unwrap();
+    )
+    .await
+    .unwrap();
 
     let config = response.unwrap();
 
@@ -48,7 +55,9 @@ async fn test() {
         canister_id,
         Principal::anonymous(),
         input_config.clone(),
-    ).await.unwrap();
+    )
+    .await
+    .unwrap();
 
     assert!(response.unwrap_err().contains("Unauthorized"));
 
@@ -59,7 +68,9 @@ async fn test() {
         canister_id,
         authorized_principal,
         input_config,
-    ).await.unwrap();
+    )
+    .await
+    .unwrap();
 
     assert!(response.is_ok());
 
@@ -72,7 +83,9 @@ async fn test() {
         canister_id,
         Principal::anonymous(),
         input_version,
-    ).await.unwrap();
+    )
+    .await
+    .unwrap();
 
     let config = response.unwrap();
 
@@ -82,20 +95,21 @@ async fn test() {
     let current_wasm_hash = get_installed_wasm_hash(&pocket_ic, canister_id).await;
     let new_wasm = modify_wasm_bytes(&wasm.clone().bytes(), 42);
     let new_wasm_hash = Sha256::hash(&new_wasm.clone());
-    
+
     assert_ne!(current_wasm_hash, new_wasm_hash);
 
-    pocket_ic.upgrade_canister(
-        canister_id,
-        new_wasm,
-        Encode!(&initial_payload).unwrap(),
-        None,
-    ).await
-    .unwrap();
+    pocket_ic
+        .upgrade_canister(
+            canister_id,
+            new_wasm,
+            Encode!(&initial_payload).unwrap(),
+            None,
+        )
+        .await
+        .unwrap();
 
     assert_eq!(
         get_installed_wasm_hash(&pocket_ic, canister_id).await,
         new_wasm_hash,
     );
-
 }
