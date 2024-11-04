@@ -38,24 +38,24 @@ use crate::{
             proposal_data::ActionAuxiliary as ActionAuxiliaryPb,
             transfer_sns_treasury_funds::TransferFrom,
             upgrade_journal_entry, Account as AccountProto, AddMaturityRequest,
-            AddMaturityResponse, Ballot, ClaimSwapNeuronsError, ClaimSwapNeuronsRequest,
-            ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus, DefaultFollowees,
-            DeregisterDappCanisters, DisburseMaturityInProgress, Empty,
-            ExecuteGenericNervousSystemFunction, FailStuckUpgradeInProgressRequest,
-            FailStuckUpgradeInProgressResponse, GetMaturityModulationRequest,
-            GetMaturityModulationResponse, GetMetadataRequest, GetMetadataResponse, GetMode,
-            GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
-            GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
-            GetUpgradeJournalResponse, Governance as GovernanceProto, GovernanceError,
-            ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
-            ListProposalsResponse, ManageDappCanisterSettings, ManageLedgerParameters,
-            ManageNeuron, ManageNeuronResponse, ManageSnsMetadata, MintSnsTokens,
-            MintTokensRequest, MintTokensResponse, NervousSystemFunction, NervousSystemParameters,
-            Neuron, NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType,
-            Proposal, ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus,
-            RegisterDappCanisters, RewardEvent, Tally, TransferSnsTreasuryFunds, UpgradeJournal,
-            UpgradeJournalEntry, UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote,
-            WaitForQuietState,
+            AddMaturityResponse, AdvanceTargetVersionRequest, AdvanceTargetVersionResponse, Ballot,
+            ClaimSwapNeuronsError, ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse,
+            ClaimedSwapNeuronStatus, DefaultFollowees, DeregisterDappCanisters,
+            DisburseMaturityInProgress, Empty, ExecuteGenericNervousSystemFunction,
+            FailStuckUpgradeInProgressRequest, FailStuckUpgradeInProgressResponse,
+            GetMaturityModulationRequest, GetMaturityModulationResponse, GetMetadataRequest,
+            GetMetadataResponse, GetMode, GetModeResponse, GetNeuron, GetNeuronResponse,
+            GetProposal, GetProposalResponse, GetSnsInitializationParametersRequest,
+            GetSnsInitializationParametersResponse, GetUpgradeJournalResponse,
+            Governance as GovernanceProto, GovernanceError, ListNervousSystemFunctionsResponse,
+            ListNeurons, ListNeuronsResponse, ListProposals, ListProposalsResponse,
+            ManageDappCanisterSettings, ManageLedgerParameters, ManageNeuron, ManageNeuronResponse,
+            ManageSnsMetadata, MintSnsTokens, MintTokensRequest, MintTokensResponse,
+            NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId, NeuronPermission,
+            NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
+            ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RegisterDappCanisters,
+            RewardEvent, Tally, TransferSnsTreasuryFunds, UpgradeJournal, UpgradeJournalEntry,
+            UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote, WaitForQuietState,
         },
     },
     proposal::{
@@ -2554,12 +2554,30 @@ impl Governance {
                 )
             })?;
 
+        self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeStarted {
+            current_version: Some(current_version.clone()),
+            expected_version: Some(next_version.clone()),
+            reason: Some(
+                upgrade_journal_entry::upgrade_started::Reason::UpgradeSnsToNextVersionProposal(
+                    ProposalId { id: proposal_id },
+                ),
+            ),
+        });
+
         // SNS Swap is controlled by NNS Governance, so this SNS instance cannot upgrade it.
         // Simply set `deployed_version` to `next_version` version so that other SNS upgrades can
         // be executed, and let the Swap upgrade occur externally (e.g. by someone submitting an
         // NNS proposal).
         if canister_type_to_upgrade == SnsCanisterType::Swap {
             self.proto.deployed_version = Some(next_version);
+            self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome {
+                status: Some(upgrade_journal_entry::upgrade_outcome::Status::Success(
+                    Empty {},
+                )),
+                human_readable: Some(
+                    "Swap upgrades are no-ops, upgrade automatically succeeded".to_string(),
+                ),
+            });
             return Ok(true);
         }
 
@@ -4781,15 +4799,17 @@ impl Governance {
         // Refresh the upgrade steps if they have changed
         if cached_upgrade_steps.upgrade_steps != Some(upgrade_steps.clone()) {
             cached_upgrade_steps.upgrade_steps = Some(upgrade_steps.clone());
-            self.push_to_upgrade_journal(upgrade_journal_entry::Event::UpgradeStepsRefreshed(
-                upgrade_journal_entry::UpgradeStepsRefreshed {
-                    upgrade_steps: Some(upgrade_steps),
-                },
-            ));
+            self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeStepsRefreshed {
+                upgrade_steps: Some(upgrade_steps),
+            });
         }
     }
 
-    pub fn push_to_upgrade_journal(&mut self, event: upgrade_journal_entry::Event) {
+    pub fn push_to_upgrade_journal<Event>(&mut self, event: Event)
+    where
+        upgrade_journal_entry::Event: From<Event>,
+    {
+        let event = upgrade_journal_entry::Event::from(event);
         let upgrade_journal_entry = UpgradeJournalEntry {
             event: Some(event),
             timestamp_seconds: Some(self.env.now()),
@@ -4824,6 +4844,22 @@ impl Governance {
                 upgrade_journal: self.proto.upgrade_journal.clone(),
             },
         }
+    }
+
+    pub fn advance_target_version(
+        &mut self,
+        request: AdvanceTargetVersionRequest,
+    ) -> AdvanceTargetVersionResponse {
+        self.push_to_upgrade_journal(upgrade_journal_entry::Event::TargetVersionSet(
+            upgrade_journal_entry::TargetVersionSet {
+                old_target_version: self.proto.target_version.clone(),
+                new_target_version: request.target_version.clone(),
+            },
+        ));
+
+        self.proto.target_version = request.target_version;
+
+        AdvanceTargetVersionResponse {}
     }
 
     fn should_update_maturity_modulation(&self) -> bool {
@@ -5276,10 +5312,12 @@ impl Governance {
     async fn check_upgrade_status(&mut self) {
         // This expect is safe because we only call this after checking exactly that condition in
         // should_check_upgrade_status
-        let upgrade_in_progress =
-            self.proto.pending_version.as_ref().expect(
-                "There must be pending_version or should_check_upgrade_status returns false",
-            );
+        let upgrade_in_progress = self
+            .proto
+            .pending_version
+            .as_ref()
+            .expect("There must be pending_version or should_check_upgrade_status returns false")
+            .clone();
 
         if upgrade_in_progress.target_version.is_none() {
             // If we have an upgrade_in_progress with no target_version, we are in an unexpected
@@ -5287,6 +5325,15 @@ impl Governance {
 
             let msg = "No target_version set for upgrade_in_progress. This should be impossible. \
                 Clearing upgrade_in_progress state and marking proposal failed to unblock further upgrades.";
+
+            self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome {
+                status: Some(
+                    upgrade_journal_entry::upgrade_outcome::Status::InvalidState(
+                        upgrade_journal_entry::upgrade_outcome::InvalidState { version: None },
+                    ),
+                ),
+                human_readable: Some(msg.to_string()),
+            });
             self.fail_sns_upgrade_to_next_version_proposal(
                 upgrade_in_progress.proposal_id,
                 GovernanceError::new_with_message(ErrorType::PreconditionFailed, msg),
@@ -5318,6 +5365,13 @@ impl Governance {
             let error =
                 "Too many attempts to check upgrade without success.  Marking upgrade failed.";
 
+            self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome {
+                status: Some(upgrade_journal_entry::upgrade_outcome::Status::Timeout(
+                    Empty {},
+                )),
+                human_readable: Some(error.to_string()),
+            });
+
             self.fail_sns_upgrade_to_next_version_proposal(
                 proposal_id,
                 GovernanceError::new_with_message(ErrorType::External, error),
@@ -5348,12 +5402,19 @@ impl Governance {
 
                 if self.env.now() > mark_failed_at {
                     let error = format!(
-                        "Upgrade marked as failed at {} seconds from genesis. \
+                        "Upgrade marked as failed at {} seconds from unix epoch. \
                              Governance could not determine running version from root: {}. \
                              Setting upgrade to failed to unblock retry.",
                         self.env.now(),
                         message,
                     );
+
+                    self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome {
+                        status: Some(upgrade_journal_entry::upgrade_outcome::Status::Timeout(
+                            Empty {},
+                        )),
+                        human_readable: Some(error.to_string()),
+                    });
                     self.fail_sns_upgrade_to_next_version_proposal(
                         proposal_id,
                         GovernanceError::new_with_message(ErrorType::External, error),
@@ -5380,6 +5441,15 @@ impl Governance {
                     self.env.now(),
                 );
 
+                self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome {
+                    status: Some(
+                        upgrade_journal_entry::upgrade_outcome::Status::InvalidState(
+                            upgrade_journal_entry::upgrade_outcome::InvalidState { version: None },
+                        ),
+                    ),
+                    human_readable: Some(error.to_string()),
+                });
+
                 self.proto.deployed_version = Some(running_version);
                 self.fail_sns_upgrade_to_next_version_proposal(
                     proposal_id,
@@ -5400,6 +5470,12 @@ impl Governance {
                     self.env.now(),
                     target_version
                 );
+                self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome {
+                    status: Some(upgrade_journal_entry::upgrade_outcome::Status::Success(
+                        Empty {},
+                    )),
+                    human_readable: None,
+                });
                 self.set_proposal_execution_status(proposal_id, Ok(()));
                 self.proto.deployed_version = Some(target_version);
                 self.proto.pending_version = None;
@@ -5413,6 +5489,13 @@ impl Governance {
                         self.env.now(),
                         errors
                     );
+
+                    self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome {
+                        status: Some(upgrade_journal_entry::upgrade_outcome::Status::Timeout(
+                            Empty {},
+                        )),
+                        human_readable: Some(error.to_string()),
+                    });
 
                     self.fail_sns_upgrade_to_next_version_proposal(
                         proposal_id,
@@ -7589,6 +7672,22 @@ mod tests {
             governance.proto.deployed_version.unwrap(),
             next_version.into()
         );
+
+        // Check that the upgrade journal reflects the succeeded upgrade
+        assert_matches!(
+            &governance.proto.upgrade_journal.clone().unwrap().entries[..],
+            [UpgradeJournalEntry {
+                timestamp_seconds: _,
+                event: Some(upgrade_journal_entry::Event::UpgradeOutcome(
+                    upgrade_journal_entry::UpgradeOutcome {
+                        human_readable: None,
+                        status: Some(upgrade_journal_entry::upgrade_outcome::Status::Success(
+                            Empty {}
+                        )),
+                    }
+                )),
+            }]
+        )
     }
 
     #[test]
@@ -7673,6 +7772,22 @@ mod tests {
             governance.proto.deployed_version.unwrap(),
             current_version.into()
         );
+
+        // Check that the upgrade journal reflects the timed-out upgrade attempt
+        assert_matches!(
+            &governance.proto.upgrade_journal.clone().unwrap().entries[..],
+            [UpgradeJournalEntry {
+                timestamp_seconds: _,
+                event: Some(upgrade_journal_entry::Event::UpgradeOutcome(
+                    upgrade_journal_entry::UpgradeOutcome {
+                        human_readable: Some(_),
+                        status: Some(upgrade_journal_entry::upgrade_outcome::Status::Timeout(
+                            Empty {}
+                        )),
+                    }
+                )),
+            }]
+        )
     }
 
     #[test]
@@ -7790,7 +7905,23 @@ mod tests {
         };
         assert_ne!(proposal_data.executed_timestamp_seconds, 0);
 
-        assert!(proposal_data.failure_reason.is_none(),);
+        assert!(proposal_data.failure_reason.is_none());
+
+        // Check that the upgrade journal reflects the succeeded upgrade
+        assert_eq!(
+            governance.proto.upgrade_journal.clone().unwrap().entries,
+            vec![UpgradeJournalEntry {
+                timestamp_seconds: Some(now),
+                event: Some(upgrade_journal_entry::Event::UpgradeOutcome(
+                    upgrade_journal_entry::UpgradeOutcome {
+                        human_readable: None,
+                        status: Some(upgrade_journal_entry::upgrade_outcome::Status::Success(
+                            Empty {}
+                        )),
+                    }
+                )),
+            }]
+        )
     }
 
     #[test]
@@ -7924,6 +8055,9 @@ mod tests {
         assert_eq!(proposal_data.executed_timestamp_seconds, 0);
 
         assert!(proposal_data.failure_reason.is_none());
+
+        // Check that the upgrade journal has not been appended to
+        assert_eq!(governance.proto.upgrade_journal, None)
     }
 
     #[test]
@@ -8054,13 +8188,29 @@ mod tests {
             GovernanceError::new_with_message(
                 ErrorType::External,
                 format!(
-                    "Upgrade marked as failed at {} seconds from genesis. \
+                    "Upgrade marked as failed at {} seconds from unix epoch. \
                 Governance could not determine running version from root: Root had no status. \
                 Setting upgrade to failed to unblock retry.",
                     now
                 )
             )
         );
+
+        // Check that the upgrade journal reflects the timed-out upgrade attempt
+        assert_matches!(
+            &governance.proto.upgrade_journal.clone().unwrap().entries[..],
+            [UpgradeJournalEntry {
+                timestamp_seconds: _,
+                event: Some(upgrade_journal_entry::Event::UpgradeOutcome(
+                    upgrade_journal_entry::UpgradeOutcome {
+                        human_readable: Some(_),
+                        status: Some(upgrade_journal_entry::upgrade_outcome::Status::Timeout(
+                            Empty {}
+                        )),
+                    }
+                )),
+            }]
+        )
     }
 
     #[test]
@@ -8176,6 +8326,26 @@ mod tests {
                         Clearing upgrade_in_progress state and marking proposal failed to unblock further upgrades."
             )
         );
+
+        // Check that the upgrade journal reflects the failed upgrade attempt
+        assert_matches!(
+            &governance.proto.upgrade_journal.clone().unwrap().entries[..],
+            [UpgradeJournalEntry {
+                timestamp_seconds: _,
+                event: Some(upgrade_journal_entry::Event::UpgradeOutcome(
+                    upgrade_journal_entry::UpgradeOutcome {
+                        human_readable: Some(_),
+                        status: Some(
+                            upgrade_journal_entry::upgrade_outcome::Status::InvalidState(
+                                upgrade_journal_entry::upgrade_outcome::InvalidState {
+                                    version: None
+                                }
+                            )
+                        ),
+                    }
+                )),
+            }]
+        )
     }
 
     #[test]
@@ -8307,6 +8477,26 @@ mod tests {
                 )
             )
         );
+
+        // Check that the upgrade journal reflects the failed upgrade attempt
+        assert_matches!(
+            &governance.proto.upgrade_journal.clone().unwrap().entries[..],
+            [UpgradeJournalEntry {
+                timestamp_seconds: _,
+                event: Some(upgrade_journal_entry::Event::UpgradeOutcome(
+                    upgrade_journal_entry::UpgradeOutcome {
+                        human_readable: Some(_),
+                        status: Some(
+                            upgrade_journal_entry::upgrade_outcome::Status::InvalidState(
+                                upgrade_journal_entry::upgrade_outcome::InvalidState {
+                                    version: None,
+                                }
+                            )
+                        ),
+                    }
+                )),
+            }]
+        )
     }
 
     #[test]

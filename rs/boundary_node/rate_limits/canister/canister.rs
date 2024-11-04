@@ -33,11 +33,11 @@ fn init(init_arg: InitArg) {
     }
     with_canister_state(|state| {
         if state.get_version().is_none() {
-            let version = 1;
-            ic_cdk::println!("Initializing config and version {version}");
-            init_version_and_config(version);
+            ic_cdk::println!("Initializing rate-limit config");
+            let current_time = ic_cdk::api::time();
+            init_version_and_config(current_time, state);
         } else {
-            ic_cdk::println!("Canister config is already initialized");
+            ic_cdk::println!("Rate-limit config is already initialized");
         }
     });
     // Spawn periodic job of fetching latest API boundary node topology
@@ -48,9 +48,9 @@ fn init(init_arg: InitArg) {
 
 #[post_upgrade]
 fn post_upgrade(init_arg: InitArg) {
-    ic_cdk::println!("Starting canister post_upgrade");
+    ic_cdk::println!("Starting canister post-upgrade");
     init(init_arg);
-    ic_cdk::println!("Finished canister post_upgrade");
+    ic_cdk::println!("Finished canister post-upgrade");
 }
 
 #[query]
@@ -111,37 +111,35 @@ fn http_request(request: HttpRequest) -> HttpResponse {
     }
 }
 
-async fn poll_api_boundary_nodes() {
-    if let Ok(canister_id) = Principal::from_text(REGISTRY_CANISTER_ID) {
-        match call::<_, (Result<Vec<ApiBoundaryNodeIdRecord>, String>,)>(
-            canister_id,
-            REGISTRY_CANISTER_METHOD,
-            (&GetApiBoundaryNodeIdsRequest {},),
-        )
-        .await
-        {
-            Ok((Ok(api_bn_records),)) => {
-                API_BOUNDARY_NODE_PRINCIPALS.with(|cell| {
-                    *cell.borrow_mut() =
-                        HashSet::from_iter(api_bn_records.into_iter().filter_map(|n| n.id))
-                });
-            }
-            Ok((Err(err),)) => {
-                ic_cdk::println!("Error fetching API boundary nodes: {}", err);
-            }
-            Err(err) => {
-                ic_cdk::println!("Error calling registry canister: {:?}", err);
-            }
-        }
-    } else {
-        ic_cdk::println!("Failed to parse registry_canister_id");
-    }
-}
-
 fn periodically_poll_api_boundary_nodes(interval: u64) {
     let interval = Duration::from_secs(interval);
 
     ic_cdk_timers::set_timer_interval(interval, || {
-        ic_cdk::spawn(poll_api_boundary_nodes());
+        ic_cdk::spawn(async {
+            if let Ok(canister_id) = Principal::from_text(REGISTRY_CANISTER_ID) {
+                match call::<_, (Result<Vec<ApiBoundaryNodeIdRecord>, String>,)>(
+                    canister_id,
+                    REGISTRY_CANISTER_METHOD,
+                    (&GetApiBoundaryNodeIdsRequest {},),
+                )
+                .await
+                {
+                    Ok((Ok(api_bn_records),)) => {
+                        API_BOUNDARY_NODE_PRINCIPALS.with(|cell| {
+                            *cell.borrow_mut() =
+                                HashSet::from_iter(api_bn_records.into_iter().filter_map(|n| n.id))
+                        });
+                    }
+                    Ok((Err(err),)) => {
+                        ic_cdk::println!("Error fetching API boundary nodes: {}", err);
+                    }
+                    Err(err) => {
+                        ic_cdk::println!("Error calling registry canister: {:?}", err);
+                    }
+                }
+            } else {
+                ic_cdk::println!("Failed to parse registry_canister_id");
+            }
+        });
     });
 }

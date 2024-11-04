@@ -451,6 +451,8 @@ impl NeuronStore {
     pub fn add_neuron(&mut self, neuron: Neuron) -> Result<NeuronId, NeuronStoreError> {
         let neuron_id = neuron.id();
 
+        self.validate_neuron(&neuron)?;
+
         if self.contains(neuron_id) {
             return Err(NeuronStoreError::NeuronAlreadyExists(neuron_id));
         }
@@ -470,6 +472,17 @@ impl NeuronStore {
         self.add_neuron_to_indexes(&neuron);
 
         Ok(neuron_id)
+    }
+
+    fn validate_neuron(&self, neuron: &Neuron) -> Result<(), NeuronStoreError> {
+        neuron
+            .dissolve_state_and_age()
+            .validate()
+            .map_err(|reason| NeuronStoreError::InvalidData {
+                reason: format!("Neuron cannot be saved: {}", reason),
+            })?;
+
+        Ok(())
     }
 
     fn add_neuron_to_indexes(&mut self, neuron: &Neuron) {
@@ -618,6 +631,8 @@ impl NeuronStore {
             StorageLocation::Heap
         };
         let is_neuron_changed = *old_neuron != new_neuron;
+
+        self.validate_neuron(&new_neuron)?;
 
         // Perform transition between 2 storage if necessary.
         //

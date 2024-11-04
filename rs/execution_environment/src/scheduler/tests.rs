@@ -1254,9 +1254,7 @@ fn canisters_with_insufficient_cycles_are_uninstalled() {
 #[test]
 fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
     let initial_time = UNIX_EPOCH + Duration::from_secs(1);
-    let mut test = SchedulerTestBuilder::new()
-        .with_canister_snapshots(true)
-        .build();
+    let mut test = SchedulerTestBuilder::new().build();
 
     let canister_id = test.create_canister_with_controller(
         Cycles::new(12_700_000),
@@ -1360,9 +1358,7 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
 #[test]
 fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
     let initial_time = UNIX_EPOCH + Duration::from_secs(1);
-    let mut test = SchedulerTestBuilder::new()
-        .with_canister_snapshots(true)
-        .build();
+    let mut test = SchedulerTestBuilder::new().build();
 
     let canister_id = test.create_canister_with_controller(
         Cycles::new(12_700_000),
@@ -4124,7 +4120,7 @@ fn construct_scheduler_for_prop_test(
         .build();
 
     // Ensure that compute allocation of canisters doesn't exceed the capacity.
-    let capacity = SchedulerImpl::compute_capacity_percent(scheduler_cores) as u64 - 1;
+    let capacity = RoundSchedule::compute_capacity_percent(scheduler_cores) as u64 - 1;
     let total = canister_params
         .iter()
         .fold(0, |acc, (ca, _)| acc + ca.as_percent());
