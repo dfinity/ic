@@ -3244,7 +3244,6 @@ dependencies = [
  "stubborn-io",
  "subtle",
  "syn 1.0.109",
- "sync_wrapper 1.0.1",
  "tar",
  "tarpc",
  "tempfile",

@@ -1196,9 +1196,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "full",
                 ],
             ),
-            "sync_wrapper": crate.spec(
-                version = "^1.0.1",
-            ),
             "tar": crate.spec(
                 version = "^0.4.38",
             ),
