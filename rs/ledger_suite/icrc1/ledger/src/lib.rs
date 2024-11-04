@@ -75,6 +75,7 @@ pub type Tokens = ic_icrc1_tokens_u256::U256;
 /// Upgrading from version N to version N+1 should always be possible.
 /// We have the following ledger versions:
 ///   * 0 - the whole ledger state is stored on the heap.
+///   * 1 - the allowances are stored in stable structures.
 #[cfg(not(feature = "next-ledger-version"))]
 pub const LEDGER_VERSION: u64 = 1;
 
