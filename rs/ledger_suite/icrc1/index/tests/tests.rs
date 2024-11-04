@@ -1,5 +1,6 @@
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat};
+use ic_base_types::CanisterId;
 use ic_base_types::PrincipalId;
 use ic_icrc1::{Block, Operation, Transaction};
 use ic_icrc1_index::{
@@ -17,6 +18,7 @@ use ic_ledger_core::{
 use ic_ledger_hash_of::HashOf;
 use ic_pocket_ic_tests::{CanisterId, StateMachine};
 use ic_rosetta_test_utils::test_http_request_decoding_quota;
+use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::{

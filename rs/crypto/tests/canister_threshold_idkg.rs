@@ -2192,6 +2192,21 @@ mod load_transcript_with_openings {
             let message = rng.gen::<[u8; 32]>();
             let seed = Randomness::from(rng.gen::<[u8; 32]>());
 
+            let taproot_tree_root = {
+                if alg == AlgorithmId::ThresholdSchnorrBip340 {
+                    let choose = rng.gen::<u8>();
+                    if choose <= 128 {
+                        None
+                    } else if choose <= 192 {
+                        Some(vec![])
+                    } else {
+                        Some(rng.gen::<[u8; 32]>().to_vec())
+                    }
+                } else {
+                    None
+                }
+            };
+
             let inputs = generate_tschnorr_protocol_inputs(
                 &env,
                 &dealers,
@@ -2199,6 +2214,7 @@ mod load_transcript_with_openings {
                 &key_transcript,
                 &message,
                 seed,
+                taproot_tree_root.as_deref(),
                 &derivation_path,
                 alg,
                 rng,

@@ -2,6 +2,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use assert_matches::assert_matches;
 use candid::Encode;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_config::{
     embedders::{Config as EmbeddersConfig, MeteringType},
     execution_environment::Config as HypervisorConfig,
@@ -9,19 +10,18 @@ use ic_config::{
     subnet_config::{SchedulerConfig, SubnetConfig},
 };
 use ic_management_canister_types::{
-    CanisterIdRecord, CanisterInfoRequest, CanisterInstallModeV2, CanisterSettingsArgsBuilder,
-    DeleteCanisterSnapshotArgs, EmptyBlob, InstallCodeArgs, ListCanisterSnapshotArgs, Method,
-    Payload, StoredChunksArgs, UninstallCodeArgs, IC_00,
+    CanisterIdRecord, CanisterInfoRequest, CanisterInstallMode, CanisterInstallModeV2,
+    CanisterSettingsArgsBuilder, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, EmptyBlob,
+    InstallChunkedCodeArgs, InstallCodeArgs, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
+    Method, Payload, StoredChunksArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
+    UpdateSettingsArgs, UploadChunkArgs, IC_00,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::{execution_state::NextScheduledMethod, NextExecution};
-use ic_state_machine_tests::{
-    CanisterId, CanisterInstallMode, ClearChunkStoreArgs, CryptoHashOfState, ErrorCode,
-    IngressState, IngressStatus, InstallChunkedCodeArgs, LoadCanisterSnapshotArgs, MessageId,
-    PrincipalId, StateMachine, StateMachineConfig, TakeCanisterSnapshotArgs, UpdateSettingsArgs,
-    UploadChunkArgs,
-};
-use ic_types::{ingress::WasmResult, Cycles, NumInstructions};
+use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineConfig};
+use ic_types::ingress::{IngressState, IngressStatus};
+use ic_types::messages::MessageId;
+use ic_types::{ingress::WasmResult, CryptoHashOfState, Cycles, NumInstructions};
 use ic_universal_canister::{call_args, wasm, CallArgs, UNIVERSAL_CANISTER_WASM};
 use more_asserts::assert_ge;
 use strum::IntoEnumIterator;
