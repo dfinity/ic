@@ -2427,6 +2427,22 @@ pub fn test_upgrade_serialization(
                 if !migration_to_stable_structures {
                     // Test downgrade to mainnet wasm
                     test_upgrade(ledger_wasm_mainnet.clone());
+                } else {
+                    // Downgrade from stable structures to mainnet not possible.
+                    match env.upgrade_canister(
+                        ledger_id,
+                        ledger_wasm_mainnet.clone(),
+                        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
+                    ) {
+                        Ok(_) => {
+                            panic!("Upgrade from future ledger version should fail!")
+                        }
+                        Err(e) => {
+                            assert!(e
+                                .description()
+                                .contains("Trying to downgrade from incompatible version"))
+                        }
+                    };
                 }
                 if verify_blocks {
                     // This will also verify the ledger blocks.
