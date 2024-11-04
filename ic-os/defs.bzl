@@ -36,7 +36,7 @@ def icos_build(
       vuln_scan: if True, create targets for vulnerability scanning
       visibility: See Bazel documentation
       tags: See Bazel documentation
-      build_local_base_image: if True, build the base images from scratch. Do not download the docker.io base image.
+      build_local_base_image: if True, build the base images from scratch. Do not download the ghcr.io base image.
       ic_version: the label pointing to the target that returns IC version
     """
 

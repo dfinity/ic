@@ -38,13 +38,6 @@ anchors:
     shell: bash
     run: |
       [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
-  docker-login: &docker-login
-    name: Login to Dockerhub
-    shell: bash
-    run: ./ci/scripts/docker-login.sh
-    env:
-      DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
-      DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
   bazel-bep: &bazel-bep
     name: Upload bazel-bep
     # runs only if previous step succeeded or failed;
@@ -67,7 +60,6 @@ jobs:
     steps:
       - <<: *checkout
       - <<: *before-script
-      - <<: *docker-login
       - name: Run Bazel Build All No Cache
         uses:  ./.github/actions/bazel-test-all/
         env:
@@ -87,7 +79,6 @@ jobs:
     steps:
       - <<: *checkout
       - <<: *before-script
-      - <<: *docker-login
       - name: Run Bazel System Test Hourly
         id: bazel-test-all
         uses:  ./.github/actions/bazel-test-all/

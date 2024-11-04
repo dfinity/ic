@@ -57,13 +57,6 @@ anchors:
     shell: bash
     run: |
       [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
-  docker-login: &docker-login
-    name: Login to Dockerhub
-    shell: bash
-    run: ./ci/scripts/docker-login.sh
-    env:
-      DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
-      DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
   checkout: &checkout
     name: Checkout
     uses: actions/checkout@v4
@@ -108,7 +101,6 @@ jobs:
     steps:
       - <<: *checkout
       - <<: *before-script
-      - <<: *docker-login
       - name: Set BAZEL_EXTRA_ARGS
         shell: bash
         run: |
@@ -174,7 +166,6 @@ jobs:
     steps:
       - <<: *checkout
       - <<: *before-script
-      - <<: *docker-login
       - name: Run bazel build --config=check //rs/...
         id: bazel-build-config-check
         uses: ./.github/actions/bazel-test-all/
@@ -197,7 +188,6 @@ jobs:
         run: |
           echo "/usr/local/bin" >> $GITHUB_PATH
           echo "$HOME/.cargo/bin:" >> $GITHUB_PATH
-      - <<: *docker-login
       - name: Run Bazel Test Darwin x86-64
         id: bazel-test-darwin-x86-64
         uses:  ./.github/actions/bazel-test-all/
@@ -278,7 +268,6 @@ jobs:
     steps:
       - <<: *checkout
       - <<: *before-script
-      - <<: *docker-login
       - name: Run Build IC
         id: build-ic
         shell: bash

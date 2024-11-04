@@ -86,7 +86,7 @@ sudo podman run --pids-limit=-1 -it --rm --privileged --network=host --cgroupns=
   --mount type=bind,source=/home/john/.local/share/fish,target=/home/ubuntu/.local/share/fish \
   --mount type=bind,source=/home/john/.zsh_history,target=/home/ubuntu/.zsh_history \
   -v /tmp/ssh-XXXXQAO7kF/agent.113731:/ssh-agent -e SSH_AUTH_SOCK=/ssh-agent -w /ic \
-  docker.io/dfinity/ic-build:221b79c4f4a966eae67a3f9ef7f20f4c5583d5bc38df17c94128804687a84c29 /usr/bin/fish
+  ghcr.io/dfinity/ic-build:221b79c4f4a966eae67a3f9ef7f20f4c5583d5bc38df17c94128804687a84c29 /usr/bin/fish
 ```
 
 ### How to use custom config
