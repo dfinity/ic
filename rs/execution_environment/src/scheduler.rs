@@ -1427,15 +1427,14 @@ impl Scheduler for SchedulerImpl {
         let round_schedule = {
             let _timer = self.metrics.round_scheduling_duration.start_timer();
 
-            let round_schedule_candidate = RoundSchedule::apply_scheduling_strategy(
+            RoundSchedule::apply_scheduling_strategy(
                 &round_log,
                 self.config.scheduler_cores,
                 current_round,
                 self.config.accumulated_priority_reset_interval,
                 &mut state.canister_states,
                 &self.metrics,
-            );
-            round_schedule_candidate
+            )
         };
 
         // Inner round.
