@@ -35,17 +35,6 @@ rust_library(
     deps = DEPENDENCIES,
 )
 
-# Disabled, doc tests do not support data dependencies.
-rust_doc_test(
-    name = "lib_doc_test",
-    crate = ":lib",
-    deps = [
-        # Keep sorted.
-        "//rs/crypto/sha2",
-        "//rs/types/types",
-    ],
-)
-
 rust_test(
     name = "lib_test",
     crate = ":lib",
