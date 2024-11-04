@@ -79,6 +79,7 @@ fn timers() {
 
 // Service
 
+#[allow(dead_code)]
 fn main() {}
 
 #[ic_cdk::init]
