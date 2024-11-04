@@ -18,7 +18,7 @@ use ic_replicated_state::metadata_state::subnet_call_context_manager::{
 use ic_types::consensus::idkg::common::{PreSignatureRef, SignatureScheme, ThresholdSigInputsRef};
 use ic_types::consensus::idkg::ecdsa::ThresholdEcdsaSigInputsRef;
 use ic_types::consensus::idkg::schnorr::ThresholdSchnorrSigInputsRef;
-use ic_types::consensus::idkg::{HasMasterPublicKeyId, IdkgMasterPublicKeyId};
+use ic_types::consensus::idkg::{HasMasterPublicKeyId, IDkgMasterPublicKeyId};
 use ic_types::consensus::Block;
 use ic_types::consensus::{
     idkg::{
@@ -364,7 +364,7 @@ pub(super) fn transcript_op_summary(op: &IDkgTranscriptOperation) -> String {
 pub(crate) fn inspect_idkg_chain_key_initializations(
     ecdsa_initializations: &[pb::EcdsaInitialization],
     chain_key_initializations: &[pb::ChainKeyInitialization],
-) -> Result<BTreeMap<IdkgMasterPublicKeyId, InitialIDkgDealings>, String> {
+) -> Result<BTreeMap<IDkgMasterPublicKeyId, InitialIDkgDealings>, String> {
     let mut initial_dealings_per_key_id = BTreeMap::new();
 
     if !ecdsa_initializations.is_empty() && !chain_key_initializations.is_empty() {

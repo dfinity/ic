@@ -18,7 +18,7 @@ use ic_management_canister_types::MasterPublicKeyId;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_features::ChainKeyConfig;
 use ic_replicated_state::{metadata_state::subnet_call_context_manager::*, ReplicatedState};
-use ic_types::consensus::idkg::{HasMasterPublicKeyId, IdkgMasterPublicKeyId};
+use ic_types::consensus::idkg::{HasMasterPublicKeyId, IDkgMasterPublicKeyId};
 use ic_types::{
     batch::ValidationContext,
     consensus::{
@@ -44,7 +44,7 @@ pub(super) mod signatures;
 /// data blocks to create the initial key transcript.
 pub(crate) fn make_bootstrap_summary(
     subnet_id: SubnetId,
-    key_ids: Vec<IdkgMasterPublicKeyId>,
+    key_ids: Vec<IDkgMasterPublicKeyId>,
     height: Height,
 ) -> idkg::Summary {
     let key_transcripts = key_ids
@@ -60,7 +60,7 @@ pub(crate) fn make_bootstrap_summary(
 pub(crate) fn make_bootstrap_summary_with_initial_dealings(
     subnet_id: SubnetId,
     height: Height,
-    initial_dealings_per_key_id: BTreeMap<IdkgMasterPublicKeyId, InitialIDkgDealings>,
+    initial_dealings_per_key_id: BTreeMap<IDkgMasterPublicKeyId, InitialIDkgDealings>,
     log: &ReplicaLogger,
 ) -> Result<idkg::Summary, IDkgPayloadError> {
     let mut idkg_transcripts = BTreeMap::new();
@@ -139,7 +139,7 @@ pub(crate) fn create_summary_payload(
         return Ok(None);
     };
 
-    let key_ids: Vec<IdkgMasterPublicKeyId> = chain_key_config
+    let key_ids: Vec<IDkgMasterPublicKeyId> = chain_key_config
         .key_configs
         .iter()
         .map(|key_config| key_config.key_id.clone())
@@ -189,7 +189,7 @@ pub(crate) fn create_summary_payload(
 
 fn create_summary_payload_helper(
     subnet_id: SubnetId,
-    key_ids: &[IdkgMasterPublicKeyId],
+    key_ids: &[IDkgMasterPublicKeyId],
     registry_client: &dyn RegistryClient,
     block_reader: &dyn IDkgBlockReader,
     height: Height,
@@ -826,7 +826,7 @@ mod tests {
     }
 
     fn master_key_transcript_with_current(
-        key: IdkgMasterPublicKeyId,
+        key: IDkgMasterPublicKeyId,
         current: UnmaskedTranscriptWithAttributes,
         next: UnmaskedTranscriptWithAttributes,
     ) -> MasterKeyTranscript {
@@ -1711,7 +1711,7 @@ mod tests {
         }
     }
 
-    fn test_no_creation_after_successful_creation(key_id: IdkgMasterPublicKeyId) {
+    fn test_no_creation_after_successful_creation(key_id: IDkgMasterPublicKeyId) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let mut rng = reproducible_rng();
             let Dependencies {
@@ -1845,7 +1845,7 @@ mod tests {
         }
     }
 
-    fn test_incomplete_reshare_doesnt_purge_pre_signatures(key_id: IdkgMasterPublicKeyId) {
+    fn test_incomplete_reshare_doesnt_purge_pre_signatures(key_id: IDkgMasterPublicKeyId) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let mut rng = reproducible_rng();
             let Dependencies {
@@ -2191,7 +2191,7 @@ mod tests {
         }
     }
 
-    fn test_if_next_in_creation_continues(key_id: IdkgMasterPublicKeyId) {
+    fn test_if_next_in_creation_continues(key_id: IDkgMasterPublicKeyId) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let Dependencies {
                 registry,
@@ -2341,7 +2341,7 @@ mod tests {
         }
     }
 
-    fn test_next_in_creation_with_initial_dealings(key_id: IdkgMasterPublicKeyId) {
+    fn test_next_in_creation_with_initial_dealings(key_id: IDkgMasterPublicKeyId) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let mut rng = reproducible_rng();
             let Dependencies {

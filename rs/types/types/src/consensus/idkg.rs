@@ -66,9 +66,9 @@ pub enum CompletedSignature {
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
-pub struct IdkgMasterPublicKeyId(MasterPublicKeyId);
+pub struct IDkgMasterPublicKeyId(MasterPublicKeyId);
 
-impl TryFrom<MasterPublicKeyId> for IdkgMasterPublicKeyId {
+impl TryFrom<MasterPublicKeyId> for IDkgMasterPublicKeyId {
     type Error = String;
 
     fn try_from(val: MasterPublicKeyId) -> Result<Self, Self::Error> {
@@ -80,13 +80,13 @@ impl TryFrom<MasterPublicKeyId> for IdkgMasterPublicKeyId {
     }
 }
 
-impl From<IdkgMasterPublicKeyId> for MasterPublicKeyId {
-    fn from(val: IdkgMasterPublicKeyId) -> Self {
+impl From<IDkgMasterPublicKeyId> for MasterPublicKeyId {
+    fn from(val: IDkgMasterPublicKeyId) -> Self {
         val.0
     }
 }
 
-impl std::ops::Deref for IdkgMasterPublicKeyId {
+impl std::ops::Deref for IDkgMasterPublicKeyId {
     type Target = MasterPublicKeyId;
 
     fn deref(&self) -> &<Self as std::ops::Deref>::Target {
@@ -94,16 +94,16 @@ impl std::ops::Deref for IdkgMasterPublicKeyId {
     }
 }
 
-impl Serialize for IdkgMasterPublicKeyId {
+impl Serialize for IDkgMasterPublicKeyId {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         self.0.serialize(serializer)
     }
 }
 
-impl<'de> serde::Deserialize<'de> for IdkgMasterPublicKeyId {
+impl<'de> serde::Deserialize<'de> for IDkgMasterPublicKeyId {
     fn deserialize<D: serde::Deserializer<'de>>(
         deserializer: D,
-    ) -> Result<IdkgMasterPublicKeyId, D::Error> {
+    ) -> Result<IDkgMasterPublicKeyId, D::Error> {
         use serde::de::Error;
 
         let master_public_key_id: MasterPublicKeyId =
@@ -426,7 +426,7 @@ pub struct MasterKeyTranscript {
 }
 
 impl MasterKeyTranscript {
-    pub fn new(key_id: IdkgMasterPublicKeyId, next_in_creation: KeyTranscriptCreation) -> Self {
+    pub fn new(key_id: IDkgMasterPublicKeyId, next_in_creation: KeyTranscriptCreation) -> Self {
         Self {
             current: None,
             next_in_creation,
