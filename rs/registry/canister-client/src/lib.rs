@@ -18,23 +18,16 @@ type CacheState = (
 pub struct CanisterRegistryClient {
     data_provider: Arc<dyn RegistryDataProvider>,
     cache: Arc<RwLock<CacheState>>,
-    current_time: fn() -> Time
 }
 
 impl CanisterRegistryClient {
     pub fn new(data_provider: Arc<dyn RegistryDataProvider>) -> Self {
-        let current_time = || {
-            let current_time = ic_cdk::api::time();
-            Time::from_nanos_since_unix_epoch(current_time)
-        };
-
         Self {
             data_provider,
             cache: Arc::new(RwLock::new(Default::default())),
-            current_time
         }
     }
-
+    
     pub fn update_to_latest_version(&self) {
         let mut cache = self.cache.write().unwrap();
         let latest_version = cache.0;
@@ -51,7 +44,8 @@ impl CanisterRegistryClient {
         let mut new_version = ZERO_REGISTRY_VERSION;
         for record in new_records {
             assert!(record.version > latest_version);
-            timestamps.insert(new_version, (self.current_time)());
+            let current_time = ic_cdk::api::time();
+            timestamps.insert(new_version, Time::from_nanos_since_unix_epoch(current_time));
             new_version = new_version.max(record.version);
             let search_key = (&record.key, &record.version);
             match cache

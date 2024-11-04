@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use super::*;
 use ic_interfaces_registry::RegistryVersionedRecord;
 use ic_registry_keys::NODE_RECORD_KEY_PREFIX;
-use ic_types::{registry::RegistryDataProviderError, time::current_time, PrincipalId};
+use ic_types::{registry::RegistryDataProviderError, PrincipalId};
 
 const DELETED_KEY: &str = "\
     node_record_\
@@ -121,11 +121,7 @@ fn test_absent_after_delete() {
 
 #[test]
 fn empty_registry_should_report_zero_as_latest_version() {
-    let client = CanisterRegistryClient{
-        data_provider: Arc::new(DummyRegistryDataProvider::new()),
-        cache: Arc::new(RwLock::new(Default::default())),
-        current_time: || current_time()
-    };
+    let client = CanisterRegistryClient::new(Arc::new(DummyRegistryDataProvider::new()));
 
     assert_eq!(client.get_latest_version(), ZERO_REGISTRY_VERSION);
 }
@@ -133,11 +129,7 @@ fn empty_registry_should_report_zero_as_latest_version() {
 #[test]
 fn can_retrieve_entries_correctly() {
     let dummy_registry = Arc::new(DummyRegistryDataProvider::new());
-    let client = CanisterRegistryClient{
-        data_provider: dummy_registry.clone(),
-        cache: Arc::new(RwLock::new(Default::default())),
-        current_time: || current_time()
-    };
+    let client = CanisterRegistryClient::new(dummy_registry.clone());
 
     let set = |key: &str, ver: u64| dummy_registry.add(key, ver, Some(ver));
     let rem = |key: &str, ver: u64| dummy_registry.add(key, ver, None);

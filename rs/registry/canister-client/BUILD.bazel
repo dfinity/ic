@@ -1,4 +1,5 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library")
+load("//bazel:defs.bzl", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -9,8 +10,14 @@ DEPENDENCIES = [
     "@crate_index//:ic-cdk",
 ]
 
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/registry/keys",
+]
+
 SRCS = glob(
-    ["src/**"]
+    ["src/**"],
+    exclude = ["**/*tests.rs"],
 )
 
 rust_library(
@@ -19,4 +26,10 @@ rust_library(
     crate_name = "ic_registry_canister_client",
     version = "0.9.0",
     deps = DEPENDENCIES,
+)
+
+rust_ic_test(
+    name = "client_test",
+    srcs = glob(["src/**/*.rs"]),
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
