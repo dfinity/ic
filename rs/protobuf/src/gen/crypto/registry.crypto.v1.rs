@@ -49,8 +49,15 @@ pub struct SchnorrKeyId {
     pub name: ::prost::alloc::string::String,
 }
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+pub struct VetKdKeyId {
+    #[prost(enumeration = "VetKdCurve", tag = "1")]
+    pub curve: i32,
+    #[prost(string, tag = "2")]
+    pub name: ::prost::alloc::string::String,
+}
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct MasterPublicKeyId {
-    #[prost(oneof = "master_public_key_id::KeyId", tags = "1, 2")]
+    #[prost(oneof = "master_public_key_id::KeyId", tags = "1, 2, 3")]
     pub key_id: ::core::option::Option<master_public_key_id::KeyId>,
 }
 /// Nested message and enum types in `MasterPublicKeyId`.
@@ -61,6 +68,8 @@ pub mod master_public_key_id {
         Ecdsa(super::EcdsaKeyId),
         #[prost(message, tag = "2")]
         Schnorr(super::SchnorrKeyId),
+        #[prost(message, tag = "3")]
+        Vetkd(super::VetKdKeyId),
     }
 }
 /// An algorithm ID. This is used to specify the signature algorithm associated with a public key.
@@ -233,6 +242,44 @@ impl SchnorrAlgorithm {
             "SCHNORR_ALGORITHM_UNSPECIFIED" => Some(Self::Unspecified),
             "SCHNORR_ALGORITHM_BIP340SECP256K1" => Some(Self::Bip340secp256k1),
             "SCHNORR_ALGORITHM_ED25519" => Some(Self::Ed25519),
+            _ => None,
+        }
+    }
+}
+#[derive(
+    serde::Serialize,
+    serde::Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    ::prost::Enumeration,
+)]
+#[repr(i32)]
+pub enum VetKdCurve {
+    Unspecified = 0,
+    Bls12381G2 = 1,
+}
+impl VetKdCurve {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "VET_KD_CURVE_UNSPECIFIED",
+            Self::Bls12381G2 => "VET_KD_CURVE_BLS12_381_G2",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "VET_KD_CURVE_UNSPECIFIED" => Some(Self::Unspecified),
+            "VET_KD_CURVE_BLS12_381_G2" => Some(Self::Bls12381G2),
             _ => None,
         }
     }
