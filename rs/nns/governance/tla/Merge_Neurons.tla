@@ -22,7 +22,8 @@ TRANSFER_FAIL == "Err"
 DUMMY_ACCOUNT == ""
 
 \* @type: ($neurons, $neuronId) => Int;
-Minted_Stake(neuron, neuron_id) == neuron[neuron_id].cached_stake - neuron[neuron_id].fees
+Minted_Stake(neuron, neuron_id) == LET diff == neuron[neuron_id].cached_stake - neuron[neuron_id].fees IN
+    IF diff > 0 THEN diff ELSE 0
 request(caller, request_args) == [caller |-> caller, method_and_args |-> request_args]
 transfer(from, to, amount, fee) == Variant("Transfer", [from |-> from, to |-> to, amount |-> amount, fee |-> fee])
 
@@ -32,7 +33,7 @@ Decrease_Stake(neuron, neuron_id, amount) == [neuron EXCEPT ![neuron_id].cached_
 Increase_Stake(neuron, neuron_id, amount) == [neuron EXCEPT ![neuron_id].cached_stake = @ + amount]
 \* @type: ($neurons, $neuronId, Int) => $neurons;
 Update_Fees(neuron, neuron_id, fees_amount) == [neuron EXCEPT
-    ![neuron_id].cached_stake = LET diff == @ - fees_amount IN IF diff > 0 THEN diff ELSE 0,
+    ![neuron_id].cached_stake = Minted_Stake(neuron, neuron_id),
     ![neuron_id].fees = 0 ]
 \* @type: ($neurons, $neuronId, Int) => $neurons;
 Decrease_Maturity(neuron, neuron_id, amount) == [neuron EXCEPT ![neuron_id].maturity = @ - amount]

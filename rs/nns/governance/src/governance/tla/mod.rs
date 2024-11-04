@@ -28,9 +28,9 @@ mod claim_neuron;
 mod merge_neurons;
 mod split_neuron;
 
-pub use claim_neuron::claim_neuron_desc;
-pub use merge_neurons::merge_neurons_desc;
-pub use split_neuron::split_neuron_desc;
+pub use claim_neuron::CLAIM_NEURON_DESC;
+pub use merge_neurons::MERGE_NEURONS_DESC;
+pub use split_neuron::SPLIT_NEURON_DESC;
 
 fn neuron_global(gov: &Governance) -> TlaValue {
     let neuron_map: BTreeMap<u64, TlaValue> = with_stable_neuron_store(|store| {
@@ -294,16 +294,17 @@ pub fn check_traces() {
     // to signal threads becoming available.
     const MAX_THREADS: usize = 20;
     let mut running_threads = 0;
-    let (tx, rx) = mpsc::channel::<()>();
+    let (thread_freed_tx, thread_freed_rx) = mpsc::channel::<()>();
     for (i, (update, constants, pair)) in all_pairs.iter().enumerate() {
         println!("Checking state pair #{}", i + 1);
         if running_threads >= MAX_THREADS {
-            rx.recv()
+            thread_freed_rx
+                .recv()
                 .expect("Error while waiting for the thread completion signal");
             running_threads -= 1;
         }
 
-        let tx = tx.clone();
+        let thread_freed_rx = thread_freed_tx.clone();
         let apalache = apalache.clone();
         let constants = constants.clone();
         let pair = pair.clone();
@@ -332,13 +333,15 @@ pub fn check_traces() {
                 println!("Apalache returned:\n{:#?}", e.apalache_error);
                 panic!("Apalache check failed")
             });
-            tx.send(())
+            thread_freed_rx
+                .send(())
                 .expect("Couldn't send the thread completion signal");
         });
     }
 
     while running_threads > 0 {
-        rx.recv()
+        thread_freed_rx
+            .recv()
             .expect("Error while waiting for the thread completion signal");
         running_threads -= 1;
     }

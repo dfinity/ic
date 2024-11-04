@@ -134,8 +134,8 @@ pub mod tla_macros;
 pub mod tla;
 #[cfg(feature = "tla")]
 pub use tla::{
-    claim_neuron_desc, merge_neurons_desc, split_neuron_desc, tla_update_method,
-    InstrumentationState, ToTla, TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY, TLA_TRACES_MUTEX,
+    tla_update_method, InstrumentationState, ToTla, CLAIM_NEURON_DESC, MERGE_NEURONS_DESC,
+    SPLIT_NEURON_DESC, TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY, TLA_TRACES_MUTEX,
 };
 
 // 70 KB (for executing NNS functions that are not canister upgrades)
@@ -2652,7 +2652,7 @@ impl Governance {
     ///   stake.
     /// - The amount to split minus the transfer fee is more than the minimum
     ///   stake.
-    #[cfg_attr(feature = "tla", tla_update_method(split_neuron_desc()))]
+    #[cfg_attr(feature = "tla", tla_update_method(SPLIT_NEURON_DESC.clone()))]
     pub async fn split_neuron(
         &mut self,
         id: &NeuronId,
@@ -2912,7 +2912,7 @@ impl Governance {
     ///   it will be merged into the stake of the target neuron; if it is less
     ///   than the transaction fee, the maturity of the source neuron will
     ///   still be merged into the maturity of the target neuron.
-    #[cfg_attr(feature = "tla", tla_update_method(merge_neurons_desc()))]
+    #[cfg_attr(feature = "tla", tla_update_method(MERGE_NEURONS_DESC.clone()))]
     pub async fn merge_neurons(
         &mut self,
         id: &NeuronId,
@@ -6227,7 +6227,7 @@ impl Governance {
     /// the neuron and lock it before we make the call, we know that any
     /// concurrent call to mutate the same neuron will need to wait for this
     /// one to finish before proceeding.
-    #[cfg_attr(feature = "tla", tla_update_method(claim_neuron_desc()))]
+    #[cfg_attr(feature = "tla", tla_update_method(CLAIM_NEURON_DESC.clone()))]
     async fn claim_neuron(
         &mut self,
         subaccount: Subaccount,
