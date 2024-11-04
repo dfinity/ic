@@ -763,3 +763,9 @@ fn assert_reply(result: WasmResult) -> Vec<u8> {
 pub fn use_evm_rpc_canister() -> bool {
     std::env::var("EVM_RPC_CANISTER_WASM_PATH").is_ok()
 }
+
+pub struct LedgerBalance {
+    pub ledger_id: Principal,
+    pub account: Account,
+    pub balance: Nat,
+}

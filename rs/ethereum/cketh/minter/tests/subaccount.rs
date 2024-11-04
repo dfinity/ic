@@ -4,8 +4,8 @@ use ic_cketh_minter::memo::MintMemo;
 use ic_cketh_test_utils::ckerc20::{CkErc20Setup, DepositCkErc20WithSubaccountParams, ONE_USDC};
 use ic_cketh_test_utils::flow::{DepositCkEthWithSubaccountParams, DepositParams};
 use ic_cketh_test_utils::{
-    CkEthSetup, CKETH_MINIMUM_WITHDRAWAL_AMOUNT, DEFAULT_DEPOSIT_FROM_ADDRESS,
-    DEFAULT_DEPOSIT_LOG_INDEX, DEFAULT_DEPOSIT_TRANSACTION_HASH, DEFAULT_ERC20_DEPOSIT_LOG_INDEX,
+    CkEthSetup, DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_DEPOSIT_LOG_INDEX,
+    DEFAULT_DEPOSIT_TRANSACTION_HASH, DEFAULT_ERC20_DEPOSIT_LOG_INDEX,
     DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH, DEFAULT_PRINCIPAL_ID, DEFAULT_USER_SUBACCOUNT,
     EXPECTED_BALANCE,
 };
@@ -105,7 +105,7 @@ fn should_deposit_cketh_and_ckerc20() {
         .expect_mint()
         .call_cketh_ledger_get_transaction(0_u8)
         .expect_mint(Mint {
-            amount: CKETH_MINIMUM_WITHDRAWAL_AMOUNT.into(),
+            amount: EXPECTED_BALANCE.into(),
             to: Account {
                 owner: caller,
                 subaccount: cketh_subaccount,
