@@ -17795,7 +17795,6 @@ name = "rate_limits"
 version = "0.9.0"
 dependencies = [
  "anyhow",
- "bincode",
  "candid",
  "getrandom",
  "hex",
@@ -17809,8 +17808,8 @@ dependencies = [
  "rand_chacha 0.3.1",
  "rate-limits-api",
  "serde",
+ "serde_cbor",
  "serde_json",
- "sha2 0.10.8",
  "thiserror",
  "uuid",
 ]
