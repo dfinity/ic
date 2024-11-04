@@ -710,8 +710,7 @@ impl Ledger {
         records.push(Value::entry("icrc1:decimals", self.decimals() as u64));
         records.push(Value::entry("icrc1:name", self.token_name()));
         records.push(Value::entry("icrc1:symbol", self.token_symbol()));
-        let nat_fee: Nat = self.transfer_fee().into();
-        records.push(Value::entry("icrc1:fee", nat_fee));
+        records.push(Value::entry("icrc1:fee", Nat::from(self.transfer_fee())));
         records.push(Value::entry(
             "icrc1:max_memo_length",
             self.max_memo_length() as u64,
