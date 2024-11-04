@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=oneshot
-ExecStart=/opt/ic/bin/config update-guestos-config --output-file /boot/config/config.json
+ExecStart=/opt/ic/bin/config update-guestos-config
 RemainAfterExit=yes
 
 [Install]
