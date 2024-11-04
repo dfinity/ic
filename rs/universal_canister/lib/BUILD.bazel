@@ -15,7 +15,6 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
-    ":build_script",
     "//rs/types/types",
 ]
 
