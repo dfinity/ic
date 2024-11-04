@@ -101,6 +101,6 @@ rust_test_suite(
     },
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = ["cpu:8"],
+    tags = ["cpu:16"],
     deps = [":pocket-ic"] + DEPENDENCIES + TEST_DEPENDENCIES,
 )
