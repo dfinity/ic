@@ -53,23 +53,7 @@ pub fn update_guestos_config(output_file: PathBuf) -> Result<()> {
         icos_dev_settings: ICOSDevSettings::default(),
     };
 
-    let guestos_dev_settings = GuestOSDevSettings {
-        backup_spool: None,
-        malicious_behavior: None,
-        query_stats_epoch_length: None,
-        bitcoind_addr: None,
-        jaeger_addr: None,
-        socks_proxy: None,
-        hostname: None,
-        generate_ic_boundary_tls_cert: None,
-    };
-
-    let guestos_settings = GuestOSSettings {
-        inject_ic_crypto: false,
-        inject_ic_state: false,
-        inject_ic_registry_local_store: false,
-        guestos_dev_settings,
-    };
+    let guestos_settings = GuestOSSettings::default();
 
     let guestos_config = GuestOSConfig {
         network_settings,
