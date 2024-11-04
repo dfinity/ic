@@ -175,7 +175,7 @@ impl<R: CanisterApi, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
                 .and_modify(|value| {
                     value.insert(rule_id);
                 })
-                .or_default;
+                .or_default();
 
             rule_ids.push(rule_id);
         }

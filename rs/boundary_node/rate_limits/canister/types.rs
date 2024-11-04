@@ -164,7 +164,7 @@ impl From<OutputRuleMetadata> for rate_limits_api::OutputRuleMetadata {
 #[derive(Debug, Error, Clone)]
 pub enum DiscloseRulesArgError {
     #[error("Invalid UUID at index = {0}")]
-    InvalidUuid(usize),
+    InvalidUuidFormat(usize),
 }
 
 impl TryFrom<rate_limits_api::DiscloseRulesArg> for DiscloseRulesArg {
@@ -176,7 +176,7 @@ impl TryFrom<rate_limits_api::DiscloseRulesArg> for DiscloseRulesArg {
                 let mut rules = Vec::with_capacity(rule_ids.len());
                 for (idx, rule_id) in rule_ids.into_iter().enumerate() {
                     let uuid = RuleId::try_from(rule_id)
-                        .map_err(|_| DiscloseRulesArgError::InvalidUuid(idx))?;
+                        .map_err(|_| DiscloseRulesArgError::InvalidUuidFormat(idx))?;
                     rules.push(uuid);
                 }
                 Ok(DiscloseRulesArg::RuleIds(rules))
@@ -185,7 +185,7 @@ impl TryFrom<rate_limits_api::DiscloseRulesArg> for DiscloseRulesArg {
                 let mut incidents = Vec::with_capacity(incident_ids.len());
                 for (idx, incident_id) in incident_ids.into_iter().enumerate() {
                     let uuid = IncidentId::try_from(incident_id)
-                        .map_err(|_| DiscloseRulesArgError::InvalidUuid(idx))?;
+                        .map_err(|_| DiscloseRulesArgError::InvalidUuidFormat(idx))?;
                     incidents.push(uuid);
                 }
                 Ok(DiscloseRulesArg::IncidentIds(incidents))
