@@ -277,7 +277,7 @@ fn migrate_next_part(instruction_limit: u64) {
                 }
             }
         }
-        let msg = format!("Number of elements migrated: allowances:{migrated_allowances} expirations:{migrated_expirations}. Instructions used {}.",
+        let msg = format!("Number of elements migrated: allowances: {migrated_allowances} expirations: {migrated_expirations}. Total instructions used in message: {}." ,
             instruction_counter());
         if !ledger.is_ready() {
             log_message(
