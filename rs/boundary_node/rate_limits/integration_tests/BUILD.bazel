@@ -53,7 +53,7 @@ rust_library(
     testonly = True,
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
-    crate_name = "ic_rate_limit_canister_integration_tests",
+    crate_name = "rate_limit_canister_integration_tests",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )

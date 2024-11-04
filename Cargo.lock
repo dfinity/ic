@@ -17759,18 +17759,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f60fcc7d6849342eff22c4350c8b9a989ee8ceabc4b481253e8946b9fe83d684"
 
 [[package]]
-name = "rate-limits-api"
-version = "0.9.0"
-dependencies = [
- "candid",
- "regex",
- "serde",
- "serde_bytes",
- "serde_json",
-]
-
-[[package]]
-name = "rate-limits-canister-integration-tests"
+name = "rate-limit-canister-integration-tests"
 version = "0.9.0"
 dependencies = [
  "assert_matches",
@@ -17790,6 +17779,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "rate-limits-api"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "regex",
+ "serde",
+ "serde_bytes",
+ "serde_json",
+]
+
+[[package]]
 name = "rate_limits"
 version = "0.9.0"
 dependencies = [
@@ -17806,8 +17806,8 @@ dependencies = [
  "ic-stable-structures",
  "mockall 0.13.0",
  "rand_chacha 0.3.1",
+ "rate-limit-canister-integration-tests",
  "rate-limits-api",
- "rate-limits-canister-integration-tests",
  "serde",
  "serde_json",
  "sha2 0.10.8",

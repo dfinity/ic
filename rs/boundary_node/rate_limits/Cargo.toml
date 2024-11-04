@@ -28,7 +28,7 @@ thiserror = { workspace = true }
 uuid = { workspace = true, features = ['serde', 'v4'] }
 
 [dev-dependencies]
-rate-limits-canister-integration-tests = { path = "./integration_tests" }
+rate-limit-canister-integration-tests = { path = "./integration_tests" }
 
 [lib]
 crate-type = ["cdylib"]

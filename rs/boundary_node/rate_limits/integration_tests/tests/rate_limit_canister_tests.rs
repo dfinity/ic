@@ -1,7 +1,7 @@
 use candid::{Encode, Principal};
 use ic_crypto_sha2::Sha256;
 use ic_nns_test_utils::common::modify_wasm_bytes;
-use ic_rate_limit_canister_integration_tests::pocket_ic_helpers::{
+use rate_limit_canister_integration_tests::pocket_ic_helpers::{
     canister_call, get_installed_wasm_hash, install_rate_limit_canister_on_ii_subnet,
     setup_subnets_and_registry_canister,
 };
@@ -11,7 +11,7 @@ const AUTHORIZED_PRINCIPAL: &str =
     "imx2d-dctwe-ircfz-emzus-bihdn-aoyzy-lkkdi-vi5vw-npnik-noxiy-mae";
 
 #[tokio::test]
-async fn test() {
+async fn main() {
     // Setup:
     // - Two system subnets: NNS and II
     // - Registry canister on NNS subnet

@@ -1,5 +1,5 @@
 [package]
-name = "rate-limits-canister-integration-tests"
+name = "rate-limit-canister-integration-tests"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -23,8 +23,4 @@ ic-registry-keys = { path = "../../../registry/keys" }
 ic-registry-transport = { path = "../../../registry/transport" }
 canister-test = { path = "../../../rust_canisters/canister_test" }
 ic-nns-test-utils = { path = "../../../nns/test_utils" }
-
-[[bin]]
-name = "rate_limit_canister_tests"
-path = "./tests/rate_limit_canister_tests.rs"
 
