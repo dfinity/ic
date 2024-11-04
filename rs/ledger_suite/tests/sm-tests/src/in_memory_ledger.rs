@@ -567,18 +567,22 @@ impl InMemoryLedger<ApprovalKey, Account, Tokens> {
         self.validate_invariants();
     }
 
-    pub fn verify_balances_and_allowances(&self, env: &StateMachine, ledger_id: CanisterId) {
-        let total_blocks = parse_metric(env, ledger_id, "ledger_total_transactions");
+    pub fn verify_balances_and_allowances(
+        &self,
+        env: &StateMachine,
+        ledger_id: CanisterId,
+        num_ledger_blocks: u64,
+    ) {
         let actual_num_approvals = parse_metric(env, ledger_id, "ledger_num_approvals");
         let actual_num_balances = parse_metric(env, ledger_id, "ledger_balance_store_entries");
         println!(
             "total_blocks in ledger: {}, total InMemoryLedger transactions: {}",
-            total_blocks, self.transactions
+            num_ledger_blocks, self.transactions
         );
         assert_eq!(
-            total_blocks, self.transactions,
+            num_ledger_blocks, self.transactions,
             "Mismatch in number of transactions ({} vs {})",
-            self.transactions, total_blocks
+            self.transactions, num_ledger_blocks
         );
         assert_eq!(
             self.balances.len() as u64,
@@ -656,6 +660,6 @@ pub fn verify_ledger_state(
     let mut expected_ledger_state = InMemoryLedger::new(burns_without_spender);
     expected_ledger_state.ingest_icrc1_ledger_blocks(&blocks);
     println!("recreated expected ledger state");
-    expected_ledger_state.verify_balances_and_allowances(env, ledger_id);
+    expected_ledger_state.verify_balances_and_allowances(env, ledger_id, blocks.len() as u64);
     println!("ledger state verified successfully");
 }
