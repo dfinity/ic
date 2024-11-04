@@ -46,6 +46,9 @@ fn canister_log_response(data: Vec<(u64, u64, Vec<u8>)>) -> FetchCanisterLogsRes
     }
 }
 
+/// Convert logs to a human readable format so that test failures show useful
+/// errors and remove any canister backtraces from log messages since we don't
+/// want to test the exact backtrace format here.
 fn readable_logs_without_backtraces(
     result: Result<WasmResult, UserError>,
 ) -> Vec<(u64, SystemTime, String)> {
