@@ -56,7 +56,7 @@ pub enum Commands {
     GenerateTestnetConfig(GenerateTestnetConfigClapArgs),
     /// Creates a GuestOSConfig object from existing guestos configuration files
     UpdateGuestosConfig {
-        #[arg(long, value_name = "output_file")]
+        #[arg(long, default_value = config::DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, value_name = "output_file")]
         output_file: PathBuf,
     },
 }
