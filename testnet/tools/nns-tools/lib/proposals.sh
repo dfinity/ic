@@ -13,8 +13,8 @@ generate_swap_canister_upgrade_proposal_text() {
     WASM_GZ=$(download_sns_canister_wasm_gz_for_type "swap" "$NEXT_COMMIT")
     WASM_SHA=$(sha_256 "$WASM_GZ")
     SHORT_NEXT_COMMIT="${NEXT_COMMIT:0:7}"
-    CANISTER_NAME="swap"
-    CAPITALIZED_CANISTER_NAME="Swap"
+    CANISTER_TYPE="swap"
+    CAPITALIZED_CANISTER_TYPE="Swap"
     LAST_WASM_HASH=$(canister_hash ic $CANISTER_ID)
 
     IC_REPO=$(repo_root)
@@ -35,7 +35,7 @@ generate_swap_canister_upgrade_proposal_text() {
 
     OUTPUT=$(
         cat <<++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-# Upgrade the $SNS_PROJECT_NAME $CAPITALIZED_CANISTER_NAME Canister to Commit $SHORT_NEXT_COMMIT
+# Upgrade the $SNS_PROJECT_NAME $CAPITALIZED_CANISTER_TYPE Canister to Commit $SHORT_NEXT_COMMIT
 
 __Proposer__: ${PROPOSER}
 
@@ -85,7 +85,7 @@ git checkout $NEXT_COMMIT
 ./ci/container/build-ic.sh -c
 
 # 3. Fingerprint the result.
-sha256sum ./artifacts/canisters/$(_canister_download_name_for_nns_canister_type "$CANISTER_NAME").wasm.gz
+sha256sum ./artifacts/canisters/$(_canister_download_name_for_sns_canister_type "$CANISTER_TYPE").wasm.gz
 \`\`\`
 
 This should match \`wasm_module_hash\` field of this proposal.
@@ -191,7 +191,7 @@ git checkout $NEXT_COMMIT
 ./ci/container/build-ic.sh -c
 
 # 3. Fingerprint the result.
-sha256sum ./artifacts/canisters/$(_canister_download_name_for_sns_canister_type "$CANISTER_NAME").wasm.gz
+sha256sum ./artifacts/canisters/$(_canister_download_name_for_nns_canister_type "$CANISTER_NAME").wasm.gz
 \`\`\`
 
 This should match \`wasm_module_hash\` field of this proposal.$(if [ ! -z "$CANDID_ARGS" ]; then
