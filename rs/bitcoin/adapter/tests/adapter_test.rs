@@ -555,12 +555,7 @@ fn test_adapter_disconnects_when_idle() {
 
     let rt: Runtime = tokio::runtime::Runtime::new().unwrap();
 
-    let _r = start_active_adapter_and_client(
-        &rt,
-        vec![url],
-        logger,
-        bitcoin::Network::Regtest,
-    );
+    let _r = start_active_adapter_and_client(&rt, vec![url], logger, bitcoin::Network::Regtest);
 
     // The client should be connected to the adapter
     wait_for_connection(&client, 1);
@@ -592,12 +587,7 @@ fn idle_adapter_does_not_connect_to_peers() {
 
     let rt = tokio::runtime::Runtime::new().unwrap();
 
-    let _r = start_idle_adapter_and_client(
-        &rt,
-        vec![url],
-        logger,
-        bitcoin::Network::Regtest,
-    );
+    let _r = start_idle_adapter_and_client(&rt, vec![url], logger, bitcoin::Network::Regtest);
 
     // The client still does not have any connections
     exact_connections(&client, 0);
