@@ -1021,6 +1021,7 @@ impl AllowancesData for StableAllowancesData {
         _timestamp: TimeStamp,
         _account_spender: (Self::AccountId, Self::AccountId),
     ) {
+        // We do not store arrivals in stable structures.
     }
 
     fn remove_arrival(
@@ -1028,6 +1029,7 @@ impl AllowancesData for StableAllowancesData {
         _timestamp: TimeStamp,
         _account_spender: (Self::AccountId, Self::AccountId),
     ) {
+        // We do not store arrivals in stable structures.
     }
 
     fn first_expiry(&self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))> {
@@ -1036,6 +1038,7 @@ impl AllowancesData for StableAllowancesData {
     }
 
     fn oldest_arrivals(&self, _n: usize) -> Vec<(Self::AccountId, Self::AccountId)> {
+        // We do not store arrivals in stable structures.
         vec![]
     }
 
