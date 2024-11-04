@@ -196,7 +196,13 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
         return Err(RetrieveBtcError::InsufficientFunds { balance });
     }
 
-    let (status, kyt_provider) = new_kyt_check_address(args.address.clone()).await?;
+    let new_kyt_principal = read_state(|s| {
+        s.new_kyt_principal
+            .expect("BUG: upgrade procedure must ensure that the new KYT principal is set")
+            .get()
+            .into()
+    });
+    let status = new_kyt_check_address(new_kyt_principal, args.address.clone()).await?;
 
     match status {
         BtcAddressCheckStatus::Tainted => {
@@ -221,7 +227,7 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
                     caller,
                     args.address,
                     args.amount,
-                    kyt_provider,
+                    new_kyt_principal,
                     block_index,
                 )
             });
@@ -237,7 +243,7 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
     }
     let burn_memo = BurnMemo::Convert {
         address: Some(&args.address),
-        kyt_fee: Some(kyt_fee),
+        kyt_fee: None,
         status: Some(Status::Accepted),
     };
     let block_index =
@@ -251,7 +257,7 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
         address: parsed_address,
         block_index,
         received_at: ic_cdk::api::time(),
-        kyt_provider: Some(kyt_provider),
+        kyt_provider: None,
         reimbursement_account: Some(Account {
             owner: caller,
             subaccount: None,
@@ -649,15 +655,9 @@ async fn kyt_check_address(
 }
 
 async fn new_kyt_check_address(
+    new_kyt_principal: Principal,
     address: String,
-) -> Result<(BtcAddressCheckStatus, Principal), RetrieveBtcError> {
-    let new_kyt_principal = read_state(|s| {
-        s.new_kyt_principal
-            .expect("BUG: upgrade procedure must ensure that the new KYT principal is set")
-            .get()
-            .into()
-    });
-
+) -> Result<BtcAddressCheckStatus, RetrieveBtcError> {
     match check_withdrawal_destination_address(new_kyt_principal, address.clone())
         .await
         .map_err(|call_err| {
@@ -668,8 +668,8 @@ async fn new_kyt_check_address(
         })? {
         CheckAddressResponse::Failed => {
             log!(P0, "Discovered a tainted btc address {}", address);
-            Ok((BtcAddressCheckStatus::Tainted, new_kyt_principal))
+            Ok(BtcAddressCheckStatus::Tainted)
         }
-        CheckAddressResponse::Passed => Ok((BtcAddressCheckStatus::Clean, new_kyt_principal)),
+        CheckAddressResponse::Passed => Ok(BtcAddressCheckStatus::Clean),
     }
 }
