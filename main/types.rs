@@ -191,10 +191,10 @@ pub enum CanisterInstallMode {
     Reinstall,
     /// Upgrade an existing canister.
     #[serde(rename = "upgrade")]
-    Upgrade(Option<SkipPreUpgrade>),
+    Upgrade(Option<UpgradeFlags>),
 }
 
-/// If set to true, the pre_upgrade step will be skipped during the canister upgrade
+/// Flags for canister installation with [`CanisterInstallMode::Upgrade`].
 #[derive(
     CandidType,
     Serialize,
@@ -209,7 +209,37 @@ pub enum CanisterInstallMode {
     Copy,
     Default,
 )]
-pub struct SkipPreUpgrade(pub Option<bool>);
+pub struct UpgradeFlags {
+    /// If set to `true`, the `pre_upgrade` step will be skipped during the canister upgrade
+    pub skip_pre_upgrade: Option<bool>,
+    /// If set to `Keep`, the WASM heap memory will be preserved instead of cleared.
+    pub wasm_memory_persistence: Option<WasmPersistenceMode>,
+}
+
+/// WASM memory persistence setting for [`UpgradeFlags`].
+#[derive(
+    CandidType,
+    Serialize,
+    Deserialize,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Clone,
+    Copy,
+    Default,
+)]
+pub enum WasmPersistenceMode {
+    /// Preserve heap memory (only officially supported by Motoko)
+    #[serde(rename = "keep")]
+    Keep,
+    /// Clear heap memory
+    #[serde(rename = "replace")]
+    #[default]
+    Replace,
+}
 
 /// WASM module.
 pub type WasmModule = Vec<u8>;
