@@ -1,4 +1,4 @@
 [env]
 # The following environment variable is used in rs/universal_canister/lib/src/lib.rs
-# and is set in bazel to its correct value. Here it's set to fake values to ensure cargo clippy and cargo build passes:
+# and is set in bazel to its correct value. Here it's set to a fake value to ensure cargo clippy and cargo build passes:
 UNIVERSAL_CANISTER_WASM_PATH = { value = "lib.rs" }
