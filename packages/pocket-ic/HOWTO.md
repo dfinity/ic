@@ -47,7 +47,7 @@ Since version 4.0.0, the PocketIC server also exposes the IC's HTTP interface, j
 For that reason, you need to explicitly make an instance "live" by calling `make_live()` on it. This will do three things: 
 
 - It launches a thread that calls `tick()` and `advance_time(...)` on the instance regularly - several times per second. 
-- It creates a gateway (like icx-proxy for the replica via dfx) which points to this live instance.
+- It creates a gateway which points to this live instance.
 - It returns a gateway URL which can then be passed to agent-like tools.
 
 Of course, other instances on the same PocketIC server remain unchanged - neither do they receive `tick`s nor can the gateway route requests to them. 
@@ -355,7 +355,7 @@ Here is a sketch of a test for a canister making canister HTTP outcalls in the l
 #[tokio::test]
 async fn test_canister_http_live() {
     use candid::{Decode, Encode, Principal};
-    use ic_cdk::api::management_canister::http_request::HttpResponse;
+    use pocket_ic::management_canister::HttpRequestResult;
     use ic_utils::interfaces::ManagementCanister;
 
     let mut pic = PocketIcBuilder::new()
@@ -365,15 +365,9 @@ async fn test_canister_http_live() {
         .await;
     let endpoint = pic.make_live(None).await;
 
-    // Retrieve the first canister ID on the application subnet
-    // which will be the effective canister ID for canister creation.
-    let topology = pic.topology().await;
-    let app_subnet = topology.get_app_subnets()[0];
-    let effective_canister_id = Principal::from_slice(
-        &topology.0.get(&app_subnet).unwrap().canister_ranges[0]
-            .start
-            .canister_id,
-    );
+    // Retrieve effective canister id for canister creation.
+    let topology = pic.topology();
+    let effective_canister_id: Principal = topology.default_effective_canister_id.into();
 
     // Create an agent for the PocketIC instance.
     let agent = ic_agent::Agent::builder()

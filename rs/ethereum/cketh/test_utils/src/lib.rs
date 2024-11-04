@@ -4,7 +4,8 @@ use crate::flow::{
 };
 use crate::mock::JsonRpcMethod;
 use assert_matches::assert_matches;
-use candid::{CandidType, Decode, Deserialize, Encode, Nat, Principal};
+use candid::{Decode, Encode, Nat, Principal};
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_cketh_minter::endpoints::events::{Event, EventPayload, GetEventsResult};
 use ic_cketh_minter::endpoints::{
@@ -19,11 +20,12 @@ use ic_cketh_minter::{
 };
 use ic_ethereum_types::Address;
 use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
+use ic_management_canister_types::{CanisterHttpResponsePayload, CanisterStatusType};
 use ic_state_machine_tests::{
-    CanisterHttpResponsePayload, CanisterId, CanisterStatusType, Cycles, PayloadBuilder,
-    PrincipalId, StateMachine, StateMachineBuilder, UserError, WasmResult,
+    PayloadBuilder, StateMachine, StateMachineBuilder, UserError, WasmResult,
 };
 use ic_test_utilities_load_wasm::load_wasm;
+use ic_types::Cycles;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use num_traits::cast::ToPrimitive;
@@ -34,9 +36,19 @@ use std::time::Duration;
 
 pub mod ckerc20;
 pub mod events;
+#[cfg(feature = "evm-rpc")]
+mod evm_rpc_provider;
 pub mod flow;
 pub mod mock;
+#[cfg(not(feature = "evm-rpc"))]
+mod provider;
 pub mod response;
+
+#[cfg(feature = "evm-rpc")]
+pub use evm_rpc_provider::JsonRpcProvider;
+#[cfg(not(feature = "evm-rpc"))]
+pub use provider::JsonRpcProvider;
+
 #[cfg(test)]
 mod tests;
 
@@ -162,9 +174,10 @@ impl CkEthSetup {
     }
 
     pub fn maybe_evm_rpc(env: Arc<StateMachine>) -> Self {
-        match std::env::var("EVM_RPC_CANISTER_WASM_PATH") {
-            Ok(_) => CkEthSetup::new_with_evm_rpc(env),
-            Err(_) => CkEthSetup::new(env),
+        if use_evm_rpc_canister() {
+            CkEthSetup::new_with_evm_rpc(env)
+        } else {
+            CkEthSetup::new(env)
         }
     }
 
@@ -583,9 +596,9 @@ impl CkEthSetup {
 
     pub fn max_logs_block_range(&self) -> u64 {
         if self.evm_rpc_id.is_none() {
-            799
+            798
         } else {
-            500
+            499
         }
     }
 
@@ -708,17 +721,9 @@ fn install_minter(env: &StateMachine, ledger_id: CanisterId, minter_id: Canister
 }
 
 fn install_evm_rpc(env: &StateMachine, evm_rpc_id: CanisterId) {
-    let args = EvmRpcInitArgs {
-        nodes_in_subnet: 28,
-    };
+    let args = evm_rpc_types::InstallArgs::default();
     env.install_existing_canister(evm_rpc_id, evm_rpc_wasm(), Encode!(&args).unwrap())
         .unwrap();
-}
-
-#[derive(Clone, Debug, CandidType, Deserialize)]
-pub struct EvmRpcInitArgs {
-    #[serde(rename = "nodesInSubnet")]
-    pub nodes_in_subnet: u32,
 }
 
 fn assert_reply(result: WasmResult) -> Vec<u8> {
@@ -728,4 +733,8 @@ fn assert_reply(result: WasmResult) -> Vec<u8> {
             panic!("Expected a successful reply, got a reject: {}", reject)
         }
     }
+}
+
+pub fn use_evm_rpc_canister() -> bool {
+    std::env::var("EVM_RPC_CANISTER_WASM_PATH").is_ok()
 }

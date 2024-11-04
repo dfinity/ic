@@ -13,19 +13,19 @@
       "ledger": {
         "type": "custom",
         "build": [
-          "bazel build //rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm"
+          "bazel build //rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm"
         ],
-        "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/ledger/ledger_canister_u256.wasm",
-        "candid": "../../../rosetta-api/icrc1/ledger/ledger.did",
+        "wasm": "../../../../bazel-bin/rs/ledger_suite/icrc1/ledger/ledger_canister_u256.wasm",
+        "candid": "../../../ledger_suite/icrc1/ledger/ledger.did",
         "shrink": false
       },
       "index": {
         "type": "custom",
         "build": [
-          "bazel build //rs/rosetta-api/icrc1/index-ng:index_ng_canister_u256.wasm"
+          "bazel build //rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256.wasm"
         ],
-        "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/index-ng/index_ng_canister_u256.wasm",
-        "candid": "../../../rosetta-api/icrc1/index-ng/index-ng.did",
+        "wasm": "../../../../bazel-bin/rs/ledger_suite/icrc1/index-ng/index_ng_canister_u256.wasm",
+        "candid": "../../../ledger_suite/icrc1/index-ng/index-ng.did",
         "shrink": false
       },
       "orchestrator": {

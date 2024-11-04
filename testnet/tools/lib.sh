@@ -2,26 +2,41 @@ repo_root() {
     git rev-parse --show-toplevel
 }
 
+LIGHT_GRAY_TEXT='\033[0;37m'
 RED_TEXT='\033[0;31m'
-YELLOW_TEXT='\033[0;33m'
 GREEN_TEXT='\033[0;32m'
+YELLOW_TEXT='\033[0;33m'
 BLUE_TEXT='\033[0;34m'
+PURPLE_TEXT='\033[0;35m'
+CYAN_TEXT='\033[0;36m'
 NO_COLOR='\033[0m'
+
+print_light_gray() {
+    echo -e "${LIGHT_GRAY_TEXT}$*${NO_COLOR}"
+}
 
 print_red() {
     echo -e "${RED_TEXT}$*${NO_COLOR}" 1>&2
-}
-
-print_yellow() {
-    echo -e "${YELLOW_TEXT}$*${NO_COLOR}" 1>&2
 }
 
 print_green() {
     echo -e "${GREEN_TEXT}$*${NO_COLOR}"
 }
 
+print_yellow() {
+    echo -e "${YELLOW_TEXT}$*${NO_COLOR}" 1>&2
+}
+
 print_blue() {
     echo -e "${BLUE_TEXT}$*${NO_COLOR}"
+}
+
+print_purple() {
+    echo -e "${PURPLE_TEXT}$*${NO_COLOR}"
+}
+
+print_cyan() {
+    echo -e "${CYAN_TEXT}$*${NO_COLOR}"
 }
 
 info() {

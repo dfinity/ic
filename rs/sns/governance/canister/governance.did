@@ -264,6 +264,12 @@ type GetSnsInitializationParametersResponse = record {
   sns_initialization_parameters : text;
 };
 
+type CachedUpgradeSteps = record {
+  upgrade_steps : opt Versions;
+  requested_timestamp_seconds : opt nat64;
+  response_timestamp_seconds : opt nat64;
+};
+
 type Governance = record {
   root_canister_id : opt principal;
   id_to_nervous_system_functions : vec record { nat64; NervousSystemFunction };
@@ -273,6 +279,7 @@ type Governance = record {
   parameters : opt NervousSystemParameters;
   is_finalizing_disburse_maturity : opt bool;
   deployed_version : opt Version;
+  cached_upgrade_steps : opt CachedUpgradeSteps;
   sns_initialization_parameters : text;
   latest_reward_event : opt RewardEvent;
   pending_version : opt UpgradeInProgress;
@@ -283,7 +290,19 @@ type Governance = record {
   sns_metadata : opt ManageSnsMetadata;
   neurons : vec record { text; Neuron };
   genesis_timestamp_seconds : nat64;
-  migrated_root_wasm_memory_limit : opt bool;
+  target_version : opt Version;
+  timers : opt Timers;
+  upgrade_journal : opt UpgradeJournal;
+};
+
+type Timers = record {
+  requires_periodic_tasks : opt bool;
+  last_reset_timestamp_seconds : opt nat64;
+  last_spawned_timestamp_seconds : opt nat64;
+};
+
+type GetTimersResponse = record {
+  timers : opt Timers;
 };
 
 type GovernanceCachedMetrics = record {
@@ -688,6 +707,8 @@ type Version = record {
   index_wasm_hash : blob;
 };
 
+type Versions = record { versions : vec Version };
+
 type VotingRewardsParameters = record {
   final_reward_rate_basis_points : opt nat64;
   initial_reward_rate_basis_points : opt nat64;
@@ -697,6 +718,58 @@ type VotingRewardsParameters = record {
 
 type WaitForQuietState = record {
   current_deadline_timestamp_seconds : nat64;
+};
+
+type UpgradeJournalEntry = record {
+  event : opt variant {
+    UpgradeStepsRefreshed : UpgradeStepsRefreshed;
+    TargetVersionSet : TargetVersionSet;
+    TargetVersionReset : TargetVersionSet;
+    UpgradeStarted : UpgradeStarted;
+    UpgradeOutcome : UpgradeOutcome;
+  };
+  timestamp_seconds : opt nat64;
+};
+
+type UpgradeStepsRefreshed = record {
+  upgrade_steps : opt Versions;
+};
+
+type TargetVersionSet = record {
+  new_target_version : opt Version;
+  old_target_version : opt Version;
+};
+
+type UpgradeStarted = record {
+  current_version : opt Version;
+  expected_version : opt Version;
+  reason : opt variant {
+    UpgradeSnsToNextVersionProposal : ProposalId;
+    BehindTargetVersion : record {};
+  }
+};
+
+type UpgradeOutcome = record {
+  human_readable : opt text;
+  status : opt variant {
+    Success : record {};
+    Timeout : record {};
+    InvalidState : record { version : opt Version };
+    ExternalFailure : record {};
+  };
+};
+
+type UpgradeJournal = record {
+  entries : vec UpgradeJournalEntry;
+};
+
+type GetUpgradeJournalRequest = record {};
+
+type GetUpgradeJournalResponse = record {
+  upgrade_steps : opt Versions;
+  response_timestamp_seconds : opt nat64;
+  target_version : opt Version;
+  upgrade_journal : opt UpgradeJournal;
 };
 
 service : (Governance) -> {
@@ -712,14 +785,13 @@ service : (Governance) -> {
   get_proposal : (GetProposal) -> (GetProposalResponse) query;
   get_root_canister_status : (null) -> (CanisterStatusResultV2);
   get_running_sns_version : (record {}) -> (GetRunningSnsVersionResponse) query;
-  get_sns_initialization_parameters : (record {}) -> (
-      GetSnsInitializationParametersResponse,
-    ) query;
-  list_nervous_system_functions : () -> (
-      ListNervousSystemFunctionsResponse,
-    ) query;
+  get_sns_initialization_parameters : (record {}) -> (GetSnsInitializationParametersResponse) query;
+  get_upgrade_journal : (GetUpgradeJournalRequest) -> (GetUpgradeJournalResponse) query;
+  list_nervous_system_functions : () -> (ListNervousSystemFunctionsResponse) query;
   list_neurons : (ListNeurons) -> (ListNeuronsResponse) query;
   list_proposals : (ListProposals) -> (ListProposalsResponse) query;
   manage_neuron : (ManageNeuron) -> (ManageNeuronResponse);
   set_mode : (SetMode) -> (record {});
+  reset_timers : (record {}) -> (record {});
+  get_timers : (record {}) -> (GetTimersResponse) query;
 }

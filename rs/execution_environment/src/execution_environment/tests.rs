@@ -1,7 +1,5 @@
-use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use ic_base_types::{NumBytes, NumSeconds};
-use ic_config::flag_status::FlagStatus;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_management_canister_types::{
     self as ic00, BitcoinGetUtxosArgs, BitcoinNetwork, BoundedHttpHeaders, CanisterChange,
@@ -51,7 +49,7 @@ mod orthogonal_persistence;
 #[cfg(test)]
 mod canister_snapshots;
 
-const BALANCE_EPSILON: Cycles = Cycles::new(10_000_000);
+const BALANCE_EPSILON: Cycles = Cycles::new(12_000_000);
 const ONE_GIB: i64 = 1 << 30;
 
 // A Wasm module calling call_perform
@@ -523,12 +521,9 @@ fn stopping_canister_rejects_requests() {
     test.execute_message(a_id);
     test.induct_messages();
     test.stop_canister(b_id);
-    assert_matches!(
-        test.canister_state(b_id).system_state.status,
-        CanisterStatus::Stopping {
-            call_context_manager: _,
-            stop_contexts: _
-        }
+    assert_eq!(
+        test.canister_state(b_id).system_state.status(),
+        CanisterStatusType::Stopping
     );
     test.execute_message(b_id);
     let system_state = &mut test.canister_state_mut(b_id).system_state;
@@ -570,8 +565,8 @@ fn stopped_canister_rejects_requests() {
     test.stop_canister(b_id);
     test.process_stopping_canisters();
     assert_eq!(
-        test.canister_state(b_id).system_state.status,
-        CanisterStatus::Stopped
+        test.canister_state(b_id).system_state.status(),
+        CanisterStatusType::Stopped
     );
     test.execute_message(b_id);
     let system_state = &mut test.canister_state_mut(b_id).system_state;
@@ -1300,7 +1295,6 @@ fn canister_snapshots_after_split() {
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(subnet_a)
         .with_manual_execution()
-        .with_snapshots(FlagStatus::Enabled)
         .with_caller(subnet_a, caller_canister)
         .build();
 
@@ -1448,7 +1442,7 @@ fn assert_consistent_stop_canister_calls(state: &ReplicatedState, expected_calls
             if let CanisterStatus::Stopping {
                 call_context_manager: _,
                 stop_contexts,
-            } = &canister.system_state.status
+            } = canister.system_state.get_status()
             {
                 Some(stop_contexts.iter().cloned())
             } else {

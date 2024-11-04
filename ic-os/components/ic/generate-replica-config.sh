@@ -90,7 +90,7 @@ function read_network_variables() {
 function read_nns_variables() {
     while IFS="=" read -r key value; do
         case "$key" in
-            "nns_url") nns_url="${value}" ;;
+            "nns_url") nns_urls="${value}" ;;
         esac
     done <"$1"
 }
@@ -134,7 +134,6 @@ function read_query_stats_variables() {
         case "$key" in
             "query_stats_epoch_length")
                 query_stats_epoch_length="${value}"
-                query_stats_aggregation="\"Enabled\""
                 ;;
         esac
     done <"$1"
@@ -217,7 +216,7 @@ IPV6_ADDRESS="${IPV6_ADDRESS:-$(get_if_address_retries 6 ${INTERFACE} 12)}"
 IPV4_ADDRESS="${ipv4_address:-}"
 IPV4_GATEWAY="${ipv4_gateway:-}"
 DOMAIN="${domain:-}"
-NNS_URL="${nns_url:-http://[::1]:8080}"
+NNS_URLS="${nns_urls:-http://[::1]:8080}"
 NODE_INDEX="${node_index:-0}"
 # Default value is 24h
 BACKUP_RETENTION_TIME_SECS="${backup_retention_time_secs:-86400}"
@@ -225,8 +224,6 @@ BACKUP_RETENTION_TIME_SECS="${backup_retention_time_secs:-86400}"
 BACKUP_PURGING_INTERVAL_SECS="${backup_purging_interval_secs:-3600}"
 # Default is null (None)
 MALICIOUS_BEHAVIOR="${malicious_behavior:-null}"
-# Defaults to enabled
-QUERY_STATS_AGGREGATION="${query_stats_aggregation:-\"Enabled\"}"
 # Default is 600 blocks i.e. around 10min
 QUERY_STATS_EPOCH_LENGTH="${query_stats_epoch_length:-600}"
 # TODO: If the Jaeger address is not specified the config file will contain Some(""). This needs to be fixed.
@@ -237,32 +234,15 @@ if [ "${IPV6_ADDRESS}" == "" ]; then
     exit 1
 fi
 
-# HACK: host names set on mercury deployment are invalid. Fix this up
-# by resetting the host name to be derived from IPv6 address.
-if [ "${hostname}" == "" ]; then
-    if [ -e "${NETWORK_CONFIG_FILE}" ]; then
-        # Derive new hostname.
-        # Hostname must start with a letter, not have two consecutive hyphens and end with an alphanumeric.
-        NEW_HOST_NAME=ip6$(echo "${IPV6_ADDRESS}" | sed -e 's/::/x/g;s/:/-/g')
-        echo "Set new hostname: ${NEW_HOST_NAME}"
-        # Substitute hostname in master config file so it persists
-        # across reboots and upgrades.
-        sed -i "${NETWORK_CONFIG_FILE}" -e "s/hostname=.*/hostname=$NEW_HOST_NAME/"
-        # Force set current hostname from master config file.
-        /opt/ic/bin/setup-hostname.sh
-    fi
-fi
-
 sed -e "s@{{ ipv6_address }}@${IPV6_ADDRESS}@" \
     -e "s@{{ ipv4_address }}@${IPV4_ADDRESS}@" \
     -e "s@{{ ipv4_gateway }}@${IPV4_GATEWAY}@" \
     -e "s@{{ domain }}@${DOMAIN}@" \
-    -e "s@{{ nns_url }}@${NNS_URL}@" \
+    -e "s@{{ nns_urls }}@${NNS_URLS}@" \
     -e "s@{{ node_index }}@${NODE_INDEX}@" \
     -e "s@{{ backup_retention_time_secs }}@${BACKUP_RETENTION_TIME_SECS}@" \
     -e "s@{{ backup_purging_interval_secs }}@${BACKUP_PURGING_INTERVAL_SECS}@" \
     -e "s@{{ malicious_behavior }}@${MALICIOUS_BEHAVIOR}@" \
-    -e "s@{{ query_stats_aggregation }}@${QUERY_STATS_AGGREGATION}@" \
     -e "s@{{ query_stats_epoch_length }}@${QUERY_STATS_EPOCH_LENGTH}@" \
     -e "s@{{ jaeger_addr }}@${JAEGER_ADDR}@" \
     "${IN_FILE}" >"${OUT_FILE}"

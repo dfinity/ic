@@ -7,11 +7,10 @@ DEPENDENCIES = [
     "//rs/async_utils",
     "//rs/config",
     "//rs/https_outcalls/service",
-    "//rs/monitoring/adapter_metrics/server",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "@crate_index//:byte-unit",
-    "@crate_index//:clap_3_2_25",
+    "@crate_index//:clap",
     "@crate_index//:futures",
     "@crate_index//:http",
     "@crate_index//:http-body-util",
@@ -34,9 +33,14 @@ MACRO_DEPENDENCIES = []
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:async-stream",
+    "@crate_index//:bytes",
     "@crate_index//:once_cell",
     "@crate_index//:rand",
+    "@crate_index//:rstest",
+    "@crate_index//:rustls",
+    "@crate_index//:rustls-pemfile",
     "@crate_index//:tempfile",
+    "@crate_index//:tokio-rustls",
     "@crate_index//:uuid",
     "@crate_index//:warp",
 ]
@@ -78,7 +82,10 @@ rust_binary(
         "//ic-os/guestos:__subpackages__",
         "//rs:release-pkg",
     ],
-    deps = DEPENDENCIES + [":adapter"],
+    deps = DEPENDENCIES + [
+        ":adapter",
+        "//rs/monitoring/adapter_metrics/server",
+    ],
 )
 
 # Same target as above but allows the adapter to make HTTP calls.
@@ -90,7 +97,10 @@ rust_binary(
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     visibility = ["//rs:release-pkg"],
-    deps = DEPENDENCIES + [":adapter_with_http"],
+    deps = DEPENDENCIES + [
+        ":adapter_with_http",
+        "//rs/monitoring/adapter_metrics/server",
+    ],
 )
 
 rust_test(

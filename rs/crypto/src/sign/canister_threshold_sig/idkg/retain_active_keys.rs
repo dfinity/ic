@@ -3,7 +3,9 @@ use ic_base_types::{NodeId, RegistryVersion};
 use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp::vault::api::CspVault;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
-use ic_crypto_internal_threshold_sig_ecdsa::{IDkgTranscriptInternal, MEGaPublicKey};
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
+    IDkgTranscriptInternal, MEGaPublicKey,
+};
 use ic_interfaces::crypto::ErrorReproducibility;
 use ic_interfaces_registry::RegistryClient;
 use ic_types::crypto::canister_threshold_sig::error::IDkgRetainKeysError;

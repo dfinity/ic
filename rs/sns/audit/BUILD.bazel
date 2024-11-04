@@ -4,11 +4,13 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//rs/nervous_system/agent",
     "//rs/nervous_system/neurons_fund",
     "//rs/nns/common",
     "//rs/nns/governance/api",
     "//rs/sns/governance",
     "//rs/sns/swap",
+    "//rs/types/base_types",
     "@crate_index//:candid",
     "@crate_index//:colored",
     "@crate_index//:csv",
@@ -18,6 +20,7 @@ DEPENDENCIES = [
     "@crate_index//:serde",
     "@crate_index//:serde_json",
     "@crate_index//:textplots",
+    "@crate_index//:thiserror",
     "@crate_index//:tokio",
 ]
 
@@ -30,5 +33,8 @@ rust_library(
 rust_binary(
     name = "sns-audit",
     srcs = ["src/main.rs"],
-    deps = DEPENDENCIES + [":ic-sns-audit"],
+    deps = DEPENDENCIES + [
+        ":ic-sns-audit",
+        "@crate_index//:anyhow",
+    ],
 )

@@ -16,13 +16,13 @@ pub fn hypervisor_config(canister_sandboxing: bool) -> HypervisorConfig {
                 rate_limiting_of_debug_prints: FlagStatus::Disabled,
                 best_effort_responses: FlagStatus::Enabled,
                 wasm64: FlagStatus::Enabled,
+                canister_backtrace: FlagStatus::Enabled,
                 ..FeatureFlags::default()
             },
             ..EmbeddersConfig::default()
         },
         rate_limiting_of_heap_delta: FlagStatus::Disabled,
         rate_limiting_of_instructions: FlagStatus::Disabled,
-        canister_snapshots: FlagStatus::Enabled,
         query_stats_epoch_length: 60,
         allowed_viewers_feature: FlagStatus::Enabled,
         ..HypervisorConfig::default()

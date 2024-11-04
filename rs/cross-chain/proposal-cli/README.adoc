@@ -35,7 +35,7 @@ bazel run //rs/cross-chain/proposal-cli:make_proposal -- upgrade cketh-ledger --
 . Blobless clone of the IC repo in a temporary directory and checkout the commit specified in `to`.
 . Retrieves the mainnet canister ID corresponding to the given canister (`ss2fx-dyaaa-aaaar-qacoq-cai` in the above example)
 . Retrieves the ID of the last upgrade proposal that was executed (if any).
-. Generates the release notes as the output of `git log` between the commits specified in `from` and `to` for the relevant directory (`rs/rosetta-api/icrc1/ledger` in the above example)
+. Generates the release notes as the output of `git log` between the commits specified in `from` and `to` for the relevant directory (`rs/ledger_suite/icrc1/ledger` in the above example)
 . Generates the canister artifacts and computes the hash of the generated compressed wasm.
 . Candid encoding of the given uprade arguments or use default empty ones.
 . Generates a proposal summary based on the previous information, where only the Motivation section remains to be (manually) filled out.

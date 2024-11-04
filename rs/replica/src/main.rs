@@ -14,7 +14,7 @@ use ic_types::{
     SubnetId,
 };
 use nix::unistd::{setpgid, Pid};
-use opentelemetry::KeyValue;
+use opentelemetry::{trace::TracerProvider, KeyValue};
 use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::{trace, Resource};
 use std::{env, fs, io, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
@@ -246,7 +246,7 @@ fn main() -> io::Result<()> {
             match opentelemetry_otlp::new_pipeline()
                 .tracing()
                 .with_trace_config(
-                    trace::config()
+                    trace::Config::default()
                         .with_sampler(opentelemetry_sdk::trace::Sampler::TraceIdRatioBased(0.01))
                         .with_resource(Resource::new(vec![KeyValue::new(
                             "service.name",
@@ -257,7 +257,8 @@ fn main() -> io::Result<()> {
                 .install_batch(opentelemetry_sdk::runtime::Tokio)
             {
                 Ok(tracer) => {
-                    let otel_layer = tracing_opentelemetry::OpenTelemetryLayer::new(tracer);
+                    let otel_layer =
+                        tracing_opentelemetry::OpenTelemetryLayer::new(tracer.tracer("jaeger"));
                     tracing_layers.push(otel_layer.boxed());
                 }
                 Err(err) => {

@@ -7,5 +7,5 @@ edition = "2021"
 
 [dependencies]
 anyhow = { workspace = true }
-clap = { workspace = true, features = ["derive"] }
+clap = { workspace = true }
 walkdir = { workspace = true }

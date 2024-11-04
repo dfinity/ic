@@ -8,6 +8,7 @@ set -eufo pipefail
 
 # default behavior is to build targets specified in BAZEL_TARGETS and not upload to s3
 ic_version_rc_only="0000000000000000000000000000000000000000"
+release_build="false"
 s3_upload="False"
 
 protected_branches=("master" "rc--*" "hotfix-*" "master-private")
@@ -20,22 +21,25 @@ for pattern in "${protected_branches[@]}"; do
     fi
 done
 
-# if we are on a protected branch or targeting a rc branch we set ic_version to the commit_sha and upload to s3
+# if we are on a protected branch or targeting a rc branch we set release build, ic_version to the commit_sha and
+# upload to s3
 if [[ "${IS_PROTECTED_BRANCH:-}" == "true" ]] || [[ "${CI_PULL_REQUEST_TARGET_BRANCH_NAME:-}" == "rc--"* ]]; then
     ic_version_rc_only="${CI_COMMIT_SHA}"
     s3_upload="True"
+    release_build="true"
     RUN_ON_DIFF_ONLY="false"
 fi
 
-# check if the workflow was triggered by a pull request and if the job requested running only on diff
-if [[ "${CI_PIPELINE_SOURCE:-}" == "pull_request" ]]; then
-    # if RUN_ALL_BAZEL_TARGETS was requested we upload to s3 and skip the diff check
-    if [[ "${CI_PULL_REQUEST_TITLE:-}" == *"[RUN_ALL_BAZEL_TARGETS]"* ]]; then
-        s3_upload="True"
-    elif [[ "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
-        # get bazel targets that changed within the MR
-        BAZEL_TARGETS=$("${CI_PROJECT_DIR:-}"/ci/bazel-scripts/diff.sh)
-    fi
+if [[ "${CI_PIPELINE_SOURCE:-}" == "merge_group" ]]; then
+    s3_upload="False"
+    RUN_ON_DIFF_ONLY="false"
+fi
+
+if [[ "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
+    # get bazel targets that changed within the MR
+    BAZEL_TARGETS=$("${CI_PROJECT_DIR:-}"/ci/bazel-scripts/diff.sh)
+else
+    s3_upload="True"
 fi
 
 # pass info about bazel targets to bazel-targets file
@@ -88,7 +92,7 @@ stream_awk_program='
 
 # shellcheck disable=SC2086
 # ${BAZEL_...} variables are expected to contain several arguments. We have `set -f` set above to disable globbing (and therefore only allow splitting)"
-buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" "${CI_JOB_NAME}-bazel-cmd" -- bazel \
+buildevents cmd "${CI_RUN_ID}" "${CI_JOB_NAME}" "${CI_JOB_NAME}-bazel-cmd" -- bazel \
     ${BAZEL_STARTUP_ARGS} \
     ${BAZEL_COMMAND} \
     --color=yes \
@@ -96,12 +100,16 @@ buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" "${CI_JOB_NAME}-bazel-cmd" 
     --build_metadata=BUILDBUDDY_LINKS="[CI Job](${CI_JOB_URL})" \
     --ic_version="${CI_COMMIT_SHA}" \
     --ic_version_rc_only="${ic_version_rc_only}" \
+    --release_build="${release_build}" \
     --s3_upload="${s3_upload:-"False"}" \
     ${BAZEL_EXTRA_ARGS:-} \
     ${BAZEL_TARGETS} \
     2>&1 | awk -v url_out="$url_out" "$stream_awk_program"
 
-# Write the bes link & GitHub notice
+# Write the bes link & summary
 echo "Build results uploaded to $(<"$url_out")"
-echo "::notice title=Build Events for $CI_JOB_NAME::$(<"$url_out")"
+if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+    invocation=$(sed <"$url_out" 's;.*/;;') # grab invocation ID (last url part)
+    echo "BuildBuddy [$invocation]($(<"$url_out"))" >>$GITHUB_STEP_SUMMARY
+fi
 rm "$url_out"

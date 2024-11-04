@@ -54,8 +54,9 @@ use ic_test_utilities::{
     universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM},
 };
 use ic_test_utilities_execution_environment::{
-    assert_delta, get_reply, get_routing_table_with_specified_ids_allocation_range,
-    wasm_compilation_cost, wat_compilation_cost, ExecutionTest, ExecutionTestBuilder,
+    assert_delta, cycles_reserved_for_app_and_verified_app_subnets, get_reply,
+    get_routing_table_with_specified_ids_allocation_range, wasm_compilation_cost,
+    wat_compilation_cost, ExecutionTest, ExecutionTestBuilder,
 };
 use ic_test_utilities_state::{
     get_running_canister, get_running_canister_with_args, get_stopped_canister,
@@ -1737,8 +1738,8 @@ fn stop_a_running_canister() {
                 .canister_state(&canister_id)
                 .unwrap()
                 .system_state
-                .status,
-            CanisterStatus::Stopping {
+                .get_status(),
+            &CanisterStatus::Stopping {
                 stop_contexts: vec![stop_context],
                 call_context_manager: CallContextManager::default(),
             }
@@ -3410,6 +3411,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
                 // making assertions.
                 .with_update_message_execution_fee(Cycles::zero())
                 .with_ten_update_instructions_execution_fee(Cycles::zero())
+                .with_ten_update_instructions_execution_fee_wasm64(Cycles::zero())
                 .build(),
         )
         .build();
@@ -4826,7 +4828,7 @@ fn create_canister_makes_subnet_oversubscribed() {
 
     test.canister_state_mut(uc)
         .system_state
-        .set_balance(Cycles::new(1_000_000_000_000));
+        .set_balance(Cycles::new(u128::MAX));
 
     let settings = CanisterSettingsArgsBuilder::new()
         .with_freezing_threshold(1)
@@ -5240,7 +5242,8 @@ fn cycles_correct_if_upgrade_succeeds() {
         test.canister_execution_cost(id),
         test.cycles_account_manager().execution_cost(
             NumInstructions::from(5 * *DROP_MEMORY_GROW_CONST_COST) + wasm_compilation_cost(&wasm),
-            test.subnet_size()
+            test.subnet_size(),
+            test.canister_wasm_execution_mode(id),
         ),
         Cycles::new(10)
     );
@@ -5257,7 +5260,8 @@ fn cycles_correct_if_upgrade_succeeds() {
         execution_cost,
         test.cycles_account_manager().execution_cost(
             NumInstructions::from(11 * *DROP_MEMORY_GROW_CONST_COST) + wasm_compilation_cost(&wasm),
-            test.subnet_size()
+            test.subnet_size(),
+            test.canister_wasm_execution_mode(id),
         ),
         Cycles::new(10)
     );
@@ -5294,8 +5298,11 @@ fn cycles_correct_if_upgrade_fails_at_validation() {
     );
     assert_eq!(
         test.canister_execution_cost(id),
-        test.cycles_account_manager()
-            .execution_cost(wasm_compilation_cost(&wasm), test.subnet_size())
+        test.cycles_account_manager().execution_cost(
+            wasm_compilation_cost(&wasm),
+            test.subnet_size(),
+            test.canister_wasm_execution_mode(id),
+        )
     );
 
     let cycles_before = test.canister_state(id).system_state.balance();
@@ -5309,8 +5316,11 @@ fn cycles_correct_if_upgrade_fails_at_validation() {
     );
     assert_eq!(
         execution_cost,
-        test.cycles_account_manager()
-            .execution_cost(NumInstructions::from(0), test.subnet_size())
+        test.cycles_account_manager().execution_cost(
+            NumInstructions::from(0),
+            test.subnet_size(),
+            test.canister_wasm_execution_mode(id),
+        )
     );
 }
 
@@ -5366,7 +5376,8 @@ fn cycles_correct_if_upgrade_fails_at_start() {
         test.cycles_account_manager().execution_cost(
             NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST + *UNREACHABLE_COST)
                 + wasm_compilation_cost(&wasm2),
-            test.subnet_size()
+            test.subnet_size(),
+            test.canister_wasm_execution_mode(id),
         ),
         Cycles::new(10)
     );
@@ -5404,8 +5415,11 @@ fn cycles_correct_if_upgrade_fails_at_pre_upgrade() {
     );
     assert_eq!(
         test.canister_execution_cost(id),
-        test.cycles_account_manager()
-            .execution_cost(wasm_compilation_cost(&wasm), test.subnet_size())
+        test.cycles_account_manager().execution_cost(
+            wasm_compilation_cost(&wasm),
+            test.subnet_size(),
+            test.canister_wasm_execution_mode(id),
+        )
     );
 
     let cycles_before = test.canister_state(id).system_state.balance();
@@ -5420,7 +5434,8 @@ fn cycles_correct_if_upgrade_fails_at_pre_upgrade() {
         execution_cost,
         test.cycles_account_manager().execution_cost(
             NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST + *UNREACHABLE_COST),
-            test.subnet_size()
+            test.subnet_size(),
+            test.canister_wasm_execution_mode(id),
         ),
         Cycles::new(10)
     );
@@ -5474,7 +5489,8 @@ fn cycles_correct_if_upgrade_fails_at_post_upgrade() {
         test.cycles_account_manager().execution_cost(
             NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST + *UNREACHABLE_COST)
                 + wasm_compilation_cost(&wasm2),
-            test.subnet_size()
+            test.subnet_size(),
+            test.canister_wasm_execution_mode(id),
         ),
         Cycles::new(10)
     );
@@ -5513,7 +5529,8 @@ fn cycles_correct_if_install_succeeds() {
         test.canister_execution_cost(id),
         test.cycles_account_manager().execution_cost(
             NumInstructions::from(6 * *DROP_MEMORY_GROW_CONST_COST) + wasm_compilation_cost(&wasm),
-            test.subnet_size()
+            test.subnet_size(),
+            test.canister_wasm_execution_mode(id),
         ),
         Cycles::new(4)
     );
@@ -5552,8 +5569,11 @@ fn cycles_correct_if_install_fails_at_validation() {
     );
     assert_eq!(
         test.canister_execution_cost(id),
-        test.cycles_account_manager()
-            .execution_cost(NumInstructions::from(0), test.subnet_size())
+        test.cycles_account_manager().execution_cost(
+            NumInstructions::from(0),
+            test.subnet_size(),
+            test.canister_wasm_execution_mode(id),
+        )
     );
 }
 
@@ -5593,7 +5613,8 @@ fn cycles_correct_if_install_fails_at_start() {
         test.canister_execution_cost(id),
         test.cycles_account_manager().execution_cost(
             NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST) + wasm_compilation_cost(&wasm),
-            test.subnet_size()
+            test.subnet_size(),
+            test.canister_wasm_execution_mode(id),
         ),
         Cycles::new(10)
     );
@@ -5631,7 +5652,8 @@ fn cycles_correct_if_install_fails_at_init() {
         test.cycles_account_manager().execution_cost(
             NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST + *UNREACHABLE_COST)
                 + wasm_compilation_cost(&wasm),
-            test.subnet_size()
+            test.subnet_size(),
+            test.canister_wasm_execution_mode(id),
         ),
         Cycles::new(10)
     );
@@ -5956,262 +5978,273 @@ fn system_subnet_does_not_check_for_freezing_threshold_on_allocation_changes() {
 
 #[test]
 fn install_reserves_cycles_on_memory_allocation() {
-    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
-    const CAPACITY: u64 = 20_000_000_000;
-    const THRESHOLD: u64 = CAPACITY / 2;
-    const USAGE: u64 = CAPACITY - THRESHOLD;
+    cycles_reserved_for_app_and_verified_app_subnets(|subnet_type| {
+        const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+        const CAPACITY: u64 = 20_000_000_000;
+        const THRESHOLD: u64 = CAPACITY / 2;
+        const USAGE: u64 = CAPACITY - THRESHOLD;
 
-    let mut test = ExecutionTestBuilder::new()
-        .with_subnet_execution_memory(CAPACITY as i64)
-        .with_subnet_memory_reservation(0)
-        .with_subnet_memory_threshold(THRESHOLD as i64)
-        .build();
+        let mut test = ExecutionTestBuilder::new()
+            .with_subnet_type(subnet_type)
+            .with_subnet_execution_memory(CAPACITY as i64)
+            .with_subnet_memory_reservation(0)
+            .with_subnet_memory_threshold(THRESHOLD as i64)
+            .build();
 
-    test.create_canister_with_allocation(CYCLES, None, Some(THRESHOLD))
-        .unwrap();
+        test.create_canister_with_allocation(CYCLES, None, Some(THRESHOLD))
+            .unwrap();
 
-    let canister_id = test
-        .create_canister_with_settings(
-            CYCLES,
-            CanisterSettingsArgsBuilder::new()
-                .with_reserved_cycles_limit(CYCLES.get())
-                .build(),
-        )
-        .unwrap();
-
-    let subnet_memory_usage =
-        CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
-
-    // TODO(RUN-745): This should be `execution_memory_usage()`.
-    let memory_usage_before = test.canister_state(canister_id).memory_usage();
-    let balance_before = test.canister_state(canister_id).system_state.balance();
-    test.install_canister_with_allocation(
-        canister_id,
-        UNIVERSAL_CANISTER_WASM.into(),
-        None,
-        Some(USAGE),
-    )
-    .unwrap();
-    let balance_after = test.canister_state(canister_id).system_state.balance();
-    let memory_usage_after = NumBytes::from(USAGE);
-
-    let reserved_cycles = test
-        .canister_state(canister_id)
-        .system_state
-        .reserved_balance();
-
-    assert_eq!(
-        reserved_cycles,
-        test.cycles_account_manager().storage_reservation_cycles(
-            memory_usage_after - memory_usage_before,
-            &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
-            test.subnet_size(),
-        )
-    );
-
-    assert_ge!(
-        balance_before - balance_after,
-        reserved_cycles,
-        "Unexpected balance change: {} >= {}",
-        balance_before - balance_after,
-        reserved_cycles,
-    );
-
-    let wat = r#"
-        (module
-            (import "ic0" "stable64_grow" (func $stable64_grow (param i64) (result i64)))
-            (func (export "canister_post_upgrade")
-                (if (i64.eq (call $stable64_grow (i64.const 150000)) (i64.const -1))
-                  (then (unreachable))
-                )
+        let canister_id = test
+            .create_canister_with_settings(
+                CYCLES,
+                CanisterSettingsArgsBuilder::new()
+                    .with_reserved_cycles_limit(CYCLES.get())
+                    .build(),
             )
-            (memory 0)
-        )"#;
+            .unwrap();
 
-    let wasm_binary = wat::parse_str(wat).unwrap();
+        let subnet_memory_usage =
+            CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
 
-    let balance_before = test.canister_state(canister_id).system_state.balance();
-    test.upgrade_canister(canister_id, wasm_binary).unwrap();
-    let balance_after = test.canister_state(canister_id).system_state.balance();
+        // TODO(RUN-745): This should be `execution_memory_usage()`.
+        let memory_usage_before = test.canister_state(canister_id).memory_usage();
+        let balance_before = test.canister_state(canister_id).system_state.balance();
+        test.install_canister_with_allocation(
+            canister_id,
+            UNIVERSAL_CANISTER_WASM.into(),
+            None,
+            Some(USAGE),
+        )
+        .unwrap();
+        let balance_after = test.canister_state(canister_id).system_state.balance();
+        let memory_usage_after = NumBytes::from(USAGE);
 
-    let new_reserved_cycles = test
-        .canister_state(canister_id)
-        .system_state
-        .reserved_balance();
+        let reserved_cycles = test
+            .canister_state(canister_id)
+            .system_state
+            .reserved_balance();
 
-    // The reserved balance shouldn't change because the canister has already
-    // reserved memory allocation.
-    assert_eq!(reserved_cycles, new_reserved_cycles);
+        assert_eq!(
+            reserved_cycles,
+            test.cycles_account_manager().storage_reservation_cycles(
+                memory_usage_after - memory_usage_before,
+                &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
+                test.subnet_size(),
+            )
+        );
 
-    // Message execution fee is an order of a few million cycles.
-    assert_lt!(balance_before - balance_after, Cycles::new(1_000_000_000));
+        assert_ge!(
+            balance_before - balance_after,
+            reserved_cycles,
+            "Unexpected balance change: {} >= {}",
+            balance_before - balance_after,
+            reserved_cycles,
+        );
+
+        let wat = r#"
+            (module
+                (import "ic0" "stable64_grow" (func $stable64_grow (param i64) (result i64)))
+                (func (export "canister_post_upgrade")
+                    (if (i64.eq (call $stable64_grow (i64.const 150000)) (i64.const -1))
+                      (then (unreachable))
+                    )
+                )
+                (memory 0)
+            )"#;
+
+        let wasm_binary = wat::parse_str(wat).unwrap();
+
+        let balance_before = test.canister_state(canister_id).system_state.balance();
+        test.upgrade_canister(canister_id, wasm_binary).unwrap();
+        let balance_after = test.canister_state(canister_id).system_state.balance();
+
+        let new_reserved_cycles = test
+            .canister_state(canister_id)
+            .system_state
+            .reserved_balance();
+
+        // The reserved balance shouldn't change because the canister has already
+        // reserved memory allocation.
+        assert_eq!(reserved_cycles, new_reserved_cycles);
+
+        // Message execution fee is an order of a few million cycles.
+        assert_lt!(balance_before - balance_after, Cycles::new(1_000_000_000));
+    });
 }
 
 #[test]
 fn install_reserves_cycles_on_memory_grow() {
-    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
-    const CAPACITY: u64 = 20_000_000_000;
-    const THRESHOLD: u64 = CAPACITY / 2;
+    cycles_reserved_for_app_and_verified_app_subnets(|subnet_type| {
+        const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+        const CAPACITY: u64 = 20_000_000_000;
+        const THRESHOLD: u64 = CAPACITY / 2;
 
-    let mut test = ExecutionTestBuilder::new()
-        .with_subnet_execution_memory(CAPACITY as i64)
-        .with_subnet_memory_reservation(0)
-        .with_subnet_memory_threshold(THRESHOLD as i64)
-        .build();
+        let mut test = ExecutionTestBuilder::new()
+            .with_subnet_type(subnet_type)
+            .with_subnet_execution_memory(CAPACITY as i64)
+            .with_subnet_memory_reservation(0)
+            .with_subnet_memory_threshold(THRESHOLD as i64)
+            .build();
 
-    test.create_canister_with_allocation(CYCLES, None, Some(THRESHOLD))
-        .unwrap();
+        test.create_canister_with_allocation(CYCLES, None, Some(THRESHOLD))
+            .unwrap();
 
-    let canister_id = test
-        .create_canister_with_settings(
-            CYCLES,
-            CanisterSettingsArgsBuilder::new()
-                .with_reserved_cycles_limit(CYCLES.get())
-                .build(),
-        )
-        .unwrap();
-
-    let wat = r#"
-        (module
-            (import "ic0" "stable64_grow" (func $stable64_grow (param i64) (result i64)))
-            (func (export "canister_init")
-                (if (i64.eq (call $stable64_grow (i64.const 150000)) (i64.const -1))
-                  (then (unreachable))
-                )
+        let canister_id = test
+            .create_canister_with_settings(
+                CYCLES,
+                CanisterSettingsArgsBuilder::new()
+                    .with_reserved_cycles_limit(CYCLES.get())
+                    .build(),
             )
-            (memory 0)
-        )"#;
+            .unwrap();
 
-    let wasm_binary = wat::parse_str(wat).unwrap();
+        let wat = r#"
+            (module
+                (import "ic0" "stable64_grow" (func $stable64_grow (param i64) (result i64)))
+                (func (export "canister_init")
+                    (if (i64.eq (call $stable64_grow (i64.const 150000)) (i64.const -1))
+                      (then (unreachable))
+                    )
+                )
+                (memory 0)
+            )"#;
 
-    let subnet_memory_usage =
-        CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
-    let memory_usage_before = test.canister_state(canister_id).execution_memory_usage();
-    let balance_before = test.canister_state(canister_id).system_state.balance();
-    test.install_canister(canister_id, wasm_binary).unwrap();
-    let balance_after = test.canister_state(canister_id).system_state.balance();
-    let memory_usage_after = test.canister_state(canister_id).execution_memory_usage();
+        let wasm_binary = wat::parse_str(wat).unwrap();
 
-    let reserved_cycles = test
-        .canister_state(canister_id)
-        .system_state
-        .reserved_balance();
+        let subnet_memory_usage =
+            CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
+        let memory_usage_before = test.canister_state(canister_id).execution_memory_usage();
+        let balance_before = test.canister_state(canister_id).system_state.balance();
+        test.install_canister(canister_id, wasm_binary).unwrap();
+        let balance_after = test.canister_state(canister_id).system_state.balance();
+        let memory_usage_after = test.canister_state(canister_id).execution_memory_usage();
 
-    assert_eq!(
-        reserved_cycles,
-        test.cycles_account_manager().storage_reservation_cycles(
-            memory_usage_after - memory_usage_before,
-            &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
-            test.subnet_size(),
-        )
-    );
+        let reserved_cycles = test
+            .canister_state(canister_id)
+            .system_state
+            .reserved_balance();
 
-    assert_ge!(
-        balance_before - balance_after,
-        reserved_cycles,
-        "Unexpected balance change: {} >= {}",
-        balance_before - balance_after,
-        reserved_cycles,
-    );
+        assert_eq!(
+            reserved_cycles,
+            test.cycles_account_manager().storage_reservation_cycles(
+                memory_usage_after - memory_usage_before,
+                &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
+                test.subnet_size(),
+            )
+        );
+
+        assert_ge!(
+            balance_before - balance_after,
+            reserved_cycles,
+            "Unexpected balance change: {} >= {}",
+            balance_before - balance_after,
+            reserved_cycles,
+        );
+    });
 }
 
 #[test]
 fn upgrade_reserves_cycles_on_memory_allocation() {
-    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
-    const CAPACITY: u64 = 20_000_000_000;
-    const THRESHOLD: u64 = CAPACITY / 2;
-    const USAGE: u64 = CAPACITY - THRESHOLD;
+    cycles_reserved_for_app_and_verified_app_subnets(|subnet_type| {
+        const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+        const CAPACITY: u64 = 20_000_000_000;
+        const THRESHOLD: u64 = CAPACITY / 2;
+        const USAGE: u64 = CAPACITY - THRESHOLD;
 
-    let mut test = ExecutionTestBuilder::new()
-        .with_subnet_execution_memory(CAPACITY as i64)
-        .with_subnet_memory_reservation(0)
-        .with_subnet_memory_threshold(THRESHOLD as i64)
-        .build();
+        let mut test = ExecutionTestBuilder::new()
+            .with_subnet_type(subnet_type)
+            .with_subnet_execution_memory(CAPACITY as i64)
+            .with_subnet_memory_reservation(0)
+            .with_subnet_memory_threshold(THRESHOLD as i64)
+            .build();
 
-    test.create_canister_with_allocation(CYCLES, None, Some(THRESHOLD))
-        .unwrap();
+        test.create_canister_with_allocation(CYCLES, None, Some(THRESHOLD))
+            .unwrap();
 
-    let canister_id = test
-        .create_canister_with_settings(
-            CYCLES,
-            CanisterSettingsArgsBuilder::new()
-                .with_reserved_cycles_limit(CYCLES.get())
-                .build(),
+        let canister_id = test
+            .create_canister_with_settings(
+                CYCLES,
+                CanisterSettingsArgsBuilder::new()
+                    .with_reserved_cycles_limit(CYCLES.get())
+                    .build(),
+            )
+            .unwrap();
+
+        test.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+            .unwrap();
+
+        let subnet_memory_usage =
+            CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
+
+        // TODO(RUN-745): This should be `execution_memory_usage()`.
+        let memory_usage_before = test.canister_state(canister_id).memory_usage();
+        let balance_before = test.canister_state(canister_id).system_state.balance();
+        let reserved_cycles_before = test
+            .canister_state(canister_id)
+            .system_state
+            .reserved_balance();
+
+        test.upgrade_canister_with_allocation(
+            canister_id,
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            None,
+            Some(USAGE),
         )
         .unwrap();
+        let balance_after = test.canister_state(canister_id).system_state.balance();
+        let memory_usage_after = NumBytes::new(USAGE);
 
-    test.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
-        .unwrap();
+        let reserved_cycles = test
+            .canister_state(canister_id)
+            .system_state
+            .reserved_balance();
 
-    let subnet_memory_usage =
-        CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
+        assert_eq!(
+            reserved_cycles - reserved_cycles_before,
+            test.cycles_account_manager().storage_reservation_cycles(
+                memory_usage_after - memory_usage_before,
+                &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
+                test.subnet_size(),
+            )
+        );
 
-    // TODO(RUN-745): This should be `execution_memory_usage()`.
-    let memory_usage_before = test.canister_state(canister_id).memory_usage();
-    let balance_before = test.canister_state(canister_id).system_state.balance();
-    let reserved_cycles_before = test
-        .canister_state(canister_id)
-        .system_state
-        .reserved_balance();
-
-    test.upgrade_canister_with_allocation(
-        canister_id,
-        UNIVERSAL_CANISTER_WASM.to_vec(),
-        None,
-        Some(USAGE),
-    )
-    .unwrap();
-    let balance_after = test.canister_state(canister_id).system_state.balance();
-    let memory_usage_after = NumBytes::new(USAGE);
-
-    let reserved_cycles = test
-        .canister_state(canister_id)
-        .system_state
-        .reserved_balance();
-
-    assert_eq!(
-        reserved_cycles - reserved_cycles_before,
-        test.cycles_account_manager().storage_reservation_cycles(
-            memory_usage_after - memory_usage_before,
-            &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
-            test.subnet_size(),
-        )
-    );
-
-    assert_ge!(
-        balance_before - balance_after,
-        reserved_cycles,
-        "Unexpected balance change: {} >= {}",
-        balance_before - balance_after,
-        reserved_cycles,
-    );
+        assert_ge!(
+            balance_before - balance_after,
+            reserved_cycles,
+            "Unexpected balance change: {} >= {}",
+            balance_before - balance_after,
+            reserved_cycles,
+        );
+    });
 }
 
 #[test]
 fn upgrade_reserves_cycles_on_memory_grow() {
-    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
-    const CAPACITY: u64 = 20_000_000_000;
-    const THRESHOLD: u64 = CAPACITY / 2;
+    cycles_reserved_for_app_and_verified_app_subnets(|subnet_type| {
+        const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+        const CAPACITY: u64 = 20_000_000_000;
+        const THRESHOLD: u64 = CAPACITY / 2;
 
-    let mut test = ExecutionTestBuilder::new()
-        .with_subnet_execution_memory(CAPACITY as i64)
-        .with_subnet_memory_reservation(0)
-        .with_subnet_memory_threshold(THRESHOLD as i64)
-        .build();
+        let mut test = ExecutionTestBuilder::new()
+            .with_subnet_type(subnet_type)
+            .with_subnet_execution_memory(CAPACITY as i64)
+            .with_subnet_memory_reservation(0)
+            .with_subnet_memory_threshold(THRESHOLD as i64)
+            .build();
 
-    test.create_canister_with_allocation(CYCLES, None, Some(THRESHOLD))
-        .unwrap();
+        test.create_canister_with_allocation(CYCLES, None, Some(THRESHOLD))
+            .unwrap();
 
-    let canister_id = test
-        .create_canister_with_settings(
-            CYCLES,
-            CanisterSettingsArgsBuilder::new()
-                .with_reserved_cycles_limit(CYCLES.get())
-                .build(),
-        )
-        .unwrap();
+        let canister_id = test
+            .create_canister_with_settings(
+                CYCLES,
+                CanisterSettingsArgsBuilder::new()
+                    .with_reserved_cycles_limit(CYCLES.get())
+                    .build(),
+            )
+            .unwrap();
 
-    let wat = r#"
+        let wat = r#"
         (module
             (import "ic0" "stable64_grow" (func $stable64_grow (param i64) (result i64)))
             (func (export "canister_post_upgrade")
@@ -6222,44 +6255,45 @@ fn upgrade_reserves_cycles_on_memory_grow() {
             (memory 0)
         )"#;
 
-    let wasm_binary = wat::parse_str(wat).unwrap();
+        let wasm_binary = wat::parse_str(wat).unwrap();
 
-    test.install_canister(canister_id, wasm_binary.clone())
-        .unwrap();
+        test.install_canister(canister_id, wasm_binary.clone())
+            .unwrap();
 
-    let subnet_memory_usage =
-        CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
-    let memory_usage_before = test.canister_state(canister_id).execution_memory_usage();
-    let balance_before = test.canister_state(canister_id).system_state.balance();
-    let reserved_cycles_before = test
-        .canister_state(canister_id)
-        .system_state
-        .reserved_balance();
-    test.upgrade_canister(canister_id, wasm_binary).unwrap();
-    let balance_after = test.canister_state(canister_id).system_state.balance();
-    let memory_usage_after = test.canister_state(canister_id).execution_memory_usage();
+        let subnet_memory_usage =
+            CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
+        let memory_usage_before = test.canister_state(canister_id).execution_memory_usage();
+        let balance_before = test.canister_state(canister_id).system_state.balance();
+        let reserved_cycles_before = test
+            .canister_state(canister_id)
+            .system_state
+            .reserved_balance();
+        test.upgrade_canister(canister_id, wasm_binary).unwrap();
+        let balance_after = test.canister_state(canister_id).system_state.balance();
+        let memory_usage_after = test.canister_state(canister_id).execution_memory_usage();
 
-    let reserved_cycles = test
-        .canister_state(canister_id)
-        .system_state
-        .reserved_balance();
+        let reserved_cycles = test
+            .canister_state(canister_id)
+            .system_state
+            .reserved_balance();
 
-    assert_eq!(
-        reserved_cycles - reserved_cycles_before,
-        test.cycles_account_manager().storage_reservation_cycles(
-            memory_usage_after - memory_usage_before,
-            &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
-            test.subnet_size(),
-        )
-    );
+        assert_eq!(
+            reserved_cycles - reserved_cycles_before,
+            test.cycles_account_manager().storage_reservation_cycles(
+                memory_usage_after - memory_usage_before,
+                &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
+                test.subnet_size(),
+            )
+        );
 
-    assert_ge!(
-        balance_before - balance_after,
-        reserved_cycles,
-        "Unexpected balance change: {} >= {}",
-        balance_before - balance_after,
-        reserved_cycles,
-    );
+        assert_ge!(
+            balance_before - balance_after,
+            reserved_cycles,
+            "Unexpected balance change: {} >= {}",
+            balance_before - balance_after,
+            reserved_cycles,
+        );
+    });
 }
 
 #[test]
@@ -6309,178 +6343,138 @@ fn install_does_not_reserve_cycles_on_system_subnet() {
 }
 
 #[test]
-fn install_does_not_reserve_cycles_on_verified_application_subnet() {
-    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
-    const CAPACITY: u64 = 20_000_000_000;
-    const THRESHOLD: u64 = CAPACITY / 2;
-    const USAGE: u64 = CAPACITY - THRESHOLD;
-
-    let mut test = ExecutionTestBuilder::new()
-        .with_subnet_type(SubnetType::VerifiedApplication)
-        .with_subnet_execution_memory(CAPACITY as i64)
-        .with_subnet_memory_reservation(0)
-        .with_subnet_memory_threshold(THRESHOLD as i64)
-        .build();
-
-    let canister_id = test.create_canister(CYCLES);
-
-    test.install_canister_with_allocation(
-        canister_id,
-        UNIVERSAL_CANISTER_WASM.into(),
-        None,
-        Some(THRESHOLD),
-    )
-    .unwrap();
-
-    let canister_id = test.create_canister(CYCLES);
-
-    let balance_before = test.canister_state(canister_id).system_state.balance();
-    test.install_canister_with_allocation(
-        canister_id,
-        UNIVERSAL_CANISTER_WASM.into(),
-        None,
-        Some(USAGE),
-    )
-    .unwrap();
-    let balance_after = test.canister_state(canister_id).system_state.balance();
-
-    // Message execution fee is an order of a few million cycles.
-    assert_lt!(balance_before - balance_after, Cycles::new(1_000_000_000));
-
-    let reserved_cycles = test
-        .canister_state(canister_id)
-        .system_state
-        .reserved_balance();
-    assert_eq!(reserved_cycles, Cycles::zero());
-}
-
-#[test]
 fn create_canister_reserves_cycles_for_memory_allocation() {
-    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
-    const CAPACITY: u64 = 20_000_000_000;
-    const THRESHOLD: u64 = CAPACITY / 2;
-    const USAGE: u64 = CAPACITY - THRESHOLD;
+    cycles_reserved_for_app_and_verified_app_subnets(|subnet_type| {
+        const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+        const CAPACITY: u64 = 20_000_000_000;
+        const THRESHOLD: u64 = CAPACITY / 2;
+        const USAGE: u64 = CAPACITY - THRESHOLD;
 
-    let mut test = ExecutionTestBuilder::new()
-        .with_subnet_execution_memory(CAPACITY as i64)
-        .with_subnet_memory_reservation(0)
-        .with_subnet_memory_threshold(THRESHOLD as i64)
-        .build();
+        let mut test = ExecutionTestBuilder::new()
+            .with_subnet_type(subnet_type)
+            .with_subnet_execution_memory(CAPACITY as i64)
+            .with_subnet_memory_reservation(0)
+            .with_subnet_memory_threshold(THRESHOLD as i64)
+            .build();
 
-    test.create_canister_with_allocation(CYCLES, None, Some(USAGE))
-        .unwrap();
+        test.create_canister_with_allocation(CYCLES, None, Some(USAGE))
+            .unwrap();
 
-    let subnet_memory_usage =
-        CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
+        let subnet_memory_usage =
+            CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
 
-    let balance_before = CYCLES;
-    let canister_id = test
-        .create_canister_with_settings(
-            balance_before,
-            CanisterSettingsArgsBuilder::new()
-                .with_memory_allocation(USAGE)
-                .with_reserved_cycles_limit(CYCLES.get())
-                .build(),
-        )
-        .unwrap();
-    let balance_after = test.canister_state(canister_id).system_state.balance();
+        let balance_before = CYCLES;
+        let canister_id = test
+            .create_canister_with_settings(
+                balance_before,
+                CanisterSettingsArgsBuilder::new()
+                    .with_memory_allocation(USAGE)
+                    .with_reserved_cycles_limit(CYCLES.get())
+                    .build(),
+            )
+            .unwrap();
+        let balance_after = test.canister_state(canister_id).system_state.balance();
 
-    assert_eq!(
-        test.canister_state(canister_id)
-            .memory_allocation()
-            .bytes()
-            .get(),
-        USAGE,
-    );
+        assert_eq!(
+            test.canister_state(canister_id)
+                .memory_allocation()
+                .bytes()
+                .get(),
+            USAGE,
+        );
 
-    let reserved_cycles = test
-        .canister_state(canister_id)
-        .system_state
-        .reserved_balance();
+        let reserved_cycles = test
+            .canister_state(canister_id)
+            .system_state
+            .reserved_balance();
 
-    assert_eq!(
-        reserved_cycles,
-        test.cycles_account_manager().storage_reservation_cycles(
-            NumBytes::new(USAGE),
-            &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
-            test.subnet_size(),
-        )
-    );
+        assert_eq!(
+            reserved_cycles,
+            test.cycles_account_manager().storage_reservation_cycles(
+                NumBytes::new(USAGE),
+                &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
+                test.subnet_size(),
+            )
+        );
 
-    assert_ge!(
-        balance_before - balance_after,
-        reserved_cycles,
-        "Unexpected balance change: {} >= {}",
-        balance_before - balance_after,
-        reserved_cycles,
-    );
+        assert_ge!(
+            balance_before - balance_after,
+            reserved_cycles,
+            "Unexpected balance change: {} >= {}",
+            balance_before - balance_after,
+            reserved_cycles,
+        );
+    });
 }
 
 #[test]
 fn update_settings_reserves_cycles_for_memory_allocation() {
-    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
-    const CAPACITY: u64 = 20_000_000_000;
-    const THRESHOLD: u64 = CAPACITY / 2;
-    const USAGE: u64 = CAPACITY - THRESHOLD;
+    cycles_reserved_for_app_and_verified_app_subnets(|subnet_type| {
+        const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+        const CAPACITY: u64 = 20_000_000_000;
+        const THRESHOLD: u64 = CAPACITY / 2;
+        const USAGE: u64 = CAPACITY - THRESHOLD;
 
-    let mut test = ExecutionTestBuilder::new()
-        .with_subnet_execution_memory(CAPACITY as i64)
-        .with_subnet_memory_reservation(0)
-        .with_subnet_memory_threshold(THRESHOLD as i64)
-        .build();
+        let mut test = ExecutionTestBuilder::new()
+            .with_subnet_type(subnet_type)
+            .with_subnet_execution_memory(CAPACITY as i64)
+            .with_subnet_memory_reservation(0)
+            .with_subnet_memory_threshold(THRESHOLD as i64)
+            .build();
 
-    test.create_canister_with_allocation(CYCLES, None, Some(THRESHOLD))
-        .unwrap();
+        test.create_canister_with_allocation(CYCLES, None, Some(THRESHOLD))
+            .unwrap();
 
-    let canister_id = test
-        .create_canister_with_settings(
-            CYCLES,
-            CanisterSettingsArgsBuilder::new()
-                .with_reserved_cycles_limit(CYCLES.get())
-                .build(),
-        )
-        .unwrap();
+        let canister_id = test
+            .create_canister_with_settings(
+                CYCLES,
+                CanisterSettingsArgsBuilder::new()
+                    .with_reserved_cycles_limit(CYCLES.get())
+                    .build(),
+            )
+            .unwrap();
 
-    let subnet_memory_usage =
-        CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
+        let subnet_memory_usage =
+            CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
 
-    // TODO(RUN-745): This should be `execution_memory_usage()`.
-    let memory_usage_before = test.canister_state(canister_id).memory_usage();
-    let balance_before = test.canister_state(canister_id).system_state.balance();
-    test.canister_update_allocations_settings(canister_id, None, Some(USAGE))
-        .unwrap();
-    let balance_after = test.canister_state(canister_id).system_state.balance();
-    let memory_usage_after = NumBytes::new(USAGE);
+        // TODO(RUN-745): This should be `execution_memory_usage()`.
+        let memory_usage_before = test.canister_state(canister_id).memory_usage();
+        let balance_before = test.canister_state(canister_id).system_state.balance();
+        test.canister_update_allocations_settings(canister_id, None, Some(USAGE))
+            .unwrap();
+        let balance_after = test.canister_state(canister_id).system_state.balance();
+        let memory_usage_after = NumBytes::new(USAGE);
 
-    assert_eq!(
-        test.canister_state(canister_id)
-            .memory_allocation()
-            .bytes()
-            .get(),
-        USAGE
-    );
+        assert_eq!(
+            test.canister_state(canister_id)
+                .memory_allocation()
+                .bytes()
+                .get(),
+            USAGE
+        );
 
-    let reserved_cycles = test
-        .canister_state(canister_id)
-        .system_state
-        .reserved_balance();
+        let reserved_cycles = test
+            .canister_state(canister_id)
+            .system_state
+            .reserved_balance();
 
-    assert_eq!(
-        reserved_cycles,
-        test.cycles_account_manager().storage_reservation_cycles(
-            memory_usage_after - memory_usage_before,
-            &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
-            test.subnet_size(),
-        )
-    );
+        assert_eq!(
+            reserved_cycles,
+            test.cycles_account_manager().storage_reservation_cycles(
+                memory_usage_after - memory_usage_before,
+                &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
+                test.subnet_size(),
+            )
+        );
 
-    assert_ge!(
-        balance_before - balance_after,
-        reserved_cycles,
-        "Unexpected balance change: {} >= {}",
-        balance_before - balance_after,
-        reserved_cycles,
-    );
+        assert_ge!(
+            balance_before - balance_after,
+            reserved_cycles,
+            "Unexpected balance change: {} >= {}",
+            balance_before - balance_after,
+            reserved_cycles,
+        );
+    });
 }
 
 #[test]
@@ -7377,9 +7371,11 @@ fn upload_chunk_fails_when_freeze_threshold_triggered() {
     // for one upload so upload_chunk fails.
     let threshold = test.freezing_threshold(canister_id);
     let new_balance = threshold
-        + test
-            .cycles_account_manager()
-            .execution_cost(instructions, test.subnet_size())
+        + test.cycles_account_manager().execution_cost(
+            instructions,
+            test.subnet_size(),
+            test.canister_wasm_execution_mode(canister_id),
+        )
         + Cycles::from(1_000_u128);
     let to_remove = test.canister_state(canister_id).system_state.balance() - new_balance;
     test.canister_state_mut(canister_id)
@@ -7442,76 +7438,79 @@ fn upload_chunk_fails_when_it_exceeds_chunk_size() {
 
 #[test]
 fn upload_chunk_reserves_cycles() {
-    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    cycles_reserved_for_app_and_verified_app_subnets(|subnet_type| {
+        const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let memory_usage_after_uploading_one_chunk = {
-        const CAPACITY: i64 = 1_000_000_000;
+        let memory_usage_after_uploading_one_chunk = {
+            const CAPACITY: i64 = 1_000_000_000;
+
+            let mut test = ExecutionTestBuilder::new()
+                .with_subnet_type(subnet_type)
+                .with_subnet_execution_memory(CAPACITY)
+                .with_subnet_memory_reservation(0)
+                .with_subnet_memory_threshold(0)
+                .build();
+            let canister_id = test.create_canister(CYCLES);
+
+            let upload_args = UploadChunkArgs {
+                canister_id: canister_id.into(),
+                chunk: vec![42; 10],
+            };
+
+            let _hash = test
+                .subnet_message("upload_chunk", upload_args.encode())
+                .unwrap();
+
+            CAPACITY - test.subnet_available_memory().get_execution_memory()
+        };
 
         let mut test = ExecutionTestBuilder::new()
-            .with_subnet_execution_memory(CAPACITY)
             .with_subnet_memory_reservation(0)
-            .with_subnet_memory_threshold(0)
+            .with_subnet_memory_threshold(memory_usage_after_uploading_one_chunk + 1)
             .build();
         let canister_id = test.create_canister(CYCLES);
+        assert_eq!(
+            test.canister_state(canister_id)
+                .system_state
+                .reserved_balance(),
+            Cycles::from(0_u128)
+        );
 
+        // Upload a chunk
         let upload_args = UploadChunkArgs {
             canister_id: canister_id.into(),
             chunk: vec![42; 10],
         };
-
         let _hash = test
             .subnet_message("upload_chunk", upload_args.encode())
             .unwrap();
+        assert_eq!(
+            test.canister_state(canister_id)
+                .system_state
+                .reserved_balance(),
+            Cycles::from(0_u128)
+        );
 
-        CAPACITY - test.subnet_available_memory().get_execution_memory()
-    };
-
-    let mut test = ExecutionTestBuilder::new()
-        .with_subnet_memory_reservation(0)
-        .with_subnet_memory_threshold(memory_usage_after_uploading_one_chunk + 1)
-        .build();
-    let canister_id = test.create_canister(CYCLES);
-    assert_eq!(
-        test.canister_state(canister_id)
+        // Upload a second chunk which should reserve some cycles.
+        let upload_args = UploadChunkArgs {
+            canister_id: canister_id.into(),
+            chunk: vec![43; 10],
+        };
+        let _hash = test
+            .subnet_message("upload_chunk", upload_args.encode())
+            .unwrap();
+        let reserved_balance = test
+            .canister_state(canister_id)
             .system_state
-            .reserved_balance(),
-        Cycles::from(0_u128)
-    );
-
-    // Upload a chunk
-    let upload_args = UploadChunkArgs {
-        canister_id: canister_id.into(),
-        chunk: vec![42; 10],
-    };
-    let _hash = test
-        .subnet_message("upload_chunk", upload_args.encode())
-        .unwrap();
-    assert_eq!(
-        test.canister_state(canister_id)
-            .system_state
-            .reserved_balance(),
-        Cycles::from(0_u128)
-    );
-
-    // Upload a second chunk which should reserve some cycles.
-    let upload_args = UploadChunkArgs {
-        canister_id: canister_id.into(),
-        chunk: vec![43; 10],
-    };
-    let _hash = test
-        .subnet_message("upload_chunk", upload_args.encode())
-        .unwrap();
-    let reserved_balance = test
-        .canister_state(canister_id)
-        .system_state
-        .reserved_balance()
-        .get();
-    assert_lt!(
-        0,
-        reserved_balance,
-        "Reserved balance {} should be positive",
-        reserved_balance
-    );
+            .reserved_balance()
+            .get();
+        assert_lt!(
+            0,
+            reserved_balance,
+            "Reserved balance {} should be positive",
+            reserved_balance
+        );
+    });
 }
 
 #[test]
@@ -7744,9 +7743,11 @@ fn upload_chunk_charges_canister_cycles() {
         chunk: vec![42; 10],
     }
     .encode();
-    let expected_charge = test
-        .cycles_account_manager()
-        .execution_cost(instructions, test.subnet_size());
+    let expected_charge = test.cycles_account_manager().execution_cost(
+        instructions,
+        test.subnet_size(),
+        test.canister_wasm_execution_mode(canister_id),
+    );
     let _hash = test.subnet_message("upload_chunk", payload).unwrap();
 
     assert_eq!(
@@ -7767,9 +7768,11 @@ fn upload_chunk_charges_if_failing() {
     let canister_id = test.create_canister(CYCLES);
     let initial_balance = test.canister_state(canister_id).system_state.balance();
     // Expected charge is the same as if the upload succeeds.
-    let expected_charge = test
-        .cycles_account_manager()
-        .execution_cost(instructions, test.subnet_size());
+    let expected_charge = test.cycles_account_manager().execution_cost(
+        instructions,
+        test.subnet_size(),
+        test.canister_wasm_execution_mode(canister_id),
+    );
 
     let payload = UploadChunkArgs {
         canister_id: canister_id.into(),
@@ -7888,4 +7891,61 @@ fn chunk_store_counts_against_subnet_memory_in_initial_round_computation() {
         .execute_ingress(CanisterId::ic_00(), "upload_chunk", payload)
         .unwrap_err();
     assert_eq!(error.code(), ErrorCode::SubnetOversubscribed);
+}
+
+/// Helper function that installs and runs an update call on a canister in
+/// Wasm32 and Wasm64 mode and returns the balance and the cost of the call(s).
+fn run_canister_in_wasm_mode(is_wasm64_mode: bool, execute_ingress: bool) -> (Cycles, Cycles) {
+    let memory_type = if is_wasm64_mode { "i64" } else { "" };
+    let canister_wat = format!(
+        r#"
+        (module 
+            (func (export "canister_update test")
+                (drop (i32.add (i32.const 1) (i32.const 2)))
+                (drop (i32.add (i32.const 1) (i32.const 2)))
+                (drop (i32.add (i32.const 1) (i32.const 2)))
+                (drop (i32.add (i32.const 1) (i32.const 2)))
+                (drop (i32.add (i32.const 1) (i32.const 2)))
+            )
+            (memory {memory_type} 1)
+        )
+    "#
+    );
+
+    let mut test = ExecutionTestBuilder::new().with_wasm64().build();
+    let canister_id = test
+        .canister_from_cycles_and_wat(DEFAULT_PROVISIONAL_BALANCE, canister_wat)
+        .unwrap();
+
+    let balance_before_ingress = test.canister_state(canister_id).system_state.balance();
+    let cost_for_install = DEFAULT_PROVISIONAL_BALANCE - balance_before_ingress;
+
+    if execute_ingress {
+        let _ = test.ingress(canister_id, "test", vec![]);
+    } else {
+        return (balance_before_ingress, cost_for_install);
+    }
+
+    let balance_after_ingress = test.canister_state(canister_id).system_state.balance();
+    let cost_for_ingress = balance_before_ingress - balance_after_ingress;
+
+    (balance_after_ingress, cost_for_ingress)
+}
+
+#[test]
+fn check_update_call_canister_in_wasm64_mode_is_charged_correctly() {
+    let (balance32, execution_cost32) = run_canister_in_wasm_mode(false, true);
+    let (balance64, execution_cost64) = run_canister_in_wasm_mode(true, true);
+
+    assert_lt!(balance64, balance32);
+    assert_lt!(execution_cost32, execution_cost64);
+}
+
+#[test]
+fn check_install_code_in_wasm64_mode_is_charged_correctly() {
+    let (balance32, execution_cost32) = run_canister_in_wasm_mode(false, false);
+    let (balance64, execution_cost64) = run_canister_in_wasm_mode(true, false);
+
+    assert_lt!(balance64, balance32);
+    assert_lt!(execution_cost32, execution_cost64);
 }

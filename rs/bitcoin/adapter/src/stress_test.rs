@@ -19,7 +19,13 @@ async fn setup_channel(uds_path: PathBuf) -> Channel {
     Endpoint::try_from("http://[::]:50051")
         .expect("failed to make endpoint")
         .connect_with_connector(service_fn(move |_: Uri| {
-            UnixStream::connect(uds_path.clone())
+            let uds_path = uds_path.clone();
+            async move {
+                // Connect to a Uds socket
+                Ok::<_, std::io::Error>(hyper_util::rt::TokioIo::new(
+                    UnixStream::connect(uds_path).await?,
+                ))
+            }
         }))
         .await
         .expect("failed to connect to socket")

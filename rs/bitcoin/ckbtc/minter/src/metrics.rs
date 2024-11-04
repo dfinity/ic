@@ -12,13 +12,13 @@ pub fn encode_metrics(
     const WASM_PAGE_SIZE_IN_BYTES: f64 = 65536.0;
 
     metrics.encode_gauge(
-        "ckbtc_minter_stable_memory_bytes",
-        ic_cdk::api::stable::stable64_size() as f64 * WASM_PAGE_SIZE_IN_BYTES,
+        "stable_memory_bytes",
+        ic_cdk::api::stable::stable_size() as f64 * WASM_PAGE_SIZE_IN_BYTES,
         "Size of the stable memory allocated by this canister.",
     )?;
 
     metrics.encode_gauge(
-        "ckbtc_minter_heap_memory_bytes",
+        "heap_memory_bytes",
         heap_memory_size_bytes() as f64,
         "Size of the heap memory allocated by this canister.",
     )?;

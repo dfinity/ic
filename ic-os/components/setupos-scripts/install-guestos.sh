@@ -6,6 +6,8 @@ set -o pipefail
 SHELL="/bin/bash"
 PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 
+source /opt/ic/bin/functions.sh
+
 LV="/dev/mapper/hostlvm-guestos"
 
 function install_guestos() {
@@ -34,7 +36,6 @@ function install_guestos() {
 
 # Establish run order
 main() {
-    source /opt/ic/bin/functions.sh
     log_start "$(basename $0)"
     install_guestos
     log_end "$(basename $0)"

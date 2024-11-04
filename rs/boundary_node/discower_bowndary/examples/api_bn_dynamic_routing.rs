@@ -31,7 +31,7 @@ const MAINNET_ROOT_SUBNET_ID: &str =
 
 // How to run via Bazel/Cargo:
 // ic$ bazel run //rs/boundary_node/discower_bowndary:api-bn-dynamic-routing
-// ic$ cargo run --bin api_bn_dynamic_routing
+// ic$ cargo run --example api_bn_dynamic_routing
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

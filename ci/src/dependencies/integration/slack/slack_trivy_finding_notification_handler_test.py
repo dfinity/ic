@@ -77,20 +77,22 @@ def supported_teams_powerset():
             for item in powerset(seq[1:]):
                 yield [seq[0]] + item
                 yield item
-    return powerset(list(SUPPORTED_TEAMS))
-    #return [[Team.NODE_TEAM], [Team.BOUNDARY_NODE_TEAM], [Team.NODE_TEAM, Team.BOUNDARY_NODE_TEAM]]
 
-@pytest.mark.parametrize(
-    "owning_teams", supported_teams_powerset()
-)
+    return powerset(list(SUPPORTED_TEAMS))
+    # return [[Team.NODE_TEAM], [Team.BOUNDARY_NODE_TEAM], [Team.NODE_TEAM, Team.BOUNDARY_NODE_TEAM]]
+
+
+@pytest.mark.parametrize("owning_teams", supported_teams_powerset())
 def test_finding_needs_risk_assessment_event(owning_teams):
     finding = deepcopy(FINDING_WITH_RISK_NO_PATCH_NO)
     finding.owning_teams = owning_teams
     slack_api = MockSlackApi()
     github_handler = Mock()
     github_handler.can_handle.return_value = True
-    handler = SlackTrivyFindingNotificationHandler(slack_api=slack_api,github_handler=github_handler)
-    event = FindingNotificationEvent(finding=finding, finding_needs_risk_assessment=True, finding_has_patch_version=False, finding_was_resolved=False)
+    handler = SlackTrivyFindingNotificationHandler(slack_api=slack_api, github_handler=github_handler)
+    event = FindingNotificationEvent(
+        finding=finding, finding_needs_risk_assessment=True, finding_has_patch_version=False, finding_was_resolved=False
+    )
 
     assert handler.can_handle(event)
 
@@ -107,18 +109,17 @@ def test_finding_needs_risk_assessment_event(owning_teams):
     github_handler.handle.assert_not_called()
 
 
-@pytest.mark.parametrize(
-    "owning_teams", supported_teams_powerset()
-)
+@pytest.mark.parametrize("owning_teams", supported_teams_powerset())
 def test_finding_has_patch_version_event(owning_teams):
     finding = deepcopy(FINDING_WITH_RISK_YES_PATCH_YES)
     finding.owning_teams = owning_teams
     slack_api = MockSlackApi()
     github_handler = Mock()
     github_handler.can_handle.return_value = True
-    handler = SlackTrivyFindingNotificationHandler(slack_api=slack_api,github_handler=github_handler)
-    event = FindingNotificationEvent(finding=finding, finding_needs_risk_assessment=False,
-                                     finding_has_patch_version=True, finding_was_resolved=False)
+    handler = SlackTrivyFindingNotificationHandler(slack_api=slack_api, github_handler=github_handler)
+    event = FindingNotificationEvent(
+        finding=finding, finding_needs_risk_assessment=False, finding_has_patch_version=True, finding_was_resolved=False
+    )
 
     assert handler.can_handle(event)
 
@@ -135,18 +136,17 @@ def test_finding_has_patch_version_event(owning_teams):
     assert github_handler.handle.call_count == len(owning_teams)
 
 
-@pytest.mark.parametrize(
-    "owning_teams", supported_teams_powerset()
-)
+@pytest.mark.parametrize("owning_teams", supported_teams_powerset())
 def test_finding_needs_risk_assessment_and_has_patch_version_event(owning_teams):
     finding = deepcopy(FINDING_WITH_RISK_NO_PATCH_YES)
     finding.owning_teams = owning_teams
     slack_api = MockSlackApi()
     github_handler = Mock()
     github_handler.can_handle.return_value = False
-    handler = SlackTrivyFindingNotificationHandler(slack_api=slack_api,github_handler=github_handler)
-    event = FindingNotificationEvent(finding=finding, finding_needs_risk_assessment=True,
-                                     finding_has_patch_version=True, finding_was_resolved=False)
+    handler = SlackTrivyFindingNotificationHandler(slack_api=slack_api, github_handler=github_handler)
+    event = FindingNotificationEvent(
+        finding=finding, finding_needs_risk_assessment=True, finding_has_patch_version=True, finding_was_resolved=False
+    )
 
     assert handler.can_handle(event)
 
@@ -163,9 +163,8 @@ def test_finding_needs_risk_assessment_and_has_patch_version_event(owning_teams)
     assert github_handler.can_handle.call_count == len(owning_teams)
     github_handler.handle.assert_not_called()
 
-@pytest.mark.parametrize(
-    "owning_teams", supported_teams_powerset()
-)
+
+@pytest.mark.parametrize("owning_teams", supported_teams_powerset())
 def test_finding_was_resolved_event(owning_teams):
     finding = deepcopy(FINDING_WITH_RISK_NO_PATCH_YES)
     finding.owning_teams = owning_teams
@@ -173,7 +172,9 @@ def test_finding_was_resolved_event(owning_teams):
     github_handler = Mock()
     github_handler.can_handle.return_value = True
     handler = SlackTrivyFindingNotificationHandler(slack_api=slack_api, github_handler=github_handler)
-    event = FindingNotificationEvent(finding=finding, finding_needs_risk_assessment=False, finding_has_patch_version=False, finding_was_resolved=True)
+    event = FindingNotificationEvent(
+        finding=finding, finding_needs_risk_assessment=False, finding_has_patch_version=False, finding_was_resolved=True
+    )
 
     assert handler.can_handle(event)
 
@@ -185,10 +186,12 @@ def test_finding_was_resolved_event(owning_teams):
     github_handler.can_handle.assert_not_called()
     github_handler.handle.assert_not_called()
 
+
 def test_supported_teams_slack_config_is_complete():
     for team in SUPPORTED_TEAMS:
         assert team in SLACK_CHANNEL_CONFIG_BY_TEAM
         assert team in SLACK_TEAM_GROUP_ID
+
 
 class MockSlackApi(SlackApi):
     messages: List[str]

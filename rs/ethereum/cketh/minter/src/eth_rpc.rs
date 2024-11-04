@@ -10,7 +10,7 @@ use crate::numeric::{BlockNumber, LogIndex, TransactionCount, Wei, WeiPerGas};
 use crate::state::{mutate_state, State};
 use candid::{candid_method, CandidType, Principal};
 use ethnum;
-use evm_rpc_client::types::candid::{
+use evm_rpc_client::{
     HttpOutcallError as EvmHttpOutcallError,
     SendRawTransactionStatus as EvmSendRawTransactionStatus,
 };
@@ -74,6 +74,10 @@ impl AsRef<[u8]> for Data {
 #[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
 #[serde(transparent)]
 pub struct FixedSizeData(#[serde(with = "ic_ethereum_types::serde_data")] pub [u8; 32]);
+
+impl FixedSizeData {
+    pub const ZERO: Self = Self([0u8; 32]);
+}
 
 impl AsRef<[u8]> for FixedSizeData {
     fn as_ref(&self) -> &[u8] {
@@ -297,7 +301,7 @@ pub struct GetLogsParam {
 }
 
 /// A topic is either a 32 Bytes DATA, or an array of 32 Bytes DATA with "or" options.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(untagged)]
 pub enum Topic {
     Single(FixedSizeData),
@@ -806,7 +810,7 @@ fn is_successful_http_code(status: &u16) -> bool {
 }
 
 fn sort_by_hash<T: Serialize + DeserializeOwned>(to_sort: &mut [T]) {
-    use ic_crypto_sha3::Keccak256;
+    use ic_sha3::Keccak256;
     to_sort.sort_by(|a, b| {
         let a_hash = Keccak256::hash(serde_json::to_vec(a).expect("BUG: failed to serialize"));
         let b_hash = Keccak256::hash(serde_json::to_vec(b).expect("BUG: failed to serialize"));

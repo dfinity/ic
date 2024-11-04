@@ -24,6 +24,7 @@ use ic_types::{
 };
 use ic_wasm_types::BinaryEncodedWasm;
 
+use ic_replicated_state::NumWasmPages;
 use lazy_static::lazy_static;
 use wasmtime::{Engine, Module, Store, StoreLimits, Val};
 
@@ -52,7 +53,7 @@ fn test_wasmtime_system_api() {
         Arc::new(TestPageAllocatorFileDescriptorImpl),
     );
     let api_type = ApiType::start(UNIX_EPOCH);
-    let sandbox_safe_system_state = SandboxSafeSystemState::new(
+    let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         CyclesAccountManagerBuilder::new().build(),
         &NetworkTopology::default(),
@@ -91,6 +92,7 @@ fn test_wasmtime_system_api() {
         EmbeddersConfig::default().feature_flags.canister_backtrace,
         EmbeddersConfig::default().max_sum_exported_function_name_lengths,
         Memory::new_for_testing(),
+        NumWasmPages::from(0),
         Rc::new(DefaultOutOfInstructionsHandler::default()),
         no_op_logger(),
     );
@@ -231,7 +233,10 @@ fn test_initial_wasmtime_config() {
         });
         // Format error message with cause using '{:?}'
         let err_msg = format!("{:?}", err);
-        // Make sure the error is because of the feature being disabled.
+        // Verify that the error occurred because the expected feature was disabled.
+        // If this test fails, check whether:
+        // 1. The feature being tested is enabled by default (in that case, explicitly disable it in the config), or
+        // 2. The error message has changed in a new release (update the expected error message accordingly).
         assert!(
             err_msg.contains(expected_err_msg),
             "Error expecting `{expected_err_msg}`, but got `{err_msg}`"

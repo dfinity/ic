@@ -16,13 +16,16 @@ class GithubTrivyFindingNotificationHandler(NotificationHandler):
         self.pipeline_run = False
 
     def can_handle(self, event: NotificationEvent) -> bool:
-        if isinstance(event, FindingNotificationEvent) and event.finding.scanner == TRIVY_SCANNER_ID and event.finding_has_patch_version:
+        if (
+            isinstance(event, FindingNotificationEvent)
+            and event.finding.scanner == TRIVY_SCANNER_ID
+            and event.finding_has_patch_version
+        ):
             parser_id = OSPackageTrivyResultParser().get_parser_id()
             for proj in event.finding.projects:
                 if proj.startswith(parser_id):
                     return True
         return False
-
 
     def handle(self, event: NotificationEvent):
         if isinstance(event, FindingNotificationEvent):

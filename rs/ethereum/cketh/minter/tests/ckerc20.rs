@@ -26,8 +26,8 @@ use ic_cketh_test_utils::{
 use ic_ethereum_types::Address;
 use ic_ledger_suite_orchestrator_test_utils::flow::call_ledger_icrc1_total_supply;
 use ic_ledger_suite_orchestrator_test_utils::{supported_erc20_tokens, usdc};
-use ic_state_machine_tests::ErrorCode;
-use ic_state_machine_tests::{CanisterStatusType, WasmResult};
+use ic_management_canister_types::CanisterStatusType;
+use ic_state_machine_tests::{ErrorCode, WasmResult};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
 use icrc_ledger_types::icrc3::transactions::Mint;
@@ -160,12 +160,11 @@ mod withdraw_erc20 {
         increment_max_priority_fee_per_gas, DepositParams, FeeHistoryProcessWithdrawal,
         ProcessWithdrawalParams,
     };
-    use ic_cketh_test_utils::mock::JsonRpcProvider;
     use ic_cketh_test_utils::response::{
         decode_transaction, default_erc20_signed_eip_1559_transaction, hash_transaction,
     };
     use ic_cketh_test_utils::{
-        CKETH_TRANSFER_FEE, DEFAULT_BLOCK_HASH, DEFAULT_BLOCK_NUMBER,
+        JsonRpcProvider, CKETH_TRANSFER_FEE, DEFAULT_BLOCK_HASH, DEFAULT_BLOCK_NUMBER,
         DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION, DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_FEE,
         DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_HASH, DEFAULT_PRINCIPAL_ID, EXPECTED_BALANCE,
     };
@@ -1173,19 +1172,19 @@ mod withdraw_erc20 {
             .start_processing_withdrawals()
             .retrieve_fee_history(move |mock| {
                 mock.modify_response(
-                    JsonRpcProvider::BlockPi,
+                    JsonRpcProvider::Provider1,
                     &mut |response: &mut ethers_core::types::FeeHistory| {
                         response.oldest_block = 0x17740742_u64.into()
                     },
                 )
                 .modify_response(
-                    JsonRpcProvider::PublicNode,
+                    JsonRpcProvider::Provider2,
                     &mut |response: &mut ethers_core::types::FeeHistory| {
                         response.oldest_block = 0x17740743_u64.into()
                     },
                 )
                 .modify_response(
-                    JsonRpcProvider::LlamaNodes,
+                    JsonRpcProvider::Provider3,
                     &mut |response: &mut ethers_core::types::FeeHistory| {
                         response.oldest_block = 0x17740744_u64.into()
                     },
@@ -1356,6 +1355,7 @@ fn should_deposit_cketh_and_ckerc20_when_ledger_temporary_offline() {
                 from_address: format_ethereum_address_to_eip_55(DEFAULT_DEPOSIT_FROM_ADDRESS),
                 value: CKETH_MINIMUM_WITHDRAWAL_AMOUNT.into(),
                 principal: caller,
+                subaccount: None,
             },
             EventPayload::AcceptedErc20Deposit {
                 transaction_hash: DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH.to_string(),
@@ -1365,6 +1365,7 @@ fn should_deposit_cketh_and_ckerc20_when_ledger_temporary_offline() {
                 value: ONE_USDC.into(),
                 principal: caller,
                 erc20_contract_address: ckusdc.erc20_contract_address.clone(),
+                subaccount: None,
             },
         ])
         .check_events()
@@ -1547,6 +1548,7 @@ fn should_retrieve_minter_info() {
             last_eth_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
             last_erc20_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
             cketh_ledger_id: Some(ckerc20.cketh_ledger_id()),
+            evm_rpc_id: ckerc20.cketh.evm_rpc_id.map(Principal::from),
         }
     );
 }

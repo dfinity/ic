@@ -1,8 +1,3 @@
-// False positive clippy lint.
-// Issue: https://github.com/rust-lang/rust-clippy/issues/12856
-// Fixed in: https://github.com/rust-lang/rust-clippy/pull/12892
-#![allow(clippy::needless_borrows_for_generic_args)]
-
 pub mod host_memory;
 mod signal_stack;
 mod system_api;
@@ -536,6 +531,14 @@ impl WasmtimeEmbedder {
                 main_memory_type = WasmMemoryType::Wasm64;
             }
         }
+        let dirty_page_overhead = match main_memory_type {
+            WasmMemoryType::Wasm32 => self.config.dirty_page_overhead,
+            WasmMemoryType::Wasm64 => NumInstructions::from(
+                self.config.dirty_page_overhead.get()
+                    * self.config.wasm64_dirty_page_overhead_multiplier,
+            ),
+        };
+
         Ok(WasmtimeInstance {
             instance,
             memory_trackers,
@@ -547,7 +550,7 @@ impl WasmtimeEmbedder {
             wasm_native_stable_memory: self.config.feature_flags.wasm_native_stable_memory,
             canister_backtrace: self.config.feature_flags.canister_backtrace,
             modification_tracking,
-            dirty_page_overhead: self.config.dirty_page_overhead,
+            dirty_page_overhead,
             #[cfg(debug_assertions)]
             stable_memory_dirty_page_limit: current_dirty_page_limit,
             stable_memory_page_access_limit: current_accessed_limit,

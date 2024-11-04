@@ -785,13 +785,7 @@ impl SystemMetadata {
             // committing each state.
             prev_state_hash: Default::default(),
             state_sync_version: CURRENT_STATE_SYNC_VERSION,
-            // NB. State manager relies on the root hash of the hash tree
-            // corresponding to the initial state to be a constant.  Thus we fix
-            // the certification version that we use for the initial state. If
-            // we used CURRENT_CERTIFICATION_VERSION here, the state hash would
-            // NOT be guaranteed to be constant, potentially leading to
-            // hard-to-track bugs in state manager.
-            certification_version: CertificationVersion::V0,
+            certification_version: CURRENT_CERTIFICATION_VERSION,
             heap_delta_estimate: NumBytes::from(0),
             subnet_metrics: Default::default(),
             expected_compiled_wasms: BTreeSet::new(),
@@ -1299,7 +1293,7 @@ impl TryFrom<pb_queues::Stream> for Stream {
             .map(|signal| {
                 Ok(RejectSignal {
                     reason: pb_queues::RejectReason::try_from(signal.reason)
-                        .map_err(ProxyDecodeError::DecodeError)?
+                        .map_err(|err| ProxyDecodeError::Other(err.to_string()))?
                         .try_into()?,
                     index: signal.index.into(),
                 })
