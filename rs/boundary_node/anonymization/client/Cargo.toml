@@ -1,0 +1,19 @@
+[package]
+name = "anonymization-client"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+candid = { workspace = true }
+# ic-canister-client = { git = "https://github.com/dfinity/ic.git", rev = "2d7dfc0135966f04973f1992587a2846e7475bec" }
+ic-canister-client = { path = "../../../canister_client" }
+ic-types = { path = "../../../types/types" }
+rand = { workspace = true }
+rsa = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+
+[dependencies.anonymization-interface]
+path = "../interface"
