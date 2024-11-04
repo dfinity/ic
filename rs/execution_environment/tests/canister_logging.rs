@@ -358,25 +358,15 @@ fn test_appending_logs_in_trapped_update_call(#[strategy("\\PC*")] message: Stri
             .update("test", wat_fn().debug_print(message.as_bytes()).trap())
             .build_wasm(),
     );
-    let timestamp = system_time_to_nanos(env.time_of_next_round());
+    let timestamp = env.time_of_next_round();
     let _ = env.execute_ingress(canister_id, "test", vec![]);
     let result = fetch_canister_logs(&env, controller, canister_id);
-    let logs = FetchCanisterLogsResponse::decode(&get_reply(result))
-        .unwrap()
-        .canister_log_records;
-    assert_eq!(logs.len(), 2);
-    for (i, log) in logs.iter().enumerate() {
-        assert_eq!(log.idx, i as u64);
-        assert_eq!(log.timestamp_nanos, timestamp);
-    }
-    assert_eq!(std::str::from_utf8(&logs[0].content).unwrap(), message);
-    let trap_message = std::str::from_utf8(&logs[1].content).unwrap();
-    let expected_trap_message = "[TRAP]: (no message)";
-    assert!(
-        trap_message.contains(expected_trap_message),
-        "Log message \"{}\" does not contain expected \"{}\"",
-        trap_message,
-        expected_trap_message
+    assert_eq!(
+        readable_logs_without_backtraces(result),
+        vec![
+            (0, timestamp, message),
+            (1, timestamp, "[TRAP]: (no message)".to_string())
+        ]
     );
 }
 
