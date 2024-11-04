@@ -3,8 +3,8 @@ use anyhow::Context;
 use anyhow::Result;
 use mac_address::mac_address::FormattedMacAddress;
 use std::collections::HashMap;
+use std::ffi::OsStr;
 use std::fs;
-use std::io::{BufRead, BufReader};
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::{Path, PathBuf};
 use url::Url;
@@ -12,10 +12,13 @@ use url::Url;
 use crate::types::*;
 
 pub static CONFIG_ROOT: &str = "/boot/config";
-pub static STATE_ROOT: &str = "/var/lib/ic";
+pub static STATE_ROOT: &str = "/var/lib/ic/data";
 
 pub fn update_guestos_config(output_file: PathBuf) -> Result<()> {
     let config_dir = Path::new(CONFIG_ROOT);
+    log_directory_structure(config_dir)?;
+    let state_root = Path::new(STATE_ROOT);
+    log_directory_structure(state_root)?;
 
     let network_settings_result = read_network_conf(config_dir)?;
     let network_settings = network_settings_result.network_settings;
@@ -24,12 +27,10 @@ pub fn update_guestos_config(output_file: PathBuf) -> Result<()> {
     let logging = read_filebeat_conf(config_dir)?;
     let nns_urls = read_nns_conf(config_dir)?;
 
-    let nns_public_key_exists = Path::new(STATE_ROOT)
-        .join("data/nns_public_key.pem")
-        .exists();
+    let nns_public_key_exists = Path::new(STATE_ROOT).join("nns_public_key.pem").exists();
 
     let node_operator_private_key_exists = Path::new(STATE_ROOT)
-        .join("data/node_operator_private_key.pem")
+        .join("node_operator_private_key.pem")
         .exists();
 
     let use_ssh_authorized_keys = Path::new(CONFIG_ROOT)
@@ -75,6 +76,8 @@ pub fn update_guestos_config(output_file: PathBuf) -> Result<()> {
         icos_settings,
         guestos_settings,
     };
+
+    println!("New GuestOSConfig: {:?}", guestos_config);
 
     serialize_and_write_config(&output_file, &guestos_config)?;
 
@@ -249,13 +252,13 @@ fn derive_mgmt_mac_from_hostname(hostname: Option<&str>) -> Result<FormattedMacA
 }
 
 fn read_conf_file(path: &Path) -> Result<HashMap<String, String>> {
-    let file = fs::File::open(path)
-        .with_context(|| format!("Failed to open configuration file: {:?}", path))?;
-    let reader = BufReader::new(file);
-    let mut map = HashMap::new();
+    println!("Reading configuration file: {:?}", path);
+    let content = fs::read_to_string(path)
+        .with_context(|| format!("Failed to read configuration file: {:?}", path))?;
+    println!("Contents of {:?}:\n{}", path, content);
 
-    for line in reader.lines() {
-        let line = line?;
+    let mut map = HashMap::new();
+    for line in content.lines() {
         if line.trim().is_empty() || line.starts_with('#') {
             continue;
         }
@@ -264,4 +267,40 @@ fn read_conf_file(path: &Path) -> Result<HashMap<String, String>> {
         }
     }
     Ok(map)
+}
+
+fn log_directory_structure(path: &Path) -> Result<()> {
+    println!("Listing directory structure of {}", path.display());
+    log_directory_structure_internal(path, 0)
+}
+
+fn log_directory_structure_internal(path: &Path, depth: usize) -> Result<()> {
+    let indent = "  ".repeat(depth);
+    if path.is_dir() {
+        if depth == 0 {
+            println!("{}{}/", indent, path.display());
+        } else {
+            println!(
+                "{}{}/",
+                indent,
+                path.file_name()
+                    .unwrap_or_else(|| OsStr::new(""))
+                    .to_string_lossy()
+            );
+        }
+        for entry in fs::read_dir(path)? {
+            let entry = entry?;
+            let path = entry.path();
+            log_directory_structure_internal(&path, depth + 1)?;
+        }
+    } else {
+        println!(
+            "{}{}",
+            indent,
+            path.file_name()
+                .unwrap_or_else(|| OsStr::new(""))
+                .to_string_lossy()
+        );
+    }
+    Ok(())
 }
