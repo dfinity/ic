@@ -460,6 +460,8 @@ impl Neuron {
         // we're dealing with a simple vector, we insert at the
         // beginning and remove at the end once we have reached
         // the maximum number of votes to keep track of.
+        // DO NOT MERGE TODO this might be the culprit!!!
+        // causing stable btreemap to update all 100 entries.
         self.recent_ballots.insert(0, ballot_info);
         // Pop and discard elements from the end until we reach
         // the maximum allowed length of the vector.
