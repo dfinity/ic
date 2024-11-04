@@ -186,7 +186,7 @@ fn post_upgrade(args: Option<LedgerArgument>) {
     if !memory_manager_found {
         let msg =
             "Cannot upgrade from scratch stable memory, please upgrade to memory manager first.";
-        ic_cdk::println!("{msg}");
+        log_message(msg);
         panic!("{msg}");
     }
 
@@ -237,6 +237,7 @@ fn post_upgrade(args: Option<LedgerArgument>) {
         ledger.state = LedgerState::Migrating(LedgerField::Allowances);
         ledger.clear_arrivals();
     });
+    log_message("Migration started.");
     migrate_next_part(
         MAX_INSTRUCTIONS_PER_UPGRADE.saturating_sub(pre_upgrade_instructions_consumed),
     );
@@ -251,8 +252,7 @@ fn migrate_next_part(instruction_limit: u64) {
     let mut migrated_allowances = 0;
     let mut migrated_expirations = 0;
 
-    ic_cdk::println!("Migration started.");
-    log!(&LOG, "Migration started.");
+    log_message("Migrating part of the ledger state.");
 
     Access::with_ledger_mut(|ledger| {
         while instruction_counter() < instruction_limit {
@@ -280,19 +280,21 @@ fn migrate_next_part(instruction_limit: u64) {
         let msg = format!("Number of elements migrated: allowances:{migrated_allowances} expirations:{migrated_expirations}. Instructions used {}.",
             instruction_counter());
         if !ledger.is_ready() {
-            ic_cdk::println!("Migration partially done. Scheduling the next part. {msg}");
-            log!(
-                &LOG,
-                "Migration partially done. Scheduling the next part. {msg}"
+            log_message(
+                format!("Migration partially done. Scheduling the next part. {msg}").as_str(),
             );
             ic_cdk_timers::set_timer(Duration::from_secs(0), || {
                 migrate_next_part(MAX_INSTRUCTIONS_PER_TIMER_CALL)
             });
         } else {
-            ic_cdk::println!("Migration completed! {msg}");
-            log!(&LOG, "Migration completed! {msg}");
+            log_message(format!("Migration completed! {msg}").as_str());
         }
     });
+}
+
+fn log_message(msg: &str) {
+    ic_cdk::println!("{msg}");
+    log!(&LOG, "{msg}");
 }
 
 fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
