@@ -7,7 +7,6 @@ DEPENDENCIES = [
     "//rs/types/types",
     "//rs/universal_canister/impl:lib",
     "@crate_index//:candid",
-    "@crate_index//:hex-literal",
     "@crate_index//:serde",
 ]
 
@@ -17,11 +16,22 @@ DEV_DEPENDENCIES = [
     "//rs/types/types",
 ]
 
+genrule(
+    name = "universal_canister_wasm_sha256_env_file",
+    srcs = ["//rs/universal_canister/impl:universal_canister.wasm.gz"],
+    outs = ["universal_canister.wasm.gz.sha256"],
+    cmd = "echo UNIVERSAL_CANISTER_WASM_SHA256=$$(sha256sum $< | cut -d' ' -f1) > $@",
+)
+
 rust_library(
     name = "lib",
     srcs = glob(["src/*.rs"]),
-    compile_data = ["src/universal-canister.wasm.gz"],
     crate_name = "ic_universal_canister",
+    data = ["//rs/universal_canister/impl:universal_canister.wasm.gz"],
+    rustc_env = {
+        "UNIVERSAL_CANISTER_WASM_PATH": "$(location //rs/universal_canister/impl:universal_canister.wasm.gz)",
+    },
+    rustc_env_files = [":universal_canister_wasm_sha256_env_file"],
     version = "0.9.0",
     deps = DEPENDENCIES,
 )
@@ -40,6 +50,10 @@ rust_doc_test(
 rust_test(
     name = "lib_test",
     crate = ":lib",
-    data = ["src/universal-canister.wasm.gz"],
+    data = ["//rs/universal_canister/impl:universal_canister.wasm.gz"],
+    rustc_env = {
+        "UNIVERSAL_CANISTER_WASM_PATH": "$(location //rs/universal_canister/impl:universal_canister.wasm.gz)",
+    },
+    rustc_env_files = [":universal_canister_wasm_sha256_env_file"],
     deps = DEV_DEPENDENCIES,
 )

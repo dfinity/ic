@@ -7,17 +7,36 @@
 
 pub mod management;
 
-use hex_literal::hex;
 use ic_types::Cycles;
 use universal_canister::Ops;
-/// The binary of the universal canister as compiled from
-/// `rs/universal_canister/impl`.
-///
-/// For steps on how to produce it, please see the README in
-/// `rs/universal_canister`.
-pub const UNIVERSAL_CANISTER_WASM: &[u8] = include_bytes!("universal-canister.wasm.gz");
-pub const UNIVERSAL_CANISTER_WASM_SHA256: [u8; 32] =
-    hex!("9c0b4ed1d729ffdd0e8d194df3be621f58a2fb86e1f1bbf556d89f43637de303");
+
+/// The binary of the universal canister as compiled from `rs/universal_canister/impl`.
+pub const UNIVERSAL_CANISTER_WASM: &[u8] = include_bytes!(env!("UNIVERSAL_CANISTER_WASM_PATH"));
+pub const UNIVERSAL_CANISTER_WASM_SHA256: [u8; 32] = hex_to_bytes(env!("UNIVERSAL_CANISTER_WASM_SHA256"));
+
+/// Convert a hexadecimal string to a [u8; 32] array
+const fn hex_to_bytes(hex: &str) -> [u8; 32] {
+    let hex_bytes = hex.as_bytes();
+    let mut bytes = [0u8; 32];
+    let mut i = 0;
+
+    while i < 32 {
+        bytes[i] = (hex_to_byte(hex_bytes[i * 2]) << 4) | hex_to_byte(hex_bytes[i * 2 + 1]);
+        i += 1;
+    }
+
+    bytes
+}
+
+/// Helper function to convert a single hexadecimal character to a u8
+const fn hex_to_byte(hex: u8) -> u8 {
+    match hex {
+        b'0'..=b'9' => hex - b'0',
+        b'a'..=b'f' => hex - b'a' + 10,
+        b'A'..=b'F' => hex - b'A' + 10,
+        _ => panic!("Invalid hex character"),
+    }
+}
 
 /// A succinct shortcut for creating a `PayloadBuilder`, which is used to encode
 /// instructions to be executed by the UC.
