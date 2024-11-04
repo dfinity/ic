@@ -551,6 +551,12 @@ impl Ledger {
         matches!(self.state, LedgerState::Ready)
     }
 
+    pub fn panic_if_not_ready(&self) {
+        if !self.is_ready() {
+            ic_cdk::trap("The Ledger is not ready");
+        }
+    }
+
     pub fn migrate_one_allowance(&mut self) -> bool {
         match self.approvals.allowances_data.pop_first_allowance() {
             Some((account_spender, allowance)) => {
@@ -587,30 +593,22 @@ impl LedgerContext for Ledger {
     type Tokens = Tokens;
 
     fn balances(&self) -> &Balances<Self::BalancesStore> {
-        if !self.is_ready() {
-            ic_cdk::trap("The Ledger is not ready");
-        }
+        self.panic_if_not_ready();
         &self.balances
     }
 
     fn balances_mut(&mut self) -> &mut Balances<Self::BalancesStore> {
-        if !self.is_ready() {
-            ic_cdk::trap("The Ledger is not ready");
-        }
+        self.panic_if_not_ready();
         &mut self.balances
     }
 
     fn approvals(&self) -> &AllowanceTable<Self::AllowancesData> {
-        if !self.is_ready() {
-            ic_cdk::trap("The Ledger is not ready");
-        }
+        self.panic_if_not_ready();
         &self.stable_approvals
     }
 
     fn approvals_mut(&mut self) -> &mut AllowanceTable<Self::AllowancesData> {
-        if !self.is_ready() {
-            ic_cdk::trap("The Ledger is not ready");
-        }
+        self.panic_if_not_ready();
         &mut self.stable_approvals
     }
 
