@@ -65,6 +65,7 @@ pub enum CompletedSignature {
 }
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct IdkgMasterPublicKeyId(MasterPublicKeyId);
 
 impl TryFrom<MasterPublicKeyId> for IdkgMasterPublicKeyId {
@@ -90,6 +91,31 @@ impl std::ops::Deref for IdkgMasterPublicKeyId {
 
     fn deref(&self) -> &<Self as std::ops::Deref>::Target {
         &self.0
+    }
+}
+
+impl Serialize for IdkgMasterPublicKeyId {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.0.serialize(serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for IdkgMasterPublicKeyId {
+    fn deserialize<D: serde::Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<IdkgMasterPublicKeyId, D::Error> {
+        use serde::de::Error;
+
+        let master_public_key_id: MasterPublicKeyId =
+            serde::Deserialize::deserialize(deserializer)?;
+
+        if !master_public_key_id.is_idkg_key() {
+            Err(D::Error::custom(
+                "expected an idkg variant of MasterPublicKeyId",
+            ))
+        } else {
+            Ok(Self(master_public_key_id))
+        }
     }
 }
 
