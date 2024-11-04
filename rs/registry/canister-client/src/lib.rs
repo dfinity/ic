@@ -1,9 +1,11 @@
-//! An implementation of RegistryClient intended to be used in canister
-//! where polling is handed over to a timer
+//! An implementation of RegistryClient intended to be used in canisters
+//! where polling of new registry versions is handed over to a timer.
+//! Most of the code is copied from ic-registry-client-fake lib restricting
+//! the attributes types of RegistryCanisterClient for single thread execution.
 
 use ic_interfaces_registry::{
-    empty_zero_registry_record, RegistryClientVersionedResult, RegistryDataProvider, RegistryTransportRecord, ZERO_REGISTRY_VERSION,
-    RegistryClient
+    empty_zero_registry_record, RegistryClient, RegistryClientVersionedResult,
+    RegistryDataProvider, RegistryTransportRecord, ZERO_REGISTRY_VERSION,
 };
 use ic_types::{registry::RegistryClientError, RegistryVersion, Time};
 use std::cell::{Ref, RefCell};
@@ -33,10 +35,7 @@ impl RegistryCanisterClient {
         let mut cache = self.cache.borrow_mut();
         let latest_version = cache.0;
 
-        let new_records = match self
-            .data_provider
-            .get_updates_since(latest_version)
-        {
+        let new_records = match self.data_provider.get_updates_since(latest_version) {
             Ok(records) if !records.is_empty() => records,
             Ok(_) => return,
             Err(e) => panic!("Failed to query data provider: {}", e),
@@ -83,7 +82,6 @@ impl RegistryCanisterClient {
         }
         Ok(cache_state)
     }
-    
 }
 
 impl RegistryClient for RegistryCanisterClient {
@@ -96,7 +94,7 @@ impl RegistryClient for RegistryCanisterClient {
             return Ok(empty_zero_registry_record(key));
         }
         let cache_state = self.check_version(version)?;
-        let records = &cache_state.2 ;
+        let records = &cache_state.2;
 
         let search_key = &(key, &version);
         let record = match records.binary_search_by_key(search_key, |r| (&r.key, &r.version)) {
@@ -135,8 +133,8 @@ impl RegistryClient for RegistryCanisterClient {
 
         let records = records
             .iter()
-            .skip(first_match_index) 
-            .filter(|r| r.version <= version) 
+            .skip(first_match_index)
+            .filter(|r| r.version <= version)
             .take_while(|r| r.key.starts_with(key_prefix));
 
         let mut effective_records = BTreeMap::new();

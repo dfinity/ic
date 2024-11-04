@@ -8,28 +8,17 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/interfaces/registry",
     "//rs/types/types",
-]
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/registry/keys",
+    "@crate_index//:ic-cdk",
 ]
 
 SRCS = glob(
-    ["src/**"],
-    exclude = ["**/*tests.rs"],
+    ["src/**"]
 )
 
 rust_library(
-    name = "fake",
+    name = "client",
     srcs = SRCS,
-    crate_name = "ic_registry_client_fake",
+    crate_name = "ic_registry_canister_client",
     version = "0.9.0",
     deps = DEPENDENCIES,
-)
-
-rust_test(
-    name = "fake_test",
-    srcs = glob(["src/**/*.rs"]),
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
