@@ -2802,6 +2802,15 @@ pub fn test_incomplete_migration<T>(
     )
     .unwrap();
 
+    let is_ledger_ready = Decode!(
+        &env.query(canister_id, "is_ledger_ready", Encode!().unwrap())
+            .expect("failed to call is_ledger_ready")
+            .bytes(),
+        bool
+    )
+    .expect("failed to decode is_ledger_ready response");
+    assert!(!is_ledger_ready);
+
     // Downgrade to mainnet without waiting for the migration to complete.
     env.upgrade_canister(
         canister_id,
