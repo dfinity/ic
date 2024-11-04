@@ -80,6 +80,7 @@ where
     total_supply: Tokens,
     fee_collector: Option<AccountId>,
     burns_without_spender: Option<BurnsWithoutSpender<AccountId>>,
+    transactions: u64,
 }
 
 impl<K, AccountId, Tokens: std::fmt::Debug> PartialEq for InMemoryLedger<K, AccountId, Tokens>
@@ -209,6 +210,7 @@ where
     ) {
         self.burn_fee(from, fee);
         self.set_allowance(from, spender, amount, expected_allowance, expires_at, now);
+        self.transactions += 1;
     }
 
     fn process_burn(
@@ -236,11 +238,13 @@ where
                 self.decrease_allowance(from, spender, amount, None);
             }
         }
+        self.transactions += 1;
     }
 
     fn process_mint(&mut self, to: &Self::AccountId, amount: &Self::Tokens) {
         self.increase_balance(to, amount);
         self.increase_total_supply(amount);
+        self.transactions += 1;
     }
 
     fn process_transfer(
@@ -261,6 +265,7 @@ where
             }
         }
         self.increase_balance(to, amount);
+        self.transactions += 1;
     }
 
     fn validate_invariants(&self) {
@@ -290,6 +295,7 @@ where
             total_supply: Tokens::zero(),
             fee_collector: None,
             burns_without_spender: None,
+            transactions: 0,
         }
     }
 }
@@ -562,8 +568,18 @@ impl InMemoryLedger<ApprovalKey, Account, Tokens> {
     }
 
     pub fn verify_balances_and_allowances(&self, env: &StateMachine, ledger_id: CanisterId) {
+        let total_blocks = parse_metric(env, ledger_id, "ledger_total_transactions");
         let actual_num_approvals = parse_metric(env, ledger_id, "ledger_num_approvals");
         let actual_num_balances = parse_metric(env, ledger_id, "ledger_balance_store_entries");
+        println!(
+            "total_blocks in ledger: {}, total InMemoryLedger transactions: {}",
+            total_blocks, self.transactions
+        );
+        assert_eq!(
+            total_blocks, self.transactions,
+            "Mismatch in number of transactions ({} vs {})",
+            self.transactions, total_blocks
+        );
         assert_eq!(
             self.balances.len() as u64,
             actual_num_balances,
