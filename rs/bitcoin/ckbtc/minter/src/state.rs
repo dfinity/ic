@@ -1099,7 +1099,9 @@ impl CkBtcMinterState {
                 kyt_provider,
                 kyt_fee,
             } => {
-                *self.owed_kyt_amount.entry(kyt_provider).or_insert(0) += kyt_fee;
+                if kyt_fee > 0 {
+                    *self.owed_kyt_amount.entry(kyt_provider).or_insert(0) += kyt_fee;
+                }
             }
             ReimbursementReason::CallFailed => {}
         }

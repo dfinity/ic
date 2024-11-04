@@ -1,7 +1,7 @@
 use super::{get_btc_address::init_ecdsa_public_key, get_withdrawal_account::compute_subaccount};
 use crate::logs::P0;
 use crate::logs::P1;
-use crate::management::{check_withdrawal_destination_address, fetch_withdrawal_alerts};
+use crate::management::check_withdrawal_destination_address;
 use crate::memo::{BurnMemo, Status};
 use crate::state::ReimbursementReason;
 use crate::tasks::{schedule_now, TaskType};
@@ -14,7 +14,6 @@ use candid::{CandidType, Deserialize, Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_btc_kyt::CheckAddressResponse;
 use ic_canister_log::log;
-use ic_ckbtc_kyt::Error as KytError;
 use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::account::Subaccount;
@@ -22,7 +21,6 @@ use icrc_ledger_types::icrc1::transfer::Memo;
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
 use num_traits::cast::ToPrimitive;
-use std::cmp::max;
 
 const MAX_CONCURRENT_PENDING_REQUESTS: usize = 1000;
 
@@ -175,12 +173,11 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
     }
 
     let _guard = retrieve_btc_guard(caller)?;
-    let (min_retrieve_amount, btc_network, kyt_fee) =
-        read_state(|s| (s.retrieve_btc_min_amount, s.btc_network, s.kyt_fee));
+    let (min_retrieve_amount, btc_network) =
+        read_state(|s| (s.retrieve_btc_min_amount, s.btc_network));
 
-    let min_amount = max(min_retrieve_amount, kyt_fee);
-    if args.amount < min_amount {
-        return Err(RetrieveBtcError::AmountTooLow(min_amount));
+    if args.amount < min_retrieve_amount {
+        return Err(RetrieveBtcError::AmountTooLow(min_retrieve_amount));
     }
 
     let parsed_address = BitcoinAddress::parse(&args.address, btc_network)?;
@@ -206,36 +203,20 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
 
     match status {
         BtcAddressCheckStatus::Tainted => {
-            let burn_memo = BurnMemo::Convert {
-                address: Some(&args.address),
-                kyt_fee: Some(kyt_fee),
-                status: Some(Status::Rejected),
-            };
-            let block_index =
-                burn_ckbtcs(caller, kyt_fee, crate::memo::encode(&burn_memo).into()).await?;
             log!(
                 P1,
-                "rejected an attempt to withdraw {} BTC to address {} due to failed KYT check (burnt {} ckBTC in block {})",
+                "rejected an attempt to withdraw {} BTC to address {} due to failed KYT check",
                 crate::tx::DisplayAmount(args.amount),
                 args.address,
-                crate::tx::DisplayAmount(kyt_fee),
-                block_index
             );
-            mutate_state(|s| {
-                state::audit::retrieve_btc_kyt_failed(
-                    s,
-                    caller,
-                    args.address,
-                    args.amount,
-                    new_kyt_principal,
-                    block_index,
-                )
-            });
+            state::audit::retrieve_btc_kyt_failed(
+                caller,
+                args.address,
+                args.amount,
+                new_kyt_principal,
+            );
             return Err(RetrieveBtcError::GenericError {
-                error_message: format!(
-                    "Destination address is tainted, KYT check fee deducted: {}",
-                    crate::tx::DisplayAmount(kyt_fee),
-                ),
+                error_message: "Destination address is tainted".to_string(),
                 error_code: ErrorCode::TaintedAddress as u64,
             });
         }
@@ -250,10 +231,7 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
         burn_ckbtcs(caller, args.amount, crate::memo::encode(&burn_memo).into()).await?;
     let request = RetrieveBtcRequest {
         // NB. We charge the KYT fee from the retrieve amount.
-        amount: args
-            .amount
-            .checked_sub(kyt_fee)
-            .expect("BUG: withdrawal amount must be greater than the KYT fee"),
+        amount: args.amount,
         address: parsed_address,
         block_index,
         received_at: ic_cdk::api::time(),
@@ -313,11 +291,12 @@ pub async fn retrieve_btc_with_approval(
     }
 
     let _guard = retrieve_btc_guard(caller)?;
-    let (min_retrieve_amount, btc_network, kyt_fee) =
-        read_state(|s| (s.retrieve_btc_min_amount, s.btc_network, s.kyt_fee));
-    let min_amount = max(min_retrieve_amount, kyt_fee);
-    if args.amount < min_amount {
-        return Err(RetrieveBtcWithApprovalError::AmountTooLow(min_amount));
+    let (min_retrieve_amount, btc_network) =
+        read_state(|s| (s.retrieve_btc_min_amount, s.btc_network));
+    if args.amount < min_retrieve_amount {
+        return Err(RetrieveBtcWithApprovalError::AmountTooLow(
+            min_retrieve_amount,
+        ));
     }
     let parsed_address = BitcoinAddress::parse(&args.address, btc_network)?;
     if read_state(|s| s.count_incomplete_retrieve_btc_requests() >= MAX_CONCURRENT_PENDING_REQUESTS)
@@ -329,7 +308,7 @@ pub async fn retrieve_btc_with_approval(
 
     let burn_memo_icrc2 = BurnMemo::Convert {
         address: Some(&args.address),
-        kyt_fee: Some(kyt_fee),
+        kyt_fee: None,
         status: None,
     };
     let block_index = burn_ckbtcs_icrc2(
@@ -342,9 +321,15 @@ pub async fn retrieve_btc_with_approval(
     )
     .await?;
 
-    match kyt_check_address(caller, args.address.clone(), args.amount).await {
-        Ok(kyt_result) => {
-            let (_uuid, status, kyt_provider) = kyt_result;
+    let new_kyt_principal = read_state(|s| {
+        s.new_kyt_principal
+            .expect("BUG: upgrade procedure must ensure that the new KYT principal is set")
+            .get()
+            .into()
+    });
+
+    match new_kyt_check_address(new_kyt_principal, args.address.clone()).await {
+        Ok(status) => {
             match status {
                 BtcAddressCheckStatus::Tainted => {
                     mutate_state(|s| {
@@ -356,18 +341,15 @@ pub async fn retrieve_btc_with_approval(
                             },
                             args.amount,
                             ReimbursementReason::TaintedDestination {
-                                kyt_provider,
-                                kyt_fee,
+                                kyt_provider: new_kyt_principal,
+                                kyt_fee: 0,
                             },
                             block_index,
                         );
                     });
                     schedule_now(TaskType::ProcessLogic);
                     return Err(RetrieveBtcWithApprovalError::GenericError {
-                        error_message: format!(
-                            "Destination address is tainted, KYT check fee deducted: {}",
-                            crate::tx::DisplayAmount(kyt_fee),
-                        ),
+                        error_message: "Destination address is tainted".to_string(),
                         error_code: ErrorCode::TaintedAddress as u64,
                     });
                 }
@@ -376,14 +358,11 @@ pub async fn retrieve_btc_with_approval(
 
             let request = RetrieveBtcRequest {
                 // NB. We charge the KYT fee from the retrieve amount.
-                amount: args
-                    .amount
-                    .checked_sub(kyt_fee)
-                    .expect("retrieve btc underflow"),
+                amount: args.amount,
                 address: parsed_address,
                 block_index,
                 received_at: ic_cdk::api::time(),
-                kyt_provider: Some(kyt_provider),
+                kyt_provider: None,
                 reimbursement_account: Some(Account {
                     owner: caller,
                     subaccount: args.from_subaccount,
@@ -598,62 +577,6 @@ pub enum BtcAddressCheckStatus {
     /// The KYT check found issues with the address in question.
     Tainted,
 }
-
-async fn kyt_check_address(
-    caller: Principal,
-    address: String,
-    amount: u64,
-) -> Result<(String, BtcAddressCheckStatus, Principal), RetrieveBtcError> {
-    let kyt_principal = read_state(|s| {
-        s.kyt_principal
-            .expect("BUG: upgrade procedure must ensure that the KYT principal is set")
-            .get()
-            .into()
-    });
-
-    match fetch_withdrawal_alerts(kyt_principal, caller, address.clone(), amount)
-        .await
-        .map_err(|call_err| {
-            RetrieveBtcError::TemporarilyUnavailable(format!(
-                "Failed to call KYT canister: {}",
-                call_err
-            ))
-        })? {
-        Ok(response) => {
-            if !response.alerts.is_empty() {
-                log!(
-                    P0,
-                    "Discovered a tainted btc address {} (external id {})",
-                    address,
-                    response.external_id
-                );
-                Ok((
-                    response.external_id,
-                    BtcAddressCheckStatus::Tainted,
-                    response.provider,
-                ))
-            } else {
-                Ok((
-                    response.external_id,
-                    BtcAddressCheckStatus::Clean,
-                    response.provider,
-                ))
-            }
-        }
-        Err(KytError::TemporarilyUnavailable(reason)) => {
-            log!(
-                P1,
-                "The KYT provider is temporarily unavailable: {}",
-                reason
-            );
-            Err(RetrieveBtcError::TemporarilyUnavailable(format!(
-                "The KYT provider is temporarily unavailable: {}",
-                reason
-            )))
-        }
-    }
-}
-
 async fn new_kyt_check_address(
     new_kyt_principal: Principal,
     address: String,

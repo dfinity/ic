@@ -126,15 +126,14 @@ pub fn distributed_kyt_fee(
 }
 
 pub fn retrieve_btc_kyt_failed(
-    state: &mut CkBtcMinterState,
     owner: Principal,
     address: String,
     amount: u64,
     kyt_provider: Principal,
-    block_index: u64,
 ) {
-    // UUID is no longer relevant for the new KYT canister
+    // uuid and block_index are no longer relevant for the new KYT canister
     let uuid = "".to_string();
+    let block_index = 0;
     record_event(&Event::RetrieveBtcKytFailed {
         owner,
         address,
@@ -143,7 +142,6 @@ pub fn retrieve_btc_kyt_failed(
         uuid,
         block_index,
     });
-    *state.owed_kyt_amount.entry(kyt_provider).or_insert(0) += state.kyt_fee;
 }
 
 pub fn schedule_deposit_reimbursement(

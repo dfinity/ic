@@ -206,7 +206,7 @@ fn estimate_withdrawal_fee(arg: EstimateFeeArg) -> WithdrawalFee {
             &s.available_utxos,
             arg.amount,
             s.last_fee_per_vbyte[50],
-            s.kyt_fee,
+            0, // kyt_fee is 0
         )
     })
 }

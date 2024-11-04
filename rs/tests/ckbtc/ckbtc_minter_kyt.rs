@@ -25,11 +25,10 @@ use ic_tests_ckbtc::{
     install_ledger, install_minter, install_new_kyt, set_kyt_api_key, setup, subnet_sys,
     upgrade_kyt, upgrade_new_kyt,
     utils::{
-        assert_account_balance, assert_burn_transaction, assert_mint_transaction,
-        assert_no_new_utxo, assert_no_transaction, ensure_wallet, generate_blocks, get_btc_address,
-        get_btc_client, send_to_btc_address, start_canister, stop_canister, upgrade_canister,
-        wait_for_bitcoin_balance, wait_for_ledger_balance, wait_for_mempool_change,
-        BTC_BLOCK_REWARD,
+        assert_account_balance, assert_mint_transaction, assert_no_new_utxo, assert_no_transaction,
+        ensure_wallet, generate_blocks, get_btc_address, get_btc_client, send_to_btc_address,
+        start_canister, stop_canister, upgrade_canister, wait_for_bitcoin_balance,
+        wait_for_ledger_balance, wait_for_mempool_change, BTC_BLOCK_REWARD,
     },
     BTC_MIN_CONFIRMATIONS, KYT_FEE, TEST_KEY_LOCAL,
 };
@@ -333,30 +332,17 @@ pub fn test_kyt(env: TestEnv) {
         }) = retrieve_result
         {
             assert_eq!(error_code, 1);
-            assert_eq!(
-                error_message,
-                "Destination address is tainted, KYT check fee deducted: 0.00001001"
-            );
+            assert_eq!(error_message, "Destination address is tainted");
         } else {
             panic!("Expected to see a tainted destination address.")
         }
-        assert_burn_transaction(&ledger_agent, &logger, 4, &withdrawal_account, KYT_FEE).await;
+        //assert_burn_transaction(&ledger_agent, &logger, 4, &withdrawal_account, KYT_FEE).await;
 
         // upgrade_kyt(&mut kyt_canister, KytMode::AcceptAll).await;
         upgrade_new_kyt(&mut new_kyt_canister, NewKytMode::AcceptAll).await;
-        let _ = minter_agent.distribute_kyt_fee().await;
 
-        assert_mint_transaction(
-            &ledger_agent,
-            &logger,
-            5,
-            &Account {
-                owner: agent_principal,
-                subaccount: None,
-            },
-            KYT_FEE,
-        )
-        .await;
+        // This should do nothing since retrieve_btc no longer charges KYT fee
+        let _ = minter_agent.distribute_kyt_fee().await;
 
         let retrieve_result = minter_agent
             .retrieve_btc(RetrieveBtcArgs {
@@ -366,7 +352,7 @@ pub fn test_kyt(env: TestEnv) {
             .await
             .expect("Error while calling retrieve_btc")
             .expect("Error in retrieve_btc");
-        assert_eq!(6, retrieve_result.block_index);
+        assert_eq!(4, retrieve_result.block_index);
         let _mempool_txids = wait_for_mempool_change(&btc_rpc, &logger).await;
         generate_blocks(&btc_rpc, &logger, BTC_MIN_CONFIRMATIONS, &btc_address0);
         // We can compute the minter's fee
@@ -381,13 +367,13 @@ pub fn test_kyt(env: TestEnv) {
         wait_for_bitcoin_balance(
             &universal_canister,
             &logger,
-            retrieve_amount - minters_fee - KYT_FEE - bitcoin_network_fee,
+            retrieve_amount - minters_fee - bitcoin_network_fee,
             &btc_address2,
         )
         .await;
 
         // Amount expected to be left on withdrawal_account
-        let expected_change_amount = transfer_amount - retrieve_amount - KYT_FEE;
+        let expected_change_amount = transfer_amount - retrieve_amount;
         assert_account_balance(&ledger_agent, &withdrawal_account, expected_change_amount).await;
 
         let _ = minter_agent.distribute_kyt_fee().await;
@@ -403,13 +389,14 @@ pub fn test_kyt(env: TestEnv) {
             )
             .await
             .expect("Error while calling balance_of");
-        assert_eq!(balance_kyt_provider, 4 * KYT_FEE);
+        assert_eq!(balance_kyt_provider, 2 * KYT_FEE);
 
         let metrics = minter_agent.get_metrics_map().await;
         let owed_kyt_amount = metrics.get("ckbtc_minter_owed_kyt_amount").unwrap().value;
         assert_eq!(owed_kyt_amount, 0_f64);
     });
 }
+
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)

@@ -652,7 +652,6 @@ struct CkBtcSetup {
     pub bitcoin_id: CanisterId,
     pub ledger_id: CanisterId,
     pub minter_id: CanisterId,
-    pub kyt_id: CanisterId,
     pub new_kyt_id: CanisterId,
 }
 
@@ -766,7 +765,6 @@ impl CkBtcSetup {
             bitcoin_id,
             ledger_id,
             minter_id,
-            kyt_id,
             new_kyt_id,
         }
     }
@@ -1789,11 +1787,12 @@ fn test_ledger_memo() {
     use ic_ckbtc_minter::memo::{BurnMemo, Status};
 
     let decoded_data = minicbor::decode::<BurnMemo>(&memo.0).expect("failed to decode memo");
+    // With the new KYT canister, retireve_btc incurs no kyt_fee
     assert_eq!(
         decoded_data,
         BurnMemo::Convert {
             address: Some(&btc_address),
-            kyt_fee: Some(KYT_FEE),
+            kyt_fee: None,
             status: Some(Status::Accepted),
         },
         "memo not found in burn"
@@ -1811,11 +1810,13 @@ fn test_ledger_memo() {
     let res = ckbtc.get_transactions(get_transaction_request);
     let memo = res.transactions[0].mint.clone().unwrap().memo.unwrap();
     assert_eq!(
-        ckbtc.new_kyt_id.get(),
+        ckbtc.kyt_provider,
         res.transactions[0].mint.clone().unwrap().to.owner.into(),
     );
     let decoded_data = minicbor::decode::<MintMemo>(&memo.0).expect("failed to decode memo");
     assert_eq!(decoded_data, MintMemo::Kyt);
+    // Make sure only deposit fee is transferred to kyt_provider
+    assert_eq!(res.transactions[0].mint.clone().unwrap().amount, KYT_FEE);
 }
 
 #[test]
@@ -1930,7 +1931,7 @@ fn test_retrieve_btc_with_approval() {
         decoded_data,
         BurnMemo::Convert {
             address: Some(WITHDRAWAL_ADDRESS),
-            kyt_fee: Some(KYT_FEE),
+            kyt_fee: None,
             status: None,
         },
         "memo not found in burn"
@@ -2019,7 +2020,7 @@ fn test_retrieve_btc_with_approval_from_subaccount() {
         decoded_data,
         BurnMemo::Convert {
             address: Some(WITHDRAWAL_ADDRESS),
-            kyt_fee: Some(KYT_FEE),
+            kyt_fee: None,
             status: None,
         },
         "memo not found in burn"
@@ -2126,20 +2127,6 @@ fn test_retrieve_btc_with_approval_fail() {
     ckbtc
         .env
         .upgrade_canister(
-            ckbtc.kyt_id,
-            kyt_wasm(),
-            Encode!(&LifecycleArg::UpgradeArg(ic_ckbtc_kyt::UpgradeArg {
-                minter_id: None,
-                maintainers: None,
-                mode: Some(KytMode::RejectAll),
-            }))
-            .unwrap(),
-        )
-        .expect("failed to upgrade the KYT canister");
-
-    ckbtc
-        .env
-        .upgrade_canister(
             ckbtc.new_kyt_id,
             new_kyt_wasm(),
             Encode!(&NewKytArg::UpgradeArg(Some(NewUpgradeArg {
@@ -2161,7 +2148,7 @@ fn test_retrieve_btc_with_approval_fail() {
     ckbtc.env.tick();
     assert_eq!(
         ckbtc.balance_of(user_account),
-        Nat::from(deposit_value - 2 * KYT_FEE - TRANSFER_FEE)
+        Nat::from(deposit_value - KYT_FEE - TRANSFER_FEE)
     );
 
     ckbtc
@@ -2171,12 +2158,12 @@ fn test_retrieve_btc_with_approval_fail() {
 
     assert_eq!(
         ckbtc.balance_of(Principal::from(ckbtc.kyt_provider)),
-        Nat::from(2 * KYT_FEE)
+        Nat::from(KYT_FEE)
     );
 
     // Check that we reimburse ckBTC if the call to the KYT canister fails
 
-    let stop_canister_result = ckbtc.env.stop_canister(ckbtc.kyt_id);
+    let stop_canister_result = ckbtc.env.stop_canister(ckbtc.new_kyt_id);
     assert_matches!(stop_canister_result, Ok(_));
 
     let retrieve_btc_result = ckbtc.retrieve_btc_with_approval(
@@ -2195,8 +2182,8 @@ fn test_retrieve_btc_with_approval_fail() {
             account: user_account,
             amount: withdrawal_amount,
             reason: TaintedDestination {
-                kyt_provider: ckbtc.kyt_provider.into(),
-                kyt_fee: KYT_FEE,
+                kyt_provider: ckbtc.new_kyt_id.into(),
+                kyt_fee: 0,
             },
             mint_block_index: 3,
         })),
@@ -2207,7 +2194,7 @@ fn test_retrieve_btc_with_approval_fail() {
         vec![
             reimbursed_tx_block_index_2.clone(),
             BtcRetrievalStatusV2 {
-                block_index: 5,
+                block_index: 6,
                 status_v2: Some(RetrieveBtcStatusV2::WillReimburse(ReimburseDepositTask {
                     account: user_account,
                     amount: withdrawal_amount,
@@ -2220,7 +2207,7 @@ fn test_retrieve_btc_with_approval_fail() {
     ckbtc.env.tick();
     assert_eq!(
         ckbtc.balance_of(user_account),
-        Nat::from(deposit_value - 2 * KYT_FEE - TRANSFER_FEE)
+        Nat::from(deposit_value - KYT_FEE - TRANSFER_FEE)
     );
 
     assert_eq!(
@@ -2228,12 +2215,12 @@ fn test_retrieve_btc_with_approval_fail() {
         vec![
             reimbursed_tx_block_index_2,
             BtcRetrievalStatusV2 {
-                block_index: 5,
+                block_index: 6,
                 status_v2: Some(RetrieveBtcStatusV2::Reimbursed(ReimbursedDeposit {
                     account: user_account,
                     amount: withdrawal_amount,
                     reason: CallFailed,
-                    mint_block_index: 6
+                    mint_block_index: 7
                 }))
             }
         ]
