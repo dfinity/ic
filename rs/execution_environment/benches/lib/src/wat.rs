@@ -37,7 +37,7 @@ impl Module {
         name: N,
         params: P,
         result: Result,
-        wasm64_enabled: Wasm64,
+        wasm64_status: Wasm64,
     ) -> String
     where
         N: std::fmt::Display,
@@ -53,55 +53,47 @@ impl Module {
             Module::CallNewLoop => LoopIterations::One,
         };
         self.from_sections(
-            Self::sections(loop_iterations, name, params, result, wasm64_enabled),
-            wasm64_enabled,
+            Self::sections(loop_iterations, name, params, result, wasm64_status),
+            wasm64_status,
         )
     }
 
     /// Render a complete WAT module from imports and body.
     #[allow(clippy::wrong_self_convention)]
-    pub fn from_sections<I, B>(&self, (imports, body): (I, B), wasm64_enabled: Wasm64) -> String
+    pub fn from_sections<I, B>(&self, (imports, body): (I, B), wasm64_status: Wasm64) -> String
     where
         I: core::fmt::Display,
         B: core::fmt::Display,
     {
-        let memory = if wasm64_enabled == Wasm64::Enabled {
+        let memory = if wasm64_status == Wasm64::Enabled {
             "(memory i64 131072)"
         } else {
             "(memory 1)"
         };
-        let call_new_params = if wasm64_enabled == Wasm64::Enabled {
-            "(call $ic0_call_new
-                (i64.const 0)   (i64.const 10)
-                (i64.const 100) (i64.const 18)
-                (i64.const 11)  (i64.const 0) ;; non-existent function
-                (i64.const 22)  (i64.const 0) ;; non-existent function
-            )"
+        let ty = if wasm64_status == Wasm64::Enabled {
+            "i64"
         } else {
-            "(call $ic0_call_new
-                (i32.const 0)   (i32.const 10)
-                (i32.const 100) (i32.const 18)
-                (i32.const 11)  (i32.const 0) ;; non-existent function
-                (i32.const 22)  (i32.const 0) ;; non-existent function
-            )"
+            "i32"
         };
-        let call_new_signature = if wasm64_enabled == Wasm64::Enabled {
+        let call_new_params = format!(
+            r#"(call $ic0_call_new
+                ({ty}.const 0)   ({ty}.const 10)
+                ({ty}.const 100) ({ty}.const 18)
+                ({ty}.const 11)  ({ty}.const 0) ;; non-existent function
+                ({ty}.const 22)  ({ty}.const 0) ;; non-existent function
+            )"#,
+            ty = ty
+        );
+        let call_new_signature = format!(
             r#"(import "ic0" "call_new"
                 (func $ic0_call_new
-                (param $callee_src i64)         (param $callee_size i64)
-                (param $name_src i64)           (param $name_size i64)
-                (param $reply_fun i64)          (param $reply_env i64)
-                (param $reject_fun i64)         (param $reject_env i64)
-            ))"#
-        } else {
-            r#"(import "ic0" "call_new"
-                (func $ic0_call_new
-                (param $callee_src i32)         (param $callee_size i32)
-                (param $name_src i32)           (param $name_size i32)
-                (param $reply_fun i32)          (param $reply_env i32)
-                (param $reject_fun i32)         (param $reject_env i32)
-            ))"#
-        };
+                (param $callee_src {ty})         (param $callee_size {ty})
+                (param $name_src {ty})           (param $name_size {ty})
+                (param $reply_fun {ty})          (param $reply_env {ty})
+                (param $reject_fun {ty})         (param $reject_env {ty})
+                ))"#,
+            ty = ty
+        );
 
         match self {
             Module::Test => {
@@ -119,7 +111,7 @@ impl Module {
             "#,
                     IMPORTS = imports,
                     MEMORY = memory,
-                    VARS_DECLARATION = if wasm64_enabled == Wasm64::Enabled {
+                    VARS_DECLARATION = if wasm64_status == Wasm64::Enabled {
                         "(local $i i64) (local $s i64)"
                     } else {
                         "(local $i i32) (local $s i32)"
@@ -141,7 +133,7 @@ impl Module {
             )
         )
             "#,
-                    STABLE_GROW_IMPORT = if wasm64_enabled == Wasm64::Enabled {
+                    STABLE_GROW_IMPORT = if wasm64_status == Wasm64::Enabled {
                         r#"(import "ic0" "stable64_grow"
                             (func $ic0_stable64_grow (param $additional_pages i64) (result i64)))"#
                     } else {
@@ -150,12 +142,12 @@ impl Module {
                     },
                     IMPORTS = imports,
                     MEMORY = memory,
-                    LOCAL_COUNTER_DECLARATION = if wasm64_enabled == Wasm64::Enabled {
+                    LOCAL_COUNTER_DECLARATION = if wasm64_status == Wasm64::Enabled {
                         "(local $i i64) (local $s i64)"
                     } else {
                         "(local $i i32) (local $s i32)"
                     },
-                    CALL_STABLE_GROW = if wasm64_enabled == Wasm64::Enabled {
+                    CALL_STABLE_GROW = if wasm64_status == Wasm64::Enabled {
                         "(drop (call $ic0_stable64_grow (i64.const 1)))"
                     } else {
                         "(drop (call $ic0_stable_grow (i32.const 1)))"
@@ -173,7 +165,7 @@ impl Module {
                         CALL_NEW_PARAMS = call_new_params,
                         BODY = body
                     ),
-                    wasm64_enabled,
+                    wasm64_status,
                 );
                 format!(
                     r#"
@@ -190,7 +182,7 @@ impl Module {
                     CALL_NEW_SIGNATURE = call_new_signature,
                     IMPORTS = imports,
                     MEMORY = memory,
-                    VARS_DECLARATION = if wasm64_enabled == Wasm64::Enabled {
+                    VARS_DECLARATION = if wasm64_status == Wasm64::Enabled {
                         "(local $i i64) (local $s i64)"
                     } else {
                         "(local $i i32) (local $s i32)"
@@ -214,7 +206,7 @@ impl Module {
             "#,
                     IMPORTS = imports,
                     MEMORY = memory,
-                    VARS_DECLARATION = if wasm64_enabled == Wasm64::Enabled {
+                    VARS_DECLARATION = if wasm64_status == Wasm64::Enabled {
                         "(local $i i64) (local $s i64)"
                     } else {
                         "(local $i i32) (local $s i32)"
@@ -255,7 +247,7 @@ impl Module {
             "#,
                     IMPORTS = imports,
                     MEMORY = memory,
-                    VARS_DECLARATION = if wasm64_enabled == Wasm64::Enabled {
+                    VARS_DECLARATION = if wasm64_status == Wasm64::Enabled {
                         "(local $i i64) (local $s i64)"
                     } else {
                         "(local $i i32) (local $s i32)"
@@ -272,7 +264,7 @@ impl Module {
         name: N,
         params: P,
         result: Result,
-        wasm64_enabled: Wasm64,
+        wasm64_status: Wasm64,
     ) -> (String, String)
     where
         N: std::fmt::Display,
@@ -294,7 +286,7 @@ impl Module {
                 NAME = name,
                 PARAMS = params.call()
             )),
-            wasm64_enabled,
+            wasm64_status,
         );
         (imports, body)
     }
@@ -303,7 +295,7 @@ impl Module {
     pub fn render_loop<B>(
         loop_iterations: LoopIterations,
         loop_body: B,
-        wasm64_enabled: Wasm64,
+        wasm64_status: Wasm64,
     ) -> String
     where
         B: core::fmt::Display,
@@ -328,13 +320,13 @@ impl Module {
                     )
                 )
         "#,
-                BRANCH_CONDITION = if wasm64_enabled == Wasm64::Enabled {
+                BRANCH_CONDITION = if wasm64_status == Wasm64::Enabled {
                     "(i64.lt_s (local.get $i) (i64.const"
                 } else {
                     "(i32.lt_s (local.get $i) (i32.const"
                 },
                 LOOP_ITERATIONS = 1_000_000,
-                INCREMENT_COUNTER = if wasm64_enabled == Wasm64::Enabled {
+                INCREMENT_COUNTER = if wasm64_status == Wasm64::Enabled {
                     "(local.set $i (i64.add (local.get $i) (i64.const 1)))"
                 } else {
                     "(local.set $i (i32.add (local.get $i) (i32.const 1)))"
