@@ -1185,12 +1185,11 @@ impl SchedulerImpl {
         // Compute subnet available memory *before* taking out the canisters.
         let mut subnet_available_memory = self.exec_env.subnet_available_message_memory(state);
 
-        let mut canisters = state.take_canister_states();
-
         // Get a list of canisters in the map before we iterate over the map.
         // This is because we cannot hold an immutable reference to the map
         // while trying to simultaneously mutate it.
-        let canisters_with_outputs: Vec<CanisterId> = canisters
+        let canisters_with_outputs: Vec<CanisterId> = state
+            .canister_states
             .iter()
             .filter(|(_, canister)| canister.has_output())
             .map(|(canister_id, _)| *canister_id)
@@ -1202,7 +1201,7 @@ impl SchedulerImpl {
             // Remove the source canister from the map so that we can
             // `get_mut()` on the map further below for the destination canister.
             // Borrow rules do not allow us to hold multiple mutable references.
-            let mut source_canister = match canisters.remove(&source_canister_id) {
+            let mut source_canister = match state.take_canister_state(&source_canister_id) {
                 None => fatal!(
                     self.log,
                     "Should be guaranteed that the canister exists in the map."
@@ -1231,21 +1230,25 @@ impl SchedulerImpl {
                 .output_queues_message_count();
             source_canister
                 .system_state
-                .output_queues_for_each(|canister_id, msg| match canisters.get_mut(canister_id) {
-                    Some(dest_canister) => dest_canister
-                        .push_input(
-                            (*msg).clone(),
-                            &mut subnet_available_memory,
-                            state.metadata.own_subnet_type,
-                            InputQueueType::LocalSubnet,
-                        )
-                        .map_err(|(err, msg)| {
-                            error!(
-                                self.log,
-                                "Inducting {:?} on same subnet failed with error '{}'.", &msg, &err
-                            );
-                        }),
-                    None => Err(()),
+                .output_queues_for_each(|canister_id, msg| {
+                    match state.canister_states.get_mut(canister_id) {
+                        Some(dest_canister) => dest_canister
+                            .push_input(
+                                (*msg).clone(),
+                                &mut subnet_available_memory,
+                                state.metadata.own_subnet_type,
+                                InputQueueType::LocalSubnet,
+                            )
+                            .map_err(|(err, msg)| {
+                                error!(
+                                    self.log,
+                                    "Inducting {:?} on same subnet failed with error '{}'.",
+                                    &msg,
+                                    &err
+                                );
+                            }),
+                        None => Err(()),
+                    }
                 });
             let messages_after_induction = source_canister
                 .system_state
@@ -1253,9 +1256,8 @@ impl SchedulerImpl {
                 .output_queues_message_count();
             inducted_messages_to_others +=
                 messages_before_induction.saturating_sub(messages_after_induction);
-            canisters.insert(source_canister_id, source_canister);
+            state.put_canister_state(source_canister);
         }
-        state.put_canister_states(canisters);
         self.metrics
             .inducted_messages
             .with_label_values(&["self"])
@@ -1669,15 +1671,13 @@ impl Scheduler for SchedulerImpl {
         let round_schedule = {
             let _timer = self.metrics.round_scheduling_duration.start_timer();
 
-            let mut canisters = state.take_canister_states();
             let round_schedule_candidate = self.apply_scheduling_strategy(
                 &round_log,
                 self.config.scheduler_cores,
                 current_round,
                 self.config.accumulated_priority_reset_interval,
-                &mut canisters,
+                &mut state.canister_states,
             );
-            state.put_canister_states(canisters);
             round_schedule_candidate
         };
 
