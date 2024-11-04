@@ -1,8 +1,9 @@
 mod client;
 mod metrics;
 
-use crate::client::BrokenCanisterHttpClient;
 pub use crate::client::CanisterHttpAdapterClientImpl;
+
+use crate::client::BrokenCanisterHttpClient;
 use ic_adapter_metrics_client::AdapterMetrics;
 use ic_async_utils::ExecuteOnTokioRuntime;
 use ic_config::adapters::AdaptersConfig;
