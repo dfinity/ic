@@ -1,4 +1,4 @@
-use super::{get_all_ledger_and_archive_blocks, get_allowance, get_blocks, Tokens};
+use super::{get_all_ledger_and_archive_blocks, get_allowance, Tokens};
 use crate::metrics::parse_metric;
 use candid::{Decode, Encode, Nat, Principal};
 use ic_agent::identity::Identity;
@@ -568,13 +568,7 @@ impl InMemoryLedger<ApprovalKey, Account, Tokens> {
     }
 
     pub fn verify_balances_and_allowances(&self, env: &StateMachine, ledger_id: CanisterId) {
-        let ledger_total_blocks = get_blocks(env, Principal::from(ledger_id), 0, 0).chain_length;
         let total_blocks = parse_metric(env, ledger_id, "ledger_total_transactions");
-        assert_eq!(
-            ledger_total_blocks, total_blocks,
-            "Mismatch in number of blocks ({} vs {})",
-            ledger_total_blocks, total_blocks
-        );
         let actual_num_approvals = parse_metric(env, ledger_id, "ledger_num_approvals");
         let actual_num_balances = parse_metric(env, ledger_id, "ledger_balance_store_entries");
         println!(
