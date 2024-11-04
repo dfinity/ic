@@ -193,7 +193,31 @@ fn read_nns_conf(config_dir: &Path) -> Result<Vec<Url>> {
 
     let nns_urls = nns_url_str
         .split(',')
-        .filter_map(|s| Url::parse(s.trim()).ok())
+        .map(|s| s.trim())
+        .filter_map(|s| {
+            // Try parsing the URL as is
+            if let Ok(url) = Url::parse(s) {
+                return Some(url);
+            }
+
+            // parsing for if url is just an IPv6 address:
+            let mut address = s.to_string();
+            let is_ipv6 = address.contains(':');
+
+            // Enclose IPv6 addresses in brackets if not already
+            if is_ipv6 && !address.starts_with('[') && !address.ends_with(']') {
+                address = format!("[{}]", address);
+            }
+
+            // Prepend 'http://' and append ':8080'
+            let url_string = format!("http://{}", address);
+
+            // Attempt to parse the constructed URL
+            match Url::parse(&url_string) {
+                Ok(url) => Some(url),
+                Err(_) => None, // Parsing failed, skip this entry
+            }
+        })
         .collect();
 
     Ok(nns_urls)
