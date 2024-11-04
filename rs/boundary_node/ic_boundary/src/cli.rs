@@ -1,6 +1,7 @@
 use std::{net::SocketAddr, path::PathBuf};
 
 use clap::{Args, Parser};
+use ic_bn_lib::http;
 use url::Url;
 
 use crate::core::{AUTHOR_NAME, SERVICE_NAME};
@@ -14,6 +15,12 @@ pub struct Cli {
 
     #[command(flatten, next_help_heading = "listen")]
     pub listen: ListenConfig,
+
+    #[command(flatten, next_help_heading = "HTTP Server")]
+    pub http_server: http::server::cli::HttpServer,
+
+    #[command(flatten, next_help_heading = "HTTP Client")]
+    pub http_client: http::client::cli::HttpClient,
 
     #[command(flatten, next_help_heading = "health")]
     pub health: HealthChecksConfig,
@@ -44,137 +51,66 @@ pub struct Cli {
 #[derive(Args)]
 pub struct RegistryConfig {
     /// Comma separated list of NNS URLs to bootstrap the registry
-    #[clap(long, value_delimiter = ',', default_value = "https://ic0.app")]
+    #[clap(env, long, value_delimiter = ',', default_value = "https://ic0.app")]
     pub nns_urls: Vec<Url>,
 
     /// The path to the NNS public key file
-    #[clap(long)]
+    #[clap(env, long)]
     pub nns_pub_key_pem: Option<PathBuf>,
 
     /// The delay between NNS polls in milliseconds
-    #[clap(long, default_value = "5000")]
+    #[clap(env, long, default_value = "5000")]
     pub nns_poll_interval_ms: u64,
 
     /// The registry local store path to be populated
-    #[clap(long)]
+    #[clap(env, long)]
     pub local_store_path: Option<PathBuf>,
 
     /// Whether to disable internal registry replicator
-    #[clap(long)]
+    #[clap(env, long)]
     pub disable_registry_replicator: bool,
 
     /// Instead of using the registry - use the specified replica nodes.
     /// This disables the registry client, registry replicator and health checking.
     /// To be used only for performance testing.
-    #[clap(long)]
+    #[clap(env, long)]
     pub stub_replica: Vec<SocketAddr>,
 
     /// Minimum snapshot version age to be useful for initial publishing, in seconds
-    #[clap(long, default_value = "10")]
+    #[clap(env, long, default_value = "10")]
     pub min_version_age: u64,
 }
 
 #[derive(Args)]
 pub struct ListenConfig {
     /// Port to listen on for HTTP (listens on IPv6 wildcard "::")
-    #[clap(long)]
+    #[clap(env, long)]
     pub http_port: Option<u16>,
 
     /// Port to listen for HTTPS (listens on IPv6 wildcard "::")
     #[cfg(feature = "tls")]
-    #[clap(long)]
+    #[clap(env, long)]
     pub https_port: Option<u16>,
 
     /// Unix socket to listen on for HTTP
-    #[clap(long)]
+    #[clap(env, long)]
     pub http_unix_socket: Option<PathBuf>,
 
     /// Skip replica TLS certificate verification. DANGER: to be used only for testing
-    #[clap(long)]
+    #[clap(env, long)]
     pub skip_replica_tls_verification: bool,
-
-    /// Timeout for the whole HTTP request in milliseconds.
-    /// From when it starts connecting until the response body is finished.
-    #[clap(long, default_value = "120000")]
-    pub http_timeout: u64,
-
-    /// Timeout for the HTTP connect phase in milliseconds.
-    /// This is applied to both normal and health check requests.
-    #[clap(long, default_value = "4000")]
-    pub http_timeout_connect: u64,
-
-    /// Maximum time between two read calls in milliseconds.
-    /// Applies to HTTP client (towards replica)
-    #[clap(long, default_value = "30000")]
-    pub http_timeout_read_client: u64,
-
-    /// Maximum time between two read calls in milliseconds.
-    /// Applies to HTTP server (towards client)
-    #[clap(long, default_value = "15000")]
-    pub http_timeout_read_server: u64,
-
-    /// Maximum number of requests to be served over a single connection.
-    /// After that it's gracefully closed
-    #[clap(long, default_value = "1000")]
-    pub http_max_requests_per_conn: u64,
-
-    /// For how long to keep the idle connections in the HTTP client pool in seconds.
-    #[clap(long, default_value = "45")]
-    pub http_pool_timeout_idle: u64,
-
-    /// How many idle connections to keep in the HTTP client pool per host.
-    #[clap(long)]
-    pub http_pool_max_idle: Option<usize>,
-
-    /// Time to wait for the client to close connection in seconds.
-    /// After that it's closed forcefully.
-    /// Applies to requests closed after `--http-max-requests-per-conn`
-    #[clap(long, default_value = "30")]
-    pub http_grace_period: u64,
 
     /// Max number of in-flight requests that can be served in parallel.
     /// If this is exceeded - new requests would be throttled.
-    #[clap(long)]
+    #[clap(env, long)]
     pub max_concurrency: Option<usize>,
 
-    /// Exponential Weighted Moving Average parameter for load shedding algorithm.
-    /// Value of 0.1 means that the next measurement would account for 10% of moving average.
-    /// Should be in range 0..1.
-    #[clap(long)]
-    pub shed_ewma_param: Option<f64>,
-
-    /// Target latency for load shedding algorithm in milliseconds.
-    /// It tries to keep the request latency less than this.
-    #[clap(long, default_value = "1200", value_parser = clap::value_parser!(u64).range(10..))]
-    pub shed_target_latency: u64,
-
-    /// How frequently to send TCP/HTTP2 keepalives, in seconds.
-    /// Affects both incoming and outgoing connections.
-    #[clap(long, default_value = "30")]
-    pub http_keepalive: u64,
-
-    /// How long to wait for a keepalive response, in seconds
-    #[clap(long, default_value = "15")]
-    pub http_keepalive_timeout: u64,
-
-    /// How long to keep idle outgoing connections open, in seconds
-    #[clap(long, default_value = "120")]
-    pub http_idle_timeout: u64,
-
-    /// Max number of HTTP2 streams to allow
-    #[clap(long, default_value = "200", value_parser = clap::value_parser!(u32).range(1..))]
-    pub http2_max_streams: u32,
-
-    /// Backlog of incoming connections to set on the listening socket.
-    #[clap(long, default_value = "8192")]
-    pub backlog: u32,
-
     /// Disable HTTP2 support for outgoing connections (to replicas)
-    #[clap(long)]
+    #[clap(env, long)]
     pub disable_http2_client: bool,
 
     /// Number of HTTP clients to create to spread the load over
-    #[clap(long, default_value = "1", value_parser = clap::value_parser!(u16).range(1..))]
+    #[clap(env, long, default_value = "1", value_parser = clap::value_parser!(u16).range(1..))]
     pub http_client_count: u16,
 }
 

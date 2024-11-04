@@ -33,7 +33,8 @@ http = { workspace = true }
 http-body = { workspace = true }
 humantime = "2.1"
 ic-base-types = { path = "../../types/base_types" }
-ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "9abf1e385e4a32279de005d0019c17774e164828" }
+#ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "9abf1e385e4a32279de005d0019c17774e164828" }
+ic-bn-lib = { path = "/home/igornovg/git/ic-bn-lib" }
 ic-certification-test-utils = { path = "../../certification/test-utils" }
 ic-config = { path = "../../config" }
 ic-crypto-ed25519 = { path = "../../crypto/ed25519" }

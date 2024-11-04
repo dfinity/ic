@@ -1514,6 +1514,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "bytesize"
+version = "1.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a3e368af43e418a04d52505cf3dbc23dda4e3407ae2fa99fd0e4f308ce546acc"
+
+[[package]]
 name = "bytestring"
 version = "1.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5530,7 +5536,6 @@ dependencies = [
 [[package]]
 name = "ic-bn-lib"
 version = "0.1.0"
-source = "git+https://github.com/dfinity/ic-bn-lib?rev=9abf1e385e4a32279de005d0019c17774e164828#9abf1e385e4a32279de005d0019c17774e164828"
 dependencies = [
  "ahash 0.8.11",
  "anyhow",
@@ -5541,6 +5546,8 @@ dependencies = [
  "base64 0.22.1",
  "bytes",
  "chacha20poly1305",
+ "clap 4.5.20",
+ "clap_derive 4.5.18",
  "cloudflare 0.12.0 (git+https://github.com/cloudflare/cloudflare-rs.git?rev=f14720e42184ee176a97676e85ef2d2d85bc3aae)",
  "derive-new",
  "fqdn",
@@ -5551,25 +5558,31 @@ dependencies = [
  "http 1.1.0",
  "http-body 1.0.1",
  "http-body-util",
+ "humantime",
  "hyper 1.5.0",
  "hyper-util",
  "instant-acme",
  "mockall 0.12.1",
  "moka",
  "prometheus",
+ "prost 0.13.3",
+ "prost-types 0.13.3",
  "rand 0.8.5",
  "rcgen",
  "reqwest 0.12.8",
  "rustls 0.23.16",
  "rustls-acme",
  "rustls-pemfile 2.2.0",
+ "scopeguard",
  "serde_json",
  "sha1",
  "strum",
  "strum_macros",
  "sync_wrapper 1.0.1",
+ "systemstat",
  "thiserror",
  "tokio",
+ "tokio-io-timeout",
  "tokio-rustls 0.26.0",
  "tokio-util",
  "tower 0.5.1",
@@ -5577,6 +5590,7 @@ dependencies = [
  "tracing",
  "url",
  "uuid",
+ "vrl",
  "x509-parser",
  "zeroize",
 ]
@@ -16318,6 +16332,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ordered-float"
+version = "4.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "83e7ccb95e240b7c9506a3d544f10d935e142cc90b0a1d56954fb44d89ad6b97"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
 name = "os_qualification_utils"
 version = "0.9.0"
 dependencies = [
@@ -19519,6 +19542,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "snafu"
+version = "0.8.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "223891c85e2a29c3fe8fb900c1fae5e69c2e42415e3177752e8718475efa5019"
+dependencies = [
+ "snafu-derive",
+]
+
+[[package]]
+name = "snafu-derive"
+version = "0.8.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "03c3c6b7927ffe7ecaa769ee0e3994da3b8cafc8f444578982c83ecb161af917"
+dependencies = [
+ "heck 0.5.0",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.85",
+]
+
+[[package]]
 name = "sns_tests"
 version = "0.9.0"
 dependencies = [
@@ -19950,6 +19994,20 @@ dependencies = [
  "thiserror",
  "tokio",
  "url",
+]
+
+[[package]]
+name = "systemstat"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a24aec24a9312c83999a28e3ef9db7e2afd5c64bf47725b758cdc1cafd5b0bd2"
+dependencies = [
+ "bytesize",
+ "lazy_static",
+ "libc",
+ "nom",
+ "time",
+ "winapi 0.3.9",
 ]
 
 [[package]]
@@ -21397,6 +21455,25 @@ name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
+
+[[package]]
+name = "vrl"
+version = "0.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5c22ec61cbd43e563df185521f9a2fb2f42f6ab96604a574c82f6564049fb431"
+dependencies = [
+ "bytes",
+ "cfg-if 1.0.0",
+ "chrono",
+ "lalrpop",
+ "once_cell",
+ "ordered-float 4.4.0",
+ "regex",
+ "serde",
+ "serde_json",
+ "snafu",
+ "tracing",
+]
 
 [[package]]
 name = "vsock"

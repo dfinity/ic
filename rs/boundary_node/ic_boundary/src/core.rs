@@ -145,20 +145,25 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         4096 * cli.listen.http_client_count as usize,
     );
 
-    let http_client_opts = http::client::Options {
-        timeout_connect: Duration::from_millis(cli.listen.http_timeout_connect),
-        timeout_read: Duration::from_millis(cli.listen.http_timeout_read_client),
-        timeout: Duration::from_millis(cli.listen.http_timeout),
-        pool_idle_timeout: Some(Duration::from_secs(cli.listen.http_pool_timeout_idle)),
-        pool_idle_max: cli.listen.http_pool_max_idle,
-        tcp_keepalive: Some(Duration::from_secs(cli.listen.http_keepalive)),
-        http2_keepalive: Some(Duration::from_secs(cli.listen.http_keepalive)),
-        http2_keepalive_timeout: Duration::from_secs(cli.listen.http_keepalive_timeout),
-        http2_keepalive_idle: false,
-        user_agent: SERVICE_NAME.into(),
-        tls_config: Some(tls_config_client),
-        dns_resolver: Some(dns_resolver),
-    };
+    // let http_client_opts = http::client::Options {
+    //     timeout_connect: Duration::from_millis(cli.listen.http_timeout_connect),
+    //     timeout_read: Duration::from_millis(cli.listen.http_timeout_read_client),
+    //     timeout: Duration::from_millis(cli.listen.http_timeout),
+    //     pool_idle_timeout: Some(Duration::from_secs(cli.listen.http_pool_timeout_idle)),
+    //     pool_idle_max: cli.listen.http_pool_max_idle,
+    //     tcp_keepalive: Some(Duration::from_secs(cli.listen.http_keepalive)),
+    //     http2_keepalive: Some(Duration::from_secs(cli.listen.http_keepalive)),
+    //     http2_keepalive_timeout: Duration::from_secs(cli.listen.http_keepalive_timeout),
+    //     http2_keepalive_idle: false,
+    //     user_agent: SERVICE_NAME.into(),
+    //     tls_config: Some(tls_config_client),
+    //     dns_resolver: Some(dns_resolver),
+    // };
+
+    let mut http_client_opts: http::client::Options = &(cli.http_client).into();
+    http_client_opts.user_agent = SERVICE_NAME.into();
+    http_client_opts.tls_config = Some(tls_config_client);
+    http_client_opts.dns_resolver = Some(dns_resolver);
 
     // HTTP client for health checks
     let http_client_check = http::client::ReqwestClient::new(http_client_opts.clone())
@@ -222,15 +227,17 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     // HTTP server metrics
     let http_metrics = http::server::Metrics::new(&metrics_registry);
 
-    let server_opts = http::server::Options {
-        backlog: cli.listen.backlog,
-        http1_header_read_timeout: Duration::from_secs(cli.listen.http_timeout_read_server),
-        http2_max_streams: cli.listen.http2_max_streams,
-        http2_keepalive_interval: Duration::from_secs(cli.listen.http_keepalive),
-        http2_keepalive_timeout: Duration::from_secs(cli.listen.http_keepalive_timeout),
-        grace_period: Duration::from_secs(cli.listen.http_grace_period),
-        max_requests_per_conn: Some(cli.listen.http_max_requests_per_conn),
-    };
+    // let server_opts = http::server::Options {
+    //     backlog: cli.listen.backlog,
+    //     http1_header_read_timeout: Duration::from_secs(cli.listen.http_timeout_read_server),
+    //     http2_max_streams: cli.listen.http2_max_streams,
+    //     http2_keepalive_interval: Duration::from_secs(cli.listen.http_keepalive),
+    //     http2_keepalive_timeout: Duration::from_secs(cli.listen.http_keepalive_timeout),
+    //     grace_period: Duration::from_secs(cli.listen.http_grace_period),
+    //     max_requests_per_conn: Some(cli.listen.http_max_requests_per_conn),
+    // };
+
+    let server_opts: http::server::Options = &(cli.http_server).into();
 
     // HTTP
     let server_http = cli.listen.http_port.map(|x| {
