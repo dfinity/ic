@@ -362,9 +362,9 @@ fn test_appending_logs_in_trapped_update_call(#[strategy("\\PC*")] message: Stri
         .unwrap()
         .canister_log_records;
     assert_eq!(logs.len(), 2);
-    for i in 0..2 {
-        assert_eq!(logs[i].idx, i as u64);
-        assert_eq!(logs[i].timestamp_nanos, timestamp);
+    for (i, log) in logs.iter().enumerate() {
+        assert_eq!(log.idx, i as u64);
+        assert_eq!(log.timestamp_nanos, timestamp);
     }
     assert_eq!(std::str::from_utf8(&logs[0].content).unwrap(), message);
     let trap_message = std::str::from_utf8(&logs[1].content).unwrap();
