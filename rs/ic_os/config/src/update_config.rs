@@ -1,4 +1,5 @@
 use crate::serialize_and_write_config;
+use anyhow::Context;
 use anyhow::Result;
 use mac_address::mac_address::FormattedMacAddress;
 use std::collections::HashMap;
@@ -145,7 +146,20 @@ struct NetworkConfigResult {
 
 fn read_filebeat_conf(config_dir: &Path) -> Result<Logging> {
     let filebeat_conf_path = config_dir.join("filebeat.conf");
-    let conf_map = read_conf_file(&filebeat_conf_path)?;
+    let conf_map = match read_conf_file(&filebeat_conf_path) {
+        Ok(map) => map,
+        Err(_) => {
+            // if filebeat.conf doesn't exist or can't be read, set to default values
+            return Ok(Logging {
+                elasticsearch_hosts: "elasticsearch-node-0.mercury.dfinity.systems:443 \
+                                       elasticsearch-node-1.mercury.dfinity.systems:443 \
+                                       elasticsearch-node-2.mercury.dfinity.systems:443 \
+                                       elasticsearch-node-3.mercury.dfinity.systems:443"
+                    .to_string(),
+                elasticsearch_tags: None,
+            });
+        }
+    };
 
     let elasticsearch_hosts = conf_map
         .get("elasticsearch_hosts")
@@ -162,7 +176,18 @@ fn read_filebeat_conf(config_dir: &Path) -> Result<Logging> {
 
 fn read_nns_conf(config_dir: &Path) -> Result<Vec<Url>> {
     let nns_conf_path = config_dir.join("nns.conf");
-    let conf_map = read_conf_file(&nns_conf_path)?;
+    let conf_map = match read_conf_file(&nns_conf_path) {
+        Ok(map) => map,
+        Err(_) => {
+            // if nns.conf doesn't exist or can't be read, set to default values
+            let default_urls = vec![
+                Url::parse("https://icp-api.io")?,
+                Url::parse("https://icp0.io")?,
+                Url::parse("https://ic0.app")?,
+            ];
+            return Ok(default_urls);
+        }
+    };
 
     let nns_url_str = conf_map.get("nns_url").cloned().unwrap_or_default();
 
@@ -200,7 +225,8 @@ fn derive_mgmt_mac_from_hostname(hostname: Option<&str>) -> Result<FormattedMacA
 }
 
 fn read_conf_file(path: &Path) -> Result<HashMap<String, String>> {
-    let file = fs::File::open(path)?;
+    let file = fs::File::open(path)
+        .with_context(|| format!("Failed to open configuration file: {:?}", path))?;
     let reader = BufReader::new(file);
     let mut map = HashMap::new();
 
