@@ -28,23 +28,19 @@ pub fn update_guestos_config(output_file: PathBuf) -> Result<()> {
 
     if network_conf_exists && !config_json_exists {
         // Read existing configuration files and generate new config.json
-        let network_settings_result = read_network_conf(config_dir)?;
-        let network_settings = network_settings_result.network_settings;
-        let hostname = network_settings_result.hostname.clone();
+        let network_config_result = read_network_conf(config_dir)?;
+        let network_settings = network_config_result.network_settings;
+        let hostname = network_config_result.hostname.clone();
 
         let logging = read_filebeat_conf(config_dir)?;
         let nns_urls = read_nns_conf(config_dir)?;
 
-        let nns_public_key_exists = Path::new(STATE_ROOT).join("nns_public_key.pem").exists();
-
-        let node_operator_private_key_exists = Path::new(STATE_ROOT)
-            .join("node_operator_private_key.pem")
-            .exists();
-
+        let nns_public_key_exists = state_root.join("nns_public_key.pem").exists();
+        let node_operator_private_key_exists =
+            state_root.join("node_operator_private_key.pem").exists();
         let use_ssh_authorized_keys = config_dir.join("accounts_ssh_authorized_keys").is_dir();
 
         let mgmt_mac = derive_mgmt_mac_from_hostname(hostname.as_deref())?;
-
         let deployment_environment = "mainnet".to_string();
 
         let icos_settings = ICOSSettings {
@@ -119,7 +115,7 @@ fn write_network_conf(
             conf_lines.push(format!("ipv6_gateway={}", config.gateway));
         }
         _ => {
-            // GuestOS Ipv6Config should always be Fixed
+            println!("Unexpected IPv6 configuration; expected Fixed configuration.");
         }
     }
 
@@ -196,34 +192,38 @@ fn read_network_conf(config_dir: &Path) -> Result<NetworkConfigResult> {
     let domain_name = conf_map.get("domain").cloned();
     let hostname = conf_map.get("hostname").cloned();
 
-    let ipv6_config = if let (Some(ipv6_address), Some(ipv6_gateway)) =
-        (ipv6_address_opt.clone(), ipv6_gateway_opt.clone())
-    {
-        let address = ipv6_address;
-        let gateway = ipv6_gateway.parse::<Ipv6Addr>()?;
-        Ipv6Config::Fixed(FixedIpv6Config { address, gateway })
-    } else {
-        Ipv6Config::RouterAdvertisement
+    let ipv6_config = match (ipv6_address_opt, ipv6_gateway_opt) {
+        (Some(ipv6_address), Some(ipv6_gateway)) => {
+            let address = ipv6_address;
+            let gateway = ipv6_gateway
+                .parse::<Ipv6Addr>()
+                .with_context(|| format!("Invalid IPv6 gateway: {}", ipv6_gateway))?;
+            Ipv6Config::Fixed(FixedIpv6Config { address, gateway })
+        }
+        _ => Ipv6Config::RouterAdvertisement,
     };
 
-    let ipv4_config = if let (Some(ipv4_address), Some(ipv4_gateway)) =
-        (ipv4_address_opt.clone(), ipv4_gateway_opt.clone())
-    {
-        let parts: Vec<&str> = ipv4_address.split('/').collect();
-        if parts.len() == 2 {
-            let address = parts[0].parse::<Ipv4Addr>()?;
-            let prefix_length = parts[1].parse::<u8>()?;
-            let gateway = ipv4_gateway.parse::<Ipv4Addr>()?;
+    let ipv4_config = match (ipv4_address_opt, ipv4_gateway_opt) {
+        (Some(ipv4_address), Some(ipv4_gateway)) => {
+            let (address_str, prefix_str) = ipv4_address
+                .split_once('/')
+                .with_context(|| format!("Invalid ipv4_address format: {}", ipv4_address))?;
+            let address = address_str
+                .parse::<Ipv4Addr>()
+                .with_context(|| format!("Invalid IPv4 address: {}", address_str))?;
+            let prefix_length = prefix_str
+                .parse::<u8>()
+                .with_context(|| format!("Invalid IPv4 prefix length: {}", prefix_str))?;
+            let gateway = ipv4_gateway
+                .parse::<Ipv4Addr>()
+                .with_context(|| format!("Invalid IPv4 gateway: {}", ipv4_gateway))?;
             Some(Ipv4Config {
                 address,
                 gateway,
                 prefix_length,
             })
-        } else {
-            None
         }
-    } else {
-        None
+        _ => None,
     };
 
     let network_settings = NetworkSettings {
@@ -296,7 +296,7 @@ fn read_nns_conf(config_dir: &Path) -> Result<Vec<Url>> {
         match Url::parse(s) {
             Ok(url) => nns_urls.push(url),
             Err(e) => {
-                eprintln!("Invalid URL '{}': {}", s, e);
+                println!("Invalid URL '{}': {}", s, e);
             }
         }
     }
@@ -308,6 +308,12 @@ fn derive_mgmt_mac_from_hostname(hostname: Option<&str>) -> Result<FormattedMacA
     if let Some(hostname) = hostname {
         if let Some(unformatted_mac) = hostname.strip_prefix("guest-") {
             // Insert colons into mac_str to format it as a MAC address
+            if unformatted_mac.len() != 12 {
+                return Err(anyhow::anyhow!(
+                    "Invalid MAC address length in hostname: {}",
+                    hostname
+                ));
+            }
             let formatted_mac = unformatted_mac
                 .chars()
                 .collect::<Vec<_>>()
@@ -316,7 +322,7 @@ fn derive_mgmt_mac_from_hostname(hostname: Option<&str>) -> Result<FormattedMacA
                 .collect::<Vec<_>>()
                 .join(":");
             let formatted_mac = FormattedMacAddress::try_from(formatted_mac.as_str())
-                .map_err(|e| anyhow::anyhow!("Failed to parse mgmt_mac: {}", e))?;
+                .with_context(|| format!("Failed to parse mgmt_mac from hostname: {}", hostname))?;
             Ok(formatted_mac)
         } else {
             Err(anyhow::anyhow!(
@@ -337,7 +343,8 @@ fn read_conf_file(path: &Path) -> Result<HashMap<String, String>> {
 
     let mut map = HashMap::new();
     for line in content.lines() {
-        if line.trim().is_empty() || line.starts_with('#') {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
             continue;
         }
         if let Some((key, value)) = line.split_once('=') {
