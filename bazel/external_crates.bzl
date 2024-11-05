@@ -27,7 +27,8 @@ def sanitize_external_crates():
                 [],
                 {
                     # Only enable fuzzing on x86_64 because it fails for wasm32.
-                    # Additionally ic-wasm generates binaries so we need to link libclang_rt.fuzzer-x86_64.a:
+                    # Additionally ic-wasm generates binaries so we need to link with
+                    # libclang_rt.fuzzer-x86_64.a when in --config=fuzzing mode:
                     "x86_64-unknown-linux-gnu": DEFAULT_RUSTC_FLAGS_FOR_FUZZING +
                                                 ["-Clink-arg=/usr/lib/llvm-18/lib/clang/18/lib/linux/libclang_rt.fuzzer-x86_64.a"],
                 },
@@ -1451,7 +1452,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.217.0",
             ),
             "wasmtime": crate.spec(
-                version = "=25.0.2",
+                version = "^26.0.0",
                 default_features = False,
                 features = [
                     "cranelift",
@@ -1461,7 +1462,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "wasmtime-environ": crate.spec(
-                version = "^25.0.0",
+                version = "^26.0.0",
             ),
             "wast": crate.spec(
                 version = "^212.0.0",
