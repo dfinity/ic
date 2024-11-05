@@ -1076,6 +1076,7 @@ impl ApiState {
         if instance.progress_thread.is_none() {
             let (tx, mut rx) = mpsc::channel::<()>(1);
             let handle = spawn(async move {
+                debug!("Starting auto progress for instance {}.", instance_id);
                 let mut now = Instant::now();
                 loop {
                     let start = Instant::now();
@@ -1091,7 +1092,7 @@ impl ApiState {
                     .await
                     .is_none()
                     {
-                        return;
+                        break;
                     }
                     let op = ProcessCanisterHttpInternal;
                     if Self::execute_operation(
@@ -1104,7 +1105,7 @@ impl ApiState {
                     .await
                     .is_none()
                     {
-                        return;
+                        break;
                     }
                     let duration = start.elapsed();
                     sleep(std::cmp::max(
@@ -1113,9 +1114,10 @@ impl ApiState {
                     ))
                     .await;
                     if received_stop_signal(&mut rx) {
-                        return;
+                        break;
                     }
                 }
+                debug!("Stopping auto progress for instance {}.", instance_id);
             });
             instance.progress_thread = Some(ProgressThread { handle, sender: tx });
             Ok(())

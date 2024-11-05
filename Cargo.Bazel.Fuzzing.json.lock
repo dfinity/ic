@@ -1,5 +1,5 @@
 {
-  "checksum": "00f0503c9d14c10b10bd2a7b5b82e8955ec1b0a8605858286d4b58be93d1843f",
+  "checksum": "228a96f14e8a494d5f2f70172f3fc877cd932e39e5f37f02c0858e0dddd7d2f3",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -10646,7 +10646,13 @@
       "repository": {
         "Http": {
           "url": "https://static.crates.io/crates/cc/1.0.83/download",
-          "sha256": "f1174fb0b6ec23863f8b971027804a42614e347eafb0a95bf0b12cdae21fc4d0"
+          "sha256": "f1174fb0b6ec23863f8b971027804a42614e347eafb0a95bf0b12cdae21fc4d0",
+          "patch_args": [
+            "-p1"
+          ],
+          "patches": [
+            "@@//bazel:cc_rs.patch"
+          ]
         }
       },
       "targets": [
@@ -14352,7 +14358,13 @@
       "repository": {
         "Http": {
           "url": "https://static.crates.io/crates/cranelift-codegen-meta/0.113.0/download",
-          "sha256": "08c73b2395ffe9e7b4fdf7e2ebc052e7e27af13f68a964985346be4da477a5fc"
+          "sha256": "08c73b2395ffe9e7b4fdf7e2ebc052e7e27af13f68a964985346be4da477a5fc",
+          "patch_args": [
+            "-p4"
+          ],
+          "patches": [
+            "@@//bazel:cranelift-codegen-meta.patch"
+          ]
         }
       },
       "targets": [
@@ -14625,7 +14637,13 @@
       "repository": {
         "Http": {
           "url": "https://static.crates.io/crates/cranelift-isle/0.113.0/download",
-          "sha256": "dc65156f010aed1985767ad1bff0eb8d186743b7b03e23d0c17604a253e3f356"
+          "sha256": "dc65156f010aed1985767ad1bff0eb8d186743b7b03e23d0c17604a253e3f356",
+          "patch_args": [
+            "-p4"
+          ],
+          "patches": [
+            "@@//bazel:cranelift-isle.patch"
+          ]
         }
       },
       "targets": [
@@ -70566,6 +70584,14 @@
         "compile_data_glob": [
           "**"
         ],
+        "data": {
+          "common": [],
+          "selects": {
+            "x86_64-unknown-linux-gnu": [
+              "@jemalloc//:libjemalloc"
+            ]
+          }
+        },
         "data_glob": [
           "**"
         ],
@@ -70577,6 +70603,14 @@
             }
           ],
           "selects": {}
+        },
+        "build_script_env": {
+          "common": {},
+          "selects": {
+            "x86_64-unknown-linux-gnu": {
+              "JEMALLOC_OVERRIDE": "$(location @jemalloc//:libjemalloc)"
+            }
+          }
         },
         "links": "jemalloc"
       },
