@@ -1,6 +1,9 @@
 use super::*;
 use crate::{
-    blocklist, providers::Provider, types::BtcNetwork, CheckTransactionIrrecoverableError,
+    blocklist,
+    providers::Provider,
+    types::{BtcNetwork, KytMode},
+    CheckTransactionIrrecoverableError,
 };
 use bitcoin::{
     absolute::LockTime, address::Address, hashes::Hash, transaction::Version, Amount, OutPoint,
@@ -33,20 +36,20 @@ impl FetchEnv for MockEnv {
         }
     }
 
-    fn btc_network(&self) -> BtcNetwork {
-        BtcNetwork::Mainnet
+    fn config(&self) -> Config {
+        Config::new_and_validate(BtcNetwork::Mainnet, KytMode::Normal).unwrap()
     }
 
     async fn http_get_tx(
         &self,
-        provider: Provider,
+        provider: &Provider,
         txid: Txid,
         max_response_bytes: u32,
     ) -> Result<Transaction, HttpGetTxError> {
         self.calls
             .borrow_mut()
             .push_back((txid, max_response_bytes));
-        *self.called_provider.borrow_mut() = Some(provider);
+        *self.called_provider.borrow_mut() = Some(provider.clone());
         self.replies
             .borrow_mut()
             .pop_front()
@@ -166,7 +169,7 @@ fn mock_transaction_with_inputs(input_txids: Vec<(Txid, u32)>) -> Transaction {
 async fn test_mock_env() {
     // Test cycle mock functions
     let env = MockEnv::new(CHECK_TRANSACTION_CYCLES_REQUIRED);
-    let provider = providers::next_provider(env.btc_network());
+    let provider = providers::next_provider(env.config().btc_network());
     assert_eq!(
         env.cycles_accept(CHECK_TRANSACTION_CYCLES_SERVICE_FEE),
         CHECK_TRANSACTION_CYCLES_SERVICE_FEE
@@ -186,7 +189,7 @@ async fn test_mock_env() {
     let txid = mock_txid(0);
     env.expect_get_tx_with_reply(Ok(mock_transaction()));
     let result = env
-        .http_get_tx(provider, txid, INITIAL_MAX_RESPONSE_BYTES)
+        .http_get_tx(&provider, txid, INITIAL_MAX_RESPONSE_BYTES)
         .await;
     assert!(result.is_ok());
     env.assert_get_tx_call(txid, INITIAL_MAX_RESPONSE_BYTES);
@@ -200,7 +203,7 @@ fn test_try_fetch_tx() {
     let txid_1 = mock_txid(1);
     let txid_2 = mock_txid(2);
     let from_tx = |tx: &bitcoin::Transaction| {
-        TransactionKytData::from_transaction(&env.btc_network(), tx.clone()).unwrap()
+        TransactionKytData::from_transaction(&env.config().btc_network(), tx.clone()).unwrap()
     };
 
     // case Fetched
@@ -245,12 +248,12 @@ fn test_try_fetch_tx() {
 #[tokio::test]
 async fn test_fetch_tx() {
     let env = MockEnv::new(CHECK_TRANSACTION_CYCLES_REQUIRED);
-    let provider = providers::next_provider(env.btc_network());
+    let provider = providers::next_provider(env.config().btc_network());
     let txid_0 = mock_txid(0);
     let txid_1 = mock_txid(1);
     let txid_2 = mock_txid(2);
     let from_tx = |tx: &bitcoin::Transaction| {
-        TransactionKytData::from_transaction(&env.btc_network(), tx.clone()).unwrap()
+        TransactionKytData::from_transaction(&env.config().btc_network(), tx.clone()).unwrap()
     };
 
     // case Fetched
@@ -258,7 +261,7 @@ async fn test_fetch_tx() {
 
     env.expect_get_tx_with_reply(Ok(tx_0.clone()));
     let result = env
-        .fetch_tx((), provider, txid_0, INITIAL_MAX_RESPONSE_BYTES)
+        .fetch_tx((), provider.clone(), txid_0, INITIAL_MAX_RESPONSE_BYTES)
         .await;
     assert!(matches!(result, Ok(FetchResult::Fetched(_))));
     assert!(matches!(
@@ -275,7 +278,7 @@ async fn test_fetch_tx() {
     // case RetryWithBiggerBuffer
     env.expect_get_tx_with_reply(Err(HttpGetTxError::ResponseTooLarge));
     let result = env
-        .fetch_tx((), provider, txid_1, INITIAL_MAX_RESPONSE_BYTES)
+        .fetch_tx((), provider.clone(), txid_1, INITIAL_MAX_RESPONSE_BYTES)
         .await;
     assert!(matches!(result, Ok(FetchResult::RetryWithBiggerBuffer)));
     assert!(matches!(
@@ -287,7 +290,7 @@ async fn test_fetch_tx() {
         "failed to decode tx".to_string(),
     )));
     let result = env
-        .fetch_tx((), provider, txid_2, INITIAL_MAX_RESPONSE_BYTES)
+        .fetch_tx((), provider.clone(), txid_2, INITIAL_MAX_RESPONSE_BYTES)
         .await;
     assert!(matches!(
         result,
@@ -318,7 +321,7 @@ async fn test_check_fetched() {
     let tx_0 = mock_transaction_with_inputs(vec![(txid_1, 0), (txid_2, 1)]);
     let tx_1 = mock_transaction_with_outputs(1);
     let tx_2 = mock_transaction_with_outputs(2);
-    let network = env.btc_network();
+    let network = env.config().btc_network();
     let from_tx = |tx: &bitcoin::Transaction| {
         TransactionKytData::from_transaction(&network, tx.clone()).unwrap()
     };
@@ -513,11 +516,11 @@ async fn test_check_fetched() {
 
     // case HttpGetTxError can be retried.
     let remaining_cycles = env.cycles_available();
-    let provider = providers::next_provider(env.btc_network());
+    let provider = providers::next_provider(env.config().btc_network());
     state::set_fetch_status(
         txid_2,
         FetchTxStatus::Error(FetchTxStatusError {
-            provider,
+            provider: provider.clone(),
             max_response_bytes: RETRY_MAX_RESPONSE_BYTES,
             error: HttpGetTxError::Rejected {
                 code: RejectionCode::SysTransient,

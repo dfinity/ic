@@ -22,7 +22,6 @@ pub fn env() -> StateMachine {
     StateMachineBuilder::new()
         .with_checkpoints_enabled(false)
         .with_subnet_type(SubnetType::Application)
-        .with_canister_snapshots(true)
         .build()
 }
 

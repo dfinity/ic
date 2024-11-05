@@ -53,7 +53,7 @@ fn test_wasmtime_system_api() {
         Arc::new(TestPageAllocatorFileDescriptorImpl),
     );
     let api_type = ApiType::start(UNIX_EPOCH);
-    let sandbox_safe_system_state = SandboxSafeSystemState::new(
+    let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         CyclesAccountManagerBuilder::new().build(),
         &NetworkTopology::default(),

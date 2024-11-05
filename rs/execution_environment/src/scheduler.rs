@@ -1986,6 +1986,7 @@ fn execute_canisters_on_thread(
         // - or the canister is blocked by a long-running install code.
         // - or the instruction limit is reached.
         // - or the canister finishes a long execution
+        let mut total_instructions_used = NumInstructions::new(0);
         loop {
             match canister.next_execution() {
                 NextExecution::None | NextExecution::ContinueInstallCode => {
@@ -2044,6 +2045,7 @@ fn execute_canisters_on_thread(
                 messages,
             );
             if let Some(instructions_used) = instructions_used {
+                total_instructions_used += instructions_used;
                 total_messages_executed.inc_assign();
                 observe_instructions_consumed_per_message(
                     &logger,
@@ -2097,8 +2099,11 @@ fn execute_canisters_on_thread(
         );
         canister.system_state.canister_metrics.executed += 1;
         canisters.push(canister);
-        round_limits.instructions -=
-            as_round_instructions(config.instruction_overhead_per_canister);
+        // Skip per-canister overhead for canisters with not enough cycles.
+        if total_instructions_used > 0.into() {
+            round_limits.instructions -=
+                as_round_instructions(config.instruction_overhead_per_canister);
+        }
     }
 
     ExecutionThreadResult {

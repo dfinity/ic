@@ -31,6 +31,9 @@ members = [
     "rs/boundary_node/certificate_issuance/certificate_orchestrator",
     "rs/boundary_node/discower_bowndary",
     "rs/boundary_node/ic_boundary",
+    "rs/boundary_node/rate_limits",
+    "rs/boundary_node/rate_limits/api",
+    "rs/boundary_node/rate_limits/canister_client",
     "rs/boundary_node/systemd_journal_gatewayd_shim",
     "rs/canister_client",
     "rs/canister_client/sender",
@@ -154,6 +157,7 @@ members = [
     "rs/interfaces/state_manager",
     "rs/interfaces/state_manager/mocks",
     "rs/limits",
+    "rs/linux_kernel_command_line",
     "rs/memory_tracker",
     "rs/messaging",
     "rs/monitoring/adapter_metrics/client",
@@ -178,6 +182,7 @@ members = [
     "rs/nervous_system/instruction_stats_update_attribute",
     "rs/nervous_system/integration_tests",
     "rs/nervous_system/lock",
+    "rs/nervous_system/linear_map",
     "rs/nervous_system/neurons_fund",
     "rs/nervous_system/neurons_fund/nfplot",
     "rs/nervous_system/proto",
@@ -545,7 +550,7 @@ hyper-rustls = { version = "0.27.3", default-features = false, features = [
     "tls12",
 ] }
 hyper-socks2 = { version = "0.9.1", default-features = false }
-hyper-util = { version = "0.1.9", features = ["full"] }
+hyper-util = { version = "0.1.10", features = ["full"] }
 ic-agent = { version = "0.37.1", features = [
     "experimental_sync_call",
     "hyper",
@@ -700,8 +705,8 @@ tokio-test = "0.4.4"
 tokio-util = { version = "0.7.12", features = ["full"] }
 tonic = "0.12.3"
 tonic-build = "0.12.3"
-tower = { version = "0.4.13", features = ["full"] }
-tower-http = { version = "0.5.2", features = [
+tower = { version = "0.5.1", features = ["full"] }
+tower-http = { version = "0.6.1", features = [
     "cors",
     "limit",
     "trace",
@@ -728,6 +733,7 @@ wasmparser = "0.217.0"
 wasmprinter = "0.217.0"
 wast = "212.0.0"
 wat = "1.212.0"
+which = "6.0.3"
 x509-cert = { version = "0.2.5", features = ["builder", "hazmat"] }
 x509-parser = { version = "0.16.0" }
 zeroize = { version = "1.8.1", features = ["zeroize_derive"] }
