@@ -8,6 +8,7 @@ use ic_config::{
     subnet_config::SubnetConfig,
 };
 use ic_cycles_account_manager::CyclesAccountManager;
+use ic_cycles_account_manager::WasmExecutionMode;
 use ic_embedders::{
     wasm_utils::{compile, decoding::decode_wasm},
     WasmtimeEmbedder,
@@ -52,6 +53,7 @@ use ic_replicated_state::{
 use ic_system_api::InstructionLimits;
 use ic_test_utilities::{crypto::mock_random_number_generator, state_manager::FakeStateManager};
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder};
+use ic_types::ReplicaVersion;
 use ic_types::{
     batch::QueryStats,
     crypto::{canister_threshold_sig::MasterPublicKey, AlgorithmId},
@@ -213,6 +215,7 @@ pub struct ExecutionTest {
     manual_execution: bool,
     caller_canister_id: Option<CanisterId>,
     idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+    replica_version: ReplicaVersion,
 
     // The actual implementation.
     exec_env: ExecutionEnvironment,
@@ -273,6 +276,18 @@ impl ExecutionTest {
             .execution_state
             .as_ref()
             .unwrap()
+    }
+
+    pub fn canister_wasm_execution_mode(&self, canister_id: CanisterId) -> WasmExecutionMode {
+        // In case of any error or missing state, default to Wasm32.
+        if let Some(state) = self.state.as_ref() {
+            if let Some(canister) = state.canister_state(&canister_id).as_ref() {
+                if let Some(execution_state) = canister.execution_state.as_ref() {
+                    return execution_state.is_wasm64.into();
+                }
+            }
+        }
+        WasmExecutionMode::Wasm32
     }
 
     pub fn xnet_messages(&self) -> &Vec<RequestOrResponse> {
@@ -417,13 +432,17 @@ impl ExecutionTest {
         self.cycles_account_manager()
             .convert_instructions_to_cycles(
                 cost - CompilationCostHandling::CountReducedAmount.adjusted_compilation_cost(cost),
+                WasmExecutionMode::Wasm32, // In this case it does not matter if it is a Wasm64 or Wasm32 canister.
             )
     }
 
     pub fn install_code_reserved_execution_cycles(&self) -> Cycles {
         let num_instructions = self.install_code_instruction_limits.message();
-        self.cycles_account_manager
-            .execution_cost(num_instructions, self.subnet_size())
+        self.cycles_account_manager.execution_cost(
+            num_instructions,
+            self.subnet_size(),
+            WasmExecutionMode::Wasm32, // For this test, we can assume a Wasm32 execution.
+        )
     }
 
     pub fn subnet_available_memory(&self) -> SubnetAvailableMemory {
@@ -602,6 +621,42 @@ impl ExecutionTest {
             canister_id: canister_id.into(),
             settings: CanisterSettingsArgsBuilder::new()
                 .with_wasm_memory_limit(wasm_memory_limit.get())
+                .build(),
+            sender_canister_version: None,
+        }
+        .encode();
+        self.subnet_message(Method::UpdateSettings, payload)
+    }
+
+    pub fn canister_update_wasm_memory_limit_and_wasm_memory_threshold(
+        &mut self,
+        canister_id: CanisterId,
+        wasm_memory_limit: NumBytes,
+        wasm_memory_threshold: NumBytes,
+    ) -> Result<WasmResult, UserError> {
+        let payload = UpdateSettingsArgs {
+            canister_id: canister_id.into(),
+            settings: CanisterSettingsArgsBuilder::new()
+                .with_wasm_memory_limit(wasm_memory_limit.get())
+                .with_wasm_memory_threshold(wasm_memory_threshold.get())
+                .build(),
+            sender_canister_version: None,
+        }
+        .encode();
+        self.subnet_message(Method::UpdateSettings, payload)
+    }
+
+    pub fn canister_update_memory_allocation_and_wasm_memory_threshold(
+        &mut self,
+        canister_id: CanisterId,
+        memory_allocation: NumBytes,
+        wasm_memory_threshold: NumBytes,
+    ) -> Result<WasmResult, UserError> {
+        let payload = UpdateSettingsArgs {
+            canister_id: canister_id.into(),
+            settings: CanisterSettingsArgsBuilder::new()
+                .with_memory_allocation(memory_allocation.get())
+                .with_wasm_memory_threshold(wasm_memory_threshold.get())
                 .build(),
             sender_canister_version: None,
         }
@@ -1219,6 +1274,7 @@ impl ExecutionTest {
             self.install_code_instruction_limits.clone(),
             &mut mock_random_number_generator(),
             &self.idkg_subnet_public_keys,
+            &self.replica_version,
             &self.registry_settings,
             &mut round_limits,
         );
@@ -1415,11 +1471,19 @@ impl ExecutionTest {
             .executed_instructions
             .entry(canister_id)
             .or_insert(NumInstructions::new(0)) += limit - left;
+
+        let is_wasm64_execution = self.canister_wasm_execution_mode(canister_id);
+
         // Ideally we would simply add `execution_cost(limit - left)`
         // but that leads to small precision errors because 1 Cycle = 0.4 Instructions.
-        let fixed_cost = mgr.execution_cost(NumInstructions::from(0), self.subnet_size());
-        let instruction_cost = mgr.execution_cost(limit, self.subnet_size())
-            - mgr.execution_cost(left, self.subnet_size());
+        let fixed_cost = mgr.execution_cost(
+            NumInstructions::from(0),
+            self.subnet_size(),
+            is_wasm64_execution,
+        );
+        let instruction_cost = mgr.execution_cost(limit, self.subnet_size(), is_wasm64_execution)
+            - mgr.execution_cost(left, self.subnet_size(), is_wasm64_execution);
+
         *self
             .execution_cost
             .entry(canister_id)
@@ -1652,6 +1716,7 @@ pub struct ExecutionTestBuilder {
     heap_delta_rate_limit: NumBytes,
     upload_wasm_chunk_instructions: NumInstructions,
     canister_snapshot_baseline_instructions: NumInstructions,
+    replica_version: ReplicaVersion,
 }
 
 impl Default for ExecutionTestBuilder {
@@ -1693,6 +1758,7 @@ impl Default for ExecutionTestBuilder {
             upload_wasm_chunk_instructions: scheduler_config.upload_wasm_chunk_instructions,
             canister_snapshot_baseline_instructions: scheduler_config
                 .canister_snapshot_baseline_instructions,
+            replica_version: ReplicaVersion::default(),
         }
     }
 }
@@ -2019,11 +2085,6 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_snapshots(mut self, status: FlagStatus) -> Self {
-        self.execution_config.canister_snapshots = status;
-        self
-    }
-
     pub fn with_best_effort_responses(mut self, status: FlagStatus) -> Self {
         self.execution_config
             .embedders_config
@@ -2051,6 +2112,11 @@ impl ExecutionTestBuilder {
         self.execution_config
             .embedders_config
             .max_dirty_pages_without_optimization = no_pages;
+        self
+    }
+
+    pub fn with_replica_version(mut self, replica_version: ReplicaVersion) -> Self {
+        self.replica_version = replica_version;
         self
     }
 
@@ -2155,6 +2221,13 @@ impl ExecutionTestBuilder {
                     MasterPublicKey {
                         algorithm_id: AlgorithmId::SchnorrSecp256k1,
                         public_key: b"cdcdcdcd".to_vec(),
+                    },
+                ),
+                MasterPublicKeyId::VetKd(_) => (
+                    key_id,
+                    MasterPublicKey {
+                        algorithm_id: AlgorithmId::ThresBls12_381,
+                        public_key: b"efefefef".to_vec(),
                     },
                 ),
             })
@@ -2276,6 +2349,7 @@ impl ExecutionTestBuilder {
             idkg_subnet_public_keys,
             log: self.log,
             checkpoint_files: vec![],
+            replica_version: self.replica_version,
         }
     }
 }

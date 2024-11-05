@@ -1,8 +1,8 @@
 use candid::{Decode, Encode};
 use canister_test::Wasm;
 use ic_base_types::CanisterId;
-use ic_icrc1_ledger_sm_tests::{generate_transactions, TransactionGenerationParameters};
 use ic_ledger_core::block::BlockType;
+use ic_ledger_suite_state_machine_tests::{generate_transactions, TransactionGenerationParameters};
 use ic_ledger_test_utils::state_machine_helpers::index::{
     get_all_blocks, wait_until_sync_is_completed,
 };

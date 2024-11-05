@@ -27,7 +27,8 @@ use ic_ethereum_types::Address;
 pub use ic_ledger_suite_orchestrator::candid::AddErc20Arg as Erc20Token;
 use ic_ledger_suite_orchestrator::candid::InitArg as LedgerSuiteOrchestratorInitArg;
 use ic_ledger_suite_orchestrator_test_utils::{supported_erc20_tokens, LedgerSuiteOrchestrator};
-use ic_state_machine_tests::{ErrorCode, MessageId, StateMachine, WasmResult};
+use ic_state_machine_tests::{ErrorCode, StateMachine, WasmResult};
+use ic_types::messages::MessageId;
 use icrc_ledger_types::icrc1::account::Account;
 use num_traits::ToPrimitive;
 use serde_json::json;
@@ -484,6 +485,7 @@ impl CkErc20DepositFlow {
                         ),
                         value: amount.into(),
                         principal: self.params.recipient,
+                        subaccount: None,
                     },
                     EventPayload::MintedCkEth {
                         event_source: EventSource {
@@ -505,6 +507,7 @@ impl CkErc20DepositFlow {
                 value: self.params.ckerc20_amount.into(),
                 principal: self.params.recipient,
                 erc20_contract_address: self.params.token.erc20_contract_address.clone(),
+                subaccount: None,
             },
             EventPayload::MintedCkErc20 {
                 event_source: EventSource {

@@ -1,12 +1,13 @@
-use crate::{assert_reply, CkEthSetup, MAX_TICKS};
+use crate::{assert_reply, CkEthSetup, JsonRpcProvider, MAX_TICKS};
 use candid::{Decode, Encode};
 use ic_cdk::api::management_canister::http_request::{
     HttpResponse as OutCallHttpResponse, TransformArgs,
 };
-use ic_state_machine_tests::{
-    CallbackId, CanisterHttpMethod, CanisterHttpRequestContext, CanisterHttpResponsePayload,
-    PayloadBuilder, RejectCode, StateMachine,
-};
+use ic_error_types::RejectCode;
+use ic_management_canister_types::CanisterHttpResponsePayload;
+use ic_state_machine_tests::{PayloadBuilder, StateMachine};
+use ic_types::canister_http::{CanisterHttpMethod, CanisterHttpRequestContext};
+use ic_types::messages::CallbackId;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::json;
@@ -44,26 +45,6 @@ pub enum JsonRpcMethod {
 
     #[strum(serialize = "eth_sendRawTransaction")]
     EthSendRawTransaction,
-}
-
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, strum_macros::EnumIter)]
-pub enum JsonRpcProvider {
-    //order is top-to-bottom and must match order used in production
-    BlockPi,
-    PublicNode,
-    LlamaNodes,
-    Alchemy,
-}
-
-impl JsonRpcProvider {
-    fn url(&self) -> &str {
-        match self {
-            JsonRpcProvider::BlockPi => "https://ethereum.blockpi.network/v1/rpc/public",
-            JsonRpcProvider::PublicNode => "https://ethereum-rpc.publicnode.com",
-            JsonRpcProvider::LlamaNodes => "https://eth.llamarpc.com",
-            JsonRpcProvider::Alchemy => "https://eth-mainnet.g.alchemy.com/v2",
-        }
-    }
 }
 
 #[derive(Debug)]

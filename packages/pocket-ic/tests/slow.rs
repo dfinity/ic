@@ -2,8 +2,8 @@ use candid::Principal;
 use pocket_ic::{common::rest::DtsFlag, PocketIc, PocketIcBuilder, UserError, WasmResult};
 use std::{thread, time::Duration};
 
-// 2T cycles
-const INIT_CYCLES: u128 = 2_000_000_000_000;
+// 200T cycles
+const INIT_CYCLES: u128 = 200_000_000_000_000;
 
 // Canister code incrementing a counter in every heartbeat
 // and exporting a query method to read the counter.
@@ -32,11 +32,11 @@ const AUTO_PROGRESS_WAT: &str = r#"
 fn test_auto_progress() {
     let pic = PocketIc::new();
 
-    // Create a canister and charge it with 2T cycles.
+    // Create a canister and charge it with 200T cycles.
     let can_id = pic.create_canister();
     pic.add_cycles(can_id, INIT_CYCLES);
 
-    // Install the auto progress canister wasm file on the canister.
+    // Install the auto progress canister wasm on the canister.
     let auto_progress_wasm = wat::parse_str(AUTO_PROGRESS_WAT).unwrap();
     pic.install_canister(can_id, auto_progress_wasm, vec![], None);
 
@@ -113,7 +113,7 @@ fn very_slow_wasm(n: u64) -> Vec<u8> {
                     i32.const 1
                     i32.add
                     local.set $j
-                    ;; if $j is less than 200000 branch to loop
+                    ;; if $j is less than ... branch to loop
                     local.get $j
                     i32.const {}
                     i32.lt_s
@@ -124,7 +124,7 @@ fn very_slow_wasm(n: u64) -> Vec<u8> {
                 i32.const 1
                 i32.add
                 local.set $i
-                ;; if $i is less than 200000 branch to loop
+                ;; if $i is less than ... branch to loop
                 local.get $i
                 i32.const {}
                 i32.lt_s
@@ -153,10 +153,10 @@ fn run_very_slow_method(
     let t1 = pic.get_time();
     assert_eq!(t1, t0 + Duration::from_nanos(1)); // canister creation should take one round, i.e., 1ns
 
-    // Charge the canister with 2T cycles.
-    pic.add_cycles(can_id, 100 * INIT_CYCLES);
+    // Charge the canister with 200T cycles.
+    pic.add_cycles(can_id, INIT_CYCLES);
 
-    // Install the very slow canister wasm file on the canister.
+    // Install the very slow canister wasm on the canister.
     pic.install_canister(can_id, very_slow_wasm(loop_iterations), vec![], None);
 
     let t0 = pic.get_time();
@@ -209,4 +209,37 @@ fn test_dts_enabled() {
 #[test]
 fn test_dts_disabled() {
     test_dts(DtsFlag::Disabled);
+}
+
+fn instruction_limit_exceeded(dts_flag: DtsFlag) {
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_dts_flag(dts_flag)
+        .build();
+
+    // Create a canister.
+    let can_id = pic.create_canister();
+
+    // Charge the canister with 200T cycles.
+    pic.add_cycles(can_id, INIT_CYCLES);
+
+    // Install the very slow canister wasm on the canister.
+    pic.install_canister(can_id, very_slow_wasm(200_000), vec![], None);
+
+    let res = pic
+        .update_call(can_id, Principal::anonymous(), "run", vec![])
+        .unwrap_err();
+    assert!(res.description.contains(
+        "Canister exceeded the limit of 40000000000 instructions for single message execution."
+    ));
+}
+
+#[test]
+fn test_instruction_limit_exceeded_no_dts() {
+    instruction_limit_exceeded(DtsFlag::Disabled);
+}
+
+#[test]
+fn test_instruction_limit_exceeded_dts() {
+    instruction_limit_exceeded(DtsFlag::Enabled);
 }

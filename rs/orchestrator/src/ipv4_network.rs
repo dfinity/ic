@@ -6,8 +6,11 @@ use crate::{
 use ic_logger::{debug, info, warn, ReplicaLogger};
 use ic_protobuf::registry::node::v1::IPv4InterfaceConfig;
 use ic_types::RegistryVersion;
-use std::{path::PathBuf, sync::Arc};
-use tokio::{process::Command, sync::RwLock};
+use std::{
+    path::PathBuf,
+    sync::{Arc, RwLock},
+};
+use tokio::process::Command;
 
 /// Provides function to check the registry to determine if there
 /// has been a change in the IPv4 config, and if so, updates the node's
@@ -153,7 +156,7 @@ impl Ipv4Configurator {
         };
 
         // keep track of the last successfully applied registry version (even if there was no change in the IPv4 config)
-        *self.last_applied_version.write().await = registry_version;
+        *self.last_applied_version.write().unwrap() = registry_version;
     }
 
     pub fn get_last_applied_version(&self) -> Arc<RwLock<RegistryVersion>> {
