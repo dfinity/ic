@@ -12,6 +12,7 @@ use ic_cketh_minter::lifecycle::EthereumNetwork;
 use ic_cketh_minter::numeric::{
     BlockNumber, Erc20Value, LedgerBurnIndex, LedgerMintIndex, LogIndex, TransactionNonce, Wei,
 };
+use ic_cketh_minter::state::eth_logs_scraping::LogScrapingId;
 use ic_cketh_minter::state::transactions::{
     ReimbursedError, ReimbursementIndex, TransactionCallData, WithdrawalRequest,
 };
@@ -325,22 +326,28 @@ impl DashboardTemplate {
                 .map(|addr| addr.to_string())
                 .unwrap_or_default(),
             eth_helper_contract_address: state
-                .eth_log_scraping
-                .contract_address()
+                .log_scrapings
+                .contract_address(LogScrapingId::EthDepositWithoutSubaccount)
                 .map_or("N/A".to_string(), |address| address.to_string()),
             erc20_helper_contract_address: state
-                .erc20_log_scraping
-                .contract_address()
+                .log_scrapings
+                .contract_address(LogScrapingId::Erc20DepositWithoutSubaccount)
                 .map_or("N/A".to_string(), |address| address.to_string()),
             cketh_ledger_id: state.cketh_ledger_id,
             next_transaction_nonce: state.eth_transactions.next_transaction_nonce(),
             minimum_withdrawal_amount: state.cketh_minimum_withdrawal_amount,
             first_synced_block: state.first_scraped_block_number,
-            last_eth_synced_block: state.eth_log_scraping.last_scraped_block_number(),
+            last_eth_synced_block: state
+                .log_scrapings
+                .last_scraped_block_number(LogScrapingId::EthDepositWithoutSubaccount),
             last_erc20_synced_block: state
-                .erc20_log_scraping
-                .contract_address()
-                .map(|_| state.erc20_log_scraping.last_scraped_block_number()),
+                .log_scrapings
+                .contract_address(LogScrapingId::Erc20DepositWithoutSubaccount)
+                .map(|_| {
+                    state
+                        .log_scrapings
+                        .last_scraped_block_number(LogScrapingId::Erc20DepositWithoutSubaccount)
+                }),
             last_observed_block: state.last_observed_block_number,
             minted_events,
             pending_deposits,
