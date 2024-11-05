@@ -151,7 +151,9 @@ impl BaseFile {
 /// For any page that appears in multiple overlay files, its contents are read
 /// from the newest overlay containing the page.
 /// The contents of pages that appear in no overlay file are read from `base`.
-#[derive(Clone, Default)]
+///
+/// DO NOT IMPLEMENT CLONE TO ELIMINATE DOUBLE INITIALIZATION IN `Storage`
+#[derive(Default)]
 pub(crate) struct StorageImpl {
     /// The lowest level data we mmap during loading.
     base: BaseFile,
@@ -173,7 +175,7 @@ pub fn verify(storage_layout: &dyn StorageLayout) -> Result<(), PersistenceError
 #[derive(Clone, Default)]
 pub(crate) struct Storage {
     storage_layout: Arc<Mutex<Option<Box<dyn StorageLayout + Send + Sync>>>>,
-    storage_impl: OnceLock<StorageImpl>,
+    storage_impl: Arc<OnceLock<StorageImpl>>,
 }
 
 impl Storage {
@@ -184,9 +186,7 @@ impl Storage {
                     .lock()
                     .expect("Failed to lock storage_layout")
                     .deref_mut(),
-            )
-            .as_ref()
-            {
+            ) {
                 None => Default::default(),
                 Some(storage_layout) => StorageImpl::load(storage_layout.deref())
                     .expect("Failed to load storage layout"),
@@ -201,11 +201,11 @@ impl Storage {
 
     /// Create Storage.
     pub fn lazy_load(
-        storage_layout: Arc<dyn StorageLayout + Send + Sync>,
+        storage_layout: Box<dyn StorageLayout + Send + Sync>,
     ) -> Result<Self, PersistenceError> {
         Ok(Storage {
             storage_layout: Arc::new(Mutex::new(Some(storage_layout))),
-            storage_impl: OnceLock::default(),
+            storage_impl: OnceLock::default().into(),
         })
     }
 
@@ -238,7 +238,7 @@ impl Storage {
         let _ = storage_impl.set(StorageImpl::deserialize(serialized_storage)?);
         Ok(Self {
             storage_layout: Arc::new(Mutex::new(None)),
-            storage_impl,
+            storage_impl: storage_impl.into(),
         })
     }
 }

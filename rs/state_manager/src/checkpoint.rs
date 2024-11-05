@@ -396,7 +396,7 @@ pub fn load_canister_state(
             let wasm_memory_layout = canister_layout.vmemory_0();
             let wasm_memory = Memory::new(
                 PageMap::open(
-                    Arc::new(wasm_memory_layout),
+                    Box::new(wasm_memory_layout),
                     height,
                     Arc::clone(&fd_factory),
                 )?,
@@ -408,7 +408,7 @@ pub fn load_canister_state(
             let stable_memory_layout = canister_layout.stable_memory();
             let stable_memory = Memory::new(
                 PageMap::open(
-                    Arc::new(stable_memory_layout),
+                    Box::new(stable_memory_layout),
                     height,
                     Arc::clone(&fd_factory),
                 )?,
@@ -469,7 +469,7 @@ pub fn load_canister_state(
     let starting_time = Instant::now();
     let wasm_chunk_store_layout = canister_layout.wasm_chunk_store();
     let wasm_chunk_store_data = PageMap::open(
-        Arc::new(wasm_chunk_store_layout),
+        Box::new(wasm_chunk_store_layout),
         height,
         Arc::clone(&fd_factory),
     )?;
@@ -575,7 +575,7 @@ pub fn load_snapshot(
         let wasm_memory_layout = snapshot_layout.vmemory_0();
         let wasm_memory = PageMemory {
             page_map: PageMap::open(
-                Arc::new(wasm_memory_layout),
+                Box::new(wasm_memory_layout),
                 height,
                 Arc::clone(&fd_factory),
             )?,
@@ -587,7 +587,7 @@ pub fn load_snapshot(
         let stable_memory_layout = snapshot_layout.stable_memory();
         let stable_memory = PageMemory {
             page_map: PageMap::open(
-                Arc::new(stable_memory_layout),
+                Box::new(stable_memory_layout),
                 height,
                 Arc::clone(&fd_factory),
             )?,
@@ -614,7 +614,7 @@ pub fn load_snapshot(
     let starting_time = Instant::now();
     let wasm_chunk_store_layout = snapshot_layout.wasm_chunk_store();
     let wasm_chunk_store_data = PageMap::open(
-        Arc::new(wasm_chunk_store_layout),
+        Box::new(wasm_chunk_store_layout),
         height,
         Arc::clone(&fd_factory),
     )?;
