@@ -286,4 +286,9 @@ async fn execute_many_instructions(n: u64) {
     while instruction_counter() < n {}
 }
 
+#[query]
+async fn run() {
+    let _x = vec![42_u8; 1_000_000_000];
+}
+
 fn main() {}
