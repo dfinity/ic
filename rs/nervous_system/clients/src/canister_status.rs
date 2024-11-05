@@ -57,11 +57,6 @@ pub enum LogVisibility {
 /// Only the fields that we need are copied.
 /// Candid deserialization is supposed to be tolerant to having data for unknown
 /// fields (which is simply discarded).
-///
-/// `freezing_threshold` represents the cycle balance below which the canister will be frozen.
-/// `wasm_memory_limit` is the upper boundary on the size of Wasm memory.
-/// `wasm_memory_threshold` is the size of available additional Wasm memory below which
-/// the `on_low_wasm_memory` hook will be activated.
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct DefiniteCanisterSettings {
     pub controllers: Vec<PrincipalId>,
@@ -71,7 +66,6 @@ pub struct DefiniteCanisterSettings {
     pub reserved_cycles_limit: Option<candid::Nat>,
     pub wasm_memory_limit: Option<candid::Nat>,
     pub log_visibility: Option<LogVisibility>,
-    pub wasm_memory_threshold: Option<candid::Nat>,
 }
 
 /// Partial copy-paste of ic-types::ic_00::CanisterStatusResult.
@@ -117,7 +111,6 @@ pub struct DefiniteCanisterSettingsFromManagementCanister {
     pub reserved_cycles_limit: candid::Nat,
     pub wasm_memory_limit: candid::Nat,
     pub log_visibility: LogVisibility,
-    pub wasm_memory_threshold: candid::Nat,
 }
 
 impl From<CanisterStatusResultFromManagementCanister> for CanisterStatusResult {

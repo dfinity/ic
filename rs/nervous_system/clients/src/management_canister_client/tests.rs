@@ -115,7 +115,6 @@ async fn test_limit_outstanding_calls() {
             reserved_cycles_limit: zero.clone(),
             wasm_memory_limit: zero.clone(),
             log_visibility: LogVisibility::Controllers,
-            wasm_memory_threshold: zero.clone(),
         },
         status: CanisterStatusType::Running,
         reserved_cycles: zero.clone(),

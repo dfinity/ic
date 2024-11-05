@@ -220,9 +220,6 @@ impl SpyNnsRootCanisterClientReply {
                 reserved_cycles_limit: Some(candid::Nat::from(10_u32)),
                 wasm_memory_limit: Some(candid::Nat::from(11_u32)),
                 log_visibility: Some(LogVisibility::Controllers),
-                // `wasm_memory_threshold` value `0` implies that `on_low_wasm_memory` hook
-                // will never be invoked.
-                wasm_memory_threshold: Some(candid::Nat::from(0_u32)),
             },
             cycles: candid::Nat::from(42_u32),
             idle_cycles_burned_per_day: Some(candid::Nat::from(43_u32)),

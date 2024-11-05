@@ -12031,7 +12031,6 @@ lazy_static! {
                     448076, // freezing_threshold
                     268693, // idle_cycles_burned_per_day
                     (3.5 * (1 << 30) as f32) as u64, // wasm_memory_limit (3.5gb)
-                    0, // wasm_memory_threshold
                 )),
             }),
             governance: Some(ic_sns_root::CanisterSummary {
