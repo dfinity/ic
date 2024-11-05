@@ -13,6 +13,8 @@ use ic_rosetta_api::models::OperationIdentifier;
 use ic_rosetta_api::request_types::ChangeAutoStakeMaturityMetadata;
 use ic_rosetta_api::request_types::DisburseMetadata;
 use ic_rosetta_api::request_types::NeuronIdentifierMetadata;
+use ic_rosetta_api::request_types::NeuronInfoMetadata;
+use ic_rosetta_api::request_types::PublicKeyOrPrincipal;
 use ic_rosetta_api::request_types::RequestType;
 use ic_rosetta_api::request_types::SetDissolveTimestampMetadata;
 use icp_ledger::AccountIdentifier;
@@ -350,6 +352,44 @@ impl RosettaClient {
                 DisburseMetadata {
                     neuron_index,
                     recipient,
+                }
+                .try_into()
+                .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
+            ),
+        }])
+    }
+
+    pub fn build_get_neuron_info_operations(
+        signer_principal: Principal,
+        neuron_index: u64,
+        public_key: Option<PublicKey>,
+        principal_id: Option<PrincipalId>,
+    ) -> anyhow::Result<Vec<Operation>> {
+        Ok(vec![Operation {
+            operation_identifier: OperationIdentifier {
+                index: 0,
+                network_index: None,
+            },
+            related_operations: None,
+            type_: "NEURON_INFO".to_string(),
+            status: None,
+            account: Some(rosetta_core::identifiers::AccountIdentifier::from(
+                AccountIdentifier::new(PrincipalId(signer_principal), None),
+            )),
+            amount: None,
+            coin_change: None,
+            metadata: Some(
+                NeuronInfoMetadata {
+                    neuron_index,
+                    controller: match (public_key, principal_id) {
+                        (Some(public_key), None) => {
+                            Some(PublicKeyOrPrincipal::PublicKey(public_key))
+                        }
+                        (None, Some(principal_id)) => {
+                            Some(PublicKeyOrPrincipal::Principal(principal_id))
+                        }
+                        _ => None,
+                    },
                 }
                 .try_into()
                 .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
@@ -956,6 +996,31 @@ impl RosettaClient {
         )
         .await
     }
+
+    pub async fn get_neuron_info<T>(
+        &self,
+        network_identifier: NetworkIdentifier,
+        neuron_info_request: RosettaNeuronInfoArgs,
+        signer_keypair: &T,
+    ) -> anyhow::Result<ConstructionSubmitResponse>
+    where
+        T: RosettaSupportedKeyPair,
+    {
+        let neuron_info_operations = RosettaClient::build_get_neuron_info_operations(
+            signer_keypair.generate_principal_id()?.0,
+            neuron_info_request.neuron_index,
+            neuron_info_request.public_key,
+            neuron_info_request.principal_id,
+        )?;
+        self.make_submit_and_wait_for_transaction(
+            signer_keypair,
+            network_identifier,
+            neuron_info_operations,
+            None,
+            None,
+        )
+        .await
+    }
 }
 
 pub struct RosettaTransferArgs {
@@ -1247,6 +1312,52 @@ impl RosettaDisburseNeuronArgsBuilder {
         RosettaDisburseNeuronArgs {
             neuron_index: self.neuron_index,
             recipient: self.recipient,
+        }
+    }
+}
+
+pub struct RosettaNeuronInfoArgs {
+    pub neuron_index: u64,
+    pub public_key: Option<PublicKey>,
+    pub principal_id: Option<PrincipalId>,
+}
+
+impl RosettaNeuronInfoArgs {
+    pub fn builder(neuron_index: u64) -> RosettaNeuronInfoArgsBuilder {
+        RosettaNeuronInfoArgsBuilder::new(neuron_index)
+    }
+}
+
+pub struct RosettaNeuronInfoArgsBuilder {
+    neuron_index: u64,
+    public_key: Option<PublicKey>,
+    principal_id: Option<PrincipalId>,
+}
+
+impl RosettaNeuronInfoArgsBuilder {
+    pub fn new(neuron_index: u64) -> Self {
+        Self {
+            neuron_index,
+            public_key: None,
+            principal_id: None,
+        }
+    }
+
+    pub fn with_public_key(mut self, public_key: PublicKey) -> Self {
+        self.public_key = Some(public_key);
+        self
+    }
+
+    pub fn with_principal_id(mut self, principal_id: PrincipalId) -> Self {
+        self.principal_id = Some(principal_id);
+        self
+    }
+
+    pub fn build(self) -> RosettaNeuronInfoArgs {
+        RosettaNeuronInfoArgs {
+            neuron_index: self.neuron_index,
+            public_key: self.public_key,
+            principal_id: self.principal_id,
         }
     }
 }

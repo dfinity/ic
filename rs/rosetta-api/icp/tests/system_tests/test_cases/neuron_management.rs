@@ -7,16 +7,16 @@ use crate::common::{
 use ic_agent::{identity::BasicIdentity, Identity};
 use ic_icp_rosetta_client::RosettaChangeAutoStakeMaturityArgs;
 use ic_icp_rosetta_client::RosettaIncreaseNeuronStakeArgs;
+use ic_icp_rosetta_client::RosettaNeuronInfoArgs;
 use ic_icp_rosetta_client::{
     RosettaCreateNeuronArgs, RosettaDisburseNeuronArgs, RosettaSetNeuronDissolveDelayArgs,
 };
 use ic_nns_governance::pb::v1::neuron::DissolveState;
 use ic_nns_governance::pb::v1::KnownNeuronData;
 use ic_rosetta_api::ledger_client::list_known_neurons_response::ListKnownNeuronsResponse;
-use ic_rosetta_api::{
-    models::AccountBalanceRequest,
-    request::transaction_operation_results::TransactionOperationResults,
-};
+use ic_rosetta_api::ledger_client::neuron_response::NeuronResponse;
+use ic_rosetta_api::models::AccountBalanceRequest;
+use ic_rosetta_api::request::transaction_operation_results::TransactionOperationResults;
 use ic_types::PrincipalId;
 use icp_ledger::{AccountIdentifier, DEFAULT_TRANSFER_FEE};
 use lazy_static::lazy_static;
@@ -721,5 +721,111 @@ fn test_list_known_neurons() {
             }
             .into()
         );
+    });
+}
+
+#[test]
+fn test_get_neuron_info() {
+    let rt = Runtime::new().unwrap();
+    rt.block_on(async {
+        let env = RosettaTestingEnvironment::builder()
+            .with_initial_balances(
+                vec![(
+                    AccountIdentifier::from(TEST_IDENTITY.sender().unwrap()),
+                    // A hundred million ICP should be enough
+                    icp_ledger::Tokens::from_tokens(100_000_000).unwrap(),
+                )]
+                .into_iter()
+                .collect(),
+            )
+            .with_governance_canister()
+            .build()
+            .await;
+
+        // Stake the minimum amount 100 million e8s
+        let staked_amount = 100_000_000u64;
+        let neuron_index = 0;
+
+        env.rosetta_client
+            .create_neuron(
+                env.network_identifier.clone(),
+                &(*TEST_IDENTITY).clone(),
+                RosettaCreateNeuronArgs::builder(staked_amount.into())
+                    .with_neuron_index(neuron_index)
+                    .build(),
+            )
+            .await
+            .unwrap();
+
+        // See if the neuron was created successfully
+        let agent = get_test_agent(env.pocket_ic.url().unwrap().port().unwrap()).await;
+        let neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
+
+        let neuron_info = NeuronResponse::try_from(
+            TransactionOperationResults::try_from(
+                env.rosetta_client
+                    .get_neuron_info(
+                        env.network_identifier.clone(),
+                        RosettaNeuronInfoArgs::builder(neuron_index)
+                            .with_principal_id(TEST_IDENTITY.sender().unwrap().into())
+                            .build(),
+                        &(*TEST_IDENTITY).clone(),
+                    )
+                    .await
+                    .unwrap()
+                    .metadata,
+            )
+            .unwrap()
+            .operations
+            .first()
+            .unwrap()
+            .clone()
+            .metadata
+            .unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(neuron_info.neuron_id, neuron.id.unwrap().id);
+        assert_eq!(neuron_info.controller.0, TEST_IDENTITY.sender().unwrap());
+
+        let neuron_info = NeuronResponse::try_from(
+            TransactionOperationResults::try_from(
+                env.rosetta_client
+                    .get_neuron_info(
+                        env.network_identifier.clone(),
+                        RosettaNeuronInfoArgs::builder(neuron_index)
+                            .with_public_key((&Arc::new(test_identity())).into())
+                            .build(),
+                        &(*TEST_IDENTITY).clone(),
+                    )
+                    .await
+                    .unwrap()
+                    .metadata,
+            )
+            .unwrap()
+            .operations
+            .first()
+            .unwrap()
+            .clone()
+            .metadata
+            .unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(neuron_info.neuron_id, neuron.id.unwrap().id);
+        assert_eq!(neuron_info.controller.0, TEST_IDENTITY.sender().unwrap());
+
+        assert!(env
+            .rosetta_client
+            .get_neuron_info(
+                env.network_identifier.clone(),
+                // Ask for a neuron that does not exist
+                RosettaNeuronInfoArgs::builder(neuron_index + 1)
+                    .with_public_key((&Arc::new(test_identity())).into())
+                    .build(),
+                &(*TEST_IDENTITY).clone(),
+            )
+            .await
+            .is_err());
     });
 }
