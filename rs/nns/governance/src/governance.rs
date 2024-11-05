@@ -5764,23 +5764,23 @@ impl Governance {
             &mut self.neuron_store,
         );
 
-        // let governance: &'static mut Governance = unsafe { std::mem::transmute(self) };
-        // set_timer_in_canister_env(Duration::from_millis(0), move || {
-        //     for (k, v) in votes_cast.iter() {
-        //         match governance
-        //             .neuron_store
-        //             .with_neuron_mut(&NeuronId { id: *k }, |neuron| {
-        //                 // Register the neuron's ballot in the
-        //                 // neuron itself.
-        //                 neuron.register_recent_ballot(topic, &proposal_id, *v);
-        //             }) {
-        //             Ok(_) => {}
-        //             Err(_) => {
-        //                 println!("error in record_neuron_vote when registering recent ballot: Neuron not found");
-        //             }
-        //         };
-        //     }
-        // });
+        let governance: &'static mut Governance = unsafe { std::mem::transmute(self) };
+        set_timer_in_canister_env(Duration::from_millis(0), move || {
+            for (k, v) in votes_cast.iter() {
+                match governance
+                    .neuron_store
+                    .with_neuron_mut(&NeuronId { id: *k }, |neuron| {
+                        // Register the neuron's ballot in the
+                        // neuron itself.
+                        neuron.register_recent_ballot(topic, &proposal_id, *v);
+                    }) {
+                    Ok(_) => {}
+                    Err(_) => {
+                        println!("error in record_neuron_vote when registering recent ballot: Neuron not found");
+                    }
+                };
+            }
+        });
 
         Ok(())
     }
@@ -5838,14 +5838,6 @@ impl Governance {
                     // Neuron with ID k is eligible to vote.
                     if k_ballot.vote == (Vote::Unspecified as i32) {
                         if neuron_store.contains(NeuronId { id: k.id }) {
-                            neuron_store
-                                .with_neuron_mut(&NeuronId { id: k.id }, |k| {
-                                    // Register the neuron's ballot in the neuron itself.
-                                    k.register_recent_ballot(topic, proposal_id, *v);
-                                })
-                                .expect(
-                                    "Neuron mysteriously not found after being confirmed to exist.",
-                                );
                             votes_cast.insert(k.id, *v);
                             // Only update a vote if it was previously unspecified. Following
                             // can trigger votes for neurons that have already voted (manually)
