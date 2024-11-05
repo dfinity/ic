@@ -1,5 +1,5 @@
 {
-  "checksum": "4002433162202c7300c4f17bf7105e405ab6e3b9f9cd9e3d56c3ebe98e04d509",
+  "checksum": "638581a5ea14121806ac61fe8f85f44f03a7c1c02c2c9594439077dd318756ec",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -32616,6 +32616,31 @@
           "selects": {}
         },
         "edition": "2021",
+        "rustc_flags": {
+          "common": [],
+          "selects": {
+            "x86_64-unknown-linux-gnu": [
+              "-Cpasses=sancov-module",
+              "-Cllvm-args=-sanitizer-coverage-level=4",
+              "-Cllvm-args=-sanitizer-coverage-inline-8bit-counters",
+              "-Cllvm-args=-sanitizer-coverage-pc-table",
+              "-Cllvm-args=-sanitizer-coverage-trace-compares",
+              "-Cllvm-args=-sanitizer-coverage-stack-depth",
+              "-Cllvm-args=-sanitizer-coverage-prune-blocks=0",
+              "-Ctarget-cpu=native",
+              "-Coverflow_checks",
+              "-Copt-level=3",
+              "-Clink-dead-code",
+              "-Cinstrument-coverage",
+              "-Cdebug-assertions",
+              "-Ccodegen-units=1",
+              "-Zextra-const-ub-checks",
+              "-Zstrict-init-checks",
+              "-Zsanitizer=address",
+              "-Clink-arg=/usr/lib/llvm-18/lib/clang/18/lib/linux/libclang_rt.fuzzer-x86_64.a"
+            ]
+          }
+        },
         "version": "0.8.4"
       },
       "license": "Apache-2.0",

@@ -26,6 +26,18 @@ def sanitize_external_crates(sanitizers_enabled):
         "bitcoin": FUZZING_ANNOTATION,
         "bincode": FUZZING_ANNOTATION,
         "ic-stable-structures": FUZZING_ANNOTATION,
+        "ic-wasm": [
+            crate.annotation(
+                gen_binaries = True,
+                rustc_flags = crate.select(
+                    [],
+                    {
+                        "x86_64-unknown-linux-gnu": DEFAULT_RUSTC_FLAGS_FOR_FUZZING +
+                                                    ["-Clink-arg=/usr/lib/llvm-18/lib/clang/18/lib/linux/libclang_rt.fuzzer-x86_64.a"],
+                    },
+                ),
+            ),
+        ],
     }
 
 ICRC_1_REV = "26a80d777e079644cd69e883e18dad1a201f5b1a"
