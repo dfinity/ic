@@ -7,11 +7,6 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_
     Dealing, EncryptedShares, PublicCoefficientsBytes, ZKProofDec, ZKProofShare, NUM_CHUNKS,
     NUM_ZK_REPETITIONS,
 };
-use ic_management_canister_types::{
-    EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve, VetKdKeyId,
-};
-use strum::EnumCount;
-use strum::IntoEnumIterator;
 
 #[test]
 fn should_correctly_convert_csp_dkg_dealing_to_dkg_dealing() {
@@ -305,38 +300,4 @@ fn empty_ni_csp_dkg_transcript() -> CspNiDkgTranscript {
         },
         receiver_data: Default::default(),
     })
-}
-
-#[test]
-fn should_correctly_convert_ni_dkg_tag_to_i32() {
-    assert_eq!(i32::from(&NiDkgTag::LowThreshold), 1);
-    assert_eq!(i32::from(&NiDkgTag::HighThreshold), 2);
-
-    for master_public_key_id in [
-        MasterPublicKeyId::Ecdsa(EcdsaKeyId {
-            curve: EcdsaCurve::Secp256k1,
-            name: "some key".to_string(),
-        }),
-        MasterPublicKeyId::Schnorr(SchnorrKeyId {
-            algorithm: SchnorrAlgorithm::Bip340Secp256k1,
-            name: "some key".to_string(),
-        }),
-        MasterPublicKeyId::Schnorr(SchnorrKeyId {
-            algorithm: SchnorrAlgorithm::Ed25519,
-            name: "some key".to_string(),
-        }),
-        MasterPublicKeyId::VetKd(VetKdKeyId {
-            curve: VetKdCurve::Bls12_381_G2,
-            name: "some key".to_string(),
-        }),
-    ] {
-        assert_eq!(
-            i32::from(&NiDkgTag::HighThresholdForKey(master_public_key_id)),
-            3
-        );
-    }
-    assert_eq!(MasterPublicKeyId::COUNT, 3);
-    assert_eq!(EcdsaCurve::iter().count(), 1);
-    assert_eq!(SchnorrAlgorithm::iter().count(), 2);
-    assert_eq!(VetKdCurve::iter().count(), 1);
 }

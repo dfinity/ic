@@ -121,19 +121,6 @@ impl fmt::Display for NiDkgTargetSubnet {
 //     }
 // }
 
-////////////////////
-// TODO: check if we still need this
-////////////////////////
-impl From<&NiDkgTag> for i32 {
-    fn from(ni_dkg_tag: &NiDkgTag) -> Self {
-        match ni_dkg_tag {
-            NiDkgTag::LowThreshold => 1,
-            NiDkgTag::HighThreshold => 2,
-            NiDkgTag::HighThresholdForKey(_) => 3,
-        }
-    }
-}
-
 /// A dealer's contribution (called dealing) to distributed key generation.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct NiDkgDealing {
