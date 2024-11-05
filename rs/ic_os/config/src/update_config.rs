@@ -290,28 +290,16 @@ fn read_nns_conf(config_dir: &Path) -> Result<Vec<Url>> {
 
     let nns_url_str = conf_map.get("nns_url").cloned().unwrap_or_default();
 
-    let nns_urls = nns_url_str
-        .split(',')
-        .map(|s| s.trim())
-        .filter_map(|s| {
-            // Try parsing the URL as is
-            if let Ok(url) = Url::parse(s) {
-                return Some(url);
+    let mut nns_urls = Vec::new();
+    for s in nns_url_str.split(',') {
+        let s = s.trim();
+        match Url::parse(s) {
+            Ok(url) => nns_urls.push(url),
+            Err(e) => {
+                eprintln!("Invalid URL '{}': {}", s, e);
             }
-
-            // Handle IPv6 addresses
-            let mut address = s.to_string();
-            let is_ipv6 = address.contains(':');
-
-            if is_ipv6 && !address.starts_with('[') && !address.ends_with(']') {
-                address = format!("[{}]", address);
-            }
-
-            let url_string = format!("http://{}", address);
-
-            Url::parse(&url_string).ok()
-        })
-        .collect();
+        }
+    }
 
     Ok(nns_urls)
 }
