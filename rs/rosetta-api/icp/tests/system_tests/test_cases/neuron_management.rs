@@ -969,6 +969,23 @@ fn test_hotkey_management() {
                         .to_owned();
                     // Make sure that the neuron has no hot keys
                     assert!(neuron.hot_keys.is_empty());
+
+                    // Now we try to not provide a key
+                    match env
+                        .rosetta_client
+                        .add_hot_key(
+                            env.network_identifier.clone(),
+                            &(*TEST_IDENTITY).clone(),
+                            RosettaHotKeyArgs::builder(neuron_index).build(),
+                        )
+                        .await
+                    {
+                        Err(e)
+                            if e.to_string()
+                                .contains("Either public key or principal id has to be set") => {}
+                        Err(e) => panic!("Unexpected error: {}", e),
+                        Ok(_) => panic!("Expected an error but got success"),
+                    }
                 });
                 Ok(())
             },
