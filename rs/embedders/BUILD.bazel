@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
-load("//bazel:defs.bzl", "rust_bench", "rust_ic_bench", "rust_ic_test_suite_with_extra_srcs")
+load("//bazel:defs.bzl", "rust_bench", "rust_ic_bench", "rust_ic_test", "rust_ic_test_suite_with_extra_srcs")
 load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
 
 package(default_visibility = ["//visibility:public"])
@@ -135,6 +135,10 @@ rust_ic_test_suite_with_extra_srcs(
         exclude = [
             "tests/wasmtime_simple.rs",
             "tests/instrumentation.rs",
+
+            # we exclude stable_grow.rs since we run it in the dedicated :stable_grow_test
+            # below since it's way more expensive than the others and needs special treatment.
+            "tests/stable_grow.rs",
         ],
     ),
     aliases = ALIASES,
@@ -159,6 +163,20 @@ rust_ic_test_suite_with_extra_srcs(
         "tests/instrumentation.rs",
     ],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = [":embedders"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_ic_test(
+    name = "stable_grow_test",
+    srcs = [
+        "tests/stable_grow.rs",
+    ],
+    crate_root = "tests/stable_grow.rs",
+    # The stable_grow test often times out (at 5m) on CI when the runner is
+    # scheduled to a loaded node. The P90 at the time of writing is 4m
+    # 53s. Let's reserve a bit more CPUs to see if that reduces the overall
+    # parallelism and allows this job to run more quickly.
+    tags = ["cpu:4"],
     deps = [":embedders"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
