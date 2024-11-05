@@ -16,7 +16,7 @@ use crate::{
             governance::{
                 self,
                 neuron_in_flight_command::{self, SyncCommand},
-                SnsMetadata,
+                SnsMetadata, Version,
             },
             governance_error::ErrorType,
             manage_neuron,
@@ -34,6 +34,7 @@ use crate::{
             NeuronPermission, NeuronPermissionList, NeuronPermissionType, ProposalId,
             RegisterDappCanisters, RewardEvent, TransferSnsTreasuryFunds,
             UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote, VotingRewardsParameters,
+            SnsVersion,
         },
     },
     proposal::ValidGenericNervousSystemFunction,
@@ -102,7 +103,7 @@ pub mod native_action_ids {
     /// ManageSnsMetadata Action.
     pub const MANAGE_SNS_METADATA: u64 = 8;
 
-    /// TransferSnsTreasuryFunds
+    /// TransferSnsTreasuryFunds Action.
     pub const TRANSFER_SNS_TREASURY_FUNDS: u64 = 9;
 
     /// RegisterDappCanisters Action.
@@ -111,7 +112,7 @@ pub mod native_action_ids {
     /// DeregisterDappCanisters Action.
     pub const DEREGISTER_DAPP_CANISTERS: u64 = 11;
 
-    /// MintSnsTokens
+    /// MintSnsTokens Action.
     pub const MINT_SNS_TOKENS: u64 = 12;
 
     /// ManageLedgerParameters Action.
@@ -119,6 +120,9 @@ pub mod native_action_ids {
 
     /// ManageDappCanisterSettings Action.
     pub const MANAGE_DAPP_CANISTER_SETTINGS: u64 = 14;
+
+    /// AdvanceSnsTargetVersion Action.
+    pub const ADVANCE_SNS_TARGET_VERSION: u64 = 15;
 }
 
 impl governance::Mode {
@@ -1177,6 +1181,15 @@ impl NervousSystemFunction {
             function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
         }
     }
+
+    fn advance_sns_target_version() -> NervousSystemFunction {
+        NervousSystemFunction {
+            id: native_action_ids::ADVANCE_SNS_TARGET_VERSION,
+            name: "Advance SNS target version".to_string(),
+            description: Some("Proposal to advance the target version of this SNS.".to_string()),
+            function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+        }
+    }
 }
 
 impl From<Action> for NervousSystemFunction {
@@ -1216,6 +1229,9 @@ impl From<Action> for NervousSystemFunction {
             Action::ManageLedgerParameters(_) => NervousSystemFunction::manage_ledger_parameters(),
             Action::ManageDappCanisterSettings(_) => {
                 NervousSystemFunction::manage_dapp_canister_settings()
+            }
+            Action::AdvanceSnsTargetVersion(_) => {
+                NervousSystemFunction::advance_sns_target_version()
             }
         }
     }
@@ -1668,6 +1684,7 @@ impl Action {
             | RemoveGenericNervousSystemFunction(_)
             | ExecuteGenericNervousSystemFunction(_)
             | UpgradeSnsToNextVersion(_)
+            | AdvanceSnsTargetVersion(_)
             | ManageSnsMetadata(_)
             | ManageLedgerParameters(_)
             | RegisterDappCanisters(_)
@@ -1854,6 +1871,7 @@ impl From<&Action> for u64 {
             Action::ManageDappCanisterSettings(_) => {
                 native_action_ids::MANAGE_DAPP_CANISTER_SETTINGS
             }
+            Action::AdvanceSnsTargetVersion(_) => native_action_ids::ADVANCE_SNS_TARGET_VERSION,
         }
     }
 }
@@ -2767,6 +2785,36 @@ impl From<upgrade_journal_entry::UpgradeOutcome> for upgrade_journal_entry::Even
 }
 // Note, we do not implement From<upgrade_journal_entry::TargetVersionSet> for upgrade_journal_entry::Event
 // because it is ambiguous which event variant to convert it to (TargetVersionSet vs TargetVersionReset).
+
+impl TryFrom<SnsVersion> for Version {
+    type Error = String;
+
+    fn try_from(src: SnsVersion) -> Result<Self, Self::Error> {
+        let SnsVersion {
+            root_wasm_hash: Some(root_wasm_hash),
+            governance_wasm_hash: Some(governance_wasm_hash),
+            ledger_wasm_hash: Some(ledger_wasm_hash),
+            swap_wasm_hash: Some(swap_wasm_hash),
+            archive_wasm_hash: Some(archive_wasm_hash),
+            index_wasm_hash: Some(index_wasm_hash),
+        } = src else {
+            return Err(
+                "Cannot interpret SnsVersion; please specify all the required fields: \
+                 {{governance, root, swap, index, ledger, archive}}_wasm_hash."
+                    .to_string()
+            );
+        };
+
+        Ok(Self {
+            governance_wasm_hash,
+            root_wasm_hash,
+            swap_wasm_hash,
+            index_wasm_hash,
+            ledger_wasm_hash,
+            archive_wasm_hash,
+        })
+    }
+}
 
 #[cfg(test)]
 pub(crate) mod tests {

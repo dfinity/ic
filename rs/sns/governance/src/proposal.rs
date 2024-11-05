@@ -16,12 +16,12 @@ use crate::{
             TransferSnsTreasuryFundsActionAuxiliary,
         },
         transfer_sns_treasury_funds::TransferFrom,
-        DeregisterDappCanisters, ExecuteGenericNervousSystemFunction, Governance, GovernanceError,
-        LogVisibility, ManageDappCanisterSettings, ManageLedgerParameters, ManageSnsMetadata,
-        MintSnsTokens, Motion, NervousSystemFunction, NervousSystemParameters, Proposal,
-        ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus,
-        RegisterDappCanisters, Tally, TransferSnsTreasuryFunds, UpgradeSnsControlledCanister,
-        UpgradeSnsToNextVersion, Valuation as ValuationPb, Vote,
+        AdvanceSnsTargetVersion, DeregisterDappCanisters, ExecuteGenericNervousSystemFunction,
+        Governance, GovernanceError, LogVisibility, ManageDappCanisterSettings,
+        ManageLedgerParameters, ManageSnsMetadata, MintSnsTokens, Motion, NervousSystemFunction,
+        NervousSystemParameters, Proposal, ProposalData, ProposalDecisionStatus, ProposalId,
+        ProposalRewardStatus, RegisterDappCanisters, Tally, TransferSnsTreasuryFunds,
+        UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Valuation as ValuationPb, Vote,
     },
     sns_upgrade::{get_proposal_id_that_added_wasm, get_upgrade_params, UpgradeSnsParams},
     types::Environment,
@@ -441,6 +441,22 @@ pub(crate) async fn validate_and_render_action(
         }
         proposal::Action::ManageDappCanisterSettings(manage_dapp_canister_settings) => {
             validate_and_render_manage_dapp_canister_settings(manage_dapp_canister_settings)
+        }
+        proposal::Action::AdvanceSnsTargetVersion(advance_sns_target_version) => {
+            let new_target = if let Some(new_target) = &advance_sns_target_version.new_target {
+                Version::try_from(new_target.clone())
+            } else {
+                governance_proto.last_known_sns_version()
+            };
+            let new_target = match new_target {
+                Ok(last_version) => last_version,
+                Err(err) => {
+                    return Err(
+                        format!("Cannot render AdvanceSnsTargetVersion proposal: {}", err)
+                    );
+                }
+            };
+            validate_and_render_advance_sns_target_version_proposal(&new_target)
         }
     }
     .map(|rendering| (rendering, ActionAuxiliary::None))
@@ -1666,6 +1682,12 @@ fn validate_and_render_manage_dapp_canister_settings(
     } else {
         Ok(render)
     }
+}
+
+fn validate_and_render_advance_sns_target_version_proposal(
+    new_target: &Version,
+) -> Result<String, String> {
+    todo!()
 }
 
 impl ProposalData {

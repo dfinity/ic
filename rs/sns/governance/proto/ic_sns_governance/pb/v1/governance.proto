@@ -439,6 +439,31 @@ message ManageDappCanisterSettings {
   optional uint64 wasm_memory_limit = 7;
 }
 
+message SnsVersion {
+  // The hash of the Governance canister WASM.
+  optional bytes governance_wasm_hash = 1;
+
+  // The hash of the Swap canister WASM.
+  optional bytes swap_wasm_hash = 2;
+
+  // The hash of the Root canister WASM.
+  optional bytes root_wasm_hash = 3;
+
+  // The hash of the Index canister WASM.
+  optional bytes index_wasm_hash = 4;
+
+  // The hash of the Ledger canister WASM.
+  optional bytes ledger_wasm_hash = 5;
+
+  // The hash of the Ledger Archive canister WASM.
+  optional bytes archive_wasm_hash = 6;
+}
+
+message AdvanceSnsTargetVersion {
+  // If not specified, the target will advance to the latest SNS version known to this SNS.
+  optional SnsVersion new_target = 1;
+}
+
 // A proposal is the immutable input of a proposal submission.
 message Proposal {
   // The proposal's title as a text, which can be at most 256 bytes.
@@ -505,7 +530,7 @@ message Proposal {
 
     // Execute a method outside the SNS canisters.
     //
-    // Id = [1000-u64::MAX].
+    // Ids \in [1000, u64::MAX].
     ExecuteGenericNervousSystemFunction execute_generic_nervous_system_function = 10;
 
     // Execute an upgrade to next version on the blessed SNS upgrade path.
@@ -515,7 +540,7 @@ message Proposal {
 
     // Modify values of SnsMetadata.
     //
-    // Id = 8
+    // Id = 8.
     ManageSnsMetadata manage_sns_metadata = 12;
 
     // Transfer SNS treasury funds (ICP or SNS token) to an account.
@@ -539,13 +564,18 @@ message Proposal {
 
     // Change some parameters on the ledger.
     //
-    // Id = 13
+    // Id = 13.
     ManageLedgerParameters manage_ledger_parameters = 17;
 
     // Change canister settings for one or more dapp canister(s).
     //
     // Id = 14.
     ManageDappCanisterSettings manage_dapp_canister_settings = 18;
+
+    // Advance SNS target version.
+    //
+    // Id = 15;
+    AdvanceSnsTargetVersion advance_sns_target_version = 19;
   }
 }
 
@@ -738,6 +768,8 @@ message ProposalData {
   // Id 8 - ManageSnsMetadata proposals.
   // Id 9 - TransferSnsTreasuryFunds proposals.
   // Id 13 - ManageLedgerParameters proposals.
+  // Id 14 - ManageDappCanisterSettings proposals.
+  // Id 15 - AdvanceSnsTargetVersion proposals.
   uint64 action = 1;
 
   // This is stored here temporarily. It is also stored on the map

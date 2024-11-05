@@ -402,6 +402,19 @@ impl GovernanceProto {
     pub fn swap_canister_id_or_panic(&self) -> CanisterId {
         CanisterId::unchecked_from_principal(self.swap_canister_id.expect("No swap_canister_id."))
     }
+    
+    pub fn last_known_sns_version(&self) -> Result<Version, String> {
+        let Some(cached_upgrade_steps) = &self.cached_upgrade_steps else {
+            return Err("Governance.cached_upgrade_steps is not specified.".to_string());
+        };
+        let Some(upgrade_steps) = &cached_upgrade_steps.upgrade_steps else {
+            return Err("Governance.cached_upgrade_steps.upgrade_steps is not specified.".to_string());
+        };
+        let Some(last_step) = upgrade_steps.versions.last() else {
+            return Err("Governance.cached_upgrade_steps.upgrade_steps is empty.".to_string());
+        };
+        Ok(last_step.clone())
+    }
 
     /// Returns self.mode, but as an enum, not i32.
     ///
@@ -2119,6 +2132,10 @@ impl Governance {
             Action::ManageDappCanisterSettings(manage_dapp_canister_settings) => {
                 self.perform_manage_dapp_canister_settings(manage_dapp_canister_settings)
                     .await
+            }
+            Action::AdvanceSnsTargetVersion(_znew_target) => {
+                // TODO[NNS1-3388]: Call self.advance_target_version(new_target).
+                unimplemented!("AdvanceSnsTargetVersion proposals are not implemented yet.");
             }
             // This should not be possible, because Proposal validation is performed when
             // a proposal is first made.
