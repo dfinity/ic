@@ -332,7 +332,6 @@ impl DefiniteCanisterSettingsArgs {
             None => candid::Nat::from(0_u32),
             Some(memory) => candid::Nat::from(memory),
         };
-
         Self {
             controllers,
             compute_allocation: candid::Nat::from(compute_allocation),
