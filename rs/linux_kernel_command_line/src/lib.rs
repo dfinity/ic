@@ -76,7 +76,7 @@ impl KernelCommandLine {
                 res
             })
             .map(|(_, x)| x)
-            .collect::<Vec<String>>();
+            .collect();
         firstpos
     }
 
