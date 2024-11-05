@@ -5,6 +5,7 @@ use ic_config::flag_status::FlagStatus;
 use ic_logger::{error, ReplicaLogger};
 use ic_replicated_state::{canister_state::NextExecution, CanisterState};
 use ic_types::{AccumulatedPriority, ComputeAllocation, ExecutionRound, LongExecutionMode};
+use num_traits::ops::saturating::{SaturatingAdd, SaturatingSub};
 
 use crate::{
     scheduler::{SCHEDULER_COMPUTE_ALLOCATION_INVARIANT_BROKEN, SCHEDULER_CORES_INVARIANT_BROKEN},
@@ -333,7 +334,10 @@ impl RoundSchedule {
                 * multiplier
                 + free_capacity_per_canister;
             // Increase accumulated priority by de-facto compute allocation.
-            canister.scheduler_state.accumulated_priority += factual.into();
+            canister.scheduler_state.accumulated_priority = canister
+                .scheduler_state
+                .accumulated_priority
+                .saturating_add(&factual.into());
         }
     }
 
@@ -408,7 +412,7 @@ impl RoundSchedule {
 
         // Compute the priority of the canisters for this round.
         let mut accumulated_priority_invariant = AccumulatedPriority::default();
-        let mut accumulated_priority_deviation = 0;
+        let mut accumulated_priority_deviation: i128 = 0;
         for (&canister_id, canister) in canister_states.iter_mut() {
             if is_reset_round {
                 canister.scheduler_state.accumulated_priority = Default::default();
@@ -432,9 +436,12 @@ impl RoundSchedule {
             });
 
             total_compute_allocation_percent += compute_allocation.as_percent() as i64;
-            accumulated_priority_invariant += accumulated_priority;
-            accumulated_priority_deviation +=
-                accumulated_priority.get() * accumulated_priority.get();
+            accumulated_priority_invariant =
+                accumulated_priority_invariant.saturating_add(&accumulated_priority);
+            accumulated_priority_deviation = accumulated_priority_deviation.saturating_add(
+                (accumulated_priority.get() as i128)
+                    .saturating_mul(accumulated_priority.get() as i128),
+            );
         }
         // Assert there is at least `1%` of free capacity to distribute across canisters.
         // It's guaranteed by `validate_compute_allocation()`
@@ -473,7 +480,7 @@ impl RoundSchedule {
             let factual =
                 rs.compute_allocation.as_percent() as i64 * multiplier + free_capacity_per_canister;
             // Increase accumulated priority by de-facto compute allocation.
-            rs.accumulated_priority += factual.into();
+            rs.accumulated_priority = rs.accumulated_priority.saturating_add(&factual.into());
             // Count long executions and sum up their compute allocation.
             if rs.has_aborted_or_paused_execution {
                 // Note: factual compute allocation is multiplied by `multiplier`
@@ -567,8 +574,12 @@ impl RoundSchedule {
                 // * For long executions, the `priority_credit` is accumulated
                 //   for a few rounds, and deducted from the `accumulated_priority`
                 //   at the end of the long execution.
-                canister_state.scheduler_state.priority_credit +=
-                    (compute_capacity_percent * multiplier / active_cores as i64).into();
+                canister_state.scheduler_state.priority_credit = canister_state
+                    .scheduler_state
+                    .priority_credit
+                    .saturating_add(
+                        &(compute_capacity_percent * multiplier / active_cores as i64).into(),
+                    );
                 if i < round_schedule.long_execution_cores {
                     canister_state.scheduler_state.long_execution_mode =
                         LongExecutionMode::Prioritized;
@@ -580,8 +591,12 @@ impl RoundSchedule {
 
     /// Applies priority credit and resets long execution mode.
     pub fn apply_priority_credit(canister: &mut CanisterState) {
-        canister.scheduler_state.accumulated_priority -=
-            std::mem::take(&mut canister.scheduler_state.priority_credit);
+        canister.scheduler_state.accumulated_priority = canister
+            .scheduler_state
+            .accumulated_priority
+            .saturating_sub(&std::mem::take(
+                &mut canister.scheduler_state.priority_credit,
+            ));
         // Aborting a long-running execution moves the canister to the
         // default execution mode because the canister does not have a
         // pending execution anymore.
