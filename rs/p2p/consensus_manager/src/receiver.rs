@@ -483,6 +483,13 @@ where
                 .await
         };
 
+        let assemble_result = select! {
+            assemble_result = assemble_artifact => Ok(assemble_result)
+            all_peers_deleted_artifact => None
+            _ = cancellation_token.cancelled() => {
+            }
+        }
+
         select! {
             assemble_result = assemble_artifact => {
                 match assemble_result {
