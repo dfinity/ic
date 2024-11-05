@@ -1048,6 +1048,10 @@ fn charge_for_dirty_stable() {
     run_charge_for_dirty_stable_test(FlagStatus::Disabled);
 }
 
+/// Helper method to generate a wasm module with tables in both
+/// 32 and 64 bit modes and compile that module. The method
+/// is then used to check if instrumentation of tables works
+/// correctly for both Wasm32 and Wasm64 wrt tables.
 fn test_table_validation(code: &str, is_wasm64: bool) -> String {
     let execution_mode = if is_wasm64 { "i64" } else { "" };
     let wat = format!(

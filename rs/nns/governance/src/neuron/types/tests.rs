@@ -126,12 +126,13 @@ fn test_abridged_neuron_size() {
             u64::MAX,
         )),
         visibility: None,
+        voting_power_refreshed_timestamp_seconds: Some(u64::MAX),
     };
 
     assert!(abridged_neuron.encoded_len() as u32 <= AbridgedNeuron::BOUND.max_size());
-    // This size can be updated. This assertion is created so that we are aware of the available
-    // headroom.
-    assert_eq!(abridged_neuron.encoded_len(), 184);
+    // This size can be updated. This assertion is here to make sure we are very aware of growth.
+    // Reminder: the amount that we allocated for AbridgedNeuron is 380 bytes.
+    assert_eq!(abridged_neuron.encoded_len(), 196);
 }
 
 fn create_neuron_with_stake_dissolve_state_and_age(

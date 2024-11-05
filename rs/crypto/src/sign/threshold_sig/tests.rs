@@ -1,5 +1,3 @@
-#![allow(clippy::unwrap_used)]
-
 use super::*;
 use crate::sign::tests::KEY_ID;
 use crate::sign::tests::KEY_ID_STRING;

@@ -111,6 +111,8 @@ async fn test_deploy_fresh_sns() {
     // TODO eventually we need to test a swap
 }
 
+// TODO[NNS1-3429]: Re-enable this test after the next SNS-W release.
+#[ignore]
 #[tokio::test]
 async fn test_upgrade_existing_sns() {
     let create_service_nervous_system = CreateServiceNervousSystemBuilder::default()

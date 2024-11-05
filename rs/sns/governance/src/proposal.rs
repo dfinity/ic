@@ -2490,6 +2490,7 @@ mod tests {
             cached_upgrade_steps: None,
             target_version: None,
             timers: None,
+            upgrade_journal: None,
         }
     }
 

@@ -243,10 +243,12 @@ fn test_deploy_cleanup_on_wasm_install_failure() {
         );
     }
 
-    // 5_000_000_000_000 cycles are burned creating the canisters before the failure
+    // 15_000_000_000_000 cycles are burned creating the canisters before the failure
+    let initial_canister_creation_cycles = 3 * ONE_TRILLION as u128;
     assert_eq!(
         machine.cycle_balance(SNS_WASM_CANISTER_ID),
-        EXPECTED_SNS_CREATION_FEE - SNS_CANISTER_COUNT_AT_INSTALL as u128 * (ONE_TRILLION as u128)
+        EXPECTED_SNS_CREATION_FEE
+            - SNS_CANISTER_COUNT_AT_INSTALL as u128 * initial_canister_creation_cycles,
     );
 }
 
