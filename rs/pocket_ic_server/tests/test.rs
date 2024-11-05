@@ -1390,6 +1390,7 @@ fn auto_progress() {
         std::thread::sleep(Duration::from_millis(10));
     }
 
+    // Since the time increased by now, we know that the log should have been recorded.
     let mut bytes = [0; 1000];
     let _ = out.stdout.as_mut().unwrap().read(&mut bytes).unwrap();
     let stdout = String::from_utf8(bytes.to_vec()).unwrap();
