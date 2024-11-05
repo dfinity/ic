@@ -11,7 +11,9 @@
 //!
 //! - **Adding New Fields**: If adding a new field to a configuration struct, make sure it is optional or has a default value by implementing `Default` or via `#[serde(default)]`.
 //!
-//! - **Removing Fields**: If removing a field, ensure all references to it in the IC-OS codebase are eliminated.
+//! - **Removing Fields**: To prevent backwards-compatibility deserialization errors, required fields must not be removed directly:
+//! In a first step, they have to be made optional and code that reads the value must be removed/handle missing values.
+//! In a second step, after the first step has rolled out to all OSes and there is no risk of a rollback, the field can be removed.
 //!
 //! - **Renaming Fields**: Avoid renaming fields unless absolutely necessary. If you must rename a field, use `#[serde(rename = "old_name")]`.
 use ic_types::malicious_behaviour::MaliciousBehaviour;
