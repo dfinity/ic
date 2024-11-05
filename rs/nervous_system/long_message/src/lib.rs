@@ -55,21 +55,44 @@ pub async fn break_message_if_over_instructions(message_threshold: u64, upper_bo
     }
 }
 
-pub async fn run_chunked_task<R, C, T>(
-    mut task: T,
-    initial_value: C,
+pub enum Continuation<IndexValue, Result, ProcessingState> {
+    Start(IndexValue),
+    Continue(IndexValue, ProcessingState),
+    Done(Result),
+}
+
+impl<I, R, P> Continuation<I, R, P> {
+    fn is_finished(&self) -> bool {
+        matches!(self, Continuation::Done(_))
+    }
+
+    fn get_result(self) -> R {
+        match self {
+            Continuation::Done(result) => result,
+            _ => panic!("Continuation is not done"),
+        }
+    }
+}
+
+pub async fn run_chunked_task<IndexValue, Result, ProcessingState, F>(
+    mut task: F,
+    initial_value: IndexValue,
     message_threshold: u64,
     upper_bound: Option<u64>,
-) -> R
+) -> Result
 where
-    T: Task<C, R>,
+    F: FnMut(
+        Continuation<IndexValue, Result, ProcessingState>,
+        Box<dyn Fn() -> bool>,
+    ) -> Continuation<IndexValue, Result, ProcessingState>,
 {
-    let mut continuation = Some(initial_value);
+    let mut continuation = Continuation::Start(initial_value);
 
-    while continuation.is_some() {
-        continuation = task.next_chunk(continuation.unwrap(), || {
-            is_message_over_threshold(message_threshold)
-        });
+    while !continuation.is_finished() {
+        continuation = task(
+            continuation,
+            Box::new(move || is_message_over_threshold(message_threshold)),
+        );
 
         make_noop_call().await;
 
@@ -85,15 +108,5 @@ where
         }
     }
 
-    task.result()
-}
-
-pub trait Task<C, R>: Sized {
-    fn next_chunk(
-        &mut self,
-        continuation: C,
-        is_message_over_soft_limit: impl Fn() -> bool,
-    ) -> Option<C>;
-
-    fn result(self) -> R;
+    continuation.get_result()
 }

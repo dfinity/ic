@@ -1,6 +1,8 @@
 use candid::CandidType;
 use ic_cdk::{init, update};
-use ic_nervous_system_long_message::{break_message_if_over_instructions, run_chunked_task, Task};
+use ic_nervous_system_long_message::{
+    break_message_if_over_instructions, run_chunked_task, Continuation,
+};
 use serde::Deserialize;
 use std::time::Duration;
 
@@ -78,13 +80,30 @@ struct ChunkedTaskParams {
 
 #[update]
 async fn test_run_chunked_task(params: ChunkedTaskParams) -> TaskResult {
-    let task = unsafe {
-        AddFibsTask {
-            sum: 0,
-            data: UNSAFE_DATA_FOR_JOB_RUNNER.as_ref().unwrap(),
-        }
-    };
     let initial_value = 0;
+
+    let task = |continuation: Continuation<u64, u64, u64>,
+                is_message_over_soft_limit: Box<dyn Fn() -> bool>|
+     -> Continuation<u64, u64, u64> {
+        let (mut index, mut sum) = match continuation {
+            Continuation::Start(index) => (index, 0),
+            Continuation::Continue(index, sum) => (index, sum),
+            Continuation::Done(_) => panic!("Continuation is done, we should not get this"),
+        };
+        // ic_cdk::println!("Continuing from index {}", index);
+        while !is_message_over_soft_limit() {
+            // println!("Processing index {}", index);
+            let values = unsafe { &UNSAFE_DATA_FOR_JOB_RUNNER.as_ref().unwrap().values };
+            if values.len() <= index as usize {
+                return Continuation::Done(sum);
+            }
+            let n = values[index as usize];
+            sum += fib(n);
+            index += 1;
+        }
+        // println!("Breaking at index {}", index);
+        Continuation::Continue(index, sum)
+    };
 
     let result = run_chunked_task(
         task,
@@ -100,37 +119,17 @@ async fn test_run_chunked_task(params: ChunkedTaskParams) -> TaskResult {
 /// This task demonstrates UNSAFE data handling, but in the task it
 /// gets values in a way that is still safe.  
 /// Generally you should get your data in another way.
-struct AddFibsTask<'a> {
-    data: &'a Data,
-    sum: u64,
-}
-
-impl<'a> Task<u64, u64> for AddFibsTask<'a> {
-    fn next_chunk(
-        &mut self,
-        continuation: u64,
-        is_message_over_soft_limit: impl Fn() -> bool,
-    ) -> Option<u64> {
-        let mut index = continuation;
-        // ic_cdk::println!("Continuing from index {}", index);
-        while !is_message_over_soft_limit() {
-            // println!("Processing index {}", index);
-            let values = &self.data.values;
-            if values.len() <= index as usize {
-                return None;
-            }
-            let n = values[index as usize];
-            self.sum += fib(n);
-            index += 1;
-        }
-        // println!("Breaking at index {}", index);
-        Some(index)
-    }
-    fn result(self) -> u64 {
-        self.sum
-    }
-}
-
+// struct AddFibsTask<'a> {
+//     data: &'a Data,
+//     sum: u64,
+// }
+//
+// impl<'a> Task<u64, u64> for AddFibsTask<'a> {
+//     fn result(self) -> u64 {
+//         self.sum
+//     }
+// }
+//
 #[derive(CandidType, Deserialize)]
 struct TaskResult {
     pub result: u64,
