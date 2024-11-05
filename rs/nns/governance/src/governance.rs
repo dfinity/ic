@@ -129,7 +129,7 @@ pub mod test_data;
 #[cfg(test)]
 mod tests;
 
-#[cfg(any(feature = "canbench-rs", test))]
+#[cfg(feature = "canbench-rs")]
 mod benches;
 
 #[macro_use]
@@ -141,6 +141,8 @@ pub use tla::{
     claim_neuron_desc, split_neuron_desc, tla_update_method, InstrumentationState, ToTla,
     TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY, TLA_TRACES_MUTEX,
 };
+
+const BILLION: u64 = 1_000_000_000;
 
 // 70 KB (for executing NNS functions that are not canister upgrades)
 const PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX: usize = 70000;
@@ -5766,20 +5768,26 @@ impl Governance {
 
         let governance: &'static mut Governance = unsafe { std::mem::transmute(self) };
         set_timer_in_canister_env(Duration::from_millis(0), move || {
-            for (k, v) in votes_cast.iter() {
-                match governance
-                    .neuron_store
-                    .with_neuron_mut(&NeuronId { id: *k }, |neuron| {
-                        // Register the neuron's ballot in the
-                        // neuron itself.
-                        neuron.register_recent_ballot(topic, &proposal_id, *v);
-                    }) {
-                    Ok(_) => {}
-                    Err(_) => {
-                        println!("error in record_neuron_vote when registering recent ballot: Neuron not found");
-                    }
-                };
-            }
+            spawn_in_canister_env(async move {
+                for (k, v) in votes_cast.iter() {
+                    match governance
+                        .neuron_store
+                        .with_neuron_mut(&NeuronId { id: *k }, |neuron| {
+                            // Register the neuron's ballot in the
+                            // neuron itself.
+                            neuron.register_recent_ballot(topic, &proposal_id, *v);
+                        }) {
+                        Ok(_) => {}
+                        Err(_) => {
+                            println!("error in record_neuron_vote when registering recent ballot: Neuron not found");
+                        }
+                    };
+                    ic_nervous_system_long_message::break_message_if_over_instructions(
+                        18 * BILLION,
+                        Some(500 * BILLION),
+                    );
+                }
+            })
         });
 
         Ok(())

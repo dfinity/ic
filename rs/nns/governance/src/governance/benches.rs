@@ -459,7 +459,6 @@ fn cascading_vote_stable_neurons_with_heap_index() -> BenchResult {
     )
 }
 
-#[test]
 #[bench(raw)]
 fn cascading_vote_stable_everything() -> BenchResult {
     let _a = temporarily_enable_active_neurons_in_stable_memory();
