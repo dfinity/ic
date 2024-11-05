@@ -188,14 +188,6 @@ name = "ic-systest-rosetta-neuron-follow-test"
 path = "financial_integrations/rosetta/rosetta_neuron_follow_test.rs"
 
 [[bin]]
-name = "ic-systest-rosetta-neuron-maturity-test"
-path = "financial_integrations/rosetta/rosetta_neuron_maturity_test.rs"
-
-[[bin]]
-name = "ic-systest-rosetta-neuron-spawn-test"
-path = "financial_integrations/rosetta/rosetta_neuron_spawn_test.rs"
-
-[[bin]]
 name = "test-driver-e2e-scenarios"
 path = "testing_verification/test_driver_e2e_scenarios.rs"
 

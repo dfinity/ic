@@ -18,6 +18,8 @@ use ic_rosetta_api::request_types::NeuronInfoMetadata;
 use ic_rosetta_api::request_types::PublicKeyOrPrincipal;
 use ic_rosetta_api::request_types::RequestType;
 use ic_rosetta_api::request_types::SetDissolveTimestampMetadata;
+use ic_rosetta_api::request_types::SpawnMetadata;
+use ic_rosetta_api::request_types::StakeMaturityMetadata;
 use icp_ledger::AccountIdentifier;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::account::Subaccount;
@@ -459,6 +461,77 @@ impl RosettaClient {
                         (None, Some(principal_id)) => PublicKeyOrPrincipal::Principal(principal_id),
                         _ => bail!("Either public key or principal id has to be set"),
                     },
+                }
+                .try_into()
+                .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
+            ),
+        }])
+    }
+
+    pub fn build_stake_maturity_operations(
+        signer_principal: Principal,
+        neuron_index: u64,
+        percentage_to_stake: Option<u32>,
+    ) -> anyhow::Result<Vec<Operation>> {
+        Ok(vec![Operation {
+            operation_identifier: OperationIdentifier {
+                index: 0,
+                network_index: None,
+            },
+            related_operations: None,
+            type_: "STAKE_MATURITY".to_string(),
+            status: None,
+            account: Some(rosetta_core::identifiers::AccountIdentifier::from(
+                AccountIdentifier::new(PrincipalId(signer_principal), None),
+            )),
+            amount: None,
+            coin_change: None,
+            metadata: Some(
+                StakeMaturityMetadata {
+                    neuron_index,
+                    percentage_to_stake,
+                }
+                .try_into()
+                .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
+            ),
+        }])
+    }
+
+    pub fn build_spawn_neuron_operations(
+        signer_principal: Principal,
+        neuron_index: u64,
+        controller_principal_id: Option<PrincipalId>,
+        controller_public_key: Option<PublicKey>,
+        percentage_to_spawn: Option<u32>,
+        spawned_neuron_index: u64,
+    ) -> anyhow::Result<Vec<Operation>> {
+        Ok(vec![Operation {
+            operation_identifier: OperationIdentifier {
+                index: 0,
+                network_index: None,
+            },
+            related_operations: None,
+            type_: "SPAWN".to_string(),
+            status: None,
+            account: Some(rosetta_core::identifiers::AccountIdentifier::from(
+                AccountIdentifier::new(PrincipalId(signer_principal), None),
+            )),
+            amount: None,
+            coin_change: None,
+            metadata: Some(
+                SpawnMetadata {
+                    neuron_index,
+                    controller: match (controller_public_key, controller_principal_id) {
+                        (Some(public_key), None) => {
+                            Some(PublicKeyOrPrincipal::PublicKey(public_key))
+                        }
+                        (None, Some(principal_id)) => {
+                            Some(PublicKeyOrPrincipal::Principal(principal_id))
+                        }
+                        _ => None,
+                    },
+                    percentage_to_spawn,
+                    spawned_neuron_index,
                 }
                 .try_into()
                 .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
@@ -1142,6 +1215,63 @@ impl RosettaClient {
         )
         .await
     }
+
+    /// The stake maturity is the amount of time that a neuron has been staked.
+    /// You can increase the amount of ICP that is staked in a neuron by restaking a percentage of the maturity a neuron has accumulated.
+    /// If the percentage is not set, the entire maturity will be restaked.
+    pub async fn stake_maturity<T>(
+        &self,
+        network_identifier: NetworkIdentifier,
+        signer_keypair: &T,
+        stake_maturity_args: RosettaStakeMaturityArgs,
+    ) -> anyhow::Result<ConstructionSubmitResponse>
+    where
+        T: RosettaSupportedKeyPair,
+    {
+        let stake_maturity_operations = RosettaClient::build_stake_maturity_operations(
+            signer_keypair.generate_principal_id()?.0,
+            stake_maturity_args.neuron_index,
+            stake_maturity_args.percentage_to_stake,
+        )?;
+        self.make_submit_and_wait_for_transaction(
+            signer_keypair,
+            network_identifier,
+            stake_maturity_operations,
+            None,
+            None,
+        )
+        .await
+    }
+
+    /// A neuron can spawn a new neuron.
+    /// The new neuron will be controlled by the controller of the spawning neuron.
+    /// The new neuron will be funded with the specified percentage of the original neuron's maturity.
+    pub async fn spawn_neuron<T>(
+        &self,
+        network_identifier: NetworkIdentifier,
+        signer_keypair: &T,
+        spawn_neuron_args: RosettaSpawnNeuronArgs,
+    ) -> anyhow::Result<ConstructionSubmitResponse>
+    where
+        T: RosettaSupportedKeyPair,
+    {
+        let spawn_neuron_operations = RosettaClient::build_spawn_neuron_operations(
+            signer_keypair.generate_principal_id()?.0,
+            spawn_neuron_args.neuron_index,
+            spawn_neuron_args.controller_principal_id,
+            spawn_neuron_args.controller_public_key,
+            spawn_neuron_args.percentage_to_spawn,
+            spawn_neuron_args.spawned_neuron_index,
+        )?;
+        self.make_submit_and_wait_for_transaction(
+            signer_keypair,
+            network_identifier,
+            spawn_neuron_operations,
+            None,
+            None,
+        )
+        .await
+    }
 }
 
 pub struct RosettaTransferArgs {
@@ -1525,6 +1655,102 @@ impl RosettaHotKeyArgsBuilder {
             neuron_index: self.neuron_index,
             hot_key: self.hot_key,
             principal_id: self.principal_id,
+        }
+    }
+}
+
+pub struct RosettaStakeMaturityArgs {
+    pub neuron_index: u64,
+    pub percentage_to_stake: Option<u32>,
+}
+
+impl RosettaStakeMaturityArgs {
+    pub fn builder(neuron_index: u64) -> RosettaStakeMaturityArgsBuilder {
+        RosettaStakeMaturityArgsBuilder::new(neuron_index)
+    }
+}
+
+pub struct RosettaStakeMaturityArgsBuilder {
+    neuron_index: u64,
+    percentage_to_stake: Option<u32>,
+}
+
+impl RosettaStakeMaturityArgsBuilder {
+    pub fn new(neuron_index: u64) -> Self {
+        Self {
+            neuron_index,
+            percentage_to_stake: None,
+        }
+    }
+
+    pub fn with_percentage_to_stake(mut self, percentage_to_stake: u32) -> Self {
+        self.percentage_to_stake = Some(percentage_to_stake);
+        self
+    }
+
+    pub fn build(self) -> RosettaStakeMaturityArgs {
+        RosettaStakeMaturityArgs {
+            neuron_index: self.neuron_index,
+            percentage_to_stake: self.percentage_to_stake,
+        }
+    }
+}
+
+pub struct RosettaSpawnNeuronArgs {
+    pub neuron_index: u64,
+    pub controller_principal_id: Option<PrincipalId>,
+    pub controller_public_key: Option<PublicKey>,
+    pub percentage_to_spawn: Option<u32>,
+    pub spawned_neuron_index: u64,
+}
+
+impl RosettaSpawnNeuronArgs {
+    pub fn builder(neuron_index: u64, spawned_neuron_index: u64) -> RosettaSpawnNeuronArgsBuilder {
+        RosettaSpawnNeuronArgsBuilder::new(neuron_index, spawned_neuron_index)
+    }
+}
+
+pub struct RosettaSpawnNeuronArgsBuilder {
+    neuron_index: u64,
+    controller_principal_id: Option<PrincipalId>,
+    controller_public_key: Option<PublicKey>,
+    percentage_to_spawn: Option<u32>,
+    spawned_neuron_index: u64,
+}
+
+impl RosettaSpawnNeuronArgsBuilder {
+    pub fn new(neuron_index: u64, spawned_neuron_index: u64) -> Self {
+        Self {
+            neuron_index,
+            controller_principal_id: None,
+            controller_public_key: None,
+            percentage_to_spawn: None,
+            spawned_neuron_index,
+        }
+    }
+
+    pub fn with_controller_principal_id(mut self, controller_principal_id: PrincipalId) -> Self {
+        self.controller_principal_id = Some(controller_principal_id);
+        self
+    }
+
+    pub fn with_controller_public_key(mut self, controller_public_key: PublicKey) -> Self {
+        self.controller_public_key = Some(controller_public_key);
+        self
+    }
+
+    pub fn with_percentage_to_spawn(mut self, percentage_to_spawn: u32) -> Self {
+        self.percentage_to_spawn = Some(percentage_to_spawn);
+        self
+    }
+
+    pub fn build(self) -> RosettaSpawnNeuronArgs {
+        RosettaSpawnNeuronArgs {
+            neuron_index: self.neuron_index,
+            controller_principal_id: self.controller_principal_id,
+            controller_public_key: self.controller_public_key,
+            percentage_to_spawn: self.percentage_to_spawn,
+            spawned_neuron_index: self.spawned_neuron_index,
         }
     }
 }
