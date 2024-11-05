@@ -2,13 +2,14 @@ use crate::common::utils::update_neuron;
 use crate::common::utils::wait_for_rosetta_to_catch_up_with_icp_ledger;
 use crate::common::{
     system_test_environment::RosettaTestingEnvironment,
-    utils::{get_test_agent, list_neurons, test_identity},
+    utils::{get_custom_agent, get_test_agent, list_neurons, test_identity},
 };
 use ic_agent::{identity::BasicIdentity, Identity};
 use ic_icp_rosetta_client::RosettaChangeAutoStakeMaturityArgs;
 use ic_icp_rosetta_client::RosettaHotKeyArgs;
 use ic_icp_rosetta_client::RosettaIncreaseNeuronStakeArgs;
 use ic_icp_rosetta_client::RosettaNeuronInfoArgs;
+use ic_icp_rosetta_client::RosettaSpawnNeuronArgs;
 use ic_icp_rosetta_client::{
     RosettaCreateNeuronArgs, RosettaDisburseNeuronArgs, RosettaSetNeuronDissolveDelayArgs,
     RosettaStakeMaturityArgs,
@@ -1017,7 +1018,7 @@ fn test_stake_maturity() {
         neuron.maturity_e8s_equivalent = new_maturity;
         update_neuron(&agent, neuron.into()).await;
         let neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
-        assert_eq!(neuron.maturity_e8s_equivalent, 100_000_000);
+        assert_eq!(neuron.maturity_e8s_equivalent, new_maturity);
 
         // First we try an invalid amount to be staked
         let stake_percentage_invalid = 101;
@@ -1052,4 +1053,188 @@ fn test_stake_maturity() {
             new_maturity * stake_percentage as u64 / 100
         );
     });
+}
+
+#[test]
+fn test_spawn_neuron() {
+    let mut runner = TestRunner::new(TestRunnerConfig {
+        max_shrink_iters: 0,
+        cases: *NUM_TEST_CASES,
+        ..Default::default()
+    });
+
+    runner
+        .run(
+            &(basic_identity_strategy().no_shrink()),
+            |controller_identity| {
+                let rt = Runtime::new().unwrap();
+                rt.block_on(async {
+                    let env = RosettaTestingEnvironment::builder()
+                        .with_initial_balances(
+                            vec![(
+                                AccountIdentifier::from(TEST_IDENTITY.sender().unwrap()),
+                                // A hundred million ICP should be enough
+                                icp_ledger::Tokens::from_tokens(100_000_000).unwrap(),
+                            )]
+                            .into_iter()
+                            .collect(),
+                        )
+                        .with_governance_canister()
+                        .build()
+                        .await;
+
+                    // Stake the minimum amount 100 million e8s
+                    let staked_amount = 100_000_000u64;
+                    let neuron_index = 0;
+
+                    env.rosetta_client
+                        .create_neuron(
+                            env.network_identifier.clone(),
+                            &(*TEST_IDENTITY).clone(),
+                            RosettaCreateNeuronArgs::builder(staked_amount.into())
+                                .with_neuron_index(neuron_index)
+                                .build(),
+                        )
+                        .await
+                        .unwrap();
+
+                    // See if the neuron was created successfully
+                    let agent = get_test_agent(env.pocket_ic.url().unwrap().port().unwrap()).await;
+                    let mut neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
+                    assert_eq!(neuron.maturity_e8s_equivalent, 0);
+
+                    let new_maturity = 100_000_000_000;
+                    neuron.maturity_e8s_equivalent = new_maturity;
+                    update_neuron(&agent, neuron.into()).await;
+
+                    let neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
+                    assert_eq!(neuron.maturity_e8s_equivalent, new_maturity);
+
+                    let spawned_neuron_index = 1;
+                    let invalid_percentage_to_spawn = 101;
+                    assert!(env.rosetta_client
+                        .spawn_neuron(
+                            env.network_identifier.clone(),
+                            &(*TEST_IDENTITY).clone(),
+                            RosettaSpawnNeuronArgs::builder(neuron_index, spawned_neuron_index)
+                                .with_controller_principal_id(
+                                    controller_identity.sender().unwrap().into(),
+                                )
+                                .with_percentage_to_spawn(invalid_percentage_to_spawn)
+                                .build(),
+                        )
+                        .await
+                        .is_err());
+
+                    let percentage_to_spawn = 50;
+                    env.rosetta_client
+                        .spawn_neuron(
+                            env.network_identifier.clone(),
+                            &(*TEST_IDENTITY).clone(),
+                            RosettaSpawnNeuronArgs::builder(neuron_index, spawned_neuron_index)
+                                .with_controller_principal_id(
+                                    controller_identity.sender().unwrap().into(),
+                                )
+                                .with_percentage_to_spawn(percentage_to_spawn)
+                                .build(),
+                        )
+                        .await
+                        .unwrap();
+
+                    let controller_identity = Arc::new(controller_identity);
+                    let controller_agent = get_custom_agent(
+                        controller_identity.clone(),
+                        env.pocket_ic.url().unwrap().port().unwrap(),
+                    )
+                    .await;
+
+                    let neurons = list_neurons(&controller_agent).await.full_neurons;
+                    assert_eq!(neurons.len(), 1);
+                    assert_eq!(
+                        neurons.first().unwrap().controller.unwrap().0,
+                        controller_identity.sender().unwrap()
+                    );
+                    assert_eq!(
+                        neurons.first().unwrap().maturity_e8s_equivalent,
+                        new_maturity * percentage_to_spawn as u64 / 100, "Neuron stake should be 50% of the original neuron stake, but is instead: {:?}", neurons.first().unwrap()
+                    );
+
+                    let neuron_info = NeuronResponse::try_from(
+                        TransactionOperationResults::try_from(
+                            env.rosetta_client
+                                .get_neuron_info(
+                                    env.network_identifier.clone(),
+                                    RosettaNeuronInfoArgs::builder(spawned_neuron_index)
+                                        .with_principal_id(controller_identity.sender().unwrap().into())
+                                        .build(),
+                                    &controller_identity.clone(),
+                                )
+                                .await
+                                .unwrap()
+                                .metadata,
+                        )
+                        .unwrap()
+                        .operations
+                        .first()
+                        .unwrap()
+                        .clone()
+                        .metadata
+                        .unwrap(),
+                    )
+                    .unwrap();
+                    assert_eq!(
+                        neurons.first().unwrap().id.unwrap().id,
+                        neuron_info.neuron_id
+                    );
+
+                    env.rosetta_client.spawn_neuron(
+                        env.network_identifier.clone(),
+                        &(*TEST_IDENTITY).clone(),
+                        RosettaSpawnNeuronArgs::builder(neuron_index, spawned_neuron_index)
+                            .with_controller_public_key((&(*TEST_IDENTITY)).into())
+                            .with_percentage_to_spawn(percentage_to_spawn)
+                            .build(),
+                    ).await.unwrap();
+
+                    let neurons = list_neurons(&agent).await.full_neurons;
+                    assert_eq!(neurons.len(), 2);
+                    assert_eq!(
+                        neurons.last().unwrap().controller.unwrap().0,
+                        TEST_IDENTITY.sender().unwrap()
+                    );
+                    assert_eq!(
+                        neurons.last().unwrap().maturity_e8s_equivalent,
+                        new_maturity * percentage_to_spawn as u64 / 100 /2
+                    );
+                    let neuron_info = NeuronResponse::try_from(
+                        TransactionOperationResults::try_from(
+                            env.rosetta_client
+                                .get_neuron_info(
+                                    env.network_identifier.clone(),
+                                    RosettaNeuronInfoArgs::builder(spawned_neuron_index)
+                                        .with_public_key((&Arc::new(test_identity())).into())
+                                        .build(),
+                                    &(*TEST_IDENTITY).clone(),
+                                )
+                                .await
+                                .unwrap()
+                                .metadata,
+                        )
+                        .unwrap()
+                        .operations
+                        .first()
+                        .unwrap()
+                        .clone()
+                        .metadata
+                        .unwrap(),
+                    )
+                    .unwrap();
+                    assert!(
+                        neurons.iter().any(|n| n.id.unwrap().id == neuron_info.neuron_id),
+                    );
+                });
+                Ok(())
+            },
+        )
+        .unwrap();
 }
