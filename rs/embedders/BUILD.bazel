@@ -22,6 +22,7 @@ DEPENDENCIES = [
     "//rs/utils/lru_cache",
     "//rs/wasm_transform",
     "@crate_index//:anyhow",
+    "@crate_index//:bincode",
     "@crate_index//:libc",
     "@crate_index//:libflate",
     "@crate_index//:nix",
