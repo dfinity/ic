@@ -1,89 +1,11 @@
 use crate::{
-    DEFAULT_BLOCK_HASH, DEFAULT_BLOCK_NUMBER, DEFAULT_DEPOSIT_BLOCK_NUMBER,
-    DEFAULT_DEPOSIT_LOG_INDEX, DEFAULT_ERC20_DEPOSIT_LOG_INDEX,
-    DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS, EFFECTIVE_GAS_PRICE, GAS_USED, MINTER_ADDRESS,
-    RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_EVENT_TOPIC, USDC_ERC20_CONTRACT_ADDRESS,
+    DEFAULT_BLOCK_HASH, DEFAULT_BLOCK_NUMBER, DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS,
+    EFFECTIVE_GAS_PRICE, GAS_USED, MINTER_ADDRESS, USDC_ERC20_CONTRACT_ADDRESS,
 };
 use ethers_core::abi::AbiDecode;
 use ethers_core::utils::rlp;
-use ic_ethereum_types::Address;
 use serde_json::{json, Value};
 use std::str::FromStr;
-
-#[derive(Clone)]
-pub struct EthLogEntry {
-    pub encoded_principal: String,
-    pub amount: u64,
-    pub from_address: Address,
-    pub transaction_hash: String,
-}
-
-impl From<EthLogEntry> for ethers_core::types::Log {
-    fn from(log_entry: EthLogEntry) -> Self {
-        let amount_hex = format!("0x{:0>64x}", log_entry.amount);
-        let topics = vec![
-            RECEIVED_ETH_EVENT_TOPIC.to_string(),
-            format!(
-                "0x000000000000000000000000{}",
-                hex::encode(log_entry.from_address.as_ref())
-            ),
-            log_entry.encoded_principal,
-        ];
-
-        let json_value = json!({
-            "address": "0xb44b5e756a894775fc32eddf3314bb1b1944dc34",
-            "blockHash": "0x79cfe76d69337dae199e32c2b6b3d7c2668bfe71a05f303f95385e70031b9ef8",
-            "blockNumber": format!("0x{:x}", DEFAULT_DEPOSIT_BLOCK_NUMBER),
-            "data": amount_hex,
-            "logIndex": format!("0x{:x}", DEFAULT_DEPOSIT_LOG_INDEX),
-            "removed": false,
-            "topics": topics,
-            "transactionHash": log_entry.transaction_hash,
-            "transactionIndex": "0x33"
-        });
-        serde_json::from_value(json_value).expect("BUG: invalid log entry")
-    }
-}
-
-#[derive(Clone)]
-pub struct Erc20LogEntry {
-    pub encoded_principal: String,
-    pub amount: u64,
-    pub from_address: Address,
-    pub transaction_hash: String,
-    pub erc20_contract_address: Address,
-}
-
-impl From<Erc20LogEntry> for ethers_core::types::Log {
-    fn from(log_entry: Erc20LogEntry) -> Self {
-        let amount_hex = format!("0x{:0>64x}", log_entry.amount);
-        let topics = vec![
-            RECEIVED_ERC20_EVENT_TOPIC.to_string(),
-            format!(
-                "0x000000000000000000000000{}",
-                hex::encode(log_entry.erc20_contract_address.as_ref()),
-            ),
-            format!(
-                "0x000000000000000000000000{}",
-                hex::encode(log_entry.from_address.as_ref())
-            ),
-            log_entry.encoded_principal,
-        ];
-
-        let json_value = json!({
-            "address": "0xb44b5e756a894775fc32eddf3314bb1b1944dc34",
-            "blockHash": "0x79cfe76d69337dae199e32c2b6b3d7c2668bfe71a05f303f95385e70031b9ef8",
-            "blockNumber": format!("0x{:x}", DEFAULT_DEPOSIT_BLOCK_NUMBER),
-            "data": amount_hex,
-            "logIndex": format!("0x{:x}", DEFAULT_ERC20_DEPOSIT_LOG_INDEX),
-            "removed": false,
-            "topics": topics,
-            "transactionHash": log_entry.transaction_hash,
-            "transactionIndex": "0x33"
-        });
-        serde_json::from_value(json_value).expect("BUG: invalid log entry")
-    }
-}
 
 pub fn empty_logs() -> Vec<ethers_core::types::Log> {
     vec![]
