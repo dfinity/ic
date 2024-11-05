@@ -6,6 +6,7 @@ use crate::{
     pb::v1::{neuron::Followees, BallotInfo, Vote},
     temporarily_disable_active_neurons_in_stable_memory,
     temporarily_enable_active_neurons_in_stable_memory,
+    temporarily_enable_stable_memory_following_index,
 };
 use canbench_rs::{bench, bench_fn, BenchResult};
 use ic_nervous_system_common::E8;
@@ -178,6 +179,8 @@ fn add_neuron_inactive_typical() -> BenchResult {
 
 #[bench(raw)]
 fn update_recent_ballots() -> BenchResult {
+    let _a = temporarily_enable_active_neurons_in_stable_memory();
+    let _b = temporarily_enable_stable_memory_following_index();
     let mut rng = new_rng();
     let mut neuron_store = set_up_neuron_store(&mut rng, 100, 200);
     let mut neuron = build_neuron(&mut rng, NeuronLocation::Heap, NeuronSize::Maximum);
