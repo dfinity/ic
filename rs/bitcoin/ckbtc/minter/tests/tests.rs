@@ -2194,7 +2194,7 @@ fn test_retrieve_btc_with_approval_fail() {
         vec![
             reimbursed_tx_block_index_2.clone(),
             BtcRetrievalStatusV2 {
-                block_index: 6,
+                block_index: 5,
                 status_v2: Some(RetrieveBtcStatusV2::WillReimburse(ReimburseDepositTask {
                     account: user_account,
                     amount: withdrawal_amount,
@@ -2215,12 +2215,12 @@ fn test_retrieve_btc_with_approval_fail() {
         vec![
             reimbursed_tx_block_index_2,
             BtcRetrievalStatusV2 {
-                block_index: 6,
+                block_index: 5,
                 status_v2: Some(RetrieveBtcStatusV2::Reimbursed(ReimbursedDeposit {
                     account: user_account,
                     amount: withdrawal_amount,
                     reason: CallFailed,
-                    mint_block_index: 7
+                    mint_block_index: 6
                 }))
             }
         ]
