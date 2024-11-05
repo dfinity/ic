@@ -109,7 +109,7 @@ impl KernelCommandLine {
         argument: &str,
         value: Option<&str>,
     ) -> Result<(), UnrepresentableValue> {
-        let formatted_argument = Self::format_argument(argument, value)?
+        let formatted_argument = Self::format_argument(argument, value)?;
         let to_add = formatted_argument;
         self.tokenized_arguments.push(to_add);
         Ok(())
