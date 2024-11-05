@@ -86,7 +86,6 @@ async fn test_run_chunked_task(params: ChunkedTaskParams) -> TaskResult {
                 is_message_over_soft_limit: Box<dyn Fn() -> bool>|
      -> Continuation<u64, u64, u64> {
         let (mut index, mut sum) = match continuation {
-            Continuation::Start(index) => (index, 0),
             Continuation::Continue(index, sum) => (index, sum),
             Continuation::Done(_) => panic!("Continuation is done, we should not get this"),
         };
@@ -107,7 +106,7 @@ async fn test_run_chunked_task(params: ChunkedTaskParams) -> TaskResult {
 
     let result = run_chunked_task(
         task,
-        initial_value,
+        Continuation::Continue(initial_value, 0),
         params.message_threshold,
         params.upper_bound,
     )

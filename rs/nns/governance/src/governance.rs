@@ -79,6 +79,7 @@ use ic_nervous_system_common::{
     ONE_YEAR_SECONDS,
 };
 use ic_nervous_system_governance::maturity_modulation::apply_maturity_modulation;
+use ic_nervous_system_long_message::{run_chunked_task, Continuation};
 use ic_nervous_system_proto::pb::v1::{GlobalTimeOfDay, Principals};
 use ic_nns_common::{
     pb::v1::{NeuronId, ProposalId},
@@ -5769,24 +5770,43 @@ impl Governance {
         let governance: &'static mut Governance = unsafe { std::mem::transmute(self) };
         set_timer_in_canister_env(Duration::from_millis(0), move || {
             spawn_in_canister_env(async move {
-                for (k, v) in votes_cast.iter() {
-                    match governance
-                        .neuron_store
-                        .with_neuron_mut(&NeuronId { id: *k }, |neuron| {
-                            // Register the neuron's ballot in the
-                            // neuron itself.
-                            neuron.register_recent_ballot(topic, &proposal_id, *v);
-                        }) {
-                        Ok(_) => {}
-                        Err(_) => {
-                            println!("error in record_neuron_vote when registering recent ballot: Neuron not found");
-                        }
+                let task = move |c: Continuation<u64, (), BTreeMap<u64, Vote>>,
+                                 is_message_over_limit: Box<dyn Fn() -> bool>|
+                      -> Continuation<u64, (), BTreeMap<u64, Vote>> {
+                    let (start_point, votes_cast) = match c {
+                        Continuation::Continue(index, data) => (index, data),
+                        Continuation::Done(_) => panic!("Should not get here!"),
                     };
-                    ic_nervous_system_long_message::break_message_if_over_instructions(
-                        18 * BILLION,
-                        Some(500 * BILLION),
-                    );
-                }
+
+                    for (k, v) in votes_cast.range(start_point..) {
+                        if is_message_over_limit() {
+                            return Continuation::Continue(*k, votes_cast);
+                        }
+                        match governance.neuron_store.with_neuron_mut(
+                            &NeuronId { id: *k },
+                            |neuron| {
+                                // Register the neuron's ballot in the
+                                // neuron itself.
+                                neuron.register_recent_ballot(topic, &proposal_id, *v);
+                            },
+                        ) {
+                            Ok(_) => {}
+                            Err(_) => {
+                                println!("error in record_neuron_vote when registering recent ballot: Neuron not found");
+                            }
+                        };
+                    }
+
+                    Continuation::Done(())
+                };
+
+                run_chunked_task(
+                    task,
+                    Continuation::Continue(0, votes_cast),
+                    18 * BILLION,
+                    Some(500 * BILLION),
+                )
+                .await;
             })
         });
 

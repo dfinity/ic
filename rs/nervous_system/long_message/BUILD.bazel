@@ -9,7 +9,13 @@ DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:serde",
     # Keep sorted.
-]
+] + select({
+    "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
+    "//conditions:default": [
+        # Keep sorted.
+        "//rs/nervous_system/temporary",
+    ],
+})
 
 DEV_DEPENDENCIES = DEPENDENCIES + [
     # Keep sorted.
