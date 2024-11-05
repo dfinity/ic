@@ -129,15 +129,15 @@ impl TryFrom<&str> for KernelCommandLine {
 
     fn try_from(cmdline: &str) -> Result<Self, ImproperlyQuotedValue> {
         let mut res: Vec<String> = vec![];
-        let mut curr: Vec<char> = vec![];
+        let mut curr: String = "".into();
         let mut is_quoted = false;
         for ch in cmdline.chars() {
             match ch {
                 '"' => {
                     if is_quoted {
                         curr.push(ch);
-                        res.push(curr.iter().collect());
-                        curr = vec![];
+                        res.push(curr.clone());
+                        curr = "".into();
                         is_quoted = false;
                     } else {
                         curr.push(ch);
@@ -148,8 +148,8 @@ impl TryFrom<&str> for KernelCommandLine {
                     if is_quoted {
                         curr.push(ch);
                     } else if !curr.is_empty() {
-                        res.push(curr.iter().collect());
-                        curr = vec![];
+                        res.push(curr.clone());
+                        curr = "".into();
                     }
                 }
                 _ => {
@@ -159,11 +159,9 @@ impl TryFrom<&str> for KernelCommandLine {
         }
         if curr.is_empty() {
         } else if is_quoted {
-            return Err(ImproperlyQuotedValue {
-                val: curr.iter().collect(),
-            });
+            return Err(ImproperlyQuotedValue { val: curr });
         } else {
-            res.push(curr.iter().collect());
+            res.push(curr);
         }
         Ok(Self {
             tokenized_arguments: res,
