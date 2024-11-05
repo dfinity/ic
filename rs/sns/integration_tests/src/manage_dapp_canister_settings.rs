@@ -160,7 +160,6 @@ fn test_manage_dapp_canister_settings_successful() {
             Some(0),
             ic_management_canister_types::LogVisibilityV2::Controllers,
             Some(2_000_000_000),
-            0
         ),
     );
 }
