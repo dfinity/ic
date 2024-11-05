@@ -598,7 +598,6 @@ impl<T> SlotEntry<T> {
 }
 
 #[cfg(test)]
-#[allow(clippy::disallowed_methods)]
 mod tests {
     use std::{convert::Infallible, time::Duration};
 
