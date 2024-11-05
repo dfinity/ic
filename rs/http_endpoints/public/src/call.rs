@@ -298,18 +298,13 @@ impl IngressMessageSubmitter {
 
         // Submission will fail if P2P is not running, meaning there is
         // no receiver for the ingress message.
-        let send_ingress_to_p2p_failed = ingress_tx
+        ingress_tx
             .send(UnvalidatedArtifactMutation::Insert((message, node_id)))
             .await
-            .is_err();
-
-        if send_ingress_to_p2p_failed {
-            return Err(HttpError {
+            .map_err(|_| HttpError {
                 status: StatusCode::INTERNAL_SERVER_ERROR,
                 message: "P2P is not running on this node.".to_string(),
-            });
-        }
-        Ok(())
+            })
     }
 }
 

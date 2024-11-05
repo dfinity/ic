@@ -397,6 +397,7 @@ mod available_slot_set {
 }
 
 #[cfg(test)]
+#[allow(clippy::disallowed_methods)]
 mod tests {
     use anyhow::anyhow;
     use axum::http::Response;
