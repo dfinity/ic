@@ -1388,7 +1388,7 @@ fn test_min_retrieval_amount_testnet() {
     let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
     assert_eq!(retrieve_btc_min_amount, 100_000 + min_amount);
 
-    // When fee is 0, it back to the original setting
+    // When fee becomes 0 again, it goes back to the initial setting
     ckbtc.set_fee_percentiles(&vec![0; 100]);
     ckbtc.refresh_fee_percentiles();
     let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
