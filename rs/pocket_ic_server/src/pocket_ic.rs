@@ -522,6 +522,7 @@ impl PocketIc {
                 subnet_config.scheduler_config.max_instructions_per_round = instruction_limit;
             }
             subnet_config.scheduler_config.max_instructions_per_message = instruction_limit;
+            subnet_config.scheduler_config.max_instructions_per_slice = instruction_limit;
             subnet_config
                 .scheduler_config
                 .max_instructions_per_message_without_dts = instruction_limit;

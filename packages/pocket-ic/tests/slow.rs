@@ -39,7 +39,10 @@ fn execute_many_instructions(
         Encode!(&instructions).unwrap(),
     );
     let t1 = pic.get_time();
+    // testing for the exact number n of rounds could lead to flakiness
+    // so we test for [n, n + 1] instead
     assert!(t1 >= t0 + Duration::from_nanos(dts_rounds));
+    assert!(t1 <= t0 + Duration::from_nanos(dts_rounds + 1));
 
     if system_subnet {
         let cycles = pic.cycle_balance(can_id);
@@ -75,7 +78,7 @@ fn test_benchmarking_system_subnet() {
 fn test_dts() {
     let pic = PocketIcBuilder::new().with_application_subnet().build();
 
-    let instructions = 4_000_000_000_u64;
+    let instructions = 8_000_000_000_u64;
     let dts_rounds = instructions / 2_000_000_000;
     execute_many_instructions(&pic, instructions, dts_rounds, false).unwrap();
 }
