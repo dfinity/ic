@@ -1,5 +1,5 @@
 use ic_base_types::{PrincipalId, SubnetId};
-use ic_pocket_ic_tests::{StateMachine, StateMachineBuilder, StateMachineStateDir};
+use ic_pocket_ic_tests::{StateMachine, StateMachineBuilder};
 
 use pocket_ic::common::rest::SubnetKind;
 use std::{
@@ -69,7 +69,7 @@ fn new_state_machine_with_golden_state_or_panic(setup_config: SetupConfig) -> St
         .with_state_machine_state_dir(
             subnet_kind,
             subnet_id,
-            Box::new(state_dir),
+            state_dir.path(),
             nonmainnet_features,
         );
 
@@ -89,7 +89,7 @@ enum StateDir {
     Cache(PathBuf),
 }
 
-impl StateMachineStateDir for StateDir {
+impl StateDir {
     fn path(&self) -> PathBuf {
         match self {
             Self::Temp(temp_dir) => temp_dir.path().to_path_buf(),

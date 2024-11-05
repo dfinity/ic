@@ -1,82 +1,72 @@
 pub use ic_error_types::{ErrorCode, UserError};
-pub use ic_state_machine_tests::StateMachineStateDir;
 pub use ic_types::ingress::WasmResult;
 
-use ic_config::execution_environment::{BitcoinConfig, Config};
-use ic_config::flag_status::FlagStatus;
-use ic_config::subnet_config::SubnetConfig;
+use candid::Principal;
 use ic_management_canister_types::{
-    CanisterInstallMode, CanisterSettingsArgs, CanisterStatusResultV2,
+    CanisterInstallMode, CanisterSettingsArgs, CanisterStatusResultV2, InstallCodeArgs,
+    ProvisionalCreateCanisterWithCyclesArgs,
 };
-use ic_registry_subnet_type::SubnetType;
-use ic_state_machine_tests::StateMachineConfig;
+use ic_protobuf::state::ingress::v1::ErrorCode as ErrorCodeProto;
 use ic_types::messages::MessageId;
 use ic_types::time::Time;
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
+use pocket_ic::call_candid_as;
 use pocket_ic::common::rest::SubnetKind;
-use std::str::FromStr;
+use pocket_ic::common::rest::{RawEffectivePrincipal, RawMessageId};
+use pocket_ic::management_canister::CanisterIdRecord;
+use pocket_ic::{CallError, PocketIc, PocketIcBuilder};
+use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 
-#[derive(Default)]
 pub struct StateMachine {
-    sm: ic_state_machine_tests::StateMachine,
+    sm: PocketIc,
 }
 
-#[derive(Default)]
+impl Default for StateMachine {
+    fn default() -> Self {
+        Self {
+            sm: PocketIc::new(),
+        }
+    }
+}
+
 pub struct StateMachineBuilder {
-    sm_builder: ic_state_machine_tests::StateMachineBuilder,
+    sm_builder: PocketIcBuilder,
+    time: Option<SystemTime>,
+}
+
+impl Default for StateMachineBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl StateMachineBuilder {
     pub fn new() -> Self {
         Self {
-            sm_builder: ic_state_machine_tests::StateMachineBuilder::new(),
+            sm_builder: PocketIcBuilder::new(),
+            time: None,
         }
     }
 
     pub fn with_ii_subnet(self) -> Self {
-        let bitcoin_testnet_canister_id: CanisterId =
-            CanisterId::from_str("g4xu7-jiaaa-aaaan-aaaaq-cai").unwrap();
-        let bitcoin_mainnet_canister_id: CanisterId =
-            CanisterId::from_str("ghsi2-tqaaa-aaaan-aaaca-cai").unwrap();
         Self {
-            sm_builder: self
-                .sm_builder
-                .with_extra_canister_range(std::ops::RangeInclusive::<CanisterId>::new(
-                    CanisterId::from_u64(0x2100000),
-                    CanisterId::from_u64(0x21FFFFE),
-                ))
-                .with_config(Some(StateMachineConfig::new(
-                    SubnetConfig::new(SubnetType::System),
-                    Config {
-                        bitcoin: BitcoinConfig {
-                            testnet_canister_id: Some(bitcoin_testnet_canister_id),
-                            mainnet_canister_id: Some(bitcoin_mainnet_canister_id),
-                            ..Default::default()
-                        },
-                        ..Default::default()
-                    },
-                ))),
+            sm_builder: self.sm_builder.with_ii_subnet(),
+            ..self
         }
     }
 
     pub fn with_bitcoin_subnet(self) -> Self {
         Self {
-            sm_builder: self
-                .sm_builder
-                .with_extra_canister_range(std::ops::RangeInclusive::<CanisterId>::new(
-                    CanisterId::from_u64(0x1A00000),
-                    CanisterId::from_u64(0x1AFFFFE),
-                )),
+            sm_builder: self.sm_builder.with_bitcoin_subnet(),
+            ..self
         }
     }
 
     pub fn with_fiduciary_subnet(self) -> Self {
         Self {
-            sm_builder: self
-                .sm_builder
-                .with_subnet_type(SubnetType::Application)
-                .with_subnet_size(28),
+            sm_builder: self.sm_builder.with_fiduciary_subnet(),
+            ..self
         }
     }
 
@@ -84,72 +74,63 @@ impl StateMachineBuilder {
         self,
         subnet_kind: SubnetKind,
         subnet_id: SubnetId,
-        state_dir: Box<dyn StateMachineStateDir>,
+        state_dir: PathBuf,
         nonmainnet_features: bool,
     ) -> Self {
-        let subnet_type = match subnet_kind {
-            SubnetKind::Fiduciary => SubnetType::Application,
-            SubnetKind::SNS => SubnetType::Application,
-            SubnetKind::NNS => SubnetType::System,
-            _ => panic!("Unexpected subnet_kind: {:?}", subnet_kind),
-        };
-        let config = if nonmainnet_features {
-            Some(StateMachineConfig::new(
-                SubnetConfig::new(subnet_type),
-                Config {
-                    rate_limiting_of_instructions: FlagStatus::Disabled,
-                    ..Config::default()
-                },
-            ))
-        } else {
-            None
-        };
         Self {
             sm_builder: self
                 .sm_builder
-                .with_state_machine_state_dir(state_dir)
-                .with_subnet_id(subnet_id)
-                .with_extra_canister_range(match subnet_kind {
-                    SubnetKind::Fiduciary => std::ops::RangeInclusive::<CanisterId>::new(
-                        CanisterId::from_u64(0x2300000),
-                        CanisterId::from_u64(0x23FFFFE),
-                    ),
-                    SubnetKind::SNS => std::ops::RangeInclusive::<CanisterId>::new(
-                        CanisterId::from_u64(0x2000000),
-                        CanisterId::from_u64(0x20FFFFE),
-                    ),
-                    SubnetKind::NNS => std::ops::RangeInclusive::<CanisterId>::new(
-                        CanisterId::from_u64(0x2100000),
-                        CanisterId::from_u64(0x21FFFFE),
-                    ),
-                    _ => panic!("Unexpected subnet_kind: {:?}", subnet_kind),
-                })
-                .with_config(config),
+                .with_subnet_state(subnet_kind, subnet_id.get().0, state_dir)
+                .with_nonmainnet_features(nonmainnet_features),
+            ..self
         }
     }
 
     pub fn with_time(self, time: Time) -> Self {
         Self {
-            sm_builder: self.sm_builder.with_time(time),
+            time: Some(time.into()),
+            ..self
         }
     }
 
     pub fn with_current_time(self) -> Self {
-        let time = Time::try_from(SystemTime::now()).expect("Current time conversion failed");
-        self.with_time(time)
+        Self {
+            time: Some(SystemTime::now()),
+            ..self
+        }
     }
 
     pub fn build(self) -> StateMachine {
-        StateMachine {
-            sm: self.sm_builder.build(),
+        let sm = self.sm_builder.build();
+        if let Some(time) = self.time {
+            sm.set_time(time);
         }
+        StateMachine { sm }
     }
 }
 
+fn wasm_result(wasm_result: pocket_ic::WasmResult) -> WasmResult {
+    match wasm_result {
+        pocket_ic::WasmResult::Reply(bytes) => WasmResult::Reply(bytes),
+        pocket_ic::WasmResult::Reject(msg) => WasmResult::Reject(msg),
+    }
+}
+
+fn user_error(user_error: pocket_ic::UserError) -> UserError {
+    let error_code = ErrorCodeProto::try_from(user_error.code as i32)
+        .unwrap()
+        .try_into()
+        .unwrap();
+    UserError::new(error_code, user_error.description)
+}
+
 impl StateMachine {
-    // TODO: replace by num_canisters in NNS integration tests
     pub fn num_running_canisters(&self) -> u64 {
-        self.sm.num_running_canisters()
+        let metrics = self
+            .sm
+            .get_subnet_metrics(self.get_subnet_id().get().0)
+            .unwrap();
+        metrics.num_canisters
     }
 
     pub fn new() -> Self {
@@ -157,17 +138,23 @@ impl StateMachine {
     }
 
     pub fn canister_memory_usage_bytes(&self) -> u64 {
-        self.sm.canister_memory_usage_bytes()
+        let metrics = self
+            .sm
+            .get_subnet_metrics(self.get_subnet_id().get().0)
+            .unwrap();
+        metrics.canister_state_bytes
     }
 
     pub fn get_subnet_id(&self) -> SubnetId {
-        self.sm.get_subnet_id()
+        SubnetId::from(PrincipalId(
+            self.sm
+                .get_subnet(self.sm.topology().default_effective_canister_id.into())
+                .unwrap(),
+        ))
     }
 
     pub fn get_subnet_ids(&self) -> Vec<SubnetId> {
-        let res = self.sm.get_subnet_ids();
-        assert_eq!(res, vec![self.sm.get_subnet_id()]);
-        res
+        vec![self.get_subnet_id()]
     }
 
     pub fn tick(&self) {
@@ -179,19 +166,19 @@ impl StateMachine {
     }
 
     pub fn time(&self) -> SystemTime {
-        self.sm.time()
-    }
-
-    pub fn time_of_next_round(&self) -> SystemTime {
-        self.sm.time_of_next_round()
-    }
-
-    pub fn get_time(&self) -> Time {
         self.sm.get_time()
     }
 
+    pub fn time_of_next_round(&self) -> SystemTime {
+        todo!()
+    }
+
+    pub fn get_time(&self) -> Time {
+        self.time().try_into().unwrap()
+    }
+
     pub fn get_time_of_next_round(&self) -> Time {
-        self.sm.get_time_of_next_round()
+        self.time_of_next_round().try_into().unwrap()
     }
 
     pub fn advance_time(&self, amount: Duration) {
@@ -199,15 +186,24 @@ impl StateMachine {
     }
 
     pub fn root_key_der(&self) -> Vec<u8> {
-        self.sm.root_key_der()
+        self.sm.root_key().unwrap()
     }
 
     pub fn await_ingress(
         &self,
         msg_id: MessageId,
-        max_ticks: usize,
+        _max_ticks: usize,
     ) -> Result<WasmResult, UserError> {
-        self.sm.await_ingress(msg_id, max_ticks)
+        let raw_msg_id = RawMessageId {
+            message_id: msg_id.as_bytes().to_vec(),
+            effective_principal: RawEffectivePrincipal::CanisterId(
+                self.sm.topology().default_effective_canister_id.canister_id,
+            ),
+        };
+        self.sm
+            .await_call(raw_msg_id)
+            .map(wasm_result)
+            .map_err(user_error)
     }
 
     pub fn install_wasm_in_mode(
@@ -217,12 +213,41 @@ impl StateMachine {
         wasm: Vec<u8>,
         payload: Vec<u8>,
     ) -> Result<(), UserError> {
-        self.sm
-            .install_wasm_in_mode(canister_id, mode, wasm, payload)
+        post_process(call_candid_as(
+            &self.sm,
+            Principal::management_canister(),
+            RawEffectivePrincipal::CanisterId(canister_id.get().to_vec()),
+            Principal::anonymous(),
+            "install_code",
+            (InstallCodeArgs {
+                mode,
+                canister_id: canister_id.into(),
+                wasm_module: wasm,
+                arg: payload,
+                sender_canister_version: None,
+                compute_allocation: None,
+                memory_allocation: None,
+            },),
+        ))
     }
 
     pub fn create_canister(&self, settings: Option<CanisterSettingsArgs>) -> CanisterId {
-        self.sm.create_canister(settings)
+        let CanisterIdRecord { canister_id } = call_candid_as(
+            &self.sm,
+            Principal::management_canister(),
+            RawEffectivePrincipal::None,
+            Principal::anonymous(),
+            "provisional_create_canister_with_cycles",
+            (ProvisionalCreateCanisterWithCyclesArgs {
+                amount: None,
+                settings,
+                specified_id: None,
+                sender_canister_version: None,
+            },),
+        )
+        .map(|(x,)| x)
+        .unwrap();
+        CanisterId::unchecked_from_principal(PrincipalId(canister_id))
     }
 
     pub fn create_canister_with_cycles(
@@ -231,8 +256,22 @@ impl StateMachine {
         cycles: Cycles,
         settings: Option<CanisterSettingsArgs>,
     ) -> CanisterId {
-        self.sm
-            .create_canister_with_cycles(specified_id, cycles, settings)
+        let CanisterIdRecord { canister_id } = call_candid_as(
+            &self.sm,
+            Principal::management_canister(),
+            RawEffectivePrincipal::None,
+            Principal::anonymous(),
+            "provisional_create_canister_with_cycles",
+            (ProvisionalCreateCanisterWithCyclesArgs {
+                amount: Some(cycles.into()),
+                settings,
+                specified_id,
+                sender_canister_version: None,
+            },),
+        )
+        .map(|(x,)| x)
+        .unwrap();
+        CanisterId::unchecked_from_principal(PrincipalId(canister_id))
     }
 
     pub fn install_canister(
@@ -241,7 +280,9 @@ impl StateMachine {
         payload: Vec<u8>,
         settings: Option<CanisterSettingsArgs>,
     ) -> Result<CanisterId, UserError> {
-        self.sm.install_canister(module, payload, settings)
+        let canister_id = self.create_canister(settings);
+        self.install_wasm_in_mode(canister_id, CanisterInstallMode::Install, module, payload)?;
+        Ok(canister_id)
     }
 
     pub fn install_canister_wat(
@@ -260,8 +301,7 @@ impl StateMachine {
         module: Vec<u8>,
         payload: Vec<u8>,
     ) -> Result<(), UserError> {
-        self.sm
-            .install_existing_canister(canister_id, module, payload)
+        self.install_wasm_in_mode(canister_id, CanisterInstallMode::Install, module, payload)
     }
 
     pub fn install_existing_canister_wat(
@@ -270,7 +310,7 @@ impl StateMachine {
         wat: &str,
         payload: Vec<u8>,
     ) -> Result<(), UserError> {
-        self.sm.install_existing_canister(
+        self.install_existing_canister(
             canister_id,
             wat::parse_str(wat).expect("invalid WAT"),
             payload,
@@ -283,7 +323,10 @@ impl StateMachine {
         module: Vec<u8>,
         payload: Vec<u8>,
     ) -> Result<(), UserError> {
-        self.sm.reinstall_canister(canister_id, module, payload)
+        post_process(
+            self.sm
+                .reinstall_canister(canister_id.into(), module, payload, None),
+        )
     }
 
     pub fn install_canister_with_cycles(
@@ -322,11 +365,18 @@ impl StateMachine {
         canister_id: &CanisterId,
         settings: CanisterSettingsArgs,
     ) -> Result<(), UserError> {
-        self.sm.update_settings(canister_id, settings)
+        post_process(call_candid_as::<_, ()>(
+            &self.sm,
+            Principal::management_canister(),
+            RawEffectivePrincipal::CanisterId(canister_id.get().to_vec()),
+            Principal::anonymous(),
+            "update_settings",
+            (settings,),
+        ))
     }
 
     pub fn canister_exists(&self, canister: CanisterId) -> bool {
-        self.sm.canister_exists(canister)
+        self.sm.canister_exists(canister.into())
     }
 
     pub fn query(
@@ -351,7 +401,14 @@ impl StateMachine {
         method_payload: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
         self.sm
-            .query_as_with_delegation(sender, receiver, method, method_payload, None)
+            .query_call(
+                receiver.get().0,
+                sender.0,
+                &method.to_string(),
+                method_payload,
+            )
+            .map(wasm_result)
+            .map_err(user_error)
     }
 
     pub fn execute_ingress(
@@ -371,10 +428,12 @@ impl StateMachine {
         payload: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
         self.sm
-            .execute_ingress_as(sender, canister_id, method, payload)
+            .update_call(canister_id.get().0, sender.0, &method.to_string(), payload)
+            .map(wasm_result)
+            .map_err(user_error)
     }
 
-    pub fn start_canister(&self, canister_id: CanisterId) -> Result<WasmResult, UserError> {
+    pub fn start_canister(&self, canister_id: CanisterId) -> Result<(), UserError> {
         self.start_canister_as(PrincipalId::new_anonymous(), canister_id)
     }
 
@@ -382,11 +441,14 @@ impl StateMachine {
         &self,
         sender: PrincipalId,
         canister_id: CanisterId,
-    ) -> Result<WasmResult, UserError> {
-        self.sm.start_canister_as(sender, canister_id)
+    ) -> Result<(), UserError> {
+        post_process(
+            self.sm
+                .start_canister(canister_id.into(), Some(sender.into())),
+        )
     }
 
-    pub fn stop_canister(&self, canister_id: CanisterId) -> Result<WasmResult, UserError> {
+    pub fn stop_canister(&self, canister_id: CanisterId) -> Result<(), UserError> {
         self.stop_canister_as(PrincipalId::new_anonymous(), canister_id)
     }
 
@@ -394,8 +456,11 @@ impl StateMachine {
         &self,
         sender: PrincipalId,
         canister_id: CanisterId,
-    ) -> Result<WasmResult, UserError> {
-        self.sm.stop_canister_as(sender, canister_id)
+    ) -> Result<(), UserError> {
+        post_process(
+            self.sm
+                .stop_canister(canister_id.into(), Some(sender.into())),
+        )
     }
 
     pub fn canister_status(
@@ -410,22 +475,44 @@ impl StateMachine {
         sender: PrincipalId,
         canister_id: CanisterId,
     ) -> Result<Result<CanisterStatusResultV2, String>, UserError> {
-        self.sm.canister_status_as(sender, canister_id)
+        let res = call_candid_as::<_, (CanisterStatusResultV2,)>(
+            &self.sm,
+            sender.0,
+            RawEffectivePrincipal::CanisterId(canister_id.get().to_vec()),
+            Principal::anonymous(),
+            "canister_status",
+            (CanisterIdRecord {
+                canister_id: canister_id.into(),
+            },),
+        );
+        match res {
+            Ok(res) => Ok(Ok(res.0)),
+            Err(CallError::Reject(msg)) => Ok(Err(msg)),
+            Err(CallError::UserError(err)) => Err(user_error(err)),
+        }
     }
 
-    pub fn delete_canister(&self, canister_id: CanisterId) -> Result<WasmResult, UserError> {
-        self.sm.delete_canister(canister_id)
+    pub fn delete_canister(&self, canister_id: CanisterId) -> Result<(), UserError> {
+        post_process(self.sm.delete_canister(canister_id.into(), None))
     }
 
-    pub fn uninstall_code(&self, canister_id: CanisterId) -> Result<WasmResult, UserError> {
-        self.sm.uninstall_code(canister_id)
+    pub fn uninstall_code(&self, canister_id: CanisterId) -> Result<(), UserError> {
+        post_process(self.sm.uninstall_canister(canister_id.into(), None))
     }
 
     pub fn cycle_balance(&self, canister_id: CanisterId) -> u128 {
-        self.sm.cycle_balance(canister_id)
+        self.sm.cycle_balance(canister_id.into())
     }
 
     pub fn add_cycles(&self, canister_id: CanisterId, amount: u128) -> u128 {
-        self.sm.add_cycles(canister_id, amount)
+        self.sm.add_cycles(canister_id.into(), amount)
+    }
+}
+
+fn post_process(res: Result<(), CallError>) -> Result<(), UserError> {
+    match res {
+        Ok(()) => Ok(()),
+        Err(CallError::Reject(msg)) => panic!("Unexpected reject with message {}", msg),
+        Err(CallError::UserError(err)) => Err(user_error(err)),
     }
 }
