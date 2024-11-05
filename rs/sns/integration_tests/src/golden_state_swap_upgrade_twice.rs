@@ -11,43 +11,6 @@ use ic_types::{CanisterId, PrincipalId};
 use pretty_assertions::assert_eq;
 use std::str::FromStr;
 
-// TODO[NNS1-3386]: Remove this function once all existing Swaps are upgraded.
-fn redact_unavailable_swap_fields(swap_state: &mut GetStateResponse) {
-    // The following fields were added to the swap state later than some of the Swap canisters'
-    // last upgrade. These fields will become available after those canisters are upgraded.
-    //
-    // Why is it okay to redact these fields in this test? This test accompanies a data migration
-    // that sets these fields for Swaps that don't yet have it in post_upgrade.
-    {
-        let swap = swap_state.swap.clone().unwrap();
-        swap_state.swap = Some(Swap {
-            timers: None,
-            direct_participation_icp_e8s: None,
-            neurons_fund_participation_icp_e8s: None,
-            ..swap
-        });
-    }
-
-    // The following fields were added to the derived state later than some of the Swap canisters'
-    // last upgrade. These fields will become available after those canisters are upgraded.
-    //
-    // Why is it okay to redact these fields in this test? As the name suggests, these fields are
-    // part of Swap's *derived* state, i.e., they are not stored in canister memory but recomputed
-    // upon request. Therefore, the only reason they might not have reasonable values is when
-    // the Swap canister's *persisted* state (`swap_state.swap`) too incomplete to compute them.
-    {
-        let derived = swap_state.derived.unwrap();
-        swap_state.derived = Some(DerivedState {
-            direct_participant_count: None,
-            cf_participant_count: None,
-            cf_neuron_count: None,
-            direct_participation_icp_e8s: None,
-            neurons_fund_participation_icp_e8s: None,
-            ..derived
-        });
-    }
-}
-
 fn get_state(
     state_machine: &StateMachine,
     swap_canister_id: CanisterId,
@@ -118,13 +81,6 @@ fn run_test_for_swap(state_machine: &StateMachine, swap_canister_id: &str, sns_n
                 ..
             })
         );
-
-        // Some fields need to be redacted as they were introduced after some Swaps were created.
-        redact_unavailable_swap_fields(&mut swap_post_state);
-
-        // Since some SNSs do have (some of) the new fields, we need to redact the same set of
-        // fields from the pre-state, too.
-        redact_unavailable_swap_fields(&mut swap_pre_state);
 
         // Otherwise, the states before and after the migration should match.
         assert_eq!(
