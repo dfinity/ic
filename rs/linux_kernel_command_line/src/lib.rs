@@ -64,7 +64,8 @@ impl KernelCommandLine {
         let mut firstpos: Option<usize> = None;
         self.tokenized_arguments = self
             .tokenized_arguments
-            .iter()
+            .clone()
+            .into_iter()
             .enumerate()
             .filter(|(pos, arg)| {
                 let res =
@@ -74,7 +75,7 @@ impl KernelCommandLine {
                 }
                 res
             })
-            .map(|(_, x)| x.clone())
+            .map(|(_, x)| x)
             .collect::<Vec<String>>();
         firstpos
     }
