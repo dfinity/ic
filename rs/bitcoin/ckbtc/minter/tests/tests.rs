@@ -1787,7 +1787,7 @@ fn test_ledger_memo() {
     use ic_ckbtc_minter::memo::{BurnMemo, Status};
 
     let decoded_data = minicbor::decode::<BurnMemo>(&memo.0).expect("failed to decode memo");
-    // With the new KYT canister, retireve_btc incurs no kyt_fee
+    // `retrieve_btc` incurs no KYT fee
     assert_eq!(
         decoded_data,
         BurnMemo::Convert {
