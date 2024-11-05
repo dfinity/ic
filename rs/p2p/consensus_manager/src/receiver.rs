@@ -259,7 +259,6 @@ where
                 Some(result) = self.artifact_processor_tasks.join_next() => {
                     match result {
                         Ok(id) => {
-                            self.metrics.assemble_task_finished_total.inc();
                             self.active_assembles.remove(&id);
                             debug_assert!(
                                 self.slot_table
@@ -497,6 +496,7 @@ where
                     .inc();
             },
         };
+        metrics.assemble_task_finished_total.inc();
         id_c
     }
 
