@@ -67,24 +67,47 @@ function get_large_drives() {
     lsblk -nld -o NAME,SIZE | grep 'T$' | grep -o '^\S*'
 }
 
+function _kernel_cmdline_bool() {
+    local parm=
+    local default="$1"
+    local target_parameter="$2"
+    local cmdline=()
+    if [[ -v TEST_CMDLINE ]]; then
+        local cmdline_file="${TEST_CMDLINE}"
+    else
+        local cmdline_file=/proc/cmdline
+    fi
+
+    # Read the command line values, parsed as quoted strings.
+    while IFS= read -r -d '' parm; do
+        cmdline+=("$parm")
+    done < <(xargs printf '%s\0' <"${cmdline_file}")
+
+    for parameter in "${cmdline[@]}"; do
+        case "$parameter" in
+            "$target_parameter" | "${target_parameter}=1")
+                return 0 # True
+                ;;
+            "${target_parameter}=0")
+                return 1 # False
+                ;;
+        esac
+    done
+
+    # Return based on the default value.
+    if [[ "$default" == "true" ]]; then
+        return 0 # True
+    else
+        return 1 # False
+    fi
+}
+
 # Check if a kernel command line boolean is set to 1 (true).
 # If set to 1, return true (0).
 # If set to 0, return false (1).
-# if absent or any other value, return true (1).
+# if absent or any other value, return true (0).
 function kernel_cmdline_bool_default_true() {
-    # Add spaces at the beginning and the end for greppability.
-    local cmdline=" $(cat /proc/cmdline) "
-    if echo "$cmdline" | grep -qF " $1=1 "; then
-        return 0
-    fi
-    # Covers the case where the option is present without =1 as value.
-    if echo "$cmdline" | grep -qF " $1 "; then
-        return 0
-    fi
-    if echo "$cmdline" | grep -qF " $1=0 "; then
-        return 1
-    fi
-    return 0
+    _kernel_cmdline_bool "true" "$1"
 }
 
 # Check if a kernel command line boolean is set to 1 (true).
@@ -92,17 +115,5 @@ function kernel_cmdline_bool_default_true() {
 # If set to 0, return false (1).
 # if absent or any other value, return false (1).
 function kernel_cmdline_bool_default_false() {
-    # Add spaces at the beginning and the end for greppability.
-    local cmdline=" $(cat /proc/cmdline) "
-    if echo "$cmdline" | grep -qF " $1=1"; then
-        return 0
-    fi
-    # Covers the case where the option is present without =1 as value.
-    if echo "$cmdline" | grep -qF " $1 "; then
-        return 0
-    fi
-    if echo "$cmdline" | grep -qF " $1=0"; then
-        return 1
-    fi
-    return 1
+    _kernel_cmdline_bool "false" "$1"
 }
