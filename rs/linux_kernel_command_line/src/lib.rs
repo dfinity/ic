@@ -251,15 +251,13 @@ mod tests {
             let result: String = cmdline.into();
             if result != *expected {
                 panic!(
-                    "During test {}:
-input:    {:?}
-argument: {:?}
-expected: {:?}
-actual:   {:?}",
-                    name, input, argument_to_remove, expected, result
+                    "During test {name}:
+input:    {input:?}
+argument: {argument_to_remove:?}
+expected: {expected:?}
+actual:   {result:?}",
                 );
             }
-            println!("{:?}", result);
         }
     }
 
@@ -282,8 +280,7 @@ actual:   {:?}",
         for (name, input) in table.iter() {
             if KernelCommandLine::try_from(*input).is_ok() {
                 panic!(
-                    "During test {}: input {:?} intentionally misquoted argument did not trigger error",
-                    name, input
+                    "During test {name}: input {input:?} intentionally misquoted argument did not trigger error",
                 )
             }
         }
