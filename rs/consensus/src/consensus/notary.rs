@@ -49,7 +49,11 @@ use std::{sync::Arc, time::Duration};
 /// The acceptable gap between the finalized height and the certified height. If
 /// the actual gap is greater than this, consensus starts slowing down the block
 /// rate.
-const ACCEPTABLE_FINALIZATION_CERTIFICATION_GAP: u64 = 3;
+const ACCEPTABLE_FINALIZATION_CERTIFICATION_GAP: u64 = 2;
+
+/// The amount of time consensus should delay notarization of the next block by,
+/// for each height that the latest finalized block is ahead of the latest certified state.
+const BACKLOG_DELAY: Duration = Duration::from_millis(2000);
 
 /// In order to have a bound on the advertised consensus pool, we place a limit on
 /// the notarization/certification gap.
@@ -329,14 +333,16 @@ fn get_adjusted_notary_delay_from_settings(
     // We adjust the delay based on the gap between the finalized height and the
     // certified height: when the certified height is more than
     // ACCEPTABLE_FINALIZATION_CERTIFICATION_GAP rounds behind the
-    // finalized height, we increase the delay. More precisely, for every additional
+    // finalized height, we increase the delay. More precisely, for every
     // round that certified height is behind finalized height, we add `unit_delay`.
-    let certified_gap = finalized_height.saturating_sub(
-        state_manager.latest_certified_height().get() + ACCEPTABLE_FINALIZATION_CERTIFICATION_GAP,
-    );
+    let certified_gap =
+        finalized_height.saturating_sub(state_manager.latest_certified_height().get());
 
-    let certified_adjusted_delay =
-        finality_adjusted_delay + unit_delay.as_millis() as u64 * certified_gap;
+    let certified_adjusted_delay = if certified_gap <= ACCEPTABLE_FINALIZATION_CERTIFICATION_GAP {
+        finality_adjusted_delay
+    } else {
+        finality_adjusted_delay + BACKLOG_DELAY.as_millis() as u64 * certified_gap
+    };
 
     // We bound the gap between the next CUP height and the current notarization
     // height by ACCEPTABLE_NOTARIZATION_CUP_GAP.
