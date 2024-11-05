@@ -389,3 +389,185 @@ fn log_directory_structure_internal(path: &Path, depth: usize) -> Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_derive_mgmt_mac_from_hostname() -> Result<()> {
+        // Test with a valid hostname
+        let hostname = Some("guest-001122334455");
+        let expected_mac = "00:11:22:33:44:55";
+        let mac = derive_mgmt_mac_from_hostname(hostname)?;
+        assert_eq!(mac.get(), expected_mac);
+
+        // Test with invalid hostname (wrong prefix)
+        let invalid_hostname = Some("host-001122334455");
+        let result = derive_mgmt_mac_from_hostname(invalid_hostname);
+        assert!(result.is_err());
+
+        // Test with invalid hostname (wrong length)
+        let invalid_hostname_length = Some("guest-00112233");
+        let result = derive_mgmt_mac_from_hostname(invalid_hostname_length);
+        assert!(result.is_err());
+
+        // Test with None
+        let result = derive_mgmt_mac_from_hostname(None);
+        assert!(result.is_err());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_read_conf_file() -> Result<()> {
+        let dir = tempdir()?;
+        let file_path = dir.path().join("test.conf");
+        let mut file = fs::File::create(&file_path)?;
+        writeln!(file, "key1=value1")?;
+        writeln!(file, "key2=value2")?;
+        writeln!(file, "# This is a comment")?;
+        writeln!(file, "key3 = value3")?;
+
+        let conf_map = read_conf_file(&file_path)?;
+
+        assert_eq!(conf_map.get("key1"), Some(&"value1".to_string()));
+        assert_eq!(conf_map.get("key2"), Some(&"value2".to_string()));
+        assert_eq!(conf_map.get("key3"), Some(&"value3".to_string()));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_write_conf_file() -> Result<()> {
+        let dir = tempdir()?;
+        let file_path = dir.path().join("test.conf");
+        let conf_lines = vec![
+            "key1=value1".to_string(),
+            "key2=value2".to_string(),
+            "key3=value3".to_string(),
+        ];
+
+        write_conf_file(&file_path, &conf_lines)?;
+
+        let content = fs::read_to_string(&file_path)?;
+        let expected_content = "key1=value1\nkey2=value2\nkey3=value3\n";
+        assert_eq!(content, expected_content);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_read_network_conf() -> Result<()> {
+        let dir = tempdir()?;
+        let network_conf_path = dir.path().join("network.conf");
+        let mut file = fs::File::create(&network_conf_path)?;
+        writeln!(file, "ipv6_address=2001:db8::1/64")?;
+        writeln!(file, "ipv6_gateway=2001:db8::fffe")?;
+        writeln!(file, "ipv4_address=192.0.2.1/24")?;
+        writeln!(file, "ipv4_gateway=192.0.2.254")?;
+        writeln!(file, "domain=example.com")?;
+        writeln!(file, "hostname=guest-001122334455")?;
+
+        let result = read_network_conf(dir.path())?;
+
+        assert_eq!(
+            result.network_settings,
+            NetworkSettings {
+                ipv6_config: Ipv6Config::Fixed(FixedIpv6Config {
+                    address: "2001:db8::1/64".to_string(),
+                    gateway: "2001:db8::fffe".parse().unwrap(),
+                }),
+                ipv4_config: Some(Ipv4Config {
+                    address: "192.0.2.1".parse().unwrap(),
+                    prefix_length: 24,
+                    gateway: "192.0.2.254".parse().unwrap(),
+                }),
+                domain_name: Some("example.com".to_string()),
+            }
+        );
+
+        assert_eq!(result.hostname, Some("guest-001122334455".to_string()));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_read_filebeat_conf_existing_file() -> Result<()> {
+        let dir = tempdir()?;
+        let filebeat_conf_path = dir.path().join("filebeat.conf");
+        let mut file = fs::File::create(&filebeat_conf_path)?;
+        writeln!(file, "elasticsearch_hosts=host1:9200,host2:9200")?;
+        writeln!(file, "elasticsearch_tags=tag1,tag2")?;
+
+        let logging = read_filebeat_conf(dir.path())?;
+
+        assert_eq!(
+            logging.elasticsearch_hosts,
+            "host1:9200,host2:9200".to_string()
+        );
+        assert_eq!(logging.elasticsearch_tags, Some("tag1,tag2".to_string()));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_read_filebeat_conf_missing_file() -> Result<()> {
+        let dir = tempdir()?;
+        let logging = read_filebeat_conf(dir.path())?;
+
+        assert_eq!(
+            logging.elasticsearch_hosts,
+            "elasticsearch-node-0.mercury.dfinity.systems:443 \
+            elasticsearch-node-1.mercury.dfinity.systems:443 \
+            elasticsearch-node-2.mercury.dfinity.systems:443 \
+            elasticsearch-node-3.mercury.dfinity.systems:443"
+                .to_string()
+        );
+        assert_eq!(logging.elasticsearch_tags, None);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_read_nns_conf_existing_file() -> Result<()> {
+        let dir = tempdir()?;
+        let nns_conf_path = dir.path().join("nns.conf");
+        let mut file = fs::File::create(&nns_conf_path)?;
+        writeln!(
+            file,
+            "nns_url=https://nns1.example.com,https://nns2.example.com"
+        )?;
+
+        let nns_urls = read_nns_conf(dir.path())?;
+
+        assert_eq!(
+            nns_urls,
+            vec![
+                Url::parse("https://nns1.example.com")?,
+                Url::parse("https://nns2.example.com")?,
+            ]
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_read_nns_conf_missing_file() -> Result<()> {
+        let dir = tempdir()?;
+        let nns_urls = read_nns_conf(dir.path())?;
+
+        assert_eq!(
+            nns_urls,
+            vec![
+                Url::parse("https://icp-api.io")?,
+                Url::parse("https://icp0.io")?,
+                Url::parse("https://ic0.app")?,
+            ]
+        );
+
+        Ok(())
+    }
+}
