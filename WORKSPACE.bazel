@@ -4,6 +4,7 @@ workspace(
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("//bazel:mainnet-canisters.bzl", "canisters")
+load("//third_party/jemalloc:repository.bzl", "jemalloc_repository")
 load("//third_party/lmdb:repository.bzl", "lmdb_repository")
 
 # We cannot derive the Bazel repository names (e.g. @mainnet_nns_registry_canister) directly
@@ -85,6 +86,9 @@ sol_register_toolchains(
 
 http_archive(
     name = "rules_rust",
+    # Back-ported fix: https://github.com/bazelbuild/rules_rust/pull/2981
+    patch_args = ["-p1"],
+    patches = ["//bazel:rules_rust.patch"],
     sha256 = "85e2013727ab26fb22abdffe4b2ac0c27a2d5b6296167ba63d8f6e13140f51f9",
     urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.53.0/rules_rust-v0.53.0.tar.gz"],
 )
@@ -109,18 +113,6 @@ rust_register_toolchains(
         "nightly/2024-09-23",
     ],
 )
-
-# Necessary for our ic-os Makefile build
-http_archive(
-    name = "rules_foreign_cc",
-    sha256 = "db6fcdb4f5ac217658f2c3aabd61e618d7fadc1cdf7d806ab1b52f2709d3fc66",
-    strip_prefix = "rules_foreign_cc-9acbb356916760192d4c16301a69267fe44e6dec",
-    url = "https://github.com/bazelbuild/rules_foreign_cc/archive/9acbb356916760192d4c16301a69267fe44e6dec.tar.gz",
-)
-
-load("@rules_foreign_cc//foreign_cc:repositories.bzl", "rules_foreign_cc_dependencies")
-
-rules_foreign_cc_dependencies()
 
 load("//bazel:external_crates.bzl", "external_crates_repository")
 load("//bazel/sanitizers_enabled_env:defs.bzl", "sanitizers_enabled_env")
@@ -156,6 +148,8 @@ rules_motoko_dependencies()
 # Third party dependencies that require special treatment
 
 lmdb_repository()
+
+jemalloc_repository()
 
 http_archive(
     name = "buildifier_prebuilt",
