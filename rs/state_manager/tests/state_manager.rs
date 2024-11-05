@@ -18,7 +18,8 @@ use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamErr
 use ic_interfaces_state_manager::*;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types::{
-    CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2,
+    CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, InstallChunkedCodeArgs,
+    LoadCanisterSnapshotArgs, TakeCanisterSnapshotArgs, UploadChunkArgs,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_features::SubnetFeatures;
@@ -33,10 +34,7 @@ use ic_replicated_state::{
     ReplicatedState, Stream, SubnetTopology,
 };
 use ic_state_layout::{CheckpointLayout, ReadOnly, StateLayout, SYSTEM_METADATA_FILE, WASM_FILE};
-use ic_state_machine_tests::{
-    InstallChunkedCodeArgs, LoadCanisterSnapshotArgs, StateMachine, StateMachineBuilder,
-    TakeCanisterSnapshotArgs, UploadChunkArgs,
-};
+use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_state_manager::manifest::{build_meta_manifest, manifest_from_path, validate_manifest};
 use ic_state_manager::{
     state_sync::{
@@ -71,7 +69,7 @@ use ic_types::{
     CanisterId, CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, NumBytes, PrincipalId,
 };
 use ic_types::{epoch_from_height, QueryStatsEpoch};
-use maplit::btreemap;
+use maplit::{btreemap, btreeset};
 use nix::sys::time::TimeValLike;
 use nix::sys::{
     stat::{utimensat, UtimensatFlags},
@@ -1434,7 +1432,7 @@ fn cannot_remove_height_zero() {
 
         state_manager.remove_states_below(height(0));
         state_manager.flush_deallocation_channel();
-        state_manager.remove_inmemory_states_below(height(0));
+        state_manager.remove_inmemory_states_below(height(0), &BTreeSet::new());
 
         assert_eq!(state_manager.list_state_heights(CERT_ANY), vec![height(0),],);
 
@@ -1448,7 +1446,7 @@ fn cannot_remove_height_zero() {
 
         state_manager.remove_states_below(height(0));
         state_manager.flush_deallocation_channel();
-        state_manager.remove_inmemory_states_below(height(0));
+        state_manager.remove_inmemory_states_below(height(0), &BTreeSet::new());
 
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
@@ -1481,7 +1479,7 @@ fn cannot_remove_latest_height_or_checkpoint() {
         // checkpoint can be retained until the hashing is complete.
         state_manager.flush_tip_channel();
         state_manager.remove_states_below(height(20));
-        state_manager.remove_inmemory_states_below(height(20));
+        state_manager.remove_inmemory_states_below(height(20), &BTreeSet::new());
         state_manager.flush_deallocation_channel();
 
         assert_eq!(
@@ -1504,7 +1502,7 @@ fn cannot_remove_latest_height_or_checkpoint() {
 
         state_manager.flush_tip_channel();
         state_manager.remove_states_below(height(20));
-        state_manager.remove_inmemory_states_below(height(20));
+        state_manager.remove_inmemory_states_below(height(20), &BTreeSet::new());
         state_manager.flush_deallocation_channel();
 
         assert_eq!(
@@ -1539,7 +1537,7 @@ fn can_remove_checkpoints_and_noncheckpoints_separately() {
         state_manager.flush_tip_channel();
 
         assert_eq!(state_manager.list_state_heights(CERT_ANY), heights);
-        state_manager.remove_inmemory_states_below(height(6));
+        state_manager.remove_inmemory_states_below(height(6), &BTreeSet::new());
 
         // Only odd heights should have been removed
         assert_eq!(
@@ -1575,6 +1573,97 @@ fn can_remove_checkpoints_and_noncheckpoints_separately() {
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
             vec![height(0), height(4), height(6)],
+        );
+    });
+}
+
+#[test]
+fn remove_inmemory_states_below_can_keep_extra_states() {
+    state_manager_restart_test(|state_manager, restart_fn| {
+        let mut heights = vec![height(0)];
+        for i in 1..10 {
+            let (_height, state) = state_manager.take_tip();
+            heights.push(height(i));
+
+            let scope = if i % 2 == 0 {
+                CertificationScope::Full
+            } else {
+                CertificationScope::Metadata
+            };
+
+            state_manager.commit_and_certify(state, height(i), scope.clone(), None);
+        }
+        // We need to wait for hashing to complete, otherwise the
+        // checkpoint can be retained until the hashing is complete.
+        state_manager.flush_tip_channel();
+
+        assert_eq!(state_manager.list_state_heights(CERT_ANY), heights);
+
+        state_manager.remove_inmemory_states_below(height(5), &btreeset![height(1), height(7)]);
+
+        // State at height 1 is kept because of it is included in `extra_heights_to_keep`.
+        // The additional protection on the state at height 7 has no effect since it is above the requested height.
+        assert_eq!(
+            state_manager.list_state_heights(CERT_ANY),
+            vec![
+                height(0),
+                height(1),
+                height(2),
+                height(4),
+                height(5),
+                height(6),
+                height(7),
+                height(8),
+                height(9)
+            ],
+        );
+
+        state_manager.remove_inmemory_states_below(height(9), &btreeset![height(7), height(8)]);
+
+        // State at height 7 is kept because of it is included in `extra_heights_to_keep`.
+        // The additional protection on the state at height 8 currently has no effect since it is a checkpoint.
+        // However, this may be subject to change in the future.
+        assert_eq!(
+            state_manager.list_state_heights(CERT_ANY),
+            vec![
+                height(0),
+                height(2),
+                height(4),
+                height(6),
+                height(7),
+                height(8),
+                height(9)
+            ],
+        );
+
+        state_manager.remove_inmemory_states_below(height(9), &BTreeSet::new());
+
+        // State at height 7 is removed.
+        assert_eq!(
+            state_manager.list_state_heights(CERT_ANY),
+            vec![
+                height(0),
+                height(2),
+                height(4),
+                height(6),
+                height(8),
+                height(9)
+            ],
+        );
+
+        state_manager.remove_states_below(height(8));
+        state_manager.flush_deallocation_channel();
+
+        assert_eq!(
+            state_manager.list_state_heights(CERT_ANY),
+            vec![height(0), height(8), height(9)],
+        );
+
+        let state_manager = restart_fn(state_manager, Some(height(8)));
+
+        assert_eq!(
+            state_manager.list_state_heights(CERT_ANY),
+            vec![height(0), height(8)],
         );
     });
 }
@@ -6465,9 +6554,7 @@ fn can_create_and_restore_snapshot() {
 
 #[test]
 fn restore_heap_from_snapshot() {
-    let env = StateMachineBuilder::new()
-        .with_canister_snapshots(true)
-        .build();
+    let env = StateMachineBuilder::new().build();
     env.set_checkpoints_enabled(false);
 
     let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
@@ -6534,9 +6621,7 @@ fn restore_heap_from_snapshot() {
 
 #[test]
 fn restore_stable_memory_from_snapshot() {
-    let env = StateMachineBuilder::new()
-        .with_canister_snapshots(true)
-        .build();
+    let env = StateMachineBuilder::new().build();
     env.set_checkpoints_enabled(false);
 
     let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
@@ -6613,9 +6698,7 @@ fn restore_stable_memory_from_snapshot() {
 
 #[test]
 fn restore_binary_from_snapshot() {
-    let env = StateMachineBuilder::new()
-        .with_canister_snapshots(true)
-        .build();
+    let env = StateMachineBuilder::new().build();
     env.set_checkpoints_enabled(false);
 
     let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
@@ -6678,9 +6761,7 @@ fn restore_binary_from_snapshot() {
 
 #[test]
 fn restore_chunk_store_from_snapshot() {
-    let env = StateMachineBuilder::new()
-        .with_canister_snapshots(true)
-        .build();
+    let env = StateMachineBuilder::new().build();
     env.set_checkpoints_enabled(false);
 
     let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);

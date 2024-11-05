@@ -9,7 +9,8 @@ use ic_icrc1_index_ng::{IndexArg, InitArg, UpgradeArg};
 use ic_icrc1_test_utils::{arb_account, minter_identity};
 use ic_ledger_suite_state_machine_tests::send_transfer;
 use ic_registry_subnet_type::SubnetType;
-use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineBuilder, Time, UserError};
+use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineBuilder, UserError};
+use ic_types::Time;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
 use num_traits::ToPrimitive;
@@ -50,7 +51,7 @@ fn install_and_upgrade(
         index_ng_wasm(),
         Encode!(&args).unwrap(),
         None,
-        ic_state_machine_tests::Cycles::new(STARTING_CYCLES_PER_CANISTER),
+        ic_types::Cycles::new(STARTING_CYCLES_PER_CANISTER),
     )?;
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
@@ -288,7 +289,7 @@ fn should_install_and_upgrade_without_build_index_interval_field_set() {
             index_ng_wasm(),
             Encode!(&args).unwrap(),
             None,
-            ic_state_machine_tests::Cycles::new(STARTING_CYCLES_PER_CANISTER),
+            ic_types::Cycles::new(STARTING_CYCLES_PER_CANISTER),
         )
         .unwrap();
 
@@ -376,8 +377,8 @@ fn should_consume_expected_amount_of_cycles() {
             initial_interval: Some(DEFAULT_MAX_WAIT_TIME_IN_SECS),
             upgrade_interval: Some(DEFAULT_MAX_WAIT_TIME_IN_SECS),
             assert_cost: |initial, upgrade| {
-                const EXPECTED_LEDGER_CYCLES_CONSUMPTION: i128 = 124_445_767;
-                const EXPECTED_INDEX_CYCLES_CONSUMPTION: i128 = 449_388_554;
+                const EXPECTED_LEDGER_CYCLES_CONSUMPTION: i128 = 706_075_016;
+                const EXPECTED_INDEX_CYCLES_CONSUMPTION: i128 = 2_783_783_209;
                 for ledger_consumption in [initial.ledger, upgrade.ledger] {
                     assert!(
                         abs_relative_difference(

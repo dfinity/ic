@@ -31,6 +31,7 @@ use ic_sns_wasm::pb::v1::SnsCanisterType;
 /// Note: FI canisters are considered fully tested elsewhere, and have stable APIs.
 
 /// Deployment tests
+//
 #[tokio::test]
 async fn test_deployment_all_upgrades() {
     test_sns_deployment(

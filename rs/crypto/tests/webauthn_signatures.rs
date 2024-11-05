@@ -1,4 +1,3 @@
-#![allow(clippy::unwrap_used)]
 use ic_config::crypto::CryptoConfig;
 use ic_crypto::CryptoComponent;
 use ic_crypto_interfaces_sig_verification::BasicSigVerifierByPublicKey;

@@ -1,3 +1,4 @@
+use ic_nervous_system_agent::sns::governance::GovernanceCanister;
 use ic_nervous_system_integration_tests::pocket_ic_helpers::sns;
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
@@ -6,15 +7,77 @@ use ic_nervous_system_integration_tests::{
     },
 };
 use ic_nns_test_utils::sns_wasm::create_modified_sns_wasm;
+use ic_sns_governance::pb::v1::governance::Versions;
 use ic_sns_governance::{
     governance::UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS, pb::v1 as sns_pb,
 };
 use ic_sns_swap::pb::v1::Lifecycle;
 use ic_sns_wasm::pb::v1::SnsCanisterType;
+use pocket_ic::nonblocking::PocketIc;
 use pocket_ic::PocketIcBuilder;
 use std::time::Duration;
 
-const TICKS_PER_TASK: u64 = 3;
+/// Verifies that the upgrade journal has the expected entries.
+async fn assert_upgrade_journal(
+    pocket_ic: &PocketIc,
+    governance: GovernanceCanister,
+    expected_entries: &[sns_pb::upgrade_journal_entry::Event],
+) {
+    let sns_pb::GetUpgradeJournalResponse {
+        upgrade_journal, ..
+    } = sns::governance::get_upgrade_journal(pocket_ic, governance.canister_id).await;
+
+    let upgrade_journal = upgrade_journal.unwrap().entries;
+    assert_eq!(upgrade_journal.len(), expected_entries.len());
+
+    for (index, (actual, expected)) in upgrade_journal
+        .iter()
+        .zip(expected_entries.iter())
+        .enumerate()
+    {
+        assert!(actual.timestamp_seconds.is_some());
+        assert_eq!(
+            &actual.event,
+            &Some(expected.clone()),
+            "Upgrade journal entry at index {} does not match",
+            index
+        );
+    }
+}
+
+/// Advances time by up to `timeout_seconds` seconds and `timeout_seconds` tickets (1 tick = 1 second).
+/// Each tick, it observes the state using the provided `observe` function.
+/// If the observed state matches the `expected` state, it returns `Ok(())`.
+/// If the timeout is reached, it returns an error.
+async fn await_with_timeout<'a, T, F, Fut>(
+    pocket_ic: &'a PocketIc,
+    timeout_seconds: u64,
+    observe: F,
+    expected: &T,
+) -> Result<(), String>
+where
+    T: std::cmp::PartialEq + std::fmt::Debug,
+    F: Fn(&'a PocketIc) -> Fut,
+    Fut: std::future::Future<Output = T>,
+{
+    let mut counter = 0;
+    loop {
+        pocket_ic.advance_time(Duration::from_secs(1)).await;
+        pocket_ic.tick().await;
+
+        let observed = observe(pocket_ic).await;
+        if observed == *expected {
+            return Ok(());
+        }
+        if counter == timeout_seconds {
+            return Err(format!(
+                "Observed state: {:?}\n!= Expected state {:?}\nafter {} seconds / rounds",
+                observed, expected, timeout_seconds,
+            ));
+        }
+        counter += 1;
+    }
+}
 
 #[tokio::test]
 async fn test_get_upgrade_journal() {
@@ -23,24 +86,6 @@ async fn test_get_upgrade_journal() {
         .with_sns_subnet()
         .build_async()
         .await;
-
-    let wait_for_next_periodic_task = |sleep_duration_seconds| {
-        let pocket_ic = &pocket_ic;
-        async move {
-            let now = pocket_ic.get_time().await;
-            pocket_ic
-                .advance_time(Duration::from_secs(sleep_duration_seconds))
-                .await;
-            for _ in 0..TICKS_PER_TASK {
-                pocket_ic.tick().await;
-            }
-            assert_eq!(
-                pocket_ic.get_time().await,
-                now + Duration::from_secs(sleep_duration_seconds)
-                    + Duration::from_nanos(TICKS_PER_TASK.saturating_sub(1))
-            );
-        }
-    };
 
     // Install the (master) NNS canisters.
     let with_mainnet_nns_canisters = false;
@@ -81,33 +126,44 @@ async fn test_get_upgrade_journal() {
         sns
     };
 
-    // State A: right after SNS creation.
+    // Step 1: right after SNS creation.
+    let mut expected_upgrade_journal_entries = vec![];
     {
-        let sns_pb::GetUpgradeJournalResponse {
-            upgrade_steps,
-            response_timestamp_seconds,
-            ..
-        } = sns::governance::get_upgrade_journal(&pocket_ic, sns.governance.canister_id).await;
-        let upgrade_steps = upgrade_steps
-            .expect("upgrade_steps should be Some")
-            .versions;
-        assert_eq!(upgrade_steps, vec![initial_sns_version.clone()]);
-        assert_eq!(response_timestamp_seconds, Some(1620501459));
+        expected_upgrade_journal_entries.push(
+            sns_pb::upgrade_journal_entry::Event::UpgradeStepsRefreshed(
+                sns_pb::upgrade_journal_entry::UpgradeStepsRefreshed {
+                    upgrade_steps: Some(Versions {
+                        versions: vec![initial_sns_version.clone()],
+                    }),
+                },
+            ),
+        );
+
+        assert_upgrade_journal(
+            &pocket_ic,
+            sns.governance,
+            &expected_upgrade_journal_entries,
+        )
+        .await;
     }
 
-    wait_for_next_periodic_task(UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS).await;
+    // Step 1.1: wait for the upgrade steps to be refreshed.
+    await_with_timeout(
+        &pocket_ic,
+        UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS,
+        |pocket_ic| async {
+            sns::governance::get_upgrade_journal(pocket_ic, sns.governance.canister_id)
+                .await
+                .upgrade_steps
+                .unwrap()
+                .versions
+        },
+        &vec![initial_sns_version.clone()],
+    )
+    .await
+    .unwrap();
 
-    // State B: after the first periodic task's completion. No changes expected yet.
-    {
-        let sns_pb::GetUpgradeJournalResponse { upgrade_steps, .. } =
-            sns::governance::get_upgrade_journal(&pocket_ic, sns.governance.canister_id).await;
-        let upgrade_steps = upgrade_steps
-            .expect("upgrade_steps should be Some")
-            .versions;
-        assert_eq!(upgrade_steps, vec![initial_sns_version.clone()]);
-    }
-
-    // Publish a new SNS version.
+    // Step 2: Publish new SNS versions.
     let (new_sns_version_1, new_sns_version_2) = {
         let (_, original_root_wasm) = deployed_sns_starting_info
             .get(&SnsCanisterType::Root)
@@ -138,44 +194,73 @@ async fn test_get_upgrade_journal() {
         };
 
         let sns_version = nns::sns_wasm::get_latest_sns_version(&pocket_ic).await;
-        assert_ne!(sns_version, initial_sns_version);
+        assert_ne!(sns_version, initial_sns_version.clone());
 
         (new_sns_version_1, new_sns_version_2)
     };
 
-    wait_for_next_periodic_task(UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS).await;
-
-    // State C: after the second periodic task's completion.
-    {
-        let sns_pb::GetUpgradeJournalResponse { upgrade_steps, .. } =
-            sns::governance::get_upgrade_journal(&pocket_ic, sns.governance.canister_id).await;
-        let upgrade_steps = upgrade_steps.expect("cached_upgrade_steps should be Some");
-
-        assert_eq!(
-            upgrade_steps.versions,
-            vec![
-                initial_sns_version,
-                new_sns_version_1,
-                new_sns_version_2.clone()
-            ]
-        );
-    }
-
-    // Advance the target version.
-    {
-        sns::governance::advance_target_version(
-            &pocket_ic,
-            sns.governance.canister_id,
+    // Step 2.1: wait for the upgrade steps to be refreshed.
+    await_with_timeout(
+        &pocket_ic,
+        UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS,
+        |pocket_ic| async {
+            sns::governance::get_upgrade_journal(pocket_ic, sns.governance.canister_id)
+                .await
+                .upgrade_steps
+                .unwrap()
+                .versions
+        },
+        &vec![
+            initial_sns_version.clone(),
+            new_sns_version_1.clone(),
             new_sns_version_2.clone(),
+        ],
+    )
+    .await
+    .unwrap();
+
+    {
+        expected_upgrade_journal_entries.push(
+            sns_pb::upgrade_journal_entry::Event::UpgradeStepsRefreshed(
+                sns_pb::upgrade_journal_entry::UpgradeStepsRefreshed {
+                    upgrade_steps: Some(Versions {
+                        versions: vec![
+                            initial_sns_version.clone(),
+                            new_sns_version_1.clone(),
+                            new_sns_version_2.clone(),
+                        ],
+                    }),
+                },
+            ),
+        );
+
+        assert_upgrade_journal(
+            &pocket_ic,
+            sns.governance,
+            &expected_upgrade_journal_entries,
         )
         .await;
     }
 
-    // Check that the target version is set to the new version.
-    {
-        let sns_pb::GetUpgradeJournalResponse { target_version, .. } =
-            sns::governance::get_upgrade_journal(&pocket_ic, sns.governance.canister_id).await;
+    // State 3: Advance the target version.
+    sns::governance::advance_target_version(
+        &pocket_ic,
+        sns.governance.canister_id,
+        new_sns_version_2.clone(),
+    )
+    .await;
 
-        assert_eq!(target_version, Some(new_sns_version_2.clone()));
-    }
+    expected_upgrade_journal_entries.push(sns_pb::upgrade_journal_entry::Event::TargetVersionSet(
+        sns_pb::upgrade_journal_entry::TargetVersionSet {
+            old_target_version: None,
+            new_target_version: Some(new_sns_version_2),
+        },
+    ));
+
+    assert_upgrade_journal(
+        &pocket_ic,
+        sns.governance,
+        &expected_upgrade_journal_entries,
+    )
+    .await;
 }

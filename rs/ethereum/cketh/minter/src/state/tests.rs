@@ -9,14 +9,18 @@ use crate::lifecycle::upgrade::UpgradeArg;
 use crate::lifecycle::EthereumNetwork;
 use crate::map::DedupMultiKeyMap;
 use crate::numeric::{
-    wei_from_milli_ether, BlockNumber, CkTokenAmount, Erc20Value, GasAmount, LedgerBurnIndex,
-    LedgerMintIndex, LogIndex, TransactionNonce, Wei, WeiPerGas,
+    BlockNumber, CkTokenAmount, Erc20Value, GasAmount, LedgerBurnIndex, LedgerMintIndex, LogIndex,
+    TransactionNonce, Wei, WeiPerGas,
 };
 use crate::state::audit::apply_state_transition;
+use crate::state::eth_logs_scraping::LogScrapingState;
 use crate::state::event::{Event, EventType};
 use crate::state::transactions::{Erc20WithdrawalRequest, ReimbursementIndex};
 use crate::state::{Erc20Balances, State};
-use crate::test_fixtures::arb::{arb_address, arb_checked_amount_of, arb_hash};
+use crate::test_fixtures::{
+    arb::{arb_address, arb_checked_amount_of, arb_hash},
+    initial_state,
+};
 use crate::tx::{
     AccessList, AccessListItem, Eip1559Signature, Eip1559TransactionRequest, GasFeeEstimate,
     ResubmissionStrategy, SignedEip1559TransactionRequest, StorageKey,
@@ -30,7 +34,7 @@ use proptest::prelude::*;
 use std::collections::BTreeMap;
 
 mod next_request_id {
-    use crate::state::tests::initial_state;
+    use super::*;
 
     #[test]
     fn should_retrieve_and_increment_counter() {
@@ -50,21 +54,6 @@ mod next_request_id {
         assert_eq!(state.next_request_id(), u64::MAX);
         assert_eq!(state.next_request_id(), 0);
     }
-}
-
-fn initial_state() -> State {
-    State::try_from(InitArg {
-        ethereum_network: Default::default(),
-        ecdsa_key_name: "test_key_1".to_string(),
-        ethereum_contract_address: None,
-        ledger_id: Principal::from_text("apia6-jaaaa-aaaar-qabma-cai")
-            .expect("BUG: invalid principal"),
-        ethereum_block_height: Default::default(),
-        minimum_withdrawal_amount: wei_from_milli_ether(10).into(),
-        next_transaction_nonce: Default::default(),
-        last_scraped_block_number: Default::default(),
-    })
-    .expect("init args should be valid")
 }
 
 mod mint_transaction {
@@ -234,7 +223,8 @@ mod mint_transaction {
           log_index: 29, \
           from_address: 0xdd2851Cdd40aE6536831558DD46db62fAc7A844d, \
           value: 10_000_000_000_000_000, \
-          principal: k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae \
+          principal: k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae, \
+          subaccount: None \
         }";
         assert_eq!(format!("{:?}", received_eth_event()), expected);
     }
@@ -248,7 +238,8 @@ mod mint_transaction {
           from_address: 0xdd2851Cdd40aE6536831558DD46db62fAc7A844d, \
           value: 5_000_000, \
           principal: hkroy-sm7vs-yyjs7-ekppe-qqnwx-hm4zf-n7ybs-titsi-k6e3k-ucuiu-uqe, \
-          contract_address: 0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238 \
+          contract_address: 0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238, \
+          subaccount: None \
         }";
         assert_eq!(format!("{:?}", received_erc20_event()), expected);
     }
@@ -395,8 +386,8 @@ mod upgrade {
             Wei::new(10_000_000_000_000_000)
         );
         assert_eq!(
-            state.eth_helper_contract_address,
-            Some(Address::from_str("0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34").unwrap())
+            state.eth_log_scraping.contract_address(),
+            Some(&Address::from_str("0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34").unwrap())
         );
         assert_eq!(state.ethereum_block_height, BlockTag::Safe);
     }
@@ -612,6 +603,8 @@ prop_compose! {
         erc20_helper_contract_address in proptest::option::of(arb_address()),
         last_erc20_scraped_block_number in proptest::option::of(arb_nat()),
         evm_rpc_id in proptest::option::of(arb_principal()),
+        deposit_with_subaccount_helper_contract_address in proptest::option::of(arb_address()),
+        last_deposit_with_subaccount_scraped_block_number in proptest::option::of(arb_nat()),
     ) -> UpgradeArg {
         UpgradeArg {
             ethereum_contract_address: contract_address.map(|addr| addr.to_string()),
@@ -621,7 +614,9 @@ prop_compose! {
             ledger_suite_orchestrator_id,
             erc20_helper_contract_address: erc20_helper_contract_address.map(|addr| addr.to_string()),
             last_erc20_scraped_block_number,
-            evm_rpc_id
+            evm_rpc_id,
+            deposit_with_subaccount_helper_contract_address: deposit_with_subaccount_helper_contract_address.map(|addr| addr.to_string()),
+            last_deposit_with_subaccount_scraped_block_number
         }
     }
 }
@@ -993,20 +988,45 @@ fn state_equivalence() {
             "ckUSDC".parse().unwrap(),
         )
         .unwrap();
+
+    let eth_log_scraping = {
+        let mut s = LogScrapingState::new(BlockNumber::new(1_000_000));
+        s.set_contract_address(
+            "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34"
+                .parse()
+                .unwrap(),
+        )
+        .unwrap();
+        s
+    };
+    let erc20_log_scraping = {
+        let mut s = LogScrapingState::new(BlockNumber::new(1_000_000));
+        s.set_contract_address(
+            "0xe1788e4834c896f1932188645cc36c54d1b80ac1"
+                .parse()
+                .unwrap(),
+        )
+        .unwrap();
+        s
+    };
+    let deposit_with_subaccount_log_scraping = {
+        let mut s = LogScrapingState::new(BlockNumber::new(1_000_000));
+        s.set_contract_address(
+            "0x2D39863d30716aaf2B7fFFd85Dd03Dda2BFC2E38"
+                .parse()
+                .unwrap(),
+        )
+        .unwrap();
+        s
+    };
+
     let state = State {
         ethereum_network: EthereumNetwork::Mainnet,
         ecdsa_key_name: "test_key".to_string(),
         cketh_ledger_id: "apia6-jaaaa-aaaar-qabma-cai".parse().unwrap(),
-        eth_helper_contract_address: Some(
-            "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34"
-                .parse()
-                .unwrap(),
-        ),
-        erc20_helper_contract_address: Some(
-            "0xe1788e4834c896f1932188645cc36c54d1b80ac1"
-                .parse()
-                .unwrap(),
-        ),
+        eth_log_scraping: eth_log_scraping.clone(),
+        erc20_log_scraping: erc20_log_scraping.clone(),
+        deposit_with_subaccount_log_scraping: deposit_with_subaccount_log_scraping.clone(),
         ecdsa_public_key: Some(EcdsaPublicKeyResponse {
             public_key: vec![1; 32],
             chain_code: vec![2; 32],
@@ -1014,8 +1034,6 @@ fn state_equivalence() {
         cketh_minimum_withdrawal_amount: Wei::new(1_000_000_000_000_000),
         ethereum_block_height: BlockTag::Finalized,
         first_scraped_block_number: BlockNumber::new(1_000_001),
-        last_scraped_block_number: BlockNumber::new(1_000_000),
-        last_erc20_scraped_block_number: BlockNumber::new(1_000_000),
         last_observed_block_number: Some(BlockNumber::new(2_000_000)),
         events_to_mint: btreemap! {
             source("0xac493fb20c93bd3519a4a5d90ce72d69455c41c5b7e229dafee44344242ba467", 100) => ReceivedEthEvent {
@@ -1083,7 +1101,37 @@ fn state_equivalence() {
     assert_ne!(
         Ok(()),
         state.is_equivalent_to(&State {
-            last_scraped_block_number: BlockNumber::new(100_000_000_000),
+            eth_log_scraping: {
+                let mut s = eth_log_scraping.clone();
+                s.set_last_scraped_block_number(BlockNumber::new(100_000_000_000));
+                s
+            },
+            ..state.clone()
+        }),
+        "changing essential fields should break equivalence",
+    );
+
+    assert_ne!(
+        Ok(()),
+        state.is_equivalent_to(&State {
+            erc20_log_scraping: {
+                let mut s = erc20_log_scraping.clone();
+                s.set_last_scraped_block_number(BlockNumber::new(100_000_000_000));
+                s
+            },
+            ..state.clone()
+        }),
+        "changing essential fields should break equivalence",
+    );
+
+    assert_ne!(
+        Ok(()),
+        state.is_equivalent_to(&State {
+            deposit_with_subaccount_log_scraping: {
+                let mut s = deposit_with_subaccount_log_scraping.clone();
+                s.set_last_scraped_block_number(BlockNumber::new(100_000_000_000));
+                s
+            },
             ..state.clone()
         }),
         "changing essential fields should break equivalence",
@@ -1101,7 +1149,16 @@ fn state_equivalence() {
     assert_ne!(
         Ok(()),
         state.is_equivalent_to(&State {
-            eth_helper_contract_address: None,
+            eth_log_scraping: LogScrapingState::new(BlockNumber::new(1_000_000)),
+            ..state.clone()
+        }),
+        "changing essential fields should break equivalence",
+    );
+
+    assert_ne!(
+        Ok(()),
+        state.is_equivalent_to(&State {
+            erc20_log_scraping: LogScrapingState::new(BlockNumber::new(1_000_000)),
             ..state.clone()
         }),
         "changing essential fields should break equivalence",
@@ -1785,6 +1842,7 @@ mod erc20_balance {
         assert_eq!(balance_after, balance_before);
     }
 }
+
 fn initial_erc20_state() -> State {
     let mut state = initial_state();
     add_erc20_token(&mut state);
