@@ -1,5 +1,5 @@
 {
-  "checksum": "d49c2d6535ae0e33df43f23bf7877c04341c237a0782c81faa1e85ae9a4e8a6b",
+  "checksum": "5aefd8ca2a0d42da60b0c785e3818db4d51d2cccbef8926fe35494d825d3a138",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -5972,26 +5972,28 @@
         },
         "edition": "2015",
         "rustc_flags": {
-          "common": [
-            "-Cpasses=sancov-module",
-            "-Cllvm-args=-sanitizer-coverage-level=4",
-            "-Cllvm-args=-sanitizer-coverage-inline-8bit-counters",
-            "-Cllvm-args=-sanitizer-coverage-pc-table",
-            "-Cllvm-args=-sanitizer-coverage-trace-compares",
-            "-Cllvm-args=-sanitizer-coverage-stack-depth",
-            "-Cllvm-args=-sanitizer-coverage-prune-blocks=0",
-            "-Ctarget-cpu=native",
-            "-Coverflow_checks",
-            "-Copt-level=3",
-            "-Clink-dead-code",
-            "-Cinstrument-coverage",
-            "-Cdebug-assertions",
-            "-Ccodegen-units=1",
-            "-Zextra-const-ub-checks",
-            "-Zstrict-init-checks",
-            "-Zsanitizer=address"
-          ],
-          "selects": {}
+          "common": [],
+          "selects": {
+            "x86_64-unknown-linux-gnu": [
+              "-Cpasses=sancov-module",
+              "-Cllvm-args=-sanitizer-coverage-level=4",
+              "-Cllvm-args=-sanitizer-coverage-inline-8bit-counters",
+              "-Cllvm-args=-sanitizer-coverage-pc-table",
+              "-Cllvm-args=-sanitizer-coverage-trace-compares",
+              "-Cllvm-args=-sanitizer-coverage-stack-depth",
+              "-Cllvm-args=-sanitizer-coverage-prune-blocks=0",
+              "-Ctarget-cpu=native",
+              "-Coverflow_checks",
+              "-Copt-level=3",
+              "-Clink-dead-code",
+              "-Cinstrument-coverage",
+              "-Cdebug-assertions",
+              "-Ccodegen-units=1",
+              "-Zextra-const-ub-checks",
+              "-Zstrict-init-checks",
+              "-Zsanitizer=address"
+            ]
+          }
         },
         "version": "1.3.3"
       },
@@ -6665,26 +6667,28 @@
         },
         "edition": "2015",
         "rustc_flags": {
-          "common": [
-            "-Cpasses=sancov-module",
-            "-Cllvm-args=-sanitizer-coverage-level=4",
-            "-Cllvm-args=-sanitizer-coverage-inline-8bit-counters",
-            "-Cllvm-args=-sanitizer-coverage-pc-table",
-            "-Cllvm-args=-sanitizer-coverage-trace-compares",
-            "-Cllvm-args=-sanitizer-coverage-stack-depth",
-            "-Cllvm-args=-sanitizer-coverage-prune-blocks=0",
-            "-Ctarget-cpu=native",
-            "-Coverflow_checks",
-            "-Copt-level=3",
-            "-Clink-dead-code",
-            "-Cinstrument-coverage",
-            "-Cdebug-assertions",
-            "-Ccodegen-units=1",
-            "-Zextra-const-ub-checks",
-            "-Zstrict-init-checks",
-            "-Zsanitizer=address"
-          ],
-          "selects": {}
+          "common": [],
+          "selects": {
+            "x86_64-unknown-linux-gnu": [
+              "-Cpasses=sancov-module",
+              "-Cllvm-args=-sanitizer-coverage-level=4",
+              "-Cllvm-args=-sanitizer-coverage-inline-8bit-counters",
+              "-Cllvm-args=-sanitizer-coverage-pc-table",
+              "-Cllvm-args=-sanitizer-coverage-trace-compares",
+              "-Cllvm-args=-sanitizer-coverage-stack-depth",
+              "-Cllvm-args=-sanitizer-coverage-prune-blocks=0",
+              "-Ctarget-cpu=native",
+              "-Coverflow_checks",
+              "-Copt-level=3",
+              "-Clink-dead-code",
+              "-Cinstrument-coverage",
+              "-Cdebug-assertions",
+              "-Ccodegen-units=1",
+              "-Zextra-const-ub-checks",
+              "-Zstrict-init-checks",
+              "-Zsanitizer=address"
+            ]
+          }
         },
         "version": "0.28.2"
       },
@@ -6783,26 +6787,28 @@
         },
         "edition": "2018",
         "rustc_flags": {
-          "common": [
-            "-Cpasses=sancov-module",
-            "-Cllvm-args=-sanitizer-coverage-level=4",
-            "-Cllvm-args=-sanitizer-coverage-inline-8bit-counters",
-            "-Cllvm-args=-sanitizer-coverage-pc-table",
-            "-Cllvm-args=-sanitizer-coverage-trace-compares",
-            "-Cllvm-args=-sanitizer-coverage-stack-depth",
-            "-Cllvm-args=-sanitizer-coverage-prune-blocks=0",
-            "-Ctarget-cpu=native",
-            "-Coverflow_checks",
-            "-Copt-level=3",
-            "-Clink-dead-code",
-            "-Cinstrument-coverage",
-            "-Cdebug-assertions",
-            "-Ccodegen-units=1",
-            "-Zextra-const-ub-checks",
-            "-Zstrict-init-checks",
-            "-Zsanitizer=address"
-          ],
-          "selects": {}
+          "common": [],
+          "selects": {
+            "x86_64-unknown-linux-gnu": [
+              "-Cpasses=sancov-module",
+              "-Cllvm-args=-sanitizer-coverage-level=4",
+              "-Cllvm-args=-sanitizer-coverage-inline-8bit-counters",
+              "-Cllvm-args=-sanitizer-coverage-pc-table",
+              "-Cllvm-args=-sanitizer-coverage-trace-compares",
+              "-Cllvm-args=-sanitizer-coverage-stack-depth",
+              "-Cllvm-args=-sanitizer-coverage-prune-blocks=0",
+              "-Ctarget-cpu=native",
+              "-Coverflow_checks",
+              "-Copt-level=3",
+              "-Clink-dead-code",
+              "-Cinstrument-coverage",
+              "-Cdebug-assertions",
+              "-Ccodegen-units=1",
+              "-Zextra-const-ub-checks",
+              "-Zstrict-init-checks",
+              "-Zsanitizer=address"
+            ]
+          }
         },
         "version": "0.30.1"
       },
@@ -6914,26 +6920,28 @@
         },
         "edition": "2021",
         "rustc_flags": {
-          "common": [
-            "-Cpasses=sancov-module",
-            "-Cllvm-args=-sanitizer-coverage-level=4",
-            "-Cllvm-args=-sanitizer-coverage-inline-8bit-counters",
-            "-Cllvm-args=-sanitizer-coverage-pc-table",
-            "-Cllvm-args=-sanitizer-coverage-trace-compares",
-            "-Cllvm-args=-sanitizer-coverage-stack-depth",
-            "-Cllvm-args=-sanitizer-coverage-prune-blocks=0",
-            "-Ctarget-cpu=native",
-            "-Coverflow_checks",
-            "-Copt-level=3",
-            "-Clink-dead-code",
-            "-Cinstrument-coverage",
-            "-Cdebug-assertions",
-            "-Ccodegen-units=1",
-            "-Zextra-const-ub-checks",
-            "-Zstrict-init-checks",
-            "-Zsanitizer=address"
-          ],
-          "selects": {}
+          "common": [],
+          "selects": {
+            "x86_64-unknown-linux-gnu": [
+              "-Cpasses=sancov-module",
+              "-Cllvm-args=-sanitizer-coverage-level=4",
+              "-Cllvm-args=-sanitizer-coverage-inline-8bit-counters",
+              "-Cllvm-args=-sanitizer-coverage-pc-table",
+              "-Cllvm-args=-sanitizer-coverage-trace-compares",
+              "-Cllvm-args=-sanitizer-coverage-stack-depth",
+              "-Cllvm-args=-sanitizer-coverage-prune-blocks=0",
+              "-Ctarget-cpu=native",
+              "-Coverflow_checks",
+              "-Copt-level=3",
+              "-Clink-dead-code",
+              "-Cinstrument-coverage",
+              "-Cdebug-assertions",
+              "-Ccodegen-units=1",
+              "-Zextra-const-ub-checks",
+              "-Zstrict-init-checks",
+              "-Zsanitizer=address"
+            ]
+          }
         },
         "version": "0.32.2"
       },
@@ -10279,26 +10287,28 @@
           "selects": {}
         },
         "rustc_flags": {
-          "common": [
-            "-Cpasses=sancov-module",
-            "-Cllvm-args=-sanitizer-coverage-level=4",
-            "-Cllvm-args=-sanitizer-coverage-inline-8bit-counters",
-            "-Cllvm-args=-sanitizer-coverage-pc-table",
-            "-Cllvm-args=-sanitizer-coverage-trace-compares",
-            "-Cllvm-args=-sanitizer-coverage-stack-depth",
-            "-Cllvm-args=-sanitizer-coverage-prune-blocks=0",
-            "-Ctarget-cpu=native",
-            "-Coverflow_checks",
-            "-Copt-level=3",
-            "-Clink-dead-code",
-            "-Cinstrument-coverage",
-            "-Cdebug-assertions",
-            "-Ccodegen-units=1",
-            "-Zextra-const-ub-checks",
-            "-Zstrict-init-checks",
-            "-Zsanitizer=address"
-          ],
-          "selects": {}
+          "common": [],
+          "selects": {
+            "x86_64-unknown-linux-gnu": [
+              "-Cpasses=sancov-module",
+              "-Cllvm-args=-sanitizer-coverage-level=4",
+              "-Cllvm-args=-sanitizer-coverage-inline-8bit-counters",
+              "-Cllvm-args=-sanitizer-coverage-pc-table",
+              "-Cllvm-args=-sanitizer-coverage-trace-compares",
+              "-Cllvm-args=-sanitizer-coverage-stack-depth",
+              "-Cllvm-args=-sanitizer-coverage-prune-blocks=0",
+              "-Ctarget-cpu=native",
+              "-Coverflow_checks",
+              "-Copt-level=3",
+              "-Clink-dead-code",
+              "-Cinstrument-coverage",
+              "-Cdebug-assertions",
+              "-Ccodegen-units=1",
+              "-Zextra-const-ub-checks",
+              "-Zstrict-init-checks",
+              "-Zsanitizer=address"
+            ]
+          }
         },
         "version": "0.10.10"
       },
@@ -32265,26 +32275,28 @@
         },
         "edition": "2021",
         "rustc_flags": {
-          "common": [
-            "-Cpasses=sancov-module",
-            "-Cllvm-args=-sanitizer-coverage-level=4",
-            "-Cllvm-args=-sanitizer-coverage-inline-8bit-counters",
-            "-Cllvm-args=-sanitizer-coverage-pc-table",
-            "-Cllvm-args=-sanitizer-coverage-trace-compares",
-            "-Cllvm-args=-sanitizer-coverage-stack-depth",
-            "-Cllvm-args=-sanitizer-coverage-prune-blocks=0",
-            "-Ctarget-cpu=native",
-            "-Coverflow_checks",
-            "-Copt-level=3",
-            "-Clink-dead-code",
-            "-Cinstrument-coverage",
-            "-Cdebug-assertions",
-            "-Ccodegen-units=1",
-            "-Zextra-const-ub-checks",
-            "-Zstrict-init-checks",
-            "-Zsanitizer=address"
-          ],
-          "selects": {}
+          "common": [],
+          "selects": {
+            "x86_64-unknown-linux-gnu": [
+              "-Cpasses=sancov-module",
+              "-Cllvm-args=-sanitizer-coverage-level=4",
+              "-Cllvm-args=-sanitizer-coverage-inline-8bit-counters",
+              "-Cllvm-args=-sanitizer-coverage-pc-table",
+              "-Cllvm-args=-sanitizer-coverage-trace-compares",
+              "-Cllvm-args=-sanitizer-coverage-stack-depth",
+              "-Cllvm-args=-sanitizer-coverage-prune-blocks=0",
+              "-Ctarget-cpu=native",
+              "-Coverflow_checks",
+              "-Copt-level=3",
+              "-Clink-dead-code",
+              "-Cinstrument-coverage",
+              "-Cdebug-assertions",
+              "-Ccodegen-units=1",
+              "-Zextra-const-ub-checks",
+              "-Zstrict-init-checks",
+              "-Zsanitizer=address"
+            ]
+          }
         },
         "version": "0.6.5"
       },
@@ -78635,26 +78647,28 @@
           "selects": {}
         },
         "rustc_flags": {
-          "common": [
-            "-Cpasses=sancov-module",
-            "-Cllvm-args=-sanitizer-coverage-level=4",
-            "-Cllvm-args=-sanitizer-coverage-inline-8bit-counters",
-            "-Cllvm-args=-sanitizer-coverage-pc-table",
-            "-Cllvm-args=-sanitizer-coverage-trace-compares",
-            "-Cllvm-args=-sanitizer-coverage-stack-depth",
-            "-Cllvm-args=-sanitizer-coverage-prune-blocks=0",
-            "-Ctarget-cpu=native",
-            "-Coverflow_checks",
-            "-Copt-level=3",
-            "-Clink-dead-code",
-            "-Cinstrument-coverage",
-            "-Cdebug-assertions",
-            "-Ccodegen-units=1",
-            "-Zextra-const-ub-checks",
-            "-Zstrict-init-checks",
-            "-Zsanitizer=address"
-          ],
-          "selects": {}
+          "common": [],
+          "selects": {
+            "x86_64-unknown-linux-gnu": [
+              "-Cpasses=sancov-module",
+              "-Cllvm-args=-sanitizer-coverage-level=4",
+              "-Cllvm-args=-sanitizer-coverage-inline-8bit-counters",
+              "-Cllvm-args=-sanitizer-coverage-pc-table",
+              "-Cllvm-args=-sanitizer-coverage-trace-compares",
+              "-Cllvm-args=-sanitizer-coverage-stack-depth",
+              "-Cllvm-args=-sanitizer-coverage-prune-blocks=0",
+              "-Ctarget-cpu=native",
+              "-Coverflow_checks",
+              "-Copt-level=3",
+              "-Clink-dead-code",
+              "-Cinstrument-coverage",
+              "-Cdebug-assertions",
+              "-Ccodegen-units=1",
+              "-Zextra-const-ub-checks",
+              "-Zstrict-init-checks",
+              "-Zsanitizer=address"
+            ]
+          }
         },
         "version": "25.0.2"
       },

@@ -9,7 +9,17 @@ load("@rules_rust//crate_universe:defs.bzl", "crate", "crates_repository", "spli
 load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
 
 def sanitize_external_crates(sanitizers_enabled):
-    FUZZING_ANNOTATION = [crate.annotation(rustc_flags = DEFAULT_RUSTC_FLAGS_FOR_FUZZING)] if sanitizers_enabled else []
+    FUZZING_ANNOTATION = [
+        crate.annotation(
+            # Only enable fuzzing on x86_64 because it fails for wasm32:
+            rustc_flags = crate.select(
+                [],
+                {
+                    "x86_64-unknown-linux-gnu": DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
+                },
+            ),
+        ),
+    ] if sanitizers_enabled else []
     return {
         "candid": FUZZING_ANNOTATION,
         "wasmtime": FUZZING_ANNOTATION,
