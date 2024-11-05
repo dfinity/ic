@@ -2562,6 +2562,7 @@ pub fn test_downgrade_from_incompatible_version<T>(
     ledger_wasm_nextledgerversion: Vec<u8>,
     ledger_wasm: Vec<u8>,
     encode_init_args: fn(InitArgs) -> T,
+    downgrade_to_mainnet_possible: bool,
 ) where
     T: CandidType,
 {
@@ -2591,12 +2592,18 @@ pub fn test_downgrade_from_incompatible_version<T>(
         Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
     ) {
         Ok(_) => {
-            panic!("Upgrade from future ledger version should fail!")
+            if !downgrade_to_mainnet_possible {
+                panic!("Upgrade from future ledger version should fail!")
+            }
         }
         Err(e) => {
-            assert!(e
-                .description()
-                .contains("Trying to downgrade from incompatible version"))
+            if downgrade_to_mainnet_possible {
+                panic!("Downgrade to mainnet should be possible!")
+            } else {
+                assert!(e
+                    .description()
+                    .contains("Trying to downgrade from incompatible version"))
+            }
         }
     };
 
