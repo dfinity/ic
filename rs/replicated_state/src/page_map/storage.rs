@@ -5,9 +5,9 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     fs::{File, OpenOptions},
     io::{Read, Seek, SeekFrom, Write},
-    ops::{Deref, Range},
+    ops::{Deref, DerefMut, Range},
     path::{Path, PathBuf},
-    sync::{Arc, OnceLock},
+    sync::{Arc, Mutex, OnceLock},
 };
 
 use crate::page_map::{
@@ -170,20 +170,28 @@ pub fn verify(storage_layout: &dyn StorageLayout) -> Result<(), PersistenceError
 /// `storage_layout` ever again.
 /// If `storage_layout` is None during load we construct `StorageLayout` with the default
 /// constructor.
-#[derive(Default, Clone)]
+#[derive(Clone, Default)]
 pub(crate) struct Storage {
-    storage_layout: Option<Arc<dyn StorageLayout + Send + Sync>>,
+    storage_layout: Arc<Mutex<Option<Box<dyn StorageLayout + Send + Sync>>>>,
     storage_impl: OnceLock<StorageImpl>,
 }
 
 impl Storage {
     fn init_or_die(&self) -> &StorageImpl {
-        self.storage_impl
-            .get_or_init(|| match self.storage_layout.as_ref() {
+        self.storage_impl.get_or_init(|| {
+            match std::mem::take(
+                self.storage_layout
+                    .lock()
+                    .expect("Failed to lock storage_layout")
+                    .deref_mut(),
+            )
+            .as_ref()
+            {
                 None => Default::default(),
                 Some(storage_layout) => StorageImpl::load(storage_layout.deref())
                     .expect("Failed to load storage layout"),
-            })
+            }
+        })
     }
 
     /// Whether the `storage_impl` is already loaded.
@@ -196,7 +204,7 @@ impl Storage {
         storage_layout: Arc<dyn StorageLayout + Send + Sync>,
     ) -> Result<Self, PersistenceError> {
         Ok(Storage {
-            storage_layout: Some(storage_layout),
+            storage_layout: Arc::new(Mutex::new(Some(storage_layout))),
             storage_impl: OnceLock::default(),
         })
     }
@@ -229,7 +237,7 @@ impl Storage {
         let storage_impl = OnceLock::new();
         let _ = storage_impl.set(StorageImpl::deserialize(serialized_storage)?);
         Ok(Self {
-            storage_layout: None,
+            storage_layout: Arc::new(Mutex::new(None)),
             storage_impl,
         })
     }
