@@ -8,36 +8,39 @@ to regenerate Cargo Bazel lockfiles.
 load("@rules_rust//crate_universe:defs.bzl", "crate", "crates_repository", "splicing_config")
 load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
 
-def sanitize_external_crates(sanitizers_enabled):
-    FUZZING_ANNOTATION = [
+def sanitize_external_crates():
+    FUZZING_ANNOTATION_LIB = [
         crate.annotation(
-            # Only enable fuzzing on x86_64 because it fails for wasm32:
             rustc_flags = crate.select(
                 [],
                 {
+                    # Only enable fuzzing on x86_64 because it fails for wasm32:
                     "x86_64-unknown-linux-gnu": DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
                 },
             ),
         ),
-    ] if sanitizers_enabled else []
-    return {
-        "candid": FUZZING_ANNOTATION,
-        "wasmtime": FUZZING_ANNOTATION,
-        "bitcoin": FUZZING_ANNOTATION,
-        "bincode": FUZZING_ANNOTATION,
-        "ic-stable-structures": FUZZING_ANNOTATION,
-        "ic-wasm": [
-            crate.annotation(
-                gen_binaries = True,
-                rustc_flags = crate.select(
-                    [],
-                    {
-                        "x86_64-unknown-linux-gnu": DEFAULT_RUSTC_FLAGS_FOR_FUZZING +
-                                                    ["-Clink-arg=/usr/lib/llvm-18/lib/clang/18/lib/linux/libclang_rt.fuzzer-x86_64.a"],
-                    },
-                ),
+    ]
+    FUZZING_ANNOTATION_BIN = [
+        crate.annotation(
+            gen_binaries = True,
+            rustc_flags = crate.select(
+                [],
+                {
+                    # Only enable fuzzing on x86_64 because it fails for wasm32.
+                    # Additionally ic-wasm generates binaries so we need to link libclang_rt.fuzzer-x86_64.a:
+                    "x86_64-unknown-linux-gnu": DEFAULT_RUSTC_FLAGS_FOR_FUZZING +
+                                                ["-Clink-arg=/usr/lib/llvm-18/lib/clang/18/lib/linux/libclang_rt.fuzzer-x86_64.a"],
+                },
             ),
-        ],
+        ),
+    ]
+    return {
+        "candid": FUZZING_ANNOTATION_LIB,
+        "wasmtime": FUZZING_ANNOTATION_LIB,
+        "bitcoin": FUZZING_ANNOTATION_LIB,
+        "bincode": FUZZING_ANNOTATION_LIB,
+        "ic-stable-structures": FUZZING_ANNOTATION_LIB,
+        "ic-wasm": FUZZING_ANNOTATION_BIN,
     }
 
 ICRC_1_REV = "26a80d777e079644cd69e883e18dad1a201f5b1a"
@@ -171,7 +174,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             gen_binaries = True,
         )],
     }
-    CRATE_ANNOTATIONS.update(sanitize_external_crates(sanitizers_enabled = sanitizers_enabled))
+    if sanitizers_enabled:
+        CRATE_ANNOTATIONS.update(sanitize_external_crates())
     crates_repository(
         name = name,
         isolated = True,
