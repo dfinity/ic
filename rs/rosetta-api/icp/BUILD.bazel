@@ -91,6 +91,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:proptest",
     "@crate_index//:prost",
     "@crate_index//:rand_chacha",
+    "@crate_index//:slog",
     "@crate_index//:tempfile",
 ]
 

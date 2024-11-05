@@ -11630,6 +11630,7 @@ dependencies = [
  "serde_bytes",
  "serde_cbor",
  "serde_json",
+ "slog",
  "strum",
  "strum_macros",
  "tempfile",

@@ -6,7 +6,7 @@ use crate::common::{
     utils::test_identity,
 };
 use candid::{Encode, Principal};
-use ic_agent::Identity;
+use ic_agent::{Identity, Agent};
 use ic_icp_rosetta_client::RosettaClient;
 use ic_icp_rosetta_client::RosettaTransferArgs;
 use ic_icp_rosetta_runner::RosettaOptions;
@@ -40,7 +40,6 @@ use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 use rosetta_core::identifiers::NetworkIdentifier;
 use std::collections::HashMap;
 use tempfile::TempDir;
-
 use super::utils::memo_bytebuf_to_u64;
 
 pub struct RosettaTestingEnvironment {
@@ -153,6 +152,10 @@ impl RosettaTestingEnvironment {
         )
         .await;
         self
+    }
+
+    pub async fn get_test_agent(self: &Self) -> Agent {
+        get_test_agent(self.pocket_ic.url().unwrap().port().unwrap()).await
     }
 }
 

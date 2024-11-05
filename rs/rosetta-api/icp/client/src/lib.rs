@@ -14,6 +14,7 @@ use ic_rosetta_api::request_types::ChangeAutoStakeMaturityMetadata;
 use ic_rosetta_api::request_types::DisburseMetadata;
 use ic_rosetta_api::request_types::KeyMetadata;
 use ic_rosetta_api::request_types::NeuronIdentifierMetadata;
+use ic_rosetta_api::request_types::RegisterVoteMetadata;
 use ic_rosetta_api::request_types::NeuronInfoMetadata;
 use ic_rosetta_api::request_types::PublicKeyOrPrincipal;
 use ic_rosetta_api::request_types::RequestType;
@@ -303,6 +304,39 @@ impl RosettaClient {
             ),
         }])
     }
+
+    pub async fn build_register_vote_operations(
+        signer_principal: Principal,
+        neuron_index: u64,
+        proposal: u64,
+        vote: i32,
+    ) -> anyhow::Result<Vec<Operation>> {
+        Ok(vec![Operation {
+            operation_identifier: OperationIdentifier {
+                index: 0,
+                network_index: None,
+            },
+            related_operations: None,
+            type_: "REGISTER_VOTE".to_string(),
+            status: None,
+            account: Some(rosetta_core::identifiers::AccountIdentifier::from(
+                AccountIdentifier::new(PrincipalId(signer_principal), None),
+            )),
+            amount: None,
+            coin_change: None,
+            metadata: Some(
+                RegisterVoteMetadata { 
+                    neuron_index,
+                    vote: vote,
+                    proposal: Some(proposal)
+                }
+                    .try_into()
+                    .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
+            ),
+        }])
+    }
+
+
 
     pub async fn build_change_auto_stake_maturity_operations(
         signer_principal: Principal,
@@ -1104,6 +1138,33 @@ impl RosettaClient {
         .await
     }
 
+    pub async fn register_vote<T>(
+        &self,
+        network_identifier: NetworkIdentifier,
+        signer_keypair: &T,
+        register_vote_args: RosettaRegisterVoteArgs,
+    ) -> anyhow::Result<ConstructionSubmitResponse>
+    where
+        T: RosettaSupportedKeyPair,
+    {
+        let register_vote_operations = RosettaClient::build_register_vote_operations(
+            signer_keypair.generate_principal_id()?.0,
+            register_vote_args.neuron_index.unwrap_or(0),
+            register_vote_args.proposal,
+            register_vote_args.vote,
+        )
+        .await?;
+
+        self.make_submit_and_wait_for_transaction(
+            signer_keypair,
+            network_identifier,
+            register_vote_operations,
+            None,
+            None,
+        )
+        .await
+    }
+
     /// A neuron can be set to automatically restake its maturity.
     pub async fn change_auto_stake_maturity<T>(
         &self,
@@ -1480,6 +1541,47 @@ impl RosettaSetNeuronDissolveDelayArgsBuilder {
     pub fn build(self) -> RosettaSetNeuronDissolveDelayArgs {
         RosettaSetNeuronDissolveDelayArgs {
             dissolve_delay_seconds: self.dissolve_delay_seconds,
+            neuron_index: self.neuron_index,
+        }
+    }
+}
+
+pub struct RosettaRegisterVoteArgs {
+    pub neuron_index: Option<u64>,
+    pub proposal: u64,
+    pub vote: i32,
+}
+
+impl RosettaRegisterVoteArgs {
+    pub fn builder(proposal: u64, vote: i32) -> RosettaRegisterVoteArgsBuilder {
+        RosettaRegisterVoteArgsBuilder::new(proposal, vote)
+    }
+}
+
+pub struct RosettaRegisterVoteArgsBuilder {
+    proposal: u64,
+    vote: i32,
+    neuron_index: Option<u64>,
+}
+
+impl RosettaRegisterVoteArgsBuilder {
+    pub fn new(proposal: u64, vote: i32) -> Self {
+        Self {
+            proposal,
+            vote,
+            neuron_index: None,
+        }
+    }
+
+    pub fn with_neuron_index(mut self, neuron_index: u64) -> Self {
+        self.neuron_index = Some(neuron_index);
+        self
+    }
+
+    pub fn build(self) -> RosettaRegisterVoteArgs {
+        RosettaRegisterVoteArgs {
+            proposal: self.proposal,
+            vote: self.vote,
             neuron_index: self.neuron_index,
         }
     }

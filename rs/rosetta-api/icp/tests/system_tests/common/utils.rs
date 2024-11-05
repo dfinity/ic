@@ -10,13 +10,16 @@ use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::pb::v1::ListNeurons;
 use ic_nns_governance::pb::v1::ListNeuronsResponse;
-use ic_nns_governance_api::pb::v1::GovernanceError;
+use ic_nns_governance_api::pb::v1::{GovernanceError, Proposal};
 use ic_rosetta_api::convert::to_hash;
 use icp_ledger::GetBlocksArgs;
 use icp_ledger::QueryEncodedBlocksResponse;
-use rosetta_core::identifiers::NetworkIdentifier;
+use rosetta_core::{identifiers::NetworkIdentifier, objects::ObjectMap};
 use std::sync::Arc;
 use url::Url;
+use ic_rosetta_api::{ ledger_client::pending_proposals_response::PendingProposalsResponse,
+    models::{CallRequest, Error}};
+use reqwest::StatusCode as HttpStatusCode;
 
 pub fn test_identity() -> BasicIdentity {
     BasicIdentity::from_pem(
@@ -204,4 +207,45 @@ pub async fn update_neuron(agent: &Agent, neuron: ic_nns_governance_api::pb::v1:
     )
     .unwrap();
     assert!(result.is_none(), "Failed to update neuron: {:?}", result);
+}
+
+pub async fn get_pending_proposals(rosetta_client: &RosettaClient, network_identifier: NetworkIdentifier) -> Result<Vec<Proposal>, String> {
+    let response = 
+    rosetta_client.call(CallRequest::new(
+        network_identifier.clone(),
+        "get_pending_proposals".to_owned(),
+        ObjectMap::new(),
+    )).await.unwrap();
+
+    let pending_proposals: Vec<Proposal> = PendingProposalsResponse::try_from(Some(response.result))
+        .unwrap()
+        .pending_proposals
+        .into_iter()
+        .map(|p| p.proposal.unwrap())
+        .collect();
+
+    Ok(pending_proposals)
+}
+
+
+fn to_rosetta_response<T: serde::de::DeserializeOwned>(
+    hyper_res: Result<(Vec<u8>, HttpStatusCode), String>,
+) -> Result<Result<T, Error>, String> {
+    match hyper_res {
+        Ok((msg, status)) => match status.as_u16() {
+            200 => {
+                let resp: T = serde_json::from_slice(&msg).unwrap();
+                Ok(Ok(resp))
+            }
+            500 => {
+                let resp: Error = serde_json::from_slice(&msg).unwrap();
+                Ok(Err(resp))
+            }
+            _ => Err(format!(
+                "Expected status 200 or 500, got {}",
+                status.as_u16()
+            )),
+        },
+        Err(e) => Err(e),
+    }
 }
