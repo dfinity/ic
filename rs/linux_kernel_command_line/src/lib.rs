@@ -177,72 +177,72 @@ mod tests {
                 "rd.debug rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\""
                     ,
                 "rd.debug",
-                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"".to_string(),
+                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
             ),
             (
                 "remove argument without value in the middle of command line succeeds",
                 "rd.initrd=/bin/bash rd.debug rd.escaped=\"this is a multiline argument\""
                     ,
                 "rd.debug",
-                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"".to_string(),
+                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
             ),
             (
                 "remove argument without value at the end of command line succeeds",
                 "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\" rd.debug"
                     ,
                 "rd.debug",
-                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"".to_string(),
+                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
             ),
             (
                 "remove argument with value at the beginning of command line succeeds",
                 "rd.debug=0 rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\""
                     ,
                 "rd.debug",
-                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"".to_string(),
+                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
             ),
             (
                 "remove argument with value in the middle of command line succeeds",
                 "rd.initrd=/bin/bash rd.debug=0 rd.escaped=\"this is a multiline argument\""
                     ,
                 "rd.debug",
-                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"".to_string(),
+                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
             ),
             (
                 "remove argument with value at the end of command line succeeds",
                 "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\" rd.debug=1"
                     ,
                 "rd.debug",
-                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"".to_string(),
+                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
             ),
             (
                 "remove argument with quoted value at the beginning of command line succeeds",
                 "rd.debug=\"i am quoted value\" rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\""
                     ,
                 "rd.debug",
-                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"".to_string(),
+                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
             ),
             (
                 "remove argument with quoted value in the middle of command line succeeds",
                 "rd.initrd=/bin/bash rd.debug=\"i am quoted value\" rd.escaped=\"this is a multiline argument\"",
                 "rd.debug",
-                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"".to_string(),
+                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
             ),
             (
                 "remove argument with quoted value at the end of command line succeeds",
                 "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\" rd.debug=\"i am quoted value\"",                "rd.debug",
-                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"".to_string(),
+                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
             ),
             (
                 "argument with substring does not get removed at end of string",
                 "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\" rd.debug=\"i am quoted value\"",                "rd.debu",
                 "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\" rd.debug=\"i am quoted value\""
-                    .to_string(),
+                    ,
             ),
             (
                 "argument removal chomps extra spaces after removal",
                 "rd.initrd=/bin/bash  rd.escaped=\"this is a multiline argument\" rd.debug=\"i am quoted value\"",                "rd.debug",
                 "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\""
-                    .to_string(),
+                    ,
             ),
         ];
         for (name, input, argument_to_remove, expected) in table.iter() {
