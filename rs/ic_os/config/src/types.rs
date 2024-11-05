@@ -26,6 +26,8 @@ pub const CONFIG_VERSION: &str = "1.0.0";
 /// (e.g., `config.ini`, `deployment.json`) are transformed into `SetupOSConfig`.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct SetupOSConfig {
+    /// Tracks the config version, set to CONFIG_VERSION at runtime.
+    pub config_version: String,
     pub network_settings: NetworkSettings,
     pub icos_settings: ICOSSettings,
     pub setupos_settings: SetupOSSettings,
@@ -36,6 +38,8 @@ pub struct SetupOSConfig {
 /// HostOS configuration. In production, this struct inherits settings from `SetupOSConfig`.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct HostOSConfig {
+    /// Tracks the config version, set to CONFIG_VERSION at runtime.
+    pub config_version: String,
     pub network_settings: NetworkSettings,
     pub icos_settings: ICOSSettings,
     pub hostos_settings: HostOSSettings,
@@ -45,6 +49,8 @@ pub struct HostOSConfig {
 /// GuestOS configuration. In production, this struct inherits settings from `HostOSConfig`.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct GuestOSConfig {
+    /// Tracks the config version, set to CONFIG_VERSION at runtime.
+    pub config_version: String,
     pub network_settings: NetworkSettings,
     pub icos_settings: ICOSSettings,
     pub guestos_settings: GuestOSSettings,
@@ -52,8 +58,6 @@ pub struct GuestOSConfig {
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct ICOSSettings {
-    /// Tracks the config version, set to CONFIG_VERSION at runtime.
-    pub config_version: String,
     /// In nested testing, mgmt_mac is set in deployment.json.template,
     /// else found dynamically in call to config tool CreateSetuposConfig
     pub mgmt_mac: FormattedMacAddress,

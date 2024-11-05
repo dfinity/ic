@@ -72,7 +72,6 @@ mod tests {
         };
         let icos_dev_settings = ICOSDevSettings::default();
         let icos_settings = ICOSSettings {
-            config_version: CONFIG_VERSION.to_string(),
             mgmt_mac: FormattedMacAddress::try_from("ec:2a:72:31:a2:0c")?,
             deployment_environment: "Mainnet".to_string(),
             logging,
@@ -96,6 +95,7 @@ mod tests {
         };
 
         let setupos_config_struct = SetupOSConfig {
+            config_version: CONFIG_VERSION.to_string(),
             network_settings: network_settings.clone(),
             icos_settings: icos_settings.clone(),
             setupos_settings: setupos_settings.clone(),
@@ -103,12 +103,14 @@ mod tests {
             guestos_settings: guestos_settings.clone(),
         };
         let hostos_config_struct = HostOSConfig {
+            config_version: CONFIG_VERSION.to_string(),
             network_settings: network_settings.clone(),
             icos_settings: icos_settings.clone(),
             hostos_settings: hostos_settings.clone(),
             guestos_settings: guestos_settings.clone(),
         };
         let guestos_config_struct = GuestOSConfig {
+            config_version: CONFIG_VERSION.to_string(),
             network_settings: network_settings.clone(),
             icos_settings: icos_settings.clone(),
             guestos_settings: guestos_settings.clone(),
@@ -141,6 +143,7 @@ mod tests {
     // Test config version 1.0.0
     const HOSTOS_CONFIG_JSON_V1_0_0: &str = r#"
     {
+        "config_version": "1.0.0",
         "network_settings": {
             "ipv6_config": {
                 "Deterministic": {
@@ -157,7 +160,6 @@ mod tests {
             "domain_name": "example.com"
         },
         "icos_settings": {
-            "config_version": "1.0.0",
             "mgmt_mac": "ec:2a:72:31:a2:0c",
             "deployment_environment": "Mainnet",
             "logging": {
@@ -200,6 +202,7 @@ mod tests {
 
     const GUESTOS_CONFIG_JSON_V1_0_0: &str = r#"
     {
+        "config_version": "1.0.0",
         "network_settings": {
             "ipv6_config": {
                 "Deterministic": {
@@ -216,7 +219,6 @@ mod tests {
             "domain_name": "example.com"
         },
         "icos_settings": {
-            "config_version": "1.0.0",
             "mgmt_mac": "ec:2a:72:31:a2:0c",
             "deployment_environment": "Mainnet",
             "logging": {
@@ -255,7 +257,7 @@ mod tests {
     #[test]
     fn test_deserialize_hostos_config_v1_0_0() -> Result<(), Box<dyn std::error::Error>> {
         let config: HostOSConfig = serde_json::from_str(HOSTOS_CONFIG_JSON_V1_0_0)?;
-        assert_eq!(config.icos_settings.config_version, "1.0.0");
+        assert_eq!(config.config_version, "1.0.0");
         assert_eq!(config.hostos_settings.vm_cpu, "kvm");
         Ok(())
     }
@@ -263,7 +265,7 @@ mod tests {
     #[test]
     fn test_deserialize_guestos_config_v1_0_0() -> Result<(), Box<dyn std::error::Error>> {
         let config: GuestOSConfig = serde_json::from_str(GUESTOS_CONFIG_JSON_V1_0_0)?;
-        assert_eq!(config.icos_settings.config_version, "1.0.0");
+        assert_eq!(config.config_version, "1.0.0");
         assert_eq!(
             config.icos_settings.mgmt_mac.to_string(),
             "ec:2a:72:31:a2:0c"
