@@ -11,7 +11,9 @@ use assert_matches::assert_matches;
 use async_trait::async_trait;
 use candid::{Decode, Encode};
 use common::increase_dissolve_delay_raw;
-use comparable::{Changed, I32Change, MapChange, OptionChange, StringChange, U64Change, VecChange};
+use comparable::{
+    Changed, I32Change, MapChange, OptionChange, StringChange, U32Change, U64Change, VecChange,
+};
 use fixtures::{
     account, environment_fixture::CanisterCallReply, new_motion_proposal, principal, NNSBuilder,
     NNSStateChange, NeuronBuilder, ProposalNeuronBehavior, NNS,
@@ -290,6 +292,7 @@ fn test_single_neuron_proposal_new() {
                                 ),
                             ),
                         ),
+                        NeuronChange::RecentBallotsNextEntryIndex(OptionChange::BothSome(U32Change(0, 1,),),),
                     ],
                 )]),
                 GovernanceChange::Proposals(vec![MapChange::Added(
@@ -956,6 +959,9 @@ async fn test_cascade_following_new() {
                             DEFAULT_TEST_START_TIMESTAMP_SECONDS,
                         ),
                     ),),
+                    NeuronChange::RecentBallotsNextEntryIndex(OptionChange::BothSome(U32Change(
+                        0, 1,
+                    ),),),
                 ],
             )]),
             GovernanceChange::Proposals(vec![MapChange::Added(
@@ -1106,6 +1112,9 @@ async fn test_cascade_following_new() {
                             DEFAULT_TEST_START_TIMESTAMP_SECONDS,
                         ),
                     ),),
+                    NeuronChange::RecentBallotsNextEntryIndex(OptionChange::BothSome(U32Change(
+                        0, 1,
+                    ),),),
                 ],
             )]),
             GovernanceChange::Proposals(vec![MapChange::Changed(
@@ -1174,29 +1183,39 @@ async fn test_cascade_following_new() {
                 ),
                 MapChange::Changed(
                     2,
-                    vec![NeuronChange::RecentBallots(vec![VecChange::Added(
-                        0,
-                        vec![
-                            BallotInfoChange::ProposalId(OptionChange::Different(
-                                None,
-                                Some(ProposalId { id: 1 }),
-                            )),
-                            BallotInfoChange::Vote(I32Change(0, 1)),
-                        ],
-                    )])],
+                    vec![
+                        NeuronChange::RecentBallots(vec![VecChange::Added(
+                            0,
+                            vec![
+                                BallotInfoChange::ProposalId(OptionChange::Different(
+                                    None,
+                                    Some(ProposalId { id: 1 }),
+                                )),
+                                BallotInfoChange::Vote(I32Change(0, 1)),
+                            ],
+                        )]),
+                        NeuronChange::RecentBallotsNextEntryIndex(OptionChange::BothSome(
+                            U32Change(0, 1,),
+                        ),),
+                    ],
                 ),
                 MapChange::Changed(
                     3,
-                    vec![NeuronChange::RecentBallots(vec![VecChange::Added(
-                        0,
-                        vec![
-                            BallotInfoChange::ProposalId(OptionChange::Different(
-                                None,
-                                Some(ProposalId { id: 1 }),
-                            )),
-                            BallotInfoChange::Vote(I32Change(0, 1)),
-                        ],
-                    )])],
+                    vec![
+                        NeuronChange::RecentBallots(vec![VecChange::Added(
+                            0,
+                            vec![
+                                BallotInfoChange::ProposalId(OptionChange::Different(
+                                    None,
+                                    Some(ProposalId { id: 1 }),
+                                )),
+                                BallotInfoChange::Vote(I32Change(0, 1)),
+                            ],
+                        )]),
+                        NeuronChange::RecentBallotsNextEntryIndex(OptionChange::BothSome(
+                            U32Change(0, 1,),
+                        ),),
+                    ],
                 ),
                 MapChange::Changed(
                     6,
@@ -1218,6 +1237,9 @@ async fn test_cascade_following_new() {
                                 DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
                                 DEFAULT_TEST_START_TIMESTAMP_SECONDS,
                             ),
+                        ),),
+                        NeuronChange::RecentBallotsNextEntryIndex(OptionChange::BothSome(
+                            U32Change(0, 1,),
                         ),),
                     ],
                 ),
@@ -4435,6 +4457,7 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
             kyc_verified: true,
             visibility,
             voting_power_refreshed_timestamp_seconds: Some(START_TIMESTAMP_SECONDS),
+            recent_ballots_next_entry_index: Some(0),
             ..Default::default()
         }
     );

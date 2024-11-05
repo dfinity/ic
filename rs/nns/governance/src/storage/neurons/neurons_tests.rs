@@ -506,13 +506,13 @@ fn test_abridged_neuron_size() {
         dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(u64::MAX)),
         visibility: None,
         voting_power_refreshed_timestamp_seconds: Some(u64::MAX),
-        recent_ballots_next_entry_index: Some(0),
+        recent_ballots_next_entry_index: Some(u32::MAX),
     };
 
     assert!(abridged_neuron.encoded_len() as u32 <= AbridgedNeuron::BOUND.max_size());
     // This size can be updated. This assertion is here to make sure we are very aware of growth.
     // Reminder: the amount we allocated for AbridgedNeuron is 380 bytes.
-    assert_eq!(abridged_neuron.encoded_len(), 196);
+    assert_eq!(abridged_neuron.encoded_len(), 203);
 }
 
 #[test]

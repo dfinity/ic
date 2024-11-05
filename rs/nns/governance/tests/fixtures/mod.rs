@@ -383,6 +383,7 @@ impl NeuronBuilder {
             joined_community_fund_timestamp_seconds: self.joined_community_fund,
             spawn_at_timestamp_seconds: self.spawn_at_timestamp_seconds,
             neuron_type: self.neuron_type,
+            recent_ballots_next_entry_index: Some(0),
             ..Neuron::default()
         }
     }

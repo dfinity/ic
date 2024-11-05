@@ -8,7 +8,6 @@ use crate::{
 };
 use candid::Principal;
 use ic_base_types::PrincipalId;
-use ic_cdk::api::instruction_counter;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_stable_structures::{storable::Bound, StableBTreeMap, Storable};
 use itertools::Itertools;
@@ -239,7 +238,6 @@ where
         old_neuron: &Neuron,
         new_neuron: Neuron,
     ) -> Result<(), NeuronStoreError> {
-        let start = instruction_counter();
         let DecomposedNeuron {
             // The original neuron is consumed near the end of this
             // statement. This abridged one takes its place.
@@ -265,8 +263,6 @@ where
             neuron.clone(),
         );
 
-        let after_main_update = instruction_counter();
-
         // Make sure that we changed an existing entry, not created a new entry.
         let _previous_neuron = previous_neuron.ok_or_else(|| {
             // Yikes! There was no entry before. Abort!
@@ -277,10 +273,9 @@ where
             NeuronStoreError::not_found(neuron_id)
         })?;
 
-        let before_hotkeys_update = instruction_counter();
         // Auxiliary Data
         // --------------
-        let hotkeys_updated = hot_keys != old_neuron.hot_keys;
+
         if hot_keys != old_neuron.hot_keys {
             update_repeated_field(
                 neuron_id,
@@ -291,18 +286,13 @@ where
                 &mut self.hot_keys_map,
             );
         }
-        let after_hotkeys_update = instruction_counter();
-        let recent_ballots_updated = recent_ballots != old_neuron.recent_ballots;
         if recent_ballots != old_neuron.recent_ballots {
             update_repeated_field(neuron_id, recent_ballots, &mut self.recent_ballots_map);
         }
-        let after_recent_ballots_update = instruction_counter();
-        let followees_updated = followees != old_neuron.followees;
         if followees != old_neuron.followees {
             self.update_followees(neuron_id, followees);
         }
-        let after_followees_update = instruction_counter();
-        let known_neuron_data_updated = known_neuron_data != old_neuron.known_neuron_data;
+
         if known_neuron_data != old_neuron.known_neuron_data {
             update_singleton_field(
                 neuron_id,
@@ -310,23 +300,10 @@ where
                 &mut self.known_neuron_data_map,
             );
         }
-        let after_known_neuron_data_update = instruction_counter();
         if transfer != old_neuron.transfer {
             update_singleton_field(neuron_id, transfer, &mut self.transfer_map);
         }
-        //
-        // panic!("What was updated? hotkeys_updated? {hotkeys_updated}\n\
-        //         recentBallots? {recent_ballots_updated}\
-        //         followees? {followees_updated} \
-        //         knownkneurons? {known_neuron_data_updated} \
-        //         Incremental update instruction counts: main: {}, hotkeys: {}, recent_ballots: {}, followees: {}, known_neuron_data: {}",
-        //     after_main_update - start,
-        //     before_hotkeys_update - after_main_update,
-        //     after_recent_ballots_update - after_hotkeys_update,
-        //     after_followees_update - after_recent_ballots_update,
-        //     after_known_neuron_data_update - after_followees_update
-        // );
-        //
+
         Ok(())
     }
 
@@ -860,8 +837,7 @@ fn update_range<Key, Value, Memory>(
     for (key, value) in map.range(range) {
         if !new_keys.contains(&key) {
             to_remove.push(key.clone());
-        }
-        if new_entries.get(&key).expect("We just checked it's there") == &value {
+        } else if new_entries.get(&key).expect("We just checked it's there") == &value {
             new_entries.remove(&key);
         }
     }
