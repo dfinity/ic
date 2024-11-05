@@ -13,7 +13,6 @@ use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
 use ic_types::CanisterId;
 use ic_types::Cycles;
-use libfuzzer_sys::fuzz_target;
 use libfuzzer_sys::test_input_wrap;
 use std::cell::RefCell;
 use wasm_fuzzers::ic_wasm::ICWasmModule;
@@ -23,6 +22,7 @@ use std::env;
 use std::ffi::CString;
 use std::os::raw::c_char;
 
+#[allow(improper_ctypes)]
 extern "C" {
     fn LLVMFuzzerRunDriver(
         argc: *const isize,
@@ -83,12 +83,13 @@ fn setup_env() -> (StateMachine, CanisterId) {
 }
 
 #[no_mangle]
+#[allow(improper_ctypes_definitions)]
 pub extern "C" fn rust_fuzzer_test_input(bytes: &[u8]) -> i32 {
     if bytes.len() < <ICWasmModule as Arbitrary>::size_hint(0).0 {
         return -1;
     }
 
-    let mut u = Unstructured::new(bytes);
+    let u = Unstructured::new(bytes);
     let data = <ICWasmModule as Arbitrary>::arbitrary_take_rest(u);
 
     let data = match data {

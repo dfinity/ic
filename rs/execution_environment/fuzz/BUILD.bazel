@@ -1,4 +1,4 @@
-load("//bazel:fuzz_testing.bzl", "rust_fuzz_test_binary", "rust_fuzz_test_binary_no_main")
+load("//bazel:fuzz_testing.bzl", "rust_fuzz_test_binary")
 
 package(default_visibility = ["//visibility:private"])
 
@@ -32,12 +32,13 @@ SYSTEM_API_FUZZ_DEPENDENCIES = [
     "@crate_index//:wat",
 ]
 
-rust_fuzz_test_binary_no_main(
+rust_fuzz_test_binary(
     name = "execute_with_wasm_executor_system_api_call",
     testonly = True,
     srcs = [
         "fuzz_targets/execute_system_api_call.rs",
     ],
+    allow_main = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = SYSTEM_API_FUZZ_DEPENDENCIES,
 )
