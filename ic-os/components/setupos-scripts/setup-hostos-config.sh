@@ -21,6 +21,17 @@ function mount_config_partition() {
 }
 
 function copy_config_files() {
+    # TODO(NODE-1519): delete config.ini copying after switch to new icos config
+    echo "* Copying 'config.ini' to hostOS config partition..."
+    if [ -f "${CONFIG_DIR}/config.ini" ]; then
+        cp ${CONFIG_DIR}/config.ini /media/
+        log_and_halt_installation_on_error "${?}" "Unable to copy 'config.ini' to hostOS config partition."
+    
+    # TODO(NODE-1519): delete deployment.json copying after switch to new icos config
+    echo "* Copying deployment.json to config partition..."
+    cp /data/deployment.json /media/
+    log_and_halt_installation_on_error "${?}" "Unable to copy deployment.json to hostOS config partition."
+
     echo "* Copying SSH authorized keys..."
     use_ssh_authorized_keys=$(get_config_value '.icos_settings.use_ssh_authorized_keys')
     if [[ "${use_ssh_authorized_keys,,}" == "true" ]]; then
