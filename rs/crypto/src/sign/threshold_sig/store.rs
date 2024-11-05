@@ -1,4 +1,5 @@
 use super::*;
+use ic_management_canister_types::MasterPublicKeyId;
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
 use std::collections::VecDeque;
 
@@ -88,6 +89,8 @@ pub struct ThresholdSigDataStoreImpl {
     // VecDeque used as queue: `push_back` to add, `pop_front` to remove
     low_threshold_dkg_id_insertion_order: VecDeque<NiDkgId>,
     high_threshold_dkg_id_insertion_order: VecDeque<NiDkgId>,
+    high_threshold_for_key_id_dkg_id_insertion_order:
+        BTreeMap<MasterPublicKeyId, VecDeque<NiDkgId>>,
 }
 
 #[derive(Default)]
@@ -129,6 +132,7 @@ impl ThresholdSigDataStoreImpl {
             high_threshold_dkg_id_insertion_order: VecDeque::with_capacity(
                 max_num_of_dkg_ids_per_tag,
             ),
+            high_threshold_for_key_id_dkg_id_insertion_order: BTreeMap::new(),
         }
     }
 
@@ -137,7 +141,7 @@ impl ThresholdSigDataStoreImpl {
         if !self.store.contains_key(dkg_id) {
             self.store
                 .insert(dkg_id.clone(), ThresholdSigData::default());
-            match dkg_id.dkg_tag {
+            match &dkg_id.dkg_tag {
                 NiDkgTag::LowThreshold => {
                     self.low_threshold_dkg_id_insertion_order
                         .push_back(dkg_id.clone());
@@ -145,6 +149,20 @@ impl ThresholdSigDataStoreImpl {
                 NiDkgTag::HighThreshold => {
                     self.high_threshold_dkg_id_insertion_order
                         .push_back(dkg_id.clone());
+                }
+                NiDkgTag::HighThresholdForKey(master_public_key_id) => {
+                    match self
+                        .high_threshold_for_key_id_dkg_id_insertion_order
+                        .get_mut(master_public_key_id)
+                    {
+                        Some(insertion_order) => insertion_order.push_back(dkg_id.clone()),
+                        None => {
+                            let mut buf = VecDeque::with_capacity(self.max_num_of_dkg_ids_per_tag);
+                            buf.push_back(dkg_id.clone());
+                            self.high_threshold_for_key_id_dkg_id_insertion_order
+                                .insert(master_public_key_id.clone(), buf);
+                        }
+                    }
                 }
             }
         }
@@ -155,14 +173,19 @@ impl ThresholdSigDataStoreImpl {
 
     fn purge_entry_for_oldest_dkg_id_if_necessary(&mut self, tag: &NiDkgTag) {
         let dkg_id_insertion_order = match tag {
-            NiDkgTag::LowThreshold => &mut self.low_threshold_dkg_id_insertion_order,
-            NiDkgTag::HighThreshold => &mut self.high_threshold_dkg_id_insertion_order,
+            NiDkgTag::LowThreshold => Some(&mut self.low_threshold_dkg_id_insertion_order),
+            NiDkgTag::HighThreshold => Some(&mut self.high_threshold_dkg_id_insertion_order),
+            NiDkgTag::HighThresholdForKey(master_public_key_id) => self
+                .high_threshold_for_key_id_dkg_id_insertion_order
+                .get_mut(master_public_key_id),
         };
-        if dkg_id_insertion_order.len() > self.max_num_of_dkg_ids_per_tag {
-            let oldest_dkg_id = dkg_id_insertion_order
-                .pop_front()
-                .expect("dkg store unexpectedly empty");
-            self.store.remove(&oldest_dkg_id);
+        if let Some(insertion_order) = dkg_id_insertion_order {
+            if insertion_order.len() > self.max_num_of_dkg_ids_per_tag {
+                let oldest_dkg_id = insertion_order
+                    .pop_front()
+                    .expect("dkg store unexpectedly empty");
+                self.store.remove(&oldest_dkg_id);
+            }
         }
     }
 

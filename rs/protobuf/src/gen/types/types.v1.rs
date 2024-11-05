@@ -122,6 +122,8 @@ pub struct NiDkgId {
     pub dkg_tag: i32,
     #[prost(message, optional, tag = "5")]
     pub remote_target_id: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    #[prost(message, optional, tag = "6")]
+    pub key_id: ::core::option::Option<MasterPublicKeyId>,
 }
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct NominalCycles {
@@ -131,7 +133,14 @@ pub struct NominalCycles {
     pub low: u64,
 }
 #[derive(
-    serde::Serialize, serde::Deserialize, Eq, candid::CandidType, Clone, PartialEq, ::prost::Message,
+    serde::Serialize,
+    serde::Deserialize,
+    Eq,
+    Hash,
+    candid::CandidType,
+    Clone,
+    PartialEq,
+    ::prost::Message,
 )]
 pub struct EcdsaKeyId {
     #[prost(enumeration = "EcdsaCurve", tag = "1")]
@@ -139,28 +148,28 @@ pub struct EcdsaKeyId {
     #[prost(string, tag = "2")]
     pub name: ::prost::alloc::string::String,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize, Eq, Hash, Clone, PartialEq, ::prost::Message)]
 pub struct SchnorrKeyId {
     #[prost(enumeration = "SchnorrAlgorithm", tag = "1")]
     pub algorithm: i32,
     #[prost(string, tag = "2")]
     pub name: ::prost::alloc::string::String,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize, Eq, Hash, Clone, PartialEq, ::prost::Message)]
 pub struct VetKdKeyId {
     #[prost(enumeration = "VetKdCurve", tag = "1")]
     pub curve: i32,
     #[prost(string, tag = "2")]
     pub name: ::prost::alloc::string::String,
 }
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize, Eq, Hash, Clone, PartialEq, ::prost::Message)]
 pub struct MasterPublicKeyId {
     #[prost(oneof = "master_public_key_id::KeyId", tags = "1, 2, 3")]
     pub key_id: ::core::option::Option<master_public_key_id::KeyId>,
 }
 /// Nested message and enum types in `MasterPublicKeyId`.
 pub mod master_public_key_id {
-    #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Oneof)]
+    #[derive(serde::Serialize, serde::Deserialize, Eq, Hash, Clone, PartialEq, ::prost::Oneof)]
     pub enum KeyId {
         #[prost(message, tag = "1")]
         Ecdsa(super::EcdsaKeyId),
@@ -177,6 +186,7 @@ pub enum NiDkgTag {
     Unspecified = 0,
     LowThreshold = 1,
     HighThreshold = 2,
+    HighThresholdForKey = 3,
 }
 impl NiDkgTag {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -188,6 +198,7 @@ impl NiDkgTag {
             Self::Unspecified => "NI_DKG_TAG_UNSPECIFIED",
             Self::LowThreshold => "NI_DKG_TAG_LOW_THRESHOLD",
             Self::HighThreshold => "NI_DKG_TAG_HIGH_THRESHOLD",
+            Self::HighThresholdForKey => "NI_DKG_TAG_HIGH_THRESHOLD_FOR_KEY",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -196,6 +207,7 @@ impl NiDkgTag {
             "NI_DKG_TAG_UNSPECIFIED" => Some(Self::Unspecified),
             "NI_DKG_TAG_LOW_THRESHOLD" => Some(Self::LowThreshold),
             "NI_DKG_TAG_HIGH_THRESHOLD" => Some(Self::HighThreshold),
+            "NI_DKG_TAG_HIGH_THRESHOLD_FOR_KEY" => Some(Self::HighThresholdForKey),
             _ => None,
         }
     }
@@ -382,6 +394,8 @@ pub struct TaggedNiDkgTranscript {
     pub transcript: ::core::option::Option<NiDkgTranscript>,
     #[prost(enumeration = "NiDkgTag", tag = "2")]
     pub tag: i32,
+    #[prost(message, optional, tag = "3")]
+    pub key_id: ::core::option::Option<MasterPublicKeyId>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CallbackIdedNiDkgTranscript {

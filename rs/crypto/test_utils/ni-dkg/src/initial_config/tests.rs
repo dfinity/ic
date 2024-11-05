@@ -294,6 +294,9 @@ fn registry_with_ni_dkg_transcript(
             cup_contents.initial_ni_dkg_transcript_low_threshold =
                 Some(InitialNiDkgTranscriptRecord::from(transcript()));
         }
+        NiDkgTag::HighThresholdForKey(_master_public_key_id) => {
+            unimplemented!("not supported currently")
+        }
     }
     let registry_data = ProtoRegistryDataProvider::new();
     registry_data

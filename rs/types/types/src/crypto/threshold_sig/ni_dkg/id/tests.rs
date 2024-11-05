@@ -21,8 +21,14 @@ fn should_convert_ni_dkg_id_to_proto() {
             dealer_subnet: principal_id.into_vec(),
             remote_target_id: Some(target_id.to_vec()),
             dkg_tag: 2,
+            key_id: None,
         }
     )
+}
+
+#[test]
+fn should_convert_ni_dkg_id_with_key_id_to_proto() {
+    todo!()
 }
 
 #[test]
@@ -37,6 +43,7 @@ fn should_parse_valid_proto_as_ni_dkg_id() {
             dealer_subnet: principal_id_blob.clone(),
             remote_target_id: val.clone(),
             dkg_tag: 2,
+            key_id: None,
         };
 
         let id = NiDkgId::try_from(proto).unwrap();
@@ -59,6 +66,11 @@ fn should_parse_valid_proto_as_ni_dkg_id() {
 }
 
 #[test]
+fn should_parse_valid_proto_as_ni_dkg_id_with_key_id() {
+    todo!()
+}
+
+#[test]
 fn should_return_error_if_remote_target_id_invalid_when_parsing_proto() {
     let target_id_size = NiDkgTargetId::SIZE - 2;
     let proto = NiDkgIdProto {
@@ -66,6 +78,7 @@ fn should_return_error_if_remote_target_id_invalid_when_parsing_proto() {
         dealer_subnet: vec![42; PrincipalId::MAX_LENGTH_IN_BYTES],
         remote_target_id: Some(vec![42; target_id_size]),
         dkg_tag: 1,
+        key_id: None,
     };
 
     let result = NiDkgId::try_from(proto);
@@ -77,13 +90,33 @@ fn should_return_error_if_remote_target_id_invalid_when_parsing_proto() {
 }
 
 #[test]
-fn should_return_error_if_ni_dkg_tag_invalid_when_parsing_proto() {
+fn should_return_error_if_ni_dkg_tag_invalid_with_missing_keyid_when_parsing_proto() {
     let invalid_dkg_tag = 3;
     let proto = NiDkgIdProto {
         start_block_height: 7,
         dealer_subnet: vec![42; PrincipalId::MAX_LENGTH_IN_BYTES],
         remote_target_id: Some(vec![42; NiDkgTargetId::SIZE]),
         dkg_tag: invalid_dkg_tag,
+        key_id: None,
+    };
+
+    let result = NiDkgId::try_from(proto);
+
+    assert_eq!(
+        result.unwrap_err(),
+        NiDkgIdFromProtoError::InvalidDkgTagMissingKeyId
+    );
+}
+
+#[test]
+fn should_return_error_if_ni_dkg_tag_invalid_when_parsing_proto() {
+    let invalid_dkg_tag = 4;
+    let proto = NiDkgIdProto {
+        start_block_height: 7,
+        dealer_subnet: vec![42; PrincipalId::MAX_LENGTH_IN_BYTES],
+        remote_target_id: Some(vec![42; NiDkgTargetId::SIZE]),
+        dkg_tag: invalid_dkg_tag,
+        key_id: None,
     };
 
     let result = NiDkgId::try_from(proto);
@@ -99,6 +132,7 @@ fn should_return_error_if_dealer_subnet_id_invalid_when_parsing_proto() {
         dealer_subnet: vec![42; invalid_principal_length],
         remote_target_id: Some(vec![42; NiDkgTargetId::SIZE]),
         dkg_tag: 2,
+        key_id: None,
     };
 
     let result = NiDkgId::try_from(proto);

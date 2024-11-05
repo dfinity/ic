@@ -47,10 +47,14 @@ impl From<NiDkgId> for NiDkgIdProto {
         NiDkgIdProto {
             start_block_height: ni_dkg_id.start_block_height.get(),
             dealer_subnet: ni_dkg_id.dealer_subnet.get().into_vec(),
-            dkg_tag: ni_dkg_id.dkg_tag as i32,
+            dkg_tag: pb::NiDkgTag::from(&ni_dkg_id.dkg_tag) as i32, // i32::from(&ni_dkg_id.dkg_tag), // TODO: delete i32::from conversion ?
             remote_target_id: match ni_dkg_id.target_subnet {
                 NiDkgTargetSubnet::Remote(target_id) => Some(target_id.0.to_vec()),
                 NiDkgTargetSubnet::Local => None,
+            },
+            key_id: match ni_dkg_id.dkg_tag {
+                NiDkgTag::HighThresholdForKey(k) => Some(pb::MasterPublicKeyId::from(&k)),
+                _ => None,
             },
         }
     }
@@ -66,8 +70,23 @@ impl TryFrom<NiDkgIdProto> for NiDkgId {
                 PrincipalId::try_from(ni_dkg_id_proto.dealer_subnet.as_slice())
                     .map_err(NiDkgIdFromProtoError::InvalidPrincipalId)?,
             ),
-            dkg_tag: NiDkgTag::try_from(ni_dkg_id_proto.dkg_tag)
-                .map_err(|_| NiDkgIdFromProtoError::InvalidDkgTag)?,
+            dkg_tag: {
+                match ni_dkg_id_proto.dkg_tag {
+                    1 => Ok(NiDkgTag::LowThreshold),
+                    2 => Ok(NiDkgTag::HighThreshold),
+                    3 => {
+                        let mpkid_proto = ni_dkg_id_proto
+                            .key_id
+                            .ok_or(NiDkgIdFromProtoError::InvalidDkgTagMissingKeyId)?;
+                        let mpkid = MasterPublicKeyId::try_from(mpkid_proto).map_err(|e| {
+                            NiDkgIdFromProtoError::InvalidMasterPublicKeyId(format!("{e}"))
+                            // TODO: test this case
+                        })?;
+                        Ok(NiDkgTag::HighThresholdForKey(mpkid))
+                    }
+                    _ => Err(NiDkgIdFromProtoError::InvalidDkgTag),
+                }?
+            },
             target_subnet: match ni_dkg_id_proto.remote_target_id {
                 None => NiDkgTargetSubnet::Local,
                 // Note that empty bytes (which are different from None) will lead to an error.
@@ -103,7 +122,9 @@ pub fn ni_dkg_target_id(data: &[u8]) -> Result<NiDkgTargetId, InvalidNiDkgTarget
 pub enum NiDkgIdFromProtoError {
     InvalidPrincipalId(PrincipalIdBlobParseError),
     InvalidDkgTag,
+    InvalidDkgTagMissingKeyId,
     InvalidRemoteTargetIdSize(InvalidNiDkgTargetIdSizeError),
+    InvalidMasterPublicKeyId(String),
 }
 
 impl From<NiDkgIdFromProtoError> for ic_protobuf::proxy::ProxyDecodeError {
@@ -112,8 +133,14 @@ impl From<NiDkgIdFromProtoError> for ic_protobuf::proxy::ProxyDecodeError {
         match error {
             InvalidPrincipalId(err) => Self::InvalidPrincipalId(Box::new(err)),
             InvalidDkgTag => Self::Other("Invalid DKG tag.".to_string()),
+            InvalidDkgTagMissingKeyId => {
+                Self::Other("Invalid DKG tag: missing the mandatory key ID.".to_string())
+            }
             InvalidRemoteTargetIdSize(_) => {
                 Self::Other("Invalid remote target Id size.".to_string())
+            }
+            InvalidMasterPublicKeyId(e) => {
+                Self::Other(format!("Invalid master public key for NiDkgTag: {e}."))
             }
         }
     }

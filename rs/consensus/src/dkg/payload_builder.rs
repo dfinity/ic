@@ -507,6 +507,21 @@ pub(crate) fn get_configs_for_local_transcripts(
                     resharing_transcript.cloned(),
                 )
             }
+            ////////////////////////////////////////////////////////////////////////////////
+            // TODO: how to behave here? The code below is copied+adapted from the HighThreshold case. However,
+            // this code currently won't be executed because we iterate over TAGS, which is a const that does not
+            // and cannot contain an NiDkgTag::HighThresholdForKey entry
+            ///////////////////////////////////////////////////////////////////////////////
+            NiDkgTag::HighThresholdForKey(master_public_key_id) => {
+                let resharing_transcript = reshared_transcripts
+                    .get(&NiDkgTag::HighThresholdForKey(master_public_key_id.clone()));
+                (
+                    resharing_transcript
+                        .map(|transcript| transcript.committee.get().clone())
+                        .unwrap_or_else(|| node_ids.clone()),
+                    resharing_transcript.cloned(),
+                )
+            }
         };
         let threshold =
             NumberOfNodes::from(tag.threshold_for_subnet_of_size(node_ids.len()) as u32);
@@ -1206,9 +1221,13 @@ mod tests {
                 assert_eq!(conf.max_corrupt_dealers().get(), 2);
                 assert_eq!(
                     conf.threshold().get().get(),
-                    match *tag {
+                    match tag {
                         NiDkgTag::LowThreshold => 3,
                         NiDkgTag::HighThreshold => 5,
+                        /////////////////////////////////////////
+                        // TODO: check with Consensus team
+                        NiDkgTag::HighThresholdForKey(_) => panic!("not applicable"),
+                        /////////////////////////////////////////
                     }
                 );
             }
@@ -1311,9 +1330,13 @@ mod tests {
                     assert_eq!(conf.max_corrupt_dealers().get(), 2);
                     assert_eq!(
                         conf.threshold().get().get(),
-                        match *tag {
+                        match tag {
                             NiDkgTag::LowThreshold => 3,
                             NiDkgTag::HighThreshold => 5,
+                            /////////////////////////////////////////
+                            // TODO: check with Consensus team
+                            NiDkgTag::HighThresholdForKey(_) => panic!("not applicable"),
+                            /////////////////////////////////////////
                         }
                     );
 

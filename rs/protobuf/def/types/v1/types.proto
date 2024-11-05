@@ -32,6 +32,7 @@ message NiDkgId {
   bytes dealer_subnet = 2;
   NiDkgTag dkg_tag = 4;
   google.protobuf.BytesValue remote_target_id = 5;
+  optional MasterPublicKeyId key_id = 6;
 }
 
 // A non-interactive distributed key generation (NI-DKG) tag.
@@ -39,6 +40,7 @@ enum NiDkgTag {
   NI_DKG_TAG_UNSPECIFIED = 0;
   NI_DKG_TAG_LOW_THRESHOLD = 1;
   NI_DKG_TAG_HIGH_THRESHOLD = 2;
+  NI_DKG_TAG_HIGH_THRESHOLD_FOR_KEY = 3;
 }
 
 message NominalCycles {

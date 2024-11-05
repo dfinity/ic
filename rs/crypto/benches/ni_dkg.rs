@@ -48,6 +48,9 @@ fn test_cases(num_dealers: &[usize]) -> Vec<TestCase> {
     for n in num_dealers {
         cases.push(TestCase::new(*n, NiDkgTag::LowThreshold));
         cases.push(TestCase::new(*n, NiDkgTag::HighThreshold));
+        ///////////////////////////////////////////////////////
+        // TODO: I assume we don't benchmark the NiDkgTag::HighThresholdForKey case here, right?
+        ///////////////////////////////////////////////////////
     }
     cases
 }
@@ -258,6 +261,7 @@ impl TestCase {
         let tag_name = match self.dkg_tag {
             NiDkgTag::LowThreshold => "low",
             NiDkgTag::HighThreshold => "high",
+            NiDkgTag::HighThresholdForKey(_) => unimplemented!(),
         };
         format!(
             "crypto_nidkg_{}_nodes_{}_dealers_{}",
@@ -281,6 +285,7 @@ impl TestCase {
                 num_of_dealers: num_of_nodes,
                 dkg_tag,
             },
+            NiDkgTag::HighThresholdForKey(_) => unimplemented!(),
         }
     }
 }
