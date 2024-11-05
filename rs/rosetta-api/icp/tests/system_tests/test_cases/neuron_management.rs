@@ -1051,5 +1051,19 @@ fn test_stake_maturity() {
             neuron.maturity_e8s_equivalent,
             new_maturity * stake_percentage as u64 / 100
         );
+
+        // Now we try without specifying the stake
+        env.rosetta_client
+            .stake_maturity(
+                env.network_identifier.clone(),
+                &(*TEST_IDENTITY).clone(),
+                RosettaStakeMaturityArgs::builder(neuron_index).build(),
+            )
+            .await
+            .unwrap();
+
+        let neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
+        assert_eq!(neuron.maturity_e8s_equivalent, 0);
+        assert_eq!(neuron.staked_maturity_e8s_equivalent.unwrap(), new_maturity);
     });
 }
