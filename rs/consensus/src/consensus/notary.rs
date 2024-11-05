@@ -53,7 +53,7 @@ const ACCEPTABLE_FINALIZATION_CERTIFICATION_GAP: u64 = 2;
 
 /// The amount of time consensus should delay notarization of the next block by,
 /// for each height that the latest finalized block is ahead of the latest certified state.
-const BACKLOG_DELAY: Duration = Duration::from_millis(2000);
+const BACKLOG_DELAY_MILLIS: u64 = 2000;
 
 /// In order to have a bound on the advertised consensus pool, we place a limit on
 /// the notarization/certification gap.
@@ -341,7 +341,7 @@ fn get_adjusted_notary_delay_from_settings(
     let certified_adjusted_delay = if certified_gap <= ACCEPTABLE_FINALIZATION_CERTIFICATION_GAP {
         finality_adjusted_delay
     } else {
-        finality_adjusted_delay + BACKLOG_DELAY.as_millis() as u64 * certified_gap
+        finality_adjusted_delay + BACKLOG_DELAY_MILLIS * certified_gap
     };
 
     // We bound the gap between the next CUP height and the current notarization
