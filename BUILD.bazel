@@ -87,9 +87,9 @@ alias(
 # $ bazel run //:python-requirements.update
 compile_pip_requirements(
     name = "python-requirements",
+    size = "medium",
     src = "requirements.in",
     requirements_txt = "requirements.txt",
-    size = "medium",
 )
 
 test_suite(
