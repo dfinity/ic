@@ -100,7 +100,7 @@ message ChainKeyInitialization {
   registry.crypto.v1.MasterPublicKeyId key_id = 1;
   oneof initialization {
     InitialIDkgDealings dealings = 2;
-    InitialNiDkgTranscriptRecord transcript = 3;
+    InitialNiDkgTranscriptRecord transcript_record = 3;
   }
 }
 
