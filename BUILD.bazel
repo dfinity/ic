@@ -89,6 +89,7 @@ compile_pip_requirements(
     name = "python-requirements",
     src = "requirements.in",
     requirements_txt = "requirements.txt",
+    tags = ["requires-network"],
 )
 
 test_suite(
