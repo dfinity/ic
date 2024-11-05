@@ -99,7 +99,7 @@ pub mod chain_key_initialization {
         #[prost(message, tag = "2")]
         Dealings(super::InitialIDkgDealings),
         #[prost(message, tag = "3")]
-        Transcript(super::InitialNiDkgTranscriptRecord),
+        TranscriptRecord(super::InitialNiDkgTranscriptRecord),
     }
 }
 /// Contains the initial DKG transcripts for the subnet and materials to construct a base CUP (i.e.

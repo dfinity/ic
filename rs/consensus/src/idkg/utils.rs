@@ -418,7 +418,7 @@ pub(crate) fn inspect_chain_key_initializations(
 
         let dealings = match &chain_key_init.initialization {
             Some(pb::chain_key_initialization::Initialization::Dealings(dealings)) => dealings,
-            Some(pb::chain_key_initialization::Initialization::Transcript(_)) => continue,
+            Some(pb::chain_key_initialization::Initialization::TranscriptRecord(_)) => continue,
             None => {
                 return Err(
                     "Error: Failed to find dealings in chain_key_initializations".to_string(),
