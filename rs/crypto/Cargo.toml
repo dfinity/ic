@@ -31,6 +31,7 @@ ic-crypto-tls-cert-validation = { path = "node_key_validation/tls_cert_validatio
 ic-crypto-tls-interfaces = { path = "tls_interfaces" }
 ic-crypto-utils-basic-sig = { path = "utils/basic_sig" }
 ic-crypto-utils-tls = { path = "utils/tls" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-logger = { path = "../monitoring/logger" }
@@ -81,7 +82,6 @@ ic-crypto-test-utils-tls = { path = "test_utils/tls" }
 ic-crypto-tree-hash = { path = "tree_hash" }
 ic-crypto-utils-canister-threshold-sig = { path = "utils/canister_threshold_sig" }
 ic-interfaces-registry-mocks = { path = "../interfaces/registry/mocks" }
-ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-registry-client = { path = "../registry/client" }
 ic-registry-client-fake = { path = "../registry/fake" }
 ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
