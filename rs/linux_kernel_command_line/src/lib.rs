@@ -21,15 +21,13 @@ impl fmt::Display for ImproperlyQuotedValue {
 
 #[derive(Debug)]
 /// A value unrepresentable as a kernel command line argument value.
-pub struct UnrepresentableValue {
-    val: String,
-}
+pub struct UnrepresentableValue(String);
 
 impl StdError for UnrepresentableValue {}
 
 impl fmt::Display for UnrepresentableValue {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Illegal characters in supplied value {:?}", self.val)
+        write!(f, "Illegal characters in supplied value {:?}", self.0)
     }
 }
 
@@ -48,9 +46,7 @@ impl KernelCommandLine {
             + &match value {
                 Some(val) => ("=".to_owned()
                     + (if val.contains("\"") || val.contains("\n") {
-                        return Err(UnrepresentableValue {
-                            val: val.to_string(),
-                        });
+                        return Err(UnrepresentableValue(val.to_string()));
                     } else if val.contains(" ") {
                         ("\"".to_owned() + val + "\"").to_string()
                     } else {
