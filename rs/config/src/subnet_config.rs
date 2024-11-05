@@ -160,6 +160,12 @@ pub const DEFAULT_UPLOAD_CHUNK_INSTRUCTIONS: NumInstructions = NumInstructions::
 pub const DEFAULT_CANISTERS_SNAPSHOT_BASELINE_INSTRUCTIONS: NumInstructions =
     NumInstructions::new(2_000_000_000);
 
+/// The cycle cost overhead of executing canister instructions when running in Wasm64 mode.
+/// This overhead is a multiplier over the cost of executing the same instructions
+/// in Wasm32 mode. The overhead comes from the bound checks performed in Wasm64 mode
+/// as well as larger heap sizes that lead to larger application working sets.
+pub const WASM64_INSTRUCTION_COST_OVERHEAD: u128 = 2;
+
 /// The per subnet type configuration for the scheduler component
 #[derive(Clone, Deserialize, Serialize)]
 pub struct SchedulerConfig {
@@ -366,6 +372,10 @@ pub struct CyclesAccountManagerConfig {
     /// than 1 cycles per instruction.
     pub ten_update_instructions_execution_fee: Cycles,
 
+    /// Fee for every 10 instructions executed when executing update type
+    /// messages on a Wasm64 canister.
+    pub ten_update_instructions_execution_fee_wasm64: Cycles,
+
     /// Fee for every inter-canister call performed. This includes the fee for
     /// sending the request and receiving the response.
     pub xnet_call_fee: Cycles,
@@ -421,6 +431,7 @@ pub struct CyclesAccountManagerConfig {
 
 impl CyclesAccountManagerConfig {
     pub fn application_subnet() -> Self {
+        let ten_update_instructions_execution_fee_in_cycles = 10;
         Self {
             reference_subnet_size: DEFAULT_REFERENCE_SUBNET_SIZE,
             canister_creation_fee: Cycles::new(100_000_000_000),
@@ -430,7 +441,12 @@ impl CyclesAccountManagerConfig {
             // we estimated how many resources a representative benchmark on a
             // verified subnet is using.
             update_message_execution_fee: Cycles::new(5_000_000),
-            ten_update_instructions_execution_fee: Cycles::new(10),
+            ten_update_instructions_execution_fee: Cycles::new(
+                ten_update_instructions_execution_fee_in_cycles,
+            ),
+            ten_update_instructions_execution_fee_wasm64: Cycles::new(
+                WASM64_INSTRUCTION_COST_OVERHEAD * ten_update_instructions_execution_fee_in_cycles,
+            ),
             xnet_call_fee: Cycles::new(260_000),
             xnet_byte_transmission_fee: Cycles::new(1_000),
             ingress_message_reception_fee: Cycles::new(1_200_000),
@@ -461,6 +477,7 @@ impl CyclesAccountManagerConfig {
             compute_percent_allocated_per_second_fee: Cycles::new(0),
             update_message_execution_fee: Cycles::new(0),
             ten_update_instructions_execution_fee: Cycles::new(0),
+            ten_update_instructions_execution_fee_wasm64: Cycles::new(0),
             xnet_call_fee: Cycles::new(0),
             xnet_byte_transmission_fee: Cycles::new(0),
             ingress_message_reception_fee: Cycles::new(0),

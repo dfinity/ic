@@ -1998,64 +1998,6 @@ pub mod governance {
         }
     }
 }
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    comparable::Comparable,
-    Clone,
-    Copy,
-    PartialEq,
-    ::prost::Message,
-)]
-pub struct Timers {
-    #[prost(uint64, optional, tag = "1")]
-    pub last_reset_timestamp_seconds: ::core::option::Option<u64>,
-    #[prost(uint64, optional, tag = "2")]
-    pub last_spawned_timestamp_seconds: ::core::option::Option<u64>,
-}
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    comparable::Comparable,
-    Clone,
-    Copy,
-    PartialEq,
-    ::prost::Message,
-)]
-pub struct ResetTimersRequest {}
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    comparable::Comparable,
-    Clone,
-    Copy,
-    PartialEq,
-    ::prost::Message,
-)]
-pub struct ResetTimersResponse {}
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    comparable::Comparable,
-    Clone,
-    Copy,
-    PartialEq,
-    ::prost::Message,
-)]
-pub struct GetTimersRequest {}
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    comparable::Comparable,
-    Clone,
-    Copy,
-    PartialEq,
-    ::prost::Message,
-)]
-pub struct GetTimersResponse {
-    #[prost(message, optional, tag = "1")]
-    pub timers: ::core::option::Option<Timers>,
-}
 /// Request message for 'get_metadata'.
 #[derive(
     candid::CandidType,
@@ -3445,6 +3387,20 @@ pub mod upgrade_journal_entry {
         PartialEq,
         ::prost::Message,
     )]
+    pub struct TargetVersionReset {
+        #[prost(message, optional, tag = "1")]
+        pub old_target_version: ::core::option::Option<super::governance::Version>,
+        #[prost(message, optional, tag = "2")]
+        pub new_target_version: ::core::option::Option<super::governance::Version>,
+    }
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
     pub struct UpgradeStarted {
         #[prost(message, optional, tag = "1")]
         pub current_version: ::core::option::Option<super::governance::Version>,
@@ -3533,7 +3489,7 @@ pub mod upgrade_journal_entry {
         #[prost(message, tag = "2")]
         TargetVersionSet(TargetVersionSet),
         #[prost(message, tag = "3")]
-        TargetVersionReset(TargetVersionSet),
+        TargetVersionReset(TargetVersionReset),
         #[prost(message, tag = "4")]
         UpgradeStarted(UpgradeStarted),
         #[prost(message, tag = "5")]

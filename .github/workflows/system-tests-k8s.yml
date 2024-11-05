@@ -29,7 +29,7 @@ env:
     github.event_name == 'workflow_dispatch' && github.event.inputs.targets ||
     '//rs/tests/testing_verification:basic_health_test' }}
   JOBS: |
-    ${{ github.event_name == 'schedule' && '7' ||
+    ${{ github.event_name == 'schedule' && '14' ||
     github.event_name == 'workflow_dispatch' && github.event.inputs.jobs ||
     '32' }}
   BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
@@ -58,12 +58,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Before script
-        id: before-script
-        shell: bash
-        run: |
-          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
 
       - name: Login to Dockerhub
         shell: bash

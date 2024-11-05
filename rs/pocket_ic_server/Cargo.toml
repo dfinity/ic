@@ -36,6 +36,7 @@ ic-crypto-ed25519 = { path = "../crypto/ed25519" }
 ic-crypto-iccsa = { path = "../crypto/iccsa" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
+ic-error-types = { path = "../types/error_types" }
 ic-http-gateway = { git = "https://github.com/dfinity/http-gateway", tag = "0.1.0-b0" }
 ic-http-endpoints-public = { path = "../http_endpoints/public" }
 ic-https-outcalls-adapter = { path = "../https_outcalls/adapter" }
@@ -67,6 +68,7 @@ rand = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 serde_json = { workspace = true }
+slog = { workspace = true }
 tempfile = { workspace = true }
 time = { workspace = true }
 tokio = { workspace = true }
@@ -92,4 +94,3 @@ registry-canister = { path = "../registry/canister" }
 reqwest = { workspace = true }
 serde_json = { workspace = true }
 spec-compliance = { path = "../tests/research/spec_compliance" }
-slog = { workspace = true }
