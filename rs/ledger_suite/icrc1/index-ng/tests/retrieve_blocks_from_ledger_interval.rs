@@ -156,11 +156,9 @@ fn should_sync_according_to_interval() {
             .to_u64()
             .expect("should retrieve num_blocks_synced from index");
         if index_num_blocks_synced != ledger_chain_length {
-            let time_to_advance = effective_retrieve_blocks_from_ledger_interval(
-                DEFAULT_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL,
-                install_interval,
-                upgrade_interval,
-            );
+            let time_to_advance = upgrade_interval
+                .or(install_interval)
+                .unwrap_or(DEFAULT_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL);
             if time_to_advance > 0 {
                 env.advance_time(Duration::from_secs(time_to_advance));
                 env.tick();
@@ -209,7 +207,7 @@ fn should_sync_according_to_interval() {
                     index_ng_wasm(),
                     Encode!(&args).unwrap(),
                     None,
-                    ic_state_machine_tests::Cycles::new(STARTING_CYCLES_PER_CANISTER),
+                    ic_types::Cycles::new(STARTING_CYCLES_PER_CANISTER),
                 )?;
 
                 // Send a transaction and verify that the index is synced after the interval
@@ -448,19 +446,6 @@ struct CycleConsumption {
 
 fn abs_relative_difference(subject: i128, reference: i128) -> f64 {
     subject.abs_diff(reference) as f64 / (subject as f64)
-}
-
-fn effective_retrieve_blocks_from_ledger_interval(
-    default: u64,
-    install: Option<u64>,
-    upgrade: Option<u64>,
-) -> u64 {
-    match (install, upgrade) {
-        (Some(_install), Some(upgrade)) => upgrade,
-        (Some(install), None) => install,
-        (None, Some(upgrade)) => upgrade,
-        (None, None) => default,
-    }
 }
 
 fn idle_ledger_and_index_cycles_consumption(
