@@ -383,6 +383,16 @@ pub fn main() -> Result<()> {
             deployment_json_path,
             hostos_config_json_path,
         }) => {
+            let hostos_config_json_path = Path::new(&hostos_config_json_path);
+
+            if hostos_config_json_path.exists() {
+                println!(
+                    "The hostos_config.json file already exists at {}",
+                    hostos_config_json_path.display()
+                );
+                return Ok(());
+            }
+
             // get config.ini settings
             let ConfigIniSettings {
                 ipv6_prefix,
@@ -478,11 +488,10 @@ pub fn main() -> Result<()> {
             };
             println!("New HostOSConfig: {:?}", hostos_config);
 
-            let hostos_config_json_path = Path::new(&hostos_config_json_path);
             serialize_and_write_config(hostos_config_json_path, &hostos_config)?;
 
             println!(
-                "New GuestOSConfig has been written to {}",
+                "New HostOSConfig has been written to {}",
                 hostos_config_json_path.display()
             );
 
