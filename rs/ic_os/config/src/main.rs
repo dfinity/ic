@@ -223,7 +223,6 @@ pub fn main() -> Result<()> {
             };
 
             let icos_settings = ICOSSettings {
-                config_version: CONFIG_VERSION.to_string(),
                 mgmt_mac,
                 deployment_environment: deployment_json_settings.deployment.name,
                 logging,
@@ -249,6 +248,7 @@ pub fn main() -> Result<()> {
             let guestos_settings = GuestOSSettings::default();
 
             let setupos_config = SetupOSConfig {
+                config_version: CONFIG_VERSION.to_string(),
                 network_settings,
                 icos_settings,
                 setupos_settings,
@@ -277,6 +277,7 @@ pub fn main() -> Result<()> {
                 serde_json::from_reader(File::open(setupos_config_json_path)?)?;
 
             let hostos_config = HostOSConfig {
+                config_version: setupos_config.config_version,
                 network_settings: setupos_config.network_settings,
                 icos_settings: setupos_config.icos_settings,
                 hostos_settings: setupos_config.hostos_settings,
@@ -322,6 +323,7 @@ pub fn main() -> Result<()> {
             }
 
             let guestos_config = GuestOSConfig {
+                config_version: hostos_config.config_version,
                 network_settings: guestos_network_settings,
                 icos_settings: hostos_config.icos_settings,
                 guestos_settings: hostos_config.guestos_settings,
