@@ -447,7 +447,6 @@ pub fn main() -> Result<()> {
             let use_ssh_authorized_keys = Path::new("/boot/config/ssh_authorized_keys").exists();
 
             let icos_settings = ICOSSettings {
-                config_version: CONFIG_VERSION.to_string(),
                 mgmt_mac,
                 deployment_environment: deployment_json_settings.deployment.name,
                 logging,
@@ -471,6 +470,7 @@ pub fn main() -> Result<()> {
             let guestos_settings = GuestOSSettings::default();
 
             let hostos_config = HostOSConfig {
+                config_version: CONFIG_VERSION.to_string(),
                 network_settings,
                 icos_settings,
                 hostos_settings,

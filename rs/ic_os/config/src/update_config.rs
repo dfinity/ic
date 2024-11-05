@@ -1,7 +1,7 @@
 use crate::serialize_and_write_config;
-use anyhow::Context;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use mac_address::mac_address::FormattedMacAddress;
+use serde_json;
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fs;
@@ -20,56 +20,168 @@ pub fn update_guestos_config(output_file: PathBuf) -> Result<()> {
     let state_root = Path::new(STATE_ROOT);
     log_directory_structure(state_root)?;
 
-    let network_settings_result = read_network_conf(config_dir)?;
-    let network_settings = network_settings_result.network_settings;
-    let hostname = network_settings_result.hostname.clone();
+    let network_conf_path = config_dir.join("network.conf");
+    let config_json_path = config_dir.join("config.json");
 
-    let logging = read_filebeat_conf(config_dir)?;
-    let nns_urls = read_nns_conf(config_dir)?;
+    let network_conf_exists = network_conf_path.exists();
+    let config_json_exists = config_json_path.exists();
 
-    let nns_public_key_exists = Path::new(STATE_ROOT).join("nns_public_key.pem").exists();
+    if network_conf_exists && !config_json_exists {
+        // Read existing configuration files and generate new config.json
+        let network_settings_result = read_network_conf(config_dir)?;
+        let network_settings = network_settings_result.network_settings;
+        let hostname = network_settings_result.hostname.clone();
 
-    let node_operator_private_key_exists = Path::new(STATE_ROOT)
-        .join("node_operator_private_key.pem")
-        .exists();
+        let logging = read_filebeat_conf(config_dir)?;
+        let nns_urls = read_nns_conf(config_dir)?;
 
-    let use_ssh_authorized_keys = Path::new(CONFIG_ROOT)
-        .join("accounts_ssh_authorized_keys")
-        .is_dir();
+        let nns_public_key_exists = Path::new(STATE_ROOT).join("nns_public_key.pem").exists();
 
-    let mgmt_mac = derive_mgmt_mac_from_hostname(hostname.as_deref())?;
+        let node_operator_private_key_exists = Path::new(STATE_ROOT)
+            .join("node_operator_private_key.pem")
+            .exists();
 
-    let deployment_environment = "mainnet".to_string();
+        let use_ssh_authorized_keys = config_dir.join("accounts_ssh_authorized_keys").is_dir();
 
-    let icos_settings = ICOSSettings {
-        config_version: CONFIG_VERSION.to_string(),
-        mgmt_mac,
-        deployment_environment,
-        logging,
-        nns_public_key_exists,
-        nns_urls,
-        node_operator_private_key_exists,
-        use_ssh_authorized_keys,
-        icos_dev_settings: ICOSDevSettings::default(),
-    };
+        let mgmt_mac = derive_mgmt_mac_from_hostname(hostname.as_deref())?;
 
-    let guestos_settings = GuestOSSettings::default();
+        let deployment_environment = "mainnet".to_string();
 
-    let guestos_config = GuestOSConfig {
-        network_settings,
-        icos_settings,
-        guestos_settings,
-    };
+        let icos_settings = ICOSSettings {
+            mgmt_mac,
+            deployment_environment,
+            logging,
+            nns_public_key_exists,
+            nns_urls,
+            node_operator_private_key_exists,
+            use_ssh_authorized_keys,
+            icos_dev_settings: ICOSDevSettings::default(),
+        };
 
-    println!("New GuestOSConfig: {:?}", guestos_config);
+        let guestos_settings = GuestOSSettings::default();
 
-    serialize_and_write_config(&output_file, &guestos_config)?;
+        let guestos_config = GuestOSConfig {
+            config_version: CONFIG_VERSION.to_string(),
+            network_settings,
+            icos_settings,
+            guestos_settings,
+        };
 
-    println!(
-        "New GuestOSConfig has been written to {}",
-        output_file.display()
-    );
+        println!("New GuestOSConfig: {:?}", guestos_config);
 
+        serialize_and_write_config(&output_file, &guestos_config)?;
+
+        println!(
+            "New GuestOSConfig has been written to {}",
+            output_file.display()
+        );
+    } else if config_json_exists && !network_conf_exists {
+        // Read config.json and generate old configuration files
+        let guestos_config = read_guestos_config(&config_json_path)?;
+
+        write_network_conf(
+            &guestos_config.network_settings,
+            &guestos_config.icos_settings.mgmt_mac,
+        )?;
+        write_filebeat_conf(&guestos_config.icos_settings.logging)?;
+        write_nns_conf(&guestos_config.icos_settings.nns_urls)?;
+
+        println!(
+            "Configuration files have been generated from {}",
+            config_json_path.display()
+        );
+    } else {
+        println!(
+            "No action taken. Either both config.json and network.conf exist, or neither exists."
+        );
+    }
+
+    Ok(())
+}
+
+fn read_guestos_config(input_file: &Path) -> Result<GuestOSConfig> {
+    let content = fs::read_to_string(input_file)
+        .with_context(|| format!("Failed to read configuration file: {:?}", input_file))?;
+    let guestos_config: GuestOSConfig = serde_json::from_str(&content)
+        .with_context(|| format!("Failed to parse JSON from file: {:?}", input_file))?;
+    Ok(guestos_config)
+}
+
+fn write_network_conf(
+    network_settings: &NetworkSettings,
+    mgmt_mac: &FormattedMacAddress,
+) -> Result<()> {
+    let mut conf_lines = Vec::new();
+
+    match &network_settings.ipv6_config {
+        Ipv6Config::Fixed(config) => {
+            conf_lines.push(format!("ipv6_address={}", config.address));
+            conf_lines.push(format!("ipv6_gateway={}", config.gateway));
+        }
+        _ => {
+            // GuestOS Ipv6Config should always be Fixed
+        }
+    }
+
+    if let Some(ipv4_config) = &network_settings.ipv4_config {
+        conf_lines.push(format!(
+            "ipv4_address={}/{}",
+            ipv4_config.address, ipv4_config.prefix_length
+        ));
+        conf_lines.push(format!("ipv4_gateway={}", ipv4_config.gateway));
+    }
+
+    if let Some(domain_name) = &network_settings.domain_name {
+        conf_lines.push(format!("domain={}", domain_name));
+    }
+
+    // Generate hostname as "guest-{mgmt_mac without colons}"
+    let mgmt_mac_str = mgmt_mac.get().replace(":", "");
+    let hostname = format!("guest-{}", mgmt_mac_str);
+    conf_lines.push(format!("hostname={}", hostname));
+
+    let network_conf_path = Path::new(CONFIG_ROOT).join("network.conf");
+    write_conf_file(&network_conf_path, &conf_lines)?;
+
+    Ok(())
+}
+
+fn write_filebeat_conf(logging: &Logging) -> Result<()> {
+    let mut conf_lines = Vec::new();
+    conf_lines.push(format!(
+        "elasticsearch_hosts={}",
+        logging.elasticsearch_hosts
+    ));
+    if let Some(tags) = &logging.elasticsearch_tags {
+        conf_lines.push(format!("elasticsearch_tags={}", tags));
+    }
+
+    let filebeat_conf_path = Path::new(CONFIG_ROOT).join("filebeat.conf");
+    write_conf_file(&filebeat_conf_path, &conf_lines)?;
+
+    Ok(())
+}
+
+fn write_nns_conf(nns_urls: &[Url]) -> Result<()> {
+    let nns_url_str = nns_urls
+        .iter()
+        .map(|url| url.as_str())
+        .collect::<Vec<_>>()
+        .join(",");
+
+    let conf_lines = vec![format!("nns_url={}", nns_url_str)];
+
+    let nns_conf_path = Path::new(CONFIG_ROOT).join("nns.conf");
+    write_conf_file(&nns_conf_path, &conf_lines)?;
+
+    Ok(())
+}
+
+fn write_conf_file(conf_path: &Path, conf_lines: &[String]) -> Result<()> {
+    let content = conf_lines.join("\n") + "\n";
+    fs::write(conf_path, content)
+        .with_context(|| format!("Failed to write config file to {:?}", conf_path))?;
+    println!("Generated {:?}", conf_path);
     Ok(())
 }
 
@@ -136,7 +248,7 @@ fn read_filebeat_conf(config_dir: &Path) -> Result<Logging> {
     let conf_map = match read_conf_file(&filebeat_conf_path) {
         Ok(map) => map,
         Err(_) => {
-            // if filebeat.conf doesn't exist or can't be read, set to default values
+            // Set default values if filebeat.conf doesn't exist
             return Ok(Logging {
                 elasticsearch_hosts: "elasticsearch-node-0.mercury.dfinity.systems:443 \
                                        elasticsearch-node-1.mercury.dfinity.systems:443 \
@@ -166,7 +278,7 @@ fn read_nns_conf(config_dir: &Path) -> Result<Vec<Url>> {
     let conf_map = match read_conf_file(&nns_conf_path) {
         Ok(map) => map,
         Err(_) => {
-            // if nns.conf doesn't exist or can't be read, set to default values
+            // Set default values if nns.conf doesn't exist
             let default_urls = vec![
                 Url::parse("https://icp-api.io")?,
                 Url::parse("https://icp0.io")?,
@@ -187,23 +299,17 @@ fn read_nns_conf(config_dir: &Path) -> Result<Vec<Url>> {
                 return Some(url);
             }
 
-            // parsing for if url is just an IPv6 address:
+            // Handle IPv6 addresses
             let mut address = s.to_string();
             let is_ipv6 = address.contains(':');
 
-            // Enclose IPv6 addresses in brackets if not already
             if is_ipv6 && !address.starts_with('[') && !address.ends_with(']') {
                 address = format!("[{}]", address);
             }
 
-            // Prepend 'http://' and append ':8080'
             let url_string = format!("http://{}", address);
 
-            // Attempt to parse the constructed URL
-            match Url::parse(&url_string) {
-                Ok(url) => Some(url),
-                Err(_) => None, // Parsing failed, skip this entry
-            }
+            Url::parse(&url_string).ok()
         })
         .collect();
 
