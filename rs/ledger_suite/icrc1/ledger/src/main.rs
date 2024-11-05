@@ -647,6 +647,7 @@ fn execute_transfer_not_async(
 #[update]
 #[candid_method(update)]
 async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, TransferError> {
+    panic_if_not_ready();
     let from_account = Account {
         owner: ic_cdk::api::caller(),
         subaccount: arg.from_subaccount,
@@ -674,6 +675,7 @@ async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, TransferError> {
 #[update]
 #[candid_method(update)]
 async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromError> {
+    panic_if_not_ready();
     let spender_account = Account {
         owner: ic_cdk::api::caller(),
         subaccount: arg.spender_subaccount,
@@ -780,6 +782,7 @@ fn get_data_certificate() -> DataCertificate {
 #[update]
 #[candid_method(update)]
 async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
+    panic_if_not_ready();
     let block_idx = Access::with_ledger_mut(|ledger| {
         let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
 
@@ -951,6 +954,10 @@ fn icrc21_canister_call_consent_message(
 
 fn is_ready() -> bool {
     Access::with_ledger(|ledger| ledger.is_ready())
+}
+
+fn panic_if_not_ready() {
+    Access::with_ledger(|ledger| ledger.panic_if_not_ready());
 }
 
 #[query]
