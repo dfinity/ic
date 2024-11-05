@@ -10,7 +10,7 @@ use ic_icrc1_test_utils::{arb_account, minter_identity};
 use ic_ledger_suite_state_machine_tests::send_transfer;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineBuilder, UserError};
-use ic_types::Time;
+use ic_types::{Cycles, Time};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
 use num_traits::ToPrimitive;
@@ -51,7 +51,7 @@ fn install_and_upgrade(
         index_ng_wasm(),
         Encode!(&args).unwrap(),
         None,
-        ic_types::Cycles::new(STARTING_CYCLES_PER_CANISTER),
+        Cycles::new(STARTING_CYCLES_PER_CANISTER),
     )?;
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
@@ -207,7 +207,7 @@ fn should_sync_according_to_interval() {
                     index_ng_wasm(),
                     Encode!(&args).unwrap(),
                     None,
-                    ic_types::Cycles::new(STARTING_CYCLES_PER_CANISTER),
+                    Cycles::new(STARTING_CYCLES_PER_CANISTER),
                 )?;
 
                 // Send a transaction and verify that the index is synced after the interval
@@ -287,7 +287,7 @@ fn should_install_and_upgrade_without_build_index_interval_field_set() {
             index_ng_wasm(),
             Encode!(&args).unwrap(),
             None,
-            ic_types::Cycles::new(STARTING_CYCLES_PER_CANISTER),
+            Cycles::new(STARTING_CYCLES_PER_CANISTER),
         )
         .unwrap();
 
