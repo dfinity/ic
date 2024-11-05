@@ -172,10 +172,8 @@ impl<R: CanisterApi, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
 
             incidents_map
                 .entry(input_rule.incident_id)
-                .and_modify(|value| {
-                    value.insert(rule_id);
-                })
-                .or_default();
+                .or_insert_with(HashSet::new)
+                .insert(rule_id);
 
             rule_ids.push(rule_id);
         }
