@@ -46,7 +46,7 @@ impl KernelCommandLine {
             Ok(if val.contains("\"") || val.contains("\n") {
                 return Err(UnrepresentableValue(val.to_string()));
             } else if val.contains(" ") {
-                ("\"".to_owned() + val + "\"").to_string()
+                format!("\"{val}\"")
             } else {
                 val.to_string()
             })
