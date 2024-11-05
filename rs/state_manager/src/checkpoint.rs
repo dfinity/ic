@@ -20,6 +20,7 @@ use ic_state_layout::{
 use ic_types::batch::RawQueryStats;
 use ic_types::{CanisterTimer, Height, Time};
 use ic_utils::thread::maybe_parallel_map;
+use ic_validate_eq::ValidateEq;
 use std::collections::BTreeMap;
 use std::convert::{identity, TryFrom};
 use std::sync::Arc;
@@ -336,11 +337,40 @@ pub fn load_checkpoint(
 
 pub fn validate_eq_checkpoint(
     checkpoint_layout: &CheckpointLayout<ReadOnly>,
+    reference_state: &ReplicatedState,
     own_subnet_type: SubnetType,
     metrics: &CheckpointMetrics,
     mut thread_pool: Option<&mut scoped_threadpool::Pool>,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) {
+    let checkpoint_loader = CheckpointLoader {
+        checkpoint_layout: checkpoint_layout.clone(),
+        own_subnet_type,
+        metrics: metrics.clone(),
+        fd_factory,
+    };
+
+    assert!(checkpoint_loader
+        .load_canister_states(&mut thread_pool)
+        .unwrap()
+        .validate_eq(&reference_state.canister_states)
+        .is_ok());
+    assert!(checkpoint_loader
+        .load_system_metadata()
+        .unwrap()
+        .validate_eq(&reference_state.metadata)
+        .is_ok());
+    assert!(checkpoint_loader
+        .load_subnet_queues()
+        .unwrap()
+        .validate_eq(&reference_state.subnet_queues())
+        .is_ok());
+    assert!(checkpoint_loader.load_query_stats().unwrap() == *reference_state.query_stats());
+    assert!(checkpoint_loader
+        .load_canister_snapshots(&mut thread_pool)
+        .unwrap()
+        .validate_eq(&reference_state.canister_snapshots)
+        .is_ok());
 }
 
 #[derive(Default)]
