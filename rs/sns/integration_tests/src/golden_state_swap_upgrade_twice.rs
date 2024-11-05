@@ -4,12 +4,22 @@ use ic_nervous_system_proto::pb::v1::Timers;
 use ic_nns_test_utils::sns_wasm::{
     build_swap_sns_wasm, create_modified_sns_wasm, ensure_sns_wasm_gzipped,
 };
-use ic_sns_swap::pb::v1::{DerivedState, GetStateRequest, GetStateResponse, Swap};
+use ic_sns_swap::pb::v1::{GetStateRequest, GetStateResponse, Swap};
 use ic_sns_wasm::pb::v1::SnsWasm;
 use ic_state_machine_tests::StateMachine;
 use ic_types::{CanisterId, PrincipalId};
 use pretty_assertions::assert_eq;
 use std::str::FromStr;
+
+/// This function redacts the timers, as they are not supposed to match before and after an upgrade.
+/// For example, the field `swap.timers.last_reset_timestamp_seconds` would change.
+fn redact_timer_related_swap_fields(swap_state: &mut GetStateResponse) {
+    let swap = swap_state.swap.clone().unwrap();
+    swap_state.swap = Some(Swap {
+        timers: None,
+        ..swap
+    });
+}
 
 fn get_state(
     state_machine: &StateMachine,
@@ -81,6 +91,10 @@ fn run_test_for_swap(state_machine: &StateMachine, swap_canister_id: &str, sns_n
                 ..
             })
         );
+
+        // Timers need to be redacted as they are expected to change due to the upgrade.
+        redact_timer_related_swap_fields(&mut swap_post_state);
+        redact_timer_related_swap_fields(&mut swap_pre_state);
 
         // Otherwise, the states before and after the migration should match.
         assert_eq!(
