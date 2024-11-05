@@ -111,4 +111,5 @@ service : {
   whois : (principal) -> (text);
   blob_len : (blob) -> (nat64);
   call_with_large_blob : (principal, nat64) -> (nat64);
+  execute_many_instructions : (nat64) -> ();
 }
