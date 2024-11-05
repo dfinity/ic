@@ -1477,19 +1477,6 @@ message Governance {
   UpgradeJournal upgrade_journal = 32;
 }
 
-message Timers {
-  optional uint64 last_reset_timestamp_seconds = 1;
-  optional uint64 last_spawned_timestamp_seconds = 2;
-}
-
-message ResetTimersRequest {}
-message ResetTimersResponse {}
-
-message GetTimersRequest {}
-message GetTimersResponse {
-  optional Timers timers = 1;
-}
-
 // Request message for 'get_metadata'.
 message GetMetadataRequest {}
 
@@ -2160,7 +2147,7 @@ message UpgradeJournalEntry {
   oneof event {
     UpgradeStepsRefreshed upgrade_steps_refreshed = 1;
     TargetVersionSet target_version_set = 2;
-    TargetVersionSet target_version_reset = 3;
+    TargetVersionReset target_version_reset = 3;
     UpgradeStarted upgrade_started = 4;
     UpgradeOutcome upgrade_outcome = 5;
   }
@@ -2171,6 +2158,11 @@ message UpgradeJournalEntry {
   }
 
   message TargetVersionSet {
+    optional Governance.Version old_target_version = 1;
+    optional Governance.Version new_target_version = 2;
+  }
+
+  message TargetVersionReset {
     optional Governance.Version old_target_version = 1;
     optional Governance.Version new_target_version = 2;
   }

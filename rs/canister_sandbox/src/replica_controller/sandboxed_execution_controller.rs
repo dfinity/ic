@@ -1825,7 +1825,7 @@ pub fn panic_due_to_exit(output: ExitStatus, pid: u32) {
             pid, code
         ),
         None => panic!(
-            "Error from launcher process, pid {} exited due to signal!",
+            "Error from launcher process, pid {} exited due to signal! In test environments (e.g., PocketIC), you can safely ignore this message.",
             pid
         ),
     }

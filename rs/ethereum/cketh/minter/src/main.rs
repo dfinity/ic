@@ -110,6 +110,11 @@ fn emit_preupgrade_events() {
         storage::record_event(EventType::SyncedErc20ToBlock {
             block_number: s.erc20_log_scraping.last_scraped_block_number(),
         });
+        storage::record_event(EventType::SyncedDepositWithSubaccountToBlock {
+            block_number: s
+                .deposit_with_subaccount_log_scraping
+                .last_scraped_block_number(),
+        });
     });
 }
 
@@ -686,6 +691,11 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                 EventType::SyncedErc20ToBlock { block_number } => EP::SyncedErc20ToBlock {
                     block_number: block_number.into(),
                 },
+                EventType::SyncedDepositWithSubaccountToBlock { block_number } => {
+                    EP::SyncedDepositWithSubaccountToBlock {
+                        block_number: block_number.into(),
+                    }
+                }
                 EventType::AcceptedEthWithdrawalRequest(EthWithdrawalRequest {
                     withdrawal_amount,
                     destination,
@@ -850,13 +860,13 @@ fn http_request(req: HttpRequest) -> HttpResponse {
 
             read_state(|s| {
                 w.encode_gauge(
-                    "cketh_minter_stable_memory_bytes",
+                    "stable_memory_bytes",
                     ic_cdk::api::stable::stable_size() as f64 * WASM_PAGE_SIZE_IN_BYTES,
                     "Size of the stable memory allocated by this canister.",
                 )?;
 
                 w.encode_gauge(
-                    "cketh_minter_heap_memory_bytes",
+                    "heap_memory_bytes",
                     heap_memory_size_bytes() as f64,
                     "Size of the heap memory allocated by this canister.",
                 )?;

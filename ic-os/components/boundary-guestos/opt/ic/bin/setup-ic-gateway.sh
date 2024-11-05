@@ -153,21 +153,21 @@ SHED_SHARDED_PASSTHROUGH="20000"
 SHED_SHARDED_LATENCY="query:1s,call:1s,sync_call:13s,read_state:1s,read_state_subnet:1s,status:100ms,health:100ms,registrations:5s,http:5s"
 EOF
 
-    if [ ! -z "${DENYLIST_URL}" ]; then
+    if [ ! -z "${DENYLIST_URL:-}" ]; then
         echo "POLICY_DENYLIST_URL=\"${DENYLIST_URL}\"" >>"${ENV_FILE}"
     fi
 
-    if [ ! -z "${LOGGING_URL}" ]; then
+    if [ ! -z "${LOGGING_URL:-}" ]; then
         echo "LOG_VECTOR_URL=\"${LOGGING_URL}\"" >>"${ENV_FILE}"
         echo "LOG_VECTOR_USER=\"${LOGGING_USER}\"" >>"${ENV_FILE}"
         echo "LOG_VECTOR_PASS=\"${LOGGING_PASSWORD}\"" >>"${ENV_FILE}"
     fi
 
-    if [ ! -z "${MAX_CONCURRENCY}" ]; then
+    if [ ! -z "${MAX_CONCURRENCY:-}" ]; then
         echo "LOAD_MAX_CONCURRENCY=\"${MAX_CONCURRENCY}\"" >>"${ENV_FILE}"
     fi
 
-    if [ ! -z "${SHED_EWMA_PARAM}" ]; then
+    if [ ! -z "${SHED_EWMA_PARAM:-}" ]; then
         echo "LOAD_SHED_EWMA_PARAM=\"${SHED_EWMA_PARAM}\"" >>"${ENV_FILE}"
     fi
 }

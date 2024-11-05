@@ -79,6 +79,7 @@ impl TryFrom<InitArg> for State {
                 })?;
         }
         let erc20_log_scraping = LogScrapingState::new(last_scraped_block_number);
+        let deposit_with_subaccount_log_scraping = LogScrapingState::new(last_scraped_block_number);
         let state = Self {
             ethereum_network,
             ecdsa_key_name,
@@ -104,6 +105,7 @@ impl TryFrom<InitArg> for State {
             erc20_balances: Default::default(),
             eth_log_scraping,
             erc20_log_scraping,
+            deposit_with_subaccount_log_scraping,
         };
         state.validate_config()?;
         Ok(state)

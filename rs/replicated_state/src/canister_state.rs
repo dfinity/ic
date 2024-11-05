@@ -144,16 +144,6 @@ impl CanisterState {
         }
     }
 
-    /// Applies priority credit and resets long execution mode.
-    pub fn apply_priority_credit(&mut self) {
-        self.scheduler_state.accumulated_priority -=
-            std::mem::take(&mut self.scheduler_state.priority_credit);
-        // Aborting a long-running execution moves the canister to the
-        // default execution mode because the canister does not have a
-        // pending execution anymore.
-        self.scheduler_state.long_execution_mode = LongExecutionMode::default();
-    }
-
     pub fn canister_id(&self) -> CanisterId {
         self.system_state.canister_id()
     }

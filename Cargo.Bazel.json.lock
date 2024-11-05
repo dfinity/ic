@@ -1,5 +1,5 @@
 {
-  "checksum": "d4b611a5f338012769866b27437875353f5d76dbabb9b135418806599a3b8912",
+  "checksum": "85964520a01715b114641f0ce8c02f15881adc9a219fd27c7364bfc4ad7df216",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -10537,7 +10537,13 @@
       "repository": {
         "Http": {
           "url": "https://static.crates.io/crates/cc/1.0.83/download",
-          "sha256": "f1174fb0b6ec23863f8b971027804a42614e347eafb0a95bf0b12cdae21fc4d0"
+          "sha256": "f1174fb0b6ec23863f8b971027804a42614e347eafb0a95bf0b12cdae21fc4d0",
+          "patch_args": [
+            "-p1"
+          ],
+          "patches": [
+            "@@//bazel:cc_rs.patch"
+          ]
         }
       },
       "targets": [
@@ -14174,7 +14180,13 @@
       "repository": {
         "Http": {
           "url": "https://static.crates.io/crates/cranelift-codegen-meta/0.112.2/download",
-          "sha256": "5a0ce0273d7a493ef8f31f606849a4e931c19187a4923f5f87fc1f2b13109981"
+          "sha256": "5a0ce0273d7a493ef8f31f606849a4e931c19187a4923f5f87fc1f2b13109981",
+          "patch_args": [
+            "-p4"
+          ],
+          "patches": [
+            "@@//bazel:cranelift-codegen-meta.patch"
+          ]
         }
       },
       "targets": [
@@ -14447,7 +14459,13 @@
       "repository": {
         "Http": {
           "url": "https://static.crates.io/crates/cranelift-isle/0.112.2/download",
-          "sha256": "230cb33572b9926e210f2ca28145f2bc87f389e1456560932168e2591feb65c1"
+          "sha256": "230cb33572b9926e210f2ca28145f2bc87f389e1456560932168e2591feb65c1",
+          "patch_args": [
+            "-p4"
+          ],
+          "patches": [
+            "@@//bazel:cranelift-isle.patch"
+          ]
         }
       },
       "targets": [
@@ -19036,6 +19054,10 @@
             {
               "id": "scraper 0.17.1",
               "target": "scraper"
+            },
+            {
+              "id": "secp256k1 0.22.2",
+              "target": "secp256k1"
             },
             {
               "id": "semver 1.0.22",
@@ -62608,6 +62630,8 @@
         ],
         "crate_features": {
           "common": [
+            "default",
+            "global-context",
             "rand",
             "rand-std",
             "recovery",
@@ -70426,6 +70450,14 @@
         "compile_data_glob": [
           "**"
         ],
+        "data": {
+          "common": [],
+          "selects": {
+            "x86_64-unknown-linux-gnu": [
+              "@jemalloc//:libjemalloc"
+            ]
+          }
+        },
         "data_glob": [
           "**"
         ],
@@ -70437,6 +70469,14 @@
             }
           ],
           "selects": {}
+        },
+        "build_script_env": {
+          "common": {},
+          "selects": {
+            "x86_64-unknown-linux-gnu": {
+              "JEMALLOC_OVERRIDE": "$(location @jemalloc//:libjemalloc)"
+            }
+          }
         },
         "links": "jemalloc"
       },
@@ -85410,6 +85450,7 @@
     "scoped_threadpool 0.1.9",
     "scopeguard 1.2.0",
     "scraper 0.17.1",
+    "secp256k1 0.22.2",
     "semver 1.0.22",
     "serde 1.0.203",
     "serde-bytes-repr 0.1.5",
