@@ -175,7 +175,7 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
 
     let _guard = retrieve_btc_guard(caller)?;
     let (min_retrieve_amount, btc_network, kyt_fee) =
-        read_state(|s| (s.retrieve_btc_min_amount, s.btc_network, s.kyt_fee));
+        read_state(|s| (s.fee_based_retrieve_btc_min_amount, s.btc_network, s.kyt_fee));
 
     let min_amount = max(min_retrieve_amount, kyt_fee);
     if args.amount < min_amount {
@@ -309,7 +309,7 @@ pub async fn retrieve_btc_with_approval(
 
     let _guard = retrieve_btc_guard(caller)?;
     let (min_retrieve_amount, btc_network, kyt_fee) =
-        read_state(|s| (s.retrieve_btc_min_amount, s.btc_network, s.kyt_fee));
+        read_state(|s| (s.fee_based_retrieve_btc_min_amount, s.btc_network, s.kyt_fee));
     let min_amount = max(min_retrieve_amount, kyt_fee);
     if args.amount < min_amount {
         return Err(RetrieveBtcWithApprovalError::AmountTooLow(min_amount));
