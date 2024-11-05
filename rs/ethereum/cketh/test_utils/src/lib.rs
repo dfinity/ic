@@ -5,6 +5,7 @@ use crate::flow::{
 use crate::mock::JsonRpcMethod;
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_cketh_minter::endpoints::events::{Event, EventPayload, GetEventsResult};
 use ic_cketh_minter::endpoints::{
@@ -19,11 +20,12 @@ use ic_cketh_minter::{
 };
 use ic_ethereum_types::Address;
 use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
+use ic_management_canister_types::{CanisterHttpResponsePayload, CanisterStatusType};
 use ic_state_machine_tests::{
-    CanisterHttpResponsePayload, CanisterId, CanisterStatusType, Cycles, PayloadBuilder,
-    PrincipalId, StateMachine, StateMachineBuilder, UserError, WasmResult,
+    PayloadBuilder, StateMachine, StateMachineBuilder, UserError, WasmResult,
 };
 use ic_test_utilities_load_wasm::load_wasm;
+use ic_types::Cycles;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use num_traits::cast::ToPrimitive;

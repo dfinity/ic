@@ -496,7 +496,6 @@ async fn validate_slice_above_msg_limit() {
         );
 
         // ...but would be valid on an `Application` subnet.
-        #[allow(clippy::redundant_clone)]
         let mut state = state.clone();
         state.metadata.own_subnet_type = SubnetType::Application;
         assert_eq!(

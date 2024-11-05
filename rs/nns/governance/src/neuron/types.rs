@@ -15,6 +15,7 @@ use crate::{
         Neuron as NeuronProto, NeuronInfo, NeuronStakeTransfer, NeuronState, NeuronType, Topic,
         Visibility, Vote,
     },
+    DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
 };
 use ic_base_types::PrincipalId;
 use ic_cdk::println;
@@ -23,20 +24,7 @@ use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use icp_ledger::Subaccount;
 use std::collections::{BTreeSet, HashMap};
 
-/// Value: one second after midnight, 2024-11-05 (UTC).
-///
-/// How this value was chosen: This is around the earliest time when
-/// "refreshing" a neuron's voting power might be released, (assuming the usual
-/// NNS release cycle). Significantly different values could also work, but this
-/// seems like a nice "neutral" value.
-///
-/// How this value is used: when a neuron does not have a value in the
-/// voting_power_refreshed_timestamp_seconds field (because it was created before
-/// this feature), we pretend as though this value is in that field.
-const DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS: u64 = 1731628801;
-
-/// A neuron type internal to the governance crate. Currently, this type is identical to the
-/// prost-generated Neuron type (except for derivations for prost). Gradually, this type will evolve
+/// A neuron type internal to the governance crate. Gradually, this type will evolve
 /// towards having all private fields while exposing methods for mutations, which allows it to hold
 /// invariants.
 #[derive(Clone, Debug)]
@@ -478,6 +466,10 @@ impl Neuron {
         while self.recent_ballots.len() > MAX_NEURON_RECENT_BALLOTS {
             self.recent_ballots.pop();
         }
+    }
+
+    pub(crate) fn refresh_voting_power(&mut self, now_seconds: u64) {
+        self.voting_power_refreshed_timestamp_seconds = now_seconds;
     }
 
     pub(crate) fn ready_to_unstake_maturity(&self, now_seconds: u64) -> bool {

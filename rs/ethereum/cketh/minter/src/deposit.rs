@@ -1,6 +1,6 @@
 use crate::eth_logs::{
     report_transaction_error, LogParser, LogScraping, ReceivedErc20LogScraping,
-    ReceivedEthLogScraping, ReceivedEvent, ReceivedEventError,
+    ReceivedEthLogScraping, ReceivedEthOrErc20LogScraping, ReceivedEvent, ReceivedEventError,
 };
 use crate::eth_rpc::{BlockSpec, GetLogsParam, HttpOutcallError, LogEntry, Topic};
 use crate::eth_rpc_client::{EthRpcClient, MultiCallError};
@@ -147,6 +147,7 @@ pub async fn scrape_logs() {
     let max_block_spread = read_state(|s| s.max_block_spread_for_logs_scraping());
     scrape_until_block::<ReceivedEthLogScraping>(last_block_number, max_block_spread).await;
     scrape_until_block::<ReceivedErc20LogScraping>(last_block_number, max_block_spread).await;
+    scrape_until_block::<ReceivedEthOrErc20LogScraping>(last_block_number, max_block_spread).await;
 }
 
 pub async fn update_last_observed_block_number() -> Option<BlockNumber> {

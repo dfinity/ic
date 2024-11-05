@@ -9,9 +9,8 @@ use crate::{
     idkg::{self, metrics::IDkgPayloadMetrics},
 };
 use ic_consensus_utils::{
-    find_lowest_ranked_non_disqualified_proposals, get_block_hash_string,
-    get_notarization_delay_settings, get_subnet_record, membership::Membership,
-    pool_reader::PoolReader,
+    find_lowest_ranked_non_disqualified_proposals, get_notarization_delay_settings,
+    get_subnet_record, membership::Membership, pool_reader::PoolReader,
 };
 use ic_interfaces::{
     consensus::PayloadBuilder, dkg::DkgPool, idkg::IDkgPool, time_source::TimeSource,
@@ -139,16 +138,8 @@ impl BlockMaker {
                         Some(&self.metrics),
                     )
                 {
-                    self.propose_block(pool, rank, parent).inspect(|proposal| {
-                        debug!(
-                            self.log,
-                            "Make proposal {:?} {:?} {:?}",
-                            proposal.content.get_hash(),
-                            proposal.as_ref().payload.get_hash(),
-                            proposal.as_ref().payload.as_ref()
-                        );
-                        self.log_block(proposal.as_ref());
-                    })
+                    self.propose_block(pool, rank, parent)
+                        .inspect(|block| self.log_block(block))
                 } else {
                     None
                 }
@@ -449,27 +440,26 @@ impl BlockMaker {
     }
 
     /// Log an entry for the proposed block and each of its ingress messages
-    fn log_block(&self, block: &Block) {
-        let hash = get_block_hash_string(block);
-        let block_log_entry = block.log_entry(hash.clone());
+    fn log_block(&self, block: &BlockProposal) {
+        let block_log_entry = block.content.log_entry();
         debug!(
             self.log,
             "block_proposal";
             block => block_log_entry
         );
         let empty_batch = BatchPayload::default();
-        let batch = if block.payload.is_summary() {
+        let batch = if block.as_ref().payload.is_summary() {
             &empty_batch
         } else {
-            &block.payload.as_ref().as_data().batch
+            &block.as_ref().payload.as_ref().as_data().batch
         };
 
         for message_id in batch.ingress.message_ids() {
             debug!(
                 self.log,
                 "ingress_message_insert_into_block";
-                ingress_message.message_id => format!("{}", message_id),
-                block.hash => hash,
+                ingress_message.message_id => message_id.to_string(),
+                block.hash => format!("{:?}", block.content.get_hash()),
             );
         }
     }
