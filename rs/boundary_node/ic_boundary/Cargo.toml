@@ -33,8 +33,7 @@ http = { workspace = true }
 http-body = { workspace = true }
 humantime = "2.1"
 ic-base-types = { path = "../../types/base_types" }
-#ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "9abf1e385e4a32279de005d0019c17774e164828" }
-ic-bn-lib = { path = "/home/igornovg/git/ic-bn-lib" }
+ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "526d34d15cfbf369d8baf2dae9932aa18d570a1d" }
 ic-certification-test-utils = { path = "../../certification/test-utils" }
 ic-config = { path = "../../config" }
 ic-crypto-ed25519 = { path = "../../crypto/ed25519" }
@@ -56,7 +55,6 @@ ic-registry-routing-table = { path = "../../registry/routing_table" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-types = { path = "../../types/types" }
 lazy_static = { workspace = true }
-little-loadshedder = "0.2.0"
 maxminddb = "0.24"
 mockall = { workspace = true }
 moka = { version = "0.12.8", features = ["sync", "future"] }

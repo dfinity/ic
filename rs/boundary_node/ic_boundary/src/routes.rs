@@ -22,11 +22,11 @@ use http::header::{HeaderValue, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS, X_FRAME_OP
 use ic_bn_lib::http::{
     body::buffer_body, headers::*, proxy, Client as HttpClient, Error as IcBnError,
 };
+pub use ic_bn_lib::types::RequestType;
 use ic_types::{
     messages::{Blob, HttpStatusResponse, ReplicaHealthStatus},
     CanisterId, PrincipalId, SubnetId,
 };
-
 use lazy_static::lazy_static;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -63,27 +63,6 @@ pub const PATH_HEALTH: &str = "/health";
 lazy_static! {
     pub static ref UUID_REGEX: Regex =
         Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$").unwrap();
-}
-
-// Type of IC request
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Display, Default, Deserialize, IntoStaticStr)]
-#[strum(serialize_all = "snake_case")]
-#[serde(rename_all = "snake_case")]
-pub enum RequestType {
-    #[default]
-    Unknown,
-    Status,
-    Query,
-    Call,
-    SyncCall,
-    ReadState,
-    ReadStateSubnet,
-}
-
-impl RequestType {
-    pub fn is_call(&self) -> bool {
-        matches!(self, Self::Call | Self::SyncCall)
-    }
 }
 
 #[derive(Clone, Debug, Display)]

@@ -1,7 +1,15 @@
-use std::{net::SocketAddr, path::PathBuf};
-
 use clap::{Args, Parser};
-use ic_bn_lib::http;
+use humantime::parse_duration;
+use ic_bn_lib::{
+    http::{
+        self,
+        shed::cli::{ShedSharded, ShedSystem},
+    },
+    parse_size,
+    types::RequestType,
+};
+use std::time::Duration;
+use std::{net::SocketAddr, path::PathBuf};
 use url::Url;
 
 use crate::core::{AUTHOR_NAME, SERVICE_NAME};
@@ -10,11 +18,11 @@ use crate::core::{AUTHOR_NAME, SERVICE_NAME};
 #[clap(name = SERVICE_NAME)]
 #[clap(author = AUTHOR_NAME)]
 pub struct Cli {
-    #[command(flatten, next_help_heading = "registry")]
-    pub registry: RegistryConfig,
+    #[command(flatten, next_help_heading = "Listen")]
+    pub listen: Listen,
 
-    #[command(flatten, next_help_heading = "listen")]
-    pub listen: ListenConfig,
+    #[command(flatten, next_help_heading = "Network")]
+    pub network: Network,
 
     #[command(flatten, next_help_heading = "HTTP Server")]
     pub http_server: http::server::cli::HttpServer,
@@ -22,201 +30,214 @@ pub struct Cli {
     #[command(flatten, next_help_heading = "HTTP Client")]
     pub http_client: http::client::cli::HttpClient,
 
-    #[command(flatten, next_help_heading = "health")]
-    pub health: HealthChecksConfig,
-
-    #[command(flatten, next_help_heading = "firewall")]
-    pub firewall: FirewallConfig,
-
     #[cfg(feature = "tls")]
-    #[command(flatten, next_help_heading = "tls")]
-    pub tls: TlsConfig,
+    #[command(flatten, next_help_heading = "TLS settings")]
+    pub tls: Tls,
 
-    #[command(flatten, next_help_heading = "monitoring")]
-    pub monitoring: MonitoringConfig,
+    #[command(flatten, next_help_heading = "Registry")]
+    pub registry: Registry,
 
-    #[command(flatten, next_help_heading = "rate_limiting")]
-    pub rate_limiting: RateLimitingConfig,
+    #[command(flatten, next_help_heading = "Health Checking")]
+    pub health: HealthChecks,
 
-    #[command(flatten, next_help_heading = "cache")]
-    pub cache: CacheConfig,
+    #[command(flatten, next_help_heading = "Observability")]
+    pub obs: Observability,
 
-    #[command(flatten, next_help_heading = "retry")]
-    pub retry: RetryConfig,
+    #[command(flatten, next_help_heading = "Rate Limiting")]
+    pub rate_limiting: RateLimiting,
 
-    #[command(flatten, next_help_heading = "bouncer")]
-    pub bouncer: BouncerConfig,
+    #[command(flatten, next_help_heading = "Caching")]
+    pub cache: Cache,
+
+    #[command(flatten, next_help_heading = "Retries")]
+    pub retry: Retry,
+
+    #[command(flatten, next_help_heading = "Load")]
+    pub load: Load,
+
+    #[command(flatten, next_help_heading = "Nftables")]
+    pub nftables: NfTables,
+
+    #[command(flatten, next_help_heading = "Shedding System")]
+    pub shed_system: ShedSystem,
+
+    #[command(flatten, next_help_heading = "Shedding Latency")]
+    pub shed_latency: ShedSharded<RequestType>,
+
+    #[command(flatten, next_help_heading = "Firewall Bouncer")]
+    pub bouncer: Bouncer,
+
+    #[command(flatten, next_help_heading = "Misc")]
+    pub misc: Misc,
 }
 
 #[derive(Args)]
-pub struct RegistryConfig {
+pub struct Registry {
     /// Comma separated list of NNS URLs to bootstrap the registry
     #[clap(env, long, value_delimiter = ',', default_value = "https://ic0.app")]
-    pub nns_urls: Vec<Url>,
+    pub registry_nns_urls: Vec<Url>,
 
     /// The path to the NNS public key file
     #[clap(env, long)]
-    pub nns_pub_key_pem: Option<PathBuf>,
+    pub registry_nns_pub_key_pem: Option<PathBuf>,
 
-    /// The delay between NNS polls in milliseconds
-    #[clap(env, long, default_value = "5000")]
-    pub nns_poll_interval_ms: u64,
+    /// The delay between NNS polls
+    #[clap(env, long, default_value = "5s", value_parser = parse_duration)]
+    pub registry_nns_poll_interval: Duration,
 
     /// The registry local store path to be populated
     #[clap(env, long)]
-    pub local_store_path: Option<PathBuf>,
+    pub registry_local_store_path: Option<PathBuf>,
 
     /// Whether to disable internal registry replicator
     #[clap(env, long)]
-    pub disable_registry_replicator: bool,
+    pub registry_disable_replicator: bool,
 
     /// Instead of using the registry - use the specified replica nodes.
     /// This disables the registry client, registry replicator and health checking.
     /// To be used only for performance testing.
     #[clap(env, long)]
-    pub stub_replica: Vec<SocketAddr>,
+    pub registry_stub_replica: Vec<SocketAddr>,
 
-    /// Minimum snapshot version age to be useful for initial publishing, in seconds
-    #[clap(env, long, default_value = "10")]
-    pub min_version_age: u64,
+    /// Minimum snapshot version age to be useful for initial publishing
+    #[clap(env, long, default_value = "10s", value_parser = parse_duration)]
+    pub registry_min_version_age: Duration,
 }
 
 #[derive(Args)]
-pub struct ListenConfig {
+pub struct Load {
+    /// Max number of in-flight requests that can be served in parallel.
+    /// If this is exceeded - new requests would be throttled.
+    #[clap(env, long)]
+    pub load_max_concurrency: Option<usize>,
+}
+
+#[derive(Args)]
+pub struct Listen {
     /// Port to listen on for HTTP (listens on IPv6 wildcard "::")
     #[clap(env, long)]
-    pub http_port: Option<u16>,
+    pub listen_http_port: Option<u16>,
 
     /// Port to listen for HTTPS (listens on IPv6 wildcard "::")
     #[cfg(feature = "tls")]
     #[clap(env, long)]
-    pub https_port: Option<u16>,
+    pub listen_https_port: Option<u16>,
 
     /// Unix socket to listen on for HTTP
     #[clap(env, long)]
-    pub http_unix_socket: Option<PathBuf>,
+    pub listen_http_unix_socket: Option<PathBuf>,
+}
 
-    /// Skip replica TLS certificate verification. DANGER: to be used only for testing
-    #[clap(env, long)]
-    pub skip_replica_tls_verification: bool,
-
-    /// Max number of in-flight requests that can be served in parallel.
-    /// If this is exceeded - new requests would be throttled.
-    #[clap(env, long)]
-    pub max_concurrency: Option<usize>,
-
+#[derive(Args)]
+pub struct Network {
     /// Disable HTTP2 support for outgoing connections (to replicas)
     #[clap(env, long)]
-    pub disable_http2_client: bool,
+    pub network_disable_http2_client: bool,
 
     /// Number of HTTP clients to create to spread the load over
     #[clap(env, long, default_value = "1", value_parser = clap::value_parser!(u16).range(1..))]
-    pub http_client_count: u16,
+    pub network_http_client_count: u16,
 }
 
 #[derive(Args)]
-pub struct HealthChecksConfig {
-    /// How frequently to run node checks in milliseconds
-    #[clap(long, default_value = "1000")]
-    pub check_interval: u64,
+pub struct HealthChecks {
+    /// How frequently to run health checks
+    #[clap(env, long, default_value = "1s", value_parser = parse_duration)]
+    pub health_check_interval: Duration,
 
     /// How frequently to recalculate healthy nodes set (per-subnet) e.g. based on height lagging
-    #[clap(long, default_value = "5000")]
-    pub update_interval: u64,
+    #[clap(env, long, default_value = "5s", value_parser = parse_duration)]
+    pub health_update_interval: Duration,
 
-    /// Timeout for the check request in milliseconds.
+    /// Timeout for the health check request.
     /// This includes connection phase and the actual HTTP request.
     /// Should be longer than --http-timeout-connect
-    #[clap(long, default_value = "5000")]
-    pub check_timeout: u64,
+    #[clap(env, long, default_value = "5s", value_parser = parse_duration)]
+    pub health_check_timeout: Duration,
 
     /// Maximum block height lag for a replica to be included in the routing table
-    #[clap(long, default_value = "50")]
-    pub max_height_lag: u64,
+    #[clap(env, long, default_value = "50")]
+    pub health_max_height_lag: u64,
 }
 
 #[derive(Args)]
-pub struct FirewallConfig {
+pub struct NfTables {
     /// The path to the nftables replica ruleset file to update
-    #[clap(long)]
+    #[clap(env, long)]
     pub nftables_system_replicas_path: Option<PathBuf>,
 
     /// The name of the nftables variable to export
-    #[clap(long, default_value = "ipv6_system_replica_ips")]
+    #[clap(env, long, default_value = "ipv6_system_replica_ips")]
     pub nftables_system_replicas_var: String,
 }
 
 #[cfg(feature = "tls")]
 #[derive(Args)]
-pub struct TlsConfig {
+pub struct Tls {
     /// Hostname to request TLS certificate for
-    #[clap(long)]
-    pub hostname: Option<String>,
+    #[clap(env, long)]
+    pub tls_hostname: Option<String>,
 
     /// Path to the ACME credentials folder, needs to be writeable - it stores the account info & issued certificate.
     /// This enables the ACME client.
     /// On the first start the account will be created.
-    #[clap(long)]
-    pub acme_credentials_path: Option<PathBuf>,
+    #[clap(env, long)]
+    pub tls_acme_credentials_path: Option<PathBuf>,
 
     /// Whether to use LetsEncrypt staging environment.
-    #[clap(long)]
-    pub acme_staging: bool,
+    #[clap(env, long)]
+    pub tls_acme_staging: bool,
 
     /// The path to the TLS certificate in PEM format.
     /// This is required if the ACME client is not used.
-    #[clap(long)]
+    #[clap(env, long)]
     pub tls_cert_path: Option<PathBuf>,
 
     /// The path to the TLS private key in PEM format.
     /// This is required if the ACME client is not used.
-    #[clap(long)]
+    #[clap(env, long)]
     pub tls_pkey_path: Option<PathBuf>,
 }
 
 #[derive(Args)]
-pub struct MonitoringConfig {
+pub struct Observability {
     /// The socket used to export metrics.
-    #[clap(long, default_value = "127.0.0.1:9090")]
-    pub metrics_addr: SocketAddr,
+    #[clap(env, long, default_value = "127.0.0.1:9090")]
+    pub obs_metrics_addr: SocketAddr,
 
     /// Maximum logging level
-    #[clap(long, default_value = "info")]
-    pub max_logging_level: tracing::Level,
+    #[clap(env, long, default_value = "info")]
+    pub obs_max_logging_level: tracing::Level,
 
     /// Disable per-request logging and metrics recording
-    #[clap(long)]
-    pub disable_request_logging: bool,
+    #[clap(env, long)]
+    pub obs_disable_request_logging: bool,
 
     /// Log only failed (non-2xx status code or other problems) requests
-    #[clap(long)]
-    pub log_failed_requests_only: bool,
+    #[clap(env, long)]
+    pub obs_log_failed_requests_only: bool,
 
     /// Enables logging to stdout
-    #[clap(long)]
-    pub log_stdout: bool,
+    #[clap(env, long)]
+    pub obs_log_stdout: bool,
 
     /// Enables logging to Journald
-    #[clap(long)]
-    pub log_journald: bool,
+    #[clap(env, long)]
+    pub obs_log_journald: bool,
 
     /// Enables logging to /dev/null (to benchmark logging)
-    #[clap(long)]
-    pub log_null: bool,
-
-    /// Path to a GeoIP country database file
-    #[clap(long)]
-    pub geoip_db: Option<PathBuf>,
+    #[clap(env, long)]
+    pub obs_log_null: bool,
 }
 
 #[derive(Args)]
-pub struct RateLimitingConfig {
+pub struct RateLimiting {
     /// Allowed number of update calls per second per subnet per boundary node. Panics if 0 is passed!
-    #[clap(long)]
+    #[clap(env, long)]
     pub rate_limit_per_second_per_subnet: Option<u32>,
 
     /// Allowed number of update calls per second per ip per boundary node. Panics if 0 is passed!
-    #[clap(long)]
+    #[clap(env, long)]
     pub rate_limit_per_second_per_ip: Option<u32>,
     /// Path to a generic rate-limiter rules, if the file does not exist - no rules are applied.
     /// File is checked every 10sec and is reloaded if the changes are detected.
@@ -232,6 +253,7 @@ pub struct RateLimitingConfig {
     ///   methods: ^baz$
     ///   limit: block (this blocks all requests)
     #[clap(
+        env,
         long,
         default_value = "/run/ic-node/etc/ic-boundary/canister-ratelimit.yml"
     )]
@@ -239,98 +261,109 @@ pub struct RateLimitingConfig {
 }
 
 #[derive(Args)]
-pub struct CacheConfig {
+pub struct Cache {
     /// Maximum size of in-memory cache in bytes. Specify a size to enable caching.
-    #[clap(long)]
-    pub cache_size_bytes: Option<u64>,
+    #[clap(env, long, value_parser = parse_size)]
+    pub cache_size: Option<u64>,
 
     /// Maximum size of a single cached response item in bytes
-    #[clap(long, default_value = "131072")]
-    pub cache_max_item_size_bytes: u64,
+    #[clap(env, long, default_value = "10MB", value_parser = parse_size)]
+    pub cache_max_item_size: u64,
 
-    /// Time-to-live for cache entries in seconds
-    #[clap(long, default_value = "1")]
-    pub cache_ttl_seconds: u64,
+    /// Time-to-live for cache entries
+    #[clap(env, long, default_value = "1s", value_parser = parse_duration)]
+    pub cache_ttl: Duration,
 
     /// Whether to cache non-anonymous requests
-    #[clap(long, default_value = "false")]
+    #[clap(env, long, default_value = "false")]
     pub cache_non_anonymous: bool,
 }
 
 #[derive(Args)]
-pub struct RetryConfig {
+pub struct Retry {
     /// How many times to retry a failed request.
     /// Should be in range [0..10], value of 0 disables the retries.
     /// If there are less healthy nodes in the subnet - then less retries would be done.
-    #[clap(long, default_value = "2", value_parser = clap::value_parser!(u8).range(0..11))]
+    #[clap(env, long, default_value = "2", value_parser = clap::value_parser!(u8).range(0..11))]
     pub retry_count: u8,
 
     /// Whether to retry update calls
-    #[clap(long, default_value = "false")]
+    #[clap(env, long, default_value = "false")]
     pub retry_update_call: bool,
 
     /// Whether to use latency-based routing for /call
-    #[clap(long, default_value = "false")]
-    pub disable_latency_routing: bool,
+    #[clap(env, long, default_value = "false")]
+    pub retry_disable_latency_routing: bool,
 }
 
 #[derive(Args)]
-pub struct BouncerConfig {
+pub struct Bouncer {
     /// Enable the firewall bouncer
-    #[clap(long)]
+    #[clap(env, long)]
     pub bouncer_enable: bool,
 
     /// Whether to use sudo to call `nft` executable
-    #[clap(long, default_value = "true")]
+    #[clap(env, long, default_value = "true")]
     pub bouncer_sudo: bool,
 
     /// Path to a sudo binary, defaults to /usr/bin/sudo
-    #[clap(long)]
+    #[clap(env, long)]
     pub bouncer_sudo_path: Option<String>,
 
-    /// Path to an nft binary, defaults to /usr/sbin/nft
-    #[clap(long)]
+    /// Path to a nft binary, defaults to /usr/sbin/nft
+    #[clap(env, long)]
     pub bouncer_nft_path: Option<String>,
 
     /// Number of requests per second that are allowed from a single IP
-    #[clap(long, default_value = "300", value_parser = clap::value_parser!(u32).range(1..))]
+    #[clap(env, long, default_value = "300", value_parser = clap::value_parser!(u32).range(1..))]
     pub bouncer_ratelimit: u32,
 
     /// Number of requests in a burst allowed, must be higher than --bouncer-ratelimit
-    #[clap(long, default_value = "600", value_parser = clap::value_parser!(u64).range(1..))]
+    #[clap(env, long, default_value = "600", value_parser = clap::value_parser!(u64).range(1..))]
     pub bouncer_burst_size: u64,
 
     /// For how long to ban the IPs
-    #[clap(long, default_value = "600")]
-    pub bouncer_ban_seconds: u64,
+    #[clap(env, long, default_value = "10m", value_parser = parse_duration)]
+    pub bouncer_ban_time: Duration,
 
     /// Maximum number of IPs to track. This restricts memory usage to store buckets.
     /// If exceeded - old ones will be removed
-    #[clap(long, default_value = "20000")]
+    #[clap(env, long, default_value = "20000")]
     pub bouncer_max_buckets: u64,
 
-    /// TTL of a per-IP bucket. If no requests are coming from given IP for this number
-    /// of seconds then the bucket is removed
-    #[clap(long, default_value = "30")]
-    pub bouncer_bucket_ttl: u64,
+    /// TTL of a per-IP bucket. If no requests are coming from given IP for this duration
+    /// then the bucket is removed
+    #[clap(env, long, default_value = "30s", value_parser = parse_duration)]
+    pub bouncer_bucket_ttl: Duration,
 
     /// How frequently to check if updates to the firewall are needed
-    #[clap(long, default_value = "1")]
-    pub bouncer_apply_interval: u64,
+    #[clap(env, long, default_value = "1s", value_parser = parse_duration)]
+    pub bouncer_apply_interval: Duration,
 
     /// NFTables table name for IPv4
-    #[clap(long, default_value = "filter")]
+    #[clap(env, long, default_value = "filter")]
     pub bouncer_v4_table: String,
 
     /// NFTables set name for IPv4
-    #[clap(long, default_value = "blackhole")]
+    #[clap(env, long, default_value = "blackhole")]
     pub bouncer_v4_set: String,
 
     /// NFTables table name for IPv6
-    #[clap(long, default_value = "filter")]
+    #[clap(env, long, default_value = "filter")]
     pub bouncer_v6_table: String,
 
     /// NFTables set name for IPv6
-    #[clap(long, default_value = "blackhole6")]
+    #[clap(env, long, default_value = "blackhole6")]
     pub bouncer_v6_set: String,
+}
+
+#[derive(Args)]
+pub struct Misc {
+    /// Path to a GeoIP country database file
+    #[clap(env, long)]
+    pub geoip_db: Option<PathBuf>,
+
+    /// Skip replica TLS certificate verification. DANGER: to be used only for testing
+    #[clap(env, long)]
+    pub skip_replica_tls_verification: bool,
 }
