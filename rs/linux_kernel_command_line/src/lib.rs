@@ -42,20 +42,20 @@ impl KernelCommandLine {
         argument: &str,
         value: Option<&str>,
     ) -> Result<String, UnrepresentableValue> {
-        Ok(argument.to_string()
-            + &match value {
-                Some(val) => ("=".to_owned()
-                    + (if val.contains("\"") || val.contains("\n") {
-                        return Err(UnrepresentableValue(val.to_string()));
-                    } else if val.contains(" ") {
-                        ("\"".to_owned() + val + "\"").to_string()
-                    } else {
-                        val.to_string()
-                    }
-                    .as_str()))
-                .to_string(),
-                None => "".to_string(),
+        fn escape_value(val: String) -> Result<String, UnrepresentableValue> {
+            Ok(if val.contains("\"") || val.contains("\n") {
+                return Err(UnrepresentableValue(val.to_string()));
+            } else if val.contains(" ") {
+                ("\"".to_owned() + val.as_str() + "\"").to_string()
+            } else {
+                val.to_string()
             })
+        }
+        if let Some(val) = value {
+            Ok(format!("{}={}", argument, escape_value(val.to_string())?))
+        } else {
+            Ok(argument.to_owned())
+        }
     }
 
     /// Remove an argument from a kernel command line, however many times it appears.
