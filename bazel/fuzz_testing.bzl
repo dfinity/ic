@@ -115,3 +115,44 @@ def rust_fuzz_test_binary_afl(name, srcs, rustc_flags = [], crate_features = [],
         ],
         **kwargs
     )
+
+def rust_fuzz_test_binary_no_main(name, srcs, rustc_flags = [], sanitizers = [], crate_features = [], proc_macro_deps = [], deps = [], **kwargs):
+    """Wrapper for the rust_binary to compile a fuzzing rust_binary with a main invocation
+
+    Args:
+      name: name of the fuzzer target.
+      srcs: source files for the fuzzer.
+      rustc_flags: Additional rustc_flags for rust_binary rule.
+      sanitizers: Sanitizers for the fuzzer target. If nothing is provided, address sanitizer is added by default.
+      crate_features: Additional crate_features to be used for compilation.
+            fuzzing is added by default.
+      deps: Fuzzer dependencies.
+      proc_macro_deps: Fuzzer proc_macro dependencies.
+      **kwargs: additional arguments to pass a rust_binary rule.
+    """
+
+    if not sanitizers:
+        sanitizers = DEFAULT_SANITIZERS
+
+    RUSTC_FLAGS_LIBFUZZER = DEFAULT_RUSTC_FLAGS + [
+        # This would only work inside the devcontainer
+        "-Clink-arg=/usr/lib/llvm-18/lib/clang/18/lib/linux/libclang_rt.fuzzer_no_main-x86_64.a",
+    ]
+
+    kwargs.setdefault("testonly", True)
+
+    rust_binary(
+        name = name,
+        srcs = srcs,
+        aliases = {},
+        crate_features = crate_features + ["fuzzing"],
+        proc_macro_deps = proc_macro_deps,
+        deps = deps,
+        rustc_flags = rustc_flags + RUSTC_FLAGS_LIBFUZZER + sanitizers,
+        tags = [
+            # Makes sure this target is not run in normal CI builds. It would fail due to non-nightly Rust toolchain.
+            "fuzz_test",
+            "libfuzzer",
+        ],
+        **kwargs
+    )

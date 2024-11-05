@@ -26,6 +26,7 @@ const RUNNABLE_AS_SANDBOX: &[&str] = &[
     "ic-recovery",
     "pocket-ic",
     "pocket-ic-server",
+    "execute_with_wasm_executor_system_api_call",
 ];
 
 enum SandboxCrate {
