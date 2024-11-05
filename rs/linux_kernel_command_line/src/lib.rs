@@ -42,17 +42,17 @@ impl KernelCommandLine {
         argument: &str,
         value: Option<&str>,
     ) -> Result<String, UnrepresentableValue> {
-        fn escape_value(val: String) -> Result<String, UnrepresentableValue> {
+        fn escape_value(val: &str) -> Result<String, UnrepresentableValue> {
             Ok(if val.contains("\"") || val.contains("\n") {
                 return Err(UnrepresentableValue(val.to_string()));
             } else if val.contains(" ") {
-                ("\"".to_owned() + val.as_str() + "\"").to_string()
+                ("\"".to_owned() + val + "\"").to_string()
             } else {
                 val.to_string()
             })
         }
         if let Some(val) = value {
-            Ok(format!("{}={}", argument, escape_value(val.to_string())?))
+            Ok(format!("{}={}", argument, escape_value(val)?))
         } else {
             Ok(argument.to_owned())
         }
