@@ -461,7 +461,7 @@ fn get_transactions(
     get_transactions_as(env, archive, start, length, "get_transactions".to_string())
 }
 
-fn get_blocks(
+pub fn get_blocks(
     env: &StateMachine,
     archive: Principal,
     start: u64,
@@ -2377,7 +2377,11 @@ pub fn test_upgrade_serialization(
                         tx_index += 1;
                     }
                     tx_index_target += ADDITIONAL_TX_BATCH_SIZE;
-                    in_memory_ledger.verify_balances_and_allowances(&env, ledger_id);
+                    in_memory_ledger.verify_balances_and_allowances(
+                        &env,
+                        ledger_id,
+                        tx_index as u64,
+                    );
                 };
                 add_tx_and_verify();
 

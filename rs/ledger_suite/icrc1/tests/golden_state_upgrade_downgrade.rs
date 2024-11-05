@@ -1,6 +1,6 @@
 use crate::common::{index_ng_wasm, ledger_wasm, load_wasm_using_env_var};
 use crate::index::verify_ledger_archive_and_index_block_parity;
-use candid::{Encode, Nat};
+use candid::{Encode, Nat, Principal};
 use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1::Block;
@@ -9,7 +9,7 @@ use ic_ledger_suite_state_machine_tests::in_memory_ledger::{
     ApprovalKey, BurnsWithoutSpender, InMemoryLedger,
 };
 use ic_ledger_suite_state_machine_tests::{
-    generate_transactions, get_all_ledger_and_archive_blocks, list_archives,
+    generate_transactions, get_all_ledger_and_archive_blocks, get_blocks, list_archives,
     TransactionGenerationParameters,
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_fiduciary_state_or_panic;
@@ -321,8 +321,13 @@ impl LedgerState {
         state_machine: &StateMachine,
         canister_id: CanisterId,
     ) {
-        self.in_memory_ledger
-            .verify_balances_and_allowances(state_machine, canister_id);
+        let num_ledger_blocks =
+            get_blocks(state_machine, Principal::from(canister_id), 0, 0).chain_length;
+        self.in_memory_ledger.verify_balances_and_allowances(
+            state_machine,
+            canister_id,
+            num_ledger_blocks,
+        );
     }
 
     /// Verify the ledger state and generate new transactions. In particular:
