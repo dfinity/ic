@@ -720,6 +720,7 @@ fn enforce_best_effort_message_limit() {
     // Enqueue 4 best-effort incoming requests of increasing sizes for
     // `CANISTER_ID`, `OTHER_CANISTER_ID` and `own_subnet_id` (i.e. subnet queues).
     let own_subnet_id = CanisterId::from(fixture.state.metadata.own_subnet_id);
+    let mut message_sizes = Vec::new();
     for (i, receiver) in [CANISTER_ID, OTHER_CANISTER_ID, CANISTER_ID, own_subnet_id]
         .iter()
         .enumerate()
@@ -727,6 +728,7 @@ fn enforce_best_effort_message_limit() {
         let mut request = request_to(*receiver);
         request.deadline = SOME_DEADLINE;
         request.method_name = String::from_utf8(vec![b'x'; i * 10 + 1]).unwrap();
+        message_sizes.push(NumBytes::from(request.count_bytes() as u64));
         fixture.push_input(request.into()).unwrap();
     }
 
@@ -749,7 +751,7 @@ fn enforce_best_effort_message_limit() {
     // but the first message we enqueued.
     let mean_message_size = best_effort_memory_usage / 4;
     assert_eq!(
-        (3, mean_message_size * 3 + 15.into()),
+        (3, message_sizes[1] + message_sizes[2] + message_sizes[3]),
         fixture
             .state
             .enforce_best_effort_message_limit(mean_message_size),
