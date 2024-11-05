@@ -724,7 +724,7 @@ type UpgradeJournalEntry = record {
   event : opt variant {
     UpgradeStepsRefreshed : UpgradeStepsRefreshed;
     TargetVersionSet : TargetVersionSet;
-    TargetVersionReset : TargetVersionSet;
+    TargetVersionReset : TargetVersionReset;
     UpgradeStarted : UpgradeStarted;
     UpgradeOutcome : UpgradeOutcome;
   };
@@ -736,6 +736,11 @@ type UpgradeStepsRefreshed = record {
 };
 
 type TargetVersionSet = record {
+  new_target_version : opt Version;
+  old_target_version : opt Version;
+};
+
+type TargetVersionReset = record {
   new_target_version : opt Version;
   old_target_version : opt Version;
 };

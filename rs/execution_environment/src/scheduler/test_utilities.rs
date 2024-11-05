@@ -68,7 +68,7 @@ use crate::{
     as_round_instructions, ExecutionEnvironment, Hypervisor, IngressHistoryWriterImpl, RoundLimits,
 };
 
-use super::SchedulerImpl;
+use super::{RoundSchedule, SchedulerImpl};
 use crate::metrics::MeasurementScope;
 use ic_crypto_prng::{Csprng, RandomnessPurpose::ExecutionThread};
 use ic_types::time::UNIX_EPOCH;
@@ -665,7 +665,6 @@ pub(crate) struct SchedulerTestBuilder {
     idkg_keys: Vec<MasterPublicKeyId>,
     metrics_registry: MetricsRegistry,
     round_summary: Option<ExecutionRoundSummary>,
-    canister_snapshot_flag: bool,
     replica_version: ReplicaVersion,
 }
 
@@ -691,7 +690,6 @@ impl Default for SchedulerTestBuilder {
             idkg_keys: vec![],
             metrics_registry: MetricsRegistry::new(),
             round_summary: None,
-            canister_snapshot_flag: true,
             replica_version: ReplicaVersion::default(),
         }
     }
@@ -758,13 +756,6 @@ impl SchedulerTestBuilder {
     pub fn with_round_summary(self, round_summary: ExecutionRoundSummary) -> Self {
         Self {
             round_summary: Some(round_summary),
-            ..self
-        }
-    }
-
-    pub fn with_canister_snapshots(self, canister_snapshot_flag: bool) -> Self {
-        Self {
-            canister_snapshot_flag,
             ..self
         }
     }
@@ -858,18 +849,12 @@ impl SchedulerTestBuilder {
         } else {
             FlagStatus::Disabled
         };
-        let canister_snapshots = if self.canister_snapshot_flag {
-            FlagStatus::Enabled
-        } else {
-            FlagStatus::Disabled
-        };
         let config = ic_config::execution_environment::Config {
             allocatable_compute_capacity_in_percent: self.allocatable_compute_capacity_in_percent,
             subnet_message_memory_capacity: NumBytes::from(self.subnet_message_memory),
             rate_limiting_of_instructions,
             rate_limiting_of_heap_delta,
             deterministic_time_slicing,
-            canister_snapshots,
             ..ic_config::execution_environment::Config::default()
         };
         let wasm_executor = Arc::new(TestWasmExecutor::new(
@@ -907,7 +892,7 @@ impl SchedulerTestBuilder {
             &self.metrics_registry,
             self.own_subnet_id,
             self.subnet_type,
-            SchedulerImpl::compute_capacity_percent(self.scheduler_config.scheduler_cores),
+            RoundSchedule::compute_capacity_percent(self.scheduler_config.scheduler_cores),
             config,
             Arc::clone(&cycles_account_manager),
             self.scheduler_config.scheduler_cores,

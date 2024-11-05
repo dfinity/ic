@@ -1,6 +1,6 @@
 use crate::eth_logs::{
     report_transaction_error, LogParser, LogScraping, ReceivedErc20LogScraping,
-    ReceivedEthLogScraping, ReceivedEvent, ReceivedEventError,
+    ReceivedEthLogScraping, ReceivedEthOrErc20LogScraping, ReceivedEvent, ReceivedEventError,
 };
 use crate::eth_rpc::{BlockSpec, GetLogsParam, HttpOutcallError, LogEntry, Topic};
 use crate::eth_rpc_client::{EthRpcClient, MultiCallError};
@@ -65,7 +65,7 @@ async fn mint() {
         let block_index = match client
             .transfer(TransferArg {
                 from_subaccount: None,
-                to: (event.principal()).into(),
+                to: event.beneficiary(),
                 fee: None,
                 created_at_time: None,
                 memo: Some((&event).into()),
@@ -114,7 +114,7 @@ async fn mint() {
             INFO,
             "Minted {} {token_symbol} to {} in block {block_index}",
             event.value(),
-            event.principal()
+            event.beneficiary()
         );
         // minting succeeded, defuse guard
         ScopeGuard::into_inner(prevent_double_minting_guard);
@@ -147,6 +147,7 @@ pub async fn scrape_logs() {
     let max_block_spread = read_state(|s| s.max_block_spread_for_logs_scraping());
     scrape_until_block::<ReceivedEthLogScraping>(last_block_number, max_block_spread).await;
     scrape_until_block::<ReceivedErc20LogScraping>(last_block_number, max_block_spread).await;
+    scrape_until_block::<ReceivedEthOrErc20LogScraping>(last_block_number, max_block_spread).await;
 }
 
 pub async fn update_last_observed_block_number() -> Option<BlockNumber> {
@@ -312,7 +313,7 @@ pub fn register_deposit_events(
             INFO,
             "Received event {event:?}; will mint {} {scraping_display_name} to {}",
             event.value(),
-            event.principal()
+            event.beneficiary()
         );
         if crate::blocklist::is_blocked(&event.from_address()) {
             log!(
