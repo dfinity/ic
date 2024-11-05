@@ -393,6 +393,9 @@ pub mod events {
         SyncedErc20ToBlock {
             block_number: Nat,
         },
+        SyncedDepositWithSubaccountToBlock {
+            block_number: Nat,
+        },
         AcceptedEthWithdrawalRequest {
             withdrawal_amount: Nat,
             destination: String,

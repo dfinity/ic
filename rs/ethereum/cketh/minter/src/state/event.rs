@@ -164,6 +164,13 @@ pub enum EventType {
         #[n(1)]
         block_number: BlockNumber,
     },
+    /// The minter processed the deposit helper smart contract with subaccount logs up to the specified height.
+    #[n(24)]
+    SyncedDepositWithSubaccountToBlock {
+        /// The last processed block number for the helper contract (inclusive).
+        #[n(0)]
+        block_number: BlockNumber,
+    },
 }
 
 impl ReceivedEvent {
