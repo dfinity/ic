@@ -191,8 +191,7 @@ pub(crate) struct ConsensusManagerReceiver<
     slot_table: HashMap<NodeId, HashMap<SlotNumber, SlotEntry<WireArtifact::Id>>>,
     active_assembles: HashMap<WireArtifact::Id, watch::Sender<PeerCounter>>,
 
-    #[allow(clippy::type_complexity)]
-    artifact_processor_tasks: JoinSet<(watch::Receiver<PeerCounter>, WireArtifact::Id)>,
+    artifact_processor_tasks: JoinSet<WireArtifact::Id>,
 
     topology_watcher: watch::Receiver<SubnetTopology>,
 
@@ -259,8 +258,16 @@ where
                 }
                 Some(result) = self.artifact_processor_tasks.join_next() => {
                     match result {
-                        Ok((receiver, id)) => {
-                            self.handle_artifact_processor_joined(receiver, id, cancellation_token.clone());
+                        Ok(id) => {
+                            self.metrics.assemble_task_finished_total.inc();
+                            self.active_assembles.remove(&id);
+                            debug_assert!(
+                                self.slot_table
+                                    .values()
+                                    .flat_map(HashMap::values)
+                                    .all(|v| self.active_assembles.contains_key(&v.id)),
+                                "Every entry in the slot table should have an active assemble task."
+                            );
 
                         }
                         Err(err) => {
@@ -293,45 +300,6 @@ where
                 "Number of assemble tasks should always be the same or exceed the number of distinct ids stored."
             );
         }
-    }
-
-    pub(crate) fn handle_artifact_processor_joined(
-        &mut self,
-        peer_rx: watch::Receiver<PeerCounter>,
-        id: WireArtifact::Id,
-        cancellation_token: CancellationToken,
-    ) {
-        self.metrics.assemble_task_finished_total.inc();
-        // Invariant: Peer sender should only be dropped in this task..
-        debug_assert!(peer_rx.has_changed().is_ok());
-
-        // peer advertised after task finished.
-        if !peer_rx.borrow().is_empty() {
-            self.metrics.assemble_task_restart_after_join_total.inc();
-            self.metrics.assemble_task_started_total.inc();
-            self.artifact_processor_tasks.spawn_on(
-                Self::process_advert(
-                    self.log.clone(),
-                    id,
-                    None,
-                    peer_rx,
-                    self.sender.clone(),
-                    self.artifact_assembler.clone(),
-                    self.metrics.clone(),
-                    cancellation_token.clone(),
-                ),
-                &self.rt_handle,
-            );
-        } else {
-            self.active_assembles.remove(&id);
-        }
-        debug_assert!(
-            self.slot_table
-                .values()
-                .flat_map(HashMap::values)
-                .all(|v| self.active_assembles.contains_key(&v.id)),
-            "Every entry in the slot table should have an active assemble task."
-        );
     }
 
     #[instrument(skip_all)]
@@ -463,7 +431,7 @@ where
         artifact_assembler: Assembler,
         metrics: ConsensusManagerMetrics,
         cancellation_token: CancellationToken,
-    ) -> (watch::Receiver<PeerCounter>, WireArtifact::Id) {
+    ) -> WireArtifact::Id {
         let _timer = metrics.assemble_task_duration.start_timer();
 
         let mut peer_rx_clone = peer_rx.clone();
@@ -529,8 +497,7 @@ where
                     .inc();
             },
         };
-
-        (peer_rx, id_c)
+        id_c
     }
 
     /// Notifies all running tasks about the topology update.
@@ -966,7 +933,7 @@ mod tests {
             .expect("Artifact processor task panicked");
 
         // Check that assemble task for first advert closes.
-        assert_eq!(result.1, 0);
+        assert_eq!(result, 0);
     }
 
     /// Check that adverts updates with higher connection ids take precedence.
@@ -1063,7 +1030,7 @@ mod tests {
         );
 
         // Check that assemble task for first advert closes.
-        assert_eq!(result.1, 0);
+        assert_eq!(result, 0);
     }
 
     /// Verify that if two peers advertise the same advert it will get added to the same assemble task.
@@ -1137,7 +1104,7 @@ mod tests {
             cancellation.clone(),
         );
         // Check that the assemble task is closed.
-        let (peer_rx, id) = mgr
+        let _ = mgr
             .artifact_processor_tasks
             .join_next()
             .await
@@ -1154,9 +1121,6 @@ mod tests {
             ConnId::from(1),
             cancellation.clone(),
         );
-        assert_eq!(mgr.active_assembles.len(), 2);
-        // Verify that we reopened the assemble task for advert 0.
-        mgr.handle_artifact_processor_joined(peer_rx, id, cancellation.clone());
         assert_eq!(mgr.active_assembles.len(), 2);
     }
 
@@ -1272,8 +1236,7 @@ mod tests {
                 .join_next()
                 .await
                 .unwrap()
-                .unwrap()
-                .1,
+                .unwrap(),
             0
         );
     }
@@ -1357,7 +1320,7 @@ mod tests {
             .expect("Artifact processor task panicked");
 
         assert_eq!(
-            result.1, 0,
+            result, 0,
             "Expected artifact processor task for id 0 to closed"
         );
         assert_eq!(mgr.artifact_processor_tasks.len(), 1);
@@ -1423,7 +1386,7 @@ mod tests {
         // Only assemble task 1 closes because it got overwritten.
         tokio::time::timeout(Duration::from_millis(100), async {
             while let Some(id) = mgr.artifact_processor_tasks.join_next().await {
-                assert_eq!(id.unwrap().1, 1);
+                assert_eq!(id.unwrap(), 1);
             }
         })
         .await
@@ -1534,7 +1497,7 @@ mod tests {
             .expect("Artifact processor task panicked");
 
         assert_eq!(
-            result.1, 0,
+            result, 0,
             "Expected artifact processor task for id 0 to closed"
         );
         assert_eq!(mgr.artifact_processor_tasks.len(), 1);

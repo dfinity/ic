@@ -17,7 +17,6 @@ pub(crate) struct ConsensusManagerMetrics {
     pub assemble_task_finished_total: IntCounter,
     pub assemble_task_duration: Histogram,
     pub assemble_task_result_total: IntCounterVec,
-    pub assemble_task_restart_after_join_total: IntCounter,
 
     // Slot table
     pub slot_table_updates_total: IntCounter,
@@ -89,15 +88,6 @@ impl ConsensusManagerMetrics {
                 )
                 .unwrap(),
             ),
-            assemble_task_restart_after_join_total: metrics_registry.register(
-                IntCounter::with_opts(opts!(
-                    "ic_consensus_manager_assemble_task_restart_after_join_total",
-                    "assemble task immediately restarted due to advert appearing when closing.",
-                    const_labels.clone(),
-                ))
-                .unwrap(),
-            ),
-
             slot_table_updates_total: metrics_registry.register(
                 IntCounter::with_opts(opts!(
                     "ic_consensus_manager_slot_table_updates_total",
