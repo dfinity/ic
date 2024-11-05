@@ -216,7 +216,7 @@ fn get_minter_info() -> MinterInfo {
     read_state(|s| MinterInfo {
         kyt_fee: s.kyt_fee,
         min_confirmations: s.min_confirmations,
-        retrieve_btc_min_amount: s.retrieve_btc_min_amount,
+        retrieve_btc_min_amount: s.fee_based_retrieve_btc_min_amount,
     })
 }
 
