@@ -1,5 +1,5 @@
 use candid::Principal;
-use pocket_ic::PocketIcBuilder;
+use pocket_ic::{PocketIc, PocketIcBuilder};
 
 fn test_canister_wasm() -> Vec<u8> {
     let wasm_path = std::env::var_os("TEST_WASM").expect("Missing test canister wasm file");
@@ -26,6 +26,8 @@ fn benchmark() {
 
 #[test]
 fn poc() {
+    // the following line starts the PocketIC server so that we don't measure that
+    let _ = PocketIc::new();
     for _ in 0..10 {
         let start = std::time::Instant::now();
         benchmark();
