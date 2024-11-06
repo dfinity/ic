@@ -1,3 +1,5 @@
+use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId};
+
 use super::*;
 
 #[test]
@@ -28,7 +30,32 @@ fn should_convert_ni_dkg_id_to_proto() {
 
 #[test]
 fn should_convert_ni_dkg_id_with_key_id_to_proto() {
-    todo!()
+    let principal_id = PrincipalId::new_subnet_test_id(42);
+    let target_id = [42; NiDkgTargetId::SIZE];
+    let height = 7;
+    let master_public_key_id = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+        curve: EcdsaCurve::Secp256k1,
+        name: "key".to_string(),
+    });
+    let id = NiDkgId {
+        start_block_height: Height::new(7),
+        dealer_subnet: SubnetId::from(principal_id),
+        dkg_tag: NiDkgTag::HighThresholdForKey(master_public_key_id.clone()),
+        target_subnet: NiDkgTargetSubnet::Remote(NiDkgTargetId::new(target_id)),
+    };
+
+    let proto = NiDkgIdProto::from(id);
+
+    assert_eq!(
+        proto,
+        NiDkgIdProto {
+            start_block_height: height,
+            dealer_subnet: principal_id.into_vec(),
+            remote_target_id: Some(target_id.to_vec()),
+            dkg_tag: pb::NiDkgTag::HighThresholdForKey as i32,
+            key_id: Some(pb::MasterPublicKeyId::from(&master_public_key_id)),
+        }
+    )
 }
 
 #[test]
@@ -67,7 +94,40 @@ fn should_parse_valid_proto_as_ni_dkg_id() {
 
 #[test]
 fn should_parse_valid_proto_as_ni_dkg_id_with_key_id() {
-    todo!()
+    let principal_id_blob = vec![42; PrincipalId::MAX_LENGTH_IN_BYTES];
+    let target_id = [42; NiDkgTargetId::SIZE];
+    let height = 7;
+    let master_public_key_id = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+        curve: EcdsaCurve::Secp256k1,
+        name: "key".to_string(),
+    });
+
+    for val in [None, Some(target_id.to_vec())].iter() {
+        let proto = NiDkgIdProto {
+            start_block_height: height,
+            dealer_subnet: principal_id_blob.clone(),
+            remote_target_id: val.clone(),
+            dkg_tag: pb::NiDkgTag::HighThresholdForKey as i32,
+            key_id: Some(pb::MasterPublicKeyId::from(&master_public_key_id)),
+        };
+
+        let id = NiDkgId::try_from(proto).unwrap();
+
+        assert_eq!(
+            id,
+            NiDkgId {
+                start_block_height: Height::new(height),
+                dealer_subnet: SubnetId::from(
+                    PrincipalId::try_from(principal_id_blob.as_slice()).unwrap()
+                ),
+                dkg_tag: NiDkgTag::HighThresholdForKey(master_public_key_id.clone()),
+                target_subnet: match val {
+                    None => NiDkgTargetSubnet::Local,
+                    Some(_) => NiDkgTargetSubnet::Remote(NiDkgTargetId::new(target_id)),
+                },
+            }
+        );
+    }
 }
 
 #[test]
