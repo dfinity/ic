@@ -62,7 +62,7 @@ pub struct ConsensusManagerSender<Artifact: IdentifiableArtifact, WireArtifact, 
     slot_manager: AvailableSlotSet,
     current_commit_id: CommitId,
     active_adverts: HashMap<Artifact::Id, (CancellationToken, AvailableSlot)>,
-    join_set: JoinSet<()>,
+    active_transmit_tasks: JoinSet<()>,
     assembler: Assembler,
     marker: PhantomData<WireArtifact>,
 }
@@ -92,7 +92,7 @@ impl<
             slot_manager,
             current_commit_id: CommitId::from(0),
             active_adverts: HashMap::new(),
-            join_set: JoinSet::new(),
+            active_transmit_tasks: JoinSet::new(),
             assembler,
             marker: PhantomData,
         };
@@ -123,14 +123,14 @@ impl<
                     self.current_commit_id.inc_assign();
                 }
 
-                Some(result) = self.join_set.join_next() => {
+                Some(result) = self.active_transmit_tasks.join_next() => {
                     panic_on_join_err(result);
                 }
             }
 
             #[cfg(debug_assertions)]
             {
-                if self.join_set.len() < self.active_adverts.len() {
+                if self.active_transmit_tasks.len() < self.active_adverts.len() {
                     // This invariant can be violated if the root cancellation token is cancelled.
                     // It can be violated because the active_adverts HashMap is only cleared
                     // when purging artifacts, and not when the tasks join due to a cancellation
@@ -142,8 +142,8 @@ impl<
 
                     if is_not_cancelled {
                         panic!(
-                            "Invariant violated: join_set.len() {:?} >= active_adverts.len() {:?}.",
-                            self.join_set.len(),
+                            "Invariant violated: active_transmit_tasks.len() {:?} >= active_adverts.len() {:?}.",
+                            self.active_transmit_tasks.len(),
                             self.active_adverts.len()
                         );
                     }
@@ -151,7 +151,7 @@ impl<
             }
         }
 
-        while let Some(result) = self.join_set.join_next().await {
+        while let Some(result) = self.active_transmit_tasks.join_next().await {
             panic_on_join_err(result);
         }
     }
@@ -193,15 +193,18 @@ impl<
                 },
                 wire_artifact_id,
             );
-            let send_future = Self::send_transmit_to_all_peers(
+            let route = uri_prefix::<WireArtifact>();
+            let send_future = send_transmit_to_all_peers(
                 self.rt_handle.clone(),
                 self.metrics.clone(),
                 self.transport.clone(),
                 payload,
+                route,
                 child_token_clone,
             );
 
-            self.join_set.spawn_on(send_future, &self.rt_handle);
+            self.active_transmit_tasks
+                .spawn_on(send_future, &self.rt_handle);
             entry.insert((child_token, used_slot));
         } else {
             self.metrics.send_view_consensus_dup_adverts_total.inc();
@@ -240,6 +243,7 @@ async fn send_transmit_to_all_peers(
     metrics: ConsensusManagerMetrics,
     transport: Arc<dyn Transport>,
     body: Bytes,
+    route: String,
     cancellation_token: CancellationToken,
 ) {
     let mut in_progress_transmissions = JoinSet::new();
@@ -271,10 +275,11 @@ async fn send_transmit_to_all_peers(
 
                         let transport = transport.clone();
                         let body = body.clone();
+                        let route = route.clone();
 
                         let send_future = async move {
                             select! {
-                                _ = send_transmit_to_peer(transport, body, peer, uri_prefix::<WireArtifact>()) => {},
+                                _ = send_transmit_to_peer(transport, body, peer, route) => {},
                                 _ = child_token.cancelled() => {},
                             }
                         };
@@ -304,7 +309,7 @@ async fn send_transmit_to_peer(
     transport: Arc<dyn Transport>,
     message: Bytes,
     peer: NodeId,
-    uri_prefix: String,
+    route: String,
 ) {
     let mut backoff = ExponentialBackoffBuilder::new()
         .with_initial_interval(MIN_BACKOFF_INTERVAL)
@@ -315,7 +320,7 @@ async fn send_transmit_to_peer(
 
     loop {
         let request = Request::builder()
-            .uri(format!("/{}/update", uri_prefix))
+            .uri(format!("/{}/update", route))
             .body(message.clone())
             .expect("Building from typed values");
 
