@@ -61,7 +61,7 @@ pub struct ConsensusManagerSender<Artifact: IdentifiableArtifact, WireArtifact, 
     outbound_transmits: Receiver<ArtifactTransmit<Artifact>>,
     slot_manager: AvailableSlotSet,
     current_commit_id: CommitId,
-    active_adverts: HashMap<Artifact::Id, (CancellationToken, AvailableSlot)>,
+    active_slots: HashMap<Artifact::Id, (CancellationToken, AvailableSlot)>,
     active_transmit_tasks: JoinSet<()>,
     assembler: Assembler,
     marker: PhantomData<WireArtifact>,
@@ -91,7 +91,7 @@ impl<
             outbound_transmits,
             slot_manager,
             current_commit_id: CommitId::from(0),
-            active_adverts: HashMap::new(),
+            active_slots: HashMap::new(),
             active_transmit_tasks: JoinSet::new(),
             assembler,
             marker: PhantomData,
@@ -130,9 +130,9 @@ impl<
 
             #[cfg(debug_assertions)]
             {
-                if self.active_transmit_tasks.len() < self.active_adverts.len() {
+                if self.active_transmit_tasks.len() < self.active_slots.len() {
                     // This invariant can be violated if the root cancellation token is cancelled.
-                    // It can be violated because the active_adverts HashMap is only cleared
+                    // It can be violated because the active_slots HashMap is only cleared
                     // when purging artifacts, and not when the tasks join due to a cancellation
                     // not triggered by the manager.
                     let is_not_cancelled =
@@ -142,9 +142,9 @@ impl<
 
                     if is_not_cancelled {
                         panic!(
-                            "Invariant violated: active_transmit_tasks.len() {:?} >= active_adverts.len() {:?}.",
+                            "Invariant violated: active_transmit_tasks.len() {:?} >= active_slots.len() {:?}.",
                             self.active_transmit_tasks.len(),
-                            self.active_adverts.len()
+                            self.active_slots.len()
                         );
                     }
                 }
@@ -157,7 +157,7 @@ impl<
     }
 
     fn handle_abort_transmit(&mut self, id: &Artifact::Id) {
-        if let Some((cancellation_token, free_slot)) = self.active_adverts.remove(id) {
+        if let Some((cancellation_token, free_slot)) = self.active_slots.remove(id) {
             self.metrics.send_view_consensus_purge_active_total.inc();
             cancellation_token.cancel();
             self.slot_manager.push(free_slot);
@@ -175,7 +175,7 @@ impl<
         let id = new_artifact.artifact.id();
         let wire_artifact = self.assembler.disassemble_message(new_artifact.artifact);
         let wire_artifact_id = wire_artifact.id();
-        let entry = self.active_adverts.entry(id.clone());
+        let entry = self.active_slots.entry(id.clone());
 
         if let Entry::Vacant(entry) = entry {
             self.metrics.send_view_consensus_new_adverts_total.inc();
