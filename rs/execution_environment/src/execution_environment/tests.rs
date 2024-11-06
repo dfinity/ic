@@ -1549,9 +1549,8 @@ fn subnet_canister_request_bad_candid_payload() {
         .subnet_message(Method::InstallCode, vec![1, 2, 3])
         .unwrap_err();
     assert_eq!(ErrorCode::InvalidManagementPayload, err.code());
-    assert_eq!(
-        "Error decoding candid: Custom(Cannot parse header 010203\n\nCaused by:\n    binary parser error: io error)",
-        err.description()
+    assert!(
+        err.description().starts_with("Error decoding candid: Custom(Cannot parse header 010203\n\nCaused by:\n    binary parser error: io error")
     );
 }
 

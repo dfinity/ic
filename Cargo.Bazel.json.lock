@@ -1,5 +1,5 @@
 {
-  "checksum": "298668ab50e9467f9c7caac143a07b150199e237864a8ff63a8345a42f42a70d",
+  "checksum": "4b719e8fdc91322b9e9063e4e9620a54f1f21b43df766cccbf7f2a3900e2768a",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -2249,14 +2249,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "anyhow 1.0.92": {
+    "anyhow 1.0.93": {
       "name": "anyhow",
-      "version": "1.0.92",
+      "version": "1.0.93",
       "package_url": "https://github.com/dtolnay/anyhow",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/anyhow/1.0.92/download",
-          "sha256": "74f37166d7d48a0284b99dd824694c26119c700b53bf0d1540cdb147dbdaaf13"
+          "url": "https://static.crates.io/crates/anyhow/1.0.93/download",
+          "sha256": "4c95c10ba0b00a02636238b814946408b1322d5ac4760326e6fb8ec956d85775"
         }
       },
       "targets": [
@@ -2300,14 +2300,14 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.92",
+              "id": "anyhow 1.0.93",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.0.92"
+        "version": "1.0.93"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -3423,7 +3423,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.92",
+              "id": "anyhow 1.0.93",
               "target": "anyhow"
             },
             {
@@ -7447,7 +7447,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.92",
+              "id": "anyhow 1.0.93",
               "target": "anyhow"
             },
             {
@@ -7487,7 +7487,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.92",
+              "id": "anyhow 1.0.93",
               "target": "anyhow"
             }
           ],
@@ -8579,7 +8579,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.92",
+              "id": "anyhow 1.0.93",
               "target": "anyhow"
             },
             {
@@ -8749,7 +8749,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.92",
+              "id": "anyhow 1.0.93",
               "target": "anyhow"
             },
             {
@@ -10164,7 +10164,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.92",
+              "id": "anyhow 1.0.93",
               "target": "anyhow"
             },
             {
@@ -10346,7 +10346,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.92",
+              "id": "anyhow 1.0.93",
               "target": "anyhow"
             },
             {
@@ -18211,7 +18211,7 @@
               "target": "aide"
             },
             {
-              "id": "anyhow 1.0.92",
+              "id": "anyhow 1.0.93",
               "target": "anyhow"
             },
             {
@@ -30432,7 +30432,7 @@
               "target": "ahash"
             },
             {
-              "id": "anyhow 1.0.92",
+              "id": "anyhow 1.0.93",
               "target": "anyhow"
             },
             {
@@ -32770,7 +32770,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.92",
+              "id": "anyhow 1.0.93",
               "target": "anyhow"
             },
             {
@@ -33186,7 +33186,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.92",
+              "id": "anyhow 1.0.93",
               "target": "anyhow"
             },
             {
@@ -33257,7 +33257,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.92",
+              "id": "anyhow 1.0.93",
               "target": "anyhow"
             },
             {
@@ -51654,7 +51654,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.92",
+              "id": "anyhow 1.0.93",
               "target": "anyhow"
             },
             {
@@ -51717,7 +51717,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.92",
+              "id": "anyhow 1.0.93",
               "target": "anyhow"
             },
             {
@@ -69880,7 +69880,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.92",
+              "id": "anyhow 1.0.93",
               "target": "anyhow"
             },
             {
@@ -77577,7 +77577,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.92",
+              "id": "anyhow 1.0.93",
               "target": "anyhow"
             },
             {
@@ -78559,7 +78559,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.92",
+              "id": "anyhow 1.0.93",
               "target": "anyhow"
             },
             {
@@ -78980,7 +78980,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.92",
+              "id": "anyhow 1.0.93",
               "target": "anyhow"
             },
             {
@@ -79036,7 +79036,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.92",
+              "id": "anyhow 1.0.93",
               "target": "anyhow"
             },
             {
@@ -79114,7 +79114,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.92",
+              "id": "anyhow 1.0.93",
               "target": "anyhow"
             },
             {
@@ -79570,7 +79570,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.92",
+              "id": "anyhow 1.0.93",
               "target": "anyhow"
             },
             {
@@ -79697,7 +79697,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.92",
+              "id": "anyhow 1.0.93",
               "target": "anyhow"
             },
             {
@@ -79821,7 +79821,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.92",
+              "id": "anyhow 1.0.93",
               "target": "anyhow"
             },
             {
@@ -79929,7 +79929,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.92",
+              "id": "anyhow 1.0.93",
               "target": "anyhow"
             },
             {
@@ -80086,7 +80086,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.92",
+              "id": "anyhow 1.0.93",
               "target": "anyhow"
             },
             {
@@ -83518,7 +83518,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.92",
+              "id": "anyhow 1.0.93",
               "target": "anyhow"
             },
             {
@@ -86161,7 +86161,7 @@
     "actix-web 4.9.0",
     "addr 0.15.6",
     "aide 0.13.4",
-    "anyhow 1.0.92",
+    "anyhow 1.0.93",
     "arbitrary 1.3.2",
     "arc-swap 1.7.1",
     "arrayvec 0.7.4",
