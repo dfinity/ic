@@ -136,6 +136,7 @@ jobs:
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
     name: Bazel Build All Config Check
+    if: ${{ contains(github.event.pull_request.labels.*.name, 'CI_BUILD_CHECK') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
