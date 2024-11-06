@@ -409,7 +409,7 @@ fn validate_data_payload(
 struct CachedBuilder {
     transcripts: BTreeMap<IDkgTranscriptId, IDkgTranscript>,
     dealings: BTreeMap<IDkgTranscriptId, Vec<SignedIDkgDealing>>,
-    signatures: BTreeMap<idkg::PseudoRandomId, CombinedSignature>,
+    signatures: BTreeMap<CallbackId, CombinedSignature>,
 }
 
 impl IDkgTranscriptBuilder for CachedBuilder {
@@ -428,10 +428,10 @@ impl IDkgTranscriptBuilder for CachedBuilder {
 impl ThresholdSignatureBuilder for CachedBuilder {
     fn get_completed_signature(
         &self,
-        _id: CallbackId,
-        context: &SignWithThresholdContext,
+        id: CallbackId,
+        _context: &SignWithThresholdContext,
     ) -> Option<CombinedSignature> {
-        self.signatures.get(&context.pseudo_random_id).cloned()
+        self.signatures.get(&id).cloned()
     }
 }
 
@@ -545,7 +545,7 @@ fn validate_new_signature_agreements(
     state: &ReplicatedState,
     prev_payload: &idkg::IDkgPayload,
     curr_payload: &idkg::IDkgPayload,
-) -> Result<BTreeMap<idkg::PseudoRandomId, CombinedSignature>, IDkgValidationError> {
+) -> Result<BTreeMap<CallbackId, CombinedSignature>, IDkgValidationError> {
     use InvalidIDkgPayloadReason::*;
     let mut new_signatures = BTreeMap::new();
     let contexts = state.signature_request_contexts();
@@ -577,7 +577,7 @@ fn validate_new_signature_agreements(
                         };
                         ThresholdEcdsaSigVerifier::verify_combined_sig(crypto, &input, &signature)
                             .map_err(ThresholdEcdsaVerifyCombinedSignatureError)?;
-                        new_signatures.insert(*random_id, CombinedSignature::Ecdsa(signature));
+                        new_signatures.insert(**id, CombinedSignature::Ecdsa(signature));
                     }
                     ThresholdSigInputsRef::Schnorr(input_ref) => {
                         let input = input_ref
@@ -593,7 +593,7 @@ fn validate_new_signature_agreements(
                             crypto, &input, &signature,
                         )
                         .map_err(ThresholdSchnorrVerifyCombinedSignatureError)?;
-                        new_signatures.insert(*random_id, CombinedSignature::Schnorr(signature));
+                        new_signatures.insert(**id, CombinedSignature::Schnorr(signature));
                     }
                 }
             }
@@ -1001,7 +1001,7 @@ mod test {
         )
         .unwrap();
         assert_eq!(res.len(), 1);
-        assert_eq!(res.keys().next().unwrap(), &pseudo_random_id(1));
+        assert_eq!(res.keys().next().unwrap(), &ids[1].callback_id);
 
         // Repeated signature leads to error
         let res = validate_new_signature_agreements(
