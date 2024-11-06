@@ -1,0 +1,44 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test_suite")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//packages/pocket-ic",
+    "@crate_index//:candid",
+    "@crate_index//:clap",
+    "@crate_index//:reqwest",
+]
+
+MACRO_DEPENDENCIES = []
+
+TEST_DEPENDENCIES = [
+    # Keep sorted.
+    "//packages/pocket-ic",
+    "@crate_index//:candid",
+]
+
+rust_binary(
+    name = "pocket-ic-cli",
+    srcs = glob(["src/**/*.rs"]),
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "5.0.0",
+    deps = DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "test",
+    size = "small",
+    srcs = ["tests/tests.rs"],
+    data = [
+        "//rs/pocket_ic_server:pocket-ic-server",
+        "//packages/pocket-ic-cli",
+    ],
+    env = {
+        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+        "POCKET_IC_CLI": "$(rootpath //packages/pocket-ic-cli)",
+    },
+    flaky = False,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = TEST_DEPENDENCIES,
+)

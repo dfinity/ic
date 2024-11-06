@@ -415,6 +415,11 @@ impl PocketIc {
         }
     }
 
+    /// Returns the URL of the PocketIC server on which this PocketIC instance is running.
+    pub fn get_server_url(&self) -> Url {
+        self.pocket_ic.get_server_url()
+    }
+
     /// Returns the instance ID.
     pub fn instance_id(&self) -> InstanceId {
         self.pocket_ic.instance_id

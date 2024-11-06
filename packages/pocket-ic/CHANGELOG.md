@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The function `PocketIcBuilder::with_subnet_state` to load subnet state from a state directory for an arbitrary subnet kind and subnet id.
 - The function `get_default_effective_canister_id` to retrieve a default effective canister id for canister creation on a PocketIC instance.
 - The function `PocketIc::new_from_existing_instance` to create a PocketIC handle to an existing instance on a running server.
+- The function `PocketIc::get_server_url` returning the URL of the PocketIC server on which the PocketIC instance is running.
 
 ### Removed
 - Functions `PocketIc::from_config`, `PocketIc::from_config_and_max_request_time`, and `PocketIc::from_config_and_server_url`.

@@ -36,6 +36,7 @@ ALL_BINARIES = {
     "systemd-journal-gatewayd-shim": "//rs/boundary_node/systemd_journal_gatewayd_shim:systemd-journal-gatewayd-shim",
     "drun": "//rs/drun:drun",
     "pocket-ic": "//rs/pocket_ic_server:pocket-ic-server",
+    "pocket-ic-cli": "//packages/pocket-ic-cli:pocket-ic-cli",
     "types-test": "//rs/types/types:types_test",
     "replicated-state-test": "//rs/replicated_state:replicated_state_test_binary",
     # needed by DRE for release qualification

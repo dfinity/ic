@@ -1,0 +1,22 @@
+[package]
+name = "pocket-ic-cli"
+version = "5.0.0"
+license = "Apache-2.0"
+description = "PocketIC CLI: A CLI for PocketIC server"
+repository = "https://github.com/dfinity/ic"
+readme = "README.md"
+include = [
+    "src",
+    "Cargo.toml",
+    "CHANGELOG.md",
+    "README.md",
+    "LICENSE",
+]
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+candid = { workspace = true }
+clap = { workspace = true }
+pocket-ic = { path = "../pocket-ic" }
+reqwest = { workspace = true }

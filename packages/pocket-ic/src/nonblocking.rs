@@ -76,6 +76,8 @@ pub struct PocketIc {
     http_gateway: Option<HttpGatewayInfo>,
     server_url: Url,
     reqwest_client: reqwest::Client,
+    // do not delete the instance when dropping this handle if this handle was created for an existing instance
+    keep: bool,
     _log_guard: Option<WorkerGuard>,
 }
 
@@ -107,6 +109,7 @@ impl PocketIc {
             http_gateway: None,
             server_url,
             reqwest_client,
+            keep: true,
             _log_guard: log_guard,
         }
     }
@@ -159,8 +162,14 @@ impl PocketIc {
             http_gateway: None,
             server_url,
             reqwest_client,
+            keep: false,
             _log_guard: log_guard,
         }
+    }
+
+    /// Returns the URL of the PocketIC server on which this PocketIC instance is running.
+    pub fn get_server_url(&self) -> Url {
+        self.server_url.clone()
     }
 
     /// Returns the topology of the different subnets of this PocketIC instance.
@@ -1085,11 +1094,13 @@ impl PocketIc {
 
     pub(crate) async fn do_drop(&mut self) {
         self.stop_http_gateway().await;
-        self.reqwest_client
-            .delete(self.instance_url())
-            .send()
-            .await
-            .expect("Failed to send delete request");
+        if !self.keep {
+            self.reqwest_client
+                .delete(self.instance_url())
+                .send()
+                .await
+                .expect("Failed to send delete request");
+        }
     }
 
     async fn get<T: DeserializeOwned>(&self, endpoint: &str) -> T {
