@@ -234,7 +234,6 @@ impl<
         Bytes::from(pb_slot_update.encode_to_vec())
     }
 }
-/// Sends an advert to all peers.
 #[instrument(skip_all)]
 async fn send_transmit_to_all_peers(
     rt_handle: Handle,
@@ -300,8 +299,6 @@ async fn send_transmit_to_all_peers(
     }
 }
 
-/// Sends a serialized advert or artifact message to a peer.
-/// If the peer is not reachable, it will retry with an exponential backoff.
 #[instrument(skip(transport, message))]
 async fn send_transmit_to_peer(
     transport: Arc<dyn Transport>,
