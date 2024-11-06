@@ -137,8 +137,10 @@ jobs:
     timeout-minutes: 90
     name: Bazel Build All Config Check
     if: |
-      contains(github.event.pull_request.labels.*.name, 'CI_BUILD_CHECK') ||
-      contains(['push', 'schedule', 'workflow_dispatch'], github.event_name)
+      github.event_name == 'push' ||
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.pull_request.labels.*.name, 'CI_BUILD_CHECK')
     steps:
       - name: Checkout
         uses: actions/checkout@v4
