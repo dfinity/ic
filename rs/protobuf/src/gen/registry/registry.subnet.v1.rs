@@ -89,8 +89,18 @@ pub struct EcdsaInitialization {
 pub struct ChainKeyInitialization {
     #[prost(message, optional, tag = "1")]
     pub key_id: ::core::option::Option<super::super::super::types::v1::MasterPublicKeyId>,
-    #[prost(message, optional, tag = "2")]
-    pub dealings: ::core::option::Option<InitialIDkgDealings>,
+    #[prost(oneof = "chain_key_initialization::Initialization", tags = "2, 3")]
+    pub initialization: ::core::option::Option<chain_key_initialization::Initialization>,
+}
+/// Nested message and enum types in `ChainKeyInitialization`.
+pub mod chain_key_initialization {
+    #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Oneof)]
+    pub enum Initialization {
+        #[prost(message, tag = "2")]
+        Dealings(super::InitialIDkgDealings),
+        #[prost(message, tag = "3")]
+        TranscriptRecord(super::InitialNiDkgTranscriptRecord),
+    }
 }
 /// Contains the initial DKG transcripts for the subnet and materials to construct a base CUP (i.e.
 /// a CUP with no dependencies on previous CUPs or blocks). Such CUP materials can be used to
