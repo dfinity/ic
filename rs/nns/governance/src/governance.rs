@@ -5671,7 +5671,7 @@ impl Governance {
                 // No neuron in the stable storage should have maturity.
 
                 for neuron in self.neuron_store.voting_eligible_neurons(now_seconds) {
-                    let voting_power = neuron.voting_power(now_seconds);
+                    let voting_power = neuron.deciding_voting_power(now_seconds);
 
                     total_power += voting_power as u128;
 

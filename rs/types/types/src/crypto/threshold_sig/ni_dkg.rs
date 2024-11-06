@@ -31,9 +31,7 @@ mod tests;
 
 /// Allows to distinguish protocol executions in high and low threshold
 /// settings.
-#[derive(
-    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, EnumIter, Serialize,
-)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, EnumIter, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum NiDkgTag {
     LowThreshold = 1,
@@ -174,7 +172,7 @@ impl From<&NiDkgTranscript> for CspPublicCoefficients {
 impl From<&NiDkgTranscript> for pb::NiDkgTranscript {
     fn from(transcript: &NiDkgTranscript) -> Self {
         Self {
-            dkg_id: Some(pb::NiDkgId::from(transcript.dkg_id)),
+            dkg_id: Some(pb::NiDkgId::from(transcript.dkg_id.clone())),
             threshold: transcript.threshold.get().get(),
             committee: transcript
                 .committee
