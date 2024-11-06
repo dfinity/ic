@@ -44,7 +44,7 @@ if grep -qE ".*\.hs" <<<"$DIFF_FILES"; then
 fi
 
 if grep -qE ".*\.proto" <<<"$DIFF_FILES"; then
-    files+=(//pre-commit:protobuf-format-check)
+    files+=(//pre-commit:protobuf-format-check //pre-commit:buf-breaking)
 fi
 
 if [ ${#files[@]} -eq 0 ]; then
