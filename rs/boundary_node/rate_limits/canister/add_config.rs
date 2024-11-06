@@ -1,4 +1,7 @@
-use crate::{storage::StorableIncidentMetadata, types::Timestamp};
+use crate::{
+    storage::StorableIncidentMetadata,
+    types::{SchemaVersion, Timestamp},
+};
 use anyhow::Context;
 use getrandom::getrandom;
 use rate_limits_api::IncidentId;
@@ -15,6 +18,7 @@ use crate::{
 };
 
 pub const INIT_VERSION: Version = 1;
+pub const INIT_SCHEMA_VERSION: SchemaVersion = 1;
 
 pub trait AddsConfig {
     fn add_config(&self, config: InputConfig, time: Timestamp) -> Result<(), AddConfigError>;

@@ -453,6 +453,11 @@ impl GetEventsFile {
                 EventPayload::QuarantinedReimbursement { index } => ET::QuarantinedReimbursement {
                     index: map_reimbursement_index(index),
                 },
+                EventPayload::SyncedDepositWithSubaccountToBlock { block_number } => {
+                    ET::SyncedDepositWithSubaccountToBlock {
+                        block_number: block_number.try_into().unwrap(),
+                    }
+                }
             },
         }
     }
