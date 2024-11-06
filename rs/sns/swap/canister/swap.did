@@ -421,6 +421,10 @@ type Timers = record {
   last_spawned_timestamp_seconds : opt nat64;
 };
 
+type GetTimersResponse = record {
+  timers : opt Timers;
+};
+
 type SweepResult = record {
   failure : nat32;
   skipped : nat32;
@@ -474,4 +478,5 @@ service : (Init) -> {
       RefreshBuyerTokensResponse,
     );
   reset_timers : (record {}) -> (record {});
+  get_timers : (record {}) -> (GetTimersResponse) query;
 }

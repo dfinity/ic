@@ -1,3 +1,7 @@
+use crate::lifecycle::init::InitArg;
+use crate::state::State;
+use candid::{Nat, Principal};
+
 pub fn expect_panic_with_message<F: FnOnce() -> R, R: std::fmt::Debug>(
     f: F,
     expected_message: &str,
@@ -24,10 +28,29 @@ pub fn expect_panic_with_message<F: FnOnce() -> R, R: std::fmt::Debug>(
     );
 }
 
+pub fn initial_state() -> State {
+    State::try_from(valid_init_arg()).expect("BUG: invalid init arg")
+}
+
+pub fn valid_init_arg() -> InitArg {
+    InitArg {
+        ethereum_network: Default::default(),
+        ecdsa_key_name: "test_key_1".to_string(),
+        ethereum_contract_address: None,
+        ledger_id: Principal::from_text("apia6-jaaaa-aaaar-qabma-cai")
+            .expect("BUG: invalid principal"),
+        ethereum_block_height: Default::default(),
+        minimum_withdrawal_amount: Nat::from(10_000_000_000_000_000_u64),
+        next_transaction_nonce: Default::default(),
+        last_scraped_block_number: Default::default(),
+    }
+}
+
 pub mod arb {
     use crate::checked_amount::CheckedAmountOf;
     use crate::eth_rpc::{Block, Data, FeeHistory, FixedSizeData, Hash, LogEntry};
     use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
+    use crate::numeric::BlockRangeInclusive;
     use evm_rpc_client::{
         Hex, Hex20, Hex256, Hex32, HexByte, HttpOutcallError as EvmHttpOutcallError,
         JsonRpcError as EvmJsonRpcError, Nat256, ProviderError as EvmProviderError,
@@ -47,6 +70,11 @@ pub mod arb {
         use proptest::arbitrary::any;
         use proptest::array::uniform32;
         uniform32(any::<u8>()).prop_map(CheckedAmountOf::from_be_bytes)
+    }
+
+    pub fn arb_block_range_inclusive() -> impl Strategy<Value = BlockRangeInclusive> {
+        (arb_checked_amount_of(), arb_checked_amount_of())
+            .prop_map(|(start, end)| BlockRangeInclusive::new(start, end))
     }
 
     pub fn arb_nat_256() -> impl Strategy<Value = Nat256> {

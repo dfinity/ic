@@ -367,6 +367,7 @@ pub mod events {
             from_address: String,
             value: Nat,
             principal: Principal,
+            subaccount: Option<[u8; 32]>,
         },
         AcceptedErc20Deposit {
             transaction_hash: String,
@@ -376,6 +377,7 @@ pub mod events {
             value: Nat,
             principal: Principal,
             erc20_contract_address: String,
+            subaccount: Option<[u8; 32]>,
         },
         InvalidDeposit {
             event_source: EventSource,
@@ -389,6 +391,9 @@ pub mod events {
             block_number: Nat,
         },
         SyncedErc20ToBlock {
+            block_number: Nat,
+        },
+        SyncedDepositWithSubaccountToBlock {
             block_number: Nat,
         },
         AcceptedEthWithdrawalRequest {

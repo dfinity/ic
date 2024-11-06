@@ -3,7 +3,6 @@ use crate::common::{
     EXPECTED_SNS_CREATION_FEE,
 };
 use canister_test::Wasm;
-use dfn_candid::candid_one;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_clients::canister_status::CanisterStatusType::Running;
 use ic_nervous_system_common::ONE_TRILLION;
@@ -27,6 +26,8 @@ use ic_sns_wasm::{
 };
 use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
 use ic_test_utilities_types::ids::canister_test_id;
+use maplit::btreeset;
+use std::collections::BTreeSet;
 
 pub mod common;
 
@@ -63,7 +64,6 @@ fn test_canisters_are_created_and_installed() {
         &state_machine,
         CanisterId::unchecked_from_principal(root_canister_id),
         "get_sns_canisters_summary",
-        candid_one,
         GetSnsCanistersSummaryRequest {
             update_canister_list: None,
         },
@@ -130,9 +130,15 @@ fn test_canisters_are_created_and_installed() {
     let swap_canister_summary = get_sns_canisters_summary_response.swap_canister_summary();
     assert_eq!(swap_canister_summary.canister_id(), swap_canister_id);
     assert_eq!(swap_canister_summary.status().status(), Running);
+    // https://internetcomputer.org/docs/current/references/ic-interface-spec#ic-canister_info:
+    // The order of controllers stored in the canister history may vary depending on the implementation.
     assert_eq!(
-        swap_canister_summary.status().controllers(),
-        vec![ROOT_CANISTER_ID.get()]
+        swap_canister_summary
+            .status()
+            .controllers()
+            .into_iter()
+            .collect::<BTreeSet<_>>(),
+        btreeset! { root_canister_id, ROOT_CANISTER_ID.get() }
     );
     assert_eq!(
         swap_canister_summary.status().module_hash().unwrap(),
@@ -237,10 +243,12 @@ fn test_deploy_cleanup_on_wasm_install_failure() {
         );
     }
 
-    // 5_000_000_000_000 cycles are burned creating the canisters before the failure
+    // 15_000_000_000_000 cycles are burned creating the canisters before the failure
+    let initial_canister_creation_cycles = 3 * ONE_TRILLION as u128;
     assert_eq!(
         machine.cycle_balance(SNS_WASM_CANISTER_ID),
-        EXPECTED_SNS_CREATION_FEE - SNS_CANISTER_COUNT_AT_INSTALL as u128 * (ONE_TRILLION as u128)
+        EXPECTED_SNS_CREATION_FEE
+            - SNS_CANISTER_COUNT_AT_INSTALL as u128 * initial_canister_creation_cycles,
     );
 }
 
@@ -386,7 +394,6 @@ fn test_deploy_sns_and_transfer_dapps() {
         &machine,
         CanisterId::unchecked_from_principal(root_canister_principal),
         "get_sns_canisters_summary",
-        candid_one,
         GetSnsCanistersSummaryRequest {
             update_canister_list: None,
         },

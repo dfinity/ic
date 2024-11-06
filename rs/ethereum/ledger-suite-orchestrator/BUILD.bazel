@@ -140,7 +140,6 @@ rust_test(
 
 rust_ic_test(
     name = "integration_tests",
-    timeout = "long",
     testonly = True,
     srcs = ["tests/tests.rs"],
     data = [
@@ -161,9 +160,6 @@ rust_ic_test(
         "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/archive:archive_canister_u256.wasm.gz)",
     },
     proc_macro_deps = [],
-    tags = [
-        "long_test",  # since it takes longer than 5 minutes.
-    ],
     deps = [
         # Keep sorted.
         ":ledger_suite_orchestrator",
@@ -174,6 +170,7 @@ rust_ic_test(
         "//rs/rust_canisters/http_types",
         "//rs/state_machine_tests",
         "//rs/types/base_types",
+        "//rs/types/management_canister_types",
         "@crate_index//:assert_matches",
         "@crate_index//:candid",
         "@crate_index//:proptest",

@@ -111,9 +111,9 @@ RUN curl -fsSL "https://github.com/cocogitto/cocogitto/releases/download/${COCOG
 
 # Add buf
 ARG BUF_BIN="/usr/local/bin/buf"
-ARG BUF_VERSION="1.31.0"
+ARG BUF_VERSION="1.46.0"
 RUN curl -sSL "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-$(uname -s)-$(uname -m)" -o "${BUF_BIN}" && \
-    echo "a4589eea3afa5f8cda01c3830cdc0112ddd08c32f8b1d45007291fae9fc9bbf4  ${BUF_BIN}" | shasum -a 256 -c - && \
+    echo "04c92815f92431bea637d834bee9d2941e979b1c821c59805667c032e2e8fc1f  ${BUF_BIN}" | shasum -a 256 -c - && \
     chmod +x "${BUF_BIN}"
 
 # Add yq

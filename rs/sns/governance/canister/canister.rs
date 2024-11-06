@@ -24,6 +24,9 @@ use ic_nervous_system_common::{
     dfn_core_stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
     serve_logs, serve_logs_v2, serve_metrics,
 };
+use ic_nervous_system_proto::pb::v1::{
+    GetTimersRequest, GetTimersResponse, ResetTimersRequest, ResetTimersResponse, Timers,
+};
 use ic_nervous_system_runtime::CdkRuntime;
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
 #[cfg(feature = "test")]
@@ -43,11 +46,10 @@ use ic_sns_governance::{
         GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
         GetRunningSnsVersionRequest, GetRunningSnsVersionResponse,
         GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
-        GetTimersRequest, GetTimersResponse, GetUpgradeJournalRequest, GetUpgradeJournalResponse,
-        Governance as GovernanceProto, ListNervousSystemFunctionsResponse, ListNeurons,
-        ListNeuronsResponse, ListProposals, ListProposalsResponse, ManageNeuron,
-        ManageNeuronResponse, NervousSystemParameters, ResetTimersRequest, ResetTimersResponse,
-        RewardEvent, SetMode, SetModeResponse, Timers,
+        GetUpgradeJournalRequest, GetUpgradeJournalResponse, Governance as GovernanceProto,
+        ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
+        ListProposalsResponse, ManageNeuron, ManageNeuronResponse, NervousSystemParameters,
+        RewardEvent, SetMode, SetModeResponse,
     },
     types::{Environment, HeapGrowthPotential},
 };
@@ -675,8 +677,7 @@ async fn mint_tokens(request: MintTokensRequest) -> MintTokensResponse {
 #[cfg(feature = "test")]
 #[update]
 fn advance_target_version(request: AdvanceTargetVersionRequest) -> AdvanceTargetVersionResponse {
-    governance_mut().proto.target_version = request.target_version;
-    AdvanceTargetVersionResponse {}
+    governance_mut().advance_target_version(request)
 }
 
 fn main() {

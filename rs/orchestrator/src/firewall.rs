@@ -19,9 +19,8 @@ use std::{
     convert::TryFrom,
     net::IpAddr,
     path::PathBuf,
-    sync::Arc,
+    sync::{Arc, RwLock},
 };
-use tokio::sync::RwLock;
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 enum DataSource {
@@ -259,11 +258,11 @@ impl Firewall {
     }
 
     /// Checks for the firewall configuration that applies to this node
-    async fn check_for_firewall_config(
+    fn check_for_firewall_config(
         &mut self,
         registry_version: RegistryVersion,
     ) -> OrchestratorResult<()> {
-        if *self.last_applied_version.read().await == registry_version {
+        if *self.last_applied_version.read().unwrap() == registry_version {
             // No update in the registry, so no need to re-check
             return Ok(());
         }
@@ -376,7 +375,7 @@ impl Firewall {
                 .firewall_registry_version
                 .set(i64::try_from(registry_version.get()).unwrap_or(-1));
         }
-        *self.last_applied_version.write().await = registry_version;
+        *self.last_applied_version.write().unwrap() = registry_version;
 
         Ok(())
     }
@@ -393,7 +392,7 @@ impl Firewall {
 
     /// Checks for new firewall config, and if found, update local firewall
     /// rules
-    pub async fn check_and_update(&mut self) {
+    pub fn check_and_update(&mut self) {
         if !self.enabled {
             return;
         }
@@ -403,7 +402,7 @@ impl Firewall {
             "Checking for firewall config registry version: {}", registry_version
         );
 
-        if let Err(e) = self.check_for_firewall_config(registry_version).await {
+        if let Err(e) = self.check_for_firewall_config(registry_version) {
             info!(
                 self.logger,
                 "Failed to check for firewall config at version {}: {}", registry_version, e
@@ -770,12 +769,7 @@ mod tests {
 
     #[test]
     fn nftables_golden_test() {
-        let rt = tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()
-            .unwrap();
         golden_test(
-            rt,
             Role::AssignedReplica(subnet_test_id(1)),
             NFTABLES_GOLDEN_BYTES,
             "assigned_replica",
@@ -784,12 +778,7 @@ mod tests {
 
     #[test]
     fn nftables_golden_boundary_node_test() {
-        let rt = tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()
-            .unwrap();
         golden_test(
-            rt,
             Role::BoundaryNode,
             NFTABLES_BOUNDARY_NODE_GOLDEN_BYTES,
             "boundary_node",
@@ -798,7 +787,7 @@ mod tests {
 
     /// Runs [`Firewall::check_for_firewall_config`] and compares the output against the specified
     /// golden output.
-    fn golden_test(rt: tokio::runtime::Runtime, role: Role, golden_bytes: &[u8], label: &str) {
+    fn golden_test(role: Role, golden_bytes: &[u8], label: &str) {
         let tmp_dir = tempfile::tempdir().unwrap();
         let nftables_config_path = tmp_dir.path().join("nftables.conf");
         let config = get_config();
@@ -817,12 +806,9 @@ mod tests {
             role,
         );
 
-        rt.block_on(async {
-            firewall
-                .check_for_firewall_config(RegistryVersion::new(1))
-                .await
-                .expect("Should successfully produce a firewall config");
-        });
+        firewall
+            .check_for_firewall_config(RegistryVersion::new(1))
+            .expect("Should successfully produce a firewall config");
 
         let golden = String::from_utf8(golden_bytes.to_vec()).unwrap();
         let nftables = std::fs::read_to_string(&nftables_config_path).unwrap();

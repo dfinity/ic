@@ -66,7 +66,7 @@ impl ShareAggregator {
             &self.log,
             self.membership.as_ref(),
             self.crypto.as_aggregate(),
-            Box::new(|_| dkg_id),
+            Box::new(|_| dkg_id.clone()),
             shares,
         ))
     }
@@ -153,7 +153,7 @@ impl ShareAggregator {
                 &self.log,
                 self.membership.as_ref(),
                 self.crypto.as_aggregate(),
-                Box::new(|_| dkg_id),
+                Box::new(|_| dkg_id.clone()),
                 shares,
             );
             if !result.is_empty() {

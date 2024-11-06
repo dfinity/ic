@@ -2,41 +2,34 @@ use crate::state::{
     FetchGuardError, FetchTxStatus, FetchTxStatusError, FetchedTx, HttpGetTxError,
     TransactionKytData,
 };
-use crate::types::{CheckTransactionResponse, CheckTransactionRetriable, CheckTransactionStatus};
-use crate::{blocklist_contains, providers, state, BtcNetwork};
+use crate::{blocklist_contains, providers, state, Config};
 use bitcoin::Transaction;
 use futures::future::try_join_all;
 use ic_btc_interface::Txid;
-use std::convert::{Infallible, TryFrom};
+use ic_btc_kyt::{
+    get_tx_cycle_cost, CheckTransactionIrrecoverableError, CheckTransactionResponse,
+    CheckTransactionRetriable, CheckTransactionStatus, INITIAL_MAX_RESPONSE_BYTES,
+    RETRY_MAX_RESPONSE_BYTES,
+};
+use std::convert::Infallible;
 
 #[cfg(test)]
 mod tests;
 
-pub fn get_tx_cycle_cost(max_response_bytes: u32) -> u128 {
-    // 1 KiB for request, max_response_bytes for response
-    49_140_000 + 1024 * 5_200 + 10_400 * (max_response_bytes as u128)
+impl HttpGetTxError {
+    pub(crate) fn into_response(self, txid: Txid) -> CheckTransactionResponse {
+        let txid = txid.as_ref().to_vec();
+        match self {
+            HttpGetTxError::Rejected { message, .. } => {
+                CheckTransactionRetriable::TransientInternalError(message).into()
+            }
+            HttpGetTxError::ResponseTooLarge => {
+                (CheckTransactionIrrecoverableError::ResponseTooLarge { txid }).into()
+            }
+            _ => CheckTransactionRetriable::TransientInternalError(self.to_string()).into(),
+        }
+    }
 }
-
-/// Caller of check_transaction must attach this amount of cycles with the call.
-pub const CHECK_TRANSACTION_CYCLES_REQUIRED: u128 = 40_000_000_000;
-
-/// One-time charge for every check_transaction call.
-pub const CHECK_TRANSACTION_CYCLES_SERVICE_FEE: u128 = 100_000_000;
-
-// The max_response_bytes is initially set to 4kB, and then
-// increased to 400kB if the initial size isn't enough.
-// - The maximum size of a standard non-taproot transaction is 400k vBytes.
-// - Taproot transactions could be as big as full block size (4MiB).
-// - Currently a subnet's maximum response size is only 2MiB.
-// - Transaction size between 400kB and 2MiB are also uncommon, we could
-//   handle them in the future if required.
-// - Transactions bigger than 2MiB are very rare, and we can't handle them.
-
-/// Initial max response bytes is 4kB
-pub const INITIAL_MAX_RESPONSE_BYTES: u32 = 4 * 1024;
-
-/// Retry max response bytes is 400kB
-pub const RETRY_MAX_RESPONSE_BYTES: u32 = 400 * 1024;
 
 pub enum FetchResult {
     RetryWithBiggerBuffer,
@@ -56,11 +49,11 @@ pub enum TryFetchResult<F> {
 pub trait FetchEnv {
     type FetchGuard;
     fn new_fetch_guard(&self, txid: Txid) -> Result<Self::FetchGuard, FetchGuardError>;
-    fn btc_network(&self) -> BtcNetwork;
+    fn config(&self) -> Config;
 
     async fn http_get_tx(
         &self,
-        provider: providers::Provider,
+        provider: &providers::Provider,
         txid: Txid,
         max_response_bytes: u32,
     ) -> Result<Transaction, HttpGetTxError>;
@@ -78,13 +71,13 @@ pub trait FetchEnv {
     ) -> TryFetchResult<impl futures::Future<Output = Result<FetchResult, Infallible>>> {
         let (provider, max_response_bytes) = match state::get_fetch_status(txid) {
             None => (
-                providers::next_provider(self.btc_network()),
+                providers::next_provider(self.config().btc_network()),
                 INITIAL_MAX_RESPONSE_BYTES,
             ),
             Some(FetchTxStatus::PendingRetry {
                 max_response_bytes, ..
             }) => (
-                providers::next_provider(self.btc_network()),
+                providers::next_provider(self.config().btc_network()),
                 max_response_bytes,
             ),
             Some(FetchTxStatus::PendingOutcall { .. }) => return TryFetchResult::Pending,
@@ -124,10 +117,10 @@ pub trait FetchEnv {
         txid: Txid,
         max_response_bytes: u32,
     ) -> Result<FetchResult, Infallible> {
-        match self.http_get_tx(provider, txid, max_response_bytes).await {
+        match self.http_get_tx(&provider, txid, max_response_bytes).await {
             Ok(tx) => {
                 let input_addresses = tx.input.iter().map(|_| None).collect();
-                match TransactionKytData::try_from(tx) {
+                match TransactionKytData::from_transaction(provider.btc_network(), tx.clone()) {
                     Ok(tx) => {
                         let fetched = FetchedTx {
                             tx,
@@ -218,8 +211,19 @@ pub trait FetchEnv {
                         futures.push(do_fetch)
                     }
                     Fetched(fetched) => {
-                        let address = &fetched.tx.outputs[input.vout as usize];
-                        state::set_fetched_address(txid, index, address.clone());
+                        if let Some(address) = &fetched.tx.outputs[input.vout as usize] {
+                            state::set_fetched_address(txid, index, address.clone());
+                        } else {
+                            // This error shouldn't happen unless blockdata is corrupted.
+                            // TODO(XC-205): log this error
+                            return CheckTransactionIrrecoverableError::InvalidTransaction(
+                                format!(
+                                    "Tx {} vout {} has no address, but is vin {} of tx {}",
+                                    input.txid, input.vout, index, txid
+                                ),
+                            )
+                            .into();
+                        }
                     }
                     Pending => continue,
                     HighLoad | NotEnoughCycles => break,
@@ -245,10 +249,21 @@ pub trait FetchEnv {
             let (index, input_txid, vout) = jobs[i];
             match result {
                 FetchResult::Fetched(fetched) => {
-                    let address = &fetched.tx.outputs[vout as usize];
-                    state::set_fetched_address(txid, index, address.clone());
+                    if let Some(address) = &fetched.tx.outputs[vout as usize] {
+                        state::set_fetched_address(txid, index, address.clone());
+                    } else {
+                        // This error shouldn't happen unless blockdata is corrupted.
+                        // TODO(XC-205): log this error
+                        error = Some(
+                            CheckTransactionIrrecoverableError::InvalidTransaction(format!(
+                                "Tx {} vout {} has no address, but is vin {} of tx {}",
+                                input_txid, vout, index, txid
+                            ))
+                            .into(),
+                        );
+                    }
                 }
-                FetchResult::Error(err) => error = Some((input_txid, err).into()),
+                FetchResult::Error(err) => error = Some(err.into_response(input_txid)),
                 FetchResult::RetryWithBiggerBuffer => (),
             }
         }

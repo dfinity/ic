@@ -35,6 +35,7 @@ pub const LOCALHOST: &str = "127.0.0.1";
 
 fn start_server_helper(
     test_driver_pid: Option<u32>,
+    log_levels: Option<String>,
     capture_stdout: bool,
     capture_stderr: bool,
 ) -> (Url, Child) {
@@ -46,6 +47,9 @@ fn start_server_helper(
     };
     let mut cmd = Command::new(PathBuf::from(bin_path));
     cmd.arg("--port-file").arg(port_file_path.clone());
+    if let Some(log_levels) = log_levels {
+        cmd.arg("--log-levels").arg(log_levels);
+    }
     // use a long TTL of 5 mins (the bazel test timeout for medium tests)
     // so that the server doesn't die during the test if the runner
     // is overloaded
@@ -74,7 +78,7 @@ fn start_server_helper(
 
 pub fn start_server() -> Url {
     let test_driver_pid = std::process::id();
-    start_server_helper(Some(test_driver_pid), false, false).0
+    start_server_helper(Some(test_driver_pid), None, false, false).0
 }
 
 #[test]
@@ -200,7 +204,7 @@ fn test_blob_store_wrong_encoding() {
 #[test]
 fn test_port_file() {
     // tests the port file by setting the parent PID to None in start_server_helper
-    start_server_helper(None, false, false);
+    start_server_helper(None, None, false, false);
 }
 
 async fn test_gateway(server_url: Url, https: bool) {
@@ -450,7 +454,7 @@ fn test_specified_id() {
 
 #[test]
 fn test_dashboard() {
-    let (server_url, _) = start_server_helper(None, false, false);
+    let (server_url, _) = start_server_helper(None, None, false, false);
     let mut pic = PocketIcBuilder::new()
         .with_nns_subnet()
         .with_application_subnet()
@@ -517,7 +521,7 @@ const CANISTER_LOGS_WAT: &str = r#"
 #[test]
 fn canister_and_replica_logs() {
     const INIT_CYCLES: u128 = 2_000_000_000_000;
-    let (server_url, mut out) = start_server_helper(None, true, true);
+    let (server_url, mut out) = start_server_helper(None, None, true, true);
     let pic = PocketIcBuilder::new()
         .with_application_subnet()
         .with_server_url(server_url)
@@ -554,7 +558,7 @@ fn canister_and_replica_logs() {
 #[test]
 fn canister_and_no_replica_logs() {
     const INIT_CYCLES: u128 = 2_000_000_000_000;
-    let (server_url, mut out) = start_server_helper(None, true, true);
+    let (server_url, mut out) = start_server_helper(None, None, true, true);
     let pic = PocketIcBuilder::new()
         .with_application_subnet()
         .with_server_url(server_url)
@@ -693,7 +697,7 @@ fn canister_state_dir(shutdown_signal: Option<Signal>) {
     let state_dir_path_buf = state_dir.path().to_path_buf();
 
     // Create a PocketIC instance with NNS and app subnets.
-    let (server_url, child) = start_server_helper(None, false, false);
+    let (server_url, child) = start_server_helper(None, None, false, false);
     let pic = PocketIcBuilder::new()
         .with_state_dir(state_dir_path_buf.clone())
         .with_server_url(server_url)
@@ -769,7 +773,7 @@ fn canister_state_dir(shutdown_signal: Option<Signal>) {
     send_signal_to_pic(pic, child, shutdown_signal);
 
     // Start a new PocketIC server.
-    let (new_server_url, child) = start_server_helper(None, false, false);
+    let (new_server_url, child) = start_server_helper(None, None, false, false);
 
     // Create a PocketIC instance mounting the state created so far.
     let pic = PocketIcBuilder::new()
@@ -810,7 +814,7 @@ fn canister_state_dir(shutdown_signal: Option<Signal>) {
     send_signal_to_pic(pic, child, shutdown_signal);
 
     // Start a new PocketIC server.
-    let (newest_server_url, _) = start_server_helper(None, false, false);
+    let (newest_server_url, _) = start_server_helper(None, None, false, false);
 
     // Create a PocketIC instance mounting the NNS and app state created so far.
     let nns_subnet_seed = topology
@@ -1122,7 +1126,7 @@ fn test_unresponsive_gateway_backend() {
     let client = Client::new();
 
     // Create PocketIC instance with one NNS subnet and one app subnet.
-    let (backend_server_url, mut backend_process) = start_server_helper(None, false, false);
+    let (backend_server_url, mut backend_process) = start_server_helper(None, None, false, false);
     let pic = PocketIcBuilder::new()
         .with_nns_subnet()
         .with_application_subnet()
@@ -1130,7 +1134,7 @@ fn test_unresponsive_gateway_backend() {
         .build();
 
     // Create HTTP gateway on a different gateway server.
-    let (gateway_server_url, _) = start_server_helper(None, false, false);
+    let (gateway_server_url, _) = start_server_helper(None, None, false, false);
     let create_gateway_endpoint = gateway_server_url.join("http_gateway").unwrap();
     let backend_instance_url = backend_server_url
         .join(&format!("instances/{}/", pic.instance_id()))
@@ -1184,7 +1188,7 @@ fn test_unresponsive_gateway_backend() {
 #[test]
 fn test_invalid_gateway_backend() {
     // Create HTTP gateway with an invalid backend URL
-    let (gateway_server_url, _) = start_server_helper(None, false, false);
+    let (gateway_server_url, _) = start_server_helper(None, None, false, false);
     let create_gateway_endpoint = gateway_server_url.join("http_gateway").unwrap();
     let backend_url = "http://240.0.0.0";
     let http_gateway_config = HttpGatewayConfig {
@@ -1358,4 +1362,46 @@ fn http_gateway_route_underscore() {
     assert_eq!(error_page.status(), StatusCode::BAD_REQUEST);
     let page = String::from_utf8(error_page.bytes().unwrap().to_vec()).unwrap();
     assert!(page.contains("canister_id_not_found"));
+}
+
+#[test]
+fn auto_progress() {
+    let (server_url, mut out) = start_server_helper(
+        None,
+        Some("pocket_ic_server=debug,tower_http=info,axum::rejection=trace".to_string()),
+        true,
+        true,
+    );
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_server_url(server_url)
+        .build();
+
+    let t0 = pic.get_time();
+
+    // Starting auto progress on the IC => a corresponding log should be made and time should start incresing automatically now.
+    pic.auto_progress();
+
+    loop {
+        let t = pic.get_time();
+        if t > t0 {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+
+    // Since the time increased by now, we know that the log should have been recorded.
+    let mut bytes = [0; 1000];
+    let _ = out.stdout.as_mut().unwrap().read(&mut bytes).unwrap();
+    let stdout = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(stdout.contains("Starting auto progress for instance 0."));
+    assert!(!stdout.contains("Stopping auto progress for instance 0."));
+
+    // Stopping auto progress on the IC => a corresponding log should be made.
+    pic.stop_progress();
+
+    let mut bytes = [0; 1000];
+    let _ = out.stdout.as_mut().unwrap().read(&mut bytes).unwrap();
+    let stdout = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(stdout.contains("Stopping auto progress for instance 0."));
 }

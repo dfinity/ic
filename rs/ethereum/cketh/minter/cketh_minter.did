@@ -5,6 +5,8 @@ type EthereumNetwork = variant {
     Sepolia;
 };
 
+type Subaccount = blob;
+
 type CanisterStatusResponse = record {
   query_stats : QueryStats;
   status : CanisterStatusType;
@@ -108,6 +110,12 @@ type UpgradeArg = record {
     // The principal of the EVM RPC canister that handles the communication
     // with the Ethereum blockchain.
     evm_rpc_id : opt principal;
+
+    // Change the deposit with subaccount helper smart contract address.
+    deposit_with_subaccount_helper_contract_address : opt text;
+
+    // Change the last scraped block number of the deposit with subaccount helper smart contract.
+    last_deposit_with_subaccount_scraped_block_number : opt nat;
 };
 
 type MinterArg = variant { UpgradeArg : UpgradeArg; InitArg : InitArg };
@@ -431,6 +439,7 @@ type Event = record {
             from_address : text;
             value : nat;
             "principal" : principal;
+            subaccount : opt Subaccount;
         };
         InvalidDeposit : record {
             event_source : EventSource;
@@ -444,6 +453,9 @@ type Event = record {
             block_number : nat;
         };
         SyncedErc20ToBlock : record {
+            block_number : nat;
+        };
+        SyncedDepositWithSubaccountToBlock : record {
             block_number : nat;
         };
         AcceptedEthWithdrawalRequest : record {
@@ -502,6 +514,7 @@ type Event = record {
             value : nat;
             "principal" : principal;
             erc20_contract_address : text;
+            subaccount : opt Subaccount;
         };
         AcceptedErc20WithdrawalRequest : record {
             max_transaction_fee : nat;

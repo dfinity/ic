@@ -270,9 +270,6 @@ pub struct Config {
     /// The duration a stop_canister has to stop the canister before timing out.
     pub stop_canister_timeout_duration: Duration,
 
-    /// Indicates whether canister backup and restore feature is enabled or not.
-    pub canister_snapshots: FlagStatus,
-
     /// Indicates whether dirty page logging is enabled or not.
     pub dirty_page_logging: FlagStatus,
 
@@ -356,11 +353,10 @@ impl Default for Config {
             query_stats_aggregation: FlagStatus::Enabled,
             query_stats_epoch_length: QUERY_STATS_EPOCH_LENGTH,
             stop_canister_timeout_duration: STOP_CANISTER_TIMEOUT_DURATION,
-            canister_snapshots: FlagStatus::Enabled,
             dirty_page_logging: FlagStatus::Disabled,
             max_canister_http_requests_in_flight: MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT,
             default_wasm_memory_limit: DEFAULT_WASM_MEMORY_LIMIT,
-            allowed_viewers_feature: FlagStatus::Disabled,
+            allowed_viewers_feature: FlagStatus::Enabled,
         }
     }
 }
