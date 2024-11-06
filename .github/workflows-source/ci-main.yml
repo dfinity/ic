@@ -263,14 +263,11 @@ jobs:
 
   build-ic:
     name: Build IC
-    <<: *dind-small-setup
+    <<: *dind-large-setup
+    # keep options from dind-large-setup but run on dind-small-setup
     runs-on:
       group: ch1
-    container:
-      options: >-
-        -e NODE_NAME
-        --privileged --cgroupns host
-        -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
+      label: dind-small-setup
     if: ${{ github.event_name != 'merge_group' }}
     steps:
       - <<: *checkout
