@@ -10,11 +10,11 @@ use ic_cketh_minter::endpoints::{
 use ic_cketh_minter::memo::MintMemo;
 use ic_cketh_minter::numeric::BlockNumber;
 use ic_cketh_minter::{MINT_RETRY_DELAY, SCRAPING_ETH_LOGS_INTERVAL};
-use ic_cketh_test_utils::ckerc20::{CkErc20DepositParams, CkErc20Setup, Erc20Token, ONE_USDC};
+use ic_cketh_test_utils::ckerc20::{CkErc20Setup, DepositCkErc20Params, Erc20Token, ONE_USDC};
 use ic_cketh_test_utils::flow::DepositParams;
 use ic_cketh_test_utils::mock::{JsonRpcMethod, MockJsonRpcProviders};
 use ic_cketh_test_utils::response::{
-    block_response, empty_logs, multi_logs_for_single_transaction, Erc20LogEntry,
+    block_response, empty_logs, multi_logs_for_single_transaction,
 };
 use ic_cketh_test_utils::{
     format_ethereum_address_to_eip_55, CkEthSetup, CKETH_MINIMUM_WITHDRAWAL_AMOUNT,
@@ -26,8 +26,8 @@ use ic_cketh_test_utils::{
 use ic_ethereum_types::Address;
 use ic_ledger_suite_orchestrator_test_utils::flow::call_ledger_icrc1_total_supply;
 use ic_ledger_suite_orchestrator_test_utils::{supported_erc20_tokens, usdc};
-use ic_state_machine_tests::ErrorCode;
-use ic_state_machine_tests::{CanisterStatusType, WasmResult};
+use ic_management_canister_types::CanisterStatusType;
+use ic_state_machine_tests::{ErrorCode, WasmResult};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
 use icrc_ledger_types::icrc3::transactions::Mint;
@@ -157,8 +157,8 @@ mod withdraw_erc20 {
     };
     use ic_cketh_test_utils::flow::{
         double_and_increment_base_fee_per_gas, increment_base_fee_per_gas,
-        increment_max_priority_fee_per_gas, DepositParams, FeeHistoryProcessWithdrawal,
-        ProcessWithdrawalParams,
+        increment_max_priority_fee_per_gas, DepositCkEthParams, DepositParams,
+        FeeHistoryProcessWithdrawal, ProcessWithdrawalParams,
     };
     use ic_cketh_test_utils::response::{
         decode_transaction, default_erc20_signed_eip_1559_transaction, hash_transaction,
@@ -312,9 +312,9 @@ mod withdraw_erc20 {
         let ckusdc = ckerc20.find_ckerc20_token("ckUSDC");
 
         ckerc20
-            .deposit_cketh(DepositParams {
+            .deposit_cketh(DepositCkEthParams {
                 amount: DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_FEE + CKETH_TRANSFER_FEE - 1,
-                ..DepositParams::default()
+                ..Default::default()
             })
             .call_cketh_ledger_approve_minter(
                 caller,
@@ -1430,9 +1430,9 @@ fn should_block_deposit_from_blocked_address() {
         .unwrap();
 
     ckerc20
-        .deposit(CkErc20DepositParams {
+        .deposit(DepositCkErc20Params {
             from_address: from_address_blocked,
-            ..CkErc20DepositParams::for_token(ONE_USDC, ckusdc)
+            ..DepositCkErc20Params::new(ONE_USDC, ckusdc)
         })
         .expect_no_mint()
         .check_events()
@@ -1452,12 +1452,10 @@ fn should_block_deposit_from_corrupted_principal() {
     let invalid_principal = "0x0a01f79d0000000000fe01000000000000000000000000000000000000000001";
 
     ckerc20
-        .deposit(CkErc20DepositParams {
-            override_erc20_log_entry: Box::new(|mut entry: Erc20LogEntry| {
-                entry.encoded_principal = invalid_principal.to_string();
-                entry
-            }),
-            ..CkErc20DepositParams::for_token(ONE_USDC, ckusdc)
+        .deposit(DepositCkErc20Params::new(ONE_USDC, ckusdc))
+        .with_override_erc20_log_entry(|mut entry| {
+            entry.topics[3] = invalid_principal.parse().unwrap();
+            entry
         })
         .expect_no_mint()
         .check_events()
@@ -1482,13 +1480,13 @@ fn should_fail_to_mint_from_unsupported_erc20_contract_address() {
         .contains(&unsupported_erc20_address));
 
     ckerc20
-        .deposit(CkErc20DepositParams {
-            override_erc20_log_entry: Box::new(move |mut entry: Erc20LogEntry| {
-                entry.erc20_contract_address = unsupported_erc20_address;
-                entry
-            }),
-            ..CkErc20DepositParams::for_token(ONE_USDC, ckusdc)
-        })
+        .deposit(DepositCkErc20Params::new(
+            ONE_USDC,
+            CkErc20Token {
+                erc20_contract_address: unsupported_erc20_address.to_string(),
+                ..ckusdc.clone()
+            },
+        ))
         .expect_no_mint()
         .check_events()
         .assert_has_no_event_satisfying(|event| {
@@ -1761,13 +1759,7 @@ fn should_skip_single_block_containing_too_many_events() {
     let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
     let erc20_topics = ckerc20.supported_erc20_contract_address_topics();
     let ckusdc = ckerc20.find_ckerc20_token("ckUSDC");
-    let deposit = CkErc20DepositParams {
-        from_address: "0x01e2919679362dFBC9ee1644Ba9C6da6D6245BB1"
-            .parse()
-            .unwrap(),
-        ..CkErc20DepositParams::for_token(ONE_USDC, ckusdc)
-    }
-    .erc20_log_entry();
+    let deposit = DepositCkErc20Params::new(ONE_USDC, ckusdc).to_log_entry();
     // around 680 bytes per log
     // we need at least 3085 logs to reach the 2MB limit
     let large_amount_of_logs = multi_logs_for_single_transaction(deposit.clone(), 3_100);

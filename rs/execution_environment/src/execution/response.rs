@@ -562,6 +562,12 @@ impl ResponseHelper {
             round.counters.ingress_with_cycles_error,
         );
 
+        let is_wasm64_execution = self
+            .canister
+            .execution_state
+            .as_ref()
+            .map_or(false, |es| es.is_wasm64);
+
         round.cycles_account_manager.refund_unused_execution_cycles(
             &mut self.canister.system_state,
             instructions_left,
@@ -569,6 +575,7 @@ impl ResponseHelper {
             original.callback.prepayment_for_response_execution,
             round.counters.execution_refund_error,
             original.subnet_size,
+            is_wasm64_execution.into(),
             round.log,
         );
 

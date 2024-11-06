@@ -33,7 +33,7 @@ use ic_metrics::MetricsRegistry;
 use ic_types::{
     consensus::{FinalizationContent, FinalizationShare, HashedBlock},
     replica_config::ReplicaConfig,
-    Height, ReplicaVersion,
+    Height,
 };
 use std::{cell::RefCell, sync::Arc};
 
@@ -98,7 +98,6 @@ impl Finalizer {
             pool,
             &*self.registry_client,
             self.replica_config.subnet_id,
-            ReplicaVersion::default(),
             &self.log,
             None,
             Some(&|result, block_stats, batch_stats| {

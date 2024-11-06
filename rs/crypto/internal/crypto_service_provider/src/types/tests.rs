@@ -1,4 +1,3 @@
-#![allow(clippy::unwrap_used)]
 use super::*;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_test_vectors::ed25519::{

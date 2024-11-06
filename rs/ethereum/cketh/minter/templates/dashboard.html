@@ -271,7 +271,7 @@
                         <td>{% call etherscan_address_link(event.deposit_event.from_address().to_string()) %}</td>
                         <td class="numeric">{{ event.token_symbol }}</td>
                         <td class="numeric">{{ event.deposit_event.value() }}</td>
-                        <td><code>{{ event.deposit_event.principal() }}</code></td>
+                        <td><code>{{ event.deposit_event.beneficiary() }}</code></td>
                         <td class="numeric">{{ event.mint_block_index }}</td>
                     </tr>
                     {% endfor %}
