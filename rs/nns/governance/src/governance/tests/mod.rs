@@ -1363,6 +1363,8 @@ fn test_pre_and_post_upgrade_first_time() {
         Box::new(StubIcpLedger {}),
         Box::new(StubCMC {}),
     );
+
+    assert_eq!(governance.neuron_store.len(), 1);
     // On next pre-upgrade, we get the heap proto and store it in stable memory
     let mut extracted_proto = governance.take_heap_proto();
 
@@ -1377,7 +1379,6 @@ fn test_pre_and_post_upgrade_first_time() {
         },
     );
 
-    assert_eq!(extracted_proto.neurons.len(), 1);
     assert_eq!(extracted_proto.topic_followee_index.len(), 2);
 
     // We now simulate the post_upgrade
@@ -1388,6 +1389,7 @@ fn test_pre_and_post_upgrade_first_time() {
         Box::new(StubCMC {}),
     );
 
+    assert_eq!(governance.neuron_store.len(), 1);
     // It should not rebuild during post_upgrade so it should still be mis-matched with neurons.
     let extracted_proto = governance.take_heap_proto();
     assert_eq!(extracted_proto.topic_followee_index.len(), 2);
