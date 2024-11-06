@@ -321,19 +321,6 @@ pub fn start_server(
 
     let ingress_filter = Arc::new(Mutex::new(ingress_filter));
 
-    let call_handler = IngressValidatorBuilder::builder(
-        log.clone(),
-        node_id,
-        subnet_id,
-        registry_client.clone(),
-        ingress_verifier.clone(),
-        ingress_filter.clone(),
-        ingress_throttler.clone(),
-        ingress_tx.clone(),
-    )
-    .with_malicious_flags(malicious_flags.clone())
-    .build();
-
     let (ingress_watcher_handle, _) = IngressWatcher::start(
         rt_handle.clone(),
         log.clone(),
@@ -343,12 +330,24 @@ pub fn start_server(
         CancellationToken::new(),
     );
 
-    let call_router =
-        call_v2::new_router(call_handler.clone(), Some(ingress_watcher_handle.clone()));
+    let call_handler = IngressValidatorBuilder::builder(
+        log.clone(),
+        node_id,
+        subnet_id,
+        registry_client.clone(),
+        ingress_verifier.clone(),
+        ingress_filter.clone(),
+        ingress_throttler.clone(),
+        ingress_tx.clone(),
+        ingress_watcher_handle,
+    )
+    .with_malicious_flags(malicious_flags.clone())
+    .build();
+
+    let call_router = call_v2::new_router(call_handler.clone());
 
     let call_v3_router = call_v3::new_router(
         call_handler,
-        ingress_watcher_handle,
         metrics.clone(),
         config.ingress_message_certificate_timeout_seconds,
         delegation_from_nns.clone(),

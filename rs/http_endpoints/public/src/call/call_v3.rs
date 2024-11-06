@@ -45,10 +45,6 @@ use tower::{util::BoxCloneService, ServiceBuilder};
 
 const LOG_EVERY_N_SECONDS: i32 = 10;
 
-/// The timeout duration used when creating a subscriber for the ingres message,
-/// by calling [`IngressWatcherHandle::subscribe_for_certification`].
-const SUBSCRIPTION_TIMEOUT: Duration = Duration::from_secs(1);
-
 pub(crate) enum CallV3Response {
     Certificate(Certificate),
     Accepted(&'static str),
@@ -59,7 +55,6 @@ pub(crate) enum CallV3Response {
 #[derive(Clone)]
 
 struct SynchronousCallHandlerState {
-    ingress_watcher_handle: IngressWatcherHandle,
     delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
     metrics: HttpHandlerMetrics,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
@@ -128,7 +123,6 @@ pub(crate) fn route() -> &'static str {
 
 pub(crate) fn new_router(
     call_handler: IngressValidator,
-    ingress_watcher_handle: IngressWatcherHandle,
     metrics: HttpHandlerMetrics,
     ingress_message_certificate_timeout_seconds: u64,
     delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
@@ -136,7 +130,6 @@ pub(crate) fn new_router(
 ) -> Router {
     let call_service = SynchronousCallHandlerState {
         delegation_from_nns,
-        ingress_watcher_handle,
         metrics,
         ingress_message_certificate_timeout_seconds,
         call_handler,
@@ -153,7 +146,6 @@ pub(crate) fn new_router(
 
 pub fn new_service(
     call_handler: IngressValidator,
-    ingress_watcher_handle: IngressWatcherHandle,
     metrics: HttpHandlerMetrics,
     ingress_message_certificate_timeout_seconds: u64,
     delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
@@ -161,7 +153,6 @@ pub fn new_service(
 ) -> BoxCloneService<Request<Body>, Response, Infallible> {
     let router = new_router(
         call_handler,
-        ingress_watcher_handle,
         metrics,
         ingress_message_certificate_timeout_seconds,
         delegation_from_nns,
@@ -175,7 +166,6 @@ async fn call_sync_v3(
     axum::extract::Path(effective_canister_id): axum::extract::Path<CanisterId>,
     State(SynchronousCallHandlerState {
         call_handler,
-        ingress_watcher_handle,
         metrics,
         ingress_message_certificate_timeout_seconds,
         state_reader,
@@ -218,46 +208,10 @@ async fn call_sync_v3(
         }
     };
 
-    let certification_subscriber = match ingress_watcher_handle
-        .subscribe_for_certification(message_id.clone())
-        .timeout(SUBSCRIPTION_TIMEOUT)
+    let ingres_submission = ingress_submitter
+        .register_certification_subscription()
         .await
-    {
-        Ok(Ok(message_subscriber)) => Ok(message_subscriber),
-        Ok(Err(SubscriptionError::DuplicateSubscriptionError)) => {
-            // TODO: At this point we could return early without submitting the ingress message.
-            Err((
-                "Duplicate request. Message is already being tracked and executed.",
-                CALL_V3_EARLY_RESPONSE_DUPLICATE_SUBSCRIPTION,
-            ))
-        }
-        Ok(Err(SubscriptionError::IngressWatcherNotRunning { error_message })) => {
-            // TODO: Send a warning or notification.
-            // This probably means that the ingress watcher panicked.
-            error!(
-                every_n_seconds => LOG_EVERY_N_SECONDS,
-                log,
-                "Error while waiting for subscriber of ingress message: {}", error_message
-            );
-            Err((
-                "Could not track the ingress message. Please try /read_state for the status.",
-                CALL_V3_EARLY_RESPONSE_INGRESS_WATCHER_NOT_RUNNING,
-            ))
-        }
-        Err(_) => {
-            warn!(
-                every_n_seconds => LOG_EVERY_N_SECONDS,
-                log,
-                "Timed out while submitting a certification subscription.";
-            );
-            Err((
-                "Could not track the ingress message. Please try /read_state for the status.",
-                CALL_V3_EARLY_RESPONSE_SUBSCRIPTION_TIMEOUT,
-            ))
-        }
-    };
-
-    let ingres_submission = ingress_submitter.try_submit();
+        .try_submit();
 
     if let Err(ingress_submission) = ingres_submission {
         return CallV3Response::HttpError(ingress_submission);

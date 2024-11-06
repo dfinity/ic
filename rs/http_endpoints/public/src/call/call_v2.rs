@@ -34,19 +34,14 @@ const MAX_CONCURRENT_TRACKING_TASKS: usize = 10_000;
 
 #[derive(Clone)]
 pub struct AsynchronousCallHandlerState {
-    ingress_watcher_handle: Option<IngressWatcherHandle>,
     ingress_validator: IngressValidator,
     ingress_tracking_semaphore: Arc<Semaphore>,
 }
 
 impl AsynchronousCallHandlerState {
-    pub fn new(
-        ingress_validator: IngressValidator,
-        ingress_watcher_handle: Option<IngressWatcherHandle>,
-    ) -> Self {
+    pub fn new(ingress_validator: IngressValidator) -> Self {
         Self {
             ingress_validator,
-            ingress_watcher_handle,
             ingress_tracking_semaphore: Arc::new(Semaphore::new(MAX_CONCURRENT_TRACKING_TASKS)),
         }
     }
@@ -82,10 +77,7 @@ pub(crate) fn new_router(
     Router::new().route_service(
         route(),
         axum::routing::post(handler)
-            .with_state(AsynchronousCallHandlerState::new(
-                ingress_validator,
-                ingress_watcher_handle,
-            ))
+            .with_state(AsynchronousCallHandlerState::new(ingress_validator))
             .layer(ServiceBuilder::new().layer(DefaultBodyLimit::disable())),
     )
 }
@@ -105,7 +97,6 @@ pub(super) async fn handler(
     State(AsynchronousCallHandlerState {
         ingress_tracking_semaphore,
         ingress_validator,
-        ingress_watcher_handle,
     }): State<AsynchronousCallHandlerState>,
     WithTimeout(Cbor(request)): WithTimeout<Cbor<HttpRequestEnvelope<HttpCallContent>>>,
 ) -> CallV2Response {
@@ -113,41 +104,32 @@ pub(super) async fn handler(
 
     let ingress_submitter = ingress_validator
         .validate_ingress_message(request, effective_canister_id)
-        .await?;
+        .await?
+        .register_certification_subscription()
+        .await;
 
-    let message_id = ingress_submitter.message_id();
+    let certification_subscriber = ingress_submitter.try_submit()?;
 
-    ingress_submitter.try_submit()?;
-
-    // We spawn a task to register the certification time of the message.
-    // The subscriber in the spawned task records the certification time of the message
-    // when `wait_for_certification` is called.
-    if let Some(ingress_watcher_handle) = ingress_watcher_handle {
-        tokio::spawn(async move {
-            // We acquire a permit to bound the number of concurrent tasks. If no permits are available,
-            // we return early to terminate the task.
-            let ingress_tracking_permit = ingress_tracking_semaphore.try_acquire();
-            let Ok(_permit) = ingress_tracking_permit else {
-                warn!(
-                    logger,
-                    "Failed to acquire permit for tracking certification time of message."
-                );
-                return;
-            };
-
-            let Ok(certification_tracker) = ingress_watcher_handle
-                .subscribe_for_certification(message_id)
-                .await
-            else {
-                return;
-            };
-
-            let _ = certification_tracker
-                .wait_for_certification()
-                .timeout(MAX_CERTIFICATION_WAIT_TIME)
-                .await;
-        });
-    }
+    if let Ok(certification_tracker) = certification_subscriber {
+        // We acquire a permit to bound the number of concurrent tasks. If no permits are available,
+        // we return early to terminate the task.
+        let ingress_tracking_permit = ingress_tracking_semaphore.try_acquire();
+        if let Ok(_permit) = ingress_tracking_permit {
+            // We spawn a task to register the certification time of the message.
+            // The subscriber in the spawned task records the certification time of the message
+            // when `wait_for_certification` is called.
+            tokio::spawn(async move {
+                certification_tracker
+                    .wait_for_certification()
+                    .timeout(MAX_CERTIFICATION_WAIT_TIME)
+            });
+        } else {
+            warn!(
+                logger,
+                "Failed to acquire permit for tracking certification time of message."
+            );
+        };
+    };
 
     Ok(Accepted)
 }

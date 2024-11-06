@@ -6,6 +6,7 @@ use std::{
     cmp::max,
     collections::{btree_map, hash_map::Entry, BTreeMap, HashMap, HashSet},
     sync::Arc,
+    time::Duration,
 };
 use tokio::{
     runtime::Handle,
@@ -15,10 +16,18 @@ use tokio::{
         oneshot, watch, Notify,
     },
     task::JoinHandle,
+    time::error::Elapsed,
 };
-use tokio_util::sync::{CancellationToken, DropGuard};
+use tokio_util::{
+    sync::{CancellationToken, DropGuard},
+    time::FutureExt,
+};
 
 const INGRESS_WATCHER_CHANNEL_SIZE: usize = 1000;
+
+/// The timeout duration used when creating a subscriber for the ingres message,
+/// by calling [`IngressWatcherHandle::subscribe_for_certification`].
+const SUBSCRIPTION_TIMEOUT: Duration = Duration::from_secs(1);
 
 #[derive(Debug)]
 pub(crate) enum SubscriptionError {
@@ -26,6 +35,14 @@ pub(crate) enum SubscriptionError {
     DuplicateSubscriptionError,
     /// The [`IngressWatcher`] is not running.
     IngressWatcherNotRunning { error_message: &'static str },
+    /// Timed out waiting for a response from the [`IngressWatcher`].
+    TIMEOUT,
+}
+
+impl From<Elapsed> for SubscriptionError {
+    fn from(_: Elapsed) -> Self {
+        SubscriptionError::TIMEOUT
+    }
 }
 
 /// Used to register a subscription for an ingress message to be tracked by the [`IngressWatcher`].
@@ -45,13 +62,16 @@ pub struct IngressWatcherHandle {
     metrics: HttpHandlerMetrics,
 }
 
+pub(crate) type IngressWatcherSubscriptionResult =
+    Result<IngressCertificationSubscriber, SubscriptionError>;
+
 impl IngressWatcherHandle {
     /// Subscribes for the certification of an ingress message, and returns a [`IngressCertificationSubscriber`], that can be
     /// used to wait for a message to be certified.
     pub(crate) async fn subscribe_for_certification(
         self,
         message: MessageId,
-    ) -> Result<IngressCertificationSubscriber, SubscriptionError> {
+    ) -> IngressWatcherSubscriptionResult {
         let _timer = self
             .metrics
             .ingress_watcher_subscription_latency_duration_seconds
@@ -69,7 +89,8 @@ impl IngressWatcherHandle {
                 certification_notifier_tx,
                 cancellation_token: cancellation_token_clone,
             })
-            .await
+            .timeout(SUBSCRIPTION_TIMEOUT)
+            .await?
             .map_err(|_| SubscriptionError::IngressWatcherNotRunning {
                 error_message: "IngressWatcher failed to receive message subscription.",
             })?;

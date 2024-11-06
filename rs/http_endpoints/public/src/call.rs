@@ -3,6 +3,7 @@ pub mod call_v2;
 pub mod call_v3;
 mod ingress_watcher;
 
+use ingress_watcher::IngressWatcherSubscriptionResult;
 pub use ingress_watcher::{IngressWatcher, IngressWatcherHandle};
 
 use crate::{
@@ -37,6 +38,10 @@ use std::sync::{Arc, RwLock};
 use tokio::sync::mpsc::UnboundedSender;
 use tower::ServiceExt;
 
+/// The timeout duration used when creating a subscriber for the ingres message,
+/// by calling [`IngressWatcherHandle::subscribe_for_certification`].
+const SUBSCRIPTION_TIMEOUT: Duration = Duration::from_secs(1);
+
 pub struct IngressValidatorBuilder {
     log: ReplicaLogger,
     node_id: NodeId,
@@ -47,6 +52,7 @@ pub struct IngressValidatorBuilder {
     ingress_filter: Arc<Mutex<IngressFilterService>>,
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
     ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
+    ingress_watcher_handle: IngressWatcherHandle,
 }
 
 impl IngressValidatorBuilder {
@@ -59,6 +65,7 @@ impl IngressValidatorBuilder {
         ingress_filter: Arc<Mutex<IngressFilterService>>,
         ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
         ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
+        ingress_watcher_handle: IngressWatcherHandle,
     ) -> Self {
         Self {
             log,
@@ -70,6 +77,7 @@ impl IngressValidatorBuilder {
             ingress_filter,
             ingress_throttler,
             ingress_tx,
+            ingress_watcher_handle,
         }
     }
 
@@ -89,6 +97,7 @@ impl IngressValidatorBuilder {
             ingress_filter: self.ingress_filter,
             ingress_throttler: self.ingress_throttler,
             ingress_tx: self.ingress_tx,
+            ingress_watcher_handle: self.ingress_watcher_handle,
         }
     }
 }
@@ -168,6 +177,7 @@ pub struct IngressValidator {
     ingress_filter: Arc<Mutex<IngressFilterService>>,
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
     ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
+    ingress_watcher_handle: IngressWatcherHandle,
 }
 
 impl IngressValidator {
@@ -179,7 +189,7 @@ impl IngressValidator {
         self,
         request: HttpRequestEnvelope<HttpCallContent>,
         effective_canister_id: CanisterId,
-    ) -> Result<IngressMessageSubmitter, IngressError> {
+    ) -> Result<IngressMessageSubmitter<NotSubscribed>, IngressError> {
         let Self {
             log,
             node_id,
@@ -189,6 +199,7 @@ impl IngressValidator {
             ingress_filter,
             ingress_throttler,
             ingress_tx,
+            ingress_watcher_handle,
         } = self;
 
         // Load shed the request if the ingress pool is full.
@@ -267,33 +278,82 @@ impl IngressValidator {
             Ok(Ok(())) => (),
         }
 
-        Ok(IngressMessageSubmitter {
+        Ok(IngressMessageSubmitter::new(
             ingress_tx,
             node_id,
-            message: msg,
-        })
+            msg,
+            ingress_watcher_handle,
+        ))
     }
 }
 
-pub struct IngressMessageSubmitter {
+struct NotSubscribed {
+    ingress_watcher_handle: IngressWatcherHandle,
+}
+struct Subscribed(IngressWatcherSubscriptionResult);
+
+pub struct IngressMessageSubmitter<SubscriptionState> {
     ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
     node_id: NodeId,
     message: SignedIngress,
+    subscriber: SubscriptionState,
 }
 
-impl IngressMessageSubmitter {
+impl<SubscriptionState> IngressMessageSubmitter<SubscriptionState> {
     /// Returns the message id of the ingress message.
     pub(crate) fn message_id(&self) -> MessageId {
         self.message.id()
     }
+}
 
+impl IngressMessageSubmitter<NotSubscribed> {
+    fn new(
+        ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
+        node_id: NodeId,
+        message: SignedIngress,
+        ingress_watcher_handle: IngressWatcherHandle,
+    ) -> Self {
+        Self {
+            ingress_tx,
+            node_id,
+            message,
+            subscriber: NotSubscribed {
+                ingress_watcher_handle,
+            },
+        }
+    }
+
+    /// Subscribes to the ingress message.
+    pub(crate) async fn register_certification_subscription(
+        self,
+    ) -> IngressMessageSubmitter<Subscribed> {
+        let message_id = self.message_id();
+
+        let certification_subscriber = self
+            .subscriber
+            .ingress_watcher_handle
+            .subscribe_for_certification(message_id)
+            .timeout()
+            .await;
+
+        IngressMessageSubmitter {
+            ingress_tx: self.ingress_tx,
+            node_id: self.node_id,
+            message: self.message,
+            subscriber: Subscribed(certification_subscriber),
+        }
+    }
+}
+
+impl IngressMessageSubmitter<Subscribed> {
     /// Attempts to submit the ingress message to the ingress pool.
     /// An [`HttpError`] is returned if P2P is not running.
-    pub(crate) fn try_submit(self) -> Result<(), HttpError> {
+    pub(crate) fn try_submit(self) -> Result<IngressWatcherSubscriptionResult, HttpError> {
         let Self {
             ingress_tx,
             node_id,
             message,
+            ..
         } = self;
 
         // Submission will fail if P2P is not running, meaning there is
@@ -308,7 +368,8 @@ impl IngressMessageSubmitter {
                 message: "P2P is not running on this node.".to_string(),
             });
         }
-        Ok(())
+
+        Ok(self.subscriber.0)
     }
 }
 
