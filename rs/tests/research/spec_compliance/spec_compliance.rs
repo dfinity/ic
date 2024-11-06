@@ -300,7 +300,7 @@ pub fn run_ic_ref_test(
     let mut cmd = Command::new(ic_ref_test_path);
     cmd.env("IC_TEST_DATA", ic_test_data_path)
         .arg("+RTS")
-        .arg("-N")
+        .arg(format!("-N{}", jobs))
         .arg("-RTS")
         .arg(format!("-j{}", jobs))
         .arg("--pattern")
