@@ -7,8 +7,11 @@ package(default_visibility = ["//rs:system-tests-pkg"])
 [
     system_test_nns(
         name = name,
+        colocated_test_driver_vm_resources = {
+            "vcpus": 16,
+        },
         flaky = True,
-        tags = ["cpu:16"],
+        tags = ["experimental_system_test_colocation"],
         target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
         runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + CANISTER_HTTP_RUNTIME_DEPS + [
             ":ic-hs",
