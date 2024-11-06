@@ -36,6 +36,7 @@ DEPENDENCIES = [
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
     "//rs/nervous_system/governance",
+    "//rs/nervous_system/linear_map",
     "//rs/nervous_system/neurons_fund",
     "//rs/nervous_system/proto",
     "//rs/nervous_system/root",

@@ -6,6 +6,8 @@ Git hash: `{{to}}`
 
 New compressed Wasm hash: `{{compressed_wasm_hash}}`
 
+Upgrade args hash: `{{upgrade_args.args_sha256_hex()}}`
+
 Target canister: `{{canister_id}}`
 
 Previous {{canister}} proposal: {{Self::previous_upgrade_proposal_url(self)}}
