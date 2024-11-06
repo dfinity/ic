@@ -3394,7 +3394,7 @@ impl StateManager for StateManagerImpl {
         self.remove_states_below_impl(
             oldest_height_to_keep,
             Self::INITIAL_STATE_HEIGHT,
-            extra_heights_to_keep,
+            &BTreeSet::new(),
         );
     }
 
