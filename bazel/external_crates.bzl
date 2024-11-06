@@ -680,7 +680,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.31.0",
             ),
             "instant-acme": crate.spec(
-                version = "^0.7.1",
+                version = "^0.7.2",
             ),
             "intmap": crate.spec(
                 version = "^1.1.0",
