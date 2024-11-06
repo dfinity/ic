@@ -187,6 +187,21 @@ impl Storage {
                     .expect("Failed to lock storage_layout")
                     .deref_mut(),
             ) {
+                None => unimplemented!(), //Default::default(),
+                Some(storage_layout) => StorageImpl::load(storage_layout.deref())
+                    .expect("Failed to load storage layout"),
+            }
+        })
+    }
+
+    fn init_or_die2(&self) -> &StorageImpl {
+        self.storage_impl.get_or_init(|| {
+            match std::mem::take(
+                self.storage_layout
+                    .lock()
+                    .expect("Failed to lock storage_layout")
+                    .deref_mut(),
+            ) {
                 None => Default::default(),
                 Some(storage_layout) => StorageImpl::load(storage_layout.deref())
                     .expect("Failed to load storage layout"),
@@ -230,7 +245,7 @@ impl Storage {
     }
 
     pub fn serialize(&self) -> StorageSerialization {
-        self.init_or_die().serialize()
+        self.init_or_die2().serialize()
     }
 
     pub fn deserialize(serialized_storage: StorageSerialization) -> Result<Self, PersistenceError> {

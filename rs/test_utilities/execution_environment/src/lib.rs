@@ -1645,7 +1645,7 @@ impl ExecutionTest {
             }
             let factory = Arc::clone(&fd_factory);
             es.wasm_memory.page_map = PageMap::open(
-                Arc::new(base_only_storage_layout(path)),
+                Box::new(base_only_storage_layout(path)),
                 Height::new(0),
                 factory,
             )
@@ -1669,7 +1669,7 @@ impl ExecutionTest {
             }
             let factory = Arc::clone(&fd_factory);
             es.stable_memory.page_map = PageMap::open(
-                Arc::new(base_only_storage_layout(path)),
+                Box::new(base_only_storage_layout(path)),
                 Height::new(0),
                 factory,
             )
