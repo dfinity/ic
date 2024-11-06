@@ -87,7 +87,7 @@ alias(
 # $ bazel run //:python-requirements.update
 compile_pip_requirements(
     name = "python-requirements",
-    size = "medium",
+    timeout = "moderate",
     src = "requirements.in",
     requirements_txt = "requirements.txt",
 )
