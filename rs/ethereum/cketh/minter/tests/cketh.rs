@@ -37,6 +37,7 @@ use icrc_ledger_types::icrc3::transactions::{Burn, Mint};
 use num_traits::cast::ToPrimitive;
 use serde_json::json;
 use std::str::FromStr;
+use std::time::Duration;
 
 #[test]
 fn should_deposit_and_withdraw() {
@@ -436,10 +437,9 @@ fn should_reimburse() {
     let balance_before_withdrawal = cketh.balance_of(caller);
     assert_eq!(balance_before_withdrawal, withdrawal_amount);
 
-    let time_at_withdrawal = cketh
-        .env
-        .get_time_of_next_round()
-        .as_nanos_since_unix_epoch();
+    // advance time so that time does not grow implicitly when executing a round
+    cketh.env.advance_time(Duration::from_secs(1));
+    let time_at_withdrawal = cketh.env.get_time().as_nanos_since_unix_epoch();
 
     let cketh = cketh
         .call_minter_withdraw_eth(caller, withdrawal_amount.clone(), destination.clone())

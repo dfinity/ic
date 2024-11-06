@@ -2430,7 +2430,7 @@ impl StateMachine {
     /// Returns the state machine time at the beginning of next round
     /// under the assumption that time won't be advanced before that
     /// round is finalized.
-    pub fn time_of_next_round(&self) -> SystemTime {
+    fn time_of_next_round(&self) -> SystemTime {
         let time = self.time();
         if time == *self.time_of_last_round.read().unwrap() {
             time + Self::EXECUTE_ROUND_TIME_INCREMENT
@@ -2450,7 +2450,7 @@ impl StateMachine {
     }
 
     /// Returns the state machine time at the beginning of next round.
-    pub fn get_time_of_next_round(&self) -> Time {
+    fn get_time_of_next_round(&self) -> Time {
         Time::from_nanos_since_unix_epoch(
             self.time_of_next_round()
                 .duration_since(SystemTime::UNIX_EPOCH)
