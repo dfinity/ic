@@ -7,11 +7,12 @@ use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
 use ic_replicated_state::page_map::PAGE_SIZE;
 use ic_replicated_state::NumWasmPages;
-use ic_state_machine_tests::{Cycles, StateMachine};
+use ic_state_machine_tests::StateMachine;
 use ic_state_machine_tests::{StateMachineBuilder, StateMachineConfig, WasmResult};
 use ic_test_utilities_execution_environment::{wat_compilation_cost, ExecutionTestBuilder};
 use ic_test_utilities_metrics::fetch_int_counter_vec;
 use ic_types::messages::CanisterTask;
+use ic_types::Cycles;
 use ic_types::{CanisterId, NumBytes};
 use ic_universal_canister::{wasm, UNIVERSAL_CANISTER_WASM};
 use maplit::btreemap;
@@ -576,7 +577,7 @@ fn global_timer_refunds_cycles_for_request_in_prep() {
     .unwrap();
 
     let canister_id = env
-        .install_canister_with_cycles(binary, vec![], None, Cycles::new(121_000_000_000))
+        .install_canister_with_cycles(binary, vec![], None, Cycles::new(301_000_000_000))
         .unwrap();
 
     let result = env.execute_ingress(canister_id, "test", vec![]).unwrap();
@@ -640,7 +641,7 @@ fn global_timer_set_returns_zero_in_canister_global_timer_method() {
     .unwrap();
 
     let canister_id = env
-        .install_canister_with_cycles(binary, vec![], None, Cycles::new(121_000_000_000))
+        .install_canister_with_cycles(binary, vec![], None, Cycles::new(301_000_000_000))
         .unwrap();
 
     let result = env

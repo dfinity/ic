@@ -60,7 +60,7 @@ Distribution:
           vesting_period: 1 year 1 second
 
     InitialBalances:
-        governance: 50 tokens
+        treasury: 50 tokens
         swap: 30_000 tokens
 
     total: 30_065 tokens

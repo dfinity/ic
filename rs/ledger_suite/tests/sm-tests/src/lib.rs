@@ -1,6 +1,7 @@
 use crate::in_memory_ledger::{verify_ledger_state, InMemoryLedger};
 use candid::{CandidType, Decode, Encode, Int, Nat, Principal};
 use ic_agent::identity::{BasicIdentity, Identity};
+use ic_base_types::CanisterId;
 use ic_base_types::PrincipalId;
 use ic_error_types::UserError;
 use ic_icrc1::blocks::encoded_block_to_generic_block;
@@ -15,7 +16,7 @@ use ic_management_canister_types::{
     self as ic00, CanisterInfoRequest, CanisterInfoResponse, Method, Payload,
 };
 use ic_rosetta_test_utils::test_http_request_decoding_quota;
-use ic_state_machine_tests::{CanisterId, ErrorCode, StateMachine, WasmResult};
+use ic_state_machine_tests::{ErrorCode, StateMachine, WasmResult};
 use ic_types::Cycles;
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
@@ -460,7 +461,7 @@ fn get_transactions(
     get_transactions_as(env, archive, start, length, "get_transactions".to_string())
 }
 
-fn get_blocks(
+pub fn get_blocks(
     env: &StateMachine,
     archive: Principal,
     start: u64,
@@ -2376,7 +2377,11 @@ pub fn test_upgrade_serialization(
                         tx_index += 1;
                     }
                     tx_index_target += ADDITIONAL_TX_BATCH_SIZE;
-                    in_memory_ledger.verify_balances_and_allowances(&env, ledger_id);
+                    in_memory_ledger.verify_balances_and_allowances(
+                        &env,
+                        ledger_id,
+                        tx_index as u64,
+                    );
                 };
                 add_tx_and_verify();
 

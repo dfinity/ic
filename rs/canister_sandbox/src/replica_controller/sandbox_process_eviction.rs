@@ -11,21 +11,11 @@ pub(crate) struct EvictionCandidate {
 }
 
 /// Evicts the least recently used candidates in order to bring the number of
-/// the remaining candidates down to `max_count_threshold`.
+/// the remaining candidates down to `max_count_threshold` and their total RSS
+/// down to `max_sandboxes_rss`.
 ///
 /// The function also tries to evict candidates that have been idle for a long
-/// time (`last_used_threshold`) while keeping the number of the remaining
-/// candidates at or above `min_count_threshold`.
-///
-/// More formally:
-/// 1. Sort the candidates in the order of increasing `last_used` field.
-/// 2. Let `N` be the total number of candidates.
-/// 3. Evict the first `K` candidates such that the number of remaining
-///    candidates `N-K` is between the given thresholds:
-///    - `min_count_threshold <= N-K <= max_count_threshold`.
-///    - if there multiple possible values for `K`, then choose the one that
-///      evicts the most candidates with `last_used < last_used_threshold`.
-/// 4. Return the evicted candidates.
+/// time (`last_used_threshold`).
 pub(crate) fn evict(
     mut candidates: Vec<EvictionCandidate>,
     total_rss: NumBytes,

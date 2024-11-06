@@ -1,5 +1,3 @@
-#![allow(clippy::unwrap_used)]
-
 use super::*;
 use assert_matches::assert_matches;
 use ic_crypto_internal_csp_test_utils::types::{
