@@ -18,7 +18,11 @@ DEV_DEPENDENCIES = [
 
 rust_library(
     name = "lib",
-    srcs = glob(["src/*.rs"]),
+    srcs = glob(
+        ["src/*.rs"],
+        # The build script is only needed to make cargo clippy work.
+        exclude = ["build.rs"],
+    ),
     crate_name = "ic_universal_canister",
     data = ["//rs/universal_canister/impl:universal_canister.wasm.gz"],
     rustc_env = {
