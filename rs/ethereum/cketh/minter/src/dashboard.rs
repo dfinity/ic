@@ -18,6 +18,7 @@ use ic_cketh_minter::state::transactions::{
 use ic_cketh_minter::state::{EthBalance, InvalidEventReason, MintedEvent, State};
 use ic_cketh_minter::tx::Eip1559TransactionRequest;
 use ic_ethereum_types::Address;
+use icrc_ledger_types::icrc1::account::Account;
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -52,7 +53,7 @@ pub struct DashboardPendingDeposit {
     pub from: Address,
     pub token_symbol: CkTokenSymbol,
     pub value: Nat,
-    pub beneficiary: Principal,
+    pub beneficiary: Account,
 }
 
 #[derive(Clone)]
@@ -131,7 +132,7 @@ impl DashboardPendingDeposit {
                     .clone(),
             },
             value: event.value(),
-            beneficiary: event.principal(),
+            beneficiary: event.beneficiary(),
         }
     }
 }

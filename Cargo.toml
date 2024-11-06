@@ -181,6 +181,7 @@ members = [
     "rs/nervous_system/instruction_stats_update_attribute",
     "rs/nervous_system/integration_tests",
     "rs/nervous_system/lock",
+    "rs/nervous_system/linear_map",
     "rs/nervous_system/neurons_fund",
     "rs/nervous_system/neurons_fund/nfplot",
     "rs/nervous_system/proto",
@@ -688,7 +689,6 @@ strum = { version = "0.26.3", features = ["derive"] }
 strum_macros = "0.26.4"
 subtle = "2.6.1"
 syn = { version = "1.0.109", features = ["fold", "full"] }
-sync_wrapper = "1.0.1"
 tar = "0.4.39"
 tempfile = "3.12.0"
 thiserror = "1.0.62"

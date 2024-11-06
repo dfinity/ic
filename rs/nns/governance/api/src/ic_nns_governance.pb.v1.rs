@@ -356,61 +356,7 @@ pub mod neuron {
         DissolveDelaySeconds(u64),
     }
 }
-/// Subset of Neuron that has no collections or big fields that might not exist in most neurons, and
-/// the goal is to keep the size of the struct consistent and can be easily stored in a
-/// StableBTreeMap. For the meaning of each field, see the Neuron struct.
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct AbridgedNeuron {
-    #[prost(bytes = "vec", tag = "2")]
-    #[serde(with = "serde_bytes")]
-    pub account: Vec<u8>,
-    #[prost(message, optional, tag = "3")]
-    pub controller: Option<PrincipalId>,
-    #[prost(uint64, tag = "5")]
-    pub cached_neuron_stake_e8s: u64,
-    #[prost(uint64, tag = "6")]
-    pub neuron_fees_e8s: u64,
-    #[prost(uint64, tag = "7")]
-    pub created_timestamp_seconds: u64,
-    #[prost(uint64, tag = "8")]
-    pub aging_since_timestamp_seconds: u64,
-    #[prost(uint64, optional, tag = "19")]
-    pub spawn_at_timestamp_seconds: Option<u64>,
-    #[prost(bool, tag = "13")]
-    pub kyc_verified: bool,
-    #[prost(uint64, tag = "15")]
-    pub maturity_e8s_equivalent: u64,
-    #[prost(uint64, optional, tag = "20")]
-    pub staked_maturity_e8s_equivalent: Option<u64>,
-    #[prost(bool, optional, tag = "21")]
-    pub auto_stake_maturity: Option<bool>,
-    #[prost(bool, tag = "16")]
-    pub not_for_profit: bool,
-    #[prost(uint64, optional, tag = "17")]
-    pub joined_community_fund_timestamp_seconds: Option<u64>,
-    #[prost(enumeration = "NeuronType", optional, tag = "22")]
-    pub neuron_type: Option<i32>,
-    #[prost(enumeration = "Visibility", optional, tag = "23")]
-    pub visibility: Option<i32>,
-    #[prost(uint64, optional, tag = "24")]
-    pub voting_power_refreshed_timestamp_seconds: ::core::option::Option<u64>,
-    #[prost(oneof = "abridged_neuron::DissolveState", tags = "9, 10")]
-    pub dissolve_state: Option<abridged_neuron::DissolveState>,
-}
-/// Nested message and enum types in `AbridgedNeuron`.
-pub mod abridged_neuron {
-    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
-    #[allow(clippy::derive_partial_eq_without_eq)]
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum DissolveState {
-        #[prost(uint64, tag = "9")]
-        WhenDissolvedTimestampSeconds(u64),
-        #[prost(uint64, tag = "10")]
-        DissolveDelaySeconds(u64),
-    }
-}
+
 /// Payload of a proposal that calls a function on another NNS
 /// canister. The canister and function to call is derived from the
 /// `nns_function`.
