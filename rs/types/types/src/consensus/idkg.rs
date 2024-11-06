@@ -94,6 +94,12 @@ impl std::ops::Deref for IDkgMasterPublicKeyId {
     }
 }
 
+impl std::borrow::Borrow<MasterPublicKeyId> for IDkgMasterPublicKeyId {
+    fn borrow(&self) -> &MasterPublicKeyId {
+        &self.0
+    }
+}
+
 impl Serialize for IDkgMasterPublicKeyId {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         self.0.serialize(serializer)

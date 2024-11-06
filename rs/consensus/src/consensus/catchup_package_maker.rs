@@ -281,7 +281,10 @@ mod tests {
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
-        consensus::{idkg::PreSigId, BlockPayload, Payload, SummaryPayload},
+        consensus::{
+            idkg::{IDkgMasterPublicKeyId, PreSigId},
+            BlockPayload, Payload, SummaryPayload,
+        },
         crypto::CryptoHash,
         CryptoHashOfState, Height, RegistryVersion,
     };
@@ -393,7 +396,8 @@ mod tests {
                 .expect_get_state_hash_at()
                 .return_const(Ok(CryptoHashOfState::from(CryptoHash(vec![1, 2, 3]))));
 
-            let key_id = fake_ecdsa_master_public_key_id();
+            let key_id: IDkgMasterPublicKeyId =
+                fake_ecdsa_master_public_key_id().try_into().unwrap();
 
             // Create three quadruple Ids and contexts, quadruple "2" will remain unmatched.
             let pre_sig_id1 = PreSigId(1);

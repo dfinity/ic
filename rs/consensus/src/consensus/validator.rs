@@ -1936,9 +1936,11 @@ pub mod test {
     use ic_types::{
         batch::{BatchPayload, IngressPayload},
         consensus::{
-            dkg, idkg::PreSigId, BlockPayload, CatchUpPackageShare, DataPayload, EquivocationProof,
-            Finalization, FinalizationShare, HashedBlock, HashedRandomBeacon, NotarizationShare,
-            Payload, RandomBeaconContent, RandomTapeContent, SummaryPayload,
+            dkg,
+            idkg::{IDkgMasterPublicKeyId, PreSigId},
+            BlockPayload, CatchUpPackageShare, DataPayload, EquivocationProof, Finalization,
+            FinalizationShare, HashedBlock, HashedRandomBeacon, NotarizationShare, Payload,
+            RandomBeaconContent, RandomTapeContent, SummaryPayload,
         },
         crypto::{BasicSig, BasicSigOf, CombinedMultiSig, CombinedMultiSigOf, CryptoHash},
         replica_config::ReplicaConfig,
@@ -2149,7 +2151,8 @@ pub mod test {
                 .expect_get_state_hash_at()
                 .return_const(Ok(state_hash.clone()));
 
-            let key_id = fake_ecdsa_master_public_key_id();
+            let key_id: IDkgMasterPublicKeyId =
+                fake_ecdsa_master_public_key_id().try_into().unwrap();
             // Create three quadruple Ids and contexts, quadruple "2" will remain unmatched.
             let pre_sig_id1 = PreSigId(1);
             let pre_sig_id2 = PreSigId(2);

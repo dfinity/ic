@@ -14,7 +14,6 @@ use ic_interfaces::idkg::IDkgPool;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
 use ic_logger::{error, info, warn, ReplicaLogger};
-use ic_management_canister_types::MasterPublicKeyId;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_features::ChainKeyConfig;
 use ic_replicated_state::{metadata_state::subnet_call_context_manager::*, ReplicatedState};
@@ -523,7 +522,7 @@ pub(crate) fn create_data_payload_helper(
     let valid_keys: BTreeSet<_> = chain_key_config
         .key_configs
         .iter()
-        .map(|key_config| key_config.key_id.clone())
+        .filter_map(|key_config| key_config.key_id.clone().try_into().ok())
         .collect();
 
     let mut idkg_payload = if let Some(prev_payload) = parent_block.payload.as_ref().as_idkg() {
@@ -570,7 +569,7 @@ pub(crate) fn create_data_payload_helper_2(
     height: Height,
     context_time: Time,
     chain_key_config: &ChainKeyConfig,
-    valid_keys: &BTreeSet<MasterPublicKeyId>,
+    valid_keys: &BTreeSet<IDkgMasterPublicKeyId>,
     next_interval_registry_version: RegistryVersion,
     certified_height: CertifiedHeight,
     receivers: &[NodeId],
@@ -692,6 +691,7 @@ mod tests {
     use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
     use ic_interfaces_registry::RegistryValue;
     use ic_logger::replica_logger::no_op_logger;
+    use ic_management_canister_types::MasterPublicKeyId;
     use ic_metrics::MetricsRegistry;
     use ic_protobuf::types::v1 as pb;
     use ic_registry_subnet_features::KeyConfig;
@@ -723,7 +723,7 @@ mod tests {
     use std::convert::TryInto;
 
     fn create_summary_block_with_transcripts(
-        key_id: MasterPublicKeyId,
+        key_id: IDkgMasterPublicKeyId,
         subnet_id: SubnetId,
         height: Height,
         current_key_transcript: (idkg::UnmaskedTranscript, IDkgTranscript),
@@ -763,7 +763,7 @@ mod tests {
     }
 
     fn create_payload_block_with_transcripts(
-        key_id: MasterPublicKeyId,
+        key_id: IDkgMasterPublicKeyId,
         subnet_id: SubnetId,
         dkg_interval_start_height: Height,
         transcripts: Vec<BTreeMap<idkg::TranscriptRef, IDkgTranscript>>,
@@ -798,21 +798,21 @@ mod tests {
     }
 
     fn set_up_idkg_payload_with_keys(
-        key_ids: Vec<MasterPublicKeyId>,
+        key_ids: Vec<IDkgMasterPublicKeyId>,
     ) -> (IDkgPayload, CanisterThresholdSigTestEnvironment) {
         let mut rng = reproducible_rng();
         let (idkg_payload, env, _block_reader) = set_up_idkg_payload(
             &mut rng,
             subnet_test_id(1),
             /*nodes_count=*/ 4,
-            key_ids,
+            key_ids.into_iter().map(|key_id| key_id.into()).collect(),
             /*should_create_key_transcript=*/ true,
         );
         (idkg_payload, env)
     }
 
     fn set_up_signature_request_contexts(
-        parameters: Vec<(MasterPublicKeyId, u8, Time, Option<PreSigId>)>,
+        parameters: Vec<(IDkgMasterPublicKeyId, u8, Time, Option<PreSigId>)>,
     ) -> BTreeMap<CallbackId, SignWithThresholdContext> {
         let mut contexts = BTreeMap::new();
         for (key_id, id, batch_time, pre_sig) in parameters {
@@ -828,13 +828,15 @@ mod tests {
     fn test_pre_signature_recreation_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_pre_signature_recreation(key_id);
+            test_pre_signature_recreation(key_id.try_into().unwrap());
         }
     }
 
-    fn test_pre_signature_recreation(valid_key_id: MasterPublicKeyId) {
+    fn test_pre_signature_recreation(valid_key_id: IDkgMasterPublicKeyId) {
         const PRE_SIGNATURES_TO_CREATE_IN_ADVANCE: u32 = 5;
-        let disabled_key_id = key_id_with_name(&valid_key_id, "disabled");
+        let disabled_key_id: IDkgMasterPublicKeyId = key_id_with_name(&valid_key_id, "disabled")
+            .try_into()
+            .unwrap();
         let valid_keys = BTreeSet::from([valid_key_id.clone()]);
 
         let (mut idkg_payload, _env) = set_up_idkg_payload_with_keys(vec![valid_key_id.clone()]);
@@ -874,7 +876,7 @@ mod tests {
 
         let chain_key_config = ChainKeyConfig {
             key_configs: vec![KeyConfig {
-                key_id: valid_key_id.clone(),
+                key_id: valid_key_id.clone().into(),
                 pre_signatures_to_create_in_advance: PRE_SIGNATURES_TO_CREATE_IN_ADVANCE,
                 max_queue_size: 1,
             }],
@@ -921,11 +923,11 @@ mod tests {
     fn test_signing_request_timeout_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_signing_request_timeout(key_id);
+            test_signing_request_timeout(key_id.try_into().unwrap());
         }
     }
 
-    fn test_signing_request_timeout(key_id: MasterPublicKeyId) {
+    fn test_signing_request_timeout(key_id: IDkgMasterPublicKeyId) {
         let expired_time = UNIX_EPOCH + Duration::from_secs(10);
         let expiry_time = UNIX_EPOCH + Duration::from_secs(11);
         let non_expired_time = UNIX_EPOCH + Duration::from_secs(12);
@@ -989,12 +991,14 @@ mod tests {
     fn test_request_with_invalid_key_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_request_with_invalid_key(key_id);
+            test_request_with_invalid_key(key_id.try_into().unwrap());
         }
     }
 
-    fn test_request_with_invalid_key(valid_key_id: MasterPublicKeyId) {
-        let invalid_key_id = key_id_with_name(&valid_key_id, "invalid");
+    fn test_request_with_invalid_key(valid_key_id: IDkgMasterPublicKeyId) {
+        let invalid_key_id: IDkgMasterPublicKeyId = key_id_with_name(&valid_key_id, "invalid")
+            .try_into()
+            .unwrap();
         let (mut idkg_payload, _env) = set_up_idkg_payload_with_keys(vec![valid_key_id.clone()]);
         // Add pre-signatures
         let pre_sig_id1 =
@@ -1056,11 +1060,11 @@ mod tests {
     fn test_signature_is_only_delivered_once_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_signature_is_only_delivered_once(key_id);
+            test_signature_is_only_delivered_once(key_id.try_into().unwrap());
         }
     }
 
-    fn test_signature_is_only_delivered_once(key_id: MasterPublicKeyId) {
+    fn test_signature_is_only_delivered_once(key_id: IDkgMasterPublicKeyId) {
         let (mut idkg_payload, _env) = set_up_idkg_payload_with_keys(vec![key_id.clone()]);
         let pre_sig_id = create_available_pre_signature(&mut idkg_payload, key_id.clone(), 13);
         let context = fake_completed_signature_request_context(0, key_id.clone(), pre_sig_id);
@@ -1074,7 +1078,7 @@ mod tests {
 
         signature_builder.signatures.insert(
             get_context_request_id(&context.1).unwrap(),
-            match key_id {
+            match key_id.deref() {
                 MasterPublicKeyId::Ecdsa(_) => {
                     CombinedSignature::Ecdsa(ThresholdEcdsaCombinedSignature {
                         signature: vec![1; 32],
@@ -1142,11 +1146,11 @@ mod tests {
     fn test_update_summary_refs_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_update_summary_refs(key_id);
+            test_update_summary_refs(key_id.try_into().unwrap());
         }
     }
 
-    fn test_update_summary_refs(key_id: MasterPublicKeyId) {
+    fn test_update_summary_refs(key_id: IDkgMasterPublicKeyId) {
         let mut rng = reproducible_rng();
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let Dependencies { mut pool, .. } = dependencies(pool_config, 1);
@@ -1232,7 +1236,7 @@ mod tests {
                 .available_pre_signatures
                 .insert(pre_sig_id_2, presig_2.clone());
 
-            let req_1 = create_reshare_request(key_id.clone(), 1, 1);
+            let req_1 = create_reshare_request(key_id.clone().into(), 1, 1);
             idkg_payload
                 .ongoing_xnet_reshares
                 .insert(req_1, reshare_params_1.clone());
@@ -1246,7 +1250,7 @@ mod tests {
                 &subnet_nodes,
                 env.newest_registry_version,
                 &mut idkg_payload.uid_generator,
-                key_id.clone(),
+                key_id.clone().into(),
                 &mut idkg_payload.pre_signatures_in_creation,
             );
 
@@ -1255,7 +1259,7 @@ mod tests {
                 &subnet_nodes,
                 env.newest_registry_version,
                 &mut idkg_payload.uid_generator,
-                key_id.clone(),
+                key_id.clone().into(),
                 &mut idkg_payload.pre_signatures_in_creation,
             )[0];
             let transcript = env.nodes.run_idkg_and_create_and_verify_transcript(
@@ -1314,22 +1318,22 @@ mod tests {
                 new_summary_height
             );
             for pre_signature in summary.available_pre_signatures.values() {
-                assert_eq!(pre_signature.key_id(), key_id);
+                assert_eq!(pre_signature.key_id(), key_id.clone().into());
                 for transcript_ref in pre_signature.get_refs() {
                     assert_ne!(transcript_ref.height, new_summary_height);
                 }
             }
             for pre_signature in summary.pre_signatures_in_creation.values() {
-                assert_eq!(pre_signature.key_id(), key_id);
+                assert_eq!(pre_signature.key_id(), key_id.clone().into());
                 for transcript_ref in pre_signature.get_refs() {
                     assert_ne!(transcript_ref.height, new_summary_height);
                 }
             }
             for (request, reshare_params) in &summary.ongoing_xnet_reshares {
-                assert_eq!(request.key_id(), key_id);
+                assert_eq!(request.key_id(), key_id.clone().into());
                 assert_eq!(
                     reshare_params.as_ref().algorithm_id,
-                    algorithm_for_key_id(&key_id)
+                    algorithm_for_key_id(&key_id.clone().into())
                 );
                 for transcript_ref in reshare_params.as_ref().get_refs() {
                     assert_ne!(transcript_ref.height, new_summary_height);
@@ -1366,22 +1370,22 @@ mod tests {
                 new_summary_height
             );
             for pre_signature in summary.available_pre_signatures.values() {
-                assert_eq!(pre_signature.key_id(), key_id);
+                assert_eq!(pre_signature.key_id(), key_id.clone().into());
                 for transcript_ref in pre_signature.get_refs() {
                     assert_eq!(transcript_ref.height, new_summary_height);
                 }
             }
             for pre_signature in summary.pre_signatures_in_creation.values() {
-                assert_eq!(pre_signature.key_id(), key_id);
+                assert_eq!(pre_signature.key_id(), key_id.clone().into());
                 for transcript_ref in pre_signature.get_refs() {
                     assert_eq!(transcript_ref.height, new_summary_height);
                 }
             }
             for (request, reshare_params) in &summary.ongoing_xnet_reshares {
-                assert_eq!(request.key_id(), key_id);
+                assert_eq!(request.key_id(), key_id.clone().into());
                 assert_eq!(
                     reshare_params.as_ref().algorithm_id,
-                    algorithm_for_key_id(&key_id)
+                    algorithm_for_key_id(&key_id.clone().into())
                 );
                 for transcript_ref in reshare_params.as_ref().get_refs() {
                     assert_eq!(transcript_ref.height, new_summary_height);
@@ -1402,11 +1406,11 @@ mod tests {
     fn test_summary_proto_conversion_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_summary_proto_conversion(key_id);
+            test_summary_proto_conversion(key_id.try_into().unwrap());
         }
     }
 
-    fn test_summary_proto_conversion(key_id: MasterPublicKeyId) {
+    fn test_summary_proto_conversion(key_id: IDkgMasterPublicKeyId) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let mut rng = reproducible_rng();
             let Dependencies { mut pool, .. } = dependencies(pool_config, 1);
@@ -1489,11 +1493,11 @@ mod tests {
                 .available_pre_signatures
                 .insert(pre_sig_id_2, presig_2);
 
-            let req_1 = create_reshare_request(key_id.clone(), 1, 1);
+            let req_1 = create_reshare_request(key_id.clone().into(), 1, 1);
             idkg_payload
                 .ongoing_xnet_reshares
                 .insert(req_1, reshare_params_1);
-            let req_2 = create_reshare_request(key_id.clone(), 2, 2);
+            let req_2 = create_reshare_request(key_id.clone().into(), 2, 2);
             idkg_payload.xnet_reshare_agreements.insert(
                 req_2,
                 idkg::CompletedReshareRequest::Unreported(empty_response()),
@@ -1505,7 +1509,7 @@ mod tests {
                 &subnet_nodes,
                 env.newest_registry_version,
                 &mut idkg_payload.uid_generator,
-                key_id.clone(),
+                key_id.clone().into(),
                 &mut idkg_payload.pre_signatures_in_creation,
             );
 
@@ -1514,7 +1518,7 @@ mod tests {
                 &subnet_nodes,
                 env.newest_registry_version,
                 &mut idkg_payload.uid_generator,
-                key_id.clone(),
+                key_id.clone().into(),
                 &mut idkg_payload.pre_signatures_in_creation,
             )[0];
             let transcript = env.nodes.run_idkg_and_create_and_verify_transcript(
@@ -1543,7 +1547,7 @@ mod tests {
                 idkg::CompletedSignature::Unreported(empty_response()),
             );
             idkg_payload.xnet_reshare_agreements.insert(
-                create_reshare_request(key_id, 6, 6),
+                create_reshare_request(key_id.into(), 6, 6),
                 idkg::CompletedReshareRequest::ReportedToExecution,
             );
 

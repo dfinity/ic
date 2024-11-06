@@ -562,7 +562,9 @@ pub(super) mod tests {
     use ic_registry_subnet_features::KeyConfig;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
-        consensus::idkg::{common::PreSignatureRef, IDkgPayload, UnmaskedTranscript},
+        consensus::idkg::{
+            common::PreSignatureRef, IDkgMasterPublicKeyId, IDkgPayload, UnmaskedTranscript,
+        },
         crypto::canister_threshold_sig::idkg::IDkgTranscriptId,
         SubnetId,
     };
@@ -677,7 +679,11 @@ pub(super) mod tests {
 
         // Add 3 available pre-signatures
         for i in 0..3 {
-            create_available_pre_signature(&mut idkg_payload, key_id.clone(), i);
+            create_available_pre_signature(
+                &mut idkg_payload,
+                key_id.clone().try_into().unwrap(),
+                i,
+            );
         }
 
         // 2 available pre-signatures are already matched
@@ -1063,16 +1069,16 @@ pub(super) mod tests {
     fn test_matched_pre_signatures_are_not_purged_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_matched_pre_signatures_are_not_purged(key_id);
+            test_matched_pre_signatures_are_not_purged(key_id.try_into().unwrap());
         }
     }
 
-    fn test_matched_pre_signatures_are_not_purged(key_id: MasterPublicKeyId) {
+    fn test_matched_pre_signatures_are_not_purged(key_id: IDkgMasterPublicKeyId) {
         let mut rng = reproducible_rng();
         let (mut payload, env, _) = set_up(
             &mut rng,
             subnet_test_id(1),
-            vec![key_id.clone()],
+            vec![key_id.clone().into()],
             Height::from(100),
         );
         let key_transcript = get_current_unmasked_key_transcript(&payload);
@@ -1128,16 +1134,16 @@ pub(super) mod tests {
     fn test_unmatched_pre_signatures_of_current_key_are_not_purged_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_unmatched_pre_signatures_of_current_key_are_not_purged(key_id);
+            test_unmatched_pre_signatures_of_current_key_are_not_purged(key_id.try_into().unwrap());
         }
     }
 
-    fn test_unmatched_pre_signatures_of_current_key_are_not_purged(key_id: MasterPublicKeyId) {
+    fn test_unmatched_pre_signatures_of_current_key_are_not_purged(key_id: IDkgMasterPublicKeyId) {
         let mut rng = reproducible_rng();
         let (mut payload, _, _) = set_up(
             &mut rng,
             subnet_test_id(1),
-            vec![key_id.clone()],
+            vec![key_id.clone().into()],
             Height::from(100),
         );
         let key_transcript = get_current_unmasked_key_transcript(&payload);
@@ -1169,16 +1175,16 @@ pub(super) mod tests {
     fn test_unmatched_pre_signatures_of_different_key_are_purged_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_unmatched_pre_signatures_of_different_key_are_purged(key_id);
+            test_unmatched_pre_signatures_of_different_key_are_purged(key_id.try_into().unwrap());
         }
     }
 
-    fn test_unmatched_pre_signatures_of_different_key_are_purged(key_id: MasterPublicKeyId) {
+    fn test_unmatched_pre_signatures_of_different_key_are_purged(key_id: IDkgMasterPublicKeyId) {
         let mut rng = reproducible_rng();
         let (mut payload, env, _) = set_up(
             &mut rng,
             subnet_test_id(1),
-            vec![key_id.clone()],
+            vec![key_id.clone().into()],
             Height::from(100),
         );
 

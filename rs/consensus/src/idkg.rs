@@ -562,11 +562,11 @@ mod tests {
 
     use super::*;
     use ic_test_utilities::state_manager::RefMockStateManager;
-    use ic_types::consensus::idkg::IDkgUIDGenerator;
     use ic_types::consensus::idkg::{
         complaint_prefix, dealing_prefix, dealing_support_prefix, ecdsa_sig_share_prefix,
         opening_prefix, schnorr_sig_share_prefix, IDkgArtifactIdData, PreSigId,
     };
+    use ic_types::consensus::idkg::{IDkgMasterPublicKeyId, IDkgUIDGenerator};
     use ic_types::{
         consensus::idkg::{RequestId, SigShareIdData},
         crypto::{canister_threshold_sig::idkg::IDkgTranscriptId, CryptoHash},
@@ -579,7 +579,7 @@ mod tests {
     fn test_idkg_priority_fn_args() {
         let state_manager = Arc::new(RefMockStateManager::default());
         let height = Height::from(100);
-        let key_id = fake_ecdsa_master_public_key_id();
+        let key_id: IDkgMasterPublicKeyId = fake_ecdsa_master_public_key_id().try_into().unwrap();
         // Add two contexts to state, one with, and one without quadruple
         let pre_sig_id = PreSigId(0);
         let context_with_quadruple =

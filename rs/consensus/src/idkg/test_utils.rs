@@ -37,8 +37,8 @@ use ic_types::consensus::idkg::{
     common::{CombinedSignature, PreSignatureRef, ThresholdSigInputsRef},
     ecdsa::{PreSignatureQuadrupleRef, ThresholdEcdsaSigInputsRef},
     schnorr::{PreSignatureTranscriptRef, ThresholdSchnorrSigInputsRef},
-    EcdsaSigShare, IDkgArtifactId, IDkgBlockReader, IDkgComplaintContent, IDkgMessage,
-    IDkgOpeningContent, IDkgPayload, IDkgReshareRequest, IDkgTranscriptAttributes,
+    EcdsaSigShare, IDkgArtifactId, IDkgBlockReader, IDkgComplaintContent, IDkgMasterPublicKeyId,
+    IDkgMessage, IDkgOpeningContent, IDkgPayload, IDkgReshareRequest, IDkgTranscriptAttributes,
     IDkgTranscriptOperationRef, IDkgTranscriptParamsRef, KeyTranscriptCreation, MaskedTranscript,
     MasterKeyTranscript, PreSigId, RequestId, ReshareOfMaskedParams, SignedIDkgComplaint,
     SignedIDkgOpening, TranscriptAttributes, TranscriptLookupError, TranscriptRef,
@@ -62,6 +62,7 @@ use ic_types::{Height, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetI
 use rand::{CryptoRng, Rng};
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
+use std::ops::Deref;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use strum::IntoEnumIterator;
@@ -87,8 +88,8 @@ pub(crate) fn empty_response() -> ic_types::batch::ConsensusResponse {
     )
 }
 
-fn fake_signature_request_args(key_id: MasterPublicKeyId) -> ThresholdArguments {
-    match key_id {
+fn fake_signature_request_args(key_id: IDkgMasterPublicKeyId) -> ThresholdArguments {
+    match key_id.into() {
         MasterPublicKeyId::Ecdsa(key_id) => ThresholdArguments::Ecdsa(EcdsaArguments {
             key_id,
             message_hash: [0; 32],
@@ -102,7 +103,7 @@ fn fake_signature_request_args(key_id: MasterPublicKeyId) -> ThresholdArguments 
 }
 
 pub fn fake_signature_request_context(
-    key_id: MasterPublicKeyId,
+    key_id: IDkgMasterPublicKeyId,
     pseudo_random_id: [u8; 32],
 ) -> SignWithThresholdContext {
     SignWithThresholdContext {
@@ -118,7 +119,7 @@ pub fn fake_signature_request_context(
 
 pub fn fake_signature_request_context_with_pre_sig(
     id: u8,
-    key_id: MasterPublicKeyId,
+    key_id: IDkgMasterPublicKeyId,
     pre_signature: Option<PreSigId>,
 ) -> (CallbackId, SignWithThresholdContext) {
     let context = SignWithThresholdContext {
@@ -135,7 +136,7 @@ pub fn fake_signature_request_context_with_pre_sig(
 
 pub fn fake_completed_signature_request_context(
     id: u8,
-    key_id: MasterPublicKeyId,
+    key_id: IDkgMasterPublicKeyId,
     pre_signature_id: PreSigId,
 ) -> (CallbackId, SignWithThresholdContext) {
     let (_, context) = fake_signature_request_context_from_id(
@@ -150,7 +151,7 @@ pub fn fake_completed_signature_request_context(
 }
 
 pub fn fake_signature_request_context_from_id(
-    key_id: MasterPublicKeyId,
+    key_id: IDkgMasterPublicKeyId,
     request_id: &RequestId,
 ) -> (CallbackId, SignWithThresholdContext) {
     let height = request_id.height;
@@ -1116,7 +1117,7 @@ pub(crate) fn create_support(
 pub(crate) fn create_sig_inputs_with_height(
     caller: u8,
     height: Height,
-    key_id: MasterPublicKeyId,
+    key_id: IDkgMasterPublicKeyId,
 ) -> TestSigInputs {
     let transcript_id = |offset| {
         let val = caller as u64;
@@ -1144,14 +1145,14 @@ pub(crate) fn create_sig_inputs_with_args(
     receivers: &BTreeSet<NodeId>,
     key_unmasked: IDkgTranscript,
     height: Height,
-    key_id: &MasterPublicKeyId,
+    key_id: &IDkgMasterPublicKeyId,
 ) -> TestSigInputs {
-    match key_id {
+    match key_id.deref() {
         MasterPublicKeyId::Ecdsa(key_id) => {
-            create_ecdsa_sig_inputs_with_args(caller, receivers, key_unmasked, height, key_id)
+            create_ecdsa_sig_inputs_with_args(caller, receivers, key_unmasked, height, &key_id)
         }
         MasterPublicKeyId::Schnorr(key_id) => {
-            create_schnorr_sig_inputs_with_args(caller, receivers, key_unmasked, height, key_id)
+            create_schnorr_sig_inputs_with_args(caller, receivers, key_unmasked, height, &key_id)
         }
         MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
     }
@@ -1332,7 +1333,7 @@ pub(crate) fn create_schnorr_sig_inputs_with_args(
 }
 
 // Creates a test signature input
-pub(crate) fn create_sig_inputs(caller: u8, key_id: &MasterPublicKeyId) -> TestSigInputs {
+pub(crate) fn create_sig_inputs(caller: u8, key_id: &IDkgMasterPublicKeyId) -> TestSigInputs {
     create_sig_inputs_with_height(caller, Height::new(0), key_id.clone())
 }
 
@@ -1594,12 +1595,15 @@ pub(crate) fn is_handle_invalid(change_set: &[IDkgChangeAction], msg_id: &IDkgMe
 }
 
 pub(crate) fn empty_idkg_payload(subnet_id: SubnetId) -> IDkgPayload {
-    empty_idkg_payload_with_key_ids(subnet_id, vec![fake_ecdsa_master_public_key_id()])
+    empty_idkg_payload_with_key_ids(
+        subnet_id,
+        vec![fake_ecdsa_master_public_key_id().try_into().unwrap()],
+    )
 }
 
 pub(crate) fn empty_idkg_payload_with_key_ids(
     subnet_id: SubnetId,
-    key_ids: Vec<MasterPublicKeyId>,
+    key_ids: Vec<IDkgMasterPublicKeyId>,
 ) -> IDkgPayload {
     IDkgPayload::empty(
         Height::new(0),
@@ -1691,7 +1695,7 @@ pub(crate) fn add_available_quadruple_to_payload(
 ) {
     let sig_inputs = create_sig_inputs(
         pre_signature_id.id() as u8,
-        &fake_ecdsa_master_public_key_id(),
+        &fake_ecdsa_master_public_key_id().try_into().unwrap(),
     );
     idkg_payload
         .available_pre_signatures
@@ -1706,7 +1710,7 @@ pub(crate) fn add_available_quadruple_to_payload(
 
 pub fn create_available_pre_signature(
     idkg_payload: &mut IDkgPayload,
-    key_id: MasterPublicKeyId,
+    key_id: IDkgMasterPublicKeyId,
     caller: u8,
 ) -> PreSigId {
     create_available_pre_signature_with_key_transcript(
@@ -1720,7 +1724,7 @@ pub fn create_available_pre_signature(
 pub fn create_available_pre_signature_with_key_transcript(
     idkg_payload: &mut IDkgPayload,
     caller: u8,
-    key_id: MasterPublicKeyId,
+    key_id: IDkgMasterPublicKeyId,
     key_transcript: Option<UnmaskedTranscript>,
 ) -> PreSigId {
     let sig_inputs = create_sig_inputs(caller, &key_id);
@@ -1762,7 +1766,14 @@ pub(crate) fn set_up_idkg_payload(
 ) {
     let env = CanisterThresholdSigTestEnvironment::new(nodes_count, rng);
 
-    let mut idkg_payload = empty_idkg_payload_with_key_ids(subnet_id, key_ids.clone());
+    let mut idkg_payload = empty_idkg_payload_with_key_ids(
+        subnet_id,
+        key_ids
+            .clone()
+            .into_iter()
+            .map(|key_id| key_id.try_into().unwrap())
+            .collect(),
+    );
     let mut block_reader = TestIDkgBlockReader::new();
 
     if should_create_key_transcript {

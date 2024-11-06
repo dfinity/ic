@@ -894,7 +894,7 @@ mod tests {
     fn add_available_pre_signatures_with_key_transcript(
         idkg_payload: &mut IDkgPayload,
         key_transcript: UnmaskedTranscript,
-        key_id: &MasterPublicKeyId,
+        key_id: &IDkgMasterPublicKeyId,
     ) -> Vec<PreSigId> {
         let mut pre_sig_ids = vec![];
         for i in 0..10 {
@@ -933,17 +933,17 @@ mod tests {
     fn test_get_pre_signature_ids_to_deliver_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_get_pre_signature_ids_to_deliver(key_id);
+            test_get_pre_signature_ids_to_deliver(key_id.try_into().unwrap());
         }
     }
 
-    fn test_get_pre_signature_ids_to_deliver(key_id: MasterPublicKeyId) {
+    fn test_get_pre_signature_ids_to_deliver(key_id: IDkgMasterPublicKeyId) {
         let mut rng = reproducible_rng();
         let (mut idkg_payload, env, _) = set_up_idkg_payload(
             &mut rng,
             subnet_test_id(1),
             /*nodes_count=*/ 8,
-            vec![key_id.clone()],
+            vec![key_id.clone().into()],
             /*should_create_key_transcript=*/ true,
         );
         let current_key_transcript = idkg_payload
@@ -1005,17 +1005,17 @@ mod tests {
     fn test_block_without_key_should_not_deliver_pre_signatures_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_block_without_key_should_not_deliver_pre_signatures(key_id);
+            test_block_without_key_should_not_deliver_pre_signatures(key_id.try_into().unwrap());
         }
     }
 
-    fn test_block_without_key_should_not_deliver_pre_signatures(key_id: MasterPublicKeyId) {
+    fn test_block_without_key_should_not_deliver_pre_signatures(key_id: IDkgMasterPublicKeyId) {
         let mut rng = reproducible_rng();
         let (mut idkg_payload, env, _) = set_up_idkg_payload(
             &mut rng,
             subnet_test_id(1),
             /*nodes_count=*/ 8,
-            vec![key_id.clone()],
+            vec![key_id.clone().into()],
             /*should_create_key_transcript=*/ false,
         );
 
