@@ -254,6 +254,11 @@ async fn get_minter_info() -> MinterInfo {
                     .last_scraped_block_number(LogScrapingId::Erc20DepositWithoutSubaccount)
                     .into(),
             ),
+            last_deposit_with_subaccount_scraped_block_number: Some(
+                s.log_scrapings
+                    .last_scraped_block_number(LogScrapingId::EthOrErc20DepositWithSubaccount)
+                    .into(),
+            ),
             cketh_ledger_id: Some(s.cketh_ledger_id),
             evm_rpc_id: s.evm_rpc_id,
         }
