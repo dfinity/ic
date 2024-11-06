@@ -27,11 +27,12 @@ use ic_nervous_system_governance::index::{
 };
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use icp_ledger::{AccountIdentifier, Subaccount};
+use itertools::Itertools;
 use std::{
     borrow::Cow,
     collections::{BTreeMap, HashMap, HashSet},
     fmt::{Debug, Display, Formatter},
-    ops::{Deref, RangeBounds},
+    ops::{Bound, Deref, RangeBounds},
 };
 
 pub mod metrics;
@@ -1245,6 +1246,163 @@ impl NeuronStore {
         (active_neurons_in_stable_store, neuron_id_for_next_batch)
     }
 
+    /// Scans the contents of self, i.e. Neurons. This is basically range + map.
+    ///
+    /// I think this is good for use cases where you want to scan ALL neurons in
+    /// the background (i.e. not as part of servicing a request), but you do not
+    /// need to scan them all in one go. By "ALL" neurons, we mean regardless of
+    /// where they are stored (heap or stable memory).
+    ///
+    /// One strange limitation of this is that changes to neurons in stable
+    /// memory are not applied immediately. Instead, such changes are only made
+    /// after the scan. As long as fun does not look at neurons that it modified
+    /// in earlier calls, this weirdness is not observable, because by the time
+    /// this returns, all modifications will have been made.
+    ///
+    // Ideally, this would would not have map functionality, and instead just
+    // return an Iterator, but I'm not sure how to do that. This seems tough,
+    // because to get a StableNeuronStore, you have to call
+    // with_stable_neuron_store.
+    pub(crate) fn map_range(
+        &mut self,
+        neuron_ids: impl RangeBounds<NeuronId> + Copy,
+        neuron_sections: NeuronSections,
+
+        // This can make changes to Neurons as each one is scanned (via the
+        // "output" parameter).
+        //
+        // When this returns false, it means that scanning should stop.
+        // Therefore, to scan everything, arrange for this to always return
+        // true.
+        mut fun: impl FnMut(&mut Neuron) -> bool,
+    ) {
+        /// This does a couple of things for us:
+        ///
+        /// 1. Abstracts away the storage location of neurons.
+        ///
+        /// 2. In the case of stable memory, gives a way to remember what
+        ///    changes were made so they can be applied later. Whereas, changes to
+        ///    heap neurons can be made directly via &mut.
+        #[allow(clippy::large_enum_variant)]
+        #[derive(Debug)]
+        enum NeuronHandle<'a> {
+            // DO NOT MERGE - Use Cow to avoid unnecessary cloning.
+            Owned { current: Neuron, original: Neuron },
+            Borrowed(&'a mut Neuron),
+        }
+
+        impl<'a> NeuronHandle<'a> {
+            fn mut_ref(&mut self) -> &mut Neuron {
+                match self {
+                    Self::Owned { current, .. } => current,
+                    Self::Borrowed(neuron) => neuron,
+                }
+            }
+
+            fn take_change(self) -> Option<(/* original */ Neuron, /* current */ Neuron)> {
+                match self {
+                    Self::Owned { current, original } => {
+                        if current != original {
+                            Some((original, current))
+                        } else {
+                            None
+                        }
+                    }
+                    Self::Borrowed(_) => None,
+                }
+            }
+        }
+
+        impl<'a> Deref for NeuronHandle<'a> {
+            type Target = Neuron;
+
+            fn deref(&self) -> &Neuron {
+                match self {
+                    Self::Owned { current, .. } => current,
+                    Self::Borrowed(neuron) => neuron,
+                }
+            }
+        }
+
+        // This records changes that need to be made to stable memory. That
+        // takes place later, because you can't modify while iterating.
+        let mut dirty_neurons = vec![];
+
+        with_stable_neuron_store(|stable_neuron_store| {
+            // Select stable memory neurons.
+            let stable_neuron = stable_neuron_store
+                .range_neurons(neuron_ids, neuron_sections)
+                .map(|neuron| {
+                    let original = neuron.clone();
+                    NeuronHandle::Owned {
+                        original,
+                        current: neuron,
+                    }
+                });
+
+            // Select heap neurons.
+            let neuron_ids = {
+                fn to_u64(bound: Bound<&NeuronId>) -> Bound<u64> {
+                    match bound {
+                        Bound::Unbounded => Bound::Unbounded,
+                        Bound::Included(neuron_id) => Bound::Included(neuron_id.id),
+                        Bound::Excluded(neuron_id) => Bound::Excluded(neuron_id.id),
+                    }
+                }
+
+                let start = to_u64(neuron_ids.start_bound());
+                let end = to_u64(neuron_ids.end_bound());
+
+                (start, end)
+            };
+            let heap_neuron = self
+                .heap_neurons
+                .range_mut(neuron_ids)
+                .map(|(_, neuron)| NeuronHandle::Borrowed(neuron));
+
+            // Merge neurons in heap + stable memory.
+            let neurons = stable_neuron.merge_by(heap_neuron, |neuron_1, neuron_2| {
+                neuron_1.id() <= neuron_2.id()
+            });
+
+            // Scan neurons.
+            for mut neuron in neurons {
+                let carry_on = fun(neuron.mut_ref());
+
+                if let Some((original, current)) = neuron.take_change() {
+                    dirty_neurons.push((original, current));
+                }
+
+                if !carry_on {
+                    break;
+                }
+            }
+        });
+
+        // Write changes to stable memory.
+        with_stable_neuron_store_mut(|stable_neuron_store| {
+            for (original, current) in dirty_neurons {
+                let update = stable_neuron_store.update(&original, current);
+
+                // Handle errors, but I know of no way that errors could occur
+                // (other than bugs, ofc).
+
+                let err = match update {
+                    Ok(()) => continue,
+                    Err(err) => err,
+                };
+
+                println!(
+                    "{}ERROR: Neuron {} had changes, but unable to update it in \
+                     stable memory. Reason: {:?}",
+                    LOG_PREFIX,
+                    original.id().id,
+                    err,
+                )
+            }
+        });
+    }
+
     // Census
 
     pub fn heap_neuron_store_len(&self) -> usize {
@@ -1264,6 +1422,54 @@ impl NeuronStore {
             account_id: indexes.account_id().num_entries(),
         })
     }
+}
+
+fn groom_neurons(
+    neuron_store: &mut NeuronStore,
+    exclusive_lower_bound: NeuronId,
+    mut fun: impl FnMut(&mut Neuron) -> bool,
+) -> NeuronId {
+    let mut last_neuron_id = exclusive_lower_bound;
+
+    for _ in 0..2 {
+        neuron_store.map_range(
+            (Bound::Excluded(exclusive_lower_bound), Bound::Unbounded),
+            NeuronSections {
+                followees: true,
+                ..Default::default()
+            },
+            |neuron: &mut Neuron| -> /* carry on */ bool {
+                last_neuron_id = neuron.id();
+                fun(neuron)
+            },
+        );
+
+        // If we made progress, return.
+        if last_neuron_id != exclusive_lower_bound {
+            return last_neuron_id;
+        }
+
+        // If no progress, that measn we reached the end. Therefore, we now
+        // restart.
+        last_neuron_id = NeuronId { id: 0 };
+    }
+
+    last_neuron_id
+}
+
+#[allow(unused)] // This line will be removed soon...
+pub fn prune_some_following(
+    neuron_store: &mut NeuronStore,
+    exclusive_lower_bound: NeuronId,
+    now_seconds: u64,
+    mut carry_on: impl FnMut() -> bool,
+) -> NeuronId {
+    groom_neurons(neuron_store, exclusive_lower_bound, |neuron| {
+        // TODO(NNS1-3418): Use return value to increment some counter metric(s).
+        let _deleted_followee_count = neuron.prune_following(now_seconds);
+
+        carry_on()
+    })
 }
 
 /// Number of entries for each neuron indexes (in stable storage)
