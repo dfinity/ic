@@ -128,6 +128,9 @@ pub mod test_data;
 #[cfg(test)]
 mod tests;
 
+#[cfg(feature = "canbench-rs")]
+mod benches;
+
 #[macro_use]
 pub mod tla_macros;
 #[cfg(feature = "tla")]
@@ -5752,7 +5755,7 @@ impl Governance {
     /// to followees).
     /// Cascading only occurs for proposal topics that support following (i.e.,
     /// all topics except Topic::NeuronManagement).
-    fn cast_vote_and_cascade_follow(
+    pub(crate) fn cast_vote_and_cascade_follow(
         proposal_id: &ProposalId,
         ballots: &mut HashMap<u64, Ballot>,
         voting_neuron_id: &NeuronId,
