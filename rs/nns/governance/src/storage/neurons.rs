@@ -56,15 +56,21 @@ pub(crate) struct NeuronSections {
 }
 
 impl NeuronSections {
-    pub fn all() -> Self {
-        Self {
-            hot_keys: true,
-            recent_ballots: true,
-            followees: true,
-            known_neuron_data: true,
-            transfer: true,
-        }
-    }
+    pub const NONE: Self = Self {
+        hot_keys: false,
+        recent_ballots: false,
+        followees: false,
+        known_neuron_data: false,
+        transfer: false,
+    };
+
+    pub const ALL: Self = Self {
+        hot_keys: true,
+        recent_ballots: true,
+        followees: true,
+        known_neuron_data: true,
+        transfer: true,
+    };
 }
 
 impl<Memory> StableNeuronStoreBuilder<Memory>
@@ -397,7 +403,7 @@ where
     where
         R: RangeBounds<NeuronId> + Clone,
     {
-        self.range_neurons_sections(range, NeuronSections::all())
+        self.range_neurons_sections(range, NeuronSections::ALL)
     }
 
     /// Returns the next neuron_id equal to or higher than the provided neuron_id
