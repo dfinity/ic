@@ -5,7 +5,7 @@ use std::{
 use thiserror::Error;
 
 use ic_interfaces::p2p::consensus::{
-    AssembleResult, ArtifactAssembler, BouncerFactory, Peers, ValidatedPoolReader,
+    ArtifactAssembler, AssembleResult, BouncerFactory, Peers, ValidatedPoolReader,
 };
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -151,16 +151,20 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
         let (stripped_artifact, peer) = match self
             .fetch_stripped
             .assemble_message(id.clone(), artifact, peer_rx.clone())
-            .await {
-                AssembleResult::Unwanted => return AssembleResult::Unwanted,
-                AssembleResult::Done {message, peer_id} => (message, peer_id)
-            };
+            .await
+        {
+            AssembleResult::Unwanted => return AssembleResult::Unwanted,
+            AssembleResult::Done { message, peer_id } => (message, peer_id),
+        };
 
         let stripped_block_proposal = match stripped_artifact {
             MaybeStrippedConsensusMessage::StrippedBlockProposal(stripped) => stripped,
             MaybeStrippedConsensusMessage::Unstripped(unstripped) => {
                 total_timer.stop_and_discard();
-                return AssembleResult::Done { message: unstripped, peer_id: peer };
+                return AssembleResult::Done {
+                    message: unstripped,
+                    peer_id: peer,
+                };
             }
         };
 
@@ -228,23 +232,24 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
         self.metrics.report_ingress_messages_count(
             IngressMessageSource::IngressPool,
             ingress_messages_from_ingress_pool,
-
         );
-        
-        let reconstructed_block_proposal = match assembler.try_assemble(){
+
+        let reconstructed_block_proposal = match assembler.try_assemble() {
             Ok(v) => v,
             Err(err) => {
                 warn!(
                     self.log,
                     "Failed to reassemble the block {}. This is a bug.", err
                 );
-    
-                return AssembleResult::Unwanted
+
+                return AssembleResult::Unwanted;
             }
         };
 
-        AssembleResult::Done { message: ConsensusMessage::BlockProposal(reconstructed_block_proposal),
-            peer_id: peer}
+        AssembleResult::Done {
+            message: ConsensusMessage::BlockProposal(reconstructed_block_proposal),
+            peer_id: peer,
+        }
     }
 }
 

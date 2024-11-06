@@ -13,7 +13,8 @@ use backoff::{backoff::Backoff, ExponentialBackoffBuilder};
 use bytes::Bytes;
 use ic_base_types::NodeId;
 use ic_interfaces::p2p::consensus::{
-    AssembleResult, ArtifactAssembler, Bouncer, BouncerFactory, BouncerValue, Peers, ValidatedPoolReader,
+    ArtifactAssembler, AssembleResult, Bouncer, BouncerFactory, BouncerValue, Peers,
+    ValidatedPoolReader,
 };
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -216,7 +217,10 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
         match artifact {
             // Artifact was pushed by peer. In this case we don't need check that the artifact ID corresponds
             // to the artifact because we earlier derived the ID from the artifact.
-            Some((artifact, peer_id)) => AssembleResult::Done { message: artifact, peer_id },
+            Some((artifact, peer_id)) => AssembleResult::Done {
+                message: artifact,
+                peer_id,
+            },
 
             // Fetch artifact
             None => {
@@ -242,7 +246,10 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
                                 let body = response.into_body();
                                 if let Ok(message) = Artifact::PbMessage::proxy_decode(&body) {
                                     if message.id() == id {
-                                        break AssembleResult::Done {message, peer_id: peer};
+                                        break AssembleResult::Done {
+                                            message,
+                                            peer_id: peer,
+                                        };
                                     } else {
                                         warn!(
                                             log,
