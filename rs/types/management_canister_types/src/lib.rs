@@ -869,6 +869,7 @@ impl TryFrom<pb_canister_state_bits::LogVisibilityV2> for LogVisibilityV2 {
 ///     reserved_cycles_limit: nat;
 ///     log_visibility: log_visibility;
 ///     wasm_memory_limit: nat;
+///     wasm_memory_threshold: nat;
 /// })`
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct DefiniteCanisterSettingsArgs {
@@ -880,6 +881,7 @@ pub struct DefiniteCanisterSettingsArgs {
     reserved_cycles_limit: candid::Nat,
     log_visibility: LogVisibilityV2,
     wasm_memory_limit: candid::Nat,
+    wasm_memory_threshold: candid::Nat,
 }
 
 impl DefiniteCanisterSettingsArgs {
@@ -892,6 +894,7 @@ impl DefiniteCanisterSettingsArgs {
         reserved_cycles_limit: Option<u128>,
         log_visibility: LogVisibilityV2,
         wasm_memory_limit: Option<u64>,
+        wasm_memory_threshold: u64,
     ) -> Self {
         let memory_allocation = candid::Nat::from(memory_allocation.unwrap_or(0));
         let reserved_cycles_limit = candid::Nat::from(reserved_cycles_limit.unwrap_or(0));
@@ -905,6 +908,7 @@ impl DefiniteCanisterSettingsArgs {
             reserved_cycles_limit,
             log_visibility,
             wasm_memory_limit,
+            wasm_memory_threshold: candid::Nat::from(wasm_memory_threshold),
         }
     }
 
@@ -922,6 +926,18 @@ impl DefiniteCanisterSettingsArgs {
 
     pub fn wasm_memory_limit(&self) -> candid::Nat {
         self.wasm_memory_limit.clone()
+    }
+
+    pub fn compute_allocation(&self) -> candid::Nat {
+        self.compute_allocation.clone()
+    }
+
+    pub fn memory_allocation(&self) -> candid::Nat {
+        self.memory_allocation.clone()
+    }
+
+    pub fn freezing_threshold(&self) -> candid::Nat {
+        self.freezing_threshold.clone()
     }
 }
 
@@ -1046,6 +1062,7 @@ impl CanisterStatusResultV2 {
         query_ingress_payload_size: u128,
         query_egress_payload_size: u128,
         wasm_memory_limit: Option<u64>,
+        wasm_memory_threshold: u64,
     ) -> Self {
         Self {
             status,
@@ -1065,6 +1082,7 @@ impl CanisterStatusResultV2 {
                 reserved_cycles_limit,
                 log_visibility,
                 wasm_memory_limit,
+                wasm_memory_threshold,
             ),
             freezing_threshold: candid::Nat::from(freezing_threshold),
             idle_cycles_burned_per_day: candid::Nat::from(idle_cycles_burned_per_day),
