@@ -902,11 +902,11 @@ mod tests {
     fn test_signature_shares_purging_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_signature_shares_purging(key_id);
+            test_signature_shares_purging(key_id.try_into().unwrap());
         }
     }
 
-    fn test_signature_shares_purging(key_id: MasterPublicKeyId) {
+    fn test_signature_shares_purging(key_id: IDkgMasterPublicKeyId) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, signer, state_manager) =
@@ -1551,8 +1551,10 @@ mod tests {
         let key_id_wrong_scheme = match key_id.deref() {
             MasterPublicKeyId::Ecdsa(_) => {
                 fake_schnorr_master_public_key_id(SchnorrAlgorithm::Ed25519)
+                    .try_into()
+                    .unwrap()
             }
-            MasterPublicKeyId::Schnorr(_) => fake_ecdsa_master_public_key_id(),
+            MasterPublicKeyId::Schnorr(_) => fake_ecdsa_master_public_key_id().try_into().unwrap(),
             MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
         };
         let message = create_signature_share(&key_id_wrong_scheme, NODE_2, id_2.clone());

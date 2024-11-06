@@ -74,7 +74,7 @@ pub(crate) fn dealings_context_from_reshare_request(
 ) -> IDkgDealingsContext {
     IDkgDealingsContext {
         request: RequestBuilder::new().build(),
-        key_id: request.key_id(),
+        key_id: request.key_id().try_into().unwrap(),
         nodes: request.receiving_node_ids.into_iter().collect(),
         registry_version: request.registry_version,
         time: time::UNIX_EPOCH,
@@ -1339,12 +1339,12 @@ pub(crate) fn create_sig_inputs(caller: u8, key_id: &IDkgMasterPublicKeyId) -> T
 
 // Creates a test signature share
 pub(crate) fn create_signature_share_with_nonce(
-    key_id: &MasterPublicKeyId,
+    key_id: &IDkgMasterPublicKeyId,
     signer_id: NodeId,
     request_id: RequestId,
     nonce: u8,
 ) -> IDkgMessage {
-    match key_id {
+    match key_id.deref() {
         MasterPublicKeyId::Ecdsa(_) => IDkgMessage::EcdsaSigShare(EcdsaSigShare {
             signer_id,
             request_id,
@@ -1365,7 +1365,7 @@ pub(crate) fn create_signature_share_with_nonce(
 
 // Creates a test signature share
 pub(crate) fn create_signature_share(
-    key_id: &MasterPublicKeyId,
+    key_id: &IDkgMasterPublicKeyId,
     signer_id: NodeId,
     request_id: RequestId,
 ) -> IDkgMessage {
