@@ -719,7 +719,7 @@ impl TryFrom<&pb::KeyTranscriptCreation> for KeyTranscriptCreation {
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct IDkgReshareRequest {
-    pub master_key_id: MasterPublicKeyId,
+    pub master_key_id: IDkgMasterPublicKeyId,
     pub receiving_node_ids: Vec<NodeId>,
     pub registry_version: RegistryVersion,
 }
@@ -730,8 +730,10 @@ impl From<&IDkgReshareRequest> for pb::IDkgReshareRequest {
         for node in &request.receiving_node_ids {
             receiving_node_ids.push(node_id_into_protobuf(*node));
         }
+
+        let master_key_id: &MasterPublicKeyId = &request.master_key_id;
         Self {
-            master_key_id: Some((&request.master_key_id).into()),
+            master_key_id: Some((master_key_id).into()),
             receiving_node_ids,
             registry_version: request.registry_version.get(),
         }
@@ -747,10 +749,13 @@ impl TryFrom<&pb::IDkgReshareRequest> for IDkgReshareRequest {
             .map(|node| node_id_try_from_option(Some(node.clone())))
             .collect::<Result<Vec<_>, ProxyDecodeError>>()?;
 
-        let master_key_id = try_from_option_field(
+        let master_key_id: MasterPublicKeyId = try_from_option_field(
             request.master_key_id.clone(),
             "IDkgReshareRequest::master_key_id",
         )?;
+        let master_key_id = master_key_id
+            .try_into()
+            .map_err(|err| ProxyDecodeError::Other(err))?;
 
         Ok(Self {
             master_key_id,
@@ -2112,7 +2117,7 @@ impl HasMasterPublicKeyId for PreSignatureRef {
 
 impl HasMasterPublicKeyId for IDkgReshareRequest {
     fn key_id(&self) -> MasterPublicKeyId {
-        self.master_key_id.clone()
+        self.master_key_id.clone().into()
     }
 }
 

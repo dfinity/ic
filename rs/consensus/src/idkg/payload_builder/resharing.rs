@@ -169,7 +169,8 @@ fn reshare_request_from_dealings_context(
     context: &IDkgDealingsContext,
 ) -> idkg::IDkgReshareRequest {
     idkg::IDkgReshareRequest {
-        master_key_id: context.key_id.clone(),
+        // TODO: Fix IdkgDealingsContext
+        master_key_id: context.key_id.clone().try_into().unwrap(),
         receiving_node_ids: context.nodes.iter().copied().collect(),
         registry_version: context.registry_version,
     }

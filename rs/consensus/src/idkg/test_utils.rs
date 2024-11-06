@@ -1674,7 +1674,7 @@ pub(crate) fn create_reshare_request(
     registry_version: u64,
 ) -> IDkgReshareRequest {
     IDkgReshareRequest {
-        master_key_id: key_id,
+        master_key_id: key_id.try_into().unwrap(),
         receiving_node_ids: (0..num_nodes).map(node_test_id).collect::<Vec<_>>(),
         registry_version: RegistryVersion::from(registry_version),
     }

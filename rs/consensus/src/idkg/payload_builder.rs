@@ -300,7 +300,7 @@ fn create_summary_payload_helper(
     // with the new key and different transcript IDs.
     idkg_summary
         .ongoing_xnet_reshares
-        .retain(|request, _| !new_key_transcripts.contains(&request.master_key_id));
+        .retain(|request, _| !new_key_transcripts.contains(request.master_key_id.deref()));
 
     idkg_summary.uid_generator.update_height(height)?;
     update_summary_refs(height, &mut idkg_summary, block_reader)?;
