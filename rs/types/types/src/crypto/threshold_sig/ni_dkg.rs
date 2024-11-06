@@ -106,21 +106,6 @@ impl fmt::Display for NiDkgTargetSubnet {
     }
 }
 
-// No longer possible;
-// this must be used in conversion of NiDkgId to pb::NiDkgId;
-// implement directly there
-// impl TryFrom<i32> for NiDkgTag {
-//     type Error = ();
-
-//     fn try_from(ni_dkg_tag: i32) -> Result<Self, Self::Error> {
-//         match ni_dkg_tag {
-//             1 => Ok(NiDkgTag::LowThreshold),
-//             2 => Ok(NiDkgTag::HighThreshold),
-//             _ => Err(()),
-//         }
-//     }
-// }
-
 /// A dealer's contribution (called dealing) to distributed key generation.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct NiDkgDealing {

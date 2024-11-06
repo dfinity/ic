@@ -47,7 +47,7 @@ impl From<NiDkgId> for NiDkgIdProto {
         NiDkgIdProto {
             start_block_height: ni_dkg_id.start_block_height.get(),
             dealer_subnet: ni_dkg_id.dealer_subnet.get().into_vec(),
-            dkg_tag: pb::NiDkgTag::from(&ni_dkg_id.dkg_tag) as i32, // i32::from(&ni_dkg_id.dkg_tag), // TODO: delete i32::from conversion ?
+            dkg_tag: pb::NiDkgTag::from(&ni_dkg_id.dkg_tag) as i32,
             remote_target_id: match ni_dkg_id.target_subnet {
                 NiDkgTargetSubnet::Remote(target_id) => Some(target_id.0.to_vec()),
                 NiDkgTargetSubnet::Local => None,
