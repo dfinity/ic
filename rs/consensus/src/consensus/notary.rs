@@ -53,7 +53,8 @@ const ACCEPTABLE_FINALIZATION_CERTIFICATION_GAP: u64 = 2;
 
 /// The amount of time consensus should delay notarization of the next block by,
 /// for each height that the latest finalized block is ahead of the latest certified state.
-const BACKLOG_DELAY_MILLIS: u64 = 2000;
+/// The value was chosen empirically.
+const BACKLOG_DELAY_MILLIS: u64 = 2_000;
 
 /// In order to have a bound on the advertised consensus pool, we place a limit on
 /// the notarization/certification gap.
