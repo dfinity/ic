@@ -81,6 +81,7 @@ def rust_fuzz_test_binary(name, srcs, rustc_flags = [], sanitizers = [], crate_f
         **kwargs
     )
 
+# TODO(PSEC): Enable allow_main for AFL fuzzers
 def rust_fuzz_test_binary_afl(name, srcs, rustc_flags = [], crate_features = [], proc_macro_deps = [], deps = [], **kwargs):
     """Wrapper for the rust_binary to compile a fuzzing rust_binary compatible with AFL
 
