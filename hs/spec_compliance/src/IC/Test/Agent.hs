@@ -762,7 +762,7 @@ isPendingOrProcessing Processing = return ()
 isPendingOrProcessing r = assertFailure $ "Expected pending or processing, got " <> show r
 
 pollDelay :: IO ()
-pollDelay = threadDelay $ 10 * 1000 -- 10 milliseconds
+pollDelay = threadDelay $ 500 * 1000 -- 500 milliseconds
 
 -- * HTTP Response predicates
 

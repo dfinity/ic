@@ -26,6 +26,7 @@ pub struct DefiniteCanisterSettings {
     pub wasm_memory_limit: candid::Nat,
     pub memory_allocation: candid::Nat,
     pub compute_allocation: candid::Nat,
+    pub wasm_memory_threshold: candid::Nat,
 }
 
 #[derive(CandidType, Deserialize, Debug, Clone, Default)]
