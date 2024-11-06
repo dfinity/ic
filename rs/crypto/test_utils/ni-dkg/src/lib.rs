@@ -464,10 +464,7 @@ impl RandomNiDkgConfig {
         let dkg_tag = match &self.0.dkg_id().dkg_tag {
             NiDkgTag::LowThreshold => NiDkgTag::HighThreshold,
             NiDkgTag::HighThreshold => NiDkgTag::LowThreshold,
-            ////////////////////////
-            // TODO: how to behave here?
-            ////////////////////////
-            NiDkgTag::HighThresholdForKey(_master_public_key_id) => NiDkgTag::LowThreshold,
+            NiDkgTag::HighThresholdForKey(_) => unimplemented!("not supported/needed currently"),
         };
 
         let subnet_size = self.0.receivers().get().len();
