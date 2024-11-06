@@ -6,25 +6,25 @@ use crate::{
     },
     logs::{ERROR, INFO},
     pb::v1::{
-        governance::{SnsMetadata, Version},
+        governance::{CachedUpgradeSteps as CachedUpgradeStepsPb, SnsMetadata, Version},
         governance_error::ErrorType,
         nervous_system_function::{FunctionType, GenericNervousSystemFunction},
         proposal,
         proposal::Action,
         proposal_data::{
-            self, ActionAuxiliary as ActionAuxiliaryPb, MintSnsTokensActionAuxiliary,
-            TransferSnsTreasuryFundsActionAuxiliary,
+            ActionAuxiliary as ActionAuxiliaryPb, AdvanceSnsTargetVersionActionAuxiliary,
+            MintSnsTokensActionAuxiliary, TransferSnsTreasuryFundsActionAuxiliary,
         },
         transfer_sns_treasury_funds::TransferFrom,
         AdvanceSnsTargetVersion, DeregisterDappCanisters, ExecuteGenericNervousSystemFunction,
         Governance, GovernanceError, LogVisibility, ManageDappCanisterSettings,
         ManageLedgerParameters, ManageSnsMetadata, MintSnsTokens, Motion, NervousSystemFunction,
         NervousSystemParameters, Proposal, ProposalData, ProposalDecisionStatus, ProposalId,
-        ProposalRewardStatus, RegisterDappCanisters, Tally, TransferSnsTreasuryFunds,
+        ProposalRewardStatus, RegisterDappCanisters, SnsVersion, Tally, TransferSnsTreasuryFunds,
         UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Valuation as ValuationPb, Vote,
     },
     sns_upgrade::{get_proposal_id_that_added_wasm, get_upgrade_params, UpgradeSnsParams},
-    types::Environment,
+    types::{CachedUpgradeSteps, Environment},
     validate_chars_count, validate_len, validate_required_field,
 };
 use candid::Principal;
@@ -173,6 +173,7 @@ pub(crate) fn get_action_auxiliary(
 pub(crate) enum ActionAuxiliary {
     TransferSnsTreasuryFunds(Valuation),
     MintSnsTokens(Valuation),
+    AdvanceSnsTargetVersion(Version),
     None,
 }
 
@@ -204,17 +205,25 @@ impl TryFrom<ActionAuxiliary> for Option<ActionAuxiliaryPb> {
 
             ActionAuxiliary::TransferSnsTreasuryFunds(valuation) => {
                 Some(ActionAuxiliaryPb::TransferSnsTreasuryFunds(
-                    proposal_data::TransferSnsTreasuryFundsActionAuxiliary {
+                    TransferSnsTreasuryFundsActionAuxiliary {
                         valuation: Some(ValuationPb::try_from(valuation)?),
                     },
                 ))
             }
 
             ActionAuxiliary::MintSnsTokens(valuation) => Some(ActionAuxiliaryPb::MintSnsTokens(
-                proposal_data::MintSnsTokensActionAuxiliary {
+                MintSnsTokensActionAuxiliary {
                     valuation: Some(ValuationPb::try_from(valuation)?),
                 },
             )),
+
+            ActionAuxiliary::AdvanceSnsTargetVersion(target_version) => {
+                Some(ActionAuxiliaryPb::AdvanceSnsTargetVersion(
+                    AdvanceSnsTargetVersionActionAuxiliary {
+                        target_version: Some(SnsVersion::from(target_version)),
+                    },
+                ))
+            }
         };
 
         Ok(result)
@@ -244,6 +253,21 @@ impl TryFrom<&Option<ActionAuxiliaryPb>> for ActionAuxiliary {
                     .map_err(|err| format!("Invalid ActionAuxiliaryPb {:?}: {}", src, err))?;
 
                 ActionAuxiliary::MintSnsTokens(valuation)
+            }
+            Some(ActionAuxiliaryPb::AdvanceSnsTargetVersion(action_auxiliary)) => {
+                let AdvanceSnsTargetVersionActionAuxiliary {
+                    target_version: Some(target_version),
+                } = action_auxiliary
+                else {
+                    return Err(
+                        "Invalid ActionAuxiliaryPb: target_version must be specified.".to_string(),
+                    );
+                };
+
+                let target_version = Version::try_from(target_version.clone())
+                    .map_err(|err| format!("Invalid ActionAuxiliaryPb {:?}: {}", src, err))?;
+
+                ActionAuxiliary::AdvanceSnsTargetVersion(target_version)
             }
         };
 
@@ -443,20 +467,11 @@ pub(crate) async fn validate_and_render_action(
             validate_and_render_manage_dapp_canister_settings(manage_dapp_canister_settings)
         }
         proposal::Action::AdvanceSnsTargetVersion(advance_sns_target_version) => {
-            let new_target = if let Some(new_target) = &advance_sns_target_version.new_target {
-                Version::try_from(new_target.clone())
-            } else {
-                governance_proto.last_known_sns_version()
-            };
-            let new_target = match new_target {
-                Ok(last_version) => last_version,
-                Err(err) => {
-                    return Err(
-                        format!("Cannot render AdvanceSnsTargetVersion proposal: {}", err)
-                    );
-                }
-            };
-            validate_and_render_advance_sns_target_version_proposal(&new_target)
+            return validate_and_render_advance_sns_target_version_proposal(
+                env.canister_id(),
+                &governance_proto.cached_upgrade_steps,
+                advance_sns_target_version,
+            );
         }
     }
     .map(|rendering| (rendering, ActionAuxiliary::None))
@@ -1685,9 +1700,71 @@ fn validate_and_render_manage_dapp_canister_settings(
 }
 
 fn validate_and_render_advance_sns_target_version_proposal(
-    new_target: &Version,
-) -> Result<String, String> {
-    todo!()
+    sns_governance_canister_id: CanisterId,
+    cached_upgrade_steps: &Option<CachedUpgradeStepsPb>,
+    advance_sns_target_version: &AdvanceSnsTargetVersion,
+) -> Result<(String, ActionAuxiliary), String> {
+    let Some(cached_upgrade_steps) = cached_upgrade_steps else {
+        return Err(
+            "Internal error: GovernanceProto.cached_upgrade_steps must be specified.".to_string(),
+        );
+    };
+    let cached_upgrade_steps = CachedUpgradeSteps::try_from(cached_upgrade_steps)
+        .map_err(|err| format!("Internal error: {}", err))?;
+
+    let new_target = if let Some(new_target) = &advance_sns_target_version.new_target {
+        let new_target = Version::try_from(new_target.clone()).map_err(|err| {
+            format!(
+                "Cannot validate and render AdvanceSnsTargetVersion proposal: {}",
+                err
+            )
+        })?;
+
+        if !cached_upgrade_steps.contains(&new_target) {
+            return Err(
+                "Invalid AdvanceSnsTargetVersion proposal: new_target must be known".to_string(),
+            );
+        }
+        new_target
+    } else {
+        cached_upgrade_steps.last()
+    };
+
+    if cached_upgrade_steps.is_current(&new_target) {
+        return Err(
+            "Invalid AdvanceSnsTargetVersion proposal: new_target must be different from \
+             the current version."
+                .to_string(),
+        );
+    }
+
+    let period_of_validity_timestamps_seconds =
+        cached_upgrade_steps.period_of_validity_timestamps_seconds();
+
+    let render = format!(
+        "# Proposal to advance SNS target version \n\
+         __New target version__: {}\n\
+         __Current version__: {}\n\
+         __Upgrade steps__:\n  - {}\n\
+         ## Monitoring the upgrade process\n\
+         Please note that the upgrade steps indicated above are not guaranteed to remain the same \
+         outside of the time period {:?}. In particular, the upgrade steps for this SNS might \
+         change during this proposal's voting period.\n\
+         \n\
+         The **upgrade journal** provides up-to-date information on this SNS's upgrade process:\n\
+         https://{}.raw.icp0.io/journal",
+        new_target.human_readable(),
+        cached_upgrade_steps.current().human_readable(),
+        cached_upgrade_steps
+            .into_iter()
+            .map(|version| version.human_readable())
+            .collect::<Vec<_>>()
+            .join("\n  - "),
+        period_of_validity_timestamps_seconds,
+        sns_governance_canister_id,
+    );
+
+    return Ok((render, ActionAuxiliary::AdvanceSnsTargetVersion(new_target)));
 }
 
 impl ProposalData {

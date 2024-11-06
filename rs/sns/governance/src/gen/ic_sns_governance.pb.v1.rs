@@ -1148,7 +1148,7 @@ pub struct ProposalData {
         ::core::option::Option<::ic_nervous_system_proto::pb::v1::Percentage>,
     /// In general, this holds data retrieved at proposal submission/creation time and used later
     /// during execution. This varies based on the action of the proposal.
-    #[prost(oneof = "proposal_data::ActionAuxiliary", tags = "22, 23")]
+    #[prost(oneof = "proposal_data::ActionAuxiliary", tags = "22, 23, 24")]
     pub action_auxiliary: ::core::option::Option<proposal_data::ActionAuxiliary>,
 }
 /// Nested message and enum types in `ProposalData`.
@@ -1177,6 +1177,20 @@ pub mod proposal_data {
         #[prost(message, optional, tag = "1")]
         pub valuation: ::core::option::Option<super::Valuation>,
     }
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct AdvanceSnsTargetVersionActionAuxiliary {
+        /// Corresponds to the Some(target_version) from an AdvanceSnsTargetVersion proposal, or
+        /// to the last SNS version known to this SNS at the time of AdvanceSnsTargetVersion creation.
+        #[prost(message, optional, tag = "1")]
+        pub target_version: ::core::option::Option<super::SnsVersion>,
+    }
     /// In general, this holds data retrieved at proposal submission/creation time and used later
     /// during execution. This varies based on the action of the proposal.
     #[derive(
@@ -1192,6 +1206,8 @@ pub mod proposal_data {
         TransferSnsTreasuryFunds(TransferSnsTreasuryFundsActionAuxiliary),
         #[prost(message, tag = "23")]
         MintSnsTokens(MintSnsTokensActionAuxiliary),
+        #[prost(message, tag = "24")]
+        AdvanceSnsTargetVersion(AdvanceSnsTargetVersionActionAuxiliary),
     }
 }
 #[derive(

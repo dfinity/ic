@@ -16,7 +16,7 @@ use crate::{
             governance::{
                 self,
                 neuron_in_flight_command::{self, SyncCommand},
-                SnsMetadata, Version,
+                CachedUpgradeSteps as CachedUpgradeStepsPb, SnsMetadata, Version,
             },
             governance_error::ErrorType,
             manage_neuron,
@@ -32,9 +32,8 @@ use crate::{
             ManageLedgerParameters, ManageNeuronResponse, ManageSnsMetadata, MintSnsTokens, Motion,
             NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId, NeuronIds,
             NeuronPermission, NeuronPermissionList, NeuronPermissionType, ProposalId,
-            RegisterDappCanisters, RewardEvent, TransferSnsTreasuryFunds,
+            RegisterDappCanisters, RewardEvent, SnsVersion, TransferSnsTreasuryFunds,
             UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote, VotingRewardsParameters,
-            SnsVersion,
         },
     },
     proposal::ValidGenericNervousSystemFunction,
@@ -2786,6 +2785,28 @@ impl From<upgrade_journal_entry::UpgradeOutcome> for upgrade_journal_entry::Even
 // Note, we do not implement From<upgrade_journal_entry::TargetVersionSet> for upgrade_journal_entry::Event
 // because it is ambiguous which event variant to convert it to (TargetVersionSet vs TargetVersionReset).
 
+impl From<Version> for SnsVersion {
+    fn from(src: Version) -> Self {
+        let Version {
+            root_wasm_hash,
+            governance_wasm_hash,
+            ledger_wasm_hash,
+            swap_wasm_hash,
+            archive_wasm_hash,
+            index_wasm_hash,
+        } = src;
+
+        Self {
+            root_wasm_hash: Some(root_wasm_hash),
+            governance_wasm_hash: Some(governance_wasm_hash),
+            ledger_wasm_hash: Some(ledger_wasm_hash),
+            swap_wasm_hash: Some(swap_wasm_hash),
+            archive_wasm_hash: Some(archive_wasm_hash),
+            index_wasm_hash: Some(index_wasm_hash),
+        }
+    }
+}
+
 impl TryFrom<SnsVersion> for Version {
     type Error = String;
 
@@ -2797,11 +2818,12 @@ impl TryFrom<SnsVersion> for Version {
             swap_wasm_hash: Some(swap_wasm_hash),
             archive_wasm_hash: Some(archive_wasm_hash),
             index_wasm_hash: Some(index_wasm_hash),
-        } = src else {
+        } = src
+        else {
             return Err(
                 "Cannot interpret SnsVersion; please specify all the required fields: \
                  {{governance, root, swap, index, ledger, archive}}_wasm_hash."
-                    .to_string()
+                    .to_string(),
             );
         };
 
@@ -2813,6 +2835,84 @@ impl TryFrom<SnsVersion> for Version {
             ledger_wasm_hash,
             archive_wasm_hash,
         })
+    }
+}
+
+pub struct CachedUpgradeSteps {
+    head: Version,
+    tail: Vec<Version>,
+
+    requested_timestamp_seconds: u64,
+    response_timestamp_seconds: u64,
+}
+
+impl TryFrom<&CachedUpgradeStepsPb> for CachedUpgradeSteps {
+    type Error = String;
+
+    fn try_from(src: &CachedUpgradeStepsPb) -> Result<Self, Self::Error> {
+        let CachedUpgradeStepsPb {
+            upgrade_steps: Some(upgrade_steps),
+            requested_timestamp_seconds: Some(requested_timestamp_seconds),
+            response_timestamp_seconds: Some(response_timestamp_seconds),
+        } = src
+        else {
+            return Err(
+                "Cannot interpret CachedUpgradeSteps; please specify all the required fields: \
+                 upgrade_steps, requested_timestamp_seconds, response_timestamp_seconds.
+                 "
+                .to_string(),
+            );
+        };
+
+        let (head, tail) = if let Some((head, tail)) = upgrade_steps.versions.split_first() {
+            (head.clone(), tail.iter().cloned().collect())
+        } else {
+            return Err(
+                "Cannot interpret CachedUpgradeSteps: upgrade_steps must not be empty.".to_string(),
+            );
+        };
+
+        Ok(Self {
+            head,
+            tail,
+            requested_timestamp_seconds: *requested_timestamp_seconds,
+            response_timestamp_seconds: *response_timestamp_seconds,
+        })
+    }
+}
+
+// let Some(cached_upgrade_steps) = &self.cached_upgrade_steps else {
+//     return Err("Governance.cached_upgrade_steps is not specified.".to_string());
+// };
+impl CachedUpgradeSteps {
+    pub fn last(&self) -> Version {
+        let Some(last) = self.tail.last() else {
+            return self.head.clone();
+        };
+        last.clone()
+    }
+
+    pub fn contains(&self, version: &Version) -> bool {
+        &self.head == version || self.tail.contains(version)
+    }
+
+    pub fn is_current(&self, version: &Version) -> bool {
+        version == &self.head
+    }
+
+    pub fn current(&self) -> Version {
+        self.head.clone()
+    }
+
+    pub fn into_iter(self) -> impl Iterator<Item = Version> {
+        Iterator::chain(std::iter::once(self.head), self.tail.into_iter())
+    }
+
+    pub fn period_of_validity_timestamps_seconds(&self) -> (u64, u64) {
+        (
+            self.requested_timestamp_seconds,
+            self.response_timestamp_seconds,
+        )
     }
 }
 

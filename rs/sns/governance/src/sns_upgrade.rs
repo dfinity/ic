@@ -464,6 +464,18 @@ impl Version {
             SnsCanisterType::Index => self.index_wasm_hash.clone(),
         }
     }
+
+    pub fn human_readable(&self) -> String {
+        format!(
+            "SnsVersion {{ root:{}, governance:{}, swap:{}, index:{}, ledger:{}, archive:{} }}",
+            hex::encode(&self.root_wasm_hash),
+            hex::encode(&self.governance_wasm_hash),
+            hex::encode(&self.swap_wasm_hash),
+            hex::encode(&self.index_wasm_hash),
+            hex::encode(&self.ledger_wasm_hash),
+            hex::encode(&self.archive_wasm_hash),
+        )
+    }
 }
 
 impl From<Version> for SnsVersion {
