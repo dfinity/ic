@@ -264,6 +264,9 @@ jobs:
   build-ic:
     name: Build IC
     <<: *dind-large-setup
+    runs-on:
+      group: ch1
+      labels: dind-large
     if: ${{ github.event_name != 'merge_group' }}
     steps:
       - <<: *checkout
@@ -350,6 +353,9 @@ jobs:
   cargo-clippy-linux:
     name: Cargo Clippy Linux
     <<: *dind-large-setup
+    runs-on:
+      group: ch1
+      labels: dind-large
     steps:
       - <<: *checkout
       - name: Filter Rust Files [*.{rs,toml,lock}]
@@ -381,6 +387,9 @@ jobs:
   cargo-build-release-linux:
     name: Cargo Build Release Linux
     <<: *dind-large-setup
+    runs-on:
+      group: ch1
+      labels: dind-large
     steps:
       - <<: *checkout
       - name: Filter Rust Files [*.{rs,toml,lock}]
