@@ -2914,6 +2914,24 @@ impl CachedUpgradeSteps {
             self.response_timestamp_seconds,
         )
     }
+
+    pub fn validate_new_target_version(&self, new_target: &Version) -> Result<(), String> {
+        if !self.contains(new_target) {
+            return Err(
+                "Invalid AdvanceSnsTargetVersion proposal: new_target must be among \
+                 the upgrade steps."
+                    .to_string(),
+            );
+        }
+        if self.is_current(new_target) {
+            return Err(
+                "Invalid AdvanceSnsTargetVersion proposal: new_target must be different from \
+                 the current version."
+                    .to_string(),
+            );
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]

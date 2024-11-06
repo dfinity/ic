@@ -605,7 +605,6 @@ ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method
 #[query(hidden = true, decoding_quota = 10000)]
 pub fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
-        "/journal" => todo!(); // DO NOT MERGE
         "/metrics" => serve_metrics(encode_metrics),
         "/logs" => serve_logs_v2(request, &INFO, &ERROR),
 

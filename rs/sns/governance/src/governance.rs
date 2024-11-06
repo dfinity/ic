@@ -1,3 +1,4 @@
+use crate::types::CachedUpgradeSteps;
 use crate::{
     canister_control::{
         get_canister_id, perform_execute_generic_nervous_system_function_call,
@@ -20,8 +21,8 @@ use crate::{
             governance::{
                 self,
                 neuron_in_flight_command::{self, Command as InFlightCommand},
-                CachedUpgradeSteps, MaturityModulation, NeuronInFlightCommand, SnsMetadata,
-                UpgradeInProgress, Version, Versions,
+                CachedUpgradeSteps as CachedUpgradeStepsPb, MaturityModulation,
+                NeuronInFlightCommand, SnsMetadata, UpgradeInProgress, Version, Versions,
             },
             governance_error::ErrorType,
             manage_neuron::{
@@ -403,21 +404,6 @@ impl GovernanceProto {
         CanisterId::unchecked_from_principal(self.swap_canister_id.expect("No swap_canister_id."))
     }
 
-    pub fn last_known_sns_version(&self) -> Result<Version, String> {
-        let Some(cached_upgrade_steps) = &self.cached_upgrade_steps else {
-            return Err("Governance.cached_upgrade_steps is not specified.".to_string());
-        };
-        let Some(upgrade_steps) = &cached_upgrade_steps.upgrade_steps else {
-            return Err(
-                "Governance.cached_upgrade_steps.upgrade_steps is not specified.".to_string(),
-            );
-        };
-        let Some(last_step) = upgrade_steps.versions.last() else {
-            return Err("Governance.cached_upgrade_steps.upgrade_steps is empty.".to_string());
-        };
-        Ok(last_step.clone())
-    }
-
     /// Returns self.mode, but as an enum, not i32.
     ///
     /// Panics in the following situations:
@@ -439,6 +425,20 @@ impl GovernanceProto {
         );
 
         result
+    }
+
+    pub fn get_cached_upgrade_steps_or_err(&self) -> Result<CachedUpgradeSteps, String> {
+        let Some(cached_upgrade_steps) = &self.cached_upgrade_steps else {
+            return Err(
+                "Internal error: GovernanceProto.cached_upgrade_steps must be specified."
+                    .to_string(),
+            );
+        };
+
+        let cached_upgrade_steps = CachedUpgradeSteps::try_from(cached_upgrade_steps)
+            .map_err(|err| format!("Internal error: {}", err))?;
+
+        Ok(cached_upgrade_steps)
     }
 
     /// Gets the current deployed version of the SNS or panics.
@@ -2135,9 +2135,26 @@ impl Governance {
                 self.perform_manage_dapp_canister_settings(manage_dapp_canister_settings)
                     .await
             }
-            Action::AdvanceSnsTargetVersion(_znew_target) => {
-                // TODO[NNS1-3388]: Call self.advance_target_version(new_target).
-                unimplemented!("AdvanceSnsTargetVersion proposals are not implemented yet.");
+            Action::AdvanceSnsTargetVersion(_) => {
+                get_action_auxiliary(&self.proto.proposals, ProposalId { id: proposal_id })
+                    .and_then(|action_auxiliary| {
+                        action_auxiliary.unwrap_advance_sns_target_version_or_err()
+                    })
+                    .and_then(|new_target| {
+                        let cached_upgrade_steps = self
+                            .proto
+                            .get_cached_upgrade_steps_or_err()
+                            .map_err(|err| {
+                                GovernanceError::new_with_message(ErrorType::NotFound, err)
+                            })?;
+                        cached_upgrade_steps
+                            .validate_new_target_version(&new_target)
+                            .map_err(|err| {
+                                GovernanceError::new_with_message(ErrorType::InvalidProposal, err)
+                            })?;
+                        self.proto.target_version = Some(new_target);
+                        Ok(())
+                    })
             }
             // This should not be possible, because Proposal validation is performed when
             // a proposal is first made.
@@ -4751,7 +4768,7 @@ impl Governance {
         let upgrade_steps =
             self.proto
                 .cached_upgrade_steps
-                .get_or_insert_with(|| CachedUpgradeSteps {
+                .get_or_insert_with(|| CachedUpgradeStepsPb {
                     requested_timestamp_seconds: Some(self.env.now()),
                     ..Default::default()
                 });

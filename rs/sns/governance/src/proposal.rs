@@ -6,7 +6,7 @@ use crate::{
     },
     logs::{ERROR, INFO},
     pb::v1::{
-        governance::{CachedUpgradeSteps as CachedUpgradeStepsPb, SnsMetadata, Version},
+        governance::{SnsMetadata, Version},
         governance_error::ErrorType,
         nervous_system_function::{FunctionType, GenericNervousSystemFunction},
         proposal,
@@ -187,6 +187,21 @@ impl ActionAuxiliary {
                 format!(
                     "Missing supporting information. Specifically, \
                      no treasury valuation factors: {:#?}",
+                    wrong,
+                ),
+            )),
+        }
+    }
+
+    pub fn unwrap_advance_sns_target_version_or_err(self) -> Result<Version, GovernanceError> {
+        match self {
+            Self::AdvanceSnsTargetVersion(new_target) => Ok(new_target),
+
+            wrong => Err(GovernanceError::new_with_message(
+                ErrorType::InconsistentInternalData,
+                format!(
+                    "Missing supporting information. Specifically, \
+                     no new target version: {:#?}",
                     wrong,
                 ),
             )),
@@ -467,9 +482,10 @@ pub(crate) async fn validate_and_render_action(
             validate_and_render_manage_dapp_canister_settings(manage_dapp_canister_settings)
         }
         proposal::Action::AdvanceSnsTargetVersion(advance_sns_target_version) => {
+            let cached_upgrade_steps = governance_proto.get_cached_upgrade_steps_or_err()?;
             return validate_and_render_advance_sns_target_version_proposal(
                 env.canister_id(),
-                &governance_proto.cached_upgrade_steps,
+                cached_upgrade_steps,
                 advance_sns_target_version,
             );
         }
@@ -1701,17 +1717,9 @@ fn validate_and_render_manage_dapp_canister_settings(
 
 fn validate_and_render_advance_sns_target_version_proposal(
     sns_governance_canister_id: CanisterId,
-    cached_upgrade_steps: &Option<CachedUpgradeStepsPb>,
+    cached_upgrade_steps: CachedUpgradeSteps,
     advance_sns_target_version: &AdvanceSnsTargetVersion,
 ) -> Result<(String, ActionAuxiliary), String> {
-    let Some(cached_upgrade_steps) = cached_upgrade_steps else {
-        return Err(
-            "Internal error: GovernanceProto.cached_upgrade_steps must be specified.".to_string(),
-        );
-    };
-    let cached_upgrade_steps = CachedUpgradeSteps::try_from(cached_upgrade_steps)
-        .map_err(|err| format!("Internal error: {}", err))?;
-
     let new_target = if let Some(new_target) = &advance_sns_target_version.new_target {
         let new_target = Version::try_from(new_target.clone()).map_err(|err| {
             format!(
@@ -1720,23 +1728,12 @@ fn validate_and_render_advance_sns_target_version_proposal(
             )
         })?;
 
-        if !cached_upgrade_steps.contains(&new_target) {
-            return Err(
-                "Invalid AdvanceSnsTargetVersion proposal: new_target must be known".to_string(),
-            );
-        }
+        cached_upgrade_steps.validate_new_target_version(&new_target)?;
+
         new_target
     } else {
         cached_upgrade_steps.last()
     };
-
-    if cached_upgrade_steps.is_current(&new_target) {
-        return Err(
-            "Invalid AdvanceSnsTargetVersion proposal: new_target must be different from \
-             the current version."
-                .to_string(),
-        );
-    }
 
     let period_of_validity_timestamps_seconds =
         cached_upgrade_steps.period_of_validity_timestamps_seconds();
