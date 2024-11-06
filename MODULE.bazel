@@ -15,6 +15,28 @@ bazel_dep(name = "aspect_bazel_lib", version = "2.9.0")
 bazel_dep(name = "rules_cc", version = "0.0.13")
 bazel_dep(name = "platforms", version = "0.0.10")
 
+# configure/make dependencies
+bazel_dep(name = "rules_foreign_cc", version = "0.12.0")
+
+register_toolchains(
+    "@rules_foreign_cc//toolchains:preinstalled_pkgconfig_toolchain",
+    "@rules_foreign_cc//toolchains:preinstalled_make_toolchain",
+)
+
+# Use HEAD to include this commit which is needed for preinstalled toolchains to work
+# https://github.com/bazel-contrib/rules_foreign_cc/commit/d03f7ae79ddda0ad228b17048b9e2dc0efcc8e95
+#
+# Use a patch to work around determinism issues in make & pkgconfig toolchains
+# https://github.com/bazel-contrib/rules_foreign_cc/issues/1313
+archive_override(
+    module_name = "rules_foreign_cc",
+    integrity = "sha384-bTtlZejENu+3rnOsCg1nmSZJl54++7nB0zgzWT+jtZJ1QyMRwkV4ieOaeORQTdjY",
+    patch_strip = 1,
+    patches = ["//bazel:rules_foreign_cc.patch"],
+    strip_prefix = "rules_foreign_cc-77d4483fadbb1b7bcace18ed8e8e87e8791050f6",
+    urls = ["https://github.com/bazelbuild/rules_foreign_cc/archive/77d4483fadbb1b7bcace18ed8e8e87e8791050f6.tar.gz"],
+)
+
 # Python dependencies
 
 bazel_dep(name = "rules_python", version = "0.35.0")

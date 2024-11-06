@@ -2677,11 +2677,11 @@ async fn test_invalid_proposals_fail() {
     .unwrap();
 }
 
-fn get_current_voting_power(gov: &Governance, neuron_id: u64, now: u64) -> u64 {
+fn deciding_voting_power(gov: &Governance, neuron_id: u64, now: u64) -> u64 {
     gov.neuron_store
         .with_neuron(&NeuronId { id: neuron_id }, |n| n.clone())
         .unwrap()
-        .voting_power(now)
+        .deciding_voting_power(now)
 }
 
 #[tokio::test]
@@ -2720,9 +2720,9 @@ async fn test_compute_tally_while_open() {
         Some(Tally {
             timestamp_seconds: fake_driver.now(),
             no: 0,
-            yes: get_current_voting_power(&gov, 1, fake_driver.now()),
-            total: get_current_voting_power(&gov, 1, fake_driver.now())
-                + get_current_voting_power(&gov, 2, fake_driver.now())
+            yes: deciding_voting_power(&gov, 1, fake_driver.now()),
+            total: deciding_voting_power(&gov, 1, fake_driver.now())
+                + deciding_voting_power(&gov, 2, fake_driver.now())
         })
     );
 }
@@ -2763,9 +2763,9 @@ async fn test_compute_tally_after_decided() {
         Some(Tally {
             timestamp_seconds: fake_driver.now(),
             no: 0,
-            yes: get_current_voting_power(&gov, 2, fake_driver.now()),
-            total: get_current_voting_power(&gov, 1, fake_driver.now())
-                + get_current_voting_power(&gov, 2, fake_driver.now())
+            yes: deciding_voting_power(&gov, 2, fake_driver.now()),
+            total: deciding_voting_power(&gov, 1, fake_driver.now())
+                + deciding_voting_power(&gov, 2, fake_driver.now())
         })
     );
 
@@ -2783,10 +2783,10 @@ async fn test_compute_tally_after_decided() {
         gov.get_proposal_data(pid).unwrap().latest_tally,
         Some(Tally {
             timestamp_seconds: fake_driver.now(),
-            no: get_current_voting_power(&gov, 1, fake_driver.now()),
-            yes: get_current_voting_power(&gov, 2, fake_driver.now()),
-            total: get_current_voting_power(&gov, 1, fake_driver.now())
-                + get_current_voting_power(&gov, 2, fake_driver.now())
+            no: deciding_voting_power(&gov, 1, fake_driver.now()),
+            yes: deciding_voting_power(&gov, 2, fake_driver.now()),
+            total: deciding_voting_power(&gov, 1, fake_driver.now())
+                + deciding_voting_power(&gov, 2, fake_driver.now())
         })
     );
 }
@@ -2984,13 +2984,13 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
     let neuron_share = gov
         .neuron_store
         .with_neuron(&NeuronId::from_u64(1), |n| {
-            n.voting_power(fake_driver.now()) as f64
+            n.deciding_voting_power(fake_driver.now()) as f64
         })
         .expect("Neuron not found")
         / gov
             .neuron_store
             .active_neurons_iter()
-            .map(|neuron| neuron.voting_power(fake_driver.now()))
+            .map(|neuron| neuron.deciding_voting_power(fake_driver.now()))
             .sum::<u64>() as f64;
     let expected_distributed_e8s_equivalent =
         (expected_available_e8s_equivalent as f64 * neuron_share) as u64;

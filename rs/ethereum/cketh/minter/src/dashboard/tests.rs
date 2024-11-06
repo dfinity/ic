@@ -2,7 +2,9 @@ use crate::dashboard::tests::assertions::DashboardAssert;
 use crate::dashboard::DashboardTemplate;
 use crate::erc20::CkErc20Token;
 use candid::{Nat, Principal};
-use ic_cketh_minter::eth_logs::{EventSource, ReceivedErc20Event, ReceivedEthEvent};
+use ic_cketh_minter::eth_logs::{
+    EventSource, LedgerSubaccount, ReceivedErc20Event, ReceivedEthEvent,
+};
 use ic_cketh_minter::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use ic_cketh_minter::lifecycle::EthereumNetwork;
 use ic_cketh_minter::numeric::{
@@ -214,6 +216,7 @@ fn should_display_minted_events_sorted_by_decreasing_mint_block_index() {
             transaction_hash: "0x5e5a5954e0a6fe5e61067330ea6f1398425a5e01a1dc1ef895b5dde00994e796"
                 .parse()
                 .unwrap(),
+            subaccount: LedgerSubaccount::from_bytes([42; 32]),
             ..received_eth_event()
         };
         let event_3 = ReceivedErc20Event {
@@ -261,7 +264,7 @@ fn should_display_minted_events_sorted_by_decreasing_mint_block_index() {
                 "0xdd2851Cdd40aE6536831558DD46db62fAc7A844d",
                 "ckETH",
                 "10_000_000_000_000_000",
-                "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae",
+                "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae-pfew5sq.2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a",
                 "43",
             ],
         )
@@ -966,7 +969,6 @@ fn initial_state_with_usdc_support() -> State {
     state
 }
 
-// TODO XC-222: add subaccounts to dashboard
 fn received_eth_event() -> ReceivedEthEvent {
     ReceivedEthEvent {
         transaction_hash: "0xf1ac37d920fa57d9caeebc7136fea591191250309ffca95ae0e8a7739de89cc2"
