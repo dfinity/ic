@@ -164,6 +164,10 @@ jobs:
   bazel-build-all-config-check:
     <<: *dind-large-setup
     name: Bazel Build All Config Check
+    if: |
+      github.event_name == 'push' ||
+      github.event_name == 'schedule' ||
+      contains(github.event.pull_request.labels.*.name, 'CI_BUILD_CHECK')
     steps:
       - <<: *checkout
       - <<: *docker-login
