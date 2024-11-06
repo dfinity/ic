@@ -16,7 +16,6 @@ use ic_types::Cycles;
 
 use libfuzzer_sys::{fuzz_target, test_input_wrap};
 use std::cell::RefCell;
-use std::env;
 use std::ffi::CString;
 use std::os::raw::c_char;
 use wasm_fuzzers::ic_wasm::ICWasmModule;
@@ -66,7 +65,9 @@ fn main() {
         compiler_sandbox_main();
     } else {
         // Collect command-line arguments
-        let args: Vec<CString> = env::args().map(|arg| CString::new(arg).unwrap()).collect();
+        let args: Vec<CString> = std::env::args()
+            .map(|arg| CString::new(arg).unwrap())
+            .collect();
 
         // Prepare argc as *const isize
         let argc = args.len() as isize;
