@@ -324,7 +324,7 @@ impl Purger {
             .certified_height
             .min(self.state_manager.latest_state_height());
 
-        let extra_heights_to_keep = get_pending_idkg_cup_heights2(pool);
+        let extra_heights_to_keep = get_pending_idkg_cup_heights(pool);
         self.state_manager
             .remove_inmemory_states_below(height, &extra_heights_to_keep);
         trace!(
