@@ -1254,9 +1254,7 @@ fn canisters_with_insufficient_cycles_are_uninstalled() {
 #[test]
 fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
     let initial_time = UNIX_EPOCH + Duration::from_secs(1);
-    let mut test = SchedulerTestBuilder::new()
-        .with_canister_snapshots(true)
-        .build();
+    let mut test = SchedulerTestBuilder::new().build();
 
     let canister_id = test.create_canister_with_controller(
         Cycles::new(12_700_000),
@@ -1360,9 +1358,7 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
 #[test]
 fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
     let initial_time = UNIX_EPOCH + Duration::from_secs(1);
-    let mut test = SchedulerTestBuilder::new()
-        .with_canister_snapshots(true)
-        .build();
+    let mut test = SchedulerTestBuilder::new().build();
 
     let canister_id = test.create_canister_with_controller(
         Cycles::new(12_700_000),
@@ -1728,40 +1724,67 @@ fn can_fully_execute_multiple_canisters_with_multiple_messages_each() {
 
 #[test]
 fn max_canisters_per_round() {
-    // In this test we have 20 canisters with one input messages each. Each
-    // message uses 10 instructions. The canister overhead is also 10
-    // instructions. The round limit is 100 instructions. We expect that 5
-    // canisters to execute per scheduler core.
-    let mut test = SchedulerTestBuilder::new()
-        .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 2,
-            max_instructions_per_round: NumInstructions::from(100),
-            max_instructions_per_message: NumInstructions::from(10),
-            max_instructions_per_message_without_dts: NumInstructions::from(10),
-            max_instructions_per_slice: NumInstructions::from(10),
-            instruction_overhead_per_execution: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(10),
-            ..SchedulerConfig::application_subnet()
-        })
-        .build();
+    fn run(canisters_with_no_cycles: usize, canisters_with_cycles: usize) -> usize {
+        let mut test = SchedulerTestBuilder::new()
+            .with_scheduler_config(SchedulerConfig {
+                scheduler_cores: 2,
+                max_instructions_per_round: 100.into(),
+                max_instructions_per_message: 10.into(),
+                max_instructions_per_message_without_dts: 10.into(),
+                max_instructions_per_slice: 10.into(),
+                instruction_overhead_per_execution: 0.into(),
+                instruction_overhead_per_canister: 10.into(),
+                ..SchedulerConfig::application_subnet()
+            })
+            .build();
 
-    // Bump up the round number to 1.
-    test.execute_round(ExecutionRoundType::OrdinaryRound);
+        // Bump up the round number to 1.
+        test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    for _ in 0..200 {
-        let canister = test.create_canister();
-        test.send_ingress(canister, ingress(10));
-    }
-
-    test.execute_round(ExecutionRoundType::OrdinaryRound);
-
-    let mut executed_canisters = 0;
-    for canister in test.state().canisters_iter() {
-        if canister.system_state.queues().ingress_queue_size() == 0 {
-            executed_canisters += 1;
+        for _ in 0..canisters_with_no_cycles {
+            let canister_id = test.create_canister_with(
+                Cycles::new(0),
+                ComputeAllocation::zero(),
+                MemoryAllocation::BestEffort,
+                None,
+                None,
+                None,
+            );
+            test.send_ingress(canister_id, ingress(10));
         }
+        for _ in 0..canisters_with_cycles {
+            let canister_id = test.create_canister();
+            test.send_ingress(canister_id, ingress(10));
+        }
+
+        test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+        test.state()
+            .canisters_iter()
+            .filter(|canister| canister.system_state.queues().ingress_queue_size() == 0)
+            .count()
     }
-    assert_eq!(executed_canisters, 10);
+
+    // In this test we have 200 canisters with one input message each. Each
+    // message uses 10 instructions. The canister overhead is also 10
+    // instructions. The round limit is 100 instructions. We expect 5
+    // canisters to execute per scheduler core.
+    let executed_canisters = run(0, 200);
+    assert_eq!(executed_canisters, 2 * 5);
+
+    // As 200 canisters do not have enough cycles for the actual execution,
+    // we expect the scheduler to try to execute them all with no
+    // per-canister overhead.
+    let executed_canisters = run(200, 0);
+    assert_eq!(executed_canisters, 200);
+
+    // As 200 canisters do not have enough cycles for the actual execution,
+    // we expect the scheduler to try to execute them all with no
+    // per-canister overhead.
+    // Plus, we should be able to execute 5 canisters with overhead 10
+    // and 10 instructions on each scheduler core.
+    let executed_canisters = run(200, 200);
+    assert_eq!(executed_canisters, 200 + 2 * 5);
 }
 
 #[test]
@@ -4097,7 +4120,7 @@ fn construct_scheduler_for_prop_test(
         .build();
 
     // Ensure that compute allocation of canisters doesn't exceed the capacity.
-    let capacity = SchedulerImpl::compute_capacity_percent(scheduler_cores) as u64 - 1;
+    let capacity = RoundSchedule::compute_capacity_percent(scheduler_cores) as u64 - 1;
     let total = canister_params
         .iter()
         .fold(0, |acc, (ca, _)| acc + ca.as_percent());

@@ -2,9 +2,10 @@ use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use proptest::prelude::*;
 
+use ic_base_types::CanisterId;
 use ic_stable_memory_integrity::StableOperationResult;
-use ic_state_machine_tests::{CanisterId, Cycles, StateMachine};
-use ic_types::{ingress::WasmResult, MAX_STABLE_MEMORY_IN_BYTES};
+use ic_state_machine_tests::StateMachine;
+use ic_types::{ingress::WasmResult, Cycles, MAX_STABLE_MEMORY_IN_BYTES};
 
 const KB: u64 = 1024;
 const WASM_PAGE_SIZE_IN_BYTES: usize = 64 * KB as usize;

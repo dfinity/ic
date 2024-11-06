@@ -1924,6 +1924,7 @@ mod tests {
                         &key_transcript,
                         &[1; 64],
                         Randomness::from([0; 32]),
+                        None,
                         &derivation_path,
                         algorithm,
                         &mut rng,
