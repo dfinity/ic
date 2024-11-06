@@ -330,7 +330,7 @@ jobs:
     # keep options from dind-large-setup but run on dind-small-setup
     runs-on:
       group: ch1
-      label: dind-small-setup
+      labels: dind-small
     if: ${{ github.event_name != 'merge_group' }}
     steps:
       - name: Checkout
