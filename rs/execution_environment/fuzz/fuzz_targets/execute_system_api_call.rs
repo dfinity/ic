@@ -14,8 +14,7 @@ use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConf
 use ic_types::CanisterId;
 use ic_types::Cycles;
 
-use arbitrary::{Arbitrary, Unstructured};
-use libfuzzer_sys::test_input_wrap;
+use libfuzzer_sys::{fuzz_target, test_input_wrap};
 use std::cell::RefCell;
 use std::env;
 use std::ffi::CString;
@@ -49,8 +48,8 @@ extern "C" {
 // `LLVMFuzzerTestOneInput`. For more details, see https://llvm.org/docs/LibFuzzer.html#using-libfuzzer-as-a-library
 //
 // We provide `libfuzzer_sys::test_input_wrap` as callback for `LLVMFuzzerRunDriver` since libfuzzer_sys
-// already exports `LLVMFuzzerTestOneInput` and we can't override it. Instead, we export `rust_fuzzer_test_input`,
-// which is called internally by `test_input_wrap` and generated via the macro `fuzz_target!`.
+// already exports `LLVMFuzzerTestOneInput` and we can't override it. `test_input_wrap` internally calls
+// `rust_fuzzer_test_input`, which is generated via the macro `fuzz_target!`.
 // See https://github.com/rust-fuzz/libfuzzer/blob/c8275d1517933765b56a6de61a371bb1cc4268cb/src/lib.rs#L62
 
 // To run the fuzzer,
@@ -84,22 +83,7 @@ fn main() {
     }
 }
 
-// The core fuzzing logic needs to be invoked here
-#[no_mangle]
-#[allow(improper_ctypes_definitions)]
-pub extern "C" fn rust_fuzzer_test_input(bytes: &[u8]) -> i32 {
-    if bytes.len() < <ICWasmModule as Arbitrary>::size_hint(0).0 {
-        return -1;
-    }
-
-    let u = Unstructured::new(bytes);
-    let data = <ICWasmModule as Arbitrary>::arbitrary_take_rest(u);
-
-    let data = match data {
-        Ok(d) => d,
-        Err(_) => return -1,
-    };
-
+fuzz_target!(|data: ICWasmModule| {
     with_env(|env, canister_id| {
         let wasm = data.module.to_bytes();
         if env
@@ -112,8 +96,7 @@ pub extern "C" fn rust_fuzzer_test_input(bytes: &[u8]) -> i32 {
             }
         }
     });
-    0
-}
+});
 
 fn with_env<F, R>(f: F) -> R
 where

@@ -27,7 +27,6 @@ SYSTEM_API_FUZZ_DEPENDENCIES = [
     "//rs/state_machine_tests",
     "//rs/types/management_canister_types",
     "//rs/types/types",
-    "@crate_index//:arbitrary",
     "@crate_index//:libfuzzer-sys",
     "@crate_index//:wat",
 ]
