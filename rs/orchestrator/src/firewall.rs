@@ -262,7 +262,7 @@ impl Firewall {
         // in the registry inclusive.
         let registry_versions: Vec<RegistryVersion> = self.get_registry_versions(registry_version);
 
-        // Get hte IPs of all nodes on system subnets
+        // Get the IPs of all nodes on system subnets
         let system_subnet_node_ips: BTreeSet<IpAddr> = registry_versions
             .into_iter()
             .flat_map(|registry_version| {
@@ -289,8 +289,8 @@ impl Firewall {
         );
 
         FirewallRule {
-            ipv4_prefixes: system_subnet_node_ipv4s.clone(),
-            ipv6_prefixes: system_subnet_node_ipv6s.clone(),
+            ipv4_prefixes: system_subnet_node_ipv4s,
+            ipv6_prefixes: system_subnet_node_ipv6s,
             ports: vec![SOCKS_PROXY_PORT],
             action: FirewallAction::Allow as i32,
             comment: "system subnet nodes for SOCKS proxy".to_string(),
@@ -1117,7 +1117,7 @@ mod tests {
 
     /// Adds a [`NodeRecord`] to the registry.
     fn add_node_record(
-        registry_data_provider: &Arc<ProtoRegistryDataProvider>,
+        registry_data_provider: &ProtoRegistryDataProvider,
         registry_version: RegistryVersion,
         node: NodeId,
         ip: &str,
@@ -1145,7 +1145,7 @@ mod tests {
 
     /// Adds an [`ApiBoundaryNodeRecord`] to the registry.
     fn add_api_boundary_node_record(
-        registry_data_provider: &Arc<ProtoRegistryDataProvider>,
+        registry_data_provider: &ProtoRegistryDataProvider,
         registry_version: RegistryVersion,
         node: NodeId,
     ) {
@@ -1162,7 +1162,7 @@ mod tests {
 
     /// Adds a [`FirewallRule`] to the registry.
     fn add_firewall_rules_record(
-        registry_data_provider: &Arc<ProtoRegistryDataProvider>,
+        registry_data_provider: &ProtoRegistryDataProvider,
         registry_version: RegistryVersion,
         scope: &FirewallRulesScope,
         ip: &str,

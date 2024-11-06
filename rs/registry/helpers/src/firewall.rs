@@ -105,21 +105,20 @@ impl<T: RegistryClient + ?Sized> FirewallRegistry for T {
             .map(|system_subnet_ids| {
                 system_subnet_ids
                     .into_iter()
-                    .filter_map(
+                    .flat_map(
                         |subnet_id| match self.get_node_ids_on_subnet(subnet_id, version) {
-                            Ok(Some(node_ids)) => Some(node_ids),
-                            Ok(None) => None,
-                            Err(_) => None,
+                            Ok(Some(node_ids)) => node_ids,
+                            Ok(None) => vec![],
+                            Err(_) => vec![],
                         },
                     )
-                    .flatten()
                     .collect()
             })
             .unwrap_or_default();
 
         let system_subnet_node_ips: Vec<IpAddr> = system_subnet_node_ids
             .into_iter()
-            .filter_map(|node_id| {
+            .flat_map(|node_id| {
                 match deserialize_registry_value::<NodeRecord>(
                     self.get_value(&make_node_record_key(node_id), version),
                 ) {
@@ -131,12 +130,11 @@ impl<T: RegistryClient + ?Sized> FirewallRegistry for T {
                         if let Some(http_record) = node_record.http {
                             endpoints.push(http_record)
                         };
-                        Some(endpoints)
+                        endpoints
                     }
-                    _ => None,
+                    _ => vec![],
                 }
             })
-            .flatten()
             .filter_map(|connection_endpoint| connection_endpoint.ip_addr.parse::<IpAddr>().ok())
             .collect::<HashSet<IpAddr>>()
             .into_iter()
