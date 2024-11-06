@@ -1374,6 +1374,19 @@ fn handle_compute_manifest_request(
             .inc();
     }
 
+    for _ in 0..3 {
+        info!(
+            log,
+            "Delay publishing manifest for state @{} for 10s",
+            checkpoint_layout.height(),
+        );
+        std::thread::sleep(std::time::Duration::from_secs(10));
+
+        let snapshot_heights: Vec<Height> =
+            states.read().snapshots.iter().map(|s| s.height).collect();
+        info!(log, "In-memory state heights: {:?}", snapshot_heights,);
+    }
+
     let mut states = states.write();
 
     if let Some(metadata) = states.states_metadata.get_mut(&checkpoint_layout.height()) {
