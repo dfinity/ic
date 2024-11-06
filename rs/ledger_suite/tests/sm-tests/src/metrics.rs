@@ -187,7 +187,7 @@ pub(crate) fn parse_metric(env: &StateMachine, canister_id: CanisterId, metric: 
     panic!("metric '{}' not found in metrics: {:?}", metric, metrics);
 }
 
-fn retrieve_metrics(env: &StateMachine, canister_id: CanisterId) -> Vec<String> {
+pub(crate) fn retrieve_metrics(env: &StateMachine, canister_id: CanisterId) -> Vec<String> {
     let request = HttpRequest {
         method: "GET".to_string(),
         url: "/metrics".to_string(),

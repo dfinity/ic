@@ -1,5 +1,5 @@
 use crate::in_memory_ledger::{verify_ledger_state, InMemoryLedger};
-use crate::metrics::parse_metric;
+use crate::metrics::{parse_metric, retrieve_metrics};
 use candid::{CandidType, Decode, Encode, Int, Nat, Principal};
 use ic_agent::identity::{BasicIdentity, Identity};
 use ic_base_types::CanisterId;
@@ -2799,6 +2799,76 @@ pub fn test_incomplete_migration<T>(
 
     // All approvals should still be in UPGRADES_MEMORY and downgrade should succeed.
     check_approvals();
+}
+
+pub fn test_metrics_while_migrating<T>(
+    ledger_wasm_mainnet: Vec<u8>,
+    ledger_wasm_current_lowinstructionlimits: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    let account = Account::from(PrincipalId::new_user_test_id(1).0);
+    let initial_balances = vec![(account, 100_000_000u64)];
+
+    // Setup ledger as it is deployed on the mainnet.
+    let (env, canister_id) = setup(
+        ledger_wasm_mainnet.clone(),
+        encode_init_args,
+        initial_balances,
+    );
+
+    for i in 2..22 {
+        let spender = Account::from(PrincipalId::new_user_test_id(i).0);
+        let approve_args = default_approve_args(spender, 150_000);
+        send_approval(&env, canister_id, account.owner, &approve_args).expect("approval failed");
+    }
+
+    env.upgrade_canister(
+        canister_id,
+        ledger_wasm_current_lowinstructionlimits,
+        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
+    )
+    .unwrap();
+
+    let metrics = retrieve_metrics(&env, canister_id);
+    assert!(
+        metrics
+            .iter()
+            .any(|line| line.contains("ledger_transactions")),
+        "Did not find ledger_transactions metric"
+    );
+    assert!(
+        !metrics
+            .iter()
+            .any(|line| line.contains("ledger_total_supply")),
+        "ledger_total_supply should not be in metrics"
+    );
+
+    let is_ledger_ready = Decode!(
+        &env.query(canister_id, "is_ledger_ready", Encode!().unwrap())
+            .expect("failed to call is_ledger_ready")
+            .bytes(),
+        bool
+    )
+    .expect("failed to decode is_ledger_ready response");
+    assert!(!is_ledger_ready);
+
+    wait_ledger_ready(&env, canister_id, 10);
+
+    let metrics = retrieve_metrics(&env, canister_id);
+    assert!(
+        metrics
+            .iter()
+            .any(|line| line.contains("ledger_transactions")),
+        "Did not find ledger_transactions metric"
+    );
+    assert!(
+        metrics
+            .iter()
+            .any(|line| line.contains("ledger_total_supply")),
+        "Did not find ledger_total_supply metric"
+    );
 }
 
 pub fn default_approve_args(spender: impl Into<Account>, amount: u64) -> ApproveArgs {
