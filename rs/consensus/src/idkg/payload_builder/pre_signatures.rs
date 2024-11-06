@@ -679,11 +679,7 @@ pub(super) mod tests {
 
         // Add 3 available pre-signatures
         for i in 0..3 {
-            create_available_pre_signature(
-                &mut idkg_payload,
-                key_id.clone().try_into().unwrap(),
-                i,
-            );
+            create_available_pre_signature(&mut idkg_payload, key_id.clone(), i);
         }
 
         // 2 available pre-signatures are already matched

@@ -1149,10 +1149,10 @@ pub(crate) fn create_sig_inputs_with_args(
 ) -> TestSigInputs {
     match key_id.deref() {
         MasterPublicKeyId::Ecdsa(key_id) => {
-            create_ecdsa_sig_inputs_with_args(caller, receivers, key_unmasked, height, &key_id)
+            create_ecdsa_sig_inputs_with_args(caller, receivers, key_unmasked, height, key_id)
         }
         MasterPublicKeyId::Schnorr(key_id) => {
-            create_schnorr_sig_inputs_with_args(caller, receivers, key_unmasked, height, &key_id)
+            create_schnorr_sig_inputs_with_args(caller, receivers, key_unmasked, height, key_id)
         }
         MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
     }
@@ -1610,12 +1610,7 @@ pub(crate) fn empty_idkg_payload_with_key_ids(
         subnet_id,
         key_ids
             .into_iter()
-            .map(|key_id| {
-                MasterKeyTranscript::new(
-                    key_id.clone().try_into().unwrap(),
-                    KeyTranscriptCreation::Begin,
-                )
-            })
+            .map(|key_id| MasterKeyTranscript::new(key_id.clone(), KeyTranscriptCreation::Begin))
             .collect(),
     )
 }

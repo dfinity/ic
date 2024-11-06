@@ -768,8 +768,8 @@ mod test {
         let mut block_reader = TestIDkgBlockReader::new();
         let transcript_builder = TestIDkgTranscriptBuilder::new();
 
-        let req_1 = create_reshare_request(key_id.clone().into(), 1, 1);
-        let req_2 = create_reshare_request(key_id.clone().into(), 2, 2);
+        let req_1 = create_reshare_request(key_id.clone(), 1, 1);
+        let req_2 = create_reshare_request(key_id.clone(), 2, 2);
         let reshare_requests = BTreeSet::from([req_1.clone(), req_2.clone()]);
 
         let contexts = BTreeMap::from([

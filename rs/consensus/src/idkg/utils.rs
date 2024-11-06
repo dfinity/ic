@@ -943,7 +943,7 @@ mod tests {
             &mut rng,
             subnet_test_id(1),
             /*nodes_count=*/ 8,
-            vec![key_id.clone().into()],
+            vec![key_id.clone()],
             /*should_create_key_transcript=*/ true,
         );
         let current_key_transcript = idkg_payload
@@ -1015,7 +1015,7 @@ mod tests {
             &mut rng,
             subnet_test_id(1),
             /*nodes_count=*/ 8,
-            vec![key_id.clone().into()],
+            vec![key_id.clone()],
             /*should_create_key_transcript=*/ false,
         );
 

@@ -189,7 +189,7 @@ mod tests {
             &mut rng,
             subnet_test_id(1),
             /*nodes_count=*/ 4,
-            vec![key_id.clone().into()],
+            vec![key_id.clone()],
             should_create_key_transcript,
         );
 

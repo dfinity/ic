@@ -577,9 +577,7 @@ impl TryFrom<pb::MasterKeyTranscript> for MasterKeyTranscript {
 
         let master_key_id: MasterPublicKeyId =
             try_from_option_field(proto.master_key_id, "KeyTranscript::master_key_id")?;
-        let master_key_id = master_key_id
-            .try_into()
-            .map_err(|err| ProxyDecodeError::Other(err))?;
+        let master_key_id = master_key_id.try_into().map_err(ProxyDecodeError::Other)?;
 
         Ok(Self {
             current,
@@ -759,9 +757,7 @@ impl TryFrom<&pb::IDkgReshareRequest> for IDkgReshareRequest {
             request.master_key_id.clone(),
             "IDkgReshareRequest::master_key_id",
         )?;
-        let master_key_id = master_key_id
-            .try_into()
-            .map_err(|err| ProxyDecodeError::Other(err))?;
+        let master_key_id = master_key_id.try_into().map_err(ProxyDecodeError::Other)?;
 
         Ok(Self {
             master_key_id,

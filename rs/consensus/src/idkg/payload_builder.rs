@@ -805,7 +805,7 @@ mod tests {
             &mut rng,
             subnet_test_id(1),
             /*nodes_count=*/ 4,
-            key_ids.into_iter().map(|key_id| key_id.into()).collect(),
+            key_ids.into_iter().collect(),
             /*should_create_key_transcript=*/ true,
         );
         (idkg_payload, env)
@@ -1236,7 +1236,7 @@ mod tests {
                 .available_pre_signatures
                 .insert(pre_sig_id_2, presig_2.clone());
 
-            let req_1 = create_reshare_request(key_id.clone().into(), 1, 1);
+            let req_1 = create_reshare_request(key_id.clone(), 1, 1);
             idkg_payload
                 .ongoing_xnet_reshares
                 .insert(req_1, reshare_params_1.clone());
@@ -1250,7 +1250,7 @@ mod tests {
                 &subnet_nodes,
                 env.newest_registry_version,
                 &mut idkg_payload.uid_generator,
-                key_id.clone().into(),
+                key_id.clone(),
                 &mut idkg_payload.pre_signatures_in_creation,
             );
 
@@ -1259,7 +1259,7 @@ mod tests {
                 &subnet_nodes,
                 env.newest_registry_version,
                 &mut idkg_payload.uid_generator,
-                key_id.clone().into(),
+                key_id.clone(),
                 &mut idkg_payload.pre_signatures_in_creation,
             )[0];
             let transcript = env.nodes.run_idkg_and_create_and_verify_transcript(
@@ -1493,11 +1493,11 @@ mod tests {
                 .available_pre_signatures
                 .insert(pre_sig_id_2, presig_2);
 
-            let req_1 = create_reshare_request(key_id.clone().into(), 1, 1);
+            let req_1 = create_reshare_request(key_id.clone(), 1, 1);
             idkg_payload
                 .ongoing_xnet_reshares
                 .insert(req_1, reshare_params_1);
-            let req_2 = create_reshare_request(key_id.clone().into(), 2, 2);
+            let req_2 = create_reshare_request(key_id.clone(), 2, 2);
             idkg_payload.xnet_reshare_agreements.insert(
                 req_2,
                 idkg::CompletedReshareRequest::Unreported(empty_response()),
@@ -1509,7 +1509,7 @@ mod tests {
                 &subnet_nodes,
                 env.newest_registry_version,
                 &mut idkg_payload.uid_generator,
-                key_id.clone().into(),
+                key_id.clone(),
                 &mut idkg_payload.pre_signatures_in_creation,
             );
 
@@ -1518,7 +1518,7 @@ mod tests {
                 &subnet_nodes,
                 env.newest_registry_version,
                 &mut idkg_payload.uid_generator,
-                key_id.clone().into(),
+                key_id.clone(),
                 &mut idkg_payload.pre_signatures_in_creation,
             )[0];
             let transcript = env.nodes.run_idkg_and_create_and_verify_transcript(
@@ -1547,7 +1547,7 @@ mod tests {
                 idkg::CompletedSignature::Unreported(empty_response()),
             );
             idkg_payload.xnet_reshare_agreements.insert(
-                create_reshare_request(key_id.into(), 6, 6),
+                create_reshare_request(key_id, 6, 6),
                 idkg::CompletedReshareRequest::ReportedToExecution,
             );
 
@@ -1851,7 +1851,7 @@ mod tests {
             } = dependencies(pool_config, 1);
             let subnet_id = subnet_test_id(1);
             let mut valid_keys = BTreeSet::new();
-            valid_keys.insert(key_id.clone().into());
+            valid_keys.insert(key_id.clone());
             let mut block_reader = TestIDkgBlockReader::new();
 
             // Create a key transcript
@@ -1945,11 +1945,11 @@ mod tests {
                 &env.nodes.ids::<Vec<_>>(),
                 env.newest_registry_version,
                 &mut payload_0.uid_generator,
-                key_id.clone().into(),
+                key_id.clone(),
                 &mut payload_0.pre_signatures_in_creation,
             );
             payload_0.ongoing_xnet_reshares.insert(
-                create_reshare_request(key_id.clone().into(), 1, 1),
+                create_reshare_request(key_id.clone(), 1, 1),
                 ReshareOfUnmaskedParams::new(
                     key_transcript.transcript_id,
                     BTreeSet::new(),
@@ -2205,7 +2205,7 @@ mod tests {
             registry.update_to_latest_version();
             let registry_version = registry.get_latest_version();
             let mut valid_keys = BTreeSet::new();
-            valid_keys.insert(key_id.clone().into());
+            valid_keys.insert(key_id.clone());
             let block_reader = TestIDkgBlockReader::new();
             let transcript_builder = TestIDkgTranscriptBuilder::new();
             let signature_builder = TestThresholdSignatureBuilder::new();
@@ -2353,7 +2353,7 @@ mod tests {
                 .with_dkg_interval_length(9)
                 .build();
             let mut valid_keys = BTreeSet::new();
-            valid_keys.insert(key_id.clone().into());
+            valid_keys.insert(key_id.clone());
             let mut block_reader = TestIDkgBlockReader::new();
             let transcript_builder = TestIDkgTranscriptBuilder::new();
             let signature_builder = TestThresholdSignatureBuilder::new();
