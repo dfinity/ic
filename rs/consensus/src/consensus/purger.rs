@@ -324,7 +324,7 @@ impl Purger {
             .certified_height
             .min(self.state_manager.latest_state_height());
 
-        let extra_heights_to_keep = get_pending_idkg_cup_heights(pool);
+        let extra_heights_to_keep = get_pending_idkg_cup_heights2(pool);
         self.state_manager
             .remove_inmemory_states_below(height, &extra_heights_to_keep);
         trace!(
@@ -461,21 +461,16 @@ fn get_purge_height(pool_reader: &PoolReader<'_>) -> Option<Height> {
 /// there exists no CUP artifact yet.
 fn get_pending_idkg_cup_heights(pool: &PoolReader<'_>) -> BTreeSet<Height> {
     let mut pending_cup_heights = BTreeSet::new();
-    let current_cup_height = pool.get_catch_up_height();
-    let mut block = pool.get_highest_finalized_summary_block();
-    while block.height() > current_cup_height {
-        if block.payload.as_ref().as_summary().idkg.is_some() {
-            pending_cup_heights.insert(block.height());
+    let cup = pool.get_highest_catch_up_package();
+    let summary = cup.content.block.as_ref().payload.as_ref().as_summary();
+    let mut next_start_height = summary.dkg.get_next_start_height();
+
+    while let Some(block) = pool.get_finalized_block(next_start_height) {
+        let summary = block.payload.as_ref().as_summary();
+        if summary.idkg.is_some() {
+            pending_cup_heights.insert(next_start_height);
         }
-        let Some(parent_block) = pool.get_finalized_block(block.height.decrement()) else {
-            break;
-        };
-        let next_start_height = parent_block.payload.as_ref().dkg_interval_start_height();
-        if let Some(start_block) = pool.get_finalized_block(next_start_height) {
-            block = start_block;
-        } else {
-            break;
-        }
+        next_start_height = summary.dkg.get_next_start_height();
     }
     pending_cup_heights
 }
