@@ -54,6 +54,7 @@ fn change_controllers() {
     assert!(new_controllers.contains(&add_another_controller_id));
 
     // Failed attempt to add an additional controller if the sender does not control the canister.
+    let add_yet_another_controller_id = Principal::from_slice(&[44; 29]);
     let out = Command::new(pocketic_cli_path)
         .arg("--server-url")
         .arg(pic.get_server_url().as_str())
@@ -62,6 +63,8 @@ fn change_controllers() {
         .arg("--instance-id")
         .arg(pic.instance_id().to_string())
         .arg("update-settings")
+        .arg("--add-controller")
+        .arg(add_yet_another_controller_id.to_string())
         .output()
         .unwrap();
     let stderr = String::from_utf8(out.stderr).unwrap();
@@ -70,4 +73,7 @@ fn change_controllers() {
         canister_id
     )));
     assert!(!out.status.success());
+    let status = pic.canister_status(canister_id, Some(user_id)).unwrap();
+    let new_controllers = status.settings.controllers;
+    assert_eq!(new_controllers.len(), 3);
 }
