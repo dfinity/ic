@@ -146,7 +146,7 @@ def test_store_findings():
 
 
 def test_filter_findings():
-    v1 = Vulnerability("v1id", "v1 name", "v1 desc", 10)
+    v1 = Vulnerability("v1id", "v1 name", "V1 desc", 10)
     # filtered because only f1 is affected and ic/proj1 ignores it
     v2 = Vulnerability("v2id", "v2 name", "v2 desc", 10)
     v3 = Vulnerability("v3id", "v3 name", "v3 desc", 10)
@@ -172,7 +172,7 @@ def test_filter_findings():
         ["ic/proj1", "ic/proj2"],
         [],
     )
-    ignore_list_by_project = {"ic/proj1": {"v1 des", "v2"}}
+    ignore_list_by_project = {"ic/proj1": {"v1 DES", "v2"}}
     vuln_by_vuln_id = {
         v1.id: VulnerabilityInfo(v1, {f1.id(): deepcopy(f1), f2.id(): deepcopy(f2)}),
         v2.id: VulnerabilityInfo(v2, {f1.id(): deepcopy(f1)}),

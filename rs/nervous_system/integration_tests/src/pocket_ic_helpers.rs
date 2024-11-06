@@ -1123,11 +1123,25 @@ pub mod sns {
 
     use super::*;
 
-    pub async fn upgrade_sns_to_next_version_and_assert_change(
+    #[derive(Clone, Debug, PartialEq)]
+    pub enum SnsUpgradeError {
+        CanisterVersionMismatch {
+            canister_type: SnsCanisterType,
+            canister_version_from_sns_pov: Vec<u8>,
+            canister_version_from_ic00_pov: Vec<u8>,
+            is_pre_upgrade: bool,
+        },
+        TargetCanisterVersionUnchanged {
+            pre_upgrade_canister_version: Vec<u8>,
+            post_upgrade_canister_version: Vec<u8>,
+        },
+    }
+
+    pub async fn try_upgrade_sns_to_next_version(
         pocket_ic: &PocketIc,
         sns_root_canister_id: PrincipalId,
         expected_type_to_change: SnsCanisterType,
-    ) {
+    ) -> Result<(), SnsUpgradeError> {
         let response = root::list_sns_canisters(pocket_ic, sns_root_canister_id).await;
         let ListSnsCanistersResponse {
             root: Some(sns_root_canister_id_1),
@@ -1149,10 +1163,7 @@ pub mod sns {
             SnsCanisterType::Root => (sns_root_canister_id, sns_governance_canister_id),
             SnsCanisterType::Governance => (sns_governance_canister_id, sns_root_canister_id),
             SnsCanisterType::Ledger => (sns_ledger_canister_id, sns_root_canister_id),
-            SnsCanisterType::Swap => {
-                // The Swap canister is special in that it is controlled by the NNS, not SNS.
-                (swap_canister_id, ROOT_CANISTER_ID.get())
-            }
+            SnsCanisterType::Swap => (swap_canister_id, sns_root_canister_id),
             SnsCanisterType::Archive => {
                 let archive_canister_id = archives.last().expect(
                     "Testing Archive canister upgrade requires some Archive canisters \
@@ -1173,26 +1184,26 @@ pub mod sns {
                 .unwrap();
 
         // Check that we get the same version from the management canister and from the SNS.
-        let pre_upgrade_running_canister_version = {
-            let running_version_for_canister = extract_sns_canister_version(
+        let pre_upgrade_canister_version = {
+            let canister_version_from_sns_pov = extract_sns_canister_version(
                 pre_upgrade_running_version.clone(),
                 expected_type_to_change,
             );
-            let module_hash = pocket_ic
+            let canister_version_from_ic00_pov = pocket_ic
                 .canister_status(canister_id.into(), Some(controller_id.into()))
                 .await
                 .unwrap()
                 .module_hash
                 .unwrap();
-            assert_eq!(
-                running_version_for_canister,
-                module_hash,
-                "pre_upgrade: running_version_for_canister of type {} ({}) != module_hash ({})",
-                expected_type_to_change.as_str_name(),
-                fmt_bytes(&running_version_for_canister),
-                fmt_bytes(&module_hash),
-            );
-            running_version_for_canister
+            if canister_version_from_sns_pov != canister_version_from_ic00_pov {
+                return Err(SnsUpgradeError::CanisterVersionMismatch {
+                    canister_type: expected_type_to_change,
+                    canister_version_from_sns_pov,
+                    canister_version_from_ic00_pov,
+                    is_pre_upgrade: true,
+                });
+            }
+            canister_version_from_sns_pov
         };
 
         governance::propose_to_upgrade_sns_to_next_version_and_wait(
@@ -1206,70 +1217,57 @@ pub mod sns {
             pocket_ic.tick().await;
         }
 
-        let post_upgrade_running_version =
+        let post_upgrade_version =
             governance::get_running_sns_version(pocket_ic, sns_governance_canister_id)
                 .await
                 .deployed_version
                 .unwrap();
 
-        if expected_type_to_change == SnsCanisterType::Swap {
-            let wasm = nns::sns_wasm::get_wasm(
-                pocket_ic,
-                post_upgrade_running_version.swap_wasm_hash.clone(),
-            )
-            .await
-            .wasm;
-            nns::governance::propose_and_wait(
-                pocket_ic,
-                MakeProposalRequest {
-                    title: Some("Upgrade Swap from NNS Governance".to_string()),
-                    summary: "".to_string(),
-                    url: "".to_string(),
-                    action: Some(ProposalActionRequest::InstallCode(InstallCodeRequest {
-                        canister_id: Some(swap_canister_id),
-                        install_mode: Some(CanisterInstallMode::Upgrade as i32),
-                        wasm_module: Some(wasm),
-                        arg: Some(vec![]),
-                        skip_stopping_before_installing: None,
-                    })),
-                },
-            )
-            .await
-            .expect("Proposal did not execute successfully");
-
-            for _ in 0..10 {
-                pocket_ic.tick().await;
-                pocket_ic.advance_time(Duration::from_secs(10)).await;
-            }
-        }
-
         // Check that we get the same version from the management canister and from the SNS.
-        let post_upgrade_running_version_for_canister = {
-            let running_version_for_canister =
-                extract_sns_canister_version(post_upgrade_running_version, expected_type_to_change);
-            let module_hash = pocket_ic
+        let post_upgrade_canister_version = {
+            let canister_version_from_sns_pov =
+                extract_sns_canister_version(post_upgrade_version, expected_type_to_change);
+            let canister_version_from_ic00_pov = pocket_ic
                 .canister_status(canister_id.into(), Some(controller_id.into()))
                 .await
                 .unwrap()
                 .module_hash
                 .unwrap();
-            assert_eq!(
-                running_version_for_canister,
-                module_hash,
-                "post_upgrade: running_version_for_canister of type {} ({}) != module_hash ({})",
-                expected_type_to_change.as_str_name(),
-                fmt_bytes(&running_version_for_canister),
-                fmt_bytes(&module_hash),
-            );
-            running_version_for_canister
+            if canister_version_from_sns_pov != canister_version_from_ic00_pov {
+                println!(
+                    "pre_upgrade_canister_version = {:?}",
+                    pre_upgrade_canister_version
+                );
+                return Err(SnsUpgradeError::CanisterVersionMismatch {
+                    canister_type: expected_type_to_change,
+                    canister_version_from_sns_pov,
+                    canister_version_from_ic00_pov,
+                    is_pre_upgrade: false,
+                });
+            }
+            canister_version_from_sns_pov
         };
 
-        assert_ne!(
-            pre_upgrade_running_canister_version,
-            post_upgrade_running_version_for_canister,
-            "pre_upgrade_running_canister_version == post_upgrade_running_version_for_canister == {}",
-            fmt_bytes(&pre_upgrade_running_canister_version),
-        );
+        if pre_upgrade_canister_version == post_upgrade_canister_version {
+            return Err(SnsUpgradeError::TargetCanisterVersionUnchanged {
+                pre_upgrade_canister_version,
+                post_upgrade_canister_version,
+            });
+        }
+
+        Ok(())
+    }
+
+    pub async fn upgrade_sns_to_next_version_and_assert_change(
+        pocket_ic: &PocketIc,
+        sns_root_canister_id: PrincipalId,
+        expected_type_to_change: SnsCanisterType,
+    ) {
+        try_upgrade_sns_to_next_version(pocket_ic, sns_root_canister_id, expected_type_to_change)
+            .await
+            .unwrap_or_else(|err| {
+                panic!("Upgrading {:?} failed: {:#?}", expected_type_to_change, err)
+            });
     }
 
     pub mod governance {

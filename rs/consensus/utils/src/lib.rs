@@ -152,7 +152,7 @@ pub fn aggregate<
     Message: Eq + Ord + Clone + std::fmt::Debug + HasHeight + HasCommittee,
     CryptoMessage,
     Signature: Ord,
-    KeySelector: Copy,
+    KeySelector,
     CommitteeSignature,
     Shares: Iterator<Item = Signed<Message, Signature>>,
 >(
@@ -262,7 +262,7 @@ pub fn active_low_threshold_nidkg_id(
 ) -> Option<NiDkgId> {
     get_active_data_at(reader, height, |block, height| {
         get_transcript_data_at_given_summary(block, height, NiDkgTag::LowThreshold, |transcript| {
-            transcript.dkg_id
+            transcript.dkg_id.clone()
         })
     })
 }
@@ -274,7 +274,7 @@ pub fn active_high_threshold_nidkg_id(
 ) -> Option<NiDkgId> {
     get_active_data_at(reader, height, |block, height| {
         get_transcript_data_at_given_summary(block, height, NiDkgTag::HighThreshold, |transcript| {
-            transcript.dkg_id
+            transcript.dkg_id.clone()
         })
     })
 }

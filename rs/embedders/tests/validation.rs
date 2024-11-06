@@ -1196,3 +1196,30 @@ fn test_wasm64_initial_wasm_memory_size_validation() {
         })
     );
 }
+
+#[test]
+fn test_validate_table64() {
+    use ic_config::embedders::FeatureFlags;
+    use ic_config::flag_status::FlagStatus;
+
+    let embedders_config = EmbeddersConfig {
+        feature_flags: FeatureFlags {
+            wasm64: FlagStatus::Enabled,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+
+    let wasm = wat2wasm(
+        r#"(module
+            (table i64 1 funcref)
+            (memory i64 1 1)
+        )"#,
+    )
+    .unwrap();
+
+    assert_eq!(
+        validate_wasm_binary(&wasm, &embedders_config),
+        Ok(WasmValidationDetails::default())
+    );
+}
