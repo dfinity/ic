@@ -322,13 +322,15 @@ jobs:
           REPO_NAME: ${{ github.repository }}
   build-ic:
     name: Build IC
-    runs-on:
-      labels: dind-large
     container:
       image: ghcr.io/dfinity/ic-build@sha256:80e976b63af2b1b352c8c5959cb6c6b02aaa56a4efa327569d8c85c9c81a2cec
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
     timeout-minutes: 90
+    # keep options from dind-large-setup but run on dind-small-setup
+    runs-on:
+      group: ch1
+      labels: dind-small
     if: ${{ github.event_name != 'merge_group' }}
     steps:
       - name: Checkout
@@ -423,13 +425,11 @@ jobs:
           SETUPOS_FLAG: ${{ matrix.SETUPOS_FLAG }}
   cargo-clippy-linux:
     name: Cargo Clippy Linux
-    runs-on:
-      labels: dind-large
     container:
       image: ghcr.io/dfinity/ic-build@sha256:80e976b63af2b1b352c8c5959cb6c6b02aaa56a4efa327569d8c85c9c81a2cec
-      options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
-    timeout-minutes: 90
+    timeout-minutes: 30
+    runs-on:
+      group: ch1
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -462,13 +462,11 @@ jobs:
               "$CI_PROJECT_DIR"/ci/scripts/rust-lint.sh
   cargo-build-release-linux:
     name: Cargo Build Release Linux
-    runs-on:
-      labels: dind-large
     container:
       image: ghcr.io/dfinity/ic-build@sha256:80e976b63af2b1b352c8c5959cb6c6b02aaa56a4efa327569d8c85c9c81a2cec
-      options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
-    timeout-minutes: 90
+    timeout-minutes: 30
+    runs-on:
+      group: ch1
     steps:
       - name: Checkout
         uses: actions/checkout@v4
