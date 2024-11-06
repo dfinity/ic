@@ -119,7 +119,7 @@ impl CatchUpPackageMaker {
         self.report_state_divergence_if_required(pool);
 
         let current_cup_height = pool.get_catch_up_height();
-        let mut block = pool.get_highest_summary_block();
+        let mut block = pool.get_highest_finalized_summary_block();
 
         while block.height() > current_cup_height {
             let result = self.consider_block(pool, block.clone());

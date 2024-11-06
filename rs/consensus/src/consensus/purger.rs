@@ -462,7 +462,7 @@ fn get_purge_height(pool_reader: &PoolReader<'_>) -> Option<Height> {
 fn get_pending_idkg_cup_heights(pool: &PoolReader<'_>) -> BTreeSet<Height> {
     let mut pending_cup_heights = BTreeSet::new();
     let current_cup_height = pool.get_catch_up_height();
-    let mut block = pool.get_highest_summary_block();
+    let mut block = pool.get_highest_finalized_summary_block();
     while block.height() > current_cup_height {
         if block.payload.as_ref().as_summary().idkg.is_some() {
             pending_cup_heights.insert(block.height());
