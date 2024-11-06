@@ -234,21 +234,19 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
             ingress_messages_from_ingress_pool,
         );
 
-        let reconstructed_block_proposal = match assembler.try_assemble() {
-            Ok(v) => v,
+        match assembler.try_assemble() {
+            Ok(reconstructed_block_proposal) => AssembleResult::Done {
+                message: ConsensusMessage::BlockProposal(reconstructed_block_proposal),
+                peer_id: peer,
+            },
             Err(err) => {
                 warn!(
                     self.log,
                     "Failed to reassemble the block {}. This is a bug.", err
                 );
 
-                return AssembleResult::Unwanted;
+                AssembleResult::Unwanted
             }
-        };
-
-        AssembleResult::Done {
-            message: ConsensusMessage::BlockProposal(reconstructed_block_proposal),
-            peer_id: peer,
         }
     }
 }
