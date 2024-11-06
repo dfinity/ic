@@ -20,13 +20,17 @@ use axum::{
 use axum_extra::middleware::option_layer;
 use candid::DecoderConfig;
 use futures::TryFutureExt;
-use ic_bn_lib::http;
-use ic_bn_lib::http::shed::sharded::{
-    ShardedLittleLoadShedderLayer, ShardedOptions, TypeExtractor,
+use ic_bn_lib::{
+    http::{
+        self,
+        shed::{
+            sharded::{ShardedLittleLoadShedderLayer, ShardedOptions, TypeExtractor},
+            system::{SystemInfo, SystemLoadShedderLayer},
+            ShedResponse,
+        },
+    },
+    types::RequestType,
 };
-use ic_bn_lib::http::shed::system::{SystemInfo, SystemLoadShedderLayer};
-use ic_bn_lib::http::shed::ShedResponse;
-use ic_bn_lib::types::RequestType;
 use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_local_store::{LocalStoreImpl, LocalStoreReader};
@@ -92,16 +96,17 @@ pub fn decoder_config() -> DecoderConfig {
 
 pub async fn main(cli: Cli) -> Result<(), Error> {
     if cli.http_client.http_client_timeout_connect > cli.health.health_check_timeout {
-        panic!("--check-timeout should be longer than --http-timeout-connect");
+        panic!("Health check timeout should be longer than HTTP client connect timeout");
     }
 
     if !(cli.registry.registry_local_store_path.is_none()
         ^ cli.registry.registry_stub_replica.is_empty())
     {
-        panic!("--local-store-path and --stub-replica are mutually exclusive and at least one of them must be specified");
+        panic!("Local store path and Stub Replica are mutually exclusive and at least one of them must be specified");
     }
 
-    // make sure ic-boundary is the leader of its own process group
+    // Make sure ic-boundary is the leader of its own process group
+    // Needed for correct execution of API BNs
     let pgid = getpgid(None).context("Failed to get the process group ID.")?;
     if pgid != Pid::this() {
         // If that is not the case, set it as the leader of its own process group

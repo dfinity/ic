@@ -161,6 +161,7 @@ impl BoundaryNodeManager {
             format!("--tls-cert-path=/var/lib/ic/data/ic-boundary-tls.crt"),
             format!("--tls-pkey-path=/var/lib/ic/data/ic-boundary-tls.key"),
             format!("--tls-acme-credentials-path=/var/lib/ic/data"),
+            format!("--http-client-timeout-connect=3s"),
             format!("--registry-disable-replicator"),
             format!("--registry-local-store-path=/var/lib/ic/data/ic_registry_local_store"),
             format!("--obs-log-journald"),

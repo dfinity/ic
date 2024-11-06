@@ -151,8 +151,8 @@ pub struct HealthChecks {
 
     /// Timeout for the health check request.
     /// This includes connection phase and the actual HTTP request.
-    /// Should be longer than --http-timeout-connect
-    #[clap(env, long, default_value = "5s", value_parser = parse_duration)]
+    /// Should be longer than HTTP client connect timeout.
+    #[clap(env, long, default_value = "4s", value_parser = parse_duration)]
     pub health_check_timeout: Duration,
 
     /// Maximum block height lag for a replica to be included in the routing table
