@@ -12,7 +12,7 @@ use ic_cketh_minter::lifecycle::EthereumNetwork;
 use ic_cketh_minter::numeric::{
     BlockNumber, Erc20Value, LedgerBurnIndex, LedgerMintIndex, LogIndex, TransactionNonce, Wei,
 };
-use ic_cketh_minter::state::eth_logs_scraping::LogScrapingId;
+use ic_cketh_minter::state::eth_logs_scraping::LogScrapings;
 use ic_cketh_minter::state::transactions::{
     ReimbursedError, ReimbursementIndex, TransactionCallData, WithdrawalRequest,
 };
@@ -35,6 +35,13 @@ mod filters {
             time::format_description::parse("[year]-[month]-[day]T[hour]:[minute]:[second]+00:00")
                 .unwrap();
         Ok(dt_offset.format(&format).unwrap())
+    }
+
+    pub fn lower_alphanumeric<T: std::fmt::Display>(input: T) -> askama::Result<String> {
+        let mut input = input.to_string();
+        input.make_ascii_lowercase();
+        input.retain(|c| c.is_ascii_alphanumeric());
+        Ok(input)
     }
 }
 
@@ -138,7 +145,6 @@ impl DashboardPendingDeposit {
     }
 }
 
-//TODO XC-220: Also add a DashboardLogScrapingState to consolidate
 #[derive(Template)]
 #[template(path = "dashboard.html")]
 #[derive(Clone)]
@@ -146,13 +152,10 @@ pub struct DashboardTemplate {
     pub ethereum_network: EthereumNetwork,
     pub ecdsa_key_name: String,
     pub minter_address: String,
-    pub eth_helper_contract_address: String,
-    pub erc20_helper_contract_address: String,
+    pub log_scrapings: LogScrapings,
     pub next_transaction_nonce: TransactionNonce,
     pub minimum_withdrawal_amount: Wei,
     pub first_synced_block: BlockNumber,
-    pub last_eth_synced_block: BlockNumber,
-    pub last_erc20_synced_block: Option<BlockNumber>,
     pub last_observed_block: Option<BlockNumber>,
     pub cketh_ledger_id: Principal,
     pub minted_events: Vec<MintedEvent>,
@@ -325,29 +328,11 @@ impl DashboardTemplate {
                 .minter_address()
                 .map(|addr| addr.to_string())
                 .unwrap_or_default(),
-            eth_helper_contract_address: state
-                .log_scrapings
-                .contract_address(LogScrapingId::EthDepositWithoutSubaccount)
-                .map_or("N/A".to_string(), |address| address.to_string()),
-            erc20_helper_contract_address: state
-                .log_scrapings
-                .contract_address(LogScrapingId::Erc20DepositWithoutSubaccount)
-                .map_or("N/A".to_string(), |address| address.to_string()),
+            log_scrapings: state.log_scrapings.clone(),
             cketh_ledger_id: state.cketh_ledger_id,
             next_transaction_nonce: state.eth_transactions.next_transaction_nonce(),
             minimum_withdrawal_amount: state.cketh_minimum_withdrawal_amount,
             first_synced_block: state.first_scraped_block_number,
-            last_eth_synced_block: state
-                .log_scrapings
-                .last_scraped_block_number(LogScrapingId::EthDepositWithoutSubaccount),
-            last_erc20_synced_block: state
-                .log_scrapings
-                .contract_address(LogScrapingId::Erc20DepositWithoutSubaccount)
-                .map(|_| {
-                    state
-                        .log_scrapings
-                        .last_scraped_block_number(LogScrapingId::Erc20DepositWithoutSubaccount)
-                }),
             last_observed_block: state.last_observed_block_number,
             minted_events,
             pending_deposits,
