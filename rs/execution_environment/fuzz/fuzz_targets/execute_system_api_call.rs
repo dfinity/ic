@@ -58,10 +58,13 @@ extern "C" {
 
 fn main() {
     if std::env::args().any(|arg| arg == RUN_AS_CANISTER_SANDBOX_FLAG) {
+        #[cfg(not(fuzzing))]
         canister_sandbox_main();
     } else if std::env::args().any(|arg| arg == RUN_AS_SANDBOX_LAUNCHER_FLAG) {
+        #[cfg(not(fuzzing))]
         sandbox_launcher_main();
     } else if std::env::args().any(|arg| arg == RUN_AS_COMPILER_SANDBOX_FLAG) {
+        #[cfg(not(fuzzing))]
         compiler_sandbox_main();
     } else {
         // Collect command-line arguments
