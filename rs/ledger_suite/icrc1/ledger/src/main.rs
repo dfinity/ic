@@ -248,6 +248,7 @@ fn post_upgrade(args: Option<LedgerArgument>) {
 }
 
 fn migrate_next_part(instruction_limit: u64) {
+    let instructions_mingration_start = instruction_counter();
     STABLE_UPGRADE_MIGRATION_STEPS.with(|n| *n.borrow_mut() += 1);
     let mut migrated_allowances = 0;
     let mut migrated_expirations = 0;
@@ -277,7 +278,8 @@ fn migrate_next_part(instruction_limit: u64) {
                 }
             }
         }
-        let msg = format!("Number of elements migrated: allowances: {migrated_allowances} expirations: {migrated_expirations}. Total instructions used in message: {}." ,
+        let instructions_mingration = instruction_counter() - instructions_mingration_start;
+        let msg = format!("Number of elements migrated: allowances: {migrated_allowances} expirations: {migrated_expirations}. Migration step instructions: {instructions_mingration}, total instructions used in message: {}." ,
             instruction_counter());
         if !ledger.is_ready() {
             log_message(
