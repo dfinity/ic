@@ -80,7 +80,6 @@ impl TryFrom<NiDkgIdProto> for NiDkgId {
                             .ok_or(NiDkgIdFromProtoError::InvalidDkgTagMissingKeyId)?;
                         let mpkid = MasterPublicKeyId::try_from(mpkid_proto).map_err(|e| {
                             NiDkgIdFromProtoError::InvalidMasterPublicKeyId(format!("{e}"))
-                            // TODO: test this case
                         })?;
                         Ok(NiDkgTag::HighThresholdForKey(mpkid))
                     }
