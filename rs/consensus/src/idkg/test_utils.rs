@@ -1673,12 +1673,12 @@ pub(crate) fn fake_master_public_key_ids_for_all_algorithms() -> Vec<MasterPubli
 }
 
 pub(crate) fn create_reshare_request(
-    key_id: MasterPublicKeyId,
+    key_id: IDkgMasterPublicKeyId,
     num_nodes: u64,
     registry_version: u64,
 ) -> IDkgReshareRequest {
     IDkgReshareRequest {
-        master_key_id: key_id.try_into().unwrap(),
+        master_key_id: key_id,
         receiving_node_ids: (0..num_nodes).map(node_test_id).collect::<Vec<_>>(),
         registry_version: RegistryVersion::from(registry_version),
     }
@@ -1757,7 +1757,7 @@ pub(crate) fn set_up_idkg_payload(
     rng: &mut ReproducibleRng,
     subnet_id: SubnetId,
     nodes_count: usize,
-    key_ids: Vec<MasterPublicKeyId>,
+    key_ids: Vec<IDkgMasterPublicKeyId>,
     should_create_key_transcript: bool,
 ) -> (
     IDkgPayload,
@@ -1766,14 +1766,7 @@ pub(crate) fn set_up_idkg_payload(
 ) {
     let env = CanisterThresholdSigTestEnvironment::new(nodes_count, rng);
 
-    let mut idkg_payload = empty_idkg_payload_with_key_ids(
-        subnet_id,
-        key_ids
-            .clone()
-            .into_iter()
-            .map(|key_id| key_id.try_into().unwrap())
-            .collect(),
-    );
+    let mut idkg_payload = empty_idkg_payload_with_key_ids(subnet_id, key_ids.clone());
     let mut block_reader = TestIDkgBlockReader::new();
 
     if should_create_key_transcript {
@@ -1789,7 +1782,7 @@ pub(crate) fn set_up_idkg_payload(
 }
 
 pub(crate) fn generate_key_transcript(
-    key_id: &MasterPublicKeyId,
+    key_id: &IDkgMasterPublicKeyId,
     env: &CanisterThresholdSigTestEnvironment,
     rng: &mut ReproducibleRng,
     height: Height,
@@ -1826,7 +1819,7 @@ pub(crate) trait IDkgPayloadTestHelper {
 
     fn generate_current_key(
         &mut self,
-        key_id: &MasterPublicKeyId,
+        key_id: &IDkgMasterPublicKeyId,
         env: &CanisterThresholdSigTestEnvironment,
         rng: &mut ReproducibleRng,
     ) -> (IDkgTranscript, idkg::UnmaskedTranscript);
@@ -1869,7 +1862,7 @@ impl IDkgPayloadTestHelper for IDkgPayload {
 
     fn generate_current_key(
         &mut self,
-        key_id: &MasterPublicKeyId,
+        key_id: &IDkgMasterPublicKeyId,
         env: &CanisterThresholdSigTestEnvironment,
         rng: &mut ReproducibleRng,
     ) -> (IDkgTranscript, idkg::UnmaskedTranscript) {

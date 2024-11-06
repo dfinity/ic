@@ -212,8 +212,6 @@ pub(super) fn update_next_key_transcript(
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
     use ic_crypto_test_utils_canister_threshold_sigs::{
         dummy_values::dummy_initial_idkg_dealing_for_tests, generate_key_transcript, node::Nodes,
         CanisterThresholdSigTestEnvironment, IDkgParticipants,
@@ -223,10 +221,12 @@ mod tests {
     use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::consensus::idkg::HasMasterPublicKeyId;
+    use ic_types::consensus::idkg::IDkgMasterPublicKeyId;
     use ic_types::{
         crypto::{canister_threshold_sig::idkg::IDkgTranscript, AlgorithmId},
         Height,
     };
+    use std::str::FromStr;
 
     use crate::idkg::{
         test_utils::{
@@ -298,11 +298,11 @@ mod tests {
     fn test_update_next_key_transcript_single_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_update_next_key_transcript_single(key_id);
+            test_update_next_key_transcript_single(key_id.try_into().unwrap());
         }
     }
 
-    fn test_update_next_key_transcript_single(key_id: MasterPublicKeyId) {
+    fn test_update_next_key_transcript_single(key_id: IDkgMasterPublicKeyId) {
         let mut rng = reproducible_rng();
         let (mut payload, env, mut block_reader) = set_up_idkg_payload(
             &mut rng,
@@ -479,18 +479,18 @@ mod tests {
             completed_transcript.algorithm_id,
             algorithm_for_key_id(&key_id)
         );
-        assert_eq!(payload.single_key_transcript().key_id(), key_id);
+        assert_eq!(payload.single_key_transcript().key_id(), key_id.into());
     }
 
     #[test]
     fn test_update_next_key_transcript_xnet_target_subnet_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_update_next_key_transcript_xnet_target_subnet_single(key_id);
+            test_update_next_key_transcript_xnet_target_subnet_single(key_id.try_into().unwrap());
         }
     }
 
-    fn test_update_next_key_transcript_xnet_target_subnet_single(key_id: MasterPublicKeyId) {
+    fn test_update_next_key_transcript_xnet_target_subnet_single(key_id: IDkgMasterPublicKeyId) {
         let mut rng = reproducible_rng();
         let (mut payload, env, mut block_reader) = set_up_idkg_payload(
             &mut rng,

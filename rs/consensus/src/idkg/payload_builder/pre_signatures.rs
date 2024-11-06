@@ -459,14 +459,13 @@ pub fn new_random_unmasked_config(
 
 #[cfg(test)]
 pub(super) mod test_utils {
-    use crate::idkg::test_utils::IDkgPayloadTestHelper;
-
     use super::*;
+    use crate::idkg::test_utils::IDkgPayloadTestHelper;
 
     use std::collections::BTreeMap;
 
     use ic_types::{
-        consensus::idkg::{self, IDkgTranscriptParamsRef},
+        consensus::idkg::{self, IDkgMasterPublicKeyId, IDkgTranscriptParamsRef},
         NodeId, RegistryVersion,
     };
 
@@ -474,10 +473,10 @@ pub(super) mod test_utils {
         subnet_nodes: &[NodeId],
         registry_version: RegistryVersion,
         uid_generator: &mut idkg::IDkgUIDGenerator,
-        key_id: MasterPublicKeyId,
+        key_id: IDkgMasterPublicKeyId,
         pre_signatures_in_creation: &mut BTreeMap<idkg::PreSigId, PreSignatureInCreation>,
     ) -> Vec<IDkgTranscriptParamsRef> {
-        let pre_signature = match key_id.clone() {
+        let pre_signature = match key_id.clone().into() {
             MasterPublicKeyId::Ecdsa(ecdsa_key_id) => {
                 let kappa_config_ref = new_random_unmasked_config(
                     &key_id,
@@ -569,12 +568,13 @@ pub(super) mod tests {
         SubnetId,
     };
     use idkg::IDkgTranscriptOperationRef;
+    use std::ops::Deref;
     use strum::IntoEnumIterator;
 
     fn set_up(
         rng: &mut ReproducibleRng,
         subnet_id: SubnetId,
-        key_ids: Vec<MasterPublicKeyId>,
+        key_ids: Vec<IDkgMasterPublicKeyId>,
         height: Height,
     ) -> (
         IDkgPayload,
@@ -655,11 +655,11 @@ pub(super) mod tests {
     fn test_make_new_pre_signatures_if_needed_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_make_new_pre_signatures_if_needed(key_id);
+            test_make_new_pre_signatures_if_needed(key_id.try_into().unwrap());
         }
     }
 
-    fn test_make_new_pre_signatures_if_needed(key_id: MasterPublicKeyId) {
+    fn test_make_new_pre_signatures_if_needed(key_id: IDkgMasterPublicKeyId) {
         let mut rng = reproducible_rng();
         let subnet_id = subnet_test_id(1);
         let height = Height::new(10);
@@ -670,7 +670,7 @@ pub(super) mod tests {
         let pre_signatures_to_create_in_advance = 4;
         let chain_key_config = ChainKeyConfig {
             key_configs: vec![KeyConfig {
-                key_id: key_id.clone(),
+                key_id: key_id.clone().into(),
                 pre_signatures_to_create_in_advance,
                 max_queue_size: 1,
             }],
@@ -697,7 +697,7 @@ pub(super) mod tests {
         make_new_pre_signatures_if_needed(
             &chain_key_config,
             &mut idkg_payload,
-            &BTreeMap::from([(key_id.clone(), pre_signature_already_matched)]),
+            &BTreeMap::from([(key_id.clone().into(), pre_signature_already_matched)]),
         );
 
         assert_eq!(
@@ -711,19 +711,19 @@ pub(super) mod tests {
         for pre_signature in idkg_payload.pre_signatures_in_creation.values() {
             match pre_signature {
                 PreSignatureInCreation::Ecdsa(pre_sig) => {
-                    assert_matches!(key_id, MasterPublicKeyId::Ecdsa(_));
+                    assert_matches!(key_id.clone().into(), MasterPublicKeyId::Ecdsa(_));
                     let kappa_unmasked_config = pre_sig.kappa_unmasked_config.clone();
                     let kappa_transcript_id = kappa_unmasked_config.as_ref().transcript_id;
                     transcript_ids.insert(kappa_transcript_id);
                     transcript_ids.insert(pre_sig.lambda_config.as_ref().transcript_id);
                 }
                 PreSignatureInCreation::Schnorr(pre_sig) => {
-                    assert_matches!(key_id, MasterPublicKeyId::Schnorr(_));
+                    assert_matches!(key_id.clone().into(), MasterPublicKeyId::Schnorr(_));
                     transcript_ids.insert(pre_sig.blinder_unmasked_config.as_ref().transcript_id);
                 }
             }
         }
-        let expected_transcript_ids = match key_id {
+        let expected_transcript_ids = match key_id.deref() {
             MasterPublicKeyId::Ecdsa(_) => 2 * expected_pre_signatures_in_creation,
             MasterPublicKeyId::Schnorr(_) => expected_pre_signatures_in_creation,
             MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
@@ -809,7 +809,7 @@ pub(super) mod tests {
     fn test_ecdsa_update_pre_signatures_in_creation() {
         let mut rng = reproducible_rng();
         let subnet_id = subnet_test_id(1);
-        let key_id = fake_ecdsa_master_public_key_id();
+        let key_id: IDkgMasterPublicKeyId = fake_ecdsa_master_public_key_id().try_into().unwrap();
         let (mut payload, env, mut block_reader) =
             set_up(&mut rng, subnet_id, vec![key_id.clone()], Height::from(100));
         let transcript_builder = TestIDkgTranscriptBuilder::new();
@@ -979,7 +979,9 @@ pub(super) mod tests {
     fn test_schnorr_update_pre_signatures_in_creation(algorithm: SchnorrAlgorithm) {
         let mut rng = reproducible_rng();
         let subnet_id = subnet_test_id(1);
-        let key_id = fake_schnorr_master_public_key_id(algorithm);
+        let key_id: IDkgMasterPublicKeyId = fake_schnorr_master_public_key_id(algorithm)
+            .try_into()
+            .unwrap();
         let (mut payload, env, mut block_reader) =
             set_up(&mut rng, subnet_id, vec![key_id.clone()], Height::from(100));
         let transcript_builder = TestIDkgTranscriptBuilder::new();
@@ -1049,7 +1051,7 @@ pub(super) mod tests {
         };
         assert_eq!(
             MasterPublicKeyId::Schnorr(transcript.key_id.clone()),
-            key_id
+            key_id.clone().into()
         );
         let translated = transcript
             .translate(&block_reader)
@@ -1078,7 +1080,7 @@ pub(super) mod tests {
         let (mut payload, env, _) = set_up(
             &mut rng,
             subnet_test_id(1),
-            vec![key_id.clone().into()],
+            vec![key_id.clone()],
             Height::from(100),
         );
         let key_transcript = get_current_unmasked_key_transcript(&payload);
@@ -1143,7 +1145,7 @@ pub(super) mod tests {
         let (mut payload, _, _) = set_up(
             &mut rng,
             subnet_test_id(1),
-            vec![key_id.clone().into()],
+            vec![key_id.clone()],
             Height::from(100),
         );
         let key_transcript = get_current_unmasked_key_transcript(&payload);
@@ -1184,7 +1186,7 @@ pub(super) mod tests {
         let (mut payload, env, _) = set_up(
             &mut rng,
             subnet_test_id(1),
-            vec![key_id.clone().into()],
+            vec![key_id.clone()],
             Height::from(100),
         );
 

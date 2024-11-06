@@ -1681,7 +1681,7 @@ mod tests {
     }
 
     fn create_key_transcript_and_refs(
-        key_id: &MasterPublicKeyId,
+        key_id: &IDkgMasterPublicKeyId,
         rng: &mut ReproducibleRng,
         height: Height,
     ) -> (
