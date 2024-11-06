@@ -42,6 +42,7 @@ impl PocketIcCliCommand {
     }
 }
 
+/// Command to execute on a canister.
 #[derive(Debug, Clone, Parser)]
 pub struct PocketIcCliCanisterSubcommand {
     /// The canister ID of the canister.
