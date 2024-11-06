@@ -65,7 +65,7 @@ async fn mint() {
         let block_index = match client
             .transfer(TransferArg {
                 from_subaccount: None,
-                to: (event.principal()).into(),
+                to: event.beneficiary(),
                 fee: None,
                 created_at_time: None,
                 memo: Some((&event).into()),
@@ -114,7 +114,7 @@ async fn mint() {
             INFO,
             "Minted {} {token_symbol} to {} in block {block_index}",
             event.value(),
-            event.principal()
+            event.beneficiary()
         );
         // minting succeeded, defuse guard
         ScopeGuard::into_inner(prevent_double_minting_guard);
@@ -313,7 +313,7 @@ pub fn register_deposit_events(
             INFO,
             "Received event {event:?}; will mint {} {scraping_display_name} to {}",
             event.value(),
-            event.principal()
+            event.beneficiary()
         );
         if crate::blocklist::is_blocked(&event.from_address()) {
             log!(

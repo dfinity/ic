@@ -65,8 +65,11 @@ spec:
             - port: 18444
             - port: 20443
         resources:
+          overcommitGuestOverhead: true
           requests:
-            memory: {memory}Ki
+            memory: {memory_request}Ki
+        memory:
+          guest: {memory}Ki
       networks:
       - name: default
         pod: {}
@@ -165,8 +168,11 @@ spec:
               - port: 19100
               - port: 19531
         resources:
+          overcommitGuestOverhead: true
           requests:
-            memory: {memory}Ki
+            memory: {memory_request}Ki
+        memory:
+          guest: {memory}Ki
       networks:
       - name: default
         pod: {}
@@ -184,6 +190,7 @@ pub async fn create_vm(
     name: &str,
     cpus: &str,
     memory: &str,
+    memory_request: &str,
     ipv4: Ipv4Addr,
     ipv6: Ipv6Addr,
     running: bool,
@@ -201,6 +208,7 @@ pub async fn create_vm(
         .replace("{tnet}", &owner.name)
         .replace("{running}", &running.to_string())
         .replace("{memory}", memory)
+        .replace("{memory_request}", memory_request)
         .replace("{cpus}", cpus)
         .replace("{ipv4}", &ipv4.to_string())
         .replace("{ipv6}", &ipv6.to_string());
