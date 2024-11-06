@@ -31,7 +31,7 @@ use ic_types::{
     },
     nominal_cycles::NominalCycles,
     time::UNIX_EPOCH,
-    CanisterId, Cycles, PrincipalId, RegistryVersion, SubnetId,
+    CanisterId, Cycles, PrincipalId, RegistryVersion,
 };
 use ic_types_test_utils::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
@@ -2275,13 +2275,6 @@ fn get_reject_message(response: RequestOrResponse) -> String {
             Payload::Reject(reject) => reject.message().clone(),
         },
     }
-}
-
-fn make_ecdsa_key(name: &str) -> MasterPublicKeyId {
-    MasterPublicKeyId::Ecdsa(EcdsaKeyId {
-        curve: EcdsaCurve::Secp256k1,
-        name: name.to_string(),
-    })
 }
 
 fn make_schnorr_key(name: &str) -> MasterPublicKeyId {
