@@ -156,6 +156,11 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
                 .eth_transactions
                 .record_quarantined_reimbursement(index.clone());
         }
+        EventType::SyncedDepositWithSubaccountToBlock { block_number } => {
+            state
+                .deposit_with_subaccount_log_scraping
+                .set_last_scraped_block_number(*block_number);
+        }
     }
 }
 
