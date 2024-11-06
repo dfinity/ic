@@ -194,7 +194,10 @@ pub const DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS: u64 = 1725148800;
 // leave this here indefinitely, but it will just be clutter after a modest
 // amount of time.
 thread_local! {
+
     static IS_VOTING_POWER_ADJUSTMENT_ENABLED: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
+
+    static IS_PRUNE_FOLLOWING_ENABLED: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
 
     // TODO(NNS1-3247): To release the feature, set this to true. Do not simply
     // delete. That way, if we need to recall the feature, we can do that via a
@@ -224,6 +227,20 @@ pub fn temporarily_enable_voting_power_adjustment() -> Temporary {
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 pub fn temporarily_disable_voting_power_adjustment() -> Temporary {
     Temporary::new(&IS_VOTING_POWER_ADJUSTMENT_ENABLED, false)
+}
+
+pub fn is_prune_following_enabled() -> bool {
+    IS_PRUNE_FOLLOWING_ENABLED.with(|ok| ok.get())
+}
+
+/// Only integration tests should use this.
+pub fn temporarily_enable_prune_following() -> Temporary {
+    Temporary::new(&IS_PRUNE_FOLLOWING_ENABLED, true)
+}
+
+/// Only integration tests should use this.
+pub fn temporarily_disable_prune_following() -> Temporary {
+    Temporary::new(&IS_PRUNE_FOLLOWING_ENABLED, false)
 }
 
 pub fn is_private_neuron_enforcement_enabled() -> bool {

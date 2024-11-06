@@ -3,8 +3,8 @@ use candid::{candid_method, Decode, Encode};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::{
-    api::call::arg_data_raw, caller as ic_cdk_caller, heartbeat, post_upgrade, pre_upgrade,
-    println, query, spawn, update,
+    api::{call::arg_data_raw, call_context_instruction_counter},
+    caller as ic_cdk_caller, heartbeat, post_upgrade, pre_upgrade, println, query, spawn, update,
 };
 use ic_management_canister_types::IC_00;
 use ic_nervous_system_canisters::cmc::CMCCanister;
@@ -22,6 +22,7 @@ use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::{
     decoder_config, encode_metrics,
     governance::{Environment, Governance, HeapGrowthPotential, RngError, TimeWarp as GovTimeWarp},
+    is_prune_following_enabled,
     neuron_data_validation::NeuronDataValidationSummary,
     pb::v1::{self as gov_pb, Governance as InternalGovernanceProto},
     storage::{grow_upgrades_memory_to, validate_stable_storage, with_upgrades_memory},
@@ -57,6 +58,7 @@ use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use std::{
     boxed::Box,
+    cell::RefCell,
     str::FromStr,
     time::{Duration, SystemTime},
 };
@@ -161,15 +163,17 @@ fn set_governance(gov: Governance) {
 fn schedule_timers() {
     schedule_seeding(Duration::from_nanos(0));
     schedule_adjust_neurons_storage(Duration::from_nanos(0), NeuronIdProto { id: 0 });
+    schedule_prune_following(Duration::from_secs(0));
 }
 
 // Seeding interval seeks to find a balance between the need for rng secrecy, and
 // avoiding the overhead of frequent reseeding.
 const SEEDING_INTERVAL: Duration = Duration::from_secs(3600);
 const RETRY_SEEDING_INTERVAL: Duration = Duration::from_secs(30);
+const PRUNE_FOLLOWING_INTERVAL: Duration = Duration::from_secs(60);
 
-fn schedule_seeding(duration: Duration) {
-    ic_cdk_timers::set_timer(duration, || {
+fn schedule_seeding(delay: Duration) {
+    ic_cdk_timers::set_timer(delay, || {
         spawn(async {
             let result: Result<([u8; 32],), (i32, String)> =
                 CdkRuntime::call_with_cleanup(IC_00, "raw_rand", ()).await;
@@ -190,6 +194,32 @@ fn schedule_seeding(duration: Duration) {
             // Schedule reseeding on a timer with duration SEEDING_INTERVAL
             schedule_seeding(SEEDING_INTERVAL);
         })
+    });
+}
+
+thread_local! {
+    // The last neuron whose following was pruned (possibly, trivially, i.e. did
+    // not try to remove anything, because it refreshed recently enough).
+    static PRUNE_FOLLOWING_CHECKPOINT: RefCell<NeuronIdProto> = Default::default();
+}
+
+fn schedule_prune_following(delay: Duration) {
+    if !is_prune_following_enabled() {
+        return;
+    }
+
+    ic_cdk_timers::set_timer(delay, || {
+        let start_checkpoint = PRUNE_FOLLOWING_CHECKPOINT.with(|p| *p.borrow());
+
+        let carry_on = || call_context_instruction_counter() < 10_000_000;
+        let new_checkpoint = governance_mut().prune_some_following(&start_checkpoint, carry_on);
+
+        PRUNE_FOLLOWING_CHECKPOINT.with(|p| {
+            let mut borrow = p.borrow_mut();
+            *borrow = new_checkpoint;
+        });
+
+        schedule_prune_following(PRUNE_FOLLOWING_INTERVAL);
     });
 }
 

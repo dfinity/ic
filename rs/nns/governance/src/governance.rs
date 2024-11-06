@@ -13,7 +13,9 @@ use crate::{
     migrations::maybe_run_migrations,
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
-    neuron_store::{metrics::NeuronSubsetMetrics, NeuronMetrics, NeuronStore},
+    neuron_store::{
+        metrics::NeuronSubsetMetrics, prune_some_following, NeuronMetrics, NeuronStore,
+    },
     neurons_fund::{
         NeuronsFund, NeuronsFundNeuronPortion, NeuronsFundSnapshot,
         PolynomialNeuronsFundParticipation, SwapParticipationLimits,
@@ -6013,6 +6015,14 @@ impl Governance {
         self.with_neuron_mut(id, |neuron| neuron.configure(caller, now_seconds, c))??;
 
         Ok(())
+    }
+
+    pub fn prune_some_following(
+        &mut self,
+        begin: &NeuronId,
+        carry_on: impl FnMut() -> bool,
+    ) -> NeuronId {
+        prune_some_following(&mut self.neuron_store, *begin, self.env.now(), carry_on)
     }
 
     /// Creates a new neuron or refreshes the stake of an existing
