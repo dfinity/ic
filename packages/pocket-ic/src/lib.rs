@@ -348,9 +348,32 @@ impl PocketIc {
         PocketIcBuilder::new().with_application_subnet().build()
     }
 
-    /// Returns the instance ID.
-    pub fn instance_id(&self) -> InstanceId {
-        self.pocket_ic.instance_id
+    /// Creates a PocketIC handle to an existing instance on a running server.
+    pub fn new_from_existing_instance(
+        server_url: Url,
+        instance_id: InstanceId,
+        max_request_time_ms: Option<u64>,
+    ) -> Self {
+        let (tx, rx) = channel();
+        let thread = thread::spawn(move || {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            tx.send(rt).unwrap();
+        });
+        let runtime = rx.recv().unwrap();
+
+        let pocket_ic = runtime.block_on(async {
+            PocketIcAsync::new_from_existing_instance(server_url, instance_id, max_request_time_ms)
+                .await
+        });
+
+        Self {
+            pocket_ic,
+            runtime: Arc::new(runtime),
+            thread: Some(thread),
+        }
     }
 
     pub(crate) fn from_components(
@@ -390,6 +413,11 @@ impl PocketIc {
             runtime: Arc::new(runtime),
             thread: Some(thread),
         }
+    }
+
+    /// Returns the instance ID.
+    pub fn instance_id(&self) -> InstanceId {
+        self.pocket_ic.instance_id
     }
 
     /// Returns the topology of the different subnets of this PocketIC instance.

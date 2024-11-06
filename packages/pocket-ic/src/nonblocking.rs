@@ -89,6 +89,28 @@ impl PocketIc {
             .await
     }
 
+    /// Creates a PocketIC handle to an existing instance on a running server.
+    pub async fn new_from_existing_instance(
+        server_url: Url,
+        instance_id: InstanceId,
+        max_request_time_ms: Option<u64>,
+    ) -> Self {
+        let test_driver_pid = std::process::id();
+        let log_guard = setup_tracing(test_driver_pid);
+
+        let reqwest_client = reqwest::Client::new();
+        debug!("instance_id={} Reusing existing instance.", instance_id);
+
+        Self {
+            instance_id,
+            max_request_time_ms,
+            http_gateway: None,
+            server_url,
+            reqwest_client,
+            _log_guard: log_guard,
+        }
+    }
+
     pub(crate) async fn from_components(
         subnet_config_set: impl Into<ExtendedSubnetConfigSet>,
         server_url: Url,
