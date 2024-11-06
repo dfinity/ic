@@ -86,7 +86,7 @@ impl Notary {
             crypto,
             state_manager,
             log,
-            metrics: NotaryMetrics::new(&metrics_registry),
+            metrics: NotaryMetrics::new(metrics_registry),
         }
     }
 
