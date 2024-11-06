@@ -829,7 +829,7 @@ mod tests {
 
     #[test]
     fn test_ecdsa_signer_action() {
-        let key_id = fake_ecdsa_idkg_master_public_key_id().try_into().unwrap();
+        let key_id = fake_ecdsa_idkg_master_public_key_id();
         let mut uid_generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
         let height = Height::from(100);
         let (id_1, id_2, id_3, id_4, id_5) = (
@@ -902,7 +902,7 @@ mod tests {
     fn test_signature_shares_purging_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_signature_shares_purging(key_id.try_into().unwrap());
+            test_signature_shares_purging(key_id);
         }
     }
 
@@ -973,7 +973,7 @@ mod tests {
     fn test_send_signature_shares_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_send_signature_shares(key_id.try_into().unwrap());
+            test_send_signature_shares(key_id);
         }
     }
 
@@ -1082,7 +1082,7 @@ mod tests {
     fn test_send_signature_shares_incomplete_contexts_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_send_signature_shares_incomplete_contexts(key_id.try_into().unwrap());
+            test_send_signature_shares_incomplete_contexts(key_id);
         }
     }
 
@@ -1099,10 +1099,8 @@ mod tests {
         let wrong_key_id = match key_id.deref() {
             MasterPublicKeyId::Ecdsa(_) => {
                 fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Ed25519)
-                    .try_into()
-                    .unwrap()
             }
-            MasterPublicKeyId::Schnorr(_) => fake_ecdsa_idkg_master_public_key_id().try_into().unwrap(),
+            MasterPublicKeyId::Schnorr(_) => fake_ecdsa_idkg_master_public_key_id(),
             MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
         };
 
@@ -1178,7 +1176,7 @@ mod tests {
     fn test_send_signature_shares_when_failure_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_send_signature_shares_when_failure(key_id.try_into().unwrap());
+            test_send_signature_shares_when_failure(key_id);
         }
     }
 
@@ -1244,7 +1242,7 @@ mod tests {
     fn test_send_signature_shares_with_complaints_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_send_signature_shares_with_complaints(key_id.try_into().unwrap());
+            test_send_signature_shares_with_complaints(key_id);
         }
     }
 
@@ -1312,7 +1310,7 @@ mod tests {
     fn test_crypto_verify_sig_share_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_crypto_verify_sig_share(key_id.try_into().unwrap());
+            test_crypto_verify_sig_share(key_id);
         }
     }
 
@@ -1403,7 +1401,7 @@ mod tests {
     fn test_validate_signature_shares_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_validate_signature_shares(key_id.try_into().unwrap());
+            test_validate_signature_shares(key_id);
         }
     }
 
@@ -1508,7 +1506,7 @@ mod tests {
     fn test_validate_signature_shares_mismatching_schemes_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_validate_signature_shares_mismatching_schemes(key_id.try_into().unwrap());
+            test_validate_signature_shares_mismatching_schemes(key_id);
         }
     }
 
@@ -1551,10 +1549,8 @@ mod tests {
         let key_id_wrong_scheme = match key_id.deref() {
             MasterPublicKeyId::Ecdsa(_) => {
                 fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Ed25519)
-                    .try_into()
-                    .unwrap()
             }
-            MasterPublicKeyId::Schnorr(_) => fake_ecdsa_idkg_master_public_key_id().try_into().unwrap(),
+            MasterPublicKeyId::Schnorr(_) => fake_ecdsa_idkg_master_public_key_id(),
             MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
         };
         let message = create_signature_share(&key_id_wrong_scheme, NODE_2, id_2.clone());
@@ -1584,7 +1580,7 @@ mod tests {
     fn test_validate_signature_shares_incomplete_contexts_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_validate_signature_shares_incomplete_contexts(key_id.try_into().unwrap());
+            test_validate_signature_shares_incomplete_contexts(key_id);
         }
     }
 
@@ -1685,7 +1681,7 @@ mod tests {
     fn test_duplicate_signature_shares_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_duplicate_signature_shares(key_id.try_into().unwrap());
+            test_duplicate_signature_shares(key_id);
         }
     }
 
@@ -1738,7 +1734,7 @@ mod tests {
     fn test_duplicate_signature_shares_in_batch_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_duplicate_signature_shares_in_batch(key_id.try_into().unwrap());
+            test_duplicate_signature_shares_in_batch(key_id);
         }
     }
 
@@ -1806,7 +1802,7 @@ mod tests {
     fn test_purge_unvalidated_signature_shares_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_purge_unvalidated_signature_shares(key_id.try_into().unwrap());
+            test_purge_unvalidated_signature_shares(key_id);
         }
     }
 
@@ -1876,7 +1872,7 @@ mod tests {
     fn test_purge_validated_signature_shares_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_purge_validated_signature_shares(key_id.try_into().unwrap());
+            test_purge_validated_signature_shares(key_id);
         }
     }
 

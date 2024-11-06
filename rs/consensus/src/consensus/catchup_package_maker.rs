@@ -267,8 +267,9 @@ impl CatchUpPackageMaker {
 mod tests {
     //! CatchUpPackageMaker unit tests
     use crate::idkg::test_utils::{
-        add_available_quadruple_to_payload, empty_idkg_payload, fake_ecdsa_idkg_master_public_key_id,
-        fake_signature_request_context_with_pre_sig, fake_state_with_signature_requests,
+        add_available_quadruple_to_payload, empty_idkg_payload,
+        fake_ecdsa_idkg_master_public_key_id, fake_signature_request_context_with_pre_sig,
+        fake_state_with_signature_requests,
     };
 
     use super::*;
@@ -281,10 +282,7 @@ mod tests {
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
-        consensus::{
-            idkg::{IDkgMasterPublicKeyId, PreSigId},
-            BlockPayload, Payload, SummaryPayload,
-        },
+        consensus::{idkg::PreSigId, BlockPayload, Payload, SummaryPayload},
         crypto::CryptoHash,
         CryptoHashOfState, Height, RegistryVersion,
     };
@@ -396,8 +394,7 @@ mod tests {
                 .expect_get_state_hash_at()
                 .return_const(Ok(CryptoHashOfState::from(CryptoHash(vec![1, 2, 3]))));
 
-            let key_id: IDkgMasterPublicKeyId =
-                fake_ecdsa_idkg_master_public_key_id().try_into().unwrap();
+            let key_id = fake_ecdsa_idkg_master_public_key_id();
 
             // Create three quadruple Ids and contexts, quadruple "2" will remain unmatched.
             let pre_sig_id1 = PreSigId(1);

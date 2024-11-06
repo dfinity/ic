@@ -239,7 +239,7 @@ mod tests {
             .enumerate()
         {
             let i = i as u64;
-            let request = create_reshare_request(key_id.clone().try_into().unwrap(), i, i);
+            let request = create_reshare_request(key_id.clone(), i, i);
             let context = dealings_context_from_reshare_request(request.clone());
             contexts.insert(CallbackId::from(i), context);
             initial_dealings.insert(
@@ -256,7 +256,7 @@ mod tests {
             .enumerate()
         {
             let i = i as u64;
-            let request = create_reshare_request(key_id.clone().try_into().unwrap(), i, i);
+            let request = create_reshare_request(key_id.clone(), i, i);
             let res = make_reshare_dealings_response(
                 &request,
                 initial_dealings.get(&i).unwrap(),
@@ -276,7 +276,7 @@ mod tests {
             assert_eq!(initial_dealings.get(&i).unwrap(), &dealings);
         }
 
-        let fake_key = fake_ecdsa_idkg_master_public_key_id().try_into().unwrap();
+        let fake_key = fake_ecdsa_idkg_master_public_key_id();
         assert_eq!(
             make_reshare_dealings_response(
                 &create_reshare_request(fake_key, 10, 10),
@@ -291,8 +291,6 @@ mod tests {
     fn test_initiate_reshare_requests_should_not_accept_when_key_transcript_not_created() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-
-            let key_id: IDkgMasterPublicKeyId = key_id.try_into().unwrap();
             let (mut payload, _block_reader) = set_up(
                 vec![key_id.clone()],
                 /*should_create_key_transcript=*/ false,
@@ -310,8 +308,6 @@ mod tests {
     fn test_initiate_reshare_requests_good_path() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-
-            let key_id: IDkgMasterPublicKeyId = key_id.try_into().unwrap();
             let (mut payload, _block_reader) = set_up(
                 vec![key_id.clone()],
                 /*should_create_key_transcript=*/ true,
@@ -334,8 +330,6 @@ mod tests {
     fn test_initiate_reshare_requests_incremental() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-
-            let key_id: IDkgMasterPublicKeyId = key_id.try_into().unwrap();
             let (mut payload, _block_reader) = set_up(
                 vec![key_id.clone()],
                 /*should_create_key_transcript=*/ true,
@@ -367,8 +361,6 @@ mod tests {
     fn test_initiate_reshare_requests_should_not_accept_already_completed() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            let key_id: IDkgMasterPublicKeyId = key_id.try_into().unwrap();
-
             let (mut payload, _block_reader) = set_up(
                 vec![key_id.clone()],
                 /*should_create_key_transcript=*/ true,
@@ -390,7 +382,7 @@ mod tests {
     fn test_ecdsa_update_completed_reshare_requests_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_ecdsa_update_completed_reshare_requests(key_id.try_into().unwrap());
+            test_ecdsa_update_completed_reshare_requests(key_id);
         }
     }
 

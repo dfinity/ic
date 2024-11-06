@@ -298,7 +298,7 @@ mod tests {
     fn test_update_next_key_transcript_single_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_update_next_key_transcript_single(key_id.try_into().unwrap());
+            test_update_next_key_transcript_single(key_id);
         }
     }
 
@@ -486,7 +486,7 @@ mod tests {
     fn test_update_next_key_transcript_xnet_target_subnet_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_update_next_key_transcript_xnet_target_subnet_single(key_id.try_into().unwrap());
+            test_update_next_key_transcript_xnet_target_subnet_single(key_id);
         }
     }
 

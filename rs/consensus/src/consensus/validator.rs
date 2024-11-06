@@ -2151,8 +2151,7 @@ pub mod test {
                 .expect_get_state_hash_at()
                 .return_const(Ok(state_hash.clone()));
 
-            let key_id: IDkgMasterPublicKeyId =
-                fake_ecdsa_idkg_master_public_key_id().try_into().unwrap();
+            let key_id: IDkgMasterPublicKeyId = fake_ecdsa_idkg_master_public_key_id();
             // Create three quadruple Ids and contexts, quadruple "2" will remain unmatched.
             let pre_sig_id1 = PreSigId(1);
             let pre_sig_id2 = PreSigId(2);

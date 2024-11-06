@@ -100,6 +100,12 @@ impl std::borrow::Borrow<MasterPublicKeyId> for IDkgMasterPublicKeyId {
     }
 }
 
+impl std::fmt::Display for IDkgMasterPublicKeyId {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(fmt, "{}", &self.0)
+    }
+}
+
 impl Serialize for IDkgMasterPublicKeyId {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         self.0.serialize(serializer)

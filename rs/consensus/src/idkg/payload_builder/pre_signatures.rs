@@ -656,7 +656,7 @@ pub(super) mod tests {
     fn test_make_new_pre_signatures_if_needed_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_make_new_pre_signatures_if_needed(key_id.try_into().unwrap());
+            test_make_new_pre_signatures_if_needed(key_id);
         }
     }
 
@@ -806,8 +806,7 @@ pub(super) mod tests {
     fn test_ecdsa_update_pre_signatures_in_creation() {
         let mut rng = reproducible_rng();
         let subnet_id = subnet_test_id(1);
-        let key_id: IDkgMasterPublicKeyId =
-            fake_ecdsa_idkg_master_public_key_id().try_into().unwrap();
+        let key_id = fake_ecdsa_idkg_master_public_key_id();
         let (mut payload, env, mut block_reader) =
             set_up(&mut rng, subnet_id, vec![key_id.clone()], Height::from(100));
         let transcript_builder = TestIDkgTranscriptBuilder::new();
@@ -977,9 +976,7 @@ pub(super) mod tests {
     fn test_schnorr_update_pre_signatures_in_creation(algorithm: SchnorrAlgorithm) {
         let mut rng = reproducible_rng();
         let subnet_id = subnet_test_id(1);
-        let key_id: IDkgMasterPublicKeyId = fake_schnorr_idkg_master_public_key_id(algorithm)
-            .try_into()
-            .unwrap();
+        let key_id: IDkgMasterPublicKeyId = fake_schnorr_idkg_master_public_key_id(algorithm);
         let (mut payload, env, mut block_reader) =
             set_up(&mut rng, subnet_id, vec![key_id.clone()], Height::from(100));
         let transcript_builder = TestIDkgTranscriptBuilder::new();
@@ -1069,7 +1066,7 @@ pub(super) mod tests {
     fn test_matched_pre_signatures_are_not_purged_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_matched_pre_signatures_are_not_purged(key_id.try_into().unwrap());
+            test_matched_pre_signatures_are_not_purged(key_id);
         }
     }
 
@@ -1134,7 +1131,7 @@ pub(super) mod tests {
     fn test_unmatched_pre_signatures_of_current_key_are_not_purged_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_unmatched_pre_signatures_of_current_key_are_not_purged(key_id.try_into().unwrap());
+            test_unmatched_pre_signatures_of_current_key_are_not_purged(key_id);
         }
     }
 
@@ -1175,7 +1172,7 @@ pub(super) mod tests {
     fn test_unmatched_pre_signatures_of_different_key_are_purged_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_unmatched_pre_signatures_of_different_key_are_purged(key_id.try_into().unwrap());
+            test_unmatched_pre_signatures_of_different_key_are_purged(key_id);
         }
     }
 

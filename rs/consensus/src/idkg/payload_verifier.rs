@@ -638,7 +638,7 @@ mod test {
     fn test_validate_transcript_refs_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_validate_transcript_refs(key_id.try_into().unwrap());
+            test_validate_transcript_refs(key_id);
         }
     }
 
@@ -753,7 +753,7 @@ mod test {
     fn test_validate_reshare_dealings_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_validate_reshare_dealings(key_id.try_into().unwrap());
+            test_validate_reshare_dealings(key_id);
         }
     }
 
@@ -858,7 +858,7 @@ mod test {
     fn test_validate_new_signature_agreements_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_validate_new_signature_agreements(key_id.try_into().unwrap());
+            test_validate_new_signature_agreements(key_id);
         }
     }
 
@@ -1013,7 +1013,7 @@ mod test {
     fn test_validate_new_signature_agreements_missing_input_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_validate_new_signature_agreements_missing_input(key_id.try_into().unwrap());
+            test_validate_new_signature_agreements_missing_input(key_id);
         }
     }
 
@@ -1077,12 +1077,8 @@ mod test {
         let wrong_key_id = match key_id.deref() {
             MasterPublicKeyId::Ecdsa(_) => {
                 fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Ed25519)
-                    .try_into()
-                    .unwrap()
             }
-            MasterPublicKeyId::Schnorr(_) => {
-                fake_ecdsa_idkg_master_public_key_id().try_into().unwrap()
-            }
+            MasterPublicKeyId::Schnorr(_) => fake_ecdsa_idkg_master_public_key_id(),
             MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
         };
         // Add a pre-signature for the "wrong_key_id"

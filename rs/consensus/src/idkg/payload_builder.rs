@@ -828,7 +828,7 @@ mod tests {
     fn test_pre_signature_recreation_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_pre_signature_recreation(key_id.try_into().unwrap());
+            test_pre_signature_recreation(key_id);
         }
     }
 
@@ -923,7 +923,7 @@ mod tests {
     fn test_signing_request_timeout_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_signing_request_timeout(key_id.try_into().unwrap());
+            test_signing_request_timeout(key_id);
         }
     }
 
@@ -991,7 +991,7 @@ mod tests {
     fn test_request_with_invalid_key_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_request_with_invalid_key(key_id.try_into().unwrap());
+            test_request_with_invalid_key(key_id);
         }
     }
 
@@ -1060,7 +1060,7 @@ mod tests {
     fn test_signature_is_only_delivered_once_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_signature_is_only_delivered_once(key_id.try_into().unwrap());
+            test_signature_is_only_delivered_once(key_id);
         }
     }
 
@@ -1146,7 +1146,7 @@ mod tests {
     fn test_update_summary_refs_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_update_summary_refs(key_id.try_into().unwrap());
+            test_update_summary_refs(key_id);
         }
     }
 
@@ -1406,7 +1406,7 @@ mod tests {
     fn test_summary_proto_conversion_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_summary_proto_conversion(key_id.try_into().unwrap());
+            test_summary_proto_conversion(key_id);
         }
     }
 
@@ -1697,7 +1697,7 @@ mod tests {
     fn test_no_creation_after_successful_creation_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_no_creation_after_successful_creation(key_id.try_into().unwrap());
+            test_no_creation_after_successful_creation(key_id);
         }
     }
 
@@ -1837,7 +1837,7 @@ mod tests {
     fn test_incomplete_reshare_doesnt_purge_pre_signatures_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_incomplete_reshare_doesnt_purge_pre_signatures(key_id.try_into().unwrap());
+            test_incomplete_reshare_doesnt_purge_pre_signatures(key_id);
         }
     }
 
@@ -2185,7 +2185,7 @@ mod tests {
     fn test_if_next_in_creation_continues_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_if_next_in_creation_continues(key_id.try_into().unwrap());
+            test_if_next_in_creation_continues(key_id);
         }
     }
 
@@ -2335,7 +2335,7 @@ mod tests {
     fn test_next_in_creation_with_initial_dealings_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_next_in_creation_with_initial_dealings(key_id.try_into().unwrap());
+            test_next_in_creation_with_initial_dealings(key_id);
         }
     }
 

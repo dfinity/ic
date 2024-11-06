@@ -981,9 +981,9 @@ mod tests {
     use ic_crypto_test_utils_canister_threshold_sigs::CanisterThresholdSigTestEnvironment;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
-    use ic_management_canister_types::MasterPublicKeyId;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
+    use ic_types::consensus::idkg::IDkgMasterPublicKeyId;
     use ic_types::consensus::idkg::{IDkgObject, TranscriptRef};
     use ic_types::crypto::AlgorithmId;
     use ic_types::time::UNIX_EPOCH;
@@ -1076,7 +1076,7 @@ mod tests {
         }
     }
 
-    fn test_validate_complaints(key_id: MasterPublicKeyId) {
+    fn test_validate_complaints(key_id: IDkgMasterPublicKeyId) {
         let (id_1, id_2, id_3) = (
             create_transcript_id_with_height(1, Height::from(200)),
             create_transcript_id_with_height(2, Height::from(20)),
@@ -1317,7 +1317,7 @@ mod tests {
         }
     }
 
-    fn test_send_openings(key_id: MasterPublicKeyId) {
+    fn test_send_openings(key_id: IDkgMasterPublicKeyId) {
         let (id_1, id_2, id_3) = (
             create_transcript_id(1),
             create_transcript_id(2),
@@ -1433,7 +1433,7 @@ mod tests {
         }
     }
 
-    fn test_validate_openings(key_id: MasterPublicKeyId) {
+    fn test_validate_openings(key_id: IDkgMasterPublicKeyId) {
         let (id_1, id_2, id_3, id_4) = (
             create_transcript_id_with_height(1, Height::from(400)),
             create_transcript_id_with_height(2, Height::from(20)),
@@ -1905,7 +1905,7 @@ mod tests {
         }
     }
 
-    fn test_load_transcript_failure_to_create_complaint(key_id: MasterPublicKeyId) {
+    fn test_load_transcript_failure_to_create_complaint(key_id: IDkgMasterPublicKeyId) {
         let mut rng = reproducible_rng();
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {

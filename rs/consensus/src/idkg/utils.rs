@@ -681,10 +681,7 @@ mod tests {
         let init = inspect_idkg_chain_key_initializations(&[], &[chain_key_init])
             .expect("Should successfully get initializations");
 
-        assert_eq!(
-            init,
-            BTreeMap::from([(key_id.try_into().unwrap(), initial_dealings)])
-        );
+        assert_eq!(init, BTreeMap::from([(key_id, initial_dealings)]));
     }
 
     #[test]
@@ -933,7 +930,7 @@ mod tests {
     fn test_get_pre_signature_ids_to_deliver_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_get_pre_signature_ids_to_deliver(key_id.try_into().unwrap());
+            test_get_pre_signature_ids_to_deliver(key_id);
         }
     }
 
@@ -1005,7 +1002,7 @@ mod tests {
     fn test_block_without_key_should_not_deliver_pre_signatures_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_block_without_key_should_not_deliver_pre_signatures(key_id.try_into().unwrap());
+            test_block_without_key_should_not_deliver_pre_signatures(key_id);
         }
     }
 

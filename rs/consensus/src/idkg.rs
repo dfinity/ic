@@ -579,7 +579,7 @@ mod tests {
     fn test_idkg_priority_fn_args() {
         let state_manager = Arc::new(RefMockStateManager::default());
         let height = Height::from(100);
-        let key_id: IDkgMasterPublicKeyId = fake_ecdsa_idkg_master_public_key_id().try_into().unwrap();
+        let key_id: IDkgMasterPublicKeyId = fake_ecdsa_idkg_master_public_key_id();
         // Add two contexts to state, one with, and one without quadruple
         let pre_sig_id = PreSigId(0);
         let context_with_quadruple =

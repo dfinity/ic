@@ -1352,10 +1352,10 @@ mod tests {
     };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
-    use ic_management_canister_types::MasterPublicKeyId;
     use ic_test_utilities_consensus::IDkgStatsNoOp;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
+    use ic_types::consensus::idkg::IDkgMasterPublicKeyId;
     use ic_types::consensus::idkg::IDkgObject;
     use ic_types::crypto::{BasicSig, BasicSigOf, CryptoHash};
     use ic_types::time::UNIX_EPOCH;
@@ -1433,7 +1433,7 @@ mod tests {
         }
     }
 
-    fn test_send_dealings(key_id: MasterPublicKeyId) {
+    fn test_send_dealings(key_id: IDkgMasterPublicKeyId) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, pre_signer) =
@@ -1535,7 +1535,7 @@ mod tests {
         }
     }
 
-    fn test_non_dealers_dont_send_dealings(key_id: MasterPublicKeyId) {
+    fn test_non_dealers_dont_send_dealings(key_id: IDkgMasterPublicKeyId) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (idkg_pool, pre_signer) = create_pre_signer_dependencies(pool_config, logger);
@@ -1595,7 +1595,7 @@ mod tests {
         }
     }
 
-    fn test_send_dealings_with_complaints(key_id: MasterPublicKeyId) {
+    fn test_send_dealings_with_complaints(key_id: IDkgMasterPublicKeyId) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (idkg_pool, pre_signer) = create_pre_signer_dependencies(pool_config, logger);
@@ -1673,7 +1673,7 @@ mod tests {
         }
     }
 
-    fn test_validate_dealings(key_id: MasterPublicKeyId) {
+    fn test_validate_dealings(key_id: IDkgMasterPublicKeyId) {
         let (id_2, id_3, id_4, id_5, id_6) = (
             // A dealing for a transcript that is requested by finalized block (accepted)
             create_transcript_id_with_height(2, Height::from(100)),
@@ -1842,7 +1842,7 @@ mod tests {
         }
     }
 
-    fn test_duplicate_dealing(key_id: MasterPublicKeyId) {
+    fn test_duplicate_dealing(key_id: IDkgMasterPublicKeyId) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, pre_signer) =
@@ -1887,7 +1887,7 @@ mod tests {
         }
     }
 
-    fn test_duplicate_dealing_in_batch(key_id: MasterPublicKeyId) {
+    fn test_duplicate_dealing_in_batch(key_id: IDkgMasterPublicKeyId) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, pre_signer) =
@@ -1954,7 +1954,7 @@ mod tests {
         }
     }
 
-    fn test_unexpected_dealing(key_id: MasterPublicKeyId) {
+    fn test_unexpected_dealing(key_id: IDkgMasterPublicKeyId) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, pre_signer) =
@@ -1991,7 +1991,7 @@ mod tests {
         }
     }
 
-    fn test_send_support(key_id: MasterPublicKeyId) {
+    fn test_send_support(key_id: IDkgMasterPublicKeyId) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, pre_signer) =
@@ -2034,7 +2034,7 @@ mod tests {
         }
     }
 
-    fn test_defer_sending_dealing_support(key_id: MasterPublicKeyId) {
+    fn test_defer_sending_dealing_support(key_id: IDkgMasterPublicKeyId) {
         let mut rng = reproducible_rng();
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
@@ -2082,7 +2082,7 @@ mod tests {
         }
     }
 
-    fn test_dont_send_support_for_invalid(key_id: MasterPublicKeyId) {
+    fn test_dont_send_support_for_invalid(key_id: IDkgMasterPublicKeyId) {
         let mut rng = reproducible_rng();
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
@@ -2123,7 +2123,7 @@ mod tests {
         }
     }
 
-    fn test_non_receivers_dont_send_support(key_id: MasterPublicKeyId) {
+    fn test_non_receivers_dont_send_support(key_id: IDkgMasterPublicKeyId) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, pre_signer) =
@@ -2216,7 +2216,7 @@ mod tests {
         }
     }
 
-    fn test_validate_dealing_support(key_id: MasterPublicKeyId) {
+    fn test_validate_dealing_support(key_id: IDkgMasterPublicKeyId) {
         let (id_2, id_3, id_4, id_5) = (
             create_transcript_id_with_height(2, Height::from(25)),
             create_transcript_id_with_height(3, Height::from(10)),
@@ -2746,7 +2746,7 @@ mod tests {
         }
     }
 
-    fn test_transcript_builder(key_id: MasterPublicKeyId) {
+    fn test_transcript_builder(key_id: IDkgMasterPublicKeyId) {
         let mut rng = reproducible_rng();
         let env = CanisterThresholdSigTestEnvironment::new(3, &mut rng);
         let (dealers, receivers) = env.choose_dealers_and_receivers(
