@@ -68,7 +68,7 @@ pub struct OutputRuleMetadata {
     pub removed_in_version: Option<Version>,
 }
 
-#[derive(CandidType, Deserialize, Debug)]
+#[derive(CandidType, Deserialize, Debug, Clone)]
 pub struct InitArg {
     pub registry_polling_period_secs: u64,
     pub authorized_principal: Option<Principal>,
