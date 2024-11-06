@@ -116,7 +116,7 @@ fn start_consensus_manager<Artifact, WireArtifact, Assembler>(
     metrics_registry: &MetricsRegistry,
     rt_handle: Handle,
     // Locally produced adverts to send to the node's peers.
-    adverts_to_send: Receiver<ArtifactTransmit<Artifact>>,
+    outbound_transmits: Receiver<ArtifactTransmit<Artifact>>,
     // Adverts received from peers
     adverts_received: Receiver<(SlotUpdate<WireArtifact>, NodeId, ConnId)>,
     sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
@@ -137,7 +137,7 @@ where
         metrics.clone(),
         rt_handle.clone(),
         transport.clone(),
-        adverts_to_send,
+        outbound_transmits,
         assembler.clone(),
     );
 
@@ -165,7 +165,7 @@ pub(crate) enum Update<Artifact: PbArtifact> {
     Id(Artifact::Id),
 }
 
-pub fn uri_prefix<Artifact: PbArtifact>() -> String {
+pub(crate) fn uri_prefix<Artifact: PbArtifact>() -> String {
     Artifact::NAME.to_lowercase()
 }
 

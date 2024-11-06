@@ -1,5 +1,3 @@
-#![allow(clippy::disallowed_methods)]
-
 use std::{
     collections::{hash_map::Entry, HashMap},
     marker::PhantomData,
@@ -34,12 +32,10 @@ use self::available_slot_set::{AvailableSlot, AvailableSlotSet};
 
 /// The size threshold for an artifact to be pushed. Artifacts smaller than this constant
 /// in size are pushed.
-pub(crate) const ARTIFACT_PUSH_THRESHOLD_BYTES: usize = 1024; // 1KB
-
+const ARTIFACT_PUSH_THRESHOLD_BYTES: usize = 1024; // 1KB
 const MIN_BACKOFF_INTERVAL: Duration = Duration::from_millis(250);
 const MAX_BACKOFF_INTERVAL: Duration = Duration::from_secs(60);
 const BACKOFF_MULTIPLIER: f64 = 2.0;
-
 // Used to log warnings if the slot table grows beyond the threshold.
 const SLOT_TABLE_THRESHOLD: u64 = 30_000;
 
@@ -57,12 +53,12 @@ fn panic_on_join_err<T>(result: Result<T, JoinError>) -> T {
     }
 }
 
-pub(crate) struct ConsensusManagerSender<Artifact: IdentifiableArtifact, WireArtifact, Assembler> {
+pub struct ConsensusManagerSender<Artifact: IdentifiableArtifact, WireArtifact, Assembler> {
     log: ReplicaLogger,
     metrics: ConsensusManagerMetrics,
     rt_handle: Handle,
     transport: Arc<dyn Transport>,
-    adverts_to_send: Receiver<ArtifactTransmit<Artifact>>,
+    outbound_transmits: Receiver<ArtifactTransmit<Artifact>>,
     slot_manager: AvailableSlotSet,
     current_commit_id: CommitId,
     active_adverts: HashMap<Artifact::Id, (CancellationToken, AvailableSlot)>,
@@ -77,12 +73,12 @@ impl<
         Assembler: ArtifactAssembler<Artifact, WireArtifact>,
     > ConsensusManagerSender<Artifact, WireArtifact, Assembler>
 {
-    pub(crate) fn run(
+    pub fn run(
         log: ReplicaLogger,
         metrics: ConsensusManagerMetrics,
         rt_handle: Handle,
         transport: Arc<dyn Transport>,
-        adverts_to_send: Receiver<ArtifactTransmit<Artifact>>,
+        outbound_transmits: Receiver<ArtifactTransmit<Artifact>>,
         assembler: Assembler,
     ) -> Shutdown {
         let slot_manager = AvailableSlotSet::new(log.clone(), metrics.clone(), WireArtifact::NAME);
@@ -92,7 +88,7 @@ impl<
             metrics,
             rt_handle: rt_handle.clone(),
             transport,
-            adverts_to_send,
+            outbound_transmits,
             slot_manager,
             current_commit_id: CommitId::from(0),
             active_adverts: HashMap::new(),
@@ -118,10 +114,10 @@ impl<
                     );
                     break;
                 }
-                Some(advert) = self.adverts_to_send.recv() => {
+                Some(advert) = self.outbound_transmits.recv() => {
                     match advert {
-                        ArtifactTransmit::Deliver(new_artifact) => self.handle_send_advert(new_artifact, cancellation_token.clone()),
-                        ArtifactTransmit::Abort(id) => self.handle_purge_advert(&id),
+                        ArtifactTransmit::Deliver(new_artifact) => self.handle_deliver_transmit(new_artifact, cancellation_token.clone()),
+                        ArtifactTransmit::Abort(id) => self.handle_abort_transmit(&id),
                     }
 
                     self.current_commit_id.inc_assign();
@@ -160,7 +156,7 @@ impl<
         }
     }
 
-    fn handle_purge_advert(&mut self, id: &Artifact::Id) {
+    fn handle_abort_transmit(&mut self, id: &Artifact::Id) {
         if let Some((cancellation_token, free_slot)) = self.active_adverts.remove(id) {
             self.metrics.send_view_consensus_purge_active_total.inc();
             cancellation_token.cancel();
@@ -171,7 +167,7 @@ impl<
     }
 
     #[instrument(skip_all)]
-    fn handle_send_advert(
+    fn handle_deliver_transmit(
         &mut self,
         new_artifact: ArtifactWithOpt<Artifact>,
         cancellation_token: CancellationToken,
@@ -188,10 +184,7 @@ impl<
 
             let child_token = cancellation_token.child_token();
             let child_token_clone = child_token.clone();
-            let send_future = Self::send_advert_to_all_peers(
-                self.rt_handle.clone(),
-                self.metrics.clone(),
-                self.transport.clone(),
+            let payload = Self::get_transmit_payload(
                 self.current_commit_id,
                 used_slot.slot_number(),
                 ArtifactWithOpt {
@@ -199,6 +192,12 @@ impl<
                     is_latency_sensitive: new_artifact.is_latency_sensitive,
                 },
                 wire_artifact_id,
+            );
+            let send_future = Self::send_transmit_to_all_peers(
+                self.rt_handle.clone(),
+                self.metrics.clone(),
+                self.transport.clone(),
+                payload,
                 child_token_clone,
             );
 
@@ -209,12 +208,7 @@ impl<
         }
     }
 
-    /// Sends an advert to all peers.
-    #[instrument(skip_all)]
-    async fn send_advert_to_all_peers(
-        rt_handle: Handle,
-        metrics: ConsensusManagerMetrics,
-        transport: Arc<dyn Transport>,
+    fn get_transmit_payload(
         commit_id: CommitId,
         slot_number: SlotNumber,
         ArtifactWithOpt {
@@ -222,8 +216,7 @@ impl<
             is_latency_sensitive,
         }: ArtifactWithOpt<WireArtifact>,
         id: WireArtifact::Id,
-        cancellation_token: CancellationToken,
-    ) {
+    ) -> Bytes {
         let pb_slot_update = pb::SlotUpdate {
             commit_id: commit_id.get(),
             slot_id: slot_number.get(),
@@ -238,63 +231,70 @@ impl<
                 }
             }),
         };
-
-        let body = Bytes::from(pb_slot_update.encode_to_vec());
-
-        let mut in_progress_transmissions = JoinSet::new();
-        // Stores the connection ID and the [`CancellationToken`] of the last successful transmission task to a peer.
-        let mut initiated_transmissions: HashMap<NodeId, (ConnId, CancellationToken)> =
-            HashMap::new();
-        let mut periodic_check_interval = time::interval(Duration::from_secs(5));
-        loop {
-            select! {
-                _ = periodic_check_interval.tick() => {
-                    // check for new peers/connection IDs
-                    // spawn task for peers with higher conn id or not in completed transmissions.
-                    // add task to join map
-                    for (peer, connection_id) in transport.peers() {
-                        let is_initiated = initiated_transmissions.get(&peer).is_some_and(|(id, token)| {
-                            if *id == connection_id {
-                                true
-                            } else {
-                                token.cancel();
-                                metrics.send_view_resend_reconnect_total.inc();
-                                false
-                            }
-                        });
-
-
-                        if !is_initiated {
-                            let child_token = cancellation_token.child_token();
-                            let child_token_clone = child_token.clone();
-                            metrics.send_view_send_to_peer_total.inc();
-
-                            let transport = transport.clone();
-                            let body = body.clone();
-
-                            let send_future = async move {
-                                select! {
-                                    _ = send_advert_to_peer(transport, body, peer, uri_prefix::<WireArtifact>()) => {},
-                                    _ = child_token.cancelled() => {},
-                                }
-                            };
-
-                            in_progress_transmissions.spawn_on(send_future, &rt_handle);
-                            initiated_transmissions.insert(peer, (connection_id, child_token_clone));
+        Bytes::from(pb_slot_update.encode_to_vec())
+    }
+}
+/// Sends an advert to all peers.
+#[instrument(skip_all)]
+async fn send_transmit_to_all_peers(
+    rt_handle: Handle,
+    metrics: ConsensusManagerMetrics,
+    transport: Arc<dyn Transport>,
+    body: Bytes,
+    cancellation_token: CancellationToken,
+) {
+    let mut in_progress_transmissions = JoinSet::new();
+    // Stores the connection ID and the [`CancellationToken`] of the last successful transmission task to a peer.
+    let mut initiated_transmissions: HashMap<NodeId, (ConnId, CancellationToken)> = HashMap::new();
+    let mut periodic_check_interval = time::interval(Duration::from_secs(5));
+    loop {
+        select! {
+            _ = periodic_check_interval.tick() => {
+                // check for new peers/connection IDs
+                // spawn task for peers with higher conn id or not in completed transmissions.
+                // add task to join map
+                for (peer, connection_id) in transport.peers() {
+                    let is_initiated = initiated_transmissions.get(&peer).is_some_and(|(id, token)| {
+                        if *id == connection_id {
+                            true
+                        } else {
+                            token.cancel();
+                            metrics.send_view_resend_reconnect_total.inc();
+                            false
                         }
+                    });
+
+
+                    if !is_initiated {
+                        let child_token = cancellation_token.child_token();
+                        let child_token_clone = child_token.clone();
+                        metrics.send_view_send_to_peer_total.inc();
+
+                        let transport = transport.clone();
+                        let body = body.clone();
+
+                        let send_future = async move {
+                            select! {
+                                _ = send_transmit_to_peer(transport, body, peer, uri_prefix::<WireArtifact>()) => {},
+                                _ = child_token.cancelled() => {},
+                            }
+                        };
+
+                        in_progress_transmissions.spawn_on(send_future, &rt_handle);
+                        initiated_transmissions.insert(peer, (connection_id, child_token_clone));
                     }
                 }
-                Some(result) = in_progress_transmissions.join_next() => {
+            }
+            Some(result) = in_progress_transmissions.join_next() => {
+                panic_on_join_err(result);
+                metrics.send_view_send_to_peer_delivered_total.inc();
+            }
+            _ = cancellation_token.cancelled() => {
+                while let Some(result) = in_progress_transmissions.join_next().await {
+                    metrics.send_view_send_to_peer_cancelled_total.inc();
                     panic_on_join_err(result);
-                    metrics.send_view_send_to_peer_delivered_total.inc();
                 }
-                _ = cancellation_token.cancelled() => {
-                    while let Some(result) = in_progress_transmissions.join_next().await {
-                        metrics.send_view_send_to_peer_cancelled_total.inc();
-                        panic_on_join_err(result);
-                    }
-                    break;
-                }
+                break;
             }
         }
     }
@@ -303,7 +303,7 @@ impl<
 /// Sends a serialized advert or artifact message to a peer.
 /// If the peer is not reachable, it will retry with an exponential backoff.
 #[instrument(skip(transport, message))]
-async fn send_advert_to_peer(
+async fn send_transmit_to_peer(
     transport: Arc<dyn Transport>,
     message: Bytes,
     peer: NodeId,
@@ -333,7 +333,9 @@ async fn send_advert_to_peer(
 }
 
 mod available_slot_set {
-    use super::*;
+    use super::SLOT_TABLE_THRESHOLD;
+    use crate::{ConsensusManagerMetrics, SlotNumber};
+    use ic_logger::{warn, ReplicaLogger};
 
     pub struct AvailableSlot(u64);
 
@@ -398,6 +400,7 @@ mod available_slot_set {
     }
 }
 
+#[allow(clippy::disallowed_methods)]
 #[cfg(test)]
 mod tests {
     use anyhow::anyhow;
@@ -433,7 +436,7 @@ mod tests {
 
     /// Verify that advert is sent to multiple peers.
     #[tokio::test]
-    async fn send_advert_to_all_peers() {
+    async fn send_transmit_to_all_peers() {
         with_test_replica_logger(|log| async {
             let (push_tx, mut push_rx) = tokio::sync::mpsc::unbounded_channel();
             let (tx, rx) = tokio::sync::mpsc::channel(100);
