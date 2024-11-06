@@ -1076,11 +1076,13 @@ mod test {
             empty_idkg_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
         let wrong_key_id = match key_id.deref() {
             MasterPublicKeyId::Ecdsa(_) => {
-                fake_schnorr_master_public_key_id(SchnorrAlgorithm::Ed25519)
+                fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Ed25519)
                     .try_into()
                     .unwrap()
             }
-            MasterPublicKeyId::Schnorr(_) => fake_ecdsa_master_public_key_id().try_into().unwrap(),
+            MasterPublicKeyId::Schnorr(_) => {
+                fake_ecdsa_idkg_master_public_key_id().try_into().unwrap()
+            }
             MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
         };
         // Add a pre-signature for the "wrong_key_id"

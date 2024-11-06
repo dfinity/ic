@@ -1597,7 +1597,7 @@ pub(crate) fn is_handle_invalid(change_set: &[IDkgChangeAction], msg_id: &IDkgMe
 pub(crate) fn empty_idkg_payload(subnet_id: SubnetId) -> IDkgPayload {
     empty_idkg_payload_with_key_ids(
         subnet_id,
-        vec![fake_ecdsa_master_public_key_id().try_into().unwrap()],
+        vec![fake_ecdsa_idkg_master_public_key_id().try_into().unwrap()],
     )
 }
 
@@ -1629,8 +1629,10 @@ pub(crate) fn fake_ecdsa_key_id() -> EcdsaKeyId {
     EcdsaKeyId::from_str("Secp256k1:some_key").unwrap()
 }
 
-pub(crate) fn fake_ecdsa_master_public_key_id() -> MasterPublicKeyId {
+pub(crate) fn fake_ecdsa_idkg_master_public_key_id() -> IDkgMasterPublicKeyId {
     MasterPublicKeyId::Ecdsa(fake_ecdsa_key_id())
+        .try_into()
+        .unwrap()
 }
 
 pub(crate) fn fake_schnorr_key_id(algorithm: SchnorrAlgorithm) -> SchnorrKeyId {
@@ -1640,8 +1642,12 @@ pub(crate) fn fake_schnorr_key_id(algorithm: SchnorrAlgorithm) -> SchnorrKeyId {
     }
 }
 
-pub(crate) fn fake_schnorr_master_public_key_id(algorithm: SchnorrAlgorithm) -> MasterPublicKeyId {
+pub(crate) fn fake_schnorr_idkg_master_public_key_id(
+    algorithm: SchnorrAlgorithm,
+) -> IDkgMasterPublicKeyId {
     MasterPublicKeyId::Schnorr(fake_schnorr_key_id(algorithm))
+        .try_into()
+        .unwrap()
 }
 
 pub(crate) fn schnorr_algorithm(algorithm: AlgorithmId) -> SchnorrAlgorithm {
@@ -1655,12 +1661,14 @@ pub(crate) fn schnorr_algorithm(algorithm: AlgorithmId) -> SchnorrAlgorithm {
 pub(crate) fn fake_master_public_key_ids_for_all_algorithms() -> Vec<MasterPublicKeyId> {
     AlgorithmId::iter()
         .flat_map(|alg| match alg {
-            AlgorithmId::ThresholdEcdsaSecp256k1 => Some(fake_ecdsa_master_public_key_id()),
-            AlgorithmId::ThresholdSchnorrBip340 => Some(fake_schnorr_master_public_key_id(
-                SchnorrAlgorithm::Bip340Secp256k1,
-            )),
+            AlgorithmId::ThresholdEcdsaSecp256k1 => {
+                Some(fake_ecdsa_idkg_master_public_key_id().into())
+            }
+            AlgorithmId::ThresholdSchnorrBip340 => Some(
+                fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Bip340Secp256k1).into(),
+            ),
             AlgorithmId::ThresholdEd25519 => {
-                Some(fake_schnorr_master_public_key_id(SchnorrAlgorithm::Ed25519))
+                Some(fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Ed25519).into())
             }
             _ => None,
         })
@@ -1690,7 +1698,7 @@ pub(crate) fn add_available_quadruple_to_payload(
 ) {
     let sig_inputs = create_sig_inputs(
         pre_signature_id.id() as u8,
-        &fake_ecdsa_master_public_key_id().try_into().unwrap(),
+        &fake_ecdsa_idkg_master_public_key_id().try_into().unwrap(),
     );
     idkg_payload
         .available_pre_signatures

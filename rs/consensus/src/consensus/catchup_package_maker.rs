@@ -267,7 +267,7 @@ impl CatchUpPackageMaker {
 mod tests {
     //! CatchUpPackageMaker unit tests
     use crate::idkg::test_utils::{
-        add_available_quadruple_to_payload, empty_idkg_payload, fake_ecdsa_master_public_key_id,
+        add_available_quadruple_to_payload, empty_idkg_payload, fake_ecdsa_idkg_master_public_key_id,
         fake_signature_request_context_with_pre_sig, fake_state_with_signature_requests,
     };
 
@@ -397,7 +397,7 @@ mod tests {
                 .return_const(Ok(CryptoHashOfState::from(CryptoHash(vec![1, 2, 3]))));
 
             let key_id: IDkgMasterPublicKeyId =
-                fake_ecdsa_master_public_key_id().try_into().unwrap();
+                fake_ecdsa_idkg_master_public_key_id().try_into().unwrap();
 
             // Create three quadruple Ids and contexts, quadruple "2" will remain unmatched.
             let pre_sig_id1 = PreSigId(1);

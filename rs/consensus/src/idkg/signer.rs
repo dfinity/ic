@@ -829,7 +829,7 @@ mod tests {
 
     #[test]
     fn test_ecdsa_signer_action() {
-        let key_id = fake_ecdsa_master_public_key_id().try_into().unwrap();
+        let key_id = fake_ecdsa_idkg_master_public_key_id().try_into().unwrap();
         let mut uid_generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
         let height = Height::from(100);
         let (id_1, id_2, id_3, id_4, id_5) = (
@@ -1098,11 +1098,11 @@ mod tests {
         );
         let wrong_key_id = match key_id.deref() {
             MasterPublicKeyId::Ecdsa(_) => {
-                fake_schnorr_master_public_key_id(SchnorrAlgorithm::Ed25519)
+                fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Ed25519)
                     .try_into()
                     .unwrap()
             }
-            MasterPublicKeyId::Schnorr(_) => fake_ecdsa_master_public_key_id().try_into().unwrap(),
+            MasterPublicKeyId::Schnorr(_) => fake_ecdsa_idkg_master_public_key_id().try_into().unwrap(),
             MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
         };
 
@@ -1550,11 +1550,11 @@ mod tests {
         // A share for the second context with mismatching schemes
         let key_id_wrong_scheme = match key_id.deref() {
             MasterPublicKeyId::Ecdsa(_) => {
-                fake_schnorr_master_public_key_id(SchnorrAlgorithm::Ed25519)
+                fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Ed25519)
                     .try_into()
                     .unwrap()
             }
-            MasterPublicKeyId::Schnorr(_) => fake_ecdsa_master_public_key_id().try_into().unwrap(),
+            MasterPublicKeyId::Schnorr(_) => fake_ecdsa_idkg_master_public_key_id().try_into().unwrap(),
             MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
         };
         let message = create_signature_share(&key_id_wrong_scheme, NODE_2, id_2.clone());

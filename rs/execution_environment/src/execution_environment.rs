@@ -2692,7 +2692,7 @@ impl ExecutionEnvironment {
             .subnet_call_context_manager
             .push_context(SubnetCallContext::IDkgDealings(IDkgDealingsContext {
                 request: request.clone(),
-                key_id: key_id,
+                key_id,
                 nodes,
                 registry_version,
                 time: state.time(),

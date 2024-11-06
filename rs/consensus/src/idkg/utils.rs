@@ -602,9 +602,9 @@ pub(crate) fn update_purge_height(cell: &RefCell<Height>, new_height: Height) ->
 mod tests {
     use super::*;
     use crate::idkg::test_utils::{
-        create_available_pre_signature_with_key_transcript, fake_ecdsa_key_id,
-        fake_ecdsa_master_public_key_id, fake_master_public_key_ids_for_all_algorithms,
-        set_up_idkg_payload, IDkgPayloadTestHelper,
+        create_available_pre_signature_with_key_transcript, fake_ecdsa_idkg_master_public_key_id,
+        fake_ecdsa_key_id, fake_master_public_key_ids_for_all_algorithms, set_up_idkg_payload,
+        IDkgPayloadTestHelper,
     };
     use ic_config::artifact_pool::ArtifactPoolConfig;
     use ic_consensus_mocks::{dependencies, Dependencies};
@@ -672,9 +672,9 @@ mod tests {
             ic_types::crypto::AlgorithmId::ThresholdEcdsaSecp256k1,
             &mut rng,
         );
-        let key_id = fake_ecdsa_master_public_key_id();
+        let key_id = fake_ecdsa_idkg_master_public_key_id();
         let chain_key_init = ChainKeyInitialization {
-            key_id: Some((&key_id).into()),
+            key_id: Some((&MasterPublicKeyId::from(key_id.clone())).into()),
             dealings: Some((&initial_dealings).into()),
         };
 

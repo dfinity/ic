@@ -193,7 +193,7 @@ mod tests {
     use crate::idkg::{
         test_utils::{
             create_reshare_request, dealings_context_from_reshare_request,
-            fake_ecdsa_master_public_key_id, fake_master_public_key_ids_for_all_algorithms,
+            fake_ecdsa_idkg_master_public_key_id, fake_master_public_key_ids_for_all_algorithms,
             set_up_idkg_payload, TestIDkgBlockReader, TestIDkgTranscriptBuilder,
         },
         utils::algorithm_for_key_id,
@@ -276,7 +276,7 @@ mod tests {
             assert_eq!(initial_dealings.get(&i).unwrap(), &dealings);
         }
 
-        let fake_key = fake_ecdsa_master_public_key_id().try_into().unwrap();
+        let fake_key = fake_ecdsa_idkg_master_public_key_id().try_into().unwrap();
         assert_eq!(
             make_reshare_dealings_response(
                 &create_reshare_request(fake_key, 10, 10),

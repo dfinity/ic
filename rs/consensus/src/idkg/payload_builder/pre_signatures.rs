@@ -546,8 +546,8 @@ pub(super) mod tests {
 
     use crate::idkg::test_utils::{
         create_available_pre_signature, create_available_pre_signature_with_key_transcript,
-        fake_ecdsa_master_public_key_id, fake_master_public_key_ids_for_all_algorithms,
-        fake_schnorr_key_id, fake_schnorr_master_public_key_id,
+        fake_ecdsa_idkg_master_public_key_id, fake_master_public_key_ids_for_all_algorithms,
+        fake_schnorr_idkg_master_public_key_id, fake_schnorr_key_id,
         fake_signature_request_context_with_pre_sig, set_up_idkg_payload, IDkgPayloadTestHelper,
         TestIDkgBlockReader, TestIDkgTranscriptBuilder,
     };
@@ -622,8 +622,9 @@ pub(super) mod tests {
             )
         };
 
-        let key_id_bib340 = fake_schnorr_master_public_key_id(SchnorrAlgorithm::Bip340Secp256k1);
-        let key_id_eddsa = fake_schnorr_master_public_key_id(SchnorrAlgorithm::Ed25519);
+        let key_id_bib340 =
+            fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Bip340Secp256k1);
+        let key_id_eddsa = fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Ed25519);
 
         for key_id in &[key_id_bib340, key_id_eddsa] {
             assert!(create_pre_signatures(key_id, 4).is_empty());
@@ -635,8 +636,8 @@ pub(super) mod tests {
                 };
                 assert!(transcript.blinder_unmasked.is_none());
                 assert_eq!(
-                    key_id,
-                    &MasterPublicKeyId::Schnorr(transcript.key_id.clone())
+                    MasterPublicKeyId::from(key_id.clone()),
+                    MasterPublicKeyId::Schnorr(transcript.key_id.clone())
                 );
                 let config = transcript.blinder_unmasked_config.as_ref();
                 assert_eq!(config.algorithm_id, algorithm_for_key_id(key_id));
@@ -805,7 +806,8 @@ pub(super) mod tests {
     fn test_ecdsa_update_pre_signatures_in_creation() {
         let mut rng = reproducible_rng();
         let subnet_id = subnet_test_id(1);
-        let key_id: IDkgMasterPublicKeyId = fake_ecdsa_master_public_key_id().try_into().unwrap();
+        let key_id: IDkgMasterPublicKeyId =
+            fake_ecdsa_idkg_master_public_key_id().try_into().unwrap();
         let (mut payload, env, mut block_reader) =
             set_up(&mut rng, subnet_id, vec![key_id.clone()], Height::from(100));
         let transcript_builder = TestIDkgTranscriptBuilder::new();
@@ -975,7 +977,7 @@ pub(super) mod tests {
     fn test_schnorr_update_pre_signatures_in_creation(algorithm: SchnorrAlgorithm) {
         let mut rng = reproducible_rng();
         let subnet_id = subnet_test_id(1);
-        let key_id: IDkgMasterPublicKeyId = fake_schnorr_master_public_key_id(algorithm)
+        let key_id: IDkgMasterPublicKeyId = fake_schnorr_idkg_master_public_key_id(algorithm)
             .try_into()
             .unwrap();
         let (mut payload, env, mut block_reader) =

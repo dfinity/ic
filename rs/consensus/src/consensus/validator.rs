@@ -1903,7 +1903,7 @@ pub mod test {
         consensus::block_maker::get_block_maker_delay,
         idkg::test_utils::{
             add_available_quadruple_to_payload, empty_idkg_payload,
-            fake_ecdsa_master_public_key_id, fake_signature_request_context_with_pre_sig,
+            fake_ecdsa_idkg_master_public_key_id, fake_signature_request_context_with_pre_sig,
             fake_state_with_signature_requests,
         },
     };
@@ -2152,7 +2152,7 @@ pub mod test {
                 .return_const(Ok(state_hash.clone()));
 
             let key_id: IDkgMasterPublicKeyId =
-                fake_ecdsa_master_public_key_id().try_into().unwrap();
+                fake_ecdsa_idkg_master_public_key_id().try_into().unwrap();
             // Create three quadruple Ids and contexts, quadruple "2" will remain unmatched.
             let pre_sig_id1 = PreSigId(1);
             let pre_sig_id2 = PreSigId(2);

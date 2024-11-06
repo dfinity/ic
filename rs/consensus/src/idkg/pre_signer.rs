@@ -1366,7 +1366,7 @@ mod tests {
     // Tests the Action logic
     #[test]
     fn test_ecdsa_pre_signer_action() {
-        let key_id = fake_ecdsa_master_public_key_id();
+        let key_id = fake_ecdsa_idkg_master_public_key_id();
         let (id_1, id_2, id_3, id_4) = (
             create_transcript_id(1),
             create_transcript_id(2),
@@ -1565,7 +1565,7 @@ mod tests {
     fn test_ecdsa_crypto_error_results_in_no_dealing() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let key_id = fake_ecdsa_master_public_key_id();
+                let key_id = fake_ecdsa_idkg_master_public_key_id();
                 let crypto = crypto_without_keys();
                 let (idkg_pool, pre_signer) =
                     create_pre_signer_dependencies_with_crypto(pool_config, logger, Some(crypto));
@@ -2363,7 +2363,7 @@ mod tests {
     fn test_ecdsa_duplicate_support_from_node() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let key_id = fake_ecdsa_master_public_key_id();
+                let key_id = fake_ecdsa_idkg_master_public_key_id();
                 let (mut idkg_pool, pre_signer) =
                     create_pre_signer_dependencies(pool_config, logger);
                 let id = create_transcript_id_with_height(1, Height::from(100));
@@ -2406,7 +2406,7 @@ mod tests {
     fn test_ecdsa_unexpected_support_from_node() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let key_id = fake_ecdsa_master_public_key_id();
+                let key_id = fake_ecdsa_idkg_master_public_key_id();
                 let (mut idkg_pool, pre_signer) =
                     create_pre_signer_dependencies(pool_config, logger);
                 let id = create_transcript_id_with_height(1, Height::from(10));
@@ -2437,7 +2437,7 @@ mod tests {
     fn test_ecdsa_dealing_support_meta_data_mismatch() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let key_id = fake_ecdsa_master_public_key_id();
+                let key_id = fake_ecdsa_idkg_master_public_key_id();
                 let (mut idkg_pool, pre_signer) =
                     create_pre_signer_dependencies(pool_config, logger);
                 let id = create_transcript_id_with_height(1, Height::from(10));
@@ -2476,7 +2476,7 @@ mod tests {
     fn test_ecdsa_dealing_support_missing_hash_meta_data_mismatch() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let key_id = fake_ecdsa_master_public_key_id();
+                let key_id = fake_ecdsa_idkg_master_public_key_id();
                 let (mut idkg_pool, pre_signer) =
                     create_pre_signer_dependencies(pool_config, logger);
                 let id = create_transcript_id_with_height(1, Height::from(10));
@@ -2515,7 +2515,7 @@ mod tests {
     fn test_ecdsa_dealing_support_missing_hash_invalid_dealer() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let key_id = fake_ecdsa_master_public_key_id();
+                let key_id = fake_ecdsa_idkg_master_public_key_id();
                 let (mut idkg_pool, pre_signer) =
                     create_pre_signer_dependencies(pool_config, logger);
                 let id = create_transcript_id_with_height(1, Height::from(10));
@@ -2555,7 +2555,7 @@ mod tests {
     fn test_ecdsa_purge_unvalidated_dealings() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let key_id = fake_ecdsa_master_public_key_id();
+                let key_id = fake_ecdsa_idkg_master_public_key_id();
                 let (mut idkg_pool, pre_signer) =
                     create_pre_signer_dependencies(pool_config, logger);
                 let (id_1, id_2, id_3) = (
@@ -2604,7 +2604,7 @@ mod tests {
     fn test_ecdsa_purge_validated_dealings() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let key_id = fake_ecdsa_master_public_key_id();
+                let key_id = fake_ecdsa_idkg_master_public_key_id();
                 let (mut idkg_pool, pre_signer) =
                     create_pre_signer_dependencies(pool_config, logger);
                 let (id_1, id_2, id_3, id_4) = (
@@ -2652,7 +2652,7 @@ mod tests {
     fn test_ecdsa_purge_unvalidated_dealing_support() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let key_id = fake_ecdsa_master_public_key_id();
+                let key_id = fake_ecdsa_idkg_master_public_key_id();
                 let (mut idkg_pool, pre_signer) =
                     create_pre_signer_dependencies(pool_config, logger);
                 let (id_1, id_2, id_3) = (
@@ -2701,7 +2701,7 @@ mod tests {
     fn test_ecdsa_purge_validated_dealing_support() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let key_id = fake_ecdsa_master_public_key_id();
+                let key_id = fake_ecdsa_idkg_master_public_key_id();
                 let (mut idkg_pool, pre_signer) =
                     create_pre_signer_dependencies(pool_config, logger);
                 let (id_1, id_2, id_3) = (

@@ -976,9 +976,7 @@ impl TryFrom<(Time, pb_metadata::IDkgDealingsContext)> for IDkgDealingsContext {
     ) -> Result<Self, Self::Error> {
         let key_id: MasterPublicKeyId =
             try_from_option_field(context.key_id, "IDkgDealingsContext::key_id")?;
-        let key_id = key_id
-            .try_into()
-            .map_err(|err| ProxyDecodeError::Other(err))?;
+        let key_id = key_id.try_into().map_err(ProxyDecodeError::Other)?;
 
         Ok(Self {
             request: try_from_option_field(context.request, "IDkgDealingsContext::request")?,
