@@ -53,6 +53,12 @@ RUN cd /tmp/ && \
     echo "eb74f962d49c21ef37a3bdc980e6fd2c453025b7bcc3a232577adb60c6bacf64  qemu-system-x86_9.2.0+ds-4ubuntu3_amd64.deb" >> qemu.sha256 && \
     shasum -c qemu.sha256
 
+# Download >=2024-05-24 OVMF
+RUN cd /tmp/ && \
+    curl -L -O http://mirrors.kernel.org/ubuntu/pool/main/e/edk2/ovmf_2024.05-2ubuntu0.1_all.deb && \
+    echo "fd9c39604249b8021fdbce1fa52a4694d7c9fcc331732e118d5b0b6deefe87d3  ovmf_2024.05-2ubuntu0.1_all.deb" >> ovmf.sha256 && \
+    shasum -c ovmf.sha256
+
 # Download and verify node_exporter
 RUN cd /tmp/ && \
     curl -L -O https://github.com/prometheus/node_exporter/releases/download/v1.8.1/node_exporter-1.8.1.linux-amd64.tar.gz && \
@@ -118,6 +124,13 @@ RUN apt-get install -y --no-install-recommends \
     rm /tmp/qemu-system-data_9.2.0+ds-4ubuntu3_all.deb && \
     rm /tmp/qemu-system-common_9.2.0+ds-4ubuntu3_amd64.deb && \
     rm /tmp/qemu-system-x86_9.2.0+ds-4ubuntu3_amd64.deb
+
+# Install >=2024-05-24 OVMF
+COPY --from=download /tmp/ovmf_2024.05-2ubuntu0.1_all.deb /tmp/ovmf_2024.05-2ubuntu0.1_all.deb
+
+RUN apt-get install -y --no-install-recommends \
+    /tmp/ovmf_2024.05-2ubuntu0.1_all.deb && \
+    rm /tmp/ovmf_2024.05-2ubuntu0.1_all.deb
 
 # Install node_exporter
 COPY --from=download /tmp/node_exporter-1.8.1.linux-amd64.tar.gz /tmp/node_exporter-1.8.1.linux-amd64.tar.gz

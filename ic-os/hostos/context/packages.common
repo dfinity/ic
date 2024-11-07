@@ -67,7 +67,6 @@ locales
 moreutils
 mtools
 nvme-cli
-ovmf
 pciutils
 python3-libvirt
 python3-requests
