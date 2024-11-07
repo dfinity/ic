@@ -3,21 +3,50 @@ use candid::Encode;
 use ic_config::execution_environment::DEFAULT_WASM_MEMORY_LIMIT;
 use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_config::Config;
-use ic_error_types::{ErrorCode, RejectCode};
+use ic_error_types::{
+    ErrorCode,
+    RejectCode,
+};
 use ic_management_canister_types::{
-    self as ic00, CanisterChange, CanisterIdRecord, CanisterInstallMode,
-    CanisterSettingsArgsBuilder, CanisterStatusResultV2, CanisterStatusType, EmptyBlob,
-    InstallCodeArgs, Method, Payload, UpdateSettingsArgs, IC_00,
+    self as ic00,
+    CanisterChange,
+    CanisterIdRecord,
+    CanisterInstallMode,
+    CanisterSettingsArgsBuilder,
+    CanisterStatusResultV2,
+    CanisterStatusType,
+    EmptyBlob,
+    InstallCodeArgs,
+    Method,
+    Payload,
+    UpdateSettingsArgs,
+    IC_00,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replica_tests as utils;
 use ic_replica_tests::assert_reject;
 use ic_test_utilities::assert_utils::assert_balance_equals;
 use ic_test_utilities::universal_canister::management::CanisterUpgradeOptions;
-use ic_test_utilities::universal_canister::{call_args, management, wasm, UNIVERSAL_CANISTER_WASM};
-use ic_types::{ingress::WasmResult, CanisterId, ComputeAllocation, Cycles, NumBytes, PrincipalId};
+use ic_test_utilities::universal_canister::{
+    call_args,
+    management,
+    wasm,
+    UNIVERSAL_CANISTER_WASM,
+};
+use ic_types::{
+    ingress::WasmResult,
+    CanisterId,
+    ComputeAllocation,
+    Cycles,
+    NumBytes,
+    PrincipalId,
+};
 use maplit::btreeset;
-use std::{collections::BTreeSet, mem::size_of, str::FromStr};
+use std::{
+    collections::BTreeSet,
+    mem::size_of,
+    str::FromStr,
+};
 
 const BALANCE_EPSILON: u64 = 1_000_000;
 const NUM_CYCLES: u128 = 1_000_000_000;

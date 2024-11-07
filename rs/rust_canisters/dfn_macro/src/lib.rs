@@ -32,12 +32,32 @@ in the rust_canisters/rs folder to inspect how they expand.
 
 extern crate proc_macro;
 
-use proc_macro2::{Ident, Span, TokenStream};
-use quote::{quote, quote_spanned};
+use proc_macro2::{
+    Ident,
+    Span,
+    TokenStream,
+};
+use quote::{
+    quote,
+    quote_spanned,
+};
 use std::collections::VecDeque;
 use syn::{
-    punctuated::Punctuated, spanned::Spanned, token::Comma, token::Paren, Expr, ExprCall, ExprPath,
-    FnArg, ItemFn, Pat, PatIdent, PatTuple, Path, PathArguments, PathSegment,
+    punctuated::Punctuated,
+    spanned::Spanned,
+    token::Comma,
+    token::Paren,
+    Expr,
+    ExprCall,
+    ExprPath,
+    FnArg,
+    ItemFn,
+    Pat,
+    PatIdent,
+    PatTuple,
+    Path,
+    PathArguments,
+    PathSegment,
 };
 
 #[derive(Clone)]

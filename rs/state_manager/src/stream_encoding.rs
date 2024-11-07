@@ -1,17 +1,36 @@
 use crate::labeled_tree_visitor::LabeledTreeVisitor;
 use ic_canonical_state::{
-    encoding::{decode_message, decode_stream_header},
-    size_limit_visitor::{Matcher, SizeLimitVisitor},
-    subtree_visitor::{Pattern, SubtreeVisitor},
-    traverse, LabelLike,
+    encoding::{
+        decode_message,
+        decode_stream_header,
+    },
+    size_limit_visitor::{
+        Matcher,
+        SizeLimitVisitor,
+    },
+    subtree_visitor::{
+        Pattern,
+        SubtreeVisitor,
+    },
+    traverse,
+    LabelLike,
 };
-use ic_crypto_tree_hash::{FlatMap, Label, LabeledTree};
+use ic_crypto_tree_hash::{
+    FlatMap,
+    Label,
+    LabeledTree,
+};
 use ic_interfaces_certified_stream_store::DecodeStreamError;
 use ic_protobuf::messaging::xnet::v1;
 use ic_protobuf::proxy::ProtoProxy;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    xnet::{StreamHeader, StreamIndex, StreamIndexedQueue, StreamSlice},
+    xnet::{
+        StreamHeader,
+        StreamIndex,
+        StreamIndexedQueue,
+        StreamSlice,
+    },
     SubnetId,
 };
 use serde::Deserialize;

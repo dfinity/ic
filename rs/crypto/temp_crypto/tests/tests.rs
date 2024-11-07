@@ -1,5 +1,8 @@
 use ic_config::crypto::CryptoConfig;
-use ic_crypto_temp_crypto::{TempCryptoComponent, TempCryptoComponentGeneric};
+use ic_crypto_temp_crypto::{
+    TempCryptoComponent,
+    TempCryptoComponentGeneric,
+};
 use ic_crypto_test_utils::empty_fake_registry;
 use ic_interfaces::crypto::CurrentNodePublicKeysError;
 use ic_types::crypto::CurrentNodePublicKeys;
@@ -52,8 +55,16 @@ fn should_set_correct_tempdir_permissions() {
 mod vault_rng {
     use super::*;
     use assert_matches::assert_matches;
-    use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
-    use ic_crypto_temp_crypto::{EcdsaSubnetConfig, NodeKeysToGenerate};
+    use ic_base_types::{
+        NodeId,
+        PrincipalId,
+        RegistryVersion,
+        SubnetId,
+    };
+    use ic_crypto_temp_crypto::{
+        EcdsaSubnetConfig,
+        NodeKeysToGenerate,
+    };
     use ic_interfaces::crypto::KeyManager;
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;

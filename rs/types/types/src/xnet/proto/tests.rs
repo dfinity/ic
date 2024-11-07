@@ -1,16 +1,33 @@
 use crate::{
-    consensus::certification::{Certification, CertificationContent},
+    consensus::certification::{
+        Certification,
+        CertificationContent,
+    },
     crypto::{
-        threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
-        CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, Signed,
+        threshold_sig::ni_dkg::{
+            NiDkgId,
+            NiDkgTag,
+            NiDkgTargetSubnet,
+        },
+        CombinedThresholdSig,
+        CombinedThresholdSigOf,
+        CryptoHash,
+        Signed,
     },
     signature::ThresholdSignature,
     xnet::CertifiedStreamSlice,
-    CryptoHashOfPartialState, Height, PrincipalId, PrincipalIdBlobParseError, SubnetId,
+    CryptoHashOfPartialState,
+    Height,
+    PrincipalId,
+    PrincipalIdBlobParseError,
+    SubnetId,
 };
 use assert_matches::assert_matches;
 use ic_protobuf::messaging::xnet::v1;
-use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
+use ic_protobuf::proxy::{
+    ProtoProxy,
+    ProxyDecodeError,
+};
 use ic_protobuf::types::v1 as pb_types;
 
 const SUBNET_1: SubnetId = SubnetId::new(PrincipalId::new(

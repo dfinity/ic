@@ -1,25 +1,46 @@
 use std::{
     collections::BTreeMap,
     convert::TryFrom,
-    path::{Path, PathBuf},
+    path::{
+        Path,
+        PathBuf,
+    },
 };
 
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_protobuf::registry::{
-    crypto::v1::{ChainKeySigningSubnetList, PublicKey},
-    subnet::v1::{CatchUpPackageContents, SubnetRecord},
+    crypto::v1::{
+        ChainKeySigningSubnetList,
+        PublicKey,
+    },
+    subnet::v1::{
+        CatchUpPackageContents,
+        SubnetRecord,
+    },
 };
 use ic_registry_keys::{
-    make_catch_up_package_contents_key, make_chain_key_signing_subnet_list_key,
-    make_crypto_threshold_signing_pubkey_key, make_subnet_record_key,
+    make_catch_up_package_contents_key,
+    make_chain_key_signing_subnet_list_key,
+    make_crypto_threshold_signing_pubkey_key,
+    make_subnet_record_key,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_types::{subnet_id_into_protobuf, RegistryVersion, SubnetId};
+use ic_types::{
+    subnet_id_into_protobuf,
+    RegistryVersion,
+    SubnetId,
+};
 
-use crate::{node::InitializedNode, util::write_registry_entry};
+use crate::{
+    node::InitializedNode,
+    util::write_registry_entry,
+};
 use crate::{
     node::NodeIndex,
-    subnet_configuration::{InitializeSubnetError, SubnetConfig},
+    subnet_configuration::{
+        InitializeSubnetError,
+        SubnetConfig,
+    },
 };
 
 /// Represents a subnet for which all initial state (node crypto keys, initial

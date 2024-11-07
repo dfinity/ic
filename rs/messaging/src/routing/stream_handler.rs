@@ -1,40 +1,84 @@
 use crate::message_routing::{
-    LatencyMetrics, MessageRoutingMetrics, CRITICAL_ERROR_INDUCT_RESPONSE_FAILED,
+    LatencyMetrics,
+    MessageRoutingMetrics,
+    CRITICAL_ERROR_INDUCT_RESPONSE_FAILED,
 };
 use ic_base_types::NumBytes;
 use ic_certification_version::CertificationVersion;
 use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_error_types::RejectCode;
 use ic_interfaces::messaging::{
-    LABEL_VALUE_CANISTER_METHOD_NOT_FOUND, LABEL_VALUE_CANISTER_NOT_FOUND,
-    LABEL_VALUE_CANISTER_OUT_OF_CYCLES, LABEL_VALUE_CANISTER_STOPPED,
-    LABEL_VALUE_CANISTER_STOPPING, LABEL_VALUE_INVALID_MANAGEMENT_PAYLOAD,
+    LABEL_VALUE_CANISTER_METHOD_NOT_FOUND,
+    LABEL_VALUE_CANISTER_NOT_FOUND,
+    LABEL_VALUE_CANISTER_OUT_OF_CYCLES,
+    LABEL_VALUE_CANISTER_STOPPED,
+    LABEL_VALUE_CANISTER_STOPPING,
+    LABEL_VALUE_INVALID_MANAGEMENT_PAYLOAD,
 };
-use ic_logger::{debug, error, fatal, info, trace, ReplicaLogger};
+use ic_logger::{
+    debug,
+    error,
+    fatal,
+    info,
+    trace,
+    ReplicaLogger,
+};
 use ic_metrics::{
-    buckets::{add_bucket, decimal_buckets},
+    buckets::{
+        add_bucket,
+        decimal_buckets,
+    },
     MetricsRegistry,
 };
 use ic_replicated_state::{
-    metadata_state::{StreamHandle, Streams},
-    replicated_state::{
-        ReplicatedStateMessageRouting, LABEL_VALUE_QUEUE_FULL, MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
+    metadata_state::{
+        StreamHandle,
+        Streams,
     },
-    ReplicatedState, StateError,
+    replicated_state::{
+        ReplicatedStateMessageRouting,
+        LABEL_VALUE_QUEUE_FULL,
+        MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
+    },
+    ReplicatedState,
+    StateError,
 };
 use ic_types::{
     messages::{
-        Payload, RejectContext, Request, RequestOrResponse, Response,
-        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, MAX_RESPONSE_COUNT_BYTES,
+        Payload,
+        RejectContext,
+        Request,
+        RequestOrResponse,
+        Response,
+        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64,
+        MAX_RESPONSE_COUNT_BYTES,
     },
-    xnet::{RejectReason, RejectSignal, StreamIndex, StreamIndexedQueue, StreamSlice},
-    CanisterId, SubnetId,
+    xnet::{
+        RejectReason,
+        RejectSignal,
+        StreamIndex,
+        StreamIndexedQueue,
+        StreamSlice,
+    },
+    CanisterId,
+    SubnetId,
 };
-use prometheus::{Histogram, IntCounter, IntCounterVec, IntGaugeVec};
+use prometheus::{
+    Histogram,
+    IntCounter,
+    IntCounterVec,
+    IntGaugeVec,
+};
 use std::{
     cell::RefCell,
-    collections::{BTreeMap, VecDeque},
-    sync::{Arc, Mutex},
+    collections::{
+        BTreeMap,
+        VecDeque,
+    },
+    sync::{
+        Arc,
+        Mutex,
+    },
 };
 
 #[cfg(test)]

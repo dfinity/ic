@@ -1,9 +1,13 @@
 //! Data types for threshold public keys.
 use crate::sign::threshold_sig::ni_dkg::CspNiDkgTranscript;
 use crate::sign::threshold_sig::public_key::bls12_381::{
-    CspNiDkgTranscriptThresholdSigPublicKeyBytesConversionError, PublicKeyBytes,
+    CspNiDkgTranscriptThresholdSigPublicKeyBytesConversionError,
+    PublicKeyBytes,
 };
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::hash::Hash;
 use thiserror::Error;
 

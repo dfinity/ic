@@ -5,31 +5,65 @@
 
 use crate::as_round_instructions;
 use crate::canister_manager::{
-    CanisterManagerError, DtsInstallCodeResult, InstallCodeContext, PausedInstallCodeExecution,
+    CanisterManagerError,
+    DtsInstallCodeResult,
+    InstallCodeContext,
+    PausedInstallCodeExecution,
 };
-use crate::execution::common::{ingress_status_with_processing_state, update_round_limits};
+use crate::execution::common::{
+    ingress_status_with_processing_state,
+    update_round_limits,
+};
 use crate::execution::install_code::{
-    canister_layout, finish_err, CanisterMemoryHandling, InstallCodeHelper, OriginalContext,
+    canister_layout,
+    finish_err,
+    CanisterMemoryHandling,
+    InstallCodeHelper,
+    OriginalContext,
     PausedInstallCodeHelper,
 };
-use crate::execution_environment::{RoundContext, RoundLimits};
-use ic_base_types::PrincipalId;
-use ic_embedders::wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult};
-use ic_interfaces::execution_environment::{
-    HypervisorError, HypervisorResult, WasmExecutionOutput,
+use crate::execution_environment::{
+    RoundContext,
+    RoundLimits,
 };
-use ic_logger::{info, warn, ReplicaLogger};
+use ic_base_types::PrincipalId;
+use ic_embedders::wasm_executor::{
+    CanisterStateChanges,
+    PausedWasmExecution,
+    WasmExecutionResult,
+};
+use ic_interfaces::execution_environment::{
+    HypervisorError,
+    HypervisorResult,
+    WasmExecutionOutput,
+};
+use ic_logger::{
+    info,
+    warn,
+    ReplicaLogger,
+};
 use ic_management_canister_types::{
-    CanisterInstallModeV2, CanisterUpgradeOptions, WasmMemoryPersistence,
+    CanisterInstallModeV2,
+    CanisterUpgradeOptions,
+    WasmMemoryPersistence,
 };
 use ic_replicated_state::{
-    metadata_state::subnet_call_context_manager::InstallCodeCallId, CanisterState, ExecutionState,
+    metadata_state::subnet_call_context_manager::InstallCodeCallId,
+    CanisterState,
+    ExecutionState,
 };
 use ic_system_api::ApiType;
-use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
+use ic_types::methods::{
+    FuncRef,
+    SystemMethod,
+    WasmMethod,
+};
 use ic_types::{
     funds::Cycles,
-    messages::{CanisterCall, RequestMetadata},
+    messages::{
+        CanisterCall,
+        RequestMetadata,
+    },
 };
 
 use super::install_code::MemoryHandling;

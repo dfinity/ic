@@ -1,30 +1,61 @@
 use crate::PROXIED_CANISTER_CALLS_TRACKER;
-use dfn_core::api::{call, call_bytes, call_with_funds, caller, print, CanisterId, Funds};
-use ic_management_canister_types::{CanisterInstallMode::Install, InstallCodeArgs};
+use dfn_core::api::{
+    call,
+    call_bytes,
+    call_with_funds,
+    caller,
+    print,
+    CanisterId,
+    Funds,
+};
+use ic_management_canister_types::{
+    CanisterInstallMode::Install,
+    InstallCodeArgs,
+};
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     management_canister_client::ManagementCanisterClient,
-    update_settings::{CanisterSettings, UpdateSettings},
+    update_settings::{
+        CanisterSettings,
+        UpdateSettings,
+    },
 };
 use ic_nervous_system_proxied_canister_calls_tracker::ProxiedCanisterCallsTracker;
 use ic_nervous_system_root::change_canister::{
-    start_canister, stop_canister, AddCanisterRequest, CanisterAction, StopOrStartCanisterRequest,
+    start_canister,
+    stop_canister,
+    AddCanisterRequest,
+    CanisterAction,
+    StopOrStartCanisterRequest,
 };
 use ic_nervous_system_runtime::DfnRuntime;
 use ic_nns_common::{
-    registry::{get_value, mutate_registry},
+    registry::{
+        get_value,
+        mutate_registry,
+    },
     types::CallCanisterProposal,
 };
 use ic_nns_handler_root_interface::{
-    ChangeCanisterControllersRequest, ChangeCanisterControllersResponse,
-    UpdateCanisterSettingsError, UpdateCanisterSettingsRequest, UpdateCanisterSettingsResponse,
+    ChangeCanisterControllersRequest,
+    ChangeCanisterControllersResponse,
+    UpdateCanisterSettingsError,
+    UpdateCanisterSettingsRequest,
+    UpdateCanisterSettingsResponse,
 };
 use ic_protobuf::{
-    registry::nns::v1::{NnsCanisterRecord, NnsCanisterRecords},
+    registry::nns::v1::{
+        NnsCanisterRecord,
+        NnsCanisterRecords,
+    },
     types::v1 as pb,
 };
 use ic_registry_keys::make_nns_canister_records_key;
-use ic_registry_transport::pb::v1::{registry_mutation::Type, Precondition, RegistryMutation};
+use ic_registry_transport::pb::v1::{
+    registry_mutation::Type,
+    Precondition,
+    RegistryMutation,
+};
 use prost::Message;
 
 pub async fn do_add_nns_canister(request: AddCanisterRequest) {

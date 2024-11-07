@@ -1,10 +1,27 @@
 use crate::deserialize_registry_value;
-use crate::subnet::{SubnetListRegistry, SubnetRegistry};
-use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
-pub use ic_protobuf::registry::node::v1::{ConnectionEndpoint, NodeRecord};
-use ic_registry_keys::{get_node_record_node_id, make_node_record_key, NODE_RECORD_KEY_PREFIX};
+use crate::subnet::{
+    SubnetListRegistry,
+    SubnetRegistry,
+};
+use ic_interfaces_registry::{
+    RegistryClient,
+    RegistryClientResult,
+};
+pub use ic_protobuf::registry::node::v1::{
+    ConnectionEndpoint,
+    NodeRecord,
+};
+use ic_registry_keys::{
+    get_node_record_node_id,
+    make_node_record_key,
+    NODE_RECORD_KEY_PREFIX,
+};
 use ic_types::registry::RegistryClientError;
-pub use ic_types::{NodeId, RegistryVersion, SubnetId};
+pub use ic_types::{
+    NodeId,
+    RegistryVersion,
+    SubnetId,
+};
 
 pub trait NodeRegistry {
     fn get_node_record(

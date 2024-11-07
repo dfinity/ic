@@ -1,17 +1,50 @@
-use crate::protobuf::{send::Extension as PExt, transaction::Transfer as PTransfer};
-use crate::{protobuf, TransferFee, TransferFeeArgs};
+use crate::protobuf::{
+    send::Extension as PExt,
+    transaction::Transfer as PTransfer,
+};
 use crate::{
-    AccountBalanceArgs, AccountIdentifier, Block, BlockArg, BlockRes, CyclesResponse, EncodedBlock,
-    GetBlocksArgs, GetBlocksRes, HashOf, IterBlocksArgs, IterBlocksRes, Memo, NotifyCanisterArgs,
-    Operation, SendArgs, Subaccount, TimeStamp, TipOfChainRes, Tokens, TotalSupplyArgs,
-    Transaction, TransactionNotification, DEFAULT_TRANSFER_FEE,
+    protobuf,
+    TransferFee,
+    TransferFeeArgs,
+};
+use crate::{
+    AccountBalanceArgs,
+    AccountIdentifier,
+    Block,
+    BlockArg,
+    BlockRes,
+    CyclesResponse,
+    EncodedBlock,
+    GetBlocksArgs,
+    GetBlocksRes,
+    HashOf,
+    IterBlocksArgs,
+    IterBlocksRes,
+    Memo,
+    NotifyCanisterArgs,
+    Operation,
+    SendArgs,
+    Subaccount,
+    TimeStamp,
+    TipOfChainRes,
+    Tokens,
+    TotalSupplyArgs,
+    Transaction,
+    TransactionNotification,
+    DEFAULT_TRANSFER_FEE,
 };
 use dfn_protobuf::ToProto;
-use ic_base_types::{CanisterId, CanisterIdError};
+use ic_base_types::{
+    CanisterId,
+    CanisterIdError,
+};
 use ic_ledger_hash_of::HASH_LENGTH;
 use protobuf::cycles_notification_response::Response;
 use serde_bytes::ByteBuf;
-use std::convert::{TryFrom, TryInto};
+use std::convert::{
+    TryFrom,
+    TryInto,
+};
 
 /// The point of this file is to validate protobufs as they're received and turn
 /// them into a validated data type

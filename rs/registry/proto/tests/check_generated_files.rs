@@ -1,5 +1,8 @@
 use ic_registry_common_proto_generator::generate_prost_files;
-use ic_test_utilities_compare_dirs::{compare, CompareError};
+use ic_test_utilities_compare_dirs::{
+    compare,
+    CompareError,
+};
 use std::path::PathBuf;
 
 #[test]

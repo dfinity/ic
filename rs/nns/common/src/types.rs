@@ -1,10 +1,24 @@
-use crate::pb::v1::{NeuronId as NeuronIdProto, ProposalId as ProposalIdProto};
-use candid::{CandidType, Deserialize};
+use crate::pb::v1::{
+    NeuronId as NeuronIdProto,
+    ProposalId as ProposalIdProto,
+};
+use candid::{
+    CandidType,
+    Deserialize,
+};
 use dfn_core::api::CanisterId;
 use serde::Serialize;
 use std::{
-    cmp::{Eq, PartialEq},
-    fmt::{self, Debug, Display, Formatter},
+    cmp::{
+        Eq,
+        PartialEq,
+    },
+    fmt::{
+        self,
+        Debug,
+        Display,
+        Formatter,
+    },
     hash::Hash,
     num::ParseIntError,
     str::FromStr,

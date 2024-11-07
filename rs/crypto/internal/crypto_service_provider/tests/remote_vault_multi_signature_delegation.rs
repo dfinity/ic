@@ -1,13 +1,21 @@
 use ic_crypto_internal_csp_proptest_utils::{
-    arb_algorithm_id, arb_csp_multi_signature_error, arb_csp_multi_signature_keygen_error,
-    arb_csp_pop, arb_csp_public_key, arb_csp_signature, arb_key_id,
+    arb_algorithm_id,
+    arb_csp_multi_signature_error,
+    arb_csp_multi_signature_keygen_error,
+    arb_csp_pop,
+    arb_csp_public_key,
+    arb_csp_signature,
+    arb_key_id,
 };
 use ic_crypto_temp_crypto_vault::RemoteVaultEnvironment;
 use ic_crypto_test_utils_local_csp_vault::MockLocalCspVault;
 use proptest::collection::vec;
 use proptest::prelude::any;
 use proptest::result::maybe_err;
-use proptest::{prop_assert_eq, proptest};
+use proptest::{
+    prop_assert_eq,
+    proptest,
+};
 use std::sync::Arc;
 
 mod common;

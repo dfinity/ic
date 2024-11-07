@@ -1,33 +1,78 @@
 use ic_canister_sandbox_backend_lib::replica_controller::sandboxed_execution_controller::SandboxedExecutionController;
-use ic_config::execution_environment::{Config, MAX_COMPILATION_CACHE_SIZE};
+use ic_config::execution_environment::{
+    Config,
+    MAX_COMPILATION_CACHE_SIZE,
+};
 use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_embedders::wasm_executor::{WasmExecutionResult, WasmExecutor};
+use ic_embedders::wasm_executor::{
+    WasmExecutionResult,
+    WasmExecutor,
+};
 use ic_embedders::wasm_utils::decoding::decoded_wasm_size;
-use ic_embedders::{wasm_executor::WasmExecutorImpl, WasmExecutionInput, WasmtimeEmbedder};
-use ic_embedders::{CompilationCache, CompilationResult};
+use ic_embedders::{
+    wasm_executor::WasmExecutorImpl,
+    WasmExecutionInput,
+    WasmtimeEmbedder,
+};
+use ic_embedders::{
+    CompilationCache,
+    CompilationResult,
+};
 use ic_interfaces::execution_environment::{
-    HypervisorError, HypervisorResult, WasmExecutionOutput,
+    HypervisorError,
+    HypervisorResult,
+    WasmExecutionOutput,
 };
 use ic_logger::ReplicaLogger;
 use ic_management_canister_types::LogVisibilityV2;
 use ic_metrics::buckets::decimal_buckets_with_zero;
-use ic_metrics::{buckets::exponential_buckets, MetricsRegistry};
+use ic_metrics::{
+    buckets::exponential_buckets,
+    MetricsRegistry,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::NetworkTopology;
-use ic_replicated_state::{page_map::allocated_pages_count, ExecutionState, SystemState};
+use ic_replicated_state::{
+    page_map::allocated_pages_count,
+    ExecutionState,
+    SystemState,
+};
 use ic_system_api::ExecutionParameters;
-use ic_system_api::{sandbox_safe_system_state::SandboxSafeSystemState, ApiType};
+use ic_system_api::{
+    sandbox_safe_system_state::SandboxSafeSystemState,
+    ApiType,
+};
 use ic_types::{
-    messages::RequestMetadata, methods::FuncRef, CanisterId, NumBytes, NumInstructions, SubnetId,
+    messages::RequestMetadata,
+    methods::FuncRef,
+    CanisterId,
+    NumBytes,
+    NumInstructions,
+    SubnetId,
     Time,
 };
 use ic_wasm_types::CanisterModule;
-use prometheus::{Histogram, HistogramVec, IntCounter, IntGauge};
-use std::{path::PathBuf, sync::Arc};
+use prometheus::{
+    Histogram,
+    HistogramVec,
+    IntCounter,
+    IntGauge,
+};
+use std::{
+    path::PathBuf,
+    sync::Arc,
+};
 
-use crate::execution::common::{apply_canister_state_changes, update_round_limits};
-use crate::execution_environment::{as_round_instructions, CompilationCostHandling, RoundLimits};
+use crate::execution::common::{
+    apply_canister_state_changes,
+    update_round_limits,
+};
+use crate::execution_environment::{
+    as_round_instructions,
+    CompilationCostHandling,
+    RoundLimits,
+};
 use crate::metrics::CallTreeMetrics;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 

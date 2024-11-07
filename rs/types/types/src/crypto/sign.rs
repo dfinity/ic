@@ -5,13 +5,29 @@ use crate::canister_http::CanisterHttpResponseMetadata;
 use crate::consensus::{
     certification::CertificationContent,
     dkg::DealingContent,
-    idkg::{IDkgComplaintContent, IDkgOpeningContent},
-    BlockMetadata, CatchUpContent, CatchUpContentProtobufBytes, FinalizationContent,
-    NotarizationContent, RandomBeaconContent, RandomTapeContent,
+    idkg::{
+        IDkgComplaintContent,
+        IDkgOpeningContent,
+    },
+    BlockMetadata,
+    CatchUpContent,
+    CatchUpContentProtobufBytes,
+    FinalizationContent,
+    NotarizationContent,
+    RandomBeaconContent,
+    RandomTapeContent,
 };
-use crate::crypto::canister_threshold_sig::idkg::{IDkgDealing, SignedIDkgDealing};
+use crate::crypto::canister_threshold_sig::idkg::{
+    IDkgDealing,
+    SignedIDkgDealing,
+};
 use crate::crypto::SignedBytesWithoutDomainSeparator;
-use crate::messages::{Delegation, MessageId, QueryResponseHash, WebAuthnEnvelope};
+use crate::messages::{
+    Delegation,
+    MessageId,
+    QueryResponseHash,
+    WebAuthnEnvelope,
+};
 use std::convert::TryFrom;
 
 const SIG_DOMAIN_IC_REQUEST_AUTH_DELEGATION: &str = "ic-request-auth-delegation";
@@ -49,7 +65,10 @@ pub trait SignatureDomain: private::SignatureDomainSeal {
 mod private {
     use super::*;
     use crate::{
-        crypto::canister_threshold_sig::idkg::{IDkgDealing, SignedIDkgDealing},
+        crypto::canister_threshold_sig::idkg::{
+            IDkgDealing,
+            SignedIDkgDealing,
+        },
         messages::QueryResponseHash,
     };
 

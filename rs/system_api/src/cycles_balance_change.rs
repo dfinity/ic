@@ -1,7 +1,13 @@
-use std::{cmp::Ordering, ops::Add};
+use std::{
+    cmp::Ordering,
+    ops::Add,
+};
 
 use ic_types::Cycles;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 /// Represents a change in the cycles balance.
 #[derive(Copy, Clone, Debug, Deserialize, Serialize)]

@@ -1,43 +1,86 @@
 use super::{
     canister_state::CanisterState,
-    metadata_state::{IngressHistoryState, Stream, Streams, SystemMetadata},
+    metadata_state::{
+        IngressHistoryState,
+        Stream,
+        Streams,
+        SystemMetadata,
+    },
 };
 use crate::{
     canister_snapshots::CanisterSnapshots,
     canister_state::{
-        queues::{CanisterInput, CanisterQueuesLoopDetector},
-        system_state::{push_input, CanisterOutputQueuesIterator},
+        queues::{
+            CanisterInput,
+            CanisterQueuesLoopDetector,
+        },
+        system_state::{
+            push_input,
+            CanisterOutputQueuesIterator,
+        },
     },
     metadata_state::{
-        subnet_call_context_manager::{IDkgDealingsContext, SignWithThresholdContext},
+        subnet_call_context_manager::{
+            IDkgDealingsContext,
+            SignWithThresholdContext,
+        },
         StreamMap,
     },
     CanisterQueues,
 };
 use ic_base_types::PrincipalId;
 use ic_btc_replica_types::BitcoinAdapterResponse;
-use ic_error_types::{ErrorCode, UserError};
+use ic_error_types::{
+    ErrorCode,
+    UserError,
+};
 use ic_interfaces::messaging::{
-    IngressInductionError, LABEL_VALUE_CANISTER_NOT_FOUND, LABEL_VALUE_CANISTER_STOPPED,
+    IngressInductionError,
+    LABEL_VALUE_CANISTER_NOT_FOUND,
+    LABEL_VALUE_CANISTER_STOPPED,
     LABEL_VALUE_CANISTER_STOPPING,
 };
 use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    batch::{ConsensusResponse, RawQueryStats},
+    batch::{
+        ConsensusResponse,
+        RawQueryStats,
+    },
     ingress::IngressStatus,
-    messages::{CallbackId, CanisterMessage, Ingress, MessageId, RequestOrResponse, Response},
+    messages::{
+        CallbackId,
+        CanisterMessage,
+        Ingress,
+        MessageId,
+        RequestOrResponse,
+        Response,
+    },
     time::CoarseTime,
-    CanisterId, MemoryAllocation, NumBytes, SubnetId, Time,
+    CanisterId,
+    MemoryAllocation,
+    NumBytes,
+    SubnetId,
+    Time,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
-use rand::{Rng, SeedableRng};
+use rand::{
+    Rng,
+    SeedableRng,
+};
 use rand_chacha::ChaChaRng;
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+    VecDeque,
+};
 use std::sync::Arc;
-use strum_macros::{EnumCount, EnumIter};
+use strum_macros::{
+    EnumCount,
+    EnumIter,
+};
 
 /// Maximum message length of a synthetic reject response produced by message
 /// routing.

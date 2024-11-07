@@ -1,9 +1,17 @@
 use std::collections::BTreeMap;
 
 use ic_types::{
-    batch::{Batch, BatchMessages, BlockmakerMetrics},
+    batch::{
+        Batch,
+        BatchMessages,
+        BlockmakerMetrics,
+    },
     time::UNIX_EPOCH,
-    Height, Randomness, RegistryVersion, ReplicaVersion, Time,
+    Height,
+    Randomness,
+    RegistryVersion,
+    ReplicaVersion,
+    Time,
 };
 
 pub struct BatchBuilder {

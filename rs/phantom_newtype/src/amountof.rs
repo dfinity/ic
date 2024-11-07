@@ -1,10 +1,30 @@
-use crate::displayer::{DisplayProxy, DisplayerOf};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use crate::displayer::{
+    DisplayProxy,
+    DisplayerOf,
+};
+use serde::{
+    Deserialize,
+    Deserializer,
+    Serialize,
+    Serializer,
+};
 use std::cmp::Ordering;
 use std::fmt;
-use std::hash::{Hash, Hasher};
+use std::hash::{
+    Hash,
+    Hasher,
+};
 use std::marker::PhantomData;
-use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
+use std::ops::{
+    Add,
+    AddAssign,
+    Div,
+    DivAssign,
+    Mul,
+    MulAssign,
+    Sub,
+    SubAssign,
+};
 
 /// `AmountOf<Unit>` provides a type-safe way to keep an amount of
 /// some `Unit`.

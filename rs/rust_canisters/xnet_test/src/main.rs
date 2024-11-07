@@ -5,7 +5,12 @@
 //! ```text
 //! cargo build --target wasm32-unknown-unknown --release
 //! ```
-use candid::{CandidType, Decode, Deserialize, Encode};
+use candid::{
+    CandidType,
+    Decode,
+    Deserialize,
+    Encode,
+};
 use dfn_core::api;
 use rand::Rng;
 use rand_pcg::Lcg64Xsh32;
@@ -14,7 +19,11 @@ use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::str::FromStr;
 use std::time::Duration;
-use xnet_test::{CanisterId, Metrics, NetworkTopology};
+use xnet_test::{
+    CanisterId,
+    Metrics,
+    NetworkTopology,
+};
 
 thread_local! {
     /// Whether this canister is generating traffic.

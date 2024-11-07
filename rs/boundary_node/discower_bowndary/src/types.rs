@@ -1,7 +1,10 @@
 use std::sync::Arc;
 
 use arc_swap::ArcSwap;
-use tokio::sync::{mpsc, watch};
+use tokio::sync::{
+    mpsc,
+    watch,
+};
 
 pub type SenderWatch<T> = watch::Sender<Option<T>>;
 pub type ReceiverWatch<T> = watch::Receiver<Option<T>>;

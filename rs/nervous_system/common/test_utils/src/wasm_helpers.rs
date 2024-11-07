@@ -12,7 +12,10 @@ pub fn annotate_wasm_with_metadata(
     name: &str,
     contents: Vec<u8>,
 ) -> Vec<u8> {
-    use ic_wasm::{metadata, utils};
+    use ic_wasm::{
+        metadata,
+        utils,
+    };
 
     let kind = if is_public {
         metadata::Kind::Public

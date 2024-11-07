@@ -11,18 +11,34 @@ mod tests;
 use crate::execution_environment::subnet_memory_capacity;
 use crate::{
     hypervisor::Hypervisor,
-    metrics::{MeasurementScope, QueryHandlerMetrics},
+    metrics::{
+        MeasurementScope,
+        QueryHandlerMetrics,
+    },
 };
 use candid::Encode;
 use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
-use ic_crypto_tree_hash::{flatmap, Label, LabeledTree, LabeledTree::SubTree};
-use ic_cycles_account_manager::CyclesAccountManager;
-use ic_error_types::{ErrorCode, UserError};
-use ic_interfaces::execution_environment::{
-    QueryExecutionError, QueryExecutionResponse, QueryExecutionService,
+use ic_crypto_tree_hash::{
+    flatmap,
+    Label,
+    LabeledTree,
+    LabeledTree::SubTree,
 };
-use ic_interfaces_state_manager::{Labeled, StateReader};
+use ic_cycles_account_manager::CyclesAccountManager;
+use ic_error_types::{
+    ErrorCode,
+    UserError,
+};
+use ic_interfaces::execution_environment::{
+    QueryExecutionError,
+    QueryExecutionResponse,
+    QueryExecutionService,
+};
+use ic_interfaces_state_manager::{
+    Labeled,
+    StateReader,
+};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_query_stats::QueryStatsCollector;
@@ -32,8 +48,15 @@ use ic_types::batch::QueryStats;
 use ic_types::QueryStatsEpoch;
 use ic_types::{
     ingress::WasmResult,
-    messages::{Blob, Certificate, CertificateDelegation, Query},
-    CanisterId, NumInstructions, PrincipalId,
+    messages::{
+        Blob,
+        Certificate,
+        CertificateDelegation,
+        Query,
+    },
+    CanisterId,
+    NumInstructions,
+    PrincipalId,
 };
 use prometheus::Histogram;
 use serde::Serialize;
@@ -43,15 +66,28 @@ use std::{
     future::Future,
     pin::Pin,
     sync::Arc,
-    task::{Context, Poll},
+    task::{
+        Context,
+        Poll,
+    },
     time::Instant,
 };
 use tokio::sync::oneshot;
-use tower::{util::BoxCloneService, Service};
+use tower::{
+    util::BoxCloneService,
+    Service,
+};
 
-pub(crate) use self::query_scheduler::{QueryScheduler, QuerySchedulerFlag};
+pub(crate) use self::query_scheduler::{
+    QueryScheduler,
+    QuerySchedulerFlag,
+};
 use ic_management_canister_types::{
-    FetchCanisterLogsRequest, FetchCanisterLogsResponse, LogVisibilityV2, Payload, QueryMethod,
+    FetchCanisterLogsRequest,
+    FetchCanisterLogsResponse,
+    LogVisibilityV2,
+    Payload,
+    QueryMethod,
 };
 
 /// Convert an object into CBOR binary.

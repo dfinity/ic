@@ -1,33 +1,72 @@
 use assert_matches::assert_matches;
-use candid::{Nat, Principal};
+use candid::{
+    Nat,
+    Principal,
+};
 use ic_base_types::CanisterId;
-use ic_cketh_minter::endpoints::events::{EventPayload, EventSource};
+use ic_cketh_minter::endpoints::events::{
+    EventPayload,
+    EventSource,
+};
 use ic_cketh_minter::endpoints::CandidBlockTag::Finalized;
 use ic_cketh_minter::endpoints::{
-    AddCkErc20Token, CkErc20Token, Erc20Balance, MinterInfo, WithdrawalDetail,
+    AddCkErc20Token,
+    CkErc20Token,
+    Erc20Balance,
+    MinterInfo,
+    WithdrawalDetail,
     WithdrawalSearchParameter,
 };
 use ic_cketh_minter::memo::MintMemo;
 use ic_cketh_minter::numeric::BlockNumber;
-use ic_cketh_minter::{MINT_RETRY_DELAY, SCRAPING_ETH_LOGS_INTERVAL};
-use ic_cketh_test_utils::ckerc20::{CkErc20Setup, DepositCkErc20Params, Erc20Token, ONE_USDC};
+use ic_cketh_minter::{
+    MINT_RETRY_DELAY,
+    SCRAPING_ETH_LOGS_INTERVAL,
+};
+use ic_cketh_test_utils::ckerc20::{
+    CkErc20Setup,
+    DepositCkErc20Params,
+    Erc20Token,
+    ONE_USDC,
+};
 use ic_cketh_test_utils::flow::DepositParams;
-use ic_cketh_test_utils::mock::{JsonRpcMethod, MockJsonRpcProviders};
+use ic_cketh_test_utils::mock::{
+    JsonRpcMethod,
+    MockJsonRpcProviders,
+};
 use ic_cketh_test_utils::response::{
-    block_response, empty_logs, multi_logs_for_single_transaction,
+    block_response,
+    empty_logs,
+    multi_logs_for_single_transaction,
 };
 use ic_cketh_test_utils::{
-    format_ethereum_address_to_eip_55, CkEthSetup, CKETH_MINIMUM_WITHDRAWAL_AMOUNT,
-    DEFAULT_DEPOSIT_BLOCK_NUMBER, DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_DEPOSIT_LOG_INDEX,
-    DEFAULT_DEPOSIT_TRANSACTION_HASH, DEFAULT_ERC20_DEPOSIT_LOG_INDEX,
-    DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH, EFFECTIVE_GAS_PRICE, ERC20_HELPER_CONTRACT_ADDRESS,
-    ETH_HELPER_CONTRACT_ADDRESS, GAS_USED, LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MINTER_ADDRESS,
+    format_ethereum_address_to_eip_55,
+    CkEthSetup,
+    CKETH_MINIMUM_WITHDRAWAL_AMOUNT,
+    DEFAULT_DEPOSIT_BLOCK_NUMBER,
+    DEFAULT_DEPOSIT_FROM_ADDRESS,
+    DEFAULT_DEPOSIT_LOG_INDEX,
+    DEFAULT_DEPOSIT_TRANSACTION_HASH,
+    DEFAULT_ERC20_DEPOSIT_LOG_INDEX,
+    DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH,
+    EFFECTIVE_GAS_PRICE,
+    ERC20_HELPER_CONTRACT_ADDRESS,
+    ETH_HELPER_CONTRACT_ADDRESS,
+    GAS_USED,
+    LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL,
+    MINTER_ADDRESS,
 };
 use ic_ethereum_types::Address;
 use ic_ledger_suite_orchestrator_test_utils::flow::call_ledger_icrc1_total_supply;
-use ic_ledger_suite_orchestrator_test_utils::{supported_erc20_tokens, usdc};
+use ic_ledger_suite_orchestrator_test_utils::{
+    supported_erc20_tokens,
+    usdc,
+};
 use ic_management_canister_types::CanisterStatusType;
-use ic_state_machine_tests::{ErrorCode, WasmResult};
+use ic_state_machine_tests::{
+    ErrorCode,
+    WasmResult,
+};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
 use icrc_ledger_types::icrc3::transactions::Mint;
@@ -141,34 +180,60 @@ mod withdraw_erc20 {
     use super::*;
     use ic_base_types::PrincipalId;
     use ic_cketh_minter::endpoints::ckerc20::{
-        LedgerError, RetrieveErc20Request, WithdrawErc20Error,
+        LedgerError,
+        RetrieveErc20Request,
+        WithdrawErc20Error,
     };
     use ic_cketh_minter::endpoints::events::{
-        TransactionReceipt, TransactionStatus, UnsignedTransaction,
+        TransactionReceipt,
+        TransactionStatus,
+        UnsignedTransaction,
     };
     use ic_cketh_minter::endpoints::{
-        EthTransaction, RetrieveEthStatus, TxFinalizedStatus, WithdrawalStatus,
+        EthTransaction,
+        RetrieveEthStatus,
+        TxFinalizedStatus,
+        WithdrawalStatus,
     };
     use ic_cketh_minter::memo::BurnMemo;
     use ic_cketh_minter::PROCESS_REIMBURSEMENT;
     use ic_cketh_test_utils::ckerc20::{
-        erc20_transfer_data, Erc20WithdrawalFlow, RefreshGasFeeEstimate,
-        DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS, ONE_USDC, TWO_USDC,
+        erc20_transfer_data,
+        Erc20WithdrawalFlow,
+        RefreshGasFeeEstimate,
+        DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS,
+        ONE_USDC,
+        TWO_USDC,
     };
     use ic_cketh_test_utils::flow::{
-        double_and_increment_base_fee_per_gas, increment_base_fee_per_gas,
-        increment_max_priority_fee_per_gas, DepositCkEthParams, DepositParams,
-        FeeHistoryProcessWithdrawal, ProcessWithdrawalParams,
+        double_and_increment_base_fee_per_gas,
+        increment_base_fee_per_gas,
+        increment_max_priority_fee_per_gas,
+        DepositCkEthParams,
+        DepositParams,
+        FeeHistoryProcessWithdrawal,
+        ProcessWithdrawalParams,
     };
     use ic_cketh_test_utils::response::{
-        decode_transaction, default_erc20_signed_eip_1559_transaction, hash_transaction,
+        decode_transaction,
+        default_erc20_signed_eip_1559_transaction,
+        hash_transaction,
     };
     use ic_cketh_test_utils::{
-        JsonRpcProvider, CKETH_TRANSFER_FEE, DEFAULT_BLOCK_HASH, DEFAULT_BLOCK_NUMBER,
-        DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION, DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_FEE,
-        DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_HASH, DEFAULT_PRINCIPAL_ID, EXPECTED_BALANCE,
+        JsonRpcProvider,
+        CKETH_TRANSFER_FEE,
+        DEFAULT_BLOCK_HASH,
+        DEFAULT_BLOCK_NUMBER,
+        DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION,
+        DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_FEE,
+        DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_HASH,
+        DEFAULT_PRINCIPAL_ID,
+        EXPECTED_BALANCE,
     };
-    use ic_ledger_suite_orchestrator_test_utils::{new_state_machine, CKERC20_TRANSFER_FEE};
+    use ic_ledger_suite_orchestrator_test_utils::{
+        new_state_machine,
+        CKERC20_TRANSFER_FEE,
+    };
     use icrc_ledger_types::icrc3::transactions::Burn;
     use num_bigint::BigUint;
     use num_traits::ToPrimitive;

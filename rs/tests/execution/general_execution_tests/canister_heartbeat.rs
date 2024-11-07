@@ -1,13 +1,25 @@
 /* tag::catalog[]
 end::catalog[] */
 
-use std::time::{Duration, Instant};
+use std::time::{
+    Duration,
+    Instant,
+};
 
 use ic_system_test_driver::driver::test_env::TestEnv;
-use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
-use ic_system_test_driver::util::{self, block_on};
+use ic_system_test_driver::driver::test_env_api::{
+    GetFirstHealthyNodeSnapshot,
+    HasPublicApiUrl,
+};
+use ic_system_test_driver::util::{
+    self,
+    block_on,
+};
 use ic_universal_canister::UNIVERSAL_CANISTER_WASM;
-use ic_universal_canister::{call_args, wasm};
+use ic_universal_canister::{
+    call_args,
+    wasm,
+};
 use ic_utils::call::AsyncCall;
 use ic_utils::interfaces::ManagementCanister;
 

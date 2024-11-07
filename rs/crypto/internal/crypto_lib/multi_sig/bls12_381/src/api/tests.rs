@@ -1,7 +1,11 @@
 //! Multisig lib API tests
 use crate as multi_sig;
 use crate::types::{
-    arbitrary, CombinedSignatureBytes, IndividualSignatureBytes, PopBytes, PublicKeyBytes,
+    arbitrary,
+    CombinedSignatureBytes,
+    IndividualSignatureBytes,
+    PopBytes,
+    PublicKeyBytes,
     SecretKeyBytes,
 };
 use ic_types::crypto::CryptoResult;

@@ -1,7 +1,11 @@
 use ic_crypto_internal_basic_sig_der_utils::PkixAlgorithmIdentifier;
 use ic_crypto_internal_basic_sig_ecdsa_secp256r1::der_encoding_from_xy_coordinates as p256_from_coordinates;
 use ic_crypto_internal_basic_sig_rsa_pkcs1::RsaPublicKey;
-use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
+use ic_types::crypto::{
+    AlgorithmId,
+    CryptoError,
+    CryptoResult,
+};
 use simple_asn1::oid;
 
 /// Return the algorithm identifier associated with COSE encoded keys

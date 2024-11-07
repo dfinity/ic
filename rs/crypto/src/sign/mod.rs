@@ -4,37 +4,83 @@ use crate::sign::basic_sig::BasicSigVerifierInternal;
 use crate::sign::basic_sig::BasicSignerInternal;
 use crate::sign::multi_sig::MultiSigVerifierInternal;
 use crate::sign::multi_sig::MultiSignerInternal;
-use crate::sign::threshold_sig::{ThresholdSigVerifierInternal, ThresholdSignerInternal};
-use ic_crypto_interfaces_sig_verification::{BasicSigVerifierByPublicKey, CanisterSigVerifier};
-use ic_crypto_internal_csp::types::{CspPublicKey, CspSignature};
+use crate::sign::threshold_sig::{
+    ThresholdSigVerifierInternal,
+    ThresholdSignerInternal,
+};
+use ic_crypto_interfaces_sig_verification::{
+    BasicSigVerifierByPublicKey,
+    CanisterSigVerifier,
+};
+use ic_crypto_internal_csp::types::{
+    CspPublicKey,
+    CspSignature,
+};
 use ic_crypto_internal_csp::CryptoServiceProvider;
 use ic_crypto_internal_threshold_sig_bls12381::api::bls_signature_cache_statistics;
 use ic_interfaces::crypto::{
-    BasicSigVerifier, BasicSigner, MultiSigVerifier, MultiSigner, ThresholdEcdsaSigVerifier,
-    ThresholdEcdsaSigner, ThresholdSchnorrSigVerifier, ThresholdSchnorrSigner,
-    ThresholdSigVerifier, ThresholdSigVerifierByPublicKey, ThresholdSigner,
+    BasicSigVerifier,
+    BasicSigner,
+    MultiSigVerifier,
+    MultiSigner,
+    ThresholdEcdsaSigVerifier,
+    ThresholdEcdsaSigner,
+    ThresholdSchnorrSigVerifier,
+    ThresholdSchnorrSigner,
+    ThresholdSigVerifier,
+    ThresholdSigVerifierByPublicKey,
+    ThresholdSigner,
 };
-use ic_logger::{debug, new_logger};
+use ic_logger::{
+    debug,
+    new_logger,
+};
 use ic_types::crypto::canister_threshold_sig::error::{
-    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaCreateSigShareError,
-    ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
-    ThresholdSchnorrCombineSigSharesError, ThresholdSchnorrCreateSigShareError,
-    ThresholdSchnorrVerifyCombinedSigError, ThresholdSchnorrVerifySigShareError,
+    ThresholdEcdsaCombineSigSharesError,
+    ThresholdEcdsaCreateSigShareError,
+    ThresholdEcdsaVerifyCombinedSignatureError,
+    ThresholdEcdsaVerifySigShareError,
+    ThresholdSchnorrCombineSigSharesError,
+    ThresholdSchnorrCreateSigShareError,
+    ThresholdSchnorrVerifyCombinedSigError,
+    ThresholdSchnorrVerifySigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::{
-    ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
-    ThresholdSchnorrCombinedSignature, ThresholdSchnorrSigInputs, ThresholdSchnorrSigShare,
+    ThresholdEcdsaCombinedSignature,
+    ThresholdEcdsaSigInputs,
+    ThresholdEcdsaSigShare,
+    ThresholdSchnorrCombinedSignature,
+    ThresholdSchnorrSigInputs,
+    ThresholdSchnorrSigShare,
 };
 use ic_types::crypto::threshold_sig::errors::threshold_sign_error::ThresholdSignError;
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
 use ic_types::crypto::KeyPurpose::CommitteeSigning;
 use ic_types::crypto::{
-    AlgorithmId, BasicSig, BasicSigOf, CanisterSigOf, CombinedMultiSig, CombinedMultiSigOf,
-    CombinedThresholdSigOf, CryptoError, CryptoResult, IndividualMultiSig, IndividualMultiSigOf,
-    Signable, ThresholdSigShareOf, UserPublicKey,
+    AlgorithmId,
+    BasicSig,
+    BasicSigOf,
+    CanisterSigOf,
+    CombinedMultiSig,
+    CombinedMultiSigOf,
+    CombinedThresholdSigOf,
+    CryptoError,
+    CryptoResult,
+    IndividualMultiSig,
+    IndividualMultiSigOf,
+    Signable,
+    ThresholdSigShareOf,
+    UserPublicKey,
 };
-use ic_types::{NodeId, RegistryVersion, SubnetId};
-use std::collections::{BTreeMap, BTreeSet};
+use ic_types::{
+    NodeId,
+    RegistryVersion,
+    SubnetId,
+};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
 use std::convert::TryFrom;
 
 pub use threshold_sig::ThresholdSigDataStoreImpl;
@@ -45,13 +91,18 @@ mod multi_sig;
 mod threshold_sig;
 
 pub use canister_threshold_sig::{
-    get_master_public_key_from_transcript, retrieve_mega_public_key_from_registry,
+    get_master_public_key_from_transcript,
+    retrieve_mega_public_key_from_registry,
     MegaKeyFromRegistryError,
 };
 
 #[cfg(test)]
 mod tests;
-use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
+use ic_crypto_internal_logmon::metrics::{
+    MetricsDomain,
+    MetricsResult,
+    MetricsScope,
+};
 use ic_types::crypto::threshold_sig::IcRootOfTrust;
 use ic_types::signature::BasicSignatureBatch;
 

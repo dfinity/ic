@@ -3,26 +3,51 @@ end::catalog[] */
 use anyhow::Result;
 use ic_agent::export::Principal;
 use ic_agent::{
-    identity::{AnonymousIdentity, Secp256k1Identity},
+    identity::{
+        AnonymousIdentity,
+        Secp256k1Identity,
+    },
     Identity,
 };
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::ic::{
+    InternetComputer,
+    Subnet,
+};
 use ic_system_test_driver::driver::test_env::TestEnv;
-use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
+use ic_system_test_driver::driver::test_env_api::{
+    GetFirstHealthyNodeSnapshot,
+    HasPublicApiUrl,
+};
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{
-    agent_with_identity, block_on, expiry_time, random_ed25519_identity, sign_query, sign_update,
+    agent_with_identity,
+    block_on,
+    expiry_time,
+    random_ed25519_identity,
+    sign_query,
+    sign_update,
     UniversalCanister,
 };
 use ic_types::messages::{
-    Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpRequestEnvelope, HttpUserQuery,
+    Blob,
+    HttpCallContent,
+    HttpCanisterUpdate,
+    HttpQueryContent,
+    HttpRequestEnvelope,
+    HttpUserQuery,
 };
 use ic_universal_canister::wasm;
-use rand::{CryptoRng, Rng};
-use slog::{debug, info};
+use rand::{
+    CryptoRng,
+    Rng,
+};
+use slog::{
+    debug,
+    info,
+};
 
 fn main() -> Result<()> {
     SystemTestGroup::new()

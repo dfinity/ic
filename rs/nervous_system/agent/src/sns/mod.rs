@@ -6,8 +6,15 @@ pub mod swap;
 
 use anyhow::Result;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
-use ic_sns_wasm::pb::v1::{ListUpgradeStepsRequest, ListUpgradeStepsResponse, SnsVersion};
-use serde::{Deserialize, Serialize};
+use ic_sns_wasm::pb::v1::{
+    ListUpgradeStepsRequest,
+    ListUpgradeStepsResponse,
+    SnsVersion,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 use crate::CallCanisters;
 

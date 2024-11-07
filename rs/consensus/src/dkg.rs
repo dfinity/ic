@@ -4,24 +4,47 @@
 
 use crate::{
     bouncer_metrics::BouncerMetrics,
-    consensus::{check_protocol_version, dkg_key_manager::DkgKeyManager},
+    consensus::{
+        check_protocol_version,
+        dkg_key_manager::DkgKeyManager,
+    },
     idkg::{
         make_bootstrap_summary,
         payload_builder::make_bootstrap_summary_with_initial_dealings,
-        utils::{get_chain_key_config_if_enabled, inspect_chain_key_initializations},
+        utils::{
+            get_chain_key_config_if_enabled,
+            inspect_chain_key_initializations,
+        },
     },
 };
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
     crypto::ErrorReproducibility,
-    dkg::{ChangeAction, DkgPool, Mutations},
-    p2p::consensus::{Bouncer, BouncerFactory, BouncerValue, PoolMutationsProducer},
+    dkg::{
+        ChangeAction,
+        DkgPool,
+        Mutations,
+    },
+    p2p::consensus::{
+        Bouncer,
+        BouncerFactory,
+        BouncerValue,
+        PoolMutationsProducer,
+    },
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{error, info, warn, ReplicaLogger};
+use ic_logger::{
+    error,
+    info,
+    warn,
+    ReplicaLogger,
+};
 use ic_metrics::{
-    buckets::{decimal_buckets, linear_buckets},
+    buckets::{
+        decimal_buckets,
+        linear_buckets,
+    },
     MetricsRegistry,
 };
 use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
@@ -29,25 +52,56 @@ use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
     batch::ValidationContext,
     consensus::{
-        dkg::{DealingContent, DkgMessageId, Message},
-        idkg, Block, BlockPayload, CatchUpContent, CatchUpPackage, HashedBlock, HashedRandomBeacon,
-        Payload, RandomBeaconContent, Rank, SummaryPayload,
+        dkg::{
+            DealingContent,
+            DkgMessageId,
+            Message,
+        },
+        idkg,
+        Block,
+        BlockPayload,
+        CatchUpContent,
+        CatchUpPackage,
+        HashedBlock,
+        HashedRandomBeacon,
+        Payload,
+        RandomBeaconContent,
+        Rank,
+        SummaryPayload,
     },
     crypto::{
         crypto_hash,
-        threshold_sig::ni_dkg::{config::NiDkgConfig, NiDkgId, NiDkgTag, NiDkgTargetSubnet},
-        CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, Signed,
+        threshold_sig::ni_dkg::{
+            config::NiDkgConfig,
+            NiDkgId,
+            NiDkgTag,
+            NiDkgTargetSubnet,
+        },
+        CombinedThresholdSig,
+        CombinedThresholdSigOf,
+        CryptoHash,
+        Signed,
     },
     signature::ThresholdSignature,
-    Height, NodeId, RegistryVersion, SubnetId, Time,
+    Height,
+    NodeId,
+    RegistryVersion,
+    SubnetId,
+    Time,
 };
-pub(crate) use payload_validator::{DkgPayloadValidationFailure, InvalidDkgPayloadReason};
+pub(crate) use payload_validator::{
+    DkgPayloadValidationFailure,
+    InvalidDkgPayloadReason,
+};
 use phantom_newtype::Id;
 use prometheus::Histogram;
 use rayon::prelude::*;
 use std::{
     collections::BTreeMap,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc,
+        Mutex,
+    },
 };
 
 pub(crate) mod payload_builder;
@@ -56,7 +110,11 @@ pub(crate) mod payload_validator;
 mod test_utils;
 mod utils;
 
-pub use payload_builder::{create_payload, make_genesis_summary, PayloadCreationError};
+pub use payload_builder::{
+    create_payload,
+    make_genesis_summary,
+    PayloadCreationError,
+};
 
 // The maximal number of DKGs for other subnets we want to run in one interval.
 const MAX_REMOTE_DKGS_PER_INTERVAL: usize = 1;
@@ -611,37 +669,63 @@ fn bootstrap_idkg_summary(
 
 #[cfg(test)]
 mod tests {
-    use super::{test_utils::complement_state_manager_with_remote_dkg_requests, *};
+    use super::{
+        test_utils::complement_state_manager_with_remote_dkg_requests,
+        *,
+    };
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
     use ic_consensus_mocks::{
-        dependencies, dependencies_with_subnet_params,
-        dependencies_with_subnet_records_with_raw_state_manager, Dependencies,
+        dependencies,
+        dependencies_with_subnet_params,
+        dependencies_with_subnet_records_with_raw_state_manager,
+        Dependencies,
     };
     use ic_consensus_utils::pool_reader::PoolReader;
     use ic_crypto_test_utils_ni_dkg::dummy_initial_dkg_transcript;
     use ic_interfaces::{
         consensus_pool::ConsensusPool,
-        p2p::consensus::{MutablePool, UnvalidatedArtifact},
+        p2p::consensus::{
+            MutablePool,
+            UnvalidatedArtifact,
+        },
     };
     use ic_interfaces_registry::RegistryVersionedRecord;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
-    use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, SubnetRecord};
+    use ic_protobuf::registry::subnet::v1::{
+        CatchUpPackageContents,
+        SubnetRecord,
+    };
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities::crypto::CryptoReturningOk;
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_registry::{
+        add_subnet_record,
+        SubnetRecordBuilder,
+    };
+    use ic_test_utilities_types::ids::{
+        node_test_id,
+        subnet_test_id,
+    };
     use ic_types::{
         consensus::HasVersion,
         crypto::threshold_sig::ni_dkg::{
-            NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
+            NiDkgDealing,
+            NiDkgId,
+            NiDkgTag,
+            NiDkgTargetId,
+            NiDkgTargetSubnet,
         },
         registry::RegistryClientError,
         time::UNIX_EPOCH,
-        PrincipalId, RegistryVersion, ReplicaVersion,
+        PrincipalId,
+        RegistryVersion,
+        ReplicaVersion,
     };
-    use std::{collections::BTreeSet, convert::TryFrom};
+    use std::{
+        collections::BTreeSet,
+        convert::TryFrom,
+    };
 
     #[test]
     // In this test we test the creation of dealing payloads.

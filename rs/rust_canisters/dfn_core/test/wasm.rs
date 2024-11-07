@@ -1,4 +1,7 @@
-use dfn_core::endpoint::{bytes, over};
+use dfn_core::endpoint::{
+    bytes,
+    over,
+};
 
 #[export_name = "canister_query reverse"]
 fn reverse() {

@@ -46,7 +46,11 @@
 //! ```
 
 use prost::DecodeError;
-use std::convert::{Infallible, TryFrom, TryInto};
+use std::convert::{
+    Infallible,
+    TryFrom,
+    TryInto,
+};
 use std::error::Error;
 
 #[cfg(test)]

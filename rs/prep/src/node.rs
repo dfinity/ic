@@ -1,36 +1,70 @@
 use std::{
     fmt::Display,
     io,
-    path::{Path, PathBuf},
+    path::{
+        Path,
+        PathBuf,
+    },
     sync::Arc,
 };
 
 use anyhow::Result;
 use ic_interfaces::{
-    certification::{Verifier, VerifierError},
+    certification::{
+        Verifier,
+        VerifierError,
+    },
     validation::ValidationResult,
 };
 use ic_state_manager::StateManagerImpl;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use thiserror::Error;
 
-use crate::util::{write_proto_to_file_raw, write_registry_entry};
+use crate::util::{
+    write_proto_to_file_raw,
+    write_registry_entry,
+};
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_node_key_generation::generate_node_keys_once;
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
-use ic_interfaces_state_manager::{CertificationScope, StateHashError, StateManager};
-use ic_protobuf::registry::{
-    crypto::v1::{PublicKey, X509PublicKeyCert},
-    node::v1::{ConnectionEndpoint as pbConnectionEndpoint, NodeRecord as pbNodeRecord},
+use ic_interfaces_state_manager::{
+    CertificationScope,
+    StateHashError,
+    StateManager,
 };
-use ic_registry_keys::{make_crypto_node_key, make_crypto_tls_cert_key, make_node_record_key};
+use ic_protobuf::registry::{
+    crypto::v1::{
+        PublicKey,
+        X509PublicKeyCert,
+    },
+    node::v1::{
+        ConnectionEndpoint as pbConnectionEndpoint,
+        NodeRecord as pbNodeRecord,
+    },
+};
+use ic_registry_keys::{
+    make_crypto_node_key,
+    make_crypto_tls_cert_key,
+    make_node_record_key,
+};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    consensus::certification::Certification, crypto::KeyPurpose, Height, NodeId, PrincipalId,
-    RegistryVersion, SubnetId,
+    consensus::certification::Certification,
+    crypto::KeyPurpose,
+    Height,
+    NodeId,
+    PrincipalId,
+    RegistryVersion,
+    SubnetId,
 };
-use std::{net::SocketAddr, os::unix::fs::PermissionsExt};
+use std::{
+    net::SocketAddr,
+    os::unix::fs::PermissionsExt,
+};
 
 const CRYPTO_DIR: &str = "crypto";
 const STATE_DIR: &str = "state";
@@ -430,7 +464,10 @@ impl NodeSecretKeyStore {
 mod node_configuration {
     use super::*;
     use pretty_assertions::assert_eq;
-    use std::{net::SocketAddr, str::FromStr};
+    use std::{
+        net::SocketAddr,
+        str::FromStr,
+    };
 
     #[test]
     fn into_proto_http() {

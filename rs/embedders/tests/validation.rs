@@ -5,19 +5,32 @@ use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::{
     wasm_utils::{
         validate_and_instrument_for_testing,
-        validation::{extract_custom_section_name, RESERVED_SYMBOLS},
-        Complexity, WasmImportsDetails, WasmValidationDetails,
+        validation::{
+            extract_custom_section_name,
+            RESERVED_SYMBOLS,
+        },
+        Complexity,
+        WasmImportsDetails,
+        WasmValidationDetails,
     },
     WasmtimeEmbedder,
 };
 use ic_interfaces::execution_environment::HypervisorError;
 use ic_logger::replica_logger::no_op_logger;
-use ic_wasm_types::{BinaryEncodedWasm, WasmValidationError};
+use ic_wasm_types::{
+    BinaryEncodedWasm,
+    WasmValidationError,
+};
 
 use ic_replicated_state::canister_state::execution_state::{
-    CustomSection, CustomSectionType, WasmMetadata,
+    CustomSection,
+    CustomSectionType,
+    WasmMetadata,
 };
-use ic_types::{NumBytes, NumInstructions};
+use ic_types::{
+    NumBytes,
+    NumInstructions,
+};
 use maplit::btreemap;
 
 const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
@@ -1070,7 +1083,10 @@ fn large_wasm_with_small_code_accepted() {
 /// rejected should later be rejected when we try to validate it with Wasmtime.
 #[test]
 fn incorrect_wasm_code_size_is_invalid() {
-    use wasmparser::{Parser, Payload};
+    use wasmparser::{
+        Parser,
+        Payload,
+    };
 
     let wasm = wasm_with_fixed_sizes(10 * KB * KB + 10, 0);
 
@@ -1119,7 +1135,10 @@ fn incorrect_wasm_code_size_is_invalid() {
 /// the module should fail validation.
 #[test]
 fn wasm_with_multiple_code_sections_is_invalid() {
-    use wasmparser::{Parser, Payload};
+    use wasmparser::{
+        Parser,
+        Payload,
+    };
 
     let wasm = wasm_with_fixed_sizes(10, 0);
 

@@ -8,7 +8,10 @@ pub mod threshold_sig;
 
 use crate::types::CspPublicKey;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
-use x509_parser::{certificate::X509Certificate, prelude::FromDer};
+use x509_parser::{
+    certificate::X509Certificate,
+    prelude::FromDer,
+};
 
 pub fn ed25519_csp_pubkey_from_tls_pubkey_cert(public_key_cert: &TlsPublicKeyCert) -> CspPublicKey {
     use ic_crypto_internal_basic_sig_ed25519::types as ed25519_types;

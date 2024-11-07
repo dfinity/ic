@@ -20,14 +20,24 @@ pub type BlockHeight = u32;
 pub mod test_common {
 
     use std::{
-        collections::{HashSet, VecDeque},
+        collections::{
+            HashSet,
+            VecDeque,
+        },
         net::SocketAddr,
     };
 
-    use bitcoin::{consensus::deserialize, Block};
+    use bitcoin::{
+        consensus::deserialize,
+        Block,
+    };
     use hex::FromHex;
 
-    use crate::{Channel, ChannelError, Command};
+    use crate::{
+        Channel,
+        ChannelError,
+        Command,
+    };
 
     /// This is a hex dump of the first block on the BTC network: 00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048
     pub const BLOCK_1_ENCODED: &str = "010000006fe28c0ab6f1b372c1a6a246ae63f74f931e8365e15a089c68d6190000000000982051fd1e4ba744bbbe680e1fee14677ba1a3c3540bf7b1cdb606e857233e0e61bc6649ffff001d01e362990101000000010000000000000000000000000000000000000000000000000000000000000000ffffffff0704ffff001d0104ffffffff0100f2052a0100000043410496b538e853519c726a2c91e61ec11600ae1390813a627c66fb8be7947be63c52da7589379515d4e0a604f8141781e62294721166bf621e73a82cbf2342c858eeac00000000";

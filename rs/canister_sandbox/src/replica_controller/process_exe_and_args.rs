@@ -4,14 +4,19 @@
 //! running unit tests or running within tools such as `drun` or `ic-replay`.
 
 use std::{
-    path::{Path, PathBuf},
+    path::{
+        Path,
+        PathBuf,
+    },
     process::Command,
 };
 
 use once_cell::sync::OnceCell;
 
 use crate::{
-    RUN_AS_CANISTER_SANDBOX_FLAG, RUN_AS_COMPILER_SANDBOX_FLAG, RUN_AS_SANDBOX_LAUNCHER_FLAG,
+    RUN_AS_CANISTER_SANDBOX_FLAG,
+    RUN_AS_COMPILER_SANDBOX_FLAG,
+    RUN_AS_SANDBOX_LAUNCHER_FLAG,
 };
 use ic_config::embedders::Config as EmbeddersConfig;
 

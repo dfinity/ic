@@ -1,8 +1,14 @@
 use crate::*;
-use core::fmt::{self, Debug};
+use core::fmt::{
+    self,
+    Debug,
+};
 use ic_types::crypto::canister_threshold_sig::idkg::BatchSignedIDkgDealing;
 use ic_types::NumberOfNodes;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::convert::TryFrom;
 
 #[derive(Clone)]

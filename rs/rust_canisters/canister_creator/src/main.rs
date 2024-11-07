@@ -1,8 +1,15 @@
 use candid::Decode;
-use dfn_core::{api, CanisterId};
+use dfn_core::{
+    api,
+    CanisterId,
+};
 use dfn_macro::update;
 use futures::future::join_all;
-use ic_management_canister_types::{CanisterIdRecord, CanisterInstallMode, Payload};
+use ic_management_canister_types::{
+    CanisterIdRecord,
+    CanisterInstallMode,
+    Payload,
+};
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 

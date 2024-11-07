@@ -1,16 +1,32 @@
 use candid::Encode;
-use common::{install_sns_wasm, set_up_state_machine_with_nns};
+use common::{
+    install_sns_wasm,
+    set_up_state_machine_with_nns,
+};
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use ic_nns_test_utils::{
-    common::{build_mainnet_sns_wasms_wasm, build_sns_wasms_wasm, NnsInitPayloadsBuilder},
+    common::{
+        build_mainnet_sns_wasms_wasm,
+        build_sns_wasms_wasm,
+        NnsInitPayloadsBuilder,
+    },
     sns_wasm::{
-        self, add_wasm, add_wasm_via_proposal, build_root_sns_wasm, get_wasm, get_wasm_metadata,
+        self,
+        add_wasm,
+        add_wasm_via_proposal,
+        build_root_sns_wasm,
+        get_wasm,
+        get_wasm_metadata,
     },
     state_test_helpers,
 };
 use ic_sns_wasm::pb::v1::{
-    add_wasm_response, get_wasm_metadata_response, GetWasmMetadataResponse, GetWasmResponse,
-    MetadataSection, SnsWasmError,
+    add_wasm_response,
+    get_wasm_metadata_response,
+    GetWasmMetadataResponse,
+    GetWasmResponse,
+    MetadataSection,
+    SnsWasmError,
 };
 use ic_state_machine_tests::StateMachine;
 
@@ -69,11 +85,17 @@ fn test_add_wasm_can_be_called_directly_if_access_controls_are_disabled() {
 
 #[test]
 fn test_sns_w_saves_metadata_on_upgrade() {
-    use get_wasm_metadata_response::{Ok, Result};
+    use get_wasm_metadata_response::{
+        Ok,
+        Result,
+    };
 
     // Prepare a WASM module to be stored inside SNS-W. Make sure it has known metadata.
     let (root_hash, root_wasm, expected_metadata) = {
-        use ic_wasm::{metadata, utils};
+        use ic_wasm::{
+            metadata,
+            utils,
+        };
 
         let root_wasm = build_root_sns_wasm();
         let root_hash = root_wasm.sha256_hash();

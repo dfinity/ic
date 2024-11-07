@@ -1,13 +1,26 @@
-use std::{collections::HashSet, sync::Arc};
+use std::{
+    collections::HashSet,
+    sync::Arc,
+};
 
 use anyhow::Context;
 use axum::{
     body::Body,
-    extract::{Query, Request, State},
+    extract::{
+        Query,
+        Request,
+        State,
+    },
     http::StatusCode,
-    response::{IntoResponse, Response},
+    response::{
+        IntoResponse,
+        Response,
+    },
 };
-use itertools::{concat, Itertools};
+use itertools::{
+    concat,
+    Itertools,
+};
 use reqwest::Method;
 use url::Url;
 

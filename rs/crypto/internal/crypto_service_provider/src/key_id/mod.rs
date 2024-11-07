@@ -1,13 +1,22 @@
 use crate::CspPublicKey;
 use hex::FromHex;
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
-    EccCurveType, MEGaPublicKey, PolynomialCommitment,
+    EccCurveType,
+    MEGaPublicKey,
+    PolynomialCommitment,
 };
 use ic_crypto_internal_types::encrypt::forward_secure::CspFsEncryptionPublicKey;
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::CspPublicCoefficients;
-use ic_crypto_sha2::{Context, DomainSeparationContext, Sha256};
+use ic_crypto_sha2::{
+    Context,
+    DomainSeparationContext,
+    Sha256,
+};
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
-use ic_types::crypto::{AlgorithmId, CryptoError};
+use ic_types::crypto::{
+    AlgorithmId,
+    CryptoError,
+};
 use std::fmt;
 use std::fmt::Formatter;
 

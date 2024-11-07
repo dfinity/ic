@@ -1,33 +1,58 @@
 //! The crypto service provider API for querying public and secret keys in combination.
 use crate::vault::api::{
-    ExternalPublicKeyError, LocalPublicKeyError, NodeKeysError, NodeKeysErrors,
-    PksAndSksContainsErrors, PublicAndSecretKeyStoreCspVault, SecretKeyError,
+    ExternalPublicKeyError,
+    LocalPublicKeyError,
+    NodeKeysError,
+    NodeKeysErrors,
+    PksAndSksContainsErrors,
+    PublicAndSecretKeyStoreCspVault,
+    SecretKeyError,
     ValidatePksAndSksError,
 };
 use crate::vault::local_csp_vault::LocalCspVault;
-use crate::{CspPublicKey, ExternalPublicKeys, KeyId, SecretKeyStore};
+use crate::{
+    CspPublicKey,
+    ExternalPublicKeys,
+    KeyId,
+    SecretKeyStore,
+};
 use parking_lot::RwLockReadGuard;
 
-use crate::keygen::utils::{mega_public_key_from_proto, MEGaPublicKeyFromProtoError};
+use crate::keygen::utils::{
+    mega_public_key_from_proto,
+    MEGaPublicKeyFromProtoError,
+};
 use crate::public_key_store::PublicKeyStore;
 use crate::types::conversions::CspPopFromPublicKeyProtoError;
 use crate::types::CspPop;
 use crate::vault::api::ValidatePksAndSksKeyPairError::{
-    PublicKeyInvalid, PublicKeyNotFound, SecretKeyNotFound,
+    PublicKeyInvalid,
+    PublicKeyNotFound,
+    SecretKeyNotFound,
 };
 use ic_crypto_internal_types::encrypt::forward_secure::{
-    CspFsEncryptionPop, CspFsEncryptionPublicKey,
+    CspFsEncryptionPop,
+    CspFsEncryptionPublicKey,
 };
 use ic_crypto_node_key_validation::{
-    ValidCommitteeSigningPublicKey, ValidDkgDealingEncryptionPublicKey,
-    ValidIDkgDealingEncryptionPublicKey, ValidNodePublicKeys, ValidNodeSigningPublicKey,
+    ValidCommitteeSigningPublicKey,
+    ValidDkgDealingEncryptionPublicKey,
+    ValidIDkgDealingEncryptionPublicKey,
+    ValidNodePublicKeys,
+    ValidNodeSigningPublicKey,
     ValidTlsCertificate,
 };
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
-use ic_protobuf::registry::crypto::v1::{PublicKey as PublicKeyProto, X509PublicKeyCert};
+use ic_protobuf::registry::crypto::v1::{
+    PublicKey as PublicKeyProto,
+    X509PublicKeyCert,
+};
 use ic_types::crypto::AlgorithmId;
 use ic_types::Time;
-use rand::{CryptoRng, Rng};
+use rand::{
+    CryptoRng,
+    Rng,
+};
 
 #[cfg(test)]
 mod tests;

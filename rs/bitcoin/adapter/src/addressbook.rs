@@ -1,13 +1,29 @@
 use crate::config::Config;
-use bitcoin::network::{constants::ServiceFlags, Address};
-use ic_logger::{info, ReplicaLogger};
+use bitcoin::network::{
+    constants::ServiceFlags,
+    Address,
+};
+use ic_logger::{
+    info,
+    ReplicaLogger,
+};
 use rand::{
-    prelude::{IteratorRandom, SliceRandom, StdRng},
+    prelude::{
+        IteratorRandom,
+        SliceRandom,
+        StdRng,
+    },
     SeedableRng,
 };
 use std::{
-    collections::{HashSet, VecDeque},
-    net::{SocketAddr, ToSocketAddrs},
+    collections::{
+        HashSet,
+        VecDeque,
+    },
+    net::{
+        SocketAddr,
+        ToSocketAddrs,
+    },
 };
 use thiserror::Error;
 

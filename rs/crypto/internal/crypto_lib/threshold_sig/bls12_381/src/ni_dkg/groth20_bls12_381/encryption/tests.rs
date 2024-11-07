@@ -1,6 +1,9 @@
 //! Tests for the CLib NiDKG forward secure encryption
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-pub use rand::{RngCore, SeedableRng};
+pub use rand::{
+    RngCore,
+    SeedableRng,
+};
 pub use rand_chacha::ChaChaRng;
 pub use std::collections::BTreeMap;
 
@@ -15,9 +18,13 @@ mod clib {
     pub use crate::types::SecretKeyBytes as ThresholdSecretKeyBytes;
 }
 use super::*;
-use crate::ni_dkg::fs_ni_dkg::forward_secure::{PublicKeyWithPop, SecretKey};
+use crate::ni_dkg::fs_ni_dkg::forward_secure::{
+    PublicKeyWithPop,
+    SecretKey,
+};
 use crate::ni_dkg::groth20_bls12_381::encryption::tests::ForwardSecureKeyVerificationError::{
-    Deserialization, PopVerificationFailed,
+    Deserialization,
+    PopVerificationFailed,
 };
 use ic_crypto_internal_bls12_381_type::Scalar;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::FsEncryptionPop;

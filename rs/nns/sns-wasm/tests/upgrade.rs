@@ -1,13 +1,25 @@
 use crate::common::EXPECTED_SNS_CREATION_FEE;
 use canister_test::Project;
 use common::set_up_state_machine_with_nns;
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
+use ic_nns_constants::{
+    GOVERNANCE_CANISTER_ID,
+    SNS_WASM_CANISTER_ID,
+};
 use ic_nns_test_utils::{
     sns_wasm,
-    sns_wasm::{add_dummy_wasms_to_sns_wasms, test_wasm, wasm_map_to_sns_version},
+    sns_wasm::{
+        add_dummy_wasms_to_sns_wasms,
+        test_wasm,
+        wasm_map_to_sns_version,
+    },
 };
 use ic_sns_init::pb::v1::SnsInitPayload;
-use ic_sns_wasm::pb::v1::{GetNextSnsVersionRequest, SnsCanisterType, SnsUpgrade, SnsVersion};
+use ic_sns_wasm::pb::v1::{
+    GetNextSnsVersionRequest,
+    SnsCanisterType,
+    SnsUpgrade,
+    SnsVersion,
+};
 
 pub mod common;
 

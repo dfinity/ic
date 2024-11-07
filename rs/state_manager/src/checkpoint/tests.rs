@@ -1,5 +1,9 @@
 use super::*;
-use crate::{spawn_tip_thread, StateManagerMetrics, NUMBER_OF_CHECKPOINT_THREADS};
+use crate::{
+    spawn_tip_thread,
+    StateManagerMetrics,
+    NUMBER_OF_CHECKPOINT_THREADS,
+};
 use ic_base_types::NumSeconds;
 use ic_config::state_manager::lsmt_config_default;
 use ic_logger::ReplicaLogger;
@@ -7,29 +11,63 @@ use ic_management_canister_types::CanisterStatusType;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::execution_state::{WasmBinary, WasmMetadata},
-    page_map::{Buffer, TestPageAllocatorFileDescriptorImpl},
-    testing::{ReplicatedStateTesting, SystemStateTesting},
-    CallContextManager, CanisterStatus, ExecutionState, ExportedFunctions, NumWasmPages, PageIndex,
+    canister_state::execution_state::{
+        WasmBinary,
+        WasmMetadata,
+    },
+    page_map::{
+        Buffer,
+        TestPageAllocatorFileDescriptorImpl,
+    },
+    testing::{
+        ReplicatedStateTesting,
+        SystemStateTesting,
+    },
+    CallContextManager,
+    CanisterStatus,
+    ExecutionState,
+    ExportedFunctions,
+    NumWasmPages,
+    PageIndex,
 };
 use ic_state_layout::{
-    StateLayout, CANISTER_FILE, CANISTER_STATES_DIR, CHECKPOINTS_DIR, SYSTEM_METADATA_FILE,
+    StateLayout,
+    CANISTER_FILE,
+    CANISTER_STATES_DIR,
+    CHECKPOINTS_DIR,
+    SYSTEM_METADATA_FILE,
 };
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities_logger::with_test_replica_logger;
-use ic_test_utilities_state::{canister_ids, new_canister_state};
+use ic_test_utilities_state::{
+    canister_ids,
+    new_canister_state,
+};
 use ic_test_utilities_tmpdir::tmpdir;
 use ic_test_utilities_types::{
-    ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id},
+    ids::{
+        canister_test_id,
+        message_test_id,
+        subnet_test_id,
+        user_test_id,
+    },
     messages::IngressBuilder,
 };
 use ic_types::{
     malicious_flags::MaliciousFlags,
-    messages::{StopCanisterCallId, StopCanisterContext},
-    CanisterId, Cycles, Height,
+    messages::{
+        StopCanisterCallId,
+        StopCanisterContext,
+    },
+    CanisterId,
+    Cycles,
+    Height,
 };
 use ic_wasm_types::CanisterModule;
-use std::{collections::BTreeSet, fs::OpenOptions};
+use std::{
+    collections::BTreeSet,
+    fs::OpenOptions,
+};
 
 const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
 

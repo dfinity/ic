@@ -1,37 +1,64 @@
-use crate::chain_key::{InitialChainKeyConfigInternal, KeyConfigRequestInternal};
+use crate::chain_key::{
+    InitialChainKeyConfigInternal,
+    KeyConfigRequestInternal,
+};
 use crate::{
     common::LOG_PREFIX,
-    mutations::common::{get_subnet_ids_from_subnet_list, has_duplicates},
-    registry::{Registry, Version},
+    mutations::common::{
+        get_subnet_ids_from_subnet_list,
+        has_duplicates,
+    },
+    registry::{
+        Registry,
+        Version,
+    },
 };
 use candid::Encode;
 use dfn_core::call;
 use ic_base_types::{
-    subnet_id_into_protobuf, CanisterId, NodeId, PrincipalId, RegistryVersion, SubnetId,
+    subnet_id_into_protobuf,
+    CanisterId,
+    NodeId,
+    PrincipalId,
+    RegistryVersion,
+    SubnetId,
 };
 use ic_management_canister_types::{
-    ComputeInitialIDkgDealingsArgs, ComputeInitialIDkgDealingsResponse, MasterPublicKeyId,
+    ComputeInitialIDkgDealingsArgs,
+    ComputeInitialIDkgDealingsResponse,
+    MasterPublicKeyId,
 };
 use ic_protobuf::registry::{
     crypto::v1::ChainKeySigningSubnetList,
     subnet::v1::{
-        chain_key_initialization, CatchUpPackageContents, ChainKeyInitialization, SubnetListRecord,
+        chain_key_initialization,
+        CatchUpPackageContents,
+        ChainKeyInitialization,
+        SubnetListRecord,
         SubnetRecord,
     },
 };
 use ic_registry_keys::{
-    make_catch_up_package_contents_key, make_chain_key_signing_subnet_list_key,
-    make_subnet_list_record_key, make_subnet_record_key,
+    make_catch_up_package_contents_key,
+    make_chain_key_signing_subnet_list_key,
+    make_subnet_list_record_key,
+    make_subnet_record_key,
 };
 use ic_registry_subnet_features::ChainKeyConfig;
 use ic_registry_transport::{
-    pb::v1::{RegistryMutation, RegistryValue},
+    pb::v1::{
+        RegistryMutation,
+        RegistryValue,
+    },
     upsert,
 };
 use on_wire::bytes;
 use prost::Message;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{
+        HashMap,
+        HashSet,
+    },
     convert::TryFrom,
     iter::FromIterator,
 };

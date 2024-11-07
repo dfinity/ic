@@ -28,32 +28,70 @@ use ic_config::{
     crypto::CryptoConfig,
     http_handler::Config as HttpHandlerConfig,
     logger::Config as LoggerConfig,
-    metrics::{Config as MetricsConfig, Exporter},
+    metrics::{
+        Config as MetricsConfig,
+        Exporter,
+    },
     registry_client::Config as RegistryClientConfig,
     state_manager::Config as StateManagerConfig,
     transport::TransportConfig,
     ConfigOptional as ReplicaConfig,
 };
-use ic_logger::{info, new_replica_logger_from_config};
-use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
+use ic_logger::{
+    info,
+    new_replica_logger_from_config,
+};
+use ic_management_canister_types::{
+    EcdsaKeyId,
+    MasterPublicKeyId,
+};
 use ic_prep_lib::{
-    internet_computer::{IcConfig, TopologyConfig},
-    node::{NodeConfiguration, NodeIndex},
-    subnet_configuration::{SubnetConfig, SubnetRunningState},
+    internet_computer::{
+        IcConfig,
+        TopologyConfig,
+    },
+    node::{
+        NodeConfiguration,
+        NodeIndex,
+    },
+    subnet_configuration::{
+        SubnetConfig,
+        SubnetRunningState,
+    },
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
-use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, SubnetFeatures};
+use ic_registry_subnet_features::{
+    ChainKeyConfig,
+    KeyConfig,
+    SubnetFeatures,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_starter::hypervisor_config;
-use ic_types::{Height, ReplicaVersion};
-use serde::{Deserialize, Serialize};
+use ic_types::{
+    Height,
+    ReplicaVersion,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::{
     collections::BTreeMap,
     net::SocketAddr,
-    net::{IpAddr, Ipv4Addr, SocketAddrV4},
+    net::{
+        IpAddr,
+        Ipv4Addr,
+        SocketAddrV4,
+    },
     time::Duration,
 };
-use std::{io, os::unix::process::CommandExt, path::PathBuf, process::Command, str::FromStr};
+use std::{
+    io,
+    os::unix::process::CommandExt,
+    path::PathBuf,
+    process::Command,
+    str::FromStr,
+};
 use tempfile::TempDir;
 
 const NODE_INDEX: NodeIndex = 100;

@@ -1,13 +1,24 @@
 use super::RawHttpRequestVal;
-use crate::{crypto::SignedBytesWithoutDomainSeparator, CountBytes};
+use crate::{
+    crypto::SignedBytesWithoutDomainSeparator,
+    CountBytes,
+};
 use ic_crypto_sha2::Sha256;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::proxy::ProxyDecodeError;
-use serde::{de::Deserializer, ser::Serializer, Deserialize, Serialize};
+use serde::{
+    de::Deserializer,
+    ser::Serializer,
+    Deserialize,
+    Serialize,
+};
 use std::{
     collections::BTreeMap,
-    convert::{AsRef, TryFrom},
+    convert::{
+        AsRef,
+        TryFrom,
+    },
     error::Error,
     fmt,
 };
@@ -244,11 +255,20 @@ impl From<MessageIdError> for ProxyDecodeError {
 #[cfg(test)]
 mod tests {
     use super::super::{
-        Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, RawHttpRequestVal,
+        Blob,
+        HttpCallContent,
+        HttpCanisterUpdate,
+        HttpRequestEnvelope,
+        RawHttpRequestVal,
         SignedIngress,
     };
     use super::*;
-    use crate::{time::expiry_time_from_now, CanisterId, PrincipalId, Time};
+    use crate::{
+        time::expiry_time_from_now,
+        CanisterId,
+        PrincipalId,
+        Time,
+    };
     use hex_literal::hex;
 
     #[test]

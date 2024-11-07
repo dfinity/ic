@@ -1,4 +1,7 @@
-use std::io::{self, Write};
+use std::io::{
+    self,
+    Write,
+};
 
 pub struct ChunkWriter {
     skip: usize,

@@ -1,6 +1,16 @@
-use candid::{CandidType, Nat};
-use num_traits::{Bounded, ToPrimitive};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use candid::{
+    CandidType,
+    Nat,
+};
+use num_traits::{
+    Bounded,
+    ToPrimitive,
+};
+use serde::{
+    de::DeserializeOwned,
+    Deserialize,
+    Serialize,
+};
 use std::fmt;
 use std::fmt::Debug;
 

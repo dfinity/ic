@@ -2,15 +2,32 @@ use std::ops::Bound;
 
 use anyhow::anyhow;
 use certificate_orchestrator_interface::{
-    EncryptedPair, ExportPackage, IcCertificate, Id, Registration, LEFT_GUARD, RIGHT_GUARD,
+    EncryptedPair,
+    ExportPackage,
+    IcCertificate,
+    Id,
+    Registration,
+    LEFT_GUARD,
+    RIGHT_GUARD,
 };
 use ic_cdk::caller;
 use prometheus::labels;
 
 use crate::{
-    acl::{Authorize, AuthorizeError, WithAuthorize},
-    ic_certification::{add_cert, get_cert_for_range, set_root_hash},
-    LocalRef, StableMap, StorableId, WithMetrics,
+    acl::{
+        Authorize,
+        AuthorizeError,
+        WithAuthorize,
+    },
+    ic_certification::{
+        add_cert,
+        get_cert_for_range,
+        set_root_hash,
+    },
+    LocalRef,
+    StableMap,
+    StorableId,
+    WithMetrics,
 };
 
 #[derive(Debug, thiserror::Error)]

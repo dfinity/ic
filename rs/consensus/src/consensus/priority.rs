@@ -1,7 +1,15 @@
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces::consensus_pool::ConsensusPool;
-use ic_interfaces::p2p::consensus::{Bouncer, BouncerValue, BouncerValue::*};
-use ic_types::{artifact::ConsensusMessageId, consensus::ConsensusMessageHash, Height};
+use ic_interfaces::p2p::consensus::{
+    Bouncer,
+    BouncerValue,
+    BouncerValue::*,
+};
+use ic_types::{
+    artifact::ConsensusMessageId,
+    consensus::ConsensusMessageHash,
+    Height,
+};
 
 /// Return a bouncer function that matches the given consensus pool.
 pub fn new_bouncer(
@@ -120,16 +128,30 @@ fn compute_bouncer(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_consensus_mocks::{dependencies, dependencies_with_subnet_params, Dependencies};
+    use ic_consensus_mocks::{
+        dependencies,
+        dependencies_with_subnet_params,
+        Dependencies,
+    };
     use ic_test_utilities_consensus::fake::FakeContent;
     use ic_test_utilities_registry::SubnetRecordBuilder;
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::{
+        node_test_id,
+        subnet_test_id,
+    };
     use ic_types::{
         consensus::{
-            ConsensusMessageHashable, Finalization, FinalizationContent, HasHeight, Notarization,
+            ConsensusMessageHashable,
+            Finalization,
+            FinalizationContent,
+            HasHeight,
+            Notarization,
             NotarizationContent,
         },
-        crypto::{CryptoHash, CryptoHashOf},
+        crypto::{
+            CryptoHash,
+            CryptoHashOf,
+        },
     };
 
     #[test]

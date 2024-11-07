@@ -1,23 +1,35 @@
 mod root_of_trust {
     use crate::internal::{
-        nns_root_public_key, ConstantRootOfTrustProvider, StandaloneIngressSigVerifier,
+        nns_root_public_key,
+        ConstantRootOfTrustProvider,
+        StandaloneIngressSigVerifier,
     };
     use crate::AuthenticationError::InvalidCanisterSignature;
     use crate::{
-        HttpRequestVerifier, IngressMessageVerifier, RequestValidationError, TimeProvider,
+        HttpRequestVerifier,
+        IngressMessageVerifier,
+        RequestValidationError,
+        TimeProvider,
     };
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_crypto_test_utils_root_of_trust::{
-        MockRootOfTrustProvider, MockRootOfTrustProviderError,
+        MockRootOfTrustProvider,
+        MockRootOfTrustProviderError,
     };
-    use ic_types::crypto::threshold_sig::{IcRootOfTrust, RootOfTrustProvider};
+    use ic_types::crypto::threshold_sig::{
+        IcRootOfTrust,
+        RootOfTrustProvider,
+    };
     use ic_types::time::GENESIS;
     use ic_types::Time;
     use ic_validator_http_request_test_utils::AuthenticationScheme::Direct;
     use ic_validator_http_request_test_utils::{
-        all_authentication_schemes, canister_signature_with_hard_coded_root_of_trust,
-        hard_coded_root_of_trust, DirectAuthenticationScheme, HttpRequestBuilder,
+        all_authentication_schemes,
+        canister_signature_with_hard_coded_root_of_trust,
+        hard_coded_root_of_trust,
+        DirectAuthenticationScheme,
+        HttpRequestBuilder,
     };
     use std::sync::Arc;
 
@@ -123,7 +135,10 @@ mod standalone_ingress_sig_verifier {
     use ic_crypto_interfaces_sig_verification::CanisterSigVerifier;
     use ic_crypto_test_utils_canister_sigs::new_valid_sig_and_crypto_component;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-    use ic_types::crypto::{AlgorithmId, CryptoError};
+    use ic_types::crypto::{
+        AlgorithmId,
+        CryptoError,
+    };
 
     #[test]
     fn should_error_when_user_public_key_algorithm_id_wrong() {

@@ -1,7 +1,13 @@
 use crate::{
     canister_id_record::CanisterIdRecord,
-    canister_status::{canister_status, CanisterStatusResultFromManagementCanister},
-    update_settings::{update_settings, UpdateSettings},
+    canister_status::{
+        canister_status,
+        CanisterStatusResultFromManagementCanister,
+    },
+    update_settings::{
+        update_settings,
+        UpdateSettings,
+    },
 };
 use async_trait::async_trait;
 use candid::Encode;
@@ -13,7 +19,10 @@ use std::{
     cell::RefCell,
     collections::VecDeque,
     marker::PhantomData,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc,
+        Mutex,
+    },
     thread::LocalKey,
 };
 

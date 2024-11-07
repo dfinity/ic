@@ -1,14 +1,20 @@
 use crate::{
     admin_helper::{
-        get_halt_subnet_at_cup_height_command, get_propose_to_complete_canister_migration_command,
+        get_halt_subnet_at_cup_height_command,
+        get_propose_to_complete_canister_migration_command,
         get_propose_to_prepare_canister_migration_command,
         get_propose_to_reroute_canister_ranges_command,
     },
     layout::Layout,
     state_tool_helper::StateToolHelper,
     steps::{
-        ComputeExpectedManifestsStep, CopyWorkDirStep, ReadRegistryStep, SplitStateStep,
-        StateSplitStrategy, ValidateCUPStep, WaitForCUPStep,
+        ComputeExpectedManifestsStep,
+        CopyWorkDirStep,
+        ReadRegistryStep,
+        SplitStateStep,
+        StateSplitStrategy,
+        ValidateCUPStep,
+        WaitForCUPStep,
     },
     target_subnet::TargetSubnet,
     utils::get_state_hash,
@@ -18,25 +24,62 @@ use clap::Parser;
 use ic_base_types::SubnetId;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_recovery::{
-    cli::{consent_given, read_optional, wait_for_confirmation},
-    error::{RecoveryError, RecoveryResult},
+    cli::{
+        consent_given,
+        read_optional,
+        wait_for_confirmation,
+    },
+    error::{
+        RecoveryError,
+        RecoveryResult,
+    },
     get_node_heights_from_metrics,
     recovery_iterator::RecoveryIterator,
-    recovery_state::{HasRecoveryState, RecoveryState},
+    recovery_state::{
+        HasRecoveryState,
+        RecoveryState,
+    },
     registry_helper::RegistryPollingStrategy,
-    steps::{AdminStep, Step, UploadAndRestartStep},
-    NeuronArgs, Recovery, RecoveryArgs, IC_REGISTRY_LOCAL_STORE,
+    steps::{
+        AdminStep,
+        Step,
+        UploadAndRestartStep,
+    },
+    NeuronArgs,
+    Recovery,
+    RecoveryArgs,
+    IC_REGISTRY_LOCAL_STORE,
 };
-use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
+use ic_registry_routing_table::{
+    CanisterIdRange,
+    RoutingTable,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
-use serde::{Deserialize, Serialize};
-use slog::{error, warn, Logger};
-use strum::{EnumMessage, IntoEnumIterator};
-use strum_macros::{EnumIter, EnumString};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use slog::{
+    error,
+    warn,
+    Logger,
+};
+use strum::{
+    EnumMessage,
+    IntoEnumIterator,
+};
+use strum_macros::{
+    EnumIter,
+    EnumString,
+};
 use url::Url;
 
-use std::{collections::HashMap, iter::Peekable, net::IpAddr};
+use std::{
+    collections::HashMap,
+    iter::Peekable,
+    net::IpAddr,
+};
 
 const SUBNET_TYPE_ALLOW_LIST: [SubnetType; 2] =
     [SubnetType::Application, SubnetType::VerifiedApplication];

@@ -1,12 +1,22 @@
-use std::fs::{create_dir_all, write};
+use std::fs::{
+    create_dir_all,
+    write,
+};
 use std::net::Ipv6Addr;
 use std::path::Path;
 use std::process::Command;
 
-use anyhow::{Context, Result};
+use anyhow::{
+    Context,
+    Result,
+};
 
 use crate::info::NetworkInfo;
-use crate::interfaces::{get_interfaces, has_ipv6_connectivity, Interface};
+use crate::interfaces::{
+    get_interfaces,
+    has_ipv6_connectivity,
+    Interface,
+};
 use mac_address::mac_address::FormattedMacAddress;
 
 pub static DEFAULT_SYSTEMD_NETWORK_DIR: &str = "/run/systemd/network";

@@ -4,28 +4,75 @@ use anyhow::Error;
 use async_trait::async_trait;
 use candid::Principal;
 use certificate_orchestrator_interface::IcCertificate;
-use ic_agent::{hash_tree::HashTree, Certificate};
+use ic_agent::{
+    hash_tree::HashTree,
+    Certificate,
+};
 use opentelemetry::{
     baggage::BaggageExt,
-    metrics::{Counter, Histogram, Meter},
-    Context, KeyValue,
+    metrics::{
+        Counter,
+        Histogram,
+        Meter,
+    },
+    Context,
+    KeyValue,
 };
 use tracing::info;
-use trust_dns_resolver::{error::ResolveError, lookup::Lookup, proto::rr::RecordType};
+use trust_dns_resolver::{
+    error::ResolveError,
+    lookup::Lookup,
+    proto::rr::RecordType,
+};
 
 use crate::{
     acme,
-    certificate::{self, ExportError, GetCert, GetCertError, Package, Pair, UploadError},
-    check::{Check, CheckError},
-    dns::{self, Record, Resolve},
-    registration::{
-        Create, CreateError, Get, GetError, Id, Registration, Remove, RemoveError, Update,
-        UpdateError, UpdateType,
+    certificate::{
+        self,
+        ExportError,
+        GetCert,
+        GetCertError,
+        Package,
+        Pair,
+        UploadError,
     },
-    verification::{Verify, VerifyError},
+    check::{
+        Check,
+        CheckError,
+    },
+    dns::{
+        self,
+        Record,
+        Resolve,
+    },
+    registration::{
+        Create,
+        CreateError,
+        Get,
+        GetError,
+        Id,
+        Registration,
+        Remove,
+        RemoveError,
+        Update,
+        UpdateError,
+        UpdateType,
+    },
+    verification::{
+        Verify,
+        VerifyError,
+    },
     work::{
-        extract_domain, Dispense, DispenseError, Peek, PeekError, Process, ProcessError, Queue,
-        QueueError, Task,
+        extract_domain,
+        Dispense,
+        DispenseError,
+        Peek,
+        PeekError,
+        Process,
+        ProcessError,
+        Queue,
+        QueueError,
+        Task,
     },
 };
 

@@ -1,12 +1,22 @@
 use criterion::*;
-use ic_base_types::{CanisterId, PrincipalId, SubnetId};
-use ic_certification::{verify_certified_data, verify_certified_data_with_cache};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+    SubnetId,
+};
+use ic_certification::{
+    verify_certified_data,
+    verify_certified_data_with_cache,
+};
 use ic_certification_test_utils::CertificateData::*;
 use ic_certification_test_utils::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_crypto_tree_hash::Digest;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
-use rand::{CryptoRng, Rng};
+use rand::{
+    CryptoRng,
+    Rng,
+};
 
 criterion_main!(benches);
 criterion_group!(benches, canister_sig, invalid_canister_sig);

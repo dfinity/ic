@@ -1,6 +1,9 @@
 use super::*;
 use ic_nervous_system_common::assert_is_ok;
-use ic_nervous_system_common_test_utils::{get_gauge, get_samples};
+use ic_nervous_system_common_test_utils::{
+    get_gauge,
+    get_samples,
+};
 use maplit::hashmap;
 
 fn get_metric_broken_out_by_dissolve_delay(

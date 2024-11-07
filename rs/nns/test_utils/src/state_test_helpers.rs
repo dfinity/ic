@@ -1,83 +1,193 @@
 use crate::common::{
-    build_cmc_wasm, build_genesis_token_wasm, build_governance_wasm_with_features,
-    build_ledger_wasm, build_lifeline_wasm, build_registry_wasm, build_root_wasm,
-    build_sns_wasms_wasm, NnsInitPayloads,
+    build_cmc_wasm,
+    build_genesis_token_wasm,
+    build_governance_wasm_with_features,
+    build_ledger_wasm,
+    build_lifeline_wasm,
+    build_registry_wasm,
+    build_root_wasm,
+    build_sns_wasms_wasm,
+    NnsInitPayloads,
 };
-use candid::{CandidType, Decode, Encode, Nat};
+use candid::{
+    CandidType,
+    Decode,
+    Encode,
+    Nat,
+};
 use canister_test::Wasm;
 use cycles_minting_canister::{
-    IcpXdrConversionRateCertifiedResponse, SetAuthorizedSubnetworkListArgs,
+    IcpXdrConversionRateCertifiedResponse,
+    SetAuthorizedSubnetworkListArgs,
 };
-use dfn_http::types::{HttpRequest, HttpResponse};
+use dfn_http::types::{
+    HttpRequest,
+    HttpResponse,
+};
 use dfn_protobuf::ToProto;
-use ic_base_types::{CanisterId, PrincipalId, SubnetId};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+    SubnetId,
+};
 use ic_management_canister_types::{
-    CanisterInstallMode, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
+    CanisterInstallMode,
+    CanisterSettingsArgs,
+    CanisterSettingsArgsBuilder,
+    CanisterStatusResultV2,
     UpdateSettingsArgs,
 };
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
-    canister_status::{CanisterStatusResult, CanisterStatusType},
+    canister_status::{
+        CanisterStatusResult,
+        CanisterStatusType,
+    },
 };
 use ic_nervous_system_common::{
-    ledger::{compute_neuron_staking_subaccount, compute_neuron_staking_subaccount_bytes},
-    DEFAULT_TRANSFER_FEE, ONE_DAY_SECONDS,
+    ledger::{
+        compute_neuron_staking_subaccount,
+        compute_neuron_staking_subaccount_bytes,
+    },
+    DEFAULT_TRANSFER_FEE,
+    ONE_DAY_SECONDS,
 };
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
-use ic_nns_common::pb::v1::{NeuronId, ProposalId};
+use ic_nns_common::pb::v1::{
+    NeuronId,
+    ProposalId,
+};
 use ic_nns_constants::{
-    canister_id_to_nns_canister_name, memory_allocation_of, CYCLES_LEDGER_CANISTER_ID,
-    CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID,
-    GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET, IDENTITY_CANISTER_ID, LEDGER_CANISTER_ID,
-    LIFELINE_CANISTER_ID, NNS_UI_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
-    ROOT_CANISTER_INDEX_IN_NNS_SUBNET, SNS_WASM_CANISTER_ID, SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET,
-    SUBNET_RENTAL_CANISTER_ID, SUBNET_RENTAL_CANISTER_INDEX_IN_NNS_SUBNET,
+    canister_id_to_nns_canister_name,
+    memory_allocation_of,
+    CYCLES_LEDGER_CANISTER_ID,
+    CYCLES_MINTING_CANISTER_ID,
+    GENESIS_TOKEN_CANISTER_ID,
+    GOVERNANCE_CANISTER_ID,
+    GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET,
+    IDENTITY_CANISTER_ID,
+    LEDGER_CANISTER_ID,
+    LIFELINE_CANISTER_ID,
+    NNS_UI_CANISTER_ID,
+    REGISTRY_CANISTER_ID,
+    ROOT_CANISTER_ID,
+    ROOT_CANISTER_INDEX_IN_NNS_SUBNET,
+    SNS_WASM_CANISTER_ID,
+    SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET,
+    SUBNET_RENTAL_CANISTER_ID,
+    SUBNET_RENTAL_CANISTER_INDEX_IN_NNS_SUBNET,
 };
 use ic_nns_governance_api::pb::v1::{
     self as nns_governance_pb,
     governance::Migrations,
     manage_neuron::{
         self,
-        claim_or_refresh::{self, MemoAndController},
+        claim_or_refresh::{
+            self,
+            MemoAndController,
+        },
         configure::Operation,
-        AddHotKey, ClaimOrRefresh, Configure, Disburse, Follow, IncreaseDissolveDelay,
-        JoinCommunityFund, LeaveCommunityFund, RegisterVote, RemoveHotKey, Split, StakeMaturity,
+        AddHotKey,
+        ClaimOrRefresh,
+        Configure,
+        Disburse,
+        Follow,
+        IncreaseDissolveDelay,
+        JoinCommunityFund,
+        LeaveCommunityFund,
+        RegisterVote,
+        RemoveHotKey,
+        Split,
+        StakeMaturity,
     },
-    manage_neuron_response::{self, ClaimOrRefreshResponse},
-    Empty, ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
-    Governance, GovernanceError, InstallCodeRequest, ListNeurons, ListNeuronsResponse,
-    ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse, ListProposalInfo,
-    ListProposalInfoResponse, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest,
-    ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, NnsFunction,
-    ProposalActionRequest, ProposalInfo, RewardNodeProviders, Topic, Vote,
+    manage_neuron_response::{
+        self,
+        ClaimOrRefreshResponse,
+    },
+    Empty,
+    ExecuteNnsFunction,
+    GetNeuronsFundAuditInfoRequest,
+    GetNeuronsFundAuditInfoResponse,
+    Governance,
+    GovernanceError,
+    InstallCodeRequest,
+    ListNeurons,
+    ListNeuronsResponse,
+    ListNodeProviderRewardsRequest,
+    ListNodeProviderRewardsResponse,
+    ListProposalInfo,
+    ListProposalInfoResponse,
+    MakeProposalRequest,
+    ManageNeuronCommandRequest,
+    ManageNeuronRequest,
+    ManageNeuronResponse,
+    MonthlyNodeProviderRewards,
+    NetworkEconomics,
+    NnsFunction,
+    ProposalActionRequest,
+    ProposalInfo,
+    RewardNodeProviders,
+    Topic,
+    Vote,
 };
 use ic_nns_handler_lifeline_interface::UpgradeRootProposal;
 use ic_nns_handler_root::init::RootCanisterInitPayload;
 use ic_registry_transport::pb::v1::{
-    RegistryGetChangesSinceRequest, RegistryGetChangesSinceResponse,
+    RegistryGetChangesSinceRequest,
+    RegistryGetChangesSinceResponse,
 };
 use ic_sns_governance::pb::v1::{
-    self as sns_pb, manage_neuron_response::Command as SnsCommandResponse, GetModeResponse,
+    self as sns_pb,
+    manage_neuron_response::Command as SnsCommandResponse,
+    GetModeResponse,
 };
-use ic_sns_swap::pb::v1::{GetAutoFinalizationStatusRequest, GetAutoFinalizationStatusResponse};
+use ic_sns_swap::pb::v1::{
+    GetAutoFinalizationStatusRequest,
+    GetAutoFinalizationStatusResponse,
+};
 use ic_sns_wasm::{
     init::SnsWasmCanisterInitPayload,
-    pb::v1::{ListDeployedSnsesRequest, ListDeployedSnsesResponse},
+    pb::v1::{
+        ListDeployedSnsesRequest,
+        ListDeployedSnsesResponse,
+    },
 };
-use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
+use ic_state_machine_tests::{
+    StateMachine,
+    StateMachineBuilder,
+};
 use ic_test_utilities::universal_canister::{
-    call_args, wasm as universal_canister_argument_builder, UNIVERSAL_CANISTER_WASM,
+    call_args,
+    wasm as universal_canister_argument_builder,
+    UNIVERSAL_CANISTER_WASM,
 };
-use ic_types::{ingress::WasmResult, Cycles};
-use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs, BlockIndex, Memo, SendArgs, Tokens};
+use ic_types::{
+    ingress::WasmResult,
+    Cycles,
+};
+use icp_ledger::{
+    AccountIdentifier,
+    BinaryAccountBalanceArgs,
+    BlockIndex,
+    Memo,
+    SendArgs,
+    Tokens,
+};
 use icrc_ledger_types::icrc1::{
     account::Account,
-    transfer::{TransferArg, TransferError},
+    transfer::{
+        TransferArg,
+        TransferError,
+    },
 };
 use num_traits::ToPrimitive;
 use prost::Message;
 use serde::Serialize;
-use std::{convert::TryInto, env, time::Duration};
+use std::{
+    convert::TryInto,
+    env,
+    time::Duration,
+};
 
 /// A `StateMachine` builder setting the IC time to the current time
 /// and using the canister ranges of both the NNS and II subnets.

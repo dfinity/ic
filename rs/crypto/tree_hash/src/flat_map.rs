@@ -3,11 +3,19 @@
 //!
 //! NOTE: `FlatMap` isn't a general-purpose map container.
 
-use serde::de::{Deserialize, Deserializer, MapAccess, Visitor};
+use serde::de::{
+    Deserialize,
+    Deserializer,
+    MapAccess,
+    Visitor,
+};
 use serde::ser::Serializer;
 use serde::Serialize;
 use std::fmt;
-use std::iter::{DoubleEndedIterator, Iterator};
+use std::iter::{
+    DoubleEndedIterator,
+    Iterator,
+};
 
 #[cfg(test)]
 mod tests;

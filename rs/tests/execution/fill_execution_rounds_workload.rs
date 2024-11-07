@@ -9,31 +9,59 @@
 //! ict test //rs/tests/execution:fill_execution_rounds_workload -k -- --test_tmpdir=test_tmpdir --test_timeout=60000
 
 use anyhow::Result;
-use futures::stream::{FuturesUnordered, StreamExt};
+use futures::stream::{
+    FuturesUnordered,
+    StreamExt,
+};
 use ic_registry_routing_table::CanisterIdRanges;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
         farm::HostFeature,
         group::SystemTestGroup,
-        ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
-        prometheus_vm::{HasPrometheus, PrometheusVm},
-        simulate_network::{ProductionSubnetTopology, SimulateNetwork},
+        ic::{
+            AmountOfMemoryKiB,
+            ImageSizeGiB,
+            InternetComputer,
+            NrOfVCPUs,
+            Subnet,
+            VmResources,
+        },
+        prometheus_vm::{
+            HasPrometheus,
+            PrometheusVm,
+        },
+        simulate_network::{
+            ProductionSubnetTopology,
+            SimulateNetwork,
+        },
         test_env::TestEnv,
         test_env_api::{
-            get_dependency_path, GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot,
+            get_dependency_path,
+            GetFirstHealthyNodeSnapshot,
+            HasPublicApiUrl,
+            HasTopologySnapshot,
             IcNodeContainer,
         },
-        universal_vm::{UniversalVm, UniversalVms},
+        universal_vm::{
+            UniversalVm,
+            UniversalVms,
+        },
     },
     systest,
-    util::{block_on, UniversalCanister},
+    util::{
+        block_on,
+        UniversalCanister,
+    },
 };
 use ic_universal_canister::PayloadBuilder;
 use slog::info;
 use std::{
     cmp::max,
-    net::{IpAddr, SocketAddr},
+    net::{
+        IpAddr,
+        SocketAddr,
+    },
     time::Duration,
 };
 

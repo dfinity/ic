@@ -1,21 +1,41 @@
 //! Implementation of the registry client. Calls to the API always return
 //! immediately. The provided data provider is polled periodically in the
 //! background when start_polling() is called.
-use crossbeam_channel::{RecvTimeoutError, Sender, TrySendError};
+use crossbeam_channel::{
+    RecvTimeoutError,
+    Sender,
+    TrySendError,
+};
 pub use ic_interfaces_registry::{
-    empty_zero_registry_record, RegistryClient, RegistryClientVersionedResult,
-    RegistryDataProvider, RegistryTransportRecord, POLLING_PERIOD, ZERO_REGISTRY_VERSION,
+    empty_zero_registry_record,
+    RegistryClient,
+    RegistryClientVersionedResult,
+    RegistryDataProvider,
+    RegistryTransportRecord,
+    POLLING_PERIOD,
+    ZERO_REGISTRY_VERSION,
 };
 use ic_metrics::MetricsRegistry;
 pub use ic_types::{
     crypto::threshold_sig::ThresholdSigPublicKey,
-    registry::{RegistryClientError, RegistryDataProviderError},
+    registry::{
+        RegistryClientError,
+        RegistryDataProviderError,
+    },
     time::current_time,
-    RegistryVersion, Time,
+    RegistryVersion,
+    Time,
 };
 use ic_utils_thread::JoinOnDrop;
-use std::sync::{Arc, RwLock, RwLockReadGuard};
-use std::{collections::BTreeMap, thread::JoinHandle};
+use std::sync::{
+    Arc,
+    RwLock,
+    RwLockReadGuard,
+};
+use std::{
+    collections::BTreeMap,
+    thread::JoinHandle,
+};
 
 use crate::metrics::Metrics;
 
@@ -356,8 +376,14 @@ mod tests {
     use ic_registry_common_proto::pb::test_protos::v1::TestProto;
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use std::collections::HashSet;
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::{Arc, RwLock};
+    use std::sync::atomic::{
+        AtomicUsize,
+        Ordering,
+    };
+    use std::sync::{
+        Arc,
+        RwLock,
+    };
     use std::time::Duration;
 
     #[test]

@@ -2,14 +2,26 @@ use ic_artifact_pool::ingress_pool::IngressPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_interfaces::{
     ingress_pool::{
-        IngressPool, IngressPoolThrottler, Mutations, PoolSection, UnvalidatedIngressArtifact,
+        IngressPool,
+        IngressPoolThrottler,
+        Mutations,
+        PoolSection,
+        UnvalidatedIngressArtifact,
         ValidatedIngressArtifact,
     },
-    p2p::consensus::{ArtifactTransmits, MutablePool, UnvalidatedArtifact},
+    p2p::consensus::{
+        ArtifactTransmits,
+        MutablePool,
+        UnvalidatedArtifact,
+    },
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
-use ic_types::{artifact::IngressMessageId, messages::SignedIngress, NodeId};
+use ic_types::{
+    artifact::IngressMessageId,
+    messages::SignedIngress,
+    NodeId,
+};
 
 pub struct TestIngressPool {
     pub pool: IngressPoolImpl,

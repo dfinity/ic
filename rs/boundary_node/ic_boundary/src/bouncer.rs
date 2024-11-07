@@ -1,29 +1,58 @@
 use std::{
     net::IpAddr,
     sync::{
-        atomic::{AtomicU64, Ordering},
+        atomic::{
+            AtomicU64,
+            Ordering,
+        },
         Arc,
     },
-    time::{Duration, Instant},
+    time::{
+        Duration,
+        Instant,
+    },
 };
 
-use anyhow::{anyhow, Context, Error};
+use anyhow::{
+    anyhow,
+    Context,
+    Error,
+};
 use async_trait::async_trait;
-use axum::{body::Body, extract::State, middleware::Next, response::IntoResponse};
+use axum::{
+    body::Body,
+    extract::State,
+    middleware::Next,
+    response::IntoResponse,
+};
 use dashmap::DashMap;
 use http::Request;
 use ic_bn_lib::http::ConnInfo;
-use moka::sync::{Cache, CacheBuilder};
+use moka::sync::{
+    Cache,
+    CacheBuilder,
+};
 use prometheus::{
-    register_histogram_with_registry, register_int_gauge_vec_with_registry, Histogram, IntGaugeVec,
+    register_histogram_with_registry,
+    register_int_gauge_vec_with_registry,
+    Histogram,
+    IntGaugeVec,
     Registry,
 };
 use ratelimit::Ratelimiter;
-use tracing::{debug, error, info, warn};
+use tracing::{
+    debug,
+    error,
+    info,
+    warn,
+};
 
 use crate::{
     cli::BouncerConfig,
-    routes::{ErrorCause, RateLimitCause},
+    routes::{
+        ErrorCause,
+        RateLimitCause,
+    },
 };
 
 // Common firewall backend operations required by the bouncer

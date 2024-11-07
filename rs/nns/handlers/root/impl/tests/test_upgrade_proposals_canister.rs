@@ -3,16 +3,24 @@ use dfn_candid::candid;
 use ic_management_canister_types::CanisterInstallMode::Upgrade;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
-    canister_status::{CanisterStatusResult, CanisterStatusType::Running},
+    canister_status::{
+        CanisterStatusResult,
+        CanisterStatusType::Running,
+    },
 };
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_handler_root::init::RootCanisterInitPayloadBuilder;
 use ic_nns_test_utils::itest_helpers::{
-    forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_root_canister,
+    forward_call_via_universal_canister,
+    local_test_on_nns_subnet,
+    set_up_root_canister,
     set_up_universal_canister,
 };
 use ic_test_utilities::{
-    stable_memory_reader::{STABLE_MEMORY_READER_SHA256, STABLE_MEMORY_READER_WASM},
+    stable_memory_reader::{
+        STABLE_MEMORY_READER_SHA256,
+        STABLE_MEMORY_READER_WASM,
+    },
     universal_canister::wasm as universal_canister_argument_builder,
 };
 use on_wire::bytes;

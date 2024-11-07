@@ -4,11 +4,24 @@
 //! used to derive additional values (using XMD) or be turned into
 //! a random number generator (ChaCha20).
 
-use core::fmt::{self, Debug};
-use rand::{CryptoRng, RngCore, SeedableRng};
-use serde::{Deserialize, Serialize};
+use core::fmt::{
+    self,
+    Debug,
+};
+use rand::{
+    CryptoRng,
+    RngCore,
+    SeedableRng,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::convert::TryInto;
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::{
+    Zeroize,
+    ZeroizeOnDrop,
+};
 
 mod xmd;
 

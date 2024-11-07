@@ -18,25 +18,45 @@
 //!
 //! 4. Replicated states below the certified height recorded in the block
 //!    in the latest CatchUpPackage can be purged.
-use super::{bounds::validated_pool_within_bounds, MINIMUM_CHAIN_LENGTH};
+use super::{
+    bounds::validated_pool_within_bounds,
+    MINIMUM_CHAIN_LENGTH,
+};
 use crate::consensus::metrics::PurgerMetrics;
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces::{
-    consensus_pool::{ChangeAction, HeightRange, Mutations, PurgeableArtifactType},
+    consensus_pool::{
+        ChangeAction,
+        HeightRange,
+        Mutations,
+        PurgeableArtifactType,
+    },
     messaging::MessageRouting,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
-use ic_logger::{error, trace, warn, ReplicaLogger};
+use ic_logger::{
+    error,
+    trace,
+    warn,
+    ReplicaLogger,
+};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    consensus::{ConsensusMessage, HasHeight, HashedBlock},
+    consensus::{
+        ConsensusMessage,
+        HasHeight,
+        HashedBlock,
+    },
     replica_config::ReplicaConfig,
     Height,
 };
 use std::collections::BTreeSet;
-use std::{cell::RefCell, sync::Arc};
+use std::{
+    cell::RefCell,
+    sync::Arc,
+};
 
 pub(crate) const VALIDATED_POOL_BOUNDS_CHECK_FREQUENCY: u64 = 10;
 
@@ -480,7 +500,10 @@ mod tests {
     use crate::idkg::test_utils::empty_idkg_payload;
 
     use super::*;
-    use ic_consensus_mocks::{dependencies, Dependencies};
+    use ic_consensus_mocks::{
+        dependencies,
+        Dependencies,
+    };
     use ic_interfaces::p2p::consensus::MutablePool;
     use ic_interfaces_mocks::messaging::MockMessageRouting;
     use ic_logger::replica_logger::no_op_logger;
@@ -489,11 +512,20 @@ mod tests {
     use ic_test_utilities::message_routing::FakeMessageRouting;
     use ic_test_utilities_consensus::fake::FakeContentUpdate;
     use ic_types::{
-        consensus::{BlockPayload, BlockProposal, Payload, Rank},
+        consensus::{
+            BlockPayload,
+            BlockProposal,
+            Payload,
+            Rank,
+        },
         crypto::CryptoHash,
-        CryptoHashOfState, SubnetId,
+        CryptoHashOfState,
+        SubnetId,
     };
-    use std::sync::{Arc, RwLock};
+    use std::sync::{
+        Arc,
+        RwLock,
+    };
 
     #[test]
     fn test_purger() {

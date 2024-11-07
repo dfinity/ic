@@ -1,35 +1,79 @@
 use std::{
     collections::HashMap,
-    net::{IpAddr, Ipv4Addr, SocketAddr},
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    net::{
+        IpAddr,
+        Ipv4Addr,
+        SocketAddr,
+    },
+    time::{
+        Duration,
+        SystemTime,
+        UNIX_EPOCH,
+    },
 };
 
 use bitcoin::network::{
     constants::ServiceFlags,
-    message::{CommandString, NetworkMessage},
+    message::{
+        CommandString,
+        NetworkMessage,
+    },
     message_network::VersionMessage,
     Address,
 };
-use ic_logger::{error, info, trace, warn, ReplicaLogger};
+use ic_logger::{
+    error,
+    info,
+    trace,
+    warn,
+    ReplicaLogger,
+};
 use rand::prelude::*;
 use thiserror::Error;
 use tokio::{
-    sync::mpsc::{channel, Sender},
-    sync::mpsc::{unbounded_channel, Receiver},
+    sync::mpsc::{
+        channel,
+        Sender,
+    },
+    sync::mpsc::{
+        unbounded_channel,
+        Receiver,
+    },
     task::JoinHandle,
 };
 
 use crate::{
     addressbook::{
-        validate_services, AddressBook, AddressBookError, AddressEntry, AddressTimestamp,
+        validate_services,
+        AddressBook,
+        AddressBookError,
+        AddressEntry,
+        AddressTimestamp,
     },
-    common::{BlockHeight, DEFAULT_CHANNEL_BUFFER_SIZE, MINIMUM_VERSION_NUMBER},
+    common::{
+        BlockHeight,
+        DEFAULT_CHANNEL_BUFFER_SIZE,
+        MINIMUM_VERSION_NUMBER,
+    },
     config::Config,
-    connection::{Connection, ConnectionConfig, ConnectionState, PingState},
+    connection::{
+        Connection,
+        ConnectionConfig,
+        ConnectionState,
+        PingState,
+    },
     metrics::RouterMetrics,
-    stream::{StreamConfig, StreamEvent, StreamEventKind},
-    Channel, ChannelError, Command, ProcessBitcoinNetworkMessage,
-    ProcessBitcoinNetworkMessageError, ProcessEvent,
+    stream::{
+        StreamConfig,
+        StreamEvent,
+        StreamEventKind,
+    },
+    Channel,
+    ChannelError,
+    Command,
+    ProcessBitcoinNetworkMessage,
+    ProcessBitcoinNetworkMessageError,
+    ProcessEvent,
 };
 
 /// How the adapter identifies itself to other Bitcoin nodes.
@@ -685,7 +729,10 @@ fn connection_limits(address_book: &AddressBook) -> (usize, usize) {
 mod test {
     use super::*;
     use crate::config::test::ConfigBuilder;
-    use bitcoin::{network::constants::ServiceFlags, Network};
+    use bitcoin::{
+        network::constants::ServiceFlags,
+        Network,
+    };
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use std::str::FromStr;

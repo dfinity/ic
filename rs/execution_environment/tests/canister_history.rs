@@ -1,26 +1,59 @@
 use ic00::{
-    CanisterSettingsArgsBuilder, CanisterSnapshotResponse, LoadCanisterSnapshotArgs,
+    CanisterSettingsArgsBuilder,
+    CanisterSnapshotResponse,
+    LoadCanisterSnapshotArgs,
     TakeCanisterSnapshotArgs,
 };
 use ic_base_types::PrincipalId;
-use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
+use ic_config::{
+    execution_environment::Config as HypervisorConfig,
+    subnet_config::SubnetConfig,
+};
 use ic_crypto_sha2::Sha256;
-use ic_error_types::{ErrorCode, UserError};
-use ic_management_canister_types::CanisterInstallMode::{Install, Reinstall, Upgrade};
+use ic_error_types::{
+    ErrorCode,
+    UserError,
+};
+use ic_management_canister_types::CanisterInstallMode::{
+    Install,
+    Reinstall,
+    Upgrade,
+};
 use ic_management_canister_types::{
-    self as ic00, CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
-    CanisterInfoRequest, CanisterInfoResponse, CreateCanisterArgs, InstallCodeArgs, Method,
-    Payload, UpdateSettingsArgs,
+    self as ic00,
+    CanisterChange,
+    CanisterChangeDetails,
+    CanisterChangeOrigin,
+    CanisterIdRecord,
+    CanisterInfoRequest,
+    CanisterInfoResponse,
+    CreateCanisterArgs,
+    InstallCodeArgs,
+    Method,
+    Payload,
+    UpdateSettingsArgs,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::{
-    CanisterHistory, MAX_CANISTER_HISTORY_CHANGES,
+    CanisterHistory,
+    MAX_CANISTER_HISTORY_CHANGES,
 };
-use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
-use ic_types::{ingress::WasmResult, CanisterId, Cycles};
+use ic_state_machine_tests::{
+    StateMachine,
+    StateMachineBuilder,
+    StateMachineConfig,
+};
+use ic_types::{
+    ingress::WasmResult,
+    CanisterId,
+    Cycles,
+};
 use ic_types_test_utils::ids::user_test_id;
 use ic_universal_canister::{
-    call_args, wasm, UNIVERSAL_CANISTER_WASM, UNIVERSAL_CANISTER_WASM_SHA256,
+    call_args,
+    wasm,
+    UNIVERSAL_CANISTER_WASM,
+    UNIVERSAL_CANISTER_WASM_SHA256,
 };
 use std::time::Duration;
 use std::time::UNIX_EPOCH;

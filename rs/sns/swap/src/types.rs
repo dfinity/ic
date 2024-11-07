@@ -1,27 +1,67 @@
 use crate::{
-    clients::{RealNnsGovernanceClient, RealSnsGovernanceClient, RealSnsRootClient},
-    environment::{CanisterClients, CanisterEnvironment},
-    logs::{ERROR, INFO},
+    clients::{
+        RealNnsGovernanceClient,
+        RealSnsGovernanceClient,
+        RealSnsRootClient,
+    },
+    environment::{
+        CanisterClients,
+        CanisterEnvironment,
+    },
+    logs::{
+        ERROR,
+        INFO,
+    },
     pb::v1::{
-        error_refund_icp_response, set_dapp_controllers_call_result, set_mode_call_result,
+        error_refund_icp_response,
+        set_dapp_controllers_call_result,
+        set_mode_call_result,
         set_mode_call_result::SetModeResult,
         settle_neurons_fund_participation_result,
-        sns_neuron_recipe::{ClaimedStatus, Investor},
-        BuyerState, CfInvestment, CfNeuron, CfParticipant, DirectInvestment,
-        ErrorRefundIcpResponse, FinalizeSwapResponse, Init, Lifecycle, NeuronId as SwapNeuronId,
-        Params, SetDappControllersCallResult, SetModeCallResult,
-        SettleNeuronsFundParticipationResult, SnsNeuronRecipe, SweepResult, TransferableAmount,
+        sns_neuron_recipe::{
+            ClaimedStatus,
+            Investor,
+        },
+        BuyerState,
+        CfInvestment,
+        CfNeuron,
+        CfParticipant,
+        DirectInvestment,
+        ErrorRefundIcpResponse,
+        FinalizeSwapResponse,
+        Init,
+        Lifecycle,
+        NeuronId as SwapNeuronId,
+        Params,
+        SetDappControllersCallResult,
+        SetModeCallResult,
+        SettleNeuronsFundParticipationResult,
+        SnsNeuronRecipe,
+        SweepResult,
+        TransferableAmount,
     },
     swap::is_valid_principal,
 };
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_canister_log::log;
 use ic_ledger_core::Tokens;
-use ic_nervous_system_common::{ledger::ICRC1Ledger, ONE_DAY_SECONDS};
+use ic_nervous_system_common::{
+    ledger::ICRC1Ledger,
+    ONE_DAY_SECONDS,
+};
 use ic_nervous_system_proto::pb::v1::Principals;
 use ic_nervous_system_runtime::DfnRuntime;
-use ic_sns_governance::pb::v1::{ClaimedSwapNeuronStatus, NeuronId};
-use icrc_ledger_types::icrc1::account::{Account, Subaccount};
+use ic_sns_governance::pb::v1::{
+    ClaimedSwapNeuronStatus,
+    NeuronId,
+};
+use icrc_ledger_types::icrc1::account::{
+    Account,
+    Subaccount,
+};
 use std::str::FromStr;
 
 pub fn validate_principal(p: &str) -> Result<(), String> {
@@ -46,7 +86,10 @@ pub fn validate_canister_id(p: &str) -> Result<(), String> {
 
 impl ErrorRefundIcpResponse {
     pub(crate) fn new_ok(block_height: u64) -> Self {
-        use error_refund_icp_response::{Ok, Result};
+        use error_refund_icp_response::{
+            Ok,
+            Result,
+        };
 
         Self {
             result: Some(Result::Ok(Ok {
@@ -77,7 +120,10 @@ impl ErrorRefundIcpResponse {
         error_type: error_refund_icp_response::err::Type,
         description: impl ToString,
     ) -> Self {
-        use error_refund_icp_response::{Err, Result};
+        use error_refund_icp_response::{
+            Err,
+            Result,
+        };
 
         Self {
             result: Some(Result::Err(Err {
@@ -1035,7 +1081,10 @@ impl SettleNeuronsFundParticipationResult {
     }
 
     pub fn new_error(error_message: String) -> Self {
-        use settle_neurons_fund_participation_result::{Error, Possibility};
+        use settle_neurons_fund_participation_result::{
+            Error,
+            Possibility,
+        };
 
         SettleNeuronsFundParticipationResult {
             possibility: Some(Possibility::Err(Error {
@@ -1048,7 +1097,10 @@ impl SettleNeuronsFundParticipationResult {
         neurons_fund_participation_icp_e8s: u64,
         neurons_fund_neurons_count: u64,
     ) -> Self {
-        use settle_neurons_fund_participation_result::{Ok, Possibility};
+        use settle_neurons_fund_participation_result::{
+            Ok,
+            Possibility,
+        };
 
         SettleNeuronsFundParticipationResult {
             possibility: Some(Possibility::Ok(Ok {
@@ -1171,13 +1223,22 @@ mod tests {
     use super::*;
     use crate::{
         pb::v1::{
-            CfNeuron, CfParticipant, Init, ListDirectParticipantsResponse,
-            NeuronBasketConstructionParameters, Params, Participant,
+            CfNeuron,
+            CfParticipant,
+            Init,
+            ListDirectParticipantsResponse,
+            NeuronBasketConstructionParameters,
+            Params,
+            Participant,
         },
         swap::MAX_LIST_DIRECT_PARTICIPANTS_LIMIT,
     };
     use ic_nervous_system_common::{
-        assert_is_err, assert_is_ok, E8, ONE_DAY_SECONDS, START_OF_2022_TIMESTAMP_SECONDS,
+        assert_is_err,
+        assert_is_ok,
+        E8,
+        ONE_DAY_SECONDS,
+        START_OF_2022_TIMESTAMP_SECONDS,
     };
     use lazy_static::lazy_static;
     use std::mem;
@@ -1449,7 +1510,14 @@ mod tests {
 
     #[test]
     fn test_life_cycle_order_methods() {
-        use Lifecycle::{Aborted, Adopted, Committed, Open, Pending, Unspecified};
+        use Lifecycle::{
+            Aborted,
+            Adopted,
+            Committed,
+            Open,
+            Pending,
+            Unspecified,
+        };
 
         let before_open = [Pending, Adopted];
         let after_open = [Committed, Aborted];

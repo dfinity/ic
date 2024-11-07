@@ -1,12 +1,26 @@
 //! Types related to the non-interactive DKG configuration.
-use crate::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTranscript};
-use crate::{NodeId, NodeIndex, NumberOfNodes, RegistryVersion};
+use crate::crypto::threshold_sig::ni_dkg::{
+    NiDkgId,
+    NiDkgTranscript,
+};
+use crate::{
+    NodeId,
+    NodeIndex,
+    NumberOfNodes,
+    RegistryVersion,
+};
 use core::fmt;
 use dealers::NiDkgDealers;
-use errors::{NiDkgConfigValidationError, NiDkgThresholdZeroError};
+use errors::{
+    NiDkgConfigValidationError,
+    NiDkgThresholdZeroError,
+};
 use ic_protobuf::types::v1 as pb;
 use receivers::NiDkgReceivers;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::collections::BTreeSet;
 use std::convert::TryFrom;
 use std::num::TryFromIntError;

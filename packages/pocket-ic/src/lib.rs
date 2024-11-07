@@ -37,36 +37,69 @@
 pub use crate::management_canister::CanisterSettings;
 use crate::{
     common::rest::{
-        BlobCompression, BlobId, CanisterHttpRequest, DtsFlag, ExtendedSubnetConfigSet,
-        HttpsConfig, InstanceId, MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId,
-        SubnetId, SubnetKind, SubnetSpec, Topology,
+        BlobCompression,
+        BlobId,
+        CanisterHttpRequest,
+        DtsFlag,
+        ExtendedSubnetConfigSet,
+        HttpsConfig,
+        InstanceId,
+        MockCanisterHttpResponse,
+        RawEffectivePrincipal,
+        RawMessageId,
+        SubnetId,
+        SubnetKind,
+        SubnetSpec,
+        Topology,
     },
-    management_canister::{CanisterId, CanisterStatusResult},
+    management_canister::{
+        CanisterId,
+        CanisterStatusResult,
+    },
     nonblocking::PocketIc as PocketIcAsync,
 };
 use candid::{
-    decode_args, encode_args,
-    utils::{ArgumentDecoder, ArgumentEncoder},
+    decode_args,
+    encode_args,
+    utils::{
+        ArgumentDecoder,
+        ArgumentEncoder,
+    },
     Principal,
 };
 use ic_transport_types::SubnetMetrics;
 use reqwest::Url;
 use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use slog::Level;
 use std::{
     net::SocketAddr,
-    path::{Path, PathBuf},
+    path::{
+        Path,
+        PathBuf,
+    },
     process::Command,
-    sync::{mpsc::channel, Arc},
+    sync::{
+        mpsc::channel,
+        Arc,
+    },
     thread,
     thread::JoinHandle,
-    time::{Duration, SystemTime},
+    time::{
+        Duration,
+        SystemTime,
+    },
 };
 use strum_macros::EnumIter;
 use thiserror::Error;
 use tokio::runtime::Runtime;
-use tracing::{instrument, warn};
+use tracing::{
+    instrument,
+    warn,
+};
 #[cfg(windows)]
 use wslpath::windows_to_wsl;
 

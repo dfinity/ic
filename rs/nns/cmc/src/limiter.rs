@@ -1,10 +1,17 @@
 use candid::CandidType;
 use ic_types::Cycles;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::{
     collections::VecDeque,
     convert::TryInto,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{
+        Duration,
+        SystemTime,
+        UNIX_EPOCH,
+    },
 };
 
 /// A record of how many cycles have been minted in the last `max_age`

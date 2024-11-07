@@ -1,11 +1,19 @@
 use ic_interfaces::{
-    batch_payload::{BatchPayloadBuilder, PastPayload, ProposalContext},
+    batch_payload::{
+        BatchPayloadBuilder,
+        PastPayload,
+        ProposalContext,
+    },
     consensus::PayloadValidationError,
 };
 use ic_types::{
-    batch::{CanisterHttpPayload, ValidationContext},
+    batch::{
+        CanisterHttpPayload,
+        ValidationContext,
+    },
     canister_http::CanisterHttpResponseWithConsensus,
-    Height, NumBytes,
+    Height,
+    NumBytes,
 };
 
 use crate::payload_builder::parse::payload_to_bytes;

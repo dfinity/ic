@@ -1,6 +1,10 @@
 use crate::{
     neuron_store::NeuronStore,
-    pb::v1::governance::{migration::MigrationStatus, Migration, Migrations},
+    pb::v1::governance::{
+        migration::MigrationStatus,
+        Migration,
+        Migrations,
+    },
 };
 
 impl MigrationStatus {

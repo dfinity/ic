@@ -4,64 +4,141 @@
 pub mod common;
 
 use crate::common::{
-    create_conn_and_send_request, default_get_latest_state, default_latest_certified_height,
-    default_read_certified_state, get_free_localhost_socket_addr,
-    test_agent::{self, wait_for_status_healthy, IngressMessage},
+    create_conn_and_send_request,
+    default_get_latest_state,
+    default_latest_certified_height,
+    default_read_certified_state,
+    get_free_localhost_socket_addr,
+    test_agent::{
+        self,
+        wait_for_status_healthy,
+        IngressMessage,
+    },
     HttpEndpointBuilder,
 };
-use axum::body::{to_bytes, Body};
+use axum::body::{
+    to_bytes,
+    Body,
+};
 use bytes::Bytes;
 use common::test_agent::APPLICATION_CBOR;
-use futures_util::{future::BoxFuture, FutureExt, StreamExt};
+use futures_util::{
+    future::BoxFuture,
+    FutureExt,
+    StreamExt,
+};
 use http_body::Frame;
 use http_body_util::StreamBody;
-use hyper::{body::Incoming, Method, Request, StatusCode};
-use hyper_util::{client::legacy::Client, rt::TokioExecutor};
-use ic_canister_client::{parse_subnet_read_state_response, prepare_read_state};
+use hyper::{
+    body::Incoming,
+    Method,
+    Request,
+    StatusCode,
+};
+use hyper_util::{
+    client::legacy::Client,
+    rt::TokioExecutor,
+};
+use ic_canister_client::{
+    parse_subnet_read_state_response,
+    prepare_read_state,
+};
 use ic_canister_client_sender::Sender;
-use ic_canonical_state::encoding::types::{Cycles, SubnetMetrics};
+use ic_canonical_state::encoding::types::{
+    Cycles,
+    SubnetMetrics,
+};
 use ic_certification_test_utils::{
-    serialize_to_cbor, Certificate as TestCertificate, CertificateBuilder, CertificateData,
+    serialize_to_cbor,
+    Certificate as TestCertificate,
+    CertificateBuilder,
+    CertificateData,
 };
 use ic_config::http_handler::Config;
-use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
-use ic_crypto_tree_hash::{flatmap, Label, LabeledTree, MixedHashTree, Path};
-use ic_error_types::{ErrorCode, RejectCode, UserError};
+use ic_crypto_temp_crypto::{
+    NodeKeysToGenerate,
+    TempCryptoComponent,
+};
+use ic_crypto_tree_hash::{
+    flatmap,
+    Label,
+    LabeledTree,
+    MixedHashTree,
+    Path,
+};
+use ic_error_types::{
+    ErrorCode,
+    RejectCode,
+    UserError,
+};
 use ic_interfaces::execution_environment::QueryExecutionError;
 use ic_interfaces_mocks::consensus_pool::MockConsensusPoolCache;
 use ic_interfaces_registry_mocks::MockRegistryClient;
 use ic_interfaces_state_manager::CertifiedStateSnapshot;
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_protobuf::registry::crypto::v1::{
-    AlgorithmId as AlgorithmIdProto, PublicKey as PublicKeyProto,
+    AlgorithmId as AlgorithmIdProto,
+    PublicKey as PublicKeyProto,
 };
 use ic_registry_keys::make_crypto_threshold_signing_pubkey_key;
 use ic_replicated_state::ReplicatedState;
 use ic_test_utilities_state::ReplicatedStateBuilder;
-use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id, NODE_1};
+use ic_test_utilities_types::ids::{
+    canister_test_id,
+    subnet_test_id,
+    user_test_id,
+    NODE_1,
+};
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
-    consensus::certification::{Certification, CertificationContent},
+    consensus::certification::{
+        Certification,
+        CertificationContent,
+    },
     crypto::{
         threshold_sig::{
-            ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+            ni_dkg::{
+                NiDkgId,
+                NiDkgTag,
+                NiDkgTargetSubnet,
+            },
             ThresholdSigPublicKey,
         },
-        CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, Signed,
+        CombinedThresholdSig,
+        CombinedThresholdSigOf,
+        CryptoHash,
+        Signed,
     },
     ingress::WasmResult,
-    messages::{Blob, Certificate, CertificateDelegation},
+    messages::{
+        Blob,
+        Certificate,
+        CertificateDelegation,
+    },
     signature::ThresholdSignature,
     time::current_time,
-    CryptoHashOfPartialState, Height, PrincipalId, RegistryVersion,
+    CryptoHashOfPartialState,
+    Height,
+    PrincipalId,
+    RegistryVersion,
 };
 use prost::Message;
 use reqwest::header::CONTENT_TYPE;
 use rstest::rstest;
 use rustls::{
-    client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
-    pki_types::{CertificateDer, ServerName, UnixTime},
-    ClientConfig, DigitallySignedStruct, SignatureScheme,
+    client::danger::{
+        HandshakeSignatureValid,
+        ServerCertVerified,
+        ServerCertVerifier,
+    },
+    pki_types::{
+        CertificateDer,
+        ServerName,
+        UnixTime,
+    },
+    ClientConfig,
+    DigitallySignedStruct,
+    SignatureScheme,
 };
 use serde_bytes::ByteBuf;
 use serde_cbor::value::Value as CBOR;
@@ -70,14 +147,20 @@ use std::{
     convert::Infallible,
     net::TcpStream,
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{
+            AtomicBool,
+            Ordering,
+        },
         Arc,
     },
 };
 use tokio::{
     net::TcpSocket,
     runtime::Runtime,
-    time::{sleep, Duration},
+    time::{
+        sleep,
+        Duration,
+    },
 };
 use tokio_rustls::TlsConnector;
 

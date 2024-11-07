@@ -1,7 +1,16 @@
-use backoff::{retry_notify, ExponentialBackoff};
+use backoff::{
+    retry_notify,
+    ExponentialBackoff,
+};
 use candid::Principal;
-use ic_system_test_driver::driver::{boundary_node::BoundaryNodeVm, test_env::TestEnv};
-use slog::{error, info};
+use ic_system_test_driver::driver::{
+    boundary_node::BoundaryNodeVm,
+    test_env::TestEnv,
+};
+use slog::{
+    error,
+    info,
+};
 use std::time::Duration;
 
 pub fn get_asset_as_string(

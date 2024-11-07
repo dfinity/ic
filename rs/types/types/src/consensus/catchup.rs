@@ -2,20 +2,41 @@
 
 use crate::{
     consensus::{
-        Block, Committee, ConsensusMessageHashable, HasCommittee, HasHeight, HasVersion,
-        HashedBlock, HashedRandomBeacon, ThresholdSignature, ThresholdSignatureShare,
+        Block,
+        Committee,
+        ConsensusMessageHashable,
+        HasCommittee,
+        HasHeight,
+        HasVersion,
+        HashedBlock,
+        HashedRandomBeacon,
+        ThresholdSignature,
+        ThresholdSignatureShare,
     },
     crypto::*,
-    node_id_into_protobuf, node_id_try_from_option, CryptoHashOfState, Height, RegistryVersion,
+    node_id_into_protobuf,
+    node_id_try_from_option,
+    CryptoHashOfState,
+    Height,
+    RegistryVersion,
     ReplicaVersion,
 };
 use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{
+        try_from_option_field,
+        ProxyDecodeError,
+    },
     types::v1 as pb,
 };
 use prost::Message;
-use serde::{Deserialize, Serialize};
-use std::cmp::{Ordering, PartialOrd};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use std::cmp::{
+    Ordering,
+    PartialOrd,
+};
 use std::convert::TryFrom;
 
 /// [`CatchUpContent`] contains all necessary data to bootstrap a subnet's participant.

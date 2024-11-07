@@ -369,7 +369,10 @@ pub mod v2 {
 #[allow(clippy::all)]
 pub mod v1 {
     include!("../gen/registry/registry.node_rewards.v1.rs");
-    use std::collections::{BTreeMap, HashMap};
+    use std::collections::{
+        BTreeMap,
+        HashMap,
+    };
     use std::iter::Extend;
 
     impl NodeRewardRates {

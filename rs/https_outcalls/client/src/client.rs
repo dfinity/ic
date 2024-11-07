@@ -1,39 +1,74 @@
 use crate::metrics::Metrics;
 use candid::Encode;
 use futures::future::TryFutureExt;
-use ic_error_types::{RejectCode, UserError};
+use ic_error_types::{
+    RejectCode,
+    UserError,
+};
 use ic_https_outcalls_service::{
-    https_outcalls_service_client::HttpsOutcallsServiceClient, HttpHeader, HttpMethod,
-    HttpsOutcallRequest, HttpsOutcallResponse,
+    https_outcalls_service_client::HttpsOutcallsServiceClient,
+    HttpHeader,
+    HttpMethod,
+    HttpsOutcallRequest,
+    HttpsOutcallResponse,
 };
 use ic_interfaces::execution_environment::QueryExecutionService;
-use ic_interfaces_adapter_client::{NonBlockingChannel, SendError, TryReceiveError};
-use ic_management_canister_types::{CanisterHttpResponsePayload, TransformArgs};
+use ic_interfaces_adapter_client::{
+    NonBlockingChannel,
+    SendError,
+    TryReceiveError,
+};
+use ic_management_canister_types::{
+    CanisterHttpResponsePayload,
+    TransformArgs,
+};
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     canister_http::{
-        validate_http_headers_and_body, CanisterHttpMethod, CanisterHttpReject,
-        CanisterHttpRequest, CanisterHttpRequestContext, CanisterHttpResponse,
-        CanisterHttpResponseContent, Transform, MAX_CANISTER_HTTP_RESPONSE_BYTES,
+        validate_http_headers_and_body,
+        CanisterHttpMethod,
+        CanisterHttpReject,
+        CanisterHttpRequest,
+        CanisterHttpRequestContext,
+        CanisterHttpResponse,
+        CanisterHttpResponseContent,
+        Transform,
+        MAX_CANISTER_HTTP_RESPONSE_BYTES,
     },
     ingress::WasmResult,
-    messages::{CertificateDelegation, Query, QuerySource, Request},
-    CanisterId, NumBytes,
+    messages::{
+        CertificateDelegation,
+        Query,
+        QuerySource,
+        Request,
+    },
+    CanisterId,
+    NumBytes,
 };
-use std::{sync::Arc, time::Instant};
+use std::{
+    sync::Arc,
+    time::Instant,
+};
 use tokio::{
     runtime::Handle,
     sync::{
         mpsc::{
             channel,
-            error::{TryRecvError, TrySendError},
-            Receiver, Sender,
+            error::{
+                TryRecvError,
+                TrySendError,
+            },
+            Receiver,
+            Sender,
         },
         OnceCell,
     },
 };
-use tonic::{transport::Channel, Code};
+use tonic::{
+    transport::Channel,
+    Code,
+};
 use tower::util::Oneshot;
 use tracing::instrument;
 
@@ -345,15 +380,25 @@ pub fn grpc_status_code_to_reject(code: Code) -> RejectCode {
 mod tests {
     use super::*;
     use ic_https_outcalls_service::{
-        https_outcalls_service_server::{HttpsOutcallsService, HttpsOutcallsServiceServer},
-        HttpsOutcallRequest, HttpsOutcallResponse,
+        https_outcalls_service_server::{
+            HttpsOutcallsService,
+            HttpsOutcallsServiceServer,
+        },
+        HttpsOutcallRequest,
+        HttpsOutcallResponse,
     };
-    use ic_interfaces::execution_environment::{QueryExecutionError, QueryExecutionResponse};
+    use ic_interfaces::execution_environment::{
+        QueryExecutionError,
+        QueryExecutionResponse,
+    };
     use ic_test_utilities_types::messages::RequestBuilder;
     use ic_types::canister_http::Transform;
     use ic_types::{
         canister_http::CanisterHttpMethod,
-        messages::{CallbackId, CertificateDelegation},
+        messages::{
+            CallbackId,
+            CertificateDelegation,
+        },
         time::current_time,
         time::UNIX_EPOCH,
         Time,
@@ -361,10 +406,22 @@ mod tests {
     use std::convert::TryFrom;
     use std::time::Duration;
     use tonic::{
-        transport::{Channel, Endpoint, Server, Uri},
-        Request, Response, Status,
+        transport::{
+            Channel,
+            Endpoint,
+            Server,
+            Uri,
+        },
+        Request,
+        Response,
+        Status,
     };
-    use tower::{service_fn, util::BoxCloneService, Service, ServiceExt};
+    use tower::{
+        service_fn,
+        util::BoxCloneService,
+        Service,
+        ServiceExt,
+    };
     use tower_test::mock::Handle;
 
     #[derive(Clone)]
@@ -1035,7 +1092,8 @@ mod tests {
     async fn test_max_response_size() {
         use ic_types::batch::MAX_CANISTER_HTTP_PAYLOAD_SIZE;
         use ic_types::canister_http::{
-            MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH, MAX_CANISTER_HTTP_HEADER_NUM,
+            MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH,
+            MAX_CANISTER_HTTP_HEADER_NUM,
             MAX_CANISTER_HTTP_HEADER_TOTAL_SIZE,
         };
         let mut headers: Vec<HttpHeader> = vec![];

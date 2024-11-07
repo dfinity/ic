@@ -1,6 +1,9 @@
 use crate::*;
 use ic_types::crypto::canister_threshold_sig::idkg::IDkgComplaint;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 

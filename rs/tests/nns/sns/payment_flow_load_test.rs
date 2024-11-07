@@ -6,7 +6,8 @@ use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::sns_client::SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S;
 use ic_system_test_driver::systest;
 use ic_tests::nns_tests::sns_deployment::{
-    generate_ticket_participants_workload, initiate_token_swap_with_oc_parameters,
+    generate_ticket_participants_workload,
+    initiate_token_swap_with_oc_parameters,
     sns_setup_with_many_icp_users,
 };
 

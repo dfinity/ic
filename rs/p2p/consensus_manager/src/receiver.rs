@@ -1,34 +1,71 @@
 #![allow(clippy::disallowed_methods)]
 
-use std::collections::{hash_map::Entry, HashMap, HashSet};
+use std::collections::{
+    hash_map::Entry,
+    HashMap,
+    HashSet,
+};
 
 use crate::{
     metrics::{
-        ConsensusManagerMetrics, ASSEMBLE_TASK_RESULT_ALL_PEERS_DELETED,
-        ASSEMBLE_TASK_RESULT_COMPLETED, ASSEMBLE_TASK_RESULT_DROP,
+        ConsensusManagerMetrics,
+        ASSEMBLE_TASK_RESULT_ALL_PEERS_DELETED,
+        ASSEMBLE_TASK_RESULT_COMPLETED,
+        ASSEMBLE_TASK_RESULT_DROP,
     },
-    uri_prefix, CommitId, SlotNumber, SlotUpdate, Update,
+    uri_prefix,
+    CommitId,
+    SlotNumber,
+    SlotUpdate,
+    Update,
 };
 use axum::{
-    extract::{DefaultBodyLimit, State},
+    extract::{
+        DefaultBodyLimit,
+        State,
+    },
     http::StatusCode,
     response::IntoResponse,
     routing::any,
-    Extension, Router,
+    Extension,
+    Router,
 };
 use bytes::Bytes;
 use ic_base_types::NodeId;
-use ic_interfaces::p2p::consensus::{Aborted, ArtifactAssembler, Peers};
-use ic_logger::{error, warn, ReplicaLogger};
+use ic_interfaces::p2p::consensus::{
+    Aborted,
+    ArtifactAssembler,
+    Peers,
+};
+use ic_logger::{
+    error,
+    warn,
+    ReplicaLogger,
+};
 use ic_protobuf::p2p::v1 as pb;
-use ic_quic_transport::{ConnId, Shutdown, SubnetTopology};
-use ic_types::artifact::{IdentifiableArtifact, PbArtifact, UnvalidatedArtifactMutation};
-use prost::{DecodeError, Message};
+use ic_quic_transport::{
+    ConnId,
+    Shutdown,
+    SubnetTopology,
+};
+use ic_types::artifact::{
+    IdentifiableArtifact,
+    PbArtifact,
+    UnvalidatedArtifactMutation,
+};
+use prost::{
+    DecodeError,
+    Message,
+};
 use tokio::{
     runtime::Handle,
     select,
     sync::{
-        mpsc::{Receiver, Sender, UnboundedSender},
+        mpsc::{
+            Receiver,
+            Sender,
+            UnboundedSender,
+        },
         watch,
     },
     task::JoinSet,
@@ -601,16 +638,34 @@ impl<T> SlotEntry<T> {
 
 #[cfg(test)]
 mod tests {
-    use std::{convert::Infallible, time::Duration};
+    use std::{
+        convert::Infallible,
+        time::Duration,
+    };
 
-    use axum::{body::Body, http::Request};
+    use axum::{
+        body::Body,
+        http::Request,
+    };
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
-    use ic_p2p_test_utils::{consensus::U64Artifact, mocks::MockArtifactAssembler};
+    use ic_p2p_test_utils::{
+        consensus::U64Artifact,
+        mocks::MockArtifactAssembler,
+    };
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_types::{artifact::IdentifiableArtifact, RegistryVersion};
-    use ic_types_test_utils::ids::{NODE_1, NODE_2};
-    use tokio::{sync::mpsc::UnboundedReceiver, time::timeout};
+    use ic_types::{
+        artifact::IdentifiableArtifact,
+        RegistryVersion,
+    };
+    use ic_types_test_utils::ids::{
+        NODE_1,
+        NODE_2,
+    };
+    use tokio::{
+        sync::mpsc::UnboundedReceiver,
+        time::timeout,
+    };
     use tower::util::ServiceExt;
 
     use super::*;

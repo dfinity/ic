@@ -1,6 +1,11 @@
-use ic_interfaces_registry::{RegistryDataProvider, RegistryTransportRecord};
+use ic_interfaces_registry::{
+    RegistryDataProvider,
+    RegistryTransportRecord,
+};
 use ic_registry_common_proto::pb::local_store::v1::{
-    ChangelogEntry as PbChangelogEntry, Delta as PbDelta, KeyMutation as PbKeyMutation,
+    ChangelogEntry as PbChangelogEntry,
+    Delta as PbDelta,
+    KeyMutation as PbKeyMutation,
     MutationType,
 };
 use ic_sys::fs::write_protobuf_using_tmp_file;
@@ -8,8 +13,13 @@ use ic_types::registry::RegistryDataProviderError;
 use ic_types::RegistryVersion;
 use prost::Message;
 use std::{
-    io::{self},
-    path::{Path, PathBuf},
+    io::{
+        self,
+    },
+    path::{
+        Path,
+        PathBuf,
+    },
 };
 pub trait LocalStore: LocalStoreWriter + LocalStoreReader {}
 

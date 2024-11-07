@@ -2,26 +2,52 @@
 mod tests;
 
 use askama::Template;
-use candid::{Nat, Principal};
-use ic_cketh_minter::endpoints::{EthTransaction, RetrieveEthStatus};
+use candid::{
+    Nat,
+    Principal,
+};
+use ic_cketh_minter::endpoints::{
+    EthTransaction,
+    RetrieveEthStatus,
+};
 use ic_cketh_minter::erc20::CkTokenSymbol;
-use ic_cketh_minter::eth_logs::{EventSource, ReceivedEvent};
+use ic_cketh_minter::eth_logs::{
+    EventSource,
+    ReceivedEvent,
+};
 use ic_cketh_minter::eth_rpc::Hash;
 use ic_cketh_minter::eth_rpc_client::responses::TransactionStatus;
 use ic_cketh_minter::lifecycle::EthereumNetwork;
 use ic_cketh_minter::numeric::{
-    BlockNumber, Erc20Value, LedgerBurnIndex, LedgerMintIndex, LogIndex, TransactionNonce, Wei,
+    BlockNumber,
+    Erc20Value,
+    LedgerBurnIndex,
+    LedgerMintIndex,
+    LogIndex,
+    TransactionNonce,
+    Wei,
 };
 use ic_cketh_minter::state::eth_logs_scraping::LogScrapings;
 use ic_cketh_minter::state::transactions::{
-    ReimbursedError, ReimbursementIndex, TransactionCallData, WithdrawalRequest,
+    ReimbursedError,
+    ReimbursementIndex,
+    TransactionCallData,
+    WithdrawalRequest,
 };
-use ic_cketh_minter::state::{EthBalance, InvalidEventReason, MintedEvent, State};
+use ic_cketh_minter::state::{
+    EthBalance,
+    InvalidEventReason,
+    MintedEvent,
+    State,
+};
 use ic_cketh_minter::tx::Eip1559TransactionRequest;
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
 use std::cmp::Reverse;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
 
 mod filters {
     pub fn timestamp_to_datetime<T: std::fmt::Display>(timestamp: T) -> askama::Result<String> {

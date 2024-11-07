@@ -2,12 +2,22 @@ use candid::CandidType;
 use futures::future::join_all;
 use ic_cdk::api::call::CallResult;
 use ic_cdk::api::management_canister::main::{
-    canister_status, create_canister, install_code, CanisterId, CanisterIdRecord,
-    CanisterInstallMode, CanisterSettings, CanisterStatusType, CreateCanisterArgument,
+    canister_status,
+    create_canister,
+    install_code,
+    CanisterId,
+    CanisterIdRecord,
+    CanisterInstallMode,
+    CanisterSettings,
+    CanisterStatusType,
+    CreateCanisterArgument,
     InstallCodeArgument,
 };
 use ic_cdk::update;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 

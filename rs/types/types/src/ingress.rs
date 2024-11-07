@@ -1,19 +1,37 @@
 //! Ingress types.
 
 use crate::artifact::IngressMessageId;
-use crate::{CanisterId, CountBytes, PrincipalId, Time, UserId};
-use ic_error_types::{ErrorCode, UserError};
+use crate::{
+    CanisterId,
+    CountBytes,
+    PrincipalId,
+    Time,
+    UserId,
+};
+use ic_error_types::{
+    ErrorCode,
+    UserError,
+};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{
+        try_from_option_field,
+        ProxyDecodeError,
+    },
     state::ingress::v1 as pb_ingress,
     types::v1 as pb_types,
 };
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::collections::HashSet;
 use std::sync::Arc;
-use std::{convert::TryFrom, fmt};
+use std::{
+    convert::TryFrom,
+    fmt,
+};
 
 /// The inner state of an ingress message.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]

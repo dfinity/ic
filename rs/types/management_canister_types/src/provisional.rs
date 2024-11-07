@@ -1,6 +1,15 @@
-use crate::{CanisterSettingsArgs, Payload};
-use candid::{CandidType, Deserialize};
-use ic_base_types::{CanisterId, PrincipalId};
+use crate::{
+    CanisterSettingsArgs,
+    Payload,
+};
+use candid::{
+    CandidType,
+    Deserialize,
+};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use num_traits::ToPrimitive;
 
 /// Struct used for encoding/decoding `(record { amount : opt nat; })`

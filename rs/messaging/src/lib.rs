@@ -7,4 +7,7 @@ pub(crate) mod routing;
 mod scheduling;
 mod state_machine;
 
-pub use message_routing::{MessageRoutingImpl, SyncMessageRouting};
+pub use message_routing::{
+    MessageRoutingImpl,
+    SyncMessageRouting,
+};

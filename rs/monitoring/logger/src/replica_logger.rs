@@ -1,13 +1,20 @@
 use std::{
     collections::HashMap,
     sync::Mutex,
-    time::{Duration, Instant},
+    time::{
+        Duration,
+        Instant,
+    },
 };
 
 use ic_protobuf::log::log_entry::v1::LogEntry;
 use ic_utils::str::StrEllipsize;
 
-use crate::context_logger::{ContextLogger, LogMetadata, Logger};
+use crate::context_logger::{
+    ContextLogger,
+    LogMetadata,
+    Logger,
+};
 
 /// A logger that logs `LogEntry`s using a `LogEntryLogger`
 pub type ReplicaLogger = ContextLogger<LogEntry, LogEntryLogger>;

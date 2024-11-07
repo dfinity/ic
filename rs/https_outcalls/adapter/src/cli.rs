@@ -6,7 +6,11 @@ use crate::config::Config;
 use clap::Parser;
 use http::Uri;
 use slog::Level;
-use std::{fs::File, io, path::PathBuf};
+use std::{
+    fs::File,
+    io,
+    path::PathBuf,
+};
 use thiserror::Error;
 
 #[derive(Debug, Error)]

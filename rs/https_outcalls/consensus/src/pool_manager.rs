@@ -4,10 +4,14 @@
 //! and eventually make it into consensus.
 use crate::metrics::CanisterHttpPoolManagerMetrics;
 use ic_consensus_utils::{
-    crypto::ConsensusCrypto, membership::Membership, registry_version_at_height,
+    crypto::ConsensusCrypto,
+    membership::Membership,
+    registry_version_at_height,
 };
 use ic_interfaces::{
-    canister_http::*, consensus_pool::ConsensusPoolCache, p2p::consensus::PoolMutationsProducer,
+    canister_http::*,
+    consensus_pool::ConsensusPoolCache,
+    p2p::consensus::PoolMutationsProducer,
 };
 use ic_interfaces_adapter_client::*;
 use ic_interfaces_registry::RegistryClient;
@@ -17,14 +21,24 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    canister_http::*, consensus::HasHeight, crypto::Signed, messages::CallbackId,
-    replica_config::ReplicaConfig, Height,
+    canister_http::*,
+    consensus::HasHeight,
+    crypto::Signed,
+    messages::CallbackId,
+    replica_config::ReplicaConfig,
+    Height,
 };
 use std::{
     cell::RefCell,
-    collections::{BTreeSet, HashSet},
+    collections::{
+        BTreeSet,
+        HashSet,
+    },
     convert::TryInto,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc,
+        Mutex,
+    },
     time::Duration,
 };
 
@@ -440,9 +454,15 @@ impl<T: CanisterHttpPool> PoolMutationsProducer<T> for CanisterHttpPoolManagerIm
 pub mod test {
     use super::*;
     use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
-    use ic_consensus_mocks::{dependencies, Dependencies};
+    use ic_consensus_mocks::{
+        dependencies,
+        Dependencies,
+    };
     use ic_consensus_utils::crypto::SignVerify;
-    use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
+    use ic_interfaces::p2p::consensus::{
+        MutablePool,
+        UnvalidatedArtifact,
+    };
     use ic_interfaces_state_manager::Labeled;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
@@ -451,10 +471,15 @@ pub mod test {
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
-        crypto::{CryptoHash, CryptoHashOf},
+        crypto::{
+            CryptoHash,
+            CryptoHashOf,
+        },
         messages::CallbackId,
         time::UNIX_EPOCH,
-        Height, RegistryVersion, Time,
+        Height,
+        RegistryVersion,
+        Time,
     };
     use mockall::predicate::*;
     use mockall::*;

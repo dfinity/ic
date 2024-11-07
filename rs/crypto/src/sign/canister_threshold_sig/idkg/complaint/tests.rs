@@ -1,29 +1,60 @@
 use super::*;
-use crate::common::test_utils::{CryptoRegistryKey, CryptoRegistryRecord};
+use crate::common::test_utils::{
+    CryptoRegistryKey,
+    CryptoRegistryRecord,
+};
 use crate::sign::canister_threshold_sig::test_utils::batch_signed_dealing_with;
 use crate::sign::canister_threshold_sig::test_utils::node_set;
 use crate::sign::canister_threshold_sig::test_utils::valid_internal_dealing_raw;
 use crate::sign::tests::{
-    mega_encryption_pk_record_with, registry_returning, registry_returning_none, registry_with,
+    mega_encryption_pk_record_with,
+    registry_returning,
+    registry_returning_none,
+    registry_with,
     REG_V1,
 };
 use assert_matches::assert_matches;
 use ic_crypto_internal_seed::Seed;
-use ic_crypto_internal_threshold_sig_canister_threshold_sig::{EccCurveType, MEGaPublicKey};
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
+    EccCurveType,
+    MEGaPublicKey,
+};
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_types::crypto::canister_threshold_sig::idkg::BatchSignedIDkgDealing;
 use ic_types::crypto::canister_threshold_sig::idkg::IDkgDealing;
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    IDkgMaskedTranscriptOrigin, IDkgReceivers, IDkgTranscriptId, IDkgTranscriptType,
+    IDkgMaskedTranscriptOrigin,
+    IDkgReceivers,
+    IDkgTranscriptId,
+    IDkgTranscriptType,
     SignedIDkgDealing,
 };
-use ic_types::crypto::{AlgorithmId, BasicSig, BasicSigOf, KeyPurpose};
-use ic_types::signature::{BasicSignature, BasicSignatureBatch};
-use ic_types::{registry::RegistryClientError, Height, RegistryVersion};
-use ic_types_test_utils::ids::{NODE_1, NODE_2, SUBNET_42};
-use rand::{CryptoRng, Rng};
+use ic_types::crypto::{
+    AlgorithmId,
+    BasicSig,
+    BasicSigOf,
+    KeyPurpose,
+};
+use ic_types::signature::{
+    BasicSignature,
+    BasicSignatureBatch,
+};
+use ic_types::{
+    registry::RegistryClientError,
+    Height,
+    RegistryVersion,
+};
+use ic_types_test_utils::ids::{
+    NODE_1,
+    NODE_2,
+    SUBNET_42,
+};
+use rand::{
+    CryptoRng,
+    Rng,
+};
 
 #[test]
 fn should_fail_on_transcript_id_mismatch() {

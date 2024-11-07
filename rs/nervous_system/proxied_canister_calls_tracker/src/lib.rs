@@ -1,9 +1,15 @@
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use std::{
     cell::RefCell,
     collections::BTreeMap,
     thread::LocalKey,
-    time::{Duration, SystemTime},
+    time::{
+        Duration,
+        SystemTime,
+    },
 };
 
 /// Tracks the age of canister calls that are being made on behalf of another

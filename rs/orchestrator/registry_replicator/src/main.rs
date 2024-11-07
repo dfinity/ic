@@ -1,6 +1,12 @@
 use clap::Parser;
-use ic_logger::{info, new_replica_logger_from_config};
-use ic_registry_replicator::{args::RegistryReplicatorArgs, RegistryReplicator};
+use ic_logger::{
+    info,
+    new_replica_logger_from_config,
+};
+use ic_registry_replicator::{
+    args::RegistryReplicatorArgs,
+    RegistryReplicator,
+};
 
 #[tokio::main]
 async fn main() {

@@ -7,7 +7,10 @@ use ic_interfaces::execution_environment::SystemApi;
 use ic_replicated_state::Global;
 use ic_test_utilities_embedders::WasmtimeInstanceBuilder;
 use ic_types::ingress::WasmResult;
-use ic_types::methods::{FuncRef, WasmMethod};
+use ic_types::methods::{
+    FuncRef,
+    WasmMethod,
+};
 use std::collections::BTreeSet;
 use tokio::runtime::Runtime;
 
@@ -146,7 +149,10 @@ fn execute_wasm(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use arbitrary::{Arbitrary, Unstructured};
+    use arbitrary::{
+        Arbitrary,
+        Unstructured,
+    };
 
     #[test]
     fn test_differential_simd_execute_with_wasmtime_single_run() {

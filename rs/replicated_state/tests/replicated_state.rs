@@ -1,42 +1,105 @@
-use ic_base_types::{CanisterId, NumBytes, NumSeconds, PrincipalId, SubnetId};
+use ic_base_types::{
+    CanisterId,
+    NumBytes,
+    NumSeconds,
+    PrincipalId,
+    SubnetId,
+};
 use ic_btc_interface::Network;
 use ic_btc_replica_types::{
-    BitcoinAdapterResponse, BitcoinAdapterResponseWrapper, BitcoinReject,
-    GetSuccessorsRequestInitial, GetSuccessorsResponseComplete, SendTransactionRequest,
+    BitcoinAdapterResponse,
+    BitcoinAdapterResponseWrapper,
+    BitcoinReject,
+    GetSuccessorsRequestInitial,
+    GetSuccessorsResponseComplete,
+    SendTransactionRequest,
 };
 use ic_error_types::RejectCode;
 use ic_management_canister_types::{
-    BitcoinGetSuccessorsResponse, CanisterChange, CanisterChangeDetails, CanisterChangeOrigin,
+    BitcoinGetSuccessorsResponse,
+    CanisterChange,
+    CanisterChangeDetails,
+    CanisterChangeOrigin,
     Payload as _,
 };
-use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
+use ic_registry_routing_table::{
+    CanisterIdRange,
+    RoutingTable,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::BitcoinSendTransactionInternalContext;
 use ic_replicated_state::replicated_state::testing::ReplicatedStateTesting;
-use ic_replicated_state::testing::{CanisterQueuesTesting, SystemStateTesting};
+use ic_replicated_state::testing::{
+    CanisterQueuesTesting,
+    SystemStateTesting,
+};
 use ic_replicated_state::{
-    canister_state::execution_state::{CustomSection, CustomSectionType, WasmMetadata},
-    metadata_state::subnet_call_context_manager::{BitcoinGetSuccessorsContext, SubnetCallContext},
-    replicated_state::{MemoryTaken, PeekableOutputIterator, ReplicatedStateMessageRouting},
-    CanisterState, IngressHistoryState, InputSource, ReplicatedState, SchedulerState, StateError,
+    canister_state::execution_state::{
+        CustomSection,
+        CustomSectionType,
+        WasmMetadata,
+    },
+    metadata_state::subnet_call_context_manager::{
+        BitcoinGetSuccessorsContext,
+        SubnetCallContext,
+    },
+    replicated_state::{
+        MemoryTaken,
+        PeekableOutputIterator,
+        ReplicatedStateMessageRouting,
+    },
+    CanisterState,
+    IngressHistoryState,
+    InputSource,
+    ReplicatedState,
+    SchedulerState,
+    StateError,
     SystemState,
 };
-use ic_test_utilities_state::{arb_replicated_state_with_output_queues, ExecutionStateBuilder};
-use ic_test_utilities_types::ids::{canister_test_id, message_test_id, user_test_id, SUBNET_1};
-use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
-use ic_types::ingress::{IngressState, IngressStatus};
-use ic_types::messages::{CallbackId, RejectContext};
+use ic_test_utilities_state::{
+    arb_replicated_state_with_output_queues,
+    ExecutionStateBuilder,
+};
+use ic_test_utilities_types::ids::{
+    canister_test_id,
+    message_test_id,
+    user_test_id,
+    SUBNET_1,
+};
+use ic_test_utilities_types::messages::{
+    RequestBuilder,
+    ResponseBuilder,
+};
+use ic_types::ingress::{
+    IngressState,
+    IngressStatus,
+};
+use ic_types::messages::{
+    CallbackId,
+    RejectContext,
+};
 use ic_types::time::CoarseTime;
 use ic_types::{
     messages::{
-        CanisterMessage, Payload, Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES,
+        CanisterMessage,
+        Payload,
+        Request,
+        RequestOrResponse,
+        Response,
+        MAX_RESPONSE_COUNT_BYTES,
     },
     time::UNIX_EPOCH,
-    CountBytes, Cycles, MemoryAllocation, Time,
+    CountBytes,
+    Cycles,
+    MemoryAllocation,
+    Time,
 };
 use maplit::btreemap;
 use proptest::prelude::*;
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{
+    BTreeMap,
+    VecDeque,
+};
 use std::mem::size_of;
 use std::sync::Arc;
 use strum::IntoEnumIterator;

@@ -1,32 +1,64 @@
 use std::rc::Rc;
 use std::sync::Arc;
 
-use super::{system_api, StoreData, INSTRUCTIONS_COUNTER_GLOBAL_NAME};
-use crate::{wasm_utils::validate_and_instrument_for_testing, WasmtimeEmbedder};
+use super::{
+    system_api,
+    StoreData,
+    INSTRUCTIONS_COUNTER_GLOBAL_NAME,
+};
+use crate::{
+    wasm_utils::validate_and_instrument_for_testing,
+    WasmtimeEmbedder,
+};
 use ic_base_types::NumSeconds;
 use ic_config::flag_status::FlagStatus;
-use ic_config::{embedders::Config as EmbeddersConfig, subnet_config::SchedulerConfig};
+use ic_config::{
+    embedders::Config as EmbeddersConfig,
+    subnet_config::SchedulerConfig,
+};
 use ic_cycles_account_manager::ResourceSaturation;
-use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
+use ic_interfaces::execution_environment::{
+    ExecutionMode,
+    SubnetAvailableMemory,
+};
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::page_map::TestPageAllocatorFileDescriptorImpl;
-use ic_replicated_state::{Memory, NetworkTopology, SystemState};
+use ic_replicated_state::{
+    Memory,
+    NetworkTopology,
+    SystemState,
+};
 use ic_system_api::{
-    sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
-    ExecutionParameters, InstructionLimits, SystemApiImpl,
+    sandbox_safe_system_state::SandboxSafeSystemState,
+    ApiType,
+    DefaultOutOfInstructionsHandler,
+    ExecutionParameters,
+    InstructionLimits,
+    SystemApiImpl,
 };
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_types::ids::canister_test_id;
 use ic_types::{
-    messages::RequestMetadata, time::UNIX_EPOCH, ComputeAllocation, Cycles, MemoryAllocation,
-    NumBytes, NumInstructions,
+    messages::RequestMetadata,
+    time::UNIX_EPOCH,
+    ComputeAllocation,
+    Cycles,
+    MemoryAllocation,
+    NumBytes,
+    NumInstructions,
 };
 use ic_wasm_types::BinaryEncodedWasm;
 
 use ic_replicated_state::NumWasmPages;
 use lazy_static::lazy_static;
-use wasmtime::{Engine, Module, Store, StoreLimits, Val};
+use wasmtime::{
+    Engine,
+    Module,
+    Store,
+    StoreLimits,
+    Val,
+};
 
 const SUBNET_MEMORY_CAPACITY: i64 = i64::MAX / 2;
 

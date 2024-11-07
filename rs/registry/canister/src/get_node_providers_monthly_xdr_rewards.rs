@@ -1,14 +1,20 @@
 use crate::{
-    mutations::node_management::common::{get_key_family, get_key_family_iter},
+    mutations::node_management::common::{
+        get_key_family,
+        get_key_family_iter,
+    },
     pb::v1::NodeProvidersMonthlyXdrRewards,
     registry::Registry,
 };
 use ic_protobuf::registry::{
-    dc::v1::DataCenterRecord, node_operator::v1::NodeOperatorRecord,
+    dc::v1::DataCenterRecord,
+    node_operator::v1::NodeOperatorRecord,
     node_rewards::v2::NodeRewardsTable,
 };
 use ic_registry_keys::{
-    DATA_CENTER_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY,
+    DATA_CENTER_KEY_PREFIX,
+    NODE_OPERATOR_RECORD_KEY_PREFIX,
+    NODE_REWARDS_TABLE_KEY,
 };
 use ic_registry_node_provider_rewards::calculate_rewards_v0;
 use prost::Message;
@@ -59,17 +65,25 @@ mod tests {
     #[cfg(target_arch = "wasm32")]
     use dfn_core::println;
     use ic_nervous_system_common_test_keys::{
-        TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL, TEST_USER3_PRINCIPAL, TEST_USER4_PRINCIPAL,
+        TEST_USER1_PRINCIPAL,
+        TEST_USER2_PRINCIPAL,
+        TEST_USER3_PRINCIPAL,
+        TEST_USER4_PRINCIPAL,
     };
     use ic_nns_test_utils::registry::invariant_compliant_mutation;
     use ic_protobuf::registry::{
         dc::v1::AddOrRemoveDataCentersProposalPayload,
         node_rewards::v2::{
-            NodeRewardRate, NodeRewardRates, UpdateNodeRewardsTableProposalPayload,
+            NodeRewardRate,
+            NodeRewardRates,
+            UpdateNodeRewardsTableProposalPayload,
         },
     };
     use ic_registry_keys::make_node_operator_record_key;
-    use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation};
+    use ic_registry_transport::pb::v1::{
+        registry_mutation,
+        RegistryMutation,
+    };
     use ic_types::PrincipalId;
     use maplit::btreemap;
     use std::collections::BTreeMap;

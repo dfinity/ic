@@ -1,25 +1,52 @@
 use std::{
     collections::HashMap,
     path::PathBuf,
-    sync::{Arc, RwLock},
+    sync::{
+        Arc,
+        RwLock,
+    },
 };
 
-use ic_artifact_pool::{consensus_pool::ConsensusPoolImpl, dkg_pool::DkgPoolImpl};
-use ic_config::{artifact_pool::ArtifactPoolConfig, Config};
+use ic_artifact_pool::{
+    consensus_pool::ConsensusPoolImpl,
+    dkg_pool::DkgPoolImpl,
+};
+use ic_config::{
+    artifact_pool::ArtifactPoolConfig,
+    Config,
+};
 use ic_consensus::{
     certification::CertificationCrypto,
-    consensus::{dkg_key_manager::DkgKeyManager, validator::Validator, ValidatorMetrics},
+    consensus::{
+        dkg_key_manager::DkgKeyManager,
+        validator::Validator,
+        ValidatorMetrics,
+    },
 };
 use ic_consensus_utils::{
-    active_high_threshold_nidkg_id, crypto::ConsensusCrypto, membership::Membership,
-    pool_reader::PoolReader, registry_version_at_height,
+    active_high_threshold_nidkg_id,
+    crypto::ConsensusCrypto,
+    membership::Membership,
+    pool_reader::PoolReader,
+    registry_version_at_height,
 };
 use ic_interfaces::{
     certification::Verifier,
-    consensus_pool::{ChangeAction, ConsensusPool, ConsensusPoolCache, HeightIndexedPool},
+    consensus_pool::{
+        ChangeAction,
+        ConsensusPool,
+        ConsensusPoolCache,
+        HeightIndexedPool,
+    },
     messaging::MessageRouting,
-    p2p::consensus::{MutablePool, UnvalidatedArtifact},
-    time_source::{SysTimeSource, TimeSource},
+    p2p::consensus::{
+        MutablePool,
+        UnvalidatedArtifact,
+    },
+    time_source::{
+        SysTimeSource,
+        TimeSource,
+    },
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
@@ -30,17 +57,33 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     artifact::ConsensusMessageId,
     consensus::{
-        certification::{Certification, CertificationShare},
-        Block, ConsensusMessage, ConsensusMessageHash, ConsensusMessageHashable, HasBlockHash,
+        certification::{
+            Certification,
+            CertificationShare,
+        },
+        Block,
+        ConsensusMessage,
+        ConsensusMessageHash,
+        ConsensusMessageHashable,
+        HasBlockHash,
         HasCommittee,
     },
     crypto::CryptoHashOf,
     replica_config::ReplicaConfig,
-    Height, NodeId, PrincipalId, SubnetId,
+    Height,
+    NodeId,
+    PrincipalId,
+    SubnetId,
 };
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
-use crate::{mocks::MockPayloadBuilder, player::ReplayError};
+use crate::{
+    mocks::MockPayloadBuilder,
+    player::ReplayError,
+};
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct InvalidArtifact {

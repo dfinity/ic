@@ -1,9 +1,16 @@
 //! Tests for combined forward secure encryption and ZK proofs
 #![allow(clippy::many_single_char_names)]
 
-use ic_crypto_internal_bls12_381_type::{G1Affine, G1Projective, G2Affine, Scalar};
+use ic_crypto_internal_bls12_381_type::{
+    G1Affine,
+    G1Projective,
+    G2Affine,
+    Scalar,
+};
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::{
-    forward_secure::*, nizk_chunking::*, nizk_sharing::*,
+    forward_secure::*,
+    nizk_chunking::*,
+    nizk_sharing::*,
 };
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;

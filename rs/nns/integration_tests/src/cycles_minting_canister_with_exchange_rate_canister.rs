@@ -1,35 +1,66 @@
-use candid::{CandidType, Encode};
+use candid::{
+    CandidType,
+    Encode,
+};
 use canister_test::Wasm;
 use cycles_minting_canister::IcpXdrConversionRateCertifiedResponse;
 use ic_base_types::CanisterId;
 use ic_cbor::CertificateToCbor;
 use ic_certificate_verification::VerifyCertificate;
-use ic_certification::{Certificate, HashTree, LookupResult};
-use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL};
+use ic_certification::{
+    Certificate,
+    HashTree,
+    LookupResult,
+};
+use ic_nervous_system_common_test_keys::{
+    TEST_NEURON_1_ID,
+    TEST_NEURON_1_OWNER_PRINCIPAL,
+};
 use ic_nns_common::{
     pb::v1::NeuronId,
-    types::{UpdateIcpXdrConversionRatePayload, UpdateIcpXdrConversionRatePayloadReason},
+    types::{
+        UpdateIcpXdrConversionRatePayload,
+        UpdateIcpXdrConversionRatePayloadReason,
+    },
 };
 use ic_nns_constants::{
-    CYCLES_MINTING_CANISTER_ID, EXCHANGE_RATE_CANISTER_ID, EXCHANGE_RATE_CANISTER_INDEX,
+    CYCLES_MINTING_CANISTER_ID,
+    EXCHANGE_RATE_CANISTER_ID,
+    EXCHANGE_RATE_CANISTER_INDEX,
 };
 use ic_nns_governance_api::pb::v1::{
-    manage_neuron_response, ExecuteNnsFunction, MakeProposalRequest, NnsFunction,
+    manage_neuron_response,
+    ExecuteNnsFunction,
+    MakeProposalRequest,
+    NnsFunction,
     ProposalActionRequest,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     state_test_helpers::{
-        create_canister_at_specified_id, get_average_icp_xdr_conversion_rate,
-        get_icp_xdr_conversion_rate, nns_governance_make_proposal, nns_wait_for_proposal_execution,
-        setup_nns_canisters, state_machine_builder_for_nns_tests,
+        create_canister_at_specified_id,
+        get_average_icp_xdr_conversion_rate,
+        get_icp_xdr_conversion_rate,
+        nns_governance_make_proposal,
+        nns_wait_for_proposal_execution,
+        setup_nns_canisters,
+        state_machine_builder_for_nns_tests,
     },
 };
 use ic_state_machine_tests::StateMachine;
 use ic_types::time::GENESIS;
-use ic_xrc_types::{Asset, AssetClass, ExchangeRateError, ExchangeRateMetadata};
+use ic_xrc_types::{
+    Asset,
+    AssetClass,
+    ExchangeRateError,
+    ExchangeRateMetadata,
+};
 use std::time::Duration;
-use xrc_mock::{ExchangeRate, Response, XrcMockInitPayload};
+use xrc_mock::{
+    ExchangeRate,
+    Response,
+    XrcMockInitPayload,
+};
 
 const ONE_MINUTE_SECONDS: u64 = 60;
 const FIVE_MINUTES_SECONDS: u64 = 5 * ONE_MINUTE_SECONDS;

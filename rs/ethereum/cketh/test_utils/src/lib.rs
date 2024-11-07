@@ -1,33 +1,77 @@
 use crate::events::MinterEventAssert;
 use crate::flow::{
-    ApprovalFlow, DepositFlow, DepositParams, LedgerTransactionAssert, WithdrawalFlow,
+    ApprovalFlow,
+    DepositFlow,
+    DepositParams,
+    LedgerTransactionAssert,
+    WithdrawalFlow,
 };
 use crate::mock::JsonRpcMethod;
 use assert_matches::assert_matches;
-use candid::{Decode, Encode, Nat, Principal};
-use ic_base_types::{CanisterId, PrincipalId};
-use ic_canisters_http_types::{HttpRequest, HttpResponse};
-use ic_cketh_minter::endpoints::events::{Event, EventPayload, GetEventsResult};
+use candid::{
+    Decode,
+    Encode,
+    Nat,
+    Principal,
+};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
+use ic_canisters_http_types::{
+    HttpRequest,
+    HttpResponse,
+};
+use ic_cketh_minter::endpoints::events::{
+    Event,
+    EventPayload,
+    GetEventsResult,
+};
 use ic_cketh_minter::endpoints::{
-    AddCkErc20Token, Eip1559TransactionPriceArg, MinterInfo, RetrieveEthStatus, WithdrawalArg,
-    WithdrawalDetail, WithdrawalSearchParameter,
+    AddCkErc20Token,
+    Eip1559TransactionPriceArg,
+    MinterInfo,
+    RetrieveEthStatus,
+    WithdrawalArg,
+    WithdrawalDetail,
+    WithdrawalSearchParameter,
 };
 use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
 use ic_cketh_minter::logs::Log;
 use ic_cketh_minter::{
-    endpoints::{CandidBlockTag, Eip1559TransactionPrice},
-    lifecycle::{init::InitArg as MinterInitArgs, EthereumNetwork, MinterArg},
+    endpoints::{
+        CandidBlockTag,
+        Eip1559TransactionPrice,
+    },
+    lifecycle::{
+        init::InitArg as MinterInitArgs,
+        EthereumNetwork,
+        MinterArg,
+    },
 };
 use ic_ethereum_types::Address;
-use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
-use ic_management_canister_types::{CanisterHttpResponsePayload, CanisterStatusType};
+use ic_icrc1_ledger::{
+    InitArgsBuilder as LedgerInitArgsBuilder,
+    LedgerArgument,
+};
+use ic_management_canister_types::{
+    CanisterHttpResponsePayload,
+    CanisterStatusType,
+};
 use ic_state_machine_tests::{
-    PayloadBuilder, StateMachine, StateMachineBuilder, UserError, WasmResult,
+    PayloadBuilder,
+    StateMachine,
+    StateMachineBuilder,
+    UserError,
+    WasmResult,
 };
 use ic_test_utilities_load_wasm::load_wasm;
 use ic_types::Cycles;
 use icrc_ledger_types::icrc1::account::Account;
-use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
+use icrc_ledger_types::icrc2::approve::{
+    ApproveArgs,
+    ApproveError,
+};
 use num_traits::cast::ToPrimitive;
 use std::path::PathBuf;
 use std::str::FromStr;

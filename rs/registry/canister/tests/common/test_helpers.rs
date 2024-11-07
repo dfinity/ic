@@ -1,30 +1,56 @@
 #![allow(dead_code)]
 
 use candid::Encode;
-use canister_test::{Canister, Runtime};
-use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
+use canister_test::{
+    Canister,
+    Runtime,
+};
+use ic_base_types::{
+    NodeId,
+    PrincipalId,
+    RegistryVersion,
+    SubnetId,
+};
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_management_canister_types::{
-    DerivationPath, ECDSAPublicKeyArgs, EcdsaKeyId, MasterPublicKeyId, Method as Ic00Method,
-    SchnorrKeyId, SchnorrPublicKeyArgs,
+    DerivationPath,
+    ECDSAPublicKeyArgs,
+    EcdsaKeyId,
+    MasterPublicKeyId,
+    Method as Ic00Method,
+    SchnorrKeyId,
+    SchnorrPublicKeyArgs,
 };
 use ic_nns_test_utils::itest_helpers::{
-    set_up_registry_canister, set_up_universal_canister, try_call_via_universal_canister,
+    set_up_registry_canister,
+    set_up_universal_canister,
+    try_call_via_universal_canister,
 };
-use ic_nns_test_utils::registry::{get_value_or_panic, new_node_keys_and_node_id};
+use ic_nns_test_utils::registry::{
+    get_value_or_panic,
+    new_node_keys_and_node_id,
+};
 use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_protobuf::registry::routing_table::v1 as pb;
 use ic_protobuf::registry::subnet::v1::{
-    CatchUpPackageContents, ChainKeyConfig as ChainKeyConfigPb, SubnetListRecord, SubnetRecord,
+    CatchUpPackageContents,
+    ChainKeyConfig as ChainKeyConfigPb,
+    SubnetListRecord,
+    SubnetRecord,
 };
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::{
-    make_catch_up_package_contents_key, make_subnet_list_record_key, make_subnet_record_key,
+    make_catch_up_package_contents_key,
+    make_subnet_list_record_key,
+    make_subnet_record_key,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_features::{
-    ChainKeyConfig, EcdsaConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+    ChainKeyConfig,
+    EcdsaConfig,
+    KeyConfig,
+    DEFAULT_ECDSA_MAX_QUEUE_SIZE,
 };
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use ic_types::ReplicaVersion;

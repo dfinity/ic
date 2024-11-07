@@ -14,7 +14,10 @@ mod keygen {
     use assert_matches::assert_matches;
     use ic_crypto_internal_basic_sig_ecdsa_secp256r1::*;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-    use ic_types::crypto::{AlgorithmId, CryptoError};
+    use ic_types::crypto::{
+        AlgorithmId,
+        CryptoError,
+    };
 
     #[test]
     fn should_correctly_generate_ecdsa_keys() {
@@ -65,7 +68,10 @@ mod keygen {
 }
 
 mod sign {
-    use ic_crypto_internal_basic_sig_ecdsa_secp256r1::{types, *};
+    use ic_crypto_internal_basic_sig_ecdsa_secp256r1::{
+        types,
+        *,
+    };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 
     #[test]
@@ -119,9 +125,15 @@ mod sign {
 
 mod verify {
     use assert_matches::assert_matches;
-    use ic_crypto_internal_basic_sig_ecdsa_secp256r1::{types, *};
+    use ic_crypto_internal_basic_sig_ecdsa_secp256r1::{
+        types,
+        *,
+    };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-    use ic_types::crypto::{AlgorithmId, CryptoError};
+    use ic_types::crypto::{
+        AlgorithmId,
+        CryptoError,
+    };
 
     #[test]
     fn should_reject_truncated_ecdsa_pubkey() {

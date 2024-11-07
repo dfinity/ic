@@ -4,18 +4,33 @@ use rand::seq::SliceRandom;
 use std::time::Duration;
 use url::Url;
 
-use ic_canister_client::{Agent, Sender};
+use ic_canister_client::{
+    Agent,
+    Sender,
+};
 use ic_interfaces_registry::RegistryTransportRecord;
 use ic_registry_transport::{
-    deserialize_atomic_mutate_response, deserialize_get_changes_since_response,
-    deserialize_get_value_response, serialize_atomic_mutate_request,
-    serialize_get_changes_since_request, serialize_get_value_request,
+    deserialize_atomic_mutate_response,
+    deserialize_get_changes_since_response,
+    deserialize_get_value_response,
+    serialize_atomic_mutate_request,
+    serialize_get_changes_since_request,
+    serialize_get_value_request,
 };
 use ic_registry_transport::{
-    pb::v1::{Precondition, RegistryDelta, RegistryMutation},
+    pb::v1::{
+        Precondition,
+        RegistryDelta,
+        RegistryMutation,
+    },
     Error,
 };
-use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, CanisterId, RegistryVersion, Time};
+use ic_types::{
+    crypto::threshold_sig::ThresholdSigPublicKey,
+    CanisterId,
+    RegistryVersion,
+    Time,
+};
 
 pub const MAX_NUM_SSH_KEYS: usize = 50;
 

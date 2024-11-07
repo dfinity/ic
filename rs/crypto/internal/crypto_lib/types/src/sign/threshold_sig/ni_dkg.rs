@@ -1,9 +1,15 @@
 //! Data types for non-interactive distributed key generation (NI-DKG).
-pub use crate::encrypt::forward_secure::{CspFsEncryptionPop, CspFsEncryptionPublicKey};
+pub use crate::encrypt::forward_secure::{
+    CspFsEncryptionPop,
+    CspFsEncryptionPublicKey,
+};
 use crate::sign::threshold_sig::public_coefficients::CspPublicCoefficients;
 use ic_protobuf::registry::subnet::v1::InitialNiDkgTranscriptRecord;
 use phantom_newtype::AmountOf;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::hash::Hash;
 use strum_macros::IntoStaticStr;
 
@@ -102,19 +108,37 @@ pub mod ni_dkg_groth20_bls12_381 {
     //! scheme.
 
     use arrayvec::ArrayVec;
-    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use serde::{
+        Deserialize,
+        Deserializer,
+        Serialize,
+        Serializer,
+    };
     use std::collections::BTreeMap;
     use std::convert::TryFrom;
-    use std::hash::{Hash, Hasher};
+    use std::hash::{
+        Hash,
+        Hasher,
+    };
 
     // These are all the types used together with this scheme, made public in one
     // place for ease of use:
     pub use super::Epoch;
-    pub use crate::curves::bls12_381::{FrBytes, G1Bytes, G2Bytes};
-    pub use crate::encrypt::forward_secure::groth20_bls12_381::{
-        FsEncryptionCiphertextBytes, FsEncryptionPop, FsEncryptionPublicKey, NUM_CHUNKS,
+    pub use crate::curves::bls12_381::{
+        FrBytes,
+        G1Bytes,
+        G2Bytes,
     };
-    pub use crate::sign::eddsa::ed25519::{PublicKey, Signature};
+    pub use crate::encrypt::forward_secure::groth20_bls12_381::{
+        FsEncryptionCiphertextBytes,
+        FsEncryptionPop,
+        FsEncryptionPublicKey,
+        NUM_CHUNKS,
+    };
+    pub use crate::sign::eddsa::ed25519::{
+        PublicKey,
+        Signature,
+    };
     pub use crate::sign::threshold_sig::public_coefficients::bls12_381::PublicCoefficientsBytes;
     pub use crate::NodeIndex;
 

@@ -3,7 +3,10 @@
 #[cfg(test)]
 mod test;
 
-use std::{cmp::Ordering, sync::Arc};
+use std::{
+    cmp::Ordering,
+    sync::Arc,
+};
 
 /// Big-endian patricia trees.
 #[derive(Clone, Debug, Default)]

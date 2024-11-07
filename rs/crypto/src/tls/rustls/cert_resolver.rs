@@ -1,10 +1,16 @@
 use rustls::{
     client::ResolvesClientCert,
-    server::{ClientHello, ResolvesServerCert},
+    server::{
+        ClientHello,
+        ResolvesServerCert,
+    },
     sign::CertifiedKey,
     SignatureScheme,
 };
-use std::fmt::{Debug, Formatter};
+use std::fmt::{
+    Debug,
+    Formatter,
+};
 use std::sync::Arc;
 
 #[cfg(test)]

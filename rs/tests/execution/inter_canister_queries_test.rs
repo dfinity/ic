@@ -5,7 +5,10 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::group::SystemTestSubGroup;
 use ic_system_test_driver::driver::{
-    ic::{InternetComputer, Subnet},
+    ic::{
+        InternetComputer,
+        Subnet,
+    },
     test_env::TestEnv,
 };
 use ic_system_test_driver::systest;

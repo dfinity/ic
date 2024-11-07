@@ -1,31 +1,56 @@
 use dfn_candid::candid;
-use ic_base_types::{PrincipalId, SubnetId};
+use ic_base_types::{
+    PrincipalId,
+    SubnetId,
+};
 use ic_canister_client_sender::Sender;
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL,
+    TEST_NEURON_1_OWNER_KEYPAIR,
+    TEST_NEURON_1_OWNER_PRINCIPAL,
 };
 use ic_nns_test_utils::registry::{
-    create_subnet_threshold_signing_pubkey_and_cup_mutations, get_committee_signing_key,
-    get_dkg_dealing_key, get_idkg_dealing_encryption_key, get_node_record, get_node_signing_key,
-    get_transport_tls_certificate, new_node_keys_and_node_id,
+    create_subnet_threshold_signing_pubkey_and_cup_mutations,
+    get_committee_signing_key,
+    get_dkg_dealing_key,
+    get_idkg_dealing_encryption_key,
+    get_node_record,
+    get_node_signing_key,
+    get_transport_tls_certificate,
+    new_node_keys_and_node_id,
 };
 use ic_nns_test_utils::{
-    itest_helpers::{local_test_on_nns_subnet, set_up_registry_canister},
-    registry::{get_value_or_panic, invariant_compliant_mutation_as_atomic_req},
+    itest_helpers::{
+        local_test_on_nns_subnet,
+        set_up_registry_canister,
+    },
+    registry::{
+        get_value_or_panic,
+        invariant_compliant_mutation_as_atomic_req,
+    },
 };
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::{
     node::v1::NodeRecord,
     node_operator::v1::NodeOperatorRecord,
-    subnet::v1::{SubnetListRecord, SubnetRecord},
+    subnet::v1::{
+        SubnetListRecord,
+        SubnetRecord,
+    },
 };
 use ic_registry_keys::{
-    make_node_operator_record_key, make_subnet_list_record_key, make_subnet_record_key,
+    make_node_operator_record_key,
+    make_subnet_list_record_key,
+    make_subnet_record_key,
 };
 use ic_registry_transport::pb::v1::{
-    registry_mutation, RegistryAtomicMutateRequest, RegistryMutation,
+    registry_mutation,
+    RegistryAtomicMutateRequest,
+    RegistryMutation,
 };
-use ic_types::{NodeId, ReplicaVersion};
+use ic_types::{
+    NodeId,
+    ReplicaVersion,
+};
 use maplit::btreemap;
 use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;

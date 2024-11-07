@@ -7,11 +7,14 @@ use std::str::FromStr;
 mod all_node_public_keys_validation {
     use super::*;
     use crate::tests::node_signing_public_key_validation::{
-        derived_node_id, node_id_from_node_signing_public_key,
+        derived_node_id,
+        node_id_from_node_signing_public_key,
     };
     use ic_crypto_test_utils_keys::public_keys::{
-        valid_committee_signing_public_key, valid_dkg_dealing_encryption_public_key,
-        valid_idkg_dealing_encryption_public_key, valid_node_signing_public_key,
+        valid_committee_signing_public_key,
+        valid_dkg_dealing_encryption_public_key,
+        valid_idkg_dealing_encryption_public_key,
+        valid_node_signing_public_key,
         valid_tls_certificate_and_validation_time,
     };
 
@@ -235,7 +238,8 @@ mod node_signing_public_key_validation {
 mod committee_signing_public_key_validation {
     use super::*;
     use ic_crypto_test_utils_keys::public_keys::{
-        valid_committee_signing_public_key, valid_committee_signing_public_key_2,
+        valid_committee_signing_public_key,
+        valid_committee_signing_public_key_2,
     };
 
     #[test]
@@ -344,7 +348,8 @@ mod dkg_dealing_encryption_public_key_validation {
     use super::*;
     use crate::tests::node_signing_public_key_validation::derived_node_id;
     use ic_crypto_test_utils_keys::public_keys::{
-        valid_dkg_dealing_encryption_public_key, valid_dkg_dealing_encryption_public_key_2,
+        valid_dkg_dealing_encryption_public_key,
+        valid_dkg_dealing_encryption_public_key_2,
     };
 
     #[test]

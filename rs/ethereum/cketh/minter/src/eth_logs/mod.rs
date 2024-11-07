@@ -4,23 +4,46 @@ mod scraping;
 mod tests;
 
 use crate::checked_amount::CheckedAmountOf;
-use crate::eth_rpc::{FixedSizeData, Hash};
-use crate::logs::{DEBUG, INFO};
-use crate::numeric::{BlockNumber, Erc20Value, LogIndex, Wei};
+use crate::eth_rpc::{
+    FixedSizeData,
+    Hash,
+};
+use crate::logs::{
+    DEBUG,
+    INFO,
+};
+use crate::numeric::{
+    BlockNumber,
+    Erc20Value,
+    LogIndex,
+    Wei,
+};
 use candid::Principal;
 use hex_literal::hex;
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
-use minicbor::{Decode, Encode};
+use minicbor::{
+    Decode,
+    Encode,
+};
 pub use parser::{
-    LogParser, ReceivedErc20LogParser, ReceivedEthLogParser, ReceivedEthOrErc20LogParser,
+    LogParser,
+    ReceivedErc20LogParser,
+    ReceivedEthLogParser,
+    ReceivedEthOrErc20LogParser,
 };
 pub use scraping::{
-    LogScraping, ReceivedErc20LogScraping, ReceivedEthLogScraping, ReceivedEthOrErc20LogScraping,
+    LogScraping,
+    ReceivedErc20LogScraping,
+    ReceivedEthLogScraping,
+    ReceivedEthOrErc20LogScraping,
 };
 use std::fmt;
-use std::fmt::{Debug, Formatter};
+use std::fmt::{
+    Debug,
+    Formatter,
+};
 use thiserror::Error;
 
 // Keccak256("ReceivedEth(address,uint256,bytes32)")

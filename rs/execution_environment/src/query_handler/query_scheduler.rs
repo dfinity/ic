@@ -1,5 +1,8 @@
 use std::{
-    sync::{Arc, Mutex},
+    sync::{
+        Arc,
+        Mutex,
+    },
     time::Duration,
 };
 
@@ -7,7 +10,10 @@ use ic_base_types::CanisterId;
 use ic_metrics::MetricsRegistry;
 
 use self::{
-    internal::{Query, QuerySchedulerInternal},
+    internal::{
+        Query,
+        QuerySchedulerInternal,
+    },
     thread_pool::QueryThreadPool,
 };
 

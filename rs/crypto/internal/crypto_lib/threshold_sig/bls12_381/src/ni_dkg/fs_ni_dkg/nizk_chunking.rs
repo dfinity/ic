@@ -1,14 +1,32 @@
 //! Proofs of correct chunking
 #![allow(clippy::needless_range_loop)]
 
-use crate::ni_dkg::fs_ni_dkg::forward_secure::{CHUNK_SIZE, NUM_CHUNKS};
-use crate::ni_dkg::fs_ni_dkg::random_oracles::{
-    random_oracle, random_oracle_to_scalar, HashedMap, UniqueHash,
+use crate::ni_dkg::fs_ni_dkg::forward_secure::{
+    CHUNK_SIZE,
+    NUM_CHUNKS,
 };
-use ic_crypto_internal_bls12_381_type::{G1Affine, G1Projective, Scalar};
-use ic_crypto_internal_types::curves::bls12_381::{FrBytes, G1Bytes};
+use crate::ni_dkg::fs_ni_dkg::random_oracles::{
+    random_oracle,
+    random_oracle_to_scalar,
+    HashedMap,
+    UniqueHash,
+};
+use ic_crypto_internal_bls12_381_type::{
+    G1Affine,
+    G1Projective,
+    Scalar,
+};
+use ic_crypto_internal_types::curves::bls12_381::{
+    FrBytes,
+    G1Bytes,
+};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::ZKProofDec;
-use rand::{CryptoRng, Rng, RngCore, SeedableRng};
+use rand::{
+    CryptoRng,
+    Rng,
+    RngCore,
+    SeedableRng,
+};
 use rand_chacha::ChaCha20Rng;
 
 /// Domain separators for the zk proof of chunking

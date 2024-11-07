@@ -1,6 +1,12 @@
-use std::time::{Duration, SystemTime};
+use std::time::{
+    Duration,
+    SystemTime,
+};
 
-use crate::{common::LOG_PREFIX, registry::Registry};
+use crate::{
+    common::LOG_PREFIX,
+    registry::Registry,
+};
 
 use prost::Message;
 
@@ -10,11 +16,20 @@ use dfn_core::println;
 use ic_base_types::NodeId;
 use ic_crypto_node_key_validation::ValidIDkgDealingEncryptionPublicKey;
 use ic_nns_common::registry::get_subnet_ids_from_subnet_list;
-use ic_protobuf::registry::{crypto::v1::PublicKey, subnet::v1::SubnetRecord};
+use ic_protobuf::registry::{
+    crypto::v1::PublicKey,
+    subnet::v1::SubnetRecord,
+};
 use ic_registry_canister_api::UpdateNodeDirectlyPayload;
-use ic_registry_keys::{make_crypto_node_key, make_node_record_key};
+use ic_registry_keys::{
+    make_crypto_node_key,
+    make_node_record_key,
+};
 use ic_registry_transport::update;
-use ic_types::{crypto::KeyPurpose, PrincipalId};
+use ic_types::{
+    crypto::KeyPurpose,
+    PrincipalId,
+};
 
 // Since nodes update their keys in turn, every potential update delay will carry over to all
 // subsequent slots. At some point we might end up in a situation where many nodes race for an update,
@@ -198,15 +213,28 @@ impl Registry {
 mod test {
     use super::*;
     use crate::common::test_helpers::{
-        add_fake_subnet, get_invariant_compliant_subnet_record, invariant_compliant_registry,
+        add_fake_subnet,
+        get_invariant_compliant_subnet_record,
+        invariant_compliant_registry,
         prepare_registry_with_nodes,
     };
     use ic_config::crypto::CryptoConfig;
     use ic_crypto_node_key_generation::generate_node_keys_once;
     use ic_crypto_node_key_validation::ValidNodePublicKeys;
-    use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId};
-    use ic_protobuf::registry::subnet::v1::{ChainKeyConfig as ChainKeyConfigPb, SubnetRecord};
-    use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
+    use ic_management_canister_types::{
+        EcdsaCurve,
+        EcdsaKeyId,
+        MasterPublicKeyId,
+    };
+    use ic_protobuf::registry::subnet::v1::{
+        ChainKeyConfig as ChainKeyConfigPb,
+        SubnetRecord,
+    };
+    use ic_registry_subnet_features::{
+        ChainKeyConfig,
+        KeyConfig,
+        DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+    };
     use ic_test_utilities_types::ids::subnet_test_id;
     use std::ops::Add;
 

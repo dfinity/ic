@@ -1,28 +1,56 @@
-use candid::{Encode, Nat, Principal};
-use ic_base_types::{CanisterId, PrincipalId};
+use candid::{
+    Encode,
+    Nat,
+    Principal,
+};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount;
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    sns_wasm::{add_wasm_via_proposal, build_ledger_sns_wasm},
+    sns_wasm::{
+        add_wasm_via_proposal,
+        build_ledger_sns_wasm,
+    },
     state_test_helpers::{
-        icrc1_fee, icrc1_token_logo, icrc1_token_name, icrc1_token_symbol, icrc1_transfer, query,
-        setup_nns_canisters, sns_claim_staked_neuron, sns_make_proposal,
-        sns_wait_for_proposal_execution, update,
+        icrc1_fee,
+        icrc1_token_logo,
+        icrc1_token_name,
+        icrc1_token_symbol,
+        icrc1_transfer,
+        query,
+        setup_nns_canisters,
+        sns_claim_staked_neuron,
+        sns_make_proposal,
+        sns_wait_for_proposal_execution,
+        update,
     },
 };
 use ic_sns_governance::pb::v1::{
-    proposal::Action, ManageLedgerParameters, NervousSystemParameters, NeuronId,
-    NeuronPermissionList, NeuronPermissionType, Proposal,
+    proposal::Action,
+    ManageLedgerParameters,
+    NervousSystemParameters,
+    NeuronId,
+    NeuronPermissionList,
+    NeuronPermissionType,
+    Proposal,
 };
 use ic_sns_test_utils::{
     itest_helpers::SnsTestsInitPayloadBuilder,
     state_test_helpers::{
-        setup_sns_canisters, state_machine_builder_for_sns_tests, SnsTestCanisterIds,
+        setup_sns_canisters,
+        state_machine_builder_for_sns_tests,
+        SnsTestCanisterIds,
     },
 };
 use ic_state_machine_tests::StateMachine;
-use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
+use icrc_ledger_types::icrc1::{
+    account::Account,
+    transfer::TransferArg,
+};
 use num_traits::cast::ToPrimitive;
 
 const DEFAULT_LEDGER_TRANSFER_FEE: u64 = 10_000;

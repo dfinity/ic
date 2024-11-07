@@ -3,8 +3,10 @@ use std::sync::atomic::Ordering;
 use ic_base_types::RegistryVersion;
 use ic_interfaces_registry::RegistryClient;
 use ic_p2p_test_utils::{
-    create_peer_manager_and_registry_handle, create_peer_manager_with_local_store,
-    mainnet_app_subnet, mainnet_nns_subnet,
+    create_peer_manager_and_registry_handle,
+    create_peer_manager_with_local_store,
+    mainnet_app_subnet,
+    mainnet_nns_subnet,
 };
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_types_test_utils::ids::node_test_id;

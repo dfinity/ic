@@ -1,7 +1,11 @@
 //! Errors related to dealing creation.
 use super::*;
 
-use crate::crypto::error::{InternalError, InvalidArgumentError, KeyNotFoundError};
+use crate::crypto::error::{
+    InternalError,
+    InvalidArgumentError,
+    KeyNotFoundError,
+};
 use crate::registry::RegistryClientError;
 
 /// Occurs if creating a dealing using `NiDkgAlgorithm::create_dealing` fails.

@@ -1,12 +1,23 @@
 #![allow(dead_code)]
 use std::{
-    fmt, io,
-    path::{Path, PathBuf},
+    fmt,
+    io,
+    path::{
+        Path,
+        PathBuf,
+    },
 };
 
-use anyhow::{bail, Context, Result};
+use anyhow::{
+    bail,
+    Context,
+    Result,
+};
 
-use crate::internet_computer::{IC_REGISTRY_LOCAL_STORE_PATH, IC_ROOT_PUB_KEY_PATH};
+use crate::internet_computer::{
+    IC_REGISTRY_LOCAL_STORE_PATH,
+    IC_ROOT_PUB_KEY_PATH,
+};
 
 /// Provides a strongly typed view for a state directory as prepared by ic-prep.
 #[derive(Clone, Debug)]
@@ -79,9 +90,18 @@ fn parse_threshold_sig_key<P: AsRef<Path> + fmt::Debug>(pem_file: P) -> Result<V
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::internet_computer::{IcConfig, TopologyConfig};
-    use crate::node::{NodeConfiguration, NodeIndex};
-    use crate::subnet_configuration::{SubnetConfig, SubnetRunningState};
+    use crate::internet_computer::{
+        IcConfig,
+        TopologyConfig,
+    };
+    use crate::node::{
+        NodeConfiguration,
+        NodeIndex,
+    };
+    use crate::subnet_configuration::{
+        SubnetConfig,
+        SubnetRunningState,
+    };
     use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_from_der;
     use ic_registry_subnet_type::SubnetType;
     use ic_types::ReplicaVersion;

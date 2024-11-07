@@ -2,40 +2,79 @@
 //! for testing distributed key generation and threshold signing.
 
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
-    ni_dkg_groth20_bls12_381, CspNiDkgDealing, CspNiDkgTranscript,
+    ni_dkg_groth20_bls12_381,
+    CspNiDkgDealing,
+    CspNiDkgTranscript,
 };
 use ic_crypto_internal_types::NodeIndex;
 use ic_crypto_temp_crypto::CryptoComponentRng;
-use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent, TempCryptoComponentGeneric};
-use ic_interfaces::crypto::{KeyManager, NiDkgAlgorithm, ThresholdSigner};
+use ic_crypto_temp_crypto::{
+    NodeKeysToGenerate,
+    TempCryptoComponent,
+    TempCryptoComponentGeneric,
+};
+use ic_interfaces::crypto::{
+    KeyManager,
+    NiDkgAlgorithm,
+    ThresholdSigner,
+};
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::consensus::get_faults_tolerated;
 use ic_types::crypto::threshold_sig::ni_dkg::config::{
-    NiDkgConfig, NiDkgConfigData, NiDkgThreshold,
+    NiDkgConfig,
+    NiDkgConfigData,
+    NiDkgThreshold,
 };
 use ic_types::crypto::threshold_sig::ni_dkg::{
-    NiDkgDealing, NiDkgId, NiDkgReceivers, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
+    NiDkgDealing,
+    NiDkgId,
+    NiDkgReceivers,
+    NiDkgTag,
+    NiDkgTargetId,
+    NiDkgTargetSubnet,
     NiDkgTranscript,
 };
-use ic_types::crypto::{KeyPurpose, Signable, ThresholdSigShareOf};
-use ic_types::{Height, NodeId, NumberOfNodes, PrincipalId, RegistryVersion, SubnetId};
+use ic_types::crypto::{
+    KeyPurpose,
+    Signable,
+    ThresholdSigShareOf,
+};
+use ic_types::{
+    Height,
+    NodeId,
+    NumberOfNodes,
+    PrincipalId,
+    RegistryVersion,
+    SubnetId,
+};
 use rand::prelude::*;
 use rand_chacha::ChaCha20Rng;
 use std::cmp;
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+    HashSet,
+};
 use std::convert::TryFrom;
-use std::path::{Path, PathBuf};
+use std::path::{
+    Path,
+    PathBuf,
+};
 use std::str::FromStr;
 use std::sync::Arc;
 
 mod initial_config;
 
 pub use initial_config::{
-    dummy_initial_dkg_transcript, dummy_initial_dkg_transcript_with_master_key,
-    initial_dkg_transcript, initial_dkg_transcript_and_master_key, sign_message,
-    InitialNiDkgConfig, SecretKeyBytes,
+    dummy_initial_dkg_transcript,
+    dummy_initial_dkg_transcript_with_master_key,
+    initial_dkg_transcript,
+    initial_dkg_transcript_and_master_key,
+    sign_message,
+    InitialNiDkgConfig,
+    SecretKeyBytes,
 };
 
 pub fn create_transcript<R: CryptoComponentRng>(

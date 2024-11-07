@@ -31,26 +31,48 @@ use ic_agent::Identity;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::ic::{
+    InternetComputer,
+    Subnet,
+};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
+    HasPublicApiUrl,
+    HasTopologySnapshot,
+    IcNodeContainer,
+    IcNodeSnapshot,
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{
-    assert_create_agent, assert_malicious_from_topo, block_on, expiry_time,
-    random_ed25519_identity, sign_update, UniversalCanister,
+    assert_create_agent,
+    assert_malicious_from_topo,
+    block_on,
+    expiry_time,
+    random_ed25519_identity,
+    sign_update,
+    UniversalCanister,
 };
 use ic_types::crypto::SignedBytesWithoutDomainSeparator;
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 use ic_types::messages::{
-    Blob, Delegation, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, SignedDelegation,
+    Blob,
+    Delegation,
+    HttpCallContent,
+    HttpCanisterUpdate,
+    HttpRequestEnvelope,
+    SignedDelegation,
 };
-use ic_types::{CanisterId, Time};
+use ic_types::{
+    CanisterId,
+    Time,
+};
 use ic_universal_canister::wasm;
 
 use anyhow::Result;
-use rand::{CryptoRng, Rng};
+use rand::{
+    CryptoRng,
+    Rng,
+};
 use slog::info;
 use std::convert::TryFrom;
 use url::Url;

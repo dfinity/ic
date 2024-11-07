@@ -1,6 +1,12 @@
 use ic_base_types::PrincipalId;
-use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
-use serde::{Deserialize, Serialize};
+use ic_sns_root::{
+    GetSnsCanistersSummaryRequest,
+    GetSnsCanistersSummaryResponse,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 use crate::CallCanisters;
 

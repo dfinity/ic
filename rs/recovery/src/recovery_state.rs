@@ -1,14 +1,38 @@
 use crate::{
-    app_subnet_recovery::{self, AppSubnetRecovery},
+    app_subnet_recovery::{
+        self,
+        AppSubnetRecovery,
+    },
     cmd::SubCommand,
-    error::{RecoveryError, RecoveryResult},
-    file_sync_helper::{path_exists, read_file, write_file},
-    nns_recovery_failover_nodes::{self, NNSRecoveryFailoverNodes},
-    nns_recovery_same_nodes::{self, NNSRecoverySameNodes},
-    NeuronArgs, RecoveryArgs,
+    error::{
+        RecoveryError,
+        RecoveryResult,
+    },
+    file_sync_helper::{
+        path_exists,
+        read_file,
+        write_file,
+    },
+    nns_recovery_failover_nodes::{
+        self,
+        NNSRecoveryFailoverNodes,
+    },
+    nns_recovery_same_nodes::{
+        self,
+        NNSRecoverySameNodes,
+    },
+    NeuronArgs,
+    RecoveryArgs,
 };
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use serde::{
+    de::DeserializeOwned,
+    Deserialize,
+    Serialize,
+};
+use std::path::{
+    Path,
+    PathBuf,
+};
 
 const RECOVERY_STATE_FILE_NAME: &str = "recovery_state.json";
 
@@ -127,13 +151,19 @@ impl HasRecoveryState for NNSRecoverySameNodes {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, str::FromStr};
+    use std::{
+        fs,
+        str::FromStr,
+    };
 
     use crate::app_subnet_recovery::AppSubnetRecoveryArgs;
     use crate::error::GracefulExpect;
 
     use super::*;
-    use ic_base_types::{PrincipalId, SubnetId};
+    use ic_base_types::{
+        PrincipalId,
+        SubnetId,
+    };
     use tempfile::tempdir;
     use url::Url;
 

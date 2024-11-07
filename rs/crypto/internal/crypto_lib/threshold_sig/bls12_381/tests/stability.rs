@@ -2,17 +2,22 @@ use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::forward_secure::SecretKey;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::Epoch;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::{
-    types::FsEncryptionSecretKey, *,
+    types::FsEncryptionSecretKey,
+    *,
 };
 use ic_crypto_internal_threshold_sig_bls12381::types::SecretKeyBytes;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
-    Dealing, FsEncryptionPublicKey,
+    Dealing,
+    FsEncryptionPublicKey,
 };
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::bls12_381::PublicCoefficientsBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_crypto_secrets_containers::SecretArray;
 use ic_crypto_sha2::Sha256;
-use ic_types::{NodeIndex, NumberOfNodes};
+use ic_types::{
+    NodeIndex,
+    NumberOfNodes,
+};
 use rand::RngCore;
 use serde::Serialize;
 use std::collections::BTreeMap;

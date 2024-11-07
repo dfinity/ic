@@ -1,19 +1,37 @@
 use async_trait::async_trait;
-use candid::{CandidType, Decode, Encode, Error};
+use candid::{
+    CandidType,
+    Decode,
+    Encode,
+    Error,
+};
 use ic_base_types::CanisterId;
 use ic_nns_governance::{
-    governance::{Environment, HeapGrowthPotential, RngError},
-    pb::v1::{ExecuteNnsFunction, GovernanceError},
+    governance::{
+        Environment,
+        HeapGrowthPotential,
+        RngError,
+    },
+    pb::v1::{
+        ExecuteNnsFunction,
+        GovernanceError,
+    },
 };
 use ic_sns_root::GetSnsCanistersSummaryRequest;
 use ic_sns_swap::pb::v1::GetStateRequest;
-use ic_sns_wasm::pb::v1::{DeployNewSnsRequest, ListDeployedSnsesRequest};
+use ic_sns_wasm::pb::v1::{
+    DeployNewSnsRequest,
+    ListDeployedSnsesRequest,
+};
 use proptest::prelude::RngCore;
 use rand::rngs::StdRng;
 use rand_chacha::ChaCha20Rng;
 use std::{
     collections::VecDeque,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc,
+        Mutex,
+    },
 };
 
 type CanisterCallResult = Result<Vec<u8>, (Option<i32>, String)>;

@@ -1,5 +1,8 @@
 //! The DKG public interface.
-use ic_types::{consensus::dkg, Height};
+use ic_types::{
+    consensus::dkg,
+    Height,
+};
 
 /// The DkgPool is used to store messages that are exchanged between nodes in
 /// the process of executing dkg.

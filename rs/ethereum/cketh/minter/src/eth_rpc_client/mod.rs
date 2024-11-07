@@ -1,31 +1,87 @@
 use crate::eth_rpc::{
-    self, Block, BlockSpec, BlockTag, Data, FeeHistory, FeeHistoryParams, FixedSizeData,
-    GetLogsParam, Hash, HttpOutcallError, HttpResponsePayload, LogEntry, Quantity,
-    ResponseSizeEstimate, SendRawTransactionResult, Topic, HEADER_SIZE_LIMIT,
+    self,
+    Block,
+    BlockSpec,
+    BlockTag,
+    Data,
+    FeeHistory,
+    FeeHistoryParams,
+    FixedSizeData,
+    GetLogsParam,
+    Hash,
+    HttpOutcallError,
+    HttpResponsePayload,
+    LogEntry,
+    Quantity,
+    ResponseSizeEstimate,
+    SendRawTransactionResult,
+    Topic,
+    HEADER_SIZE_LIMIT,
 };
-use crate::eth_rpc_client::providers::{RpcNodeProvider, MAINNET_PROVIDERS, SEPOLIA_PROVIDERS};
+use crate::eth_rpc_client::providers::{
+    RpcNodeProvider,
+    MAINNET_PROVIDERS,
+    SEPOLIA_PROVIDERS,
+};
 use crate::eth_rpc_client::requests::GetTransactionCountParams;
-use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
+use crate::eth_rpc_client::responses::{
+    TransactionReceipt,
+    TransactionStatus,
+};
 use crate::lifecycle::EthereumNetwork;
-use crate::logs::{PrintProxySink, DEBUG, INFO, TRACE_HTTP};
-use crate::numeric::{BlockNumber, GasAmount, LogIndex, TransactionCount, Wei, WeiPerGas};
+use crate::logs::{
+    PrintProxySink,
+    DEBUG,
+    INFO,
+    TRACE_HTTP,
+};
+use crate::numeric::{
+    BlockNumber,
+    GasAmount,
+    LogIndex,
+    TransactionCount,
+    Wei,
+    WeiPerGas,
+};
 use crate::state::State;
 use evm_rpc_client::{
-    Block as EvmBlock, BlockTag as EvmBlockTag, ConsensusStrategy, EvmRpcClient,
-    FeeHistory as EvmFeeHistory, FeeHistoryArgs as EvmFeeHistoryArgs,
-    GetLogsArgs as EvmGetLogsArgs, GetTransactionCountArgs as EvmGetTransactionCountArgs, Hex20,
-    Hex32, IcRuntime, LogEntry as EvmLogEntry, MultiRpcResult as EvmMultiRpcResult, Nat256,
-    OverrideRpcConfig, RpcConfig as EvmRpcConfig, RpcError as EvmRpcError,
-    RpcResult as EvmRpcResult, SendRawTransactionStatus as EvmSendRawTransactionStatus,
+    Block as EvmBlock,
+    BlockTag as EvmBlockTag,
+    ConsensusStrategy,
+    EvmRpcClient,
+    FeeHistory as EvmFeeHistory,
+    FeeHistoryArgs as EvmFeeHistoryArgs,
+    GetLogsArgs as EvmGetLogsArgs,
+    GetTransactionCountArgs as EvmGetTransactionCountArgs,
+    Hex20,
+    Hex32,
+    IcRuntime,
+    LogEntry as EvmLogEntry,
+    MultiRpcResult as EvmMultiRpcResult,
+    Nat256,
+    OverrideRpcConfig,
+    RpcConfig as EvmRpcConfig,
+    RpcError as EvmRpcError,
+    RpcResult as EvmRpcResult,
+    SendRawTransactionStatus as EvmSendRawTransactionStatus,
     TransactionReceipt as EvmTransactionReceipt,
 };
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
 use num_traits::ToPrimitive;
-use serde::{de::DeserializeOwned, Serialize};
-use std::collections::{BTreeMap, BTreeSet};
+use serde::{
+    de::DeserializeOwned,
+    Serialize,
+};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
 use std::convert::Infallible;
-use std::fmt::{Debug, Display};
+use std::fmt::{
+    Debug,
+    Display,
+};
 
 mod providers;
 pub mod requests;

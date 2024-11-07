@@ -1,15 +1,25 @@
 #![no_main]
 
 use ic_types::messages::{
-    HttpCallContent, HttpQueryContent, HttpReadStateContent, HttpRequest, HttpRequestEnvelope,
+    HttpCallContent,
+    HttpQueryContent,
+    HttpReadStateContent,
+    HttpRequest,
+    HttpRequestEnvelope,
     HttpRequestError,
 };
 use ic_types::time::GENESIS;
 use ic_validator_http_request_arbitrary::AnonymousContent;
 use ic_validator_ingress_message::IngressMessageVerifier;
 use ic_validator_ingress_message::RequestValidationError;
-use ic_validator_ingress_message::{HttpRequestVerifier, TimeProvider};
-use libfuzzer_sys::{fuzz_target, Corpus};
+use ic_validator_ingress_message::{
+    HttpRequestVerifier,
+    TimeProvider,
+};
+use libfuzzer_sys::{
+    fuzz_target,
+    Corpus,
+};
 
 fuzz_target!(|content: AnonymousContent| -> Corpus {
     let (call_content, query_content, read_content) = (

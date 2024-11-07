@@ -1,6 +1,9 @@
 use anyhow::Result;
 
-use ic_consensus_system_test_backup_common::{setup_upgrade, test_upgrade};
+use ic_consensus_system_test_backup_common::{
+    setup_upgrade,
+    test_upgrade,
+};
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::systest;
 use std::time::Duration;

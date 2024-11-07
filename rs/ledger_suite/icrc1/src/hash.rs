@@ -1,9 +1,18 @@
-use crate::known_tags::{BIGNUM, SELF_DESCRIBED};
+use crate::known_tags::{
+    BIGNUM,
+    SELF_DESCRIBED,
+};
 use ciborium::value::Value;
 use ic_crypto_sha2::Sha256;
 use num_bigint::BigUint;
-use num_traits::{ToPrimitive, Zero};
-use std::ops::{BitAnd, ShrAssign};
+use num_traits::{
+    ToPrimitive,
+    Zero,
+};
+use std::ops::{
+    BitAnd,
+    ShrAssign,
+};
 
 pub type Hash = [u8; 32];
 

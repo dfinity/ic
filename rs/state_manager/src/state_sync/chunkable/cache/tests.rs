@@ -8,7 +8,10 @@ use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::{
     crypto::CryptoHash,
-    state_sync::StateSyncVersion::{self, *},
+    state_sync::StateSyncVersion::{
+        self,
+        *,
+    },
 };
 use tempfile::TempDir;
 

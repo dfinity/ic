@@ -1,13 +1,28 @@
 use candid::candid_method;
 use ic_btc_interface::{
-    Address, GetCurrentFeePercentilesRequest, GetUtxosRequest, GetUtxosResponse,
-    MillisatoshiPerByte, Network, Utxo, UtxosFilterInRequest,
+    Address,
+    GetCurrentFeePercentilesRequest,
+    GetUtxosRequest,
+    GetUtxosResponse,
+    MillisatoshiPerByte,
+    Network,
+    Utxo,
+    UtxosFilterInRequest,
 };
-use ic_cdk::api::management_canister::bitcoin::{BitcoinNetwork, SendTransactionRequest};
-use ic_cdk_macros::{init, update};
+use ic_cdk::api::management_canister::bitcoin::{
+    BitcoinNetwork,
+    SendTransactionRequest,
+};
+use ic_cdk_macros::{
+    init,
+    update,
+};
 use serde_bytes::ByteBuf;
 use std::cell::RefCell;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
 
 // We use 12 as the default tip height to mint all
 // the utxos with height 1 in the minter.

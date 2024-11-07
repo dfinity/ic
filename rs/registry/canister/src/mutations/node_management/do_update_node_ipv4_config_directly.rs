@@ -1,7 +1,12 @@
 use crate::mutations::node_management::common::{
-    get_node_operator_id_for_node, node_exists_with_ipv4,
+    get_node_operator_id_for_node,
+    node_exists_with_ipv4,
 };
-use crate::{common::LOG_PREFIX, mutations::common::node_exists_or_panic, registry::Registry};
+use crate::{
+    common::LOG_PREFIX,
+    mutations::common::node_exists_or_panic,
+    registry::Registry,
+};
 
 use ic_protobuf::registry::node::v1::IPv4InterfaceConfig;
 use ic_registry_canister_api::UpdateNodeIPv4ConfigDirectlyPayload;
@@ -12,7 +17,10 @@ use prost::Message;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 
-use ic_base_types::{NodeId, PrincipalId};
+use ic_base_types::{
+    NodeId,
+    PrincipalId,
+};
 
 impl Registry {
     /// Updates the IPv4 configuration of a node
@@ -101,10 +109,16 @@ mod tests {
     use std::str::FromStr;
 
     use crate::{
-        common::test_helpers::{invariant_compliant_registry, prepare_registry_with_nodes},
+        common::test_helpers::{
+            invariant_compliant_registry,
+            prepare_registry_with_nodes,
+        },
         mutations::common::test::TEST_NODE_ID,
     };
-    use ic_base_types::{NodeId, PrincipalId};
+    use ic_base_types::{
+        NodeId,
+        PrincipalId,
+    };
     use ic_registry_canister_api::IPv4Config;
 
     fn init_ipv4_config() -> IPv4Config {

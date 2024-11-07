@@ -1,17 +1,32 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
 
 use ic_error_types::RejectCode;
 use ic_management_canister_types::{
-    MasterPublicKeyId, Payload, SignWithECDSAReply, SignWithSchnorrReply,
+    MasterPublicKeyId,
+    Payload,
+    SignWithECDSAReply,
+    SignWithSchnorrReply,
 };
 use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithThresholdContext;
 use ic_types::{
-    consensus::idkg::{self, common::CombinedSignature},
-    messages::{CallbackId, RejectContext},
+    consensus::idkg::{
+        self,
+        common::CombinedSignature,
+    },
+    messages::{
+        CallbackId,
+        RejectContext,
+    },
     Time,
 };
 
-use crate::{idkg::metrics::IDkgPayloadMetrics, idkg::signer::ThresholdSignatureBuilder};
+use crate::{
+    idkg::metrics::IDkgPayloadMetrics,
+    idkg::signer::ThresholdSignatureBuilder,
+};
 
 /// Helper to create a reject response to the management canister
 /// with the given code and message
@@ -165,18 +180,27 @@ mod tests {
     use ic_management_canister_types::MasterPublicKeyId;
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
-        consensus::idkg::{IDkgPayload, RequestId},
+        consensus::idkg::{
+            IDkgPayload,
+            RequestId,
+        },
         crypto::canister_threshold_sig::{
-            ThresholdEcdsaCombinedSignature, ThresholdSchnorrCombinedSignature,
+            ThresholdEcdsaCombinedSignature,
+            ThresholdSchnorrCombinedSignature,
         },
         Height,
     };
 
     use crate::idkg::test_utils::{
-        create_available_pre_signature, empty_idkg_payload_with_key_ids, empty_response,
-        fake_completed_signature_request_context, fake_ecdsa_master_public_key_id,
-        fake_master_public_key_ids_for_all_algorithms, fake_signature_request_context,
-        fake_signature_request_context_with_pre_sig, set_up_idkg_payload,
+        create_available_pre_signature,
+        empty_idkg_payload_with_key_ids,
+        empty_response,
+        fake_completed_signature_request_context,
+        fake_ecdsa_master_public_key_id,
+        fake_master_public_key_ids_for_all_algorithms,
+        fake_signature_request_context,
+        fake_signature_request_context_with_pre_sig,
+        set_up_idkg_payload,
         TestThresholdSignatureBuilder,
     };
 

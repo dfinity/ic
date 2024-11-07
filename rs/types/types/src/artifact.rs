@@ -2,21 +2,45 @@
 use crate::{
     canister_http::CanisterHttpResponseShare,
     consensus::{
-        certification::{CertificationMessage, CertificationMessageHash},
+        certification::{
+            CertificationMessage,
+            CertificationMessageHash,
+        },
         idkg::IDkgArtifactId,
-        ConsensusMessage, ConsensusMessageHash, ConsensusMessageHashable, HasHash, HasHeight,
+        ConsensusMessage,
+        ConsensusMessageHash,
+        ConsensusMessageHashable,
+        HasHash,
+        HasHeight,
     },
-    crypto::{crypto_hash, CryptoHash},
-    messages::{MessageId, SignedIngress},
-    Height, NodeId, Time,
+    crypto::{
+        crypto_hash,
+        CryptoHash,
+    },
+    messages::{
+        MessageId,
+        SignedIngress,
+    },
+    Height,
+    NodeId,
+    Time,
 };
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_protobuf::proxy::{
+    try_from_option_field,
+    ProxyDecodeError,
+};
 use ic_protobuf::types::v1 as pb;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::{
-    convert::{TryFrom, TryInto},
+    convert::{
+        TryFrom,
+        TryInto,
+    },
     hash::Hash,
 };
 

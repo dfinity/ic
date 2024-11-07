@@ -1,9 +1,16 @@
 use crate::metrics::PROMETHEUS_HTTP_PORT;
 use clap::Parser;
-use ic_config::{Config, ConfigSource};
+use ic_config::{
+    Config,
+    ConfigSource,
+};
 use std::{
     fs,
-    net::{Ipv4Addr, SocketAddr, SocketAddrV4},
+    net::{
+        Ipv4Addr,
+        SocketAddr,
+        SocketAddrV4,
+    },
     path::PathBuf,
 };
 

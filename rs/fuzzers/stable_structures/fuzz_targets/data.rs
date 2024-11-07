@@ -1,7 +1,10 @@
 use arbitrary::Arbitrary;
 use ic_stable_structures::storable::Bound;
 use ic_stable_structures::Storable;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::borrow::Cow;
 
 pub const MAX_VALUE_SIZE: u32 = 100;

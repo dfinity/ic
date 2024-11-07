@@ -1,9 +1,18 @@
 use ic_base_types::NodeId;
 use ic_types::crypto::canister_threshold_sig::idkg::BatchSignedIDkgDealing;
 use ic_types::crypto::canister_threshold_sig::idkg::IDkgDealing;
-use ic_types::crypto::canister_threshold_sig::idkg::{IDkgTranscriptId, SignedIDkgDealing};
-use ic_types::crypto::{BasicSig, BasicSigOf};
-use ic_types::signature::{BasicSignature, BasicSignatureBatch};
+use ic_types::crypto::canister_threshold_sig::idkg::{
+    IDkgTranscriptId,
+    SignedIDkgDealing,
+};
+use ic_types::crypto::{
+    BasicSig,
+    BasicSigOf,
+};
+use ic_types::signature::{
+    BasicSignature,
+    BasicSignatureBatch,
+};
 use ic_types::Height;
 use ic_types_test_utils::ids::SUBNET_42;
 use std::collections::BTreeMap;

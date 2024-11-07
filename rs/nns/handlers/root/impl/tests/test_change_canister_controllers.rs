@@ -1,23 +1,37 @@
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::CanisterStatusResult,
     management_canister_client::{
-        MockManagementCanisterClient, MockManagementCanisterClientCall,
+        MockManagementCanisterClient,
+        MockManagementCanisterClientCall,
         MockManagementCanisterClientReply,
     },
-    update_settings::{CanisterSettings, UpdateSettings},
+    update_settings::{
+        CanisterSettings,
+        UpdateSettings,
+    },
 };
-use ic_nns_constants::{ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID};
+use ic_nns_constants::{
+    ROOT_CANISTER_ID,
+    SNS_WASM_CANISTER_ID,
+};
 use ic_nns_handler_root::canister_management::change_canister_controllers;
 use ic_nns_handler_root_interface::{
-    ChangeCanisterControllersRequest, ChangeCanisterControllersResponse,
+    ChangeCanisterControllersRequest,
+    ChangeCanisterControllersResponse,
     ChangeCanisterControllersResult,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     state_test_helpers::{
-        set_controllers, set_up_universal_canister, setup_nns_canisters, update_with_sender,
+        set_controllers,
+        set_up_universal_canister,
+        setup_nns_canisters,
+        update_with_sender,
     },
 };
 use ic_state_machine_tests::StateMachine;

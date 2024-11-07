@@ -1,54 +1,140 @@
 //! Implementations and serialization tests of the ExhaustiveSet trait
 
 use crate::consensus::hashed::Hashed;
-use crate::consensus::idkg::common::{PreSignatureInCreation, PreSignatureRef};
-use crate::consensus::idkg::ecdsa::{QuadrupleInCreation, ThresholdEcdsaSigInputsRef};
+use crate::consensus::idkg::common::{
+    PreSignatureInCreation,
+    PreSignatureRef,
+};
+use crate::consensus::idkg::ecdsa::{
+    QuadrupleInCreation,
+    ThresholdEcdsaSigInputsRef,
+};
 use crate::consensus::idkg::{
-    CompletedReshareRequest, CompletedSignature, HasMasterPublicKeyId, IDkgPayload,
-    IDkgReshareRequest, IDkgUIDGenerator, MaskedTranscript, MasterKeyTranscript, PreSigId,
-    PseudoRandomId, RandomTranscriptParams, RandomUnmaskedTranscriptParams, RequestId,
-    ReshareOfMaskedParams, ReshareOfUnmaskedParams, UnmaskedTimesMaskedParams, UnmaskedTranscript,
+    CompletedReshareRequest,
+    CompletedSignature,
+    HasMasterPublicKeyId,
+    IDkgPayload,
+    IDkgReshareRequest,
+    IDkgUIDGenerator,
+    MaskedTranscript,
+    MasterKeyTranscript,
+    PreSigId,
+    PseudoRandomId,
+    RandomTranscriptParams,
+    RandomUnmaskedTranscriptParams,
+    RequestId,
+    ReshareOfMaskedParams,
+    ReshareOfUnmaskedParams,
+    UnmaskedTimesMaskedParams,
+    UnmaskedTranscript,
 };
 use crate::consensus::{
-    Block, BlockPayload, CatchUpShareContent, ConsensusMessageHashable, Payload, SummaryPayload,
+    Block,
+    BlockPayload,
+    CatchUpShareContent,
+    ConsensusMessageHashable,
+    Payload,
+    SummaryPayload,
 };
-use crate::consensus::{CatchUpContent, CatchUpPackage, HashedBlock, HashedRandomBeacon};
+use crate::consensus::{
+    CatchUpContent,
+    CatchUpPackage,
+    HashedBlock,
+    HashedRandomBeacon,
+};
 use crate::crypto::canister_threshold_sig::idkg::{
-    BatchSignedIDkgDealing, IDkgDealers, IDkgDealing, IDkgReceivers, IDkgTranscript,
-    IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams, IDkgTranscriptType,
-    InitialIDkgDealings, SignedIDkgDealing,
+    BatchSignedIDkgDealing,
+    IDkgDealers,
+    IDkgDealing,
+    IDkgReceivers,
+    IDkgTranscript,
+    IDkgTranscriptId,
+    IDkgTranscriptOperation,
+    IDkgTranscriptParams,
+    IDkgTranscriptType,
+    InitialIDkgDealings,
+    SignedIDkgDealing,
 };
 use crate::crypto::threshold_sig::ni_dkg::{
-    config::{tests::valid_dkg_config_data, NiDkgConfig},
-    NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTranscript,
+    config::{
+        tests::valid_dkg_config_data,
+        NiDkgConfig,
+    },
+    NiDkgDealing,
+    NiDkgId,
+    NiDkgTag,
+    NiDkgTargetId,
+    NiDkgTranscript,
 };
 use crate::crypto::{
-    crypto_hash, AlgorithmId, BasicSig, BasicSigOf, CombinedMultiSig, CombinedMultiSigOf,
-    CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashOf, CryptoHashable,
-    IndividualMultiSig, IndividualMultiSigOf, Signed, ThresholdSigShare, ThresholdSigShareOf,
+    crypto_hash,
+    AlgorithmId,
+    BasicSig,
+    BasicSigOf,
+    CombinedMultiSig,
+    CombinedMultiSigOf,
+    CombinedThresholdSig,
+    CombinedThresholdSigOf,
+    CryptoHash,
+    CryptoHashOf,
+    CryptoHashable,
+    IndividualMultiSig,
+    IndividualMultiSigOf,
+    Signed,
+    ThresholdSigShare,
+    ThresholdSigShareOf,
 };
 use crate::signature::{
-    BasicSignature, BasicSignatureBatch, MultiSignature, MultiSignatureShare, ThresholdSignature,
+    BasicSignature,
+    BasicSignatureBatch,
+    MultiSignature,
+    MultiSignatureShare,
+    ThresholdSignature,
     ThresholdSignatureShare,
 };
 use crate::xnet::CertifiedStreamSlice;
-use crate::{CryptoHashOfState, ReplicaVersion};
-use ic_base_types::{CanisterId, NodeId, PrincipalId, RegistryVersion, SubnetId};
+use crate::{
+    CryptoHashOfState,
+    ReplicaVersion,
+};
+use ic_base_types::{
+    CanisterId,
+    NodeId,
+    PrincipalId,
+    RegistryVersion,
+    SubnetId,
+};
 use ic_btc_replica_types::{
-    BitcoinAdapterResponse, BitcoinAdapterResponseWrapper, BitcoinReject,
-    GetSuccessorsResponseComplete, SendTransactionResponse,
+    BitcoinAdapterResponse,
+    BitcoinAdapterResponseWrapper,
+    BitcoinReject,
+    GetSuccessorsResponseComplete,
+    SendTransactionResponse,
 };
 use ic_crypto_internal_types::NodeIndex;
 use ic_error_types::RejectCode;
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types::{
-    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
+    EcdsaCurve,
+    EcdsaKeyId,
+    MasterPublicKeyId,
+    SchnorrAlgorithm,
+    SchnorrKeyId,
 };
 use ic_protobuf::types::v1 as pb;
-use phantom_newtype::{AmountOf, Id};
+use phantom_newtype::{
+    AmountOf,
+    Id,
+};
 use prost::Message;
-use rand::{CryptoRng, RngCore};
-use std::collections::{BTreeMap, BTreeSet};
+use rand::{
+    CryptoRng,
+    RngCore,
+};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
 use strum::IntoEnumIterator;
 
 /// A trait for creating an exhaustive set of fake values for a type, which we
@@ -945,7 +1031,10 @@ impl HasId<MasterPublicKeyId> for MasterKeyTranscript {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, path::PathBuf};
+    use std::{
+        fs,
+        path::PathBuf,
+    };
 
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 

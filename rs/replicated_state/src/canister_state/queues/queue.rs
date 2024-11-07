@@ -1,16 +1,29 @@
-use super::message_pool::{Kind, Reference};
+use super::message_pool::{
+    Kind,
+    Reference,
+};
 use super::CanisterInput;
 use crate::StateError;
 use ic_base_types::CanisterId;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::state::ingress::v1 as pb_ingress;
 use ic_protobuf::state::queues::v1 as pb_queues;
-use ic_types::messages::{Ingress, RequestOrResponse};
+use ic_types::messages::{
+    Ingress,
+    RequestOrResponse,
+};
 use ic_types::CountBytes;
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
-use std::collections::{BTreeMap, VecDeque};
-use std::convert::{From, TryFrom, TryInto};
+use std::collections::{
+    BTreeMap,
+    VecDeque,
+};
+use std::convert::{
+    From,
+    TryFrom,
+    TryInto,
+};
 use std::fmt::Debug;
 use std::mem::size_of;
 use std::sync::Arc;

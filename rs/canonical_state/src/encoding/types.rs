@@ -16,13 +16,29 @@ use ic_protobuf::proxy::ProxyDecodeError;
 use ic_types::{
     messages::NO_DEADLINE,
     time::CoarseTime,
-    xnet::{RejectReason, RejectSignal, StreamIndex},
+    xnet::{
+        RejectReason,
+        RejectSignal,
+        StreamIndex,
+    },
     Time,
 };
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::{
-    collections::{BTreeMap, HashMap, VecDeque},
-    convert::{From, Into, TryFrom, TryInto},
+    collections::{
+        BTreeMap,
+        HashMap,
+        VecDeque,
+    },
+    convert::{
+        From,
+        Into,
+        TryFrom,
+        TryInto,
+    },
     sync::Arc,
 };
 use strum::EnumCount;

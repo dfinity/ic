@@ -13,23 +13,37 @@ Success:: The test driver can download an HTML page from II and NNS frontend dap
 
 end::catalog[] */
 
-use anyhow::{bail, Result};
+use anyhow::{
+    bail,
+    Result,
+};
 
 use candid::Principal;
 use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
-    boundary_node::{BoundaryNode, BoundaryNodeVm},
+    boundary_node::{
+        BoundaryNode,
+        BoundaryNodeVm,
+    },
     group::SystemTestGroup,
-    ic::{InternetComputer, Subnet},
+    ic::{
+        InternetComputer,
+        Subnet,
+    },
     test_env::TestEnv,
-    test_env_api::{secs, HasTopologySnapshot},
+    test_env_api::{
+        secs,
+        HasTopologySnapshot,
+    },
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::block_on;
 use libflate::gzip::Decoder;
 use nns_dapp::{
-    install_ii_nns_dapp_and_subnet_rental, nns_dapp_customizations, set_authorized_subnets,
+    install_ii_nns_dapp_and_subnet_rental,
+    nns_dapp_customizations,
+    set_authorized_subnets,
 };
 use std::io::Read;
 

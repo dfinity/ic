@@ -1,6 +1,9 @@
 use candid::CandidType;
 use ic_base_types::CanisterId;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 /// Copied from ic-types::ic_00::CanisterIdRecord.
 #[derive(Copy, Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]

@@ -1,15 +1,36 @@
-use crate::{runtime::Runtime, spawn};
-use candid::{CandidType, Encode};
-use ic_base_types::{CanisterId, PrincipalId};
-use ic_canister_log::{log, Sink};
+use crate::{
+    runtime::Runtime,
+    spawn,
+};
+use candid::{
+    CandidType,
+    Encode,
+};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
+use ic_canister_log::{
+    log,
+    Sink,
+};
 use ic_management_canister_types::IC_00;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::borrow::Cow;
 use std::collections::VecDeque;
 use std::marker::PhantomData;
-use std::sync::{Arc, RwLock};
+use std::sync::{
+    Arc,
+    RwLock,
+};
 
-use crate::ledger::{LedgerAccess, LedgerData};
+use crate::ledger::{
+    LedgerAccess,
+    LedgerData,
+};
 use ic_ledger_core::block::EncodedBlock;
 
 fn default_cycles_for_archive_creation() -> u64 {

@@ -1,10 +1,16 @@
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_types::{
     consensus::Block,
-    crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId},
+    crypto::threshold_sig::ni_dkg::{
+        NiDkgDealing,
+        NiDkgId,
+    },
     NodeId,
 };
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{
+    BTreeMap,
+    HashSet,
+};
 
 pub(super) fn get_dealers_from_chain(
     pool_reader: &PoolReader<'_>,

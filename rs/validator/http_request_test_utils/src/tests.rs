@@ -4,14 +4,26 @@ use ic_canister_client_sender::Ed25519KeyPair;
 use ic_crypto_internal_basic_sig_ed25519 as ed25519;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_types::crypto::Signable;
-use ic_types::messages::{Authentication, MessageId, SignedDelegation, UserSignature};
+use ic_types::messages::{
+    Authentication,
+    MessageId,
+    SignedDelegation,
+    UserSignature,
+};
 
 mod delegation_chain {
     use super::*;
     use crate::AuthenticationScheme::Delegation;
-    use crate::{DelegationChain, HttpRequestBuilder};
+    use crate::{
+        DelegationChain,
+        HttpRequestBuilder,
+    };
     use ic_canister_client_sender::ed25519_public_key_to_der;
-    use ic_types::{PrincipalId, Time, UserId};
+    use ic_types::{
+        PrincipalId,
+        Time,
+        UserId,
+    };
 
     #[test]
     fn should_produce_a_valid_delegation_chain_of_length_2() {
@@ -130,7 +142,10 @@ mod delegation_chain {
 mod change_authentication {
     use super::*;
     use crate::DirectAuthenticationScheme::UserKeyPair;
-    use crate::{AuthenticationScheme, HttpRequestBuilder};
+    use crate::{
+        AuthenticationScheme,
+        HttpRequestBuilder,
+    };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_types::messages::Blob;
 

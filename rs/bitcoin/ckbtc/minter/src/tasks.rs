@@ -1,6 +1,12 @@
 use ic0;
-use std::cell::{Cell, RefCell};
-use std::collections::{BTreeMap, BTreeSet};
+use std::cell::{
+    Cell,
+    RefCell,
+};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
 use std::time::Duration;
 
 thread_local! {

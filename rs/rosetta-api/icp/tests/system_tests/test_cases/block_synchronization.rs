@@ -8,7 +8,11 @@ use candid::Principal;
 use ic_agent::identity::BasicIdentity;
 use ic_agent::Identity;
 use ic_icp_rosetta_runner::RosettaOptions;
-use ic_icrc1_test_utils::{minter_identity, valid_transactions_strategy, DEFAULT_TRANSFER_FEE};
+use ic_icrc1_test_utils::{
+    minter_identity,
+    valid_transactions_strategy,
+    DEFAULT_TRANSFER_FEE,
+};
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use icp_ledger::LedgerCanisterPayload;
 use icp_ledger::LedgerCanisterUpgradePayload;

@@ -1,7 +1,10 @@
 //! Common initialization and proposal submission code and utilities to write
 //! and execute SNS tests.
 
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{
+    SystemTime,
+    UNIX_EPOCH,
+};
 
 pub mod icrc1;
 pub mod itest_helpers;

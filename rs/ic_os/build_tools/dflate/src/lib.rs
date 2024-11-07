@@ -1,13 +1,32 @@
 use std::fs::File;
-use std::io::{BufReader, Read, Seek, SeekFrom, Write};
+use std::io::{
+    BufReader,
+    Read,
+    Seek,
+    SeekFrom,
+    Write,
+};
 use std::os::fd::AsRawFd;
 
-use anyhow::{bail, Result};
-use tar::{Builder, EntryType, GnuExtSparseHeader, GnuSparseHeader, Header, HeaderMode};
+use anyhow::{
+    bail,
+    Result,
+};
+use tar::{
+    Builder,
+    EntryType,
+    GnuExtSparseHeader,
+    GnuSparseHeader,
+    Header,
+    HeaderMode,
+};
 
 mod tar_util;
 mod types;
-use types::{Block, State};
+use types::{
+    Block,
+    State,
+};
 
 const MAX_BLOCK_SIZE: usize = 512;
 
@@ -203,9 +222,15 @@ fn seek_data(file: &mut File, from: u64) -> Option<u64> {
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use anyhow::{Context, Result};
+    use anyhow::{
+        Context,
+        Result,
+    };
     use std::env;
-    use std::path::{Path, PathBuf};
+    use std::path::{
+        Path,
+        PathBuf,
+    };
     use tar::Archive;
 
     fn test_dir() -> Result<PathBuf> {

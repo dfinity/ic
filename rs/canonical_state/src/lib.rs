@@ -136,8 +136,11 @@ mod traversal;
 pub mod visitor;
 
 pub use ic_certification_version::{
-    all_supported_versions, CertificationVersion, UnsupportedCertificationVersion,
-    CURRENT_CERTIFICATION_VERSION, MAX_SUPPORTED_CERTIFICATION_VERSION,
+    all_supported_versions,
+    CertificationVersion,
+    UnsupportedCertificationVersion,
+    CURRENT_CERTIFICATION_VERSION,
+    MAX_SUPPORTED_CERTIFICATION_VERSION,
     MIN_SUPPORTED_CERTIFICATION_VERSION,
 };
 
@@ -149,4 +152,7 @@ pub type Label = Vec<u8>;
 
 pub use lazy_tree_conversion::LabelLike;
 pub use traversal::traverse;
-pub use visitor::{Control, Visitor};
+pub use visitor::{
+    Control,
+    Visitor,
+};

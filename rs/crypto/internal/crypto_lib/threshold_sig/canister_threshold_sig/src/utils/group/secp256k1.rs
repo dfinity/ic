@@ -1,14 +1,28 @@
 use hex_literal::hex;
 use k256::elliptic_curve::{
-    group::{ff::PrimeField, GroupEncoding},
-    ops::{LinearCombination, MulByGenerator, Reduce},
+    group::{
+        ff::PrimeField,
+        GroupEncoding,
+    },
+    ops::{
+        LinearCombination,
+        MulByGenerator,
+        Reduce,
+    },
     scalar::IsHigh,
     sec1::FromEncodedPoint,
-    Field, Group,
+    Field,
+    Group,
 };
 use std::ops::Neg;
-use subtle::{Choice, ConditionallySelectable};
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use subtle::{
+    Choice,
+    ConditionallySelectable,
+};
+use zeroize::{
+    Zeroize,
+    ZeroizeOnDrop,
+};
 
 #[derive(Clone, Eq, PartialEq, Zeroize, ZeroizeOnDrop)]
 pub struct Scalar {

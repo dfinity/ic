@@ -1,6 +1,9 @@
 use crate::pb::v1::{
-    Governance as GovernancePb, NetworkEconomics as NetworkEconomicsPb, Neuron as NeuronPb,
-    ProposalData as ProposalPb, RewardEvent as RewardEventPb,
+    Governance as GovernancePb,
+    NetworkEconomics as NetworkEconomicsPb,
+    Neuron as NeuronPb,
+    ProposalData as ProposalPb,
+    RewardEvent as RewardEventPb,
 };
 
 pub struct GovernanceProtoBuilder {

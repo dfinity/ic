@@ -1,10 +1,20 @@
 use crate::NervousSystemError;
 use async_trait::async_trait;
-use dfn_core::{api::PrincipalId, CanisterId};
+use dfn_core::{
+    api::PrincipalId,
+    CanisterId,
+};
 use ic_crypto_sha2::Sha256;
 use ic_ledger_core::block::BlockIndex;
-use icp_ledger::{AccountIdentifier, Subaccount as IcpSubaccount, Tokens};
-use icrc_ledger_types::icrc1::account::{Account, Subaccount};
+use icp_ledger::{
+    AccountIdentifier,
+    Subaccount as IcpSubaccount,
+    Tokens,
+};
+use icrc_ledger_types::icrc1::account::{
+    Account,
+    Subaccount,
+};
 use mockall::automock;
 
 /// A trait defining common patterns for accessing the ICRC1 Ledger canister.

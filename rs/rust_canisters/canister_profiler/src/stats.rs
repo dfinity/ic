@@ -1,4 +1,7 @@
-use crate::{ProfilerSink, SpanName};
+use crate::{
+    ProfilerSink,
+    SpanName,
+};
 use ic_metrics_encoder::LabeledHistogramBuilder;
 use std::collections::BTreeMap;
 

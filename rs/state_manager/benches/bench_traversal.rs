@@ -1,27 +1,66 @@
-use criterion::{black_box, BatchSize, BenchmarkId, Criterion};
+use criterion::{
+    black_box,
+    BatchSize,
+    BenchmarkId,
+    Criterion,
+};
 use criterion_time::ProcessTime;
 use ic_base_types::NumBytes;
-use ic_canonical_state::{lazy_tree_conversion::replicated_state_as_lazy_tree, traverse};
+use ic_canonical_state::{
+    lazy_tree_conversion::replicated_state_as_lazy_tree,
+    traverse,
+};
 use ic_canonical_state_tree_hash::hash_tree::hash_lazy_tree;
-use ic_canonical_state_tree_hash_test_utils::{build_witness_gen, crypto_hash_lazy_tree};
+use ic_canonical_state_tree_hash_test_utils::{
+    build_witness_gen,
+    crypto_hash_lazy_tree,
+};
 use ic_certification_version::CURRENT_CERTIFICATION_VERSION;
-use ic_crypto_tree_hash::{flatmap, FlatMap, Label, LabeledTree, MixedHashTree, WitnessGenerator};
+use ic_crypto_tree_hash::{
+    flatmap,
+    FlatMap,
+    Label,
+    LabeledTree,
+    MixedHashTree,
+    WitnessGenerator,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::execution_state::{CustomSection, CustomSectionType, WasmMetadata},
+    canister_state::execution_state::{
+        CustomSection,
+        CustomSectionType,
+        WasmMetadata,
+    },
     metadata_state::Stream,
     testing::ReplicatedStateTesting,
     ReplicatedState,
 };
 use ic_state_manager::labeled_tree_visitor::LabeledTreeVisitor;
-use ic_state_manager::{stream_encoding::encode_stream_slice, tree_hash::hash_state};
-use ic_test_utilities_state::{get_initial_state, get_running_canister};
+use ic_state_manager::{
+    stream_encoding::encode_stream_slice,
+    tree_hash::hash_state,
+};
+use ic_test_utilities_state::{
+    get_initial_state,
+    get_running_canister,
+};
 use ic_test_utilities_types::{
-    ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id},
-    messages::{RequestBuilder, ResponseBuilder},
+    ids::{
+        canister_test_id,
+        message_test_id,
+        subnet_test_id,
+        user_test_id,
+    },
+    messages::{
+        RequestBuilder,
+        ResponseBuilder,
+    },
 };
 use ic_types::{
-    messages::{CallbackId, Payload},
+    messages::{
+        CallbackId,
+        Payload,
+    },
     time::UNIX_EPOCH,
     xnet::StreamIndex,
     Cycles,
@@ -80,8 +119,15 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
     let time = UNIX_EPOCH;
 
     for i in 1..NUM_STATUSES {
-        use ic_error_types::{ErrorCode, UserError};
-        use ic_types::ingress::{IngressState::*, IngressStatus::*, WasmResult::*};
+        use ic_error_types::{
+            ErrorCode,
+            UserError,
+        };
+        use ic_types::ingress::{
+            IngressState::*,
+            IngressStatus::*,
+            WasmResult::*,
+        };
 
         let status = match i % 6 {
             0 => Known {

@@ -1,4 +1,9 @@
-use ic_types::batch::{BatchPayload, IngressPayload, SelfValidatingPayload, XNetPayload};
+use ic_types::batch::{
+    BatchPayload,
+    IngressPayload,
+    SelfValidatingPayload,
+    XNetPayload,
+};
 
 pub struct PayloadBuilder {
     payload: BatchPayload,
@@ -46,9 +51,15 @@ impl PayloadBuilder {
 #[cfg(test)]
 mod tests {
     use ic_types::{
-        batch::{BatchPayload, IngressPayload},
+        batch::{
+            BatchPayload,
+            IngressPayload,
+        },
         consensus::dkg::Dealings,
-        consensus::{BlockPayload, DataPayload},
+        consensus::{
+            BlockPayload,
+            DataPayload,
+        },
     };
 
     #[test]
@@ -69,7 +80,10 @@ mod tests {
     fn payload_serialize_then_deserialize() {
         use ic_types::{
             batch::BatchPayload,
-            consensus::{dkg, Payload},
+            consensus::{
+                dkg,
+                Payload,
+            },
             Height,
         };
 

@@ -1,15 +1,25 @@
 use std::fs;
-use std::net::{IpAddr, Ipv6Addr};
+use std::net::{
+    IpAddr,
+    Ipv6Addr,
+};
 use std::path::PathBuf;
 use std::thread::sleep;
 use std::time::Duration;
 use std::vec::Vec;
 
-use anyhow::{Context, Result};
+use anyhow::{
+    Context,
+    Result,
+};
 use ping::dgramsock;
 use rayon::prelude::*;
 
-use utils::{get_command_stdout, retry, retry_pred};
+use utils::{
+    get_command_stdout,
+    retry,
+    retry_pred,
+};
 
 static SYSFS_NETWORK_DIR: &str = "/sys/class/net";
 

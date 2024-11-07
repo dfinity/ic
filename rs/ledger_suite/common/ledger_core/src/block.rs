@@ -2,7 +2,10 @@ use crate::timestamp::TimeStamp;
 
 use candid::CandidType;
 use ic_ledger_hash_of::HashOf;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use serde_bytes::ByteBuf;
 
 /// Position of a block in the chain. The first block has position 0.

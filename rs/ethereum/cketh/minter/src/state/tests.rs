@@ -1,31 +1,71 @@
 use crate::endpoints::CandidBlockTag;
 use crate::eth_logs::{
-    EventSource, LedgerSubaccount, ReceivedErc20Event, ReceivedEthEvent, ReceivedEvent,
+    EventSource,
+    LedgerSubaccount,
+    ReceivedErc20Event,
+    ReceivedEthEvent,
+    ReceivedEvent,
 };
 use crate::eth_rpc::BlockTag;
-use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
+use crate::eth_rpc_client::responses::{
+    TransactionReceipt,
+    TransactionStatus,
+};
 use crate::lifecycle::init::InitArg;
 use crate::lifecycle::upgrade::UpgradeArg;
 use crate::lifecycle::EthereumNetwork;
 use crate::map::DedupMultiKeyMap;
 use crate::numeric::{
-    BlockNumber, CkTokenAmount, Erc20Value, GasAmount, LedgerBurnIndex, LedgerMintIndex, LogIndex,
-    TransactionNonce, Wei, WeiPerGas,
+    BlockNumber,
+    CkTokenAmount,
+    Erc20Value,
+    GasAmount,
+    LedgerBurnIndex,
+    LedgerMintIndex,
+    LogIndex,
+    TransactionNonce,
+    Wei,
+    WeiPerGas,
 };
 use crate::state::audit::apply_state_transition;
-use crate::state::eth_logs_scraping::{LogScrapingId, LogScrapings};
-use crate::state::event::{Event, EventType};
-use crate::state::transactions::{Erc20WithdrawalRequest, ReimbursementIndex};
-use crate::state::{Erc20Balances, State};
+use crate::state::eth_logs_scraping::{
+    LogScrapingId,
+    LogScrapings,
+};
+use crate::state::event::{
+    Event,
+    EventType,
+};
+use crate::state::transactions::{
+    Erc20WithdrawalRequest,
+    ReimbursementIndex,
+};
+use crate::state::{
+    Erc20Balances,
+    State,
+};
 use crate::test_fixtures::{
-    arb::{arb_address, arb_checked_amount_of, arb_hash},
+    arb::{
+        arb_address,
+        arb_checked_amount_of,
+        arb_hash,
+    },
     initial_state,
 };
 use crate::tx::{
-    AccessList, AccessListItem, Eip1559Signature, Eip1559TransactionRequest, GasFeeEstimate,
-    ResubmissionStrategy, SignedEip1559TransactionRequest, StorageKey,
+    AccessList,
+    AccessListItem,
+    Eip1559Signature,
+    Eip1559TransactionRequest,
+    GasFeeEstimate,
+    ResubmissionStrategy,
+    SignedEip1559TransactionRequest,
+    StorageKey,
 };
-use candid::{Nat, Principal};
+use candid::{
+    Nat,
+    Principal,
+};
 use ethnum::u256;
 use ic_ethereum_types::Address;
 use proptest::array::uniform32;
@@ -57,11 +97,24 @@ mod next_request_id {
 }
 
 mod mint_transaction {
-    use crate::eth_logs::{EventSourceError, ReceivedEthEvent};
+    use crate::eth_logs::{
+        EventSourceError,
+        ReceivedEthEvent,
+    };
     use crate::lifecycle::EthereumNetwork;
-    use crate::numeric::{LedgerMintIndex, LogIndex};
-    use crate::state::tests::{initial_state, received_erc20_event, received_eth_event};
-    use crate::state::{InvalidEventReason, MintedEvent};
+    use crate::numeric::{
+        LedgerMintIndex,
+        LogIndex,
+    };
+    use crate::state::tests::{
+        initial_state,
+        received_erc20_event,
+        received_eth_event,
+    };
+    use crate::state::{
+        InvalidEventReason,
+        MintedEvent,
+    };
 
     #[test]
     fn should_record_mint_task_from_event() {
@@ -289,7 +342,10 @@ mod upgrade {
     use crate::eth_rpc::BlockTag;
     use crate::lifecycle::upgrade::UpgradeArg;
     use crate::lifecycle::EthereumNetwork;
-    use crate::numeric::{TransactionNonce, Wei};
+    use crate::numeric::{
+        TransactionNonce,
+        Wei,
+    };
     use crate::state::eth_logs_scraping::LogScrapingId;
     use crate::state::tests::initial_state;
     use crate::state::InvalidStateError;
@@ -802,17 +858,32 @@ proptest! {
 
 #[test]
 fn state_equivalence() {
-    use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
+    use crate::eth_rpc_client::responses::{
+        TransactionReceipt,
+        TransactionStatus,
+    };
     use crate::map::MultiKeyMap;
     use crate::state::transactions::{
-        EthTransactions, EthWithdrawalRequest, Reimbursed, ReimbursementRequest,
+        EthTransactions,
+        EthWithdrawalRequest,
+        Reimbursed,
+        ReimbursementRequest,
     };
-    use crate::state::{InvalidEventReason, MintedEvent};
+    use crate::state::{
+        InvalidEventReason,
+        MintedEvent,
+    };
     use crate::tx::{
-        Eip1559Signature, Eip1559TransactionRequest, SignedTransactionRequest, TransactionRequest,
+        Eip1559Signature,
+        Eip1559TransactionRequest,
+        SignedTransactionRequest,
+        TransactionRequest,
     };
     use ic_cdk::api::management_canister::ecdsa::EcdsaPublicKeyResponse;
-    use maplit::{btreemap, btreeset};
+    use maplit::{
+        btreemap,
+        btreeset,
+    };
 
     fn source(txhash: &str, index: u64) -> EventSource {
         EventSource {
@@ -1288,17 +1359,41 @@ fn state_equivalence() {
 
 mod eth_balance {
     use super::*;
-    use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
+    use crate::eth_rpc_client::responses::{
+        TransactionReceipt,
+        TransactionStatus,
+    };
     use crate::lifecycle::EthereumNetwork;
     use crate::numeric::{
-        BlockNumber, GasAmount, LedgerBurnIndex, TransactionNonce, Wei, WeiPerGas,
+        BlockNumber,
+        GasAmount,
+        LedgerBurnIndex,
+        TransactionNonce,
+        Wei,
+        WeiPerGas,
     };
-    use crate::state::audit::{apply_state_transition, EventType};
+    use crate::state::audit::{
+        apply_state_transition,
+        EventType,
+    };
     use crate::state::tests::checked_sub;
-    use crate::state::tests::{initial_state, received_eth_event};
-    use crate::state::transactions::{create_transaction, EthWithdrawalRequest, WithdrawalRequest};
-    use crate::state::{EthBalance, State};
-    use crate::tx::{Eip1559Signature, SignedEip1559TransactionRequest};
+    use crate::state::tests::{
+        initial_state,
+        received_eth_event,
+    };
+    use crate::state::transactions::{
+        create_transaction,
+        EthWithdrawalRequest,
+        WithdrawalRequest,
+    };
+    use crate::state::{
+        EthBalance,
+        State,
+    };
+    use crate::tx::{
+        Eip1559Signature,
+        SignedEip1559TransactionRequest,
+    };
     use maplit::btreemap;
 
     #[test]
@@ -1666,11 +1761,20 @@ mod eth_balance {
 }
 
 mod erc20_balance {
-    use crate::eth_logs::{ReceivedErc20Event, ReceivedEvent};
+    use crate::eth_logs::{
+        ReceivedErc20Event,
+        ReceivedEvent,
+    };
     use crate::state::audit::EventType::AcceptedErc20WithdrawalRequest;
-    use crate::state::audit::{apply_state_transition, EventType};
+    use crate::state::audit::{
+        apply_state_transition,
+        EventType,
+    };
     use crate::state::tests::{
-        checked_sub, erc20_withdrawal_request, initial_erc20_state, received_erc20_event,
+        checked_sub,
+        erc20_withdrawal_request,
+        initial_erc20_state,
+        received_erc20_event,
         received_eth_event,
     };
     use crate::state::transactions::Erc20WithdrawalRequest;

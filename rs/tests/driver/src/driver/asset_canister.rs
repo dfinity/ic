@@ -1,15 +1,32 @@
 use crate::{
     driver::test_env_api::{
-        GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTestEnv, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+        GetFirstHealthyNodeSnapshot,
+        HasPublicApiUrl,
+        HasTestEnv,
+        READY_WAIT_TIMEOUT,
+        RETRY_BACKOFF,
     },
     retry_with_msg_async,
     util::agent_observes_canister_module,
 };
-use anyhow::{Context, Result};
+use anyhow::{
+    Context,
+    Result,
+};
 use async_trait::async_trait;
-use candid::{CandidType, Decode, Deserialize, Encode, Nat, Principal};
+use candid::{
+    CandidType,
+    Decode,
+    Deserialize,
+    Encode,
+    Nat,
+    Principal,
+};
 use ic_agent::Agent;
-use slog::{info, Logger};
+use slog::{
+    info,
+    Logger,
+};
 use std::collections::BTreeMap;
 use std::env;
 use tokio::task;

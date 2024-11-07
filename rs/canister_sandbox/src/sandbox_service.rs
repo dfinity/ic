@@ -1,5 +1,8 @@
 use crate::protocol::sbxsvc::*;
-use crate::rpc::{Call, DemuxServer};
+use crate::rpc::{
+    Call,
+    DemuxServer,
+};
 
 /// RPC interface exposed by sandbox process.
 pub trait SandboxService: Send + Sync {

@@ -1,4 +1,8 @@
-use crate::rw_message::{can_read_msg, can_store_msg, cert_state_makes_progress_with_retries};
+use crate::rw_message::{
+    can_read_msg,
+    can_store_msg,
+    cert_state_makes_progress_with_retries,
+};
 use crate::upgrade::assert_assigned_replica_version;
 use anyhow::bail;
 use candid::Principal;
@@ -6,15 +10,24 @@ use canister_test::Canister;
 use ic_base_types::SubnetId;
 use ic_config::subnet_config::ECDSA_SIGNATURE_FEE;
 use ic_consensus_threshold_sig_system_test_utils::{
-    add_chain_keys_with_timeout_and_rotation_period, empty_subnet_update,
-    execute_update_subnet_proposal, get_master_public_key, get_signature_with_logger,
+    add_chain_keys_with_timeout_and_rotation_period,
+    empty_subnet_update,
+    execute_update_subnet_proposal,
+    get_master_public_key,
+    get_signature_with_logger,
 };
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_system_test_driver::util::*;
-use ic_system_test_driver::{driver::test_env_api::*, util::runtime_from_url};
+use ic_system_test_driver::{
+    driver::test_env_api::*,
+    util::runtime_from_url,
+};
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
-use slog::{info, Logger};
+use slog::{
+    info,
+    Logger,
+};
 use std::collections::BTreeMap;
 use std::time::Duration;
 

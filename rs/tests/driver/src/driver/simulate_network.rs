@@ -1,10 +1,19 @@
 //! This module contains functionality to simulate a subnet's
 /// network, RTT and Packet Loss, during system tests.
 use super::{
-    super::{driver::test_env_api::SshSession, util::get_config},
-    test_env_api::{IcNodeContainer, SubnetSnapshot},
+    super::{
+        driver::test_env_api::SshSession,
+        util::get_config,
+    },
+    test_env_api::{
+        IcNodeContainer,
+        SubnetSnapshot,
+    },
 };
-use std::{time::Duration, vec::Vec};
+use std::{
+    time::Duration,
+    vec::Vec,
+};
 
 pub trait SimulateNetwork<NetworkSettings> {
     fn apply_network_settings(&self, network_settings: NetworkSettings);

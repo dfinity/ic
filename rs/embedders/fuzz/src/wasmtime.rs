@@ -2,7 +2,10 @@ use crate::ic_wasm::ICWasmModule;
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_test_utilities_embedders::WasmtimeInstanceBuilder;
-use ic_types::methods::{FuncRef, WasmMethod};
+use ic_types::methods::{
+    FuncRef,
+    WasmMethod,
+};
 use libfuzzer_sys::Corpus;
 use std::collections::BTreeSet;
 
@@ -41,7 +44,10 @@ pub fn run_fuzzer(module: ICWasmModule) -> Corpus {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use arbitrary::{Arbitrary, Unstructured};
+    use arbitrary::{
+        Arbitrary,
+        Unstructured,
+    };
 
     #[test]
     fn test_execute_with_wasmtime_single_run() {

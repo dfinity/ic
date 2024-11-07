@@ -3,7 +3,10 @@ use crate::FiatCurrency;
 use crate::TVL_TIMESERIES;
 use ic_base_types::PrincipalId;
 use std::cell::RefCell;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
 use std::time::Duration;
 
 pub struct TvlState {

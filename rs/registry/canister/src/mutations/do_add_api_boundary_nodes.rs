@@ -1,14 +1,24 @@
-use candid::{CandidType, Deserialize};
+use candid::{
+    CandidType,
+    Deserialize,
+};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
-use ic_base_types::{NodeId, PrincipalId, SubnetId};
+use ic_base_types::{
+    NodeId,
+    PrincipalId,
+    SubnetId,
+};
 use ic_protobuf::registry::api_boundary_node::v1::ApiBoundaryNodeRecord;
 use ic_registry_keys::make_api_boundary_node_record_key;
 use ic_registry_transport::insert;
 use prost::Message;
 use serde::Serialize;
 
-use crate::{common::LOG_PREFIX, registry::Registry};
+use crate::{
+    common::LOG_PREFIX,
+    registry::Registry,
+};
 
 use super::common::check_replica_version_is_blessed;
 
@@ -102,23 +112,38 @@ impl Registry {
 mod tests {
     use std::str::FromStr;
 
-    use ic_base_types::{NodeId, PrincipalId, SubnetId};
+    use ic_base_types::{
+        NodeId,
+        PrincipalId,
+        SubnetId,
+    };
     use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
     use ic_protobuf::registry::{
         api_boundary_node::v1::ApiBoundaryNodeRecord,
-        replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
+        replica_version::v1::{
+            BlessedReplicaVersions,
+            ReplicaVersionRecord,
+        },
     };
     use ic_registry_keys::{
-        make_api_boundary_node_record_key, make_blessed_replica_versions_key, make_node_record_key,
+        make_api_boundary_node_record_key,
+        make_blessed_replica_versions_key,
+        make_node_record_key,
         make_replica_version_key,
     };
-    use ic_registry_transport::{insert, update, upsert};
+    use ic_registry_transport::{
+        insert,
+        update,
+        upsert,
+    };
     use ic_types::ReplicaVersion;
     use prost::Message;
 
     use crate::{
         common::test_helpers::{
-            add_fake_subnet, get_invariant_compliant_subnet_record, invariant_compliant_registry,
+            add_fake_subnet,
+            get_invariant_compliant_subnet_record,
+            invariant_compliant_registry,
             prepare_registry_with_nodes,
         },
         mutations::common::test::TEST_NODE_ID,

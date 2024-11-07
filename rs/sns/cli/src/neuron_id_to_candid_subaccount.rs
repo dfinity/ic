@@ -1,6 +1,9 @@
 use std::str::FromStr;
 
-use anyhow::{anyhow, Result};
+use anyhow::{
+    anyhow,
+    Result,
+};
 use candid::IDLValue;
 use clap::Parser;
 use ic_sns_governance::pb::v1::NeuronId;

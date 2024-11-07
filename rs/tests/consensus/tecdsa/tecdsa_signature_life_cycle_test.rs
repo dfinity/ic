@@ -1,16 +1,30 @@
 use std::time::Duration;
 
-use anyhow::{bail, Result};
+use anyhow::{
+    bail,
+    Result,
+};
 
 use canister_test::Canister;
-use ic_agent::agent::{RejectCode, RejectResponse};
+use ic_agent::agent::{
+    RejectCode,
+    RejectResponse,
+};
 use ic_agent::AgentError;
 use ic_config::subnet_config::ECDSA_SIGNATURE_FEE;
 use ic_consensus_threshold_sig_system_test_utils::{
-    create_new_subnet_with_keys, empty_subnet_update, enable_chain_key_signing,
-    execute_update_subnet_proposal, get_public_key_and_test_signature, get_public_key_with_retries,
-    get_signature_with_logger, make_bip340_key_id, make_ecdsa_key_id, make_eddsa_key_id,
-    scale_cycles, setup_without_ecdsa_on_nns,
+    create_new_subnet_with_keys,
+    empty_subnet_update,
+    enable_chain_key_signing,
+    execute_update_subnet_proposal,
+    get_public_key_and_test_signature,
+    get_public_key_with_retries,
+    get_signature_with_logger,
+    make_bip340_key_id,
+    make_ecdsa_key_id,
+    make_eddsa_key_id,
+    scale_cycles,
+    setup_without_ecdsa_on_nns,
 };
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -21,13 +35,24 @@ use ic_system_test_driver::{
         group::SystemTestGroup,
         test_env::TestEnv,
         test_env_api::{
-            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, READY_WAIT_TIMEOUT,
+            HasPublicApiUrl,
+            HasTopologySnapshot,
+            IcNodeContainer,
+            READY_WAIT_TIMEOUT,
             RETRY_BACKOFF,
         },
     },
-    nns::{self, get_subnet_list_from_registry},
+    nns::{
+        self,
+        get_subnet_list_from_registry,
+    },
     systest,
-    util::{block_on, runtime_from_url, MessageCanister, MetricsFetcher},
+    util::{
+        block_on,
+        runtime_from_url,
+        MessageCanister,
+        MetricsFetcher,
+    },
 };
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use slog::info;

@@ -1,6 +1,9 @@
 use clap::Parser;
 use ic_types::ReplicaVersion;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::path::PathBuf;
 use url::Url;
 

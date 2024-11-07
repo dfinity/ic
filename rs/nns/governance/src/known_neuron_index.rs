@@ -1,7 +1,14 @@
-use crate::{governance::KNOWN_NEURON_NAME_MAX_LEN, storage::validate_stable_btree_map};
+use crate::{
+    governance::KNOWN_NEURON_NAME_MAX_LEN,
+    storage::validate_stable_btree_map,
+};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_stable_structures::storable::Bound;
-use ic_stable_structures::{Memory, StableBTreeMap, Storable};
+use ic_stable_structures::{
+    Memory,
+    StableBTreeMap,
+    Storable,
+};
 
 /// An index to make it easy to check whether a known neuron with the same name exists,
 /// as well as listing all known neuron's ids.

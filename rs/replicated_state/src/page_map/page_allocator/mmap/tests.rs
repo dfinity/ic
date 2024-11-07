@@ -1,7 +1,10 @@
 use std::sync::Arc;
 
 use crate::page_map::page_allocator::PageAllocatorInner;
-use ic_sys::{PageIndex, PAGE_SIZE};
+use ic_sys::{
+    PageIndex,
+    PAGE_SIZE,
+};
 
 #[test]
 fn test_page_validation_zero_page() {

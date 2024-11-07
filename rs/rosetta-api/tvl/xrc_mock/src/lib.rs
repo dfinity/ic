@@ -1,5 +1,9 @@
 use candid::CandidType;
-use ic_xrc_types::{Asset, ExchangeRateError, ExchangeRateMetadata};
+use ic_xrc_types::{
+    Asset,
+    ExchangeRateError,
+    ExchangeRateMetadata,
+};
 
 #[derive(Debug, CandidType, candid::Deserialize)]
 pub struct XrcMockInitPayload {

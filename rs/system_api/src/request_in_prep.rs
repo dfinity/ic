@@ -1,16 +1,38 @@
-use crate::{sandbox_safe_system_state::SandboxSafeSystemState, valid_subslice};
-use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
+use crate::{
+    sandbox_safe_system_state::SandboxSafeSystemState,
+    valid_subslice,
+};
+use ic_interfaces::execution_environment::{
+    HypervisorError,
+    HypervisorResult,
+};
 use ic_logger::ReplicaLogger;
 use ic_types::Time;
 use ic_types::{
-    messages::{CallContextId, Request, NO_DEADLINE},
-    methods::{Callback, WasmClosure},
+    messages::{
+        CallContextId,
+        Request,
+        NO_DEADLINE,
+    },
+    methods::{
+        Callback,
+        WasmClosure,
+    },
     time::CoarseTime,
-    CanisterId, Cycles, NumBytes, PrincipalId,
+    CanisterId,
+    Cycles,
+    NumBytes,
+    PrincipalId,
 };
 use ic_wasm_types::doc_ref;
-use serde::{Deserialize, Serialize};
-use std::{convert::TryFrom, time::Duration};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use std::{
+    convert::TryFrom,
+    time::Duration,
+};
 
 const PAYLOAD_SIZE_SUGGESTION: &str = "Check the canister for errors or redesign the target \
                 API to allow shorter messages";

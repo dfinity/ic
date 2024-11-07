@@ -3,22 +3,44 @@
 //!
 //! Some tests are run over a range of subnet configurations to check for corner cases.
 
-use super::{parse, CanisterHttpPayloadBuilderImpl};
+use super::{
+    parse,
+    CanisterHttpPayloadBuilderImpl,
+};
 use crate::payload_builder::{
     divergence_response_into_reject,
-    parse::{bytes_to_payload, payload_to_bytes},
+    parse::{
+        bytes_to_payload,
+        payload_to_bytes,
+    },
 };
 use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
-use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
+use ic_consensus_mocks::{
+    dependencies_with_subnet_params,
+    Dependencies,
+};
 use ic_error_types::RejectCode;
 use ic_interfaces::{
-    batch_payload::{BatchPayloadBuilder, PastPayload, ProposalContext},
+    batch_payload::{
+        BatchPayloadBuilder,
+        PastPayload,
+        ProposalContext,
+    },
     canister_http::{
-        CanisterHttpChangeAction, CanisterHttpChangeSet, CanisterHttpPayloadValidationFailure,
+        CanisterHttpChangeAction,
+        CanisterHttpChangeSet,
+        CanisterHttpPayloadValidationFailure,
         InvalidCanisterHttpPayloadReason,
     },
-    consensus::{InvalidPayloadReason, PayloadValidationError, PayloadValidationFailure},
-    p2p::consensus::{MutablePool, UnvalidatedArtifact},
+    consensus::{
+        InvalidPayloadReason,
+        PayloadValidationError,
+        PayloadValidationFailure,
+    },
+    p2p::consensus::{
+        MutablePool,
+        UnvalidatedArtifact,
+    },
     validation::ValidationError,
 };
 use ic_logger::replica_logger::no_op_logger;
@@ -27,31 +49,68 @@ use ic_registry_subnet_features::SubnetFeatures;
 use ic_test_utilities::state_manager::RefMockStateManager;
 use ic_test_utilities_registry::SubnetRecordBuilder;
 use ic_test_utilities_types::{
-    ids::{canister_test_id, node_test_id, subnet_test_id},
+    ids::{
+        canister_test_id,
+        node_test_id,
+        subnet_test_id,
+    },
     messages::RequestBuilder,
 };
 use ic_types::{
-    batch::{CanisterHttpPayload, ValidationContext, MAX_CANISTER_HTTP_PAYLOAD_SIZE},
+    batch::{
+        CanisterHttpPayload,
+        ValidationContext,
+        MAX_CANISTER_HTTP_PAYLOAD_SIZE,
+    },
     canister_http::{
-        CanisterHttpMethod, CanisterHttpRequestContext, CanisterHttpResponse,
-        CanisterHttpResponseContent, CanisterHttpResponseDivergence, CanisterHttpResponseMetadata,
-        CanisterHttpResponseShare, CanisterHttpResponseWithConsensus,
-        CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, CANISTER_HTTP_TIMEOUT_INTERVAL,
+        CanisterHttpMethod,
+        CanisterHttpRequestContext,
+        CanisterHttpResponse,
+        CanisterHttpResponseContent,
+        CanisterHttpResponseDivergence,
+        CanisterHttpResponseMetadata,
+        CanisterHttpResponseShare,
+        CanisterHttpResponseWithConsensus,
+        CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK,
+        CANISTER_HTTP_TIMEOUT_INTERVAL,
     },
     consensus::get_faults_tolerated,
-    crypto::{crypto_hash, BasicSig, BasicSigOf, CryptoHash, CryptoHashOf, Signed},
-    messages::{CallbackId, Payload, RejectContext},
+    crypto::{
+        crypto_hash,
+        BasicSig,
+        BasicSigOf,
+        CryptoHash,
+        CryptoHashOf,
+        Signed,
+    },
+    messages::{
+        CallbackId,
+        Payload,
+        RejectContext,
+    },
     registry::RegistryClientError,
-    signature::{BasicSignature, BasicSignatureBatch},
+    signature::{
+        BasicSignature,
+        BasicSignatureBatch,
+    },
     time::UNIX_EPOCH,
-    Height, NumBytes, RegistryVersion, Time,
+    Height,
+    NumBytes,
+    RegistryVersion,
+    Time,
 };
 use rand::Rng;
-use rand_chacha::{rand_core::SeedableRng, ChaCha20Rng};
+use rand_chacha::{
+    rand_core::SeedableRng,
+    ChaCha20Rng,
+};
 use std::{
     collections::BTreeMap,
     ops::DerefMut,
-    sync::{Arc, RwLock},
+    sync::{
+        Arc,
+        RwLock,
+    },
     time::Duration,
 };
 

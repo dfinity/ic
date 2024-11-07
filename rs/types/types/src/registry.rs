@@ -1,7 +1,10 @@
 //! Types for working with the registry.
 
 use crate::RegistryVersion;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::fmt;
 use thiserror::Error;
 

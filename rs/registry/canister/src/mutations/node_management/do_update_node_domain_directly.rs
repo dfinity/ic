@@ -1,7 +1,13 @@
 use crate::mutations::node_management::common::get_node_operator_id_for_node;
-use crate::{common::LOG_PREFIX, registry::Registry};
+use crate::{
+    common::LOG_PREFIX,
+    registry::Registry,
+};
 
-use candid::{CandidType, Deserialize};
+use candid::{
+    CandidType,
+    Deserialize,
+};
 use ic_registry_keys::make_node_record_key;
 use ic_registry_transport::update;
 use idna::domain_to_ascii_strict;
@@ -11,7 +17,10 @@ use serde::Serialize;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 
-use ic_base_types::{NodeId, PrincipalId};
+use ic_base_types::{
+    NodeId,
+    PrincipalId,
+};
 
 // Payload of the request to update the domain name of an existing node
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
@@ -75,17 +84,31 @@ impl Registry {
 #[cfg(test)]
 mod tests {
     use crate::{
-        common::test_helpers::{invariant_compliant_registry, prepare_registry_with_nodes},
+        common::test_helpers::{
+            invariant_compliant_registry,
+            prepare_registry_with_nodes,
+        },
         mutations::{
-            common::test::TEST_NODE_ID, do_add_api_boundary_nodes::AddApiBoundaryNodesPayload,
+            common::test::TEST_NODE_ID,
+            do_add_api_boundary_nodes::AddApiBoundaryNodesPayload,
         },
     };
-    use ic_base_types::{NodeId, PrincipalId};
-    use ic_protobuf::registry::replica_version::v1::{
-        BlessedReplicaVersions, ReplicaVersionRecord,
+    use ic_base_types::{
+        NodeId,
+        PrincipalId,
     };
-    use ic_registry_keys::{make_blessed_replica_versions_key, make_replica_version_key};
-    use ic_registry_transport::{insert, upsert};
+    use ic_protobuf::registry::replica_version::v1::{
+        BlessedReplicaVersions,
+        ReplicaVersionRecord,
+    };
+    use ic_registry_keys::{
+        make_blessed_replica_versions_key,
+        make_replica_version_key,
+    };
+    use ic_registry_transport::{
+        insert,
+        upsert,
+    };
     use prost::Message;
     use std::str::FromStr;
 

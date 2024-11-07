@@ -11,21 +11,44 @@
 //!  - Repeat until state sync reports completed or we hit the state sync timeout or
 //!    this object is dropped.
 use std::{
-    collections::{hash_map::Entry, HashMap},
-    sync::{Arc, Mutex},
+    collections::{
+        hash_map::Entry,
+        HashMap,
+    },
+    sync::{
+        Arc,
+        Mutex,
+    },
     time::Duration,
 };
 
 use crate::metrics::OngoingStateSyncMetrics;
-use crate::routes::{build_chunk_handler_request, parse_chunk_handler_response};
+use crate::routes::{
+    build_chunk_handler_request,
+    parse_chunk_handler_response,
+};
 
 use ic_async_utils::JoinMap;
 use ic_base_types::NodeId;
-use ic_interfaces::p2p::state_sync::{ChunkId, Chunkable, StateSyncArtifactId};
-use ic_logger::{error, info, ReplicaLogger};
-use ic_quic_transport::{Shutdown, Transport};
+use ic_interfaces::p2p::state_sync::{
+    ChunkId,
+    Chunkable,
+    StateSyncArtifactId,
+};
+use ic_logger::{
+    error,
+    info,
+    ReplicaLogger,
+};
+use ic_quic_transport::{
+    Shutdown,
+    Transport,
+};
 use rand::{
-    distributions::{Distribution, WeightedIndex},
+    distributions::{
+        Distribution,
+        WeightedIndex,
+    },
     rngs::SmallRng,
     SeedableRng,
 };
@@ -33,7 +56,10 @@ use thiserror::Error;
 use tokio::{
     runtime::Handle,
     select,
-    sync::mpsc::{Receiver, Sender},
+    sync::mpsc::{
+        Receiver,
+        Sender,
+    },
 };
 use tokio_util::sync::CancellationToken;
 
@@ -357,14 +383,29 @@ pub(crate) enum DownloadChunkError {
 
 #[cfg(test)]
 mod tests {
-    use axum::http::{Response, StatusCode};
-    use bytes::{Bytes, BytesMut};
+    use axum::http::{
+        Response,
+        StatusCode,
+    };
+    use bytes::{
+        Bytes,
+        BytesMut,
+    };
     use ic_interfaces::p2p::state_sync::AddChunkError;
     use ic_metrics::MetricsRegistry;
-    use ic_p2p_test_utils::mocks::{MockChunkable, MockTransport};
+    use ic_p2p_test_utils::mocks::{
+        MockChunkable,
+        MockTransport,
+    };
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_types::{crypto::CryptoHash, Height};
-    use ic_types_test_utils::ids::{NODE_1, NODE_2};
+    use ic_types::{
+        crypto::CryptoHash,
+        Height,
+    };
+    use ic_types_test_utils::ids::{
+        NODE_1,
+        NODE_2,
+    };
     use prost::Message;
     use tokio::runtime::Runtime;
 

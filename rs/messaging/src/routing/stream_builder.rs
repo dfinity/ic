@@ -1,29 +1,55 @@
 use crate::message_routing::{
-    LatencyMetrics, MessageRoutingMetrics, CRITICAL_ERROR_INDUCT_RESPONSE_FAILED,
+    LatencyMetrics,
+    MessageRoutingMetrics,
+    CRITICAL_ERROR_INDUCT_RESPONSE_FAILED,
 };
 use ic_error_types::RejectCode;
 use ic_limits::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
-use ic_logger::{error, warn, ReplicaLogger};
-use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+use ic_logger::{
+    error,
+    warn,
+    ReplicaLogger,
+};
+use ic_metrics::{
+    buckets::decimal_buckets,
+    MetricsRegistry,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     replicated_state::{
-        PeekableOutputIterator, ReplicatedStateMessageRouting, MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
+        PeekableOutputIterator,
+        ReplicatedStateMessageRouting,
+        MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
     },
-    ReplicatedState, Stream,
+    ReplicatedState,
+    Stream,
 };
 use ic_types::{
     messages::{
-        Payload, RejectContext, Request, RequestOrResponse, Response,
-        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MAX_REJECT_MESSAGE_LEN_BYTES,
+        Payload,
+        RejectContext,
+        Request,
+        RequestOrResponse,
+        Response,
+        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+        MAX_REJECT_MESSAGE_LEN_BYTES,
     },
-    CountBytes, SubnetId,
+    CountBytes,
+    SubnetId,
 };
 #[cfg(test)]
 use mockall::automock;
-use prometheus::{Histogram, IntCounter, IntCounterVec, IntGaugeVec};
+use prometheus::{
+    Histogram,
+    IntCounter,
+    IntCounterVec,
+    IntGaugeVec,
+};
 use std::collections::BTreeMap;
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    Arc,
+    Mutex,
+};
 
 #[cfg(test)]
 mod tests;

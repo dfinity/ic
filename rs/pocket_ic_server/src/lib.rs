@@ -38,7 +38,10 @@ pub mod pocket_ic;
 pub mod state_api;
 
 use crate::state_api::state::OpOut;
-use ::pocket_ic::common::rest::{BinaryBlob, BlobId};
+use ::pocket_ic::common::rest::{
+    BinaryBlob,
+    BlobId,
+};
 use axum::async_trait;
 use pocket_ic::PocketIc;
 use serde::Deserialize;

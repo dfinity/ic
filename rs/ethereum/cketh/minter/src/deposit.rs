@@ -1,15 +1,42 @@
 use crate::eth_logs::{
-    report_transaction_error, LogParser, LogScraping, ReceivedErc20LogScraping,
-    ReceivedEthLogScraping, ReceivedEthOrErc20LogScraping, ReceivedEvent, ReceivedEventError,
+    report_transaction_error,
+    LogParser,
+    LogScraping,
+    ReceivedErc20LogScraping,
+    ReceivedEthLogScraping,
+    ReceivedEthOrErc20LogScraping,
+    ReceivedEvent,
+    ReceivedEventError,
 };
-use crate::eth_rpc::{BlockSpec, GetLogsParam, HttpOutcallError, LogEntry, Topic};
-use crate::eth_rpc_client::{EthRpcClient, MultiCallError};
+use crate::eth_rpc::{
+    BlockSpec,
+    GetLogsParam,
+    HttpOutcallError,
+    LogEntry,
+    Topic,
+};
+use crate::eth_rpc_client::{
+    EthRpcClient,
+    MultiCallError,
+};
 use crate::guard::TimerGuard;
-use crate::logs::{DEBUG, INFO};
-use crate::numeric::{BlockNumber, BlockRangeInclusive, LedgerMintIndex};
+use crate::logs::{
+    DEBUG,
+    INFO,
+};
+use crate::numeric::{
+    BlockNumber,
+    BlockRangeInclusive,
+    LedgerMintIndex,
+};
 use crate::state::eth_logs_scraping::LogScrapingId;
 use crate::state::{
-    audit::process_event, event::EventType, mutate_state, read_state, State, TaskType,
+    audit::process_event,
+    event::EventType,
+    mutate_state,
+    read_state,
+    State,
+    TaskType,
 };
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
@@ -19,7 +46,10 @@ use std::collections::VecDeque;
 use std::time::Duration;
 
 async fn mint() {
-    use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
+    use icrc_ledger_client_cdk::{
+        CdkRuntime,
+        ICRC1Client,
+    };
     use icrc_ledger_types::icrc1::transfer::TransferArg;
 
     let _guard = match TimerGuard::new(TaskType::Mint) {

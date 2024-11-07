@@ -1,7 +1,12 @@
-use ic_canister_log::{declare_log_buffer, log};
+use ic_canister_log::{
+    declare_log_buffer,
+    log,
+};
 use ic_canister_serve::serve_logs;
 use ic_cdk::api::management_canister::http_request::{
-    CanisterHttpRequestArgument, HttpMethod, HttpResponse,
+    CanisterHttpRequestArgument,
+    HttpMethod,
+    HttpResponse,
 };
 use maplit::hashmap;
 use serde_json::json;

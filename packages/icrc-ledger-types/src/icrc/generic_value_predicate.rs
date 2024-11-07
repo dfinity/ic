@@ -2,11 +2,17 @@
 #[cfg(test)]
 use assert_matches::assert_matches;
 #[cfg(test)]
-use candid::{Int, Nat};
+use candid::{
+    Int,
+    Nat,
+};
 use num_bigint::BigInt;
 #[cfg(test)]
 use std::collections::BTreeMap;
-use std::{borrow::Cow, sync::Arc};
+use std::{
+    borrow::Cow,
+    sync::Arc,
+};
 
 use super::generic_value::Value;
 

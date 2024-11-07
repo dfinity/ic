@@ -1,7 +1,10 @@
 use local_key::task_local;
 use std::cell::RefCell;
 use std::sync::RwLock;
-pub use tla_instrumentation::{InstrumentationState, UpdateTrace};
+pub use tla_instrumentation::{
+    InstrumentationState,
+    UpdateTrace,
+};
 
 // The entire module should only ever be imported if the tla feature is enabled,
 // but use another directive here just to make sure, as we really don't want to

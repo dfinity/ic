@@ -1,9 +1,16 @@
 use ic_interfaces_certified_stream_store::{
-    CertifiedStreamStore, DecodeStreamError, EncodeStreamError,
+    CertifiedStreamStore,
+    DecodeStreamError,
+    EncodeStreamError,
 };
 use ic_types::{
-    xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice},
-    RegistryVersion, SubnetId,
+    xnet::{
+        CertifiedStreamSlice,
+        StreamIndex,
+        StreamSlice,
+    },
+    RegistryVersion,
+    SubnetId,
 };
 use mockall::*;
 

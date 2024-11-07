@@ -10,17 +10,33 @@
 
 use ic_crypto_internal_basic_sig_ed25519::types as ed25519_types;
 use ic_crypto_internal_basic_sig_ed25519::{
-    secret_key_to_pkcs8_v1_der, secret_key_to_pkcs8_v2_der,
+    secret_key_to_pkcs8_v1_der,
+    secret_key_to_pkcs8_v2_der,
 };
 use ic_crypto_secrets_containers::SecretBytes;
-use rand::{CryptoRng, Rng};
-use rcgen::{
-    Certificate, CertificateParams, DistinguishedName, DnType, DnValue, KeyPair, SerialNumber,
+use rand::{
+    CryptoRng,
+    Rng,
 };
-use serde::{Deserialize, Serialize};
+use rcgen::{
+    Certificate,
+    CertificateParams,
+    DistinguishedName,
+    DnType,
+    DnValue,
+    KeyPair,
+    SerialNumber,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::fmt;
 use time::OffsetDateTime;
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::{
+    Zeroize,
+    ZeroizeOnDrop,
+};
 
 /// A DER-encoded X.509 v3 certificate with an Ed25519 public key.
 #[derive(Debug)]

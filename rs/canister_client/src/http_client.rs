@@ -1,18 +1,38 @@
 //! The hyper based HTTP client
 use futures_util::{
-    future::{Either as EitherFut, Map, Ready},
+    future::{
+        Either as EitherFut,
+        Map,
+        Ready,
+    },
     FutureExt,
 };
-use http_body_util::{BodyExt, Full};
-use hyper::{body::Bytes, header::CONTENT_TYPE, Method, StatusCode, Uri as HyperUri};
-use hyper_rustls::{HttpsConnector as HyperTlsConnector, HttpsConnectorBuilder};
+use http_body_util::{
+    BodyExt,
+    Full,
+};
+use hyper::{
+    body::Bytes,
+    header::CONTENT_TYPE,
+    Method,
+    StatusCode,
+    Uri as HyperUri,
+};
+use hyper_rustls::{
+    HttpsConnector as HyperTlsConnector,
+    HttpsConnectorBuilder,
+};
 use hyper_util::{
     client::legacy::{
         connect::{
-            dns::{self, GaiResolver},
+            dns::{
+                self,
+                GaiResolver,
+            },
             HttpConnector as HyperConnector,
         },
-        Client as HyperClient, ResponseFuture as HyperFuture,
+        Client as HyperClient,
+        ResponseFuture as HyperFuture,
     },
     rt::TokioExecutor,
 };
@@ -23,9 +43,15 @@ use std::{
     borrow::Cow,
     collections::HashMap,
     io,
-    iter::{once, Once},
+    iter::{
+        once,
+        Once,
+    },
     net::SocketAddr,
-    task::{Context, Poll},
+    task::{
+        Context,
+        Poll,
+    },
     time::Duration,
 };
 use tower::Service;

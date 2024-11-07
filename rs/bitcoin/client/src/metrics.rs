@@ -1,4 +1,7 @@
-use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+use ic_metrics::{
+    buckets::decimal_buckets,
+    MetricsRegistry,
+};
 use prometheus::HistogramVec;
 
 pub const LABEL_REQUEST_TYPE: &str = "request_type";

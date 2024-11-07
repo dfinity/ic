@@ -1,30 +1,67 @@
 use candid::Principal;
 use ic_btc_interface::Utxo;
 use ic_canister_log::export as export_logs;
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_cdk_macros::{init, post_upgrade, query, update};
+use ic_canisters_http_types::{
+    HttpRequest,
+    HttpResponse,
+    HttpResponseBuilder,
+};
+use ic_cdk_macros::{
+    init,
+    post_upgrade,
+    query,
+    update,
+};
 use ic_ckbtc_minter::dashboard::build_dashboard;
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
-use ic_ckbtc_minter::lifecycle::{self, init::MinterArg};
-use ic_ckbtc_minter::metrics::encode_metrics;
-use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest, WithdrawalFee};
-use ic_ckbtc_minter::state::{
-    read_state, BtcRetrievalStatusV2, RetrieveBtcStatus, RetrieveBtcStatusV2,
+use ic_ckbtc_minter::lifecycle::{
+    self,
+    init::MinterArg,
 };
-use ic_ckbtc_minter::tasks::{schedule_now, TaskType};
+use ic_ckbtc_minter::metrics::encode_metrics;
+use ic_ckbtc_minter::queries::{
+    EstimateFeeArg,
+    RetrieveBtcStatusRequest,
+    WithdrawalFee,
+};
+use ic_ckbtc_minter::state::{
+    read_state,
+    BtcRetrievalStatusV2,
+    RetrieveBtcStatus,
+    RetrieveBtcStatusV2,
+};
+use ic_ckbtc_minter::tasks::{
+    schedule_now,
+    TaskType,
+};
 use ic_ckbtc_minter::updates::retrieve_btc::{
-    RetrieveBtcArgs, RetrieveBtcError, RetrieveBtcOk, RetrieveBtcWithApprovalArgs,
+    RetrieveBtcArgs,
+    RetrieveBtcError,
+    RetrieveBtcOk,
+    RetrieveBtcWithApprovalArgs,
     RetrieveBtcWithApprovalError,
 };
 use ic_ckbtc_minter::updates::{
     self,
     get_btc_address::GetBtcAddressArgs,
-    update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus},
+    update_balance::{
+        UpdateBalanceArgs,
+        UpdateBalanceError,
+        UtxoStatus,
+    },
 };
 use ic_ckbtc_minter::MinterInfo;
 use ic_ckbtc_minter::{
-    state::eventlog::{Event, GetEventsArg},
-    storage, {Log, LogEntry, Priority},
+    state::eventlog::{
+        Event,
+        GetEventsArg,
+    },
+    storage,
+    {
+        Log,
+        LogEntry,
+        Priority,
+    },
 };
 use icrc_ledger_types::icrc1::account::Account;
 use std::str::FromStr;
@@ -338,7 +375,10 @@ fn main() {}
 /// Checks the real candid interface against the one declared in the did file
 #[test]
 fn check_candid_interface_compatibility() {
-    use candid_parser::utils::{service_equal, CandidSource};
+    use candid_parser::utils::{
+        service_equal,
+        CandidSource,
+    };
 
     fn source_to_str(source: &CandidSource) -> String {
         match source {

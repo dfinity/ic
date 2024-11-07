@@ -1,6 +1,9 @@
 use crate::protocol::ctlsvc::*;
 use crate::protocol::logging::LogRequest;
-use crate::rpc::{Call, DemuxServer};
+use crate::rpc::{
+    Call,
+    DemuxServer,
+};
 
 /// RPC interface exposed by sandbox process.
 pub trait ControllerService: Send + Sync {

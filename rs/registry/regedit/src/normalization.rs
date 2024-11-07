@@ -1,8 +1,16 @@
-use crate::{json, snapshot::Snapshot};
+use crate::{
+    json,
+    snapshot::Snapshot,
+};
 use ic_base_types::PrincipalId;
 use ic_crypto_sha2::Sha256;
 use serde_json::Value;
-use std::{collections::BTreeMap, convert::TryFrom, ops::Range, str::FromStr};
+use std::{
+    collections::BTreeMap,
+    convert::TryFrom,
+    ops::Range,
+    str::FromStr,
+};
 
 const LARGE_ARRAY_MIN_SIZE: usize = 33;
 const BIN_DATA_SHA256: &str = "(binary-data|sha256)";
@@ -175,10 +183,17 @@ fn hexdigit_to_u8(c: u8) -> u8 {
 
 #[cfg(test)]
 mod tests {
-    use super::{expand, normalize};
+    use super::{
+        expand,
+        normalize,
+    };
     use crate::{
-        args::{SourceSpec, VersionSpec},
-        snapshot, source,
+        args::{
+            SourceSpec,
+            VersionSpec,
+        },
+        snapshot,
+        source,
     };
 
     use crate::tests::run_ic_prep;

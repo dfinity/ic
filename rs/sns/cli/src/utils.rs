@@ -1,9 +1,18 @@
-use anyhow::{anyhow, Result};
-use futures::{stream, StreamExt};
+use anyhow::{
+    anyhow,
+    Result,
+};
+use futures::{
+    stream,
+    StreamExt,
+};
 use ic_agent::Agent;
 use ic_nervous_system_agent::sns::Sns;
 use itertools::Itertools;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 fn get_agent(ic_url: &str) -> Result<Agent> {
     Agent::builder()

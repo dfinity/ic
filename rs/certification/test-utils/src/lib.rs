@@ -1,14 +1,28 @@
 use ic_crypto_internal_seed::Seed;
-use rand::{thread_rng, CryptoRng, Rng, RngCore};
+use rand::{
+    thread_rng,
+    CryptoRng,
+    Rng,
+    RngCore,
+};
 use serde::Serialize;
 
 use ic_crypto_internal_threshold_sig_bls12381::api::{
-    combine_signatures, combined_public_key, generate_threshold_key, sign_message,
+    combine_signatures,
+    combined_public_key,
+    generate_threshold_key,
+    sign_message,
 };
 use ic_crypto_internal_threshold_sig_bls12381::types::SecretKeyBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
 use ic_crypto_tree_hash::{
-    flatmap, Digest, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree, MixedHashTree,
+    flatmap,
+    Digest,
+    HashTreeBuilder,
+    HashTreeBuilderImpl,
+    Label,
+    LabeledTree,
+    MixedHashTree,
     WitnessGenerator,
 };
 use ic_crypto_utils_threshold_sig_der::public_key_to_der;
@@ -16,9 +30,18 @@ use ic_types::messages::Blob;
 use ic_types::{
     consensus::certification::CertificationContent,
     crypto::Signable,
-    crypto::{threshold_sig::ThresholdSigPublicKey, CryptoHash},
-    crypto::{CombinedThresholdSig, CombinedThresholdSigOf},
-    CanisterId, CryptoHashOfPartialState, NumberOfNodes, SubnetId,
+    crypto::{
+        threshold_sig::ThresholdSigPublicKey,
+        CryptoHash,
+    },
+    crypto::{
+        CombinedThresholdSig,
+        CombinedThresholdSigOf,
+    },
+    CanisterId,
+    CryptoHashOfPartialState,
+    NumberOfNodes,
+    SubnetId,
 };
 
 const REPLICA_TIME: u64 = 1234567;

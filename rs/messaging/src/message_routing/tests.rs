@@ -6,47 +6,98 @@ use crate::routing::demux::DemuxImpl;
 use super::*;
 use assert_matches::assert_matches;
 use ic_crypto_test_utils_ni_dkg::{
-    dummy_transcript_for_tests, dummy_transcript_for_tests_with_params,
+    dummy_transcript_for_tests,
+    dummy_transcript_for_tests_with_params,
 };
 use ic_interfaces_registry::RegistryValue;
 use ic_interfaces_state_manager::StateReader;
 use ic_interfaces_state_manager_mocks::MockStateManager;
-use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId};
-use ic_protobuf::registry::crypto::v1::{ChainKeySigningSubnetList, PublicKey as PublicKeyProto};
+use ic_management_canister_types::{
+    EcdsaCurve,
+    EcdsaKeyId,
+    MasterPublicKeyId,
+};
+use ic_protobuf::registry::crypto::v1::{
+    ChainKeySigningSubnetList,
+    PublicKey as PublicKeyProto,
+};
 use ic_protobuf::registry::subnet::v1::SubnetRecord as SubnetRecordProto;
 use ic_protobuf::registry::{
-    api_boundary_node::v1::ApiBoundaryNodeRecord, node::v1::IPv4InterfaceConfig,
+    api_boundary_node::v1::ApiBoundaryNodeRecord,
+    node::v1::IPv4InterfaceConfig,
     node::v1::NodeRecord,
 };
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_chain_key_signing_subnet_list_key;
 use ic_registry_local_registry::LocalRegistry;
-use ic_registry_local_store::{compact_delta_to_changelog, LocalStoreImpl, LocalStoreWriter};
-use ic_registry_proto_data_provider::{ProtoRegistryDataProvider, ProtoRegistryDataProviderError};
-use ic_registry_routing_table::{routing_table_insert_subnet, CanisterMigrations, RoutingTable};
-use ic_registry_subnet_features::{ChainKeyConfig, EcdsaConfig, KeyConfig};
+use ic_registry_local_store::{
+    compact_delta_to_changelog,
+    LocalStoreImpl,
+    LocalStoreWriter,
+};
+use ic_registry_proto_data_provider::{
+    ProtoRegistryDataProvider,
+    ProtoRegistryDataProviderError,
+};
+use ic_registry_routing_table::{
+    routing_table_insert_subnet,
+    CanisterMigrations,
+    RoutingTable,
+};
+use ic_registry_subnet_features::{
+    ChainKeyConfig,
+    EcdsaConfig,
+    KeyConfig,
+};
 use ic_replicated_state::Stream;
 use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_logger::with_test_replica_logger;
-use ic_test_utilities_metrics::{fetch_int_counter_vec, fetch_int_gauge_vec, metric_vec};
+use ic_test_utilities_metrics::{
+    fetch_int_counter_vec,
+    fetch_int_gauge_vec,
+    metric_vec,
+};
 use ic_test_utilities_registry::SubnetRecordBuilder;
 use ic_test_utilities_state::CanisterStateBuilder;
 use ic_test_utilities_types::{
     batch::BatchBuilder,
-    ids::{canister_test_id, node_test_id, subnet_test_id},
+    ids::{
+        canister_test_id,
+        node_test_id,
+        subnet_test_id,
+    },
 };
 use ic_types::batch::BlockmakerMetrics;
-use ic_types::xnet::{StreamIndexedQueue, StreamSlice};
+use ic_types::xnet::{
+    StreamIndexedQueue,
+    StreamSlice,
+};
 use ic_types::ReplicaVersion;
 use ic_types::{
-    batch::{Batch, BatchMessages},
-    crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript},
+    batch::{
+        Batch,
+        BatchMessages,
+    },
+    crypto::threshold_sig::ni_dkg::{
+        NiDkgTag,
+        NiDkgTranscript,
+    },
     crypto::AlgorithmId,
     time::Time,
-    NodeId, PrincipalId, Randomness,
+    NodeId,
+    PrincipalId,
+    Randomness,
 };
-use maplit::{btreemap, btreeset};
-use std::{fmt::Debug, str::FromStr, sync::Arc, time::Duration};
+use maplit::{
+    btreemap,
+    btreeset,
+};
+use std::{
+    fmt::Debug,
+    str::FromStr,
+    sync::Arc,
+    time::Duration,
+};
 use tempfile::TempDir;
 
 /// Helper function for testing the values of the
@@ -68,7 +119,10 @@ fn assert_deliver_batch_count_eq(
 }
 
 mod notification {
-    use std::sync::{Condvar, Mutex};
+    use std::sync::{
+        Condvar,
+        Mutex,
+    };
     use std::time::Duration;
 
     /// One-off notification that can be used to synchronize two threads.
@@ -203,7 +257,10 @@ mod notification {
 
 #[test]
 fn message_routing_does_not_block() {
-    use notification::{Notification, WaitResult};
+    use notification::{
+        Notification,
+        WaitResult,
+    };
 
     with_test_replica_logger(|log| {
         let timeout = Duration::from_secs(10);
@@ -370,7 +427,10 @@ impl RegistryFixture {
         key: &str,
         value: Integrity<T>,
     ) -> Result<(), ProtoRegistryDataProviderError> {
-        use ic_registry_transport::pb::v1::{registry_mutation::Type, RegistryMutation};
+        use ic_registry_transport::pb::v1::{
+            registry_mutation::Type,
+            RegistryMutation,
+        };
         match value {
             Integrity::Valid(value) => self.data_provider.add(
                 key,
@@ -400,7 +460,8 @@ impl RegistryFixture {
         transcript: Integrity<Option<&NiDkgTranscript>>,
     ) -> Result<(), ProtoRegistryDataProviderError> {
         use ic_protobuf::registry::subnet::v1::{
-            CatchUpPackageContents, InitialNiDkgTranscriptRecord,
+            CatchUpPackageContents,
+            InitialNiDkgTranscriptRecord,
         };
         use ic_registry_keys::make_catch_up_package_contents_key;
 

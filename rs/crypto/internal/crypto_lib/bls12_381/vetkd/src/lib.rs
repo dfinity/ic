@@ -6,8 +6,14 @@
 #![forbid(missing_docs)]
 
 pub use ic_crypto_internal_bls12_381_type::*;
-use rand::{CryptoRng, RngCore};
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use rand::{
+    CryptoRng,
+    RngCore,
+};
+use zeroize::{
+    Zeroize,
+    ZeroizeOnDrop,
+};
 
 mod ro;
 

@@ -1,8 +1,14 @@
 mod scenario;
 mod state;
 
-use candid::{CandidType, Nat};
-use ic_base_types::{CanisterId, PrincipalId};
+use candid::{
+    CandidType,
+    Nat,
+};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_cdk::api::management_canister::main::WasmModule;
 use rand::RngCore;
 use rand_chacha::rand_core::SeedableRng;

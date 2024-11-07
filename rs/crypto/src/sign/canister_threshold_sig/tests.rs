@@ -7,8 +7,12 @@ mod get_master_public_key_from_transcript {
     use ic_crypto_internal_threshold_sig_canister_threshold_sig::IDkgTranscriptInternal;
     use ic_crypto_test_utils::set_of;
     use ic_types::crypto::canister_threshold_sig::idkg::{
-        IDkgMaskedTranscriptOrigin, IDkgReceivers, IDkgTranscript, IDkgTranscriptId,
-        IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin,
+        IDkgMaskedTranscriptOrigin,
+        IDkgReceivers,
+        IDkgTranscript,
+        IDkgTranscriptId,
+        IDkgTranscriptType,
+        IDkgUnmaskedTranscriptOrigin,
     };
     use ic_types::crypto::canister_threshold_sig::MasterPublicKey;
     use ic_types::crypto::AlgorithmId;

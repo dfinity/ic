@@ -10,35 +10,72 @@ use ic_ckbtc_minter::{
     state::Mode,
     updates::{
         get_withdrawal_account::compute_subaccount,
-        update_balance::{UpdateBalanceArgs, UtxoStatus},
+        update_balance::{
+            UpdateBalanceArgs,
+            UtxoStatus,
+        },
     },
 };
 use ic_system_test_driver::{
     driver::{
         group::SystemTestGroup,
         test_env::TestEnv,
-        test_env_api::{HasPublicApiUrl, IcNodeContainer},
+        test_env_api::{
+            HasPublicApiUrl,
+            IcNodeContainer,
+        },
     },
     systest,
-    util::{assert_create_agent, block_on, runtime_from_url, UniversalCanister},
+    util::{
+        assert_create_agent,
+        block_on,
+        runtime_from_url,
+        UniversalCanister,
+    },
 };
 use ic_tests_ckbtc::{
-    activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_kyt,
-    install_ledger, install_minter, set_kyt_api_key, setup, subnet_sys,
+    activate_ecdsa_signature,
+    create_canister,
+    install_bitcoin_canister,
+    install_kyt,
+    install_ledger,
+    install_minter,
+    set_kyt_api_key,
+    setup,
+    subnet_sys,
     utils::{
-        assert_mint_transaction, assert_no_new_utxo, assert_no_transaction,
-        assert_temporarily_unavailable, ensure_wallet, generate_blocks, get_btc_address,
-        get_btc_client, start_canister, stop_canister, update_balance, upgrade_canister,
-        upgrade_canister_with_args, wait_for_bitcoin_balance, BTC_BLOCK_REWARD,
+        assert_mint_transaction,
+        assert_no_new_utxo,
+        assert_no_transaction,
+        assert_temporarily_unavailable,
+        ensure_wallet,
+        generate_blocks,
+        get_btc_address,
+        get_btc_client,
+        start_canister,
+        stop_canister,
+        update_balance,
+        upgrade_canister,
+        upgrade_canister_with_args,
+        wait_for_bitcoin_balance,
+        BTC_BLOCK_REWARD,
     },
-    BTC_MIN_CONFIRMATIONS, KYT_FEE, TEST_KEY_LOCAL,
+    BTC_MIN_CONFIRMATIONS,
+    KYT_FEE,
+    TEST_KEY_LOCAL,
 };
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::account::Account;
 use k256::elliptic_curve::SecretKey;
-use rand::{rngs::OsRng, SeedableRng};
+use rand::{
+    rngs::OsRng,
+    SeedableRng,
+};
 use rand_chacha::ChaChaRng;
-use slog::{debug, info};
+use slog::{
+    debug,
+    info,
+};
 
 /// Test update_balance method of the minter canister.
 /// Verify proper state preservation after canister update.

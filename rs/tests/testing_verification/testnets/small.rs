@@ -41,10 +41,20 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
     boundary_node::BoundaryNode,
     group::SystemTestGroup,
-    ic::{InternetComputer, Subnet},
-    prometheus_vm::{HasPrometheus, PrometheusVm},
+    ic::{
+        InternetComputer,
+        Subnet,
+    },
+    prometheus_vm::{
+        HasPrometheus,
+        PrometheusVm,
+    },
     test_env::TestEnv,
-    test_env_api::{await_boundary_node_healthy, HasTopologySnapshot, NnsCustomizations},
+    test_env_api::{
+        await_boundary_node_healthy,
+        HasTopologySnapshot,
+        NnsCustomizations,
+    },
 };
 
 const BOUNDARY_NODE_NAME: &str = "boundary-node-1";

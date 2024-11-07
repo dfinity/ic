@@ -1,26 +1,52 @@
 use crate::deserialize_registry_value;
 use ic_interfaces_registry::{
-    RegistryClient, RegistryClientResult, RegistryClientVersionedResult, RegistryVersionedRecord,
+    RegistryClient,
+    RegistryClientResult,
+    RegistryClientVersionedResult,
+    RegistryVersionedRecord,
 };
-use ic_limits::{INITIAL_NOTARY_DELAY, UNIT_DELAY_APP_SUBNET};
+use ic_limits::{
+    INITIAL_NOTARY_DELAY,
+    UNIT_DELAY_APP_SUBNET,
+};
 use ic_protobuf::{
     registry::{
         node::v1::NodeRecord,
         replica_version::v1::ReplicaVersionRecord,
-        subnet::v1::{CatchUpPackageContents, SubnetListRecord, SubnetRecord},
+        subnet::v1::{
+            CatchUpPackageContents,
+            SubnetListRecord,
+            SubnetRecord,
+        },
     },
     types::v1::SubnetId as SubnetIdProto,
 };
 use ic_registry_keys::{
-    make_catch_up_package_contents_key, make_node_record_key, make_replica_version_key,
-    make_subnet_list_record_key, make_subnet_record_key, ROOT_SUBNET_ID_KEY,
+    make_catch_up_package_contents_key,
+    make_node_record_key,
+    make_replica_version_key,
+    make_subnet_list_record_key,
+    make_subnet_record_key,
+    ROOT_SUBNET_ID_KEY,
 };
-use ic_registry_subnet_features::{ChainKeyConfig, SubnetFeatures};
+use ic_registry_subnet_features::{
+    ChainKeyConfig,
+    SubnetFeatures,
+};
 use ic_types::{
-    registry::RegistryClientError::DecodeError, Height, NodeId, PrincipalId,
-    PrincipalIdBlobParseError, RegistryVersion, ReplicaVersion, SubnetId,
+    registry::RegistryClientError::DecodeError,
+    Height,
+    NodeId,
+    PrincipalId,
+    PrincipalIdBlobParseError,
+    RegistryVersion,
+    ReplicaVersion,
+    SubnetId,
 };
-use std::{convert::TryFrom, time::Duration};
+use std::{
+    convert::TryFrom,
+    time::Duration,
+};
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct NotarizationDelaySettings {

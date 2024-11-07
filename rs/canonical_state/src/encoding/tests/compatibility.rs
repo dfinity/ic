@@ -8,31 +8,62 @@
 //! (and ideally forwards) compatibility with one or more preceding
 //! protocol versions.
 
-use crate::{all_supported_versions, encoding::*, CertificationVersion};
+use crate::{
+    all_supported_versions,
+    encoding::*,
+    CertificationVersion,
+};
 use assert_matches::assert_matches;
 use ic_error_types::RejectCode;
 use ic_management_canister_types::{
-    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
+    EcdsaCurve,
+    EcdsaKeyId,
+    MasterPublicKeyId,
+    SchnorrAlgorithm,
+    SchnorrKeyId,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::system_state::CyclesUseCase,
-    metadata_state::{SubnetMetrics, SystemMetadata},
+    metadata_state::{
+        SubnetMetrics,
+        SystemMetadata,
+    },
 };
-use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id};
+use ic_test_utilities_types::ids::{
+    canister_test_id,
+    subnet_test_id,
+};
 use ic_types::{
     crypto::CryptoHash,
     messages::{
-        CallbackId, Payload, RejectContext, Request, RequestMetadata, RequestOrResponse, Response,
+        CallbackId,
+        Payload,
+        RejectContext,
+        Request,
+        RequestMetadata,
+        RequestOrResponse,
+        Response,
         NO_DEADLINE,
     },
     nominal_cycles::NominalCycles,
     time::CoarseTime,
-    xnet::{RejectReason, RejectSignal, StreamFlags},
-    CryptoHashOfPartialState, Cycles, Funds, NumBytes, Time,
+    xnet::{
+        RejectReason,
+        RejectSignal,
+        StreamFlags,
+    },
+    CryptoHashOfPartialState,
+    Cycles,
+    Funds,
+    NumBytes,
+    Time,
 };
 use serde_cbor::value::Value;
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{
+    BTreeMap,
+    VecDeque,
+};
 
 //
 // Tests for exact binary encoding

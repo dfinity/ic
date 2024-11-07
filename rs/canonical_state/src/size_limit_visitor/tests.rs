@@ -1,8 +1,24 @@
 use super::*;
-use crate::test_visitors::{NoopVisitor, TraceEntry, TracingVisitor};
-use crate::visitor::{named_blob, named_num, named_subtree, subtree, Visitor};
+use crate::test_visitors::{
+    NoopVisitor,
+    TraceEntry,
+    TracingVisitor,
+};
+use crate::visitor::{
+    named_blob,
+    named_num,
+    named_subtree,
+    subtree,
+    Visitor,
+};
 use Matcher::*;
-use TraceEntry::{EndSubtree, EnterEdge, StartSubtree, VisitBlob, VisitNum};
+use TraceEntry::{
+    EndSubtree,
+    EnterEdge,
+    StartSubtree,
+    VisitBlob,
+    VisitNum,
+};
 
 const MESSAGE_SIZE: usize = 3;
 const HEADER_SIZE: usize = 2;

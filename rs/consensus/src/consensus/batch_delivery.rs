@@ -4,38 +4,82 @@
 
 use crate::{
     consensus::{
-        metrics::{BatchStats, BlockStats},
-        status::{self, Status},
+        metrics::{
+            BatchStats,
+            BlockStats,
+        },
+        status::{
+            self,
+            Status,
+        },
     },
-    idkg::utils::{get_idkg_subnet_public_keys, get_pre_signature_ids_to_deliver},
+    idkg::utils::{
+        get_idkg_subnet_public_keys,
+        get_pre_signature_ids_to_deliver,
+    },
 };
 use ic_consensus_utils::{
-    crypto_hashable_to_seed, membership::Membership, pool_reader::PoolReader,
+    crypto_hashable_to_seed,
+    membership::Membership,
+    pool_reader::PoolReader,
 };
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl;
 use ic_interfaces::{
     batch_payload::IntoMessages,
-    messaging::{MessageRouting, MessageRoutingError},
+    messaging::{
+        MessageRouting,
+        MessageRoutingError,
+    },
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{debug, error, info, warn, ReplicaLogger};
+use ic_logger::{
+    debug,
+    error,
+    info,
+    warn,
+    ReplicaLogger,
+};
 use ic_management_canister_types::SetupInitialDKGResponse;
 use ic_protobuf::{
     log::consensus_log_entry::v1::ConsensusLogEntry,
-    registry::{crypto::v1::PublicKey as PublicKeyProto, subnet::v1::InitialNiDkgTranscriptRecord},
+    registry::{
+        crypto::v1::PublicKey as PublicKeyProto,
+        subnet::v1::InitialNiDkgTranscriptRecord,
+    },
 };
 use ic_types::{
-    batch::{Batch, BatchMessages, BatchSummary, BlockmakerMetrics, ConsensusResponse},
+    batch::{
+        Batch,
+        BatchMessages,
+        BatchSummary,
+        BlockmakerMetrics,
+        ConsensusResponse,
+    },
     consensus::{
-        idkg::{self, CompletedSignature},
-        Block, HasVersion,
+        idkg::{
+            self,
+            CompletedSignature,
+        },
+        Block,
+        HasVersion,
     },
     crypto::threshold_sig::{
-        ni_dkg::{NiDkgId, NiDkgTag, NiDkgTranscript},
+        ni_dkg::{
+            NiDkgId,
+            NiDkgTag,
+            NiDkgTranscript,
+        },
         ThresholdSigPublicKey,
     },
-    messages::{CallbackId, Payload, RejectContext},
-    Height, PrincipalId, Randomness, SubnetId,
+    messages::{
+        CallbackId,
+        Payload,
+        RejectContext,
+    },
+    Height,
+    PrincipalId,
+    Randomness,
+    SubnetId,
 };
 use std::collections::BTreeMap;
 

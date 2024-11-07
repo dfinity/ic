@@ -4,14 +4,22 @@ use crate::NodeId;
 use crate::RegistryVersion;
 use assert_matches::assert_matches;
 use maplit::btreeset;
-use rand::{CryptoRng, Rng};
+use rand::{
+    CryptoRng,
+    Rng,
+};
 use std::collections::BTreeSet;
 
 use crate::crypto::canister_threshold_sig::idkg::tests::test_utils::{
-    mock_masked_transcript_type, mock_transcript, mock_unmasked_transcript_type,
+    mock_masked_transcript_type,
+    mock_transcript,
+    mock_unmasked_transcript_type,
     random_transcript_id,
 };
-use ic_crypto_test_utils_canister_threshold_sigs::{ordered_node_id, set_of_nodes};
+use ic_crypto_test_utils_canister_threshold_sigs::{
+    ordered_node_id,
+    set_of_nodes,
+};
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 
 #[test]

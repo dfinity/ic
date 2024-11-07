@@ -5,25 +5,58 @@ pub mod system_state;
 mod tests;
 
 use crate::canister_state::queues::CanisterOutputQueuesIterator;
-use crate::canister_state::system_state::{ExecutionTask, SystemState};
-use crate::{InputQueueType, StateError};
-pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions, Global};
-use ic_management_canister_types::{CanisterStatusType, LogVisibilityV2};
+use crate::canister_state::system_state::{
+    ExecutionTask,
+    SystemState,
+};
+use crate::{
+    InputQueueType,
+    StateError,
+};
+pub use execution_state::{
+    EmbedderCache,
+    ExecutionState,
+    ExportedFunctions,
+    Global,
+};
+use ic_management_canister_types::{
+    CanisterStatusType,
+    LogVisibilityV2,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::batch::TotalQueryStats;
 use ic_types::methods::SystemMethod;
 use ic_types::time::UNIX_EPOCH;
 use ic_types::{
-    messages::{CanisterMessage, Ingress, Request, RequestOrResponse, Response},
+    messages::{
+        CanisterMessage,
+        Ingress,
+        Request,
+        RequestOrResponse,
+        Response,
+    },
     methods::WasmMethod,
-    AccumulatedPriority, CanisterId, CanisterLog, ComputeAllocation, ExecutionRound,
-    MemoryAllocation, NumBytes, PrincipalId, Time,
+    AccumulatedPriority,
+    CanisterId,
+    CanisterLog,
+    ComputeAllocation,
+    ExecutionRound,
+    MemoryAllocation,
+    NumBytes,
+    PrincipalId,
+    Time,
 };
-use ic_types::{LongExecutionMode, NumInstructions};
+use ic_types::{
+    LongExecutionMode,
+    NumInstructions,
+};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use phantom_newtype::AmountOf;
-pub use queues::{CanisterQueues, DEFAULT_QUEUE_CAPACITY};
+pub use queues::{
+    CanisterQueues,
+    DEFAULT_QUEUE_CAPACITY,
+};
 use std::collections::BTreeSet;
 use std::convert::From;
 use std::sync::Arc;
@@ -598,5 +631,8 @@ pub fn num_bytes_try_from(pages: NumWasmPages) -> Result<NumBytes, String> {
 }
 
 pub mod testing {
-    pub use super::queues::testing::{new_canister_output_queues_for_test, CanisterQueuesTesting};
+    pub use super::queues::testing::{
+        new_canister_output_queues_for_test,
+        CanisterQueuesTesting,
+    };
 }

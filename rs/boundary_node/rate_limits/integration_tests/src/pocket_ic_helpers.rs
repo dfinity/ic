@@ -1,13 +1,28 @@
-use candid::{CandidType, Decode, Encode, Principal};
+use candid::{
+    CandidType,
+    Decode,
+    Encode,
+    Principal,
+};
 use canister_test::Project;
 use canister_test::Wasm;
 use ic_crypto_sha2::Sha256;
-use ic_nns_constants::{REGISTRY_CANISTER_ID, ROOT_CANISTER_ID};
+use ic_nns_constants::{
+    REGISTRY_CANISTER_ID,
+    ROOT_CANISTER_ID,
+};
 use ic_nns_test_utils::common::{
-    build_mainnet_registry_wasm, build_registry_wasm, NnsInitPayloadsBuilder,
+    build_mainnet_registry_wasm,
+    build_registry_wasm,
+    NnsInitPayloadsBuilder,
 };
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
-use pocket_ic::{nonblocking::PocketIc, CanisterSettings, PocketIcBuilder, WasmResult};
+use pocket_ic::{
+    nonblocking::PocketIc,
+    CanisterSettings,
+    PocketIcBuilder,
+    WasmResult,
+};
 use rate_limits_api::InitArg;
 use serde::de::DeserializeOwned;
 

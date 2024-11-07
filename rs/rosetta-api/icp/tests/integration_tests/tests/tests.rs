@@ -1,4 +1,10 @@
-use candid::{CandidType, Decode, Encode, Nat, Principal};
+use candid::{
+    CandidType,
+    Decode,
+    Encode,
+    Nat,
+    Principal,
+};
 use ic_agent::identity::BasicIdentity;
 use ic_agent::Identity;
 use ic_icrc_rosetta::common::types::Error;
@@ -6,20 +12,49 @@ use ic_icrc_rosetta_client::RosettaClient;
 use ic_ledger_test_utils::pocket_ic_helpers::ledger::LEDGER_CANISTER_ID;
 use ic_rosetta_api::convert;
 use ic_rosetta_api::models::{
-    BlockIdentifier, CallResponse, NetworkIdentifier, NetworkListResponse, NetworkStatusResponse,
-    PartialBlockIdentifier, QueryBlockRangeRequest, QueryBlockRangeResponse, TransactionIdentifier,
+    BlockIdentifier,
+    CallResponse,
+    NetworkIdentifier,
+    NetworkListResponse,
+    NetworkStatusResponse,
+    PartialBlockIdentifier,
+    QueryBlockRangeRequest,
+    QueryBlockRangeResponse,
+    TransactionIdentifier,
 };
-use ic_rosetta_api::request_types::{RosettaBlocksMode, RosettaStatus};
-use ic_sender_canister_lib::{SendArg, SendResult};
+use ic_rosetta_api::request_types::{
+    RosettaBlocksMode,
+    RosettaStatus,
+};
+use ic_sender_canister_lib::{
+    SendArg,
+    SendResult,
+};
 use icp_ledger::{
-    AccountIdentifier, Memo, Operation, TimeStamp, Tokens, Transaction, DEFAULT_TRANSFER_FEE,
+    AccountIdentifier,
+    Memo,
+    Operation,
+    TimeStamp,
+    Tokens,
+    Transaction,
+    DEFAULT_TRANSFER_FEE,
 };
-use icp_rosetta_integration_tests::{start_rosetta, RosettaContext};
+use icp_rosetta_integration_tests::{
+    start_rosetta,
+    RosettaContext,
+};
 use icrc_ledger_types::icrc1::account::Account;
-use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError};
+use icrc_ledger_types::icrc1::transfer::{
+    BlockIndex,
+    TransferArg,
+    TransferError,
+};
 use num_traits::cast::ToPrimitive;
 use pocket_ic::WasmResult;
-use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder};
+use pocket_ic::{
+    nonblocking::PocketIc,
+    PocketIcBuilder,
+};
 use rosetta_core::objects::ObjectMap;
 use serde::Deserialize;
 use std::path::PathBuf;

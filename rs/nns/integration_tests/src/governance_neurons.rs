@@ -6,33 +6,70 @@ use dfn_protobuf::protobuf;
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::Sender;
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_ID,
+    TEST_NEURON_1_ID,
+    TEST_NEURON_1_OWNER_KEYPAIR,
+    TEST_NEURON_1_OWNER_PRINCIPAL,
+    TEST_NEURON_2_ID,
     TEST_NEURON_2_OWNER_PRINCIPAL,
 };
 use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
 use ic_nns_governance::governance::INITIAL_NEURON_DISSOLVE_DELAY;
 use ic_nns_governance_api::pb::v1::{
     governance_error::ErrorType,
-    manage_neuron::{Command, Merge, NeuronIdOrSubaccount, Spawn},
+    manage_neuron::{
+        Command,
+        Merge,
+        NeuronIdOrSubaccount,
+        Spawn,
+    },
     manage_neuron_response::{
-        Command as CommandResponse, {self},
+        Command as CommandResponse,
+        {
+            self,
+        },
     },
     neuron::DissolveState,
-    GovernanceError, ListNeurons, ManageNeuron, ManageNeuronResponse, Neuron, NeuronState,
+    GovernanceError,
+    ListNeurons,
+    ManageNeuron,
+    ManageNeuronResponse,
+    Neuron,
+    NeuronState,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{
+        state_machine_test_on_nns_subnet,
+        NnsCanisters,
+    },
     state_test_helpers::{
-        list_neurons, list_neurons_by_principal, nns_add_hot_key, nns_claim_or_refresh_neuron,
-        nns_disburse_neuron, nns_governance_get_full_neuron, nns_governance_get_neuron_info,
-        nns_join_community_fund, nns_leave_community_fund, nns_remove_hot_key,
-        nns_send_icp_to_claim_or_refresh_neuron, nns_start_dissolving, setup_nns_canisters,
+        list_neurons,
+        list_neurons_by_principal,
+        nns_add_hot_key,
+        nns_claim_or_refresh_neuron,
+        nns_disburse_neuron,
+        nns_governance_get_full_neuron,
+        nns_governance_get_neuron_info,
+        nns_join_community_fund,
+        nns_leave_community_fund,
+        nns_remove_hot_key,
+        nns_send_icp_to_claim_or_refresh_neuron,
+        nns_start_dissolving,
+        setup_nns_canisters,
         state_machine_builder_for_nns_tests,
     },
 };
-use icp_ledger::{tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Tokens};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use icp_ledger::{
+    tokens_from_proto,
+    AccountBalanceArgs,
+    AccountIdentifier,
+    Tokens,
+};
+use std::time::{
+    Duration,
+    SystemTime,
+    UNIX_EPOCH,
+};
 
 #[test]
 fn test_merge_neurons_and_simulate_merge_neurons() {

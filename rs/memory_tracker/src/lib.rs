@@ -1,18 +1,36 @@
 use bit_vec::BitVec;
-use ic_logger::{debug, ReplicaLogger};
+use ic_logger::{
+    debug,
+    ReplicaLogger,
+};
 use ic_replicated_state::{
-    page_map::{FileDescriptor, MemoryInstructions},
-    PageIndex, PageMap,
+    page_map::{
+        FileDescriptor,
+        MemoryInstructions,
+    },
+    PageIndex,
+    PageMap,
 };
 use ic_sys::PAGE_SIZE;
 use nix::{
     errno::Errno,
-    sys::mman::{mmap, mprotect, MapFlags, ProtFlags},
+    sys::mman::{
+        mmap,
+        mprotect,
+        MapFlags,
+        ProtFlags,
+    },
 };
 use std::{
-    cell::{Cell, RefCell},
+    cell::{
+        Cell,
+        RefCell,
+    },
     ops::Range,
-    sync::atomic::{AtomicUsize, Ordering},
+    sync::atomic::{
+        AtomicUsize,
+        Ordering,
+    },
 };
 
 // The upper bound on the number of pages that are memory mapped from the

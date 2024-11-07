@@ -1,15 +1,31 @@
 use flate2::read::GzDecoder;
 use http::Method;
 use ic_crypto_sha2::Sha256;
-use ic_logger::{info, warn, ReplicaLogger};
-use reqwest::{Client, Response};
+use ic_logger::{
+    info,
+    warn,
+    ReplicaLogger,
+};
+use reqwest::{
+    Client,
+    Response,
+};
 use std::error::Error;
 use std::fmt;
-use std::fs::{self, File};
+use std::fs::{
+    self,
+    File,
+};
 use std::io;
 use std::io::prelude::*;
-use std::io::{BufReader, SeekFrom};
-use std::path::{Path, PathBuf};
+use std::io::{
+    BufReader,
+    SeekFrom,
+};
+use std::path::{
+    Path,
+    PathBuf,
+};
 use std::time::Duration;
 use tar::Archive;
 use zstd::stream::read::Decoder as ZstdDecoder;
@@ -321,12 +337,21 @@ mod tests {
     use assert_matches::assert_matches;
     use flate2::write::GzEncoder;
     use flate2::Compression;
-    use ic_test_utilities_in_memory_logger::{assertions::LogEntriesAssert, InMemoryReplicaLogger};
-    use mockito::{Mock, ServerGuard};
+    use ic_test_utilities_in_memory_logger::{
+        assertions::LogEntriesAssert,
+        InMemoryReplicaLogger,
+    };
+    use mockito::{
+        Mock,
+        ServerGuard,
+    };
     use slog::Level;
     use tar::Builder;
     use tempfile::tempdir;
-    use tempfile::{NamedTempFile, TempPath};
+    use tempfile::{
+        NamedTempFile,
+        TempPath,
+    };
     use tokio::test;
     use zstd::stream::write::Encoder as ZstdEncoder;
 

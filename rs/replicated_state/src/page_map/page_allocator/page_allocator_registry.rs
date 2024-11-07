@@ -1,9 +1,16 @@
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex, Weak},
+    sync::{
+        Arc,
+        Mutex,
+        Weak,
+    },
 };
 
-use super::{PageAllocatorId, PageAllocatorInner};
+use super::{
+    PageAllocatorId,
+    PageAllocatorInner,
+};
 
 /// It is used to deduplicate page allocators after deserialization in the
 /// sandbox process in order to ensure the 1:1 correspondence between page
@@ -104,7 +111,10 @@ impl PageAllocatorRegistryCore {
 mod tests {
     use super::*;
 
-    use crate::page_map::page_allocator::mmap::{PageAllocatorId, PageAllocatorInner};
+    use crate::page_map::page_allocator::mmap::{
+        PageAllocatorId,
+        PageAllocatorInner,
+    };
     use std::sync::Arc;
 
     #[test]

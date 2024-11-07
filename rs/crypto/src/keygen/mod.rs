@@ -1,28 +1,59 @@
 #[cfg(test)]
 mod tests;
 
-use crate::tls::{tls_cert_from_registry_raw, TlsCertFromRegistryError};
-use crate::{key_from_registry, CryptoComponentImpl};
+use crate::tls::{
+    tls_cert_from_registry_raw,
+    TlsCertFromRegistryError,
+};
+use crate::{
+    key_from_registry,
+    CryptoComponentImpl,
+};
 use ic_crypto_internal_csp::keygen::utils::idkg_dealing_encryption_pk_to_proto;
 use ic_crypto_internal_csp::types::ExternalPublicKeys;
 use ic_crypto_internal_csp::vault::api::{
-    CspPublicKeyStoreError, NodeKeysErrors, PksAndSksContainsErrors,
+    CspPublicKeyStoreError,
+    NodeKeysErrors,
+    PksAndSksContainsErrors,
 };
 use ic_crypto_internal_csp::CryptoServiceProvider;
 use ic_crypto_internal_logmon::metrics::{
-    BooleanOperation, BooleanResult, KeyCounts, KeyRotationResult, MetricsResult,
+    BooleanOperation,
+    BooleanResult,
+    KeyCounts,
+    KeyRotationResult,
+    MetricsResult,
 };
 use ic_interfaces::crypto::{
-    CheckKeysWithRegistryError, CurrentNodePublicKeysError, IDkgDealingEncryptionKeyRotationError,
-    IDkgKeyRotationResult, KeyManager, KeyRotationOutcome,
+    CheckKeysWithRegistryError,
+    CurrentNodePublicKeysError,
+    IDkgDealingEncryptionKeyRotationError,
+    IDkgKeyRotationResult,
+    KeyManager,
+    KeyRotationOutcome,
 };
-use ic_logger::{error, info, warn};
-use ic_protobuf::registry::crypto::v1::{PublicKey as PublicKeyProto, X509PublicKeyCert};
+use ic_logger::{
+    error,
+    info,
+    warn,
+};
+use ic_protobuf::registry::crypto::v1::{
+    PublicKey as PublicKeyProto,
+    X509PublicKeyCert,
+};
 use ic_registry_client_helpers::crypto::CryptoRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
-use ic_types::crypto::{CryptoError, CryptoResult, CurrentNodePublicKeys, KeyPurpose};
+use ic_types::crypto::{
+    CryptoError,
+    CryptoResult,
+    CurrentNodePublicKeys,
+    KeyPurpose,
+};
 use ic_types::registry::RegistryClientError;
-use ic_types::{RegistryVersion, Time};
+use ic_types::{
+    RegistryVersion,
+    Time,
+};
 use std::time::Duration;
 
 impl<C: CryptoServiceProvider> KeyManager for CryptoComponentImpl<C> {

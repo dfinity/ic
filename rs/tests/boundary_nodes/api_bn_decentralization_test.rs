@@ -1,23 +1,50 @@
-use anyhow::{bail, Result};
-use candid::{Decode, Encode};
+use anyhow::{
+    bail,
+    Result,
+};
+use candid::{
+    Decode,
+    Encode,
+};
 use itertools::Itertools;
 use k256::SecretKey;
-use slog::{debug, info};
-use std::{collections::HashSet, net::SocketAddr, sync::Arc, time::Duration, time::Instant};
+use slog::{
+    debug,
+    info,
+};
+use std::{
+    collections::HashSet,
+    net::SocketAddr,
+    sync::Arc,
+    time::Duration,
+    time::Instant,
+};
 use tokio::time::sleep;
 
 use discower_bowndary::{
-    check::{HealthCheck, HealthCheckImpl},
-    fetch::{NodesFetcher, NodesFetcherImpl},
+    check::{
+        HealthCheck,
+        HealthCheckImpl,
+    },
+    fetch::{
+        NodesFetcher,
+        NodesFetcherImpl,
+    },
     node::Node,
     route_provider::HealthCheckRouteProvider,
     snapshot_health_based::HealthBasedSnapshot,
-    transport::{TransportProvider, TransportProviderImpl},
+    transport::{
+        TransportProvider,
+        TransportProviderImpl,
+    },
 };
 use ic_base_types::NodeId;
 
 use ic_canister_client::Sender;
-use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
+use ic_nervous_system_common_test_keys::{
+    TEST_NEURON_1_ID,
+    TEST_NEURON_1_OWNER_KEYPAIR,
+};
 use ic_nns_common::types::NeuronId;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_nns_governance_api::pb::v1::NnsFunction;
@@ -28,13 +55,24 @@ use ic_system_test_driver::{
         group::SystemTestGroup,
         test_env::TestEnv,
         test_env_api::{
-            GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, IcNodeSnapshot,
-            SshSession, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+            GetFirstHealthyNodeSnapshot,
+            HasPublicApiUrl,
+            HasTopologySnapshot,
+            IcNodeSnapshot,
+            SshSession,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
         },
     },
-    nns::{self, vote_execute_proposal_assert_executed},
+    nns::{
+        self,
+        vote_execute_proposal_assert_executed,
+    },
     systest,
-    util::{block_on, runtime_from_url},
+    util::{
+        block_on,
+        runtime_from_url,
+    },
 };
 use registry_canister::mutations::{
     do_add_api_boundary_nodes::AddApiBoundaryNodesPayload,
@@ -45,22 +83,37 @@ use registry_canister::mutations::{
 use ic_agent::{
     agent::{
         http_transport::{
-            reqwest_transport::reqwest::{redirect::Policy, Client, ClientBuilder},
+            reqwest_transport::reqwest::{
+                redirect::Policy,
+                Client,
+                ClientBuilder,
+            },
             route_provider::RouteProvider,
             ReqwestTransport,
         },
         ApiBoundaryNode,
     },
     export::Principal,
-    identity::{AnonymousIdentity, Secp256k1Identity},
+    identity::{
+        AnonymousIdentity,
+        Secp256k1Identity,
+    },
     Agent,
 };
 use ic_boundary_nodes_system_test_utils::{
-    constants::{BOUNDARY_NODE_NAME, COUNTER_CANISTER_WAT},
-    helpers::{
-        install_canisters, read_counters_on_counter_canisters, set_counters_on_counter_canisters,
+    constants::{
+        BOUNDARY_NODE_NAME,
+        COUNTER_CANISTER_WAT,
     },
-    setup::{setup_ic, TEST_PRIVATE_KEY},
+    helpers::{
+        install_canisters,
+        read_counters_on_counter_canisters,
+        set_counters_on_counter_canisters,
+    },
+    setup::{
+        setup_ic,
+        TEST_PRIVATE_KEY,
+    },
 };
 
 const CANISTER_RETRY_TIMEOUT: Duration = Duration::from_secs(30);

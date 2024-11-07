@@ -5,7 +5,10 @@ use icp_ledger::BlockIndex;
 use rosetta_core::objects::ObjectMap;
 use serde_json::Value;
 
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::convert::TryFrom;
 
 #[derive(Clone, PartialEq, Debug, Default, Deserialize, Serialize)]

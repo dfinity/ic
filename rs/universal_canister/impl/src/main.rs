@@ -1,4 +1,10 @@
-use candid::{CandidType, Decode, Deserialize, Encode, Principal};
+use candid::{
+    CandidType,
+    Decode,
+    Deserialize,
+    Encode,
+    Principal,
+};
 use std::convert::TryInto;
 use std::hint::black_box;
 use universal_canister::Ops;

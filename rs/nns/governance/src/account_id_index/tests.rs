@@ -1,6 +1,9 @@
 use crate::{
     account_id_index::NeuronAccountIdIndex,
-    pb::v1::{governance_error::ErrorType, GovernanceError},
+    pb::v1::{
+        governance_error::ErrorType,
+        GovernanceError,
+    },
 };
 use assert_matches::assert_matches;
 use ic_nns_common::pb::v1::NeuronId;

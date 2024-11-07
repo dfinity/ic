@@ -1,5 +1,8 @@
 use crate::api::handle::Ic;
-use canister_test::{Canister, Project};
+use canister_test::{
+    Canister,
+    Project,
+};
 use chrono::Utc;
 use std::time::Duration;
 

@@ -1,15 +1,31 @@
-use candid::{Decode, Encode};
+use candid::{
+    Decode,
+    Encode,
+};
 use ic_base_types::CanisterId;
-use ic_canisters_http_types::{HttpRequest, HttpResponse};
+use ic_canisters_http_types::{
+    HttpRequest,
+    HttpResponse,
+};
 use ic_nns_constants::{
-    CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID,
-    ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    CYCLES_MINTING_CANISTER_ID,
+    GOVERNANCE_CANISTER_ID,
+    LEDGER_CANISTER_ID,
+    REGISTRY_CANISTER_ID,
+    ROOT_CANISTER_ID,
+    SNS_WASM_CANISTER_ID,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    state_test_helpers::{setup_nns_canisters, state_machine_builder_for_nns_tests},
+    state_test_helpers::{
+        setup_nns_canisters,
+        state_machine_builder_for_nns_tests,
+    },
 };
-use ic_state_machine_tests::{StateMachine, WasmResult};
+use ic_state_machine_tests::{
+    StateMachine,
+    WasmResult,
+};
 use serde_bytes::ByteBuf;
 
 fn setup_state_machine_with_nns_canisters() -> StateMachine {

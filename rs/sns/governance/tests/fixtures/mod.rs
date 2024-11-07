@@ -1,39 +1,93 @@
-use crate::fixtures::environment_fixture::{EnvironmentFixture, EnvironmentFixtureState};
+use crate::fixtures::environment_fixture::{
+    EnvironmentFixture,
+    EnvironmentFixtureState,
+};
 use async_trait::async_trait;
 use futures::future::FutureExt;
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
-use ic_nervous_system_common::{cmc::CMC, NervousSystemError, E8};
+use ic_nervous_system_common::{
+    cmc::CMC,
+    NervousSystemError,
+    E8,
+};
 use ic_sns_governance::{
-    governance::{Governance, ValidGovernanceProto},
+    governance::{
+        Governance,
+        ValidGovernanceProto,
+    },
     pb::v1::{
-        get_neuron_response, get_proposal_response,
-        governance::{MaturityModulation, Mode, SnsMetadata},
+        get_neuron_response,
+        get_proposal_response,
+        governance::{
+            MaturityModulation,
+            Mode,
+            SnsMetadata,
+        },
         manage_neuron,
         manage_neuron::{
-            AddNeuronPermissions, MergeMaturity, RegisterVote, RemoveNeuronPermissions,
+            AddNeuronPermissions,
+            MergeMaturity,
+            RegisterVote,
+            RemoveNeuronPermissions,
         },
         manage_neuron_response::{
-            self, AddNeuronPermissionsResponse, FollowResponse, MergeMaturityResponse,
-            RegisterVoteResponse, RemoveNeuronPermissionsResponse,
+            self,
+            AddNeuronPermissionsResponse,
+            FollowResponse,
+            MergeMaturityResponse,
+            RegisterVoteResponse,
+            RemoveNeuronPermissionsResponse,
         },
-        neuron::{DissolveState, Followees},
+        neuron::{
+            DissolveState,
+            Followees,
+        },
         proposal::Action,
-        GetMaturityModulationRequest, GetMaturityModulationResponse, GetNeuron, GetProposal,
-        Governance as GovernanceProto, GovernanceError, ManageNeuron, ManageNeuronResponse,
-        NervousSystemParameters, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
-        NeuronPermissionType, Proposal, ProposalData, ProposalId, Vote,
+        GetMaturityModulationRequest,
+        GetMaturityModulationResponse,
+        GetNeuron,
+        GetProposal,
+        Governance as GovernanceProto,
+        GovernanceError,
+        ManageNeuron,
+        ManageNeuronResponse,
+        NervousSystemParameters,
+        Neuron,
+        NeuronId,
+        NeuronPermission,
+        NeuronPermissionList,
+        NeuronPermissionType,
+        Proposal,
+        ProposalData,
+        ProposalId,
+        Vote,
     },
     types::Environment,
 };
-use icrc_ledger_types::icrc1::account::{Account, Subaccount};
+use icrc_ledger_types::icrc1::account::{
+    Account,
+    Subaccount,
+};
 use maplit::btreemap;
-use rand::{rngs::StdRng, SeedableRng};
+use rand::{
+    rngs::StdRng,
+    SeedableRng,
+};
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{
+        BTreeMap,
+        BTreeSet,
+    },
     convert::TryFrom,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc,
+        Mutex,
+    },
 };
 
 pub mod environment_fixture;

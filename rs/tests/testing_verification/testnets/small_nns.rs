@@ -42,13 +42,24 @@ use ic_system_test_driver::driver::boundary_node::BoundaryNodeVm;
 use ic_system_test_driver::driver::{
     boundary_node::BoundaryNode,
     group::SystemTestGroup,
-    ic::{InternetComputer, Subnet},
-    prometheus_vm::{HasPrometheus, PrometheusVm},
+    ic::{
+        InternetComputer,
+        Subnet,
+    },
+    prometheus_vm::{
+        HasPrometheus,
+        PrometheusVm,
+    },
     test_env::TestEnv,
-    test_env_api::{await_boundary_node_healthy, HasTopologySnapshot},
+    test_env_api::{
+        await_boundary_node_healthy,
+        HasTopologySnapshot,
+    },
 };
 use nns_dapp::{
-    install_ii_nns_dapp_and_subnet_rental, nns_dapp_customizations, set_authorized_subnets,
+    install_ii_nns_dapp_and_subnet_rental,
+    nns_dapp_customizations,
+    set_authorized_subnets,
 };
 
 const BOUNDARY_NODE_NAME: &str = "boundary-node-1";

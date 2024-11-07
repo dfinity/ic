@@ -5,7 +5,10 @@
 use std::os::unix::io::RawFd;
 
 use ic_types::CanisterId;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 use crate::fdenum::EnumerateInnerFileDescriptors;
 

@@ -1,15 +1,27 @@
 use ic_base_types::SubnetId;
 use ic_protobuf::types::v1 as pb;
 use ic_recovery::{
-    error::{RecoveryError, RecoveryResult},
+    error::{
+        RecoveryError,
+        RecoveryResult,
+    },
     file_sync_helper::read_file,
     util::subnet_id_from_str,
 };
 use ic_registry_routing_table::CanisterIdRange;
-use ic_state_manager::manifest::{manifest_from_path, manifest_hash};
-use ic_types::{consensus::CatchUpPackage, Time};
+use ic_state_manager::manifest::{
+    manifest_from_path,
+    manifest_hash,
+};
+use ic_types::{
+    consensus::CatchUpPackage,
+    Time,
+};
 
-use std::{fmt::Display, path::Path};
+use std::{
+    fmt::Display,
+    path::Path,
+};
 
 pub(crate) fn get_batch_time_from_cup(cup_path: &Path) -> RecoveryResult<Time> {
     get_cup(cup_path).map(|cup| cup.content.block.as_ref().context.time)

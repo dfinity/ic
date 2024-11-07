@@ -1,6 +1,9 @@
 use ic_logger::ReplicaLogger;
 use std::io;
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    Arc,
+    Mutex,
+};
 
 struct SyncBuf(Arc<Mutex<Vec<u8>>>);
 

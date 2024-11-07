@@ -5,10 +5,22 @@ pub use askama::Template;
 use candid::Principal;
 use ic_ledger_suite_orchestrator::scheduler::Erc20Token;
 use ic_ledger_suite_orchestrator::state::{
-    Archive, Canisters, GitCommitHash, Index, IndexCanister, Ledger, LedgerCanister, State,
-    TokenId, WasmHash,
+    Archive,
+    Canisters,
+    GitCommitHash,
+    Index,
+    IndexCanister,
+    Ledger,
+    LedgerCanister,
+    State,
+    TokenId,
+    WasmHash,
 };
-use ic_ledger_suite_orchestrator::storage::{StorableWasm, StoredWasm, WasmStore};
+use ic_ledger_suite_orchestrator::storage::{
+    StorableWasm,
+    StoredWasm,
+    WasmStore,
+};
 use std::cmp::Reverse;
 use std::collections::BTreeMap;
 

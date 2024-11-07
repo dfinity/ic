@@ -1,6 +1,9 @@
 use crate::key_id::KeyId;
 use crate::secret_key_store::{
-    Scope, SecretKeyStore, SecretKeyStoreInsertionError, SecretKeyStoreWriteError,
+    Scope,
+    SecretKeyStore,
+    SecretKeyStoreInsertionError,
+    SecretKeyStoreWriteError,
 };
 use crate::types::CspSecretKey;
 use mockall::predicate::*;

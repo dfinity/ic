@@ -2,7 +2,10 @@ use std::iter::IntoIterator;
 use std::net::Ipv6Addr;
 use std::process::Command;
 
-use anyhow::{bail, Result};
+use anyhow::{
+    bail,
+    Result,
+};
 
 /// Systemd requires ip addresses to be specified with the prefix length
 pub fn to_cidr(ipv6_address: Ipv6Addr, prefix_length: u8) -> String {

@@ -2,7 +2,10 @@ use core::fmt::Display;
 use ic_nervous_system_proto::pb::v1 as nervous_system_pb;
 use lazy_static::lazy_static;
 use regex::Regex;
-use std::{collections::VecDeque, str::FromStr};
+use std::{
+    collections::VecDeque,
+    str::FromStr,
+};
 
 pub mod serde;
 

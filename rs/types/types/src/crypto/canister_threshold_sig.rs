@@ -1,17 +1,29 @@
 //! Defines canister threshold signature types.
 use crate::crypto::canister_threshold_sig::error::impl_display_using_debug;
 use crate::crypto::canister_threshold_sig::idkg::{
-    IDkgMaskedTranscriptOrigin, IDkgReceivers, IDkgTranscript, IDkgTranscriptType,
+    IDkgMaskedTranscriptOrigin,
+    IDkgReceivers,
+    IDkgTranscript,
+    IDkgTranscriptType,
     IDkgUnmaskedTranscriptOrigin,
 };
 use crate::crypto::AlgorithmId;
-use crate::{NumberOfNodes, Randomness};
+use crate::{
+    NumberOfNodes,
+    Randomness,
+};
 use core::fmt;
-use ic_base_types::{NodeId, PrincipalId};
+use ic_base_types::{
+    NodeId,
+    PrincipalId,
+};
 use ic_crypto_internal_types::NodeIndex;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::fmt::Formatter;
 
 pub mod error;

@@ -1,4 +1,8 @@
-use candid::{CandidType, Deserialize, Nat};
+use candid::{
+    CandidType,
+    Deserialize,
+    Nat,
+};
 use serde::Serialize;
 
 use super::super::icrc1::account::Account;

@@ -1,15 +1,30 @@
 use ic_canister_client_sender::Sender;
 use ic_canonical_state::encoding::types::SubnetMetrics;
-use ic_crypto_tree_hash::{LabeledTree, LookupStatus, MixedHashTree, Path};
+use ic_crypto_tree_hash::{
+    LabeledTree,
+    LookupStatus,
+    MixedHashTree,
+    Path,
+};
 use ic_types::{
     crypto::threshold_sig::ThresholdSigPublicKey,
     messages::{
-        Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
-        HttpReadStateContent, HttpReadStateResponse, HttpRequestEnvelope, HttpUserQuery, MessageId,
+        Blob,
+        HttpCallContent,
+        HttpCanisterUpdate,
+        HttpQueryContent,
+        HttpReadState,
+        HttpReadStateContent,
+        HttpReadStateResponse,
+        HttpRequestEnvelope,
+        HttpUserQuery,
+        MessageId,
         SignedRequestBytes,
     },
     time::expiry_time_from_now,
-    CanisterId, SubnetId, Time,
+    CanisterId,
+    SubnetId,
+    Time,
 };
 use serde::Deserialize;
 use serde_cbor::value::Value as CBOR;
@@ -333,17 +348,34 @@ fn sign_query(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_canister_client_sender::{ed25519_public_key_to_der, Ed25519KeyPair};
-    use ic_certification_test_utils::{CertificateBuilder, CertificateData};
+    use ic_canister_client_sender::{
+        ed25519_public_key_to_der,
+        Ed25519KeyPair,
+    };
+    use ic_certification_test_utils::{
+        CertificateBuilder,
+        CertificateData,
+    };
     use ic_crypto_test_utils_root_of_trust::MockRootOfTrustProvider;
-    use ic_crypto_tree_hash::{Digest, Label, MixedHashTree};
+    use ic_crypto_tree_hash::{
+        Digest,
+        Label,
+        MixedHashTree,
+    };
     use ic_test_utilities::crypto::temp_crypto_component_with_fake_registry;
     use ic_test_utilities_types::ids::node_test_id;
     use ic_types::messages::{
-        HttpCanisterUpdate, HttpReadStateResponse, HttpRequest, HttpUserQuery, Query,
+        HttpCanisterUpdate,
+        HttpReadStateResponse,
+        HttpRequest,
+        HttpUserQuery,
+        Query,
     };
     use ic_types::time::current_time;
-    use ic_types::{PrincipalId, UserId};
+    use ic_types::{
+        PrincipalId,
+        UserId,
+    };
     use ic_validator::HttpRequestVerifier;
     use ic_validator::HttpRequestVerifierImpl;
     use rand::SeedableRng;

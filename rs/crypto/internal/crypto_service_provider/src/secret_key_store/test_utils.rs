@@ -6,7 +6,10 @@ use crate::key_id::KeyId;
 use crate::types::CspSecretKey;
 use ic_crypto_internal_basic_sig_ed25519::types as ed25519_types;
 use ic_crypto_secrets_containers::SecretArray;
-use rand::{CryptoRng, Rng};
+use rand::{
+    CryptoRng,
+    Rng,
+};
 
 pub fn make_key_id<R: Rng + CryptoRng>(rng: &mut R) -> KeyId {
     KeyId::from(rng.gen::<[u8; 32]>())

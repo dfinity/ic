@@ -1,24 +1,50 @@
 use assert_matches::assert_matches;
 use ic_config::{
-    embedders::{Config, StableMemoryPageLimit},
+    embedders::{
+        Config,
+        StableMemoryPageLimit,
+    },
     flag_status::FlagStatus,
 };
 use ic_embedders::{
     wasm_utils::instrumentation::instruction_to_cost,
     wasm_utils::instrumentation::WasmMemoryType,
-    wasmtime_embedder::{system_api_complexity, CanisterMemoryType},
+    wasmtime_embedder::{
+        system_api_complexity,
+        CanisterMemoryType,
+    },
 };
-use ic_interfaces::execution_environment::{ExecutionMode, HypervisorError, SystemApi, TrapCode};
+use ic_interfaces::execution_environment::{
+    ExecutionMode,
+    HypervisorError,
+    SystemApi,
+    TrapCode,
+};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{canister_state::WASM_PAGE_SIZE_IN_BYTES, Global};
-use ic_test_utilities_embedders::{WasmtimeInstanceBuilder, DEFAULT_NUM_INSTRUCTIONS};
-use ic_test_utilities_types::ids::{call_context_test_id, user_test_id};
+use ic_replicated_state::{
+    canister_state::WASM_PAGE_SIZE_IN_BYTES,
+    Global,
+};
+use ic_test_utilities_embedders::{
+    WasmtimeInstanceBuilder,
+    DEFAULT_NUM_INSTRUCTIONS,
+};
+use ic_test_utilities_types::ids::{
+    call_context_test_id,
+    user_test_id,
+};
 use ic_types::{
     ingress::WasmResult,
     messages::RejectContext,
-    methods::{FuncRef, WasmClosure, WasmMethod},
+    methods::{
+        FuncRef,
+        WasmClosure,
+        WasmMethod,
+    },
     time::UNIX_EPOCH,
-    Cycles, NumBytes, NumInstructions,
+    Cycles,
+    NumBytes,
+    NumInstructions,
 };
 
 const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;

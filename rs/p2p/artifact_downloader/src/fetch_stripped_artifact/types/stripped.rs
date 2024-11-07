@@ -1,9 +1,17 @@
 use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{
+        try_from_option_field,
+        ProxyDecodeError,
+    },
     types::v1 as pb,
 };
 use ic_types::{
-    artifact::{ConsensusMessageId, IdentifiableArtifact, IngressMessageId, PbArtifact},
+    artifact::{
+        ConsensusMessageId,
+        IdentifiableArtifact,
+        IngressMessageId,
+        PbArtifact,
+    },
     consensus::ConsensusMessage,
 };
 
@@ -186,7 +194,8 @@ impl PbArtifact for MaybeStrippedConsensusMessage {
 #[cfg(test)]
 mod tests {
     use crate::fetch_stripped_artifact::test_utils::{
-        fake_ingress_message, fake_stripped_block_proposal_with_ingresses,
+        fake_ingress_message,
+        fake_stripped_block_proposal_with_ingresses,
     };
 
     use super::*;

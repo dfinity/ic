@@ -4,16 +4,38 @@ pub mod types;
 use super::StateManagerImpl;
 use crate::{
     manifest::build_file_group_chunks,
-    state_sync::types::{FileGroupChunks, Manifest, MetaManifest, StateSyncMessage},
-    StateSyncRefs, EXTRA_CHECKPOINTS_TO_KEEP, NUMBER_OF_CHECKPOINT_THREADS,
+    state_sync::types::{
+        FileGroupChunks,
+        Manifest,
+        MetaManifest,
+        StateSyncMessage,
+    },
+    StateSyncRefs,
+    EXTRA_CHECKPOINTS_TO_KEEP,
+    NUMBER_OF_CHECKPOINT_THREADS,
 };
 use ic_interfaces::p2p::state_sync::{
-    Chunk, ChunkId, Chunkable, StateSyncArtifactId, StateSyncClient,
+    Chunk,
+    ChunkId,
+    Chunkable,
+    StateSyncArtifactId,
+    StateSyncClient,
 };
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{fatal, info, warn, ReplicaLogger};
-use ic_types::{CryptoHashOfState, Height};
-use std::sync::{Arc, Mutex};
+use ic_logger::{
+    fatal,
+    info,
+    warn,
+    ReplicaLogger,
+};
+use ic_types::{
+    CryptoHashOfState,
+    Height,
+};
+use std::sync::{
+    Arc,
+    Mutex,
+};
 
 #[derive(Clone)]
 pub struct StateSync {

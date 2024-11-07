@@ -1,5 +1,8 @@
 use ic_agent::agent::{
-    http_transport::reqwest_transport::{reqwest::Client, ReqwestTransport},
+    http_transport::reqwest_transport::{
+        reqwest::Client,
+        ReqwestTransport,
+    },
     Transport,
 };
 use std::fmt::Debug;

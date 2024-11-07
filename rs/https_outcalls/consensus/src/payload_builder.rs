@@ -4,49 +4,91 @@ use crate::{
     metrics::CanisterHttpPayloadBuilderMetrics,
     payload_builder::{
         parse::bytes_to_payload,
-        utils::{group_shares_by_callback_id, grouped_shares_meet_divergence_criteria},
+        utils::{
+            group_shares_by_callback_id,
+            grouped_shares_meet_divergence_criteria,
+        },
     },
 };
 use ic_consensus_utils::{
-    crypto::ConsensusCrypto, membership::Membership, registry_version_at_height,
+    crypto::ConsensusCrypto,
+    membership::Membership,
+    registry_version_at_height,
 };
 use ic_error_types::RejectCode;
 use ic_interfaces::{
-    batch_payload::{BatchPayloadBuilder, IntoMessages, PastPayload, ProposalContext},
+    batch_payload::{
+        BatchPayloadBuilder,
+        IntoMessages,
+        PastPayload,
+        ProposalContext,
+    },
     canister_http::{
-        CanisterHttpPayloadValidationError, CanisterHttpPayloadValidationFailure, CanisterHttpPool,
+        CanisterHttpPayloadValidationError,
+        CanisterHttpPayloadValidationFailure,
+        CanisterHttpPool,
         InvalidCanisterHttpPayloadReason,
     },
-    consensus::{self, PayloadValidationError},
+    consensus::{
+        self,
+        PayloadValidationError,
+    },
     consensus_pool::ConsensusPoolCache,
     validation::ValidationError,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{
+    warn,
+    ReplicaLogger,
+};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::{
-        CanisterHttpPayload, ConsensusResponse, ValidationContext, MAX_CANISTER_HTTP_PAYLOAD_SIZE,
+        CanisterHttpPayload,
+        ConsensusResponse,
+        ValidationContext,
+        MAX_CANISTER_HTTP_PAYLOAD_SIZE,
     },
     canister_http::{
-        CanisterHttpResponse, CanisterHttpResponseContent, CanisterHttpResponseDivergence,
-        CanisterHttpResponseMetadata, CanisterHttpResponseProof, CanisterHttpResponseWithConsensus,
-        CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, CANISTER_HTTP_TIMEOUT_INTERVAL,
+        CanisterHttpResponse,
+        CanisterHttpResponseContent,
+        CanisterHttpResponseDivergence,
+        CanisterHttpResponseMetadata,
+        CanisterHttpResponseProof,
+        CanisterHttpResponseWithConsensus,
+        CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK,
+        CANISTER_HTTP_TIMEOUT_INTERVAL,
     },
     consensus::Committee,
     crypto::Signed,
-    messages::{CallbackId, Payload, RejectContext},
+    messages::{
+        CallbackId,
+        Payload,
+        RejectContext,
+    },
     registry::RegistryClientError,
     signature::BasicSignature,
-    CountBytes, Height, NodeId, NumBytes, RegistryVersion, SubnetId,
+    CountBytes,
+    Height,
+    NodeId,
+    NumBytes,
+    RegistryVersion,
+    SubnetId,
 };
 use std::{
-    collections::{BTreeMap, BTreeSet, HashSet},
+    collections::{
+        BTreeMap,
+        BTreeSet,
+        HashSet,
+    },
     mem::size_of,
-    sync::{Arc, RwLock},
+    sync::{
+        Arc,
+        RwLock,
+    },
 };
 
 pub(crate) mod parse;

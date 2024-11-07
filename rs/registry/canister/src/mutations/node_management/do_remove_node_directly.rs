@@ -1,14 +1,29 @@
 use crate::mutations::node_management::common::{
-    find_subnet_for_node, get_node_operator_id_for_node, get_node_operator_record,
-    get_subnet_list_record, make_remove_node_registry_mutations,
+    find_subnet_for_node,
+    get_node_operator_id_for_node,
+    get_node_operator_record,
+    get_subnet_list_record,
+    make_remove_node_registry_mutations,
     make_update_node_operator_mutation,
 };
-use crate::{common::LOG_PREFIX, registry::Registry};
-use candid::{CandidType, Deserialize};
+use crate::{
+    common::LOG_PREFIX,
+    registry::Registry,
+};
+use candid::{
+    CandidType,
+    Deserialize,
+};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
-use ic_base_types::{NodeId, PrincipalId};
-use ic_registry_keys::{make_api_boundary_node_record_key, make_subnet_record_key};
+use ic_base_types::{
+    NodeId,
+    PrincipalId,
+};
+use ic_registry_keys::{
+    make_api_boundary_node_record_key,
+    make_subnet_record_key,
+};
 
 impl Registry {
     /// Removes an existing node from the registry.
@@ -107,7 +122,8 @@ mod tests {
 
     use ic_base_types::PrincipalId;
     use ic_protobuf::registry::{
-        api_boundary_node::v1::ApiBoundaryNodeRecord, node_operator::v1::NodeOperatorRecord,
+        api_boundary_node::v1::ApiBoundaryNodeRecord,
+        node_operator::v1::NodeOperatorRecord,
     };
     use ic_registry_keys::make_node_operator_record_key;
     use ic_registry_transport::insert;
@@ -115,7 +131,10 @@ mod tests {
     use prost::Message;
 
     use crate::{
-        common::test_helpers::{invariant_compliant_registry, prepare_registry_with_nodes},
+        common::test_helpers::{
+            invariant_compliant_registry,
+            prepare_registry_with_nodes,
+        },
         mutations::common::test::TEST_NODE_ID,
     };
 

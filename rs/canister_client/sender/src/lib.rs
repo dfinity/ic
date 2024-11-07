@@ -5,9 +5,16 @@ mod tests;
 use ic_base_types::PrincipalId;
 use ic_types::crypto::DOMAIN_IC_REQUEST;
 use ic_types::messages::MessageId;
-use rand::{CryptoRng, Rng, SeedableRng};
+use rand::{
+    CryptoRng,
+    Rng,
+    SeedableRng,
+};
 use rand_chacha::ChaCha20Rng;
-use std::{error::Error, sync::Arc};
+use std::{
+    error::Error,
+    sync::Arc,
+};
 
 // TODO: migrate the two closures to async closures when supported by Rust.
 // The closures are called within async context. So putting the signing function in

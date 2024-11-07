@@ -1,12 +1,28 @@
 use crate::benches::{
-    assert_has_num_balances, emulate_archive_blocks, icrc1_transfer, max_length_principal,
-    mint_tokens, upgrade, NUM_TRANSFERS,
+    assert_has_num_balances,
+    emulate_archive_blocks,
+    icrc1_transfer,
+    max_length_principal,
+    mint_tokens,
+    upgrade,
+    NUM_TRANSFERS,
 };
-use crate::{init_state, Access, LOG};
+use crate::{
+    init_state,
+    Access,
+    LOG,
+};
 use assert_matches::assert_matches;
-use canbench_rs::{bench, BenchResult};
+use canbench_rs::{
+    bench,
+    BenchResult,
+};
 use candid::Principal;
-use ic_icrc1_ledger::{FeatureFlags, InitArgs, InitArgsBuilder};
+use ic_icrc1_ledger::{
+    FeatureFlags,
+    InitArgs,
+    InitArgsBuilder,
+};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::TransferArg;

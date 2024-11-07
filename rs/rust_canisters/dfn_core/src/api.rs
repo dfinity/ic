@@ -1,11 +1,33 @@
 pub mod futures;
 pub use self::futures::spawn;
-use self::futures::{CallFuture, FutureResult, RefCounted, TopLevelFuture};
-pub use ic_base_types::{CanisterId, PrincipalId};
-use on_wire::{FromWire, IntoWire, NewType};
-use std::convert::{TryFrom, TryInto};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use std::{cell::RefCell, future::Future};
+use self::futures::{
+    CallFuture,
+    FutureResult,
+    RefCounted,
+    TopLevelFuture,
+};
+pub use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
+use on_wire::{
+    FromWire,
+    IntoWire,
+    NewType,
+};
+use std::convert::{
+    TryFrom,
+    TryInto,
+};
+use std::time::{
+    Duration,
+    SystemTime,
+    UNIX_EPOCH,
+};
+use std::{
+    cell::RefCell,
+    future::Future,
+};
 
 /// This is a simplified version of `ic_types::Funds`.
 pub struct Funds {

@@ -139,7 +139,10 @@ mod tls_public_key_cert {
 mod allowed_clients {
     use crate::SomeOrAllNodes;
     use assert_matches::assert_matches;
-    use ic_types::{NodeId, PrincipalId};
+    use ic_types::{
+        NodeId,
+        PrincipalId,
+    };
     use maplit::btreeset;
 
     #[test]

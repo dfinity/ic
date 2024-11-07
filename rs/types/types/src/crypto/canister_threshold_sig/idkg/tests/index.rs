@@ -1,11 +1,33 @@
 use crate::crypto::canister_threshold_sig::idkg::{
-    BatchSignedIDkgDealing, IDkgDealing, IDkgMaskedTranscriptOrigin, IDkgReceivers, IDkgTranscript,
-    IDkgTranscriptId, IDkgTranscriptType, SignedIDkgDealing,
+    BatchSignedIDkgDealing,
+    IDkgDealing,
+    IDkgMaskedTranscriptOrigin,
+    IDkgReceivers,
+    IDkgTranscript,
+    IDkgTranscriptId,
+    IDkgTranscriptType,
+    SignedIDkgDealing,
 };
-use crate::crypto::{AlgorithmId, BasicSig, BasicSigOf};
-use crate::signature::{BasicSignature, BasicSignatureBatch};
-use crate::{Height, NodeId, PrincipalId, RegistryVersion, SubnetId};
-use maplit::{btreemap, btreeset};
+use crate::crypto::{
+    AlgorithmId,
+    BasicSig,
+    BasicSigOf,
+};
+use crate::signature::{
+    BasicSignature,
+    BasicSignatureBatch,
+};
+use crate::{
+    Height,
+    NodeId,
+    PrincipalId,
+    RegistryVersion,
+    SubnetId,
+};
+use maplit::{
+    btreemap,
+    btreeset,
+};
 use std::collections::BTreeMap;
 
 #[test]

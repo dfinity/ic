@@ -1,8 +1,19 @@
-use crate::{public_key_from_der, public_key_to_der};
+use crate::{
+    public_key_from_der,
+    public_key_to_der,
+};
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
-use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
-use std::io::{Error, ErrorKind, Result};
+use ic_types::crypto::{
+    AlgorithmId,
+    CryptoError,
+    CryptoResult,
+};
+use std::io::{
+    Error,
+    ErrorKind,
+    Result,
+};
 use std::path::Path;
 
 /// Parse a PEM format threshold signature public key from a named file.

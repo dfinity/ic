@@ -1,7 +1,10 @@
 use hex_literal::hex;
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use rand::{Rng, RngCore};
+use rand::{
+    Rng,
+    RngCore,
+};
 
 #[test]
 fn not_affected_by_point_serialization_bug() -> CanisterThresholdResult<()> {

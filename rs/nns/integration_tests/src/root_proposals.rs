@@ -1,21 +1,37 @@
-use canister_test::{Canister, Project};
+use canister_test::{
+    Canister,
+    Project,
+};
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::Sender;
 use ic_management_canister_types::CanisterInstallMode;
 use ic_nervous_system_clients::{
-    canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
+    canister_id_record::CanisterIdRecord,
+    canister_status::CanisterStatusResult,
 };
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL, TEST_USER2_KEYPAIR,
-    TEST_USER2_PRINCIPAL, TEST_USER3_KEYPAIR, TEST_USER4_KEYPAIR, TEST_USER5_KEYPAIR,
+    TEST_NEURON_1_OWNER_KEYPAIR,
+    TEST_USER1_KEYPAIR,
+    TEST_USER1_PRINCIPAL,
+    TEST_USER2_KEYPAIR,
+    TEST_USER2_PRINCIPAL,
+    TEST_USER3_KEYPAIR,
+    TEST_USER4_KEYPAIR,
+    TEST_USER5_KEYPAIR,
     TEST_USER6_KEYPAIR,
 };
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_handler_root::root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot};
+use ic_nns_handler_root::root_proposals::{
+    GovernanceUpgradeRootProposal,
+    RootProposalBallot,
+};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{
+        state_machine_test_on_nns_subnet,
+        NnsCanisters,
+    },
     registry::initial_mutations_for_a_multinode_nns_subnet,
 };
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;

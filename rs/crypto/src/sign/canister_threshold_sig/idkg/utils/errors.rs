@@ -1,10 +1,15 @@
 use ic_interfaces::crypto::ErrorReproducibility;
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_types::crypto::canister_threshold_sig::error::{
-    IDkgCreateDealingError, IDkgLoadTranscriptError, IDkgOpenTranscriptError,
+    IDkgCreateDealingError,
+    IDkgLoadTranscriptError,
+    IDkgOpenTranscriptError,
 };
 use ic_types::registry::RegistryClientError;
-use ic_types::{NodeId, RegistryVersion};
+use ic_types::{
+    NodeId,
+    RegistryVersion,
+};
 
 /// Errors encountered while looking-up a MEGa public key from the registry
 #[derive(Clone, Eq, PartialEq, Debug)]

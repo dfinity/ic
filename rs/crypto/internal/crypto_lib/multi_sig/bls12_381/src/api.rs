@@ -1,11 +1,25 @@
 //! External API for the multisignature library
 use super::crypto;
 use super::types::{
-    CombinedSignature, CombinedSignatureBytes, IndividualSignature, IndividualSignatureBytes, Pop,
-    PopBytes, PublicKey, PublicKeyBytes, SecretKey, SecretKeyBytes,
+    CombinedSignature,
+    CombinedSignatureBytes,
+    IndividualSignature,
+    IndividualSignatureBytes,
+    Pop,
+    PopBytes,
+    PublicKey,
+    PublicKeyBytes,
+    SecretKey,
+    SecretKeyBytes,
 };
-use ic_types::crypto::{AlgorithmId, CryptoError};
-use rand::{CryptoRng, Rng};
+use ic_types::crypto::{
+    AlgorithmId,
+    CryptoError,
+};
+use rand::{
+    CryptoRng,
+    Rng,
+};
 use std::convert::TryFrom;
 
 #[cfg(test)]

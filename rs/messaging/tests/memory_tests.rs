@@ -1,22 +1,54 @@
-use candid::{Decode, Encode};
+use candid::{
+    Decode,
+    Encode,
+};
 use canister_test::Project;
-use ic_base_types::{CanisterId, NumBytes, SubnetId};
+use ic_base_types::{
+    CanisterId,
+    NumBytes,
+    SubnetId,
+};
 use ic_config::{
     execution_environment::Config as HypervisorConfig,
-    subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetConfig},
+    subnet_config::{
+        CyclesAccountManagerConfig,
+        SchedulerConfig,
+        SubnetConfig,
+    },
 };
-use ic_registry_routing_table::{routing_table_insert_subnet, RoutingTable};
+use ic_registry_routing_table::{
+    routing_table_insert_subnet,
+    RoutingTable,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
-use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig, UserError};
-use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1};
+use ic_state_machine_tests::{
+    StateMachine,
+    StateMachineBuilder,
+    StateMachineConfig,
+    UserError,
+};
+use ic_test_utilities_types::ids::{
+    SUBNET_0,
+    SUBNET_1,
+};
 use ic_types::{
-    messages::{MessageId, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64},
+    messages::{
+        MessageId,
+        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64,
+    },
     Cycles,
 };
 use proptest::prelude::*;
-use random_traffic_test::{extract_metrics, Config as CanisterConfig, Record as CanisterRecord};
-use std::collections::{BTreeMap, BTreeSet};
+use random_traffic_test::{
+    extract_metrics,
+    Config as CanisterConfig,
+    Record as CanisterRecord,
+};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
 use std::sync::Arc;
 
 const LOCAL_SUBNET_ID: SubnetId = SUBNET_0;

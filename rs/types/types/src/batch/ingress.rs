@@ -1,15 +1,30 @@
 use crate::{
     artifact::IngressMessageId,
-    messages::{MessageId, SignedIngress, SignedRequestBytes, EXPECTED_MESSAGE_ID_LENGTH},
-    CountBytes, Time,
+    messages::{
+        MessageId,
+        SignedIngress,
+        SignedRequestBytes,
+        EXPECTED_MESSAGE_ID_LENGTH,
+    },
+    CountBytes,
+    Time,
 };
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
-use serde::{Deserialize, Serialize};
+use ic_protobuf::{
+    proxy::ProxyDecodeError,
+    types::v1 as pb,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::{
     convert::TryFrom,
-    io::{Cursor, Write},
+    io::{
+        Cursor,
+        Write,
+    },
 };
 
 /// Payload that contains Ingress messages
@@ -193,8 +208,13 @@ mod tests {
     use super::*;
     use crate::{
         messages::{
-            Blob, Delegation, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope,
-            SignedDelegation, SignedIngress,
+            Blob,
+            Delegation,
+            HttpCallContent,
+            HttpCanisterUpdate,
+            HttpRequestEnvelope,
+            SignedDelegation,
+            SignedIngress,
         },
         time::expiry_time_from_now,
     };

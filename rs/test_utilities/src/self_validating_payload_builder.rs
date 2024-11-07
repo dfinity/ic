@@ -1,9 +1,13 @@
 use ic_btc_replica_types::BitcoinAdapterResponse;
 use ic_interfaces::self_validating_payload::{
-    SelfValidatingPayloadBuilder, SelfValidatingPayloadValidationError,
+    SelfValidatingPayloadBuilder,
+    SelfValidatingPayloadValidationError,
 };
 use ic_types::{
-    batch::{SelfValidatingPayload, ValidationContext},
+    batch::{
+        SelfValidatingPayload,
+        ValidationContext,
+    },
     NumBytes,
 };
 

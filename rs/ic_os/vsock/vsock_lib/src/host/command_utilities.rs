@@ -1,4 +1,7 @@
-use crate::protocol::{Payload, Response};
+use crate::protocol::{
+    Payload,
+    Response,
+};
 use std::io::Error;
 use std::process::Output;
 

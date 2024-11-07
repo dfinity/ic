@@ -23,18 +23,33 @@
 use ic_consensus_utils::{
     active_low_threshold_nidkg_id,
     crypto::ConsensusCrypto,
-    membership::{Membership, MembershipError},
+    membership::{
+        Membership,
+        MembershipError,
+    },
     pool_reader::PoolReader,
 };
 use ic_interfaces::messaging::MessageRouting;
-use ic_logger::{error, trace, ReplicaLogger};
+use ic_logger::{
+    error,
+    trace,
+    ReplicaLogger,
+};
 use ic_types::{
-    consensus::{HasCommittee, RandomTape, RandomTapeContent, RandomTapeShare},
+    consensus::{
+        HasCommittee,
+        RandomTape,
+        RandomTapeContent,
+        RandomTapeShare,
+    },
     replica_config::ReplicaConfig,
     Height,
 };
 use std::{
-    cmp::{max, min},
+    cmp::{
+        max,
+        min,
+    },
     sync::Arc,
 };
 
@@ -187,12 +202,21 @@ impl RandomTapeMaker {
 mod tests {
     use super::*;
     use crate::consensus::add_all_to_validated;
-    use ic_consensus_mocks::{dependencies, Dependencies};
-    use ic_interfaces::{p2p::consensus::MutablePool, time_source::TimeSource};
+    use ic_consensus_mocks::{
+        dependencies,
+        Dependencies,
+    };
+    use ic_interfaces::{
+        p2p::consensus::MutablePool,
+        time_source::TimeSource,
+    };
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::message_routing::FakeMessageRouting;
     use ic_test_utilities_consensus::fake::*;
-    use ic_types::consensus::{ConsensusMessage, HasHeight};
+    use ic_types::consensus::{
+        ConsensusMessage,
+        HasHeight,
+    };
 
     // Returns the vector of heights for which `changes` contains a ChangeAction
     // that adds a random tape share for that height to the validated pool.

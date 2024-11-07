@@ -1,12 +1,19 @@
 //! A crate that groups user-facing and internal error types and codes produced
 //! by the Internet Computer.
 use ic_protobuf::{
-    proxy::ProxyDecodeError, state::ingress::v1::ErrorCode as ErrorCodeProto,
+    proxy::ProxyDecodeError,
+    state::ingress::v1::ErrorCode as ErrorCodeProto,
     types::v1::RejectCode as RejectCodeProto,
 };
 use ic_utils::str::StrEllipsize;
-use serde::{Deserialize, Serialize};
-use std::{convert::TryFrom, fmt};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use std::{
+    convert::TryFrom,
+    fmt,
+};
 use strum_macros::EnumIter;
 
 #[derive(Copy, Clone, Debug)]

@@ -1,6 +1,13 @@
-use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+use ic_metrics::{
+    buckets::decimal_buckets,
+    MetricsRegistry,
+};
 
-use prometheus::{histogram_opts, labels, Histogram};
+use prometheus::{
+    histogram_opts,
+    labels,
+    Histogram,
+};
 
 pub(crate) struct BouncerMetrics {
     pub(crate) update_duration: Histogram,

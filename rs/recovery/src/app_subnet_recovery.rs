@@ -1,21 +1,52 @@
 use crate::{
     cli::{
-        consent_given, print_height_info, read_optional, read_optional_node_ids,
-        read_optional_subnet_id, read_optional_version, wait_for_confirmation,
+        consent_given,
+        print_height_info,
+        read_optional,
+        read_optional_node_ids,
+        read_optional_subnet_id,
+        read_optional_version,
+        wait_for_confirmation,
     },
-    error::{GracefulExpect, RecoveryError},
+    error::{
+        GracefulExpect,
+        RecoveryError,
+    },
     recovery_iterator::RecoveryIterator,
     registry_helper::RegistryPollingStrategy,
-    NeuronArgs, Recovery, RecoveryArgs, RecoveryResult, Step, CUPS_DIR,
+    NeuronArgs,
+    Recovery,
+    RecoveryArgs,
+    RecoveryResult,
+    Step,
+    CUPS_DIR,
 };
 use clap::Parser;
-use ic_base_types::{NodeId, SubnetId};
+use ic_base_types::{
+    NodeId,
+    SubnetId,
+};
 use ic_types::ReplicaVersion;
-use serde::{Deserialize, Serialize};
-use slog::{info, Logger};
-use std::{iter::Peekable, net::IpAddr};
-use strum::{EnumMessage, IntoEnumIterator};
-use strum_macros::{EnumIter, EnumString};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use slog::{
+    info,
+    Logger,
+};
+use std::{
+    iter::Peekable,
+    net::IpAddr,
+};
+use strum::{
+    EnumMessage,
+    IntoEnumIterator,
+};
+use strum_macros::{
+    EnumIter,
+    EnumString,
+};
 use url::Url;
 
 #[derive(

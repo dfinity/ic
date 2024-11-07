@@ -3,23 +3,47 @@ use dfn_protobuf::protobuf;
 use ic_canister_client_sender::Sender;
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL,
+    TEST_NEURON_1_ID,
+    TEST_NEURON_1_OWNER_KEYPAIR,
+    TEST_NEURON_1_OWNER_PRINCIPAL,
 };
-use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
+use ic_nns_common::{
+    pb::v1::NeuronId,
+    types::ProposalId,
+};
 use ic_nns_governance_api::pb::v1::{
     add_or_remove_node_provider::Change,
     manage_neuron::NeuronIdOrSubaccount,
     manage_neuron_response::Command as CommandResponse,
-    reward_node_provider::{RewardMode, RewardToAccount},
-    AddOrRemoveNodeProvider, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest,
-    ManageNeuronResponse, NodeProvider, ProposalActionRequest, ProposalStatus, RewardNodeProvider,
+    reward_node_provider::{
+        RewardMode,
+        RewardToAccount,
+    },
+    AddOrRemoveNodeProvider,
+    MakeProposalRequest,
+    ManageNeuronCommandRequest,
+    ManageNeuronRequest,
+    ManageNeuronResponse,
+    NodeProvider,
+    ProposalActionRequest,
+    ProposalStatus,
+    RewardNodeProvider,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::wait_for_final_state,
-    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{
+        state_machine_test_on_nns_subnet,
+        NnsCanisters,
+    },
 };
-use icp_ledger::{tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Subaccount, Tokens};
+use icp_ledger::{
+    tokens_from_proto,
+    AccountBalanceArgs,
+    AccountIdentifier,
+    Subaccount,
+    Tokens,
+};
 
 /// Tests that we can add and reward a node provider.
 #[test]

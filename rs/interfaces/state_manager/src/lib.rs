@@ -1,9 +1,15 @@
 //! The state manager public interface.
 
-use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
+use ic_crypto_tree_hash::{
+    LabeledTree,
+    MixedHashTree,
+};
 use ic_types::{
-    batch::BatchSummary, consensus::certification::Certification, CryptoHashOfPartialState,
-    CryptoHashOfState, Height,
+    batch::BatchSummary,
+    consensus::certification::Certification,
+    CryptoHashOfPartialState,
+    CryptoHashOfState,
+    Height,
 };
 use phantom_newtype::BitMask;
 use std::collections::BTreeSet;

@@ -2,7 +2,10 @@
 mod tests;
 
 use crate::git::ArgsHash;
-use candid::types::{Type, TypeInner};
+use candid::types::{
+    Type,
+    TypeInner,
+};
 use candid::TypeEnv;
 use std::path::Path;
 

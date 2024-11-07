@@ -1,10 +1,21 @@
 //! The registry public interface.
 use ic_types::{
-    registry::RegistryClientError, registry::RegistryDataProviderError, time::Time, RegistryVersion,
+    registry::RegistryClientError,
+    registry::RegistryDataProviderError,
+    time::Time,
+    RegistryVersion,
 };
 pub use prost::Message as RegistryValue;
-use serde::{Deserialize, Serialize};
-use std::{cmp::Eq, fmt::Debug, hash::Hash, time::Duration};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use std::{
+    cmp::Eq,
+    fmt::Debug,
+    hash::Hash,
+    time::Duration,
+};
 
 /// The registry at version `0` is the empty registry.
 pub const ZERO_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(0);

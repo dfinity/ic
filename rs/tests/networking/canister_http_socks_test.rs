@@ -22,22 +22,42 @@ use canister_http::*;
 use dfn_candid::candid_one;
 use ic_cdk::api::call::RejectionCode;
 use ic_management_canister_types::{
-    BoundedHttpHeaders, CanisterHttpRequestArgs, HttpMethod, TransformContext, TransformFunc,
+    BoundedHttpHeaders,
+    CanisterHttpRequestArgs,
+    HttpMethod,
+    TransformContext,
+    TransformFunc,
 };
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::driver::test_env_api::{HasPublicApiUrl, RetrieveIpv4Addr};
+use ic_system_test_driver::driver::test_env_api::{
+    HasPublicApiUrl,
+    RetrieveIpv4Addr,
+};
 use ic_system_test_driver::driver::{
-    boundary_node::{BoundaryNode, BoundaryNodeVm},
-    ic::{InternetComputer, Subnet},
+    boundary_node::{
+        BoundaryNode,
+        BoundaryNodeVm,
+    },
+    ic::{
+        InternetComputer,
+        Subnet,
+    },
     test_env::TestEnv,
-    test_env_api::{get_dependency_path, READY_WAIT_TIMEOUT, RETRY_BACKOFF},
+    test_env_api::{
+        get_dependency_path,
+        READY_WAIT_TIMEOUT,
+        RETRY_BACKOFF,
+    },
     universal_vm::UniversalVm,
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::block_on;
-use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
+use proxy_canister::{
+    RemoteHttpRequest,
+    RemoteHttpResponse,
+};
 use slog::info;
 
 const BN_NAME: &str = "socks-bn";

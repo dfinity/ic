@@ -1,11 +1,19 @@
 //! This canister tests `BufferedStableMemWriter` and `BufferedStableMemReader`
 
 use dfn_candid::candid;
-use dfn_core::{over, println, stable};
-use ic_nervous_system_common::dfn_core_stable_mem_utils::{
-    BufferedStableMemReader, BufferedStableMemWriter,
+use dfn_core::{
+    over,
+    println,
+    stable,
 };
-use ic_nns_governance_api::pb::v1::{Governance, Neuron};
+use ic_nervous_system_common::dfn_core_stable_mem_utils::{
+    BufferedStableMemReader,
+    BufferedStableMemWriter,
+};
+use ic_nns_governance_api::pb::v1::{
+    Governance,
+    Neuron,
+};
 use prost::Message;
 use std::ptr::addr_of_mut;
 

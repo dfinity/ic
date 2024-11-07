@@ -24,13 +24,25 @@ use anyhow::Result;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{
-    AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, Subnet, VmResources,
+    AmountOfMemoryKiB,
+    ImageSizeGiB,
+    InternetComputer,
+    Subnet,
+    VmResources,
 };
-use ic_system_test_driver::driver::pot_dsl::{PotSetupFn, SysTestFn};
-use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
+use ic_system_test_driver::driver::pot_dsl::{
+    PotSetupFn,
+    SysTestFn,
+};
+use ic_system_test_driver::driver::prometheus_vm::{
+    HasPrometheus,
+    PrometheusVm,
+};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+    HasPublicApiUrl,
+    HasTopologySnapshot,
+    IcNodeContainer,
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::block_on;

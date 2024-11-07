@@ -1,10 +1,18 @@
 use super::*;
 use crate::canister_status::{
-    CanisterStatusType, DefiniteCanisterSettingsFromManagementCanister, LogVisibility,
+    CanisterStatusType,
+    DefiniteCanisterSettingsFromManagementCanister,
+    LogVisibility,
 };
 use candid::Nat;
-use ic_base_types::{CanisterId, PrincipalId};
-use rand::{thread_rng, Rng};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
+use rand::{
+    thread_rng,
+    Rng,
+};
 use std::time::Duration;
 
 /// Five canister_status calls are made via LimitedOutstandingCallsManagementCanisterClient with a

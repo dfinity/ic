@@ -1,6 +1,9 @@
 mod targets {
     use super::to_blob;
-    use crate::messages::{Blob, Delegation};
+    use crate::messages::{
+        Blob,
+        Delegation,
+    };
     use crate::time::GENESIS;
     use crate::Time;
     use assert_matches::assert_matches;
@@ -58,9 +61,17 @@ mod try_from {
     mod call {
         use super::super::to_blob;
         use super::*;
-        use crate::messages::http::{Authentication, HttpCallContent, HttpRequestError};
+        use crate::messages::http::{
+            Authentication,
+            HttpCallContent,
+            HttpRequestError,
+        };
         use crate::messages::{
-            Blob, HttpCanisterUpdate, HttpRequest, HttpRequestEnvelope, SignedIngressContent,
+            Blob,
+            HttpCanisterUpdate,
+            HttpRequest,
+            HttpRequestEnvelope,
+            SignedIngressContent,
             UserSignature,
         };
         use crate::UserId;
@@ -207,9 +218,18 @@ mod try_from {
 
     mod read_state {
         use super::*;
-        use crate::messages::http::{Authentication, HttpReadStateContent, HttpRequestError};
+        use crate::messages::http::{
+            Authentication,
+            HttpReadStateContent,
+            HttpRequestError,
+        };
         use crate::messages::{
-            Blob, HttpReadState, HttpRequest, HttpRequestEnvelope, ReadState, UserSignature,
+            Blob,
+            HttpReadState,
+            HttpRequest,
+            HttpRequestEnvelope,
+            ReadState,
+            UserSignature,
         };
         use crate::UserId;
         use assert_matches::assert_matches;
@@ -337,10 +357,18 @@ mod try_from {
         use super::super::to_blob;
         use super::*;
         use crate::messages::http::{
-            Authentication, HttpQueryContent, HttpRequestError, HttpUserQuery,
+            Authentication,
+            HttpQueryContent,
+            HttpRequestError,
+            HttpUserQuery,
         };
         use crate::messages::{
-            Blob, HttpRequest, HttpRequestEnvelope, Query, QuerySource, UserSignature,
+            Blob,
+            HttpRequest,
+            HttpRequestEnvelope,
+            Query,
+            QuerySource,
+            UserSignature,
         };
         use crate::UserId;
         use assert_matches::assert_matches;
@@ -487,8 +515,14 @@ mod try_from {
     }
 
     pub mod fixed_test_values {
-        use crate::messages::{Blob, SignedDelegation};
-        use ic_crypto_tree_hash::{Label, Path};
+        use crate::messages::{
+            Blob,
+            SignedDelegation,
+        };
+        use ic_crypto_tree_hash::{
+            Label,
+            Path,
+        };
 
         pub fn delegation() -> Option<Vec<SignedDelegation>> {
             Some(Vec::<SignedDelegation>::default())
@@ -558,7 +592,12 @@ mod try_from {
 mod hashing {
     use super::try_from::query;
     use crate::{
-        messages::{Blob, HttpQueryResponse, HttpQueryResponseReply, QueryResponseHash},
+        messages::{
+            Blob,
+            HttpQueryResponse,
+            HttpQueryResponseReply,
+            QueryResponseHash,
+        },
         Time,
     };
     use hex_literal::hex;
@@ -607,16 +646,29 @@ mod hashing {
 mod cbor_serialization {
     use crate::{
         messages::{
-            http::{btreemap, HttpSignedQueryResponse, NodeSignature},
-            Blob, Delegation, HttpQueryResponse, HttpQueryResponseReply, HttpStatusResponse,
-            ReplicaHealthStatus, SignedDelegation,
+            http::{
+                btreemap,
+                HttpSignedQueryResponse,
+                NodeSignature,
+            },
+            Blob,
+            Delegation,
+            HttpQueryResponse,
+            HttpQueryResponseReply,
+            HttpStatusResponse,
+            ReplicaHealthStatus,
+            SignedDelegation,
         },
         time::UNIX_EPOCH,
-        AmountOf, Time,
+        AmountOf,
+        Time,
     };
 
     use candid::Principal;
-    use ic_base_types::{NodeId, PrincipalId};
+    use ic_base_types::{
+        NodeId,
+        PrincipalId,
+    };
     use pretty_assertions::assert_eq;
     use serde::Serialize;
     use serde_cbor::Value;
@@ -859,8 +911,16 @@ mod cbor_serialization {
 
 mod to_authentication {
     use crate::messages::{
-        http::to_authentication, Authentication, Blob, Delegation, HttpQueryContent,
-        HttpRequestEnvelope, HttpRequestError, HttpUserQuery, SignedDelegation, UserSignature,
+        http::to_authentication,
+        Authentication,
+        Blob,
+        Delegation,
+        HttpQueryContent,
+        HttpRequestEnvelope,
+        HttpRequestError,
+        HttpUserQuery,
+        SignedDelegation,
+        UserSignature,
     };
     use crate::Time;
     use assert_matches::assert_matches;

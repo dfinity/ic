@@ -1,5 +1,13 @@
-use crate::{args::VersionSpec, json, protobuf::raw_data_to_value, source::Changelog};
-use anyhow::{bail, Result};
+use crate::{
+    args::VersionSpec,
+    json,
+    protobuf::raw_data_to_value,
+    source::Changelog,
+};
+use anyhow::{
+    bail,
+    Result,
+};
 use serde_json::Value;
 use std::collections::BTreeMap;
 use thiserror::Error;

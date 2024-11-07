@@ -1,12 +1,26 @@
 mod proto;
 
 use candid::CandidType;
-use ic_base_types::{CanisterId, CanisterIdError, PrincipalId, SubnetId};
+use ic_base_types::{
+    CanisterId,
+    CanisterIdError,
+    PrincipalId,
+    SubnetId,
+};
 use ic_protobuf::proxy::ProxyDecodeError;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::convert::TryInto;
-use std::fmt::{Display, Formatter};
-use std::{collections::BTreeMap, convert::TryFrom};
+use std::fmt::{
+    Display,
+    Formatter,
+};
+use std::{
+    collections::BTreeMap,
+    convert::TryFrom,
+};
 
 /// Every subnet starts off with an allocation of roughly 1M canister IDs.
 pub const CANISTER_IDS_PER_SUBNET: u64 = 1 << 20;

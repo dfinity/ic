@@ -1,11 +1,18 @@
 use canister_test::Canister;
 use dfn_candid::candid_one;
-use ic_canisters_http_types::{HttpRequest, HttpResponse};
+use ic_canisters_http_types::{
+    HttpRequest,
+    HttpResponse,
+};
 use ic_sns_governance::pb::v1::{
-    NervousSystemParameters, NeuronPermissionList, NeuronPermissionType,
+    NervousSystemParameters,
+    NeuronPermissionList,
+    NeuronPermissionType,
 };
 use ic_sns_test_utils::itest_helpers::{
-    local_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder,
+    local_test_on_sns_subnet,
+    SnsCanisters,
+    SnsTestsInitPayloadBuilder,
 };
 use serde_bytes::ByteBuf;
 

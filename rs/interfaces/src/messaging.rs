@@ -1,10 +1,20 @@
 //! Message Routing public interfaces.
-use crate::{execution_environment::CanisterOutOfCyclesError, validation::ValidationError};
+use crate::{
+    execution_environment::CanisterOutOfCyclesError,
+    validation::ValidationError,
+};
 use ic_error_types::ErrorCode;
 use ic_types::{
-    batch::{Batch, ValidationContext, XNetPayload},
+    batch::{
+        Batch,
+        ValidationContext,
+        XNetPayload,
+    },
     consensus::Payload,
-    CanisterId, Height, NumBytes, Time,
+    CanisterId,
+    Height,
+    NumBytes,
+    Time,
 };
 
 /// Errors that `MessageRouting` may return.

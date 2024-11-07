@@ -1,13 +1,29 @@
-use crate::{common::LOG_PREFIX, registry::Registry};
-use candid::{CandidType, Deserialize};
+use crate::{
+    common::LOG_PREFIX,
+    registry::Registry,
+};
+use candid::{
+    CandidType,
+    Deserialize,
+};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use serde::Serialize;
 
 use ic_crypto_sha2::Sha256;
-use ic_protobuf::registry::firewall::v1::{FirewallRule, FirewallRuleSet};
-use ic_registry_keys::{make_firewall_rules_record_key, FirewallRulesScope};
-use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation, RegistryValue};
+use ic_protobuf::registry::firewall::v1::{
+    FirewallRule,
+    FirewallRuleSet,
+};
+use ic_registry_keys::{
+    make_firewall_rules_record_key,
+    FirewallRulesScope,
+};
+use ic_registry_transport::pb::v1::{
+    registry_mutation,
+    RegistryMutation,
+    RegistryValue,
+};
 use prost::Message;
 use std::fmt::Write;
 
@@ -259,14 +275,26 @@ mod tests {
     use crate::common::test_helpers::invariant_compliant_registry;
     use crate::mutations::firewall::compute_firewall_ruleset_hash;
     use crate::mutations::firewall::{
-        AddFirewallRulesPayload, RemoveFirewallRulesPayload, UpdateFirewallRulesPayload,
+        AddFirewallRulesPayload,
+        RemoveFirewallRulesPayload,
+        UpdateFirewallRulesPayload,
     };
     use crate::registry::Registry;
-    use ic_base_types::{NodeId, PrincipalId, SubnetId};
-    use ic_protobuf::registry::firewall::v1::{
-        FirewallAction, FirewallRule, FirewallRuleDirection, FirewallRuleSet,
+    use ic_base_types::{
+        NodeId,
+        PrincipalId,
+        SubnetId,
     };
-    use ic_registry_keys::{make_firewall_rules_record_key, FirewallRulesScope};
+    use ic_protobuf::registry::firewall::v1::{
+        FirewallAction,
+        FirewallRule,
+        FirewallRuleDirection,
+        FirewallRuleSet,
+    };
+    use ic_registry_keys::{
+        make_firewall_rules_record_key,
+        FirewallRulesScope,
+    };
     use prost::Message;
 
     const MUTATION_ID: u8 = 0;

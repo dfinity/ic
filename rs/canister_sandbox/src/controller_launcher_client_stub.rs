@@ -1,6 +1,9 @@
 use crate::controller_launcher_service::ControllerLauncherService;
 use crate::protocol::ctllaunchersvc::*;
-use crate::rpc::{Call, Channel};
+use crate::rpc::{
+    Call,
+    Channel,
+};
 
 use std::sync::Arc;
 

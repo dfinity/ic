@@ -1,8 +1,15 @@
-use std::fmt::{self, Display, Formatter};
+use std::fmt::{
+    self,
+    Display,
+    Formatter,
+};
 
 use async_trait::async_trait;
 use ic_base_types::CanisterId;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 /// A general trait for the environment in which governance is running.
 #[async_trait]

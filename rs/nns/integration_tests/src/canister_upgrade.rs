@@ -1,17 +1,32 @@
 use canister_test::Wasm;
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_crypto_sha2::Sha256;
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID, ROOT_CANISTER_ID};
-use ic_nns_governance_api::pb::v1::{install_code::CanisterInstallMode, proposal::Action};
+use ic_nns_constants::{
+    GOVERNANCE_CANISTER_ID,
+    LIFELINE_CANISTER_ID,
+    ROOT_CANISTER_ID,
+};
+use ic_nns_governance_api::pb::v1::{
+    install_code::CanisterInstallMode,
+    proposal::Action,
+};
 use ic_nns_test_utils::common::{
-    build_governance_wasm, build_lifeline_wasm, build_root_wasm, modify_wasm_bytes,
+    build_governance_wasm,
+    build_lifeline_wasm,
+    build_root_wasm,
+    modify_wasm_bytes,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     neuron_helpers::get_neuron_1,
     state_test_helpers::{
-        nns_governance_get_proposal_info_as_anonymous, nns_propose_upgrade_nns_canister,
-        setup_nns_canisters, state_machine_builder_for_nns_tests,
+        nns_governance_get_proposal_info_as_anonymous,
+        nns_propose_upgrade_nns_canister,
+        setup_nns_canisters,
+        state_machine_builder_for_nns_tests,
         wait_for_canister_upgrade_to_succeed,
     },
 };

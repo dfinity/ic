@@ -6,11 +6,19 @@
 //!    every inter-canister callback call.
 
 use std::{
-    cell::{Cell, RefCell, RefMut},
+    cell::{
+        Cell,
+        RefCell,
+        RefMut,
+    },
     future::Future,
     pin::Pin,
     rc::Rc,
-    task::{Context, Poll, Waker},
+    task::{
+        Context,
+        Poll,
+        Waker,
+    },
 };
 
 thread_local! {
@@ -219,7 +227,11 @@ pub fn spawn<F: 'static + Future<Output = ()>>(future: F) {
 // for the future to become ready and deletes it afterwards.
 mod waker {
     use super::*;
-    use std::task::{RawWaker, RawWakerVTable, Waker};
+    use std::task::{
+        RawWaker,
+        RawWakerVTable,
+        Waker,
+    };
 
     static MY_VTABLE: RawWakerVTable = RawWakerVTable::new(clone, wake, wake_by_ref, drop);
 

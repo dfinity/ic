@@ -7,15 +7,24 @@ use ic_crypto_internal_tls::generate_tls_key_pair_der;
 use ic_crypto_internal_tls::TlsEd25519SecretKeyDerBytes;
 use ic_crypto_internal_tls::TlsKeyPairAndCertGenerationError;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use ic_types::time::{Time, GENESIS};
-use ic_types::{NodeId, PrincipalId};
+use ic_types::time::{
+    Time,
+    GENESIS,
+};
+use ic_types::{
+    NodeId,
+    PrincipalId,
+};
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 use time::macros::datetime;
 use time::OffsetDateTime;
 use x509_parser::certificate::X509Certificate;
 use x509_parser::prelude::FromDer;
-use x509_parser::x509::{X509Name, X509Version};
+use x509_parser::x509::{
+    X509Name,
+    X509Version,
+};
 
 #[test]
 fn should_generate_x509_v3_certificate_in_der_encoding() {

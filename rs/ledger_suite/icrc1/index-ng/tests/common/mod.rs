@@ -1,16 +1,49 @@
-use candid::{Decode, Encode, Nat, Principal};
-use ic_base_types::{CanisterId, PrincipalId};
-use ic_canisters_http_types::{HttpRequest, HttpResponse};
-use ic_icrc1_index_ng::{GetBlocksResponse, IndexArg, InitArg as IndexInitArg, Log, Status};
-use ic_icrc1_ledger::{FeatureFlags, InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
+use candid::{
+    Decode,
+    Encode,
+    Nat,
+    Principal,
+};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
+use ic_canisters_http_types::{
+    HttpRequest,
+    HttpResponse,
+};
+use ic_icrc1_index_ng::{
+    GetBlocksResponse,
+    IndexArg,
+    InitArg as IndexInitArg,
+    Log,
+    Status,
+};
+use ic_icrc1_ledger::{
+    FeatureFlags,
+    InitArgsBuilder as LedgerInitArgsBuilder,
+    LedgerArgument,
+};
 use ic_ledger_canister_core::archive::ArchiveOptions;
-use ic_state_machine_tests::{StateMachine, WasmResult};
+use ic_state_machine_tests::{
+    StateMachine,
+    WasmResult,
+};
 use icrc_ledger_types::icrc1::account::Account;
 #[cfg(feature = "icrc3_disabled")]
-use icrc_ledger_types::icrc3::archive::{ArchivedRange, QueryBlockArchiveFn};
+use icrc_ledger_types::icrc3::archive::{
+    ArchivedRange,
+    QueryBlockArchiveFn,
+};
 #[cfg(not(feature = "icrc3_disabled"))]
-use icrc_ledger_types::icrc3::blocks::{ArchivedBlocks, BlockWithId};
-use icrc_ledger_types::icrc3::blocks::{BlockRange, GetBlocksRequest};
+use icrc_ledger_types::icrc3::blocks::{
+    ArchivedBlocks,
+    BlockWithId,
+};
+use icrc_ledger_types::icrc3::blocks::{
+    BlockRange,
+    GetBlocksRequest,
+};
 use num_traits::cast::ToPrimitive;
 use std::time::Duration;
 

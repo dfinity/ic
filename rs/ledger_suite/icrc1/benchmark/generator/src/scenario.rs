@@ -2,16 +2,33 @@ pub(crate) mod accounts;
 pub(crate) mod indexperf;
 pub(crate) mod transactions;
 
-use crate::{get_ledger_principal, next_u64};
-use candid::{Encode, Nat, Principal};
-use ic_base_types::{CanisterId, PrincipalId};
+use crate::{
+    get_ledger_principal,
+    next_u64,
+};
+use candid::{
+    Encode,
+    Nat,
+    Principal,
+};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_cdk::api::management_canister::main::{
-    CanisterIdRecord, CanisterInstallMode, CreateCanisterArgument, InstallCodeArgument,
-    SkipPreUpgrade, WasmModule,
+    CanisterIdRecord,
+    CanisterInstallMode,
+    CreateCanisterArgument,
+    InstallCodeArgument,
+    SkipPreUpgrade,
+    WasmModule,
 };
 use ic_icrc1_benchmark_worker::InitArgs;
 use ic_ledger_core::Tokens;
-use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
+use icrc_ledger_client_cdk::{
+    CdkRuntime,
+    ICRC1Client,
+};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
 

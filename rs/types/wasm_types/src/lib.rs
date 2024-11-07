@@ -3,7 +3,12 @@
 mod errors;
 
 pub use errors::{
-    doc_ref, AsErrorHelp, ErrorHelp, WasmEngineError, WasmError, WasmInstrumentationError,
+    doc_ref,
+    AsErrorHelp,
+    ErrorHelp,
+    WasmEngineError,
+    WasmError,
+    WasmInstrumentationError,
     WasmValidationError,
 };
 use ic_types::CountBytes;
@@ -12,7 +17,10 @@ use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use std::{
     fmt,
-    path::{Path, PathBuf},
+    path::{
+        Path,
+        PathBuf,
+    },
     sync::Arc,
 };
 

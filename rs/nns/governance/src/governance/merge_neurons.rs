@@ -1,11 +1,24 @@
 use crate::{
-    governance::ledger_helper::{BurnNeuronFeesOperation, NeuronStakeTransferOperation},
-    neuron::{combine_aged_stakes, DissolveStateAndAge, Neuron},
+    governance::ledger_helper::{
+        BurnNeuronFeesOperation,
+        NeuronStakeTransferOperation,
+    },
+    neuron::{
+        combine_aged_stakes,
+        DissolveStateAndAge,
+        Neuron,
+    },
     neuron_store::NeuronStore,
     pb::v1::{
-        governance_error::ErrorType, manage_neuron::Merge, manage_neuron::NeuronIdOrSubaccount,
-        manage_neuron_response::MergeResponse, GovernanceError, Neuron as NeuronProto, NeuronState,
-        ProposalData, ProposalStatus,
+        governance_error::ErrorType,
+        manage_neuron::Merge,
+        manage_neuron::NeuronIdOrSubaccount,
+        manage_neuron_response::MergeResponse,
+        GovernanceError,
+        Neuron as NeuronProto,
+        NeuronState,
+        ProposalData,
+        ProposalStatus,
     },
 };
 use ic_base_types::PrincipalId;
@@ -618,14 +631,30 @@ fn is_neuron_involved_with_open_proposals(
 mod tests {
     use super::*;
     use crate::{
-        neuron::{DissolveStateAndAge, NeuronBuilder},
-        pb::v1::{neuron::Followees, proposal::Action, ManageNeuron, NeuronType, Proposal, Topic},
+        neuron::{
+            DissolveStateAndAge,
+            NeuronBuilder,
+        },
+        pb::v1::{
+            neuron::Followees,
+            proposal::Action,
+            ManageNeuron,
+            NeuronType,
+            Proposal,
+            Topic,
+        },
         storage::reset_stable_memory,
     };
     use assert_matches::assert_matches;
-    use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
+    use ic_nervous_system_common::{
+        E8,
+        ONE_DAY_SECONDS,
+    };
     use lazy_static::lazy_static;
-    use maplit::{btreemap, hashmap};
+    use maplit::{
+        btreemap,
+        hashmap,
+    };
     use std::collections::BTreeMap;
 
     static NOW_SECONDS: u64 = 1_234_567_890;

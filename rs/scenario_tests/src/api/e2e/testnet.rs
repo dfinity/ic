@@ -1,18 +1,32 @@
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::subnet::v1::SubnetType;
-use ic_registry_client::client::{RegistryClient, RegistryClientImpl};
+use ic_registry_client::client::{
+    RegistryClient,
+    RegistryClientImpl,
+};
 use ic_registry_client_helpers::{
     node::NodeRegistry,
     routing_table::RoutingTableRegistry,
-    subnet::{SubnetListRegistry, SubnetRegistry},
+    subnet::{
+        SubnetListRegistry,
+        SubnetRegistry,
+    },
 };
 use ic_registry_nns_data_provider_wrappers::create_nns_data_provider;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_routing_table::RoutingTable;
-use ic_types::{NodeId, PrincipalId, SubnetId};
+use ic_types::{
+    NodeId,
+    PrincipalId,
+    SubnetId,
+};
 use std::{
-    collections::BTreeMap, convert::TryFrom, net::SocketAddr, path::PathBuf, result::Result,
+    collections::BTreeMap,
+    convert::TryFrom,
+    net::SocketAddr,
+    path::PathBuf,
+    result::Result,
     sync::Arc,
 };
 use url::Url;

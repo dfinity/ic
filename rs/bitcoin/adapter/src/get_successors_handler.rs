@@ -1,15 +1,29 @@
 use std::{
-    collections::{HashSet, VecDeque},
-    sync::{Arc, Mutex},
+    collections::{
+        HashSet,
+        VecDeque,
+    },
+    sync::{
+        Arc,
+        Mutex,
+    },
 };
 
-use bitcoin::{Block, BlockHash, BlockHeader, Network};
+use bitcoin::{
+    Block,
+    BlockHash,
+    BlockHeader,
+    Network,
+};
 use ic_metrics::MetricsRegistry;
 use tokio::sync::mpsc::Sender;
 use tonic::Status;
 
 use crate::{
-    common::BlockHeight, config::Config, metrics::GetSuccessorMetrics, BlockchainManagerRequest,
+    common::BlockHeight,
+    config::Config,
+    metrics::GetSuccessorMetrics,
+    BlockchainManagerRequest,
     BlockchainState,
 };
 
@@ -245,7 +259,10 @@ fn are_multiple_blocks_allowed(network: Network, anchor_height: BlockHeight) -> 
 mod test {
     use super::*;
 
-    use std::sync::{Arc, Mutex};
+    use std::sync::{
+        Arc,
+        Mutex,
+    };
 
     use bitcoin::Network;
     use ic_metrics::MetricsRegistry;
@@ -253,7 +270,9 @@ mod test {
 
     use crate::config::test::ConfigBuilder;
     use ic_btc_adapter_test_utils::{
-        generate_headers, generate_large_block_blockchain, headers_to_hashes,
+        generate_headers,
+        generate_large_block_blockchain,
+        headers_to_hashes,
     };
 
     /// This tests ensures that `BlockchainManager::get_successors(...)` will return relevant blocks

@@ -5,10 +5,17 @@ mod tests;
 
 /// Some key related utils
 pub mod utils {
-    use crate::types::{CspPop, CspPublicKey};
-    use ic_crypto_internal_threshold_sig_canister_threshold_sig::{EccCurveType, MEGaPublicKey};
+    use crate::types::{
+        CspPop,
+        CspPublicKey,
+    };
+    use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
+        EccCurveType,
+        MEGaPublicKey,
+    };
     use ic_crypto_internal_types::encrypt::forward_secure::{
-        CspFsEncryptionPop, CspFsEncryptionPublicKey,
+        CspFsEncryptionPop,
+        CspFsEncryptionPublicKey,
     };
     use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
     use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;

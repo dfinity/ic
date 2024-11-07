@@ -1,8 +1,14 @@
 use ic_interfaces::execution_environment::{
-    IngressHistoryError, IngressHistoryReader, IngressHistoryWriter,
+    IngressHistoryError,
+    IngressHistoryReader,
+    IngressHistoryWriter,
 };
 use ic_replicated_state::ReplicatedState;
-use ic_types::{ingress::IngressStatus, messages::MessageId, Height};
+use ic_types::{
+    ingress::IngressStatus,
+    messages::MessageId,
+    Height,
+};
 use mockall::*;
 
 mock! {

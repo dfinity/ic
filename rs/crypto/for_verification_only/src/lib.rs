@@ -1,4 +1,7 @@
-use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
+use ic_crypto_temp_crypto::{
+    NodeKeysToGenerate,
+    TempCryptoComponent,
+};
 use ic_interfaces::crypto::Crypto;
 use ic_interfaces_registry::RegistryClient;
 use std::sync::Arc;

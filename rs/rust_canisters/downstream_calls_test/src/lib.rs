@@ -1,6 +1,9 @@
 use candid::CandidType;
 use ic_base_types::CanisterId;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::collections::VecDeque;
 
 /// An action for a 'downstream_calls_test' canister, i.e. either call another such

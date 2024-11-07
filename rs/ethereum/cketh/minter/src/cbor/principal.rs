@@ -1,6 +1,12 @@
 use candid::Principal;
-use minicbor::decode::{Decoder, Error};
-use minicbor::encode::{Encoder, Write};
+use minicbor::decode::{
+    Decoder,
+    Error,
+};
+use minicbor::encode::{
+    Encoder,
+    Write,
+};
 
 pub fn decode<Ctx>(d: &mut Decoder<'_>, _ctx: &mut Ctx) -> Result<Principal, Error> {
     let bytes = d.bytes()?;
@@ -18,7 +24,10 @@ pub fn encode<Ctx, W: Write>(
 
 pub mod option {
     use super::*;
-    use minicbor::{Decode, Encode};
+    use minicbor::{
+        Decode,
+        Encode,
+    };
 
     #[derive(Decode, Encode)]
     #[cbor(transparent)]

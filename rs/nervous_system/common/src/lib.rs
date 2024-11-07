@@ -2,14 +2,32 @@ use by_address::ByAddress;
 use core::{
     cmp::Reverse,
     fmt::Debug,
-    ops::{Add, AddAssign, Div, Mul, Sub},
+    ops::{
+        Add,
+        AddAssign,
+        Div,
+        Mul,
+        Sub,
+    },
 };
 use dfn_core::api::time_nanos;
 use ic_base_types::CanisterId;
-use ic_canister_log::{export, GlobalBuffer, LogBuffer, LogEntry};
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
+use ic_canister_log::{
+    export,
+    GlobalBuffer,
+    LogBuffer,
+    LogEntry,
+};
+use ic_canisters_http_types::{
+    HttpRequest,
+    HttpResponse,
+    HttpResponseBuilder,
+};
 use ic_ledger_core::{
-    tokens::{CheckedAdd, CheckedSub},
+    tokens::{
+        CheckedAdd,
+        CheckedSub,
+    },
     Tokens,
 };
 use lazy_static::lazy_static;
@@ -20,7 +38,11 @@ use rust_decimal::Decimal;
 use std::{
     collections::HashMap,
     convert::TryInto,
-    fmt::{self, Display, Formatter},
+    fmt::{
+        self,
+        Display,
+        Formatter,
+    },
     mem::size_of,
     str::FromStr,
 };

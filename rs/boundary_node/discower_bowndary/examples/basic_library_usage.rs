@@ -1,17 +1,31 @@
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::Arc,
+    time::Duration,
+};
 
 use discower_bowndary::{
-    check::{HealthCheck, HealthCheckImpl},
-    fetch::{NodesFetcher, NodesFetcherImpl},
+    check::{
+        HealthCheck,
+        HealthCheckImpl,
+    },
+    fetch::{
+        NodesFetcher,
+        NodesFetcherImpl,
+    },
     node::Node,
     route_provider::HealthCheckRouteProvider,
     snapshot::IC0_SEED_DOMAIN,
     snapshot_health_based::HealthBasedSnapshot,
-    transport::{TransportProvider, TransportProviderImpl},
+    transport::{
+        TransportProvider,
+        TransportProviderImpl,
+    },
 };
 use ic_agent::{
     agent::http_transport::{
-        reqwest_transport::reqwest::Client, route_provider::RouteProvider, ReqwestTransport,
+        reqwest_transport::reqwest::Client,
+        route_provider::RouteProvider,
+        ReqwestTransport,
     },
     export::Principal,
     identity::AnonymousIdentity,

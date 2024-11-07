@@ -1,6 +1,13 @@
 use crate::pb::v1::Canister;
 use ic_base_types::PrincipalId;
-use pb::v1::{Decimal as DecimalPb, Duration, GlobalTimeOfDay, Percentage, Principals, Tokens};
+use pb::v1::{
+    Decimal as DecimalPb,
+    Duration,
+    GlobalTimeOfDay,
+    Percentage,
+    Principals,
+    Tokens,
+};
 use rust_decimal::Decimal;
 use std::str::FromStr;
 

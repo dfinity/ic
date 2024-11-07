@@ -1,23 +1,42 @@
-use crate::error::{OrchestratorError, OrchestratorResult};
+use crate::error::{
+    OrchestratorError,
+    OrchestratorResult,
+};
 use ic_consensus::dkg::make_registry_cup;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::ReplicaLogger;
 use ic_protobuf::registry::{
-    api_boundary_node::v1::ApiBoundaryNodeRecord, firewall::v1::FirewallRuleSet,
-    hostos_version::v1::HostosVersionRecord, node::v1::IPv4InterfaceConfig,
-    replica_version::v1::ReplicaVersionRecord, subnet::v1::SubnetRecord,
+    api_boundary_node::v1::ApiBoundaryNodeRecord,
+    firewall::v1::FirewallRuleSet,
+    hostos_version::v1::HostosVersionRecord,
+    node::v1::IPv4InterfaceConfig,
+    replica_version::v1::ReplicaVersionRecord,
+    subnet::v1::SubnetRecord,
 };
 use ic_registry_client_helpers::{
-    api_boundary_node::ApiBoundaryNodeRegistry, firewall::FirewallRegistry,
-    hostos_version::HostosRegistry, node::NodeRegistry, node_operator::NodeOperatorRegistry,
-    subnet::SubnetRegistry, unassigned_nodes::UnassignedNodeRegistry,
+    api_boundary_node::ApiBoundaryNodeRegistry,
+    firewall::FirewallRegistry,
+    hostos_version::HostosRegistry,
+    node::NodeRegistry,
+    node_operator::NodeOperatorRegistry,
+    subnet::SubnetRegistry,
+    unassigned_nodes::UnassignedNodeRegistry,
 };
 use ic_registry_keys::FirewallRulesScope;
 use ic_types::{
-    consensus::CatchUpPackage, hostos_version::HostosVersion, NodeId, PrincipalId, RegistryVersion,
-    ReplicaVersion, SubnetId,
+    consensus::CatchUpPackage,
+    hostos_version::HostosVersion,
+    NodeId,
+    PrincipalId,
+    RegistryVersion,
+    ReplicaVersion,
+    SubnetId,
 };
-use std::{convert::TryFrom, net::IpAddr, sync::Arc};
+use std::{
+    convert::TryFrom,
+    net::IpAddr,
+    sync::Arc,
+};
 
 /// Calls the Registry and converts errors into `OrchestratorError`
 #[derive(Clone)]

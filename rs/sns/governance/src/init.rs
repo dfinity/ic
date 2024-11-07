@@ -1,6 +1,11 @@
 use crate::pb::v1::{
-    governance::{Mode, SnsMetadata},
-    Governance, NervousSystemParameters, Neuron,
+    governance::{
+        Mode,
+        SnsMetadata,
+    },
+    Governance,
+    NervousSystemParameters,
+    Neuron,
 };
 use ic_base_types::PrincipalId;
 use std::collections::BTreeMap;

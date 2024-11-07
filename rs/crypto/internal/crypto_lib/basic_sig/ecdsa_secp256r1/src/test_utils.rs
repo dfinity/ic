@@ -1,5 +1,9 @@
 use super::types;
-use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
+use ic_types::crypto::{
+    AlgorithmId,
+    CryptoError,
+    CryptoResult,
+};
 
 // NOTE: both `new_keypair()` and `sign()` are exposed as public but
 // are not used in production. They are exposed due to requirements on

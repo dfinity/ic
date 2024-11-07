@@ -1,39 +1,106 @@
 use crate::common::rest::{
-    ApiResponse, AutoProgressConfig, BlobCompression, BlobId, CanisterHttpRequest,
-    CreateHttpGatewayResponse, CreateInstanceResponse, ExtendedSubnetConfigSet, HttpGatewayBackend,
-    HttpGatewayConfig, HttpGatewayInfo, HttpsConfig, InstanceConfig, InstanceId,
-    MockCanisterHttpResponse, RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId,
-    RawCanisterResult, RawCycles, RawEffectivePrincipal, RawMessageId, RawMockCanisterHttpResponse,
-    RawSetStableMemory, RawStableMemory, RawSubmitIngressResult, RawSubnetId, RawTime,
-    RawVerifyCanisterSigArg, RawWasmResult, SubnetId, Topology,
+    ApiResponse,
+    AutoProgressConfig,
+    BlobCompression,
+    BlobId,
+    CanisterHttpRequest,
+    CreateHttpGatewayResponse,
+    CreateInstanceResponse,
+    ExtendedSubnetConfigSet,
+    HttpGatewayBackend,
+    HttpGatewayConfig,
+    HttpGatewayInfo,
+    HttpsConfig,
+    InstanceConfig,
+    InstanceId,
+    MockCanisterHttpResponse,
+    RawAddCycles,
+    RawCanisterCall,
+    RawCanisterHttpRequest,
+    RawCanisterId,
+    RawCanisterResult,
+    RawCycles,
+    RawEffectivePrincipal,
+    RawMessageId,
+    RawMockCanisterHttpResponse,
+    RawSetStableMemory,
+    RawStableMemory,
+    RawSubmitIngressResult,
+    RawSubnetId,
+    RawTime,
+    RawVerifyCanisterSigArg,
+    RawWasmResult,
+    SubnetId,
+    Topology,
 };
 use crate::management_canister::{
-    CanisterId, CanisterIdRecord, CanisterInstallMode, CanisterInstallModeUpgradeInner,
-    CanisterInstallModeUpgradeInnerWasmMemoryPersistenceInner, CanisterSettings,
-    CanisterStatusResult, ChunkHash, InstallChunkedCodeArgs, InstallCodeArgs,
-    ProvisionalCreateCanisterWithCyclesArgs, UpdateSettingsArgs, UploadChunkArgs,
+    CanisterId,
+    CanisterIdRecord,
+    CanisterInstallMode,
+    CanisterInstallModeUpgradeInner,
+    CanisterInstallModeUpgradeInnerWasmMemoryPersistenceInner,
+    CanisterSettings,
+    CanisterStatusResult,
+    ChunkHash,
+    InstallChunkedCodeArgs,
+    InstallCodeArgs,
+    ProvisionalCreateCanisterWithCyclesArgs,
+    UpdateSettingsArgs,
+    UploadChunkArgs,
 };
 pub use crate::DefaultEffectiveCanisterIdError;
-use crate::{CallError, PocketIcBuilder, UserError, WasmResult};
+use crate::{
+    CallError,
+    PocketIcBuilder,
+    UserError,
+    WasmResult,
+};
 use candid::{
-    decode_args, encode_args,
-    utils::{ArgumentDecoder, ArgumentEncoder},
+    decode_args,
+    encode_args,
+    utils::{
+        ArgumentDecoder,
+        ArgumentEncoder,
+    },
     Principal,
 };
-use ic_certification::{Certificate, Label, LookupResult};
+use ic_certification::{
+    Certificate,
+    Label,
+    LookupResult,
+};
 use ic_transport_types::Envelope;
 use ic_transport_types::EnvelopeContent::ReadState;
-use ic_transport_types::{ReadStateResponse, SubnetMetrics};
-use reqwest::{StatusCode, Url};
-use serde::{de::DeserializeOwned, Serialize};
-use sha2::{Digest, Sha256};
+use ic_transport_types::{
+    ReadStateResponse,
+    SubnetMetrics,
+};
+use reqwest::{
+    StatusCode,
+    Url,
+};
+use serde::{
+    de::DeserializeOwned,
+    Serialize,
+};
+use sha2::{
+    Digest,
+    Sha256,
+};
 use slog::Level;
 use std::fs::File;
 use std::future::Future;
 use std::net::SocketAddr;
 use std::path::PathBuf;
-use std::time::{Duration, SystemTime};
-use tracing::{debug, instrument, warn};
+use std::time::{
+    Duration,
+    SystemTime,
+};
+use tracing::{
+    debug,
+    instrument,
+    warn,
+};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::EnvFilter;
 

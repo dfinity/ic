@@ -1,8 +1,17 @@
-use crate::{fdenum::EnumerateInnerFileDescriptors, protocol::logging::LogRequest};
+use crate::{
+    fdenum::EnumerateInnerFileDescriptors,
+    protocol::logging::LogRequest,
+};
 use ic_embedders::wasm_executor::SliceExecutionOutput;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
-use super::{id::ExecId, structs::SandboxExecOutput};
+use super::{
+    id::ExecId,
+    structs::SandboxExecOutput,
+};
 
 // This defines the RPC service methods offered by the controller process
 // (used by the sandbox) as well as the expected replies.
@@ -64,20 +73,46 @@ mod tests {
 
     use ic_embedders::wasm_executor::SliceExecutionOutput;
     use ic_interfaces::execution_environment::{
-        InstanceStats, SystemApiCallCounters, WasmExecutionOutput,
+        InstanceStats,
+        SystemApiCallCounters,
+        WasmExecutionOutput,
     };
-    use ic_replicated_state::{Global, NumWasmPages, PageMap};
+    use ic_replicated_state::{
+        Global,
+        NumWasmPages,
+        PageMap,
+    };
     use ic_system_api::sandbox_safe_system_state::SystemStateChanges;
-    use ic_types::{ingress::WasmResult, CanisterLog, NumBytes, NumInstructions};
+    use ic_types::{
+        ingress::WasmResult,
+        CanisterLog,
+        NumBytes,
+        NumInstructions,
+    };
 
     use crate::protocol::{
-        ctlsvc::{ExecutionFinishedReply, ExecutionPausedReply, ExecutionPausedRequest, Reply},
+        ctlsvc::{
+            ExecutionFinishedReply,
+            ExecutionPausedReply,
+            ExecutionPausedRequest,
+            Reply,
+        },
         id::ExecId,
-        logging::{LogLevel, LogRequest},
-        structs::{MemoryModifications, SandboxExecOutput, StateModifications},
+        logging::{
+            LogLevel,
+            LogRequest,
+        },
+        structs::{
+            MemoryModifications,
+            SandboxExecOutput,
+            StateModifications,
+        },
     };
 
-    use super::{ExecutionFinishedRequest, Request};
+    use super::{
+        ExecutionFinishedRequest,
+        Request,
+    };
 
     fn round_trip_request(msg: &Request) -> Request {
         let ser = bincode::serialize(&msg).unwrap();

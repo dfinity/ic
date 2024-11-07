@@ -1,5 +1,8 @@
 //! The crypto service provider API for querying public keys.
-use crate::vault::api::{CspPublicKeyStoreError, PublicKeyStoreCspVault};
+use crate::vault::api::{
+    CspPublicKeyStoreError,
+    PublicKeyStoreCspVault,
+};
 use crate::vault::local_csp_vault::LocalCspVault;
 use crate::SecretKeyStore;
 use parking_lot::RwLockReadGuard;
@@ -7,7 +10,10 @@ use parking_lot::RwLockReadGuard;
 use crate::public_key_store::PublicKeyStore;
 use ic_types::crypto::CurrentNodePublicKeys;
 use ic_types::Time;
-use rand::{CryptoRng, Rng};
+use rand::{
+    CryptoRng,
+    Rng,
+};
 
 #[cfg(test)]
 mod tests;

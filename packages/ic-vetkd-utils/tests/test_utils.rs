@@ -1,10 +1,20 @@
 //! A partial implementation of the server side vetkd API
 
-use ic_bls12_381::hash_to_curve::{ExpandMsgXmd, HashToCurve};
+use ic_bls12_381::hash_to_curve::{
+    ExpandMsgXmd,
+    HashToCurve,
+};
 use ic_bls12_381::*;
-use rand::{CryptoRng, RngCore};
+use rand::{
+    CryptoRng,
+    RngCore,
+};
 use sha3::{
-    digest::{ExtendableOutputReset, Update, XofReader},
+    digest::{
+        ExtendableOutputReset,
+        Update,
+        XofReader,
+    },
     Shake256,
 };
 

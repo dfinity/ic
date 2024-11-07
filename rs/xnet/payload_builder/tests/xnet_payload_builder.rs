@@ -1,7 +1,10 @@
 use async_trait::async_trait;
 use ic_base_types::NumBytes;
 use ic_interfaces::messaging::XNetPayloadBuilder;
-use ic_interfaces_certified_stream_store::{CertifiedStreamStore, DecodeStreamError};
+use ic_interfaces_certified_stream_store::{
+    CertifiedStreamStore,
+    DecodeStreamError,
+};
 use ic_interfaces_certified_stream_store_mocks::MockCertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
 use ic_limits::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
@@ -9,39 +12,85 @@ use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;
 use ic_registry_client_fake::FakeRegistryClient;
-use ic_registry_client_helpers::node::{ConnectionEndpoint, NodeRecord};
-use ic_registry_keys::{make_node_record_key, make_subnet_list_record_key, make_subnet_record_key};
+use ic_registry_client_helpers::node::{
+    ConnectionEndpoint,
+    NodeRecord,
+};
+use ic_registry_keys::{
+    make_node_record_key,
+    make_subnet_list_record_key,
+    make_subnet_record_key,
+};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::metadata_state::Stream;
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
-    fetch_histogram_stats, fetch_histogram_vec_count, fetch_int_counter_vec, metric_vec,
-    HistogramStats, MetricVec,
+    fetch_histogram_stats,
+    fetch_histogram_vec_count,
+    fetch_int_counter_vec,
+    metric_vec,
+    HistogramStats,
+    MetricVec,
 };
 use ic_test_utilities_registry::SubnetRecordBuilder;
-use ic_test_utilities_state::{arb_stream, arb_stream_slice};
+use ic_test_utilities_state::{
+    arb_stream,
+    arb_stream_slice,
+};
 use ic_test_utilities_types::ids::{
-    NODE_1, NODE_2, NODE_3, NODE_4, NODE_42, NODE_5, SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4,
+    NODE_1,
+    NODE_2,
+    NODE_3,
+    NODE_4,
+    NODE_42,
+    NODE_5,
+    SUBNET_1,
+    SUBNET_2,
+    SUBNET_3,
+    SUBNET_4,
     SUBNET_5,
 };
 use ic_types::batch::ValidationContext;
 use ic_types::time::UNIX_EPOCH;
-use ic_types::xnet::{CertifiedStreamSlice, StreamIndex, StreamIndexedQueue, StreamSlice};
-use ic_types::{CountBytes, Height, NodeId, RegistryVersion, SubnetId};
-use ic_xnet_payload_builder::certified_slice_pool::{CertifiedSlicePool, UnpackedStreamSlice};
+use ic_types::xnet::{
+    CertifiedStreamSlice,
+    StreamIndex,
+    StreamIndexedQueue,
+    StreamSlice,
+};
+use ic_types::{
+    CountBytes,
+    Height,
+    NodeId,
+    RegistryVersion,
+    SubnetId,
+};
+use ic_xnet_payload_builder::certified_slice_pool::{
+    CertifiedSlicePool,
+    UnpackedStreamSlice,
+};
 use ic_xnet_payload_builder::testing::*;
 use ic_xnet_payload_builder::{
-    ExpectedIndices, XNetPayloadBuilderImpl, XNetSlicePoolImpl, LABEL_STATUS,
+    ExpectedIndices,
+    XNetPayloadBuilderImpl,
+    XNetSlicePoolImpl,
+    LABEL_STATUS,
     METRIC_PULL_ATTEMPT_COUNT,
 };
 use maplit::btreemap;
-use mockall::predicate::{always, eq};
+use mockall::predicate::{
+    always,
+    eq,
+};
 use proptest::prelude::*;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    Arc,
+    Mutex,
+};
 use tempfile::TempDir;
 use tokio::sync::mpsc;
 use tokio::time::Duration;

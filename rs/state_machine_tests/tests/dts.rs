@@ -1,7 +1,13 @@
 use ic_base_types::PrincipalId;
-use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
+use ic_config::{
+    execution_environment::Config as HypervisorConfig,
+    subnet_config::SubnetConfig,
+};
 use ic_registry_subnet_type::SubnetType;
-use ic_state_machine_tests::{StateMachineBuilder, StateMachineConfig};
+use ic_state_machine_tests::{
+    StateMachineBuilder,
+    StateMachineConfig,
+};
 use ic_types::Cycles;
 use std::time::Duration;
 

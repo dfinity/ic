@@ -1,7 +1,10 @@
 // Stuff here used in tests and benchmarks.
 // Since benchmarks use ic-boundary as an external library crate - this has to be public.
 
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::Arc,
+    time::Duration,
+};
 
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
@@ -9,29 +12,52 @@ use axum::Router;
 use clap::Parser;
 use http;
 use ic_base_types::NodeId;
-use ic_bn_lib::http::{Client as HttpClient, ConnInfo};
+use ic_bn_lib::http::{
+    Client as HttpClient,
+    ConnInfo,
+};
 use ic_certification_test_utils::CertificateBuilder;
 use ic_certification_test_utils::CertificateData::*;
 use ic_crypto_tree_hash::Digest;
 use ic_limits::INITIAL_NOTARY_DELAY;
 use ic_protobuf::registry::{
-    crypto::v1::{PublicKey as PublicKeyProto, X509PublicKeyCert},
-    node::v1::{ConnectionEndpoint, NodeRecord},
+    crypto::v1::{
+        PublicKey as PublicKeyProto,
+        X509PublicKeyCert,
+    },
+    node::v1::{
+        ConnectionEndpoint,
+        NodeRecord,
+    },
     routing_table::v1::RoutingTable as PbRoutingTable,
-    subnet::v1::{SubnetListRecord, SubnetRecord},
+    subnet::v1::{
+        SubnetListRecord,
+        SubnetRecord,
+    },
 };
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::{
-    make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key, make_node_record_key,
-    make_routing_table_record_key, make_subnet_list_record_key, make_subnet_record_key,
+    make_crypto_threshold_signing_pubkey_key,
+    make_crypto_tls_cert_key,
+    make_node_record_key,
+    make_routing_table_record_key,
+    make_subnet_list_record_key,
+    make_subnet_record_key,
     ROOT_SUBNET_ID_KEY,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_registry_routing_table::{CanisterIdRange, RoutingTable as RoutingTableIC};
+use ic_registry_routing_table::{
+    CanisterIdRange,
+    RoutingTable as RoutingTableIC,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    crypto::threshold_sig::ThresholdSigPublicKey, replica_version::ReplicaVersion, time::Time,
-    CanisterId, RegistryVersion, SubnetId,
+    crypto::threshold_sig::ThresholdSigPublicKey,
+    replica_version::ReplicaVersion,
+    time::Time,
+    CanisterId,
+    RegistryVersion,
+    SubnetId,
 };
 use prometheus::Registry;
 use rand::Rng;
@@ -41,8 +67,19 @@ use crate::{
     cache::Cache,
     cli::Cli,
     core::setup_router,
-    persist::{Persist, Persister, Routes},
-    snapshot::{node_test_id, subnet_test_id, RegistrySnapshot, Snapshot, Snapshotter, Subnet},
+    persist::{
+        Persist,
+        Persister,
+        Routes,
+    },
+    snapshot::{
+        node_test_id,
+        subnet_test_id,
+        RegistrySnapshot,
+        Snapshot,
+        Snapshotter,
+        Subnet,
+    },
 };
 
 #[derive(Debug)]

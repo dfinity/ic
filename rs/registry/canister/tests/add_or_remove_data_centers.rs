@@ -4,18 +4,33 @@ use canister_test::Canister;
 use dfn_candid::candid_one;
 use ic_nns_test_utils::{
     itest_helpers::{
-        forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
+        forward_call_via_universal_canister,
+        local_test_on_nns_subnet,
+        set_up_registry_canister,
         set_up_universal_canister,
     },
-    registry::{get_value_or_panic, invariant_compliant_mutation_as_atomic_req},
+    registry::{
+        get_value_or_panic,
+        invariant_compliant_mutation_as_atomic_req,
+    },
 };
 use ic_protobuf::registry::dc::v1::{
-    AddOrRemoveDataCentersProposalPayload, DataCenterRecord, Gps, MAX_DC_ID_LENGTH,
-    MAX_DC_OWNER_LENGTH, MAX_DC_REGION_LENGTH,
+    AddOrRemoveDataCentersProposalPayload,
+    DataCenterRecord,
+    Gps,
+    MAX_DC_ID_LENGTH,
+    MAX_DC_OWNER_LENGTH,
+    MAX_DC_REGION_LENGTH,
 };
 use ic_registry_keys::make_data_center_record_key;
-use ic_registry_transport::{deserialize_get_value_response, serialize_get_value_request};
-use ic_registry_transport::{Error, Error::KeyNotPresent};
+use ic_registry_transport::{
+    deserialize_get_value_response,
+    serialize_get_value_request,
+};
+use ic_registry_transport::{
+    Error,
+    Error::KeyNotPresent,
+};
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 
 /// Attempt to get a value from the Registry and return the error if one

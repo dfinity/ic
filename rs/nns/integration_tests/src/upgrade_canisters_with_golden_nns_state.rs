@@ -1,24 +1,38 @@
 use candid::Encode;
 use cycles_minting_canister::CyclesCanisterInitPayload;
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_clients::canister_status::CanisterStatusType;
 use ic_nns_constants::{
-    CYCLES_LEDGER_CANISTER_ID, CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
-    GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID,
-    ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    CYCLES_LEDGER_CANISTER_ID,
+    CYCLES_MINTING_CANISTER_ID,
+    GENESIS_TOKEN_CANISTER_ID,
+    GOVERNANCE_CANISTER_ID,
+    LEDGER_CANISTER_ID,
+    LIFELINE_CANISTER_ID,
+    REGISTRY_CANISTER_ID,
+    ROOT_CANISTER_ID,
+    SNS_WASM_CANISTER_ID,
 };
 use ic_nns_test_utils::{
     common::modify_wasm_bytes,
     state_test_helpers::{
-        get_canister_status, nns_create_super_powerful_neuron, nns_propose_upgrade_nns_canister,
+        get_canister_status,
+        nns_create_super_powerful_neuron,
+        nns_propose_upgrade_nns_canister,
         wait_for_canister_upgrade_to_succeed,
     },
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
 use std::{
     env,
-    fmt::{Debug, Formatter},
+    fmt::{
+        Debug,
+        Formatter,
+    },
     fs,
 };
 

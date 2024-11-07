@@ -1,16 +1,30 @@
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_nervous_system_common::ONE_MONTH_SECONDS;
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
     pocket_ic_helpers,
     pocket_ic_helpers::{
-        add_wasm_via_nns_proposal, nns, sns, upgrade_nns_canister_to_tip_of_master_or_panic,
+        add_wasm_via_nns_proposal,
+        nns,
+        sns,
+        upgrade_nns_canister_to_tip_of_master_or_panic,
     },
 };
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
+use ic_nns_constants::{
+    GOVERNANCE_CANISTER_ID,
+    SNS_WASM_CANISTER_ID,
+};
 use ic_nns_test_utils::sns_wasm::{
-    build_archive_sns_wasm, build_governance_sns_wasm, build_index_ng_sns_wasm,
-    build_ledger_sns_wasm, build_root_sns_wasm, build_swap_sns_wasm, create_modified_sns_wasm,
+    build_archive_sns_wasm,
+    build_governance_sns_wasm,
+    build_index_ng_sns_wasm,
+    build_ledger_sns_wasm,
+    build_root_sns_wasm,
+    build_swap_sns_wasm,
+    create_modified_sns_wasm,
     ensure_sns_wasm_gzipped,
 };
 use ic_sns_swap::pb::v1::Lifecycle;

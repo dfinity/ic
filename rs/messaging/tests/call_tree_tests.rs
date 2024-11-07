@@ -1,11 +1,24 @@
-use candid::{Decode, Encode};
+use candid::{
+    Decode,
+    Encode,
+};
 use canister_test::Project;
-use downstream_calls_test::{CallOrResponse, State};
+use downstream_calls_test::{
+    CallOrResponse,
+    State,
+};
 use ic_base_types::CanisterId;
 use ic_base_types::PrincipalId;
-use ic_registry_routing_table::{routing_table_insert_subnet, RoutingTable};
+use ic_registry_routing_table::{
+    routing_table_insert_subnet,
+    RoutingTable,
+};
 use ic_registry_subnet_type::SubnetType;
-use ic_state_machine_tests::{StateMachine, StateMachineBuilder, WasmResult};
+use ic_state_machine_tests::{
+    StateMachine,
+    StateMachineBuilder,
+    WasmResult,
+};
 use ic_test_utilities_metrics::fetch_histogram_stats;
 use ic_test_utilities_types::ids::SUBNET_0;
 use ic_types::Cycles;

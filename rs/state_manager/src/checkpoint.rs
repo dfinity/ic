@@ -1,33 +1,69 @@
-use crossbeam_channel::{unbounded, Sender};
-use ic_base_types::{subnet_id_try_from_protobuf, CanisterId, SnapshotId};
+use crossbeam_channel::{
+    unbounded,
+    Sender,
+};
+use ic_base_types::{
+    subnet_id_try_from_protobuf,
+    CanisterId,
+    SnapshotId,
+};
 use ic_config::flag_status::FlagStatus;
 use ic_logger::error;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_snapshots::{
-    CanisterSnapshot, CanisterSnapshots, ExecutionStateSnapshot, PageMemory,
+    CanisterSnapshot,
+    CanisterSnapshots,
+    ExecutionStateSnapshot,
+    PageMemory,
 };
 use ic_replicated_state::canister_state::system_state::wasm_chunk_store::WasmChunkStore;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{
-    canister_state::execution_state::WasmBinary, page_map::PageMap, CanisterMetrics, CanisterState,
-    ExecutionState, ReplicatedState, SchedulerState, SystemState,
+    canister_state::execution_state::WasmBinary,
+    page_map::PageMap,
+    CanisterMetrics,
+    CanisterState,
+    ExecutionState,
+    ReplicatedState,
+    SchedulerState,
+    SystemState,
 };
-use ic_replicated_state::{CheckpointLoadingMetrics, Memory};
+use ic_replicated_state::{
+    CheckpointLoadingMetrics,
+    Memory,
+};
 use ic_state_layout::{
-    CanisterLayout, CanisterSnapshotBits, CanisterStateBits, CheckpointLayout, ReadOnly,
-    ReadPolicy, SnapshotLayout,
+    CanisterLayout,
+    CanisterSnapshotBits,
+    CanisterStateBits,
+    CheckpointLayout,
+    ReadOnly,
+    ReadPolicy,
+    SnapshotLayout,
 };
 use ic_types::batch::RawQueryStats;
-use ic_types::{CanisterTimer, Height, Time};
+use ic_types::{
+    CanisterTimer,
+    Height,
+    Time,
+};
 use ic_utils::thread::maybe_parallel_map;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::{
+    Duration,
+    Instant,
+};
 
 use crate::{
-    CheckpointError, CheckpointMetrics, HasDowngrade, PageMapType, TipRequest,
-    CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN, NUMBER_OF_CHECKPOINT_THREADS,
+    CheckpointError,
+    CheckpointMetrics,
+    HasDowngrade,
+    PageMapType,
+    TipRequest,
+    CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN,
+    NUMBER_OF_CHECKPOINT_THREADS,
 };
 
 #[cfg(test)]

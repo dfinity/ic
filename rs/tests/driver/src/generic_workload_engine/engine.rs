@@ -1,6 +1,12 @@
-use slog::{info, warn};
+use slog::{
+    info,
+    warn,
+};
 use std::future::Future;
-use std::time::{Duration, Instant};
+use std::time::{
+    Duration,
+    Instant,
+};
 use tokio::task;
 use tokio::time::sleep_until;
 

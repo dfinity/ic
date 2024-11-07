@@ -1,4 +1,7 @@
-use ic_nervous_system_proto::pb::v1::{Duration, Percentage};
+use ic_nervous_system_proto::pb::v1::{
+    Duration,
+    Percentage,
+};
 
 /// It is more difficult to pass critical proposals. This controls voting power thresholds and
 /// voting duration parameters on proposals.

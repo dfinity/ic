@@ -1,13 +1,25 @@
-use crate::candid::{encode_upgrade_args, UpgradeArgs};
+use crate::candid::{
+    encode_upgrade_args,
+    UpgradeArgs,
+};
 use crate::canister::TargetCanister;
 use candid::Principal;
-use std::fmt::{Display, Formatter};
+use std::fmt::{
+    Display,
+    Formatter,
+};
 use std::fs::File;
 use std::io::BufReader;
-use std::path::{Path, PathBuf};
+use std::path::{
+    Path,
+    PathBuf,
+};
 use std::process::Command;
 use std::str::FromStr;
-use std::{fs, iter};
+use std::{
+    fs,
+    iter,
+};
 use tempfile::TempDir;
 
 #[derive(Clone, Eq, PartialEq, Debug)]

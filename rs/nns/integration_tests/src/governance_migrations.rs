@@ -1,17 +1,34 @@
 use assert_matches::assert_matches;
-use candid::{Decode, Encode};
-use ic_canisters_http_types::{HttpRequest, HttpResponse};
+use candid::{
+    Decode,
+    Encode,
+};
+use ic_canisters_http_types::{
+    HttpRequest,
+    HttpResponse,
+};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::neuron_data_validation::NeuronDataValidationSummary;
 use ic_nns_governance_api::pb::v1::{
-    manage_neuron_response::{Command, FollowResponse, SplitResponse},
+    manage_neuron_response::{
+        Command,
+        FollowResponse,
+        SplitResponse,
+    },
     Topic,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    neuron_helpers::{get_neuron_1, get_neuron_2, get_neuron_3},
+    neuron_helpers::{
+        get_neuron_1,
+        get_neuron_2,
+        get_neuron_3,
+    },
     state_test_helpers::{
-        nns_set_followees_for_neuron, nns_split_neuron, query, setup_nns_canisters,
+        nns_set_followees_for_neuron,
+        nns_split_neuron,
+        query,
+        setup_nns_canisters,
         state_machine_builder_for_nns_tests,
     },
 };

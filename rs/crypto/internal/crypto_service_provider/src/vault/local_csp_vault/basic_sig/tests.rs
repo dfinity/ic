@@ -4,12 +4,24 @@ use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
 use crate::public_key_store::PublicKeySetOnceError;
 use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
 use crate::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
-use crate::secret_key_store::{SecretKeyStore, SecretKeyStoreInsertionError};
-use crate::types::{CspPublicKey, CspSignature};
+use crate::secret_key_store::{
+    SecretKeyStore,
+    SecretKeyStoreInsertionError,
+};
+use crate::types::{
+    CspPublicKey,
+    CspSignature,
+};
 use crate::vault::api::PublicKeyStoreCspVault;
 use crate::vault::api::SecretKeyStoreCspVault;
-use crate::vault::api::{BasicSignatureCspVault, CspBasicSignatureKeygenError};
-use crate::vault::api::{CspBasicSignatureError, CspVault};
+use crate::vault::api::{
+    BasicSignatureCspVault,
+    CspBasicSignatureKeygenError,
+};
+use crate::vault::api::{
+    CspBasicSignatureError,
+    CspVault,
+};
 use crate::vault::local_csp_vault::basic_sig::node_signing_pk_to_proto;
 use crate::vault::local_csp_vault::LocalCspVault;
 use crate::KeyId;
@@ -21,7 +33,10 @@ use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_types::crypto::AlgorithmId;
 use ic_types::NumberOfNodes;
 use mockall::Sequence;
-use rand::{Rng, SeedableRng};
+use rand::{
+    Rng,
+    SeedableRng,
+};
 use rand_chacha::ChaCha20Rng;
 use rand_chacha::ChaChaRng;
 use std::io;

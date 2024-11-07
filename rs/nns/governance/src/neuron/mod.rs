@@ -1,5 +1,9 @@
 use crate::pb::v1::{
-    neuron::DissolveState, Neuron as NeuronProto, NeuronInfo, NeuronState, NeuronType,
+    neuron::DissolveState,
+    Neuron as NeuronProto,
+    NeuronInfo,
+    NeuronState,
+    NeuronType,
 };
 
 pub mod dissolve_state_and_age;
@@ -84,7 +88,10 @@ impl NeuronInfo {
 mod tests {
     use super::*;
 
-    use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
+    use ic_nervous_system_common::{
+        E8,
+        ONE_DAY_SECONDS,
+    };
 
     #[test]
     fn test_combine_aged_stakes() {
@@ -124,7 +131,10 @@ mod tests {
         }
     }
 
-    use proptest::{prelude::*, proptest};
+    use proptest::{
+        prelude::*,
+        proptest,
+    };
 
     proptest! {
         #[test]

@@ -1,16 +1,35 @@
-use bytes::{Buf, BufMut};
-use ic_interfaces_registry::{RegistryDataProvider, RegistryTransportRecord, RegistryValue};
-use ic_registry_common_proto::pb::proto_registry::v1::{ProtoRegistry, ProtoRegistryRecord};
+use bytes::{
+    Buf,
+    BufMut,
+};
+use ic_interfaces_registry::{
+    RegistryDataProvider,
+    RegistryTransportRecord,
+    RegistryValue,
+};
+use ic_registry_common_proto::pb::proto_registry::v1::{
+    ProtoRegistry,
+    ProtoRegistryRecord,
+};
 use ic_registry_transport::insert;
 use ic_registry_transport::pb::v1::registry_mutation::Type;
-use ic_registry_transport::pb::v1::{RegistryAtomicMutateRequest, RegistryMutation};
+use ic_registry_transport::pb::v1::{
+    RegistryAtomicMutateRequest,
+    RegistryMutation,
+};
 use ic_sys::fs::write_atomically;
-use ic_types::{registry::RegistryDataProviderError, RegistryVersion};
+use ic_types::{
+    registry::RegistryDataProviderError,
+    RegistryVersion,
+};
 use std::collections::HashMap;
 use std::{
     io::Write,
     path::Path,
-    sync::{Arc, RwLock},
+    sync::{
+        Arc,
+        RwLock,
+    },
 };
 use thiserror::Error;
 

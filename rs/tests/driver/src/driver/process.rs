@@ -1,15 +1,38 @@
 use nix::{
-    sys::signal::{kill, Signal},
+    sys::signal::{
+        kill,
+        Signal,
+    },
     unistd::Pid,
 };
-use slog::{info, Logger};
-use std::process::{Command, ExitStatus, Stdio};
+use slog::{
+    info,
+    Logger,
+};
+use std::process::{
+    Command,
+    ExitStatus,
+    Stdio,
+};
 use tokio::{
-    io::{AsyncBufReadExt, AsyncRead, BufReader},
-    process::{Child, Command as AsyncCommand},
+    io::{
+        AsyncBufReadExt,
+        AsyncRead,
+        BufReader,
+    },
+    process::{
+        Child,
+        Command as AsyncCommand,
+    },
     select,
-    sync::watch::{channel, Receiver},
-    task::{self, JoinHandle},
+    sync::watch::{
+        channel,
+        Receiver,
+    },
+    task::{
+        self,
+        JoinHandle,
+    },
 };
 
 pub trait KillFn: FnOnce() + Send + Sync {}

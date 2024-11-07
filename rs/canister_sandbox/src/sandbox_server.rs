@@ -5,7 +5,11 @@ use std::sync::Arc;
 /// actual "logic" in this module, just bridging the interfaces.
 use crate::sandbox_manager::SandboxManager;
 
-use crate::{protocol::sbxsvc::*, rpc, sandbox_service::SandboxService};
+use crate::{
+    protocol::sbxsvc::*,
+    rpc,
+    sandbox_service::SandboxService,
+};
 
 /// This is the implementation of the RPC interface exposed by the
 /// sandbox process and "binds everything together": All RPCs pass
@@ -141,35 +145,86 @@ mod tests {
         fdenum::EnumerateInnerFileDescriptors,
         protocol::{
             self,
-            id::{ExecId, MemoryId, WasmId},
+            id::{
+                ExecId,
+                MemoryId,
+                WasmId,
+            },
             structs::SandboxExecInput,
         },
     };
-    use ic_base_types::{NumSeconds, PrincipalId};
-    use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig};
-    use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
-    use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
-    use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
+    use ic_base_types::{
+        NumSeconds,
+        PrincipalId,
+    };
+    use ic_config::subnet_config::{
+        CyclesAccountManagerConfig,
+        SchedulerConfig,
+    };
+    use ic_config::{
+        embedders::Config as EmbeddersConfig,
+        flag_status::FlagStatus,
+    };
+    use ic_cycles_account_manager::{
+        CyclesAccountManager,
+        ResourceSaturation,
+    };
+    use ic_interfaces::execution_environment::{
+        ExecutionMode,
+        SubnetAvailableMemory,
+    };
     use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
     use ic_logger::replica_logger::no_op_logger;
     use ic_registry_subnet_type::SubnetType;
-    use ic_replicated_state::{Global, NumWasmPages, PageIndex, PageMap};
-    use ic_system_api::{
-        sandbox_safe_system_state::{CanisterStatusView, SandboxSafeSystemState},
-        ApiType, ExecutionParameters, InstructionLimits,
+    use ic_replicated_state::{
+        Global,
+        NumWasmPages,
+        PageIndex,
+        PageMap,
     };
-    use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
+    use ic_system_api::{
+        sandbox_safe_system_state::{
+            CanisterStatusView,
+            SandboxSafeSystemState,
+        },
+        ApiType,
+        ExecutionParameters,
+        InstructionLimits,
+    };
+    use ic_test_utilities_types::ids::{
+        canister_test_id,
+        subnet_test_id,
+        user_test_id,
+    };
     use ic_types::{
         ingress::WasmResult,
-        messages::{CallContextId, RequestMetadata},
-        methods::{FuncRef, WasmMethod},
+        messages::{
+            CallContextId,
+            RequestMetadata,
+        },
+        methods::{
+            FuncRef,
+            WasmMethod,
+        },
         time::Time,
-        CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
+        CanisterTimer,
+        ComputeAllocation,
+        Cycles,
+        MemoryAllocation,
+        NumBytes,
+        NumInstructions,
     };
     use mockall::*;
-    use std::collections::{BTreeMap, BTreeSet};
+    use std::collections::{
+        BTreeMap,
+        BTreeSet,
+    };
     use std::convert::TryFrom;
-    use std::sync::{Arc, Condvar, Mutex};
+    use std::sync::{
+        Arc,
+        Condvar,
+        Mutex,
+    };
 
     const INSTRUCTION_LIMIT: u64 = 100_000;
     const IS_WASM64_EXECUTION: bool = false;

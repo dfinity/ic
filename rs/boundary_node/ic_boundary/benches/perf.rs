@@ -1,9 +1,24 @@
-use std::{net::SocketAddr, time::Duration};
+use std::{
+    net::SocketAddr,
+    time::Duration,
+};
 
 use candid::Principal;
-use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion, Throughput};
+use criterion::{
+    criterion_group,
+    criterion_main,
+    BatchSize,
+    BenchmarkId,
+    Criterion,
+    Throughput,
+};
 use ic_bn_lib::http::server;
-use ic_types::messages::{Blob, HttpQueryContent, HttpRequestEnvelope, HttpUserQuery};
+use ic_types::messages::{
+    Blob,
+    HttpQueryContent,
+    HttpRequestEnvelope,
+    HttpUserQuery,
+};
 use rand::prelude::*;
 use tokio_util::sync::CancellationToken;
 

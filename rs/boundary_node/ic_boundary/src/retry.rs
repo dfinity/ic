@@ -1,17 +1,30 @@
 use std::sync::Arc;
 
 use axum::{
-    body::{to_bytes, Body},
-    extract::{Request, State},
+    body::{
+        to_bytes,
+        Body,
+    },
+    extract::{
+        Request,
+        State,
+    },
     middleware::Next,
-    response::{IntoResponse, Response},
+    response::{
+        IntoResponse,
+        Response,
+    },
     Extension,
 };
 use http::StatusCode;
 
 use crate::{
     persist::RouteSubnet,
-    routes::{ApiError, ErrorCause, RequestContext},
+    routes::{
+        ApiError,
+        ErrorCause,
+        RequestContext,
+    },
     snapshot::Node,
 };
 

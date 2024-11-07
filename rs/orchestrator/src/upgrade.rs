@@ -1,36 +1,66 @@
 use crate::{
     catch_up_package_provider::CatchUpPackageProvider,
-    error::{OrchestratorError, OrchestratorResult},
+    error::{
+        OrchestratorError,
+        OrchestratorResult,
+    },
     metrics::OrchestratorMetrics,
-    process_manager::{Process, ProcessManager},
+    process_manager::{
+        Process,
+        ProcessManager,
+    },
     registry_helper::RegistryHelper,
 };
 use async_trait::async_trait;
 use ic_crypto::get_master_public_key_from_transcript;
 use ic_http_utils::file_downloader::FileDownloader;
 use ic_image_upgrader::{
-    error::{UpgradeError, UpgradeResult},
+    error::{
+        UpgradeError,
+        UpgradeResult,
+    },
     ImageUpgrader,
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{error, info, warn, ReplicaLogger};
+use ic_logger::{
+    error,
+    info,
+    warn,
+    ReplicaLogger,
+};
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_protobuf::proxy::try_from_option_field;
-use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
+use ic_registry_client_helpers::{
+    node::NodeRegistry,
+    subnet::SubnetRegistry,
+};
 use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::{
-    consensus::{CatchUpPackage, HasHeight},
+    consensus::{
+        CatchUpPackage,
+        HasHeight,
+    },
     crypto::{
         canister_threshold_sig::MasterPublicKey,
-        threshold_sig::ni_dkg::{NiDkgId, NiDkgTargetSubnet},
+        threshold_sig::ni_dkg::{
+            NiDkgId,
+            NiDkgTargetSubnet,
+        },
     },
-    Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId,
+    Height,
+    NodeId,
+    RegistryVersion,
+    ReplicaVersion,
+    SubnetId,
 };
 use std::{
     collections::BTreeMap,
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc,
+        Mutex,
+    },
 };
 
 const KEY_CHANGES_FILENAME: &str = "key_changed_metric.cbor";
@@ -629,8 +659,14 @@ fn remove_node_state(
     cup_path: PathBuf,
     orchestrator_data_directory: PathBuf,
 ) -> Result<(), String> {
-    use ic_config::{Config, ConfigSource};
-    use std::fs::{remove_dir_all, remove_file};
+    use ic_config::{
+        Config,
+        ConfigSource,
+    };
+    use std::fs::{
+        remove_dir_all,
+        remove_file,
+    };
     let tmpdir = tempfile::Builder::new()
         .prefix("ic_config")
         .tempdir()
@@ -886,28 +922,57 @@ mod tests {
 
     use super::*;
     use ic_crypto_test_utils_canister_threshold_sigs::{
-        generate_key_transcript, CanisterThresholdSigTestEnvironment, IDkgParticipants,
+        generate_key_transcript,
+        CanisterThresholdSigTestEnvironment,
+        IDkgParticipants,
     };
-    use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
-    use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId};
+    use ic_crypto_test_utils_reproducible_rng::{
+        reproducible_rng,
+        ReproducibleRng,
+    };
+    use ic_management_canister_types::{
+        EcdsaCurve,
+        EcdsaKeyId,
+    };
     use ic_metrics::MetricsRegistry;
-    use ic_test_utilities_consensus::fake::{Fake, FakeContent};
+    use ic_test_utilities_consensus::fake::{
+        Fake,
+        FakeContent,
+    };
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
         batch::ValidationContext,
         consensus::{
-            idkg::{self, MasterKeyTranscript, TranscriptAttributes},
-            Block, BlockPayload, CatchUpContent, HashedBlock, HashedRandomBeacon, Payload,
-            RandomBeacon, RandomBeaconContent, Rank, SummaryPayload,
+            idkg::{
+                self,
+                MasterKeyTranscript,
+                TranscriptAttributes,
+            },
+            Block,
+            BlockPayload,
+            CatchUpContent,
+            HashedBlock,
+            HashedRandomBeacon,
+            Payload,
+            RandomBeacon,
+            RandomBeaconContent,
+            Rank,
+            SummaryPayload,
         },
         crypto::{
-            canister_threshold_sig::idkg::IDkgTranscript, AlgorithmId, CryptoHash, CryptoHashOf,
+            canister_threshold_sig::idkg::IDkgTranscript,
+            AlgorithmId,
+            CryptoHash,
+            CryptoHashOf,
         },
         signature::ThresholdSignature,
         time::UNIX_EPOCH,
     };
-    use tempfile::{tempdir, TempDir};
+    use tempfile::{
+        tempdir,
+        TempDir,
+    };
 
     fn make_cup(
         h: Height,

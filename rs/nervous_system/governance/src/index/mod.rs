@@ -1,4 +1,8 @@
-use ic_stable_structures::{Memory, StableBTreeMap, Storable};
+use ic_stable_structures::{
+    Memory,
+    StableBTreeMap,
+    Storable,
+};
 
 pub mod neuron_following;
 pub mod neuron_principal;

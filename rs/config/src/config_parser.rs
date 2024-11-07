@@ -118,7 +118,10 @@ impl ConfigSource {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde::{Deserialize, Serialize};
+    use serde::{
+        Deserialize,
+        Serialize,
+    };
 
     #[derive(PartialEq, Debug, Default, Deserialize, Serialize)]
     struct KV {

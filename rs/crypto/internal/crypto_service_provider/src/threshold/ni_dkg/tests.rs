@@ -15,7 +15,10 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_
 use ic_types_test_utils::ids::NODE_1;
 use proptest::prelude::*;
 use rand::SeedableRng;
-use rand::{CryptoRng, Rng};
+use rand::{
+    CryptoRng,
+    Rng,
+};
 use rand_chacha::ChaCha20Rng;
 
 mod gen_dealing_encryption_key_pair_tests {
@@ -24,7 +27,8 @@ mod gen_dealing_encryption_key_pair_tests {
     use crate::LocalCspVault;
     use ic_crypto_internal_test_vectors::unhex::hex_to_32_bytes;
     use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
-        CspDkgCreateFsKeyError, InternalError,
+        CspDkgCreateFsKeyError,
+        InternalError,
     };
 
     #[test]
@@ -108,7 +112,10 @@ mod dkg_dealing_encryption_key_id {
     use super::*;
     use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
     use crate::threshold::ni_dkg::dkg_dealing_encryption_key_id;
-    use crate::{Csp, LocalCspVault};
+    use crate::{
+        Csp,
+        LocalCspVault,
+    };
     use assert_matches::assert_matches;
     use ic_protobuf::registry::crypto::v1::PublicKey;
 

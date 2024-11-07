@@ -9,8 +9,14 @@
 //!
 //! It is desirable to have a description for each flag in this file
 
-use serde::{Deserialize, Serialize};
-use std::time::{Duration, Instant};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use std::time::{
+    Duration,
+    Instant,
+};
 
 /// Groups all available malicious flags.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Default, Deserialize, Serialize)]

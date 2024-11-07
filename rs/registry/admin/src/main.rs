@@ -2,124 +2,269 @@
 use crate::helpers::*;
 use anyhow::anyhow;
 use async_trait::async_trait;
-use candid::{CandidType, Decode, Encode, Principal};
-use clap::{Args, Parser, ValueEnum};
+use candid::{
+    CandidType,
+    Decode,
+    Encode,
+    Principal,
+};
+use clap::{
+    Args,
+    Parser,
+    ValueEnum,
+};
 use create_subnet::ProposeToCreateSubnetCmd;
 use cycles_minting_canister::{
-    ChangeSubnetTypeAssignmentArgs, SetAuthorizedSubnetworkListArgs, SubnetListWithType,
+    ChangeSubnetTypeAssignmentArgs,
+    SetAuthorizedSubnetworkListArgs,
+    SubnetListWithType,
     UpdateSubnetTypeArgs,
 };
 use helpers::{
-    get_proposer_and_sender, get_subnet_ids, get_subnet_record_with_details, parse_proposal_url,
-    shortened_pid_string, shortened_subnet_string,
+    get_proposer_and_sender,
+    get_subnet_ids,
+    get_subnet_record_with_details,
+    parse_proposal_url,
+    shortened_pid_string,
+    shortened_subnet_string,
 };
-use ic_btc_interface::{Flag, SetConfigRequest};
-use ic_canister_client::{Agent, Sender};
+use ic_btc_interface::{
+    Flag,
+    SetConfigRequest,
+};
+use ic_canister_client::{
+    Agent,
+    Sender,
+};
 use ic_canister_client_sender::SigKeys;
 use ic_crypto_utils_threshold_sig_der::{
-    parse_threshold_sig_key, parse_threshold_sig_key_from_der,
+    parse_threshold_sig_key,
+    parse_threshold_sig_key_from_der,
 };
-use ic_http_utils::file_downloader::{check_file_hash, FileDownloader};
-use ic_interfaces_registry::{RegistryClient, RegistryDataProvider};
+use ic_http_utils::file_downloader::{
+    check_file_hash,
+    FileDownloader,
+};
+use ic_interfaces_registry::{
+    RegistryClient,
+    RegistryDataProvider,
+};
 use ic_management_canister_types::CanisterInstallMode;
 use ic_nervous_system_clients::{
-    canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
+    canister_id_record::CanisterIdRecord,
+    canister_status::CanisterStatusResult,
 };
 use ic_nervous_system_common_test_keys::{
-    TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL, TEST_USER2_KEYPAIR, TEST_USER2_PRINCIPAL,
-    TEST_USER3_KEYPAIR, TEST_USER3_PRINCIPAL, TEST_USER4_KEYPAIR, TEST_USER4_PRINCIPAL,
+    TEST_USER1_KEYPAIR,
+    TEST_USER1_PRINCIPAL,
+    TEST_USER2_KEYPAIR,
+    TEST_USER2_PRINCIPAL,
+    TEST_USER3_KEYPAIR,
+    TEST_USER3_PRINCIPAL,
+    TEST_USER4_KEYPAIR,
+    TEST_USER4_PRINCIPAL,
 };
 use ic_nervous_system_humanize::{
-    parse_duration, parse_percentage, parse_time_of_day, parse_tokens,
+    parse_duration,
+    parse_percentage,
+    parse_time_of_day,
+    parse_tokens,
 };
 use ic_nervous_system_proto::pb::v1 as nervous_system_pb;
 use ic_nervous_system_root::change_canister::{
-    AddCanisterRequest, CanisterAction, ChangeCanisterRequest, StopOrStartCanisterRequest,
+    AddCanisterRequest,
+    CanisterAction,
+    ChangeCanisterRequest,
+    StopOrStartCanisterRequest,
 };
-use ic_nns_common::types::{NeuronId, ProposalId, UpdateIcpXdrConversionRatePayload};
-use ic_nns_constants::{memory_allocation_of, GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
+use ic_nns_common::types::{
+    NeuronId,
+    ProposalId,
+    UpdateIcpXdrConversionRatePayload,
+};
+use ic_nns_constants::{
+    memory_allocation_of,
+    GOVERNANCE_CANISTER_ID,
+    ROOT_CANISTER_ID,
+};
 use ic_nns_governance_api::{
-    bitcoin::{BitcoinNetwork, BitcoinSetConfigProposal},
+    bitcoin::{
+        BitcoinNetwork,
+        BitcoinSetConfigProposal,
+    },
     pb::v1::{
         add_or_remove_node_provider::Change,
         create_service_nervous_system::{
             governance_parameters::VotingRewardParameters,
             initial_token_distribution::{
-                developer_distribution::NeuronDistribution, DeveloperDistribution,
-                SwapDistribution, TreasuryDistribution,
+                developer_distribution::NeuronDistribution,
+                DeveloperDistribution,
+                SwapDistribution,
+                TreasuryDistribution,
             },
-            swap_parameters, GovernanceParameters, InitialTokenDistribution, LedgerParameters,
+            swap_parameters,
+            GovernanceParameters,
+            InitialTokenDistribution,
+            LedgerParameters,
             SwapParameters,
         },
         install_code::CanisterInstallMode as GovernanceInstallMode,
         proposal::Action,
         stop_or_start_canister::CanisterAction as GovernanceCanisterAction,
         update_canister_settings::{
-            CanisterSettings, Controllers, LogVisibility as GovernanceLogVisibility,
+            CanisterSettings,
+            Controllers,
+            LogVisibility as GovernanceLogVisibility,
         },
-        AddOrRemoveNodeProvider, CreateServiceNervousSystem, GovernanceError, InstallCodeRequest,
-        MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest, NnsFunction,
-        NodeProvider, ProposalActionRequest, RewardNodeProviders, StopOrStartCanister,
+        AddOrRemoveNodeProvider,
+        CreateServiceNervousSystem,
+        GovernanceError,
+        InstallCodeRequest,
+        MakeProposalRequest,
+        ManageNeuronCommandRequest,
+        ManageNeuronRequest,
+        NnsFunction,
+        NodeProvider,
+        ProposalActionRequest,
+        RewardNodeProviders,
+        StopOrStartCanister,
         UpdateCanisterSettings,
     },
     proposal_submission_helpers::{
-        create_external_update_proposal_candid, create_make_proposal_payload,
+        create_external_update_proposal_candid,
+        create_make_proposal_payload,
         decode_make_proposal_response,
     },
-    subnet_rental::{RentalConditionId, SubnetRentalRequest},
+    subnet_rental::{
+        RentalConditionId,
+        SubnetRentalRequest,
+    },
 };
-use ic_nns_handler_root::root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot};
+use ic_nns_handler_root::root_proposals::{
+    GovernanceUpgradeRootProposal,
+    RootProposalBallot,
+};
 use ic_nns_init::make_hsm_sender;
-use ic_nns_test_utils::governance::{HardResetNnsRootToVersionPayload, UpgradeRootProposal};
+use ic_nns_test_utils::governance::{
+    HardResetNnsRootToVersionPayload,
+    UpgradeRootProposal,
+};
 use ic_protobuf::registry::{
     api_boundary_node::v1::ApiBoundaryNodeRecord,
-    crypto::v1::{PublicKey, X509PublicKeyCert},
-    dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord},
-    firewall::v1::{FirewallConfig, FirewallRule, FirewallRuleSet},
+    crypto::v1::{
+        PublicKey,
+        X509PublicKeyCert,
+    },
+    dc::v1::{
+        AddOrRemoveDataCentersProposalPayload,
+        DataCenterRecord,
+    },
+    firewall::v1::{
+        FirewallConfig,
+        FirewallRule,
+        FirewallRuleSet,
+    },
     node::v1::NodeRecord,
-    node_operator::v1::{NodeOperatorRecord, RemoveNodeOperatorsPayload},
-    node_rewards::v2::{NodeRewardRate, UpdateNodeRewardsTableProposalPayload},
+    node_operator::v1::{
+        NodeOperatorRecord,
+        RemoveNodeOperatorsPayload,
+    },
+    node_rewards::v2::{
+        NodeRewardRate,
+        UpdateNodeRewardsTableProposalPayload,
+    },
     provisional_whitelist::v1::ProvisionalWhitelist as ProvisionalWhitelistProto,
-    replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
-    routing_table::v1::{CanisterMigrations, RoutingTable},
-    subnet::v1::{SubnetListRecord, SubnetRecord as SubnetRecordProto},
+    replica_version::v1::{
+        BlessedReplicaVersions,
+        ReplicaVersionRecord,
+    },
+    routing_table::v1::{
+        CanisterMigrations,
+        RoutingTable,
+    },
+    subnet::v1::{
+        SubnetListRecord,
+        SubnetRecord as SubnetRecordProto,
+    },
     unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
 };
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client_helpers::{
-    chain_keys::ChainKeysRegistry, crypto::CryptoRegistry, deserialize_registry_value,
-    ecdsa_keys::EcdsaKeysRegistry, hostos_version::HostosRegistry, subnet::SubnetRegistry,
+    chain_keys::ChainKeysRegistry,
+    crypto::CryptoRegistry,
+    deserialize_registry_value,
+    ecdsa_keys::EcdsaKeysRegistry,
+    hostos_version::HostosRegistry,
+    subnet::SubnetRegistry,
 };
 use ic_registry_keys::{
-    get_node_operator_id_from_record_key, get_node_record_node_id, is_node_operator_record_key,
-    is_node_record_key, make_api_boundary_node_record_key, make_blessed_replica_versions_key,
-    make_canister_migrations_record_key, make_crypto_node_key,
-    make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
-    make_data_center_record_key, make_firewall_config_record_key, make_firewall_rules_record_key,
-    make_node_operator_record_key, make_node_record_key, make_provisional_whitelist_record_key,
-    make_replica_version_key, make_routing_table_record_key, make_subnet_list_record_key,
-    make_subnet_record_key, make_unassigned_nodes_config_record_key, FirewallRulesScope,
-    API_BOUNDARY_NODE_RECORD_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY,
+    get_node_operator_id_from_record_key,
+    get_node_record_node_id,
+    is_node_operator_record_key,
+    is_node_record_key,
+    make_api_boundary_node_record_key,
+    make_blessed_replica_versions_key,
+    make_canister_migrations_record_key,
+    make_crypto_node_key,
+    make_crypto_threshold_signing_pubkey_key,
+    make_crypto_tls_cert_key,
+    make_data_center_record_key,
+    make_firewall_config_record_key,
+    make_firewall_rules_record_key,
+    make_node_operator_record_key,
+    make_node_record_key,
+    make_provisional_whitelist_record_key,
+    make_replica_version_key,
+    make_routing_table_record_key,
+    make_subnet_list_record_key,
+    make_subnet_record_key,
+    make_unassigned_nodes_config_record_key,
+    FirewallRulesScope,
+    API_BOUNDARY_NODE_RECORD_KEY_PREFIX,
+    NODE_OPERATOR_RECORD_KEY_PREFIX,
+    NODE_REWARDS_TABLE_KEY,
     ROOT_SUBNET_ID_KEY,
 };
 use ic_registry_local_store::{
-    Changelog, ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreWriter,
+    Changelog,
+    ChangelogEntry,
+    KeyMutation,
+    LocalStoreImpl,
+    LocalStoreWriter,
 };
 use ic_registry_nns_data_provider::registry::RegistryCanister;
-use ic_registry_nns_data_provider_wrappers::{CertifiedNnsDataProvider, NnsDataProvider};
+use ic_registry_nns_data_provider_wrappers::{
+    CertifiedNnsDataProvider,
+    NnsDataProvider,
+};
 use ic_registry_routing_table::{
-    CanisterIdRange, CanisterMigrations as OtherCanisterMigrations,
+    CanisterIdRange,
+    CanisterMigrations as OtherCanisterMigrations,
     RoutingTable as OtherRoutingTable,
 };
 use ic_registry_transport::Error;
 use ic_sns_init::pb::v1::SnsInitPayload; // To validate CreateServiceNervousSystem.
 use ic_sns_wasm::pb::v1::{
-    AddWasmRequest, InsertUpgradePathEntriesRequest, PrettySnsVersion, SnsCanisterType, SnsUpgrade,
-    SnsVersion, SnsWasm, UpdateAllowedPrincipalsRequest, UpdateSnsSubnetListRequest,
+    AddWasmRequest,
+    InsertUpgradePathEntriesRequest,
+    PrettySnsVersion,
+    SnsCanisterType,
+    SnsUpgrade,
+    SnsVersion,
+    SnsWasm,
+    UpdateAllowedPrincipalsRequest,
+    UpdateSnsSubnetListRequest,
 };
 use ic_types::{
-    crypto::{threshold_sig::ThresholdSigPublicKey, KeyPurpose},
-    CanisterId, NodeId, PrincipalId, RegistryVersion, SubnetId,
+    crypto::{
+        threshold_sig::ThresholdSigPublicKey,
+        KeyPurpose,
+    },
+    CanisterId,
+    NodeId,
+    PrincipalId,
+    RegistryVersion,
+    SubnetId,
 };
 use indexmap::IndexMap;
 use itertools::izip;
@@ -142,31 +287,56 @@ use registry_canister::mutations::{
     do_update_nodes_hostos_version::DeployHostosToSomeNodes,
     do_update_ssh_readonly_access_for_all_unassigned_nodes::UpdateSshReadOnlyAccessForAllUnassignedNodesPayload,
     firewall::{
-        add_firewall_rules_compute_entries, compute_firewall_ruleset_hash,
-        remove_firewall_rules_compute_entries, update_firewall_rules_compute_entries,
-        AddFirewallRulesPayload, RemoveFirewallRulesPayload, UpdateFirewallRulesPayload,
+        add_firewall_rules_compute_entries,
+        compute_firewall_ruleset_hash,
+        remove_firewall_rules_compute_entries,
+        update_firewall_rules_compute_entries,
+        AddFirewallRulesPayload,
+        RemoveFirewallRulesPayload,
+        UpdateFirewallRulesPayload,
     },
     node_management::do_remove_nodes::RemoveNodesPayload,
     prepare_canister_migration::PrepareCanisterMigrationPayload,
     reroute_canister_ranges::RerouteCanisterRangesPayload,
 };
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::{
+        BTreeMap,
+        HashSet,
+    },
     convert::TryFrom,
     fmt::Debug,
-    fs::{metadata, read_to_string, File},
+    fs::{
+        metadata,
+        read_to_string,
+        File,
+    },
     io::Read,
     net::Ipv6Addr,
-    path::{Path, PathBuf},
+    path::{
+        Path,
+        PathBuf,
+    },
     process::exit,
     str::FromStr,
     sync::Arc,
     time::SystemTime,
 };
 use types::{
-    LogVisibility, NodeDetails, ProposalAction, ProposalMetadata, ProposalPayload,
-    ProvisionalWhitelistRecord, Registry, RegistryRecord, RegistryValue, SubnetDescriptor,
+    LogVisibility,
+    NodeDetails,
+    ProposalAction,
+    ProposalMetadata,
+    ProposalPayload,
+    ProvisionalWhitelistRecord,
+    Registry,
+    RegistryRecord,
+    RegistryValue,
+    SubnetDescriptor,
     SubnetRecord,
 };
 use update_subnet::ProposeToUpdateSubnetCmd;

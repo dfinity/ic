@@ -1,16 +1,30 @@
 use crate::pb::v1::{
-    valuation::{Token as TokenPb, ValuationFactors as ValuationFactorsPb},
-    Account as AccountPb, Valuation as ValuationPb,
+    valuation::{
+        Token as TokenPb,
+        ValuationFactors as ValuationFactorsPb,
+    },
+    Account as AccountPb,
+    Valuation as ValuationPb,
 };
 use candid::Principal;
 use ic_base_types::PrincipalId;
 use ic_nervous_system_common::E8;
-use ic_nervous_system_proto::pb::v1::{Decimal as DecimalPb, Tokens};
-use ic_sns_governance_token_valuation::{Token, Valuation, ValuationFactors};
+use ic_nervous_system_proto::pb::v1::{
+    Decimal as DecimalPb,
+    Tokens,
+};
+use ic_sns_governance_token_valuation::{
+    Token,
+    Valuation,
+    ValuationFactors,
+};
 use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
 use rust_decimal::Decimal;
-use std::time::{Duration, SystemTime};
+use std::time::{
+    Duration,
+    SystemTime,
+};
 
 fn field_err(field_name: &str, child_message: String) -> String {
     format!("invalid {}: {}", field_name, child_message,)

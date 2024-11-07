@@ -2,12 +2,22 @@ use std::time::Duration;
 
 use ic_nns_governance_api::pb::v1::CreateServiceNervousSystem;
 use ic_sns_governance::pb::v1::governance::Mode;
-use ic_sns_swap::pb::v1::{GetDerivedStateResponse, GetLifecycleResponse, Lifecycle};
+use ic_sns_swap::pb::v1::{
+    GetDerivedStateResponse,
+    GetLifecycleResponse,
+    Lifecycle,
+};
 use ic_system_test_driver::{
     canister_agent::HasCanisterAgentCapability,
-    canister_api::{CallMode, SnsRequestProvider},
+    canister_api::{
+        CallMode,
+        SnsRequestProvider,
+    },
     driver::{
-        test_env::{TestEnv, TestEnvAttribute},
+        test_env::{
+            TestEnv,
+            TestEnvAttribute,
+        },
         test_env_api::GetFirstHealthyNodeSnapshot,
     },
     sns_client::SnsClient,

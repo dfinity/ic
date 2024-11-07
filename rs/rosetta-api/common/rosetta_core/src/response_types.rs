@@ -1,7 +1,10 @@
 use crate::identifiers::*;
 use crate::miscellaneous::*;
 use crate::objects::*;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 /// A NetworkListResponse contains all NetworkIdentifiers that the node can
 /// serve information for.

@@ -1,8 +1,14 @@
 use crate::request::transaction_operation_results::TransactionOperationResults;
 use crate::request::transaction_results::TransactionResults;
-use crate::{convert, models::Error};
+use crate::{
+    convert,
+    models::Error,
+};
 use rosetta_core::objects::ObjectMap;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use serde_json::Value;
 use std::convert::TryFrom;
 use std::num::TryFromIntError;

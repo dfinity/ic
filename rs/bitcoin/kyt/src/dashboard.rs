@@ -1,7 +1,11 @@
 use crate::state;
 use askama::Template;
 use ic_btc_interface::Txid;
-use state::{Config, FetchTxStatus, Timestamp};
+use state::{
+    Config,
+    FetchTxStatus,
+    Timestamp,
+};
 use std::fmt;
 
 #[cfg(test)]

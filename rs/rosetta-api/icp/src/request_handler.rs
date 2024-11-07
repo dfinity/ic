@@ -8,39 +8,87 @@ mod construction_preprocess;
 mod construction_submit;
 
 use crate::{
-    convert::{self, neuron_account_from_public_key},
-    errors::{ApiError, Details},
+    convert::{
+        self,
+        neuron_account_from_public_key,
+    },
+    errors::{
+        ApiError,
+        Details,
+    },
     ledger_client::{
         list_known_neurons_response::ListKnownNeuronsResponse,
         pending_proposals_response::PendingProposalsResponse,
-        proposal_info_response::ProposalInfoResponse, LedgerAccess,
+        proposal_info_response::ProposalInfoResponse,
+        LedgerAccess,
     },
     models::{
-        self, amount::tokens_to_amount, AccountBalanceMetadata, AccountBalanceRequest,
-        AccountBalanceResponse, Allow, BalanceAccountType, BlockIdentifier, BlockResponse,
-        BlockTransaction, BlockTransactionResponse, CallResponse, Error, NetworkIdentifier,
-        NetworkOptionsResponse, NetworkStatusResponse, NeuronInfoResponse, NeuronState,
-        NeuronSubaccountComponents, OperationStatus, PartialBlockIdentifier,
-        QueryBlockRangeRequest, QueryBlockRangeResponse, SearchTransactionsResponse, Version,
+        self,
+        amount::tokens_to_amount,
+        AccountBalanceMetadata,
+        AccountBalanceRequest,
+        AccountBalanceResponse,
+        Allow,
+        BalanceAccountType,
+        BlockIdentifier,
+        BlockResponse,
+        BlockTransaction,
+        BlockTransactionResponse,
+        CallResponse,
+        Error,
+        NetworkIdentifier,
+        NetworkOptionsResponse,
+        NetworkStatusResponse,
+        NeuronInfoResponse,
+        NeuronState,
+        NeuronSubaccountComponents,
+        OperationStatus,
+        PartialBlockIdentifier,
+        QueryBlockRangeRequest,
+        QueryBlockRangeResponse,
+        SearchTransactionsResponse,
+        Version,
     },
-    request_types::{GetProposalInfo, STATUS_COMPLETED},
-    API_VERSION, MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST, NODE_VERSION,
+    request_types::{
+        GetProposalInfo,
+        STATUS_COMPLETED,
+    },
+    API_VERSION,
+    MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST,
+    NODE_VERSION,
 };
 use ic_ledger_canister_blocks_synchronizer::{
-    blocks::{HashedBlock, RosettaBlocksMode},
+    blocks::{
+        HashedBlock,
+        RosettaBlocksMode,
+    },
     rosetta_block::RosettaBlock,
 };
 use ic_ledger_core::block::BlockType;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance_api::pb::v1::manage_neuron::NeuronIdOrSubaccount;
-use ic_types::{crypto::DOMAIN_IC_REQUEST, messages::MessageId, CanisterId};
-use icp_ledger::{Block, BlockIndex};
+use ic_types::{
+    crypto::DOMAIN_IC_REQUEST,
+    messages::MessageId,
+    CanisterId,
+};
+use icp_ledger::{
+    Block,
+    BlockIndex,
+};
 use rosetta_core::{
     objects::ObjectMap,
-    response_types::{MempoolResponse, MempoolTransactionResponse, NetworkListResponse},
+    response_types::{
+        MempoolResponse,
+        MempoolTransactionResponse,
+        NetworkListResponse,
+    },
 };
 use std::{
-    convert::{TryFrom, TryInto},
+    convert::{
+        TryFrom,
+        TryInto,
+    },
     num::TryFromIntError,
     sync::Arc,
 };

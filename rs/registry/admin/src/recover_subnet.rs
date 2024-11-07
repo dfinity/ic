@@ -1,17 +1,32 @@
 use crate::helpers::{
-    get_proposer_and_sender, parse_proposal_url, shortened_subnet_string,
+    get_proposer_and_sender,
+    parse_proposal_url,
+    shortened_subnet_string,
     summary_from_string_or_file,
 };
-use crate::types::{ProposalMetadata, ProposalPayload};
-use crate::{ProposalTitle, SubnetDescriptor};
+use crate::types::{
+    ProposalMetadata,
+    ProposalPayload,
+};
+use crate::{
+    ProposalTitle,
+    SubnetDescriptor,
+};
 use async_trait::async_trait;
 use clap::Parser;
 use ic_admin_derive::derive_common_proposal_fields;
-use ic_canister_client::{Agent, Sender};
+use ic_canister_client::{
+    Agent,
+    Sender,
+};
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_nns_common::types::NeuronId;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
-use ic_types::{NodeId, PrincipalId, SubnetId};
+use ic_types::{
+    NodeId,
+    PrincipalId,
+    SubnetId,
+};
 use registry_canister::mutations::do_recover_subnet;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -223,7 +238,12 @@ impl ProposalPayload<do_recover_subnet::RecoverSubnetPayload> for ProposeToUpdat
 mod tests {
     use std::str::FromStr;
 
-    use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId};
+    use ic_management_canister_types::{
+        EcdsaCurve,
+        EcdsaKeyId,
+        SchnorrAlgorithm,
+        SchnorrKeyId,
+    };
     use ic_types::PrincipalId;
 
     use super::*;

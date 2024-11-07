@@ -16,24 +16,55 @@
 //!    - State sync is started for the advert that returned FETCH.
 //!    - State advert is periodically broadcasted and there is no delivery guarantee.
 use std::{
-    sync::{Arc, Mutex},
+    sync::{
+        Arc,
+        Mutex,
+    },
     time::Duration,
 };
 
-use axum::{routing::any, Router};
+use axum::{
+    routing::any,
+    Router,
+};
 use futures::future::join_all;
 use ic_base_types::NodeId;
-use ic_interfaces::p2p::state_sync::{StateSyncArtifactId, StateSyncClient};
-use ic_logger::{info, ReplicaLogger};
-use ic_metrics::MetricsRegistry;
-use ic_quic_transport::{Shutdown, Transport};
-use metrics::{StateSyncManagerHandlerMetrics, StateSyncManagerMetrics};
-use ongoing::{start_ongoing_state_sync, OngoingStateSyncHandle};
-use routes::{
-    build_advert_handler_request, state_sync_advert_handler, state_sync_chunk_handler,
-    StateSyncAdvertHandler, StateSyncChunkHandler, STATE_SYNC_ADVERT_PATH, STATE_SYNC_CHUNK_PATH,
+use ic_interfaces::p2p::state_sync::{
+    StateSyncArtifactId,
+    StateSyncClient,
 };
-use tokio::{runtime::Handle, select, task::JoinSet, time::MissedTickBehavior};
+use ic_logger::{
+    info,
+    ReplicaLogger,
+};
+use ic_metrics::MetricsRegistry;
+use ic_quic_transport::{
+    Shutdown,
+    Transport,
+};
+use metrics::{
+    StateSyncManagerHandlerMetrics,
+    StateSyncManagerMetrics,
+};
+use ongoing::{
+    start_ongoing_state_sync,
+    OngoingStateSyncHandle,
+};
+use routes::{
+    build_advert_handler_request,
+    state_sync_advert_handler,
+    state_sync_chunk_handler,
+    StateSyncAdvertHandler,
+    StateSyncChunkHandler,
+    STATE_SYNC_ADVERT_PATH,
+    STATE_SYNC_CHUNK_PATH,
+};
+use tokio::{
+    runtime::Handle,
+    select,
+    task::JoinSet,
+    time::MissedTickBehavior,
+};
 use tokio_util::sync::CancellationToken;
 
 mod metrics;
@@ -251,17 +282,36 @@ impl<T: 'static + Send> StateSyncManager<T> {
 
 #[cfg(test)]
 mod tests {
-    use axum::{http::StatusCode, response::Response};
-    use bytes::{Bytes, BytesMut};
+    use axum::{
+        http::StatusCode,
+        response::Response,
+    };
+    use bytes::{
+        Bytes,
+        BytesMut,
+    };
     use ic_interfaces::p2p::state_sync::ChunkId;
     use ic_metrics::MetricsRegistry;
-    use ic_p2p_test_utils::mocks::{MockChunkable, MockStateSync, MockTransport};
+    use ic_p2p_test_utils::mocks::{
+        MockChunkable,
+        MockStateSync,
+        MockTransport,
+    };
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_types::{crypto::CryptoHash, Height};
-    use ic_types_test_utils::ids::{NODE_1, NODE_2};
+    use ic_types::{
+        crypto::CryptoHash,
+        Height,
+    };
+    use ic_types_test_utils::ids::{
+        NODE_1,
+        NODE_2,
+    };
     use mockall::Sequence;
     use prost::Message;
-    use tokio::{runtime::Runtime, sync::Notify};
+    use tokio::{
+        runtime::Runtime,
+        sync::Notify,
+    };
 
     use super::*;
 

@@ -1,22 +1,54 @@
 use crate::{
-    blockchainstate::{AddHeaderError, BlockchainState},
-    common::{BlockHeight, MINIMUM_VERSION_NUMBER},
+    blockchainstate::{
+        AddHeaderError,
+        BlockchainState,
+    },
+    common::{
+        BlockHeight,
+        MINIMUM_VERSION_NUMBER,
+    },
     metrics::RouterMetrics,
-    Channel, Command, ProcessBitcoinNetworkMessageError,
+    Channel,
+    Command,
+    ProcessBitcoinNetworkMessageError,
 };
 use bitcoin::{
     network::{
-        message::{NetworkMessage, MAX_INV_SIZE},
-        message_blockdata::{GetHeadersMessage, Inventory},
+        message::{
+            NetworkMessage,
+            MAX_INV_SIZE,
+        },
+        message_blockdata::{
+            GetHeadersMessage,
+            Inventory,
+        },
     },
-    Block, BlockHash, BlockHeader,
+    Block,
+    BlockHash,
+    BlockHeader,
 };
-use hashlink::{LinkedHashMap, LinkedHashSet};
-use ic_logger::{debug, error, info, trace, warn, ReplicaLogger};
+use hashlink::{
+    LinkedHashMap,
+    LinkedHashSet,
+};
+use ic_logger::{
+    debug,
+    error,
+    info,
+    trace,
+    warn,
+    ReplicaLogger,
+};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{
+        HashMap,
+        HashSet,
+    },
     net::SocketAddr,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc,
+        Mutex,
+    },
     time::Instant,
 };
 use thiserror::Error;
@@ -764,18 +796,29 @@ fn get_next_block_hash_to_sync(
 pub mod test {
     use super::*;
     use crate::{
-        common::test_common::{TestChannel, TestState},
-        config::{test::ConfigBuilder, Config},
+        common::test_common::{
+            TestChannel,
+            TestState,
+        },
+        config::{
+            test::ConfigBuilder,
+            Config,
+        },
     };
     use bitcoin::blockdata::constants::genesis_block;
     use bitcoin::consensus::deserialize;
     use bitcoin::Network;
     use bitcoin::{
-        network::message::NetworkMessage, network::message_blockdata::Inventory, BlockHash,
+        network::message::NetworkMessage,
+        network::message_blockdata::Inventory,
+        BlockHash,
     };
     use hex::FromHex;
     use ic_btc_adapter_test_utils::{
-        generate_headers, generate_large_block_blockchain, BLOCK_1_ENCODED, BLOCK_2_ENCODED,
+        generate_headers,
+        generate_large_block_blockchain,
+        BLOCK_1_ENCODED,
+        BLOCK_2_ENCODED,
     };
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;

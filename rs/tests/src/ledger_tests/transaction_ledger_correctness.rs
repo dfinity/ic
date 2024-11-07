@@ -22,31 +22,70 @@ end::catalog[] */
 
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
+    HasPublicApiUrl,
+    HasTopologySnapshot,
+    IcNodeContainer,
+    NnsInstallationBuilder,
 };
-use ic_system_test_driver::util::{block_on, runtime_from_url};
+use ic_system_test_driver::util::{
+    block_on,
+    runtime_from_url,
+};
 use rand_chacha::ChaCha8Rng;
 use slog::info;
 
 use async_recursion::async_recursion;
-use canister_test::{Canister, Runtime};
-use dfn_candid::{candid, candid_one};
+use canister_test::{
+    Canister,
+    Runtime,
+};
+use dfn_candid::{
+    candid,
+    candid_one,
+};
 use dfn_protobuf::protobuf;
 use ic_agent::Agent;
-use ic_canister_client_sender::{ed25519_public_key_to_der, Ed25519KeyPair, Sender};
+use ic_canister_client_sender::{
+    ed25519_public_key_to_der,
+    Ed25519KeyPair,
+    Sender,
+};
 use ic_ledger_core::block::BlockType;
-use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
+use ic_ledger_core::tokens::{
+    CheckedAdd,
+    CheckedSub,
+};
 use ic_nns_constants::{
-    GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, ROOT_CANISTER_ID,
+    GOVERNANCE_CANISTER_ID,
+    LEDGER_CANISTER_ID,
+    LIFELINE_CANISTER_ID,
+    ROOT_CANISTER_ID,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::ic::InternetComputer;
-use ic_types::{CanisterId, PrincipalId};
-use icp_ledger::{
-    AccountIdentifier, BinaryAccountBalanceArgs, Block, BlockArg, BlockIndex, BlockRes, Memo,
-    Operation, Tokens, Transaction, TransferArgs, TransferError, DEFAULT_TRANSFER_FEE,
+use ic_types::{
+    CanisterId,
+    PrincipalId,
 };
-use quickcheck::{Arbitrary, Gen};
+use icp_ledger::{
+    AccountIdentifier,
+    BinaryAccountBalanceArgs,
+    Block,
+    BlockArg,
+    BlockIndex,
+    BlockRes,
+    Memo,
+    Operation,
+    Tokens,
+    Transaction,
+    TransferArgs,
+    TransferError,
+    DEFAULT_TRANSFER_FEE,
+};
+use quickcheck::{
+    Arbitrary,
+    Gen,
+};
 use rand::Rng;
 
 // Seed for a random generator
@@ -122,7 +161,11 @@ pub fn test(env: TestEnv) {
 }
 
 mod holder {
-    use canister_test::{Canister, Runtime, Wasm};
+    use canister_test::{
+        Canister,
+        Runtime,
+        Wasm,
+    };
     use ic_base_types::PrincipalId;
     use ic_types::CanisterId;
     use ic_utils::interfaces::ManagementCanister;

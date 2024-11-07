@@ -1,39 +1,86 @@
 #![allow(clippy::disallowed_types)]
-use anyhow::{bail, Context, Result};
+use anyhow::{
+    bail,
+    Context,
+    Result,
+};
 use axum::{
     body::Body,
     extract::Request,
-    routing::{get, post},
+    routing::{
+        get,
+        post,
+    },
     Router,
 };
-use clap::{Parser, ValueEnum};
+use clap::{
+    Parser,
+    ValueEnum,
+};
 use ic_agent::{
-    agent::http_transport::reqwest_transport::ReqwestTransport, identity::AnonymousIdentity, Agent,
+    agent::http_transport::reqwest_transport::ReqwestTransport,
+    identity::AnonymousIdentity,
+    Agent,
 };
 use ic_base_types::CanisterId;
 use ic_icrc_rosetta::{
-    common::constants::{BLOCK_SYNC_WAIT_SECS, MAX_BLOCK_SYNC_WAIT_SECS},
-    common::storage::{storage_client::StorageClient, types::MetadataEntry},
+    common::constants::{
+        BLOCK_SYNC_WAIT_SECS,
+        MAX_BLOCK_SYNC_WAIT_SECS,
+    },
+    common::storage::{
+        storage_client::StorageClient,
+        types::MetadataEntry,
+    },
     construction_api::endpoints::*,
     data_api::endpoints::*,
     ledger_blocks_synchronization::blocks_synchronizer::start_synching_blocks,
-    AppState, Metadata,
+    AppState,
+    Metadata,
 };
 use ic_sys::fs::write_string_using_tmp_file;
-use icrc_ledger_agent::{CallMode, Icrc1Agent};
+use icrc_ledger_agent::{
+    CallMode,
+    Icrc1Agent,
+};
 use lazy_static::lazy_static;
-use std::sync::{Arc, Mutex};
-use std::{path::PathBuf, process};
-use tokio::{net::TcpListener, sync::Mutex as AsyncMutex};
-use tower_http::classify::{ServerErrorsAsFailures, SharedClassifier};
+use std::sync::{
+    Arc,
+    Mutex,
+};
+use std::{
+    path::PathBuf,
+    process,
+};
+use tokio::{
+    net::TcpListener,
+    sync::Mutex as AsyncMutex,
+};
+use tower_http::classify::{
+    ServerErrorsAsFailures,
+    SharedClassifier,
+};
 use tower_http::trace::TraceLayer;
-use tower_request_id::{RequestId, RequestIdLayer};
+use tower_request_id::{
+    RequestId,
+    RequestIdLayer,
+};
 use tracing::level_filters::LevelFilter;
-use tracing::{debug, error, error_span, info, Level, Span};
+use tracing::{
+    debug,
+    error,
+    error_span,
+    info,
+    Level,
+    Span,
+};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::{Layer, Registry};
+use tracing_subscriber::{
+    Layer,
+    Registry,
+};
 use url::Url;
 
 lazy_static! {

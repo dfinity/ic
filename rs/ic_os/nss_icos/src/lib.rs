@@ -4,11 +4,22 @@ extern crate lazy_static;
 #[macro_use]
 extern crate libnss;
 
-use libnss::host::{AddressFamily, Addresses, Host, HostHooks};
+use libnss::host::{
+    AddressFamily,
+    Addresses,
+    Host,
+    HostHooks,
+};
 use libnss::interop::Response;
-use local_ip_address::{local_ipv6, Error};
+use local_ip_address::{
+    local_ipv6,
+    Error,
+};
 
-use std::net::{IpAddr, Ipv6Addr};
+use std::net::{
+    IpAddr,
+    Ipv6Addr,
+};
 use std::sync::Arc;
 
 struct ICOSHosts;

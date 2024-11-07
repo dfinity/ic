@@ -3,19 +3,45 @@ pub mod test_fixtures;
 #[cfg(test)]
 mod tests;
 
-use crate::candid::{CyclesManagement, InitArg};
-use crate::scheduler::{Erc20Token, InvalidManageInstalledCanistersError, Task};
-use crate::storage::memory::{state_memory, StableMemory};
+use crate::candid::{
+    CyclesManagement,
+    InitArg,
+};
+use crate::scheduler::{
+    Erc20Token,
+    InvalidManageInstalledCanistersError,
+    Task,
+};
+use crate::storage::memory::{
+    state_memory,
+    StableMemory,
+};
 use crate::storage::WasmHashError;
 use candid::Principal;
 use ic_cdk::trap;
-use ic_stable_structures::{storable::Bound, Cell, Storable};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use ic_stable_structures::{
+    storable::Bound,
+    Cell,
+    Storable,
+};
+use serde::{
+    Deserialize,
+    Deserializer,
+    Serialize,
+    Serializer,
+};
 use serde_bytes::ByteArray;
 use std::borrow::Cow;
 use std::cell::RefCell;
-use std::collections::{BTreeMap, BTreeSet};
-use std::fmt::{Debug, Display, Formatter};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
+use std::fmt::{
+    Debug,
+    Display,
+    Formatter,
+};
 use std::iter::once;
 use std::marker::PhantomData;
 use std::str::FromStr;

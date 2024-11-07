@@ -1,16 +1,28 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::HashMap,
+    sync::Arc,
+};
 
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use candid::Principal;
 use ethnum::u256;
 use rand::seq::SliceRandom;
-use tracing::{debug, error};
+use tracing::{
+    debug,
+    error,
+};
 
 use crate::{
-    metrics::{MetricParamsPersist, WithMetricsPersist},
+    metrics::{
+        MetricParamsPersist,
+        WithMetricsPersist,
+    },
     routes::ErrorCause,
-    snapshot::{Node, Subnet},
+    snapshot::{
+        Node,
+        Subnet,
+    },
 };
 
 #[derive(Copy, Clone)]

@@ -1,7 +1,10 @@
 //! Static crypto utility methods.
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_csp::api::CspCreateMEGaKeyError;
-use ic_crypto_internal_csp::vault::api::{CspVault, ValidatePksAndSksError};
+use ic_crypto_internal_csp::vault::api::{
+    CspVault,
+    ValidatePksAndSksError,
+};
 use ic_crypto_internal_csp::vault::vault_from_config;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_node_key_validation::ValidNodePublicKeys;

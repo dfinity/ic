@@ -1,34 +1,68 @@
 use assert_matches::assert_matches;
-use candid::{Decode, Encode};
+use candid::{
+    Decode,
+    Encode,
+};
 use ic_base_types::NumBytes;
 use ic_config::subnet_config::SubnetConfig;
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_cycles_account_manager::WasmExecutionMode;
-use ic_error_types::{ErrorCode, RejectCode};
+use ic_error_types::{
+    ErrorCode,
+    RejectCode,
+};
 use ic_management_canister_types::{
-    self as ic00, CanisterChange, CanisterChangeDetails, CanisterSnapshotResponse,
-    ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, ListCanisterSnapshotArgs,
-    LoadCanisterSnapshotArgs, Method, Payload as Ic00Payload, TakeCanisterSnapshotArgs,
+    self as ic00,
+    CanisterChange,
+    CanisterChangeDetails,
+    CanisterSnapshotResponse,
+    ClearChunkStoreArgs,
+    DeleteCanisterSnapshotArgs,
+    ListCanisterSnapshotArgs,
+    LoadCanisterSnapshotArgs,
+    Method,
+    Payload as Ic00Payload,
+    TakeCanisterSnapshotArgs,
     UploadChunkArgs,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_snapshots::SnapshotOperation,
-    canister_state::{execution_state::WasmBinary, system_state::CyclesUseCase},
-    CanisterState, ExecutionState, SchedulerState,
+    canister_state::{
+        execution_state::WasmBinary,
+        system_state::CyclesUseCase,
+    },
+    CanisterState,
+    ExecutionState,
+    SchedulerState,
 };
 use ic_test_utilities_execution_environment::{
-    cycles_reserved_for_app_and_verified_app_subnets, get_output_messages, ExecutionTest,
+    cycles_reserved_for_app_and_verified_app_subnets,
+    get_output_messages,
+    ExecutionTest,
     ExecutionTestBuilder,
 };
-use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id};
+use ic_test_utilities_types::ids::{
+    canister_test_id,
+    subnet_test_id,
+};
 use ic_types::{
     ingress::WasmResult,
-    messages::{Payload, RejectContext, RequestOrResponse},
+    messages::{
+        Payload,
+        RejectContext,
+        RequestOrResponse,
+    },
     time::UNIX_EPOCH,
-    CanisterId, Cycles, NumInstructions, SnapshotId,
+    CanisterId,
+    Cycles,
+    NumInstructions,
+    SnapshotId,
 };
-use ic_universal_canister::{wasm, UNIVERSAL_CANISTER_WASM};
+use ic_universal_canister::{
+    wasm,
+    UNIVERSAL_CANISTER_WASM,
+};
 use more_asserts::assert_gt;
 use serde_bytes::ByteBuf;
 use std::borrow::Borrow;

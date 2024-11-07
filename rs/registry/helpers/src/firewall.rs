@@ -1,15 +1,34 @@
-use crate::{deserialize_registry_value, node::NodeRecord};
-use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
+use crate::{
+    deserialize_registry_value,
+    node::NodeRecord,
+};
+use ic_interfaces_registry::{
+    RegistryClient,
+    RegistryClientResult,
+};
 use ic_protobuf::registry::{
-    firewall::v1::{FirewallConfig, FirewallRuleSet},
+    firewall::v1::{
+        FirewallConfig,
+        FirewallRuleSet,
+    },
     node::v1::ConnectionEndpoint,
 };
 use ic_registry_keys::{
-    get_node_record_node_id, make_firewall_config_record_key, make_firewall_rules_record_key,
-    make_node_record_key, FirewallRulesScope, NODE_RECORD_KEY_PREFIX,
+    get_node_record_node_id,
+    make_firewall_config_record_key,
+    make_firewall_rules_record_key,
+    make_node_record_key,
+    FirewallRulesScope,
+    NODE_RECORD_KEY_PREFIX,
 };
-use ic_types::{NodeId, RegistryVersion};
-use std::{collections::HashSet, net::IpAddr};
+use ic_types::{
+    NodeId,
+    RegistryVersion,
+};
+use std::{
+    collections::HashSet,
+    net::IpAddr,
+};
 
 /// A trait that allows access to firewall rules and ancillary information.
 pub trait FirewallRegistry {

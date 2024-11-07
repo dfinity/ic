@@ -1,9 +1,28 @@
-use crate::displayer::{DisplayProxy, DisplayerOf};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use crate::displayer::{
+    DisplayProxy,
+    DisplayerOf,
+};
+use serde::{
+    Deserialize,
+    Deserializer,
+    Serialize,
+    Serializer,
+};
 use std::fmt;
-use std::hash::{Hash, Hasher};
+use std::hash::{
+    Hash,
+    Hasher,
+};
 use std::marker::PhantomData;
-use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Not};
+use std::ops::{
+    BitAnd,
+    BitAndAssign,
+    BitOr,
+    BitOrAssign,
+    BitXor,
+    BitXorAssign,
+    Not,
+};
 
 /// `BitMask<Unit>` provides a type-safe way to work with bitmasks.
 ///

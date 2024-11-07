@@ -1,45 +1,86 @@
 //! Common utils for the IDKG implementation.
 
-use crate::idkg::complaints::{IDkgTranscriptLoader, TranscriptLoadStatus};
+use crate::idkg::complaints::{
+    IDkgTranscriptLoader,
+    TranscriptLoadStatus,
+};
 use crate::idkg::metrics::IDkgPayloadMetrics;
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_crypto::get_master_public_key_from_transcript;
 use ic_interfaces::consensus_pool::ConsensusBlockChain;
-use ic_interfaces::idkg::{IDkgChangeAction, IDkgChangeSet, IDkgPool};
+use ic_interfaces::idkg::{
+    IDkgChangeAction,
+    IDkgChangeSet,
+    IDkgPool,
+};
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{warn, ReplicaLogger};
-use ic_management_canister_types::{EcdsaCurve, MasterPublicKeyId, SchnorrAlgorithm, VetKdCurve};
+use ic_logger::{
+    warn,
+    ReplicaLogger,
+};
+use ic_management_canister_types::{
+    EcdsaCurve,
+    MasterPublicKeyId,
+    SchnorrAlgorithm,
+    VetKdCurve,
+};
 use ic_protobuf::registry::subnet::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_features::ChainKeyConfig;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::{
-    SignWithThresholdContext, ThresholdArguments,
+    SignWithThresholdContext,
+    ThresholdArguments,
 };
-use ic_types::consensus::idkg::common::{PreSignatureRef, SignatureScheme, ThresholdSigInputsRef};
+use ic_types::consensus::idkg::common::{
+    PreSignatureRef,
+    SignatureScheme,
+    ThresholdSigInputsRef,
+};
 use ic_types::consensus::idkg::ecdsa::ThresholdEcdsaSigInputsRef;
 use ic_types::consensus::idkg::schnorr::ThresholdSchnorrSigInputsRef;
 use ic_types::consensus::idkg::HasMasterPublicKeyId;
 use ic_types::consensus::Block;
 use ic_types::consensus::{
     idkg::{
-        IDkgBlockReader, IDkgMessage, IDkgTranscriptParamsRef, PreSigId, RequestId,
-        TranscriptLookupError, TranscriptRef,
+        IDkgBlockReader,
+        IDkgMessage,
+        IDkgTranscriptParamsRef,
+        PreSigId,
+        RequestId,
+        TranscriptLookupError,
+        TranscriptRef,
     },
     HasHeight,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    IDkgTranscript, IDkgTranscriptOperation, InitialIDkgDealings,
+    IDkgTranscript,
+    IDkgTranscriptOperation,
+    InitialIDkgDealings,
 };
-use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterPublicKey};
+use ic_types::crypto::canister_threshold_sig::{
+    ExtendedDerivationPath,
+    MasterPublicKey,
+};
 use ic_types::crypto::AlgorithmId;
 use ic_types::registry::RegistryClientError;
-use ic_types::{Height, RegistryVersion, SubnetId};
+use ic_types::{
+    Height,
+    RegistryVersion,
+    SubnetId,
+};
 use phantom_newtype::Id;
 use std::{
     cell::RefCell,
-    collections::{BTreeMap, BTreeSet},
+    collections::{
+        BTreeMap,
+        BTreeSet,
+    },
     convert::TryInto,
-    fmt::{self, Display, Formatter},
+    fmt::{
+        self,
+        Display,
+        Formatter,
+    },
     sync::Arc,
 };
 
@@ -596,29 +637,50 @@ pub(crate) fn update_purge_height(cell: &RefCell<Height>, new_height: Height) ->
 mod tests {
     use super::*;
     use crate::idkg::test_utils::{
-        create_available_pre_signature_with_key_transcript, fake_ecdsa_key_id,
-        fake_ecdsa_master_public_key_id, fake_master_public_key_ids_for_all_algorithms,
-        set_up_idkg_payload, IDkgPayloadTestHelper,
+        create_available_pre_signature_with_key_transcript,
+        fake_ecdsa_key_id,
+        fake_ecdsa_master_public_key_id,
+        fake_master_public_key_ids_for_all_algorithms,
+        set_up_idkg_payload,
+        IDkgPayloadTestHelper,
     };
     use ic_config::artifact_pool::ArtifactPoolConfig;
-    use ic_consensus_mocks::{dependencies, Dependencies};
+    use ic_consensus_mocks::{
+        dependencies,
+        Dependencies,
+    };
     use ic_crypto_test_utils_canister_threshold_sigs::{
-        dummy_values::dummy_initial_idkg_dealing_for_tests, generate_key_transcript,
+        dummy_values::dummy_initial_idkg_dealing_for_tests,
+        generate_key_transcript,
         IDkgParticipants,
     };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-    use ic_management_canister_types::{EcdsaKeyId, SchnorrKeyId};
+    use ic_management_canister_types::{
+        EcdsaKeyId,
+        SchnorrKeyId,
+    };
     use ic_protobuf::registry::subnet::v1::EcdsaInitialization;
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_subnet_features::KeyConfig;
     use ic_test_utilities_consensus::fake::Fake;
-    use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_registry::{
+        add_subnet_record,
+        SubnetRecordBuilder,
+    };
+    use ic_test_utilities_types::ids::{
+        node_test_id,
+        subnet_test_id,
+    };
     use ic_types::{
         batch::ValidationContext,
         consensus::{
-            idkg::{IDkgPayload, UnmaskedTranscript},
-            BlockPayload, Payload, SummaryPayload,
+            idkg::{
+                IDkgPayload,
+                UnmaskedTranscript,
+            },
+            BlockPayload,
+            Payload,
+            SummaryPayload,
         },
         crypto::CryptoHashOf,
         time::UNIX_EPOCH,

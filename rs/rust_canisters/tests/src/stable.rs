@@ -1,7 +1,16 @@
-use dfn_core::{bytes, over, stable};
+use dfn_core::{
+    bytes,
+    over,
+    stable,
+};
 use rand::{
-    distributions::{Distribution, Standard, Uniform},
-    Rng, SeedableRng,
+    distributions::{
+        Distribution,
+        Standard,
+        Uniform,
+    },
+    Rng,
+    SeedableRng,
 };
 use rand_pcg::Pcg64Mcg;
 

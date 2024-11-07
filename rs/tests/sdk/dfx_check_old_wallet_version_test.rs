@@ -2,12 +2,22 @@ use anyhow::Result;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
     group::SystemTestGroup,
-    ic::{InternetComputer, Subnet},
+    ic::{
+        InternetComputer,
+        Subnet,
+    },
     test_env::TestEnv,
-    test_env_api::{get_dependency_path, HasTopologySnapshot, IcNodeContainer},
+    test_env_api::{
+        get_dependency_path,
+        HasTopologySnapshot,
+        IcNodeContainer,
+    },
 };
 use ic_system_test_driver::systest;
-use sdk_system_tests::{config::configure_local_network, dfx::DfxCommandContext};
+use sdk_system_tests::{
+    config::configure_local_network,
+    dfx::DfxCommandContext,
+};
 use slog::info;
 use std::fs;
 use std::path::PathBuf;

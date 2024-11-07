@@ -1,7 +1,14 @@
 use std::pin::Pin;
 use std::result::Result;
-use std::sync::{Arc, Condvar, Mutex};
-use std::task::{Context, Poll};
+use std::sync::{
+    Arc,
+    Condvar,
+    Mutex,
+};
+use std::task::{
+    Context,
+    Poll,
+};
 
 /// Pieces for a very simple bidirectional RPC using an underlying
 /// duplex stream channel.

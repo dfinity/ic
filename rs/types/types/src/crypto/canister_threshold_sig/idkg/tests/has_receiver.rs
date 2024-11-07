@@ -1,8 +1,12 @@
 use crate::crypto::canister_threshold_sig::idkg::tests::test_utils::{
-    mock_transcript, mock_unmasked_transcript_type,
+    mock_transcript,
+    mock_unmasked_transcript_type,
 };
 use crate::crypto::tests::set_of;
-use ic_base_types::{NodeId, PrincipalId};
+use ic_base_types::{
+    NodeId,
+    PrincipalId,
+};
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 
 #[test]

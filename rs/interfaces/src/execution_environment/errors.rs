@@ -1,10 +1,27 @@
-use ic_base_types::{NumBytes, PrincipalIdBlobParseError};
-use ic_error_types::UserError;
-use ic_types::{methods::WasmMethod, CanisterId, CountBytes, Cycles, NumInstructions};
-use ic_wasm_types::{
-    doc_ref, AsErrorHelp, ErrorHelp, WasmEngineError, WasmInstrumentationError, WasmValidationError,
+use ic_base_types::{
+    NumBytes,
+    PrincipalIdBlobParseError,
 };
-use serde::{Deserialize, Serialize};
+use ic_error_types::UserError;
+use ic_types::{
+    methods::WasmMethod,
+    CanisterId,
+    CountBytes,
+    Cycles,
+    NumInstructions,
+};
+use ic_wasm_types::{
+    doc_ref,
+    AsErrorHelp,
+    ErrorHelp,
+    WasmEngineError,
+    WasmInstrumentationError,
+    WasmValidationError,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 /// Various traps that a canister can create.
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]

@@ -3,15 +3,27 @@ use self::local_csp_vault::ProdLocalCspVault;
 use self::remote_csp_vault::RemoteCspVault;
 use crate::key_id::KeyIdInstantiationError;
 use crate::vault::api::{
-    CspBasicSignatureError, CspBasicSignatureKeygenError, CspMultiSignatureError,
-    CspMultiSignatureKeygenError, CspSecretKeyStoreContainsError,
+    CspBasicSignatureError,
+    CspBasicSignatureKeygenError,
+    CspMultiSignatureError,
+    CspMultiSignatureKeygenError,
+    CspSecretKeyStoreContainsError,
 };
 use ic_adapter_metrics_client::AdapterMetrics;
-use ic_config::crypto::{CryptoConfig, CspVaultType};
+use ic_config::crypto::{
+    CryptoConfig,
+    CspVaultType,
+};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
-use ic_logger::{info, ReplicaLogger};
+use ic_logger::{
+    info,
+    ReplicaLogger,
+};
 use ic_types::crypto::CryptoError;
-use std::path::{Path, PathBuf};
+use std::path::{
+    Path,
+    PathBuf,
+};
 use std::sync::Arc;
 
 pub mod api;

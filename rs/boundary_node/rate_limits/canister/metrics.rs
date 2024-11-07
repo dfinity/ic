@@ -1,5 +1,8 @@
 use crate::storage::API_BOUNDARY_NODE_PRINCIPALS;
-use ic_canisters_http_types::{HttpResponse, HttpResponseBuilder};
+use ic_canisters_http_types::{
+    HttpResponse,
+    HttpResponseBuilder,
+};
 
 /// Encode the metrics in a format that can be understood by Prometheus
 pub fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {

@@ -1,11 +1,25 @@
-use super::services::{self, initial_sync_is_completed};
+use super::services::{
+    self,
+    initial_sync_is_completed,
+};
 use crate::{
-    common::{types::Error, utils::utils::verify_network_id},
+    common::{
+        types::Error,
+        utils::utils::verify_network_id,
+    },
     AppState,
 };
-use axum::{extract::State, http::StatusCode, response::Result, Json};
+use axum::{
+    extract::State,
+    http::StatusCode,
+    response::Result,
+    Json,
+};
 use ic_rosetta_api::models::MempoolResponse;
-use rosetta_core::{request_types::*, response_types::*};
+use rosetta_core::{
+    request_types::*,
+    response_types::*,
+};
 use std::sync::Arc;
 
 // This endpoint is used to determine whether ICRC Rosetta is ready to be querried for data.

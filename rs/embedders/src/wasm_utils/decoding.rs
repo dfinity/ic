@@ -1,5 +1,8 @@
 use ic_types::NumBytes;
-use ic_wasm_types::{BinaryEncodedWasm, WasmValidationError};
+use ic_wasm_types::{
+    BinaryEncodedWasm,
+    WasmValidationError,
+};
 use std::io::Read;
 use std::sync::Arc;
 

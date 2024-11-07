@@ -1,23 +1,40 @@
 use assert_matches::assert_matches;
-use ic_base_types::{NodeId, PrincipalId, SubnetId};
+use ic_base_types::{
+    NodeId,
+    PrincipalId,
+    SubnetId,
+};
 use ic_config::crypto::CryptoConfig;
 use ic_crypto::CryptoComponent;
 use ic_crypto_internal_csp_test_utils::remote_csp_vault::{
-    get_temp_file_path, start_new_remote_csp_vault_server_for_test,
+    get_temp_file_path,
+    start_new_remote_csp_vault_server_for_test,
 };
 use ic_crypto_internal_tls::generate_tls_key_pair_der;
 use ic_crypto_node_key_generation::generate_node_keys_once;
-use ic_crypto_temp_crypto::{EcdsaSubnetConfig, NodeKeysToGenerate, TempCryptoComponent};
+use ic_crypto_temp_crypto::{
+    EcdsaSubnetConfig,
+    NodeKeysToGenerate,
+    TempCryptoComponent,
+};
 use ic_crypto_test_utils::files::temp_dir;
 use ic_crypto_test_utils_keygen::TestKeygenCrypto;
-use ic_crypto_test_utils_keygen::{add_public_key_to_registry, add_tls_cert_to_registry};
+use ic_crypto_test_utils_keygen::{
+    add_public_key_to_registry,
+    add_tls_cert_to_registry,
+};
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_crypto_test_utils_tls::x509_certificates::generate_ed25519_cert;
 use ic_interfaces::crypto::KeyManager;
 use ic_interfaces::crypto::{
-    CheckKeysWithRegistryError, IDkgKeyRotationResult, KeyRotationOutcome,
+    CheckKeysWithRegistryError,
+    IDkgKeyRotationResult,
+    KeyRotationOutcome,
 };
-use ic_interfaces::time_source::{SysTimeSource, TimeSource};
+use ic_interfaces::time_source::{
+    SysTimeSource,
+    TimeSource,
+};
 use ic_logger::replica_logger::no_op_logger;
 use ic_logger::ReplicaLogger;
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
@@ -28,9 +45,15 @@ use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
 use ic_test_utilities_in_memory_logger::InMemoryReplicaLogger;
 use ic_test_utilities_time::FastForwardTimeSource;
-use ic_types::crypto::{AlgorithmId, KeyPurpose};
+use ic_types::crypto::{
+    AlgorithmId,
+    KeyPurpose,
+};
 use ic_types::time::GENESIS;
-use ic_types::{RegistryVersion, Time};
+use ic_types::{
+    RegistryVersion,
+    Time,
+};
 use ic_types_test_utils::ids::node_test_id;
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;

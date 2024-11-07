@@ -1,16 +1,35 @@
-use candid::{CandidType, Nat};
+use candid::{
+    CandidType,
+    Nat,
+};
 // TODO(EXC-1687): remove temporary alias `Ic00CanisterSettingsArgs`.
 use ic_management_canister_types::{
-    BoundedControllers, CanisterSettingsArgs as Ic00CanisterSettingsArgs, LogVisibilityV2,
+    BoundedControllers,
+    CanisterSettingsArgs as Ic00CanisterSettingsArgs,
+    LogVisibilityV2,
 };
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
-use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
+use ic_types::{
+    CanisterId,
+    Cycles,
+    PrincipalId,
+    SubnetId,
+};
 use ic_xrc_types::ExchangeRate;
 use icp_ledger::{
-    AccountIdentifier, BlockIndex, Memo, SendArgs, Subaccount, Tokens, DEFAULT_TRANSFER_FEE,
+    AccountIdentifier,
+    BlockIndex,
+    Memo,
+    SendArgs,
+    Subaccount,
+    Tokens,
+    DEFAULT_TRANSFER_FEE,
 };
 use icrc_ledger_types::icrc1::account::Account;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 pub const DEFAULT_CYCLES_PER_XDR: u128 = 1_000_000_000_000u128; // 1T cycles = 1 XDR
 
@@ -567,7 +586,11 @@ pub struct AuthorizedSubnetsResponse {
 
 #[cfg(test)]
 mod tests {
-    use ic_xrc_types::{Asset, AssetClass, ExchangeRateMetadata};
+    use ic_xrc_types::{
+        Asset,
+        AssetClass,
+        ExchangeRateMetadata,
+    };
 
     use super::*;
 

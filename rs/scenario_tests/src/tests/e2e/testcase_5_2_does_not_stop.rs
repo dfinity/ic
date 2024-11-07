@@ -1,4 +1,7 @@
-use crate::api::e2e::{handle::IcHandle, testnet::Testnet};
+use crate::api::e2e::{
+    handle::IcHandle,
+    testnet::Testnet,
+};
 use crate::tests::testcase_5_2_does_not_stop::test_impl;
 
 /// Testcase 5.2 in its end-to-end test incarnation.

@@ -1,12 +1,22 @@
 ///
 /// Benchmark System API performance in `execute_query()`
 ///
-use criterion::{criterion_group, criterion_main, Criterion};
-use execution_environment_bench::{common, wat::*};
+use criterion::{
+    criterion_group,
+    criterion_main,
+    Criterion,
+};
+use execution_environment_bench::{
+    common,
+    wat::*,
+};
 use ic_execution_environment::{
-    as_num_instructions, as_round_instructions,
-    execution::nonreplicated_query::execute_non_replicated_query, ExecutionEnvironment,
-    NonReplicatedQueryKind, RoundLimits,
+    as_num_instructions,
+    as_round_instructions,
+    execution::nonreplicated_query::execute_non_replicated_query,
+    ExecutionEnvironment,
+    NonReplicatedQueryKind,
+    RoundLimits,
 };
 use ic_interfaces::execution_environment::ExecutionMode;
 use ic_types::methods::WasmMethod;

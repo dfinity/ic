@@ -1,6 +1,9 @@
 use crate::tls::rustls::csp_server_signing_key::CspServerEd25519SigningKey;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
-use rustls::{pki_types::CertificateDer, sign::CertifiedKey};
+use rustls::{
+    pki_types::CertificateDer,
+    sign::CertifiedKey,
+};
 use std::sync::Arc;
 
 mod cert_resolver;

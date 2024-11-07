@@ -1,4 +1,7 @@
-use ic_sns_governance_token_valuation::{Valuation, ValuationFactors};
+use ic_sns_governance_token_valuation::{
+    Valuation,
+    ValuationFactors,
+};
 use num_traits::ops::inv::Inv;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;

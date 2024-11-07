@@ -1,9 +1,16 @@
 use std::{
     io::Write,
-    process::{Command, Stdio},
+    process::{
+        Command,
+        Stdio,
+    },
 };
 
-use anyhow::{anyhow, Context, Error};
+use anyhow::{
+    anyhow,
+    Context,
+    Error,
+};
 use nftables::schema::Nftables;
 
 const SUDO: &str = "/usr/bin/sudo";

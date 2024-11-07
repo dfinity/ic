@@ -1,7 +1,15 @@
 use crate::storage::{
-    ArchiveWasm, IndexWasm, LedgerSuiteVersion, LedgerWasm, TaskQueue, WasmStore,
+    ArchiveWasm,
+    IndexWasm,
+    LedgerSuiteVersion,
+    LedgerWasm,
+    TaskQueue,
+    WasmStore,
 };
-use ic_stable_structures::memory_manager::{MemoryId, MemoryManager};
+use ic_stable_structures::memory_manager::{
+    MemoryId,
+    MemoryManager,
+};
 use ic_stable_structures::BTreeMap;
 use ic_stable_structures::DefaultMemoryImpl;
 

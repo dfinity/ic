@@ -1,16 +1,31 @@
-use candid::{CandidType, Decode, Encode, Nat, Principal};
+use candid::{
+    CandidType,
+    Decode,
+    Encode,
+    Nat,
+    Principal,
+};
 use ic_base_types::PrincipalId;
 use ic_ledger_core::Tokens;
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
+use ic_nns_constants::{
+    GOVERNANCE_CANISTER_ID,
+    LEDGER_CANISTER_ID,
+};
 use ic_nns_governance_api::pb::v1::{
-    ListNeurons as ListNnsNeuronsReq, ListNeuronsResponse as ListNnsNeuronsRes,
+    ListNeurons as ListNnsNeuronsReq,
+    ListNeuronsResponse as ListNnsNeuronsRes,
 };
 use ic_nns_gtc::pb::v1::AccountState;
 use ic_sns_governance::pb::v1::{
-    GetMetadataRequest as GetMetadataReq, GetMetadataResponse as GetMetadataRes,
-    GetMode as GetModeReq, GetModeResponse as GetModeRes, ListNeurons as ListSnsNeuronsReq,
-    ListNeuronsResponse as ListSnsNeuronsRes, ManageNeuron as ManageSnsNeuronReq,
-    ManageNeuronResponse as ManageSnsNeuronRes, NeuronId,
+    GetMetadataRequest as GetMetadataReq,
+    GetMetadataResponse as GetMetadataRes,
+    GetMode as GetModeReq,
+    GetModeResponse as GetModeRes,
+    ListNeurons as ListSnsNeuronsReq,
+    ListNeuronsResponse as ListSnsNeuronsRes,
+    ManageNeuron as ManageSnsNeuronReq,
+    ManageNeuronResponse as ManageSnsNeuronRes,
+    NeuronId,
 };
 use ic_sns_root::{
     pb::v1::ListSnsCanistersResponse as ListSnsCanistersRes,
@@ -18,16 +33,23 @@ use ic_sns_root::{
     GetSnsCanistersSummaryResponse as GetSnsCanistersSummaryRes,
 };
 use ic_sns_swap::pb::v1::{
-    FinalizeSwapRequest as FinalizeSwapReq, FinalizeSwapResponse,
+    FinalizeSwapRequest as FinalizeSwapReq,
+    FinalizeSwapResponse,
     GetAutoFinalizationStatusRequest as GetAutoFinalizationStatusReq,
     GetAutoFinalizationStatusResponse as GetAutoFinalizationStatusRes,
-    GetBuyerStateRequest as GetBuyerStateReq, GetBuyerStateResponse as GetBuyerStateRes,
+    GetBuyerStateRequest as GetBuyerStateReq,
+    GetBuyerStateResponse as GetBuyerStateRes,
     GetDerivedStateRequest as GetDerivedSwapStateReq,
-    GetDerivedStateResponse as GetDerivedSwapStateRes, GetLifecycleRequest as GetLifecycleReq,
-    GetLifecycleResponse as GetLifecycleRes, GetOpenTicketRequest as GetOpenTicketReq,
-    GetOpenTicketResponse as GetOpenTicketRes, GetStateRequest as GetStateReq,
-    GetStateResponse as GetStateRes, NewSaleTicketRequest as NewSaleTicketReq,
-    NewSaleTicketResponse as NewSaleTicketRes, RefreshBuyerTokensRequest as RefreshBuyerTokensReq,
+    GetDerivedStateResponse as GetDerivedSwapStateRes,
+    GetLifecycleRequest as GetLifecycleReq,
+    GetLifecycleResponse as GetLifecycleRes,
+    GetOpenTicketRequest as GetOpenTicketReq,
+    GetOpenTicketResponse as GetOpenTicketRes,
+    GetStateRequest as GetStateReq,
+    GetStateResponse as GetStateRes,
+    NewSaleTicketRequest as NewSaleTicketReq,
+    NewSaleTicketResponse as NewSaleTicketRes,
+    RefreshBuyerTokensRequest as RefreshBuyerTokensReq,
     RefreshBuyerTokensResponse as RefreshBuyerTokensRes,
 };
 use icp_ledger::Subaccount;
@@ -35,21 +57,32 @@ use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value,
     icrc1::{
         account::Account,
-        transfer::{TransferArg, TransferError},
+        transfer::{
+            TransferArg,
+            TransferError,
+        },
     },
 };
 
 //nns/gtc/gen/ic_nns_gtc.pb.v1.rs
 use ic_sns_wasm::pb::v1::{
     ListDeployedSnsesRequest as ListDeployedSnsesReq,
-    ListDeployedSnsesResponse as ListDeployedSnsesRes, SnsCanisterIds,
+    ListDeployedSnsesResponse as ListDeployedSnsesRes,
+    SnsCanisterIds,
 };
 
 use ic_utils::interfaces::http_request::HttpResponse;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{
+    de::DeserializeOwned,
+    Deserialize,
+    Serialize,
+};
 
 use crate::{
-    driver::test_env::{TestEnv, TestEnvAttribute},
+    driver::test_env::{
+        TestEnv,
+        TestEnvAttribute,
+    },
     sns_client::SnsClient,
 };
 

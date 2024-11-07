@@ -3,7 +3,11 @@ use crate::models::RosettaSupportedKeyPair;
 use crate::models::Secp256k1KeyPair;
 use crate::{
     identifiers::{
-        AccountIdentifier, BlockIdentifier, CoinIdentifier, NetworkIdentifier, OperationIdentifier,
+        AccountIdentifier,
+        BlockIdentifier,
+        CoinIdentifier,
+        NetworkIdentifier,
+        OperationIdentifier,
         TransactionIdentifier,
     },
     miscellaneous::*,
@@ -14,7 +18,10 @@ use candid::Nat;
 use candid::Principal;
 use ic_types::PrincipalId;
 use num_bigint::BigInt;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::str::FromStr;
 
 pub type Object = serde_json::Value;

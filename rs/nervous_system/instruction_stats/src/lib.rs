@@ -19,7 +19,10 @@ use ic_metrics_encoder::MetricsEncoder;
 use ic_nervous_system_histogram::Histogram;
 use itertools::Itertools;
 use lazy_static::lazy_static;
-use std::{cell::RefCell, collections::BTreeMap};
+use std::{
+    cell::RefCell,
+    collections::BTreeMap,
+};
 
 #[cfg(test)]
 use crate::tests::call_context_instruction_counter;

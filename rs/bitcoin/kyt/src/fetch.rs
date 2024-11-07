@@ -1,14 +1,27 @@
 use crate::state::{
-    FetchGuardError, FetchTxStatus, FetchTxStatusError, FetchedTx, HttpGetTxError,
+    FetchGuardError,
+    FetchTxStatus,
+    FetchTxStatusError,
+    FetchedTx,
+    HttpGetTxError,
     TransactionKytData,
 };
-use crate::{blocklist_contains, providers, state, Config};
+use crate::{
+    blocklist_contains,
+    providers,
+    state,
+    Config,
+};
 use bitcoin::Transaction;
 use futures::future::try_join_all;
 use ic_btc_interface::Txid;
 use ic_btc_kyt::{
-    get_tx_cycle_cost, CheckTransactionIrrecoverableError, CheckTransactionResponse,
-    CheckTransactionRetriable, CheckTransactionStatus, INITIAL_MAX_RESPONSE_BYTES,
+    get_tx_cycle_cost,
+    CheckTransactionIrrecoverableError,
+    CheckTransactionResponse,
+    CheckTransactionRetriable,
+    CheckTransactionStatus,
+    INITIAL_MAX_RESPONSE_BYTES,
     RETRY_MAX_RESPONSE_BYTES,
 };
 use std::convert::Infallible;

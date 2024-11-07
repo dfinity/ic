@@ -1,6 +1,15 @@
 use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
-use ic_registry_local_store::{ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreReader};
-use ic_registry_transport::{delete, pb::v1::RegistryAtomicMutateRequest, upsert};
+use ic_registry_local_store::{
+    ChangelogEntry,
+    KeyMutation,
+    LocalStoreImpl,
+    LocalStoreReader,
+};
+use ic_registry_transport::{
+    delete,
+    pb::v1::RegistryAtomicMutateRequest,
+    upsert,
+};
 use std::path::Path;
 
 /// Reads the initial content to inject into the registry in the "local store"
@@ -40,7 +49,10 @@ pub(crate) fn read_initial_mutations_from_local_store_dir(
 mod test {
     use super::*;
     use ic_registry_client::client::RegistryVersion;
-    use ic_registry_local_store::{Changelog, LocalStoreWriter};
+    use ic_registry_local_store::{
+        Changelog,
+        LocalStoreWriter,
+    };
     use tempfile::TempDir;
 
     /// In this test, a directory written by the `LocalStore::store` function is

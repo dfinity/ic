@@ -1,13 +1,25 @@
 //! Generating and verifying Proofs of Possession (PoP)
 
 use crate::ni_dkg::fs_ni_dkg::random_oracles::{
-    random_oracle_to_g1, random_oracle_to_scalar, HashedMap, UniqueHash,
+    random_oracle_to_g1,
+    random_oracle_to_scalar,
+    HashedMap,
+    UniqueHash,
 };
-use ic_crypto_internal_bls12_381_type::{G1Affine, G1Projective, Scalar};
+use ic_crypto_internal_bls12_381_type::{
+    G1Affine,
+    G1Projective,
+    Scalar,
+};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
-    FrBytes, FsEncryptionPop, G1Bytes,
+    FrBytes,
+    FsEncryptionPop,
+    G1Bytes,
 };
-use rand::{CryptoRng, RngCore};
+use rand::{
+    CryptoRng,
+    RngCore,
+};
 
 const DOMAIN_POP_ENCRYPTION_KEY: &str = "ic-pop-encryption";
 

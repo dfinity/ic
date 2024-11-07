@@ -1,12 +1,23 @@
 use crate::{
     logs::P1,
-    state::{mutate_state, read_state, CkBtcMinterState},
+    state::{
+        mutate_state,
+        read_state,
+        CkBtcMinterState,
+    },
     ECDSAPublicKey,
 };
-use candid::{CandidType, Deserialize, Principal};
+use candid::{
+    CandidType,
+    Deserialize,
+    Principal,
+};
 use ic_canister_log::log;
 use ic_management_canister_types::DerivationPath;
-use icrc_ledger_types::icrc1::account::{Account, Subaccount};
+use icrc_ledger_types::icrc1::account::{
+    Account,
+    Subaccount,
+};
 use serde::Serialize;
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]

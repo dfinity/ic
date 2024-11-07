@@ -1,12 +1,25 @@
 //! Module for managing the canisters in test.
 
-use ic_canister_client::{Agent, HttpClient, Sender as AgentSender};
+use ic_canister_client::{
+    Agent,
+    HttpClient,
+    Sender as AgentSender,
+};
 use ic_management_canister_types::{
-    CanisterIdRecord, CanisterInstallMode, InstallCodeArgs, Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, IC_00,
+    CanisterIdRecord,
+    CanisterInstallMode,
+    InstallCodeArgs,
+    Payload,
+    ProvisionalCreateCanisterWithCyclesArgs,
+    IC_00,
 };
 use ic_types::CanisterId;
-use std::{fs::File, io::Read, path::Path, time::Duration};
+use std::{
+    fs::File,
+    io::Read,
+    path::Path,
+    time::Duration,
+};
 use url::Url;
 
 const REQUESTED_MEMORY_ALLOCATION: Option<u64> = None; // Best effort memory allocation

@@ -7,13 +7,22 @@ mod tests;
 
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_limits::{MAX_INGRESS_TTL, PERMITTED_DRIFT};
+use ic_limits::{
+    MAX_INGRESS_TTL,
+    PERMITTED_DRIFT,
+};
 #[cfg(test)]
 use proptest_derive::Arbitrary;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::convert::TryFrom;
 use std::fmt;
-use std::time::{Duration, SystemTime};
+use std::time::{
+    Duration,
+    SystemTime,
+};
 use thiserror::Error;
 
 /// Time since UNIX_EPOCH (in nanoseconds). Just like 'std::time::Instant' or
@@ -252,7 +261,10 @@ impl From<Time> for SystemTime {
 #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 impl fmt::Display for Time {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use chrono::{TimeZone, Utc};
+        use chrono::{
+            TimeZone,
+            Utc,
+        };
 
         match self.0.try_into() {
             Ok(signed) => write!(f, "{}", Utc.timestamp_nanos(signed)),

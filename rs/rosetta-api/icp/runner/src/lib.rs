@@ -1,8 +1,14 @@
 pub mod constants;
-use crate::constants::{NUM_TRIES, WAIT_BETWEEN_ATTEMPTS};
+use crate::constants::{
+    NUM_TRIES,
+    WAIT_BETWEEN_ATTEMPTS,
+};
 use candid::Principal;
 use std::path::Path;
-use std::process::{Child, Command};
+use std::process::{
+    Child,
+    Command,
+};
 use std::str::FromStr;
 use tempfile::TempDir;
 use tokio::time::sleep;

@@ -22,8 +22,16 @@
 //! SNS-WASM can use "WASMs-end offset" and "canister state size" to read canister state from
 //! stable memory.
 
-use crate::pb::v1::{SnsWasm, StableCanisterState};
-use ic_cdk::api::stable::{StableMemory, StableMemoryError, StableReader, StableWriter};
+use crate::pb::v1::{
+    SnsWasm,
+    StableCanisterState,
+};
+use ic_cdk::api::stable::{
+    StableMemory,
+    StableMemoryError,
+    StableReader,
+    StableWriter,
+};
 use prost::Message;
 use std::mem::size_of;
 
@@ -166,8 +174,13 @@ mod test {
     use crate::{
         canister_stable_memory::TestCanisterStableMemory,
         pb::v1::{
-            DeployedSns, MetadataSection as MetadataSectionPb, SnsSpecificSnsUpgrade, SnsUpgrade,
-            SnsVersion, SnsWasmStableIndex, UpgradePath,
+            DeployedSns,
+            MetadataSection as MetadataSectionPb,
+            SnsSpecificSnsUpgrade,
+            SnsUpgrade,
+            SnsVersion,
+            SnsWasmStableIndex,
+            UpgradePath,
         },
     };
     use ic_base_types::PrincipalId;

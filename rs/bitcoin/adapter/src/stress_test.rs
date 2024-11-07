@@ -1,19 +1,39 @@
-use std::{convert::TryFrom, path::PathBuf, time::Duration};
+use std::{
+    convert::TryFrom,
+    path::PathBuf,
+    time::Duration,
+};
 
-use bitcoin::{blockdata::constants::genesis_block, consensus::Decodable, Block, BlockHash};
+use bitcoin::{
+    blockdata::constants::genesis_block,
+    consensus::Decodable,
+    Block,
+    BlockHash,
+};
 use clap::Parser;
 use ic_btc_service::{
-    btc_service_client::BtcServiceClient, BtcServiceGetSuccessorsRequest,
+    btc_service_client::BtcServiceClient,
+    BtcServiceGetSuccessorsRequest,
     BtcServiceGetSuccessorsResponse,
 };
 use tokio::{
     net::UnixStream,
-    time::{sleep, Instant},
+    time::{
+        sleep,
+        Instant,
+    },
 };
-use tonic::transport::{Channel, Endpoint, Uri};
+use tonic::transport::{
+    Channel,
+    Endpoint,
+    Uri,
+};
 use tower::service_fn;
 
-use ic_btc_adapter::{cli::Cli, config::IncomingSource};
+use ic_btc_adapter::{
+    cli::Cli,
+    config::IncomingSource,
+};
 
 async fn setup_channel(uds_path: PathBuf) -> Channel {
     Endpoint::try_from("http://[::]:50051")

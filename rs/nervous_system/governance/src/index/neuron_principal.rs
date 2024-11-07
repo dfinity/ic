@@ -1,11 +1,19 @@
 use ic_base_types::PrincipalId;
 use ic_principal::Principal;
-use ic_stable_structures::{Memory, StableBTreeMap, Storable};
+use ic_stable_structures::{
+    Memory,
+    StableBTreeMap,
+    Storable,
+};
 use num_traits::bounds::LowerBounded;
 use std::{
     clone::Clone,
     cmp::Ord,
-    collections::{btree_map::Entry, BTreeMap, HashSet},
+    collections::{
+        btree_map::Entry,
+        BTreeMap,
+        HashSet,
+    },
     hash::Hash,
 };
 
@@ -206,7 +214,10 @@ mod tests {
     use super::*;
 
     use ic_stable_structures::storable::Bound;
-    use ic_stable_structures::{Storable, VectorMemory};
+    use ic_stable_structures::{
+        Storable,
+        VectorMemory,
+    };
     use maplit::hashset;
     use num_traits::bounds::LowerBounded;
     use std::borrow::Cow;

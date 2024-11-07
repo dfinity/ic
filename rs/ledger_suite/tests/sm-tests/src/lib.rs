@@ -1,42 +1,105 @@
-use crate::in_memory_ledger::{verify_ledger_state, InMemoryLedger};
-use candid::{CandidType, Decode, Encode, Int, Nat, Principal};
-use ic_agent::identity::{BasicIdentity, Identity};
+use crate::in_memory_ledger::{
+    verify_ledger_state,
+    InMemoryLedger,
+};
+use candid::{
+    CandidType,
+    Decode,
+    Encode,
+    Int,
+    Nat,
+    Principal,
+};
+use ic_agent::identity::{
+    BasicIdentity,
+    Identity,
+};
 use ic_base_types::CanisterId;
 use ic_base_types::PrincipalId;
 use ic_error_types::UserError;
 use ic_icrc1::blocks::encoded_block_to_generic_block;
-use ic_icrc1::{endpoints::StandardRecord, hash::Hash, Block, Operation, Transaction};
+use ic_icrc1::{
+    endpoints::StandardRecord,
+    hash::Hash,
+    Block,
+    Operation,
+    Transaction,
+};
 use ic_icrc1_ledger::FeatureFlags;
-use ic_icrc1_test_utils::{valid_transactions_strategy, ArgWithCaller, LedgerEndpointArg};
+use ic_icrc1_test_utils::{
+    valid_transactions_strategy,
+    ArgWithCaller,
+    LedgerEndpointArg,
+};
 use ic_ledger_canister_core::archive::ArchiveOptions;
-use ic_ledger_core::block::{BlockIndex, BlockType};
+use ic_ledger_core::block::{
+    BlockIndex,
+    BlockType,
+};
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_hash_of::HashOf;
 use ic_management_canister_types::{
-    self as ic00, CanisterInfoRequest, CanisterInfoResponse, Method, Payload,
+    self as ic00,
+    CanisterInfoRequest,
+    CanisterInfoResponse,
+    Method,
+    Payload,
 };
 use ic_rosetta_test_utils::test_http_request_decoding_quota;
-use ic_state_machine_tests::{ErrorCode, StateMachine, WasmResult};
+use ic_state_machine_tests::{
+    ErrorCode,
+    StateMachine,
+    WasmResult,
+};
 use ic_types::Cycles;
-use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use ic_universal_canister::{
+    call_args,
+    wasm,
+    UNIVERSAL_CANISTER_WASM,
+};
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use icrc_ledger_types::icrc::generic_value::Value as GenericValue;
-use icrc_ledger_types::icrc1::account::{Account, Subaccount};
-use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
-use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
-use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
-use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
+use icrc_ledger_types::icrc1::account::{
+    Account,
+    Subaccount,
+};
+use icrc_ledger_types::icrc1::transfer::{
+    Memo,
+    TransferArg,
+    TransferError,
+};
+use icrc_ledger_types::icrc2::allowance::{
+    Allowance,
+    AllowanceArgs,
+};
+use icrc_ledger_types::icrc2::approve::{
+    ApproveArgs,
+    ApproveError,
+};
+use icrc_ledger_types::icrc2::transfer_from::{
+    TransferFromArgs,
+    TransferFromError,
+};
 use icrc_ledger_types::icrc21::errors::ErrorInfo;
 use icrc_ledger_types::icrc21::errors::Icrc21Error;
 use icrc_ledger_types::icrc21::requests::ConsentMessageMetadata;
 use icrc_ledger_types::icrc21::requests::{
-    ConsentMessageRequest, ConsentMessageSpec, DisplayMessageType,
+    ConsentMessageRequest,
+    ConsentMessageSpec,
+    DisplayMessageType,
 };
-use icrc_ledger_types::icrc21::responses::{ConsentInfo, ConsentMessage};
+use icrc_ledger_types::icrc21::responses::{
+    ConsentInfo,
+    ConsentMessage,
+};
 use icrc_ledger_types::icrc3;
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 use icrc_ledger_types::icrc3::blocks::{
-    BlockRange, GenericBlock as IcrcBlock, GetBlocksRequest, GetBlocksResponse, GetBlocksResult,
+    BlockRange,
+    GenericBlock as IcrcBlock,
+    GetBlocksRequest,
+    GetBlocksResponse,
+    GetBlocksResult,
 };
 use icrc_ledger_types::icrc3::transactions::GetTransactionsRequest;
 use icrc_ledger_types::icrc3::transactions::GetTransactionsResponse;
@@ -45,13 +108,26 @@ use icrc_ledger_types::icrc3::transactions::TransactionRange;
 use icrc_ledger_types::icrc3::transactions::Transfer;
 use num_traits::ToPrimitive;
 use proptest::prelude::*;
-use proptest::test_runner::{Config as TestRunnerConfig, TestCaseResult, TestRunner};
+use proptest::test_runner::{
+    Config as TestRunnerConfig,
+    TestCaseResult,
+    TestRunner,
+};
 use std::sync::Arc;
-use std::time::{Instant, UNIX_EPOCH};
+use std::time::{
+    Instant,
+    UNIX_EPOCH,
+};
 use std::{
     cmp,
-    collections::{BTreeMap, HashMap},
-    time::{Duration, SystemTime},
+    collections::{
+        BTreeMap,
+        HashMap,
+    },
+    time::{
+        Duration,
+        SystemTime,
+    },
 };
 
 pub mod fee_collector;
@@ -3435,10 +3511,18 @@ pub fn test_icrc1_test_suite<T: candid::CandidType>(
 ) {
     use anyhow::Context;
     use async_trait::async_trait;
-    use candid::utils::{decode_args, encode_args, ArgumentDecoder, ArgumentEncoder};
+    use candid::utils::{
+        decode_args,
+        encode_args,
+        ArgumentDecoder,
+        ArgumentEncoder,
+    };
     use futures::FutureExt;
     use icrc1_test_env::LedgerEnv;
-    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::atomic::{
+        AtomicU64,
+        Ordering,
+    };
     use std::sync::Arc;
 
     #[derive(Clone)]

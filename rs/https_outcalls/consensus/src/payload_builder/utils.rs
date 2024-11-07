@@ -2,13 +2,19 @@ use ic_interfaces::canister_http::InvalidCanisterHttpPayloadReason;
 use ic_types::{
     batch::ValidationContext,
     canister_http::{
-        CanisterHttpResponseMetadata, CanisterHttpResponseShare, CanisterHttpResponseWithConsensus,
+        CanisterHttpResponseMetadata,
+        CanisterHttpResponseShare,
+        CanisterHttpResponseWithConsensus,
     },
     crypto::crypto_hash,
     messages::CallbackId,
-    NodeId, RegistryVersion,
+    NodeId,
+    RegistryVersion,
 };
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
 
 /// Checks whether the response is consistent
 ///

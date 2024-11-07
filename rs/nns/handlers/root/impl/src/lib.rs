@@ -1,13 +1,27 @@
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_nervous_system_proxied_canister_calls_tracker::ProxiedCanisterCallsTracker;
 use ic_nns_constants::{
-    CYCLES_MINTING_CANISTER_ID, EXCHANGE_RATE_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
-    GOVERNANCE_CANISTER_ID, IDENTITY_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID,
-    NNS_UI_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    CYCLES_MINTING_CANISTER_ID,
+    EXCHANGE_RATE_CANISTER_ID,
+    GENESIS_TOKEN_CANISTER_ID,
+    GOVERNANCE_CANISTER_ID,
+    IDENTITY_CANISTER_ID,
+    LEDGER_CANISTER_ID,
+    LIFELINE_CANISTER_ID,
+    NNS_UI_CANISTER_ID,
+    REGISTRY_CANISTER_ID,
+    ROOT_CANISTER_ID,
+    SNS_WASM_CANISTER_ID,
 };
 use lazy_static::lazy_static;
 use maplit::btreemap;
-use std::{cell::RefCell, collections::BTreeMap};
+use std::{
+    cell::RefCell,
+    collections::BTreeMap,
+};
 
 pub mod canister_management;
 pub mod init;

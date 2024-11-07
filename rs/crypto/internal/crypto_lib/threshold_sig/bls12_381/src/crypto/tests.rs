@@ -3,15 +3,26 @@
 use super::super::crypto;
 use super::super::test_utils::select_n;
 use super::super::types::{
-    CombinedSignature, IndividualSignature, Polynomial, PublicCoefficients, SecretKey,
+    CombinedSignature,
+    IndividualSignature,
+    Polynomial,
+    PublicCoefficients,
+    SecretKey,
 };
 use crate::crypto::hash_message_to_g1;
 use crate::types::PublicKey;
-use ic_crypto_internal_bls12_381_type::{G2Projective, LagrangeCoefficients, Scalar};
+use ic_crypto_internal_bls12_381_type::{
+    G2Projective,
+    LagrangeCoefficients,
+    Scalar,
+};
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_types::crypto::error::InvalidArgumentError;
-use ic_types::{NodeIndex, NumberOfNodes};
+use ic_types::{
+    NodeIndex,
+    NumberOfNodes,
+};
 use proptest::prelude::*;
 use proptest::std_facade::HashSet;
 use rand::SeedableRng;

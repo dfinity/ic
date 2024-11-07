@@ -1,6 +1,13 @@
-use crate::page_map::storage::{Shard, StorageLayout, StorageResult};
+use crate::page_map::storage::{
+    Shard,
+    StorageLayout,
+    StorageResult,
+};
 use ic_types::Height;
-use std::path::{Path, PathBuf};
+use std::path::{
+    Path,
+    PathBuf,
+};
 
 pub struct TestStorageLayout {
     pub base: PathBuf,

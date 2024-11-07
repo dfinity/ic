@@ -1,13 +1,25 @@
-use crate::table::{as_table, TableRow};
-use crate::utils::{get_snses_with_metadata, SnsWithMetadata};
+use crate::table::{
+    as_table,
+    TableRow,
+};
+use crate::utils::{
+    get_snses_with_metadata,
+    SnsWithMetadata,
+};
 use anyhow::Result;
 use clap::Parser;
-use futures::{stream, StreamExt};
+use futures::{
+    stream,
+    StreamExt,
+};
 use ic_agent::Agent;
 use ic_nervous_system_agent::nns::sns_wasm;
 use ic_sns_root::types::SnsCanisterType;
 use itertools::Itertools;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 /// The arguments used to configure the health command
 #[derive(Debug, Parser)]

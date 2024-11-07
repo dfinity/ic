@@ -3,7 +3,10 @@
 //! Note: Public coefficients are a generalised public key for threshold
 //! signatures.
 use crate::sign::threshold_sig::ni_dkg::CspNiDkgTranscript;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use strum_macros::IntoStaticStr;
 
 /// Public coefficients for threshold signatures. This is a generalized public
@@ -29,7 +32,10 @@ pub mod bls12_381 {
     //! Data types for BLS12-381 public coefficients.
     use crate::sign::threshold_sig::public_coefficients::CspPublicCoefficients;
     use crate::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
-    use serde::{Deserialize, Serialize};
+    use serde::{
+        Deserialize,
+        Serialize,
+    };
 
     /// The public coefficients of a threshold public key.
     ///

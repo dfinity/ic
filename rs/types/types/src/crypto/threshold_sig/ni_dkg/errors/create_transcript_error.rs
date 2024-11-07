@@ -1,5 +1,8 @@
 //! Errors related to transcript creation.
-use crate::crypto::error::{InvalidArgumentError, MalformedPublicKeyError};
+use crate::crypto::error::{
+    InvalidArgumentError,
+    MalformedPublicKeyError,
+};
 use core::fmt;
 
 /// Occurs if creating a transcript using `NiDkgAlgorithm::create_transcript`

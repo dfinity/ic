@@ -3,23 +3,55 @@
 //! there is something to do. On high-level, it's responsible of spawning
 //! threads triggering long-running CSP operation and book-keeping of
 //! thread-handles.
-use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
-use ic_interfaces::crypto::{ErrorReproducibility, LoadTranscriptResult, NiDkgAlgorithm};
-use ic_logger::{error, info, warn, ReplicaLogger};
-use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+use ic_consensus_utils::{
+    crypto::ConsensusCrypto,
+    pool_reader::PoolReader,
+};
+use ic_interfaces::crypto::{
+    ErrorReproducibility,
+    LoadTranscriptResult,
+    NiDkgAlgorithm,
+};
+use ic_logger::{
+    error,
+    info,
+    warn,
+    ReplicaLogger,
+};
+use ic_metrics::{
+    buckets::decimal_buckets,
+    MetricsRegistry,
+};
 use ic_types::{
-    consensus::{dkg::Summary, HasHeight},
+    consensus::{
+        dkg::Summary,
+        HasHeight,
+    },
     crypto::threshold_sig::ni_dkg::{
-        errors::load_transcript_error::DkgLoadTranscriptError, NiDkgId, NiDkgTag,
-        NiDkgTargetSubnet, NiDkgTranscript,
+        errors::load_transcript_error::DkgLoadTranscriptError,
+        NiDkgId,
+        NiDkgTag,
+        NiDkgTargetSubnet,
+        NiDkgTranscript,
     },
     Height,
 };
-use prometheus::{HistogramVec, IntCounterVec, IntGauge, IntGaugeVec};
+use prometheus::{
+    HistogramVec,
+    IntCounterVec,
+    IntGauge,
+    IntGaugeVec,
+};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{
+        HashMap,
+        HashSet,
+    },
     sync::{
-        mpsc::{sync_channel, Receiver},
+        mpsc::{
+            sync_channel,
+            Receiver,
+        },
         Arc,
     },
     time::Instant,
@@ -555,12 +587,18 @@ fn dkg_id_log_msg(id: &NiDkgId) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
+    use ic_consensus_mocks::{
+        dependencies_with_subnet_params,
+        Dependencies,
+    };
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities::crypto::CryptoReturningOk;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::SubnetRecordBuilder;
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::{
+        node_test_id,
+        subnet_test_id,
+    };
 
     #[test]
     fn test_transcripts_get_loaded_and_retained() {

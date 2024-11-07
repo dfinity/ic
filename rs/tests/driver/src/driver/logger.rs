@@ -2,10 +2,25 @@
 
 use crate::driver::constants;
 use anyhow::Result;
-use slog::{o, Drain, Key, Logger, OwnedKVList, Record, KV};
+use slog::{
+    o,
+    Drain,
+    Key,
+    Logger,
+    OwnedKVList,
+    Record,
+    KV,
+};
 use slog_term::Decorator;
-use std::{fmt, fs::File, io};
-use std::{os::unix::prelude::AsRawFd, path::Path};
+use std::{
+    fmt,
+    fs::File,
+    io,
+};
+use std::{
+    os::unix::prelude::AsRawFd,
+    path::Path,
+};
 
 fn open_append_and_lock_exclusive<P: AsRef<Path>>(p: P) -> Result<File> {
     let f = std::fs::OpenOptions::new()

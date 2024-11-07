@@ -2,9 +2,17 @@
 #![deny(clippy::unwrap_used)]
 
 use ic_crypto_sha2::Sha256;
-use serde::{ser::SerializeSeq, Deserialize, Serialize, Serializer};
+use serde::{
+    ser::SerializeSeq,
+    Deserialize,
+    Serialize,
+    Serializer,
+};
 use serde_bytes::Bytes;
-use std::convert::{TryFrom, TryInto};
+use std::convert::{
+    TryFrom,
+    TryInto,
+};
 use std::fmt;
 use std::iter::FromIterator;
 use std::ops::Deref;
@@ -770,7 +778,12 @@ impl<'de> serde::de::Deserialize<'de> for MixedHashTree {
     where
         D: serde::de::Deserializer<'de>,
     {
-        use serde::de::{self, IgnoredAny, SeqAccess, Visitor};
+        use serde::de::{
+            self,
+            IgnoredAny,
+            SeqAccess,
+            Visitor,
+        };
 
         struct SeqVisitor;
 

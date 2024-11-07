@@ -8,7 +8,11 @@ use ic_agent::identity::BasicIdentity;
 use ic_agent::Identity;
 use ic_icrc1_test_utils::ArgWithCaller;
 use ic_icrc1_test_utils::LedgerEndpointArg;
-use ic_icrc1_test_utils::{minter_identity, valid_transactions_strategy, DEFAULT_TRANSFER_FEE};
+use ic_icrc1_test_utils::{
+    minter_identity,
+    valid_transactions_strategy,
+    DEFAULT_TRANSFER_FEE,
+};
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_rosetta_api::models::AccountBalanceRequest;
 use icrc_ledger_agent::CallMode;

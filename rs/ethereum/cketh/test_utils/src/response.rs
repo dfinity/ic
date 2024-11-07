@@ -1,10 +1,18 @@
 use crate::{
-    DEFAULT_BLOCK_HASH, DEFAULT_BLOCK_NUMBER, DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS,
-    EFFECTIVE_GAS_PRICE, GAS_USED, MINTER_ADDRESS, USDC_ERC20_CONTRACT_ADDRESS,
+    DEFAULT_BLOCK_HASH,
+    DEFAULT_BLOCK_NUMBER,
+    DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS,
+    EFFECTIVE_GAS_PRICE,
+    GAS_USED,
+    MINTER_ADDRESS,
+    USDC_ERC20_CONTRACT_ADDRESS,
 };
 use ethers_core::abi::AbiDecode;
 use ethers_core::utils::rlp;
-use serde_json::{json, Value};
+use serde_json::{
+    json,
+    Value,
+};
 use std::str::FromStr;
 
 pub fn empty_logs() -> Vec<ethers_core::types::Log> {
@@ -32,7 +40,10 @@ pub fn send_raw_transaction_response() -> ethers_core::types::TxHash {
 }
 
 pub fn block_response(block_number: u64) -> ethers_core::types::Block<ethers_core::types::TxHash> {
-    use ethers_core::types::{H256, H64};
+    use ethers_core::types::{
+        H256,
+        H64,
+    };
 
     let mut hash = [0_u8; 32];
     hex::decode_to_slice(&DEFAULT_BLOCK_HASH[2..], &mut hash).unwrap();

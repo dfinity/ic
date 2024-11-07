@@ -1,19 +1,37 @@
 ///
 /// Common System API benchmark functions, types, constants.
 ///
-use criterion::{BatchSize, Criterion};
-use ic_config::embedders::{Config as EmbeddersConfig, FeatureFlags};
+use criterion::{
+    BatchSize,
+    Criterion,
+};
+use ic_config::embedders::{
+    Config as EmbeddersConfig,
+    FeatureFlags,
+};
 use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
-use ic_config::subnet_config::{SchedulerConfig, SubnetConfig};
-use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
+use ic_config::subnet_config::{
+    SchedulerConfig,
+    SubnetConfig,
+};
+use ic_cycles_account_manager::{
+    CyclesAccountManager,
+    ResourceSaturation,
+};
 use ic_error_types::RejectCode;
 use ic_execution_environment::{
-    as_round_instructions, CompilationCostHandling, ExecutionEnvironment, Hypervisor,
-    IngressHistoryWriterImpl, RoundLimits,
+    as_round_instructions,
+    CompilationCostHandling,
+    ExecutionEnvironment,
+    Hypervisor,
+    IngressHistoryWriterImpl,
+    RoundLimits,
 };
 use ic_interfaces::execution_environment::{
-    ExecutionMode, IngressHistoryWriter, SubnetAvailableMemory,
+    ExecutionMode,
+    IngressHistoryWriter,
+    SubnetAvailableMemory,
 };
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
@@ -21,18 +39,44 @@ use ic_metrics::MetricsRegistry;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_INDEX_IN_NNS_SUBNET;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::page_map::TestPageAllocatorFileDescriptorImpl;
-use ic_replicated_state::{CallOrigin, CanisterState, NetworkTopology, ReplicatedState};
-use ic_system_api::{ExecutionParameters, InstructionLimits};
+use ic_replicated_state::{
+    CallOrigin,
+    CanisterState,
+    NetworkTopology,
+    ReplicatedState,
+};
+use ic_system_api::{
+    ExecutionParameters,
+    InstructionLimits,
+};
 use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_execution_environment::generate_network_topology;
 use ic_test_utilities_state::canister_from_exec_state;
-use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
+use ic_test_utilities_types::ids::{
+    canister_test_id,
+    subnet_test_id,
+    user_test_id,
+};
 use ic_test_utilities_types::messages::IngressBuilder;
 use ic_types::{
-    messages::{CallbackId, CanisterMessage, Payload, RejectContext, RequestMetadata, NO_DEADLINE},
-    methods::{Callback, WasmClosure},
+    messages::{
+        CallbackId,
+        CanisterMessage,
+        Payload,
+        RejectContext,
+        RequestMetadata,
+        NO_DEADLINE,
+    },
+    methods::{
+        Callback,
+        WasmClosure,
+    },
     time::UNIX_EPOCH,
-    Cycles, MemoryAllocation, NumBytes, NumInstructions, Time,
+    Cycles,
+    MemoryAllocation,
+    NumBytes,
+    NumInstructions,
+    Time,
 };
 use ic_wasm_types::CanisterModule;
 use lazy_static::lazy_static;

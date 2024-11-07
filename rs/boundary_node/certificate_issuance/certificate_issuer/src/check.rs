@@ -3,19 +3,37 @@ use async_trait::async_trait;
 use candid::Principal;
 use flate2::bufread::GzDecoder;
 use ic_agent::Agent;
-use ic_http_certification::{HttpRequest, HttpResponse};
-use ic_response_verification::{verify_request_response_pair, MIN_VERIFICATION_VERSION};
+use ic_http_certification::{
+    HttpRequest,
+    HttpResponse,
+};
+use ic_response_verification::{
+    verify_request_response_pair,
+    MIN_VERIFICATION_VERSION,
+};
 use ic_utils::{
     call::SyncCall,
-    interfaces::http_request::{HeaderField, HttpRequestCanister},
+    interfaces::http_request::{
+        HeaderField,
+        HttpRequestCanister,
+    },
 };
 use mockall::automock;
 use std::{
-    io::{BufRead, Read},
+    io::{
+        BufRead,
+        Read,
+    },
     sync::Arc,
-    time::{SystemTime, UNIX_EPOCH},
+    time::{
+        SystemTime,
+        UNIX_EPOCH,
+    },
 };
-use trust_dns_resolver::{error::ResolveErrorKind, proto::rr::RecordType};
+use trust_dns_resolver::{
+    error::ResolveErrorKind,
+    proto::rr::RecordType,
+};
 
 use crate::dns::Resolve;
 

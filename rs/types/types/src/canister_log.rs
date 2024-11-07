@@ -1,5 +1,8 @@
 use candid::Deserialize;
-use ic_management_canister_types::{CanisterLogRecord, DataSize};
+use ic_management_canister_types::{
+    CanisterLogRecord,
+    DataSize,
+};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use serde::Serialize;

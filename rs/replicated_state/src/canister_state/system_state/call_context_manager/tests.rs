@@ -1,9 +1,20 @@
 use super::*;
 use ic_test_utilities_types::{
-    ids::{canister_test_id, message_test_id, user_test_id},
-    messages::{RequestBuilder, ResponseBuilder},
+    ids::{
+        canister_test_id,
+        message_test_id,
+        user_test_id,
+    },
+    messages::{
+        RequestBuilder,
+        ResponseBuilder,
+    },
 };
-use ic_types::{messages::RequestMetadata, methods::WasmClosure, time::UNIX_EPOCH};
+use ic_types::{
+    messages::RequestMetadata,
+    methods::WasmClosure,
+    time::UNIX_EPOCH,
+};
 use maplit::btreemap;
 
 #[test]

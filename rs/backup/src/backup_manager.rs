@@ -5,9 +5,15 @@ use std::{
     path::PathBuf,
     process::Command,
     str::FromStr,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc,
+        Mutex,
+    },
     thread,
-    time::{Duration, Instant},
+    time::{
+        Duration,
+        Instant,
+    },
 };
 
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key;
@@ -16,16 +22,35 @@ use ic_recovery::command_helper::exec_cmd;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_replicator::RegistryReplicator;
-use ic_types::{PrincipalId, ReplicaVersion, SubnetId};
-use slog::{error, info, o, Logger};
+use ic_types::{
+    PrincipalId,
+    ReplicaVersion,
+    SubnetId,
+};
+use slog::{
+    error,
+    info,
+    o,
+    Logger,
+};
 use tokio::runtime::Handle;
 
 use crate::{
-    backup_helper::{retrieve_replica_version_last_replayed, BackupHelper},
+    backup_helper::{
+        retrieve_replica_version_last_replayed,
+        BackupHelper,
+    },
     cmd::BackupArgs,
-    config::{ColdStorage, Config, SubnetConfig},
+    config::{
+        ColdStorage,
+        Config,
+        SubnetConfig,
+    },
     notification_client::NotificationClient,
-    util::{block_on, sleep_secs},
+    util::{
+        block_on,
+        sleep_secs,
+    },
 };
 
 const DEFAULT_SYNC_NODES: usize = 5;
@@ -496,7 +521,10 @@ fn cold_store(m: Arc<BackupManager>) {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs::File, io::Write};
+    use std::{
+        fs::File,
+        io::Write,
+    };
 
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities_tmpdir::tmpdir;

@@ -1,7 +1,13 @@
 use super::errors::ErrorInfo;
 use super::requests::ConsentMessageRequest;
-use super::responses::{ConsentInfo, ConsentMessage};
-use super::{requests::DisplayMessageType, responses::LineDisplayPage};
+use super::responses::{
+    ConsentInfo,
+    ConsentMessage,
+};
+use super::{
+    requests::DisplayMessageType,
+    responses::LineDisplayPage,
+};
 use crate::icrc1::account::Account;
 use crate::icrc1::transfer::TransferArg;
 use crate::icrc2::approve::ApproveArgs;
@@ -9,12 +15,25 @@ use crate::icrc2::transfer_from::TransferFromArgs;
 use crate::icrc21::errors::Icrc21Error;
 use crate::icrc21::requests::ConsentMessageMetadata;
 use candid::Decode;
-use candid::{Nat, Principal};
+use candid::{
+    Nat,
+    Principal,
+};
 use itertools::Itertools;
-use num_traits::{Pow, ToPrimitive};
+use num_traits::{
+    Pow,
+    ToPrimitive,
+};
 use serde_bytes::ByteBuf;
-use strum::{self, IntoEnumIterator};
-use strum_macros::{Display, EnumIter, EnumString};
+use strum::{
+    self,
+    IntoEnumIterator,
+};
+use strum_macros::{
+    Display,
+    EnumIter,
+    EnumString,
+};
 
 // Maximum number of bytes that an argument to an ICRC-1 ledger function can have when passed to the ICRC-21 endpoint.
 pub const MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES: u16 = 500;

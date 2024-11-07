@@ -1,20 +1,36 @@
 use candid::Decode;
 use ic_agent::{
-    agent::{RejectCode, RejectResponse},
+    agent::{
+        RejectCode,
+        RejectResponse,
+    },
     AgentError,
 };
 use ic_base_types::CanisterId;
 use ic_management_canister_types::{
-    CanisterInstallModeV2, InstallChunkedCodeArgs, Payload, UploadChunkArgs, UploadChunkReply,
+    CanisterInstallModeV2,
+    InstallChunkedCodeArgs,
+    Payload,
+    UploadChunkArgs,
+    UploadChunkReply,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot,
+    GetFirstHealthyNodeSnapshot,
+    HasPublicApiUrl,
+    HasTopologySnapshot,
 };
-use ic_system_test_driver::util::{block_on, UniversalCanister};
+use ic_system_test_driver::util::{
+    block_on,
+    UniversalCanister,
+};
 use ic_types::Cycles;
-use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use ic_universal_canister::{
+    call_args,
+    wasm,
+    UNIVERSAL_CANISTER_WASM,
+};
 use ic_utils::interfaces::ManagementCanister;
 
 pub fn install_large_wasm(env: TestEnv) {

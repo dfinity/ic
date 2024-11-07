@@ -1,24 +1,53 @@
 //! Replica -- Internet Computer
 
-use ic_async_utils::{abort_on_panic, shutdown_signal};
+use ic_async_utils::{
+    abort_on_panic,
+    shutdown_signal,
+};
 use ic_config::Config;
 use ic_crypto_sha2::Sha256;
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
-use ic_logger::{info, new_replica_logger_from_config};
+use ic_logger::{
+    info,
+    new_replica_logger_from_config,
+};
 use ic_metrics::MetricsRegistry;
 use ic_replica::setup;
 use ic_sys::PAGE_SIZE;
 use ic_tracing::ReloadHandles;
 use ic_types::{
-    consensus::CatchUpPackage, replica_version::REPLICA_BINARY_HASH, PrincipalId, ReplicaVersion,
+    consensus::CatchUpPackage,
+    replica_version::REPLICA_BINARY_HASH,
+    PrincipalId,
+    ReplicaVersion,
     SubnetId,
 };
-use nix::unistd::{setpgid, Pid};
-use opentelemetry::{trace::TracerProvider, KeyValue};
+use nix::unistd::{
+    setpgid,
+    Pid,
+};
+use opentelemetry::{
+    trace::TracerProvider,
+    KeyValue,
+};
 use opentelemetry_otlp::WithExportConfig;
-use opentelemetry_sdk::{trace, Resource};
-use std::{env, fs, io, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
-use tokio::signal::unix::{signal, SignalKind};
+use opentelemetry_sdk::{
+    trace,
+    Resource,
+};
+use std::{
+    env,
+    fs,
+    io,
+    path::PathBuf,
+    str::FromStr,
+    sync::Arc,
+    time::Duration,
+};
+use tokio::signal::unix::{
+    signal,
+    SignalKind,
+};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::Layer;
 
@@ -33,7 +62,10 @@ use tikv_jemallocator::Jemalloc;
 static ALLOC: Jemalloc = Jemalloc;
 
 #[cfg(feature = "profiler")]
-use pprof::{protos::Message, ProfilerGuard};
+use pprof::{
+    protos::Message,
+    ProfilerGuard,
+};
 #[cfg(feature = "profiler")]
 use regex::Regex;
 #[cfg(feature = "profiler")]

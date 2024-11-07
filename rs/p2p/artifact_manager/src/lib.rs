@@ -2,25 +2,49 @@ use ic_interfaces::{
     p2p::{
         artifact_manager::JoinGuard,
         consensus::{
-            ArtifactTransmit, ArtifactTransmits, ArtifactWithOpt, MutablePool,
-            PoolMutationsProducer, UnvalidatedArtifact, ValidatedPoolReader,
+            ArtifactTransmit,
+            ArtifactTransmits,
+            ArtifactWithOpt,
+            MutablePool,
+            PoolMutationsProducer,
+            UnvalidatedArtifact,
+            ValidatedPoolReader,
         },
     },
     time_source::TimeSource,
 };
 use ic_metrics::MetricsRegistry;
-use ic_types::{artifact::*, messages::SignedIngress};
-use prometheus::{histogram_opts, labels, Histogram};
+use ic_types::{
+    artifact::*,
+    messages::SignedIngress,
+};
+use prometheus::{
+    histogram_opts,
+    labels,
+    Histogram,
+};
 use std::{
     sync::{
-        atomic::{AtomicBool, Ordering::SeqCst},
-        Arc, RwLock,
+        atomic::{
+            AtomicBool,
+            Ordering::SeqCst,
+        },
+        Arc,
+        RwLock,
     },
-    thread::{Builder as ThreadBuilder, JoinHandle},
+    thread::{
+        Builder as ThreadBuilder,
+        JoinHandle,
+    },
     time::Duration,
 };
 use tokio::{
-    sync::mpsc::{unbounded_channel, Sender, UnboundedReceiver, UnboundedSender},
+    sync::mpsc::{
+        unbounded_channel,
+        Sender,
+        UnboundedReceiver,
+        UnboundedSender,
+    },
     time::timeout,
 };
 use tracing::instrument;
@@ -418,13 +442,19 @@ impl<P: MutablePool<SignedIngress> + Send + Sync + 'static> ArtifactProcessor<Si
 mod tests {
     use super::*;
 
-    use std::{convert::Infallible, sync::Arc};
+    use std::{
+        convert::Infallible,
+        sync::Arc,
+    };
 
     use ic_interfaces::time_source::SysTimeSource;
     use ic_metrics::MetricsRegistry;
     use ic_types::artifact::UnvalidatedArtifactMutation;
 
-    use crate::{run_artifact_processor, ArtifactProcessor};
+    use crate::{
+        run_artifact_processor,
+        ArtifactProcessor,
+    };
 
     #[test]
     fn send_initial_artifacts() {

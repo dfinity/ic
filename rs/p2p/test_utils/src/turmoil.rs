@@ -1,39 +1,78 @@
 use std::{
     fmt::Debug,
     future::Future,
-    io::{self, IoSliceMut},
-    net::{IpAddr, Ipv4Addr, SocketAddr},
+    io::{
+        self,
+        IoSliceMut,
+    },
+    net::{
+        IpAddr,
+        Ipv4Addr,
+        SocketAddr,
+    },
     pin::Pin,
-    sync::{Arc, RwLock},
-    task::{Context, Poll},
+    sync::{
+        Arc,
+        RwLock,
+    },
+    task::{
+        Context,
+        Poll,
+    },
     time::Duration,
 };
 
 use crate::{
-    consensus::{TestConsensus, U64Artifact},
-    create_peer_manager_and_registry_handle, temp_crypto_component_with_tls_keys,
+    consensus::{
+        TestConsensus,
+        U64Artifact,
+    },
+    create_peer_manager_and_registry_handle,
+    temp_crypto_component_with_tls_keys,
     RegistryConsensusHandle,
 };
 use axum::Router;
 use bytes::BytesMut;
-use futures::{future::BoxFuture, FutureExt};
+use futures::{
+    future::BoxFuture,
+    FutureExt,
+};
 use ic_artifact_downloader::FetchArtifact;
 use ic_artifact_manager::run_artifact_processor;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::{
-    p2p::artifact_manager::JoinGuard, p2p::consensus::ArtifactTransmit,
-    p2p::state_sync::StateSyncClient, time_source::SysTimeSource,
+    p2p::artifact_manager::JoinGuard,
+    p2p::consensus::ArtifactTransmit,
+    p2p::state_sync::StateSyncClient,
+    time_source::SysTimeSource,
 };
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_quic_transport::SubnetTopology;
-use ic_quic_transport::{QuicTransport, Transport};
+use ic_quic_transport::{
+    QuicTransport,
+    Transport,
+};
 use ic_state_manager::state_sync::types::StateSyncMessage;
-use ic_types::{artifact::UnvalidatedArtifactMutation, NodeId, RegistryVersion};
-use quinn::{self, udp::EcnCodepoint, AsyncUdpSocket, UdpPoller};
+use ic_types::{
+    artifact::UnvalidatedArtifactMutation,
+    NodeId,
+    RegistryVersion,
+};
+use quinn::{
+    self,
+    udp::EcnCodepoint,
+    AsyncUdpSocket,
+    UdpPoller,
+};
 use tokio::{
     select,
-    sync::{mpsc, oneshot, watch, Notify},
+    sync::{
+        mpsc,
+        oneshot,
+        watch,
+        Notify,
+    },
 };
 use turmoil::Sim;
 

@@ -1,11 +1,23 @@
 use anyhow::Result;
-use clap::{Parser, Subcommand};
-use config::config_ini::{get_config_ini_settings, ConfigIniSettings};
+use clap::{
+    Parser,
+    Subcommand,
+};
+use config::config_ini::{
+    get_config_ini_settings,
+    ConfigIniSettings,
+};
 use config::deployment_json::get_deployment_settings;
 use config::serialize_and_write_config;
-use mac_address::mac_address::{get_ipmi_mac, FormattedMacAddress};
+use mac_address::mac_address::{
+    get_ipmi_mac,
+    FormattedMacAddress,
+};
 use std::fs::File;
-use std::path::{Path, PathBuf};
+use std::path::{
+    Path,
+    PathBuf,
+};
 
 use config::types::*;
 

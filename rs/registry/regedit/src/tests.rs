@@ -1,21 +1,40 @@
 #![cfg(test)]
 use crate::{
-    args::{universal_projection, Command, RegistrySpec, SourceSpec, VersionSpec},
+    args::{
+        universal_projection,
+        Command,
+        RegistrySpec,
+        SourceSpec,
+        VersionSpec,
+    },
     diff::DELETED_MARKER,
-    execute_command, normalization,
+    execute_command,
+    normalization,
     snapshot::SPECIAL_FIELD_PREFIX,
 };
 use ic_prep_lib::{
-    internet_computer::{IcConfig, TopologyConfig},
-    node::{NodeConfiguration, NodeIndex},
+    internet_computer::{
+        IcConfig,
+        TopologyConfig,
+    },
+    node::{
+        NodeConfiguration,
+        NodeIndex,
+    },
     prep_state_directory::IcPrepStateDir,
-    subnet_configuration::{SubnetConfig, SubnetRunningState},
+    subnet_configuration::{
+        SubnetConfig,
+        SubnetRunningState,
+    },
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::ReplicaVersion;
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::{
+        BTreeMap,
+        HashSet,
+    },
     net::SocketAddr,
     path::PathBuf,
     str::FromStr,

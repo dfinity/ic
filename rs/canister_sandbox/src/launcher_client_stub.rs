@@ -1,6 +1,10 @@
 use crate::launcher_service::LauncherService;
 use crate::protocol::launchersvc::*;
-use crate::rpc::{Call, Channel, Error};
+use crate::rpc::{
+    Call,
+    Channel,
+    Error,
+};
 
 pub struct LauncherClientStub {
     channel: Channel<Request, Reply>,

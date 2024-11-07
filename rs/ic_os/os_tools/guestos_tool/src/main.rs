@@ -1,7 +1,10 @@
 use std::path::Path;
 
 use anyhow::Result;
-use clap::{Parser, Subcommand};
+use clap::{
+    Parser,
+    Subcommand,
+};
 
 mod node_gen;
 use node_gen::get_node_gen_metric;
@@ -11,11 +14,15 @@ use prometheus_metric::write_single_metric;
 
 mod generate_network_config;
 use generate_network_config::{
-    generate_networkd_config, validate_and_construct_ipv4_address_info,
+    generate_networkd_config,
+    validate_and_construct_ipv4_address_info,
     DEFAULT_GUESTOS_NETWORK_CONFIG_PATH,
 };
 
-use network::systemd::{restart_systemd_networkd, DEFAULT_SYSTEMD_NETWORK_DIR};
+use network::systemd::{
+    restart_systemd_networkd,
+    DEFAULT_SYSTEMD_NETWORK_DIR,
+};
 
 #[derive(Subcommand)]
 pub enum Commands {

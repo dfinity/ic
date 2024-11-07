@@ -1,51 +1,116 @@
-use candid::{candid_method, CandidType, Encode};
+use candid::{
+    candid_method,
+    CandidType,
+    Encode,
+};
 use core::cmp::Ordering;
 use cycles_minting_canister::*;
-use dfn_candid::{candid_one, CandidOne};
+use dfn_candid::{
+    candid_one,
+    CandidOne,
+};
 use dfn_core::{
-    api::{call_with_cleanup, caller},
-    over, over_async, over_init, over_may_reject, stable,
+    api::{
+        call_with_cleanup,
+        caller,
+    },
+    over,
+    over_async,
+    over_init,
+    over_may_reject,
+    stable,
 };
 use dfn_protobuf::protobuf;
 use environment::Environment;
 use exchange_rate_canister::{
-    RealExchangeRateCanisterClient, UpdateExchangeRateError, UpdateExchangeRateState,
+    RealExchangeRateCanisterClient,
+    UpdateExchangeRateError,
+    UpdateExchangeRateState,
 };
 use ic_crypto_tree_hash::{
-    flatmap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree, WitnessGenerator,
+    flatmap,
+    HashTreeBuilder,
+    HashTreeBuilderImpl,
+    Label,
+    LabeledTree,
+    WitnessGenerator,
     WitnessGeneratorImpl,
 };
-use ic_ledger_core::{block::BlockType, tokens::CheckedSub};
+use ic_ledger_core::{
+    block::BlockType,
+    tokens::CheckedSub,
+};
 // TODO(EXC-1687): remove temporary aliases `Ic00CanisterSettingsArgs` and `Ic00CanisterSettingsArgsBuilder`.
 use ic_management_canister_types::{
-    BoundedVec, CanisterIdRecord, CanisterSettingsArgs as Ic00CanisterSettingsArgs,
-    CanisterSettingsArgsBuilder as Ic00CanisterSettingsArgsBuilder, CreateCanisterArgs, Method,
+    BoundedVec,
+    CanisterIdRecord,
+    CanisterSettingsArgs as Ic00CanisterSettingsArgs,
+    CanisterSettingsArgsBuilder as Ic00CanisterSettingsArgsBuilder,
+    CreateCanisterArgs,
+    Method,
     IC_00,
 };
 use ic_nervous_system_common::NNS_DAPP_BACKEND_CANISTER_ID;
 use ic_nervous_system_governance::maturity_modulation::{
-    MAX_MATURITY_MODULATION_PERMYRIAD, MIN_MATURITY_MODULATION_PERMYRIAD,
+    MAX_MATURITY_MODULATION_PERMYRIAD,
+    MIN_MATURITY_MODULATION_PERMYRIAD,
 };
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_nns_constants::{
-    GOVERNANCE_CANISTER_ID, ICP_LEDGER_ARCHIVE_1_CANISTER_ID, REGISTRY_CANISTER_ID,
+    GOVERNANCE_CANISTER_ID,
+    ICP_LEDGER_ARCHIVE_1_CANISTER_ID,
+    REGISTRY_CANISTER_ID,
 };
-use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
+use ic_types::{
+    CanisterId,
+    Cycles,
+    PrincipalId,
+    SubnetId,
+};
 use icp_ledger::{
-    AccountIdentifier, Block, BlockIndex, BlockRes, CyclesResponse, Memo, Operation, SendArgs,
-    Subaccount, Tokens, TransactionNotification, DEFAULT_TRANSFER_FEE,
+    AccountIdentifier,
+    Block,
+    BlockIndex,
+    BlockRes,
+    CyclesResponse,
+    Memo,
+    Operation,
+    SendArgs,
+    Subaccount,
+    Tokens,
+    TransactionNotification,
+    DEFAULT_TRANSFER_FEE,
 };
 use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
-use on_wire::{FromWire, IntoWire, NewType};
-use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
-use serde::{Deserialize, Serialize};
+use on_wire::{
+    FromWire,
+    IntoWire,
+    NewType,
+};
+use rand::{
+    rngs::StdRng,
+    seq::SliceRandom,
+    SeedableRng,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::{
     cell::RefCell,
-    collections::{btree_map::Entry, BTreeMap, BTreeSet},
+    collections::{
+        btree_map::Entry,
+        BTreeMap,
+        BTreeSet,
+    },
     convert::TryInto,
     thread::LocalKey,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{
+        Duration,
+        SystemTime,
+        UNIX_EPOCH,
+    },
 };
 
 mod environment;
@@ -2404,7 +2469,10 @@ fn get_subnet_selection(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_types_test_utils::ids::{subnet_test_id, user_test_id};
+    use ic_types_test_utils::ids::{
+        subnet_test_id,
+        user_test_id,
+    };
     use rand::Rng;
     use std::str::FromStr;
 
@@ -3106,7 +3174,10 @@ mod tests {
 
     #[test]
     fn test_candid_interface_compatibility() {
-        use candid_parser::utils::{service_equal, CandidSource};
+        use candid_parser::utils::{
+            service_equal,
+            CandidSource,
+        };
         use std::path::PathBuf;
 
         candid::export_service!();

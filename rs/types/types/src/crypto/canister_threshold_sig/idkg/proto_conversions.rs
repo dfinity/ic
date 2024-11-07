@@ -1,17 +1,43 @@
 use crate::crypto::canister_threshold_sig::error::InitialIDkgDealingsValidationError;
 use crate::crypto::canister_threshold_sig::idkg::{
-    BatchSignedIDkgDealing, IDkgDealing, IDkgReceivers, IDkgTranscript, IDkgTranscriptId,
-    IDkgTranscriptOperation, IDkgTranscriptParams, IDkgTranscriptType, InitialIDkgDealings,
+    BatchSignedIDkgDealing,
+    IDkgDealing,
+    IDkgReceivers,
+    IDkgTranscript,
+    IDkgTranscriptId,
+    IDkgTranscriptOperation,
+    IDkgTranscriptParams,
+    IDkgTranscriptType,
+    InitialIDkgDealings,
     SignedIDkgDealing,
 };
 use crate::crypto::canister_threshold_sig::ExtendedDerivationPath;
-use crate::crypto::{AlgorithmId, BasicSig, BasicSigOf, CryptoHashOf};
-use crate::signature::{BasicSignature, BasicSignatureBatch};
-use crate::{node_id_into_protobuf, node_id_try_from_option, Height, NodeIndex};
-use ic_base_types::{
-    subnet_id_into_protobuf, subnet_id_try_from_protobuf, NodeId, RegistryVersion,
+use crate::crypto::{
+    AlgorithmId,
+    BasicSig,
+    BasicSigOf,
+    CryptoHashOf,
 };
-use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use crate::signature::{
+    BasicSignature,
+    BasicSignatureBatch,
+};
+use crate::{
+    node_id_into_protobuf,
+    node_id_try_from_option,
+    Height,
+    NodeIndex,
+};
+use ic_base_types::{
+    subnet_id_into_protobuf,
+    subnet_id_try_from_protobuf,
+    NodeId,
+    RegistryVersion,
+};
+use ic_protobuf::proxy::{
+    try_from_option_field,
+    ProxyDecodeError,
+};
 use ic_protobuf::registry::subnet::v1::ExtendedDerivationPath as ExtendedDerivationPathProto;
 use ic_protobuf::registry::subnet::v1::IDkgComplaint as IDkgComplaintProto;
 use ic_protobuf::registry::subnet::v1::IDkgDealing as IDkgDealingProto;
@@ -23,15 +49,25 @@ use ic_protobuf::registry::subnet::v1::IDkgTranscriptOperation as IDkgTranscript
 use ic_protobuf::registry::subnet::v1::IDkgTranscriptParams as IDkgTranscriptParamsProto;
 use ic_protobuf::registry::subnet::v1::InitialIDkgDealings as InitialIDkgDealingsProto;
 use ic_protobuf::registry::subnet::v1::VerifiedIDkgDealing as VerifiedIDkgDealingProto;
-use ic_protobuf::registry::subnet::v1::{DealerTuple as DealerTupleProto, SignatureTuple};
+use ic_protobuf::registry::subnet::v1::{
+    DealerTuple as DealerTupleProto,
+    SignatureTuple,
+};
 use ic_protobuf::types::v1::BasicSignature as BasicSignatureProto;
 use ic_protobuf::types::v1::IDkgDealingSupport as IDkgDealingSupportProto;
 use ic_protobuf::types::v1::PrincipalId as PrincipalIdProto;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
 use std::convert::TryFrom;
 use std::iter::FromIterator;
 
-use super::{IDkgComplaint, IDkgDealingSupport, IDkgOpening};
+use super::{
+    IDkgComplaint,
+    IDkgDealingSupport,
+    IDkgOpening,
+};
 
 const CURRENT_INITIAL_IDKG_DEALINGS_VERSION: u32 = 0;
 

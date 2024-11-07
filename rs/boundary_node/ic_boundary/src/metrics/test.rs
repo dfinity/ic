@@ -1,7 +1,10 @@
 use super::*;
 
 use crate::check::test::generate_custom_registry_snapshot;
-use prometheus::proto::{LabelPair, Metric};
+use prometheus::proto::{
+    LabelPair,
+    Metric,
+};
 
 // node_id, subnet_id
 const NODES: &[(&str, &str)] = &[

@@ -3,20 +3,35 @@ use std::collections::BTreeMap;
 use dfn_candid::candid;
 use ic_canister_client_sender::Sender;
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_USER1_KEYPAIR,
+    TEST_NEURON_1_OWNER_KEYPAIR,
+    TEST_NEURON_1_OWNER_PRINCIPAL,
+    TEST_USER1_KEYPAIR,
 };
 use ic_nns_test_utils::{
-    itest_helpers::{local_test_on_nns_subnet, set_up_registry_canister},
+    itest_helpers::{
+        local_test_on_nns_subnet,
+        set_up_registry_canister,
+    },
     registry::{
-        get_committee_signing_key, get_dkg_dealing_key, get_node_operator_record, get_node_record,
-        get_node_signing_key, get_transport_tls_certificate,
-        invariant_compliant_mutation_as_atomic_req, prepare_add_node_payload,
+        get_committee_signing_key,
+        get_dkg_dealing_key,
+        get_node_operator_record,
+        get_node_record,
+        get_node_signing_key,
+        get_transport_tls_certificate,
+        invariant_compliant_mutation_as_atomic_req,
+        prepare_add_node_payload,
     },
 };
-use ic_protobuf::registry::{node::v1::NodeRewardType, node_operator::v1::NodeOperatorRecord};
+use ic_protobuf::registry::{
+    node::v1::NodeRewardType,
+    node_operator::v1::NodeOperatorRecord,
+};
 use ic_registry_keys::make_node_operator_record_key;
 use ic_registry_transport::pb::v1::{
-    registry_mutation, RegistryAtomicMutateRequest, RegistryMutation,
+    registry_mutation,
+    RegistryAtomicMutateRequest,
+    RegistryMutation,
 };
 use ic_types::NodeId;
 use prost::Message;

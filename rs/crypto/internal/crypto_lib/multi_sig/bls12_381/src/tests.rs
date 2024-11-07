@@ -1,8 +1,15 @@
 //! Tests for multisignatures
 
 use crate::{
-    api, crypto as multi_crypto, types as multi_types, types::arbitrary, types::CombinedSignature,
-    types::IndividualSignature, types::PublicKey, types::SecretKey, types::SecretKeyBytes,
+    api,
+    crypto as multi_crypto,
+    types as multi_types,
+    types::arbitrary,
+    types::CombinedSignature,
+    types::IndividualSignature,
+    types::PublicKey,
+    types::SecretKey,
+    types::SecretKeyBytes,
 };
 use ic_crypto_internal_bls12_381_type::G1Projective;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
@@ -159,7 +166,10 @@ mod basic_functionality {
 
 mod advanced_functionality {
     use super::*;
-    use crate::types::{PopBytes, PublicKeyBytes};
+    use crate::types::{
+        PopBytes,
+        PublicKeyBytes,
+    };
     use ic_crypto_internal_types::curves::bls12_381::G2Bytes;
     use proptest::prelude::*;
 

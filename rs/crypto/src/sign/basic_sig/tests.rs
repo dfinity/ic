@@ -5,7 +5,10 @@ use assert_matches::assert_matches;
 use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use ic_types::crypto::{AlgorithmId, SignableMock};
+use ic_types::crypto::{
+    AlgorithmId,
+    SignableMock,
+};
 use ic_types::messages::MessageId;
 use ic_types::registry::RegistryClientError;
 use ic_types_test_utils::arbitrary as arbitrary_types;
@@ -215,7 +218,10 @@ mod combine_basic_sig {
     use crate::common::test_utils::basic_sig::TestVector::ED25519_STABILITY_1;
     use crate::common::test_utils::crypto_component::crypto_component_with_csp;
     use crate::sign::tests::REG_V2;
-    use ic_types_test_utils::ids::{NODE_1, NODE_2};
+    use ic_types_test_utils::ids::{
+        NODE_1,
+        NODE_2,
+    };
 
     #[test]
     fn should_correctly_combine_a_single_signature() {
@@ -285,7 +291,10 @@ mod verify_sig_batch {
     use ic_crypto_temp_crypto::TempCryptoComponent;
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-    use ic_types_test_utils::ids::{NODE_1, NODE_2};
+    use ic_types_test_utils::ids::{
+        NODE_1,
+        NODE_2,
+    };
 
     #[test]
     fn should_correctly_verify_batch_with_single_signature() {

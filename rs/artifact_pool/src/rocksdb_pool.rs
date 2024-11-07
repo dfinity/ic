@@ -1,43 +1,101 @@
 #![allow(dead_code)]
 use crate::consensus_pool::{
-    InitializablePoolSection, MutablePoolSection, PoolSectionOp, PoolSectionOps,
+    InitializablePoolSection,
+    MutablePoolSection,
+    PoolSectionOp,
+    PoolSectionOps,
 };
-use crate::rocksdb_iterator::{StandaloneIterator, StandaloneSnapshot};
-use bincode::{deserialize, serialize};
-use byteorder::{BigEndian, ReadBytesExt};
+use crate::rocksdb_iterator::{
+    StandaloneIterator,
+    StandaloneSnapshot,
+};
+use bincode::{
+    deserialize,
+    serialize,
+};
+use byteorder::{
+    BigEndian,
+    ReadBytesExt,
+};
 use ic_config::artifact_pool::RocksDBConfig;
 use ic_interfaces::consensus_pool::{
-    HeightIndexedPool, HeightRange, OnlyError, PoolSection, ValidatedArtifact,
+    HeightIndexedPool,
+    HeightRange,
+    OnlyError,
+    PoolSection,
+    ValidatedArtifact,
     ValidatedConsensusArtifact,
 };
-use ic_logger::{info, warn, ReplicaLogger};
+use ic_logger::{
+    info,
+    warn,
+    ReplicaLogger,
+};
 use ic_protobuf::types::v1 as pb;
 use ic_types::consensus::certification::CertificationMessageHash;
-use ic_types::consensus::{BlockPayload, DataPayload, HasHash};
+use ic_types::consensus::{
+    BlockPayload,
+    DataPayload,
+    HasHash,
+};
 use ic_types::{
-    artifact::{CertificationMessageId, ConsensusMessageId},
+    artifact::{
+        CertificationMessageId,
+        ConsensusMessageId,
+    },
     batch::BatchPayload,
     consensus::{
-        certification::{Certification, CertificationMessage, CertificationShare},
+        certification::{
+            Certification,
+            CertificationMessage,
+            CertificationShare,
+        },
         dkg::Dealings,
-        BlockProposal, CatchUpPackage, CatchUpPackageShare, ConsensusMessage, ConsensusMessageHash,
-        ConsensusMessageHashable, EquivocationProof, Finalization, FinalizationShare, HasHeight,
-        Notarization, NotarizationShare, Payload, RandomBeacon, RandomBeaconShare, RandomTape,
+        BlockProposal,
+        CatchUpPackage,
+        CatchUpPackageShare,
+        ConsensusMessage,
+        ConsensusMessageHash,
+        ConsensusMessageHashable,
+        EquivocationProof,
+        Finalization,
+        FinalizationShare,
+        HasHeight,
+        Notarization,
+        NotarizationShare,
+        Payload,
+        RandomBeacon,
+        RandomBeaconShare,
+        RandomTape,
         RandomTapeShare,
     },
     crypto::CryptoHashable,
-    Height, Time,
+    Height,
+    Time,
 };
 use rocksdb::{
-    compaction_filter::{CompactionFilterFn, Decision},
-    ColumnFamilyDescriptor, DBCompressionType, Options, WriteBatch, DB,
+    compaction_filter::{
+        CompactionFilterFn,
+        Decision,
+    },
+    ColumnFamilyDescriptor,
+    DBCompressionType,
+    Options,
+    WriteBatch,
+    DB,
 };
 use std::convert::TryFrom;
 use std::marker::PhantomData;
 use std::path::PathBuf;
-use std::sync::{Mutex, RwLock};
+use std::sync::{
+    Mutex,
+    RwLock,
+};
 use std::thread::JoinHandle;
-use std::{path::Path, sync::Arc};
+use std::{
+    path::Path,
+    sync::Arc,
+};
 
 // Macro that panics when result is not ok, printing the error.
 macro_rules! check_ok {

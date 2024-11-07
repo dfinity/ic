@@ -1,5 +1,8 @@
 use std::collections::BTreeMap;
-use tla_instrumentation::{TlaValue, ToTla};
+use tla_instrumentation::{
+    TlaValue,
+    ToTla,
+};
 
 #[test]
 fn size_test() {

@@ -1,12 +1,22 @@
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{self, BufRead, Write};
+use std::io::{
+    self,
+    BufRead,
+    Write,
+};
 use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
 
-use anyhow::{Context, Result};
+use anyhow::{
+    Context,
+    Result,
+};
 use clap::Parser;
-use walkdir::{DirEntryExt, WalkDir};
+use walkdir::{
+    DirEntryExt,
+    WalkDir,
+};
 
 /// Generate an e2fsdroid fs_config file for a given directory tree
 #[derive(Parser)]

@@ -1,13 +1,24 @@
 use candid::Nat;
 use ciborium::tag::Required;
 use ethnum::u256;
-use ic_ledger_core::tokens::{CheckedAdd, CheckedSub, Zero};
-use ic_stable_structures::storable::{Bound, Storable};
+use ic_ledger_core::tokens::{
+    CheckedAdd,
+    CheckedSub,
+    Zero,
+};
+use ic_stable_structures::storable::{
+    Bound,
+    Storable,
+};
 use num_traits::Bounded;
 use serde::{
-    de::{self, Deserializer},
+    de::{
+        self,
+        Deserializer,
+    },
     ser::Serializer,
-    Deserialize, Serialize,
+    Deserialize,
+    Serialize,
 };
 use std::borrow::Cow;
 use std::fmt;

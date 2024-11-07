@@ -4,37 +4,91 @@ pub mod test_fixtures;
 #[cfg(test)]
 mod tests;
 
-use crate::candid::{AddCkErc20Token, AddErc20Arg, CyclesManagement, LedgerInitArg, UpgradeArg};
+use crate::candid::{
+    AddCkErc20Token,
+    AddErc20Arg,
+    CyclesManagement,
+    LedgerInitArg,
+    UpgradeArg,
+};
 use crate::logs::DEBUG;
 use crate::logs::INFO;
 use crate::management::IcCanisterRuntime;
-use crate::management::{CallError, CanisterRuntime, Reason};
+use crate::management::{
+    CallError,
+    CanisterRuntime,
+    Reason,
+};
 use crate::state::{
-    mutate_state, read_state, Archive, Canister, Canisters, CanistersMetadata, Index, Ledger,
-    LedgerSuiteVersion, ManageSingleCanister, ManagedCanisterStatus, State, TokenId, TokenSymbol,
+    mutate_state,
+    read_state,
+    Archive,
+    Canister,
+    Canisters,
+    CanistersMetadata,
+    Index,
+    Ledger,
+    LedgerSuiteVersion,
+    ManageSingleCanister,
+    ManagedCanisterStatus,
+    State,
+    TokenId,
+    TokenSymbol,
     WasmHash,
 };
 use crate::storage::{
-    read_wasm_store, validate_wasm_hashes, wasm_store_contain, wasm_store_try_get, StorableWasm,
-    TaskQueue, WasmHashError, WasmStore, WasmStoreError, TASKS,
+    read_wasm_store,
+    validate_wasm_hashes,
+    wasm_store_contain,
+    wasm_store_try_get,
+    StorableWasm,
+    TaskQueue,
+    WasmHashError,
+    WasmStore,
+    WasmStoreError,
+    TASKS,
 };
-use candid::{CandidType, Encode, Nat, Principal};
+use candid::{
+    CandidType,
+    Encode,
+    Nat,
+    Principal,
+};
 use futures::future;
 use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
-use ic_icrc1_index_ng::{IndexArg, InitArg as IndexInitArg};
-use ic_icrc1_ledger::{ArchiveOptions, InitArgs as LedgerInitArgs, LedgerArgument};
-use icrc_ledger_types::icrc3::archive::{GetArchivesArgs, GetArchivesResult};
+use ic_icrc1_index_ng::{
+    IndexArg,
+    InitArg as IndexInitArg,
+};
+use ic_icrc1_ledger::{
+    ArchiveOptions,
+    InitArgs as LedgerInitArgs,
+    LedgerArgument,
+};
+use icrc_ledger_types::icrc3::archive::{
+    GetArchivesArgs,
+    GetArchivesResult,
+};
 pub use metrics::encode_orchestrator_metrics;
 use metrics::observe_task_duration;
 use num_traits::ToPrimitive;
 use scopeguard::ScopeGuard;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::cell::Cell;
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, BTreeSet};
-use std::fmt::{Debug, Display};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
+use std::fmt::{
+    Debug,
+    Display,
+};
 use std::str::FromStr;
 use std::time::Duration;
 

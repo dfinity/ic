@@ -4,58 +4,126 @@ mod tests;
 
 use crate::metadata_state::subnet_call_context_manager::SubnetCallContextManager;
 use crate::CanisterQueues;
-use crate::{canister_state::system_state::CyclesUseCase, CheckpointLoadingMetrics};
+use crate::{
+    canister_state::system_state::CyclesUseCase,
+    CheckpointLoadingMetrics,
+};
 use ic_base_types::CanisterId;
 use ic_btc_replica_types::BlockBlob;
-use ic_certification_version::{CertificationVersion, CURRENT_CERTIFICATION_VERSION};
-use ic_error_types::{ErrorCode, RejectCode, UserError};
+use ic_certification_version::{
+    CertificationVersion,
+    CURRENT_CERTIFICATION_VERSION,
+};
+use ic_error_types::{
+    ErrorCode,
+    RejectCode,
+    UserError,
+};
 use ic_limits::MAX_INGRESS_TTL;
-use ic_management_canister_types::{MasterPublicKeyId, NodeMetrics, NodeMetricsHistoryResponse};
+use ic_management_canister_types::{
+    MasterPublicKeyId,
+    NodeMetrics,
+    NodeMetricsHistoryResponse,
+};
 use ic_protobuf::state::system_metadata::v1::ThresholdSignatureAgreementsEntry;
 use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{
+        try_from_option_field,
+        ProxyDecodeError,
+    },
     registry::subnet::v1 as pb_subnet,
     state::{
-        canister_state_bits::v1::{ConsumedCyclesByUseCase, CyclesUseCase as pbCyclesUseCase},
+        canister_state_bits::v1::{
+            ConsumedCyclesByUseCase,
+            CyclesUseCase as pbCyclesUseCase,
+        },
         ingress::v1 as pb_ingress,
         queues::v1 as pb_queues,
-        system_metadata::v1::{self as pb_metadata},
+        system_metadata::v1::{
+            self as pb_metadata,
+        },
     },
     types::v1 as pb_types,
 };
 use ic_registry_routing_table::{
-    canister_id_into_u64, difference, intersection, CanisterIdRanges, CanisterMigrations,
-    RoutingTable, CANISTER_IDS_PER_SUBNET,
+    canister_id_into_u64,
+    difference,
+    intersection,
+    CanisterIdRanges,
+    CanisterMigrations,
+    RoutingTable,
+    CANISTER_IDS_PER_SUBNET,
 };
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     batch::BlockmakerMetrics,
     crypto::CryptoHash,
-    ingress::{IngressState, IngressStatus},
+    ingress::{
+        IngressState,
+        IngressStatus,
+    },
     messages::{
-        is_subnet_id, CanisterCall, MessageId, Payload, RejectContext, RequestOrResponse, Response,
+        is_subnet_id,
+        CanisterCall,
+        MessageId,
+        Payload,
+        RejectContext,
+        RequestOrResponse,
+        Response,
         NO_DEADLINE,
     },
-    node_id_into_protobuf, node_id_try_from_option,
+    node_id_into_protobuf,
+    node_id_try_from_option,
     nominal_cycles::NominalCycles,
-    state_sync::{StateSyncVersion, CURRENT_STATE_SYNC_VERSION},
-    subnet_id_into_protobuf, subnet_id_try_from_protobuf,
-    time::{Time, UNIX_EPOCH},
+    state_sync::{
+        StateSyncVersion,
+        CURRENT_STATE_SYNC_VERSION,
+    },
+    subnet_id_into_protobuf,
+    subnet_id_try_from_protobuf,
+    time::{
+        Time,
+        UNIX_EPOCH,
+    },
     xnet::{
-        RejectReason, RejectSignal, StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue,
+        RejectReason,
+        RejectSignal,
+        StreamFlags,
+        StreamHeader,
+        StreamIndex,
+        StreamIndexedQueue,
         StreamSlice,
     },
-    CountBytes, CryptoHashOfPartialState, NodeId, NumBytes, PrincipalId, SubnetId,
+    CountBytes,
+    CryptoHashOfPartialState,
+    NodeId,
+    NumBytes,
+    PrincipalId,
+    SubnetId,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use ic_wasm_types::WasmHash;
-use serde::{Deserialize, Serialize};
-use std::ops::Bound::{Included, Unbounded};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use std::ops::Bound::{
+    Included,
+    Unbounded,
+};
 use std::{
-    collections::{BTreeMap, BTreeSet, VecDeque},
-    convert::{From, TryFrom, TryInto},
+    collections::{
+        BTreeMap,
+        BTreeSet,
+        VecDeque,
+    },
+    convert::{
+        From,
+        TryFrom,
+        TryInto,
+    },
     mem::size_of,
     sync::Arc,
 };

@@ -1,23 +1,41 @@
 use clap::Parser;
 use ic_prep_lib::{
-    internet_computer::{IcConfig, TopologyConfig},
+    internet_computer::{
+        IcConfig,
+        TopologyConfig,
+    },
     node::NodeConfiguration,
     subnet_configuration::SubnetConfig,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
     farm::{
-        AttachImageSpec, CreateVmRequest, Farm, GroupMetadata, GroupSpec, ImageLocation, VmType,
+        AttachImageSpec,
+        CreateVmRequest,
+        Farm,
+        GroupMetadata,
+        GroupSpec,
+        ImageLocation,
+        VmType,
     },
-    ic::{Subnet, VmAllocationStrategy},
+    ic::{
+        Subnet,
+        VmAllocationStrategy,
+    },
     resource::build_empty_image,
 };
 use ic_types::ReplicaVersion;
 use reqwest::blocking::Client;
 use serde::Serialize;
-use slog::{o, Drain};
+use slog::{
+    o,
+    Drain,
+};
 use std::collections::BTreeMap;
-use std::net::{IpAddr, SocketAddr};
+use std::net::{
+    IpAddr,
+    SocketAddr,
+};
 use std::path::PathBuf;
 use std::process::Command;
 use tempfile::tempdir;

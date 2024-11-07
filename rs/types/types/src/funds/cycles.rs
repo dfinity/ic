@@ -1,14 +1,27 @@
-use candid::{CandidType, Nat};
+use candid::{
+    CandidType,
+    Nat,
+};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::state::canister_state_bits::v1::CyclesAccount as pbCyclesAccount;
 use ic_protobuf::state::queues::v1::Cycles as PbCycles;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::convert::TryInto;
 use std::iter::Sum;
 use std::{
     fmt,
-    ops::{Add, AddAssign, Div, Mul, Sub, SubAssign},
+    ops::{
+        Add,
+        AddAssign,
+        Div,
+        Mul,
+        Sub,
+        SubAssign,
+    },
 };
 use thousands::Separable;
 

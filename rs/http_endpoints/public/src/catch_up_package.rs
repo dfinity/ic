@@ -8,14 +8,23 @@ use axum::extract::State;
 use axum::response::IntoResponse;
 use axum::Router;
 use bytes::Bytes;
-use http_body_util::{BodyExt, Full};
-use hyper::{Response, StatusCode};
+use http_body_util::{
+    BodyExt,
+    Full,
+};
+use hyper::{
+    Response,
+    StatusCode,
+};
 use ic_interfaces::consensus_pool::ConsensusPoolCache;
 use ic_types::consensus::catchup::CatchUpPackageParam;
 use ic_types::consensus::CatchUpPackage;
 use prost::Message;
 use std::sync::Arc;
-use tower::{BoxError, ServiceBuilder};
+use tower::{
+    BoxError,
+    ServiceBuilder,
+};
 
 #[derive(Clone)]
 pub(crate) struct CatchUpPackageService {
@@ -89,11 +98,18 @@ async fn cup(
 
 #[cfg(test)]
 mod tests {
-    use http::{header::CONTENT_TYPE, Method, Request};
+    use http::{
+        header::CONTENT_TYPE,
+        Method,
+        Request,
+    };
     use ic_interfaces_mocks::consensus_pool::MockConsensusPoolCache;
     use tower::ServiceExt;
 
-    use crate::{common::CONTENT_TYPE_PROTOBUF, CONTENT_TYPE_CBOR};
+    use crate::{
+        common::CONTENT_TYPE_PROTOBUF,
+        CONTENT_TYPE_CBOR,
+    };
 
     use super::*;
 

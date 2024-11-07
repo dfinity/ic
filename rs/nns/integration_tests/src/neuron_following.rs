@@ -1,20 +1,38 @@
 use assert_matches::assert_matches;
-use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
+use ic_nns_common::{
+    pb::v1::NeuronId,
+    types::ProposalId,
+};
 use ic_nns_governance_api::pb::v1::{
     governance_error::ErrorType,
-    manage_neuron_response::{Command, FollowResponse},
-    Tally, Topic, Vote,
+    manage_neuron_response::{
+        Command,
+        FollowResponse,
+    },
+    Tally,
+    Topic,
+    Vote,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     neuron_helpers::{
-        get_neuron_1, get_neuron_2, get_neuron_3, get_nonexistent_neuron, get_unauthorized_neuron,
-        submit_proposal, TestNeuronOwner,
+        get_neuron_1,
+        get_neuron_2,
+        get_neuron_3,
+        get_nonexistent_neuron,
+        get_unauthorized_neuron,
+        submit_proposal,
+        TestNeuronOwner,
     },
     state_test_helpers::{
-        get_neuron_ids, nns_cast_vote, nns_governance_get_full_neuron,
-        nns_governance_get_proposal_info, nns_governance_get_proposal_info_as_anonymous,
-        nns_set_followees_for_neuron, nns_split_neuron, setup_nns_canisters,
+        get_neuron_ids,
+        nns_cast_vote,
+        nns_governance_get_full_neuron,
+        nns_governance_get_proposal_info,
+        nns_governance_get_proposal_info_as_anonymous,
+        nns_set_followees_for_neuron,
+        nns_split_neuron,
+        setup_nns_canisters,
         state_machine_builder_for_nns_tests,
     },
 };

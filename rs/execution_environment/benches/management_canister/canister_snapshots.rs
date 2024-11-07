@@ -1,13 +1,28 @@
 // To run the benchmarks:
 // bazel run //rs/execution_environment:management_canister_bench -- canister_snapshot
 use crate::utils::env;
-use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkGroup, Criterion};
+use criterion::{
+    criterion_group,
+    criterion_main,
+    BatchSize,
+    BenchmarkGroup,
+    Criterion,
+};
 use ic_management_canister_types::{
-    CanisterSettingsArgsBuilder, LoadCanisterSnapshotArgs, TakeCanisterSnapshotArgs,
+    CanisterSettingsArgsBuilder,
+    LoadCanisterSnapshotArgs,
+    TakeCanisterSnapshotArgs,
 };
 use ic_state_machine_tests::StateMachine;
-use ic_types::{CanisterId, Cycles, SnapshotId};
-use ic_universal_canister::{wasm, UNIVERSAL_CANISTER_WASM};
+use ic_types::{
+    CanisterId,
+    Cycles,
+    SnapshotId,
+};
+use ic_universal_canister::{
+    wasm,
+    UNIVERSAL_CANISTER_WASM,
+};
 
 const MIB: u64 = 1024 * 1024;
 const GIB: u64 = 1024 * MIB;

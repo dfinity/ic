@@ -1,16 +1,37 @@
-use candid::{CandidType, Principal};
+use candid::{
+    CandidType,
+    Principal,
+};
 use dfn_core::CanisterId;
-use ic_base_types::{CanisterIdError, PrincipalId, PrincipalIdError};
+use ic_base_types::{
+    CanisterIdError,
+    PrincipalId,
+    PrincipalIdError,
+};
 use ic_crypto_sha2::Sha224;
 use icrc_ledger_types::icrc1::account::Account;
-use serde::{de, de::Error, Deserialize, Serialize};
+use serde::{
+    de,
+    de::Error,
+    Deserialize,
+    Serialize,
+};
 use std::{
-    convert::{TryFrom, TryInto},
-    fmt::{Display, Formatter},
+    convert::{
+        TryFrom,
+        TryInto,
+    },
+    fmt::{
+        Display,
+        Formatter,
+    },
     str::FromStr,
 };
 
-use crate::{protobuf as proto, AccountIdBlob};
+use crate::{
+    protobuf as proto,
+    AccountIdBlob,
+};
 
 /// While this is backed by an array of length 28, it's canonical representation
 /// is a hex string of length 64. The first 8 characters are the CRC-32 encoded

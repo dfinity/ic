@@ -1,11 +1,23 @@
 use ic_btc_replica_types::BitcoinAdapterResponse;
-use ic_interfaces::batch_payload::{iterator_to_bytes, slice_to_messages, PastPayload};
-use ic_logger::{error, warn, ReplicaLogger};
+use ic_interfaces::batch_payload::{
+    iterator_to_bytes,
+    slice_to_messages,
+    PastPayload,
+};
+use ic_logger::{
+    error,
+    warn,
+    ReplicaLogger,
+};
 use ic_protobuf::{
-    bitcoin::v1::BitcoinAdapterResponse as PbBitcoinAdapterResponse, proxy::ProxyDecodeError,
+    bitcoin::v1::BitcoinAdapterResponse as PbBitcoinAdapterResponse,
+    proxy::ProxyDecodeError,
 };
 use ic_types::{
-    batch::{SelfValidatingPayload, MAX_BITCOIN_PAYLOAD_IN_BYTES},
+    batch::{
+        SelfValidatingPayload,
+        MAX_BITCOIN_PAYLOAD_IN_BYTES,
+    },
     NumBytes,
 };
 use prost::Message;

@@ -1,23 +1,54 @@
-use crate::{AccountIdentifier, Ledger};
-use ic_base_types::{CanisterId, PrincipalId};
+use crate::{
+    AccountIdentifier,
+    Ledger,
+};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_ledger_canister_core::{
     archive::Archive,
     ledger as core_ledger,
-    ledger::{LedgerContext, LedgerTransaction, TxApplyError},
+    ledger::{
+        LedgerContext,
+        LedgerTransaction,
+        TxApplyError,
+    },
 };
 use ic_ledger_core::{
     approvals::Allowance,
-    block::{BlockIndex, BlockType},
+    block::{
+        BlockIndex,
+        BlockType,
+    },
     timestamp::TimeStamp,
-    tokens::{CheckedAdd, CheckedSub, Tokens},
+    tokens::{
+        CheckedAdd,
+        CheckedSub,
+        Tokens,
+    },
 };
 use icp_ledger::{
-    apply_operation, ArchiveOptions, Block, LedgerBalances, Memo, Operation, PaymentError,
-    Transaction, TransferError, DEFAULT_TRANSFER_FEE,
+    apply_operation,
+    ArchiveOptions,
+    Block,
+    LedgerBalances,
+    Memo,
+    Operation,
+    PaymentError,
+    Transaction,
+    TransferError,
+    DEFAULT_TRANSFER_FEE,
 };
 use std::collections::HashSet;
-use std::sync::{Arc, RwLock};
-use std::time::{Duration, SystemTime};
+use std::sync::{
+    Arc,
+    RwLock,
+};
+use std::time::{
+    Duration,
+    SystemTime,
+};
 
 fn test_account_id(n: u64) -> AccountIdentifier {
     PrincipalId::new_user_test_id(n).into()

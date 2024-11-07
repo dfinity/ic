@@ -24,19 +24,38 @@ use anyhow::Result;
 use canister_test::Runtime;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
-use ic_system_test_driver::driver::pot_dsl::{PotSetupFn, SysTestFn};
-use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
+use ic_system_test_driver::driver::ic::{
+    InternetComputer,
+    Subnet,
+};
+use ic_system_test_driver::driver::pot_dsl::{
+    PotSetupFn,
+    SysTestFn,
+};
+use ic_system_test_driver::driver::prometheus_vm::{
+    HasPrometheus,
+    PrometheusVm,
+};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, SubnetSnapshot,
+    HasPublicApiUrl,
+    HasTopologySnapshot,
+    IcNodeContainer,
+    SubnetSnapshot,
 };
 use ic_system_test_driver::systest;
-use ic_system_test_driver::util::{block_on, runtime_from_url, MetricsFetcher};
+use ic_system_test_driver::util::{
+    block_on,
+    runtime_from_url,
+    MetricsFetcher,
+};
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 use slog::info;
 use std::time::Duration;
-use systest_message_routing_common::{install_canisters, start_all_canisters};
+use systest_message_routing_common::{
+    install_canisters,
+    start_all_canisters,
+};
 
 const PER_TASK_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 const OVERALL_TIMEOUT: Duration = Duration::from_secs(10 * 60);

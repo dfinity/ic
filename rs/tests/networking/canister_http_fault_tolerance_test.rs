@@ -24,23 +24,41 @@ use canister_test::Canister;
 use dfn_candid::candid_one;
 use ic_cdk::api::call::RejectionCode;
 use ic_management_canister_types::{
-    BoundedHttpHeaders, CanisterHttpRequestArgs, HttpMethod, TransformContext, TransformFunc,
+    BoundedHttpHeaders,
+    CanisterHttpRequestArgs,
+    HttpMethod,
+    TransformContext,
+    TransformFunc,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    load_wasm, HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, READY_WAIT_TIMEOUT,
+    load_wasm,
+    HasPublicApiUrl,
+    HasTopologySnapshot,
+    HasVm,
+    IcNodeContainer,
+    READY_WAIT_TIMEOUT,
     RETRY_BACKOFF,
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util;
-use ic_types::{CanisterId, PrincipalId};
+use ic_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_utils::interfaces::ManagementCanister;
-use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
+use proxy_canister::{
+    RemoteHttpRequest,
+    RemoteHttpResponse,
+};
 use slog::info;
 use std::env;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{
+    AtomicUsize,
+    Ordering,
+};
 use std::sync::Arc;
 
 fn main() -> Result<()> {

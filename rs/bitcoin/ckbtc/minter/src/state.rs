@@ -5,7 +5,11 @@
 //! code should use those functions instead of touching `__STATE` directly.
 use std::{
     cell::RefCell,
-    collections::{BTreeMap, BTreeSet, VecDeque},
+    collections::{
+        BTreeMap,
+        BTreeSet,
+        VecDeque,
+    },
 };
 
 pub mod audit;
@@ -14,13 +18,27 @@ pub mod eventlog;
 use crate::lifecycle::init::InitArgs;
 use crate::lifecycle::upgrade::UpgradeArgs;
 use crate::logs::P0;
-use crate::{address::BitcoinAddress, ECDSAPublicKey};
-use candid::{CandidType, Deserialize, Principal};
+use crate::{
+    address::BitcoinAddress,
+    ECDSAPublicKey,
+};
+use candid::{
+    CandidType,
+    Deserialize,
+    Principal,
+};
 use ic_base_types::CanisterId;
 pub use ic_btc_interface::Network;
-use ic_btc_interface::{OutPoint, Txid, Utxo};
+use ic_btc_interface::{
+    OutPoint,
+    Txid,
+    Utxo,
+};
 use ic_canister_log::log;
-use ic_utils_ensure::{ensure, ensure_eq};
+use ic_utils_ensure::{
+    ensure,
+    ensure_eq,
+};
 use icrc_ledger_types::icrc1::account::Account;
 use serde::Serialize;
 use std::collections::btree_map::Entry;

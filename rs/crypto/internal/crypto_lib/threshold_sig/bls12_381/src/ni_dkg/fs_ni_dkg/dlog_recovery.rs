@@ -1,6 +1,16 @@
-use crate::ni_dkg::fs_ni_dkg::forward_secure::{CHUNK_MAX, CHUNK_MIN, CHUNK_SIZE};
-use crate::ni_dkg::fs_ni_dkg::nizk_chunking::{CHALLENGE_BITS, NUM_ZK_REPETITIONS};
-use ic_crypto_internal_bls12_381_type::{Gt, Scalar};
+use crate::ni_dkg::fs_ni_dkg::forward_secure::{
+    CHUNK_MAX,
+    CHUNK_MIN,
+    CHUNK_SIZE,
+};
+use crate::ni_dkg::fs_ni_dkg::nizk_chunking::{
+    CHALLENGE_BITS,
+    NUM_ZK_REPETITIONS,
+};
+use ic_crypto_internal_bls12_381_type::{
+    Gt,
+    Scalar,
+};
 
 pub struct HonestDealerDlogLookupTable {
     table: Vec<u32>,
@@ -29,7 +39,10 @@ impl HonestDealerDlogLookupTable {
 
     /// Solve several discrete logarithms
     pub fn solve_several(&self, targets: &[Gt]) -> Vec<Option<Scalar>> {
-        use subtle::{ConditionallySelectable, ConstantTimeEq};
+        use subtle::{
+            ConditionallySelectable,
+            ConstantTimeEq,
+        };
 
         let target_hashes = targets
             .iter()

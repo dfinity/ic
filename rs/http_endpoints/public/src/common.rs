@@ -1,38 +1,84 @@
 use crate::HttpError;
-use axum::{body::Body, extract::FromRequest, response::IntoResponse};
+use axum::{
+    body::Body,
+    extract::FromRequest,
+    response::IntoResponse,
+};
 use bytes::Bytes;
 use http::{
-    header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE},
-    HeaderMap, HeaderValue, Method,
+    header::{
+        ACCEPT,
+        AUTHORIZATION,
+        CONTENT_TYPE,
+    },
+    HeaderMap,
+    HeaderValue,
+    Method,
 };
 use http_body_util::BodyExt;
-use hyper::{header, Response, StatusCode};
+use hyper::{
+    header,
+    Response,
+    StatusCode,
+};
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
-use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path, TooLongPathError};
+use ic_crypto_tree_hash::{
+    sparse_labeled_tree_from_paths,
+    Label,
+    Path,
+    TooLongPathError,
+};
 use ic_error_types::UserError;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{info, warn, ReplicaLogger};
+use ic_logger::{
+    info,
+    warn,
+    ReplicaLogger,
+};
 use ic_registry_client_helpers::crypto::{
-    root_of_trust::RegistryRootOfTrustProvider, CryptoRegistry,
+    root_of_trust::RegistryRootOfTrustProvider,
+    CryptoRegistry,
 };
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     crypto::threshold_sig::ThresholdSigPublicKey,
     malicious_flags::MaliciousFlags,
-    messages::{HttpRequest, HttpRequestContent, MessageId},
-    RegistryVersion, SubnetId, Time,
+    messages::{
+        HttpRequest,
+        HttpRequestContent,
+        MessageId,
+    },
+    RegistryVersion,
+    SubnetId,
+    Time,
 };
 use ic_validator::{
-    CanisterIdSet, HttpRequestVerifier, HttpRequestVerifierImpl, RequestValidationError,
+    CanisterIdSet,
+    HttpRequestVerifier,
+    HttpRequestVerifierImpl,
+    RequestValidationError,
 };
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use serde_cbor::value::Value as CBOR;
 use std::sync::Arc;
-use std::{collections::BTreeMap, time::Duration};
+use std::{
+    collections::BTreeMap,
+    time::Duration,
+};
 use tokio::time::timeout;
-use tower::{load_shed::error::Overloaded, timeout::error::Elapsed, BoxError};
-use tower_http::cors::{CorsLayer, Vary};
+use tower::{
+    load_shed::error::Overloaded,
+    timeout::error::Elapsed,
+    BoxError,
+};
+use tower_http::cors::{
+    CorsLayer,
+    Vary,
+};
 
 pub const CONTENT_TYPE_CBOR: &str = "application/cbor";
 pub const CONTENT_TYPE_PROTOBUF: &str = "application/x-protobuf";
@@ -309,7 +355,10 @@ pub(crate) mod test {
 
     use super::*;
     use hyper::header;
-    use ic_types::messages::{Blob, CertificateDelegation};
+    use ic_types::messages::{
+        Blob,
+        CertificateDelegation,
+    };
     use maplit::btreemap;
     use pretty_assertions::assert_eq;
     use serde::Serialize;

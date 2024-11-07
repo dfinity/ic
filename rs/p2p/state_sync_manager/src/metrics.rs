@@ -1,7 +1,14 @@
 use ic_metrics::{
-    buckets::decimal_buckets, tokio_metrics_collector::TokioTaskMetricsCollector, MetricsRegistry,
+    buckets::decimal_buckets,
+    tokio_metrics_collector::TokioTaskMetricsCollector,
+    MetricsRegistry,
 };
-use prometheus::{Histogram, IntCounter, IntCounterVec, IntGauge};
+use prometheus::{
+    Histogram,
+    IntCounter,
+    IntCounterVec,
+    IntGauge,
+};
 use tokio_metrics::TaskMonitor;
 
 use crate::ongoing::DownloadChunkError;

@@ -1,17 +1,29 @@
 /* tag::catalog[]
 end::catalog[] */
 
-use candid::{Encode, Principal};
+use candid::{
+    Encode,
+    Principal,
+};
 use ic_agent::{
-    agent::{RejectCode, RejectResponse},
+    agent::{
+        RejectCode,
+        RejectResponse,
+    },
     AgentError,
 };
 use ic_base_types::RegistryVersion;
 use ic_management_canister_types::SetupInitialDKGArgs;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_system_test_driver::driver::test_env::TestEnv;
-use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
-use ic_system_test_driver::{util::CYCLES_LIMIT_PER_CANISTER, util::*};
+use ic_system_test_driver::driver::test_env_api::{
+    GetFirstHealthyNodeSnapshot,
+    HasPublicApiUrl,
+};
+use ic_system_test_driver::{
+    util::CYCLES_LIMIT_PER_CANISTER,
+    util::*,
+};
 use ic_types::Cycles;
 use ic_types_test_utils::ids::node_test_id;
 use lazy_static::lazy_static;

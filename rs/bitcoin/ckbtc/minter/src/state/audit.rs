@@ -1,14 +1,25 @@
 //! State modifications that should end up in the event log.
 
 use super::{
-    eventlog::Event, CkBtcMinterState, FinalizedBtcRetrieval, FinalizedStatus, RetrieveBtcRequest,
-    SubmittedBtcTransaction, UtxoCheckStatus,
+    eventlog::Event,
+    CkBtcMinterState,
+    FinalizedBtcRetrieval,
+    FinalizedStatus,
+    RetrieveBtcRequest,
+    SubmittedBtcTransaction,
+    UtxoCheckStatus,
 };
-use crate::state::{ReimburseDepositTask, ReimbursedDeposit};
+use crate::state::{
+    ReimburseDepositTask,
+    ReimbursedDeposit,
+};
 use crate::storage::record_event;
 use crate::ReimbursementReason;
 use candid::Principal;
-use ic_btc_interface::{Txid, Utxo};
+use ic_btc_interface::{
+    Txid,
+    Utxo,
+};
 use icrc_ledger_types::icrc1::account::Account;
 
 pub fn accept_retrieve_btc_request(state: &mut CkBtcMinterState, request: RetrieveBtcRequest) {

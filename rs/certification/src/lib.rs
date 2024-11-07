@@ -2,20 +2,38 @@ use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::fmt;
 
-use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
-use ic_crypto_utils_threshold_sig::{verify_combined, verify_combined_with_cache};
+use ic_crypto_tree_hash::{
+    LabeledTree,
+    MixedHashTree,
+};
+use ic_crypto_utils_threshold_sig::{
+    verify_combined,
+    verify_combined_with_cache,
+};
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use ic_types::{
     consensus::certification::CertificationContent,
     crypto::{
-        threshold_sig::ThresholdSigPublicKey, CombinedThresholdSig, CombinedThresholdSigOf,
+        threshold_sig::ThresholdSigPublicKey,
+        CombinedThresholdSig,
+        CombinedThresholdSigOf,
         CryptoHash,
     },
-    messages::{Blob, Certificate},
-    CanisterId, CryptoHashOfPartialState, PrincipalId, SubnetId, Time,
+    messages::{
+        Blob,
+        Certificate,
+    },
+    CanisterId,
+    CryptoHashOfPartialState,
+    PrincipalId,
+    SubnetId,
+    Time,
 };
 use serde::Deserialize;
-use tree_deserializer::{types::Leb128EncodedU64, LabeledTreeDeserializer};
+use tree_deserializer::{
+    types::Leb128EncodedU64,
+    LabeledTreeDeserializer,
+};
 
 #[cfg(test)]
 mod tests;

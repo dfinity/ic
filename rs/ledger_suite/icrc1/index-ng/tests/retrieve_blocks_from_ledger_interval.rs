@@ -1,22 +1,51 @@
 use crate::common::{
-    default_archive_options, index_ng_wasm, install_index_ng, install_ledger,
-    wait_until_sync_is_completed, MAX_ATTEMPTS_FOR_INDEX_SYNC_WAIT, STARTING_CYCLES_PER_CANISTER,
+    default_archive_options,
+    index_ng_wasm,
+    install_index_ng,
+    install_ledger,
+    wait_until_sync_is_completed,
+    MAX_ATTEMPTS_FOR_INDEX_SYNC_WAIT,
+    STARTING_CYCLES_PER_CANISTER,
 };
-use candid::{CandidType, Deserialize, Encode, Nat, Principal};
+use candid::{
+    CandidType,
+    Deserialize,
+    Encode,
+    Nat,
+    Principal,
+};
 use ic_agent::Identity;
 use ic_base_types::CanisterId;
-use ic_icrc1_index_ng::{IndexArg, InitArg, UpgradeArg};
-use ic_icrc1_test_utils::{arb_account, minter_identity};
+use ic_icrc1_index_ng::{
+    IndexArg,
+    InitArg,
+    UpgradeArg,
+};
+use ic_icrc1_test_utils::{
+    arb_account,
+    minter_identity,
+};
 use ic_ledger_suite_state_machine_tests::send_transfer;
 use ic_registry_subnet_type::SubnetType;
-use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineBuilder, UserError};
-use ic_types::{Cycles, Time};
+use ic_state_machine_tests::{
+    ErrorCode,
+    StateMachine,
+    StateMachineBuilder,
+    UserError,
+};
+use ic_types::{
+    Cycles,
+    Time,
+};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
 use num_traits::ToPrimitive;
 use proptest::prelude::Strategy;
 use proptest::test_runner::TestRunner;
-use std::time::{Duration, SystemTime};
+use std::time::{
+    Duration,
+    SystemTime,
+};
 
 mod common;
 

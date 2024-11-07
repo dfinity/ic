@@ -1,17 +1,50 @@
-use crate::common::{index_ng_wasm, ledger_wasm, load_wasm_using_env_var};
-use candid::{Encode, Principal};
-use ic_base_types::{CanisterId, PrincipalId};
-use ic_icrc1_index_ng::{IndexArg, InitArg as IndexInitArg, UpgradeArg as IndexUpgradeArg};
-use ic_icrc1_ledger::{FeatureFlags, InitArgsBuilder, LedgerArgument};
+use crate::common::{
+    index_ng_wasm,
+    ledger_wasm,
+    load_wasm_using_env_var,
+};
+use candid::{
+    Encode,
+    Principal,
+};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
+use ic_icrc1_index_ng::{
+    IndexArg,
+    InitArg as IndexInitArg,
+    UpgradeArg as IndexUpgradeArg,
+};
+use ic_icrc1_ledger::{
+    FeatureFlags,
+    InitArgsBuilder,
+    LedgerArgument,
+};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_suite_state_machine_tests::{
-    BLOB_META_KEY, BLOB_META_VALUE, FEE, INT_META_KEY, INT_META_VALUE, NAT_META_KEY,
-    NAT_META_VALUE, TEXT_META_KEY, TEXT_META_VALUE, TOKEN_NAME, TOKEN_SYMBOL,
+    BLOB_META_KEY,
+    BLOB_META_VALUE,
+    FEE,
+    INT_META_KEY,
+    INT_META_VALUE,
+    NAT_META_KEY,
+    NAT_META_VALUE,
+    TEXT_META_KEY,
+    TEXT_META_VALUE,
+    TOKEN_NAME,
+    TOKEN_SYMBOL,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
+use ic_state_machine_tests::{
+    StateMachine,
+    StateMachineBuilder,
+};
 use icrc_ledger_types::icrc1::account::Account;
-use std::time::{Duration, SystemTime};
+use std::time::{
+    Duration,
+    SystemTime,
+};
 
 mod common;
 

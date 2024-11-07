@@ -1,16 +1,33 @@
 use super::CanisterInput;
-use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_protobuf::proxy::{
+    try_from_option_field,
+    ProxyDecodeError,
+};
 use ic_protobuf::state::queues::v1 as pb_queues;
 use ic_types::messages::{
-    CallbackId, Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE,
+    CallbackId,
+    Request,
+    RequestOrResponse,
+    Response,
+    MAX_RESPONSE_COUNT_BYTES,
+    NO_DEADLINE,
 };
 use ic_types::time::CoarseTime;
-use ic_types::{CountBytes, Time};
+use ic_types::{
+    CountBytes,
+    Time,
+};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
 use std::marker::PhantomData;
-use std::ops::{AddAssign, SubAssign};
+use std::ops::{
+    AddAssign,
+    SubAssign,
+};
 use std::sync::Arc;
 use std::time::Duration;
 

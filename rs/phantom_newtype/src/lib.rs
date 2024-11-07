@@ -5,5 +5,8 @@ mod id;
 
 pub use amountof::AmountOf;
 pub use bitmask::BitMask;
-pub use displayer::{DisplayProxy, DisplayerOf};
+pub use displayer::{
+    DisplayProxy,
+    DisplayerOf,
+};
 pub use id::Id;

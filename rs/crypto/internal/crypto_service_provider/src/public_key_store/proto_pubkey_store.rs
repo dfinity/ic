@@ -1,15 +1,33 @@
 use crate::public_key_store::{
-    PublicKeyAddError, PublicKeyRetainError, PublicKeySetOnceError, PublicKeyStore,
+    PublicKeyAddError,
+    PublicKeyRetainError,
+    PublicKeySetOnceError,
+    PublicKeyStore,
 };
-use crate::public_key_store::{PublicKeyGenerationTimestamps, PublicKeyRetainCheckError};
-use ic_logger::{debug, ReplicaLogger};
+use crate::public_key_store::{
+    PublicKeyGenerationTimestamps,
+    PublicKeyRetainCheckError,
+};
+use ic_logger::{
+    debug,
+    ReplicaLogger,
+};
 use ic_protobuf::crypto::v1::NodePublicKeys;
-use ic_protobuf::registry::crypto::v1::{PublicKey as PublicKeyProto, X509PublicKeyCert};
+use ic_protobuf::registry::crypto::v1::{
+    PublicKey as PublicKeyProto,
+    X509PublicKeyCert,
+};
 use ic_types::Time;
 use prost::Message;
 use std::io::ErrorKind;
-use std::path::{Path, PathBuf};
-use std::{fs, io};
+use std::path::{
+    Path,
+    PathBuf,
+};
+use std::{
+    fs,
+    io,
+};
 
 #[cfg(test)]
 mod tests;

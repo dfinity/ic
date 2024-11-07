@@ -1,6 +1,12 @@
-use num_bigint_dig::{BigUint, ModInverse};
+use num_bigint_dig::{
+    BigUint,
+    ModInverse,
+};
 use num_traits::{
-    identities::{One, Zero},
+    identities::{
+        One,
+        Zero,
+    },
     ToPrimitive,
 };
 use quote::quote;

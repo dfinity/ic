@@ -22,7 +22,11 @@
 //     Interact with it using NeuronId(5453944968753393786).
 
 use anyhow::Result;
-use ic_mainnet_nns_recovery::{setup, OVERALL_TIMEOUT, PER_TEST_TIMEOUT};
+use ic_mainnet_nns_recovery::{
+    setup,
+    OVERALL_TIMEOUT,
+    PER_TEST_TIMEOUT,
+};
 use ic_system_test_driver::driver::group::SystemTestGroup;
 
 fn main() -> Result<()> {

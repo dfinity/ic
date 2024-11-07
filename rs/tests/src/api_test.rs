@@ -7,7 +7,10 @@
 
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
-    ic::{InternetComputer, Subnet},
+    ic::{
+        InternetComputer,
+        Subnet,
+    },
     test_env::TestEnv,
     test_env_api::*,
 };

@@ -1,7 +1,9 @@
 use crate::key_id::KeyId;
 use crate::secret_key_store::proto_store::ProtoSecretKeyStore;
 use crate::secret_key_store::{
-    SecretKeyStore, SecretKeyStoreInsertionError, SecretKeyStoreWriteError,
+    SecretKeyStore,
+    SecretKeyStoreInsertionError,
+    SecretKeyStoreWriteError,
 };
 use crate::types::CspSecretKey;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;

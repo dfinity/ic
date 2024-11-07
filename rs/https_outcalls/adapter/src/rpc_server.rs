@@ -1,31 +1,62 @@
 use crate::metrics::{
-    AdapterMetrics, LABEL_BODY_RECEIVE_SIZE, LABEL_CONNECT, LABEL_DOWNLOAD,
-    LABEL_HEADER_RECEIVE_SIZE, LABEL_HTTP_METHOD, LABEL_REQUEST_HEADERS, LABEL_RESPONSE_HEADERS,
-    LABEL_UPLOAD, LABEL_URL_PARSE,
+    AdapterMetrics,
+    LABEL_BODY_RECEIVE_SIZE,
+    LABEL_CONNECT,
+    LABEL_DOWNLOAD,
+    LABEL_HEADER_RECEIVE_SIZE,
+    LABEL_HTTP_METHOD,
+    LABEL_REQUEST_HEADERS,
+    LABEL_RESPONSE_HEADERS,
+    LABEL_UPLOAD,
+    LABEL_URL_PARSE,
 };
 use crate::Config;
 use core::convert::TryFrom;
-use http::{header::USER_AGENT, HeaderName, HeaderValue, Uri};
-use http_body_util::{BodyExt, Full};
+use http::{
+    header::USER_AGENT,
+    HeaderName,
+    HeaderValue,
+    Uri,
+};
+use http_body_util::{
+    BodyExt,
+    Full,
+};
 use hyper::{
     body::Bytes,
-    header::{HeaderMap, ToStrError},
+    header::{
+        HeaderMap,
+        ToStrError,
+    },
     Method,
 };
 use hyper_rustls::HttpsConnector;
 use hyper_rustls::HttpsConnectorBuilder;
 use hyper_socks2::SocksConnector;
-use hyper_util::client::legacy::{connect::HttpConnector, Client};
+use hyper_util::client::legacy::{
+    connect::HttpConnector,
+    Client,
+};
 use hyper_util::rt::TokioExecutor;
 use ic_https_outcalls_service::{
-    https_outcalls_service_server::HttpsOutcallsService, HttpHeader, HttpMethod,
-    HttpsOutcallRequest, HttpsOutcallResponse,
+    https_outcalls_service_server::HttpsOutcallsService,
+    HttpHeader,
+    HttpMethod,
+    HttpsOutcallRequest,
+    HttpsOutcallResponse,
 };
-use ic_logger::{debug, ReplicaLogger};
+use ic_logger::{
+    debug,
+    ReplicaLogger,
+};
 use ic_metrics::MetricsRegistry;
 use std::str::FromStr;
 use std::time::Duration;
-use tonic::{Request, Response, Status};
+use tonic::{
+    Request,
+    Response,
+    Status,
+};
 
 /// Hyper only supports a maximum of 32768 headers https://docs.rs/hyper/1.5.0/hyper/header/index.html
 /// and it panics if we try to allocate more headers. And since hyper sometimes grows the map by doubling the entries
@@ -369,7 +400,10 @@ fn add_fallback_user_agent_header(header_map: &mut HeaderMap) {
 mod tests {
     use super::*;
     use rand::distributions::Alphanumeric;
-    use rand::{thread_rng, Rng};
+    use rand::{
+        thread_rng,
+        Rng,
+    };
 
     #[test]
     // Verify that hyper does not panic within header limits.

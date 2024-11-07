@@ -1,9 +1,17 @@
 use ic_base_types::PrincipalId;
 use ic_sns_swap::pb::v1::{
-    GetDerivedStateRequest, GetDerivedStateResponse, GetInitRequest, GetInitResponse,
-    ListSnsNeuronRecipesRequest, ListSnsNeuronRecipesResponse, SnsNeuronRecipe,
+    GetDerivedStateRequest,
+    GetDerivedStateResponse,
+    GetInitRequest,
+    GetInitResponse,
+    ListSnsNeuronRecipesRequest,
+    ListSnsNeuronRecipesResponse,
+    SnsNeuronRecipe,
 };
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use thiserror::Error;
 
 use crate::CallCanisters;

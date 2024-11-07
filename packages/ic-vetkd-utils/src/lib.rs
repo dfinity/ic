@@ -9,14 +9,25 @@
 #![allow(clippy::mem_forget)]
 
 use ic_bls12_381::{
-    hash_to_curve::{ExpandMsgXmd, HashToCurve},
-    G1Affine, G1Projective, G2Affine, G2Prepared, Gt, Scalar,
+    hash_to_curve::{
+        ExpandMsgXmd,
+        HashToCurve,
+    },
+    G1Affine,
+    G1Projective,
+    G2Affine,
+    G2Prepared,
+    Gt,
+    Scalar,
 };
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 use std::array::TryFromSliceError;
 use std::ops::Neg;
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::{
+    Zeroize,
+    ZeroizeOnDrop,
+};
 
 mod ro;
 

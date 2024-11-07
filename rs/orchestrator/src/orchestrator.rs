@@ -2,7 +2,10 @@ use crate::{
     args::OrchestratorArgs,
     boundary_node::BoundaryNodeManager,
     catch_up_package_provider::CatchUpPackageProvider,
-    dashboard::{Dashboard, OrchestratorDashboard},
+    dashboard::{
+        Dashboard,
+        OrchestratorDashboard,
+    },
     firewall::Firewall,
     hostos_upgrade::HostosUpgrader,
     ipv4_network::Ipv4Configurator,
@@ -15,27 +18,54 @@ use crate::{
 };
 use backoff::ExponentialBackoffBuilder;
 use get_if_addrs::get_if_addrs;
-use ic_config::metrics::{Config as MetricsConfig, Exporter};
+use ic_config::metrics::{
+    Config as MetricsConfig,
+    Exporter,
+};
 use ic_crypto::CryptoComponent;
-use ic_crypto_node_key_generation::{generate_node_keys_once, NodeKeyGenerationError};
+use ic_crypto_node_key_generation::{
+    generate_node_keys_once,
+    NodeKeyGenerationError,
+};
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_image_upgrader::ImageUpgrader;
-use ic_logger::{error, info, new_replica_logger_from_config, warn, ReplicaLogger};
+use ic_logger::{
+    error,
+    info,
+    new_replica_logger_from_config,
+    warn,
+    ReplicaLogger,
+};
 use ic_metrics::MetricsRegistry;
 use ic_registry_replicator::RegistryReplicator;
 use ic_sys::utility_command::UtilityCommand;
-use ic_types::{hostos_version::HostosVersion, ReplicaVersion, SubnetId};
+use ic_types::{
+    hostos_version::HostosVersion,
+    ReplicaVersion,
+    SubnetId,
+};
 use slog_async::AsyncGuard;
 use std::{
     convert::TryFrom,
     net::SocketAddr,
-    path::{Path, PathBuf},
-    sync::{Arc, Mutex, RwLock},
+    path::{
+        Path,
+        PathBuf,
+    },
+    sync::{
+        Arc,
+        Mutex,
+        RwLock,
+    },
     thread,
     time::Duration,
 };
 use tokio::{
-    sync::watch::{self, Receiver, Sender},
+    sync::watch::{
+        self,
+        Receiver,
+        Sender,
+    },
     task::JoinHandle,
 };
 

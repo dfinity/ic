@@ -1,23 +1,44 @@
 //! Threshold Schnorr transcripts and references related definitions.
 use crate::crypto::canister_threshold_sig::{
-    ExtendedDerivationPath, SchnorrPreSignatureTranscript, ThresholdSchnorrSigInputs,
+    ExtendedDerivationPath,
+    SchnorrPreSignatureTranscript,
+    ThresholdSchnorrSigInputs,
 };
-use crate::{Height, Randomness};
+use crate::{
+    Height,
+    Randomness,
+};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types::SchnorrKeyId;
-use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_protobuf::proxy::{
+    try_from_option_field,
+    ProxyDecodeError,
+};
 use ic_protobuf::types::v1 as pb;
-use serde::{Deserialize, Serialize};
-use std::convert::{AsMut, AsRef, TryFrom, TryInto};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use std::convert::{
+    AsMut,
+    AsRef,
+    TryFrom,
+    TryInto,
+};
 use std::fmt;
 use std::hash::Hash;
 use std::sync::Arc;
 
 use super::{
-    IDkgBlockReader, IDkgTranscriptParamsRef, RandomUnmaskedTranscriptParams,
-    ThresholdSchnorrPresignatureTranscriptCreationError, ThresholdSchnorrSigInputsCreationError,
-    TranscriptLookupError, TranscriptRef, UnmaskedTranscript,
+    IDkgBlockReader,
+    IDkgTranscriptParamsRef,
+    RandomUnmaskedTranscriptParams,
+    ThresholdSchnorrPresignatureTranscriptCreationError,
+    ThresholdSchnorrSigInputsCreationError,
+    TranscriptLookupError,
+    TranscriptRef,
+    UnmaskedTranscript,
 };
 
 /// Schnorr pre-signature in creation.

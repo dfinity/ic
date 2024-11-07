@@ -67,18 +67,34 @@
 //!
 //! We have chosen to exclude the data.
 
-use crate::metrics::{QueryStatsAggregatorMetrics, CRITICAL_ERROR_AGGREGATION_FAILURE};
-use ic_logger::{error, info, ReplicaLogger};
+use crate::metrics::{
+    QueryStatsAggregatorMetrics,
+    CRITICAL_ERROR_AGGREGATION_FAILURE,
+};
+use ic_logger::{
+    error,
+    info,
+    ReplicaLogger,
+};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    batch::{QueryStats, QueryStatsPayload, RawQueryStats},
+    batch::{
+        QueryStats,
+        QueryStatsPayload,
+        RawQueryStats,
+    },
     consensus::get_faults_tolerated,
-    CanisterId, NodeId, QueryStatsEpoch,
+    CanisterId,
+    NodeId,
+    QueryStatsEpoch,
 };
 use std::{
     cmp::Ordering,
     collections::BTreeMap,
-    ops::{Add, Div},
+    ops::{
+        Add,
+        Div,
+    },
 };
 
 fn get_median<T: Default + Ord + Copy + Add<Output = T> + Div<Output = T> + From<u8>, F>(
@@ -453,12 +469,22 @@ pub(crate) fn get_stats_for_node_id_and_epoch<'a>(
 mod tests {
     use super::*;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_test_utilities_state::{CanisterStateBuilder, ReplicatedStateBuilder};
-    use ic_types::{
-        batch::{CanisterQueryStats, TotalQueryStats},
-        NodeId, QueryStatsEpoch,
+    use ic_test_utilities_state::{
+        CanisterStateBuilder,
+        ReplicatedStateBuilder,
     };
-    use ic_types_test_utils::ids::{canister_test_id, node_test_id};
+    use ic_types::{
+        batch::{
+            CanisterQueryStats,
+            TotalQueryStats,
+        },
+        NodeId,
+        QueryStatsEpoch,
+    };
+    use ic_types_test_utils::ids::{
+        canister_test_id,
+        node_test_id,
+    };
 
     #[test]
     fn full_aggregation_test() {

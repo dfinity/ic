@@ -1,12 +1,17 @@
 //! Contains mocks for traits internal to consensus
 use ic_artifact_pool::{
-    canister_http_pool::CanisterHttpPoolImpl, dkg_pool::DkgPoolImpl, idkg_pool::IDkgPoolImpl,
+    canister_http_pool::CanisterHttpPoolImpl,
+    dkg_pool::DkgPoolImpl,
+    idkg_pool::IDkgPoolImpl,
 };
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus_utils::membership::Membership;
 use ic_interfaces::{
     batch_payload::ProposalContext,
-    consensus::{PayloadBuilder, PayloadValidationError},
+    consensus::{
+        PayloadBuilder,
+        PayloadValidationError,
+    },
     validation::ValidationResult,
 };
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
@@ -14,20 +19,41 @@ use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::ROOT_SUBNET_ID_KEY;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
-use ic_test_utilities::{crypto::CryptoReturningOk, state_manager::RefMockStateManager};
+use ic_test_utilities::{
+    crypto::CryptoReturningOk,
+    state_manager::RefMockStateManager,
+};
 use ic_test_utilities_consensus::IDkgStatsNoOp;
-use ic_test_utilities_registry::{setup_registry_non_final, SubnetRecordBuilder};
+use ic_test_utilities_registry::{
+    setup_registry_non_final,
+    SubnetRecordBuilder,
+};
 use ic_test_utilities_time::FastForwardTimeSource;
-use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+use ic_test_utilities_types::ids::{
+    node_test_id,
+    subnet_test_id,
+};
 use ic_types::{
-    batch::{BatchPayload, ValidationContext},
-    consensus::{block_maker::SubnetRecords, Payload},
+    batch::{
+        BatchPayload,
+        ValidationContext,
+    },
+    consensus::{
+        block_maker::SubnetRecords,
+        Payload,
+    },
     replica_config::ReplicaConfig,
-    Height, RegistryVersion, SubnetId, Time,
+    Height,
+    RegistryVersion,
+    SubnetId,
+    Time,
 };
 use mockall::predicate::*;
 use mockall::*;
-use std::sync::{Arc, RwLock};
+use std::sync::{
+    Arc,
+    RwLock,
+};
 
 mock! {
     pub PayloadBuilder {}

@@ -1,15 +1,28 @@
-use super::{invalid_proposal_error, topic_to_manage_canister};
+use super::{
+    invalid_proposal_error,
+    topic_to_manage_canister,
+};
 use crate::{
-    pb::v1::{stop_or_start_canister::CanisterAction, GovernanceError, StopOrStartCanister, Topic},
+    pb::v1::{
+        stop_or_start_canister::CanisterAction,
+        GovernanceError,
+        StopOrStartCanister,
+        Topic,
+    },
     proposals::call_canister::CallCanister,
 };
 
 use candid::Encode;
 use ic_base_types::CanisterId;
 use ic_nervous_system_root::change_canister::{
-    CanisterAction as RootCanisterAction, StopOrStartCanisterRequest,
+    CanisterAction as RootCanisterAction,
+    StopOrStartCanisterRequest,
 };
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID, ROOT_CANISTER_ID};
+use ic_nns_constants::{
+    GOVERNANCE_CANISTER_ID,
+    LIFELINE_CANISTER_ID,
+    ROOT_CANISTER_ID,
+};
 
 const CANISTERS_NOT_ALLOWED_TO_STOP: [&CanisterId; 3] = [
     &ROOT_CANISTER_ID,

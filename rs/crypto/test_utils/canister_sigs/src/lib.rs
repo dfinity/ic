@@ -3,13 +3,27 @@
 use ic_certification_test_utils::serialize_to_cbor;
 use ic_crypto_internal_basic_sig_iccsa::types::Signature;
 use ic_crypto_internal_basic_sig_iccsa_test_utils::new_random_cert;
-use ic_crypto_temp_crypto::{TempCryptoComponent, TempCryptoComponentGeneric};
+use ic_crypto_temp_crypto::{
+    TempCryptoComponent,
+    TempCryptoComponentGeneric,
+};
 use ic_crypto_test_utils::canister_signatures::canister_sig_pub_key_to_bytes;
 use ic_types::crypto::threshold_sig::IcRootOfTrust;
-use ic_types::crypto::{AlgorithmId, CanisterSig, CanisterSigOf, SignableMock, UserPublicKey};
+use ic_types::crypto::{
+    AlgorithmId,
+    CanisterSig,
+    CanisterSigOf,
+    SignableMock,
+    UserPublicKey,
+};
 use ic_types::messages::Blob;
 use ic_types::CanisterId;
-use rand::{CryptoRng, Rng, RngCore, SeedableRng};
+use rand::{
+    CryptoRng,
+    Rng,
+    RngCore,
+    SeedableRng,
+};
 use rand_chacha::ChaCha20Rng;
 
 const GLOBAL_CANISTER_ID: CanisterId = canister_id(1);

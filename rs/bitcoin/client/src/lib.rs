@@ -1,26 +1,55 @@
 mod metrics;
 
 use crate::metrics::{
-    Metrics, LABEL_GET_SUCCESSORS, LABEL_REQUEST_TYPE, LABEL_SEND_TRANSACTION, LABEL_STATUS,
-    OK_LABEL, REQUESTS_LABEL_NAMES, UNKNOWN_LABEL,
+    Metrics,
+    LABEL_GET_SUCCESSORS,
+    LABEL_REQUEST_TYPE,
+    LABEL_SEND_TRANSACTION,
+    LABEL_STATUS,
+    OK_LABEL,
+    REQUESTS_LABEL_NAMES,
+    UNKNOWN_LABEL,
 };
 use ic_adapter_metrics_client::AdapterMetrics;
 use ic_async_utils::ExecuteOnTokioRuntime;
 use ic_btc_replica_types::{
-    BitcoinAdapterRequestWrapper, BitcoinAdapterResponseWrapper, GetSuccessorsRequestInitial,
-    GetSuccessorsResponseComplete, SendTransactionRequest, SendTransactionResponse,
+    BitcoinAdapterRequestWrapper,
+    BitcoinAdapterResponseWrapper,
+    GetSuccessorsRequestInitial,
+    GetSuccessorsResponseComplete,
+    SendTransactionRequest,
+    SendTransactionResponse,
 };
 use ic_btc_service::{
-    btc_service_client::BtcServiceClient, BtcServiceGetSuccessorsRequest,
+    btc_service_client::BtcServiceClient,
+    BtcServiceGetSuccessorsRequest,
     BtcServiceSendTransactionRequest,
 };
 use ic_config::adapters::AdaptersConfig;
-use ic_interfaces_adapter_client::{Options, RpcAdapterClient, RpcError, RpcResult};
-use ic_logger::{error, ReplicaLogger};
-use ic_metrics::{histogram_vec_timer::HistogramVecTimer, MetricsRegistry};
-use std::{convert::TryFrom, path::PathBuf};
+use ic_interfaces_adapter_client::{
+    Options,
+    RpcAdapterClient,
+    RpcError,
+    RpcResult,
+};
+use ic_logger::{
+    error,
+    ReplicaLogger,
+};
+use ic_metrics::{
+    histogram_vec_timer::HistogramVecTimer,
+    MetricsRegistry,
+};
+use std::{
+    convert::TryFrom,
+    path::PathBuf,
+};
 use tokio::net::UnixStream;
-use tonic::transport::{Channel, Endpoint, Uri};
+use tonic::transport::{
+    Channel,
+    Endpoint,
+    Uri,
+};
 use tower::service_fn;
 use tracing::instrument;
 

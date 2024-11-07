@@ -1,38 +1,101 @@
 use candid::Principal;
-use candid::{Decode, Encode, Nat};
+use candid::{
+    Decode,
+    Encode,
+    Nat,
+};
 use dfn_candid::CandidOne;
 use dfn_protobuf::ProtoBuf;
 use ic_agent::identity::Identity;
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_icrc1_test_utils::minter_identity;
 use ic_ledger_core::block::BlockIndex;
-use ic_ledger_core::{block::BlockType, Tokens};
-use ic_ledger_suite_state_machine_tests::{
-    balance_of, default_approve_args, default_transfer_from_args, expect_icrc2_disabled,
-    get_allowance, send_approval, send_transfer_from, setup, supported_standards, total_supply,
-    transfer, FEE, MINTER,
+use ic_ledger_core::{
+    block::BlockType,
+    Tokens,
 };
-use ic_state_machine_tests::{ErrorCode, StateMachine, UserError};
+use ic_ledger_suite_state_machine_tests::{
+    balance_of,
+    default_approve_args,
+    default_transfer_from_args,
+    expect_icrc2_disabled,
+    get_allowance,
+    send_approval,
+    send_transfer_from,
+    setup,
+    supported_standards,
+    total_supply,
+    transfer,
+    FEE,
+    MINTER,
+};
+use ic_state_machine_tests::{
+    ErrorCode,
+    StateMachine,
+    UserError,
+};
 use icp_ledger::{
-    AccountIdBlob, AccountIdentifier, ArchiveOptions, ArchivedBlocksRange, Block, CandidBlock,
-    CandidOperation, CandidTransaction, FeatureFlags, GetBlocksArgs, GetBlocksRes, GetBlocksResult,
-    GetEncodedBlocksResult, IcpAllowanceArgs, InitArgs, IterBlocksArgs, IterBlocksRes,
-    LedgerCanisterInitPayload, LedgerCanisterPayload, LedgerCanisterUpgradePayload, Operation,
-    QueryBlocksResponse, QueryEncodedBlocksResponse, TimeStamp, UpgradeArgs, DEFAULT_TRANSFER_FEE,
-    MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST, MAX_BLOCKS_PER_REQUEST,
+    AccountIdBlob,
+    AccountIdentifier,
+    ArchiveOptions,
+    ArchivedBlocksRange,
+    Block,
+    CandidBlock,
+    CandidOperation,
+    CandidTransaction,
+    FeatureFlags,
+    GetBlocksArgs,
+    GetBlocksRes,
+    GetBlocksResult,
+    GetEncodedBlocksResult,
+    IcpAllowanceArgs,
+    InitArgs,
+    IterBlocksArgs,
+    IterBlocksRes,
+    LedgerCanisterInitPayload,
+    LedgerCanisterPayload,
+    LedgerCanisterUpgradePayload,
+    Operation,
+    QueryBlocksResponse,
+    QueryEncodedBlocksResponse,
+    TimeStamp,
+    UpgradeArgs,
+    DEFAULT_TRANSFER_FEE,
+    MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST,
+    MAX_BLOCKS_PER_REQUEST,
 };
 use icrc_ledger_types::icrc1::{
     account::Account,
-    transfer::{Memo, TransferArg, TransferError},
+    transfer::{
+        Memo,
+        TransferArg,
+        TransferError,
+    },
 };
-use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
+use icrc_ledger_types::icrc2::allowance::{
+    Allowance,
+    AllowanceArgs,
+};
 use icrc_ledger_types::icrc2::approve::ApproveArgs;
 use num_traits::cast::ToPrimitive;
-use on_wire::{FromWire, IntoWire};
+use on_wire::{
+    FromWire,
+    IntoWire,
+};
 use serde_bytes::ByteBuf;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{
+    BTreeMap,
+    HashMap,
+    HashSet,
+};
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use std::time::{
+    Duration,
+    SystemTime,
+};
 
 fn system_time_to_nanos(t: SystemTime) -> u64 {
     t.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos() as u64
@@ -1712,7 +1775,11 @@ fn test_icrc21_standard() {
 }
 
 mod metrics {
-    use crate::{encode_init_args, encode_upgrade_args, ledger_wasm};
+    use crate::{
+        encode_init_args,
+        encode_upgrade_args,
+        ledger_wasm,
+    };
     use ic_ledger_suite_state_machine_tests::metrics::LedgerSuiteType;
 
     #[test]

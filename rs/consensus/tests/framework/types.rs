@@ -1,12 +1,19 @@
 #![allow(dead_code)]
 use ic_artifact_pool::{
-    canister_http_pool, certification_pool::CertificationPoolImpl,
-    consensus_pool::ConsensusPoolImpl, dkg_pool, idkg_pool,
+    canister_http_pool,
+    certification_pool::CertificationPoolImpl,
+    consensus_pool::ConsensusPoolImpl,
+    dkg_pool,
+    idkg_pool,
 };
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus::{
-    consensus::{ConsensusBouncer, ConsensusImpl},
-    dkg, idkg,
+    consensus::{
+        ConsensusBouncer,
+        ConsensusImpl,
+    },
+    dkg,
+    idkg,
 };
 use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
 use ic_interfaces::{
@@ -16,40 +23,66 @@ use ic_interfaces::{
     idkg::IDkgChangeSet,
     ingress_manager::IngressSelector,
     messaging::XNetPayloadBuilder,
-    p2p::consensus::{Bouncer, BouncerFactory, BouncerValue, PoolMutationsProducer},
+    p2p::consensus::{
+        Bouncer,
+        BouncerFactory,
+        BouncerValue,
+        PoolMutationsProducer,
+    },
     self_validating_payload::SelfValidatingPayloadBuilder,
     time_source::TimeSource,
 };
 use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
-use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
+use ic_logger::{
+    replica_logger::no_op_logger,
+    ReplicaLogger,
+};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_test_artifact_pool::ingress_pool::TestIngressPool;
 use ic_test_utilities::{
-    ingress_selector::FakeIngressSelector, message_routing::FakeMessageRouting,
+    ingress_selector::FakeIngressSelector,
+    message_routing::FakeMessageRouting,
     self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
-    state_manager::FakeStateManager, xnet_payload_builder::FakeXNetPayloadBuilder,
+    state_manager::FakeStateManager,
+    xnet_payload_builder::FakeXNetPayloadBuilder,
 };
-use ic_test_utilities_consensus::{batch::MockBatchPayloadBuilder, IDkgStatsNoOp};
+use ic_test_utilities_consensus::{
+    batch::MockBatchPayloadBuilder,
+    IDkgStatsNoOp,
+};
 use ic_types::{
     artifact::IdentifiableArtifact,
     consensus::{
-        certification::CertificationMessage, dkg::Message as DkgMessage, idkg::IDkgMessage,
-        CatchUpPackage, ConsensusMessage,
+        certification::CertificationMessage,
+        dkg::Message as DkgMessage,
+        idkg::IDkgMessage,
+        CatchUpPackage,
+        ConsensusMessage,
     },
     replica_config::ReplicaConfig,
-    time::{Time, UNIX_EPOCH},
-    NodeId, SubnetId,
+    time::{
+        Time,
+        UNIX_EPOCH,
+    },
+    NodeId,
+    SubnetId,
 };
 use rand_chacha::ChaChaRng;
-use std::cell::{RefCell, RefMut};
+use std::cell::{
+    RefCell,
+    RefMut,
+};
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::fmt;
 use std::rc::Rc;
-use std::sync::{Arc, RwLock};
+use std::sync::{
+    Arc,
+    RwLock,
+};
 use std::time::Duration;
 
 /// We use priority queues for input/output messages.

@@ -1,4 +1,10 @@
-use rand::{CryptoRng, Error, Rng, RngCore, SeedableRng};
+use rand::{
+    CryptoRng,
+    Error,
+    Rng,
+    RngCore,
+    SeedableRng,
+};
 use rand_chacha::ChaCha20Rng;
 
 /// Byte length of the seed type used in [`ReproducibleRng`].

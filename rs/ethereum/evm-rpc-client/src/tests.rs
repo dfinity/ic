@@ -1,6 +1,17 @@
-use crate::tests::mock::{MockLogger, MockRuntime};
+use crate::tests::mock::{
+    MockLogger,
+    MockRuntime,
+};
 use crate::EvmRpcClient;
-use crate::{Block, BlockTag, MultiRpcResult, ProviderError, RpcConfig, RpcError, RpcServices};
+use crate::{
+    Block,
+    BlockTag,
+    MultiRpcResult,
+    ProviderError,
+    RpcConfig,
+    RpcError,
+    RpcServices,
+};
 use mockall::Sequence;
 
 #[tokio::test]
@@ -109,7 +120,10 @@ async fn should_not_retry_when_max_num_retries_reached() {
 mod max_expected_too_few_cycles_error {
     use super::*;
     use crate::max_expected_too_few_cycles_error;
-    use crate::{RpcApi, RpcService};
+    use crate::{
+        RpcApi,
+        RpcService,
+    };
 
     #[test]
     fn should_get_max_expected_too_few_cycles_for_custom_rpc_service() {
@@ -277,8 +291,14 @@ mod mock {
     use crate::Runtime;
     use async_trait::async_trait;
     use candid::utils::ArgumentEncoder;
-    use candid::{CandidType, Principal};
-    use ic_canister_log::{LogEntry, Sink};
+    use candid::{
+        CandidType,
+        Principal,
+    };
+    use ic_canister_log::{
+        LogEntry,
+        Sink,
+    };
     use ic_cdk::api::call::RejectionCode;
     use mockall::mock;
     use serde::de::DeserializeOwned;

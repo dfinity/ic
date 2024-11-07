@@ -28,23 +28,49 @@ AKA:: Testcase 2.4
 
 end::catalog[] */
 
-use candid::{Decode, Encode};
-use ic_agent::{agent::RejectCode, export::Principal, identity::Identity};
+use candid::{
+    Decode,
+    Encode,
+};
+use ic_agent::{
+    agent::RejectCode,
+    export::Principal,
+    identity::Identity,
+};
 use ic_management_canister_types::{
-    CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2, CreateCanisterArgs,
-    EmptyBlob, Payload,
+    CanisterSettingsArgs,
+    CanisterSettingsArgsBuilder,
+    CanisterStatusResultV2,
+    CreateCanisterArgs,
+    EmptyBlob,
+    Payload,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::test_env::TestEnv;
-use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
+use ic_system_test_driver::driver::test_env_api::{
+    GetFirstHealthyNodeSnapshot,
+    HasPublicApiUrl,
+};
 use ic_system_test_driver::types::*;
 use ic_system_test_driver::util::*;
-use ic_types::{Cycles, PrincipalId};
-use ic_universal_canister::{call_args, management, wasm, CallInterface, UNIVERSAL_CANISTER_WASM};
+use ic_types::{
+    Cycles,
+    PrincipalId,
+};
+use ic_universal_canister::{
+    call_args,
+    management,
+    wasm,
+    CallInterface,
+    UNIVERSAL_CANISTER_WASM,
+};
 use ic_utils::call::AsyncCall;
 use ic_utils::interfaces::{
     management_canister::{
-        builders::{CanisterUpgradeOptions, InstallMode},
+        builders::{
+            CanisterUpgradeOptions,
+            InstallMode,
+        },
         UpdateCanisterBuilder,
     },
     ManagementCanister,
@@ -103,8 +129,14 @@ pub fn create_canister_via_canister_succeeds(env: TestEnv) {
 
 pub fn update_settings_of_frozen_canister(env: TestEnv) {
     use ic_base_types::NumBytes;
-    use ic_cdk::api::management_canister::main::{CanisterSettings, UpdateSettingsArgument};
-    use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig};
+    use ic_cdk::api::management_canister::main::{
+        CanisterSettings,
+        UpdateSettingsArgument,
+    };
+    use ic_config::subnet_config::{
+        CyclesAccountManagerConfig,
+        SchedulerConfig,
+    };
     use ic_cycles_account_manager::CyclesAccountManager;
 
     let logger = env.logger();

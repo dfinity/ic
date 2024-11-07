@@ -1,22 +1,39 @@
-use candid::{Decode, Encode};
+use candid::{
+    Decode,
+    Encode,
+};
 use canister_test::Wasm;
 use ic_base_types::CanisterId;
 use ic_ledger_core::block::BlockType;
-use ic_ledger_suite_state_machine_tests::{generate_transactions, TransactionGenerationParameters};
+use ic_ledger_suite_state_machine_tests::{
+    generate_transactions,
+    TransactionGenerationParameters,
+};
 use ic_ledger_test_utils::state_machine_helpers::index::{
-    get_all_blocks, wait_until_sync_is_completed,
+    get_all_blocks,
+    wait_until_sync_is_completed,
 };
 use ic_ledger_test_utils::state_machine_helpers::ledger::icp_get_blocks;
 use ic_ledger_test_utils::{
-    build_ledger_archive_wasm, build_ledger_index_wasm, build_ledger_wasm,
-    build_mainnet_ledger_archive_wasm, build_mainnet_ledger_index_wasm, build_mainnet_ledger_wasm,
+    build_ledger_archive_wasm,
+    build_ledger_index_wasm,
+    build_ledger_wasm,
+    build_mainnet_ledger_archive_wasm,
+    build_mainnet_ledger_index_wasm,
+    build_mainnet_ledger_wasm,
 };
 use ic_nns_constants::{
-    LEDGER_CANISTER_INDEX_IN_NNS_SUBNET, LEDGER_INDEX_CANISTER_INDEX_IN_NNS_SUBNET,
+    LEDGER_CANISTER_INDEX_IN_NNS_SUBNET,
+    LEDGER_INDEX_CANISTER_INDEX_IN_NNS_SUBNET,
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
 use ic_state_machine_tests::StateMachine;
-use icp_ledger::{Archives, FeatureFlags, LedgerCanisterPayload, UpgradeArgs};
+use icp_ledger::{
+    Archives,
+    FeatureFlags,
+    LedgerCanisterPayload,
+    UpgradeArgs,
+};
 use std::time::Instant;
 
 const INDEX_CANISTER_ID: CanisterId =

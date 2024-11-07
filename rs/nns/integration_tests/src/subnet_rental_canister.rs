@@ -1,34 +1,73 @@
-use candid::{CandidType, Decode, Deserialize, Encode};
+use candid::{
+    CandidType,
+    Decode,
+    Deserialize,
+    Encode,
+};
 use canister_test::Wasm;
 use ic_base_types::PrincipalId;
 use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
 use ic_nns_constants::{
-    EXCHANGE_RATE_CANISTER_ID, EXCHANGE_RATE_CANISTER_INDEX, LEDGER_CANISTER_ID,
+    EXCHANGE_RATE_CANISTER_ID,
+    EXCHANGE_RATE_CANISTER_INDEX,
+    LEDGER_CANISTER_ID,
     SUBNET_RENTAL_CANISTER_ID,
 };
 use ic_nns_governance_api::pb::v1::{
-    manage_neuron_response::{Command as CommandResponse, RegisterVoteResponse},
-    ExecuteNnsFunction, MakeProposalRequest, NnsFunction, ProposalActionRequest, Vote,
+    manage_neuron_response::{
+        Command as CommandResponse,
+        RegisterVoteResponse,
+    },
+    ExecuteNnsFunction,
+    MakeProposalRequest,
+    NnsFunction,
+    ProposalActionRequest,
+    Vote,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    neuron_helpers::{get_neuron_1, get_neuron_2},
+    neuron_helpers::{
+        get_neuron_1,
+        get_neuron_2,
+    },
     state_test_helpers::{
-        create_canister_at_specified_id, ledger_account_balance, nns_cast_vote,
-        nns_governance_get_proposal_info_as_anonymous, nns_governance_make_proposal,
-        nns_wait_for_proposal_execution, nns_wait_for_proposal_failure, setup_nns_canisters,
-        setup_subnet_rental_canister_with_correct_canister_id, state_machine_builder_for_nns_tests,
+        create_canister_at_specified_id,
+        ledger_account_balance,
+        nns_cast_vote,
+        nns_governance_get_proposal_info_as_anonymous,
+        nns_governance_make_proposal,
+        nns_wait_for_proposal_execution,
+        nns_wait_for_proposal_failure,
+        setup_nns_canisters,
+        setup_subnet_rental_canister_with_correct_canister_id,
+        state_machine_builder_for_nns_tests,
     },
 };
-use ic_state_machine_tests::{StateMachine, WasmResult};
+use ic_state_machine_tests::{
+    StateMachine,
+    WasmResult,
+};
 use ic_types::Time;
-use ic_xrc_types::{Asset, AssetClass, ExchangeRateMetadata};
+use ic_xrc_types::{
+    Asset,
+    AssetClass,
+    ExchangeRateMetadata,
+};
 use icp_ledger::{
-    AccountIdentifier, BinaryAccountBalanceArgs, Memo, Subaccount, Tokens, TransferArgs,
+    AccountIdentifier,
+    BinaryAccountBalanceArgs,
+    Memo,
+    Subaccount,
+    Tokens,
+    TransferArgs,
     DEFAULT_TRANSFER_FEE,
 };
 use std::time::Duration;
-use xrc_mock::{ExchangeRate, Response, XrcMockInitPayload};
+use xrc_mock::{
+    ExchangeRate,
+    Response,
+    XrcMockInitPayload,
+};
 
 // A proposal payload to make a subnet rental request.
 #[derive(candid::CandidType, candid::Deserialize)]

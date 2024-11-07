@@ -2,9 +2,16 @@ use criterion::Criterion;
 use ic_base_types::NumSeconds;
 use ic_config::flag_status::FlagStatus;
 use ic_execution_environment::RoundSchedule;
-use ic_replicated_state::{CanisterState, SchedulerState, SystemState};
+use ic_replicated_state::{
+    CanisterState,
+    SchedulerState,
+    SystemState,
+};
 use ic_types::Cycles;
-use ic_types_test_utils::ids::{canister_test_id, user_test_id};
+use ic_types_test_utils::ids::{
+    canister_test_id,
+    user_test_id,
+};
 use std::collections::BTreeMap;
 
 fn main() {

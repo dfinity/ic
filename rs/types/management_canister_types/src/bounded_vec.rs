@@ -1,5 +1,8 @@
 use crate::DataSize;
-use candid::{CandidType, Deserialize};
+use candid::{
+    CandidType,
+    Deserialize,
+};
 use serde::Deserializer;
 use std::fmt;
 
@@ -60,7 +63,10 @@ impl<
             _marker: std::marker::PhantomData<T>,
         }
 
-        use serde::de::{SeqAccess, Visitor};
+        use serde::de::{
+            SeqAccess,
+            Visitor,
+        };
 
         impl<
                 'de,

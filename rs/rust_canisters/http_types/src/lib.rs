@@ -1,4 +1,7 @@
-use candid::{CandidType, Deserialize};
+use candid::{
+    CandidType,
+    Deserialize,
+};
 use dfn_candid::HasCandidDecoderConfig;
 use serde_bytes::ByteBuf;
 

@@ -1,15 +1,39 @@
 use ic00::CanisterSettingsArgsBuilder;
 use ic_base_types::PrincipalId;
 use ic_config::execution_environment;
-use ic_config::subnet_config::{SchedulerConfig, SubnetConfig};
-use ic_management_canister_types::CanisterInstallMode::{Install, Reinstall, Upgrade};
+use ic_config::subnet_config::{
+    SchedulerConfig,
+    SubnetConfig,
+};
+use ic_management_canister_types::CanisterInstallMode::{
+    Install,
+    Reinstall,
+    Upgrade,
+};
 use ic_management_canister_types::{
-    self as ic00, CanisterIdRecord, CanisterInstallMode, InstallCodeArgs, Method, Payload,
+    self as ic00,
+    CanisterIdRecord,
+    CanisterInstallMode,
+    InstallCodeArgs,
+    Method,
+    Payload,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig, UserError};
-use ic_types::ingress::{IngressState, IngressStatus};
-use ic_types::{ingress::WasmResult, CanisterId, Cycles};
+use ic_state_machine_tests::{
+    StateMachine,
+    StateMachineBuilder,
+    StateMachineConfig,
+    UserError,
+};
+use ic_types::ingress::{
+    IngressState,
+    IngressStatus,
+};
+use ic_types::{
+    ingress::WasmResult,
+    CanisterId,
+    Cycles,
+};
 use ic_types_test_utils::ids::user_test_id;
 
 const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);

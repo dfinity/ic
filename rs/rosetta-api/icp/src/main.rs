@@ -1,20 +1,44 @@
 use clap::Parser;
 use ic_crypto_utils_threshold_sig_der::{
-    parse_threshold_sig_key, parse_threshold_sig_key_from_der,
+    parse_threshold_sig_key,
+    parse_threshold_sig_key_from_der,
 };
 use ic_rosetta_api::request_handler::RosettaRequestHandler;
-use ic_rosetta_api::rosetta_server::{RosettaApiServer, RosettaApiServerOpt};
-use ic_rosetta_api::{ledger_client, DEFAULT_BLOCKCHAIN, DEFAULT_TOKEN_SYMBOL};
-use ic_types::{CanisterId, PrincipalId};
-use std::{path::Path, path::PathBuf, str::FromStr, sync::Arc};
+use ic_rosetta_api::rosetta_server::{
+    RosettaApiServer,
+    RosettaApiServerOpt,
+};
+use ic_rosetta_api::{
+    ledger_client,
+    DEFAULT_BLOCKCHAIN,
+    DEFAULT_TOKEN_SYMBOL,
+};
+use ic_types::{
+    CanisterId,
+    PrincipalId,
+};
+use std::{
+    path::Path,
+    path::PathBuf,
+    str::FromStr,
+    sync::Arc,
+};
 use tracing::level_filters::LevelFilter;
-use tracing::{error, info, warn, Level};
+use tracing::{
+    error,
+    info,
+    warn,
+    Level,
+};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::filter::FilterExt;
 use tracing_subscriber::filter::FilterFn;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::{Layer, Registry};
+use tracing_subscriber::{
+    Layer,
+    Registry,
+};
 use url::Url;
 
 #[derive(Debug, Parser)]

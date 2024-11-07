@@ -1,8 +1,15 @@
 use crate::icrc::generic_value::ICRC3Value;
 use crate::icrc3::archive::ArchivedRange;
 use crate::icrc3::archive::QueryBlockArchiveFn;
-use crate::{icrc::generic_value::Value, icrc1::transfer::BlockIndex};
-use candid::{CandidType, Deserialize, Nat};
+use crate::{
+    icrc::generic_value::Value,
+    icrc1::transfer::BlockIndex,
+};
+use candid::{
+    CandidType,
+    Deserialize,
+    Nat,
+};
 use serde::Serialize;
 use serde_bytes::ByteBuf;
 

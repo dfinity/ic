@@ -3,21 +3,43 @@ use ic_registry_routing_table::canister_id_into_u64;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::boundary_node::{
-    BoundaryNode, BoundaryNodeVm, BoundaryNodeWithVm,
+    BoundaryNode,
+    BoundaryNodeVm,
+    BoundaryNodeWithVm,
 };
-use ic_system_test_driver::driver::ic::{InternetComputer, NrOfVCPUs, Subnet, VmResources};
+use ic_system_test_driver::driver::ic::{
+    InternetComputer,
+    NrOfVCPUs,
+    Subnet,
+    VmResources,
+};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    await_boundary_node_healthy, get_dependency_path, HasPublicApiUrl, HasTopologySnapshot,
-    IcNodeContainer, NnsInstallationBuilder, SubnetSnapshot, TopologySnapshot,
+    await_boundary_node_healthy,
+    get_dependency_path,
+    HasPublicApiUrl,
+    HasTopologySnapshot,
+    IcNodeContainer,
+    NnsInstallationBuilder,
+    SubnetSnapshot,
+    TopologySnapshot,
 };
 use ic_system_test_driver::driver::universal_vm::UniversalVm;
 use ic_system_test_driver::util::timeit;
 use ic_types::SubnetId;
-use slog::{info, Logger};
+use slog::{
+    info,
+    Logger,
+};
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
-use std::thread::{spawn, JoinHandle};
+use std::process::{
+    Command,
+    Stdio,
+};
+use std::thread::{
+    spawn,
+    JoinHandle,
+};
 
 pub const UNIVERSAL_VM_NAME: &str = "httpbin";
 

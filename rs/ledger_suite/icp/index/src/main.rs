@@ -1,32 +1,80 @@
-use candid::{candid_method, Principal};
+use candid::{
+    candid_method,
+    Principal,
+};
 use dfn_core::api::caller;
-use ic_canister_log::{export as export_logs, log};
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_cdk_macros::{init, post_upgrade, query};
+use ic_canister_log::{
+    export as export_logs,
+    log,
+};
+use ic_canisters_http_types::{
+    HttpRequest,
+    HttpResponse,
+    HttpResponseBuilder,
+};
+use ic_cdk_macros::{
+    init,
+    post_upgrade,
+    query,
+};
 use ic_cdk_timers::TimerId;
-use ic_icp_index::logs::{P0, P1};
+use ic_icp_index::logs::{
+    P0,
+    P1,
+};
 use ic_icp_index::{
-    GetAccountIdentifierTransactionsArgs, GetAccountIdentifierTransactionsResponse,
-    GetAccountIdentifierTransactionsResult, GetAccountTransactionsResult, InitArg, Log, LogEntry,
-    Priority, SettledTransaction, SettledTransactionWithId, Status,
+    GetAccountIdentifierTransactionsArgs,
+    GetAccountIdentifierTransactionsResponse,
+    GetAccountIdentifierTransactionsResult,
+    GetAccountTransactionsResult,
+    InitArg,
+    Log,
+    LogEntry,
+    Priority,
+    SettledTransaction,
+    SettledTransactionWithId,
+    Status,
 };
 use ic_icrc1_index_ng::GetAccountTransactionsArgs;
 use ic_ledger_canister_core::runtime::total_memory_size_bytes;
-use ic_ledger_core::block::{BlockType, EncodedBlock};
-use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
+use ic_ledger_core::block::{
+    BlockType,
+    EncodedBlock,
+};
+use ic_stable_structures::memory_manager::{
+    MemoryId,
+    VirtualMemory,
+};
 use ic_stable_structures::StableBTreeMap;
 use ic_stable_structures::{
-    cell::Cell as StableCell, log::Log as StableLog, memory_manager::MemoryManager,
-    storable::Bound, DefaultMemoryImpl, Storable,
+    cell::Cell as StableCell,
+    log::Log as StableLog,
+    memory_manager::MemoryManager,
+    storable::Bound,
+    DefaultMemoryImpl,
+    Storable,
 };
 use icp_ledger::{
-    AccountIdentifier, ArchivedEncodedBlocksRange, Block, BlockIndex, GetBlocksArgs,
-    GetEncodedBlocksResult, Operation, QueryEncodedBlocksResponse, MAX_BLOCKS_PER_REQUEST,
+    AccountIdentifier,
+    ArchivedEncodedBlocksRange,
+    Block,
+    BlockIndex,
+    GetBlocksArgs,
+    GetEncodedBlocksResult,
+    Operation,
+    QueryEncodedBlocksResponse,
+    MAX_BLOCKS_PER_REQUEST,
 };
 use icrc_ledger_types::icrc1::account::Account;
 use num_traits::cast::ToPrimitive;
-use scopeguard::{guard, ScopeGuard};
-use serde::{Deserialize, Serialize};
+use scopeguard::{
+    guard,
+    ScopeGuard,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::cmp::Reverse;
@@ -735,7 +783,10 @@ fn test_account_identifier_data_type_storable() {
 
 #[test]
 fn check_candid_interface_compatibility() {
-    use candid_parser::utils::{service_equal, CandidSource};
+    use candid_parser::utils::{
+        service_equal,
+        CandidSource,
+    };
 
     candid::export_service!();
 

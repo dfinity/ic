@@ -9,34 +9,69 @@ mod types;
 
 pub use runner::ConsensusRunner;
 pub use types::{
-    ComponentModifier, ConsensusDependencies, ConsensusDriver, ConsensusInstance,
-    ConsensusRunnerConfig, StopPredicate,
+    ComponentModifier,
+    ConsensusDependencies,
+    ConsensusDriver,
+    ConsensusInstance,
+    ConsensusRunnerConfig,
+    StopPredicate,
 };
 
-use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent, TempCryptoComponentGeneric};
-use ic_crypto_test_utils_ni_dkg::{initial_dkg_transcript, InitialNiDkgConfig};
+use ic_crypto_temp_crypto::{
+    NodeKeysToGenerate,
+    TempCryptoComponent,
+    TempCryptoComponentGeneric,
+};
+use ic_crypto_test_utils_ni_dkg::{
+    initial_dkg_transcript,
+    InitialNiDkgConfig,
+};
 use ic_interfaces_registry::RegistryClient;
 use ic_management_canister_types::{
-    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
+    EcdsaCurve,
+    EcdsaKeyId,
+    MasterPublicKeyId,
+    SchnorrAlgorithm,
+    SchnorrKeyId,
 };
-use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, InitialNiDkgTranscriptRecord};
+use ic_protobuf::registry::subnet::v1::{
+    CatchUpPackageContents,
+    InitialNiDkgTranscriptRecord,
+};
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_client_helpers::crypto::CryptoRegistry;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_registry_subnet_features::{ChainKeyConfig, EcdsaConfig, KeyConfig};
+use ic_registry_subnet_features::{
+    ChainKeyConfig,
+    EcdsaConfig,
+    KeyConfig,
+};
 use ic_test_utilities_consensus::make_genesis;
 use ic_test_utilities_registry::SubnetRecordBuilder;
 use ic_types::{
     consensus::CatchUpPackage,
     crypto::{
-        threshold_sig::ni_dkg::{NiDkgTag, NiDkgTargetId},
+        threshold_sig::ni_dkg::{
+            NiDkgTag,
+            NiDkgTargetId,
+        },
         KeyPurpose,
     },
-    subnet_id_into_protobuf, NodeId, RegistryVersion, SubnetId,
+    subnet_id_into_protobuf,
+    NodeId,
+    RegistryVersion,
+    SubnetId,
 };
-use rand::{CryptoRng, Rng, SeedableRng};
+use rand::{
+    CryptoRng,
+    Rng,
+    SeedableRng,
+};
 use rand_chacha::ChaCha20Rng;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
 use std::sync::Arc;
 
 /// Setup a subnet of the given subnet_id and node_ids by creating an initial registry

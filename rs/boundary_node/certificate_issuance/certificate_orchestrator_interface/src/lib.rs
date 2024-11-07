@@ -1,6 +1,15 @@
-use std::{borrow::Cow, fmt::Display};
+use std::{
+    borrow::Cow,
+    fmt::Display,
+};
 
-use candid::{CandidType, Decode, Deserialize, Encode, Principal};
+use candid::{
+    CandidType,
+    Decode,
+    Deserialize,
+    Encode,
+    Principal,
+};
 use ic_stable_structures::storable::Bound;
 use ic_stable_structures::Storable;
 

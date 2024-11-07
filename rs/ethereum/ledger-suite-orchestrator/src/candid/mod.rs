@@ -1,7 +1,18 @@
 use crate::scheduler::Erc20Token;
-use crate::state::{Canister, Canisters};
-use candid::{CandidType, Deserialize, Nat, Principal};
-use std::fmt::{Display, Formatter};
+use crate::state::{
+    Canister,
+    Canisters,
+};
+use candid::{
+    CandidType,
+    Deserialize,
+    Nat,
+    Principal,
+};
+use std::fmt::{
+    Display,
+    Formatter,
+};
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, CandidType, Deserialize)]

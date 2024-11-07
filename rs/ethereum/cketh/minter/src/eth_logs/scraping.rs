@@ -1,9 +1,16 @@
 use crate::eth_logs::{
-    LogParser, ReceivedErc20LogParser, ReceivedEthLogParser, ReceivedEthOrErc20LogParser,
-    RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_EVENT_TOPIC,
+    LogParser,
+    ReceivedErc20LogParser,
+    ReceivedEthLogParser,
+    ReceivedEthOrErc20LogParser,
+    RECEIVED_ERC20_EVENT_TOPIC,
+    RECEIVED_ETH_EVENT_TOPIC,
     RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC,
 };
-use crate::eth_rpc::{FixedSizeData, Topic};
+use crate::eth_rpc::{
+    FixedSizeData,
+    Topic,
+};
 use crate::numeric::BlockNumber;
 use crate::state::eth_logs_scraping::LogScrapingId;
 use crate::state::State;

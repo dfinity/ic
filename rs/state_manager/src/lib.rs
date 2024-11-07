@@ -14,43 +14,102 @@ use crate::{
     manifest::compute_bundled_manifest,
     state_sync::{
         chunkable::cache::StateSyncCache,
-        types::{FileGroupChunks, Manifest, MetaManifest},
+        types::{
+            FileGroupChunks,
+            Manifest,
+            MetaManifest,
+        },
     },
-    tip::{spawn_tip_thread, HasDowngrade, PageMapToFlush, TipRequest},
+    tip::{
+        spawn_tip_thread,
+        HasDowngrade,
+        PageMapToFlush,
+        TipRequest,
+    },
 };
-use crossbeam_channel::{bounded, unbounded, Sender};
+use crossbeam_channel::{
+    bounded,
+    unbounded,
+    Sender,
+};
 use ic_canonical_state::lazy_tree_conversion::replicated_state_as_lazy_tree;
 use ic_canonical_state_tree_hash::{
-    hash_tree::{hash_lazy_tree, HashTree, HashTreeError},
+    hash_tree::{
+        hash_lazy_tree,
+        HashTree,
+        HashTreeError,
+    },
     lazy_tree::materialize::materialize_partial,
 };
 use ic_config::flag_status::FlagStatus;
 use ic_config::state_manager::Config;
-use ic_crypto_tree_hash::{recompute_digest, Digest, LabeledTree, MixedHashTree, Witness};
+use ic_crypto_tree_hash::{
+    recompute_digest,
+    Digest,
+    LabeledTree,
+    MixedHashTree,
+    Witness,
+};
 use ic_interfaces::certification::Verifier;
 use ic_interfaces_certified_stream_store::{
-    CertifiedStreamStore, DecodeStreamError, EncodeStreamError,
+    CertifiedStreamStore,
+    DecodeStreamError,
+    EncodeStreamError,
 };
 use ic_interfaces_state_manager::{
-    CertificationScope, CertifiedStateSnapshot, Labeled, PermanentStateHashError::*,
-    StateHashError, StateManager, StateManagerError, StateManagerResult, StateReader,
+    CertificationScope,
+    CertifiedStateSnapshot,
+    Labeled,
+    PermanentStateHashError::*,
+    StateHashError,
+    StateManager,
+    StateManagerError,
+    StateManagerResult,
+    StateReader,
     TransientStateHashError::*,
 };
-use ic_logger::{debug, error, fatal, info, warn, ReplicaLogger};
-use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
-use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
-use ic_protobuf::{messaging::xnet::v1, state::v1 as pb};
+use ic_logger::{
+    debug,
+    error,
+    fatal,
+    info,
+    warn,
+    ReplicaLogger,
+};
+use ic_metrics::{
+    buckets::decimal_buckets,
+    MetricsRegistry,
+};
+use ic_protobuf::proxy::{
+    ProtoProxy,
+    ProxyDecodeError,
+};
+use ic_protobuf::{
+    messaging::xnet::v1,
+    state::v1 as pb,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_snapshots::SnapshotOperation, page_map::PageAllocatorFileDescriptor,
+    canister_snapshots::SnapshotOperation,
+    page_map::PageAllocatorFileDescriptor,
 };
 use ic_replicated_state::{
     canister_state::execution_state::SandboxMemory,
-    page_map::{PersistenceError, StorageMetrics},
-    PageIndex, PageMap, ReplicatedState,
+    page_map::{
+        PersistenceError,
+        StorageMetrics,
+    },
+    PageIndex,
+    PageMap,
+    ReplicatedState,
 };
 use ic_state_layout::{
-    error::LayoutError, AccessPolicy, CheckpointLayout, PageMapLayout, ReadOnly, StateLayout,
+    error::LayoutError,
+    AccessPolicy,
+    CheckpointLayout,
+    PageMapLayout,
+    ReadOnly,
+    StateLayout,
 };
 use ic_types::{
     batch::BatchSummary,
@@ -58,27 +117,59 @@ use ic_types::{
     crypto::CryptoHash,
     malicious_flags::MaliciousFlags,
     state_sync::CURRENT_STATE_SYNC_VERSION,
-    xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice},
-    CanisterId, CryptoHashOfPartialState, CryptoHashOfState, Height, RegistryVersion, SnapshotId,
+    xnet::{
+        CertifiedStreamSlice,
+        StreamIndex,
+        StreamSlice,
+    },
+    CanisterId,
+    CryptoHashOfPartialState,
+    CryptoHashOfState,
+    Height,
+    RegistryVersion,
+    SnapshotId,
     SubnetId,
 };
 use ic_utils_thread::JoinOnDrop;
 use ic_validate_eq::ValidateEq;
-use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
+use prometheus::{
+    Histogram,
+    HistogramVec,
+    IntCounter,
+    IntCounterVec,
+    IntGauge,
+};
 use prost::Message;
-use std::convert::{From, TryFrom};
+use std::convert::{
+    From,
+    TryFrom,
+};
 use std::fs::File;
 use std::fs::OpenOptions;
 use std::os::unix::io::RawFd;
 use std::os::unix::prelude::IntoRawFd;
-use std::path::{Path, PathBuf};
+use std::path::{
+    Path,
+    PathBuf,
+};
 use std::sync::{
-    atomic::{AtomicU64, Ordering},
+    atomic::{
+        AtomicU64,
+        Ordering,
+    },
     Arc,
 };
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{
+    Duration,
+    Instant,
+    SystemTime,
+};
 use std::{
-    collections::{BTreeMap, BTreeSet, VecDeque},
+    collections::{
+        BTreeMap,
+        BTreeSet,
+        VecDeque,
+    },
     sync::Mutex,
 };
 use tempfile::tempfile;
@@ -4069,7 +4160,8 @@ fn maliciously_return_wrong_hash(
     height: Height,
 ) -> CryptoHashOfState {
     use ic_protobuf::log::malicious_behaviour_log_entry::v1::{
-        MaliciousBehaviour, MaliciousBehaviourLogEntry,
+        MaliciousBehaviour,
+        MaliciousBehaviourLogEntry,
     };
 
     if malicious_flags

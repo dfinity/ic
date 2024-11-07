@@ -1,12 +1,28 @@
 use crate::timestamp::TimeStamp;
-use crate::tokens::{CheckedSub, TokensType, Zero};
+use crate::tokens::{
+    CheckedSub,
+    TokensType,
+    Zero,
+};
 use candid::Nat;
-use ic_stable_structures::{storable::Bound, Storable};
-use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet};
+use ic_stable_structures::{
+    storable::Bound,
+    Storable,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
 use std::{
     borrow::Cow,
-    io::{Cursor, Read},
+    io::{
+        Cursor,
+        Read,
+    },
 };
 
 #[cfg(test)]

@@ -4,17 +4,31 @@
 use ic_protobuf::proxy::try_from_option_field;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::types::v1 as pb;
-use phantom_newtype::{AmountOf, DisplayerOf, Id};
-use std::{convert::TryFrom, fmt};
+use phantom_newtype::{
+    AmountOf,
+    DisplayerOf,
+    Id,
+};
+use std::{
+    convert::TryFrom,
+    fmt,
+};
 
 mod canister_id;
 mod pb_internal;
 mod principal_id;
 
-pub use canister_id::{CanisterId, CanisterIdError, CanisterIdError as CanisterIdBlobParseError};
+pub use canister_id::{
+    CanisterId,
+    CanisterIdError,
+    CanisterIdError as CanisterIdBlobParseError,
+};
 use ic_protobuf::state::canister_state_bits::v1::SnapshotId as pbSnapshot;
 pub use principal_id::{
-    PrincipalId, PrincipalIdClass, PrincipalIdError, PrincipalIdError as PrincipalIdBlobParseError,
+    PrincipalId,
+    PrincipalIdClass,
+    PrincipalIdError,
+    PrincipalIdError as PrincipalIdBlobParseError,
     PrincipalIdError as PrincipalIdParseError,
 };
 
@@ -244,7 +258,10 @@ impl TryFrom<pbSnapshot> for SnapshotId {
 
 #[cfg(test)]
 mod tests {
-    pub use crate::{CanisterId, SnapshotId};
+    pub use crate::{
+        CanisterId,
+        SnapshotId,
+    };
 
     #[test]
     fn test_snapshot_id_creation() {

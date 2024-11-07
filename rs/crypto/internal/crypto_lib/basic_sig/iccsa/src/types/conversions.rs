@@ -1,5 +1,11 @@
-use crate::types::{PublicKey, PublicKeyBytes};
-use ic_types::{CanisterId, CanisterIdBlobParseError};
+use crate::types::{
+    PublicKey,
+    PublicKeyBytes,
+};
+use ic_types::{
+    CanisterId,
+    CanisterIdBlobParseError,
+};
 use std::convert::TryFrom;
 
 #[cfg(test)]

@@ -1,10 +1,24 @@
-use anyhow::{anyhow, Result};
-use k8s_openapi::api::batch::v1::{Job, JobSpec};
+use anyhow::{
+    anyhow,
+    Result,
+};
+use k8s_openapi::api::batch::v1::{
+    Job,
+    JobSpec,
+};
 use k8s_openapi::api::core::v1::{
-    Container, PersistentVolumeClaimVolumeSource, PodSpec, PodTemplateSpec, Volume, VolumeMount,
+    Container,
+    PersistentVolumeClaimVolumeSource,
+    PodSpec,
+    PodTemplateSpec,
+    Volume,
+    VolumeMount,
 };
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::OwnerReference;
-use kube::api::{ObjectMeta, PostParams};
+use kube::api::{
+    ObjectMeta,
+    PostParams,
+};
 use kube::Api;
 use tracing::*;
 

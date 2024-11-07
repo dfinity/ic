@@ -1,26 +1,60 @@
 //! Consensus utility functions
-use crate::{crypto::Aggregate, membership::Membership, pool_reader::PoolReader};
+use crate::{
+    crypto::Aggregate,
+    membership::Membership,
+    pool_reader::PoolReader,
+};
 use ic_interfaces::{
-    consensus::{PayloadValidationError, PayloadValidationFailure},
+    consensus::{
+        PayloadValidationError,
+        PayloadValidationFailure,
+    },
     consensus_pool::ConsensusPoolCache,
     validation::ValidationError,
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{error, warn, ReplicaLogger};
+use ic_logger::{
+    error,
+    warn,
+    ReplicaLogger,
+};
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
-use ic_registry_client_helpers::subnet::{NotarizationDelaySettings, SubnetRegistry};
+use ic_registry_client_helpers::subnet::{
+    NotarizationDelaySettings,
+    SubnetRegistry,
+};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     consensus::{
-        idkg::IDkgPayload, Block, BlockProposal, HasCommittee, HasHeight, HasRank, Threshold,
+        idkg::IDkgPayload,
+        Block,
+        BlockProposal,
+        HasCommittee,
+        HasHeight,
+        HasRank,
+        Threshold,
     },
     crypto::{
-        threshold_sig::ni_dkg::{NiDkgId, NiDkgReceivers, NiDkgTag, NiDkgTranscript},
-        CryptoHash, CryptoHashable, Signed,
+        threshold_sig::ni_dkg::{
+            NiDkgId,
+            NiDkgReceivers,
+            NiDkgTag,
+            NiDkgTranscript,
+        },
+        CryptoHash,
+        CryptoHashable,
+        Signed,
     },
-    Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId,
+    Height,
+    NodeId,
+    RegistryVersion,
+    ReplicaVersion,
+    SubnetId,
 };
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
 
 pub mod crypto;
 pub mod membership;
@@ -415,35 +449,61 @@ pub fn get_oldest_idkg_state_registry_version(
 #[cfg(test)]
 mod tests {
     use assert_matches::assert_matches;
-    use std::{str::FromStr, sync::Arc};
+    use std::{
+        str::FromStr,
+        sync::Arc,
+    };
 
     use super::*;
-    use ic_consensus_mocks::{dependencies, Dependencies};
-    use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId, SchnorrKeyId};
+    use ic_consensus_mocks::{
+        dependencies,
+        Dependencies,
+    };
+    use ic_management_canister_types::{
+        EcdsaKeyId,
+        MasterPublicKeyId,
+        SchnorrKeyId,
+    };
     use ic_replicated_state::metadata_state::subnet_call_context_manager::{
-        EcdsaArguments, SchnorrArguments, SignWithThresholdContext, ThresholdArguments,
+        EcdsaArguments,
+        SchnorrArguments,
+        SignWithThresholdContext,
+        ThresholdArguments,
     };
     use ic_test_utilities_state::ReplicatedStateBuilder;
     use ic_test_utilities_types::{
-        ids::{node_test_id, subnet_test_id},
+        ids::{
+            node_test_id,
+            subnet_test_id,
+        },
         messages::RequestBuilder,
     };
     use ic_types::{
         consensus::{
             get_faults_tolerated,
             idkg::{
-                common::PreSignatureRef, ecdsa::PreSignatureQuadrupleRef,
-                schnorr::PreSignatureTranscriptRef, KeyTranscriptCreation, MaskedTranscript,
-                MasterKeyTranscript, PreSigId, UnmaskedTranscript,
+                common::PreSignatureRef,
+                ecdsa::PreSignatureQuadrupleRef,
+                schnorr::PreSignatureTranscriptRef,
+                KeyTranscriptCreation,
+                MaskedTranscript,
+                MasterKeyTranscript,
+                PreSigId,
+                UnmaskedTranscript,
             },
             Rank,
         },
         crypto::{
             canister_threshold_sig::idkg::{
-                IDkgMaskedTranscriptOrigin, IDkgReceivers, IDkgTranscript, IDkgTranscriptId,
-                IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin,
+                IDkgMaskedTranscriptOrigin,
+                IDkgReceivers,
+                IDkgTranscript,
+                IDkgTranscriptId,
+                IDkgTranscriptType,
+                IDkgUnmaskedTranscriptOrigin,
             },
-            ThresholdSigShare, ThresholdSigShareOf,
+            ThresholdSigShare,
+            ThresholdSigShareOf,
         },
         messages::CallbackId,
         signature::ThresholdSignatureShare,

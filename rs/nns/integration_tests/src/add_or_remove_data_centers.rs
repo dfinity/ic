@@ -1,25 +1,45 @@
 use assert_matches::assert_matches;
 use ic_canister_client_sender::Sender;
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_ID, TEST_NEURON_2_OWNER_KEYPAIR,
+    TEST_NEURON_1_ID,
+    TEST_NEURON_1_OWNER_KEYPAIR,
+    TEST_NEURON_2_ID,
+    TEST_NEURON_2_OWNER_KEYPAIR,
 };
-use ic_nns_common::types::{NeuronId, ProposalId};
-use ic_nns_governance_api::pb::v1::{GovernanceError, NnsFunction, ProposalStatus};
+use ic_nns_common::types::{
+    NeuronId,
+    ProposalId,
+};
+use ic_nns_governance_api::pb::v1::{
+    GovernanceError,
+    NnsFunction,
+    ProposalStatus,
+};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::{
-        get_pending_proposals, submit_external_update_proposal,
-        submit_external_update_proposal_allowing_error, wait_for_final_state,
+        get_pending_proposals,
+        submit_external_update_proposal,
+        submit_external_update_proposal_allowing_error,
+        wait_for_final_state,
     },
-    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{
+        state_machine_test_on_nns_subnet,
+        NnsCanisters,
+    },
     registry::get_value_or_panic,
 };
 use ic_protobuf::registry::dc::v1::{
-    AddOrRemoveDataCentersProposalPayload, DataCenterRecord, Gps, MAX_DC_OWNER_LENGTH,
+    AddOrRemoveDataCentersProposalPayload,
+    DataCenterRecord,
+    Gps,
+    MAX_DC_OWNER_LENGTH,
 };
 use ic_registry_keys::make_data_center_record_key;
 use ic_registry_transport::{
-    deserialize_get_value_response, serialize_get_value_request, Error::KeyNotPresent,
+    deserialize_get_value_response,
+    serialize_get_value_request,
+    Error::KeyNotPresent,
 };
 
 #[test]

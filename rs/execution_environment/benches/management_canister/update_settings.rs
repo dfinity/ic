@@ -1,8 +1,30 @@
-use crate::utils::{expect_error, expect_reply, setup, CANISTERS_PER_BATCH};
-use candid::{CandidType, Encode, Principal};
-use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkGroup, Criterion};
-use ic_state_machine_tests::{ErrorCode, UserError, WasmResult};
-use serde::{Deserialize, Serialize};
+use crate::utils::{
+    expect_error,
+    expect_reply,
+    setup,
+    CANISTERS_PER_BATCH,
+};
+use candid::{
+    CandidType,
+    Encode,
+    Principal,
+};
+use criterion::{
+    criterion_group,
+    criterion_main,
+    BatchSize,
+    BenchmarkGroup,
+    Criterion,
+};
+use ic_state_machine_tests::{
+    ErrorCode,
+    UserError,
+    WasmResult,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 #[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 pub struct CreateCanistersArgs {

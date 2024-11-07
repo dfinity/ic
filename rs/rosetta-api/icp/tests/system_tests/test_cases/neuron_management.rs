@@ -2,16 +2,26 @@ use crate::common::utils::update_neuron;
 use crate::common::utils::wait_for_rosetta_to_catch_up_with_icp_ledger;
 use crate::common::{
     system_test_environment::RosettaTestingEnvironment,
-    utils::{get_custom_agent, get_test_agent, list_neurons, test_identity},
+    utils::{
+        get_custom_agent,
+        get_test_agent,
+        list_neurons,
+        test_identity,
+    },
 };
-use ic_agent::{identity::BasicIdentity, Identity};
+use ic_agent::{
+    identity::BasicIdentity,
+    Identity,
+};
 use ic_icp_rosetta_client::RosettaChangeAutoStakeMaturityArgs;
 use ic_icp_rosetta_client::RosettaHotKeyArgs;
 use ic_icp_rosetta_client::RosettaIncreaseNeuronStakeArgs;
 use ic_icp_rosetta_client::RosettaNeuronInfoArgs;
 use ic_icp_rosetta_client::RosettaSpawnNeuronArgs;
 use ic_icp_rosetta_client::{
-    RosettaCreateNeuronArgs, RosettaDisburseNeuronArgs, RosettaSetNeuronDissolveDelayArgs,
+    RosettaCreateNeuronArgs,
+    RosettaDisburseNeuronArgs,
+    RosettaSetNeuronDissolveDelayArgs,
     RosettaStakeMaturityArgs,
 };
 use ic_icrc1_test_utils::basic_identity_strategy;
@@ -22,7 +32,10 @@ use ic_rosetta_api::ledger_client::neuron_response::NeuronResponse;
 use ic_rosetta_api::models::AccountBalanceRequest;
 use ic_rosetta_api::request::transaction_operation_results::TransactionOperationResults;
 use ic_types::PrincipalId;
-use icp_ledger::{AccountIdentifier, DEFAULT_TRANSFER_FEE};
+use icp_ledger::{
+    AccountIdentifier,
+    DEFAULT_TRANSFER_FEE,
+};
 use lazy_static::lazy_static;
 use proptest::strategy::Strategy;
 use proptest::test_runner::Config as TestRunnerConfig;
@@ -31,7 +44,10 @@ use rosetta_core::objects::ObjectMap;
 use rosetta_core::request_types::CallRequest;
 use std::{
     sync::Arc,
-    time::{SystemTime, UNIX_EPOCH},
+    time::{
+        SystemTime,
+        UNIX_EPOCH,
+    },
 };
 use tokio::runtime::Runtime;
 

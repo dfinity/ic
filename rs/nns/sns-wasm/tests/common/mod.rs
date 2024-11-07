@@ -1,17 +1,33 @@
 use candid::Encode;
 use canister_test::Project;
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_nervous_system_common::ONE_TRILLION;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use ic_nns_test_utils::{
-    common::{NnsInitPayloads, NnsInitPayloadsBuilder},
-    state_test_helpers::{self, create_canister, setup_nns_canisters, update_with_sender},
+    common::{
+        NnsInitPayloads,
+        NnsInitPayloadsBuilder,
+    },
+    state_test_helpers::{
+        self,
+        create_canister,
+        setup_nns_canisters,
+        update_with_sender,
+    },
 };
 use ic_sns_wasm::pb::v1::{
-    get_deployed_sns_by_proposal_id_response::GetDeployedSnsByProposalIdResult, DeployedSns,
-    GetDeployedSnsByProposalIdRequest, GetDeployedSnsByProposalIdResponse,
+    get_deployed_sns_by_proposal_id_response::GetDeployedSnsByProposalIdResult,
+    DeployedSns,
+    GetDeployedSnsByProposalIdRequest,
+    GetDeployedSnsByProposalIdResponse,
 };
-use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
+use ic_state_machine_tests::{
+    StateMachine,
+    StateMachineBuilder,
+};
 
 pub const EXPECTED_SNS_CREATION_FEE: u128 = 180 * ONE_TRILLION as u128;
 

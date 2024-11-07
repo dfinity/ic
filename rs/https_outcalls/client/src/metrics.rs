@@ -1,5 +1,12 @@
-use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
-use prometheus::{Histogram, HistogramVec, IntCounterVec};
+use ic_metrics::{
+    buckets::decimal_buckets,
+    MetricsRegistry,
+};
+use prometheus::{
+    Histogram,
+    HistogramVec,
+    IntCounterVec,
+};
 
 #[derive(Clone)]
 pub struct Metrics {

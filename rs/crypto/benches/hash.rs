@@ -1,6 +1,12 @@
 use criterion::measurement::Measurement;
 use criterion::BatchSize::SmallInput;
-use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion, Throughput};
+use criterion::{
+    criterion_group,
+    criterion_main,
+    BenchmarkGroup,
+    Criterion,
+    Throughput,
+};
 use ic_crypto_sha2::Sha256;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::prelude::*;

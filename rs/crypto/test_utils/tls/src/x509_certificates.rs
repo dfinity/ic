@@ -4,11 +4,21 @@ use x509_cert::spki; // re-export of spki create
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
-use rand::{CryptoRng, Rng};
+use rand::{
+    CryptoRng,
+    Rng,
+};
 use std::str::FromStr;
-use std::time::{Duration, SystemTime};
+use std::time::{
+    Duration,
+    SystemTime,
+};
 use x509_cert::{
-    builder::{Builder, CertificateBuilder, Profile},
+    builder::{
+        Builder,
+        CertificateBuilder,
+        Profile,
+    },
     ext::pkix::BasicConstraints,
     name::Name,
     serial_number::SerialNumber,

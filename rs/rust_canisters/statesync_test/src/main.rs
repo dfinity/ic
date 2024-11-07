@@ -1,9 +1,15 @@
 /// This canister is used in the testcase 5_2. The canister stores a vector of
 /// variable length, and the number of times the canister update method has
 /// been called.
-use dfn_macro::{query, update};
+use dfn_macro::{
+    query,
+    update,
+};
 use lazy_static::lazy_static;
-use rand::{Rng, SeedableRng};
+use rand::{
+    Rng,
+    SeedableRng,
+};
 use rand_pcg::Pcg64Mcg;
 use std::sync::Mutex;
 

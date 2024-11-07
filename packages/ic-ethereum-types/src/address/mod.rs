@@ -1,10 +1,20 @@
 #[cfg(test)]
 mod tests;
 
-use minicbor::{Decode, Encode};
-use serde::{Deserialize, Serialize};
+use minicbor::{
+    Decode,
+    Encode,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::fmt;
-use std::fmt::{Formatter, LowerHex, UpperHex};
+use std::fmt::{
+    Formatter,
+    LowerHex,
+    UpperHex,
+};
 use std::str::FromStr;
 
 /// An Ethereum account address.

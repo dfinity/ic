@@ -1,18 +1,52 @@
 use candid::Principal;
 use ic_canisters_http_types as http;
-use ic_cdk::api::management_canister::http_request::{HttpMethod, HttpResponse, TransformArgs};
-use ic_cdk_macros::{init, post_upgrade, query, update};
+use ic_cdk::api::management_canister::http_request::{
+    HttpMethod,
+    HttpResponse,
+    TransformArgs,
+};
+use ic_cdk_macros::{
+    init,
+    post_upgrade,
+    query,
+    update,
+};
 use ic_ckbtc_kyt::SetApiKeyArg;
 use ic_ckbtc_kyt::{
-    Alert, AlertLevel, DepositRequest, Error, ExposureType, FetchAlertsResponse, KytMode,
-    LifecycleArg, WithdrawalAttempt,
+    Alert,
+    AlertLevel,
+    DepositRequest,
+    Error,
+    ExposureType,
+    FetchAlertsResponse,
+    KytMode,
+    LifecycleArg,
+    WithdrawalAttempt,
 };
-use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory as VM};
-use ic_stable_structures::storable::{Bound, Storable};
-use ic_stable_structures::{DefaultMemoryImpl, RestrictedMemory as RM, StableCell, StableLog};
-use serde::{Deserialize, Serialize};
+use ic_stable_structures::memory_manager::{
+    MemoryId,
+    MemoryManager,
+    VirtualMemory as VM,
+};
+use ic_stable_structures::storable::{
+    Bound,
+    Storable,
+};
+use ic_stable_structures::{
+    DefaultMemoryImpl,
+    RestrictedMemory as RM,
+    StableCell,
+    StableLog,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::borrow::Cow;
-use std::cell::{Cell, RefCell};
+use std::cell::{
+    Cell,
+    RefCell,
+};
 use std::collections::BTreeMap;
 use std::fmt;
 
@@ -857,7 +891,10 @@ fn test_key_rotation() {
 
 #[test]
 fn check_candid_interface_compatibility() {
-    use candid_parser::utils::{service_equal, CandidSource};
+    use candid_parser::utils::{
+        service_equal,
+        CandidSource,
+    };
 
     candid::export_service!();
 

@@ -1,11 +1,16 @@
 use std::collections::HashSet;
 
-use ic_base_types::{NodeId, PrincipalId};
+use ic_base_types::{
+    NodeId,
+    PrincipalId,
+};
 
 use super::{
     common::{
-        get_api_boundary_node_records_from_snapshot, get_node_records_from_snapshot,
-        InvariantCheckError, RegistrySnapshot,
+        get_api_boundary_node_records_from_snapshot,
+        get_node_records_from_snapshot,
+        InvariantCheckError,
+        RegistrySnapshot,
     },
     subnet::get_subnet_records_map,
 };
@@ -65,13 +70,20 @@ pub(crate) fn check_node_assignment_invariants(
 mod tests {
     use std::str::FromStr;
 
-    use ic_base_types::{NodeId, PrincipalId, SubnetId};
+    use ic_base_types::{
+        NodeId,
+        PrincipalId,
+        SubnetId,
+    };
     use ic_protobuf::registry::{
-        api_boundary_node::v1::ApiBoundaryNodeRecord, node::v1::NodeRecord,
+        api_boundary_node::v1::ApiBoundaryNodeRecord,
+        node::v1::NodeRecord,
         subnet::v1::SubnetRecord,
     };
     use ic_registry_keys::{
-        make_api_boundary_node_record_key, make_node_record_key, make_subnet_record_key,
+        make_api_boundary_node_record_key,
+        make_node_record_key,
+        make_subnet_record_key,
     };
     use prost::Message;
 

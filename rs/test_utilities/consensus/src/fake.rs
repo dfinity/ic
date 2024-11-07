@@ -2,21 +2,40 @@ use std::collections::BTreeMap;
 
 use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
 use ic_interfaces::{
-    certification::{Verifier, VerifierError},
+    certification::{
+        Verifier,
+        VerifierError,
+    },
     validation::ValidationResult,
 };
-use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+use ic_test_utilities_types::ids::{
+    node_test_id,
+    subnet_test_id,
+};
 use ic_types::{
     batch::*,
     consensus::certification::*,
-    consensus::dkg::{Dealings, Summary},
+    consensus::dkg::{
+        Dealings,
+        Summary,
+    },
     consensus::*,
-    crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
-    crypto::{threshold_sig::ni_dkg::NiDkgTranscript, *},
+    crypto::threshold_sig::ni_dkg::{
+        NiDkgId,
+        NiDkgTag,
+        NiDkgTargetSubnet,
+    },
+    crypto::{
+        threshold_sig::ni_dkg::NiDkgTranscript,
+        *,
+    },
     signature::*,
     *,
 };
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 pub trait Fake {
     fn fake() -> Self;

@@ -1,7 +1,11 @@
 use std::path::PathBuf;
 
 use anyhow::Error;
-use chacha20poly1305::{aead::OsRng as ChaChaOsRng, KeyInit, XChaCha20Poly1305};
+use chacha20poly1305::{
+    aead::OsRng as ChaChaOsRng,
+    KeyInit,
+    XChaCha20Poly1305,
+};
 use clap::Parser;
 use pem::Pem;
 

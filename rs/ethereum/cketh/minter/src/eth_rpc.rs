@@ -4,30 +4,69 @@
 use crate::endpoints::CandidBlockTag;
 use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::eth_rpc_client::SingleCallError;
-use crate::eth_rpc_error::{sanitize_send_raw_transaction_result, Parser};
-use crate::logs::{DEBUG, TRACE_HTTP};
-use crate::numeric::{BlockNumber, LogIndex, TransactionCount, Wei, WeiPerGas};
-use crate::state::{mutate_state, State};
-use candid::{candid_method, CandidType, Principal};
+use crate::eth_rpc_error::{
+    sanitize_send_raw_transaction_result,
+    Parser,
+};
+use crate::logs::{
+    DEBUG,
+    TRACE_HTTP,
+};
+use crate::numeric::{
+    BlockNumber,
+    LogIndex,
+    TransactionCount,
+    Wei,
+    WeiPerGas,
+};
+use crate::state::{
+    mutate_state,
+    State,
+};
+use candid::{
+    candid_method,
+    CandidType,
+    Principal,
+};
 use ethnum;
 use evm_rpc_client::{
     HttpOutcallError as EvmHttpOutcallError,
     SendRawTransactionStatus as EvmSendRawTransactionStatus,
 };
 use ic_canister_log::log;
-use ic_cdk::api::call::{call_with_payment128, RejectionCode};
+use ic_cdk::api::call::{
+    call_with_payment128,
+    RejectionCode,
+};
 use ic_cdk::api::management_canister::http_request::{
-    CanisterHttpRequestArgument, HttpHeader, HttpMethod, HttpResponse, TransformArgs,
+    CanisterHttpRequestArgument,
+    HttpHeader,
+    HttpMethod,
+    HttpResponse,
+    TransformArgs,
     TransformContext,
 };
 use ic_cdk_macros::query;
 use ic_ethereum_types::Address;
 pub use metrics::encode as encode_metrics;
-use minicbor::{Decode, Encode};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use minicbor::{
+    Decode,
+    Encode,
+};
+use serde::{
+    de::DeserializeOwned,
+    Deserialize,
+    Serialize,
+};
 use serde_json::Value;
 use std::fmt;
-use std::fmt::{Debug, Display, Formatter, LowerHex, UpperHex};
+use std::fmt::{
+    Debug,
+    Display,
+    Formatter,
+    LowerHex,
+    UpperHex,
+};
 
 #[cfg(test)]
 mod tests;

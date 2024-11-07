@@ -1,5 +1,8 @@
 #![no_main]
-use ic_replicated_state::page_map::storage::tests::{write_overlays_and_verify, Instruction};
+use ic_replicated_state::page_map::storage::tests::{
+    write_overlays_and_verify,
+    Instruction,
+};
 use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|instructions: Vec<Instruction>| {

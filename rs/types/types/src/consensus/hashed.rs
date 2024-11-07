@@ -15,8 +15,15 @@
 //! The serialization of `Hashed<H, V>` will serialize both the hash and the
 //! value.
 
-use serde::{Deserialize, Serialize};
-use std::cmp::{Eq, Ordering, PartialOrd};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use std::cmp::{
+    Eq,
+    Ordering,
+    PartialOrd,
+};
 
 /// Bundle of both a value and its hash. Once created it remains immutable,
 /// which is why both fields are only accessible through member functions, not

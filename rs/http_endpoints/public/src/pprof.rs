@@ -1,15 +1,30 @@
-use crate::common::{CONTENT_TYPE_PROTOBUF, CONTENT_TYPE_SVG};
+use crate::common::{
+    CONTENT_TYPE_PROTOBUF,
+    CONTENT_TYPE_SVG,
+};
 
 use axum::{
-    extract::{Query, State},
-    response::{Html, IntoResponse},
+    extract::{
+        Query,
+        State,
+    },
+    response::{
+        Html,
+        IntoResponse,
+    },
     Router,
 };
 use http::header;
-use hyper::{self, StatusCode};
+use hyper::{
+    self,
+    StatusCode,
+};
 use ic_pprof::PprofCollector;
 use serde::Deserialize;
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::Arc,
+    time::Duration,
+};
 
 /// Default CPU profile duration.
 pub const DEFAULT_DURATION_SECONDS: u64 = 30;

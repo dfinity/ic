@@ -1,8 +1,14 @@
 //! Types for Ed25519 basic signatures
 #![allow(clippy::unit_arg)] // Arbitrary is a unit arg in: derive(proptest_derive::Arbitrary)
 use ic_crypto_secrets_containers::SecretArray;
-use serde::{Deserialize, Serialize};
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use zeroize::{
+    Zeroize,
+    ZeroizeOnDrop,
+};
 
 mod conversions;
 mod generic_traits;

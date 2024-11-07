@@ -121,7 +121,10 @@
 //! can also always decide upon proposals in a timely manner.
 
 use crate::{
-    governance::{Governance, TimeWarp},
+    governance::{
+        Governance,
+        TimeWarp,
+    },
     pb::v1::{
         governance::{
             governance_cached_metrics::NeuronSubsetMetrics as NeuronSubsetMetricsPb,
@@ -136,9 +139,15 @@ use ic_nervous_system_temporary::Temporary;
 use mockall::automock;
 use std::{
     cell::Cell,
-    collections::{BTreeMap, HashMap},
+    collections::{
+        BTreeMap,
+        HashMap,
+    },
     io,
-    time::{Duration, SystemTime},
+    time::{
+        Duration,
+        SystemTime,
+    },
 };
 
 #[cfg(any(test, feature = "canbench-rs"))]

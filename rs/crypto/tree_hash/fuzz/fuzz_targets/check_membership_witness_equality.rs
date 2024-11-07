@@ -6,7 +6,10 @@
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 
 use ic_canonical_state_tree_hash_test_utils::test_membership_witness;
-use libfuzzer_sys::{fuzz_mutator, fuzz_target};
+use libfuzzer_sys::{
+    fuzz_mutator,
+    fuzz_target,
+};
 
 mod common;
 

@@ -2,7 +2,10 @@ use candid::CandidType;
 use ic_base_types::CanisterId;
 use ic_error_types::RejectCode;
 use ic_types::messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::ops::RangeInclusive;
 
 /// A full config for generating random calls and replies. Ranges are stored as individual u32

@@ -1,5 +1,8 @@
 use assert_matches::assert_matches;
-use ic_crypto_tree_hash::{Label, MixedHashTree};
+use ic_crypto_tree_hash::{
+    Label,
+    MixedHashTree,
+};
 use ic_crypto_tree_hash_test_utils::arbitrary::arbitrary_mixed_hash_tree;
 use proptest::prelude::*;
 use serde_cbor::Value as Cbor;
@@ -118,7 +121,11 @@ proptest! {
 fn fail_to_decode_unknown_tag() {
     use serde_cbor::{
         error::Error,
-        value::Value::{Array, Integer, Null},
+        value::Value::{
+            Array,
+            Integer,
+            Null,
+        },
     };
 
     match serde_cbor::value::from_value(Array(vec![Integer(5), Null]))

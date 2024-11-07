@@ -1,7 +1,11 @@
 use crate::BtcNetwork;
 use ic_btc_interface::Txid;
 use ic_cdk::api::management_canister::http_request::{
-    CanisterHttpRequestArgument, HttpHeader, HttpMethod, TransformContext, TransformFunc,
+    CanisterHttpRequestArgument,
+    HttpHeader,
+    HttpMethod,
+    TransformContext,
+    TransformFunc,
 };
 use std::cell::RefCell;
 use std::fmt;

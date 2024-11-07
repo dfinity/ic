@@ -1,17 +1,31 @@
 use crate::{
     cli::wait_for_confirmation,
     command_helper::exec_cmd,
-    error::{RecoveryError, RecoveryResult},
+    error::{
+        RecoveryError,
+        RecoveryResult,
+    },
     ssh_helper,
 };
 use core::time;
 use ic_http_utils::file_downloader::FileDownloader;
 use ic_types::ReplicaVersion;
-use slog::{info, warn, Logger};
+use slog::{
+    info,
+    warn,
+    Logger,
+};
 use std::{
-    fs::{self, File, ReadDir},
+    fs::{
+        self,
+        File,
+        ReadDir,
+    },
     io::Write,
-    path::{Path, PathBuf},
+    path::{
+        Path,
+        PathBuf,
+    },
     process::Command,
     thread,
     time::Duration,

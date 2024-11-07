@@ -2,14 +2,20 @@ use ic_rosetta_api::models::Error as RosettaError;
 use ic_rosetta_api::models::*;
 use ic_types::CanisterId;
 
-use icp_ledger::{AccountIdentifier, BlockIndex};
+use icp_ledger::{
+    AccountIdentifier,
+    BlockIndex,
+};
 use rosetta_core::request_types::NetworkRequest;
 use slog::info;
 
 use crate::store_threshold_sig_pk;
 use ic_rosetta_api::models::Operation;
 use ic_types::messages::Blob;
-use rand::{seq::SliceRandom, thread_rng};
+use rand::{
+    seq::SliceRandom,
+    thread_rng,
+};
 use reqwest::Client as HttpClient;
 use reqwest::StatusCode as HttpStatusCode;
 use rosetta_core::request_types::MetadataRequest;
@@ -508,7 +514,10 @@ impl RosettaApiHandle {
         const TIMEOUT: Duration = Duration::from_secs(10 * 60); // 10 minutes
         const WAIT_BETWEEN_ATTEMPTS: Duration = Duration::from_secs(1);
 
-        use nix::sys::signal::{kill, Signal::SIGTERM};
+        use nix::sys::signal::{
+            kill,
+            Signal::SIGTERM,
+        };
         use nix::unistd::Pid;
         kill(Pid::from_raw(self.process.id() as i32), SIGTERM).ok();
 

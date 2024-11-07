@@ -1,13 +1,27 @@
 use crate::{
-    archive::{Archive, ArchiveCanisterWasm, ArchiveOptions},
+    archive::{
+        Archive,
+        ArchiveCanisterWasm,
+        ArchiveOptions,
+    },
     runtime::Runtime,
 };
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::collections::VecDeque;
 use std::convert::TryFrom;
-use std::sync::{Arc, RwLock};
+use std::sync::{
+    Arc,
+    RwLock,
+};
 
-use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
+use ic_ledger_core::block::{
+    BlockIndex,
+    BlockType,
+    EncodedBlock,
+};
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_hash_of::HashOf;
 
@@ -104,7 +118,10 @@ impl<Rt: Runtime, Wasm: ArchiveCanisterWasm> Blockchain<Rt, Wasm> {
     ///
     /// This function panics if the specified range is not a subset of locally available blocks.
     pub fn block_slice(&self, local_blocks: std::ops::Range<u64>) -> &[EncodedBlock] {
-        use crate::range_utils::{is_subrange, offset};
+        use crate::range_utils::{
+            is_subrange,
+            offset,
+        };
 
         assert!(
             is_subrange(&local_blocks, &self.local_block_range()),

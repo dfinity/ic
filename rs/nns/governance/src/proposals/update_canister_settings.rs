@@ -1,17 +1,30 @@
-use super::{invalid_proposal_error, topic_to_manage_canister};
+use super::{
+    invalid_proposal_error,
+    topic_to_manage_canister,
+};
 use crate::{
     pb::v1::{
-        update_canister_settings::LogVisibility, GovernanceError, Topic, UpdateCanisterSettings,
+        update_canister_settings::LogVisibility,
+        GovernanceError,
+        Topic,
+        UpdateCanisterSettings,
     },
     proposals::call_canister::CallCanister,
 };
 
-use candid::{Encode, Nat};
+use candid::{
+    Encode,
+    Nat,
+};
 use ic_base_types::CanisterId;
 use ic_nervous_system_clients::update_settings::{
-    CanisterSettings as RootCanisterSettings, LogVisibility as RootLogVisibility,
+    CanisterSettings as RootCanisterSettings,
+    LogVisibility as RootLogVisibility,
 };
-use ic_nns_constants::{LIFELINE_CANISTER_ID, ROOT_CANISTER_ID};
+use ic_nns_constants::{
+    LIFELINE_CANISTER_ID,
+    ROOT_CANISTER_ID,
+};
 use ic_nns_handler_root_interface::UpdateCanisterSettingsRequest;
 
 impl UpdateCanisterSettings {
@@ -133,10 +146,16 @@ mod tests {
     use super::*;
 
     use crate::pb::v1::governance_error::ErrorType;
-    use crate::pb::v1::update_canister_settings::{CanisterSettings, Controllers};
+    use crate::pb::v1::update_canister_settings::{
+        CanisterSettings,
+        Controllers,
+    };
     use candid::Decode;
     use ic_base_types::CanisterId;
-    use ic_nns_constants::{LEDGER_CANISTER_ID, SNS_WASM_CANISTER_ID};
+    use ic_nns_constants::{
+        LEDGER_CANISTER_ID,
+        SNS_WASM_CANISTER_ID,
+    };
 
     #[test]
     fn test_invalid_update_canister_settings() {

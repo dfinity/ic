@@ -4,14 +4,25 @@ use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
 use ic_nervous_system_common::ledger::IcpLedger;
 use ic_nervous_system_common::NervousSystemError;
 use ic_nervous_system_runtime::Runtime;
-use icp_ledger::{AccountIdentifier, Subaccount as IcpSubaccount, Tokens};
+use icp_ledger::{
+    AccountIdentifier,
+    Subaccount as IcpSubaccount,
+    Tokens,
+};
 
 #[cfg(feature = "tla")]
 use ic_nns_governance::governance::tla::{
-    self as tla, account_to_tla, opt_subaccount_to_tla, Destination, ToTla,
+    self as tla,
+    account_to_tla,
+    opt_subaccount_to_tla,
+    Destination,
+    ToTla,
     TLA_INSTRUMENTATION_STATE,
 };
-use ic_nns_governance::{tla_log_request, tla_log_response};
+use ic_nns_governance::{
+    tla_log_request,
+    tla_log_response,
+};
 use std::collections::BTreeMap;
 
 pub struct LoggingIcpLedgerCanister<Rt: Runtime>(IcpLedgerCanister<Rt>);

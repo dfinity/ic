@@ -22,7 +22,13 @@ use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use std::{
     fmt::Debug,
-    ops::{Add, Div, Mul, RangeBounds, Sub},
+    ops::{
+        Add,
+        Div,
+        Mul,
+        RangeBounds,
+        Sub,
+    },
 };
 
 lazy_static! {
@@ -461,8 +467,15 @@ impl Div<Duration> for Duration {
 #[cfg(test)]
 mod test {
     use super::*;
-    use ic_nervous_system_common::{assert_is_err, assert_is_ok, E8};
-    use pretty_assertions::{assert_eq, assert_ne};
+    use ic_nervous_system_common::{
+        assert_is_err,
+        assert_is_ok,
+        E8,
+    };
+    use pretty_assertions::{
+        assert_eq,
+        assert_ne,
+    };
 
     const TRANSITION_ROUND_COUNT: u64 = 42;
 

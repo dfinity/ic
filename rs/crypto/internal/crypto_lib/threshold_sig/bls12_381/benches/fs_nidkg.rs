@@ -2,7 +2,9 @@ use criterion::*;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::Epoch;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::{
-    create_forward_secure_key_pair, update_key_inplace_to_epoch, SecretKey,
+    create_forward_secure_key_pair,
+    update_key_inplace_to_epoch,
+    SecretKey,
 };
 
 fn fs_key_generation(c: &mut Criterion) {

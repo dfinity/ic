@@ -26,7 +26,11 @@ mod verify_dealing_public {
     use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptOperation;
     use ic_types::crypto::canister_threshold_sig::idkg::InitialIDkgDealings;
     use ic_types::crypto::KeyPurpose::NodeSigning;
-    use ic_types::crypto::{AlgorithmId, CryptoError, Signable};
+    use ic_types::crypto::{
+        AlgorithmId,
+        CryptoError,
+        Signable,
+    };
     use ic_types::registry::RegistryClientError;
     use rand::Rng;
 

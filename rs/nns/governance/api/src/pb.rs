@@ -1,11 +1,28 @@
 use crate::pb::v1::{
-    governance::migration::MigrationStatus, governance_error::ErrorType, manage_neuron_response,
-    neuron::DissolveState, CreateServiceNervousSystem, GovernanceError, ManageNeuronResponse,
-    NetworkEconomics, Neuron, NeuronState, NeuronsFundEconomics,
-    NeuronsFundMatchedFundingCurveCoefficients, XdrConversionRate,
+    governance::migration::MigrationStatus,
+    governance_error::ErrorType,
+    manage_neuron_response,
+    neuron::DissolveState,
+    CreateServiceNervousSystem,
+    GovernanceError,
+    ManageNeuronResponse,
+    NetworkEconomics,
+    Neuron,
+    NeuronState,
+    NeuronsFundEconomics,
+    NeuronsFundMatchedFundingCurveCoefficients,
+    XdrConversionRate,
 };
-use ic_nervous_system_proto::pb::v1::{Decimal, Duration, GlobalTimeOfDay, Percentage};
-use icp_ledger::{DEFAULT_TRANSFER_FEE, TOKEN_SUBDIVIDABLE_BY};
+use ic_nervous_system_proto::pb::v1::{
+    Decimal,
+    Duration,
+    GlobalTimeOfDay,
+    Percentage,
+};
+use icp_ledger::{
+    DEFAULT_TRANSFER_FEE,
+    TOKEN_SUBDIVIDABLE_BY,
+};
 use std::fmt;
 
 #[allow(clippy::all)]

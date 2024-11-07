@@ -1,4 +1,8 @@
-use depcheck::{DepKind, PackageSpec, Rule};
+use depcheck::{
+    DepKind,
+    PackageSpec,
+    Rule,
+};
 
 const SEPARATOR: &str =
     "================================================================================";

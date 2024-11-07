@@ -1,8 +1,21 @@
 //! This module implements the IDKG payload builder.
-use super::pre_signer::{IDkgTranscriptBuilder, IDkgTranscriptBuilderImpl};
-use super::signer::{ThresholdSignatureBuilder, ThresholdSignatureBuilderImpl};
-use super::utils::{block_chain_reader, get_chain_key_config_if_enabled, InvalidChainCacheError};
-use crate::idkg::metrics::{IDkgPayloadMetrics, CRITICAL_ERROR_MASTER_KEY_TRANSCRIPT_MISSING};
+use super::pre_signer::{
+    IDkgTranscriptBuilder,
+    IDkgTranscriptBuilderImpl,
+};
+use super::signer::{
+    ThresholdSignatureBuilder,
+    ThresholdSignatureBuilderImpl,
+};
+use super::utils::{
+    block_chain_reader,
+    get_chain_key_config_if_enabled,
+    InvalidChainCacheError,
+};
+use crate::idkg::metrics::{
+    IDkgPayloadMetrics,
+    CRITICAL_ERROR_MASTER_KEY_TRANSCRIPT_MISSING,
+};
 pub(super) use errors::IDkgPayloadError;
 use errors::MembershipError;
 use ic_consensus_utils::crypto::ConsensusCrypto;
@@ -11,25 +24,50 @@ use ic_crypto::retrieve_mega_public_key_from_registry;
 use ic_interfaces::idkg::IDkgPool;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
-use ic_logger::{error, info, warn, ReplicaLogger};
+use ic_logger::{
+    error,
+    info,
+    warn,
+    ReplicaLogger,
+};
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_features::ChainKeyConfig;
-use ic_replicated_state::{metadata_state::subnet_call_context_manager::*, ReplicatedState};
+use ic_replicated_state::{
+    metadata_state::subnet_call_context_manager::*,
+    ReplicatedState,
+};
 use ic_types::consensus::idkg::HasMasterPublicKeyId;
 use ic_types::{
     batch::ValidationContext,
     consensus::{
-        idkg::{self, IDkgBlockReader, IDkgPayload, MasterKeyTranscript, TranscriptAttributes},
-        Block, HasHeight,
+        idkg::{
+            self,
+            IDkgBlockReader,
+            IDkgPayload,
+            MasterKeyTranscript,
+            TranscriptAttributes,
+        },
+        Block,
+        HasHeight,
     },
     crypto::canister_threshold_sig::idkg::InitialIDkgDealings,
     messages::CallbackId,
-    Height, NodeId, RegistryVersion, SubnetId, Time,
+    Height,
+    NodeId,
+    RegistryVersion,
+    SubnetId,
+    Time,
 };
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
 use std::ops::Deref;
-use std::sync::{Arc, RwLock};
+use std::sync::{
+    Arc,
+    RwLock,
+};
 use std::time::Duration;
 
 mod errors;
@@ -679,25 +717,45 @@ mod tests {
     use crate::idkg::utils::block_chain_reader;
     use crate::idkg::utils::get_context_request_id;
     use assert_matches::assert_matches;
-    use ic_consensus_mocks::{dependencies, Dependencies};
+    use ic_consensus_mocks::{
+        dependencies,
+        Dependencies,
+    };
     use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_initial_idkg_dealing_for_tests;
     use ic_crypto_test_utils_canister_threshold_sigs::generate_tecdsa_protocol_inputs;
     use ic_crypto_test_utils_canister_threshold_sigs::generate_tschnorr_protocol_inputs;
     use ic_crypto_test_utils_canister_threshold_sigs::{
-        CanisterThresholdSigTestEnvironment, IDkgParticipants,
+        CanisterThresholdSigTestEnvironment,
+        IDkgParticipants,
     };
-    use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
+    use ic_crypto_test_utils_reproducible_rng::{
+        reproducible_rng,
+        ReproducibleRng,
+    };
     use ic_interfaces_registry::RegistryValue;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_protobuf::types::v1 as pb;
     use ic_registry_subnet_features::KeyConfig;
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
-    use ic_test_utilities_consensus::fake::{Fake, FakeContentSigner};
-    use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, user_test_id};
+    use ic_test_utilities_consensus::fake::{
+        Fake,
+        FakeContentSigner,
+    };
+    use ic_test_utilities_registry::{
+        add_subnet_record,
+        SubnetRecordBuilder,
+    };
+    use ic_test_utilities_types::ids::{
+        node_test_id,
+        subnet_test_id,
+        user_test_id,
+    };
     use ic_types::batch::BatchPayload;
-    use ic_types::consensus::dkg::{Dealings, Summary};
+    use ic_types::consensus::dkg::{
+        Dealings,
+        Summary,
+    };
     use ic_types::consensus::idkg::IDkgPayload;
     use ic_types::consensus::idkg::PreSigId;
     use ic_types::consensus::idkg::ReshareOfUnmaskedParams;
@@ -705,16 +763,29 @@ mod tests {
     use ic_types::consensus::idkg::UnmaskedTranscript;
     use ic_types::consensus::idkg::UnmaskedTranscriptWithAttributes;
     use ic_types::consensus::{
-        BlockPayload, BlockProposal, DataPayload, HashedBlock, Payload, Rank, SummaryPayload,
+        BlockPayload,
+        BlockProposal,
+        DataPayload,
+        HashedBlock,
+        Payload,
+        Rank,
+        SummaryPayload,
     };
     use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscript;
     use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
     use ic_types::crypto::canister_threshold_sig::ThresholdEcdsaCombinedSignature;
     use ic_types::crypto::canister_threshold_sig::ThresholdSchnorrCombinedSignature;
-    use ic_types::crypto::{CryptoHash, CryptoHashOf};
+    use ic_types::crypto::{
+        CryptoHash,
+        CryptoHashOf,
+    };
     use ic_types::time::UNIX_EPOCH;
     use ic_types::Randomness;
-    use ic_types::{messages::CallbackId, Height, RegistryVersion};
+    use ic_types::{
+        messages::CallbackId,
+        Height,
+        RegistryVersion,
+    };
     use idkg::common::CombinedSignature;
     use std::collections::BTreeSet;
     use std::convert::TryInto;

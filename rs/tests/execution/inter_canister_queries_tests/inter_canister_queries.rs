@@ -1,12 +1,21 @@
 use ic_agent::agent::RejectCode;
 use ic_system_test_driver::driver::test_env::TestEnv;
-use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
+use ic_system_test_driver::driver::test_env_api::{
+    GetFirstHealthyNodeSnapshot,
+    HasPublicApiUrl,
+};
 use ic_system_test_driver::util::block_on;
 use ic_system_test_driver::util::{
-    assert_reject, create_and_install, escape_for_wat, UniversalCanister,
+    assert_reject,
+    create_and_install,
+    escape_for_wat,
+    UniversalCanister,
 };
 use ic_types::CanisterId;
-use ic_universal_canister::{call_args, wasm};
+use ic_universal_canister::{
+    call_args,
+    wasm,
+};
 
 /// User queries A on first subnet. A queries B on another subnet which fails.
 pub fn cannot_query_xnet_canister(env: TestEnv) {

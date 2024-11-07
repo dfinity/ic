@@ -1,16 +1,44 @@
 use assert_matches::assert_matches;
-use candid::{Decode, Encode, Nat, Principal};
-use ic_base_types::{CanisterId, PrincipalId};
-use ic_canisters_http_types::{HttpRequest, HttpResponse};
+use candid::{
+    Decode,
+    Encode,
+    Nat,
+    Principal,
+};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
+use ic_canisters_http_types::{
+    HttpRequest,
+    HttpResponse,
+};
 use ic_ledger_suite_orchestrator::candid::{
-    AddErc20Arg, CyclesManagement, LedgerInitArg, LedgerSuiteVersion, ManagedCanisterStatus,
-    ManagedCanisters, ManagedLedgerSuite, OrchestratorArg, OrchestratorInfo,
-    UpdateCyclesManagement, UpgradeArg,
+    AddErc20Arg,
+    CyclesManagement,
+    LedgerInitArg,
+    LedgerSuiteVersion,
+    ManagedCanisterStatus,
+    ManagedCanisters,
+    ManagedLedgerSuite,
+    OrchestratorArg,
+    OrchestratorInfo,
+    UpdateCyclesManagement,
+    UpgradeArg,
 };
 use ic_ledger_suite_orchestrator_test_utils::{
-    assert_reply, cketh_installed_canisters, default_init_arg, ledger_suite_orchestrator_wasm,
-    new_state_machine, usdc, usdc_erc20_contract, usdt, LedgerSuiteOrchestrator,
-    GIT_COMMIT_HASH_UPGRADE, MINTER_PRINCIPAL, NNS_ROOT_PRINCIPAL,
+    assert_reply,
+    cketh_installed_canisters,
+    default_init_arg,
+    ledger_suite_orchestrator_wasm,
+    new_state_machine,
+    usdc,
+    usdc_erc20_contract,
+    usdt,
+    LedgerSuiteOrchestrator,
+    GIT_COMMIT_HASH_UPGRADE,
+    MINTER_PRINCIPAL,
+    NNS_ROOT_PRINCIPAL,
 };
 use ic_state_machine_tests::ErrorCode;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as LedgerMetadataValue;
@@ -532,16 +560,29 @@ fn should_not_change_ledger_suite_version_when_registering_embedded_wasms_a_seco
 mod upgrade {
     use super::*;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-    use ic_ledger_suite_orchestrator::candid::{InstalledCanister, InstalledLedgerSuite};
+    use ic_ledger_suite_orchestrator::candid::{
+        InstalledCanister,
+        InstalledLedgerSuite,
+    };
     use ic_ledger_suite_orchestrator::state::WasmHash;
     use ic_ledger_suite_orchestrator_test_utils::universal_canister::{
-        CanisterChangeDetails, CanisterInfoResponse, CanisterInstallMode, UniversalCanister,
+        CanisterChangeDetails,
+        CanisterInfoResponse,
+        CanisterInstallMode,
+        UniversalCanister,
     };
     use ic_ledger_suite_orchestrator_test_utils::{
-        default_init_arg, ledger_suite_orchestrator_wasm, ledger_wasm, tweak_ledger_suite_wasms,
-        usdt_erc20_contract, GIT_COMMIT_HASH_UPGRADE,
+        default_init_arg,
+        ledger_suite_orchestrator_wasm,
+        ledger_wasm,
+        tweak_ledger_suite_wasms,
+        usdt_erc20_contract,
+        GIT_COMMIT_HASH_UPGRADE,
     };
-    use ic_management_canister_types::{CanisterSettingsArgsBuilder, CanisterStatusType};
+    use ic_management_canister_types::{
+        CanisterSettingsArgsBuilder,
+        CanisterStatusType,
+    };
     use icrc_ledger_types::icrc1::transfer::TransferArg;
     use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
     use proptest::prelude::Rng;

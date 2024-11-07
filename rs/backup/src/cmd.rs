@@ -1,5 +1,8 @@
 use clap::Parser;
-use ic_types::{PrincipalId, SubnetId};
+use ic_types::{
+    PrincipalId,
+    SubnetId,
+};
 use std::path::PathBuf;
 
 #[derive(Clone)]

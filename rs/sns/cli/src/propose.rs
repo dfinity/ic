@@ -1,24 +1,54 @@
 use crate::{
-    fetch_canister_controllers, get_identity, use_test_neuron_1_owner_identity,
-    MakeProposalResponse, NnsGovernanceCanister, SaveOriginalDfxIdentityAndRestoreOnExit,
+    fetch_canister_controllers,
+    get_identity,
+    use_test_neuron_1_owner_identity,
+    MakeProposalResponse,
+    NnsGovernanceCanister,
+    SaveOriginalDfxIdentityAndRestoreOnExit,
 };
-use anyhow::{anyhow, bail, Context, Result};
-use clap::{ArgGroup, Parser};
-use ic_base_types::{CanisterId, PrincipalId};
+use anyhow::{
+    anyhow,
+    bail,
+    Context,
+    Result,
+};
+use clap::{
+    ArgGroup,
+    Parser,
+};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount_bytes;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_ID;
-use ic_nns_common::pb::v1::{NeuronId, ProposalId};
+use ic_nns_common::pb::v1::{
+    NeuronId,
+    ProposalId,
+};
 use ic_nns_constants::ROOT_CANISTER_ID;
 use ic_nns_governance_api::pb::v1::{
-    manage_neuron::NeuronIdOrSubaccount, proposal::Action, Proposal,
+    manage_neuron::NeuronIdOrSubaccount,
+    proposal::Action,
+    Proposal,
 };
 use ic_sns_governance::pb::v1::governance::Mode;
 use itertools::Itertools;
 use std::{
     collections::HashSet,
-    fmt::{Debug, Display, Formatter},
-    fs::{write, OpenOptions},
-    path::{Path, PathBuf},
+    fmt::{
+        Debug,
+        Display,
+        Formatter,
+    },
+    fs::{
+        write,
+        OpenOptions,
+    },
+    path::{
+        Path,
+        PathBuf,
+    },
 };
 
 #[cfg(test)]
@@ -229,7 +259,10 @@ fn inform_user_of_sns_behavior(proposal: &Proposal, skip_confirmation: bool) -> 
 }
 
 fn confirm_understanding(skip_confirmation: bool) -> Result<()> {
-    use std::io::{self, Write};
+    use std::io::{
+        self,
+        Write,
+    };
 
     if skip_confirmation {
         return Ok(());

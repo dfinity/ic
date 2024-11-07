@@ -4,7 +4,12 @@ use super::*;
 use crate::{
     artifact::PbArtifact,
     crypto::threshold_sig::ni_dkg::{
-        config::NiDkgConfig, NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTranscript,
+        config::NiDkgConfig,
+        NiDkgDealing,
+        NiDkgId,
+        NiDkgTag,
+        NiDkgTargetId,
+        NiDkgTranscript,
     },
     messages::CallbackId,
     ReplicaVersion,

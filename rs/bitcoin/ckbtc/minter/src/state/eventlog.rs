@@ -1,14 +1,30 @@
 use crate::lifecycle::init::InitArgs;
 use crate::lifecycle::upgrade::UpgradeArgs;
 use crate::state::{
-    ChangeOutput, CkBtcMinterState, FinalizedBtcRetrieval, FinalizedStatus, Overdraft,
-    RetrieveBtcRequest, SubmittedBtcTransaction, UtxoCheckStatus,
+    ChangeOutput,
+    CkBtcMinterState,
+    FinalizedBtcRetrieval,
+    FinalizedStatus,
+    Overdraft,
+    RetrieveBtcRequest,
+    SubmittedBtcTransaction,
+    UtxoCheckStatus,
 };
-use crate::state::{ReimburseDepositTask, ReimbursedDeposit, ReimbursementReason};
+use crate::state::{
+    ReimburseDepositTask,
+    ReimbursedDeposit,
+    ReimbursementReason,
+};
 use candid::Principal;
-use ic_btc_interface::{Txid, Utxo};
+use ic_btc_interface::{
+    Txid,
+    Utxo,
+};
 use icrc_ledger_types::icrc1::account::Account;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 #[derive(Deserialize, candid::CandidType)]
 pub struct GetEventsArg {

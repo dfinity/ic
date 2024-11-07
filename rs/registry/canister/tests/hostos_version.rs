@@ -3,14 +3,29 @@ use candid::Encode;
 use dfn_candid::candid;
 use ic_nns_test_utils::{
     itest_helpers::{
-        forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
+        forward_call_via_universal_canister,
+        local_test_on_nns_subnet,
+        set_up_registry_canister,
         set_up_universal_canister,
     },
-    registry::{get_value, get_value_or_panic, invariant_compliant_mutation_as_atomic_req},
+    registry::{
+        get_value,
+        get_value_or_panic,
+        invariant_compliant_mutation_as_atomic_req,
+    },
 };
-use ic_protobuf::registry::{hostos_version::v1::HostosVersionRecord, node::v1::NodeRecord};
-use ic_registry_keys::{make_hostos_version_key, make_node_record_key};
-use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest};
+use ic_protobuf::registry::{
+    hostos_version::v1::HostosVersionRecord,
+    node::v1::NodeRecord,
+};
+use ic_registry_keys::{
+    make_hostos_version_key,
+    make_node_record_key,
+};
+use ic_registry_transport::{
+    insert,
+    pb::v1::RegistryAtomicMutateRequest,
+};
 use prost::Message;
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder,
@@ -22,7 +37,8 @@ use registry_canister::{
 
 mod common;
 use common::test_helpers::{
-    prepare_registry_with_nodes, prepare_registry_with_nodes_from_template,
+    prepare_registry_with_nodes,
+    prepare_registry_with_nodes_from_template,
 };
 
 const GOOD_PACKAGE_URL: &str = "http://release_package.tar.zst";

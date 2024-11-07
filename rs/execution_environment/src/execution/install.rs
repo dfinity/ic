@@ -4,25 +4,54 @@
 
 use crate::as_round_instructions;
 use crate::canister_manager::{
-    DtsInstallCodeResult, InstallCodeContext, PausedInstallCodeExecution,
+    DtsInstallCodeResult,
+    InstallCodeContext,
+    PausedInstallCodeExecution,
 };
-use crate::execution::common::{ingress_status_with_processing_state, update_round_limits};
+use crate::execution::common::{
+    ingress_status_with_processing_state,
+    update_round_limits,
+};
 use crate::execution::install_code::{
-    canister_layout, finish_err, CanisterMemoryHandling, InstallCodeHelper, MemoryHandling,
-    OriginalContext, PausedInstallCodeHelper,
+    canister_layout,
+    finish_err,
+    CanisterMemoryHandling,
+    InstallCodeHelper,
+    MemoryHandling,
+    OriginalContext,
+    PausedInstallCodeHelper,
 };
-use crate::execution_environment::{RoundContext, RoundLimits};
+use crate::execution_environment::{
+    RoundContext,
+    RoundLimits,
+};
 use ic_base_types::PrincipalId;
-use ic_embedders::wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult};
+use ic_embedders::wasm_executor::{
+    CanisterStateChanges,
+    PausedWasmExecution,
+    WasmExecutionResult,
+};
 use ic_interfaces::execution_environment::WasmExecutionOutput;
-use ic_logger::{info, warn, ReplicaLogger};
+use ic_logger::{
+    info,
+    warn,
+    ReplicaLogger,
+};
 use ic_replicated_state::{
-    metadata_state::subnet_call_context_manager::InstallCodeCallId, CanisterState,
+    metadata_state::subnet_call_context_manager::InstallCodeCallId,
+    CanisterState,
 };
 use ic_system_api::ApiType;
 use ic_types::funds::Cycles;
-use ic_types::messages::{CanisterCall, RequestMetadata};
-use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
+use ic_types::messages::{
+    CanisterCall,
+    RequestMetadata,
+};
+use ic_types::methods::{
+    FuncRef,
+    SystemMethod,
+    WasmMethod,
+};
 
 /// Installs a new code in canister. The algorithm consists of five stages:
 /// - Stage 0: validate input.

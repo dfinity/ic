@@ -1,5 +1,11 @@
-use serde::{Deserialize, Serialize};
-use std::{net::SocketAddr, path::PathBuf};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use std::{
+    net::SocketAddr,
+    path::PathBuf,
+};
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]

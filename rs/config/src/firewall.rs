@@ -1,9 +1,15 @@
 use ic_protobuf::registry::firewall::v1::FirewallRule;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::path::PathBuf;
 
 #[cfg(test)]
-use proptest::prelude::{any, Strategy};
+use proptest::prelude::{
+    any,
+    Strategy,
+};
 #[cfg(test)]
 use proptest_derive::Arbitrary;
 

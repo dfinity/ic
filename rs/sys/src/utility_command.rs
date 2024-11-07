@@ -1,6 +1,10 @@
 use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
-use std::process::{Command as StdCommand, ExitStatus, Stdio};
+use std::process::{
+    Command as StdCommand,
+    ExitStatus,
+    Stdio,
+};
 use tokio::process::Command;
 
 const VSOCK_AGENT_PATH: &str = "/opt/ic/bin/vsock_guest";

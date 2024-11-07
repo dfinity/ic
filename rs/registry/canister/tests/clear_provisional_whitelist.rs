@@ -5,7 +5,9 @@ use ic_base_types::PrincipalId;
 use ic_nns_test_utils::registry::invariant_compliant_mutation_as_atomic_req;
 use ic_nns_test_utils::{
     itest_helpers::{
-        forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
+        forward_call_via_universal_canister,
+        local_test_on_nns_subnet,
+        set_up_registry_canister,
         set_up_universal_canister,
     },
     registry::get_value_or_panic,
@@ -13,7 +15,9 @@ use ic_nns_test_utils::{
 use ic_protobuf::registry::provisional_whitelist::v1::ProvisionalWhitelist;
 use ic_registry_keys::make_provisional_whitelist_record_key;
 use ic_registry_transport::pb::v1::{
-    registry_mutation::Type, RegistryAtomicMutateRequest, RegistryMutation,
+    registry_mutation::Type,
+    RegistryAtomicMutateRequest,
+    RegistryMutation,
 };
 use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;

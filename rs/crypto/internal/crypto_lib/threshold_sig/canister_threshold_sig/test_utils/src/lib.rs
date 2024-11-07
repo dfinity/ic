@@ -1,14 +1,25 @@
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
-    EccCurveType, EccPoint, EccScalar, PedersenCommitment, PolynomialCommitment,
-    PolynomialCommitmentType, SimpleCommitment,
+    EccCurveType,
+    EccPoint,
+    EccScalar,
+    PedersenCommitment,
+    PolynomialCommitment,
+    PolynomialCommitmentType,
+    SimpleCommitment,
 };
-use rand::{CryptoRng, Rng};
+use rand::{
+    CryptoRng,
+    Rng,
+};
 
 use assert_matches::assert_matches;
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::*;
 use ic_types::crypto::canister_threshold_sig::MasterPublicKey;
 use ic_types::crypto::AlgorithmId;
-use ic_types::{NumberOfNodes, Randomness};
+use ic_types::{
+    NumberOfNodes,
+    Randomness,
+};
 use rand::seq::IteratorRandom;
 use std::collections::BTreeMap;
 
@@ -58,7 +69,12 @@ pub fn verify_taproot_signature_using_third_party(
         return true;
     }
     use bitcoin::schnorr::TapTweak;
-    use bitcoin::secp256k1::{schnorr::Signature, Message, Secp256k1, XOnlyPublicKey};
+    use bitcoin::secp256k1::{
+        schnorr::Signature,
+        Message,
+        Secp256k1,
+        XOnlyPublicKey,
+    };
     use bitcoin::util::taproot::TapBranchHash;
 
     let secp256k1 = Secp256k1::new();
@@ -74,7 +90,11 @@ pub fn verify_taproot_signature_using_third_party(
 }
 
 pub fn verify_ed25519_signature_using_third_party(pk: &[u8], sig: &[u8], msg: &[u8]) -> bool {
-    use ed25519_dalek::{Signature, Verifier, VerifyingKey};
+    use ed25519_dalek::{
+        Signature,
+        Verifier,
+        VerifyingKey,
+    };
 
     let pk: [u8; 32] = pk.try_into().expect("Public key wrong size");
     let vk = VerifyingKey::from_bytes(&pk).unwrap();

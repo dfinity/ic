@@ -1,4 +1,7 @@
-use ic_nns_gtc_protobuf_generator::{generate_prost_files, ProtoPaths};
+use ic_nns_gtc_protobuf_generator::{
+    generate_prost_files,
+    ProtoPaths,
+};
 use std::path::PathBuf;
 
 fn main() {

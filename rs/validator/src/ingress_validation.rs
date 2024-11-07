@@ -1,21 +1,49 @@
 use crate::webauthn::validate_webauthn_sig;
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
-use ic_crypto_standalone_sig_verifier::{user_public_key_from_bytes, KeyBytesContentType};
+use ic_crypto_standalone_sig_verifier::{
+    user_public_key_from_bytes,
+    KeyBytesContentType,
+};
 use ic_crypto_tree_hash::Path;
-use ic_limits::{MAX_INGRESS_TTL, PERMITTED_DRIFT_AT_VALIDATOR};
+use ic_limits::{
+    MAX_INGRESS_TTL,
+    PERMITTED_DRIFT_AT_VALIDATOR,
+};
 use ic_types::{
     crypto::{
-        threshold_sig::RootOfTrustProvider, AlgorithmId, BasicSig, BasicSigOf, CanisterSig,
-        CanisterSigOf, CryptoError, UserPublicKey,
+        threshold_sig::RootOfTrustProvider,
+        AlgorithmId,
+        BasicSig,
+        BasicSigOf,
+        CanisterSig,
+        CanisterSigOf,
+        CryptoError,
+        UserPublicKey,
     },
     messages::{
-        Authentication, Delegation, HasCanisterId, HttpRequest, HttpRequestContent, MessageId,
-        Query, ReadState, SignedDelegation, SignedIngressContent, UserSignature, WebAuthnSignature,
+        Authentication,
+        Delegation,
+        HasCanisterId,
+        HttpRequest,
+        HttpRequestContent,
+        MessageId,
+        Query,
+        ReadState,
+        SignedDelegation,
+        SignedIngressContent,
+        UserSignature,
+        WebAuthnSignature,
     },
-    CanisterId, PrincipalId, Time, UserId,
+    CanisterId,
+    PrincipalId,
+    Time,
+    UserId,
 };
 use std::{
-    collections::{BTreeSet, HashSet},
+    collections::{
+        BTreeSet,
+        HashSet,
+    },
     convert::TryFrom,
     sync::Arc,
 };

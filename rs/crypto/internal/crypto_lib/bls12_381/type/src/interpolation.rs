@@ -1,4 +1,11 @@
-use crate::{G1Affine, G1Projective, G2Affine, G2Projective, NodeIndex, Scalar};
+use crate::{
+    G1Affine,
+    G1Projective,
+    G2Affine,
+    G2Projective,
+    NodeIndex,
+    Scalar,
+};
 
 #[derive(Copy, Clone, Debug)]
 /// Error during interpolation

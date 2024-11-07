@@ -1,6 +1,8 @@
 mod create_transcript_error_conversions {
     use crate::api::ni_dkg_errors::{
-        CspDkgCreateReshareTranscriptError, InvalidArgumentError, MalformedPublicKeyError,
+        CspDkgCreateReshareTranscriptError,
+        InvalidArgumentError,
+        MalformedPublicKeyError,
         SizeError,
     };
     use ic_types::crypto::threshold_sig::ni_dkg::errors::create_transcript_error::DkgCreateTranscriptError;

@@ -1,12 +1,22 @@
 use crate::public_key_store::PublicKeyStore;
 use crate::{
     secret_key_store::SecretKeyStore,
-    vault::api::{PublicRandomSeedGenerator, PublicRandomSeedGeneratorError},
+    vault::api::{
+        PublicRandomSeedGenerator,
+        PublicRandomSeedGeneratorError,
+    },
     LocalCspVault,
 };
-use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
+use ic_crypto_internal_logmon::metrics::{
+    MetricsDomain,
+    MetricsResult,
+    MetricsScope,
+};
 use ic_crypto_internal_seed::Seed;
-use rand::{CryptoRng, Rng};
+use rand::{
+    CryptoRng,
+    Rng,
+};
 
 #[cfg(test)]
 mod tests;

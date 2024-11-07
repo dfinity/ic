@@ -2,20 +2,31 @@ mod common;
 
 use assert_matches::assert_matches;
 use candid::Encode;
-use canister_test::{Canister, Project, Runtime};
+use canister_test::{
+    Canister,
+    Project,
+    Runtime,
+};
 use ic_nns_test_utils::{
-    itest_helpers::local_test_on_nns_subnet, registry::invariant_compliant_mutation_as_atomic_req,
+    itest_helpers::local_test_on_nns_subnet,
+    registry::invariant_compliant_mutation_as_atomic_req,
 };
 use ic_registry_transport::{
     insert,
     pb::v1::{
-        RegistryAtomicMutateRequest, RegistryAtomicMutateResponse, RegistryGetValueRequest,
+        RegistryAtomicMutateRequest,
+        RegistryAtomicMutateResponse,
+        RegistryGetValueRequest,
         RegistryGetValueResponse,
     },
-    precondition, upsert,
+    precondition,
+    upsert,
 };
 use registry_canister::{
-    init::{RegistryCanisterInitPayload, RegistryCanisterInitPayloadBuilder},
+    init::{
+        RegistryCanisterInitPayload,
+        RegistryCanisterInitPayloadBuilder,
+    },
     proto_on_wire::protobuf,
 };
 

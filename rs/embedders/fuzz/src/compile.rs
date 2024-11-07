@@ -1,10 +1,20 @@
-use arbitrary::{Arbitrary, Result, Unstructured};
+use arbitrary::{
+    Arbitrary,
+    Result,
+    Unstructured,
+};
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::flag_status::FlagStatus;
-use ic_embedders::{wasm_utils::compile, WasmtimeEmbedder};
+use ic_embedders::{
+    wasm_utils::compile,
+    WasmtimeEmbedder,
+};
 use ic_logger::replica_logger::no_op_logger;
 use ic_wasm_types::BinaryEncodedWasm;
-use wasm_smith::{Config, Module};
+use wasm_smith::{
+    Config,
+    Module,
+};
 
 #[derive(Debug)]
 pub struct MaybeInvalidModule(pub Module);
@@ -31,7 +41,10 @@ pub fn run_fuzzer(module: MaybeInvalidModule) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use arbitrary::{Arbitrary, Unstructured};
+    use arbitrary::{
+        Arbitrary,
+        Unstructured,
+    };
 
     #[test]
     fn test_compile_wasm_using_embedder_single_run() {

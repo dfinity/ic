@@ -5,13 +5,24 @@ use ic_base_types::PrincipalId;
 use ic_system_test_driver::{
     driver::{
         test_env::TestEnv,
-        test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
+        test_env_api::{
+            HasPublicApiUrl,
+            HasTopologySnapshot,
+            IcNodeContainer,
+        },
     },
-    util::{assert_malicious_from_topo, UniversalCanister},
+    util::{
+        assert_malicious_from_topo,
+        UniversalCanister,
+    },
 };
 use rand::Rng;
 use rand_chacha::ChaCha8Rng;
-use slog::{debug, info, Logger};
+use slog::{
+    debug,
+    info,
+    Logger,
+};
 
 const MSG_LEN: usize = 8;
 // Seed for a random generator

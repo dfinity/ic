@@ -1,19 +1,43 @@
 //! Multi-Signature operations provided by the CSP vault.
 use crate::key_id::KeyId;
 use crate::keygen::utils::committee_signing_pk_to_proto;
-use crate::public_key_store::{PublicKeySetOnceError, PublicKeyStore};
-use crate::secret_key_store::{SecretKeyStore, SecretKeyStoreInsertionError};
-use crate::types::{CspPop, CspPublicKey, CspSecretKey, CspSignature, MultiBls12_381_Signature};
+use crate::public_key_store::{
+    PublicKeySetOnceError,
+    PublicKeyStore,
+};
+use crate::secret_key_store::{
+    SecretKeyStore,
+    SecretKeyStoreInsertionError,
+};
+use crate::types::{
+    CspPop,
+    CspPublicKey,
+    CspSecretKey,
+    CspSignature,
+    MultiBls12_381_Signature,
+};
 use crate::vault::api::{
-    CspMultiSignatureError, CspMultiSignatureKeygenError, MultiSignatureCspVault,
+    CspMultiSignatureError,
+    CspMultiSignatureKeygenError,
+    MultiSignatureCspVault,
 };
 use crate::vault::local_csp_vault::LocalCspVault;
-use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
+use ic_crypto_internal_logmon::metrics::{
+    MetricsDomain,
+    MetricsResult,
+    MetricsScope,
+};
 use ic_crypto_internal_multi_sig_bls12381 as multi_bls12381;
 use ic_crypto_node_key_validation::ValidCommitteeSigningPublicKey;
 use ic_protobuf::registry::crypto::v1::PublicKey;
-use ic_types::crypto::{AlgorithmId, CryptoError};
-use rand::{CryptoRng, Rng};
+use ic_types::crypto::{
+    AlgorithmId,
+    CryptoError,
+};
+use rand::{
+    CryptoRng,
+    Rng,
+};
 
 #[cfg(test)]
 mod tests;

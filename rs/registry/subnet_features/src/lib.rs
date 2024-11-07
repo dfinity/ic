@@ -1,11 +1,26 @@
 use candid::CandidType;
-use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
-use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
-    registry::{crypto::v1 as crypto_pb, subnet::v1 as pb},
+use ic_management_canister_types::{
+    EcdsaKeyId,
+    MasterPublicKeyId,
 };
-use serde::{Deserialize, Serialize};
-use std::{convert::TryFrom, str::FromStr};
+use ic_protobuf::{
+    proxy::{
+        try_from_option_field,
+        ProxyDecodeError,
+    },
+    registry::{
+        crypto::v1 as crypto_pb,
+        subnet::v1 as pb,
+    },
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use std::{
+    convert::TryFrom,
+    str::FromStr,
+};
 
 pub const DEFAULT_ECDSA_MAX_QUEUE_SIZE: u32 = 20;
 

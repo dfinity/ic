@@ -1,35 +1,75 @@
-use candid::{candid_method, Decode};
-use dfn_candid::{candid, candid_one};
-use dfn_core::{
-    api::{arg_data, data_certificate, reply, trap_with},
-    over, over_async, stable,
+use candid::{
+    candid_method,
+    Decode,
 };
-use ic_base_types::{NodeId, PrincipalId};
-use ic_certified_map::{AsHashTree, HashTree};
+use dfn_candid::{
+    candid,
+    candid_one,
+};
+use dfn_core::{
+    api::{
+        arg_data,
+        data_certificate,
+        reply,
+        trap_with,
+    },
+    over,
+    over_async,
+    stable,
+};
+use ic_base_types::{
+    NodeId,
+    PrincipalId,
+};
+use ic_certified_map::{
+    AsHashTree,
+    HashTree,
+};
 use ic_nervous_system_string::clamp_debug_len;
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
+use ic_nns_constants::{
+    GOVERNANCE_CANISTER_ID,
+    ROOT_CANISTER_ID,
+};
 use ic_protobuf::registry::{
-    dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord},
-    node_operator::v1::{NodeOperatorRecord, RemoveNodeOperatorsPayload},
+    dc::v1::{
+        AddOrRemoveDataCentersProposalPayload,
+        DataCenterRecord,
+    },
+    node_operator::v1::{
+        NodeOperatorRecord,
+        RemoveNodeOperatorsPayload,
+    },
     node_rewards::v2::UpdateNodeRewardsTableProposalPayload,
 };
 use ic_registry_canister_api::{
-    AddNodePayload, UpdateNodeDirectlyPayload, UpdateNodeIPv4ConfigDirectlyPayload,
+    AddNodePayload,
+    UpdateNodeDirectlyPayload,
+    UpdateNodeIPv4ConfigDirectlyPayload,
 };
 use ic_registry_transport::{
-    deserialize_atomic_mutate_request, deserialize_get_changes_since_request,
+    deserialize_atomic_mutate_request,
+    deserialize_get_changes_since_request,
     deserialize_get_value_request,
     pb::v1::{
-        registry_error::Code, CertifiedResponse, RegistryAtomicMutateResponse, RegistryError,
-        RegistryGetChangesSinceRequest, RegistryGetChangesSinceResponse,
-        RegistryGetLatestVersionResponse, RegistryGetValueResponse,
+        registry_error::Code,
+        CertifiedResponse,
+        RegistryAtomicMutateResponse,
+        RegistryError,
+        RegistryGetChangesSinceRequest,
+        RegistryGetChangesSinceResponse,
+        RegistryGetLatestVersionResponse,
+        RegistryGetValueResponse,
     },
-    serialize_atomic_mutate_response, serialize_get_changes_since_response,
+    serialize_atomic_mutate_response,
+    serialize_get_changes_since_response,
     serialize_get_value_response,
 };
 use prost::Message;
 use registry_canister::{
-    certification::{current_version_tree, hash_tree_to_proto},
+    certification::{
+        current_version_tree,
+        hash_tree_to_proto,
+    },
     common::LOG_PREFIX,
     init::RegistryCanisterInitPayload,
     mutations::{
@@ -47,21 +87,26 @@ use registry_canister::{
         do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
         do_set_firewall_config::SetFirewallConfigPayload,
         do_update_api_boundary_nodes_version::{
-            DeployGuestosToSomeApiBoundaryNodes, UpdateApiBoundaryNodesVersionPayload,
+            DeployGuestosToSomeApiBoundaryNodes,
+            UpdateApiBoundaryNodesVersionPayload,
         },
         do_update_elected_hostos_versions::{
-            ReviseElectedHostosVersionsPayload, UpdateElectedHostosVersionsPayload,
+            ReviseElectedHostosVersionsPayload,
+            UpdateElectedHostosVersionsPayload,
         },
         do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
         do_update_node_operator_config_directly::UpdateNodeOperatorConfigDirectlyPayload,
         do_update_nodes_hostos_version::{
-            DeployHostosToSomeNodes, UpdateNodesHostosVersionPayload,
+            DeployHostosToSomeNodes,
+            UpdateNodesHostosVersionPayload,
         },
         do_update_ssh_readonly_access_for_all_unassigned_nodes::UpdateSshReadOnlyAccessForAllUnassignedNodesPayload,
         do_update_subnet::UpdateSubnetPayload,
         do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload,
         firewall::{
-            AddFirewallRulesPayload, RemoveFirewallRulesPayload, UpdateFirewallRulesPayload,
+            AddFirewallRulesPayload,
+            RemoveFirewallRulesPayload,
+            UpdateFirewallRulesPayload,
         },
         node_management::{
             do_remove_node_directly::RemoveNodeDirectlyPayload,
@@ -72,11 +117,19 @@ use registry_canister::{
         reroute_canister_ranges::RerouteCanisterRangesPayload,
     },
     pb::v1::{
-        ApiBoundaryNodeIdRecord, GetApiBoundaryNodeIdsRequest, GetSubnetForCanisterRequest,
-        NodeProvidersMonthlyXdrRewards, RegistryCanisterStableStorage, SubnetForCanister,
+        ApiBoundaryNodeIdRecord,
+        GetApiBoundaryNodeIdsRequest,
+        GetSubnetForCanisterRequest,
+        NodeProvidersMonthlyXdrRewards,
+        RegistryCanisterStableStorage,
+        SubnetForCanister,
     },
     proto_on_wire::protobuf,
-    registry::{EncodedVersion, Registry, MAX_REGISTRY_DELTAS_SIZE},
+    registry::{
+        EncodedVersion,
+        Registry,
+        MAX_REGISTRY_DELTAS_SIZE,
+    },
     registry_lifecycle,
 };
 use std::ptr::addr_of_mut;
@@ -235,7 +288,11 @@ fn get_certified_changes_since() {
     over(
         protobuf,
         |req: RegistryGetChangesSinceRequest| -> CertifiedResponse {
-            use ic_certified_map::{fork, labeled, labeled_hash};
+            use ic_certified_map::{
+                fork,
+                labeled,
+                labeled_hash,
+            };
             let latest_version = registry().latest_version();
             let from_version = EncodedVersion::from(req.version.saturating_add(1));
 
@@ -316,7 +373,10 @@ fn get_latest_version() {
 #[export_name = "canister_query get_certified_latest_version"]
 fn get_certified_latest_version() {
     over(protobuf, |_: Vec<u8>| -> CertifiedResponse {
-        use ic_certified_map::{fork, labeled_hash};
+        use ic_certified_map::{
+            fork,
+            labeled_hash,
+        };
         let latest_version = registry().latest_version();
         let hash_tree = fork(
             current_version_tree(latest_version),

@@ -10,24 +10,46 @@
 //!   in the past payloads, and the user signature is checked eventually, and
 //!   the message validates successfully
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use ic_artifact_pool::{consensus_pool::ConsensusPoolImpl, ingress_pool::IngressPoolImpl};
+use criterion::{
+    black_box,
+    criterion_group,
+    criterion_main,
+    Criterion,
+};
+use ic_artifact_pool::{
+    consensus_pool::ConsensusPoolImpl,
+    ingress_pool::IngressPoolImpl,
+};
 use ic_config::state_manager::Config as StateManagerConfig;
 use ic_consensus::consensus::payload_builder::PayloadBuilderImpl;
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_execution_environment::IngressHistoryReaderImpl;
 use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
-use ic_ingress_manager::{IngressManager, RandomStateKind};
+use ic_ingress_manager::{
+    IngressManager,
+    RandomStateKind,
+};
 use ic_interfaces::{
     batch_payload::ProposalContext,
-    consensus::{PayloadBuilder, PayloadValidationError},
-    consensus_pool::{ChangeAction, ConsensusPool, Mutations, ValidatedConsensusArtifact},
+    consensus::{
+        PayloadBuilder,
+        PayloadValidationError,
+    },
+    consensus_pool::{
+        ChangeAction,
+        ConsensusPool,
+        Mutations,
+        ValidatedConsensusArtifact,
+    },
     p2p::consensus::MutablePool,
     time_source::TimeSource,
     validation::ValidationResult,
 };
 use ic_interfaces_mocks::consensus_pool::MockConsensusTime;
-use ic_interfaces_state_manager::{CertificationScope, StateManager};
+use ic_interfaces_state_manager::{
+    CertificationScope,
+    StateManager,
+};
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_limits::MAX_INGRESS_TTL;
 use ic_logger::replica_logger::no_op_logger;
@@ -42,25 +64,51 @@ use ic_test_utilities::{
     self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
     xnet_payload_builder::FakeXNetPayloadBuilder,
 };
-use ic_test_utilities_consensus::{batch::MockBatchPayloadBuilder, fake::*, make_genesis};
-use ic_test_utilities_registry::{setup_registry, SubnetRecordBuilder};
+use ic_test_utilities_consensus::{
+    batch::MockBatchPayloadBuilder,
+    fake::*,
+    make_genesis,
+};
+use ic_test_utilities_registry::{
+    setup_registry,
+    SubnetRecordBuilder,
+};
 use ic_test_utilities_state::ReplicatedStateBuilder;
 use ic_test_utilities_time::FastForwardTimeSource;
 use ic_test_utilities_types::{
-    ids::{canister_test_id, node_test_id, subnet_test_id},
+    ids::{
+        canister_test_id,
+        node_test_id,
+        subnet_test_id,
+    },
     messages::SignedIngressBuilder,
 };
 use ic_types::{
-    batch::{BatchPayload, IngressPayload, ValidationContext},
+    batch::{
+        BatchPayload,
+        IngressPayload,
+        ValidationContext,
+    },
     consensus::certification::*,
     consensus::*,
     crypto::Signed,
-    ingress::{IngressState, IngressStatus},
+    ingress::{
+        IngressState,
+        IngressStatus,
+    },
     signature::*,
     time::UNIX_EPOCH,
-    Height, NumBytes, PrincipalId, RegistryVersion, Time, UserId,
+    Height,
+    NumBytes,
+    PrincipalId,
+    RegistryVersion,
+    Time,
+    UserId,
 };
-use std::sync::{Arc, RwLock};
+use std::sync::{
+    Arc,
+    RwLock,
+};
 use std::time::Duration;
 
 type SignedCertificationContent =

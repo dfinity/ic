@@ -1,16 +1,26 @@
 //! Displays a pretty-printed debug view of a state file.
 
 use ic_protobuf::state::{
-    canister_state_bits::v1 as pb_canister, ingress::v1 as pb_ingress, queues::v1 as pb_queues,
+    canister_state_bits::v1 as pb_canister,
+    ingress::v1 as pb_ingress,
+    queues::v1 as pb_queues,
     system_metadata::v1 as pb_metadata,
 };
 use ic_replicated_state::CheckpointLoadingMetrics;
 use ic_replicated_state::{
-    canister_state::CanisterQueues, metadata_state::IngressHistoryState, SystemMetadata,
+    canister_state::CanisterQueues,
+    metadata_state::IngressHistoryState,
+    SystemMetadata,
 };
 use ic_state_layout::{
-    CanisterStateBits, ProtoFileWith, ReadOnly, CANISTER_FILE, INGRESS_HISTORY_FILE, QUEUES_FILE,
-    SUBNET_QUEUES_FILE, SYSTEM_METADATA_FILE,
+    CanisterStateBits,
+    ProtoFileWith,
+    ReadOnly,
+    CANISTER_FILE,
+    INGRESS_HISTORY_FILE,
+    QUEUES_FILE,
+    SUBNET_QUEUES_FILE,
+    SYSTEM_METADATA_FILE,
 };
 use ic_state_manager::CheckpointMetrics;
 use std::convert::TryFrom;

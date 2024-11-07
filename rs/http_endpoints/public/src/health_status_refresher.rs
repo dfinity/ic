@@ -4,14 +4,24 @@ use crossbeam::atomic::AtomicCell;
 use http::Request;
 use ic_interfaces::consensus_pool::ConsensusPoolCache;
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{info, warn, ReplicaLogger};
+use ic_logger::{
+    info,
+    warn,
+    ReplicaLogger,
+};
 use ic_replicated_state::ReplicatedState;
 use ic_types::messages::ReplicaHealthStatus;
 use std::{
     sync::Arc,
-    task::{Context, Poll},
+    task::{
+        Context,
+        Poll,
+    },
 };
-use tower::{Layer, Service};
+use tower::{
+    Layer,
+    Service,
+};
 
 #[derive(Clone)]
 pub(crate) struct HealthStatusRefreshLayer {

@@ -1,27 +1,65 @@
 use std::{
     collections::HashMap,
-    net::{Ipv4Addr, Ipv6Addr},
-    path::{Path, PathBuf},
-    time::{Duration, Instant},
+    net::{
+        Ipv4Addr,
+        Ipv6Addr,
+    },
+    path::{
+        Path,
+        PathBuf,
+    },
+    time::{
+        Duration,
+        Instant,
+    },
 };
 
-use crate::driver::ic::{AmountOfMemoryKiB, NrOfVCPUs, VmAllocationStrategy};
+use crate::driver::ic::{
+    AmountOfMemoryKiB,
+    NrOfVCPUs,
+    VmAllocationStrategy,
+};
 use crate::driver::log_events;
-use crate::driver::test_env::{RequiredHostFeaturesFromCmdLine, TestEnvAttribute};
-use crate::driver::test_env_api::{read_dependency_to_string, HasIcDependencies};
+use crate::driver::test_env::{
+    RequiredHostFeaturesFromCmdLine,
+    TestEnvAttribute,
+};
+use crate::driver::test_env_api::{
+    read_dependency_to_string,
+    HasIcDependencies,
+};
 use anyhow::Result;
-use chrono::{DateTime, Utc};
+use chrono::{
+    DateTime,
+    Utc,
+};
 use ic_crypto_sha2::Sha256;
-use reqwest::blocking::{multipart, Client, RequestBuilder};
+use reqwest::blocking::{
+    multipart,
+    Client,
+    RequestBuilder,
+};
 use serde::de::Error;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use slog::{error, warn, Logger};
+use serde::{
+    Deserialize,
+    Deserializer,
+    Serialize,
+    Serializer,
+};
+use slog::{
+    error,
+    warn,
+    Logger,
+};
 use std::fmt;
 use std::io::Write;
 use thiserror::Error;
 use url::Url;
 
-use crate::driver::{ic::ImageSizeGiB, test_env::TestEnv};
+use crate::driver::{
+    ic::ImageSizeGiB,
+    test_env::TestEnv,
+};
 
 pub type FarmResult<T> = Result<T, FarmError>;
 

@@ -1,5 +1,9 @@
 use ic_config::artifact_pool::{
-    ArtifactPoolConfig, ArtifactPoolTomlConfig, LMDBConfig, PersistentPoolBackend, RocksDBConfig,
+    ArtifactPoolConfig,
+    ArtifactPoolTomlConfig,
+    LMDBConfig,
+    PersistentPoolBackend,
+    RocksDBConfig,
 };
 use tempfile::Builder;
 
@@ -56,7 +60,10 @@ mod tests {
     use super::*;
     use ic_artifact_pool::ingress_pool::IngressPoolImpl;
     use ic_interfaces::ingress_pool::IngressPool;
-    use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
+    use ic_interfaces::p2p::consensus::{
+        MutablePool,
+        UnvalidatedArtifact,
+    };
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::node_test_id;

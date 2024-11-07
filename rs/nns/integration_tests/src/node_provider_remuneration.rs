@@ -1,44 +1,98 @@
-use candid::{Decode, Encode};
+use candid::{
+    Decode,
+    Encode,
+};
 use cycles_minting_canister::IcpXdrConversionRateCertifiedResponse;
 use ic_canister_client_sender::Sender;
-use ic_nervous_system_common::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
+use ic_nervous_system_common::{
+    ONE_DAY_SECONDS,
+    ONE_MONTH_SECONDS,
+};
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL,
-    TEST_USER3_PRINCIPAL, TEST_USER4_PRINCIPAL, TEST_USER5_PRINCIPAL, TEST_USER6_PRINCIPAL,
+    TEST_NEURON_1_ID,
+    TEST_NEURON_1_OWNER_KEYPAIR,
+    TEST_USER1_PRINCIPAL,
+    TEST_USER2_PRINCIPAL,
+    TEST_USER3_PRINCIPAL,
+    TEST_USER4_PRINCIPAL,
+    TEST_USER5_PRINCIPAL,
+    TEST_USER6_PRINCIPAL,
     TEST_USER7_PRINCIPAL,
 };
-use ic_nns_common::{pb::v1::NeuronId as ProtoNeuronId, types::UpdateIcpXdrConversionRatePayload};
-use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
+use ic_nns_common::{
+    pb::v1::NeuronId as ProtoNeuronId,
+    types::UpdateIcpXdrConversionRatePayload,
+};
+use ic_nns_constants::{
+    CYCLES_MINTING_CANISTER_ID,
+    GOVERNANCE_CANISTER_ID,
+    LEDGER_CANISTER_ID,
+};
 use ic_nns_governance_api::pb::v1::{
     add_or_remove_node_provider::Change,
     manage_neuron_response::Command as CommandResponse,
-    reward_node_provider::{RewardMode, RewardToAccount},
-    AddOrRemoveNodeProvider, DateRangeFilter, ExecuteNnsFunction, GovernanceError,
-    ListNodeProviderRewardsRequest, MakeProposalRequest, NetworkEconomics, NnsFunction,
-    NodeProvider, ProposalActionRequest, RewardNodeProvider, RewardNodeProviders,
+    reward_node_provider::{
+        RewardMode,
+        RewardToAccount,
+    },
+    AddOrRemoveNodeProvider,
+    DateRangeFilter,
+    ExecuteNnsFunction,
+    GovernanceError,
+    ListNodeProviderRewardsRequest,
+    MakeProposalRequest,
+    NetworkEconomics,
+    NnsFunction,
+    NodeProvider,
+    ProposalActionRequest,
+    RewardNodeProvider,
+    RewardNodeProviders,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     state_test_helpers::{
-        get_pending_proposals, ledger_account_balance, nns_get_monthly_node_provider_rewards,
-        nns_get_most_recent_monthly_node_provider_rewards, nns_get_network_economics_parameters,
-        nns_governance_get_proposal_info, nns_governance_make_proposal,
-        nns_list_node_provider_rewards, nns_wait_for_proposal_execution, query,
-        setup_nns_canisters, state_machine_builder_for_nns_tests, update_with_sender,
+        get_pending_proposals,
+        ledger_account_balance,
+        nns_get_monthly_node_provider_rewards,
+        nns_get_most_recent_monthly_node_provider_rewards,
+        nns_get_network_economics_parameters,
+        nns_governance_get_proposal_info,
+        nns_governance_make_proposal,
+        nns_list_node_provider_rewards,
+        nns_wait_for_proposal_execution,
+        query,
+        setup_nns_canisters,
+        state_machine_builder_for_nns_tests,
+        update_with_sender,
     },
 };
 use ic_protobuf::registry::{
-    dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord},
-    node_rewards::v2::{NodeRewardRate, NodeRewardRates, UpdateNodeRewardsTableProposalPayload},
+    dc::v1::{
+        AddOrRemoveDataCentersProposalPayload,
+        DataCenterRecord,
+    },
+    node_rewards::v2::{
+        NodeRewardRate,
+        NodeRewardRates,
+        UpdateNodeRewardsTableProposalPayload,
+    },
 };
 use ic_state_machine_tests::StateMachine;
 use ic_types::PrincipalId;
-use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs, Tokens, TOKEN_SUBDIVIDABLE_BY};
+use icp_ledger::{
+    AccountIdentifier,
+    BinaryAccountBalanceArgs,
+    Tokens,
+    TOKEN_SUBDIVIDABLE_BY,
+};
 use maplit::btreemap;
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 use std::{
     collections::BTreeMap,
-    time::{Duration, UNIX_EPOCH},
+    time::{
+        Duration,
+        UNIX_EPOCH,
+    },
 };
 
 struct NodeInfo {

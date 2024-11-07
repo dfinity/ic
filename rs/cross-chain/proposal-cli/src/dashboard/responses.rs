@@ -1,4 +1,7 @@
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::collections::BTreeSet;
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]

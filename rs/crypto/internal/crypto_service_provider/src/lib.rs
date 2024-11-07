@@ -24,15 +24,30 @@ pub use crate::vault::local_csp_vault::LocalCspVault;
 pub use crate::vault::remote_csp_vault::run_csp_vault_server;
 pub use crate::vault::remote_csp_vault::RemoteCspVault;
 
-use crate::api::{CspSigner, NiDkgCspClient, ThresholdSignatureCspClient};
+use crate::api::{
+    CspSigner,
+    NiDkgCspClient,
+    ThresholdSignatureCspClient,
+};
 use crate::secret_key_store::SecretKeyStore;
-use crate::types::{CspPublicKey, ExternalPublicKeys};
+use crate::types::{
+    CspPublicKey,
+    ExternalPublicKeys,
+};
 use crate::vault::api::CspVault;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
-use ic_logger::{new_logger, replica_logger::no_op_logger, ReplicaLogger};
+use ic_logger::{
+    new_logger,
+    replica_logger::no_op_logger,
+    ReplicaLogger,
+};
 use key_id::KeyId;
-use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use parking_lot::{
+    RwLock,
+    RwLockReadGuard,
+    RwLockWriteGuard,
+};
 use std::sync::Arc;
 use std::time::Instant;
 

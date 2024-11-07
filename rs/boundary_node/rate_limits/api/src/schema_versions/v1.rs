@@ -1,5 +1,8 @@
 use candid::Principal;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 const DOUBLE_INDENT: &str = "      ";
 

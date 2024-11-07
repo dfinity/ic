@@ -1,27 +1,46 @@
 //! Dealing phase of Groth20-BLS12-381 non-interactive distributed key
 //! generation.
 
-use super::encryption::{encrypt_and_prove, verify_zk_proofs};
+use super::encryption::{
+    encrypt_and_prove,
+    verify_zk_proofs,
+};
 use crate::api::ni_dkg_errors::{
-    dealing::InvalidDealingError, CspDkgCreateReshareDealingError, CspDkgVerifyDealingError,
-    InvalidArgumentError, MalformedSecretKeyError, MisnumberedReceiverError, SizeError,
+    dealing::InvalidDealingError,
+    CspDkgCreateReshareDealingError,
+    CspDkgVerifyDealingError,
+    InvalidArgumentError,
+    MalformedSecretKeyError,
+    MisnumberedReceiverError,
+    SizeError,
 };
 use crate::{
     api::individual_public_key,
-    crypto::{generate_threshold_key, threshold_share_secret_key},
+    crypto::{
+        generate_threshold_key,
+        threshold_share_secret_key,
+    },
 };
 use ic_crypto_internal_seed::Seed;
-use ic_types::{NodeIndex, NumberOfNodes};
+use ic_types::{
+    NodeIndex,
+    NumberOfNodes,
+};
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
 // "Old style" CSP types, used for the threshold keys:
-use crate::types::{SecretKey as ThresholdSecretKey, SecretKeyBytes as ThresholdSecretKeyBytes};
+use crate::types::{
+    SecretKey as ThresholdSecretKey,
+    SecretKeyBytes as ThresholdSecretKeyBytes,
+};
 
 // "New style" internal types, used for the NiDKG:
 use super::ALGORITHM_ID;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
-    Dealing, FsEncryptionPublicKey, PublicCoefficientsBytes,
+    Dealing,
+    FsEncryptionPublicKey,
+    PublicCoefficientsBytes,
 };
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
 

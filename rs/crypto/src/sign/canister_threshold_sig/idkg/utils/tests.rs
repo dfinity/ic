@@ -1,23 +1,37 @@
 mod index_and_dealing_of_dealer {
     use crate::sign::canister_threshold_sig::idkg::utils::{
-        index_and_dealing_of_dealer, IDkgDealingExtractionError,
+        index_and_dealing_of_dealer,
+        IDkgDealingExtractionError,
     };
     use crate::sign::canister_threshold_sig::test_utils::{
-        batch_signed_dealing_with, valid_internal_dealing_raw,
+        batch_signed_dealing_with,
+        valid_internal_dealing_raw,
     };
     use crate::sign::tests::REG_V1;
     use assert_matches::assert_matches;
-    use ic_base_types::{PrincipalId, SubnetId};
+    use ic_base_types::{
+        PrincipalId,
+        SubnetId,
+    };
     use ic_crypto_internal_threshold_sig_canister_threshold_sig::IDkgDealingInternal;
     use ic_crypto_internal_types::NodeIndex;
     use ic_crypto_test_utils::set_of;
     use ic_types::crypto::canister_threshold_sig::idkg::{
-        BatchSignedIDkgDealing, IDkgMaskedTranscriptOrigin, IDkgReceivers, IDkgTranscript,
-        IDkgTranscriptId, IDkgTranscriptType,
+        BatchSignedIDkgDealing,
+        IDkgMaskedTranscriptOrigin,
+        IDkgReceivers,
+        IDkgTranscript,
+        IDkgTranscriptId,
+        IDkgTranscriptType,
     };
     use ic_types::crypto::AlgorithmId;
     use ic_types::Height;
-    use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
+    use ic_types_test_utils::ids::{
+        NODE_1,
+        NODE_2,
+        NODE_3,
+        NODE_4,
+    };
     use maplit::btreemap;
     use std::collections::BTreeMap;
 
@@ -125,7 +139,10 @@ mod index_and_dealing_of_dealer {
 mod retrieve_mega_public_key_from_registry {
     use crate::sign::canister_threshold_sig::idkg::utils::mega_public_key_from_proto;
     use crate::sign::tests::REG_V1;
-    use crate::{retrieve_mega_public_key_from_registry, MegaKeyFromRegistryError};
+    use crate::{
+        retrieve_mega_public_key_from_registry,
+        MegaKeyFromRegistryError,
+    };
     use assert_matches::assert_matches;
     use ic_base_types::NodeId;
     use ic_base_types::RegistryVersion;

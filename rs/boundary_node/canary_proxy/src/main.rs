@@ -1,36 +1,72 @@
 use std::{
     borrow::Cow,
     mem::take,
-    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
+    net::{
+        IpAddr,
+        Ipv4Addr,
+        Ipv6Addr,
+        SocketAddr,
+    },
 };
 
 use anyhow::anyhow;
 use bytes::Bytes;
 use clap::Parser;
-use futures_util::{future::Either, Future};
+use futures_util::{
+    future::Either,
+    Future,
+};
 use http::{
-    header::{Entry, CONTENT_SECURITY_POLICY},
-    HeaderValue, Uri, Version,
+    header::{
+        Entry,
+        CONTENT_SECURITY_POLICY,
+    },
+    HeaderValue,
+    Uri,
+    Version,
 };
 use http_body::Body;
-use http_body_util::{combinators::BoxBody, BodyExt, Empty, Full};
+use http_body_util::{
+    combinators::BoxBody,
+    BodyExt,
+    Empty,
+    Full,
+};
 use hyper::{
     body::Incoming,
-    client::conn::{http1, http2},
+    client::conn::{
+        http1,
+        http2,
+    },
     service::service_fn,
     upgrade::Upgraded,
-    Method, Request, Response,
+    Method,
+    Request,
+    Response,
 };
 use once_cell::sync::Lazy;
 use regex::bytes::Regex;
 use tokio::{
     io::copy_bidirectional,
-    net::{lookup_host, TcpListener, TcpStream},
+    net::{
+        lookup_host,
+        TcpListener,
+        TcpStream,
+    },
 };
-use tracing::{error, info, Instrument, Span};
+use tracing::{
+    error,
+    info,
+    Instrument,
+    Span,
+};
 
 mod support;
-use support::{ServerBuilder, TokioExecutor, TokioIo};
+use support::{
+    ServerBuilder,
+    TokioExecutor,
+    TokioIo,
+};
 
 #[derive(Parser)]
 pub struct Cli {

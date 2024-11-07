@@ -1,7 +1,10 @@
 use std::{
     collections::HashSet,
     sync::{
-        atomic::{AtomicUsize, Ordering},
+        atomic::{
+            AtomicUsize,
+            Ordering,
+        },
         Arc,
     },
 };
@@ -9,7 +12,11 @@ use std::{
 use crate::{
     check::HealthCheckResult,
     node::Node,
-    snapshot::{NodesChanged, NodesSnapshotError, Snapshot},
+    snapshot::{
+        NodesChanged,
+        NodesSnapshotError,
+        Snapshot,
+    },
 };
 
 #[derive(Clone, Debug, Default)]
@@ -86,10 +93,16 @@ impl Snapshot for HealthBasedSnapshot {
 #[cfg(test)]
 mod tests {
     use std::time::Duration;
-    use std::{collections::HashSet, sync::atomic::Ordering};
+    use std::{
+        collections::HashSet,
+        sync::atomic::Ordering,
+    };
 
     use crate::snapshot::Snapshot;
-    use crate::{check::HealthCheckResult, node::Node};
+    use crate::{
+        check::HealthCheckResult,
+        node::Node,
+    };
 
     use super::HealthBasedSnapshot;
 

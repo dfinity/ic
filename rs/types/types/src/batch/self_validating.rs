@@ -2,8 +2,14 @@ use crate::CountBytes;
 use ic_btc_replica_types::BitcoinAdapterResponse;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
-use serde::{Deserialize, Serialize};
+use ic_protobuf::{
+    proxy::ProxyDecodeError,
+    types::v1 as pb,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::convert::TryFrom;
 
 // The theoretical maximum for the size of a bitcoin block.

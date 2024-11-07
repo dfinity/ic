@@ -1,7 +1,15 @@
 #![cfg(target_os = "linux")]
 
-use clap::{Args, Parser};
-use vsock_lib::protocol::{Command, NotifyData, Payload, UpgradeData};
+use clap::{
+    Args,
+    Parser,
+};
+use vsock_lib::protocol::{
+    Command,
+    NotifyData,
+    Payload,
+    UpgradeData,
+};
 use vsock_lib::send_command;
 fn main() -> Result<(), String> {
     let cli = Cli::parse();

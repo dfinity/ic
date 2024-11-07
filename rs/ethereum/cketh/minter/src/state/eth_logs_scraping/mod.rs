@@ -1,7 +1,11 @@
 use crate::numeric::BlockNumber;
 use ic_ethereum_types::Address;
 use std::collections::BTreeMap;
-use std::fmt::{Debug, Display, Formatter};
+use std::fmt::{
+    Debug,
+    Display,
+    Formatter,
+};
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 

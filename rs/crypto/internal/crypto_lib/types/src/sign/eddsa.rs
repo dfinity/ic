@@ -4,7 +4,10 @@ pub mod ed25519 {
     //! Data types for Ed25519.
     use std::convert::TryFrom;
     use std::fmt;
-    use std::hash::{Hash, Hasher};
+    use std::hash::{
+        Hash,
+        Hasher,
+    };
 
     #[cfg(test)]
     mod tests;

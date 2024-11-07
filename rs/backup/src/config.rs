@@ -1,7 +1,21 @@
-use ic_config::{ConfigSource, ConfigValidate};
-use ic_types::{ReplicaVersion, SubnetId};
-use serde::{Deserialize, Serialize};
-use std::{fs::File, io::Write, net::IpAddr, path::PathBuf};
+use ic_config::{
+    ConfigSource,
+    ConfigValidate,
+};
+use ic_types::{
+    ReplicaVersion,
+    SubnetId,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use std::{
+    fs::File,
+    io::Write,
+    net::IpAddr,
+    path::PathBuf,
+};
 use url::Url;
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]

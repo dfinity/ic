@@ -1,16 +1,32 @@
 use crate::checked_amount::CheckedAmountOf;
 use crate::eth_rpc::Hash;
-use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
+use crate::eth_rpc_client::responses::{
+    TransactionReceipt,
+    TransactionStatus,
+};
 use crate::lifecycle::EthereumNetwork;
 use crate::numeric::{
-    BlockNumber, Erc20Value, GasAmount, LedgerBurnIndex, TransactionNonce, Wei, WeiPerGas,
+    BlockNumber,
+    Erc20Value,
+    GasAmount,
+    LedgerBurnIndex,
+    TransactionNonce,
+    Wei,
+    WeiPerGas,
 };
 use crate::state::transactions::{
-    create_transaction, Erc20WithdrawalRequest, EthTransactions, EthWithdrawalRequest, Subaccount,
+    create_transaction,
+    Erc20WithdrawalRequest,
+    EthTransactions,
+    EthWithdrawalRequest,
+    Subaccount,
     WithdrawalRequest,
 };
 use crate::tx::{
-    AccessList, Eip1559Signature, Eip1559TransactionRequest, GasFeeEstimate,
+    AccessList,
+    Eip1559Signature,
+    Eip1559TransactionRequest,
+    GasFeeEstimate,
     SignedEip1559TransactionRequest,
 };
 use crate::withdraw::estimate_gas_limit;
@@ -30,19 +46,35 @@ const DEFAULT_ERC20_CONTRACT_ADDRESS: &str = "0xa0b86991c6218b36c1d19d4a2e9eb0ce
 const DEFAULT_CKERC20_LEDGER_ID: &str = "sa4so-piaaa-aaaar-qacnq-cai";
 
 mod eth_transactions {
-    use crate::endpoints::{EthTransaction, RetrieveEthStatus};
-    use crate::numeric::{LedgerBurnIndex, TransactionNonce};
-    use crate::state::transactions::tests::{
-        cketh_withdrawal_request_with_index, create_and_record_transaction, gas_fee_estimate,
-        sign_transaction, transaction_receipt,
+    use crate::endpoints::{
+        EthTransaction,
+        RetrieveEthStatus,
     };
-    use crate::state::transactions::{EthTransactions, TransactionStatus, WithdrawalRequest};
+    use crate::numeric::{
+        LedgerBurnIndex,
+        TransactionNonce,
+    };
+    use crate::state::transactions::tests::{
+        cketh_withdrawal_request_with_index,
+        create_and_record_transaction,
+        gas_fee_estimate,
+        sign_transaction,
+        transaction_receipt,
+    };
+    use crate::state::transactions::{
+        EthTransactions,
+        TransactionStatus,
+        WithdrawalRequest,
+    };
 
     mod record_withdrawal_request {
         use super::*;
         use crate::state::transactions::tests::{
-            ckerc20_withdrawal_request_with_index, create_and_record_signed_transaction,
-            create_and_record_transaction, gas_fee_estimate, transaction_receipt,
+            ckerc20_withdrawal_request_with_index,
+            create_and_record_signed_transaction,
+            create_and_record_transaction,
+            gas_fee_estimate,
+            transaction_receipt,
         };
         use crate::state::transactions::WithdrawalRequest;
         use crate::test_fixtures::expect_panic_with_message;
@@ -132,12 +164,17 @@ mod eth_transactions {
     mod withdrawal_requests_batch {
         use super::*;
         use crate::state::transactions::tests::{
-            create_and_record_ck_withdrawal_requests, create_and_record_signed_transaction,
-            create_and_record_transaction, gas_fee_estimate,
+            create_and_record_ck_withdrawal_requests,
+            create_and_record_signed_transaction,
+            create_and_record_transaction,
+            gas_fee_estimate,
         };
         use crate::state::transactions::WithdrawalRequest;
         use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-        use proptest::{prop_assert_eq, proptest};
+        use proptest::{
+            prop_assert_eq,
+            proptest,
+        };
         use rand::Rng;
 
         #[test]
@@ -295,24 +332,39 @@ mod eth_transactions {
 
     mod record_created_transaction {
         use crate::lifecycle::EthereumNetwork;
-        use crate::numeric::{LedgerBurnIndex, TransactionNonce, Wei};
+        use crate::numeric::{
+            LedgerBurnIndex,
+            TransactionNonce,
+            Wei,
+        };
         use crate::state::transactions::tests::{
-            ckerc20_withdrawal_request_with_index, cketh_withdrawal_request_with_index,
-            create_and_record_ck_withdrawal_requests, create_and_record_transaction,
-            create_ck_withdrawal_requests, gas_fee_estimate, DEFAULT_CKERC20_MAX_FEE_PER_GAS,
+            ckerc20_withdrawal_request_with_index,
+            cketh_withdrawal_request_with_index,
+            create_and_record_ck_withdrawal_requests,
+            create_and_record_transaction,
+            create_ck_withdrawal_requests,
+            gas_fee_estimate,
+            DEFAULT_CKERC20_MAX_FEE_PER_GAS,
         };
         use crate::state::transactions::Erc20Value;
-        use crate::state::transactions::{create_transaction, EthTransactions};
+        use crate::state::transactions::{
+            create_transaction,
+            EthTransactions,
+        };
         use crate::test_fixtures::expect_panic_with_message;
         use crate::tx::Eip1559TransactionRequest;
         use crate::withdraw::{
-            estimate_gas_limit, CKERC20_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
+            estimate_gas_limit,
+            CKERC20_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
             CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
         };
         use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
         use ic_ethereum_types::Address;
         use proptest::prelude::any;
-        use proptest::{prop_assert_ne, proptest};
+        use proptest::{
+            prop_assert_ne,
+            proptest,
+        };
 
         #[test]
         fn should_fail_when_withdrawal_request_not_found() {
@@ -542,7 +594,11 @@ mod eth_transactions {
             expected_amount: &Erc20Value,
         ) -> Vec<u8> {
             use crate::state::transactions::ERC_20_TRANSFER_FUNCTION_SELECTOR;
-            use ethers_core::abi::{Param, ParamType, Token};
+            use ethers_core::abi::{
+                Param,
+                ParamType,
+                Token,
+            };
 
             let erc20_transfer = ethers_core::abi::Function {
                 name: "transfer".to_string(),
@@ -599,13 +655,22 @@ mod eth_transactions {
         use super::super::arbitrary::arb_signed_eip_1559_transaction_request_with_nonce;
         use crate::numeric::TransactionNonce;
         use crate::state::transactions::tests::{
-            create_and_record_ck_withdrawal_requests, create_and_record_transaction,
-            gas_fee_estimate, sign_transaction, signed_transaction_with_nonce,
+            create_and_record_ck_withdrawal_requests,
+            create_and_record_transaction,
+            gas_fee_estimate,
+            sign_transaction,
+            signed_transaction_with_nonce,
         };
-        use crate::state::transactions::{EthTransactions, WithdrawalRequest};
+        use crate::state::transactions::{
+            EthTransactions,
+            WithdrawalRequest,
+        };
         use crate::test_fixtures::expect_panic_with_message;
         use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-        use proptest::{prop_assume, proptest};
+        use proptest::{
+            prop_assume,
+            proptest,
+        };
 
         #[test]
         #[should_panic(expected = "missing created transaction")]
@@ -688,18 +753,34 @@ mod eth_transactions {
     }
 
     mod create_resubmit_transactions {
-        use crate::numeric::{LedgerBurnIndex, TransactionCount, TransactionNonce, Wei, WeiPerGas};
+        use crate::numeric::{
+            LedgerBurnIndex,
+            TransactionCount,
+            TransactionNonce,
+            Wei,
+            WeiPerGas,
+        };
         use crate::state::transactions::tests::{
-            cketh_withdrawal_request_with_index, create_and_record_ck_withdrawal_requests,
+            cketh_withdrawal_request_with_index,
+            create_and_record_ck_withdrawal_requests,
             create_and_record_ckerc20_withdrawal_requests,
-            create_and_record_cketh_withdrawal_requests, create_and_record_signed_transaction,
-            create_and_record_transaction, double_and_increment, gas_fee_estimate,
-            DEFAULT_CKERC20_MAX_FEE_PER_GAS, DEFAULT_MAX_TRANSACTION_FEE,
+            create_and_record_cketh_withdrawal_requests,
+            create_and_record_signed_transaction,
+            create_and_record_transaction,
+            double_and_increment,
+            gas_fee_estimate,
+            DEFAULT_CKERC20_MAX_FEE_PER_GAS,
+            DEFAULT_MAX_TRANSACTION_FEE,
         };
         use crate::state::transactions::{
-            EthTransactions, ResubmitTransactionError, WithdrawalRequest,
+            EthTransactions,
+            ResubmitTransactionError,
+            WithdrawalRequest,
         };
-        use crate::tx::{Eip1559TransactionRequest, GasFeeEstimate};
+        use crate::tx::{
+            Eip1559TransactionRequest,
+            GasFeeEstimate,
+        };
         use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 
         #[test]
@@ -1041,19 +1122,37 @@ mod eth_transactions {
     mod record_resubmit_transaction {
         use super::super::arbitrary::arb_signed_eip_1559_transaction_request_with_nonce;
         use crate::map::MultiKeyMap;
-        use crate::numeric::{LedgerBurnIndex, TransactionCount, TransactionNonce, Wei, WeiPerGas};
+        use crate::numeric::{
+            LedgerBurnIndex,
+            TransactionCount,
+            TransactionNonce,
+            Wei,
+            WeiPerGas,
+        };
         use crate::state::transactions::tests::{
-            ckerc20_withdrawal_request_with_index, cketh_withdrawal_request_with_index,
-            create_and_record_ck_withdrawal_requests, create_and_record_signed_transaction,
-            create_and_record_transaction, gas_fee_estimate, sign_transaction,
+            ckerc20_withdrawal_request_with_index,
+            cketh_withdrawal_request_with_index,
+            create_and_record_ck_withdrawal_requests,
+            create_and_record_signed_transaction,
+            create_and_record_transaction,
+            gas_fee_estimate,
+            sign_transaction,
         };
         use crate::state::transactions::{
-            equal_ignoring_fee_and_amount, EthTransactions, WithdrawalRequest,
+            equal_ignoring_fee_and_amount,
+            EthTransactions,
+            WithdrawalRequest,
         };
         use crate::test_fixtures::expect_panic_with_message;
-        use crate::tx::{Eip1559TransactionRequest, GasFeeEstimate};
+        use crate::tx::{
+            Eip1559TransactionRequest,
+            GasFeeEstimate,
+        };
         use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-        use proptest::{prop_assume, proptest};
+        use proptest::{
+            prop_assume,
+            proptest,
+        };
         use std::iter;
 
         #[test]
@@ -1278,11 +1377,16 @@ mod eth_transactions {
     }
 
     mod transactions_to_send_batch {
-        use crate::numeric::{TransactionCount, TransactionNonce};
+        use crate::numeric::{
+            TransactionCount,
+            TransactionNonce,
+        };
         use crate::state::transactions::tests::arbitrary::arb_checked_amount_of;
         use crate::state::transactions::tests::{
-            create_and_record_ck_withdrawal_requests, create_and_record_signed_transaction,
-            create_and_record_transaction, gas_fee_estimate,
+            create_and_record_ck_withdrawal_requests,
+            create_and_record_signed_transaction,
+            create_and_record_transaction,
+            gas_fee_estimate,
             resubmit_transaction_with_bumped_price,
         };
         use crate::state::transactions::EthTransactions;
@@ -1374,14 +1478,23 @@ mod eth_transactions {
 
     mod sent_transactions_to_finalize {
         use super::super::{
-            arbitrary::arb_checked_amount_of, create_and_record_transaction, gas_fee_estimate,
+            arbitrary::arb_checked_amount_of,
+            create_and_record_transaction,
+            gas_fee_estimate,
         };
-        use crate::numeric::{TransactionCount, TransactionNonce};
+        use crate::numeric::{
+            TransactionCount,
+            TransactionNonce,
+        };
         use crate::state::transactions::tests::{
-            create_and_record_ck_withdrawal_requests, create_and_record_signed_transaction,
+            create_and_record_ck_withdrawal_requests,
+            create_and_record_signed_transaction,
             resubmit_transaction_with_bumped_price,
         };
-        use crate::state::transactions::{EthTransactions, WithdrawalRequest};
+        use crate::state::transactions::{
+            EthTransactions,
+            WithdrawalRequest,
+        };
         use crate::tx::SignedEip1559TransactionRequest;
         use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
         use proptest::proptest;
@@ -1485,20 +1598,41 @@ mod eth_transactions {
     mod record_finalized_transaction {
         use crate::eth_rpc_client::responses::TransactionReceipt;
         use crate::map::MultiKeyMap;
-        use crate::numeric::{GasAmount, LedgerBurnIndex, TransactionNonce, Wei, WeiPerGas};
+        use crate::numeric::{
+            GasAmount,
+            LedgerBurnIndex,
+            TransactionNonce,
+            Wei,
+            WeiPerGas,
+        };
         use crate::state::transactions::tests::{
-            ckerc20_withdrawal_request_with_index, cketh_withdrawal_request_with_index,
-            create_and_record_ck_withdrawal_requests, create_and_record_signed_transaction,
-            create_and_record_transaction, dummy_signature, gas_fee_estimate, transaction_receipt,
+            ckerc20_withdrawal_request_with_index,
+            cketh_withdrawal_request_with_index,
+            create_and_record_ck_withdrawal_requests,
+            create_and_record_signed_transaction,
+            create_and_record_transaction,
+            dummy_signature,
+            gas_fee_estimate,
+            transaction_receipt,
         };
         use crate::state::transactions::{
-            Erc20WithdrawalRequest, EthTransactions, ReimbursementIndex, ReimbursementRequest,
-            TransactionStatus, WithdrawalRequest,
+            Erc20WithdrawalRequest,
+            EthTransactions,
+            ReimbursementIndex,
+            ReimbursementRequest,
+            TransactionStatus,
+            WithdrawalRequest,
         };
         use crate::test_fixtures::expect_panic_with_message;
-        use crate::tx::{GasFeeEstimate, SignedEip1559TransactionRequest};
+        use crate::tx::{
+            GasFeeEstimate,
+            SignedEip1559TransactionRequest,
+        };
         use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-        use maplit::{btreemap, btreeset};
+        use maplit::{
+            btreemap,
+            btreeset,
+        };
 
         #[test]
         fn should_fail_when_sent_transaction_not_found() {
@@ -1810,9 +1944,16 @@ mod eth_transactions {
         use crate::numeric::TransactionNonce;
         use crate::state::transactions::tests::create_ck_withdrawal_requests;
         use crate::state::transactions::tests::eth_transactions::withdrawal_flow;
-        use crate::state::transactions::{EthTransactions, ReimbursedError, ReimbursementIndex};
+        use crate::state::transactions::{
+            EthTransactions,
+            ReimbursedError,
+            ReimbursementIndex,
+        };
         use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-        use maplit::{btreemap, btreeset};
+        use maplit::{
+            btreemap,
+            btreeset,
+        };
 
         #[test]
         fn should_quarantine_reimbursement() {
@@ -1840,15 +1981,28 @@ mod eth_transactions {
     }
 
     mod transaction_status {
-        use crate::endpoints::{RetrieveEthStatus, TxFinalizedStatus};
-        use crate::numeric::{LedgerBurnIndex, LedgerMintIndex, TransactionNonce};
+        use crate::endpoints::{
+            RetrieveEthStatus,
+            TxFinalizedStatus,
+        };
+        use crate::numeric::{
+            LedgerBurnIndex,
+            LedgerMintIndex,
+            TransactionNonce,
+        };
         use crate::state::transactions::tests::{
-            ckerc20_withdrawal_request_with_index, cketh_withdrawal_request_with_index,
-            create_ck_withdrawal_requests, eth_transactions::withdrawal_flow,
+            ckerc20_withdrawal_request_with_index,
+            cketh_withdrawal_request_with_index,
+            create_ck_withdrawal_requests,
+            eth_transactions::withdrawal_flow,
         };
         use crate::state::transactions::{
-            EthTransactions, ReimbursementIndex, TransactionStatus, WithdrawalRequest,
-            WithdrawalSearchParameter, WithdrawalStatus,
+            EthTransactions,
+            ReimbursementIndex,
+            TransactionStatus,
+            WithdrawalRequest,
+            WithdrawalSearchParameter,
+            WithdrawalStatus,
         };
         use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 
@@ -2250,23 +2404,42 @@ mod erc_20_withdrawal_request {
 mod create_transaction {
     use crate::lifecycle::EthereumNetwork;
     use crate::numeric::{
-        Erc20Value, GasAmount, LedgerBurnIndex, TransactionNonce, Wei, WeiPerGas,
+        Erc20Value,
+        GasAmount,
+        LedgerBurnIndex,
+        TransactionNonce,
+        Wei,
+        WeiPerGas,
     };
-    use crate::state::transactions::tests::arbitrary::{arb_address, arb_checked_amount_of};
+    use crate::state::transactions::tests::arbitrary::{
+        arb_address,
+        arb_checked_amount_of,
+    };
     use crate::state::transactions::tests::{
-        ckerc20_withdrawal_request_with_index, cketh_withdrawal_request_with_index,
+        ckerc20_withdrawal_request_with_index,
+        cketh_withdrawal_request_with_index,
         gas_fee_estimate,
     };
     use crate::state::transactions::{
-        create_transaction, CreateTransactionError, Erc20WithdrawalRequest, EthWithdrawalRequest,
+        create_transaction,
+        CreateTransactionError,
+        Erc20WithdrawalRequest,
+        EthWithdrawalRequest,
         TransactionCallData,
     };
     use crate::tx::GasFeeEstimate;
-    use crate::tx::{AccessList, Eip1559TransactionRequest};
+    use crate::tx::{
+        AccessList,
+        Eip1559TransactionRequest,
+    };
     use crate::withdraw::CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT;
     use proptest::collection::vec as pvec;
     use proptest::prelude::any;
-    use proptest::{prop_assert, prop_assert_eq, proptest};
+    use proptest::{
+        prop_assert,
+        prop_assert_eq,
+        proptest,
+    };
 
     proptest! {
         #[test]
@@ -2438,10 +2611,18 @@ mod create_transaction {
 }
 
 mod withdrawal_flow {
-    use super::arbitrary::{arb_checked_amount_of, arb_gas_fee_estimate, arb_withdrawal_request};
+    use super::arbitrary::{
+        arb_checked_amount_of,
+        arb_gas_fee_estimate,
+        arb_withdrawal_request,
+    };
     use crate::numeric::TransactionNonce;
     use crate::state::transactions::tests::sign_transaction;
-    use crate::state::transactions::{create_transaction, EthTransactions, EthereumNetwork};
+    use crate::state::transactions::{
+        create_transaction,
+        EthTransactions,
+        EthereumNetwork,
+    };
     use crate::withdraw::estimate_gas_limit;
     use proptest::proptest;
     use std::cell::RefCell;
@@ -2488,19 +2669,35 @@ mod withdrawal_flow {
 
 pub mod arbitrary {
     use crate::checked_amount::CheckedAmountOf;
-    use crate::numeric::{GasAmount, TransactionNonce, WeiPerGas};
+    use crate::numeric::{
+        GasAmount,
+        TransactionNonce,
+        WeiPerGas,
+    };
     use crate::state::transactions::{
-        Erc20WithdrawalRequest, EthWithdrawalRequest, Subaccount, WithdrawalRequest,
+        Erc20WithdrawalRequest,
+        EthWithdrawalRequest,
+        Subaccount,
+        WithdrawalRequest,
     };
     use crate::tx::{
-        AccessList, AccessListItem, Eip1559Signature, Eip1559TransactionRequest, GasFeeEstimate,
-        SignedEip1559TransactionRequest, StorageKey, TransactionPrice,
+        AccessList,
+        AccessListItem,
+        Eip1559Signature,
+        Eip1559TransactionRequest,
+        GasFeeEstimate,
+        SignedEip1559TransactionRequest,
+        StorageKey,
+        TransactionPrice,
     };
     use candid::Principal;
     use ic_ethereum_types::Address;
     use phantom_newtype::Id;
     use proptest::arbitrary::any;
-    use proptest::array::{uniform20, uniform32};
+    use proptest::array::{
+        uniform20,
+        uniform32,
+    };
     use proptest::collection::vec as pvec;
     use proptest::prelude::BoxedStrategy;
     use proptest::prop_oneof;

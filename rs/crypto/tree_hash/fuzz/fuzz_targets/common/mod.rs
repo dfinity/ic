@@ -4,11 +4,18 @@
 // let $data: &mut [u8] = unsafe { std::slice::from_raw_parts_mut($data, len) };"
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 
-use ic_crypto_tree_hash::{flatmap, LabeledTree};
+use ic_crypto_tree_hash::{
+    flatmap,
+    LabeledTree,
+};
 use ic_crypto_tree_hash_fuzz_check_witness_equality_utils::*;
 use ic_protobuf::messaging::xnet::v1::LabeledTree as ProtobufLabeledTree;
 use ic_protobuf::proxy::ProtoProxy;
-use rand::{Rng, RngCore, SeedableRng};
+use rand::{
+    Rng,
+    RngCore,
+    SeedableRng,
+};
 use rand_chacha::ChaCha20Rng;
 
 const CHACHA_SEED_LEN: usize = 32;

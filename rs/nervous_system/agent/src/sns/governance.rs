@@ -1,10 +1,15 @@
 use crate::CallCanisters;
 use ic_base_types::PrincipalId;
 use ic_sns_governance::pb::v1::{
-    GetMetadataRequest, GetMetadataResponse, GetRunningSnsVersionRequest,
+    GetMetadataRequest,
+    GetMetadataResponse,
+    GetRunningSnsVersionRequest,
     GetRunningSnsVersionResponse,
 };
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 #[derive(Copy, Clone, Debug, Deserialize, Serialize)]
 pub struct GovernanceCanister {

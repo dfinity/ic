@@ -1,59 +1,131 @@
-use crate::api::{CspCreateMEGaKeyError, CspThresholdSignError};
+use crate::api::{
+    CspCreateMEGaKeyError,
+    CspThresholdSignError,
+};
 use crate::key_id::KeyId;
-use crate::types::{CspPop, CspPublicKey, CspSignature};
+use crate::types::{
+    CspPop,
+    CspPublicKey,
+    CspSignature,
+};
 use crate::vault::api::{
-    BasicSignatureCspVault, CspBasicSignatureError, CspBasicSignatureKeygenError,
-    CspMultiSignatureError, CspMultiSignatureKeygenError, CspPublicKeyStoreError,
-    CspSecretKeyStoreContainsError, CspTlsKeygenError, CspTlsSignError,
-    IDkgCreateDealingVaultError, IDkgDealingInternalBytes, IDkgProtocolCspVault,
-    IDkgTranscriptInternalBytes, MultiSignatureCspVault, NiDkgCspVault, PksAndSksContainsErrors,
-    PublicAndSecretKeyStoreCspVault, PublicKeyStoreCspVault, PublicRandomSeedGenerator,
-    PublicRandomSeedGeneratorError, SecretKeyStoreCspVault, ThresholdEcdsaSignerCspVault,
-    ThresholdSchnorrSigShareBytes, ThresholdSchnorrSignerCspVault, ThresholdSignatureCspVault,
+    BasicSignatureCspVault,
+    CspBasicSignatureError,
+    CspBasicSignatureKeygenError,
+    CspMultiSignatureError,
+    CspMultiSignatureKeygenError,
+    CspPublicKeyStoreError,
+    CspSecretKeyStoreContainsError,
+    CspTlsKeygenError,
+    CspTlsSignError,
+    IDkgCreateDealingVaultError,
+    IDkgDealingInternalBytes,
+    IDkgProtocolCspVault,
+    IDkgTranscriptInternalBytes,
+    MultiSignatureCspVault,
+    NiDkgCspVault,
+    PksAndSksContainsErrors,
+    PublicAndSecretKeyStoreCspVault,
+    PublicKeyStoreCspVault,
+    PublicRandomSeedGenerator,
+    PublicRandomSeedGeneratorError,
+    SecretKeyStoreCspVault,
+    ThresholdEcdsaSignerCspVault,
+    ThresholdSchnorrSigShareBytes,
+    ThresholdSchnorrSignerCspVault,
+    ThresholdSignatureCspVault,
     ValidatePksAndSksError,
 };
-use crate::vault::remote_csp_vault::codec::{Bincode, CspVaultObserver, ObservableCodec};
+use crate::vault::remote_csp_vault::codec::{
+    Bincode,
+    CspVaultObserver,
+    ObservableCodec,
+};
 use crate::vault::remote_csp_vault::ThresholdSchnorrCreateSigShareVaultError;
 use crate::vault::remote_csp_vault::{
-    remote_vault_codec_builder, robust_unix_socket, TarpcCspVaultClient, FOUR_GIGA_BYTES,
+    remote_vault_codec_builder,
+    robust_unix_socket,
+    TarpcCspVaultClient,
+    FOUR_GIGA_BYTES,
 };
-use crate::{ExternalPublicKeys, TlsHandshakeCspVault};
+use crate::{
+    ExternalPublicKeys,
+    TlsHandshakeCspVault,
+};
 use core::future::Future;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::dkg_errors::InternalError;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
-    CspDkgCreateFsKeyError, CspDkgCreateReshareDealingError, CspDkgLoadPrivateKeyError,
-    CspDkgRetainThresholdKeysError, CspDkgUpdateFsEpochError,
+    CspDkgCreateFsKeyError,
+    CspDkgCreateReshareDealingError,
+    CspDkgLoadPrivateKeyError,
+    CspDkgRetainThresholdKeysError,
+    CspDkgUpdateFsEpochError,
 };
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
-    CommitmentOpening, IDkgComplaintInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
+    CommitmentOpening,
+    IDkgComplaintInternal,
+    MEGaPublicKey,
+    ThresholdEcdsaSigShareInternal,
 };
 use ic_crypto_internal_types::encrypt::forward_secure::{
-    CspFsEncryptionPop, CspFsEncryptionPublicKey,
+    CspFsEncryptionPop,
+    CspFsEncryptionPublicKey,
 };
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
-    CspNiDkgDealing, CspNiDkgTranscript, Epoch,
+    CspNiDkgDealing,
+    CspNiDkgTranscript,
+    Epoch,
 };
 use ic_crypto_internal_types::NodeIndex;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
-use ic_logger::{debug, new_logger, ReplicaLogger};
+use ic_logger::{
+    debug,
+    new_logger,
+    ReplicaLogger,
+};
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_types::crypto::canister_threshold_sig::error::{
-    IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
-    IDkgVerifyDealingPrivateError, ThresholdEcdsaCreateSigShareError,
+    IDkgLoadTranscriptError,
+    IDkgOpenTranscriptError,
+    IDkgRetainKeysError,
+    IDkgVerifyDealingPrivateError,
+    ThresholdEcdsaCreateSigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::{
-    idkg::{BatchSignedIDkgDealing, IDkgTranscriptOperation},
+    idkg::{
+        BatchSignedIDkgDealing,
+        IDkgTranscriptOperation,
+    },
     ExtendedDerivationPath,
 };
-use ic_types::crypto::{AlgorithmId, CurrentNodePublicKeys};
-use ic_types::{NodeId, NumberOfNodes, Randomness};
-use serde::{Deserialize, Serialize};
+use ic_types::crypto::{
+    AlgorithmId,
+    CurrentNodePublicKeys,
+};
+use ic_types::{
+    NodeId,
+    NumberOfNodes,
+    Randomness,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use serde_bytes::ByteBuf;
-use std::collections::{BTreeMap, BTreeSet};
-use std::path::{Path, PathBuf};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
+use std::path::{
+    Path,
+    PathBuf,
+};
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use std::time::{
+    Duration,
+    SystemTime,
+};
 use tarpc::serde_transport;
 use tracing::instrument;
 

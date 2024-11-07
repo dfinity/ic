@@ -1,7 +1,14 @@
-use arbitrary::{Arbitrary, Result, Unstructured};
+use arbitrary::{
+    Arbitrary,
+    Result,
+    Unstructured,
+};
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::wasm_utils::decoding::decode_wasm;
-use ic_embedders::wasm_utils::validation::{RESERVED_SYMBOLS, WASM_FUNCTION_SIZE_LIMIT};
+use ic_embedders::wasm_utils::validation::{
+    RESERVED_SYMBOLS,
+    WASM_FUNCTION_SIZE_LIMIT,
+};
 use ic_replicated_state::Global;
 use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
 use ic_types::methods::WasmMethod;
@@ -12,10 +19,21 @@ use std::collections::HashSet;
 use std::fmt::Write;
 use std::sync::Arc;
 use wasm_encoder::{
-    CodeSection, ExportKind, ExportSection, Function, FunctionSection, GlobalSection, GlobalType,
-    Instruction, Module as WasmModule, TypeSection,
+    CodeSection,
+    ExportKind,
+    ExportSection,
+    Function,
+    FunctionSection,
+    GlobalSection,
+    GlobalType,
+    Instruction,
+    Module as WasmModule,
+    TypeSection,
 };
-use wasm_smith::{Config, Module};
+use wasm_smith::{
+    Config,
+    Module,
+};
 use wasmparser::*;
 
 lazy_static! {

@@ -1,7 +1,15 @@
 use super::*;
 use crate::pb::v1::neuron::DissolveState;
-use ic_nervous_system_common::{E8, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS};
-use proptest::{prelude::proptest, sample::select};
+use ic_nervous_system_common::{
+    E8,
+    ONE_DAY_SECONDS,
+    ONE_MONTH_SECONDS,
+    ONE_YEAR_SECONDS,
+};
+use proptest::{
+    prelude::proptest,
+    sample::select,
+};
 
 const AMOUNTS_OF_ICP_E8S: [u64; 14] = [
     0,

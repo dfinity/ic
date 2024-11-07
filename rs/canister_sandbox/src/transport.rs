@@ -3,16 +3,30 @@ use crate::frame_decoder::FrameDecoder;
 use crate::rpc::MessageSink;
 
 use bytes::{
-    buf::{Buf, BufMut},
+    buf::{
+        Buf,
+        BufMut,
+    },
     BytesMut,
 };
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
 use std::marker::PhantomData;
-use std::os::unix::{io::AsRawFd, io::RawFd, net::UnixStream};
-use std::sync::{Arc, Condvar, Mutex};
-use std::{convert::TryInto, time::Duration};
+use std::os::unix::{
+    io::AsRawFd,
+    io::RawFd,
+    net::UnixStream,
+};
+use std::sync::{
+    Arc,
+    Condvar,
+    Mutex,
+};
+use std::{
+    convert::TryInto,
+    time::Duration,
+};
 
 // The maximum number of file descriptors that can be sent in a single message.
 const MAX_NUM_FD_PER_MESSAGE: usize = 16;

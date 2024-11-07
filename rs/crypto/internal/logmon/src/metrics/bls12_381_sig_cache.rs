@@ -1,4 +1,7 @@
-use prometheus::{IntCounter, IntGauge};
+use prometheus::{
+    IntCounter,
+    IntGauge,
+};
 
 /// Metrics for the cache of successfully verified BLS12-381 threshold signatures.
 pub struct Metrics {

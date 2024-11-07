@@ -1,4 +1,8 @@
-use std::ops::{Add, Div, Sub};
+use std::ops::{
+    Add,
+    Div,
+    Sub,
+};
 
 pub trait Mid: Sized {
     /// Returns the value halfway between `self` and `other`, rounded to -infinity.

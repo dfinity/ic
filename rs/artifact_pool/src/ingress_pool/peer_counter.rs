@@ -1,11 +1,20 @@
 use std::{
-    collections::{btree_map::Entry, BTreeMap},
+    collections::{
+        btree_map::Entry,
+        BTreeMap,
+    },
     ops::Add,
 };
 
 use ic_interfaces::ingress_pool::IngressPoolObject;
-use ic_logger::{warn, ReplicaLogger};
-use ic_types::{CountBytes, NodeId};
+use ic_logger::{
+    warn,
+    ReplicaLogger,
+};
+use ic_types::{
+    CountBytes,
+    NodeId,
+};
 
 pub(super) struct Counter {
     pub(super) bytes: usize,
@@ -128,7 +137,10 @@ impl PeerCounter {
 mod tests {
     use ic_logger::no_op_logger;
     use ic_test_utilities_types::{
-        ids::{NODE_1, NODE_2},
+        ids::{
+            NODE_1,
+            NODE_2,
+        },
         messages::SignedIngressBuilder,
     };
 

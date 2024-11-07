@@ -1,9 +1,15 @@
-use crate::rosetta_tests::lib::{create_neuron, NeuronDetails};
+use crate::rosetta_tests::lib::{
+    create_neuron,
+    NeuronDetails,
+};
 use ic_ledger_core::Tokens;
 use ic_nns_governance_api::pb::v1::Neuron;
 use ic_rosetta_test_utils::EdKeypair;
 use icp_ledger::AccountIdentifier;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{
+    BTreeMap,
+    HashMap,
+};
 
 use super::lib::create_custom_neuron;
 

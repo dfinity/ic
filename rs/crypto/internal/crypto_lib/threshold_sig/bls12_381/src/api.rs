@@ -35,7 +35,10 @@
 //!   the corresponding internal methods and serialises the responses.
 use super::crypto;
 use super::types::{
-    CombinedSignatureBytes, IndividualSignature, IndividualSignatureBytes, PublicCoefficients,
+    CombinedSignatureBytes,
+    IndividualSignature,
+    IndividualSignatureBytes,
+    PublicCoefficients,
     SecretKeyBytes,
 };
 use crate::api::threshold_sign_error::ClibThresholdSignError;
@@ -45,10 +48,17 @@ use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::PublicCoefficientsBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_types::{
-    crypto::{CryptoError, CryptoResult},
-    NodeIndex, NumberOfNodes,
+    crypto::{
+        CryptoError,
+        CryptoResult,
+    },
+    NodeIndex,
+    NumberOfNodes,
 };
-use std::convert::{TryFrom, TryInto};
+use std::convert::{
+    TryFrom,
+    TryInto,
+};
 
 pub mod dkg_errors;
 pub mod ni_dkg_errors;

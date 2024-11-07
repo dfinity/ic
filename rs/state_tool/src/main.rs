@@ -8,7 +8,10 @@ use clap::Parser;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_tool::commands;
-use ic_types::{PrincipalId, Time};
+use ic_types::{
+    PrincipalId,
+    Time,
+};
 use std::path::PathBuf;
 
 /// Supported `state_tool` commands and their arguments.

@@ -2,7 +2,10 @@ use ic_crypto_temp_crypto_vault::RemoteVaultEnvironment;
 use ic_crypto_test_utils_local_csp_vault::MockLocalCspVault;
 use proptest::prelude::any;
 use proptest::result::maybe_err;
-use proptest::{prop_assert_eq, proptest};
+use proptest::{
+    prop_assert_eq,
+    proptest,
+};
 use std::sync::Arc;
 
 mod common;

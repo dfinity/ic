@@ -1,49 +1,93 @@
-use candid::{Decode, Encode, Principal};
+use candid::{
+    Decode,
+    Encode,
+    Principal,
+};
 use cycles_minting_canister::DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS;
-use ic_base_types::{CanisterId, PrincipalId};
-use ic_ledger_core::{tokens::CheckedSub, Tokens};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
+use ic_ledger_core::{
+    tokens::CheckedSub,
+    Tokens,
+};
 use ic_nervous_system_common::{
-    ledger::compute_distribution_subaccount, ExplosiveTokens, DEFAULT_TRANSFER_FEE, E8,
+    ledger::compute_distribution_subaccount,
+    ExplosiveTokens,
+    DEFAULT_TRANSFER_FEE,
+    E8,
     ONE_DAY_SECONDS,
 };
 use ic_nervous_system_proto::pb::v1::Percentage;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
-use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
+use ic_nns_constants::{
+    CYCLES_MINTING_CANISTER_ID,
+    GOVERNANCE_CANISTER_ID,
+    LEDGER_CANISTER_ID,
+};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     state_test_helpers::{
-        self, icrc1_balance, query, setup_nns_canisters, sns_claim_staked_neuron, sns_get_proposal,
-        sns_make_proposal, sns_stake_neuron, sns_wait_for_proposal_executed_or_failed,
+        self,
+        icrc1_balance,
+        query,
+        setup_nns_canisters,
+        sns_claim_staked_neuron,
+        sns_get_proposal,
+        sns_make_proposal,
+        sns_stake_neuron,
+        sns_wait_for_proposal_executed_or_failed,
         sns_wait_for_proposal_execution,
     },
 };
 use ic_sns_governance::{
     governance::TREASURY_SUBACCOUNT_NONCE,
     pb::v1::{
-        governance_error::ErrorType as SnsErrorType, proposal::Action,
-        transfer_sns_treasury_funds::TransferFrom, GovernanceError as SnsGovernanceError,
-        MintSnsTokens, Motion, NervousSystemParameters, NeuronId as SnsNeuronId,
-        NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
-        TransferSnsTreasuryFunds, Vote,
+        governance_error::ErrorType as SnsErrorType,
+        proposal::Action,
+        transfer_sns_treasury_funds::TransferFrom,
+        GovernanceError as SnsGovernanceError,
+        MintSnsTokens,
+        Motion,
+        NervousSystemParameters,
+        NeuronId as SnsNeuronId,
+        NeuronPermissionList,
+        NeuronPermissionType,
+        Proposal,
+        ProposalData,
+        TransferSnsTreasuryFunds,
+        Vote,
     },
     types::E8S_PER_TOKEN,
 };
-use ic_sns_swap::pb::v1::{Init as SwapInit, NeuronBasketConstructionParameters};
+use ic_sns_swap::pb::v1::{
+    Init as SwapInit,
+    NeuronBasketConstructionParameters,
+};
 use ic_sns_test_utils::{
     itest_helpers::SnsTestsInitPayloadBuilder,
     state_test_helpers::{
-        participate_in_swap, setup_sns_canisters, sns_cast_vote,
-        state_machine_builder_for_sns_tests, SnsTestCanisterIds,
+        participate_in_swap,
+        setup_sns_canisters,
+        sns_cast_vote,
+        state_machine_builder_for_sns_tests,
+        SnsTestCanisterIds,
     },
 };
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::{
-    AccountIdentifier, BinaryAccountBalanceArgs, Subaccount as IcpSubaccount,
+    AccountIdentifier,
+    BinaryAccountBalanceArgs,
+    Subaccount as IcpSubaccount,
     DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE,
 };
 use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
-use std::time::{Duration, SystemTime};
+use std::time::{
+    Duration,
+    SystemTime,
+};
 
 fn icrc1_account_to_icp_accountidentifier(account: Account) -> AccountIdentifier {
     AccountIdentifier::new(

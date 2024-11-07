@@ -14,9 +14,13 @@ use cycles_minting_canister::SetAuthorizedSubnetworkListArgs;
 use dfn_candid::candid_one;
 use flate2::read::GzDecoder;
 use ic_canister_client::Sender;
-use ic_canister_client_sender::{Ed25519KeyPair, SigKeys};
+use ic_canister_client_sender::{
+    Ed25519KeyPair,
+    SigKeys,
+};
 use ic_consensus_system_test_utils::{
-    rw_message::install_nns_with_customizations_and_check_progress, set_sandbox_env_vars,
+    rw_message::install_nns_with_customizations_and_check_progress,
+    set_sandbox_env_vars,
 };
 use ic_nervous_system_common::E8;
 use ic_nns_common::types::NeuronId;
@@ -24,42 +28,108 @@ use ic_nns_governance_api::pb::v1::NnsFunction;
 use ic_nns_test_utils::governance::submit_external_update_proposal;
 use ic_registry_subnet_type::SubnetType;
 use ic_sns_wasm::pb::v1::{
-    GetSnsSubnetIdsRequest, GetSnsSubnetIdsResponse, UpdateSnsSubnetListRequest,
+    GetSnsSubnetIdsRequest,
+    GetSnsSubnetIdsResponse,
+    UpdateSnsSubnetListRequest,
 };
 use ic_system_test_driver::{
     driver::{
-        boundary_node::{BoundaryNode, BoundaryNodeVm},
+        boundary_node::{
+            BoundaryNode,
+            BoundaryNodeVm,
+        },
         constants::SSH_USERNAME,
         driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR,
-        ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
-        prometheus_vm::{HasPrometheus, PrometheusVm},
-        test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
-        test_env_api::{
-            get_dependency_path, get_ic_os_update_img_sha256, get_ic_os_update_img_url,
-            read_dependency_to_string, HasIcDependencies, HasPublicApiUrl, HasTopologySnapshot,
-            IcNodeContainer, IcNodeSnapshot, NnsCustomizations, SshSession, TopologySnapshot,
+        ic::{
+            AmountOfMemoryKiB,
+            ImageSizeGiB,
+            InternetComputer,
+            NrOfVCPUs,
+            Subnet,
+            VmResources,
         },
-        universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms},
+        prometheus_vm::{
+            HasPrometheus,
+            PrometheusVm,
+        },
+        test_env::{
+            HasIcPrepDir,
+            TestEnv,
+            TestEnvAttribute,
+        },
+        test_env_api::{
+            get_dependency_path,
+            get_ic_os_update_img_sha256,
+            get_ic_os_update_img_url,
+            read_dependency_to_string,
+            HasIcDependencies,
+            HasPublicApiUrl,
+            HasTopologySnapshot,
+            IcNodeContainer,
+            IcNodeSnapshot,
+            NnsCustomizations,
+            SshSession,
+            TopologySnapshot,
+        },
+        universal_vm::{
+            DeployedUniversalVm,
+            UniversalVm,
+            UniversalVms,
+        },
     },
     nns::{
-        await_proposal_execution, get_canister, get_governance_canister,
-        submit_update_elected_replica_versions_proposal, vote_execute_proposal_assert_executed,
+        await_proposal_execution,
+        get_canister,
+        get_governance_canister,
+        submit_update_elected_replica_versions_proposal,
+        vote_execute_proposal_assert_executed,
     },
-    util::{block_on, runtime_from_url},
+    util::{
+        block_on,
+        runtime_from_url,
+    },
 };
-use ic_types::{CanisterId, NodeId, PrincipalId, ReplicaVersion, SubnetId};
+use ic_types::{
+    CanisterId,
+    NodeId,
+    PrincipalId,
+    ReplicaVersion,
+    SubnetId,
+};
 use icp_ledger::AccountIdentifier;
-use serde::{Deserialize, Serialize};
-use slog::{info, Logger};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use slog::{
+    info,
+    Logger,
+};
 use std::{
     fs,
-    fs::{File, OpenOptions},
-    io::{Cursor, Read, Write},
+    fs::{
+        File,
+        OpenOptions,
+    },
+    io::{
+        Cursor,
+        Read,
+        Write,
+    },
     os::unix::fs::OpenOptionsExt,
-    path::{Path, PathBuf},
-    process::{Command, Output},
+    path::{
+        Path,
+        PathBuf,
+    },
+    process::{
+        Command,
+        Output,
+    },
     str::FromStr,
-    sync::{mpsc, mpsc::Receiver},
+    sync::{
+        mpsc,
+        mpsc::Receiver,
+    },
     time::Duration,
 };
 use url::Url;

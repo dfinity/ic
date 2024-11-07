@@ -1,15 +1,27 @@
 //! Standalone interface for testing application canisters.
 
-use crate::message::{msg_stream_from_file, Message};
+use crate::message::{
+    msg_stream_from_file,
+    Message,
+};
 use hex::encode;
-use ic_config::{subnet_config::SubnetConfig, Config};
+use ic_config::{
+    subnet_config::SubnetConfig,
+    Config,
+};
 use ic_crypto_test_utils_ni_dkg::dummy_initial_dkg_transcript_with_master_key;
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_error_types::{ErrorCode, UserError};
+use ic_error_types::{
+    ErrorCode,
+    UserError,
+};
 use ic_execution_environment::ExecutionServices;
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_interfaces::{
-    execution_environment::{IngressHistoryReader, QueryExecutionError},
+    execution_environment::{
+        IngressHistoryReader,
+        QueryExecutionError,
+    },
     messaging::MessageRouting,
 };
 use ic_messaging::MessageRoutingImpl;
@@ -22,39 +34,75 @@ use ic_protobuf::types::v1::PrincipalId as PrincipalIdIdProto;
 use ic_protobuf::types::v1::SubnetId as SubnetIdProto;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_keys::{
-    make_provisional_whitelist_record_key, make_routing_table_record_key, ROOT_SUBNET_ID_KEY,
+    make_provisional_whitelist_record_key,
+    make_routing_table_record_key,
+    ROOT_SUBNET_ID_KEY,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
-use ic_registry_routing_table::{routing_table_insert_subnet, RoutingTable};
+use ic_registry_routing_table::{
+    routing_table_insert_subnet,
+    RoutingTable,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::certify_latest_state_helper;
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities_consensus::fake::FakeVerifier;
 use ic_test_utilities_registry::{
-    add_subnet_record, insert_initial_dkg_transcript, SubnetRecordBuilder,
+    add_subnet_record,
+    insert_initial_dkg_transcript,
+    SubnetRecordBuilder,
 };
 use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::{
     batch::Batch,
-    ingress::{IngressState, IngressStatus, WasmResult},
-    messages::{MessageId, SignedIngress},
+    ingress::{
+        IngressState,
+        IngressStatus,
+        WasmResult,
+    },
+    messages::{
+        MessageId,
+        SignedIngress,
+    },
     replica_config::ReplicaConfig,
-    time, CanisterId, NodeId, NumInstructions, PrincipalId, Randomness, RegistryVersion, SubnetId,
+    time,
+    CanisterId,
+    NodeId,
+    NumInstructions,
+    PrincipalId,
+    Randomness,
+    RegistryVersion,
+    SubnetId,
 };
 use ic_types::{
-    batch::{BatchMessages, BlockmakerMetrics},
+    batch::{
+        BatchMessages,
+        BlockmakerMetrics,
+    },
     ReplicaVersion,
 };
-use rand::distributions::{Distribution, Uniform};
+use rand::distributions::{
+    Distribution,
+    Uniform,
+};
 use rand::rngs::StdRng;
 use rand::SeedableRng;
-use slog::{Drain, Logger};
+use slog::{
+    Drain,
+    Logger,
+};
 use std::collections::BTreeMap;
 use std::fs::OpenOptions;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
-use std::{thread::sleep, time::Duration};
+use std::sync::{
+    Arc,
+    Mutex,
+};
+use std::{
+    thread::sleep,
+    time::Duration,
+};
 use tower::util::ServiceExt;
 
 mod message;

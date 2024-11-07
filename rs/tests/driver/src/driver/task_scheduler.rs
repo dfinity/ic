@@ -1,8 +1,15 @@
 #![allow(dead_code)]
 use std::collections::BTreeMap;
-use std::time::{Duration, SystemTime};
+use std::time::{
+    Duration,
+    SystemTime,
+};
 
-use slog::{debug, info, Logger};
+use slog::{
+    debug,
+    info,
+    Logger,
+};
 
 use crate::driver::action_graph::ActionGraph;
 use crate::driver::event::TaskId;
@@ -11,7 +18,10 @@ use crate::driver::task::Task;
 
 use super::action_graph::Node;
 use super::group::is_task_visible_to_user;
-use super::report::{SystemGroupSummary, TaskReport};
+use super::report::{
+    SystemGroupSummary,
+    TaskReport,
+};
 use super::task::TaskHandle;
 // Be mindful when modifying this constant, as the event can be consumed by other parties.
 const JSON_REPORT_CREATED_EVENT_NAME: &str = "json_report_created_event";

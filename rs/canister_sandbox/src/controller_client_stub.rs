@@ -1,7 +1,11 @@
 use crate::controller_service::ControllerService;
 use crate::protocol::ctlsvc::*;
 use crate::protocol::logging::LogRequest;
-use crate::rpc::{Call, Channel, Error};
+use crate::rpc::{
+    Call,
+    Channel,
+    Error,
+};
 
 use std::sync::Arc;
 

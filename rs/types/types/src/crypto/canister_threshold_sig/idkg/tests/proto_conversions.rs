@@ -1,15 +1,30 @@
 use crate::crypto::canister_threshold_sig::idkg::{
-    IDkgComplaint, IDkgDealing, IDkgOpening, IDkgTranscriptId, IDkgTranscriptOperation,
-    InitialIDkgDealings, SignedIDkgDealing,
+    IDkgComplaint,
+    IDkgDealing,
+    IDkgOpening,
+    IDkgTranscriptId,
+    IDkgTranscriptOperation,
+    InitialIDkgDealings,
+    SignedIDkgDealing,
 };
 use crate::crypto::canister_threshold_sig::ExtendedDerivationPath;
-use crate::{Height, NodeId, PrincipalId};
+use crate::{
+    Height,
+    NodeId,
+    PrincipalId,
+};
 
 use crate::crypto::canister_threshold_sig::idkg::tests::test_utils::{
-    create_idkg_params, mock_transcript, mock_unmasked_transcript_type,
+    create_idkg_params,
+    mock_transcript,
+    mock_unmasked_transcript_type,
 };
 use crate::crypto::canister_threshold_sig::idkg::IDkgDealingSupport;
-use crate::crypto::{BasicSig, BasicSigOf, CryptoHash};
+use crate::crypto::{
+    BasicSig,
+    BasicSigOf,
+    CryptoHash,
+};
 use crate::signature::BasicSignature;
 use crate::Id;
 use assert_matches::assert_matches;
@@ -24,7 +39,10 @@ use ic_protobuf::registry::subnet::v1::InitialIDkgDealings as InitialIDkgDealing
 use ic_protobuf::types::v1::IDkgDealingSupport as IDkgDealingSupportProto;
 use ic_protobuf::types::v1::PrincipalId as PrincipalIdProto;
 use rand::distributions::Standard;
-use rand::{CryptoRng, Rng};
+use rand::{
+    CryptoRng,
+    Rng,
+};
 use std::collections::BTreeSet;
 use std::convert::TryFrom;
 

@@ -2,28 +2,60 @@
 //! set of ip-addresses of a subnetwork.
 
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{
+        BTreeMap,
+        BTreeSet,
+    },
     fs,
-    io::{self, BufRead},
-    path::{Path, PathBuf},
+    io::{
+        self,
+        BufRead,
+    },
+    path::{
+        Path,
+        PathBuf,
+    },
     str::FromStr,
     time::Duration,
 };
 
-use anyhow::{bail, Context, Result};
+use anyhow::{
+    bail,
+    Context,
+    Result,
+};
 use clap::Parser;
 use reqwest::blocking::ClientBuilder;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{
+    de::DeserializeOwned,
+    Deserialize,
+    Serialize,
+};
 use url::Url;
 
 use ic_prep_lib::{
-    internet_computer::{IcConfig, TopologyConfig},
-    node::{Node, NodeConfiguration, NodeIndex},
-    subnet_configuration::{SubnetConfig, SubnetIndex, SubnetRunningState},
+    internet_computer::{
+        IcConfig,
+        TopologyConfig,
+    },
+    node::{
+        Node,
+        NodeConfiguration,
+        NodeIndex,
+    },
+    subnet_configuration::{
+        SubnetConfig,
+        SubnetIndex,
+        SubnetRunningState,
+    },
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::{Height, PrincipalId, ReplicaVersion};
+use ic_types::{
+    Height,
+    PrincipalId,
+    ReplicaVersion,
+};
 
 /// the filename of the update disk image, as published on the cdn
 const UPD_IMG_FILENAME: &str = "update-img.tar.zst";

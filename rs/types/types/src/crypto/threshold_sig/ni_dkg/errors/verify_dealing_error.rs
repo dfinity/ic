@@ -1,7 +1,10 @@
 //! Errors related to verifying a dealing.
 use super::*;
 
-use crate::crypto::error::{InvalidArgumentError, MalformedPublicKeyError};
+use crate::crypto::error::{
+    InvalidArgumentError,
+    MalformedPublicKeyError,
+};
 use crate::registry::RegistryClientError;
 
 /// Occurs if verifying a dealing using `NiDkgAlgorithm::verify_dealing` fails.

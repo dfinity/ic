@@ -2,19 +2,29 @@ use ic_crypto_temp_crypto_vault::RemoteVaultEnvironment;
 use ic_crypto_test_utils_local_csp_vault::MockLocalCspVault;
 use proptest::prelude::any;
 use proptest::result::maybe_err;
-use proptest::{prop_assert_eq, proptest};
+use proptest::{
+    prop_assert_eq,
+    proptest,
+};
 use std::sync::Arc;
 
 mod common;
 use common::proptest_config_for_delegation;
 
 use ic_crypto_internal_csp_proptest_utils::{
-    arb_external_public_keys, arb_pks_and_sks_contains_errors, arb_validate_pks_and_sks_error,
+    arb_external_public_keys,
+    arb_pks_and_sks_contains_errors,
+    arb_validate_pks_and_sks_error,
 };
-use ic_crypto_node_key_validation::{ValidNodePublicKeys, ValidNodeSigningPublicKey};
+use ic_crypto_node_key_validation::{
+    ValidNodePublicKeys,
+    ValidNodeSigningPublicKey,
+};
 use ic_crypto_test_utils_keys::public_keys::{
-    valid_committee_signing_public_key, valid_dkg_dealing_encryption_public_key,
-    valid_idkg_dealing_encryption_public_key, valid_node_signing_public_key,
+    valid_committee_signing_public_key,
+    valid_dkg_dealing_encryption_public_key,
+    valid_idkg_dealing_encryption_public_key,
+    valid_node_signing_public_key,
     valid_tls_certificate_and_validation_time,
 };
 use ic_types::crypto::CurrentNodePublicKeys;

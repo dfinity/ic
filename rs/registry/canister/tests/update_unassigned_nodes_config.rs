@@ -3,10 +3,16 @@ use dfn_candid::candid;
 
 use ic_nns_test_utils::{
     itest_helpers::{
-        forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
+        forward_call_via_universal_canister,
+        local_test_on_nns_subnet,
+        set_up_registry_canister,
         set_up_universal_canister,
     },
-    registry::{get_value, get_value_or_panic, invariant_compliant_mutation_as_atomic_req},
+    registry::{
+        get_value,
+        get_value_or_panic,
+        invariant_compliant_mutation_as_atomic_req,
+    },
 };
 use ic_protobuf::registry::unassigned_nodes_config::v1::UnassignedNodesConfigRecord;
 use ic_registry_keys::make_unassigned_nodes_config_record_key;

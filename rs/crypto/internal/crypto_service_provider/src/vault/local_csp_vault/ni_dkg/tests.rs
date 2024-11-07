@@ -21,14 +21,18 @@ use assert_matches::assert_matches;
 use ic_crypto_internal_threshold_sig_bls12381::api::dkg_errors::InternalError;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::CspDkgUpdateFsEpochError;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
-    CspDkgCreateFsKeyError, CspDkgLoadPrivateKeyError,
+    CspDkgCreateFsKeyError,
+    CspDkgLoadPrivateKeyError,
 };
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::FsEncryptionPop;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::FsEncryptionPublicKey;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::Transcript;
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::bls12_381::PublicCoefficientsBytes;
 use ic_crypto_test_utils::set_of;
-use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
+use ic_crypto_test_utils_reproducible_rng::{
+    reproducible_rng,
+    ReproducibleRng,
+};
 use ic_types::crypto::error::KeyNotFoundError;
 use ic_types::crypto::AlgorithmId;
 use ic_types_test_utils::ids::NODE_42;

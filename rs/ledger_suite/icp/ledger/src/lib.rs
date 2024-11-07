@@ -1,29 +1,67 @@
-use dfn_core::api::{now, trap_with};
-use ic_base_types::{CanisterId, PrincipalId};
+use dfn_core::api::{
+    now,
+    trap_with,
+};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_ledger_canister_core::archive::ArchiveCanisterWasm;
 use ic_ledger_canister_core::blockchain::Blockchain;
 use ic_ledger_canister_core::ledger::{
-    self as core_ledger, LedgerContext, LedgerData, TransactionInfo,
+    self as core_ledger,
+    LedgerContext,
+    LedgerData,
+    TransactionInfo,
 };
 use ic_ledger_core::{
-    approvals::AllowanceTable, approvals::HeapAllowancesData, balances::Balances,
-    block::EncodedBlock, timestamp::TimeStamp,
+    approvals::AllowanceTable,
+    approvals::HeapAllowancesData,
+    balances::Balances,
+    block::EncodedBlock,
+    timestamp::TimeStamp,
 };
-use ic_ledger_core::{block::BlockIndex, tokens::Tokens};
+use ic_ledger_core::{
+    block::BlockIndex,
+    tokens::Tokens,
+};
 use ic_ledger_hash_of::HashOf;
-use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
+use ic_stable_structures::memory_manager::{
+    MemoryId,
+    MemoryManager,
+    VirtualMemory,
+};
 use ic_stable_structures::DefaultMemoryImpl;
 use icp_ledger::{
-    AccountIdentifier, Block, FeatureFlags, LedgerAllowances, LedgerBalances, Memo, Operation,
-    PaymentError, Transaction, TransferError, TransferFee, UpgradeArgs, DEFAULT_TRANSFER_FEE,
+    AccountIdentifier,
+    Block,
+    FeatureFlags,
+    LedgerAllowances,
+    LedgerBalances,
+    Memo,
+    Operation,
+    PaymentError,
+    Transaction,
+    TransferError,
+    TransferFee,
+    UpgradeArgs,
+    DEFAULT_TRANSFER_FEE,
 };
 use icrc_ledger_types::icrc1::account::Account;
 use intmap::IntMap;
 use lazy_static::lazy_static;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::borrow::Cow;
 use std::cell::RefCell;
-use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
+use std::collections::{
+    BTreeMap,
+    HashMap,
+    HashSet,
+    VecDeque,
+};
 use std::sync::RwLock;
 use std::time::Duration;
 

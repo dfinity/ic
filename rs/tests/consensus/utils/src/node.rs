@@ -1,9 +1,15 @@
 use ic_system_test_driver::driver::test_env_api::{
-    HasPublicApiUrl, IcNodeSnapshot, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+    HasPublicApiUrl,
+    IcNodeSnapshot,
+    READY_WAIT_TIMEOUT,
+    RETRY_BACKOFF,
 };
 use ic_types::Height;
 
-use anyhow::{anyhow, bail};
+use anyhow::{
+    anyhow,
+    bail,
+};
 use slog::Logger;
 
 pub fn await_node_certified_height(node: &IcNodeSnapshot, target_height: Height, log: Logger) {

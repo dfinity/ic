@@ -1,15 +1,26 @@
 //! Utilities for testing multisignature operations.
 
-use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent, TempCryptoComponentGeneric};
+use ic_crypto_temp_crypto::{
+    NodeKeysToGenerate,
+    TempCryptoComponent,
+    TempCryptoComponentGeneric,
+};
 use ic_interfaces::crypto::KeyManager;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::crypto::KeyPurpose;
-use ic_types::{NodeId, PrincipalId, RegistryVersion};
+use ic_types::{
+    NodeId,
+    PrincipalId,
+    RegistryVersion,
+};
 use rand::prelude::*;
 use rand_chacha::ChaCha20Rng;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
 use std::sync::Arc;
 
 pub struct MultiSigTestEnvironment {

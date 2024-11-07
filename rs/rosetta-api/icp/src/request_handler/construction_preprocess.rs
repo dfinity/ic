@@ -1,14 +1,33 @@
-use crate::convert::{self, to_model_account_identifier};
+use crate::convert::{
+    self,
+    to_model_account_identifier,
+};
 use crate::errors::ApiError;
 use crate::models::{
-    ConstructionMetadataRequestOptions, ConstructionPreprocessRequest,
+    ConstructionMetadataRequestOptions,
+    ConstructionPreprocessRequest,
     ConstructionPreprocessResponse,
 };
 use crate::request::Request;
-use crate::request_handler::{verify_network_id, RosettaRequestHandler};
+use crate::request_handler::{
+    verify_network_id,
+    RosettaRequestHandler,
+};
 use crate::request_types::{
-    AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons, MergeMaturity, NeuronInfo,
-    RegisterVote, RemoveHotKey, SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve,
+    AddHotKey,
+    ChangeAutoStakeMaturity,
+    Disburse,
+    Follow,
+    ListNeurons,
+    MergeMaturity,
+    NeuronInfo,
+    RegisterVote,
+    RemoveHotKey,
+    SetDissolveTimestamp,
+    Spawn,
+    Stake,
+    StakeMaturity,
+    StartDissolve,
     StopDissolve,
 };
 use icp_ledger::Operation;

@@ -14,32 +14,71 @@
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::rc::Rc;
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::sync::{
+    Arc,
+    Mutex,
+};
+use std::time::{
+    Duration,
+    Instant,
+};
 
-use crate::protocol::id::{ExecId, MemoryId, WasmId};
+use crate::protocol::id::{
+    ExecId,
+    MemoryId,
+    WasmId,
+};
 use crate::protocol::sbxsvc::{
-    CreateExecutionStateSerializedSuccessReply, CreateExecutionStateSuccessReply, OpenMemoryRequest,
+    CreateExecutionStateSerializedSuccessReply,
+    CreateExecutionStateSuccessReply,
+    OpenMemoryRequest,
 };
 use crate::protocol::structs::{
-    MemoryModifications, SandboxExecInput, SandboxExecOutput, StateModifications,
+    MemoryModifications,
+    SandboxExecInput,
+    SandboxExecOutput,
+    StateModifications,
 };
-use crate::{controller_service::ControllerService, protocol};
+use crate::{
+    controller_service::ControllerService,
+    protocol,
+};
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::{
     wasm_executor::WasmStateChanges,
-    wasm_utils::{compile, decoding::decode_wasm, Segments},
-    CompilationResult, SerializedModule, SerializedModuleBytes, WasmtimeEmbedder,
+    wasm_utils::{
+        compile,
+        decoding::decode_wasm,
+        Segments,
+    },
+    CompilationResult,
+    SerializedModule,
+    SerializedModuleBytes,
+    WasmtimeEmbedder,
 };
 use ic_interfaces::execution_environment::{
-    ExecutionMode, HypervisorError, HypervisorResult, WasmExecutionOutput,
+    ExecutionMode,
+    HypervisorError,
+    HypervisorResult,
+    WasmExecutionOutput,
 };
 use ic_logger::ReplicaLogger;
-use ic_replicated_state::page_map::{PageAllocatorRegistry, PageMapSerialization};
-use ic_replicated_state::{EmbedderCache, Global, Memory, PageMap};
+use ic_replicated_state::page_map::{
+    PageAllocatorRegistry,
+    PageMapSerialization,
+};
+use ic_replicated_state::{
+    EmbedderCache,
+    Global,
+    Memory,
+    PageMap,
+};
 use ic_types::CanisterId;
 
-use crate::dts::{DeterministicTimeSlicingHandler, PausedExecution};
+use crate::dts::{
+    DeterministicTimeSlicingHandler,
+    PausedExecution,
+};
 
 /// A canister execution currently in progress.
 struct Execution {

@@ -1,7 +1,12 @@
 #[cfg(test)]
 mod tests;
 
-use nix::sys::mman::{mmap, munmap, MapFlags, ProtFlags};
+use nix::sys::mman::{
+    mmap,
+    munmap,
+    MapFlags,
+    ProtFlags,
+};
 use std::convert::AsRef;
 use std::io;
 use std::os::unix::io::AsRawFd;

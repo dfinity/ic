@@ -3,9 +3,15 @@
 //! complex/weird configurations of neurons and proposals against which several
 //! tests are run.
 
-use comparable::{Changed, U64Change};
+use comparable::{
+    Changed,
+    U64Change,
+};
 use fixtures::NNSStateChange;
-use fixtures::{NNSBuilder, NeuronBuilder};
+use fixtures::{
+    NNSBuilder,
+    NeuronBuilder,
+};
 use futures::future::FutureExt;
 use ic_base_types::PrincipalId;
 use ic_nervous_system_common::ONE_YEAR_SECONDS;
@@ -13,12 +19,23 @@ use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::{
     governance::MAX_DISSOLVE_DELAY_SECONDS,
     pb::v1::{
-        manage_neuron::{Command, Merge},
-        manage_neuron_response::{Command as CommandResponse, MergeResponse},
-        ManageNeuron, NetworkEconomics, Neuron,
+        manage_neuron::{
+            Command,
+            Merge,
+        },
+        manage_neuron_response::{
+            Command as CommandResponse,
+            MergeResponse,
+        },
+        ManageNeuron,
+        NetworkEconomics,
+        Neuron,
     },
 };
-use proptest::prelude::{proptest, TestCaseError};
+use proptest::prelude::{
+    proptest,
+    TestCaseError,
+};
 
 // Using a `pub mod` works around spurious dead code warnings; see
 // https://github.com/rust-lang/rust/issues/46379

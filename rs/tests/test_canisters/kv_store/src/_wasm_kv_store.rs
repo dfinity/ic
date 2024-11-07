@@ -1,5 +1,8 @@
 use candid::CandidType;
-use ic_cdk::storage::{stable_restore, stable_save};
+use ic_cdk::storage::{
+    stable_restore,
+    stable_save,
+};
 use ic_cdk_macros::*;
 use serde::Deserialize;
 

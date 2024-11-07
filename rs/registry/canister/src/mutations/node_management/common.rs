@@ -1,19 +1,40 @@
-use std::{default::Default, str::FromStr};
+use std::{
+    default::Default,
+    str::FromStr,
+};
 
-use crate::{common::LOG_PREFIX, registry::Registry};
-use ic_base_types::{NodeId, PrincipalId, SubnetId};
+use crate::{
+    common::LOG_PREFIX,
+    registry::Registry,
+};
+use ic_base_types::{
+    NodeId,
+    PrincipalId,
+    SubnetId,
+};
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_protobuf::registry::{
-    node::v1::NodeRecord, node_operator::v1::NodeOperatorRecord, subnet::v1::SubnetListRecord,
+    node::v1::NodeRecord,
+    node_operator::v1::NodeOperatorRecord,
+    subnet::v1::SubnetListRecord,
 };
 use ic_registry_keys::{
-    make_crypto_node_key, make_crypto_tls_cert_key, make_firewall_rules_record_key,
-    make_node_operator_record_key, make_node_record_key, make_subnet_list_record_key,
-    FirewallRulesScope, NODE_RECORD_KEY_PREFIX,
+    make_crypto_node_key,
+    make_crypto_tls_cert_key,
+    make_firewall_rules_record_key,
+    make_node_operator_record_key,
+    make_node_record_key,
+    make_subnet_list_record_key,
+    FirewallRulesScope,
+    NODE_RECORD_KEY_PREFIX,
 };
 use ic_registry_transport::{
-    delete, insert,
-    pb::v1::{RegistryMutation, RegistryValue},
+    delete,
+    insert,
+    pb::v1::{
+        RegistryMutation,
+        RegistryValue,
+    },
     update,
 };
 use ic_types::crypto::KeyPurpose;

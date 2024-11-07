@@ -1,14 +1,26 @@
 use std::collections::BTreeSet;
 
-use crate::idkg::{pre_signer::IDkgTranscriptBuilder, utils::algorithm_for_key_id};
-use ic_logger::{info, ReplicaLogger};
+use crate::idkg::{
+    pre_signer::IDkgTranscriptBuilder,
+    utils::algorithm_for_key_id,
+};
+use ic_logger::{
+    info,
+    ReplicaLogger,
+};
 use ic_types::consensus::idkg::HasMasterPublicKeyId;
 use ic_types::{
     consensus::idkg::{
-        self, IDkgBlockReader, IDkgUIDGenerator, MasterKeyTranscript, TranscriptAttributes,
+        self,
+        IDkgBlockReader,
+        IDkgUIDGenerator,
+        MasterKeyTranscript,
+        TranscriptAttributes,
     },
     crypto::canister_threshold_sig::idkg::IDkgTranscript,
-    Height, NodeId, RegistryVersion,
+    Height,
+    NodeId,
+    RegistryVersion,
 };
 
 use super::IDkgPayloadError;
@@ -215,24 +227,39 @@ mod tests {
     use std::str::FromStr;
 
     use ic_crypto_test_utils_canister_threshold_sigs::{
-        dummy_values::dummy_initial_idkg_dealing_for_tests, generate_key_transcript, node::Nodes,
-        CanisterThresholdSigTestEnvironment, IDkgParticipants,
+        dummy_values::dummy_initial_idkg_dealing_for_tests,
+        generate_key_transcript,
+        node::Nodes,
+        CanisterThresholdSigTestEnvironment,
+        IDkgParticipants,
     };
-    use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
+    use ic_crypto_test_utils_reproducible_rng::{
+        reproducible_rng,
+        ReproducibleRng,
+    };
     use ic_logger::replica_logger::no_op_logger;
-    use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
+    use ic_management_canister_types::{
+        EcdsaKeyId,
+        MasterPublicKeyId,
+    };
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::consensus::idkg::HasMasterPublicKeyId;
     use ic_types::{
-        crypto::{canister_threshold_sig::idkg::IDkgTranscript, AlgorithmId},
+        crypto::{
+            canister_threshold_sig::idkg::IDkgTranscript,
+            AlgorithmId,
+        },
         Height,
     };
 
     use crate::idkg::{
         test_utils::{
             create_reshare_unmasked_transcript_param,
-            fake_master_public_key_ids_for_all_algorithms, set_up_idkg_payload,
-            IDkgPayloadTestHelper, TestIDkgBlockReader, TestIDkgTranscriptBuilder,
+            fake_master_public_key_ids_for_all_algorithms,
+            set_up_idkg_payload,
+            IDkgPayloadTestHelper,
+            TestIDkgBlockReader,
+            TestIDkgTranscriptBuilder,
         },
         utils::algorithm_for_key_id,
     };

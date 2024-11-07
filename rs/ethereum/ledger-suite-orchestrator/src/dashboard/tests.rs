@@ -1,18 +1,39 @@
 use crate::dashboard::tests::assertions::DashboardAssert;
 use crate::dashboard::tests::fixtures::{
-    cketh_ledger_suite, usdc_metadata, usdc_token_id, usdt_token_id,
+    cketh_ledger_suite,
+    usdc_metadata,
+    usdc_token_id,
+    usdt_token_id,
 };
 use crate::dashboard::DashboardTemplate;
 use candid::Principal;
-use fixtures::{usdc, usdt, USDC_ADDRESS, USDT_ADDRESS};
+use fixtures::{
+    usdc,
+    usdt,
+    USDC_ADDRESS,
+    USDT_ADDRESS,
+};
 use ic_ledger_suite_orchestrator::candid::InitArg;
 use ic_ledger_suite_orchestrator::scheduler::Erc20Token;
 use ic_ledger_suite_orchestrator::state::{
-    ArchiveWasm, CanistersMetadata, GitCommitHash, Index, IndexWasm, Ledger, LedgerWasm, State,
+    ArchiveWasm,
+    CanistersMetadata,
+    GitCommitHash,
+    Index,
+    IndexWasm,
+    Ledger,
+    LedgerWasm,
+    State,
     WasmHash,
 };
-use ic_ledger_suite_orchestrator::storage::{wasm_store_try_insert, WasmStore};
-use ic_stable_structures::memory_manager::{MemoryId, MemoryManager};
+use ic_ledger_suite_orchestrator::storage::{
+    wasm_store_try_insert,
+    WasmStore,
+};
+use ic_stable_structures::memory_manager::{
+    MemoryId,
+    MemoryManager,
+};
 use ic_stable_structures::DefaultMemoryImpl;
 use std::str::FromStr;
 
@@ -256,11 +277,17 @@ pub fn empty_wasm_store() -> WasmStore {
 }
 
 mod assertions {
-    use crate::dashboard::tests::{empty_wasm_store, initial_state};
+    use crate::dashboard::tests::{
+        empty_wasm_store,
+        initial_state,
+    };
     use crate::dashboard::DashboardTemplate;
     use ic_ledger_suite_orchestrator::state::State;
     use ic_ledger_suite_orchestrator::storage::WasmStore;
-    use scraper::{Html, Selector};
+    use scraper::{
+        Html,
+        Selector,
+    };
 
     pub struct DashboardAssert {
         rendered_html: String,
@@ -496,11 +523,15 @@ mod assertions {
 
 mod fixtures {
     use ic_ledger_suite_orchestrator::candid::{
-        InstalledCanister, InstalledLedgerSuite as CandidInstalledLedgerSuite,
+        InstalledCanister,
+        InstalledLedgerSuite as CandidInstalledLedgerSuite,
     };
     use ic_ledger_suite_orchestrator::scheduler::Erc20Token;
     use ic_ledger_suite_orchestrator::state::{
-        CanistersMetadata, InstalledLedgerSuite, State, TokenId,
+        CanistersMetadata,
+        InstalledLedgerSuite,
+        State,
+        TokenId,
     };
 
     pub const USDC_ADDRESS: &str = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";

@@ -5,21 +5,39 @@
 
 use anyhow::Result;
 use core::fmt::Write;
-use ic_agent::{agent::RejectResponse, export::Principal, AgentError, RequestId};
+use ic_agent::{
+    agent::RejectResponse,
+    export::Principal,
+    AgentError,
+    RequestId,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::systest;
 use ic_system_test_driver::{
     driver::{
-        ic::{InternetComputer, Subnet},
+        ic::{
+            InternetComputer,
+            Subnet,
+        },
         test_env::TestEnv,
-        test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
+        test_env_api::{
+            HasPublicApiUrl,
+            HasTopologySnapshot,
+            IcNodeContainer,
+        },
     },
     util::*,
 };
 use ic_utils::interfaces::ManagementCanister;
-use slog::{debug, Logger};
-use std::{time::Duration, time::Instant};
+use slog::{
+    debug,
+    Logger,
+};
+use std::{
+    time::Duration,
+    time::Instant,
+};
 use tokio::time::sleep_until;
 
 // Enables additional debug logs

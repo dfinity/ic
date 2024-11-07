@@ -2,25 +2,58 @@
 // are not used in canbench-rs, but are used elsewhere.  Otherwise we get annoying clippy warnings.
 #![allow(dead_code)]
 use crate::{
-    governance::{Environment, HeapGrowthPotential, RngError},
-    pb::v1::{ExecuteNnsFunction, GovernanceError, OpenSnsTokenSwap},
+    governance::{
+        Environment,
+        HeapGrowthPotential,
+        RngError,
+    },
+    pb::v1::{
+        ExecuteNnsFunction,
+        GovernanceError,
+        OpenSnsTokenSwap,
+    },
 };
 use async_trait::async_trait;
-use candid::{Decode, Encode};
-use ic_base_types::{CanisterId, PrincipalId};
+use candid::{
+    Decode,
+    Encode,
+};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_ledger_core::Tokens;
-use ic_nervous_system_common::{cmc::CMC, ledger::IcpLedger, NervousSystemError, E8};
+use ic_nervous_system_common::{
+    cmc::CMC,
+    ledger::IcpLedger,
+    NervousSystemError,
+    E8,
+};
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use ic_sns_swap::pb::{
     v1 as sns_swap_pb,
-    v1::{NeuronBasketConstructionParameters, Params, Swap},
+    v1::{
+        NeuronBasketConstructionParameters,
+        Params,
+        Swap,
+    },
 };
-use ic_sns_wasm::pb::v1::{DeployedSns, ListDeployedSnsesRequest, ListDeployedSnsesResponse};
-use icp_ledger::{AccountIdentifier, Subaccount};
+use ic_sns_wasm::pb::v1::{
+    DeployedSns,
+    ListDeployedSnsesRequest,
+    ListDeployedSnsesResponse,
+};
+use icp_ledger::{
+    AccountIdentifier,
+    Subaccount,
+};
 use lazy_static::lazy_static;
 use std::{
     collections::VecDeque,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc,
+        Mutex,
+    },
 };
 
 pub const TEST_SWAP_PARAMS: Params = Params {

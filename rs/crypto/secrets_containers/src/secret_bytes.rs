@@ -1,6 +1,12 @@
 /// Sensitive data held as a Vec of `u8`s.
-use core::fmt::{self, Debug};
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use core::fmt::{
+    self,
+    Debug,
+};
+use zeroize::{
+    Zeroize,
+    ZeroizeOnDrop,
+};
 
 /// Sensitive data held as a Vec of `u8`s.
 ///

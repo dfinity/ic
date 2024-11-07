@@ -1,11 +1,21 @@
 ///
 /// Benchmark System API performance in `execute_inspect_message()`
 ///
-use criterion::{criterion_group, criterion_main, Criterion};
-use execution_environment_bench::{common, wat::*};
+use criterion::{
+    criterion_group,
+    criterion_main,
+    Criterion,
+};
+use execution_environment_bench::{
+    common,
+    wat::*,
+};
 use ic_execution_environment::execution::inspect_message;
 
-use ic_execution_environment::{ExecutionEnvironment, IngressFilterMetrics};
+use ic_execution_environment::{
+    ExecutionEnvironment,
+    IngressFilterMetrics,
+};
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_test_utilities_types::ids::user_test_id;

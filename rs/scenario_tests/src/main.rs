@@ -1,5 +1,8 @@
 use ic_scenario_tests::api::e2e::testnet::*;
-use ic_scenario_tests::runner::{passing_test_async, runner};
+use ic_scenario_tests::runner::{
+    passing_test_async,
+    runner,
+};
 use ic_scenario_tests::tests::e2e::*;
 
 #[derive(Default)]

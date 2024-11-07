@@ -1,21 +1,45 @@
-use clap::{arg, Arg, Command};
+use clap::{
+    arg,
+    Arg,
+    Command,
+};
 use ic_artifact_pool::{
     certification_pool::CertificationPoolImpl,
-    consensus_pool::{PoolSectionOps, UncachedConsensusPoolImpl},
+    consensus_pool::{
+        PoolSectionOps,
+        UncachedConsensusPoolImpl,
+    },
 };
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_interfaces::consensus_pool::*;
-use ic_logger::{LoggerImpl, ReplicaLogger};
+use ic_logger::{
+    LoggerImpl,
+    ReplicaLogger,
+};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
-    consensus::{certification::CertificationMessage, CatchUpPackage, ConsensusMessageHashable},
+    consensus::{
+        certification::CertificationMessage,
+        CatchUpPackage,
+        ConsensusMessageHashable,
+    },
     time::current_time,
-    NodeId, PrincipalId,
+    NodeId,
+    PrincipalId,
 };
 use prost::Message;
-use serde::{Deserialize, Serialize};
-use serde_bytes_repr::{ByteFmtDeserializer, ByteFmtSerializer};
-use serde_json::{Deserializer, Serializer};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use serde_bytes_repr::{
+    ByteFmtDeserializer,
+    ByteFmtSerializer,
+};
+use serde_json::{
+    Deserializer,
+    Serializer,
+};
 use std::convert::TryFrom;
 use std::io::BufRead;
 use std::io::Write;

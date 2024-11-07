@@ -1,24 +1,69 @@
-use candid::{candid_method, Principal};
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_cdk_macros::{init, post_upgrade, query, update};
-use ic_icrc1::{blocks::encoded_block_to_generic_block, Block};
+use candid::{
+    candid_method,
+    Principal,
+};
+use ic_canisters_http_types::{
+    HttpRequest,
+    HttpResponse,
+    HttpResponseBuilder,
+};
+use ic_cdk_macros::{
+    init,
+    post_upgrade,
+    query,
+    update,
+};
+use ic_icrc1::{
+    blocks::encoded_block_to_generic_block,
+    Block,
+};
 use ic_ledger_canister_core::runtime::total_memory_size_bytes;
-use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
-use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
+use ic_ledger_core::block::{
+    BlockIndex,
+    BlockType,
+    EncodedBlock,
+};
+use ic_stable_structures::memory_manager::{
+    MemoryId,
+    VirtualMemory,
+};
 use ic_stable_structures::{
-    cell::Cell as StableCell, log::Log as StableLog, memory_manager::MemoryManager,
-    storable::Bound, DefaultMemoryImpl, RestrictedMemory, Storable,
+    cell::Cell as StableCell,
+    log::Log as StableLog,
+    memory_manager::MemoryManager,
+    storable::Bound,
+    DefaultMemoryImpl,
+    RestrictedMemory,
+    Storable,
 };
-use icrc_ledger_types::icrc3::archive::{GetArchivesArgs, GetArchivesResult};
-use icrc_ledger_types::icrc3::blocks::{BlockRange, GetBlocksRequest, GetBlocksResult};
+use icrc_ledger_types::icrc3::archive::{
+    GetArchivesArgs,
+    GetArchivesResult,
+};
 use icrc_ledger_types::icrc3::blocks::{
-    GenericBlock as IcrcBlock, ICRC3DataCertificate, SupportedBlockType,
+    BlockRange,
+    GetBlocksRequest,
+    GetBlocksResult,
 };
-use icrc_ledger_types::{icrc::generic_value::ICRC3Value, icrc3::blocks::BlockWithId};
+use icrc_ledger_types::icrc3::blocks::{
+    GenericBlock as IcrcBlock,
+    ICRC3DataCertificate,
+    SupportedBlockType,
+};
+use icrc_ledger_types::{
+    icrc::generic_value::ICRC3Value,
+    icrc3::blocks::BlockWithId,
+};
 
 use icrc_ledger_types::icrc3::transactions::Transaction;
-use icrc_ledger_types::icrc3::transactions::{GetTransactionsRequest, TransactionRange};
-use serde::{Deserialize, Serialize};
+use icrc_ledger_types::icrc3::transactions::{
+    GetTransactionsRequest,
+    TransactionRange,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::borrow::Cow;
 use std::cell::RefCell;
 
@@ -419,7 +464,10 @@ fn main() {}
 
 #[test]
 fn check_candid_interface() {
-    use candid_parser::utils::{service_equal, CandidSource};
+    use candid_parser::utils::{
+        service_equal,
+        CandidSource,
+    };
     use std::path::PathBuf;
 
     candid::export_service!();

@@ -1,31 +1,75 @@
-use std::{convert::TryFrom, rc::Rc, sync::Arc};
-
-use ic_base_types::{CanisterId, NumBytes, SubnetId};
-use ic_config::{
-    embedders::Config as EmbeddersConfig, flag_status::FlagStatus, subnet_config::SchedulerConfig,
+use std::{
+    convert::TryFrom,
+    rc::Rc,
+    sync::Arc,
 };
-use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
-use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
+
+use ic_base_types::{
+    CanisterId,
+    NumBytes,
+    SubnetId,
+};
+use ic_config::{
+    embedders::Config as EmbeddersConfig,
+    flag_status::FlagStatus,
+    subnet_config::SchedulerConfig,
+};
+use ic_cycles_account_manager::{
+    CyclesAccountManager,
+    ResourceSaturation,
+};
+use ic_interfaces::execution_environment::{
+    ExecutionMode,
+    SubnetAvailableMemory,
+};
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types::IC_00;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
-use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
+use ic_registry_routing_table::{
+    CanisterIdRange,
+    RoutingTable,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::NumWasmPages;
-use ic_replicated_state::{CallOrigin, Memory, NetworkTopology, SubnetTopology, SystemState};
+use ic_replicated_state::{
+    CallOrigin,
+    Memory,
+    NetworkTopology,
+    SubnetTopology,
+    SystemState,
+};
 use ic_system_api::{
-    sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
-    ExecutionParameters, InstructionLimits, NonReplicatedQueryKind, SystemApiImpl,
+    sandbox_safe_system_state::SandboxSafeSystemState,
+    ApiType,
+    DefaultOutOfInstructionsHandler,
+    ExecutionParameters,
+    InstructionLimits,
+    NonReplicatedQueryKind,
+    SystemApiImpl,
 };
 use ic_test_utilities_state::SystemStateBuilder;
 use ic_test_utilities_types::ids::{
-    call_context_test_id, canister_test_id, subnet_test_id, user_test_id,
+    call_context_test_id,
+    canister_test_id,
+    subnet_test_id,
+    user_test_id,
 };
 use ic_types::{
-    messages::{CallContextId, CallbackId, RejectContext, RequestMetadata, NO_DEADLINE},
+    messages::{
+        CallContextId,
+        CallbackId,
+        RejectContext,
+        RequestMetadata,
+        NO_DEADLINE,
+    },
     methods::SystemMethod,
     time::UNIX_EPOCH,
-    ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, PrincipalId, Time,
+    ComputeAllocation,
+    Cycles,
+    MemoryAllocation,
+    NumInstructions,
+    PrincipalId,
+    Time,
 };
 use maplit::btreemap;
 

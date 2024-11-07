@@ -1,37 +1,67 @@
 use crate::key_id::KeyIdInstantiationError;
 use crate::keygen::utils::dkg_dealing_encryption_pk_to_proto;
-use crate::public_key_store::{PublicKeySetOnceError, PublicKeyStore};
-use crate::secret_key_store::{SecretKeyStore, SecretKeyStoreInsertionError};
+use crate::public_key_store::{
+    PublicKeySetOnceError,
+    PublicKeyStore,
+};
+use crate::secret_key_store::{
+    SecretKeyStore,
+    SecretKeyStoreInsertionError,
+};
 use crate::threshold::ni_dkg::specialise;
-use crate::threshold::ni_dkg::{NIDKG_FS_SCOPE, NIDKG_THRESHOLD_SCOPE};
-use crate::types::{CspPublicCoefficients, CspSecretKey};
+use crate::threshold::ni_dkg::{
+    NIDKG_FS_SCOPE,
+    NIDKG_THRESHOLD_SCOPE,
+};
+use crate::types::{
+    CspPublicCoefficients,
+    CspSecretKey,
+};
 use crate::vault::api::NiDkgCspVault;
 use crate::vault::local_csp_vault::LocalCspVault;
 use crate::KeyId;
-use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
+use ic_crypto_internal_logmon::metrics::{
+    MetricsDomain,
+    MetricsResult,
+    MetricsScope,
+};
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
-    CspDkgCreateFsKeyError, CspDkgLoadPrivateKeyError, InternalError,
+    CspDkgCreateFsKeyError,
+    CspDkgLoadPrivateKeyError,
+    InternalError,
 };
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381 as ni_dkg_clib;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::types::FsEncryptionKeySetWithPop;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::SecretKey;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::types::CspFsEncryptionKeySet;
 use ic_crypto_internal_types::encrypt::forward_secure::{
-    CspFsEncryptionPop, CspFsEncryptionPublicKey,
+    CspFsEncryptionPop,
+    CspFsEncryptionPublicKey,
 };
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
-    CspNiDkgDealing, CspNiDkgTranscript, Epoch,
+    CspNiDkgDealing,
+    CspNiDkgTranscript,
+    Epoch,
 };
 use ic_crypto_internal_types::NodeIndex;
 use ic_crypto_node_key_validation::ValidDkgDealingEncryptionPublicKey;
 use ic_logger::debug;
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_types::crypto::AlgorithmId;
-use ic_types::{NodeId, NumberOfNodes};
-use rand::{CryptoRng, Rng};
-use std::collections::{BTreeMap, BTreeSet};
+use ic_types::{
+    NodeId,
+    NumberOfNodes,
+};
+use rand::{
+    CryptoRng,
+    Rng,
+};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
 
 #[cfg(test)]
 mod tests;

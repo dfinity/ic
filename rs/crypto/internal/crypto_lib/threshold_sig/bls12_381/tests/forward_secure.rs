@@ -2,11 +2,21 @@
 
 //! Tests for combined forward secure encryption and ZK proofs
 
-use ic_crypto_internal_bls12_381_type::{G2Affine, Scalar};
-use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::{forward_secure::*, Epoch};
+use ic_crypto_internal_bls12_381_type::{
+    G2Affine,
+    Scalar,
+};
+use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::{
+    forward_secure::*,
+    Epoch,
+};
 use ic_crypto_sha2::Sha256;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use rand::{CryptoRng, Rng, RngCore};
+use rand::{
+    CryptoRng,
+    Rng,
+    RngCore,
+};
 
 #[test]
 fn output_of_mk_sys_params_is_expected_values() {

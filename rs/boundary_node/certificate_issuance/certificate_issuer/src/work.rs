@@ -1,24 +1,59 @@
 use std::{
-    collections::HashSet, fmt, iter::once, sync::atomic::Ordering, sync::Arc, time::Duration,
+    collections::HashSet,
+    fmt,
+    iter::once,
+    sync::atomic::Ordering,
+    sync::Arc,
+    time::Duration,
 };
 
-use anyhow::{anyhow, Context};
+use anyhow::{
+    anyhow,
+    Context,
+};
 use async_trait::async_trait;
-use candid::{Decode, Encode, Principal};
+use candid::{
+    Decode,
+    Encode,
+    Principal,
+};
 use certificate_orchestrator_interface as ifc;
 use ic_agent::Agent;
-use opentelemetry::{baggage::BaggageExt, trace::FutureExt, KeyValue};
+use opentelemetry::{
+    baggage::BaggageExt,
+    trace::FutureExt,
+    KeyValue,
+};
 use serde::Serialize;
-use trust_dns_resolver::{error::ResolveErrorKind, proto::rr::RecordType};
+use trust_dns_resolver::{
+    error::ResolveErrorKind,
+    proto::rr::RecordType,
+};
 
 use crate::{
-    acme::{self, FinalizeError},
-    certificate::{self, GetCert, GetCertError, Pair},
+    acme::{
+        self,
+        FinalizeError,
+    },
+    certificate::{
+        self,
+        GetCert,
+        GetCertError,
+        Pair,
+    },
     check::Check,
     decoder_config,
-    dns::{self, Resolve},
-    registration::{Id, Registration, State},
-    TASK_DELAY_SEC, TASK_ERROR_DELAY_SEC,
+    dns::{
+        self,
+        Resolve,
+    },
+    registration::{
+        Id,
+        Registration,
+        State,
+    },
+    TASK_DELAY_SEC,
+    TASK_ERROR_DELAY_SEC,
 };
 
 #[derive(Clone, Debug, Serialize)]
@@ -141,7 +176,10 @@ pub struct CanisterQueuer(pub Arc<Agent>, pub Principal);
 #[async_trait]
 impl Queue for CanisterQueuer {
     async fn queue(&self, id: &Id, t: u64) -> Result<(), QueueError> {
-        use ifc::{QueueTaskError as Error, QueueTaskResponse as Response};
+        use ifc::{
+            QueueTaskError as Error,
+            QueueTaskResponse as Response,
+        };
 
         let args = Encode!(id, &t).context("failed to encode arg")?;
 
@@ -172,7 +210,10 @@ pub struct CanisterPeeker(pub Arc<Agent>, pub Principal);
 #[async_trait]
 impl Peek for CanisterPeeker {
     async fn peek(&self) -> Result<Id, PeekError> {
-        use ifc::{PeekTaskError as Error, PeekTaskResponse as Response};
+        use ifc::{
+            PeekTaskError as Error,
+            PeekTaskResponse as Response,
+        };
 
         let args = Encode!().context("failed to encode arg")?;
 
@@ -204,7 +245,10 @@ pub struct CanisterDispenser(pub Arc<Agent>, pub Principal);
 impl Dispense for CanisterDispenser {
     async fn dispense(&self) -> Result<(Id, Task), DispenseError> {
         let id = {
-            use ifc::{DispenseTaskError as Error, DispenseTaskResponse as Response};
+            use ifc::{
+                DispenseTaskError as Error,
+                DispenseTaskResponse as Response,
+            };
 
             let args = Encode!().context("failed to encode arg")?;
 
@@ -230,7 +274,10 @@ impl Dispense for CanisterDispenser {
         };
 
         let reg: Registration = {
-            use ifc::{GetRegistrationError as Error, GetRegistrationResponse as Response};
+            use ifc::{
+                GetRegistrationError as Error,
+                GetRegistrationResponse as Response,
+            };
 
             let args = Encode!(&id).context("failed to encode arg")?;
 
@@ -479,15 +526,30 @@ mod tests {
     use mockall::predicate;
     use trust_dns_resolver::{
         lookup::Lookup,
-        proto::{op::Query, rr::Record as TrustRecord},
+        proto::{
+            op::Query,
+            rr::Record as TrustRecord,
+        },
         Name,
     };
 
     use crate::{
-        acme::{MockFinalize, MockOrder, MockReady},
+        acme::{
+            MockFinalize,
+            MockOrder,
+            MockReady,
+        },
         certificate::MockUpload,
-        check::{CheckError, MockCheck},
-        dns::{MockCreate, MockDelete, MockResolve, Record},
+        check::{
+            CheckError,
+            MockCheck,
+        },
+        dns::{
+            MockCreate,
+            MockDelete,
+            MockResolve,
+            Record,
+        },
     };
 
     #[tokio::test]

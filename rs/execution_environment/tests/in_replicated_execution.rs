@@ -1,8 +1,19 @@
 use ic_management_canister_types::CanisterInstallMode;
 use ic_registry_subnet_type::SubnetType;
-use ic_state_machine_tests::{StateMachine, StateMachineBuilder, UserError, WasmResult};
-use ic_test_utilities::universal_canister::{wasm, UNIVERSAL_CANISTER_WASM};
-use ic_types::{CanisterId, Cycles};
+use ic_state_machine_tests::{
+    StateMachine,
+    StateMachineBuilder,
+    UserError,
+    WasmResult,
+};
+use ic_test_utilities::universal_canister::{
+    wasm,
+    UNIVERSAL_CANISTER_WASM,
+};
+use ic_types::{
+    CanisterId,
+    Cycles,
+};
 
 const REPLICATED_EXECUTION: [u8; 4] = [1, 0, 0, 0];
 const NON_REPLICATED_EXECUTION: [u8; 4] = [0, 0, 0, 0];

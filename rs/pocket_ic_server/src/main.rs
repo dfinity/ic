@@ -1,35 +1,77 @@
 #![allow(clippy::disallowed_types)]
 use aide::{
     axum::{
-        routing::{get, post},
-        ApiRouter, IntoApiResponse,
+        routing::{
+            get,
+            post,
+        },
+        ApiRouter,
+        IntoApiResponse,
     },
-    openapi::{Info, OpenApi},
+    openapi::{
+        Info,
+        OpenApi,
+    },
 };
 use axum::{
     async_trait,
-    extract::{DefaultBodyLimit, Path, State},
+    extract::{
+        DefaultBodyLimit,
+        Path,
+        State,
+    },
     http,
-    http::{HeaderMap, StatusCode},
-    middleware::{self, Next},
+    http::{
+        HeaderMap,
+        StatusCode,
+    },
+    middleware::{
+        self,
+        Next,
+    },
     response::IntoResponse,
-    Extension, Json,
+    Extension,
+    Json,
 };
 use axum_server::Handle;
 use clap::Parser;
 use ic_canister_sandbox_backend_lib::{
-    canister_sandbox_main, compiler_sandbox::compiler_sandbox_main,
-    launcher::sandbox_launcher_main, RUN_AS_CANISTER_SANDBOX_FLAG, RUN_AS_COMPILER_SANDBOX_FLAG,
+    canister_sandbox_main,
+    compiler_sandbox::compiler_sandbox_main,
+    launcher::sandbox_launcher_main,
+    RUN_AS_CANISTER_SANDBOX_FLAG,
+    RUN_AS_COMPILER_SANDBOX_FLAG,
     RUN_AS_SANDBOX_LAUNCHER_FLAG,
 };
-use ic_crypto_iccsa::{public_key_bytes_from_der, types::SignatureBytes, verify};
+use ic_crypto_iccsa::{
+    public_key_bytes_from_der,
+    types::SignatureBytes,
+    verify,
+};
 use ic_crypto_sha2::Sha256;
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
-use pocket_ic::common::rest::{BinaryBlob, BlobCompression, BlobId, RawVerifyCanisterSigArg};
-use pocket_ic_server::state_api::routes::{handler_read_graph, timeout_or_default};
+use pocket_ic::common::rest::{
+    BinaryBlob,
+    BlobCompression,
+    BlobId,
+    RawVerifyCanisterSigArg,
+};
+use pocket_ic_server::state_api::routes::{
+    handler_read_graph,
+    timeout_or_default,
+};
 use pocket_ic_server::state_api::{
-    routes::{http_gateway_routes, instances_routes, status, AppState, RouterExt},
-    state::{ApiState, PocketIcApiStateBuilder},
+    routes::{
+        http_gateway_routes,
+        instances_routes,
+        status,
+        AppState,
+        RouterExt,
+    },
+    state::{
+        ApiState,
+        PocketIcApiStateBuilder,
+    },
 };
 use pocket_ic_server::BlobStore;
 use std::collections::HashMap;
@@ -40,9 +82,15 @@ use std::sync::Arc;
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc::channel;
 use tokio::sync::RwLock;
-use tokio::time::{Duration, Instant};
+use tokio::time::{
+    Duration,
+    Instant,
+};
 use tower_http::trace::TraceLayer;
-use tracing::{debug, info};
+use tracing::{
+    debug,
+    info,
+};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::filter::EnvFilter;
 

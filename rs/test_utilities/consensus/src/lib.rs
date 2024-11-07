@@ -2,30 +2,58 @@ pub mod batch;
 pub mod fake;
 
 use ic_interfaces::{
-    consensus_pool::{ChangeAction, ConsensusPoolCache, ConsensusTime},
+    consensus_pool::{
+        ChangeAction,
+        ConsensusPoolCache,
+        ConsensusTime,
+    },
     validation::*,
 };
 use ic_protobuf::types::v1 as pb;
 use ic_types::{
     batch::ValidationContext,
-    consensus::idkg::{IDkgBlockReader, IDkgStats, RequestId},
+    consensus::idkg::{
+        IDkgBlockReader,
+        IDkgStats,
+        RequestId,
+    },
     consensus::{
-        dkg, Block, BlockPayload, CatchUpContent, CatchUpPackage, ConsensusMessageHashable,
-        HasHeight, HashedBlock, HashedRandomBeacon, Payload, RandomBeaconContent, Rank,
+        dkg,
+        Block,
+        BlockPayload,
+        CatchUpContent,
+        CatchUpPackage,
+        ConsensusMessageHashable,
+        HasHeight,
+        HashedBlock,
+        HashedRandomBeacon,
+        Payload,
+        RandomBeaconContent,
+        Rank,
         SummaryPayload,
     },
     crypto::{
-        canister_threshold_sig::idkg::{IDkgDealingSupport, IDkgTranscriptParams},
+        canister_threshold_sig::idkg::{
+            IDkgDealingSupport,
+            IDkgTranscriptParams,
+        },
         crypto_hash,
         threshold_sig::ni_dkg::NiDkgTag,
-        CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, Signed,
+        CombinedThresholdSig,
+        CombinedThresholdSigOf,
+        CryptoHash,
+        Signed,
     },
     signature::ThresholdSignature,
     time::UNIX_EPOCH,
-    Height, Time,
+    Height,
+    Time,
 };
 use phantom_newtype::Id;
-use std::{sync::RwLock, time::Duration};
+use std::{
+    sync::RwLock,
+    time::Duration,
+};
 
 #[macro_export]
 macro_rules! assert_changeset_matches_pattern {

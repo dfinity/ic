@@ -7,17 +7,40 @@
 use std::time::Duration;
 
 use crate::execution::common::{
-    finish_call_with_error, validate_message, wasm_result_to_query_response,
+    finish_call_with_error,
+    validate_message,
+    wasm_result_to_query_response,
 };
-use crate::execution_environment::{ExecuteMessageResult, RoundContext, RoundLimits};
+use crate::execution_environment::{
+    ExecuteMessageResult,
+    RoundContext,
+    RoundLimits,
+};
 use crate::metrics::CallTreeMetricsNoOp;
-use ic_error_types::{ErrorCode, UserError};
-use ic_replicated_state::{CallOrigin, CanisterState};
-use ic_system_api::{ApiType, ExecutionParameters};
-use ic_types::methods::{FuncRef, WasmMethod};
+use ic_error_types::{
+    ErrorCode,
+    UserError,
+};
+use ic_replicated_state::{
+    CallOrigin,
+    CanisterState,
+};
+use ic_system_api::{
+    ApiType,
+    ExecutionParameters,
+};
+use ic_types::methods::{
+    FuncRef,
+    WasmMethod,
+};
 use ic_types::{
-    messages::{CanisterCall, CanisterCallOrTask},
-    NumBytes, NumInstructions, Time,
+    messages::{
+        CanisterCall,
+        CanisterCallOrTask,
+    },
+    NumBytes,
+    NumInstructions,
+    Time,
 };
 use prometheus::IntCounter;
 

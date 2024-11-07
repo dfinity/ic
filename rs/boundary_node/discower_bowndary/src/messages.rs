@@ -1,4 +1,7 @@
-use crate::{check::HealthCheckResult, node::Node};
+use crate::{
+    check::HealthCheckResult,
+    node::Node,
+};
 
 #[derive(Clone, Debug)]
 pub struct FetchedNodes {

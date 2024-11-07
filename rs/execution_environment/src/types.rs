@@ -1,7 +1,10 @@
 //! Various types that are internal to the execution crate.
 use ic_types::{
     ingress::IngressStatus,
-    messages::{MessageId, Response as CanisterResponse},
+    messages::{
+        MessageId,
+        Response as CanisterResponse,
+    },
 };
 
 #[derive(Eq, PartialEq, Debug)]

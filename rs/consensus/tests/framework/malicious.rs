@@ -2,15 +2,29 @@
 
 use super::ComponentModifier;
 use ic_consensus::consensus::ConsensusImpl;
-use ic_consensus::idkg::{malicious_pre_signer, IDkgImpl};
+use ic_consensus::idkg::{
+    malicious_pre_signer,
+    IDkgImpl,
+};
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces::{
-    consensus_pool::{ChangeAction::*, ConsensusPool, Mutations, ValidatedConsensusArtifact},
-    idkg::{IDkgChangeSet, IDkgPool},
+    consensus_pool::{
+        ChangeAction::*,
+        ConsensusPool,
+        Mutations,
+        ValidatedConsensusArtifact,
+    },
+    idkg::{
+        IDkgChangeSet,
+        IDkgPool,
+    },
     p2p::consensus::PoolMutationsProducer,
 };
 use ic_protobuf::types::v1 as pb;
-use ic_types::consensus::{ConsensusMessageHashable, NotarizationShare};
+use ic_types::consensus::{
+    ConsensusMessageHashable,
+    NotarizationShare,
+};
 use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::time::current_time;
 use std::cell::RefCell;

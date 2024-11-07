@@ -1,20 +1,34 @@
 use crate::{
     canister_manager::{
-        CanisterManager, CanisterManagerError, CanisterMgrConfig, DtsInstallCodeResult,
-        InstallCodeContext, PausedInstallCodeExecution, StopCanisterResult, UploadChunkResult,
+        CanisterManager,
+        CanisterManagerError,
+        CanisterMgrConfig,
+        DtsInstallCodeResult,
+        InstallCodeContext,
+        PausedInstallCodeExecution,
+        StopCanisterResult,
+        UploadChunkResult,
     },
     canister_settings::CanisterSettings,
     execution::{
-        inspect_message, install_code::validate_controller,
-        replicated_query::execute_replicated_query, response::execute_response,
+        inspect_message,
+        install_code::validate_controller,
+        replicated_query::execute_replicated_query,
+        response::execute_response,
         update::execute_update,
     },
     execution_environment_metrics::{
-        ExecutionEnvironmentMetrics, SUBMITTED_OUTCOME_LABEL, SUCCESS_STATUS_LABEL,
+        ExecutionEnvironmentMetrics,
+        SUBMITTED_OUTCOME_LABEL,
+        SUCCESS_STATUS_LABEL,
     },
     hypervisor::Hypervisor,
     ic00_permissions::Ic00MethodPermissions,
-    metrics::{CallTreeMetrics, CallTreeMetricsImpl, IngressFilterMetrics},
+    metrics::{
+        CallTreeMetrics,
+        CallTreeMetricsImpl,
+        IngressFilterMetrics,
+    },
     RoundSchedule,
 };
 use candid::Encode;
@@ -23,70 +37,167 @@ use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_crypto_utils_canister_threshold_sig::derive_threshold_public_key;
 use ic_cycles_account_manager::{
-    is_delayed_ingress_induction_cost, CyclesAccountManager, IngressInductionCost,
+    is_delayed_ingress_induction_cost,
+    CyclesAccountManager,
+    IngressInductionCost,
     ResourceSaturation,
 };
-use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_interfaces::execution_environment::{
-    ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings, SubnetAvailableMemory,
+use ic_error_types::{
+    ErrorCode,
+    RejectCode,
+    UserError,
 };
-use ic_limits::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SIZE};
-use ic_logger::{error, info, warn, ReplicaLogger};
+use ic_interfaces::execution_environment::{
+    ExecutionMode,
+    IngressHistoryWriter,
+    RegistryExecutionSettings,
+    SubnetAvailableMemory,
+};
+use ic_limits::{
+    LOG_CANISTER_OPERATION_CYCLES_THRESHOLD,
+    SMALL_APP_SUBNET_MAX_SIZE,
+};
+use ic_logger::{
+    error,
+    info,
+    warn,
+    ReplicaLogger,
+};
 use ic_management_canister_types::{
-    CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
-    CanisterInfoResponse, CanisterStatusType, ClearChunkStoreArgs, ComputeInitialIDkgDealingsArgs,
-    CreateCanisterArgs, DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse,
-    EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs,
-    LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs,
-    Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
-    SchnorrPublicKeyArgs, SchnorrPublicKeyResponse, SetupInitialDKGArgs, SignWithECDSAArgs,
-    SignWithSchnorrArgs, StoredChunksArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
-    UpdateSettingsArgs, UploadChunkArgs, IC_00,
+    CanisterChangeOrigin,
+    CanisterHttpRequestArgs,
+    CanisterIdRecord,
+    CanisterInfoRequest,
+    CanisterInfoResponse,
+    CanisterStatusType,
+    ClearChunkStoreArgs,
+    ComputeInitialIDkgDealingsArgs,
+    CreateCanisterArgs,
+    DeleteCanisterSnapshotArgs,
+    ECDSAPublicKeyArgs,
+    ECDSAPublicKeyResponse,
+    EmptyBlob,
+    InstallChunkedCodeArgs,
+    InstallCodeArgsV2,
+    ListCanisterSnapshotArgs,
+    LoadCanisterSnapshotArgs,
+    MasterPublicKeyId,
+    Method as Ic00Method,
+    NodeMetricsHistoryArgs,
+    Payload as Ic00Payload,
+    ProvisionalCreateCanisterWithCyclesArgs,
+    ProvisionalTopUpCanisterArgs,
+    SchnorrPublicKeyArgs,
+    SchnorrPublicKeyResponse,
+    SetupInitialDKGArgs,
+    SignWithECDSAArgs,
+    SignWithSchnorrArgs,
+    StoredChunksArgs,
+    TakeCanisterSnapshotArgs,
+    UninstallCodeArgs,
+    UpdateSettingsArgs,
+    UploadChunkArgs,
+    IC_00,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::system_state::PausedExecutionId,
-    canister_state::{system_state::CyclesUseCase, NextExecution},
+    canister_state::{
+        system_state::CyclesUseCase,
+        NextExecution,
+    },
     metadata_state::subnet_call_context_manager::{
-        EcdsaArguments, IDkgDealingsContext, InstallCodeCall, InstallCodeCallId, SchnorrArguments,
-        SetupInitialDkgContext, SignWithThresholdContext, StopCanisterCall, SubnetCallContext,
+        EcdsaArguments,
+        IDkgDealingsContext,
+        InstallCodeCall,
+        InstallCodeCallId,
+        SchnorrArguments,
+        SetupInitialDkgContext,
+        SignWithThresholdContext,
+        StopCanisterCall,
+        SubnetCallContext,
         ThresholdArguments,
     },
     page_map::PageAllocatorFileDescriptor,
-    CanisterState, ExecutionTask, NetworkTopology, ReplicatedState,
+    CanisterState,
+    ExecutionTask,
+    NetworkTopology,
+    ReplicatedState,
 };
-use ic_system_api::{ExecutionParameters, InstructionLimits};
+use ic_system_api::{
+    ExecutionParameters,
+    InstructionLimits,
+};
 use ic_types::{
     canister_http::CanisterHttpRequestContext,
     crypto::{
-        canister_threshold_sig::{ExtendedDerivationPath, MasterPublicKey, PublicKey},
+        canister_threshold_sig::{
+            ExtendedDerivationPath,
+            MasterPublicKey,
+            PublicKey,
+        },
         threshold_sig::ni_dkg::NiDkgTargetId,
     },
-    ingress::{IngressState, IngressStatus, WasmResult},
+    ingress::{
+        IngressState,
+        IngressStatus,
+        WasmResult,
+    },
     messages::{
-        extract_effective_canister_id, CanisterCall, CanisterCallOrTask, CanisterMessage,
-        CanisterMessageOrTask, CanisterTask, Payload, RejectContext, Request, Response,
-        SignedIngressContent, StopCanisterCallId, StopCanisterContext,
+        extract_effective_canister_id,
+        CanisterCall,
+        CanisterCallOrTask,
+        CanisterMessage,
+        CanisterMessageOrTask,
+        CanisterTask,
+        Payload,
+        RejectContext,
+        Request,
+        Response,
+        SignedIngressContent,
+        StopCanisterCallId,
+        StopCanisterContext,
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
     },
     methods::SystemMethod,
     nominal_cycles::NominalCycles,
-    CanisterId, Cycles, NumBytes, NumInstructions, ReplicaVersion, SubnetId, Time,
+    CanisterId,
+    Cycles,
+    NumBytes,
+    NumInstructions,
+    ReplicaVersion,
+    SubnetId,
+    Time,
 };
-use ic_types::{messages::MessageId, methods::WasmMethod};
+use ic_types::{
+    messages::MessageId,
+    methods::WasmMethod,
+};
 use ic_wasm_types::WasmHash;
 use phantom_newtype::AmountOf;
 use prometheus::IntCounter;
 use rand::RngCore;
 use std::{
-    collections::{BTreeMap, HashMap},
-    convert::{Into, TryFrom},
+    collections::{
+        BTreeMap,
+        HashMap,
+    },
+    convert::{
+        Into,
+        TryFrom,
+    },
     fmt,
     str::FromStr,
-    sync::{Arc, Mutex},
-    time::{Duration, Instant},
+    sync::{
+        Arc,
+        Mutex,
+    },
+    time::{
+        Duration,
+        Instant,
+    },
 };
 use strum::ParseError;
 

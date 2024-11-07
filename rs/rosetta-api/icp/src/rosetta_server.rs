@@ -1,6 +1,9 @@
 #![allow(clippy::disallowed_types)]
 use crate::{
-    errors::{self, ApiError},
+    errors::{
+        self,
+        ApiError,
+    },
     ledger_client::LedgerAccess,
     models::*,
     request_handler::RosettaRequestHandler,
@@ -8,14 +11,32 @@ use crate::{
 };
 use actix_rt::time::interval;
 use actix_web::{
-    dev::{Server, ServerHandle},
-    get, post, web, App, HttpResponse, HttpServer,
+    dev::{
+        Server,
+        ServerHandle,
+    },
+    get,
+    post,
+    web,
+    App,
+    HttpResponse,
+    HttpServer,
 };
 
 use prometheus::{
-    register_gauge, register_histogram, register_histogram_vec, register_int_counter,
-    register_int_counter_vec, register_int_gauge, Encoder, Gauge, Histogram, HistogramVec,
-    IntCounter, IntCounterVec, IntGauge,
+    register_gauge,
+    register_histogram,
+    register_histogram_vec,
+    register_int_counter,
+    register_int_counter_vec,
+    register_int_gauge,
+    Encoder,
+    Gauge,
+    Histogram,
+    HistogramVec,
+    IntCounter,
+    IntCounterVec,
+    IntGauge,
 };
 use std::{
     io,
@@ -24,14 +45,24 @@ use std::{
     sync::{
         atomic::{
             AtomicBool,
-            Ordering::{Relaxed, SeqCst},
+            Ordering::{
+                Relaxed,
+                SeqCst,
+            },
         },
         Arc,
     },
-    time::{Duration, Instant},
+    time::{
+        Duration,
+        Instant,
+    },
 };
 use tokio::sync::Mutex;
-use tracing::{debug, error, info};
+use tracing::{
+    debug,
+    error,
+    info,
+};
 
 use lazy_static::lazy_static;
 

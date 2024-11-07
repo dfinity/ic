@@ -1,11 +1,21 @@
-use ic_interfaces::messaging::{XNetPayloadBuilder, XNetPayloadValidationError};
+use ic_interfaces::messaging::{
+    XNetPayloadBuilder,
+    XNetPayloadValidationError,
+};
 use ic_types::{
-    batch::{ValidationContext, XNetPayload},
+    batch::{
+        ValidationContext,
+        XNetPayload,
+    },
     xnet::CertifiedStreamSlice,
-    NumBytes, SubnetId,
+    NumBytes,
+    SubnetId,
 };
 use std::{
-    collections::{BTreeMap, VecDeque},
+    collections::{
+        BTreeMap,
+        VecDeque,
+    },
     sync::Mutex,
 };
 

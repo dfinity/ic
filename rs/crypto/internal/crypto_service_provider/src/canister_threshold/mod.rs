@@ -7,7 +7,10 @@
 #[cfg(test)]
 mod tests;
 
-use ic_crypto_internal_types::scope::{ConstScope, Scope};
+use ic_crypto_internal_types::scope::{
+    ConstScope,
+    Scope,
+};
 
 pub const IDKG_MEGA_SCOPE: Scope = Scope::Const(ConstScope::IDkgMEGaEncryptionKeys);
 pub const IDKG_THRESHOLD_KEYS_SCOPE: Scope = Scope::Const(ConstScope::IDkgThresholdKeys);

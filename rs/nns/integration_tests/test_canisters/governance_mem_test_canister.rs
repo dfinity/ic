@@ -8,24 +8,48 @@
 use dfn_core::println;
 use ic_base_types::PrincipalId;
 use ic_nervous_system_common::memory_manager_upgrade_storage::store_protobuf;
-use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL};
-use ic_nns_common::pb::v1::{NeuronId as NeuronIdProto, ProposalId as ProposalIdProto};
+use ic_nervous_system_common_test_keys::{
+    TEST_NEURON_1_ID,
+    TEST_NEURON_1_OWNER_PRINCIPAL,
+};
+use ic_nns_common::pb::v1::{
+    NeuronId as NeuronIdProto,
+    ProposalId as ProposalIdProto,
+};
 use ic_nns_governance::governance::{
-    HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES, MAX_FOLLOWEES_PER_TOPIC, MAX_NEURON_RECENT_BALLOTS,
-    MAX_NUMBER_OF_NEURONS, MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS, MAX_NUM_HOT_KEYS_PER_NEURON,
+    HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES,
+    MAX_FOLLOWEES_PER_TOPIC,
+    MAX_NEURON_RECENT_BALLOTS,
+    MAX_NUMBER_OF_NEURONS,
+    MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
+    MAX_NUM_HOT_KEYS_PER_NEURON,
 };
 use ic_nns_governance_api::pb::v1::{
-    governance::NeuronInFlightCommand, neuron::DissolveState, proposal::Action,
-    Governance as GovernanceProto, NetworkEconomics as NetworkEconomicsProto, Neuron, Proposal,
-    ProposalData, Topic, *,
+    governance::NeuronInFlightCommand,
+    neuron::DissolveState,
+    proposal::Action,
+    Governance as GovernanceProto,
+    NetworkEconomics as NetworkEconomicsProto,
+    Neuron,
+    Proposal,
+    ProposalData,
+    Topic,
+    *,
 };
 use ic_stable_structures::{
-    memory_manager::{MemoryId, MemoryManager, VirtualMemory},
+    memory_manager::{
+        MemoryId,
+        MemoryManager,
+        VirtualMemory,
+    },
     DefaultMemoryImpl,
 };
 use icp_ledger::Subaccount;
 use lazy_static::lazy_static;
-use std::{cell::RefCell, collections::HashMap};
+use std::{
+    cell::RefCell,
+    collections::HashMap,
+};
 use strum::IntoEnumIterator;
 
 const LOG_PREFIX: &str = "[Governance mem test] ";

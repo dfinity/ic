@@ -1,5 +1,12 @@
-use ic_canonical_state::{Control, Visitor};
-use ic_crypto_tree_hash::{FlatMap, Label, LabeledTree};
+use ic_canonical_state::{
+    Control,
+    Visitor,
+};
+use ic_crypto_tree_hash::{
+    FlatMap,
+    Label,
+    LabeledTree,
+};
 
 /// Visitor that materializes the tree being traversed as a `LabeledTree`.
 #[derive(Default)]

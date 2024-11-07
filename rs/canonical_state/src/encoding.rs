@@ -12,8 +12,15 @@
 
 use crate::CertificationVersion;
 use ic_protobuf::proxy::ProxyDecodeError;
-use ic_replicated_state::metadata_state::{SubnetMetrics, SystemMetadata};
-use ic_types::{messages::RequestOrResponse, xnet::StreamHeader, PrincipalId};
+use ic_replicated_state::metadata_state::{
+    SubnetMetrics,
+    SystemMetadata,
+};
+use ic_types::{
+    messages::RequestOrResponse,
+    xnet::StreamHeader,
+    PrincipalId,
+};
 use serde::Serialize;
 use std::collections::BTreeSet;
 use std::convert::TryInto;

@@ -2,24 +2,48 @@ use ic_consensus_utils::pool_reader::PoolReader;
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpBatchStats;
 use ic_interfaces::ingress_manager::IngressSelector;
 use ic_metrics::{
-    buckets::{decimal_buckets, decimal_buckets_with_zero, linear_buckets},
+    buckets::{
+        decimal_buckets,
+        decimal_buckets_with_zero,
+        linear_buckets,
+    },
     MetricsRegistry,
 };
 use ic_types::{
     batch::BatchPayload,
     consensus::{
-        idkg::{CompletedReshareRequest, CompletedSignature, IDkgPayload, KeyTranscriptCreation},
-        Block, BlockPayload, BlockProposal, ConsensusMessageHashable, HasHeight, HasRank,
+        idkg::{
+            CompletedReshareRequest,
+            CompletedSignature,
+            IDkgPayload,
+            KeyTranscriptCreation,
+        },
+        Block,
+        BlockPayload,
+        BlockProposal,
+        ConsensusMessageHashable,
+        HasHeight,
+        HasRank,
     },
-    CountBytes, Height,
+    CountBytes,
+    Height,
 };
 use prometheus::{
-    GaugeVec, Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec,
+    GaugeVec,
+    Histogram,
+    HistogramVec,
+    IntCounter,
+    IntCounterVec,
+    IntGauge,
+    IntGaugeVec,
 };
 use std::sync::RwLock;
 
 use crate::idkg::metrics::{
-    count_by_master_public_key_id, expected_keys, key_id_label, CounterPerMasterPublicKeyId,
+    count_by_master_public_key_id,
+    expected_keys,
+    key_id_label,
+    CounterPerMasterPublicKeyId,
     KEY_ID_LABEL,
 };
 

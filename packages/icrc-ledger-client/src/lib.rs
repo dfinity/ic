@@ -1,12 +1,25 @@
 use async_trait::async_trait;
 use candid::types::number::Nat;
-use candid::utils::{ArgumentDecoder, ArgumentEncoder};
+use candid::utils::{
+    ArgumentDecoder,
+    ArgumentEncoder,
+};
 use candid::Principal;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use icrc_ledger_types::icrc1::account::Account;
-use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError};
-use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
-use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
+use icrc_ledger_types::icrc1::transfer::{
+    BlockIndex,
+    TransferArg,
+    TransferError,
+};
+use icrc_ledger_types::icrc2::approve::{
+    ApproveArgs,
+    ApproveError,
+};
+use icrc_ledger_types::icrc2::transfer_from::{
+    TransferFromArgs,
+    TransferFromError,
+};
 
 // Abstraction over the runtime. Implement this in terms of cdk call if you use
 // the cdk or dfn_* if you use dfn_* call.

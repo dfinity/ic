@@ -3,37 +3,66 @@ use crate::crypto::{
     canister_threshold_sig::{
         error::IDkgParamsValidationError,
         idkg::{
-            IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
+            IDkgTranscript,
+            IDkgTranscriptId,
+            IDkgTranscriptOperation,
+            IDkgTranscriptParams,
             IDkgTranscriptType,
         },
-        ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs,
-        ThresholdSchnorrCombinedSignature, ThresholdSchnorrSigInputs,
+        ThresholdEcdsaCombinedSignature,
+        ThresholdEcdsaSigInputs,
+        ThresholdSchnorrCombinedSignature,
+        ThresholdSchnorrSigInputs,
     },
     AlgorithmId,
 };
-use crate::{Height, RegistryVersion};
-use ic_base_types::{NodeId, PrincipalId};
+use crate::{
+    Height,
+    RegistryVersion,
+};
+use ic_base_types::{
+    NodeId,
+    PrincipalId,
+};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types::MasterPublicKeyId;
-use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_protobuf::proxy::{
+    try_from_option_field,
+    ProxyDecodeError,
+};
 use ic_protobuf::registry::subnet::v1 as subnet_pb;
 use ic_protobuf::types::v1 as pb;
-use serde::{Deserialize, Serialize};
-use std::convert::{AsMut, AsRef, TryFrom};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use std::convert::{
+    AsMut,
+    AsRef,
+    TryFrom,
+};
 use std::hash::Hash;
 use std::{
     collections::BTreeSet,
-    fmt::{self, Display, Formatter},
+    fmt::{
+        self,
+        Display,
+        Formatter,
+    },
 };
 
 use super::{
     ecdsa::{
-        PreSignatureQuadrupleRef, QuadrupleInCreation, ThresholdEcdsaSigInputsError,
+        PreSignatureQuadrupleRef,
+        QuadrupleInCreation,
+        ThresholdEcdsaSigInputsError,
         ThresholdEcdsaSigInputsRef,
     },
     schnorr::{
-        PreSignatureTranscriptRef, ThresholdSchnorrSigInputsError, ThresholdSchnorrSigInputsRef,
+        PreSignatureTranscriptRef,
+        ThresholdSchnorrSigInputsError,
+        ThresholdSchnorrSigInputsRef,
         TranscriptInCreation,
     },
 };

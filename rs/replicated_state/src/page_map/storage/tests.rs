@@ -3,30 +3,67 @@ use std::{
     collections::BTreeMap,
     fs::File,
     io::Write,
-    os::{fd::FromRawFd, unix::prelude::FileExt},
-    path::{Path, PathBuf},
+    os::{
+        fd::FromRawFd,
+        unix::prelude::FileExt,
+    },
+    path::{
+        Path,
+        PathBuf,
+    },
 };
 
 use crate::page_map::{
     storage::{
-        Checkpoint, FileIndex, MergeCandidate, MergeDestination, OverlayFile, PageIndexRange,
-        Shard, Storage, StorageLayout, CURRENT_OVERLAY_VERSION, PAGE_INDEX_RANGE_NUM_BYTES,
-        SIZE_NUM_BYTES, VERSION_NUM_BYTES,
+        Checkpoint,
+        FileIndex,
+        MergeCandidate,
+        MergeDestination,
+        OverlayFile,
+        PageIndexRange,
+        Shard,
+        Storage,
+        StorageLayout,
+        CURRENT_OVERLAY_VERSION,
+        PAGE_INDEX_RANGE_NUM_BYTES,
+        SIZE_NUM_BYTES,
+        VERSION_NUM_BYTES,
     },
-    test_utils::{ShardedTestStorageLayout, TestStorageLayout},
-    FileDescriptor, MemoryInstructions, MemoryMapOrData, PageAllocator, PageDelta, PageMap,
-    PersistenceError, StorageMetrics, MAX_NUMBER_OF_FILES,
+    test_utils::{
+        ShardedTestStorageLayout,
+        TestStorageLayout,
+    },
+    FileDescriptor,
+    MemoryInstructions,
+    MemoryMapOrData,
+    PageAllocator,
+    PageDelta,
+    PageMap,
+    PersistenceError,
+    StorageMetrics,
+    MAX_NUMBER_OF_FILES,
 };
 use assert_matches::assert_matches;
 use bit_vec::BitVec;
 use ic_config::flag_status::FlagStatus;
 use ic_config::state_manager::LsmtConfig;
 use ic_metrics::MetricsRegistry;
-use ic_sys::{PageIndex, PAGE_SIZE};
-use ic_test_utilities_io::{make_mutable, make_readonly, write_all_at};
+use ic_sys::{
+    PageIndex,
+    PAGE_SIZE,
+};
+use ic_test_utilities_io::{
+    make_mutable,
+    make_readonly,
+    write_all_at,
+};
 use ic_test_utilities_metrics::fetch_int_counter_vec;
 use ic_types::Height;
-use tempfile::{tempdir, Builder, TempDir};
+use tempfile::{
+    tempdir,
+    Builder,
+    TempDir,
+};
 
 #[cfg(feature = "fuzzing_code")]
 use arbitrary::Arbitrary;

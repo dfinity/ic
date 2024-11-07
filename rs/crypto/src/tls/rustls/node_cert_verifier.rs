@@ -1,18 +1,46 @@
 use crate::tls::tls_cert_from_registry;
 use ic_crypto_tls_cert_validation::ValidTlsCertificate;
-use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsPublicKeyCert};
-use ic_crypto_utils_tls::{node_id_from_certificate_der, NodeIdFromCertificateDerError};
+use ic_crypto_tls_interfaces::{
+    SomeOrAllNodes,
+    TlsPublicKeyCert,
+};
+use ic_crypto_utils_tls::{
+    node_id_from_certificate_der,
+    NodeIdFromCertificateDerError,
+};
 use ic_interfaces_registry::RegistryClient;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
-use ic_types::{NodeId, RegistryVersion, Time};
+use ic_types::{
+    NodeId,
+    RegistryVersion,
+    Time,
+};
 use rustls::{
-    client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
-    pki_types::{CertificateDer, ServerName, UnixTime},
-    server::danger::{ClientCertVerified, ClientCertVerifier},
-    CertificateError, DigitallySignedStruct, DistinguishedName, Error as TLSError, OtherError,
+    client::danger::{
+        HandshakeSignatureValid,
+        ServerCertVerified,
+        ServerCertVerifier,
+    },
+    pki_types::{
+        CertificateDer,
+        ServerName,
+        UnixTime,
+    },
+    server::danger::{
+        ClientCertVerified,
+        ClientCertVerifier,
+    },
+    CertificateError,
+    DigitallySignedStruct,
+    DistinguishedName,
+    Error as TLSError,
+    OtherError,
     SignatureScheme,
 };
-use std::{fmt, sync::Arc};
+use std::{
+    fmt,
+    sync::Arc,
+};
 
 #[cfg(test)]
 mod tests;

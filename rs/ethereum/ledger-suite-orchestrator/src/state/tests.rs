@@ -1,10 +1,24 @@
 mod manage_canister {
     use crate::scheduler::test_fixtures::{
-        usdc, usdc_metadata, usdc_token_id, usdt, usdt_metadata, usdt_token_id,
+        usdc,
+        usdc_metadata,
+        usdc_token_id,
+        usdt,
+        usdt_metadata,
+        usdt_token_id,
     };
-    use crate::state::test_fixtures::{expect_panic_with_message, new_state};
+    use crate::state::test_fixtures::{
+        expect_panic_with_message,
+        new_state,
+    };
     use crate::state::{
-        Canisters, Index, Ledger, ManageSingleCanister, ManagedCanisterStatus, TokenId, WasmHash,
+        Canisters,
+        Index,
+        Ledger,
+        ManageSingleCanister,
+        ManagedCanisterStatus,
+        TokenId,
+        WasmHash,
     };
     use candid::Principal;
     use std::fmt::Debug;
@@ -158,10 +172,19 @@ mod manage_canister {
 
 mod installed_ledger_suite {
     use crate::candid::InstalledLedgerSuite as CandidInstalledLedgerSuite;
-    use crate::scheduler::test_fixtures::{usdc, usdc_metadata, usdt, usdt_metadata};
+    use crate::scheduler::test_fixtures::{
+        usdc,
+        usdc_metadata,
+        usdt,
+        usdt_metadata,
+    };
     use crate::state::test_fixtures::new_state;
     use crate::state::{
-        Index, InstalledLedgerSuite, InvalidManageInstalledCanistersError, Ledger, State,
+        Index,
+        InstalledLedgerSuite,
+        InvalidManageInstalledCanistersError,
+        Ledger,
+        State,
         TokenSymbol,
     };
     use assert_matches::assert_matches;
@@ -318,7 +341,10 @@ mod wasm_hash {
     use assert_matches::assert_matches;
     use proptest::arbitrary::any;
     use proptest::array::uniform32;
-    use proptest::{prop_assert_eq, proptest};
+    use proptest::{
+        prop_assert_eq,
+        proptest,
+    };
     use std::str::FromStr;
 
     proptest! {
@@ -346,7 +372,10 @@ mod git_commit_hash {
     use assert_matches::assert_matches;
     use proptest::arbitrary::any;
     use proptest::array::uniform20;
-    use proptest::{prop_assert_eq, proptest};
+    use proptest::{
+        prop_assert_eq,
+        proptest,
+    };
     use std::str::FromStr;
 
     proptest! {
@@ -371,8 +400,14 @@ mod git_commit_hash {
 
 mod validate_config {
     use crate::candid::InitArg;
-    use crate::state::test_fixtures::{arb_init_arg, arb_principal};
-    use crate::state::{InvalidStateError, State};
+    use crate::state::test_fixtures::{
+        arb_init_arg,
+        arb_principal,
+    };
+    use crate::state::{
+        InvalidStateError,
+        State,
+    };
     use proptest::collection::vec;
     use proptest::proptest;
 
@@ -402,18 +437,35 @@ mod validate_config {
 mod schema_upgrades {
     use crate::candid::CyclesManagement;
     use crate::scheduler::test_fixtures::{
-        cketh_ledger_suite, cketh_token_symbol, usdc, usdc_ledger_suite,
+        cketh_ledger_suite,
+        cketh_token_symbol,
+        usdc,
+        usdc_ledger_suite,
     };
     use crate::scheduler::Task;
     use crate::state::test_fixtures::arb_state;
     use crate::state::{
-        decode, encode, Canisters, CanistersMetadata, Erc20Token, IndexCanister, LedgerCanister,
-        LedgerSuiteVersion, ManagedCanisters, State,
+        decode,
+        encode,
+        Canisters,
+        CanistersMetadata,
+        Erc20Token,
+        IndexCanister,
+        LedgerCanister,
+        LedgerSuiteVersion,
+        ManagedCanisters,
+        State,
     };
-    use candid::{Deserialize, Principal};
+    use candid::{
+        Deserialize,
+        Principal,
+    };
     use proptest::proptest;
     use serde::Serialize;
-    use std::collections::{BTreeMap, BTreeSet};
+    use std::collections::{
+        BTreeMap,
+        BTreeSet,
+    };
 
     #[derive(Clone, PartialEq, Debug, Default, Deserialize, Serialize)]
     pub struct ManagedCanistersPreviousVersion {

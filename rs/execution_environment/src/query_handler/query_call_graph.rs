@@ -1,12 +1,25 @@
-use std::{collections::VecDeque, sync::Arc};
+use std::{
+    collections::VecDeque,
+    sync::Arc,
+};
 
-use ic_error_types::{ErrorCode, UserError};
-use ic_replicated_state::{CallOrigin, CanisterState};
+use ic_error_types::{
+    ErrorCode,
+    UserError,
+};
+use ic_replicated_state::{
+    CallOrigin,
+    CanisterState,
+};
 use ic_types::messages::Request;
 
 use crate::metrics::MeasurementScope;
 
-use super::query_context::{ExecutionResult, QueryContext, QueryResponse};
+use super::query_context::{
+    ExecutionResult,
+    QueryContext,
+    QueryResponse,
+};
 
 /// Represents a node in the query call graph together with the edges that are
 /// not visited yet. Specifically, the canister state and the call origin

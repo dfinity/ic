@@ -2,7 +2,9 @@ use crate::{
     governance::{
         // super
         tests::{
-            basic_governance_proto, DoNothingLedger, TEST_GOVERNANCE_CANISTER_ID,
+            basic_governance_proto,
+            DoNothingLedger,
+            TEST_GOVERNANCE_CANISTER_ID,
             TEST_ROOT_CANISTER_ID,
         },
         Governance,
@@ -10,12 +12,24 @@ use crate::{
     },
     pb::v1::{
         get_proposal_response,
-        governance::{UpgradeInProgress, Version},
+        governance::{
+            UpgradeInProgress,
+            Version,
+        },
         governance_error::ErrorType,
         proposal::Action,
-        Ballot, FailStuckUpgradeInProgressRequest, FailStuckUpgradeInProgressResponse, GetProposal,
-        Governance as GovernanceProto, Proposal, ProposalData, ProposalId, Tally,
-        UpgradeSnsToNextVersion, Vote, WaitForQuietState,
+        Ballot,
+        FailStuckUpgradeInProgressRequest,
+        FailStuckUpgradeInProgressResponse,
+        GetProposal,
+        Governance as GovernanceProto,
+        Proposal,
+        ProposalData,
+        ProposalId,
+        Tally,
+        UpgradeSnsToNextVersion,
+        Vote,
+        WaitForQuietState,
     },
     types::test_helpers::NativeEnvironment,
 };

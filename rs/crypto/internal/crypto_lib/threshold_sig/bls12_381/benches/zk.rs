@@ -5,7 +5,10 @@ use ic_crypto_internal_bls12_381_type::*;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::forward_secure::CHUNK_SIZE;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use rand::{CryptoRng, Rng};
+use rand::{
+    CryptoRng,
+    Rng,
+};
 
 fn setup_sharing_instance_and_witness() -> (SharingInstance, SharingWitness) {
     const NODE_COUNT: usize = 28;

@@ -1,5 +1,11 @@
-use std::io::{Result, Write};
-use std::sync::{Arc, Mutex};
+use std::io::{
+    Result,
+    Write,
+};
+use std::sync::{
+    Arc,
+    Mutex,
+};
 
 #[derive(Clone, Default)]
 pub struct SharedBuffer {

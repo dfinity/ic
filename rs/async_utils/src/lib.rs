@@ -1,4 +1,7 @@
-use slog::{info, Logger};
+use slog::{
+    info,
+    Logger,
+};
 
 mod hyper;
 mod join_map;
@@ -8,7 +11,9 @@ pub use self::{
     hyper::ExecuteOnTokioRuntime,
     join_map::JoinMap,
     unix::{
-        incoming_from_first_systemd_socket, incoming_from_nth_systemd_socket, incoming_from_path,
+        incoming_from_first_systemd_socket,
+        incoming_from_nth_systemd_socket,
+        incoming_from_path,
         incoming_from_second_systemd_socket,
     },
 };
@@ -26,7 +31,10 @@ pub fn abort_on_panic() {
 /// shutdown. Completion happens if either of `SIGINT` or `SIGTERM` are
 /// received.
 pub async fn shutdown_signal(log: Logger) {
-    use tokio::signal::unix::{signal, SignalKind};
+    use tokio::signal::unix::{
+        signal,
+        SignalKind,
+    };
     let mut sig_int =
         signal(SignalKind::interrupt()).expect("failed to install SIGINT signal handler");
     let mut sig_term =

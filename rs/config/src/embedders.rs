@@ -3,8 +3,16 @@ use std::time::Duration;
 use ic_base_types::NumBytes;
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::PAGE_SIZE;
-use ic_types::{NumInstructions, NumOsPages, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES};
-use serde::{Deserialize, Serialize};
+use ic_types::{
+    NumInstructions,
+    NumOsPages,
+    MAX_STABLE_MEMORY_IN_BYTES,
+    MAX_WASM_MEMORY_IN_BYTES,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 use crate::flag_status::FlagStatus;
 

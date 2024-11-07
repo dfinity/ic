@@ -4,37 +4,80 @@ use super::*;
 use ic_base_types::NumSeconds;
 use ic_error_types::RejectCode;
 use ic_management_canister_types::Method;
-use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
+use ic_registry_routing_table::{
+    CanisterIdRange,
+    RoutingTable,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    testing::{CanisterQueuesTesting, ReplicatedStateTesting, SystemStateTesting},
-    CanisterState, InputQueueType, ReplicatedState, Stream,
+    testing::{
+        CanisterQueuesTesting,
+        ReplicatedStateTesting,
+        SystemStateTesting,
+    },
+    CanisterState,
+    InputQueueType,
+    ReplicatedState,
+    Stream,
 };
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
-    fetch_histogram_stats, fetch_int_counter_vec, fetch_int_gauge_vec, metric_vec, nonzero_values,
+    fetch_histogram_stats,
+    fetch_int_counter_vec,
+    fetch_int_gauge_vec,
+    metric_vec,
+    nonzero_values,
     MetricVec,
 };
-use ic_test_utilities_state::{new_canister_state, register_callback};
+use ic_test_utilities_state::{
+    new_canister_state,
+    register_callback,
+};
 use ic_test_utilities_types::{
-    ids::{canister_test_id, user_test_id, SUBNET_27, SUBNET_42},
+    ids::{
+        canister_test_id,
+        user_test_id,
+        SUBNET_27,
+        SUBNET_42,
+    },
     messages::RequestBuilder,
 };
 use ic_types::{
     messages::{
-        CallbackId, Payload, RejectContext, Request, RequestOrResponse, Response,
-        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, NO_DEADLINE,
+        CallbackId,
+        Payload,
+        RejectContext,
+        Request,
+        RequestOrResponse,
+        Response,
+        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64,
+        NO_DEADLINE,
     },
-    time::{CoarseTime, UNIX_EPOCH},
-    xnet::{StreamIndex, StreamIndexedQueue},
-    CanisterId, Cycles, SubnetId, Time,
+    time::{
+        CoarseTime,
+        UNIX_EPOCH,
+    },
+    xnet::{
+        StreamIndex,
+        StreamIndexedQueue,
+    },
+    CanisterId,
+    Cycles,
+    SubnetId,
+    Time,
 };
 use lazy_static::lazy_static;
 use maplit::btreemap;
-use rand::{Rng, SeedableRng};
+use rand::{
+    Rng,
+    SeedableRng,
+};
 use rand_chacha::ChaChaRng;
 use std::{
-    collections::{BTreeMap, VecDeque},
+    collections::{
+        BTreeMap,
+        VecDeque,
+    },
     convert::TryFrom,
     mem::size_of,
 };

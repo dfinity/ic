@@ -1,16 +1,29 @@
 use crate::{
-    canister_state::execution_state::{Global, Memory},
+    canister_state::execution_state::{
+        Global,
+        Memory,
+    },
     canister_state::system_state::wasm_chunk_store::WasmChunkStore,
-    CanisterState, NumWasmPages, PageMap,
+    CanisterState,
+    NumWasmPages,
+    PageMap,
 };
 use ic_sys::PAGE_SIZE;
-use ic_types::{CanisterId, NumBytes, SnapshotId, Time};
+use ic_types::{
+    CanisterId,
+    NumBytes,
+    SnapshotId,
+    Time,
+};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use ic_wasm_types::CanisterModule;
 
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{
+        BTreeMap,
+        BTreeSet,
+    },
     sync::Arc,
 };
 
@@ -457,11 +470,18 @@ pub enum SnapshotOperation {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use super::{CanisterSnapshot, CanisterSnapshots, PageMap};
+    use super::{
+        CanisterSnapshot,
+        CanisterSnapshots,
+        PageMap,
+    };
     use ic_test_utilities_types::ids::canister_test_id;
     use ic_types::time::UNIX_EPOCH;
     use ic_types::NumBytes;
-    use maplit::{btreemap, btreeset};
+    use maplit::{
+        btreemap,
+        btreeset,
+    };
 
     fn fake_canister_snapshot(
         canister_id: CanisterId,

@@ -1,14 +1,25 @@
 use crate::{
-    error::{OrchestratorError, OrchestratorResult},
+    error::{
+        OrchestratorError,
+        OrchestratorResult,
+    },
     metrics::OrchestratorMetrics,
     registry_helper::RegistryHelper,
 };
-use ic_logger::{debug, info, warn, ReplicaLogger};
+use ic_logger::{
+    debug,
+    info,
+    warn,
+    ReplicaLogger,
+};
 use ic_protobuf::registry::node::v1::IPv4InterfaceConfig;
 use ic_types::RegistryVersion;
 use std::{
     path::PathBuf,
-    sync::{Arc, RwLock},
+    sync::{
+        Arc,
+        RwLock,
+    },
 };
 use tokio::process::Command;
 

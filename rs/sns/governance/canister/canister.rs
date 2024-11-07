@@ -10,57 +10,131 @@
 // the did definition of the method.
 
 use async_trait::async_trait;
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_canister_log::log;
-use ic_canister_profiler::{measure_span, measure_span_async};
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_cdk::{caller as cdk_caller, init, post_upgrade, pre_upgrade, query, update};
+use ic_canister_profiler::{
+    measure_span,
+    measure_span_async,
+};
+use ic_canisters_http_types::{
+    HttpRequest,
+    HttpResponse,
+    HttpResponseBuilder,
+};
+use ic_cdk::{
+    caller as cdk_caller,
+    init,
+    post_upgrade,
+    pre_upgrade,
+    query,
+    update,
+};
 use ic_cdk_timers::TimerId;
-use ic_nervous_system_canisters::{cmc::CMCCanister, ledger::IcpLedgerCanister};
+use ic_nervous_system_canisters::{
+    cmc::CMCCanister,
+    ledger::IcpLedgerCanister,
+};
 use ic_nervous_system_clients::{
-    canister_status::CanisterStatusResultV2, ledger_client::LedgerCanister,
+    canister_status::CanisterStatusResultV2,
+    ledger_client::LedgerCanister,
 };
 use ic_nervous_system_common::{
-    dfn_core_stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
-    serve_logs, serve_logs_v2, serve_metrics,
+    dfn_core_stable_mem_utils::{
+        BufferedStableMemReader,
+        BufferedStableMemWriter,
+    },
+    serve_logs,
+    serve_logs_v2,
+    serve_metrics,
 };
 use ic_nervous_system_proto::pb::v1::{
-    GetTimersRequest, GetTimersResponse, ResetTimersRequest, ResetTimersResponse, Timers,
+    GetTimersRequest,
+    GetTimersResponse,
+    ResetTimersRequest,
+    ResetTimersResponse,
+    Timers,
 };
 use ic_nervous_system_runtime::CdkRuntime;
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
 #[cfg(feature = "test")]
 use ic_sns_governance::pb::v1::{
-    AddMaturityRequest, AddMaturityResponse, AdvanceTargetVersionRequest,
-    AdvanceTargetVersionResponse, GovernanceError, MintTokensRequest, MintTokensResponse, Neuron,
+    AddMaturityRequest,
+    AddMaturityResponse,
+    AdvanceTargetVersionRequest,
+    AdvanceTargetVersionResponse,
+    GovernanceError,
+    MintTokensRequest,
+    MintTokensResponse,
+    Neuron,
 };
 use ic_sns_governance::{
     governance::{
-        log_prefix, Governance, TimeWarp, ValidGovernanceProto, MATURITY_DISBURSEMENT_DELAY_SECONDS,
+        log_prefix,
+        Governance,
+        TimeWarp,
+        ValidGovernanceProto,
+        MATURITY_DISBURSEMENT_DELAY_SECONDS,
     },
-    logs::{ERROR, INFO},
+    logs::{
+        ERROR,
+        INFO,
+    },
     pb::v1::{
-        ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, FailStuckUpgradeInProgressRequest,
-        FailStuckUpgradeInProgressResponse, GetMaturityModulationRequest,
-        GetMaturityModulationResponse, GetMetadataRequest, GetMetadataResponse, GetMode,
-        GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
-        GetRunningSnsVersionRequest, GetRunningSnsVersionResponse,
-        GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
-        GetUpgradeJournalRequest, GetUpgradeJournalResponse, Governance as GovernanceProto,
-        ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
-        ListProposalsResponse, ManageNeuron, ManageNeuronResponse, NervousSystemParameters,
-        RewardEvent, SetMode, SetModeResponse,
+        ClaimSwapNeuronsRequest,
+        ClaimSwapNeuronsResponse,
+        FailStuckUpgradeInProgressRequest,
+        FailStuckUpgradeInProgressResponse,
+        GetMaturityModulationRequest,
+        GetMaturityModulationResponse,
+        GetMetadataRequest,
+        GetMetadataResponse,
+        GetMode,
+        GetModeResponse,
+        GetNeuron,
+        GetNeuronResponse,
+        GetProposal,
+        GetProposalResponse,
+        GetRunningSnsVersionRequest,
+        GetRunningSnsVersionResponse,
+        GetSnsInitializationParametersRequest,
+        GetSnsInitializationParametersResponse,
+        GetUpgradeJournalRequest,
+        GetUpgradeJournalResponse,
+        Governance as GovernanceProto,
+        ListNervousSystemFunctionsResponse,
+        ListNeurons,
+        ListNeuronsResponse,
+        ListProposals,
+        ListProposalsResponse,
+        ManageNeuron,
+        ManageNeuronResponse,
+        NervousSystemParameters,
+        RewardEvent,
+        SetMode,
+        SetModeResponse,
     },
-    types::{Environment, HeapGrowthPotential},
+    types::{
+        Environment,
+        HeapGrowthPotential,
+    },
 };
 use prost::Message;
-use rand::{RngCore, SeedableRng};
+use rand::{
+    RngCore,
+    SeedableRng,
+};
 use rand_chacha::ChaCha20Rng;
 use std::{
     boxed::Box,
     cell::RefCell,
     convert::TryFrom,
-    time::{Duration, SystemTime},
+    time::{
+        Duration,
+        SystemTime,
+    },
 };
 
 /// Size of the buffer for stable memory reads and writes.

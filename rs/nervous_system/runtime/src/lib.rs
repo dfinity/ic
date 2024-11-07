@@ -1,6 +1,12 @@
 use async_trait::async_trait;
-use candid::utils::{ArgumentDecoder, ArgumentEncoder};
-use ic_base_types::{CanisterId, PrincipalId};
+use candid::utils::{
+    ArgumentDecoder,
+    ArgumentEncoder,
+};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use std::future::Future;
 
 // A trait to help parameterize the switch from dfn_core to ic_cdk. It should

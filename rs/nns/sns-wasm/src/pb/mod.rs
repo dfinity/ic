@@ -1,13 +1,31 @@
 use crate::{
     pb::v1::{
-        add_wasm_response, get_deployed_sns_by_proposal_id_response, AddWasmResponse, DeployedSns,
-        GetDeployedSnsByProposalIdResponse, GetNextSnsVersionResponse,
-        InsertUpgradePathEntriesResponse, ListUpgradeStep, PrettySnsVersion, SnsCanisterIds,
-        SnsCanisterType, SnsSpecificSnsUpgrade, SnsUpgrade, SnsVersion, SnsWasm, SnsWasmError,
-        StableCanisterState, UpdateSnsSubnetListResponse, UpgradePath as StableUpgradePath,
+        add_wasm_response,
+        get_deployed_sns_by_proposal_id_response,
+        AddWasmResponse,
+        DeployedSns,
+        GetDeployedSnsByProposalIdResponse,
+        GetNextSnsVersionResponse,
+        InsertUpgradePathEntriesResponse,
+        ListUpgradeStep,
+        PrettySnsVersion,
+        SnsCanisterIds,
+        SnsCanisterType,
+        SnsSpecificSnsUpgrade,
+        SnsUpgrade,
+        SnsVersion,
+        SnsWasm,
+        SnsWasmError,
+        StableCanisterState,
+        UpdateSnsSubnetListResponse,
+        UpgradePath as StableUpgradePath,
         UpgradePath as UpgradePathPb,
     },
-    sns_wasm::{vec_to_hash, SnsWasmCanister, UpgradePath},
+    sns_wasm::{
+        vec_to_hash,
+        SnsWasmCanister,
+        UpgradePath,
+    },
     stable_memory::SnsWasmStableMemory,
 };
 use ic_base_types::CanisterId;
@@ -16,7 +34,10 @@ use ic_crypto_sha2::Sha256;
 use std::{
     collections::HashMap,
     convert::TryFrom,
-    fmt::{Display, Write},
+    fmt::{
+        Display,
+        Write,
+    },
     str::FromStr,
 };
 

@@ -1,23 +1,50 @@
 use super::types::{
-    CanisterMethodName, ConstructionPayloadsRequestMetadata, SignedTransaction, UnsignedTransaction,
+    CanisterMethodName,
+    ConstructionPayloadsRequestMetadata,
+    SignedTransaction,
+    UnsignedTransaction,
 };
 use crate::common::utils::utils::{
-    icrc1_operation_to_rosetta_core_operations, rosetta_core_operations_to_icrc1_operation,
+    icrc1_operation_to_rosetta_core_operations,
+    rosetta_core_operations_to_icrc1_operation,
 };
-use anyhow::{bail, Context};
-use candid::{Decode, Encode, Principal};
-use ic_agent::agent::{Envelope, EnvelopeContent};
+use anyhow::{
+    bail,
+    Context,
+};
+use candid::{
+    Decode,
+    Encode,
+    Principal,
+};
+use ic_agent::agent::{
+    Envelope,
+    EnvelopeContent,
+};
 use ic_rosetta_api::models::ConstructionParseResponse;
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::account::Account;
-use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg};
+use icrc_ledger_types::icrc1::transfer::{
+    Memo,
+    TransferArg,
+};
 use icrc_ledger_types::icrc2::approve::ApproveArgs;
 use icrc_ledger_types::icrc2::transfer_from::TransferFromArgs;
-use rosetta_core::objects::{Currency, Operation, PublicKey, Signature, SigningPayload};
+use rosetta_core::objects::{
+    Currency,
+    Operation,
+    PublicKey,
+    Signature,
+    SigningPayload,
+};
 use rosetta_core::response_types::ConstructionHashResponse;
-use rosetta_core::response_types::{ConstructionCombineResponse, ConstructionPayloadsResponse};
+use rosetta_core::response_types::{
+    ConstructionCombineResponse,
+    ConstructionPayloadsResponse,
+};
 use rosetta_core::{
-    identifiers::TransactionIdentifier, response_types::ConstructionSubmitResponse,
+    identifiers::TransactionIdentifier,
+    response_types::ConstructionSubmitResponse,
 };
 use std::borrow::Cow;
 use std::collections::HashSet;

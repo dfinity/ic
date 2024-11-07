@@ -1,6 +1,16 @@
-use crate::api::e2e::{handle::IcHandle, testnet::Testnet};
-use crate::tests::testcase_4_3_xnet_slo::{stop_chatters, DEFAULT_DELETE_CANISTER_RETRIES};
-use crate::tests::{cleanup_canister_ids, locate_canister_ids, testcase_4_3_xnet_slo::test_impl};
+use crate::api::e2e::{
+    handle::IcHandle,
+    testnet::Testnet,
+};
+use crate::tests::testcase_4_3_xnet_slo::{
+    stop_chatters,
+    DEFAULT_DELETE_CANISTER_RETRIES,
+};
+use crate::tests::{
+    cleanup_canister_ids,
+    locate_canister_ids,
+    testcase_4_3_xnet_slo::test_impl,
+};
 
 /// Testcase 4.3 in its end-to-end test incarnation.
 ///

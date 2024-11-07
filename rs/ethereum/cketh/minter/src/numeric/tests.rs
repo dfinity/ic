@@ -3,7 +3,12 @@ mod transaction_nonce {
     use assert_matches::assert_matches;
     use candid::Nat;
     use num_bigint::BigUint;
-    use proptest::{array::uniform32, prelude::any, prop_assert_eq, proptest};
+    use proptest::{
+        array::uniform32,
+        prelude::any,
+        prop_assert_eq,
+        proptest,
+    };
 
     #[test]
     fn should_overflow() {
@@ -65,7 +70,10 @@ mod transaction_nonce {
 }
 
 mod wei {
-    use crate::numeric::{wei_from_milli_ether, Wei};
+    use crate::numeric::{
+        wei_from_milli_ether,
+        Wei,
+    };
 
     #[test]
     fn should_not_overflow_when_converting_from_milli_ether() {
@@ -78,7 +86,12 @@ mod wei {
 
 mod cbor {
     use crate::checked_amount::CheckedAmountOf;
-    use proptest::{array::uniform32, prelude::any, prop_assert_eq, proptest};
+    use proptest::{
+        array::uniform32,
+        prelude::any,
+        prop_assert_eq,
+        proptest,
+    };
 
     proptest! {
         #[test]
@@ -115,9 +128,16 @@ mod cbor {
 
 mod block_range {
 
-    use crate::numeric::{BlockNumber, BlockRangeInclusive};
+    use crate::numeric::{
+        BlockNumber,
+        BlockRangeInclusive,
+    };
     use crate::test_fixtures::arb::arb_block_range_inclusive;
-    use proptest::{prelude::any, prop_assume, proptest};
+    use proptest::{
+        prelude::any,
+        prop_assume,
+        proptest,
+    };
 
     #[test]
     fn should_be_non_overlapping() {

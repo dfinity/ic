@@ -1,18 +1,27 @@
 use std::collections::BTreeSet;
 
 use crate::invariants::common::{
-    assert_valid_urls_and_hash, get_api_boundary_node_records_from_snapshot,
-    get_subnet_ids_from_snapshot, get_value_from_snapshot, InvariantCheckError, RegistrySnapshot,
+    assert_valid_urls_and_hash,
+    get_api_boundary_node_records_from_snapshot,
+    get_subnet_ids_from_snapshot,
+    get_value_from_snapshot,
+    InvariantCheckError,
+    RegistrySnapshot,
 };
 
 use ic_base_types::SubnetId;
 use ic_protobuf::registry::{
-    replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
+    replica_version::v1::{
+        BlessedReplicaVersions,
+        ReplicaVersionRecord,
+    },
     subnet::v1::SubnetRecord,
     unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
 };
 use ic_registry_keys::{
-    make_blessed_replica_versions_key, make_replica_version_key, make_subnet_record_key,
+    make_blessed_replica_versions_key,
+    make_replica_version_key,
+    make_subnet_record_key,
     make_unassigned_nodes_config_record_key,
 };
 use prost::Message;
@@ -117,7 +126,10 @@ mod tests {
 
     use super::*;
     use canister_test::PrincipalId;
-    use ic_registry_transport::{insert, upsert};
+    use ic_registry_transport::{
+        insert,
+        upsert,
+    };
     use ic_types::ReplicaVersion;
     use prost::Message;
 

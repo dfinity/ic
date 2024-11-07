@@ -1,5 +1,9 @@
 use crate::Address;
-use proptest::{prop_assert, prop_assert_eq, proptest};
+use proptest::{
+    prop_assert,
+    prop_assert_eq,
+    proptest,
+};
 use std::str::FromStr;
 
 mod from_string {

@@ -1,4 +1,7 @@
-use candid::{CandidType, Deserialize};
+use candid::{
+    CandidType,
+    Deserialize,
+};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_base_types::NodeId;
@@ -6,7 +9,10 @@ use ic_registry_keys::make_api_boundary_node_record_key;
 use ic_registry_transport::delete;
 use serde::Serialize;
 
-use crate::{common::LOG_PREFIX, registry::Registry};
+use crate::{
+    common::LOG_PREFIX,
+    registry::Registry,
+};
 
 use super::common::check_api_boundary_nodes_exist;
 
@@ -41,7 +47,10 @@ impl Registry {
 mod tests {
     use std::str::FromStr;
 
-    use ic_base_types::{NodeId, PrincipalId};
+    use ic_base_types::{
+        NodeId,
+        PrincipalId,
+    };
     use ic_protobuf::registry::api_boundary_node::v1::ApiBoundaryNodeRecord;
     use ic_registry_keys::make_api_boundary_node_record_key;
     use ic_registry_transport::insert;
@@ -49,7 +58,10 @@ mod tests {
     use prost::Message;
 
     use crate::{
-        common::test_helpers::{invariant_compliant_registry, prepare_registry_with_nodes},
+        common::test_helpers::{
+            invariant_compliant_registry,
+            prepare_registry_with_nodes,
+        },
         mutations::common::test::TEST_NODE_ID,
     };
 

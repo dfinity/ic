@@ -1,22 +1,40 @@
-use candid::{Encode, Nat};
+use candid::{
+    Encode,
+    Nat,
+};
 use dfn_candid::candid;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
-    canister_status::{CanisterStatusResult, CanisterStatusType::Running},
+    canister_status::{
+        CanisterStatusResult,
+        CanisterStatusType::Running,
+    },
 };
 use ic_nervous_system_root::change_canister::AddCanisterRequest;
-use ic_nns_constants::{REGISTRY_CANISTER_ID, ROOT_CANISTER_ID};
+use ic_nns_constants::{
+    REGISTRY_CANISTER_ID,
+    ROOT_CANISTER_ID,
+};
 use ic_nns_handler_root::init::RootCanisterInitPayloadBuilder;
 use ic_nns_test_utils::{
     itest_helpers::{
-        forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
-        set_up_root_canister, set_up_universal_canister,
+        forward_call_via_universal_canister,
+        local_test_on_nns_subnet,
+        set_up_registry_canister,
+        set_up_root_canister,
+        set_up_universal_canister,
     },
-    registry::{get_value_or_panic, invariant_compliant_mutation_as_atomic_req},
+    registry::{
+        get_value_or_panic,
+        invariant_compliant_mutation_as_atomic_req,
+    },
 };
 use ic_protobuf::registry::nns::v1::NnsCanisterRecords;
 use ic_registry_keys::make_nns_canister_records_key;
-use ic_test_utilities::empty_wasm::{EMPTY_WASM, EMPTY_WASM_SHA256};
+use ic_test_utilities::empty_wasm::{
+    EMPTY_WASM,
+    EMPTY_WASM_SHA256,
+};
 use ic_types::CanisterId;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 use std::convert::TryFrom;

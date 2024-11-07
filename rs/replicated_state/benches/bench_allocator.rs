@@ -2,11 +2,18 @@ use std::cell::Cell;
 use std::sync::Arc;
 use std::time::Duration;
 
-use criterion::{black_box, BenchmarkId, Criterion};
+use criterion::{
+    black_box,
+    BenchmarkId,
+    Criterion,
+};
 use criterion_time::ProcessTime;
 use ic_replicated_state::page_map::PageAllocator;
 use ic_replicated_state::PageIndex;
-use ic_sys::{PageBytes, PAGE_SIZE};
+use ic_sys::{
+    PageBytes,
+    PAGE_SIZE,
+};
 
 // The number of threads doing allocation in parallel
 // to simulate parallel execution of canisters.

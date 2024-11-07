@@ -1,17 +1,40 @@
-use anyhow::{anyhow, Context, Error};
+use anyhow::{
+    anyhow,
+    Context,
+    Error,
+};
 use async_trait::async_trait;
 use cloudflare::{
     endpoints::{
         dns::{
-            CreateDnsRecord, CreateDnsRecordParams, DeleteDnsRecord, DnsContent, ListDnsRecords,
-            ListDnsRecordsParams, UpdateDnsRecord, UpdateDnsRecordParams,
+            CreateDnsRecord,
+            CreateDnsRecordParams,
+            DeleteDnsRecord,
+            DnsContent,
+            ListDnsRecords,
+            ListDnsRecordsParams,
+            UpdateDnsRecord,
+            UpdateDnsRecordParams,
         },
-        zone::{ListZones, ListZonesParams, Zone},
+        zone::{
+            ListZones,
+            ListZonesParams,
+            Zone,
+        },
     },
-    framework::{async_api::Client, auth::Credentials, Environment, HttpApiClientConfig},
+    framework::{
+        async_api::Client,
+        auth::Credentials,
+        Environment,
+        HttpApiClientConfig,
+    },
 };
 
-use crate::dns::{Create, Delete, Record};
+use crate::dns::{
+    Create,
+    Delete,
+    Record,
+};
 
 impl TryFrom<DnsContent> for Record {
     type Error = Error;

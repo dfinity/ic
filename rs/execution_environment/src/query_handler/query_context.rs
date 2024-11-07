@@ -1,47 +1,104 @@
 use super::query_call_graph::evaluate_query_call_graph;
 use crate::{
-    execution::common::{self, validate_method},
+    execution::common::{
+        self,
+        validate_method,
+    },
     execution::nonreplicated_query::execute_non_replicated_query,
-    execution_environment::{as_round_instructions, RoundLimits},
+    execution_environment::{
+        as_round_instructions,
+        RoundLimits,
+    },
     hypervisor::Hypervisor,
     metrics::{
-        CallTreeMetricsNoOp, MeasurementScope, QueryHandlerMetrics, QUERY_HANDLER_CRITICAL_ERROR,
-        SYSTEM_API_CANISTER_CYCLE_BALANCE, SYSTEM_API_CANISTER_CYCLE_BALANCE128,
-        SYSTEM_API_DATA_CERTIFICATE_COPY, SYSTEM_API_TIME,
+        CallTreeMetricsNoOp,
+        MeasurementScope,
+        QueryHandlerMetrics,
+        QUERY_HANDLER_CRITICAL_ERROR,
+        SYSTEM_API_CANISTER_CYCLE_BALANCE,
+        SYSTEM_API_CANISTER_CYCLE_BALANCE128,
+        SYSTEM_API_DATA_CERTIFICATE_COPY,
+        SYSTEM_API_TIME,
     },
-    NonReplicatedQueryKind, RoundInstructions,
+    NonReplicatedQueryKind,
+    RoundInstructions,
 };
 use ic_base_types::NumBytes;
 use ic_config::flag_status::FlagStatus;
-use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
-use ic_error_types::{ErrorCode, RejectCode, UserError};
+use ic_cycles_account_manager::{
+    CyclesAccountManager,
+    ResourceSaturation,
+};
+use ic_error_types::{
+    ErrorCode,
+    RejectCode,
+    UserError,
+};
 use ic_interfaces::execution_environment::{
-    ExecutionMode, HypervisorError, SubnetAvailableMemory, SystemApiCallCounters,
+    ExecutionMode,
+    HypervisorError,
+    SubnetAvailableMemory,
+    SystemApiCallCounters,
 };
 use ic_interfaces_state_manager::Labeled;
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
-use ic_logger::{error, info, ReplicaLogger};
+use ic_logger::{
+    error,
+    info,
+    ReplicaLogger,
+};
 use ic_query_stats::QueryStatsCollector;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    CallContextAction, CallOrigin, CanisterState, NetworkTopology, ReplicatedState,
+    CallContextAction,
+    CallOrigin,
+    CanisterState,
+    NetworkTopology,
+    ReplicatedState,
 };
-use ic_system_api::{ApiType, ExecutionParameters, InstructionLimits};
+use ic_system_api::{
+    ApiType,
+    ExecutionParameters,
+    InstructionLimits,
+};
 use ic_types::{
     batch::QueryStats,
     ingress::WasmResult,
     messages::{
-        CallContextId, CallbackId, Payload, Query, QuerySource, RejectContext, Request,
-        RequestOrResponse, Response, NO_DEADLINE,
+        CallContextId,
+        CallbackId,
+        Payload,
+        Query,
+        QuerySource,
+        RejectContext,
+        Request,
+        RequestOrResponse,
+        Response,
+        NO_DEADLINE,
     },
-    methods::{FuncRef, WasmClosure, WasmMethod},
-    CanisterId, Cycles, NumInstructions, NumMessages, NumSlices, Time,
+    methods::{
+        FuncRef,
+        WasmClosure,
+        WasmMethod,
+    },
+    CanisterId,
+    Cycles,
+    NumInstructions,
+    NumMessages,
+    NumSlices,
+    Time,
 };
 use prometheus::IntCounter;
 use std::{
-    collections::{BTreeMap, VecDeque},
+    collections::{
+        BTreeMap,
+        VecDeque,
+    },
     sync::Arc,
-    time::{Duration, Instant},
+    time::{
+        Duration,
+        Instant,
+    },
 };
 
 /// The response of a query. If the query originated from a user, then it

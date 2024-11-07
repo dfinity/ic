@@ -8,34 +8,67 @@
 use super::types::FsEncryptionKeySetWithPop;
 use super::ALGORITHM_ID;
 use crate::api::ni_dkg_errors::{
-    CspDkgVerifyDealingError, DecryptError, EncryptAndZKProveError, MalformedPublicKeyError,
+    CspDkgVerifyDealingError,
+    DecryptError,
+    EncryptAndZKProveError,
+    MalformedPublicKeyError,
     SizeError,
 };
-use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, Scalar};
+use ic_crypto_internal_bls12_381_type::{
+    G1Affine,
+    G2Affine,
+    Scalar,
+};
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_types::sign::threshold_sig::{
     ni_dkg::ni_dkg_groth20_bls12_381::{
-        FsEncryptionCiphertextBytes, FsEncryptionPublicKey, NodeIndex, ZKProofDec, ZKProofShare,
+        FsEncryptionCiphertextBytes,
+        FsEncryptionPublicKey,
+        NodeIndex,
+        ZKProofDec,
+        ZKProofShare,
     },
     ni_dkg::Epoch,
     public_coefficients::bls12_381::PublicCoefficientsBytes,
 };
-use ic_types::{crypto::error::InvalidArgumentError, crypto::AlgorithmId, NumberOfNodes};
-use rand::{CryptoRng, RngCore};
+use ic_types::{
+    crypto::error::InvalidArgumentError,
+    crypto::AlgorithmId,
+    NumberOfNodes,
+};
+use rand::{
+    CryptoRng,
+    RngCore,
+};
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
 mod crypto {
 
     pub use crate::ni_dkg::fs_ni_dkg::forward_secure::{
-        dec_chunks, enc_chunks, kgen, verify_ciphertext_integrity, EncryptionWitness,
-        FsEncryptionCiphertext, PlaintextChunks, SecretKey, SysParam,
+        dec_chunks,
+        enc_chunks,
+        kgen,
+        verify_ciphertext_integrity,
+        EncryptionWitness,
+        FsEncryptionCiphertext,
+        PlaintextChunks,
+        SecretKey,
+        SysParam,
     };
     pub use crate::ni_dkg::fs_ni_dkg::nizk_chunking::{
-        prove_chunking, verify_chunking, ChunkingInstance, ChunkingWitness, ProofChunking,
+        prove_chunking,
+        verify_chunking,
+        ChunkingInstance,
+        ChunkingWitness,
+        ProofChunking,
     };
     pub use crate::ni_dkg::fs_ni_dkg::nizk_sharing::{
-        prove_sharing, verify_sharing, ProofSharing, SharingInstance, SharingWitness,
+        prove_sharing,
+        verify_sharing,
+        ProofSharing,
+        SharingInstance,
+        SharingWitness,
     };
 }
 
@@ -444,7 +477,11 @@ pub fn verify_zk_proofs(
 }
 
 mod util {
-    use ic_crypto_internal_bls12_381_type::{G1Affine, G1Projective, Scalar};
+    use ic_crypto_internal_bls12_381_type::{
+        G1Affine,
+        G1Projective,
+        Scalar,
+    };
 
     /// Combine a big endian array of group elements (first chunk is the
     /// most significant) into a single group element.

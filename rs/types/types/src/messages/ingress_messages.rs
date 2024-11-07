@@ -1,34 +1,80 @@
 //! This module contains various definitions related to Ingress messages
 
-use super::{MessageId, EXPECTED_MESSAGE_ID_LENGTH};
-use crate::{
-    artifact::{IdentifiableArtifact, IngressMessageId, PbArtifact},
-    messages::{
-        http::{representation_independent_hash_call_or_query, CallOrQuery},
-        Authentication, HasCanisterId, HttpCallContent, HttpCanisterUpdate, HttpRequest,
-        HttpRequestContent, HttpRequestEnvelope, HttpRequestError, SignedRequestBytes,
-    },
-    CanisterId, CountBytes, PrincipalId, SubnetId, Time, UserId,
+use super::{
+    MessageId,
+    EXPECTED_MESSAGE_ID_LENGTH,
 };
-use ic_error_types::{ErrorCode, UserError};
+use crate::{
+    artifact::{
+        IdentifiableArtifact,
+        IngressMessageId,
+        PbArtifact,
+    },
+    messages::{
+        http::{
+            representation_independent_hash_call_or_query,
+            CallOrQuery,
+        },
+        Authentication,
+        HasCanisterId,
+        HttpCallContent,
+        HttpCanisterUpdate,
+        HttpRequest,
+        HttpRequestContent,
+        HttpRequestEnvelope,
+        HttpRequestError,
+        SignedRequestBytes,
+    },
+    CanisterId,
+    CountBytes,
+    PrincipalId,
+    SubnetId,
+    Time,
+    UserId,
+};
+use ic_error_types::{
+    ErrorCode,
+    UserError,
+};
 use ic_management_canister_types::{
-    CanisterIdRecord, CanisterInfoRequest, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs,
-    InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
-    Method, Payload, StoredChunksArgs, TakeCanisterSnapshotArgs, UpdateSettingsArgs,
-    UploadChunkArgs, IC_00,
+    CanisterIdRecord,
+    CanisterInfoRequest,
+    ClearChunkStoreArgs,
+    DeleteCanisterSnapshotArgs,
+    InstallChunkedCodeArgs,
+    InstallCodeArgsV2,
+    ListCanisterSnapshotArgs,
+    LoadCanisterSnapshotArgs,
+    Method,
+    Payload,
+    StoredChunksArgs,
+    TakeCanisterSnapshotArgs,
+    UpdateSettingsArgs,
+    UploadChunkArgs,
+    IC_00,
 };
 use ic_protobuf::{
     log::ingress_message_log_entry::v1::IngressMessageLogEntry,
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{
+        try_from_option_field,
+        ProxyDecodeError,
+    },
     state::ingress::v1 as pb_ingress,
     types::v1 as pb_types,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use prost::bytes::Bytes;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::{
-    convert::{From, TryFrom, TryInto},
+    convert::{
+        From,
+        TryFrom,
+        TryInto,
+    },
     mem::size_of,
     str::FromStr,
 };
@@ -586,9 +632,15 @@ pub fn is_subnet_id(canister_id: CanisterId, own_subnet_id: SubnetId) -> bool {
 #[cfg(test)]
 mod test {
     use crate::messages::ingress_messages::{
-        extract_effective_canister_id, ParseIngressError, SignedIngressContent,
+        extract_effective_canister_id,
+        ParseIngressError,
+        SignedIngressContent,
     };
-    use crate::{CanisterId, SubnetId, UserId};
+    use crate::{
+        CanisterId,
+        SubnetId,
+        UserId,
+    };
     use ic_base_types::PrincipalId;
     use ic_management_canister_types::IC_00;
     use std::convert::From;

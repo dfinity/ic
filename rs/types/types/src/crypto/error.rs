@@ -2,7 +2,10 @@
 pub mod conversions;
 pub use super::CryptoError;
 use crate::crypto::AlgorithmId;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::fmt; // Probably move all the errors into this file
 
 /// Occurs if an argument is invalid.

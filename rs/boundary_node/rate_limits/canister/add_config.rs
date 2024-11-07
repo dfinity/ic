@@ -1,6 +1,9 @@
 use crate::{
     storage::StorableIncidentMetadata,
-    types::{SchemaVersion, Timestamp},
+    types::{
+        SchemaVersion,
+        Timestamp,
+    },
 };
 use anyhow::Context;
 use getrandom::getrandom;
@@ -11,10 +14,20 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use crate::{
-    access_control::{AccessLevel, ResolveAccessLevel},
+    access_control::{
+        AccessLevel,
+        ResolveAccessLevel,
+    },
     state::CanisterApi,
-    storage::{StorableConfig, StorableRuleMetadata},
-    types::{InputConfig, RuleId, Version},
+    storage::{
+        StorableConfig,
+        StorableRuleMetadata,
+    },
+    types::{
+        InputConfig,
+        RuleId,
+        Version,
+    },
 };
 
 pub const INIT_VERSION: Version = 1;

@@ -1,17 +1,32 @@
 //! The ingress manager public interface.
 use crate::{
-    execution_environment::{CanisterOutOfCyclesError, IngressHistoryError},
-    validation::{ValidationError, ValidationResult},
+    execution_environment::{
+        CanisterOutOfCyclesError,
+        IngressHistoryError,
+    },
+    validation::{
+        ValidationError,
+        ValidationResult,
+    },
 };
 use ic_interfaces_state_manager::StateManagerError;
 use ic_types::{
     artifact::IngressMessageId,
-    batch::{IngressPayload, IngressPayloadError, ValidationContext},
+    batch::{
+        IngressPayload,
+        IngressPayloadError,
+        ValidationContext,
+    },
     consensus::Payload,
     ingress::IngressSets,
     messages::MessageId,
-    time::{Time, UNIX_EPOCH},
-    CanisterId, Height, NumBytes,
+    time::{
+        Time,
+        UNIX_EPOCH,
+    },
+    CanisterId,
+    Height,
+    NumBytes,
 };
 use std::collections::HashSet;
 

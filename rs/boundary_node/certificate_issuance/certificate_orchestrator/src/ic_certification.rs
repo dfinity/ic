@@ -1,13 +1,34 @@
 use candid::Encode;
 use certificate_orchestrator_interface::{
-    BoundedString, ExportPackage, IcCertificate, Id, LABEL_DOMAINS, LEFT_GUARD, RIGHT_GUARD,
+    BoundedString,
+    ExportPackage,
+    IcCertificate,
+    Id,
+    LABEL_DOMAINS,
+    LEFT_GUARD,
+    RIGHT_GUARD,
 };
-use ic_cdk::api::{data_certificate, set_certified_data};
-use ic_certified_map::{labeled, labeled_hash, AsHashTree, Hash as ICHash, RbTree};
+use ic_cdk::api::{
+    data_certificate,
+    set_certified_data,
+};
+use ic_certified_map::{
+    labeled,
+    labeled_hash,
+    AsHashTree,
+    Hash as ICHash,
+    RbTree,
+};
 use serde::Serialize;
 use serde_cbor::Serializer;
-use sha2::{Digest, Sha256};
-use std::{cell::RefCell, convert::AsRef};
+use sha2::{
+    Digest,
+    Sha256,
+};
+use std::{
+    cell::RefCell,
+    convert::AsRef,
+};
 
 thread_local! {
     static CERT_TREE: RefCell<RbTree<Id, ICHash>> = const { RefCell::new(RbTree::new()) };

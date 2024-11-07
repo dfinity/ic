@@ -2,23 +2,63 @@ use ic_base_types::PrincipalId;
 use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::subnet_config::SubnetConfig;
 use ic_management_canister_types::{
-    self as ic00, BoundedAllowedViewers, CanisterIdRecord, CanisterInstallMode, CanisterLogRecord,
-    CanisterSettingsArgs, CanisterSettingsArgsBuilder, DataSize, EmptyBlob,
-    FetchCanisterLogsRequest, FetchCanisterLogsResponse, LogVisibilityV2, Payload,
+    self as ic00,
+    BoundedAllowedViewers,
+    CanisterIdRecord,
+    CanisterInstallMode,
+    CanisterLogRecord,
+    CanisterSettingsArgs,
+    CanisterSettingsArgsBuilder,
+    DataSize,
+    EmptyBlob,
+    FetchCanisterLogsRequest,
+    FetchCanisterLogsResponse,
+    LogVisibilityV2,
+    Payload,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
-    ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig, SubmitIngressError, UserError,
+    ErrorCode,
+    StateMachine,
+    StateMachineBuilder,
+    StateMachineConfig,
+    SubmitIngressError,
+    UserError,
 };
-use ic_test_utilities::universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
-use ic_test_utilities_execution_environment::{get_reply, wat_canister, wat_fn};
-use ic_test_utilities_metrics::{fetch_histogram_stats, fetch_histogram_vec_stats, labels};
+use ic_test_utilities::universal_canister::{
+    call_args,
+    wasm,
+    UNIVERSAL_CANISTER_WASM,
+};
+use ic_test_utilities_execution_environment::{
+    get_reply,
+    wat_canister,
+    wat_fn,
+};
+use ic_test_utilities_metrics::{
+    fetch_histogram_stats,
+    fetch_histogram_vec_stats,
+    labels,
+};
 use ic_types::{
-    ingress::WasmResult, CanisterId, Cycles, NumInstructions, MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE,
+    ingress::WasmResult,
+    CanisterId,
+    Cycles,
+    NumInstructions,
+    MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE,
 };
-use more_asserts::{assert_le, assert_lt};
-use proptest::{prelude::ProptestConfig, prop_assume};
-use std::time::{Duration, SystemTime};
+use more_asserts::{
+    assert_le,
+    assert_lt,
+};
+use proptest::{
+    prelude::ProptestConfig,
+    prop_assume,
+};
+use std::time::{
+    Duration,
+    SystemTime,
+};
 
 const MAX_LOG_MESSAGE_LEN: usize = 4 * 1024;
 const TIME_STEP: Duration = Duration::from_nanos(111_111);

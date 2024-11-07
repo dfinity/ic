@@ -1,10 +1,21 @@
-use crate::{governance::LOG_PREFIX, pb::v1::AuditEvent};
+use crate::{
+    governance::LOG_PREFIX,
+    pb::v1::AuditEvent,
+};
 
 use crate::pb::v1::ArchivedMonthlyNodeProviderRewards;
 use ic_cdk::println;
 use ic_stable_structures::{
-    memory_manager::{MemoryId, MemoryManager, VirtualMemory},
-    DefaultMemoryImpl, Memory, StableBTreeMap, StableLog, Storable,
+    memory_manager::{
+        MemoryId,
+        MemoryManager,
+        VirtualMemory,
+    },
+    DefaultMemoryImpl,
+    Memory,
+    StableBTreeMap,
+    StableLog,
+    Storable,
 };
 use std::cell::RefCell;
 

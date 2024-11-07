@@ -1,5 +1,8 @@
 use crate::common::constants::MAX_ROSETTA_SYNC_ATTEMPTS;
-use candid::{Decode, Encode};
+use candid::{
+    Decode,
+    Encode,
+};
 use ic_agent::agent::http_transport::ReqwestTransport;
 use ic_agent::identity::BasicIdentity;
 use ic_agent::Agent;

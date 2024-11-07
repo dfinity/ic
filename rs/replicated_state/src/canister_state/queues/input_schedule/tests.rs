@@ -1,6 +1,7 @@
 use super::*;
 use crate::canister_state::queues::{
-    message_pool::MessagePool, tests::input_queue_type_from_local_canisters,
+    message_pool::MessagePool,
+    tests::input_queue_type_from_local_canisters,
 };
 use assert_matches::assert_matches;
 use ic_test_utilities_types::messages::RequestBuilder;

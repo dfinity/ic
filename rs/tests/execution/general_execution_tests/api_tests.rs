@@ -2,16 +2,28 @@
 end::catalog[] */
 
 use candid::Principal;
-use ic_agent::{agent::RejectCode, Agent, AgentError};
+use ic_agent::{
+    agent::RejectCode,
+    Agent,
+    AgentError,
+};
 use ic_base_types::PrincipalId;
-use ic_management_canister_types::{self as ic00, EmptyBlob, Method, Payload};
+use ic_management_canister_types::{
+    self as ic00,
+    EmptyBlob,
+    Method,
+    Payload,
+};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::GetFirstHealthyNodeSnapshot;
 use ic_system_test_driver::driver::test_env_api::HasPublicApiUrl;
 use ic_system_test_driver::driver::test_env_api::IcNodeSnapshot;
 use ic_system_test_driver::util::*;
 use ic_types::Cycles;
-use ic_universal_canister::{call_args, wasm};
+use ic_universal_canister::{
+    call_args,
+    wasm,
+};
 
 /// Helper function to setup an application node and an agent.
 fn setup_app_node_and_agent(env: &TestEnv) -> (IcNodeSnapshot, Agent) {

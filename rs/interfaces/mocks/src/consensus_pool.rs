@@ -1,9 +1,16 @@
-use ic_interfaces::consensus_pool::{ConsensusPoolCache, ConsensusTime};
+use ic_interfaces::consensus_pool::{
+    ConsensusPoolCache,
+    ConsensusTime,
+};
 use ic_protobuf::types::v1 as pb;
 use ic_types::{
-    consensus::{Block, CatchUpPackage},
+    consensus::{
+        Block,
+        CatchUpPackage,
+    },
     time::Time,
-    Height, RegistryVersion,
+    Height,
+    RegistryVersion,
 };
 use mockall::mock;
 

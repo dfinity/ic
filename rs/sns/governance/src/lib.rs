@@ -1,5 +1,8 @@
 use crate::pb::v1::Subaccount as SubaccountProto;
-use std::{convert::TryInto, fmt::Debug};
+use std::{
+    convert::TryInto,
+    fmt::Debug,
+};
 
 pub mod canister_control;
 pub mod governance;

@@ -1,15 +1,31 @@
 use ic_ledger_canister_blocks_synchronizer::blocks::HashedBlock;
 use ic_ledger_core::block::BlockType;
-use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
+use ic_ledger_core::tokens::{
+    CheckedAdd,
+    CheckedSub,
+};
 use ic_types::PrincipalId;
 use icp_ledger::{
-    AccountIdentifier, Block, BlockIndex, Memo, Operation, Tokens, Transaction,
+    AccountIdentifier,
+    Block,
+    BlockIndex,
+    Memo,
+    Operation,
+    Tokens,
+    Transaction,
     DEFAULT_TRANSFER_FEE,
 };
 
-use rand::{rngs::StdRng, RngCore, SeedableRng};
+use rand::{
+    rngs::StdRng,
+    RngCore,
+    SeedableRng,
+};
 use rand_distr::Distribution;
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{
+    BTreeMap,
+    VecDeque,
+};
 use std::time::SystemTime;
 
 pub fn acc_id(seed: u64) -> AccountIdentifier {

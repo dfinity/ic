@@ -2,28 +2,53 @@ use crate::{
     wasm_utils::instrumentation::WasmMemoryType,
     wasmtime_embedder::{
         convert_backtrace,
-        system_api_complexity::{overhead, overhead_native},
-        StoreData, WASM_HEAP_BYTEMAP_MEMORY_NAME, WASM_HEAP_MEMORY_NAME,
+        system_api_complexity::{
+            overhead,
+            overhead_native,
+        },
+        StoreData,
+        WASM_HEAP_BYTEMAP_MEMORY_NAME,
+        WASM_HEAP_MEMORY_NAME,
     },
     InternalErrorCode,
 };
 use ic_config::{
-    embedders::{FeatureFlags, StableMemoryPageLimit},
+    embedders::{
+        FeatureFlags,
+        StableMemoryPageLimit,
+    },
     flag_status::FlagStatus,
 };
 use ic_interfaces::execution_environment::{
-    HypervisorError, HypervisorResult, PerformanceCounterType, StableGrowOutcome, SystemApi,
+    HypervisorError,
+    HypervisorResult,
+    PerformanceCounterType,
+    StableGrowOutcome,
+    SystemApi,
     TrapCode,
 };
 use ic_logger::error;
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::PAGE_SIZE;
 use ic_system_api::SystemApiImpl;
-use ic_types::{Cycles, NumBytes, NumInstructions, Time};
+use ic_types::{
+    Cycles,
+    NumBytes,
+    NumInstructions,
+    Time,
+};
 use ic_wasm_types::WasmEngineError;
 use num_traits::ops::saturating::SaturatingAdd;
 
-use wasmtime::{AsContext, AsContextMut, Caller, Global, Linker, Val, WasmBacktrace};
+use wasmtime::{
+    AsContext,
+    AsContextMut,
+    Caller,
+    Global,
+    Linker,
+    Val,
+    WasmBacktrace,
+};
 
 use std::convert::TryFrom;
 

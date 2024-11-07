@@ -1,25 +1,46 @@
 use candid::Nat;
 use canister_test::Wasm;
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_nervous_system_common::ONE_MONTH_SECONDS;
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
     pocket_ic_helpers,
     pocket_ic_helpers::{
-        add_wasm_via_nns_proposal, add_wasms_to_sns_wasm, install_canister, install_nns_canisters,
-        nns, sns, upgrade_nns_canister_to_tip_of_master_or_panic,
+        add_wasm_via_nns_proposal,
+        add_wasms_to_sns_wasm,
+        install_canister,
+        install_nns_canisters,
+        nns,
+        sns,
+        upgrade_nns_canister_to_tip_of_master_or_panic,
     },
 };
-use ic_nns_constants::{self, GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
+use ic_nns_constants::{
+    self,
+    GOVERNANCE_CANISTER_ID,
+    SNS_WASM_CANISTER_ID,
+};
 use ic_nns_test_utils::sns_wasm::{
-    build_archive_sns_wasm, build_index_ng_sns_wasm, build_ledger_sns_wasm,
+    build_archive_sns_wasm,
+    build_index_ng_sns_wasm,
+    build_ledger_sns_wasm,
     create_modified_sns_wasm,
 };
 use ic_sns_wasm::pb::v1::SnsCanisterType;
 use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
 use icrc_ledger_types::{
-    icrc1::{account::Account, transfer::TransferArg},
-    icrc2::{allowance::AllowanceArgs, approve::ApproveArgs, transfer_from::TransferFromArgs},
+    icrc1::{
+        account::Account,
+        transfer::TransferArg,
+    },
+    icrc2::{
+        allowance::AllowanceArgs,
+        approve::ApproveArgs,
+        transfer_from::TransferFromArgs,
+    },
 };
 use pocket_ic::PocketIcBuilder;
 use rust_decimal::prelude::ToPrimitive;

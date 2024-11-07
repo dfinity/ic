@@ -1,5 +1,8 @@
 use ic_config::logger::Config as LoggerConfig;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::path::PathBuf;
 
 const DEFAULT_HTTP_CONNECT_TIMEOUT_SECS: u64 = 2;

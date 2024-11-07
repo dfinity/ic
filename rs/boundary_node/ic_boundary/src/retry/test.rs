@@ -2,20 +2,31 @@ use super::*;
 
 use std::{
     str::FromStr,
-    sync::{Arc, RwLock},
+    sync::{
+        Arc,
+        RwLock,
+    },
 };
 
 use anyhow::Error;
 use axum::{
-    body::Body, extract::State, http::Request, middleware, response::IntoResponse,
-    routing::method_routing::post, Router,
+    body::Body,
+    extract::State,
+    http::Request,
+    middleware,
+    response::IntoResponse,
+    routing::method_routing::post,
+    Router,
 };
 use candid::Principal;
 use http::StatusCode;
 use ic_types::CanisterId;
 use tower::Service;
 
-use crate::routes::{test::test_route_subnet, RequestType};
+use crate::routes::{
+    test::test_route_subnet,
+    RequestType,
+};
 
 struct TestState {
     failures: u8,

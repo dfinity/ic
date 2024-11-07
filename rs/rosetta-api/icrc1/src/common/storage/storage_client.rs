@@ -1,11 +1,20 @@
 use super::storage_operations;
-use crate::common::storage::types::{MetadataEntry, RosettaBlock};
-use anyhow::{bail, Result};
+use crate::common::storage::types::{
+    MetadataEntry,
+    RosettaBlock,
+};
+use anyhow::{
+    bail,
+    Result,
+};
 use candid::Nat;
 use icrc_ledger_types::icrc1::account::Account;
 use rusqlite::Connection;
 use serde_bytes::ByteBuf;
-use std::{path::Path, sync::Mutex};
+use std::{
+    path::Path,
+    sync::Mutex,
+};
 
 #[derive(Debug)]
 pub struct StorageClient {
@@ -269,7 +278,10 @@ mod tests {
     use ic_icrc1::blocks::generic_block_to_encoded_block;
     use ic_icrc1::Block;
     use ic_icrc1_test_utils::{
-        arb_amount, blocks_strategy, metadata_strategy, valid_blockchain_with_gaps_strategy,
+        arb_amount,
+        blocks_strategy,
+        metadata_strategy,
+        valid_blockchain_with_gaps_strategy,
     };
     use ic_icrc1_tokens_u256::U256;
     use ic_icrc1_tokens_u64::U64;

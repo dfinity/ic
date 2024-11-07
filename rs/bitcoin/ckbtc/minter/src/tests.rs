@@ -1,32 +1,70 @@
 use crate::MINTER_FEE_CONSTANT;
 use crate::{
-    address::BitcoinAddress, build_unsigned_transaction, estimate_fee, fake_sign, greedy,
-    signature::EncodedSignature, tx, BuildTxError,
+    address::BitcoinAddress,
+    build_unsigned_transaction,
+    estimate_fee,
+    fake_sign,
+    greedy,
+    signature::EncodedSignature,
+    tx,
+    BuildTxError,
 };
 use crate::{
     lifecycle::init::InitArgs,
     state::{
-        ChangeOutput, CkBtcMinterState, Mode, RetrieveBtcRequest, RetrieveBtcStatus,
+        ChangeOutput,
+        CkBtcMinterState,
+        Mode,
+        RetrieveBtcRequest,
+        RetrieveBtcStatus,
         SubmittedBtcTransaction,
     },
 };
 use bitcoin::network::constants::Network as BtcNetwork;
-use bitcoin::util::psbt::serialize::{Deserialize, Serialize};
+use bitcoin::util::psbt::serialize::{
+    Deserialize,
+    Serialize,
+};
 use candid::Principal;
-use ic_base_types::{CanisterId, PrincipalId};
-use ic_btc_interface::{Network, OutPoint, Satoshi, Txid, Utxo};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
+use ic_btc_interface::{
+    Network,
+    OutPoint,
+    Satoshi,
+    Txid,
+    Utxo,
+};
 use icrc_ledger_types::icrc1::account::Account;
 use proptest::proptest;
 use proptest::{
     array::uniform20,
     array::uniform32,
-    collection::{btree_set, vec as pvec, SizeRange},
+    collection::{
+        btree_set,
+        vec as pvec,
+        SizeRange,
+    },
     option,
-    prelude::{any, Strategy},
+    prelude::{
+        any,
+        Strategy,
+    },
 };
-use proptest::{prop_assert, prop_assert_eq, prop_assume, prop_oneof};
+use proptest::{
+    prop_assert,
+    prop_assert_eq,
+    prop_assume,
+    prop_oneof,
+};
 use serde_bytes::ByteBuf;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+    HashMap,
+};
 use std::str::FromStr;
 
 fn dummy_utxo_from_value(v: u64) -> Utxo {
@@ -57,7 +95,10 @@ fn network_to_btc_network(network: Network) -> BtcNetwork {
 }
 
 fn address_to_btc_address(address: &BitcoinAddress, network: Network) -> bitcoin::Address {
-    use bitcoin::util::address::{Payload, WitnessVersion};
+    use bitcoin::util::address::{
+        Payload,
+        WitnessVersion,
+    };
     match address {
         BitcoinAddress::P2wpkhV0(pkhash) => bitcoin::Address {
             payload: Payload::WitnessProgram {
@@ -100,7 +141,10 @@ fn as_txid(hash: &[u8; 32]) -> bitcoin::Txid {
 }
 
 fn p2wpkh_script_code(pkhash: &[u8; 20]) -> bitcoin::Script {
-    use bitcoin::blockdata::{opcodes, script::Builder};
+    use bitcoin::blockdata::{
+        opcodes,
+        script::Builder,
+    };
 
     Builder::new()
         .push_opcode(opcodes::all::OP_DUP)

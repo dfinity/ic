@@ -3,42 +3,76 @@ use arbitrary::Arbitrary;
 use axum::body::Body;
 use bytes::Bytes;
 use http_body_util::Full;
-use hyper::{Method, Request, Response};
+use hyper::{
+    Method,
+    Request,
+    Response,
+};
 use ic_agent::{
-    agent::{http_transport::reqwest_transport::ReqwestTransport, UpdateBuilder},
+    agent::{
+        http_transport::reqwest_transport::ReqwestTransport,
+        UpdateBuilder,
+    },
     export::Principal,
     identity::AnonymousIdentity,
     Agent,
 };
 use ic_config::http_handler::Config;
-use ic_error_types::{ErrorCode, UserError};
-use ic_http_endpoints_public::{call_v2, IngressValidatorBuilder};
+use ic_error_types::{
+    ErrorCode,
+    UserError,
+};
+use ic_http_endpoints_public::{
+    call_v2,
+    IngressValidatorBuilder,
+};
 use ic_interfaces::ingress_pool::IngressPoolThrottler;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_test_utilities::crypto::temp_crypto_component_with_fake_registry;
-use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
-use ic_types::{messages::SignedIngressContent, PrincipalId};
+use ic_test_utilities_types::ids::{
+    node_test_id,
+    subnet_test_id,
+};
+use ic_types::{
+    messages::SignedIngressContent,
+    PrincipalId,
+};
 use ic_validator_http_request_arbitrary::AnonymousContent;
 use libfuzzer_sys::fuzz_target;
 use std::{
     convert::Infallible,
     net::SocketAddr,
-    sync::{Arc, Mutex, RwLock},
+    sync::{
+        Arc,
+        Mutex,
+        RwLock,
+    },
 };
 use tokio::{
     runtime::Runtime,
-    sync::mpsc::{channel, Receiver},
+    sync::mpsc::{
+        channel,
+        Receiver,
+    },
 };
 use tower::{
-    limit::GlobalConcurrencyLimitLayer, util::BoxCloneService, Service, ServiceBuilder, ServiceExt,
+    limit::GlobalConcurrencyLimitLayer,
+    util::BoxCloneService,
+    Service,
+    ServiceBuilder,
+    ServiceExt,
 };
 use tower_test::mock::Handle;
 
 #[path = "../../public/tests/common/mod.rs"]
 pub mod common;
-use common::{basic_registry_client, get_free_localhost_socket_addr, setup_ingress_filter_mock};
+use common::{
+    basic_registry_client,
+    get_free_localhost_socket_addr,
+    setup_ingress_filter_mock,
+};
 
 type IngressFilterHandle =
     Handle<(ProvisionalWhitelist, SignedIngressContent), Result<(), UserError>>;

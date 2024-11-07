@@ -1,4 +1,7 @@
-use crate::MessageLength::{Small, TooLarge};
+use crate::MessageLength::{
+    Small,
+    TooLarge,
+};
 use assert_matches::assert_matches;
 use ic_config::logger::Config as LoggerConfig;
 use ic_crypto_internal_csp::api::CspCreateMEGaKeyError;
@@ -6,14 +9,24 @@ use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp::types::CspSignature;
 use ic_crypto_internal_csp::vault::api::CspBasicSignatureError::TransientInternalError;
 use ic_crypto_internal_csp::vault::api::{
-    BasicSignatureCspVault, CspBasicSignatureError, CspPublicKeyStoreError, IDkgProtocolCspVault,
+    BasicSignatureCspVault,
+    CspBasicSignatureError,
+    CspPublicKeyStoreError,
+    IDkgProtocolCspVault,
     PublicKeyStoreCspVault,
 };
 use ic_crypto_internal_csp::vault::remote_csp_vault::{
-    RemoteCspVault, RemoteCspVaultBuilder, TarpcCspVaultServerImplBuilder,
+    RemoteCspVault,
+    RemoteCspVaultBuilder,
+    TarpcCspVaultServerImplBuilder,
 };
 use ic_crypto_temp_crypto_vault::RemoteVaultEnvironment;
-use ic_logger::{info, new_logger, new_replica_logger_from_config, ReplicaLogger};
+use ic_logger::{
+    info,
+    new_logger,
+    new_replica_logger_from_config,
+    ReplicaLogger,
+};
 use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
 use ic_test_utilities_in_memory_logger::InMemoryReplicaLogger;
 use ic_types::crypto::AlgorithmId;

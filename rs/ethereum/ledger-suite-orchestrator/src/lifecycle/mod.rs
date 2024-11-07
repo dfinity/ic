@@ -1,12 +1,29 @@
-use crate::candid::{AddErc20Arg, InitArg, UpgradeArg};
+use crate::candid::{
+    AddErc20Arg,
+    InitArg,
+    UpgradeArg,
+};
 use crate::logs::INFO;
 use crate::scheduler::{
-    schedule_now, InstallLedgerSuiteArgs, Task, UpgradeOrchestratorArgs, IC_CANISTER_RUNTIME,
+    schedule_now,
+    InstallLedgerSuiteArgs,
+    Task,
+    UpgradeOrchestratorArgs,
+    IC_CANISTER_RUNTIME,
 };
 use crate::state::{
-    init_state, mutate_state, read_state, GitCommitHash, InstalledLedgerSuite, State,
+    init_state,
+    mutate_state,
+    read_state,
+    GitCommitHash,
+    InstalledLedgerSuite,
+    State,
 };
-use crate::storage::{mutate_wasm_store, read_wasm_store, record_icrc1_ledger_suite_wasms};
+use crate::storage::{
+    mutate_wasm_store,
+    read_wasm_store,
+    record_icrc1_ledger_suite_wasms,
+};
 use ic_canister_log::log;
 use std::str::FromStr;
 

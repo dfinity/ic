@@ -26,25 +26,44 @@
 use crate::consensus::metrics::NotaryMetrics;
 use ic_consensus_utils::{
     crypto::ConsensusCrypto,
-    find_lowest_ranked_non_disqualified_proposals, get_notarization_delay_settings,
-    membership::{Membership, MembershipError},
+    find_lowest_ranked_non_disqualified_proposals,
+    get_notarization_delay_settings,
+    membership::{
+        Membership,
+        MembershipError,
+    },
     pool_reader::PoolReader,
 };
 use ic_interfaces::time_source::TimeSource;
 use ic_interfaces_state_manager::StateManager;
-use ic_logger::{error, trace, warn, ReplicaLogger};
+use ic_logger::{
+    error,
+    trace,
+    warn,
+    ReplicaLogger,
+};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::subnet::NotarizationDelaySettings;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     consensus::{
-        BlockProposal, HasBlockHash, HasHeight, HasRank, HashedBlock, NotarizationContent,
-        NotarizationShare, RandomBeacon, Rank,
+        BlockProposal,
+        HasBlockHash,
+        HasHeight,
+        HasRank,
+        HashedBlock,
+        NotarizationContent,
+        NotarizationShare,
+        RandomBeacon,
+        Rank,
     },
     replica_config::ReplicaConfig,
     Height,
 };
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::Arc,
+    time::Duration,
+};
 
 /// The acceptable gap between the finalized height and the certified height. If
 /// the actual gap is greater than this, consensus starts slowing down the block
@@ -365,14 +384,26 @@ mod tests {
     //! Notary unit tests
     use super::*;
     use assert_matches::assert_matches;
-    use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
-    use ic_interfaces::{consensus_pool::ConsensusPool, time_source::TimeSource};
+    use ic_consensus_mocks::{
+        dependencies_with_subnet_params,
+        Dependencies,
+    };
+    use ic_interfaces::{
+        consensus_pool::ConsensusPool,
+        time_source::TimeSource,
+    };
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities_consensus::fake::*;
     use ic_test_utilities_registry::SubnetRecordBuilder;
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
-    use std::{sync::Arc, time::Duration};
+    use ic_test_utilities_types::ids::{
+        node_test_id,
+        subnet_test_id,
+    };
+    use std::{
+        sync::Arc,
+        time::Duration,
+    };
 
     /// Do basic notary validations
     #[test]

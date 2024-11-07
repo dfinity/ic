@@ -1,11 +1,23 @@
 use clap::Parser;
 use ic_backup::{
     backup_manager::BackupManager,
-    cmd::{BackupArgs, SubCommand},
+    cmd::{
+        BackupArgs,
+        SubCommand,
+    },
 };
-use slog::{o, Drain};
-use std::{io::stdin, sync::Arc};
-use tokio::{runtime::Handle, task::spawn_blocking};
+use slog::{
+    o,
+    Drain,
+};
+use std::{
+    io::stdin,
+    sync::Arc,
+};
+use tokio::{
+    runtime::Handle,
+    task::spawn_blocking,
+};
 
 // Here is an example config file:
 //

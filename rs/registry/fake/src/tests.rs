@@ -1,7 +1,10 @@
 use super::*;
 use ic_interfaces_registry::RegistryVersionedRecord;
 use ic_registry_keys::NODE_RECORD_KEY_PREFIX;
-use ic_types::{registry::RegistryDataProviderError, PrincipalId};
+use ic_types::{
+    registry::RegistryDataProviderError,
+    PrincipalId,
+};
 
 /// This is a regression test.
 #[test]

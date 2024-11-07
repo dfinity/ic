@@ -2,17 +2,31 @@ use std::{
     collections::BTreeMap,
     convert::TryFrom,
     error,
-    fmt::{Display, Formatter, Result as FmtResult},
+    fmt::{
+        Display,
+        Formatter,
+        Result as FmtResult,
+    },
 };
 
-use ic_base_types::{NodeId, PrincipalId, SubnetId};
+use ic_base_types::{
+    NodeId,
+    PrincipalId,
+    SubnetId,
+};
 use ic_protobuf::registry::{
-    api_boundary_node::v1::ApiBoundaryNodeRecord, crypto::v1::ChainKeySigningSubnetList,
-    hostos_version::v1::HostosVersionRecord, node::v1::NodeRecord, subnet::v1::SubnetListRecord,
+    api_boundary_node::v1::ApiBoundaryNodeRecord,
+    crypto::v1::ChainKeySigningSubnetList,
+    hostos_version::v1::HostosVersionRecord,
+    node::v1::NodeRecord,
+    subnet::v1::SubnetListRecord,
 };
 use ic_registry_keys::{
-    get_api_boundary_node_record_node_id, get_node_record_node_id, make_node_record_key,
-    make_subnet_list_record_key, CHAIN_KEY_SIGNING_SUBNET_LIST_KEY_PREFIX,
+    get_api_boundary_node_record_node_id,
+    get_node_record_node_id,
+    make_node_record_key,
+    make_subnet_list_record_key,
+    CHAIN_KEY_SIGNING_SUBNET_LIST_KEY_PREFIX,
     HOSTOS_VERSION_KEY_PREFIX,
 };
 use prost::Message;
@@ -227,13 +241,18 @@ pub(crate) fn assert_valid_urls_and_hash(urls: &[String], hash: &str, allow_file
 
 #[cfg(test)]
 mod tests {
-    use ic_base_types::{NodeId, PrincipalId};
+    use ic_base_types::{
+        NodeId,
+        PrincipalId,
+    };
     use ic_protobuf::registry::api_boundary_node::v1::ApiBoundaryNodeRecord;
     use ic_registry_keys::make_api_boundary_node_record_key;
     use prost::Message;
 
     use super::{
-        get_api_boundary_node_records_from_snapshot, get_value_from_snapshot, RegistrySnapshot,
+        get_api_boundary_node_records_from_snapshot,
+        get_value_from_snapshot,
+        RegistrySnapshot,
     };
 
     #[test]

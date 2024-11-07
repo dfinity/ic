@@ -86,7 +86,10 @@ pub async fn sign_with_ecdsa(
     message_hash: [u8; 32],
 ) -> Result<[u8; 64], CallError> {
     use ic_cdk::api::management_canister::ecdsa::{
-        sign_with_ecdsa, EcdsaCurve, EcdsaKeyId, SignWithEcdsaArgument,
+        sign_with_ecdsa,
+        EcdsaCurve,
+        EcdsaKeyId,
+        SignWithEcdsaArgument,
     };
 
     let result = sign_with_ecdsa(SignWithEcdsaArgument {

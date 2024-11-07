@@ -1,47 +1,95 @@
 use crate::api::CspCreateMEGaKeyError;
-use crate::canister_threshold::{IDKG_MEGA_SCOPE, IDKG_THRESHOLD_KEYS_SCOPE};
+use crate::canister_threshold::{
+    IDKG_MEGA_SCOPE,
+    IDKG_THRESHOLD_KEYS_SCOPE,
+};
 use crate::key_id::KeyId;
 use crate::keygen::utils::{
-    idkg_dealing_encryption_pk_to_proto, mega_public_key_from_proto, MEGaPublicKeyFromProtoError,
+    idkg_dealing_encryption_pk_to_proto,
+    mega_public_key_from_proto,
+    MEGaPublicKeyFromProtoError,
 };
 use crate::public_key_store::{
-    PublicKeyAddError, PublicKeyRetainCheckError, PublicKeyRetainError, PublicKeyStore,
+    PublicKeyAddError,
+    PublicKeyRetainCheckError,
+    PublicKeyRetainError,
+    PublicKeyStore,
 };
 use crate::secret_key_store::{
-    SecretKeyStore, SecretKeyStoreInsertionError, SecretKeyStoreWriteError,
+    SecretKeyStore,
+    SecretKeyStoreInsertionError,
+    SecretKeyStoreWriteError,
 };
 use crate::types::CspSecretKey;
 use crate::vault::api::{
-    IDkgCreateDealingVaultError, IDkgDealingInternalBytes, IDkgProtocolCspVault,
+    IDkgCreateDealingVaultError,
+    IDkgDealingInternalBytes,
+    IDkgProtocolCspVault,
     IDkgTranscriptInternalBytes,
 };
 use crate::vault::local_csp_vault::LocalCspVault;
-use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
+use ic_crypto_internal_logmon::metrics::{
+    MetricsDomain,
+    MetricsResult,
+    MetricsScope,
+};
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
-    compute_secret_shares, compute_secret_shares_with_openings,
-    create_dealing as clib_create_dealing, gen_keypair, generate_complaints, open_dealing,
-    privately_verify_dealing, CommitmentOpening, CommitmentOpeningBytes, EccCurveType,
-    IDkgComplaintInternal, IDkgComputeSecretSharesInternalError,
-    IDkgComputeSecretSharesWithOpeningsInternalError, IDkgDealingInternal, IDkgTranscriptInternal,
-    IDkgTranscriptOperationInternal, MEGaKeySetK256Bytes, MEGaPrivateKey, MEGaPrivateKeyK256Bytes,
-    MEGaPublicKey, MEGaPublicKeyK256Bytes, PolynomialCommitment, SecretShares, Seed,
+    compute_secret_shares,
+    compute_secret_shares_with_openings,
+    create_dealing as clib_create_dealing,
+    gen_keypair,
+    generate_complaints,
+    open_dealing,
+    privately_verify_dealing,
+    CommitmentOpening,
+    CommitmentOpeningBytes,
+    EccCurveType,
+    IDkgComplaintInternal,
+    IDkgComputeSecretSharesInternalError,
+    IDkgComputeSecretSharesWithOpeningsInternalError,
+    IDkgDealingInternal,
+    IDkgTranscriptInternal,
+    IDkgTranscriptOperationInternal,
+    MEGaKeySetK256Bytes,
+    MEGaPrivateKey,
+    MEGaPrivateKeyK256Bytes,
+    MEGaPublicKey,
+    MEGaPublicKeyK256Bytes,
+    PolynomialCommitment,
+    SecretShares,
+    Seed,
 };
 use ic_crypto_node_key_validation::ValidIDkgDealingEncryptionPublicKey;
 use ic_logger::debug;
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_types::crypto::canister_threshold_sig::error::{
-    IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
+    IDkgLoadTranscriptError,
+    IDkgOpenTranscriptError,
+    IDkgRetainKeysError,
     IDkgVerifyDealingPrivateError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    BatchSignedIDkgDealing, IDkgTranscriptOperation,
+    BatchSignedIDkgDealing,
+    IDkgTranscriptOperation,
 };
 use ic_types::crypto::AlgorithmId;
-use ic_types::{NodeIndex, NumberOfNodes};
-use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
-use rand::{CryptoRng, Rng};
-use std::collections::{BTreeMap, BTreeSet};
+use ic_types::{
+    NodeIndex,
+    NumberOfNodes,
+};
+use parking_lot::{
+    RwLockReadGuard,
+    RwLockWriteGuard,
+};
+use rand::{
+    CryptoRng,
+    Rng,
+};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
 use std::convert::TryFrom;
 
 #[cfg(test)]

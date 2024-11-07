@@ -1,12 +1,22 @@
 use nix::{
-    sys::signal::{self, Signal},
+    sys::signal::{
+        self,
+        Signal,
+    },
     unistd::Pid,
 };
-use slog::{debug, info, warn};
+use slog::{
+    debug,
+    info,
+    warn,
+};
 use std::{
     fmt::Debug,
     io::Result,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc,
+        Mutex,
+    },
 };
 
 type PIDCell = Arc<Mutex<Option<Pid>>>;

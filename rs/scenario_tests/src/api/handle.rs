@@ -1,5 +1,9 @@
 use canister_test::Runtime;
-use ic_types::{NodeId, PrincipalId, SubnetId};
+use ic_types::{
+    NodeId,
+    PrincipalId,
+    SubnetId,
+};
 
 /// Shim for `IcHandle` implementations.
 pub trait Ic {

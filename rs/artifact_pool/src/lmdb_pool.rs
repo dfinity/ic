@@ -1,53 +1,143 @@
-use crate::consensus_pool::{InitializablePoolSection, PoolSectionOp, PoolSectionOps};
-use crate::lmdb_iterator::{LMDBIDkgIterator, LMDBIterator};
+use crate::consensus_pool::{
+    InitializablePoolSection,
+    PoolSectionOp,
+    PoolSectionOps,
+};
+use crate::lmdb_iterator::{
+    LMDBIDkgIterator,
+    LMDBIterator,
+};
 use crate::metrics::IDkgPoolMetrics;
 use ic_config::artifact_pool::LMDBConfig;
 use ic_interfaces::consensus_pool::PurgeableArtifactType;
 use ic_interfaces::{
     consensus_pool::{
-        HeightIndexedPool, HeightRange, OnlyError, PoolSection, ValidatedConsensusArtifact,
+        HeightIndexedPool,
+        HeightRange,
+        OnlyError,
+        PoolSection,
+        ValidatedConsensusArtifact,
     },
-    idkg::{IDkgPoolSection, IDkgPoolSectionOp, IDkgPoolSectionOps, MutableIDkgPoolSection},
+    idkg::{
+        IDkgPoolSection,
+        IDkgPoolSectionOp,
+        IDkgPoolSectionOps,
+        MutableIDkgPoolSection,
+    },
 };
-use ic_logger::{error, info, ReplicaLogger};
+use ic_logger::{
+    error,
+    info,
+    ReplicaLogger,
+};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::types::v1 as pb;
 use ic_types::consensus::certification::CertificationMessageHash;
 use ic_types::consensus::idkg::{
-    IDkgArtifactIdData, IDkgArtifactIdDataOf, SigShare, SigShareIdData, SigShareIdDataOf,
+    IDkgArtifactIdData,
+    IDkgArtifactIdDataOf,
+    SigShare,
+    SigShareIdData,
+    SigShareIdDataOf,
 };
-use ic_types::consensus::{DataPayload, HasHash, SummaryPayload};
+use ic_types::consensus::{
+    DataPayload,
+    HasHash,
+    SummaryPayload,
+};
 use ic_types::{
-    artifact::{CertificationMessageId, ConsensusMessageId, IDkgMessageId},
+    artifact::{
+        CertificationMessageId,
+        ConsensusMessageId,
+        IDkgMessageId,
+    },
     batch::BatchPayload,
     consensus::{
-        certification::{Certification, CertificationMessage, CertificationShare},
+        certification::{
+            Certification,
+            CertificationMessage,
+            CertificationShare,
+        },
         dkg,
         idkg::{
-            EcdsaSigShare, IDkgArtifactId, IDkgMessage, IDkgMessageType, IDkgPrefix, IDkgPrefixOf,
-            SchnorrSigShare, SignedIDkgComplaint, SignedIDkgOpening,
+            EcdsaSigShare,
+            IDkgArtifactId,
+            IDkgMessage,
+            IDkgMessageType,
+            IDkgPrefix,
+            IDkgPrefixOf,
+            SchnorrSigShare,
+            SignedIDkgComplaint,
+            SignedIDkgOpening,
         },
-        BlockPayload, BlockProposal, CatchUpPackage, CatchUpPackageShare, ConsensusMessage,
-        ConsensusMessageHash, ConsensusMessageHashable, EquivocationProof, Finalization,
-        FinalizationShare, HasHeight, Notarization, NotarizationShare, Payload, PayloadType,
-        RandomBeacon, RandomBeaconShare, RandomTape, RandomTapeShare,
+        BlockPayload,
+        BlockProposal,
+        CatchUpPackage,
+        CatchUpPackageShare,
+        ConsensusMessage,
+        ConsensusMessageHash,
+        ConsensusMessageHashable,
+        EquivocationProof,
+        Finalization,
+        FinalizationShare,
+        HasHeight,
+        Notarization,
+        NotarizationShare,
+        Payload,
+        PayloadType,
+        RandomBeacon,
+        RandomBeaconShare,
+        RandomTape,
+        RandomTapeShare,
     },
-    crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing},
-    crypto::{CryptoHash, CryptoHashOf, CryptoHashable},
-    Height, Time,
+    crypto::canister_threshold_sig::idkg::{
+        IDkgDealingSupport,
+        SignedIDkgDealing,
+    },
+    crypto::{
+        CryptoHash,
+        CryptoHashOf,
+        CryptoHashable,
+    },
+    Height,
+    Time,
 };
 use lmdb::{
-    Cursor, Database, DatabaseFlags, Environment, EnvironmentFlags, RoTransaction, RwTransaction,
-    Transaction, WriteFlags,
+    Cursor,
+    Database,
+    DatabaseFlags,
+    Environment,
+    EnvironmentFlags,
+    RoTransaction,
+    RwTransaction,
+    Transaction,
+    WriteFlags,
 };
 use prost::Message;
-use serde::{Deserialize, Serialize};
-use std::convert::{TryFrom, TryInto};
-use std::fmt::{Debug, Formatter};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use std::convert::{
+    TryFrom,
+    TryInto,
+};
+use std::fmt::{
+    Debug,
+    Formatter,
+};
 use std::marker::PhantomData;
-use std::{os::raw::c_uint, path::Path, sync::Arc};
-use strum::{AsRefStr, FromRepr, IntoEnumIterator};
+use std::{
+    os::raw::c_uint,
+    path::Path,
+    sync::Arc,
+};
+use strum::{
+    AsRefStr,
+    FromRepr,
+    IntoEnumIterator,
+};
 
 /// Implementation of a persistent, height indexed pool using LMDB.
 ///
@@ -2165,13 +2255,25 @@ mod tests {
     use crate::{
         consensus_pool::MutablePoolSection,
         test_utils::{
-            block_proposal_ops, fake_block_proposal_with_rank, fake_random_beacon,
-            finalization_share_ops, notarization_share_ops, random_beacon_ops, PoolTestHelper,
+            block_proposal_ops,
+            fake_block_proposal_with_rank,
+            fake_random_beacon,
+            finalization_share_ops,
+            notarization_share_ops,
+            random_beacon_ops,
+            PoolTestHelper,
         },
     };
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_types::{consensus::Rank, PrincipalId, SubnetId};
-    use std::{panic, path::PathBuf};
+    use ic_types::{
+        consensus::Rank,
+        PrincipalId,
+        SubnetId,
+    };
+    use std::{
+        panic,
+        path::PathBuf,
+    };
 
     #[test]
     fn test_encode_decode_key() {

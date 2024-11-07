@@ -1,9 +1,19 @@
 use ic_crypto_tree_hash::{
     Label,
-    LabeledTree::{self, Leaf, SubTree},
+    LabeledTree::{
+        self,
+        Leaf,
+        SubTree,
+    },
 };
 use serde::{
-    de::{DeserializeSeed, Deserializer, MapAccess, SeqAccess, Visitor},
+    de::{
+        DeserializeSeed,
+        Deserializer,
+        MapAccess,
+        SeqAccess,
+        Visitor,
+    },
     forward_to_deserialize_any,
 };
 use std::convert::TryInto;

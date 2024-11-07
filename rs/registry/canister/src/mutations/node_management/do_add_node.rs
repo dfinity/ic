@@ -1,4 +1,7 @@
-use crate::{common::LOG_PREFIX, registry::Registry};
+use crate::{
+    common::LOG_PREFIX,
+    registry::Registry,
+};
 use std::fmt::Display;
 
 use std::net::SocketAddr;
@@ -6,24 +9,41 @@ use std::net::SocketAddr;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 
-use ic_base_types::{NodeId, PrincipalId};
+use ic_base_types::{
+    NodeId,
+    PrincipalId,
+};
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_crypto_utils_basic_sig::conversions as crypto_basicsig_conversions;
 use ic_protobuf::registry::{
-    crypto::v1::{PublicKey, X509PublicKeyCert},
-    node::v1::{ConnectionEndpoint, IPv4InterfaceConfig, NodeRecord, NodeRewardType},
+    crypto::v1::{
+        PublicKey,
+        X509PublicKeyCert,
+    },
+    node::v1::{
+        ConnectionEndpoint,
+        IPv4InterfaceConfig,
+        NodeRecord,
+        NodeRewardType,
+    },
 };
 use idna::domain_to_ascii_strict;
 
 use crate::mutations::node_management::{
     common::{
-        get_node_operator_record, make_add_node_registry_mutations,
-        make_update_node_operator_mutation, node_exists_with_ipv4, scan_for_nodes_by_ip,
+        get_node_operator_record,
+        make_add_node_registry_mutations,
+        make_update_node_operator_mutation,
+        node_exists_with_ipv4,
+        scan_for_nodes_by_ip,
     },
     do_remove_node_directly::RemoveNodeDirectlyPayload,
 };
 use ic_registry_canister_api::AddNodePayload;
-use ic_types::{crypto::CurrentNodePublicKeys, time::Time};
+use ic_types::{
+    crypto::CurrentNodePublicKeys,
+    time::Time,
+};
 use prost::Message;
 
 impl Registry {
@@ -290,7 +310,8 @@ mod tests {
     use std::str::FromStr;
 
     use crate::{
-        common::test_helpers::invariant_compliant_registry, mutations::common::test::TEST_NODE_ID,
+        common::test_helpers::invariant_compliant_registry,
+        mutations::common::test::TEST_NODE_ID,
     };
 
     use super::*;
@@ -298,7 +319,10 @@ mod tests {
     use ic_crypto_node_key_generation::generate_node_keys_once;
     use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
     use ic_registry_canister_api::IPv4Config;
-    use ic_registry_keys::{make_node_operator_record_key, make_node_record_key};
+    use ic_registry_keys::{
+        make_node_operator_record_key,
+        make_node_record_key,
+    };
     use ic_registry_transport::insert;
     use lazy_static::lazy_static;
     use prost::Message;

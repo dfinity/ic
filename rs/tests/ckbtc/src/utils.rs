@@ -22,31 +22,71 @@ end::catalog[] */
 use crate::ADDRESS_LENGTH;
 use assert_matches::assert_matches;
 use bitcoincore_rpc::{
-    bitcoin::{Address, Amount, Txid},
-    bitcoincore_rpc_json::{self, LoadWalletResult},
-    Auth, Client, RpcApi,
+    bitcoin::{
+        Address,
+        Amount,
+        Txid,
+    },
+    bitcoincore_rpc_json::{
+        self,
+        LoadWalletResult,
+    },
+    Auth,
+    Client,
+    RpcApi,
 };
-use candid::{Decode, Encode, Nat};
+use candid::{
+    Decode,
+    Encode,
+    Nat,
+};
 use canister_test::Canister;
 use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::state::RetrieveBtcStatus;
-use ic_ckbtc_minter::updates::retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError};
+use ic_ckbtc_minter::updates::retrieve_btc::{
+    RetrieveBtcArgs,
+    RetrieveBtcError,
+};
 use ic_ckbtc_minter::updates::update_balance::UtxoStatus::Checked;
-use ic_ckbtc_minter::updates::update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus};
+use ic_ckbtc_minter::updates::update_balance::{
+    UpdateBalanceArgs,
+    UpdateBalanceError,
+    UtxoStatus,
+};
 use ic_system_test_driver::{
-    driver::{test_env::TestEnv, universal_vm::UniversalVms},
+    driver::{
+        test_env::TestEnv,
+        universal_vm::UniversalVms,
+    },
     util::UniversalCanister,
 };
-use ic_universal_canister::{management, wasm};
-use icrc_ledger_agent::{CallMode, Icrc1Agent, Icrc1AgentError};
+use ic_universal_canister::{
+    management,
+    wasm,
+};
+use icrc_ledger_agent::{
+    CallMode,
+    Icrc1Agent,
+    Icrc1AgentError,
+};
 use icrc_ledger_types::{
     icrc1::account::Account,
     icrc1::account::Subaccount,
     icrc1::transfer::BlockIndex,
-    icrc3::transactions::{GetTransactionsRequest, GetTransactionsResponse},
+    icrc3::transactions::{
+        GetTransactionsRequest,
+        GetTransactionsResponse,
+    },
 };
-use slog::{debug, info, Logger};
-use std::time::{Duration, Instant};
+use slog::{
+    debug,
+    info,
+    Logger,
+};
+use std::time::{
+    Duration,
+    Instant,
+};
 
 pub const UNIVERSAL_VM_NAME: &str = "btc-node";
 

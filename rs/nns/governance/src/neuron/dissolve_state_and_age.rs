@@ -1,5 +1,7 @@
 use crate::{
-    governance::MAX_DISSOLVE_DELAY_SECONDS, neuron::StoredDissolveStateAndAge, pb::v1::NeuronState,
+    governance::MAX_DISSOLVE_DELAY_SECONDS,
+    neuron::StoredDissolveStateAndAge,
+    pb::v1::NeuronState,
 };
 
 /// An enum to represent different combinations of a neurons dissolve_state and

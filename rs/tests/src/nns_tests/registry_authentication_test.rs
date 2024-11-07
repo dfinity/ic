@@ -17,24 +17,41 @@ Runbook::
 end::catalog[] */
 use axum::{
     body::Body,
-    extract::{Request, State},
+    extract::{
+        Request,
+        State,
+    },
     routing::any,
 };
 use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_from_der;
 use ic_nns_test_utils::itest_helpers::{
-    forward_call_via_universal_canister, set_up_universal_canister,
+    forward_call_via_universal_canister,
+    set_up_universal_canister,
 };
 use ic_nns_test_utils::{
-    itest_helpers::install_registry_canister, registry::invariant_compliant_mutation_as_atomic_req,
+    itest_helpers::install_registry_canister,
+    registry::invariant_compliant_mutation_as_atomic_req,
 };
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use ic_registry_transport::upsert;
-use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
-use ic_system_test_driver::driver::test_env::{HasIcPrepDir, TestEnv};
-use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
-use ic_system_test_driver::util::{block_on, runtime_from_url};
+use ic_system_test_driver::driver::ic::{
+    InternetComputer,
+    Subnet,
+};
+use ic_system_test_driver::driver::test_env::{
+    HasIcPrepDir,
+    TestEnv,
+};
+use ic_system_test_driver::driver::test_env_api::{
+    GetFirstHealthyNodeSnapshot,
+    HasPublicApiUrl,
+};
+use ic_system_test_driver::util::{
+    block_on,
+    runtime_from_url,
+};
 use ic_types::RegistryVersion;
 use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;

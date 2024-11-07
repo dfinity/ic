@@ -3,8 +3,13 @@ use super::*;
 use std::sync::Arc;
 
 use axum::{
-    body::Body, http::Request, middleware, response::IntoResponse, routing::method_routing::post,
-    Extension, Router,
+    body::Body,
+    http::Request,
+    middleware,
+    response::IntoResponse,
+    routing::method_routing::post,
+    Extension,
+    Router,
 };
 use candid::Principal;
 use http::header::HeaderValue;

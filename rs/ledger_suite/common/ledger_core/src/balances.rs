@@ -1,8 +1,19 @@
 use num_traits::Bounded;
-use serde::{Deserialize, Serialize};
-use std::collections::{btree_map::Entry, BTreeMap};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use std::collections::{
+    btree_map::Entry,
+    BTreeMap,
+};
 
-use crate::tokens::{CheckedAdd, CheckedSub, TokensType, Zero};
+use crate::tokens::{
+    CheckedAdd,
+    CheckedSub,
+    TokensType,
+    Zero,
+};
 
 pub trait BalancesStore {
     type AccountId: Clone;

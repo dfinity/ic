@@ -1,33 +1,56 @@
-use candid::{Decode, Encode};
+use candid::{
+    Decode,
+    Encode,
+};
 use canister_test::Project;
 use dfn_candid::candid;
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_ledger_core::Tokens;
 use ic_management_canister_types::CanisterInstallMode;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
-    canister_status::{CanisterStatusResult, CanisterStatusType},
+    canister_status::{
+        CanisterStatusResult,
+        CanisterStatusType,
+    },
 };
 use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_test_utils::state_test_helpers::{get_controllers, set_controllers, update_with_sender};
+use ic_nns_test_utils::state_test_helpers::{
+    get_controllers,
+    set_controllers,
+    update_with_sender,
+};
 use ic_sns_root::{
-    pb::v1::SnsRootCanister, GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse,
+    pb::v1::SnsRootCanister,
+    GetSnsCanistersSummaryRequest,
+    GetSnsCanistersSummaryResponse,
 };
 use ic_sns_test_utils::{
     itest_helpers::{
-        local_test_on_sns_subnet, set_up_root_canister, SnsCanisters, SnsTestsInitPayloadBuilder,
+        local_test_on_sns_subnet,
+        set_up_root_canister,
+        SnsCanisters,
+        SnsTestsInitPayloadBuilder,
     },
     state_test_helpers::{
-        sns_root_register_dapp_canister, sns_root_register_dapp_canisters,
-        state_machine_builder_for_sns_tests, Scenario,
+        sns_root_register_dapp_canister,
+        sns_root_register_dapp_canisters,
+        state_machine_builder_for_sns_tests,
+        Scenario,
     },
 };
 use ic_state_machine_tests::StateMachine;
 use ic_types::ingress::WasmResult;
 use ic_universal_canister::UNIVERSAL_CANISTER_WASM;
-use std::{collections::BTreeSet, time::Duration};
+use std::{
+    collections::BTreeSet,
+    time::Duration,
+};
 
 #[test]
 fn test_get_status() {

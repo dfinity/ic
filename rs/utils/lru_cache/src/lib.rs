@@ -1,4 +1,7 @@
-use ic_types::{CountBytes, NumBytes};
+use ic_types::{
+    CountBytes,
+    NumBytes,
+};
 use std::hash::Hash;
 
 /// The upper bound on cache item size and cache capacity.

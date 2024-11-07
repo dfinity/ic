@@ -1,4 +1,8 @@
-use dfn_core::{api, call, over_async};
+use dfn_core::{
+    api,
+    call,
+    over_async,
+};
 use on_wire::bytes;
 
 fn main() {}

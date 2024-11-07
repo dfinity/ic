@@ -1,15 +1,29 @@
 use std::{
     error::Error,
-    fmt::{self, Display},
+    fmt::{
+        self,
+        Display,
+    },
     str::FromStr,
 };
 
 use base32::Alphabet;
-use candid::{types::principal::PrincipalError, CandidType, Deserialize, Principal};
-use ic_stable_structures::{storable::Bound, Storable};
+use candid::{
+    types::principal::PrincipalError,
+    CandidType,
+    Deserialize,
+    Principal,
+};
+use ic_stable_structures::{
+    storable::Bound,
+    Storable,
+};
 use serde::Serialize;
 use std::borrow::Cow;
-use std::io::{Cursor, Read};
+use std::io::{
+    Cursor,
+    Read,
+};
 
 pub type Subaccount = [u8; 32];
 
@@ -230,7 +244,10 @@ mod tests {
     use candid::Principal;
 
     use crate::icrc1::account::{
-        Account, ICRC1TextReprError, DEFAULT_SUBACCOUNT, MAX_SERIALIZATION_LEN,
+        Account,
+        ICRC1TextReprError,
+        DEFAULT_SUBACCOUNT,
+        MAX_SERIALIZATION_LEN,
     };
 
     pub fn principal_strategy() -> impl Strategy<Value = Principal> {
@@ -402,7 +419,10 @@ mod tests {
 
     #[test]
     fn test_account_serialization() {
-        use proptest::{prop_assert_eq, proptest};
+        use proptest::{
+            prop_assert_eq,
+            proptest,
+        };
         proptest!(|(account in account_strategy())| {
             prop_assert_eq!(Account::from_bytes(account.to_bytes()), account);
         })

@@ -18,15 +18,32 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
         group::SystemTestGroup,
-        ic::{AmountOfMemoryKiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
-        prometheus_vm::{HasPrometheus, PrometheusVm},
+        ic::{
+            AmountOfMemoryKiB,
+            InternetComputer,
+            NrOfVCPUs,
+            Subnet,
+            VmResources,
+        },
+        prometheus_vm::{
+            HasPrometheus,
+            PrometheusVm,
+        },
         test_env::TestEnv,
         test_env_api::{
-            HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, NnsInstallationBuilder,
+            HasPublicApiUrl,
+            HasTopologySnapshot,
+            HasVm,
+            IcNodeContainer,
+            NnsInstallationBuilder,
         },
     },
     systest,
-    util::{assert_create_agent, block_on, MessageCanister},
+    util::{
+        assert_create_agent,
+        block_on,
+        MessageCanister,
+    },
 };
 use ic_types::Height;
 use slog::info;

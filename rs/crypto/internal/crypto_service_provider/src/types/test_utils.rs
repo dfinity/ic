@@ -6,18 +6,27 @@ use ic_crypto_internal_basic_sig_rsa_pkcs1::RsaPublicKey as IcRsaPublicKey;
 use ic_crypto_internal_multi_sig_bls12381::types as multi_sig_types;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_test_vectors::unhex::{
-    hex_to_32_bytes, hex_to_48_bytes, hex_to_64_bytes, hex_to_96_bytes,
+    hex_to_32_bytes,
+    hex_to_48_bytes,
+    hex_to_64_bytes,
+    hex_to_96_bytes,
 };
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::types as ni_dkg_types;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::types::FsEncryptionSecretKey;
 use ic_crypto_internal_threshold_sig_bls12381::types as threshold_sig_types;
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
-    gen_keypair, CommitmentOpeningBytes, EccCurveType, EccScalarBytes, MEGaKeySetK256Bytes,
-    MEGaPrivateKeyK256Bytes, MEGaPublicKeyK256Bytes,
+    gen_keypair,
+    CommitmentOpeningBytes,
+    EccCurveType,
+    EccScalarBytes,
+    MEGaKeySetK256Bytes,
+    MEGaPrivateKeyK256Bytes,
+    MEGaPublicKeyK256Bytes,
 };
 use ic_crypto_internal_tls::TlsEd25519SecretKeyDerBytes;
 use ic_crypto_internal_types::encrypt::forward_secure::groth20_bls12_381::{
-    FsEncryptionPop, FsEncryptionPublicKey,
+    FsEncryptionPop,
+    FsEncryptionPublicKey,
 };
 use ic_crypto_secrets_containers::SecretArray;
 use rand::SeedableRng;

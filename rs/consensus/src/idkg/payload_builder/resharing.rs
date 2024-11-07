@@ -1,11 +1,23 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
 
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{
+    warn,
+    ReplicaLogger,
+};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::IDkgDealingsContext;
 use ic_types::{
-    consensus::idkg::{self, HasMasterPublicKeyId, IDkgBlockReader, IDkgReshareRequest},
+    consensus::idkg::{
+        self,
+        HasMasterPublicKeyId,
+        IDkgBlockReader,
+        IDkgReshareRequest,
+    },
     crypto::canister_threshold_sig::{
-        error::InitialIDkgDealingsValidationError, idkg::InitialIDkgDealings,
+        error::InitialIDkgDealingsValidationError,
+        idkg::InitialIDkgDealings,
     },
     messages::CallbackId,
 };
@@ -181,19 +193,27 @@ mod tests {
 
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::{
-        dummy_dealings, dummy_initial_idkg_dealing_for_tests,
+        dummy_dealings,
+        dummy_initial_idkg_dealing_for_tests,
     };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_management_canister_types::{ComputeInitialIDkgDealingsResponse, MasterPublicKeyId};
+    use ic_management_canister_types::{
+        ComputeInitialIDkgDealingsResponse,
+        MasterPublicKeyId,
+    };
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::consensus::idkg::IDkgPayload;
 
     use crate::idkg::{
         test_utils::{
-            create_reshare_request, dealings_context_from_reshare_request,
-            fake_ecdsa_master_public_key_id, fake_master_public_key_ids_for_all_algorithms,
-            set_up_idkg_payload, TestIDkgBlockReader, TestIDkgTranscriptBuilder,
+            create_reshare_request,
+            dealings_context_from_reshare_request,
+            fake_ecdsa_master_public_key_id,
+            fake_master_public_key_ids_for_all_algorithms,
+            set_up_idkg_payload,
+            TestIDkgBlockReader,
+            TestIDkgTranscriptBuilder,
         },
         utils::algorithm_for_key_id,
     };

@@ -1,6 +1,10 @@
 use candid::Principal;
 
-use crate::{LocalRef, StableSet, StorablePrincipal};
+use crate::{
+    LocalRef,
+    StableSet,
+    StorablePrincipal,
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum AuthorizeError {
@@ -56,7 +60,10 @@ pub struct WithAuthorize<T, A>(pub T, pub A);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{acl::AuthorizeError, ROOT_PRINCIPALS};
+    use crate::{
+        acl::AuthorizeError,
+        ROOT_PRINCIPALS,
+    };
     use candid::Principal;
 
     #[test]

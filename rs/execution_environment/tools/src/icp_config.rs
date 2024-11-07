@@ -1,8 +1,15 @@
-use clap::{Arg, ArgMatches};
+use clap::{
+    Arg,
+    ArgMatches,
+};
 use eyre::Result;
 use ic_config::{
-    embedders, execution_environment,
-    subnet_config::{CyclesAccountManagerConfig, SchedulerConfig},
+    embedders,
+    execution_environment,
+    subnet_config::{
+        CyclesAccountManagerConfig,
+        SchedulerConfig,
+    },
 };
 use serde_json::json;
 

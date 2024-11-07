@@ -1,69 +1,159 @@
-use candid::{Decode, Encode, Nat, Principal};
+use candid::{
+    Decode,
+    Encode,
+    Nat,
+    Principal,
+};
 use canister_test::Wasm;
-use ic_base_types::{CanisterId, PrincipalId, SubnetId};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+    SubnetId,
+};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_agent::sns::Sns;
 use ic_nervous_system_agent::CallCanisters;
-use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
-use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL};
-use ic_nns_common::pb::v1::{NeuronId, ProposalId};
+use ic_nervous_system_common::{
+    E8,
+    ONE_DAY_SECONDS,
+};
+use ic_nervous_system_common_test_keys::{
+    TEST_NEURON_1_ID,
+    TEST_NEURON_1_OWNER_PRINCIPAL,
+};
+use ic_nns_common::pb::v1::{
+    NeuronId,
+    ProposalId,
+};
 use ic_nns_constants::{
-    self, ALL_NNS_CANISTER_IDS, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID,
-    REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    self,
+    ALL_NNS_CANISTER_IDS,
+    GOVERNANCE_CANISTER_ID,
+    LEDGER_CANISTER_ID,
+    LIFELINE_CANISTER_ID,
+    REGISTRY_CANISTER_ID,
+    ROOT_CANISTER_ID,
+    SNS_WASM_CANISTER_ID,
 };
 use ic_nns_governance_api::pb::v1::{
-    install_code::CanisterInstallMode, manage_neuron_response, CreateServiceNervousSystem,
-    ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
-    InstallCodeRequest, ListNeurons, ListNeuronsResponse, MakeProposalRequest,
-    ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, NetworkEconomics,
-    NnsFunction, ProposalActionRequest, ProposalInfo, Topic,
+    install_code::CanisterInstallMode,
+    manage_neuron_response,
+    CreateServiceNervousSystem,
+    ExecuteNnsFunction,
+    GetNeuronsFundAuditInfoRequest,
+    GetNeuronsFundAuditInfoResponse,
+    InstallCodeRequest,
+    ListNeurons,
+    ListNeuronsResponse,
+    MakeProposalRequest,
+    ManageNeuronCommandRequest,
+    ManageNeuronRequest,
+    ManageNeuronResponse,
+    NetworkEconomics,
+    NnsFunction,
+    ProposalActionRequest,
+    ProposalInfo,
+    Topic,
 };
 use ic_nns_test_utils::{
     common::{
-        build_governance_wasm, build_ledger_wasm, build_lifeline_wasm,
-        build_mainnet_governance_wasm, build_mainnet_ledger_wasm, build_mainnet_lifeline_wasm,
-        build_mainnet_registry_wasm, build_mainnet_root_wasm, build_mainnet_sns_wasms_wasm,
-        build_registry_wasm, build_root_wasm, build_sns_wasms_wasm, NnsInitPayloadsBuilder,
+        build_governance_wasm,
+        build_ledger_wasm,
+        build_lifeline_wasm,
+        build_mainnet_governance_wasm,
+        build_mainnet_ledger_wasm,
+        build_mainnet_lifeline_wasm,
+        build_mainnet_registry_wasm,
+        build_mainnet_root_wasm,
+        build_mainnet_sns_wasms_wasm,
+        build_registry_wasm,
+        build_root_wasm,
+        build_sns_wasms_wasm,
+        NnsInitPayloadsBuilder,
     },
     sns_wasm::{
-        build_archive_sns_wasm, build_governance_sns_wasm, build_index_ng_sns_wasm,
-        build_ledger_sns_wasm, build_mainnet_archive_sns_wasm, build_mainnet_governance_sns_wasm,
-        build_mainnet_index_ng_sns_wasm, build_mainnet_ledger_sns_wasm,
-        build_mainnet_root_sns_wasm, build_mainnet_swap_sns_wasm, build_root_sns_wasm,
-        build_swap_sns_wasm, ensure_sns_wasm_gzipped,
+        build_archive_sns_wasm,
+        build_governance_sns_wasm,
+        build_index_ng_sns_wasm,
+        build_ledger_sns_wasm,
+        build_mainnet_archive_sns_wasm,
+        build_mainnet_governance_sns_wasm,
+        build_mainnet_index_ng_sns_wasm,
+        build_mainnet_ledger_sns_wasm,
+        build_mainnet_root_sns_wasm,
+        build_mainnet_swap_sns_wasm,
+        build_root_sns_wasm,
+        build_swap_sns_wasm,
+        ensure_sns_wasm_gzipped,
     },
 };
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use ic_sns_governance::pb::v1::{
-    self as sns_pb, governance::Version, AdvanceTargetVersionRequest, AdvanceTargetVersionResponse,
+    self as sns_pb,
+    governance::Version,
+    AdvanceTargetVersionRequest,
+    AdvanceTargetVersionResponse,
 };
 use ic_sns_init::SnsCanisterInitPayloads;
 use ic_sns_swap::pb::v1::{
-    ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapRequest, FinalizeSwapResponse,
-    GetAutoFinalizationStatusRequest, GetAutoFinalizationStatusResponse, GetBuyerStateRequest,
-    GetBuyerStateResponse, GetDerivedStateRequest, GetDerivedStateResponse, GetInitRequest,
-    GetInitResponse, GetLifecycleRequest, GetLifecycleResponse, Lifecycle,
-    ListSnsNeuronRecipesRequest, ListSnsNeuronRecipesResponse, NewSaleTicketRequest,
-    NewSaleTicketResponse, RefreshBuyerTokensRequest, RefreshBuyerTokensResponse,
+    ErrorRefundIcpRequest,
+    ErrorRefundIcpResponse,
+    FinalizeSwapRequest,
+    FinalizeSwapResponse,
+    GetAutoFinalizationStatusRequest,
+    GetAutoFinalizationStatusResponse,
+    GetBuyerStateRequest,
+    GetBuyerStateResponse,
+    GetDerivedStateRequest,
+    GetDerivedStateResponse,
+    GetInitRequest,
+    GetInitResponse,
+    GetLifecycleRequest,
+    GetLifecycleResponse,
+    Lifecycle,
+    ListSnsNeuronRecipesRequest,
+    ListSnsNeuronRecipesResponse,
+    NewSaleTicketRequest,
+    NewSaleTicketResponse,
+    RefreshBuyerTokensRequest,
+    RefreshBuyerTokensResponse,
 };
 use ic_sns_test_utils::itest_helpers::populate_canister_ids;
 use ic_sns_wasm::pb::v1::{
-    get_deployed_sns_by_proposal_id_response::GetDeployedSnsByProposalIdResult, AddWasmRequest,
-    GetDeployedSnsByProposalIdRequest, GetDeployedSnsByProposalIdResponse, SnsCanisterType,
+    get_deployed_sns_by_proposal_id_response::GetDeployedSnsByProposalIdResult,
+    AddWasmRequest,
+    GetDeployedSnsByProposalIdRequest,
+    GetDeployedSnsByProposalIdResponse,
+    SnsCanisterType,
     SnsWasm,
 };
-use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs};
+use icp_ledger::{
+    AccountIdentifier,
+    BinaryAccountBalanceArgs,
+};
 use icrc_ledger_types::icrc1::{
     account::Account,
-    transfer::{TransferArg, TransferError},
+    transfer::{
+        TransferArg,
+        TransferError,
+    },
 };
 use maplit::btreemap;
 use pocket_ic::{
-    nonblocking::PocketIc, CanisterSettings, ErrorCode, PocketIcBuilder, UserError, WasmResult,
+    nonblocking::PocketIc,
+    CanisterSettings,
+    ErrorCode,
+    PocketIcBuilder,
+    UserError,
+    WasmResult,
 };
 use prost::Message;
 use rust_decimal::prelude::ToPrimitive;
-use std::{collections::BTreeMap, fmt::Write, time::Duration};
+use std::{
+    collections::BTreeMap,
+    fmt::Write,
+    time::Duration,
+};
 
 pub const STARTING_CYCLES_PER_CANISTER: u128 = 2_000_000_000_000_000;
 
@@ -948,7 +1038,10 @@ pub mod nns {
 
     pub mod ledger {
         use super::*;
-        use icp_ledger::{Memo, TransferArgs};
+        use icp_ledger::{
+            Memo,
+            TransferArgs,
+        };
 
         pub async fn icrc1_transfer(
             pocket_ic: &PocketIc,
@@ -1032,7 +1125,10 @@ pub mod nns {
     pub mod sns_wasm {
         use super::*;
         use ic_sns_wasm::pb::v1::{
-            GetWasmRequest, GetWasmResponse, ListUpgradeStepsRequest, ListUpgradeStepsResponse,
+            GetWasmRequest,
+            GetWasmResponse,
+            ListUpgradeStepsRequest,
+            ListUpgradeStepsResponse,
         };
 
         pub async fn get_deployed_sns_by_proposal_id(
@@ -1273,7 +1369,10 @@ pub mod sns {
     pub mod governance {
         use super::*;
         use ic_crypto_sha2::Sha256;
-        use ic_sns_governance::pb::v1::{get_neuron_response, GetRunningSnsVersionResponse};
+        use ic_sns_governance::pb::v1::{
+            get_neuron_response,
+            GetRunningSnsVersionResponse,
+        };
         use pocket_ic::ErrorCode;
 
         pub async fn get_mode(
@@ -1669,10 +1768,16 @@ pub mod sns {
     }
 
     pub mod index_ng {
-        use candid::{CandidType, Deserialize};
+        use candid::{
+            CandidType,
+            Deserialize,
+        };
 
         use ic_icrc1_index_ng::GetBlocksResponse;
-        use icrc_ledger_types::{icrc1::transfer::BlockIndex, icrc3::blocks::GetBlocksRequest};
+        use icrc_ledger_types::{
+            icrc1::transfer::BlockIndex,
+            icrc3::blocks::GetBlocksRequest,
+        };
 
         use super::*;
 
@@ -1779,11 +1884,23 @@ pub mod sns {
         use ic_sns_root::ArchiveInfo;
         use icrc_ledger_types::{
             icrc2::{
-                allowance::{Allowance, AllowanceArgs},
-                approve::{ApproveArgs, ApproveError},
-                transfer_from::{TransferFromArgs, TransferFromError},
+                allowance::{
+                    Allowance,
+                    AllowanceArgs,
+                },
+                approve::{
+                    ApproveArgs,
+                    ApproveError,
+                },
+                transfer_from::{
+                    TransferFromArgs,
+                    TransferFromError,
+                },
             },
-            icrc3::blocks::{GetBlocksRequest, GetBlocksResponse},
+            icrc3::blocks::{
+                GetBlocksRequest,
+                GetBlocksResponse,
+            },
         };
 
         use super::*;
@@ -2035,7 +2152,10 @@ pub mod sns {
     }
 
     pub mod archive {
-        use icrc_ledger_types::icrc3::{blocks::BlockRange, transactions::GetTransactionsRequest};
+        use icrc_ledger_types::icrc3::{
+            blocks::BlockRange,
+            transactions::GetTransactionsRequest,
+        };
 
         use super::*;
 
@@ -2117,7 +2237,8 @@ pub mod sns {
     pub mod root {
         use super::*;
         use ic_sns_root::{
-            pb::v1::ListSnsCanistersRequest, GetSnsCanistersSummaryRequest,
+            pb::v1::ListSnsCanistersRequest,
+            GetSnsCanistersSummaryRequest,
             GetSnsCanistersSummaryResponse,
         };
 
@@ -2206,7 +2327,10 @@ pub mod sns {
         ledger_canister_id: PrincipalId,
         index_canister_id: PrincipalId,
     ) {
-        use ic_icrc1::{blocks::generic_block_to_encoded_block, Block};
+        use ic_icrc1::{
+            blocks::generic_block_to_encoded_block,
+            Block,
+        };
         use ic_icrc1_tokens_u64::U64;
         use ic_ledger_core::block::BlockType;
         use icrc_ledger_types::icrc::generic_value::Value;
@@ -2272,7 +2396,11 @@ pub mod sns {
         use assert_matches::assert_matches;
         use ic_nns_governance_api::pb::v1::create_service_nervous_system::SwapParameters;
         use ic_sns_swap::{
-            pb::v1::{BuyerState, GetOpenTicketRequest, GetOpenTicketResponse},
+            pb::v1::{
+                BuyerState,
+                GetOpenTicketRequest,
+                GetOpenTicketResponse,
+            },
             swap::principal_to_subaccount,
         };
         use icp_ledger::DEFAULT_TRANSFER_FEE;

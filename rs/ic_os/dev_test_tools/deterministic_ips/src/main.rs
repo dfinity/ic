@@ -1,8 +1,17 @@
 use clap::{
-    builder::{EnumValueParser, TypedValueParser},
-    Parser, ValueEnum,
+    builder::{
+        EnumValueParser,
+        TypedValueParser,
+    },
+    Parser,
+    ValueEnum,
 };
-use deterministic_ips::{calculate_deterministic_mac, Deployment, HwAddr, IpVariant};
+use deterministic_ips::{
+    calculate_deterministic_mac,
+    Deployment,
+    HwAddr,
+    IpVariant,
+};
 use std::net::Ipv6Addr;
 
 /// Map `Deployment` from `DeploymentArg` to avoid a dependency on `clap` in

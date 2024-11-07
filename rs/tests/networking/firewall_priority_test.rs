@@ -28,31 +28,51 @@ end::catalog[] */
 use anyhow::Result;
 use candid::CandidType;
 use ic_nns_governance_api::pb::v1::NnsFunction;
-use ic_protobuf::registry::firewall::v1::{FirewallAction, FirewallRule, FirewallRuleDirection};
+use ic_protobuf::registry::firewall::v1::{
+    FirewallAction,
+    FirewallRule,
+    FirewallRuleDirection,
+};
 use ic_registry_keys::FirewallRulesScope;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
         group::SystemTestGroup,
-        ic::{InternetComputer, Subnet},
+        ic::{
+            InternetComputer,
+            Subnet,
+        },
         test_env::TestEnv,
         test_env_api::{
-            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
-            NnsInstallationBuilder, SshSession,
+            HasPublicApiUrl,
+            HasTopologySnapshot,
+            IcNodeContainer,
+            IcNodeSnapshot,
+            NnsInstallationBuilder,
+            SshSession,
         },
     },
     nns::{
-        await_proposal_execution, submit_external_proposal_with_test_id,
+        await_proposal_execution,
+        submit_external_proposal_with_test_id,
         vote_execute_proposal_assert_executed,
     },
     systest,
-    util::{self, block_on},
+    util::{
+        self,
+        block_on,
+    },
 };
 use registry_canister::mutations::firewall::{
-    compute_firewall_ruleset_hash, AddFirewallRulesPayload, RemoveFirewallRulesPayload,
+    compute_firewall_ruleset_hash,
+    AddFirewallRulesPayload,
+    RemoveFirewallRulesPayload,
     UpdateFirewallRulesPayload,
 };
-use slog::{info, Logger};
+use slog::{
+    info,
+    Logger,
+};
 use std::time::Duration;
 use url::Url;
 const INITIAL_WAIT: Duration = Duration::from_secs(10);

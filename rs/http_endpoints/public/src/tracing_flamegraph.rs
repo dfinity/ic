@@ -1,13 +1,22 @@
 use axum::extract::State;
-use axum::http::{header, StatusCode};
+use axum::http::{
+    header,
+    StatusCode,
+};
 use axum::response::IntoResponse;
 use axum::Router;
-use ic_tracing::{utils::SharedBuffer, ReloadHandles};
+use ic_tracing::{
+    utils::SharedBuffer,
+    ReloadHandles,
+};
 use std::io::BufReader;
 use std::time::Duration;
 use tokio::sync::oneshot;
 use tracing_flame::FlameLayer;
-use tracing_subscriber::filter::{LevelFilter, Targets};
+use tracing_subscriber::filter::{
+    LevelFilter,
+    Targets,
+};
 use tracing_subscriber::layer::Layer;
 
 use crate::common::CONTENT_TYPE_SVG;

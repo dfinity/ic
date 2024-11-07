@@ -1,5 +1,7 @@
 use crate::errors::ApiError;
-use crate::models::{self};
+use crate::models::{
+    self,
+};
 use ic_types::PrincipalId;
 use rosetta_core::objects::ObjectMap;
 use serde_json::Value;

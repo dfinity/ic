@@ -1,19 +1,37 @@
 //! IDKG specific stats.
 
 use crate::idkg::metrics::{
-    IDkgPreSignatureMetrics, IDkgTranscriptMetrics, ThresholdSignatureMetrics,
+    IDkgPreSignatureMetrics,
+    IDkgTranscriptMetrics,
+    ThresholdSignatureMetrics,
 };
 use ic_management_canister_types::MasterPublicKeyId;
-use ic_types::consensus::idkg::{IDkgBlockReader, IDkgStats, PreSigId, RequestId};
+use ic_types::consensus::idkg::{
+    IDkgBlockReader,
+    IDkgStats,
+    PreSigId,
+    RequestId,
+};
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    IDkgDealingSupport, IDkgTranscriptId, IDkgTranscriptParams,
+    IDkgDealingSupport,
+    IDkgTranscriptId,
+    IDkgTranscriptParams,
 };
 
 use ic_metrics::MetricsRegistry;
-use prometheus::{Histogram, HistogramVec};
-use std::collections::{HashMap, HashSet};
+use prometheus::{
+    Histogram,
+    HistogramVec,
+};
+use std::collections::{
+    HashMap,
+    HashSet,
+};
 use std::sync::Mutex;
-use std::time::{Duration, Instant};
+use std::time::{
+    Duration,
+    Instant,
+};
 
 /// Implementation of IDkgStats
 pub struct IDkgStatsImpl {

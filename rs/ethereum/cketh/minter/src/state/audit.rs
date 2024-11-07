@@ -1,13 +1,22 @@
 #[cfg(test)]
 mod tests;
 
-pub use super::event::{Event, EventType};
+pub use super::event::{
+    Event,
+    EventType,
+};
 use super::State;
 use crate::erc20::CkTokenSymbol;
 use crate::state::eth_logs_scraping::LogScrapingId;
 use crate::state::eth_logs_scraping::LogScrapingId::Erc20DepositWithoutSubaccount;
-use crate::state::transactions::{Reimbursed, ReimbursementIndex};
-use crate::storage::{record_event, with_event_iter};
+use crate::state::transactions::{
+    Reimbursed,
+    ReimbursementIndex,
+};
+use crate::storage::{
+    record_event,
+    with_event_iter,
+};
 
 /// Updates the state to reflect the given state transition.
 // public because it's used in tests since process_event

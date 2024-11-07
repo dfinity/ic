@@ -1,5 +1,9 @@
 use crate::protocol::sbxsvc::*;
-use crate::rpc::{Call, Channel, Error};
+use crate::rpc::{
+    Call,
+    Channel,
+    Error,
+};
 use crate::sandbox_service::SandboxService;
 
 /// Client stub for sandbox RPC interface -- this is instantiated in

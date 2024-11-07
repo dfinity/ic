@@ -1,17 +1,47 @@
 use super::input_schedule::testing::InputScheduleTesting;
-use super::message_pool::{MessageStats, REQUEST_LIFETIME};
-use super::testing::{new_canister_output_queues_for_test, CanisterQueuesTesting};
+use super::message_pool::{
+    MessageStats,
+    REQUEST_LIFETIME,
+};
+use super::testing::{
+    new_canister_output_queues_for_test,
+    CanisterQueuesTesting,
+};
 use super::*;
-use crate::{CanisterState, InputQueueType::*, SchedulerState, SystemState};
+use crate::{
+    CanisterState,
+    InputQueueType::*,
+    SchedulerState,
+    SystemState,
+};
 use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
 use ic_test_utilities_state::arb_num_receivers;
 use ic_test_utilities_types::arbitrary;
-use ic_test_utilities_types::ids::{canister_test_id, message_test_id, user_test_id};
-use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, ResponseBuilder};
-use ic_types::messages::{CallbackId, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, NO_DEADLINE};
-use ic_types::time::{expiry_time_from_now, CoarseTime, UNIX_EPOCH};
-use ic_types::{Cycles, UserId};
+use ic_test_utilities_types::ids::{
+    canister_test_id,
+    message_test_id,
+    user_test_id,
+};
+use ic_test_utilities_types::messages::{
+    IngressBuilder,
+    RequestBuilder,
+    ResponseBuilder,
+};
+use ic_types::messages::{
+    CallbackId,
+    MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64,
+    NO_DEADLINE,
+};
+use ic_types::time::{
+    expiry_time_from_now,
+    CoarseTime,
+    UNIX_EPOCH,
+};
+use ic_types::{
+    Cycles,
+    UserId,
+};
 use maplit::btreemap;
 use proptest::prelude::*;
 use std::cell::RefCell;

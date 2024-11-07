@@ -3,26 +3,53 @@ use dfn_candid::candid_one;
 use ic_base_types::NodeId;
 use ic_canister_client_sender::Sender;
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL,
+    TEST_NEURON_1_ID,
+    TEST_NEURON_1_OWNER_KEYPAIR,
+    TEST_NEURON_1_OWNER_PRINCIPAL,
     TEST_NEURON_2_OWNER_PRINCIPAL,
 };
-use ic_nns_common::types::{NeuronId, ProposalId};
+use ic_nns_common::types::{
+    NeuronId,
+    ProposalId,
+};
 use ic_nns_governance_api::pb::v1::{
-    add_or_remove_node_provider::Change, manage_neuron::NeuronIdOrSubaccount,
-    manage_neuron_response::Command as CommandResponse, AddOrRemoveNodeProvider,
-    MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse,
-    NnsFunction, NodeProvider, ProposalActionRequest, ProposalStatus,
+    add_or_remove_node_provider::Change,
+    manage_neuron::NeuronIdOrSubaccount,
+    manage_neuron_response::Command as CommandResponse,
+    AddOrRemoveNodeProvider,
+    MakeProposalRequest,
+    ManageNeuronCommandRequest,
+    ManageNeuronRequest,
+    ManageNeuronResponse,
+    NnsFunction,
+    NodeProvider,
+    ProposalActionRequest,
+    ProposalStatus,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    governance::{submit_external_update_proposal, wait_for_final_state},
-    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
-    registry::{get_value_or_panic, prepare_add_node_payload},
+    governance::{
+        submit_external_update_proposal,
+        wait_for_final_state,
+    },
+    itest_helpers::{
+        state_machine_test_on_nns_subnet,
+        NnsCanisters,
+    },
+    registry::{
+        get_value_or_panic,
+        prepare_add_node_payload,
+    },
 };
-use ic_protobuf::registry::node_operator::v1::{NodeOperatorRecord, RemoveNodeOperatorsPayload};
+use ic_protobuf::registry::node_operator::v1::{
+    NodeOperatorRecord,
+    RemoveNodeOperatorsPayload,
+};
 use ic_registry_keys::make_node_operator_record_key;
 use ic_registry_transport::{
-    deserialize_get_value_response, serialize_get_value_request, Error::KeyNotPresent,
+    deserialize_get_value_response,
+    serialize_get_value_request,
+    Error::KeyNotPresent,
 };
 use ic_types::PrincipalId;
 use maplit::btreemap;

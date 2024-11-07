@@ -1,9 +1,16 @@
 use anyhow::bail;
 use candid::Principal;
 use ic_base_types::PrincipalId;
-use ic_system_test_driver::{driver::test_env_api::*, util::*};
+use ic_system_test_driver::{
+    driver::test_env_api::*,
+    util::*,
+};
 use reqwest::Url;
-use slog::{debug, info, Logger};
+use slog::{
+    debug,
+    info,
+    Logger,
+};
 use std::time::Duration;
 
 pub fn store_message(

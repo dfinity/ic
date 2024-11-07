@@ -2,64 +2,115 @@
 
 use assert_matches::assert_matches;
 use canister_test::Canister;
-use ic_base_types::{CanisterId, PrincipalId, RegistryVersion, SubnetId};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+    RegistryVersion,
+    SubnetId,
+};
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_node_key_generation::generate_node_keys_once;
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_crypto_test_utils_ni_dkg::{
-    dummy_initial_dkg_transcript, initial_dkg_transcript, InitialNiDkgConfig,
+    dummy_initial_dkg_transcript,
+    initial_dkg_transcript,
+    InitialNiDkgConfig,
 };
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_crypto_utils_ni_dkg::extract_threshold_sig_public_key;
 use ic_nervous_system_common_test_keys::{
-    TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL, TEST_USER3_PRINCIPAL, TEST_USER4_PRINCIPAL,
-    TEST_USER5_PRINCIPAL, TEST_USER6_PRINCIPAL, TEST_USER7_PRINCIPAL,
+    TEST_USER1_PRINCIPAL,
+    TEST_USER2_PRINCIPAL,
+    TEST_USER3_PRINCIPAL,
+    TEST_USER4_PRINCIPAL,
+    TEST_USER5_PRINCIPAL,
+    TEST_USER6_PRINCIPAL,
+    TEST_USER7_PRINCIPAL,
 };
 use ic_protobuf::registry::{
-    crypto::v1::{PublicKey, X509PublicKeyCert},
-    node::v1::{ConnectionEndpoint, NodeRecord},
+    crypto::v1::{
+        PublicKey,
+        X509PublicKeyCert,
+    },
+    node::v1::{
+        ConnectionEndpoint,
+        NodeRecord,
+    },
     node_operator::v1::NodeOperatorRecord,
-    replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
+    replica_version::v1::{
+        BlessedReplicaVersions,
+        ReplicaVersionRecord,
+    },
     routing_table::v1::RoutingTable as RoutingTablePB,
     subnet::v1::{
-        CatchUpPackageContents, ChainKeyConfig, InitialNiDkgTranscriptRecord, SubnetListRecord,
+        CatchUpPackageContents,
+        ChainKeyConfig,
+        InitialNiDkgTranscriptRecord,
+        SubnetListRecord,
         SubnetRecord,
     },
 };
 use ic_registry_canister_api::AddNodePayload;
 use ic_registry_keys::{
-    make_blessed_replica_versions_key, make_catch_up_package_contents_key, make_crypto_node_key,
-    make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
-    make_node_operator_record_key, make_node_record_key, make_replica_version_key,
-    make_routing_table_record_key, make_subnet_list_record_key, make_subnet_record_key,
+    make_blessed_replica_versions_key,
+    make_catch_up_package_contents_key,
+    make_crypto_node_key,
+    make_crypto_threshold_signing_pubkey_key,
+    make_crypto_tls_cert_key,
+    make_node_operator_record_key,
+    make_node_record_key,
+    make_replica_version_key,
+    make_routing_table_record_key,
+    make_subnet_list_record_key,
+    make_subnet_record_key,
 };
-use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
+use ic_registry_routing_table::{
+    CanisterIdRange,
+    RoutingTable,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{
-    deserialize_get_value_response, insert,
+    deserialize_get_value_response,
+    insert,
     pb::v1::{
-        registry_mutation::Type, RegistryAtomicMutateRequest, RegistryAtomicMutateResponse,
+        registry_mutation::Type,
+        RegistryAtomicMutateRequest,
+        RegistryAtomicMutateResponse,
         RegistryMutation,
     },
-    serialize_get_value_request, Error,
+    serialize_get_value_request,
+    Error,
 };
-use ic_test_utilities_types::ids::{subnet_test_id, user_test_id};
+use ic_test_utilities_types::ids::{
+    subnet_test_id,
+    user_test_id,
+};
 use ic_types::{
     crypto::{
-        threshold_sig::ni_dkg::{NiDkgTag, NiDkgTargetId, NiDkgTranscript},
-        CurrentNodePublicKeys, KeyPurpose,
+        threshold_sig::ni_dkg::{
+            NiDkgTag,
+            NiDkgTargetId,
+            NiDkgTranscript,
+        },
+        CurrentNodePublicKeys,
+        KeyPurpose,
     },
-    NodeId, ReplicaVersion,
+    NodeId,
+    ReplicaVersion,
 };
 use maplit::btreemap;
 use on_wire::bytes;
 use prost::Message;
 use rand::RngCore;
 use registry_canister::mutations::node_management::{
-    common::make_add_node_registry_mutations, do_add_node::connection_endpoint_from_string,
+    common::make_add_node_registry_mutations,
+    do_add_node::connection_endpoint_from_string,
 };
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{
+        BTreeMap,
+        BTreeSet,
+    },
     convert::TryFrom,
 };
 

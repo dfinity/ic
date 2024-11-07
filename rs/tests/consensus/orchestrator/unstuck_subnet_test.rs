@@ -16,26 +16,36 @@ end::catalog[] */
 use anyhow::bail;
 use anyhow::Result;
 use ic_consensus_system_test_utils::upgrade::{
-    bless_replica_version, deploy_guestos_to_all_subnet_nodes, get_assigned_replica_version,
+    bless_replica_version,
+    deploy_guestos_to_all_subnet_nodes,
+    get_assigned_replica_version,
     UpdateImageType,
 };
 use ic_consensus_system_test_utils::{
     rw_message::{
-        can_read_msg_with_retries, cert_state_makes_no_progress_with_retries,
-        install_nns_and_check_progress, store_message_with_retries,
+        can_read_msg_with_retries,
+        cert_state_makes_no_progress_with_retries,
+        install_nns_and_check_progress,
+        store_message_with_retries,
     },
     ssh_access::execute_bash_command,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::{
-    ic::{InternetComputer, Subnet},
+    ic::{
+        InternetComputer,
+        Subnet,
+    },
     test_env::TestEnv,
     test_env_api::*,
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::block_on;
-use ic_types::{Height, ReplicaVersion};
+use ic_types::{
+    Height,
+    ReplicaVersion,
+};
 use slog::info;
 use ssh2::Session;
 use std::convert::TryFrom;

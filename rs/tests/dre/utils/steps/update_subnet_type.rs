@@ -1,24 +1,37 @@
 use futures::future::join_all;
 use ic_canister_client::Sender;
 use ic_consensus_system_test_utils::upgrade::{
-    assert_assigned_replica_version_with_time, deploy_guestos_to_all_subnet_nodes,
+    assert_assigned_replica_version_with_time,
+    deploy_guestos_to_all_subnet_nodes,
 };
-use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
+use ic_nervous_system_common_test_keys::{
+    TEST_NEURON_1_ID,
+    TEST_NEURON_1_OWNER_KEYPAIR,
+};
 use ic_nns_common::types::NeuronId;
 use ic_protobuf::registry::subnet::v1::SubnetType;
 use ic_system_test_driver::{
     driver::test_env_api::{
-        GetFirstHealthyNodeSnapshot, HasIcDependencies, HasPublicApiUrl, HasTopologySnapshot,
-        IcNodeContainer, IcNodeSnapshot, TopologySnapshot,
+        GetFirstHealthyNodeSnapshot,
+        HasIcDependencies,
+        HasPublicApiUrl,
+        HasTopologySnapshot,
+        IcNodeContainer,
+        IcNodeSnapshot,
+        TopologySnapshot,
     },
     nns::{
-        get_governance_canister, submit_update_unassigned_node_version_proposal,
+        get_governance_canister,
+        submit_update_unassigned_node_version_proposal,
         vote_execute_proposal_assert_executed,
     },
     util::runtime_from_url,
 };
 use itertools::Itertools;
-use slog::{info, Logger};
+use slog::{
+    info,
+    Logger,
+};
 use tokio::runtime::Handle;
 
 use super::Step;

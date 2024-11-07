@@ -2,7 +2,10 @@ use dfn_candid::candid_one;
 use ic_nns_governance_api::pb::v1::NetworkEconomics;
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{
+        state_machine_test_on_nns_subnet,
+        NnsCanisters,
+    },
 };
 
 #[test]

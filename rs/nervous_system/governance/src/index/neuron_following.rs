@@ -1,8 +1,18 @@
-use ic_stable_structures::{Memory, StableBTreeMap, Storable};
-use num_traits::bounds::{LowerBounded, UpperBounded};
+use ic_stable_structures::{
+    Memory,
+    StableBTreeMap,
+    Storable,
+};
+use num_traits::bounds::{
+    LowerBounded,
+    UpperBounded,
+};
 use std::{
     cmp::Ord,
-    collections::{BTreeMap, BTreeSet},
+    collections::{
+        BTreeMap,
+        BTreeSet,
+    },
 };
 
 /// An index to make it easy to look up neuron followers by (category, followee).
@@ -344,7 +354,10 @@ mod tests {
     use super::*;
 
     use ic_stable_structures::storable::Bound;
-    use ic_stable_structures::{Storable, VectorMemory};
+    use ic_stable_structures::{
+        Storable,
+        VectorMemory,
+    };
     use maplit::btreeset;
     use std::borrow::Cow;
 

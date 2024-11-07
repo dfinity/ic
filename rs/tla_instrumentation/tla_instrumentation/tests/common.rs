@@ -1,5 +1,8 @@
 use std::path::PathBuf;
-use tla_instrumentation::checker::{check_tla_code_link, PredicateDescription};
+use tla_instrumentation::checker::{
+    check_tla_code_link,
+    PredicateDescription,
+};
 use tla_instrumentation::UpdateTrace;
 
 // Add JAVABASE/bin to PATH to make the Bazel-provided JRE available to scripts

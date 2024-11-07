@@ -1,8 +1,17 @@
 use candid::CandidType;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::convert::TryInto;
-use std::ops::{Add, Sub};
-use std::time::{Duration, SystemTime};
+use std::ops::{
+    Add,
+    Sub,
+};
+use std::time::{
+    Duration,
+    SystemTime,
+};
 
 #[derive(
     Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, CandidType, Deserialize, Serialize,

@@ -1,15 +1,32 @@
-use ic_base_types::{CanisterId, PrincipalId, SubnetId};
-use ic_config::{execution_environment::Config, subnet_config::SubnetConfig};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+    SubnetId,
+};
+use ic_config::{
+    execution_environment::Config,
+    subnet_config::SubnetConfig,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
-    StateMachine, StateMachineBuilder, StateMachineConfig, StateMachineStateDir,
+    StateMachine,
+    StateMachineBuilder,
+    StateMachineConfig,
+    StateMachineStateDir,
 };
 
 use ic_config::flag_status::FlagStatus;
-use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
+use ic_registry_routing_table::{
+    CanisterIdRange,
+    RoutingTable,
+    CANISTER_IDS_PER_SUBNET,
+};
 use std::ops::RangeInclusive;
 use std::{
-    path::{Path, PathBuf},
+    path::{
+        Path,
+        PathBuf,
+    },
     process::Command,
     str::FromStr,
 };

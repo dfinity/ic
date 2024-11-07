@@ -21,18 +21,43 @@
 //! The aggregated statistics are then added to the [`TotalQueryStats`], from where they can
 //! be accessed by canisters.
 
-use crate::{node_id_into_protobuf, node_id_try_from_option, QueryStatsEpoch};
-use ic_base_types::{CanisterId, NodeId, NumBytes};
-use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
-    state::{
-        canister_state_bits::v1::{TotalQueryStats as TotalQueryStatsProto, Unsigned128},
-        stats::v1::{QueryStats as QueryStatsProto, QueryStatsInner},
-    },
-    types::v1::{self as pb},
+use crate::{
+    node_id_into_protobuf,
+    node_id_try_from_option,
+    QueryStatsEpoch,
 };
-use prost::{bytes::BufMut, Message};
-use std::{collections::BTreeMap, hash::Hash};
+use ic_base_types::{
+    CanisterId,
+    NodeId,
+    NumBytes,
+};
+use ic_protobuf::{
+    proxy::{
+        try_from_option_field,
+        ProxyDecodeError,
+    },
+    state::{
+        canister_state_bits::v1::{
+            TotalQueryStats as TotalQueryStatsProto,
+            Unsigned128,
+        },
+        stats::v1::{
+            QueryStats as QueryStatsProto,
+            QueryStatsInner,
+        },
+    },
+    types::v1::{
+        self as pb,
+    },
+};
+use prost::{
+    bytes::BufMut,
+    Message,
+};
+use std::{
+    collections::BTreeMap,
+    hash::Hash,
+};
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Default)]
 pub struct QueryStats {
@@ -341,8 +366,15 @@ impl TryFrom<&pb::CanisterQueryStats> for CanisterQueryStats {
 mod tests {
     use super::*;
     use ic_base_types::PrincipalId;
-    use ic_types_test_utils::ids::{canister_test_id, node_test_id};
-    use rand::{Rng, RngCore, SeedableRng};
+    use ic_types_test_utils::ids::{
+        canister_test_id,
+        node_test_id,
+    };
+    use rand::{
+        Rng,
+        RngCore,
+        SeedableRng,
+    };
     use rand_chacha::ChaCha8Rng;
 
     /// Empty serialization test

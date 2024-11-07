@@ -1,7 +1,10 @@
 use canister_test::*;
 use dfn_core::bytes;
 use dfn_json::json;
-use std::time::{Duration, SystemTime};
+use std::time::{
+    Duration,
+    SystemTime,
+};
 
 #[test]
 fn nan_canonicalized() {

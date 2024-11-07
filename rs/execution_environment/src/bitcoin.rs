@@ -1,15 +1,25 @@
-use ic_error_types::{ErrorCode, UserError};
+use ic_error_types::{
+    ErrorCode,
+    UserError,
+};
 use ic_management_canister_types::{
-    BitcoinGetSuccessorsArgs, BitcoinGetSuccessorsResponse, BitcoinSendTransactionInternalArgs,
+    BitcoinGetSuccessorsArgs,
+    BitcoinGetSuccessorsResponse,
+    BitcoinSendTransactionInternalArgs,
     Payload,
 };
 use ic_replicated_state::{
     metadata_state::subnet_call_context_manager::{
-        BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext, SubnetCallContext,
+        BitcoinGetSuccessorsContext,
+        BitcoinSendTransactionInternalContext,
+        SubnetCallContext,
     },
     ReplicatedState,
 };
-use ic_types::{messages::Request, CanisterId};
+use ic_types::{
+    messages::Request,
+    CanisterId,
+};
 
 /// Handles a `bitcoin_get_successors` request.
 /// Returns Ok if the request has been accepted, and an error otherwise.
@@ -112,12 +122,21 @@ pub fn send_transaction_internal(
 #[cfg(test)]
 mod tests {
     use ic_management_canister_types::{
-        BitcoinGetSuccessorsArgs, Method, Payload as Ic00Payload, IC_00,
+        BitcoinGetSuccessorsArgs,
+        Method,
+        Payload as Ic00Payload,
+        IC_00,
     };
-    use ic_test_utilities::universal_canister::{call_args, wasm};
+    use ic_test_utilities::universal_canister::{
+        call_args,
+        wasm,
+    };
     use ic_test_utilities_execution_environment::ExecutionTestBuilder;
     use ic_test_utilities_types::ids::canister_test_id;
-    use ic_types::{CanisterId, PrincipalId};
+    use ic_types::{
+        CanisterId,
+        PrincipalId,
+    };
     use std::str::FromStr;
 
     #[test]

@@ -6,7 +6,10 @@ use std::sync::Arc;
 use askama::Template;
 use axum::{
     extract::State,
-    response::{Html, IntoResponse},
+    response::{
+        Html,
+        IntoResponse,
+    },
     Router,
 };
 use hyper::StatusCode;
@@ -14,7 +17,10 @@ use ic_config::http_handler::Config;
 use ic_interfaces_state_manager::StateReader;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
-use ic_types::{Height, ReplicaVersion};
+use ic_types::{
+    Height,
+    ReplicaVersion,
+};
 
 // See build.rs
 include!(concat!(env!("OUT_DIR"), "/dashboard.rs"));

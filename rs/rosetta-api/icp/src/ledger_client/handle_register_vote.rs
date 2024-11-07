@@ -1,6 +1,12 @@
-use crate::{errors::ApiError, ledger_client::OperationOutput};
+use crate::{
+    errors::ApiError,
+    ledger_client::OperationOutput,
+};
 use ic_nns_governance_api::pb::v1::{
-    manage_neuron_response::{Command, RegisterVoteResponse},
+    manage_neuron_response::{
+        Command,
+        RegisterVoteResponse,
+    },
     ManageNeuronResponse,
 };
 

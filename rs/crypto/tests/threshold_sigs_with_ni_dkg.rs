@@ -3,23 +3,47 @@ use ic_crypto_temp_crypto::CryptoComponentRng;
 use ic_crypto_temp_crypto::TempCryptoComponentGeneric;
 use ic_crypto_test_utils::crypto_for;
 use ic_crypto_test_utils_ni_dkg::{
-    create_dealings, run_ni_dkg_and_create_single_transcript, NiDkgTestEnvironment,
+    create_dealings,
+    run_ni_dkg_and_create_single_transcript,
+    NiDkgTestEnvironment,
     RandomNiDkgConfig,
 };
-use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
+use ic_crypto_test_utils_reproducible_rng::{
+    reproducible_rng,
+    ReproducibleRng,
+};
 use ic_interfaces::crypto::{
-    LoadTranscriptResult, NiDkgAlgorithm, ThresholdSigVerifier, ThresholdSigner,
+    LoadTranscriptResult,
+    NiDkgAlgorithm,
+    ThresholdSigVerifier,
+    ThresholdSigner,
 };
 use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgConfig;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::create_dealing_error::DkgCreateDealingError;
-use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTranscript};
-use ic_types::crypto::{
-    CombinedThresholdSigOf, CryptoError, Signable, SignableMock, ThresholdSigShareOf,
+use ic_types::crypto::threshold_sig::ni_dkg::{
+    NiDkgId,
+    NiDkgTag,
+    NiDkgTranscript,
 };
-use ic_types::{NodeId, NumberOfNodes, RegistryVersion};
+use ic_types::crypto::{
+    CombinedThresholdSigOf,
+    CryptoError,
+    Signable,
+    SignableMock,
+    ThresholdSigShareOf,
+};
+use ic_types::{
+    NodeId,
+    NumberOfNodes,
+    RegistryVersion,
+};
 use rand::prelude::*;
 use rand_chacha::ChaCha20Rng;
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+    HashSet,
+};
 use std::convert::TryFrom;
 
 const REG_V1: RegistryVersion = RegistryVersion::new(1);

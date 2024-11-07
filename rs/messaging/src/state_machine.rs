@@ -1,18 +1,34 @@
 use crate::message_routing::{
-    ApiBoundaryNodes, MessageRoutingMetrics, NodePublicKeys, CRITICAL_ERROR_INDUCT_RESPONSE_FAILED,
+    ApiBoundaryNodes,
+    MessageRoutingMetrics,
+    NodePublicKeys,
+    CRITICAL_ERROR_INDUCT_RESPONSE_FAILED,
 };
 use crate::routing::demux::Demux;
 use crate::routing::stream_builder::StreamBuilder;
 use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_interfaces::execution_environment::{
-    ExecutionRoundSummary, ExecutionRoundType, RegistryExecutionSettings, Scheduler,
+    ExecutionRoundSummary,
+    ExecutionRoundType,
+    RegistryExecutionSettings,
+    Scheduler,
 };
-use ic_logger::{error, fatal, ReplicaLogger};
+use ic_logger::{
+    error,
+    fatal,
+    ReplicaLogger,
+};
 use ic_query_stats::deliver_query_stats;
 use ic_registry_subnet_features::SubnetFeatures;
-use ic_replicated_state::{NetworkTopology, ReplicatedState};
+use ic_replicated_state::{
+    NetworkTopology,
+    ReplicatedState,
+};
 use ic_types::batch::Batch;
-use ic_types::{ExecutionRound, NumBytes};
+use ic_types::{
+    ExecutionRound,
+    NumBytes,
+};
 use std::time::Instant;
 
 #[cfg(test)]

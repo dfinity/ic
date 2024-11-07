@@ -1,9 +1,20 @@
-use crate::rosetta_tests::{lib::hex2addr, rosetta_client::RosettaApiClient};
+use crate::rosetta_tests::{
+    lib::hex2addr,
+    rosetta_client::RosettaApiClient,
+};
 use candid::Encode;
-use canister_test::{Canister, CanisterId, Runtime};
+use canister_test::{
+    Canister,
+    CanisterId,
+    Runtime,
+};
 use ic_ledger_core::Tokens;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
-use ic_nns_governance_api::pb::v1::{Governance, NetworkEconomics, Neuron};
+use ic_nns_governance_api::pb::v1::{
+    Governance,
+    NetworkEconomics,
+    Neuron,
+};
 use ic_nns_test_utils::itest_helpers::install_rust_canister;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
@@ -12,18 +23,42 @@ use ic_system_test_driver::{
         resource::AllocatedVm,
         test_env::TestEnv,
         test_env_api::{
-            get_dependency_path, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-            IcNodeSnapshot, SshSession, SubnetSnapshot,
+            get_dependency_path,
+            HasPublicApiUrl,
+            HasTopologySnapshot,
+            IcNodeContainer,
+            IcNodeSnapshot,
+            SshSession,
+            SubnetSnapshot,
         },
-        universal_vm::{insert_file_to_config, UniversalVm, UniversalVms},
+        universal_vm::{
+            insert_file_to_config,
+            UniversalVm,
+            UniversalVms,
+        },
     },
-    util::{block_on, runtime_from_url},
+    util::{
+        block_on,
+        runtime_from_url,
+    },
 };
-use icp_ledger::{AccountIdentifier, ArchiveOptions, LedgerCanisterInitPayload};
+use icp_ledger::{
+    AccountIdentifier,
+    ArchiveOptions,
+    LedgerCanisterInitPayload,
+};
 use prost::Message;
-use slog::{debug, error, info, Logger};
+use slog::{
+    debug,
+    error,
+    info,
+    Logger,
+};
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{
+        BTreeMap,
+        HashMap,
+    },
     fs::File,
     io::Read,
     path::Path,

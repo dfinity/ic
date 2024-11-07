@@ -5,13 +5,22 @@
 //! is inconsistent for the same checkpoint between adjacent replica versions.
 
 use crate::manifest::{
-    manifest_hash, tests::computation::dummy_file_table_and_chunk_table, DEFAULT_CHUNK_SIZE,
+    manifest_hash,
+    tests::computation::dummy_file_table_and_chunk_table,
+    DEFAULT_CHUNK_SIZE,
 };
 use crate::state_sync::types::{
-    encode_manifest, ChunkInfo, FileInfo, Manifest, MAX_SUPPORTED_STATE_SYNC_VERSION,
+    encode_manifest,
+    ChunkInfo,
+    FileInfo,
+    Manifest,
+    MAX_SUPPORTED_STATE_SYNC_VERSION,
 };
 use ic_protobuf::state::sync::v1 as pb;
-use ic_state_layout::{SUBNET_QUEUES_FILE, SYSTEM_METADATA_FILE};
+use ic_state_layout::{
+    SUBNET_QUEUES_FILE,
+    SYSTEM_METADATA_FILE,
+};
 use ic_types::state_sync::StateSyncVersion;
 use proptest::prelude::*;
 

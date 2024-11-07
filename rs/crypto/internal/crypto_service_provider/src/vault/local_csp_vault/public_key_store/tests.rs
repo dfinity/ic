@@ -3,8 +3,10 @@ use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_types_test_utils::ids::node_test_id;
 
 use crate::keygen::utils::{
-    committee_signing_pk_to_proto, dkg_dealing_encryption_pk_to_proto,
-    idkg_dealing_encryption_pk_to_proto, node_signing_pk_to_proto,
+    committee_signing_pk_to_proto,
+    dkg_dealing_encryption_pk_to_proto,
+    idkg_dealing_encryption_pk_to_proto,
+    node_signing_pk_to_proto,
 };
 use crate::vault::api::BasicSignatureCspVault;
 use crate::vault::api::MultiSignatureCspVault;

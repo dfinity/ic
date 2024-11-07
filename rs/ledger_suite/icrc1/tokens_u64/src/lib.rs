@@ -1,8 +1,22 @@
 use candid::Nat;
-use ic_ledger_core::tokens::{CheckedAdd, CheckedSub, Zero};
-use ic_stable_structures::storable::{Bound, Storable};
-use num_traits::{Bounded, ToPrimitive};
-use serde::{de::Deserializer, Deserialize, Serialize};
+use ic_ledger_core::tokens::{
+    CheckedAdd,
+    CheckedSub,
+    Zero,
+};
+use ic_stable_structures::storable::{
+    Bound,
+    Storable,
+};
+use num_traits::{
+    Bounded,
+    ToPrimitive,
+};
+use serde::{
+    de::Deserializer,
+    Deserialize,
+    Serialize,
+};
 use std::borrow::Cow;
 use std::fmt;
 use std::str::FromStr;
@@ -112,7 +126,11 @@ impl<'de> Deserialize<'de> for U64 {
     where
         D: Deserializer<'de>,
     {
-        use serde::de::{self, MapAccess, Visitor};
+        use serde::de::{
+            self,
+            MapAccess,
+            Visitor,
+        };
 
         struct U64TokenVisitor;
 

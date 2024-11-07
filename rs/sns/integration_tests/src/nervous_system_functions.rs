@@ -4,13 +4,24 @@ use ic_ledger_core::Tokens;
 use ic_nervous_system_common::ONE_YEAR_SECONDS;
 use ic_nervous_system_common_test_keys::TEST_USER1_KEYPAIR;
 use ic_sns_governance::pb::v1::{
-    nervous_system_function::{FunctionType, GenericNervousSystemFunction},
+    nervous_system_function::{
+        FunctionType,
+        GenericNervousSystemFunction,
+    },
     proposal::Action,
-    ExecuteGenericNervousSystemFunction, NervousSystemFunction, NervousSystemParameters,
-    NeuronPermissionList, NeuronPermissionType, Proposal, ProposalDecisionStatus, ProposalId,
+    ExecuteGenericNervousSystemFunction,
+    NervousSystemFunction,
+    NervousSystemParameters,
+    NeuronPermissionList,
+    NeuronPermissionType,
+    Proposal,
+    ProposalDecisionStatus,
+    ProposalId,
 };
 use ic_sns_test_utils::itest_helpers::{
-    install_rust_canister_with_memory_allocation, local_test_on_sns_subnet, SnsCanisters,
+    install_rust_canister_with_memory_allocation,
+    local_test_on_sns_subnet,
+    SnsCanisters,
     SnsTestsInitPayloadBuilder,
 };
 

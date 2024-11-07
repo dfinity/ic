@@ -1,35 +1,78 @@
 use crate::{
     common::modify_wasm_bytes,
-    state_test_helpers::{query, update, update_with_sender},
+    state_test_helpers::{
+        query,
+        update,
+        update_with_sender,
+    },
 };
-use candid::{Decode, Encode};
+use candid::{
+    Decode,
+    Encode,
+};
 use canister_test::Project;
 use ic_base_types::CanisterId;
-use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL};
+use ic_nervous_system_common_test_keys::{
+    TEST_NEURON_1_ID,
+    TEST_NEURON_1_OWNER_PRINCIPAL,
+};
 use ic_nervous_system_common_test_utils::wasm_helpers;
-use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
+use ic_nns_common::{
+    pb::v1::NeuronId,
+    types::ProposalId,
+};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance_api::pb::v1::{
-    manage_neuron::{Command, NeuronIdOrSubaccount},
+    manage_neuron::{
+        Command,
+        NeuronIdOrSubaccount,
+    },
     manage_neuron_response::Command as CommandResponse,
-    proposal, ExecuteNnsFunction, ManageNeuron, ManageNeuronResponse, NnsFunction, Proposal,
-    ProposalInfo, ProposalStatus,
+    proposal,
+    ExecuteNnsFunction,
+    ManageNeuron,
+    ManageNeuronResponse,
+    NnsFunction,
+    Proposal,
+    ProposalInfo,
+    ProposalStatus,
 };
 use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_wasm::pb::v1::{
-    AddWasmRequest, AddWasmResponse, DeployNewSnsRequest, DeployNewSnsResponse,
-    GetNextSnsVersionRequest, GetNextSnsVersionResponse, GetSnsSubnetIdsRequest,
-    GetSnsSubnetIdsResponse, GetWasmMetadataRequest, GetWasmMetadataResponse, GetWasmRequest,
-    GetWasmResponse, InsertUpgradePathEntriesRequest, ListDeployedSnsesRequest,
-    ListDeployedSnsesResponse, SnsCanisterType, SnsUpgrade, SnsVersion, SnsWasm,
-    UpdateSnsSubnetListRequest, UpdateSnsSubnetListResponse,
+    AddWasmRequest,
+    AddWasmResponse,
+    DeployNewSnsRequest,
+    DeployNewSnsResponse,
+    GetNextSnsVersionRequest,
+    GetNextSnsVersionResponse,
+    GetSnsSubnetIdsRequest,
+    GetSnsSubnetIdsResponse,
+    GetWasmMetadataRequest,
+    GetWasmMetadataResponse,
+    GetWasmRequest,
+    GetWasmResponse,
+    InsertUpgradePathEntriesRequest,
+    ListDeployedSnsesRequest,
+    ListDeployedSnsesResponse,
+    SnsCanisterType,
+    SnsUpgrade,
+    SnsVersion,
+    SnsWasm,
+    UpdateSnsSubnetListRequest,
+    UpdateSnsSubnetListResponse,
 };
 use ic_state_machine_tests::StateMachine;
 use maplit::btreemap;
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{
+        BTreeMap,
+        HashMap,
+    },
     io::Write,
-    time::{Duration, Instant},
+    time::{
+        Duration,
+        Instant,
+    },
 };
 
 /// Get a valid tiny WASM for use in tests of a particular SnsCanisterType.

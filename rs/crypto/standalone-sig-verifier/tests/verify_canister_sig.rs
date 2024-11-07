@@ -1,7 +1,10 @@
 use assert_matches::assert_matches;
 use ic_crypto_test_utils_canister_sigs::new_valid_sig_and_crypto_component;
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
-use ic_types::crypto::{CryptoError, Signable};
+use ic_types::crypto::{
+    CryptoError,
+    Signable,
+};
 
 #[test]
 fn should_validate_canister_signature_smoke_test() {

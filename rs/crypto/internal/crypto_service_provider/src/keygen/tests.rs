@@ -6,7 +6,10 @@ use crate::CspPublicKey;
 use crate::KeyId;
 use crate::LocalCspVault;
 use assert_matches::assert_matches;
-use ic_crypto_internal_test_vectors::unhex::{hex_to_32_bytes, hex_to_byte_vec};
+use ic_crypto_internal_test_vectors::unhex::{
+    hex_to_32_bytes,
+    hex_to_byte_vec,
+};
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_types_test_utils::ids::node_test_id;
 use rand::SeedableRng;

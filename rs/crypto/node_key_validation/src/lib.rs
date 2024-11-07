@@ -35,12 +35,16 @@
 #![deny(clippy::unwrap_used)]
 
 use crate::proto_conversions::fs_ni_dkg::fs_ni_dkg_pubkey_from_proto;
-use ic_base_types::{NodeId, PrincipalId};
+use ic_base_types::{
+    NodeId,
+    PrincipalId,
+};
 use ic_crypto_internal_basic_sig_ed25519::types::PublicKeyBytes as BasicSigEd25519PublicKeyBytes;
 use ic_crypto_internal_multi_sig_bls12381::types::PopBytes as MultiSigBls12381PopBytes;
 use ic_crypto_internal_multi_sig_bls12381::types::PublicKeyBytes as MultiSigBls12381PublicKeyBytes;
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
-    verify_mega_public_key, EccCurveType,
+    verify_mega_public_key,
+    EccCurveType,
 };
 pub use ic_crypto_tls_cert_validation::TlsCertValidationError;
 pub use ic_crypto_tls_cert_validation::ValidTlsCertificate;
@@ -49,7 +53,10 @@ use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_types::crypto::CurrentNodePublicKeys;
 use ic_types::Time;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::convert::TryFrom;
 use std::fmt;
 

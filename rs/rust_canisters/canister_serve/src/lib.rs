@@ -1,7 +1,13 @@
 use by_address::ByAddress;
-use ic_canister_log::{GlobalBuffer, LogBuffer, LogEntry};
+use ic_canister_log::{
+    GlobalBuffer,
+    LogBuffer,
+    LogEntry,
+};
 use ic_cdk::api::management_canister::http_request::{
-    CanisterHttpRequestArgument, HttpHeader, HttpResponse,
+    CanisterHttpRequestArgument,
+    HttpHeader,
+    HttpResponse,
 };
 use ic_metrics_encoder::MetricsEncoder;
 use maplit::hashmap;
@@ -10,7 +16,11 @@ use std::{
     cmp::Reverse,
     collections::HashMap,
     fmt,
-    fmt::{Debug, Display, Formatter},
+    fmt::{
+        Debug,
+        Display,
+        Formatter,
+    },
     mem::size_of,
     str::FromStr,
 };

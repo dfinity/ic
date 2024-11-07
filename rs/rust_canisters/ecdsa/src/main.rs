@@ -1,10 +1,25 @@
-use candid::{candid_method, CandidType, Encode};
-use ic_cdk::api::{call::call_raw, print};
+use candid::{
+    candid_method,
+    CandidType,
+    Encode,
+};
+use ic_cdk::api::{
+    call::call_raw,
+    print,
+};
 use ic_cdk_macros::update;
 use ic_management_canister_types::{
-    DerivationPath, EcdsaCurve, EcdsaKeyId, Method as Ic00Method, SignWithECDSAArgs, IC_00,
+    DerivationPath,
+    EcdsaCurve,
+    EcdsaKeyId,
+    Method as Ic00Method,
+    SignWithECDSAArgs,
+    IC_00,
 };
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use serde_bytes::ByteBuf;
 
 #[derive(Debug, CandidType, Deserialize, Serialize)]

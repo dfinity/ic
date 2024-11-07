@@ -1,5 +1,8 @@
 use minicbor::Encoder;
-use minicbor::{Decode, Encode};
+use minicbor::{
+    Decode,
+    Encode,
+};
 
 /// Encodes minter memo as a binary blob.
 pub fn encode<T: minicbor::Encode<()>>(t: &T) -> Vec<u8> {

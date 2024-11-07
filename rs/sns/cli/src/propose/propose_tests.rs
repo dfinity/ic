@@ -1,6 +1,14 @@
-use crate::propose::{ensure_file_exists_and_is_writeable, save_proposal_id_to_file, SaveToErrors};
+use crate::propose::{
+    ensure_file_exists_and_is_writeable,
+    save_proposal_id_to_file,
+    SaveToErrors,
+};
 use ic_nns_common::pb::v1::ProposalId;
-use std::{fs, os::unix::fs::PermissionsExt, path::Path};
+use std::{
+    fs,
+    os::unix::fs::PermissionsExt,
+    path::Path,
+};
 use tempfile::NamedTempFile;
 
 /// read-only for owner, group, and others

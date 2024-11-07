@@ -1,19 +1,38 @@
 //! Basic Signature operations provided by the CSP vault.
 use crate::key_id::KeyId;
 use crate::keygen::utils::node_signing_pk_to_proto;
-use crate::public_key_store::{PublicKeySetOnceError, PublicKeyStore};
-use crate::secret_key_store::{SecretKeyStore, SecretKeyStoreInsertionError};
-use crate::types::{CspPublicKey, CspSecretKey, CspSignature};
+use crate::public_key_store::{
+    PublicKeySetOnceError,
+    PublicKeyStore,
+};
+use crate::secret_key_store::{
+    SecretKeyStore,
+    SecretKeyStoreInsertionError,
+};
+use crate::types::{
+    CspPublicKey,
+    CspSecretKey,
+    CspSignature,
+};
 use crate::vault::api::{
-    BasicSignatureCspVault, CspBasicSignatureError, CspBasicSignatureKeygenError,
+    BasicSignatureCspVault,
+    CspBasicSignatureError,
+    CspBasicSignatureKeygenError,
 };
 use crate::vault::local_csp_vault::LocalCspVault;
 use ic_crypto_internal_basic_sig_ed25519 as ed25519;
-use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
+use ic_crypto_internal_logmon::metrics::{
+    MetricsDomain,
+    MetricsResult,
+    MetricsScope,
+};
 use ic_crypto_node_key_validation::ValidNodeSigningPublicKey;
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_types::crypto::AlgorithmId;
-use rand::{CryptoRng, Rng};
+use rand::{
+    CryptoRng,
+    Rng,
+};
 
 #[cfg(test)]
 mod tests;

@@ -1,6 +1,14 @@
-use crate::{format_tokens, parse_tokens};
+use crate::{
+    format_tokens,
+    parse_tokens,
+};
 use ic_nervous_system_proto::pb::v1::Tokens;
-use serde::{ser::Error, Deserialize, Deserializer, Serializer};
+use serde::{
+    ser::Error,
+    Deserialize,
+    Deserializer,
+    Serializer,
+};
 
 #[cfg(test)]
 mod tokens_tests;

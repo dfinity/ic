@@ -1,40 +1,102 @@
 use async_trait::async_trait;
-use candid::{Decode, Encode};
-use cycles_minting_canister::{IcpXdrConversionRate, IcpXdrConversionRateCertifiedResponse};
+use candid::{
+    Decode,
+    Encode,
+};
+use cycles_minting_canister::{
+    IcpXdrConversionRate,
+    IcpXdrConversionRateCertifiedResponse,
+};
 use futures::future::FutureExt;
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_ledger_core::tokens::CheckedSub;
-use ic_nervous_system_common::{cmc::CMC, ledger::IcpLedger, NervousSystemError};
+use ic_nervous_system_common::{
+    cmc::CMC,
+    ledger::IcpLedger,
+    NervousSystemError,
+};
 use ic_nns_common::{
-    pb::v1::{NeuronId, ProposalId},
+    pb::v1::{
+        NeuronId,
+        ProposalId,
+    },
     types::UpdateIcpXdrConversionRatePayload,
 };
 use ic_nns_constants::{
-    CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID,
+    CYCLES_MINTING_CANISTER_ID,
+    GOVERNANCE_CANISTER_ID,
+    LEDGER_CANISTER_ID,
+    REGISTRY_CANISTER_ID,
     SNS_WASM_CANISTER_ID,
 };
 use ic_nns_governance::{
-    governance::{Environment, Governance, HeapGrowthPotential, RngError},
+    governance::{
+        Environment,
+        Governance,
+        HeapGrowthPotential,
+        RngError,
+    },
     pb::v1::{
-        manage_neuron, manage_neuron::NeuronIdOrSubaccount, manage_neuron_response, proposal,
-        ExecuteNnsFunction, GovernanceError, ManageNeuron, ManageNeuronResponse, Motion,
-        NetworkEconomics, Neuron, NnsFunction, Proposal, Vote,
+        manage_neuron,
+        manage_neuron::NeuronIdOrSubaccount,
+        manage_neuron_response,
+        proposal,
+        ExecuteNnsFunction,
+        GovernanceError,
+        ManageNeuron,
+        ManageNeuronResponse,
+        Motion,
+        NetworkEconomics,
+        Neuron,
+        NnsFunction,
+        Proposal,
+        Vote,
     },
 };
-use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
+use ic_sns_root::{
+    GetSnsCanistersSummaryRequest,
+    GetSnsCanistersSummaryResponse,
+};
 use ic_sns_swap::pb::v1 as sns_swap_pb;
-use ic_sns_wasm::pb::v1::{DeployedSns, ListDeployedSnsesRequest, ListDeployedSnsesResponse};
-use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
+use ic_sns_wasm::pb::v1::{
+    DeployedSns,
+    ListDeployedSnsesRequest,
+    ListDeployedSnsesResponse,
+};
+use icp_ledger::{
+    AccountIdentifier,
+    Subaccount,
+    Tokens,
+};
 use lazy_static::lazy_static;
 use maplit::hashmap;
-use rand::{RngCore, SeedableRng};
+use rand::{
+    RngCore,
+    SeedableRng,
+};
 use rand_chacha::ChaCha20Rng;
 use registry_canister::pb::v1::NodeProvidersMonthlyXdrRewards;
 use std::{
-    collections::{hash_map::Entry, BTreeMap, HashMap},
-    convert::{TryFrom, TryInto},
-    sync::{Arc, Mutex},
-    time::{SystemTime, UNIX_EPOCH},
+    collections::{
+        hash_map::Entry,
+        BTreeMap,
+        HashMap,
+    },
+    convert::{
+        TryFrom,
+        TryInto,
+    },
+    sync::{
+        Arc,
+        Mutex,
+    },
+    time::{
+        SystemTime,
+        UNIX_EPOCH,
+    },
 };
 
 const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
@@ -42,9 +104,16 @@ pub const NODE_PROVIDER_REWARD: u64 = 10_000;
 
 #[cfg(feature = "tla")]
 use ic_nns_governance::governance::tla::{
-    self, account_to_tla, Destination, ToTla, TLA_INSTRUMENTATION_STATE,
+    self,
+    account_to_tla,
+    Destination,
+    ToTla,
+    TLA_INSTRUMENTATION_STATE,
 };
-use ic_nns_governance::{tla_log_request, tla_log_response};
+use ic_nns_governance::{
+    tla_log_request,
+    tla_log_response,
+};
 
 lazy_static! {
     pub(crate) static ref SNS_ROOT_CANISTER_ID: PrincipalId = PrincipalId::new_user_test_id(213599);

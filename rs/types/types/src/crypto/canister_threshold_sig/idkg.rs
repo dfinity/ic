@@ -2,20 +2,52 @@
 use crate::consensus::get_faults_tolerated;
 use crate::crypto::canister_threshold_sig::error::impl_display_using_debug;
 use crate::crypto::canister_threshold_sig::error::{
-    IDkgParamsValidationError, IDkgTranscriptIdError, InitialIDkgDealingsValidationError,
+    IDkgParamsValidationError,
+    IDkgTranscriptIdError,
+    InitialIDkgDealingsValidationError,
 };
-use crate::crypto::{AlgorithmId, CryptoHashOf, Signed, SignedBytesWithoutDomainSeparator};
-use crate::signature::{BasicSignature, BasicSignatureBatch};
-use crate::{Height, NodeId, NumberOfNodes, RegistryVersion};
+use crate::crypto::{
+    AlgorithmId,
+    CryptoHashOf,
+    Signed,
+    SignedBytesWithoutDomainSeparator,
+};
+use crate::signature::{
+    BasicSignature,
+    BasicSignatureBatch,
+};
+use crate::{
+    Height,
+    NodeId,
+    NumberOfNodes,
+    RegistryVersion,
+};
 use ic_base_types::SubnetId;
 use ic_crypto_internal_types::NodeIndex;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use serde::{de::Error, Deserialize, Deserializer, Serialize};
-use std::collections::{btree_map, BTreeMap, BTreeSet};
+use serde::{
+    de::Error,
+    Deserialize,
+    Deserializer,
+    Serialize,
+};
+use std::collections::{
+    btree_map,
+    BTreeMap,
+    BTreeSet,
+};
 use std::convert::TryFrom;
-use std::fmt::{self, Debug, Display, Formatter};
-use std::hash::{Hash, Hasher};
+use std::fmt::{
+    self,
+    Debug,
+    Display,
+    Formatter,
+};
+use std::hash::{
+    Hash,
+    Hasher,
+};
 use std::num::TryFromIntError;
 
 pub mod conversions;
@@ -1279,9 +1311,15 @@ fn context_data(
 #[test]
 fn should_fail_deserializing_invalid_initial_idkg_dealings() {
     use crate::crypto::canister_threshold_sig::IDkgUnmaskedTranscriptOrigin;
-    use crate::{PrincipalId, SubnetId};
+    use crate::{
+        PrincipalId,
+        SubnetId,
+    };
     use ic_crypto_test_utils_canister_threshold_sigs::set_of_nodes;
-    use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
+    use ic_crypto_test_utils_reproducible_rng::{
+        reproducible_rng,
+        ReproducibleRng,
+    };
     use ic_protobuf::proxy::ProxyDecodeError;
     use ic_protobuf::registry::subnet::v1::InitialIDkgDealings as InitialIDkgDealingsProto;
     use rand::Rng;

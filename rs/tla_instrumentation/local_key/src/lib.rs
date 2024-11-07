@@ -4,8 +4,15 @@ use std::error::Error;
 use std::future::Future;
 use std::marker::PhantomPinned;
 use std::pin::Pin;
-use std::task::{Context, Poll};
-use std::{fmt, mem, thread};
+use std::task::{
+    Context,
+    Poll,
+};
+use std::{
+    fmt,
+    mem,
+    thread,
+};
 
 /// Declares a new task-local key of type [`tokio::task::LocalKey`].
 ///

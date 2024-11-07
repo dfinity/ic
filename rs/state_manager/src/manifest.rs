@@ -9,34 +9,87 @@ mod tests {
 
 use super::CheckpointError;
 use crate::{
-    manifest::hash::{meta_manifest_hasher, sub_manifest_hasher},
+    manifest::hash::{
+        meta_manifest_hasher,
+        sub_manifest_hasher,
+    },
     state_sync::types::{
-        encode_manifest, ChunkInfo, FileGroupChunks, FileInfo, Manifest, MetaManifest,
-        DEFAULT_CHUNK_SIZE, FILE_CHUNK_ID_OFFSET, FILE_GROUP_CHUNK_ID_OFFSET,
+        encode_manifest,
+        ChunkInfo,
+        FileGroupChunks,
+        FileInfo,
+        Manifest,
+        MetaManifest,
+        DEFAULT_CHUNK_SIZE,
+        FILE_CHUNK_ID_OFFSET,
+        FILE_GROUP_CHUNK_ID_OFFSET,
         MAX_SUPPORTED_STATE_SYNC_VERSION,
     },
-    BundledManifest, DirtyPages, ManifestMetrics, CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS,
-    CRITICAL_ERROR_REUSED_CHUNK_HASH, LABEL_VALUE_HASHED, LABEL_VALUE_HASHED_AND_COMPARED,
-    LABEL_VALUE_REUSED, NUMBER_OF_CHECKPOINT_THREADS,
+    BundledManifest,
+    DirtyPages,
+    ManifestMetrics,
+    CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS,
+    CRITICAL_ERROR_REUSED_CHUNK_HASH,
+    LABEL_VALUE_HASHED,
+    LABEL_VALUE_HASHED_AND_COMPARED,
+    LABEL_VALUE_REUSED,
+    NUMBER_OF_CHECKPOINT_THREADS,
 };
 use bit_vec::BitVec;
-use hash::{chunk_hasher, file_hasher, manifest_hasher, ManifestHash};
+use hash::{
+    chunk_hasher,
+    file_hasher,
+    manifest_hasher,
+    ManifestHash,
+};
 use ic_config::flag_status::FlagStatus;
 use ic_crypto_sha2::Sha256;
-use ic_logger::{error, fatal, replica_logger::no_op_logger, ReplicaLogger};
+use ic_logger::{
+    error,
+    fatal,
+    replica_logger::no_op_logger,
+    ReplicaLogger,
+};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::page_map::StorageLayout;
 use ic_replicated_state::PageIndex;
-use ic_state_layout::{CheckpointLayout, ReadOnly, CANISTER_FILE, UNVERIFIED_CHECKPOINT_MARKER};
-use ic_sys::{mmap::ScopedMmap, PAGE_SIZE};
-use ic_types::{crypto::CryptoHash, state_sync::StateSyncVersion, CryptoHashOfState, Height};
-use rand::{Rng, SeedableRng};
+use ic_state_layout::{
+    CheckpointLayout,
+    ReadOnly,
+    CANISTER_FILE,
+    UNVERIFIED_CHECKPOINT_MARKER,
+};
+use ic_sys::{
+    mmap::ScopedMmap,
+    PAGE_SIZE,
+};
+use ic_types::{
+    crypto::CryptoHash,
+    state_sync::StateSyncVersion,
+    CryptoHashOfState,
+    Height,
+};
+use rand::{
+    Rng,
+    SeedableRng,
+};
 use rand_chacha::ChaChaRng;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{
+    BTreeMap,
+    HashMap,
+    HashSet,
+};
 use std::fmt;
 use std::ops::Range;
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, Weak};
+use std::path::{
+    Path,
+    PathBuf,
+};
+use std::sync::{
+    Arc,
+    Mutex,
+    Weak,
+};
 
 /// When computing a manifest, we recompute the hash of every
 /// `REHASH_EVERY_NTH_CHUNK` chunk, even if we know it to be unchanged and

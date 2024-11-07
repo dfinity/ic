@@ -1,6 +1,12 @@
-use candid::{CandidType, Principal};
+use candid::{
+    CandidType,
+    Principal,
+};
 use ic_cdk::api::call::RejectionCode;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 #[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 pub struct SendArg {

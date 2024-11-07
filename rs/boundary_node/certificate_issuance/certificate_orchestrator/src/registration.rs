@@ -1,8 +1,18 @@
-use std::{cmp::Reverse, time::Duration};
+use std::{
+    cmp::Reverse,
+    time::Duration,
+};
 
 use candid::Principal;
 use certificate_orchestrator_interface::{
-    EncryptedPair, ExportPackage, Id, Name, NameError, Registration, State, UpdateType,
+    EncryptedPair,
+    ExportPackage,
+    Id,
+    Name,
+    NameError,
+    Registration,
+    State,
+    UpdateType,
 };
 use ic_cdk::caller;
 use mockall::automock;
@@ -20,10 +30,21 @@ cfg_if::cfg_if! {
 }
 
 use crate::{
-    acl::{Authorize, AuthorizeError, WithAuthorize},
-    ic_certification::{add_cert, remove_cert},
+    acl::{
+        Authorize,
+        AuthorizeError,
+        WithAuthorize,
+    },
+    ic_certification::{
+        add_cert,
+        remove_cert,
+    },
     id::Generate,
-    LocalRef, StableMap, StorableId, WithMetrics, REGISTRATION_EXPIRATION_TTL,
+    LocalRef,
+    StableMap,
+    StorableId,
+    WithMetrics,
+    REGISTRATION_EXPIRATION_TTL,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -554,7 +575,13 @@ mod tests {
 
     use super::*;
     use crate::{
-        ENCRYPTED_CERTIFICATES, EXPIRATIONS, ID_GENERATOR, NAMES, REGISTRATIONS, RETRIES, TASKS,
+        ENCRYPTED_CERTIFICATES,
+        EXPIRATIONS,
+        ID_GENERATOR,
+        NAMES,
+        REGISTRATIONS,
+        RETRIES,
+        TASKS,
     };
 
     pub fn time() -> u64 {

@@ -1,10 +1,19 @@
 //! Types for ECDSA secp256k1 signatures
 
 use ic_crypto_secrets_containers::SecretVec;
-use ic_types::crypto::{AlgorithmId, CryptoError};
-use serde::{Deserialize, Serialize};
+use ic_types::crypto::{
+    AlgorithmId,
+    CryptoError,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::fmt;
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::{
+    Zeroize,
+    ZeroizeOnDrop,
+};
 
 /// The size of the secp256k1 field (256 bits, 32 bytes)
 pub const FIELD_SIZE: usize = 32;

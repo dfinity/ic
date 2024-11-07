@@ -1,14 +1,24 @@
-use candid::{Decode, Encode};
+use candid::{
+    Decode,
+    Encode,
+};
 use ic_base_types::PrincipalId;
-use ic_canisters_http_types::{HttpRequest, HttpResponse};
+use ic_canisters_http_types::{
+    HttpRequest,
+    HttpResponse,
+};
 use ic_nervous_system_clients::{
-    canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
+    canister_id_record::CanisterIdRecord,
+    canister_status::CanisterStatusResult,
 };
 use ic_nns_constants::ROOT_CANISTER_ID;
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     state_test_helpers::{
-        query, set_up_universal_canister, setup_nns_canisters, update_with_sender,
+        query,
+        set_up_universal_canister,
+        setup_nns_canisters,
+        update_with_sender,
     },
 };
 use ic_state_machine_tests::StateMachine;

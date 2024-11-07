@@ -1,54 +1,116 @@
 //! Defines types used for threshold master key generation.
 
-use crate::artifact::{IdentifiableArtifact, PbArtifact};
+use crate::artifact::{
+    IdentifiableArtifact,
+    PbArtifact,
+};
 pub use crate::consensus::idkg::common::{
-    unpack_reshare_of_unmasked_params, IDkgBlockReader, IDkgTranscriptAttributes,
-    IDkgTranscriptOperationRef, IDkgTranscriptParamsRef, MaskedTranscript, PreSigId,
-    PseudoRandomId, RandomTranscriptParams, RandomUnmaskedTranscriptParams, RequestId,
-    ReshareOfMaskedParams, ReshareOfUnmaskedParams, TranscriptAttributes, TranscriptCastError,
-    TranscriptLookupError, TranscriptParamsError, TranscriptRef, UnmaskedTimesMaskedParams,
+    unpack_reshare_of_unmasked_params,
+    IDkgBlockReader,
+    IDkgTranscriptAttributes,
+    IDkgTranscriptOperationRef,
+    IDkgTranscriptParamsRef,
+    MaskedTranscript,
+    PreSigId,
+    PseudoRandomId,
+    RandomTranscriptParams,
+    RandomUnmaskedTranscriptParams,
+    RequestId,
+    ReshareOfMaskedParams,
+    ReshareOfUnmaskedParams,
+    TranscriptAttributes,
+    TranscriptCastError,
+    TranscriptLookupError,
+    TranscriptParamsError,
+    TranscriptRef,
+    UnmaskedTimesMaskedParams,
     UnmaskedTranscript,
 };
-use crate::consensus::idkg::ecdsa::{PreSignatureQuadrupleRef, QuadrupleInCreation};
+use crate::consensus::idkg::ecdsa::{
+    PreSignatureQuadrupleRef,
+    QuadrupleInCreation,
+};
 use crate::{
     consensus::BasicSignature,
     crypto::{
         canister_threshold_sig::{
             error::*,
             idkg::{
-                IDkgComplaint, IDkgDealingSupport, IDkgOpening, IDkgTranscript, IDkgTranscriptId,
-                IDkgTranscriptParams, InitialIDkgDealings, SignedIDkgDealing,
+                IDkgComplaint,
+                IDkgDealingSupport,
+                IDkgOpening,
+                IDkgTranscript,
+                IDkgTranscriptId,
+                IDkgTranscriptParams,
+                InitialIDkgDealings,
+                SignedIDkgDealing,
             },
-            ThresholdEcdsaSigShare, ThresholdSchnorrSigShare,
+            ThresholdEcdsaSigShare,
+            ThresholdSchnorrSigShare,
         },
-        crypto_hash, AlgorithmId, CryptoHash, CryptoHashOf, CryptoHashable, Signed,
+        crypto_hash,
+        AlgorithmId,
+        CryptoHash,
+        CryptoHashOf,
+        CryptoHashable,
+        Signed,
         SignedBytesWithoutDomainSeparator,
     },
-    node_id_into_protobuf, node_id_try_from_option, Height, NodeId, RegistryVersion, SubnetId,
+    node_id_into_protobuf,
+    node_id_try_from_option,
+    Height,
+    NodeId,
+    RegistryVersion,
+    SubnetId,
 };
 use common::SignatureScheme;
-use ic_base_types::{subnet_id_into_protobuf, subnet_id_try_from_protobuf};
+use ic_base_types::{
+    subnet_id_into_protobuf,
+    subnet_id_try_from_protobuf,
+};
 use ic_crypto_sha2::Sha256;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
-    registry::{crypto::v1 as crypto_pb, subnet::v1 as subnet_pb},
+    proxy::{
+        try_from_option_field,
+        ProxyDecodeError,
+    },
+    registry::{
+        crypto::v1 as crypto_pb,
+        subnet::v1 as subnet_pb,
+    },
     types::v1 as pb,
 };
 use phantom_newtype::Id;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::{
-    collections::{BTreeMap, BTreeSet},
-    convert::{TryFrom, TryInto},
-    fmt::{self, Display, Formatter},
+    collections::{
+        BTreeMap,
+        BTreeSet,
+    },
+    convert::{
+        TryFrom,
+        TryInto,
+    },
+    fmt::{
+        self,
+        Display,
+        Formatter,
+    },
     hash::Hash,
     time::Duration,
 };
 use strum_macros::EnumIter;
 
-use self::common::{PreSignatureInCreation, PreSignatureRef};
+use self::common::{
+    PreSignatureInCreation,
+    PreSignatureRef,
+};
 
 pub mod common;
 pub mod ecdsa;

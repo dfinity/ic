@@ -1,5 +1,8 @@
 use ic_types::Height;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::path::PathBuf;
 
 const PERSISTENT_POOL_VALIDATED_PURGE_INTERVAL: u64 = 5000;

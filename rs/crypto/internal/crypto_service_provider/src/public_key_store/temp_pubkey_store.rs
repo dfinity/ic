@@ -1,11 +1,17 @@
 use crate::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
 use crate::public_key_store::PublicKeyGenerationTimestamps;
 use crate::public_key_store::{
-    PublicKeyAddError, PublicKeyRetainCheckError, PublicKeyRetainError, PublicKeySetOnceError,
+    PublicKeyAddError,
+    PublicKeyRetainCheckError,
+    PublicKeyRetainError,
+    PublicKeySetOnceError,
     PublicKeyStore,
 };
 use ic_logger::replica_logger::no_op_logger;
-use ic_protobuf::registry::crypto::v1::{PublicKey, X509PublicKeyCert};
+use ic_protobuf::registry::crypto::v1::{
+    PublicKey,
+    X509PublicKeyCert,
+};
 use std::fs;
 use std::fs::Permissions;
 use std::os::unix::fs::PermissionsExt;

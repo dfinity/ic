@@ -2,25 +2,43 @@ use ic_base_types::PrincipalId;
 use ic_canonical_state::{
     encoding::{
         old_types::{
-            RequestOrResponseV13, RequestOrResponseV17, RequestOrResponseV3, StreamHeaderV16,
-            StreamHeaderV18, StreamHeaderV6, SystemMetadataV9,
+            RequestOrResponseV13,
+            RequestOrResponseV17,
+            RequestOrResponseV3,
+            StreamHeaderV16,
+            StreamHeaderV18,
+            StreamHeaderV6,
+            SystemMetadataV9,
         },
         types::{
-            RequestOrResponse as RequestOrResponseV18, StreamHeader as StreamHeaderV19,
-            SubnetMetrics as SubnetMetricsV15, SystemMetadata as SystemMetadataV10,
+            RequestOrResponse as RequestOrResponseV18,
+            StreamHeader as StreamHeaderV19,
+            SubnetMetrics as SubnetMetricsV15,
+            SystemMetadata as SystemMetadataV10,
         },
-        CborProxyDecoder, CborProxyEncoder,
+        CborProxyDecoder,
+        CborProxyEncoder,
     },
-    CertificationVersion, MAX_SUPPORTED_CERTIFICATION_VERSION,
+    CertificationVersion,
+    MAX_SUPPORTED_CERTIFICATION_VERSION,
 };
 use ic_protobuf::proxy::ProxyDecodeError;
-use ic_replicated_state::{metadata_state::SubnetMetrics, SystemMetadata};
-use ic_test_utilities_state::{arb_stream_header, arb_subnet_metrics};
+use ic_replicated_state::{
+    metadata_state::SubnetMetrics,
+    SystemMetadata,
+};
+use ic_test_utilities_state::{
+    arb_stream_header,
+    arb_subnet_metrics,
+};
 use ic_test_utilities_types::arbitrary;
 use ic_types::{
     crypto::CryptoHash,
     messages::RequestOrResponse,
-    xnet::{RejectReason, StreamHeader},
+    xnet::{
+        RejectReason,
+        StreamHeader,
+    },
     CryptoHashOfPartialState,
 };
 use lazy_static::lazy_static;

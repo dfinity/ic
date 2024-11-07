@@ -8,7 +8,10 @@ use std::{
 };
 
 use crate::driver::{
-    pot_dsl::{PotSetupFn, SysTestFn},
+    pot_dsl::{
+        PotSetupFn,
+        SysTestFn,
+    },
     test_env::TestEnv,
 };
 use slog::Logger;

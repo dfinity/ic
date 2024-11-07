@@ -1,16 +1,35 @@
 //! This module contains a collection of types and structs that define the
 //! various types of methods in the IC.
 
-use crate::{messages::CallContextId, time::CoarseTime, Cycles};
-use ic_base_types::{CanisterId, PrincipalId};
+use crate::{
+    messages::CallContextId,
+    time::CoarseTime,
+    Cycles,
+};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
-use ic_protobuf::state::{canister_state_bits::v1 as pb, queues::v1::Cycles as PbCycles};
+use ic_protobuf::proxy::{
+    try_from_option_field,
+    ProxyDecodeError,
+};
+use ic_protobuf::state::{
+    canister_state_bits::v1 as pb,
+    queues::v1::Cycles as PbCycles,
+};
 use ic_protobuf::types::v1 as pb_types;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::{
-    convert::{From, TryFrom},
+    convert::{
+        From,
+        TryFrom,
+    },
     fmt,
 };
 use strum_macros::EnumIter;
@@ -89,7 +108,10 @@ impl TryFrom<String> for WasmMethod {
 
 impl From<&WasmMethod> for pb::WasmMethod {
     fn from(method: &WasmMethod) -> Self {
-        use pb::wasm_method::{SystemMethod as PbSystemMethod, WasmMethod as PbWasmMethod};
+        use pb::wasm_method::{
+            SystemMethod as PbSystemMethod,
+            WasmMethod as PbWasmMethod,
+        };
 
         match method {
             WasmMethod::Update(value) => Self {
@@ -112,7 +134,10 @@ impl TryFrom<pb::WasmMethod> for WasmMethod {
     type Error = ProxyDecodeError;
 
     fn try_from(method: pb::WasmMethod) -> Result<Self, Self::Error> {
-        use pb::wasm_method::{SystemMethod as PbSystemMethod, WasmMethod as PbWasmMethod};
+        use pb::wasm_method::{
+            SystemMethod as PbSystemMethod,
+            WasmMethod as PbWasmMethod,
+        };
 
         match try_from_option_field(method.wasm_method, "WasmMethod::wasm_method")? {
             PbWasmMethod::Update(update) => Ok(Self::Update(update)),

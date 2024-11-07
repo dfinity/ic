@@ -1,29 +1,69 @@
 use crate::{
-    deploy::DirectSnsDeployerForTests, health::HealthArgs, init_config_file::InitConfigFileArgs,
+    deploy::DirectSnsDeployerForTests,
+    health::HealthArgs,
+    init_config_file::InitConfigFileArgs,
     neuron_id_to_candid_subaccount::NeuronIdToCandidSubaccountArgs,
-    prepare_canisters::PrepareCanistersArgs, propose::ProposeArgs,
+    prepare_canisters::PrepareCanistersArgs,
+    propose::ProposeArgs,
 };
-use anyhow::{anyhow, bail, Context, Result};
-use candid::{CandidType, Decode, Encode, IDLArgs};
+use anyhow::{
+    anyhow,
+    bail,
+    Context,
+    Result,
+};
+use candid::{
+    CandidType,
+    Decode,
+    Encode,
+    IDLArgs,
+};
 use clap::Parser;
 use ic_agent::Agent;
 use ic_base_types::PrincipalId;
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
+use ic_nns_constants::{
+    GOVERNANCE_CANISTER_ID,
+    SNS_WASM_CANISTER_ID,
+};
 use ic_nns_governance_api::pb::v1::{
-    manage_neuron::{self, NeuronIdOrSubaccount},
-    manage_neuron_response::{self, MakeProposalResponse},
-    ManageNeuron, ManageNeuronResponse, Proposal,
+    manage_neuron::{
+        self,
+        NeuronIdOrSubaccount,
+    },
+    manage_neuron_response::{
+        self,
+        MakeProposalResponse,
+    },
+    ManageNeuron,
+    ManageNeuronResponse,
+    Proposal,
 };
 use ic_sns_init::pb::v1::SnsInitPayload;
-use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsCanisterType, SnsWasm};
+use ic_sns_wasm::pb::v1::{
+    AddWasmRequest,
+    SnsCanisterType,
+    SnsWasm,
+};
 use std::{
-    fmt::{Debug, Display},
+    fmt::{
+        Debug,
+        Display,
+    },
     fs::File,
-    io::{Read, Write},
-    path::{Path, PathBuf},
-    process::{Command, Output},
+    io::{
+        Read,
+        Write,
+    },
+    path::{
+        Path,
+        PathBuf,
+    },
+    process::{
+        Command,
+        Output,
+    },
     str::FromStr,
     sync::Once,
 };

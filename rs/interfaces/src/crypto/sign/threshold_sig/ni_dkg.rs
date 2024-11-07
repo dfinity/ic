@@ -4,9 +4,15 @@ use ic_types::crypto::threshold_sig::ni_dkg::errors::create_transcript_error::Dk
 use ic_types::crypto::threshold_sig::ni_dkg::errors::key_removal_error::DkgKeyRemovalError;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::load_transcript_error::DkgLoadTranscriptError;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::verify_dealing_error::DkgVerifyDealingError;
-use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgTranscript};
+use ic_types::crypto::threshold_sig::ni_dkg::{
+    NiDkgDealing,
+    NiDkgTranscript,
+};
 use ic_types::NodeId;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{
+    BTreeMap,
+    HashSet,
+};
 
 /// The result of loading a transcript
 ///

@@ -1,5 +1,11 @@
-use ic_metrics::{buckets::exponential_buckets, MetricsRegistry};
-use prometheus::{Histogram, IntCounter};
+use ic_metrics::{
+    buckets::exponential_buckets,
+    MetricsRegistry,
+};
+use prometheus::{
+    Histogram,
+    IntCounter,
+};
 
 #[derive(Clone, Debug)]
 pub struct PeerManagerMetrics {

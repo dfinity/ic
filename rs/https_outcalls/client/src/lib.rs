@@ -9,16 +9,32 @@ use ic_async_utils::ExecuteOnTokioRuntime;
 use ic_config::adapters::AdaptersConfig;
 use ic_interfaces::execution_environment::QueryExecutionService;
 use ic_interfaces_adapter_client::NonBlockingChannel;
-use ic_logger::{error, info, ReplicaLogger};
+use ic_logger::{
+    error,
+    info,
+    ReplicaLogger,
+};
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    canister_http::{CanisterHttpRequest, CanisterHttpResponse},
+    canister_http::{
+        CanisterHttpRequest,
+        CanisterHttpResponse,
+    },
     messages::CertificateDelegation,
 };
-use std::{convert::TryFrom, sync::Arc};
-use tokio::{net::UnixStream, sync::OnceCell};
-use tonic::transport::{Endpoint, Uri};
+use std::{
+    convert::TryFrom,
+    sync::Arc,
+};
+use tokio::{
+    net::UnixStream,
+    sync::OnceCell,
+};
+use tonic::transport::{
+    Endpoint,
+    Uri,
+};
 use tower::service_fn;
 
 pub fn setup_canister_http_client(

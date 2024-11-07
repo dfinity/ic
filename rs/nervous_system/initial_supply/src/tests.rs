@@ -1,12 +1,23 @@
 use super::*;
 use async_trait::async_trait;
 use candid::{
-    decode_args, encode_args,
-    utils::{ArgumentDecoder, ArgumentEncoder},
+    decode_args,
+    encode_args,
+    utils::{
+        ArgumentDecoder,
+        ArgumentEncoder,
+    },
 };
-use icrc_ledger_types::{icrc1::account::Account, icrc3::transactions::Mint};
+use icrc_ledger_types::{
+    icrc1::account::Account,
+    icrc3::transactions::Mint,
+};
 use lazy_static::lazy_static;
-use std::{cell::RefCell, collections::VecDeque, future::Future};
+use std::{
+    cell::RefCell,
+    collections::VecDeque,
+    future::Future,
+};
 
 fn i2nat(i: u64) -> Nat {
     Nat(BigUint::from(i))

@@ -5,36 +5,86 @@ mod http;
 mod provisional;
 
 #[cfg(feature = "fuzzing_code")]
-use arbitrary::{Arbitrary, Result as ArbitraryResult, Unstructured};
+use arbitrary::{
+    Arbitrary,
+    Result as ArbitraryResult,
+    Unstructured,
+};
 pub use bounded_vec::*;
-use candid::{CandidType, Decode, DecoderConfig, Deserialize, Encode};
+use candid::{
+    CandidType,
+    Decode,
+    DecoderConfig,
+    Deserialize,
+    Encode,
+};
 pub use data_size::*;
 pub use http::{
-    BoundedHttpHeaders, CanisterHttpRequestArgs, CanisterHttpResponsePayload, HttpHeader,
-    HttpMethod, TransformArgs, TransformContext, TransformFunc,
+    BoundedHttpHeaders,
+    CanisterHttpRequestArgs,
+    CanisterHttpResponsePayload,
+    HttpHeader,
+    HttpMethod,
+    TransformArgs,
+    TransformContext,
+    TransformFunc,
 };
 use ic_base_types::{
-    CanisterId, NodeId, NumBytes, PrincipalId, RegistryVersion, SnapshotId, SubnetId,
+    CanisterId,
+    NodeId,
+    NumBytes,
+    PrincipalId,
+    RegistryVersion,
+    SnapshotId,
+    SubnetId,
 };
-use ic_error_types::{ErrorCode, UserError};
-use ic_protobuf::proxy::{try_decode_hash, try_from_option_field};
+use ic_error_types::{
+    ErrorCode,
+    UserError,
+};
+use ic_protobuf::proxy::{
+    try_decode_hash,
+    try_from_option_field,
+};
 use ic_protobuf::registry::crypto::v1::PublicKey;
-use ic_protobuf::registry::subnet::v1::{InitialIDkgDealings, InitialNiDkgTranscriptRecord};
-use ic_protobuf::state::canister_state_bits::v1::{self as pb_canister_state_bits};
+use ic_protobuf::registry::subnet::v1::{
+    InitialIDkgDealings,
+    InitialNiDkgTranscriptRecord,
+};
+use ic_protobuf::state::canister_state_bits::v1::{
+    self as pb_canister_state_bits,
+};
 use ic_protobuf::types::v1::CanisterInstallModeV2 as CanisterInstallModeV2Proto;
 use ic_protobuf::types::v1::{
     CanisterInstallMode as CanisterInstallModeProto,
     CanisterUpgradeOptions as CanisterUpgradeOptionsProto,
     WasmMemoryPersistence as WasmMemoryPersistenceProto,
 };
-use ic_protobuf::{proxy::ProxyDecodeError, registry::crypto::v1 as pb_registry_crypto};
+use ic_protobuf::{
+    proxy::ProxyDecodeError,
+    registry::crypto::v1 as pb_registry_crypto,
+};
 use num_traits::cast::ToPrimitive;
-pub use provisional::{ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs};
+pub use provisional::{
+    ProvisionalCreateCanisterWithCyclesArgs,
+    ProvisionalTopUpCanisterArgs,
+};
 use serde::Serialize;
 use serde_bytes::ByteBuf;
 use std::mem::size_of;
-use std::{collections::BTreeSet, convert::TryFrom, error::Error, fmt, slice::Iter, str::FromStr};
-use strum_macros::{Display, EnumIter, EnumString};
+use std::{
+    collections::BTreeSet,
+    convert::TryFrom,
+    error::Error,
+    fmt,
+    slice::Iter,
+    str::FromStr,
+};
+use strum_macros::{
+    Display,
+    EnumIter,
+    EnumString,
+};
 
 /// The id of the management canister.
 pub const IC_00: CanisterId = CanisterId::ic_00();
@@ -2708,7 +2758,8 @@ pub use ic_btc_interface::{
     GetBalanceRequest as BitcoinGetBalanceArgs,
     GetBlockHeadersRequest as BitcoinGetBlockHeadersArgs,
     GetCurrentFeePercentilesRequest as BitcoinGetCurrentFeePercentilesArgs,
-    GetUtxosRequest as BitcoinGetUtxosArgs, Network as BitcoinNetwork,
+    GetUtxosRequest as BitcoinGetUtxosArgs,
+    Network as BitcoinNetwork,
     SendTransactionRequest as BitcoinSendTransactionArgs,
 };
 pub use ic_btc_replica_types::{

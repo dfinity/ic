@@ -7,7 +7,10 @@ use ic_types::NodeId;
 use ic_interfaces_registry::RegistryClient;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
 use std::sync::Arc;
 
 pub use ic_crypto_internal_csp_test_utils::files;

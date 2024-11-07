@@ -1,46 +1,101 @@
 use crate::common::{
-    buy_token, compute_multiple_successful_claim_swap_neurons_response,
-    compute_single_successful_claim_swap_neurons_response, create_generic_cf_participants,
-    create_generic_sns_neuron_recipes, create_successful_swap_neuron_basket_for_neurons_fund,
+    buy_token,
+    compute_multiple_successful_claim_swap_neurons_response,
+    compute_single_successful_claim_swap_neurons_response,
+    create_generic_cf_participants,
+    create_generic_sns_neuron_recipes,
+    create_successful_swap_neuron_basket_for_neurons_fund,
     create_successful_swap_neuron_basket_for_one_direct_participant,
     doubles::{
-        spy_clients, spy_clients_exploding_root, LedgerExpect, NnsGovernanceClientCall,
-        NnsGovernanceClientReply, SnsGovernanceClientCall, SnsGovernanceClientReply,
-        SnsRootClientCall, SnsRootClientReply, SpyNnsGovernanceClient, SpySnsGovernanceClient,
+        spy_clients,
+        spy_clients_exploding_root,
+        LedgerExpect,
+        NnsGovernanceClientCall,
+        NnsGovernanceClientReply,
+        SnsGovernanceClientCall,
+        SnsGovernanceClientReply,
+        SnsRootClientCall,
+        SnsRootClientReply,
+        SpyNnsGovernanceClient,
+        SpySnsGovernanceClient,
         SpySnsRootClient,
     },
-    get_account_balance_mock_ledger, get_snapshot_of_buyers_index_list, get_sns_balance,
-    get_transfer_and_account_balance_mock_ledger, get_transfer_mock_ledger, i2principal_id_string,
-    mock_stub, paginate_participants, successful_set_dapp_controllers_call_result,
-    successful_set_mode_call_result, sweep, try_error_refund_err, try_error_refund_ok,
-    verify_direct_participant_icp_balances, verify_direct_participant_sns_balances,
+    get_account_balance_mock_ledger,
+    get_snapshot_of_buyers_index_list,
+    get_sns_balance,
+    get_transfer_and_account_balance_mock_ledger,
+    get_transfer_mock_ledger,
+    i2principal_id_string,
+    mock_stub,
+    paginate_participants,
+    successful_set_dapp_controllers_call_result,
+    successful_set_mode_call_result,
+    sweep,
+    try_error_refund_err,
+    try_error_refund_ok,
+    verify_direct_participant_icp_balances,
+    verify_direct_participant_sns_balances,
 };
 use assert_matches::assert_matches;
 use candid::Principal;
 use error_refund_icp_response::err::Type::Precondition;
-use futures::{channel::mpsc, future::FutureExt, StreamExt};
-use ic_base_types::{CanisterId, PrincipalId};
+use futures::{
+    channel::mpsc,
+    future::FutureExt,
+    StreamExt,
+};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::{
-    assert_is_err, assert_is_ok, ledger::compute_neuron_staking_subaccount_bytes,
-    NervousSystemError, E8, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, START_OF_2022_TIMESTAMP_SECONDS,
+    assert_is_err,
+    assert_is_ok,
+    ledger::compute_neuron_staking_subaccount_bytes,
+    NervousSystemError,
+    E8,
+    ONE_DAY_SECONDS,
+    ONE_MONTH_SECONDS,
+    START_OF_2022_TIMESTAMP_SECONDS,
 };
 use ic_nervous_system_common_test_keys::{
-    TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL, TEST_USER3_PRINCIPAL,
+    TEST_USER1_PRINCIPAL,
+    TEST_USER2_PRINCIPAL,
+    TEST_USER3_PRINCIPAL,
 };
 use ic_nervous_system_common_test_utils::{
-    drain_receiver_channel, InterleavingTestLedger, LedgerCall, LedgerControlMessage, LedgerReply,
+    drain_receiver_channel,
+    InterleavingTestLedger,
+    LedgerCall,
+    LedgerControlMessage,
+    LedgerReply,
     SpyLedger,
 };
-use ic_nervous_system_proto::pb::v1::{Countries, Principals};
+use ic_nervous_system_proto::pb::v1::{
+    Countries,
+    Principals,
+};
 use ic_neurons_fund::{
-    InvertibleFunction, MatchingFunction, NeuronsFundParticipationLimits,
-    PolynomialMatchingFunction, SerializableFunction,
+    InvertibleFunction,
+    MatchingFunction,
+    NeuronsFundParticipationLimits,
+    PolynomialMatchingFunction,
+    SerializableFunction,
 };
 use ic_sns_governance::pb::v1::{
-    claim_swap_neurons_request::{neuron_recipe, NeuronRecipe, NeuronRecipes},
+    claim_swap_neurons_request::{
+        neuron_recipe,
+        NeuronRecipe,
+        NeuronRecipes,
+    },
     claim_swap_neurons_response::ClaimSwapNeuronsResult,
-    governance, ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, NeuronId, NeuronIds, SetMode,
+    governance,
+    ClaimSwapNeuronsRequest,
+    ClaimSwapNeuronsResponse,
+    NeuronId,
+    NeuronIds,
+    SetMode,
     SetModeResponse,
 };
 use ic_sns_swap::{
@@ -48,14 +103,30 @@ use ic_sns_swap::{
     memory,
     pb::v1::{
         settle_neurons_fund_participation_response::NeuronsFundNeuron,
-        sns_neuron_recipe::{ClaimedStatus, Investor, Investor::CommunityFund, NeuronAttributes},
-        Lifecycle::{Aborted, Committed, Open, Pending, Unspecified},
-        NeuronBasketConstructionParameters, SetDappControllersRequest, SetDappControllersResponse,
+        sns_neuron_recipe::{
+            ClaimedStatus,
+            Investor,
+            Investor::CommunityFund,
+            NeuronAttributes,
+        },
+        Lifecycle::{
+            Aborted,
+            Committed,
+            Open,
+            Pending,
+            Unspecified,
+        },
+        NeuronBasketConstructionParameters,
+        SetDappControllersRequest,
+        SetDappControllersResponse,
         *,
     },
     swap::{
-        apportion_approximately_equally, principal_to_subaccount, CLAIM_SWAP_NEURONS_BATCH_SIZE,
-        FIRST_PRINCIPAL_BYTES, NEURON_BASKET_MEMO_RANGE_START,
+        apportion_approximately_equally,
+        principal_to_subaccount,
+        CLAIM_SWAP_NEURONS_BATCH_SIZE,
+        FIRST_PRINCIPAL_BYTES,
+        NEURON_BASKET_MEMO_RANGE_START,
     },
     swap_builder::SwapBuilder,
 };
@@ -64,10 +135,16 @@ use icrc_ledger_types::icrc1::account::Account;
 use maplit::btreemap;
 use rust_decimal_macros::dec;
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::{
+        BTreeMap,
+        HashSet,
+    },
     pin::Pin,
     str::FromStr,
-    sync::{atomic, atomic::Ordering as AtomicOrdering},
+    sync::{
+        atomic,
+        atomic::Ordering as AtomicOrdering,
+    },
     thread,
 };
 
@@ -1492,7 +1569,10 @@ async fn test_finalize_swap_ok_matched_funding() {
 
     // Assert that NNS governance was notified of positive outcome (i.e. ended in Committed).
     {
-        use settle_neurons_fund_participation_request::{Committed, Result};
+        use settle_neurons_fund_participation_request::{
+            Committed,
+            Result,
+        };
         assert_eq!(
             clients.nns_governance.calls,
             vec![NnsGovernanceClientCall::SettleNeuronsFundParticipation(
@@ -1764,7 +1844,10 @@ async fn test_finalize_swap_abort_matched_funding() {
 
     // Assert that NNS governance was notified of negative outcome (i.e. ended in Aborted).
     {
-        use settle_neurons_fund_participation_request::{Aborted, Result};
+        use settle_neurons_fund_participation_request::{
+            Aborted,
+            Result,
+        };
         assert_eq!(
             clients.nns_governance.calls,
             vec![NnsGovernanceClientCall::SettleNeuronsFundParticipation(

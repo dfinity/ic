@@ -1,6 +1,12 @@
 use crate::common::local_replica;
-use crate::common::local_replica::{create_and_install_icrc_ledger, test_identity};
-use crate::common::utils::{get_rosetta_blocks_from_icrc1_ledger, wait_for_rosetta_block};
+use crate::common::local_replica::{
+    create_and_install_icrc_ledger,
+    test_identity,
+};
+use crate::common::utils::{
+    get_rosetta_blocks_from_icrc1_ledger,
+    wait_for_rosetta_block,
+};
 use candid::Nat;
 use candid::Principal;
 use common::local_replica::get_custom_agent;
@@ -8,10 +14,16 @@ use ic_agent::identity::BasicIdentity;
 use ic_agent::Identity;
 use ic_base_types::CanisterId;
 use ic_base_types::PrincipalId;
-use ic_icrc1_ledger::{InitArgs, InitArgsBuilder};
+use ic_icrc1_ledger::{
+    InitArgs,
+    InitArgsBuilder,
+};
 use ic_icrc1_test_utils::KeyPairGenerator;
 use ic_icrc1_test_utils::{
-    minter_identity, valid_transactions_strategy, ArgWithCaller, LedgerEndpointArg,
+    minter_identity,
+    valid_transactions_strategy,
+    ArgWithCaller,
+    LedgerEndpointArg,
     DEFAULT_TRANSFER_FEE,
 };
 use ic_icrc1_tokens_u256::U256;
@@ -20,15 +32,25 @@ use ic_icrc_rosetta::common::types::Error;
 use ic_icrc_rosetta::common::types::OperationType;
 use ic_icrc_rosetta::common::utils::utils::icrc1_rosetta_block_to_rosetta_core_transaction;
 use ic_icrc_rosetta::common::utils::utils::{
-    icrc1_operation_to_rosetta_core_operations, icrc1_rosetta_block_to_rosetta_core_block,
+    icrc1_operation_to_rosetta_core_operations,
+    icrc1_rosetta_block_to_rosetta_core_block,
 };
 use ic_icrc_rosetta::construction_api::types::ConstructionMetadataRequestOptions;
-use ic_icrc_rosetta::data_api::types::{QueryBlockRangeRequest, QueryBlockRangeResponse};
+use ic_icrc_rosetta::data_api::types::{
+    QueryBlockRangeRequest,
+    QueryBlockRangeResponse,
+};
 use ic_icrc_rosetta_client::RosettaClient;
 use ic_icrc_rosetta_runner::RosettaClientArgsBuilder;
-use ic_icrc_rosetta_runner::{make_transaction_with_rosetta_client_binary, DEFAULT_TOKEN_SYMBOL};
 use ic_icrc_rosetta_runner::{
-    start_rosetta, RosettaContext, RosettaOptions, DEFAULT_DECIMAL_PLACES,
+    make_transaction_with_rosetta_client_binary,
+    DEFAULT_TOKEN_SYMBOL,
+};
+use ic_icrc_rosetta_runner::{
+    start_rosetta,
+    RosettaContext,
+    RosettaOptions,
+    DEFAULT_DECIMAL_PLACES,
 };
 use ic_rosetta_api::DEFAULT_BLOCKCHAIN;
 use icrc_ledger_agent::CallMode;
@@ -38,7 +60,10 @@ use icrc_ledger_types::icrc1::transfer::TransferArg;
 use icrc_ledger_types::icrc2::approve::ApproveArgs;
 use lazy_static::lazy_static;
 use num_traits::cast::ToPrimitive;
-use pocket_ic::{PocketIc, PocketIcBuilder};
+use pocket_ic::{
+    PocketIc,
+    PocketIcBuilder,
+};
 use proptest::prelude::ProptestConfig;
 use proptest::proptest;
 use proptest::strategy::Strategy;
@@ -60,7 +85,10 @@ use std::{
     path::PathBuf,
     process::Command,
     sync::Arc,
-    time::{Duration, SystemTime},
+    time::{
+        Duration,
+        SystemTime,
+    },
 };
 use strum::IntoEnumIterator;
 use tokio::runtime::Runtime;

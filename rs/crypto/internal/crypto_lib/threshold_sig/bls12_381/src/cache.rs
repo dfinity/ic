@@ -1,6 +1,9 @@
 //! Cache for BLS signatures
 
-use cached::{Cached, SizedCache};
+use cached::{
+    Cached,
+    SizedCache,
+};
 
 #[cfg(test)]
 mod tests;

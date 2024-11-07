@@ -1,5 +1,8 @@
 use crate::Scalar;
-use rand::{CryptoRng, RngCore};
+use rand::{
+    CryptoRng,
+    RngCore,
+};
 
 /// A Polynomial whose coefficients are scalars in an elliptic curve group
 ///

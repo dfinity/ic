@@ -1,24 +1,41 @@
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{
+        BTreeMap,
+        BTreeSet,
+    },
     convert::TryFrom,
     io,
-    path::{Path, PathBuf},
+    path::{
+        Path,
+        PathBuf,
+    },
     time::Duration,
 };
 
 use crate::{
     initialized_subnet::InitializedSubnet,
     internet_computer::INITIAL_REGISTRY_VERSION,
-    node::{InitializeNodeError, InitializedNode, NodeConfiguration, NodeIndex},
+    node::{
+        InitializeNodeError,
+        InitializedNode,
+        NodeConfiguration,
+        NodeIndex,
+    },
 };
 use anyhow::Result;
 use ic_config::subnet_config::SchedulerConfig;
-use ic_crypto_test_utils_ni_dkg::{initial_dkg_transcript, InitialNiDkgConfig};
+use ic_crypto_test_utils_ni_dkg::{
+    initial_dkg_transcript,
+    InitialNiDkgConfig,
+};
 use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
 use ic_protobuf::registry::{
     crypto::v1::PublicKey,
     subnet::v1::{
-        CatchUpPackageContents, ChainKeyConfig, InitialNiDkgTranscriptRecord, SubnetRecord,
+        CatchUpPackageContents,
+        ChainKeyConfig,
+        InitialNiDkgTranscriptRecord,
+        SubnetRecord,
     },
 };
 use ic_registry_subnet_features::SubnetFeatures;
@@ -27,12 +44,20 @@ use ic_types::crypto::threshold_sig::ni_dkg::ThresholdSigPublicKeyError;
 use ic_types::{
     crypto::{
         threshold_sig::{
-            ni_dkg::{NiDkgTag, NiDkgTargetId},
-            ThresholdSigPublicKey, ThresholdSigPublicKeyBytesConversionError,
+            ni_dkg::{
+                NiDkgTag,
+                NiDkgTargetId,
+            },
+            ThresholdSigPublicKey,
+            ThresholdSigPublicKeyBytesConversionError,
         },
         CryptoError,
     },
-    Height, NodeId, PrincipalId, ReplicaVersion, SubnetId,
+    Height,
+    NodeId,
+    PrincipalId,
+    ReplicaVersion,
+    SubnetId,
 };
 use serde::Deserialize;
 use thiserror::Error;

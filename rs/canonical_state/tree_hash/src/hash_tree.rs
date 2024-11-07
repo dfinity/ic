@@ -1,7 +1,15 @@
-use crate::lazy_tree::{LazyFork, LazyTree};
+use crate::lazy_tree::{
+    LazyFork,
+    LazyTree,
+};
 use crypto::WitnessGenerationError;
 use ic_crypto_tree_hash::{
-    self as crypto, hasher::Hasher, Digest, Label, LabeledTree, WitnessBuilder,
+    self as crypto,
+    hasher::Hasher,
+    Digest,
+    Label,
+    LabeledTree,
+    WitnessBuilder,
 };
 use itertools::izip;
 use std::fmt;

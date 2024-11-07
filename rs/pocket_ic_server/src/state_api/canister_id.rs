@@ -2,9 +2,16 @@ use crate::state_api::state::HandlerState;
 use async_trait::async_trait;
 use axum::extract::FromRequestParts;
 use candid::Principal;
-use fqdn::{fqdn, Fqdn, FQDN};
+use fqdn::{
+    fqdn,
+    Fqdn,
+    FQDN,
+};
 use hyper::{
-    header::{HOST, REFERER},
+    header::{
+        HOST,
+        REFERER,
+    },
     http::request::Parts,
     Uri,
 };
@@ -283,11 +290,18 @@ mod tests {
     use crate::state_api::canister_id::DomainResolver;
     use axum::extract::FromRequestParts;
     use fqdn::fqdn;
-    use hyper::{header::HOST, http::request::Parts, Request};
+    use hyper::{
+        header::HOST,
+        http::request::Parts,
+        Request,
+    };
     use ic_agent::export::Principal;
     use tokio::runtime::Runtime;
 
-    use super::{HostHeader, QueryParam};
+    use super::{
+        HostHeader,
+        QueryParam,
+    };
 
     #[test]
     fn simple_resolve() {

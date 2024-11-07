@@ -6,37 +6,79 @@
 //! reproducible) description of the step, as well as its potential automatic
 //! execution.
 use crate::{
-    cli::wait_for_confirmation, file_sync_helper::remove_dir, registry_helper::RegistryHelper,
+    cli::wait_for_confirmation,
+    file_sync_helper::remove_dir,
+    registry_helper::RegistryHelper,
 };
-use admin_helper::{AdminHelper, IcAdmin, RegistryParams};
+use admin_helper::{
+    AdminHelper,
+    IcAdmin,
+    RegistryParams,
+};
 use command_helper::exec_cmd;
-use error::{RecoveryError, RecoveryResult};
-use file_sync_helper::{create_dir, download_binary, read_dir};
+use error::{
+    RecoveryError,
+    RecoveryResult,
+};
+use file_sync_helper::{
+    create_dir,
+    download_binary,
+    read_dir,
+};
 use futures::future::join_all;
-use ic_base_types::{CanisterId, NodeId};
+use ic_base_types::{
+    CanisterId,
+    NodeId,
+};
 use ic_cup_explorer::get_catchup_content;
 use ic_registry_client_helpers::node::NodeRegistry;
 use ic_replay::{
-    cmd::{AddAndBlessReplicaVersionCmd, AddRegistryContentCmd, SubCommand},
+    cmd::{
+        AddAndBlessReplicaVersionCmd,
+        AddRegistryContentCmd,
+        SubCommand,
+    },
     player::StateParams,
 };
-use ic_types::{messages::HttpStatusResponse, Height, ReplicaVersion, SubnetId};
+use ic_types::{
+    messages::HttpStatusResponse,
+    Height,
+    ReplicaVersion,
+    SubnetId,
+};
 use registry_helper::RegistryPollingStrategy;
-use serde::{Deserialize, Serialize};
-use slog::{info, warn, Logger};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use slog::{
+    info,
+    warn,
+    Logger,
+};
 use ssh_helper::SshHelper;
 use std::io::ErrorKind;
 use std::{
     net::IpAddr,
-    path::{Path, PathBuf},
+    path::{
+        Path,
+        PathBuf,
+    },
     process::Command,
     str::FromStr,
     thread,
-    time::{self, Duration, SystemTime},
+    time::{
+        self,
+        Duration,
+        SystemTime,
+    },
 };
 use steps::*;
 use url::Url;
-use util::{block_on, parse_hex_str};
+use util::{
+    block_on,
+    parse_hex_str,
+};
 
 pub mod admin_helper;
 pub mod app_subnet_recovery;

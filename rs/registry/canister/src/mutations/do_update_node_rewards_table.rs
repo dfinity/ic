@@ -1,10 +1,18 @@
-use crate::{common::LOG_PREFIX, registry::Registry};
+use crate::{
+    common::LOG_PREFIX,
+    registry::Registry,
+};
 
 use ic_protobuf::registry::node_rewards::v2::{
-    NodeRewardsTable, UpdateNodeRewardsTableProposalPayload,
+    NodeRewardsTable,
+    UpdateNodeRewardsTableProposalPayload,
 };
 use ic_registry_keys::NODE_REWARDS_TABLE_KEY;
-use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation, RegistryValue};
+use ic_registry_transport::pb::v1::{
+    registry_mutation,
+    RegistryMutation,
+    RegistryValue,
+};
 use prost::Message;
 
 impl Registry {

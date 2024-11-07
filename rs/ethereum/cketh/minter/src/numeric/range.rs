@@ -1,5 +1,8 @@
 use crate::numeric::BlockNumber;
-use std::fmt::{Debug, Display};
+use std::fmt::{
+    Debug,
+    Display,
+};
 use std::ops::RangeInclusive;
 
 #[derive(Clone, PartialEq, Eq)]

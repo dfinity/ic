@@ -1,20 +1,32 @@
 //! A task that fails after a specified duration.
 use std::{
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{
+            AtomicBool,
+            Ordering,
+        },
         Arc,
     },
     time::Duration,
 };
 
-use tokio::{runtime::Handle as RtHandle, task::JoinHandle};
+use tokio::{
+    runtime::Handle as RtHandle,
+    task::JoinHandle,
+};
 
 use crate::driver::{
     event::TaskId,
-    task::{Task, TaskHandle},
+    task::{
+        Task,
+        TaskHandle,
+    },
 };
 
-use super::{task::TaskResultCallback, task_scheduler::TaskResult};
+use super::{
+    task::TaskResultCallback,
+    task_scheduler::TaskResult,
+};
 
 pub struct TimeoutTask {
     spawned: AtomicBool,

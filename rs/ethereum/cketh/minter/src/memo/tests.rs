@@ -1,11 +1,27 @@
 use crate::cbor::tests::check_roundtrip;
-use crate::eth_logs::{ReceivedEthEvent, ReceivedEvent};
+use crate::eth_logs::{
+    ReceivedEthEvent,
+    ReceivedEvent,
+};
 use crate::eth_rpc::Hash;
 use crate::memo::BurnMemo;
-use crate::memo::{Address, MintMemo};
-use crate::numeric::{BlockNumber, CkTokenAmount, LedgerBurnIndex, LogIndex, Wei};
+use crate::memo::{
+    Address,
+    MintMemo,
+};
+use crate::numeric::{
+    BlockNumber,
+    CkTokenAmount,
+    LedgerBurnIndex,
+    LogIndex,
+    Wei,
+};
 use crate::state::transactions::ReimbursementRequest;
-use arbitrary::{arb_burn_memo, arb_mint_memo, arb_reimbursement_request};
+use arbitrary::{
+    arb_burn_memo,
+    arb_mint_memo,
+    arb_reimbursement_request,
+};
 use candid::Principal;
 use icrc_ledger_types::icrc1::transfer::Memo;
 use proptest::prelude::*;
@@ -125,16 +141,31 @@ fn encode_burn_memo_is_stable() {
 mod arbitrary {
     use crate::checked_amount::CheckedAmountOf;
     use crate::eth_rpc::Hash;
-    use crate::memo::{BurnMemo, MintMemo};
-    use crate::numeric::{LedgerBurnIndex, LogIndex};
-    use crate::state::transactions::{ReimbursementRequest, Subaccount};
+    use crate::memo::{
+        BurnMemo,
+        MintMemo,
+    };
+    use crate::numeric::{
+        LedgerBurnIndex,
+        LogIndex,
+    };
+    use crate::state::transactions::{
+        ReimbursementRequest,
+        Subaccount,
+    };
     use candid::Principal;
     use ic_ethereum_types::Address;
     use proptest::arbitrary::any;
-    use proptest::array::{uniform20, uniform32};
+    use proptest::array::{
+        uniform20,
+        uniform32,
+    };
     use proptest::collection::vec as pvec;
     use proptest::option;
-    use proptest::prelude::{BoxedStrategy, Strategy};
+    use proptest::prelude::{
+        BoxedStrategy,
+        Strategy,
+    };
     use proptest::prop_oneof;
 
     fn arb_hash() -> impl Strategy<Value = Hash> {

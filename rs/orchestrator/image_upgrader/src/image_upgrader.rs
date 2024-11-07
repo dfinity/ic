@@ -1,6 +1,11 @@
 use async_trait::async_trait;
 use ic_http_utils::file_downloader::FileDownloader;
-use ic_logger::{error, info, warn, ReplicaLogger};
+use ic_logger::{
+    error,
+    info,
+    warn,
+    ReplicaLogger,
+};
 use std::future::Future;
 use std::str::FromStr;
 use std::{
@@ -8,13 +13,19 @@ use std::{
     io::Write,
     path::PathBuf,
     process::exit,
-    time::{Duration, SystemTime},
+    time::{
+        Duration,
+        SystemTime,
+    },
 };
 use tokio::process::Command;
 use tokio::sync::watch::Receiver;
 use tokio::time::error::Elapsed;
 
-use crate::error::{UpgradeError, UpgradeResult};
+use crate::error::{
+    UpgradeError,
+    UpgradeResult,
+};
 
 pub mod error;
 

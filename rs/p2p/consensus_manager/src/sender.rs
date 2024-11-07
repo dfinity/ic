@@ -1,5 +1,8 @@
 use std::{
-    collections::{hash_map::Entry, HashMap},
+    collections::{
+        hash_map::Entry,
+        HashMap,
+    },
     marker::PhantomData,
     panic,
     sync::Arc,
@@ -7,28 +10,60 @@ use std::{
 };
 
 use axum::http::Request;
-use backoff::{backoff::Backoff, ExponentialBackoffBuilder};
+use backoff::{
+    backoff::Backoff,
+    ExponentialBackoffBuilder,
+};
 use bytes::Bytes;
 use ic_base_types::NodeId;
-use ic_interfaces::p2p::consensus::{ArtifactAssembler, ArtifactTransmit, ArtifactWithOpt};
-use ic_logger::{error, warn, ReplicaLogger};
-use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy};
-use ic_quic_transport::{ConnId, Shutdown, Transport};
-use ic_types::artifact::{IdentifiableArtifact, PbArtifact};
+use ic_interfaces::p2p::consensus::{
+    ArtifactAssembler,
+    ArtifactTransmit,
+    ArtifactWithOpt,
+};
+use ic_logger::{
+    error,
+    warn,
+    ReplicaLogger,
+};
+use ic_protobuf::{
+    p2p::v1 as pb,
+    proxy::ProtoProxy,
+};
+use ic_quic_transport::{
+    ConnId,
+    Shutdown,
+    Transport,
+};
+use ic_types::artifact::{
+    IdentifiableArtifact,
+    PbArtifact,
+};
 use prost::Message;
 use tokio::{
     runtime::Handle,
     select,
     sync::mpsc::Receiver,
-    task::{JoinError, JoinSet},
+    task::{
+        JoinError,
+        JoinSet,
+    },
     time,
 };
 use tokio_util::sync::CancellationToken;
 use tracing::instrument;
 
-use crate::{metrics::ConsensusManagerMetrics, uri_prefix, CommitId, SlotNumber};
+use crate::{
+    metrics::ConsensusManagerMetrics,
+    uri_prefix,
+    CommitId,
+    SlotNumber,
+};
 
-use self::available_slot_set::{AvailableSlot, AvailableSlotSet};
+use self::available_slot_set::{
+    AvailableSlot,
+    AvailableSlotSet,
+};
 
 /// The size threshold for an artifact to be pushed. Artifacts smaller than this constant
 /// in size are pushed.
@@ -336,8 +371,14 @@ async fn send_transmit_to_peer(
 
 mod available_slot_set {
     use super::SLOT_TABLE_THRESHOLD;
-    use crate::{ConsensusManagerMetrics, SlotNumber};
-    use ic_logger::{warn, ReplicaLogger};
+    use crate::{
+        ConsensusManagerMetrics,
+        SlotNumber,
+    };
+    use ic_logger::{
+        warn,
+        ReplicaLogger,
+    };
 
     pub struct AvailableSlot(u64);
 
@@ -409,13 +450,25 @@ mod tests {
     use axum::http::Response;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
-    use ic_p2p_test_utils::{consensus::U64Artifact, mocks::MockTransport};
+    use ic_p2p_test_utils::{
+        consensus::U64Artifact,
+        mocks::MockTransport,
+    };
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_types_test_utils::ids::{NODE_1, NODE_2};
+    use ic_types_test_utils::ids::{
+        NODE_1,
+        NODE_2,
+    };
     use mockall::Sequence;
-    use tokio::{runtime::Handle, time::timeout};
+    use tokio::{
+        runtime::Handle,
+        time::timeout,
+    };
 
-    use ic_interfaces::p2p::consensus::{Aborted, Peers};
+    use ic_interfaces::p2p::consensus::{
+        Aborted,
+        Peers,
+    };
 
     use super::*;
 

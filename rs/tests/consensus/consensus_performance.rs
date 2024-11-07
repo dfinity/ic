@@ -52,11 +52,27 @@ use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env_api::read_dependency_from_env_to_string;
 use ic_system_test_driver::driver::{
     farm::HostFeature,
-    ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
-    prometheus_vm::{HasPrometheus, PrometheusVm},
-    simulate_network::{FixedNetworkSimulation, SimulateNetwork},
+    ic::{
+        AmountOfMemoryKiB,
+        ImageSizeGiB,
+        InternetComputer,
+        NrOfVCPUs,
+        Subnet,
+        VmResources,
+    },
+    prometheus_vm::{
+        HasPrometheus,
+        PrometheusVm,
+    },
+    simulate_network::{
+        FixedNetworkSimulation,
+        SimulateNetwork,
+    },
     test_env::TestEnv,
-    test_env_api::{HasTopologySnapshot, NnsCustomizations},
+    test_env_api::{
+        HasTopologySnapshot,
+        NnsCustomizations,
+    },
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::get_app_subnet_and_node;
@@ -65,7 +81,10 @@ use ic_types::Height;
 use anyhow::Result;
 use slog::info;
 use std::time::Duration;
-use tokio::runtime::{Builder, Runtime};
+use tokio::runtime::{
+    Builder,
+    Runtime,
+};
 
 const MAX_RUNTIME_THREADS: usize = 64;
 const MAX_RUNTIME_BLOCKING_THREADS: usize = MAX_RUNTIME_THREADS;

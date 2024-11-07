@@ -4,10 +4,17 @@
 use crate::address::BitcoinAddress;
 use crate::signature::EncodedSignature;
 use ic_crypto_sha2::Sha256;
-use serde_bytes::{ByteBuf, Bytes};
+use serde_bytes::{
+    ByteBuf,
+    Bytes,
+};
 use std::fmt;
 
-pub use ic_btc_interface::{OutPoint, Satoshi, Txid};
+pub use ic_btc_interface::{
+    OutPoint,
+    Satoshi,
+    Txid,
+};
 
 /// The current Bitcoin transaction encoding version.
 /// See https://github.com/bitcoin/bitcoin/blob/c90f86e4c7760a9f7ed0a574f54465964e006a64/src/primitives/transaction.h#L291.
@@ -168,7 +175,10 @@ impl Buffer for CountBytes {
 
 /// SHA-256 followed by Ripemd160, also known as HASH160.
 pub fn hash160(bytes: &[u8]) -> [u8; 20] {
-    use ripemd::{Digest, Ripemd160};
+    use ripemd::{
+        Digest,
+        Ripemd160,
+    };
     Ripemd160::digest(Sha256::hash(bytes)).into()
 }
 

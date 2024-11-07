@@ -1,6 +1,11 @@
 use std::collections::HashMap;
 
-use bitcoin::{hashes::hex::FromHex, util::uint::Uint256, BlockHash, Network};
+use bitcoin::{
+    hashes::hex::FromHex,
+    util::uint::Uint256,
+    BlockHash,
+    Network,
+};
 
 use crate::BlockHeight;
 

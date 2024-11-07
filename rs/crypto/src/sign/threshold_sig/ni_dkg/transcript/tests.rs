@@ -1,24 +1,45 @@
 use super::*;
 use crate::sign::tests::REG_V2;
 use crate::sign::threshold_sig::ni_dkg::test_utils::{
-    csp_dealing, dkg_config, map_of, minimal_dkg_config_data_without_resharing, nodes, DKG_ID,
+    csp_dealing,
+    dkg_config,
+    map_of,
+    minimal_dkg_config_data_without_resharing,
+    nodes,
+    DKG_ID,
     THRESHOLD,
 };
 use crate::sign::threshold_sig::ni_dkg::transcript::create_transcript;
 use ic_crypto_internal_threshold_sig_bls12381::api::dkg_errors::InvalidArgumentError;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::PublicCoefficientsBytes;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
-    ni_dkg_groth20_bls12_381, CspNiDkgDealing, CspNiDkgTranscript, Epoch,
+    ni_dkg_groth20_bls12_381,
+    CspNiDkgDealing,
+    CspNiDkgTranscript,
+    Epoch,
 };
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_crypto_test_utils::set_of;
 use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
 use ic_types::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;
-use ic_types::crypto::threshold_sig::ni_dkg::config::{NiDkgConfigData, NiDkgThreshold};
+use ic_types::crypto::threshold_sig::ni_dkg::config::{
+    NiDkgConfigData,
+    NiDkgThreshold,
+};
 use ic_types::crypto::threshold_sig::ni_dkg::errors::create_transcript_error::DkgCreateTranscriptError;
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgDealing;
-use ic_types::{NodeId, NumberOfNodes};
-use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, NODE_4, NODE_5, NODE_6};
+use ic_types::{
+    NodeId,
+    NumberOfNodes,
+};
+use ic_types_test_utils::ids::{
+    NODE_1,
+    NODE_2,
+    NODE_3,
+    NODE_4,
+    NODE_5,
+    NODE_6,
+};
 use std::collections::BTreeMap;
 
 const PK_BYTES_1: PublicKeyBytes = PublicKeyBytes([42; PublicKeyBytes::SIZE]);
@@ -239,7 +260,9 @@ mod create_transcript {
 mod create_transcript_with_resharing {
     use super::*;
     use crate::sign::threshold_sig::ni_dkg::test_utils::{
-        dummy_transcript, minimal_dkg_config_data_with_resharing, RESHARING_TRANSCRIPT_THRESHOLD,
+        dummy_transcript,
+        minimal_dkg_config_data_with_resharing,
+        RESHARING_TRANSCRIPT_THRESHOLD,
     };
     use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::CspDkgCreateReshareTranscriptError;
     use ic_types::crypto::error::MalformedPublicKeyError;
@@ -418,7 +441,10 @@ mod load_transcript {
     use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::CspDkgLoadPrivateKeyError;
     use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_types::crypto::error::{InvalidArgumentError, KeyNotFoundError};
+    use ic_types::crypto::error::{
+        InvalidArgumentError,
+        KeyNotFoundError,
+    };
     use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
 
     const PK_BYTES_1: PublicKeyBytes = PublicKeyBytes([42; PublicKeyBytes::SIZE]);

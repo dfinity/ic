@@ -1,60 +1,127 @@
 use crate::compiler_sandbox::WasmCompilerProxy;
 use crate::controller_launcher_service::ControllerLauncherService;
 use crate::launcher_service::LauncherService;
-use crate::protocol::id::{ExecId, MemoryId, WasmId};
+use crate::protocol::id::{
+    ExecId,
+    MemoryId,
+    WasmId,
+};
 use crate::protocol::sbxsvc::MemorySerialization;
-use crate::protocol::structs::{SandboxExecInput, SandboxExecOutput};
+use crate::protocol::structs::{
+    SandboxExecInput,
+    SandboxExecOutput,
+};
 use crate::sandbox_service::SandboxService;
-use crate::{protocol, rpc};
+use crate::{
+    protocol,
+    rpc,
+};
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_embedders::wasm_executor::{
-    get_wasm_reserved_pages, wasm_execution_error, CanisterStateChanges, PausedWasmExecution,
-    SliceExecutionOutput, WasmExecutionResult, WasmExecutor,
+    get_wasm_reserved_pages,
+    wasm_execution_error,
+    CanisterStateChanges,
+    PausedWasmExecution,
+    SliceExecutionOutput,
+    WasmExecutionResult,
+    WasmExecutor,
 };
 use ic_embedders::{
-    wasm_utils::WasmImportsDetails, CompilationCache, CompilationResult, WasmExecutionInput,
+    wasm_utils::WasmImportsDetails,
+    CompilationCache,
+    CompilationResult,
+    WasmExecutionInput,
 };
-use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
+use ic_interfaces::execution_environment::{
+    HypervisorError,
+    HypervisorResult,
+};
 #[cfg(target_os = "linux")]
 use ic_logger::warn;
-use ic_logger::{error, info, ReplicaLogger};
+use ic_logger::{
+    error,
+    info,
+    ReplicaLogger,
+};
 use ic_metrics::buckets::decimal_buckets_with_zero;
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::canister_state::execution_state::{
-    SandboxMemory, SandboxMemoryHandle, SandboxMemoryOwner, WasmBinary,
+    SandboxMemory,
+    SandboxMemoryHandle,
+    SandboxMemoryOwner,
+    WasmBinary,
 };
-use ic_replicated_state::{EmbedderCache, ExecutionState, ExportedFunctions, Memory, PageMap};
+use ic_replicated_state::{
+    EmbedderCache,
+    ExecutionState,
+    ExportedFunctions,
+    Memory,
+    PageMap,
+};
 use ic_types::ingress::WasmResult;
-use ic_types::methods::{FuncRef, WasmMethod};
-use ic_types::{CanisterId, NumBytes, NumInstructions};
+use ic_types::methods::{
+    FuncRef,
+    WasmMethod,
+};
+use ic_types::{
+    CanisterId,
+    NumBytes,
+    NumInstructions,
+};
 use ic_wasm_types::CanisterModule;
 use num_traits::ops::saturating::SaturatingSub;
 #[cfg(target_os = "linux")]
 use prometheus::IntGauge;
-use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec};
-use std::collections::{HashMap, VecDeque};
+use prometheus::{
+    Histogram,
+    HistogramVec,
+    IntCounter,
+    IntCounterVec,
+};
+use std::collections::{
+    HashMap,
+    VecDeque,
+};
 #[cfg(target_os = "linux")]
 use std::convert::TryInto;
 use std::path::PathBuf;
 use std::process::ExitStatus;
 use std::sync::mpsc::Receiver;
 use std::sync::Weak;
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    Arc,
+    Mutex,
+};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::{
+    Duration,
+    Instant,
+};
 
-use super::active_execution_state_registry::{ActiveExecutionStateRegistry, CompletionResult};
+use super::active_execution_state_registry::{
+    ActiveExecutionStateRegistry,
+    CompletionResult,
+};
 use super::controller_service_impl::ControllerServiceImpl;
-use super::launch_as_process::{create_sandbox_process, spawn_launcher_process};
+use super::launch_as_process::{
+    create_sandbox_process,
+    spawn_launcher_process,
+};
 use super::process_exe_and_args::{
-    create_compiler_sandbox_argv, create_launcher_argv, create_sandbox_argv,
+    create_compiler_sandbox_argv,
+    create_launcher_argv,
+    create_sandbox_argv,
 };
 #[cfg(target_os = "linux")]
 use super::process_os_metrics;
-use super::sandbox_process_eviction::{self, EvictionCandidate};
+use super::sandbox_process_eviction::{
+    self,
+    EvictionCandidate,
+};
 use ic_replicated_state::{
-    canister_state::execution_state::NextScheduledMethod, page_map::PageAllocatorFileDescriptor,
+    canister_state::execution_state::NextScheduledMethod,
+    page_map::PageAllocatorFileDescriptor,
 };
 use ic_types::ExecutionRound;
 
@@ -1866,16 +1933,26 @@ impl ControllerLauncherService for ExitWatcher {
 
 #[cfg(test)]
 mod tests {
-    use std::fs::{self, File};
+    use std::fs::{
+        self,
+        File,
+    };
 
     use super::*;
     use ic_config::{
-        execution_environment::MAX_COMPILATION_CACHE_SIZE, logger::Config as LoggerConfig,
+        execution_environment::MAX_COMPILATION_CACHE_SIZE,
+        logger::Config as LoggerConfig,
     };
-    use ic_logger::{new_replica_logger, replica_logger::no_op_logger};
+    use ic_logger::{
+        new_replica_logger,
+        replica_logger::no_op_logger,
+    };
     use ic_test_utilities_types::ids::canister_test_id;
     use libc::kill;
-    use slog::{o, Drain};
+    use slog::{
+        o,
+        Drain,
+    };
 
     #[test]
     #[should_panic(expected = "exited due to signal!")]

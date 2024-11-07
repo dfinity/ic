@@ -1,5 +1,8 @@
 use certificate_orchestrator_interface::Id;
-use sha2::{Digest, Sha256};
+use sha2::{
+    Digest,
+    Sha256,
+};
 
 cfg_if::cfg_if! {
     if #[cfg(test)] {
@@ -9,7 +12,10 @@ cfg_if::cfg_if! {
     }
 }
 
-use crate::{LocalRef, StableValue};
+use crate::{
+    LocalRef,
+    StableValue,
+};
 
 pub trait Generate {
     fn generate(&self) -> Id;
@@ -45,7 +51,10 @@ impl Generate for Generator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ID_COUNTER, ID_SEED};
+    use crate::{
+        ID_COUNTER,
+        ID_SEED,
+    };
 
     pub fn time() -> u64 {
         0

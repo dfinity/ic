@@ -1,4 +1,8 @@
-use prometheus_parse::{Sample, Scrape, Value};
+use prometheus_parse::{
+    Sample,
+    Scrape,
+    Value,
+};
 
 pub fn get_counter(scrape: &Scrape, name: &str) -> f64 {
     match get_sample(scrape, name).value {

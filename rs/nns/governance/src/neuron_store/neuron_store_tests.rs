@@ -1,12 +1,19 @@
 use super::*;
 use crate::{
-    neuron::{DissolveStateAndAge, NeuronBuilder},
+    neuron::{
+        DissolveStateAndAge,
+        NeuronBuilder,
+    },
     pb::v1::neuron::Followees,
     storage::with_stable_neuron_indexes,
 };
 use ic_nervous_system_common::ONE_DAY_SECONDS;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use maplit::{btreemap, hashmap, hashset};
+use maplit::{
+    btreemap,
+    hashmap,
+    hashset,
+};
 use num_traits::bounds::LowerBounded;
 use pretty_assertions::assert_eq;
 

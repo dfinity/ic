@@ -4,15 +4,25 @@
 //! and publish transactions. Moreover, it interacts with the Bitcoin system
 //! component to provide blocks and collect outgoing transactions.
 
-use bitcoin::{network::message::NetworkMessage, BlockHash, BlockHeader};
+use bitcoin::{
+    network::message::NetworkMessage,
+    BlockHash,
+    BlockHeader,
+};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use std::{
     net::SocketAddr,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc,
+        Mutex,
+    },
     time::Instant,
 };
-use tokio::sync::{mpsc::channel, watch};
+use tokio::sync::{
+    mpsc::channel,
+    watch,
+};
 /// This module contains the AddressManager struct. The struct stores addresses
 /// that will be used to create new connections. It also tracks addresses that
 /// are in current use to encourage use from non-utilized addresses.
@@ -52,7 +62,10 @@ mod transaction_store;
 // malicious fork can be prioritized by a DFS, thus potentially ignoring honest forks).
 mod get_successors_handler;
 
-use crate::{router::start_main_event_loop, stream::StreamEvent};
+use crate::{
+    router::start_main_event_loop,
+    stream::StreamEvent,
+};
 pub use blockchainstate::BlockchainState;
 pub use get_successors_handler::GetSuccessorsHandler;
 pub use rpc_server::start_grpc_server;

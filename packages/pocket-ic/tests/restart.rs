@@ -1,6 +1,9 @@
 use pocket_ic::PocketIcBuilder;
 use reqwest::blocking::Client;
-use std::{thread, time::Duration};
+use std::{
+    thread,
+    time::Duration,
+};
 
 // This test must be in a separate test suite so that the PocketIC server is not reused
 // by a different test.

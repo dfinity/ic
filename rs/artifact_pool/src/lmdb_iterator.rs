@@ -6,9 +6,23 @@
 // In order to store these parent/child/sibling/cousin relationships under
 // the same struct it's necessary to use unsafe operation as the borrow checker
 // won't allow it.
-use crate::lmdb_pool::{HeightKey, IDkgIdKey};
-use ic_logger::{error, ReplicaLogger};
-use lmdb::{Cursor, Database, Environment, Iter, RoCursor, RoTransaction, Transaction};
+use crate::lmdb_pool::{
+    HeightKey,
+    IDkgIdKey,
+};
+use ic_logger::{
+    error,
+    ReplicaLogger,
+};
+use lmdb::{
+    Cursor,
+    Database,
+    Environment,
+    Iter,
+    RoCursor,
+    RoTransaction,
+    Transaction,
+};
 use std::sync::Arc;
 
 /// A standalone iterator for LMDB.

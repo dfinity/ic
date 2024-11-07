@@ -3,18 +3,30 @@ use ic_base_types::PrincipalId;
 use ic_nns_common::types::ProposalId;
 use ic_nns_governance_api::pb::v1::{
     governance_error::ErrorType,
-    manage_neuron_response::{Command, RegisterVoteResponse},
+    manage_neuron_response::{
+        Command,
+        RegisterVoteResponse,
+    },
     Vote,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     neuron_helpers::{
-        get_neuron_1, get_neuron_2, get_neuron_3, get_nonexistent_neuron, get_some_proposal,
-        get_unauthorized_neuron, submit_proposal,
+        get_neuron_1,
+        get_neuron_2,
+        get_neuron_3,
+        get_nonexistent_neuron,
+        get_some_proposal,
+        get_unauthorized_neuron,
+        submit_proposal,
     },
     state_test_helpers::{
-        get_pending_proposals, nns_cast_vote, nns_governance_get_full_neuron,
-        nns_governance_make_proposal, setup_nns_canisters, state_machine_builder_for_nns_tests,
+        get_pending_proposals,
+        nns_cast_vote,
+        nns_governance_get_full_neuron,
+        nns_governance_make_proposal,
+        setup_nns_canisters,
+        state_machine_builder_for_nns_tests,
     },
 };
 use ic_state_machine_tests::StateMachine;

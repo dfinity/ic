@@ -228,7 +228,10 @@ fn distance_vector(distances: &mut [Vec<usize>]) -> Option<usize> {
 mod test {
     use super::*;
     use rand::thread_rng;
-    use rand_chacha::{rand_core::SeedableRng, ChaChaRng};
+    use rand_chacha::{
+        rand_core::SeedableRng,
+        ChaChaRng,
+    };
 
     fn check_distance(graph: &[Vec<usize>], degree: usize) {
         let n = graph.len();

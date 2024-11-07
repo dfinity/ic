@@ -1,7 +1,15 @@
 use ic_cdk::api::stable::{
-    stable_grow, stable_read, stable_size, stable_write, StableMemory, StableMemoryError,
+    stable_grow,
+    stable_read,
+    stable_size,
+    stable_write,
+    StableMemory,
+    StableMemoryError,
 };
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    Arc,
+    Mutex,
+};
 
 /// Provides a `StableMemory` implementation backed by ic_cdk
 #[derive(Copy, Clone, Default)]

@@ -1,6 +1,12 @@
-use std::{cmp::Reverse, time::Duration};
+use std::{
+    cmp::Reverse,
+    time::Duration,
+};
 
-use certificate_orchestrator_interface::{Id, Registration};
+use certificate_orchestrator_interface::{
+    Id,
+    Registration,
+};
 use ic_cdk::caller;
 use priority_queue::PriorityQueue;
 use prometheus::labels;
@@ -14,8 +20,16 @@ cfg_if::cfg_if! {
 }
 
 use crate::{
-    acl::{Authorize, AuthorizeError, WithAuthorize},
-    LocalRef, StableMap, StorableId, WithMetrics, IN_PROGRESS_TTL,
+    acl::{
+        Authorize,
+        AuthorizeError,
+        WithAuthorize,
+    },
+    LocalRef,
+    StableMap,
+    StorableId,
+    WithMetrics,
+    IN_PROGRESS_TTL,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -339,7 +353,10 @@ impl Retry for Retrier {
 mod tests {
     use super::*;
 
-    use crate::{RETRIES, TASKS};
+    use crate::{
+        RETRIES,
+        TASKS,
+    };
 
     pub fn time() -> u64 {
         0

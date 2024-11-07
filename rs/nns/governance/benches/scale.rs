@@ -14,19 +14,47 @@
 //! tree 200k   time:   250.08 ms 254.14 ms 256.39 ms
 
 use async_trait::async_trait;
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{
+    criterion_group,
+    criterion_main,
+    Criterion,
+};
 use futures::future::FutureExt;
-use ic_base_types::{CanisterId, PrincipalId};
-use ic_nervous_system_common::{cmc::FakeCmc, ledger::IcpLedger, NervousSystemError};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
+use ic_nervous_system_common::{
+    cmc::FakeCmc,
+    ledger::IcpLedger,
+    NervousSystemError,
+};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::{
-    governance::{Environment, Governance, HeapGrowthPotential, RngError},
+    governance::{
+        Environment,
+        Governance,
+        HeapGrowthPotential,
+        RngError,
+    },
     pb::v1::{
-        neuron, proposal, ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError,
-        Motion, NetworkEconomics, Neuron, Proposal, Topic,
+        neuron,
+        proposal,
+        ExecuteNnsFunction,
+        Governance as GovernanceProto,
+        GovernanceError,
+        Motion,
+        NetworkEconomics,
+        Neuron,
+        Proposal,
+        Topic,
     },
 };
-use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
+use icp_ledger::{
+    AccountIdentifier,
+    Subaccount,
+    Tokens,
+};
 use std::convert::TryFrom;
 
 criterion_group! {

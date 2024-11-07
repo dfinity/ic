@@ -26,11 +26,16 @@ use anyhow::Result;
 use ic_system_test_driver::{
     driver::{
         group::SystemTestGroup,
-        ic::{InternetComputer, Node, Subnet},
+        ic::{
+            InternetComputer,
+            Node,
+            Subnet,
+        },
         test_env::TestEnv,
         test_env_api::*,
     },
-    retry_with_msg, systest,
+    retry_with_msg,
+    systest,
 };
 
 use ic_nns_constants::REGISTRY_CANISTER_ID;
@@ -38,7 +43,10 @@ use ic_registry_subnet_type::SubnetType;
 
 use ic_base_types::PrincipalId;
 
-use ic_registry_canister_api::{IPv4Config, UpdateNodeIPv4ConfigDirectlyPayload};
+use ic_registry_canister_api::{
+    IPv4Config,
+    UpdateNodeIPv4ConfigDirectlyPayload,
+};
 use registry_canister::mutations::node_management::do_remove_node_directly::RemoveNodeDirectlyPayload;
 
 use slog::info;
@@ -46,7 +54,11 @@ use std::net::Ipv4Addr;
 use std::time::Duration;
 use tokio::runtime::Runtime;
 
-use anyhow::{anyhow, format_err, Error};
+use anyhow::{
+    anyhow,
+    format_err,
+    Error,
+};
 
 use candid::Encode;
 

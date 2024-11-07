@@ -1,17 +1,31 @@
-use anyhow::{anyhow, Result};
-use futures::{stream, StreamExt};
+use anyhow::{
+    anyhow,
+    Result,
+};
+use futures::{
+    stream,
+    StreamExt,
+};
 use ic_agent::Agent;
 use ic_base_types::CanisterId;
 use ic_nervous_system_agent::nns::sns_wasm;
 use ic_nns_constants::{
-    CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID,
-    LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
+    CYCLES_MINTING_CANISTER_ID,
+    GENESIS_TOKEN_CANISTER_ID,
+    GOVERNANCE_CANISTER_ID,
+    LEDGER_CANISTER_ID,
+    LIFELINE_CANISTER_ID,
+    REGISTRY_CANISTER_ID,
+    ROOT_CANISTER_ID,
     SNS_WASM_CANISTER_ID,
 };
 use std::env;
 use std::fs::File;
 use std::io::BufReader;
-use std::path::{Path, PathBuf};
+use std::path::{
+    Path,
+    PathBuf,
+};
 
 pub const NNS_CANISTER_NAME_TO_ID: [(&str, CanisterId); 8] = [
     ("registry", REGISTRY_CANISTER_ID),

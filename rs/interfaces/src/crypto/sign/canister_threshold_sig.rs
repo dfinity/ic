@@ -31,24 +31,47 @@
 
 use ic_base_types::NodeId;
 use ic_types::crypto::canister_threshold_sig::error::{
-    IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
-    IDkgOpenTranscriptError, IDkgRetainKeysError, IDkgVerifyComplaintError,
-    IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError, IDkgVerifyInitialDealingsError,
-    IDkgVerifyOpeningError, IDkgVerifyTranscriptError, ThresholdEcdsaCombineSigSharesError,
-    ThresholdEcdsaCreateSigShareError, ThresholdEcdsaVerifyCombinedSignatureError,
-    ThresholdEcdsaVerifySigShareError, ThresholdSchnorrCombineSigSharesError,
-    ThresholdSchnorrCreateSigShareError, ThresholdSchnorrVerifyCombinedSigError,
+    IDkgCreateDealingError,
+    IDkgCreateTranscriptError,
+    IDkgLoadTranscriptError,
+    IDkgOpenTranscriptError,
+    IDkgRetainKeysError,
+    IDkgVerifyComplaintError,
+    IDkgVerifyDealingPrivateError,
+    IDkgVerifyDealingPublicError,
+    IDkgVerifyInitialDealingsError,
+    IDkgVerifyOpeningError,
+    IDkgVerifyTranscriptError,
+    ThresholdEcdsaCombineSigSharesError,
+    ThresholdEcdsaCreateSigShareError,
+    ThresholdEcdsaVerifyCombinedSignatureError,
+    ThresholdEcdsaVerifySigShareError,
+    ThresholdSchnorrCombineSigSharesError,
+    ThresholdSchnorrCreateSigShareError,
+    ThresholdSchnorrVerifyCombinedSigError,
     ThresholdSchnorrVerifySigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    BatchSignedIDkgDealings, IDkgComplaint, IDkgOpening, IDkgTranscript, IDkgTranscriptParams,
-    InitialIDkgDealings, SignedIDkgDealing,
+    BatchSignedIDkgDealings,
+    IDkgComplaint,
+    IDkgOpening,
+    IDkgTranscript,
+    IDkgTranscriptParams,
+    InitialIDkgDealings,
+    SignedIDkgDealing,
 };
 use ic_types::crypto::canister_threshold_sig::{
-    ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
-    ThresholdSchnorrCombinedSignature, ThresholdSchnorrSigInputs, ThresholdSchnorrSigShare,
+    ThresholdEcdsaCombinedSignature,
+    ThresholdEcdsaSigInputs,
+    ThresholdEcdsaSigShare,
+    ThresholdSchnorrCombinedSignature,
+    ThresholdSchnorrSigInputs,
+    ThresholdSchnorrSigShare,
 };
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{
+    BTreeMap,
+    HashSet,
+};
 
 /// A Crypto Component interface to run interactive distributed key generation (IDKG) protocol as part of the
 /// threshold ECDSA protocol. Nodes can engage in an instance of the IDKG protocol to secret-share some values.

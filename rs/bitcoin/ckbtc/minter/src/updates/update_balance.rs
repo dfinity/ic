@@ -1,25 +1,65 @@
-use crate::logs::{P0, P1};
+use crate::logs::{
+    P0,
+    P1,
+};
 use crate::memo::MintMemo;
-use crate::state::{mutate_state, read_state, UtxoCheckStatus};
-use crate::tasks::{schedule_now, TaskType};
-use candid::{CandidType, Deserialize, Nat, Principal};
-use ic_btc_interface::{GetUtxosError, GetUtxosResponse, OutPoint, Utxo};
+use crate::state::{
+    mutate_state,
+    read_state,
+    UtxoCheckStatus,
+};
+use crate::tasks::{
+    schedule_now,
+    TaskType,
+};
+use candid::{
+    CandidType,
+    Deserialize,
+    Nat,
+    Principal,
+};
+use ic_btc_interface::{
+    GetUtxosError,
+    GetUtxosResponse,
+    OutPoint,
+    Utxo,
+};
 use ic_canister_log::log;
 use ic_ckbtc_kyt::Error as KytError;
-use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
-use icrc_ledger_types::icrc1::account::{Account, Subaccount};
+use icrc_ledger_client_cdk::{
+    CdkRuntime,
+    ICRC1Client,
+};
+use icrc_ledger_types::icrc1::account::{
+    Account,
+    Subaccount,
+};
 use icrc_ledger_types::icrc1::transfer::Memo;
-use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
+use icrc_ledger_types::icrc1::transfer::{
+    TransferArg,
+    TransferError,
+};
 use num_traits::ToPrimitive;
 use serde::Serialize;
 
 use super::get_btc_address::init_ecdsa_public_key;
 
 use crate::{
-    guard::{balance_update_guard, GuardError},
-    management::{fetch_utxo_alerts, get_utxos, CallError, CallSource},
+    guard::{
+        balance_update_guard,
+        GuardError,
+    },
+    management::{
+        fetch_utxo_alerts,
+        get_utxos,
+        CallError,
+        CallSource,
+    },
     state,
-    tx::{DisplayAmount, DisplayOutpoint},
+    tx::{
+        DisplayAmount,
+        DisplayOutpoint,
+    },
     updates::get_btc_address,
 };
 

@@ -1,5 +1,13 @@
-use candid::{CandidType, Deserialize, Nat, Principal};
-use icrc_ledger_types::icrc1::account::{Account, Subaccount};
+use candid::{
+    CandidType,
+    Deserialize,
+    Nat,
+    Principal,
+};
+use icrc_ledger_types::icrc1::account::{
+    Account,
+    Subaccount,
+};
 use icrc_ledger_types::icrc1::transfer::BlockIndex;
 use icrc_ledger_types::icrc3::blocks::GenericBlock;
 use icrc_ledger_types::icrc3::transactions::Transaction;

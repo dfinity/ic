@@ -1,8 +1,22 @@
 //! The module is responsible for keeping track of the blockchain state.
 //!
-use crate::{common::BlockHeight, config::Config, metrics::BlockchainStateMetrics};
-use bitcoin::{blockdata::constants::genesis_block, Block, BlockHash, BlockHeader, Network};
-use ic_btc_validation::{validate_header, HeaderStore, ValidateHeaderError};
+use crate::{
+    common::BlockHeight,
+    config::Config,
+    metrics::BlockchainStateMetrics,
+};
+use bitcoin::{
+    blockdata::constants::genesis_block,
+    Block,
+    BlockHash,
+    BlockHeader,
+    Network,
+};
+use ic_btc_validation::{
+    validate_header,
+    HeaderStore,
+    ValidateHeaderError,
+};
 use ic_metrics::MetricsRegistry;
 use std::collections::HashMap;
 use thiserror::Error;
@@ -353,8 +367,16 @@ mod test {
     use ic_metrics::MetricsRegistry;
 
     use super::*;
-    use crate::{common::test_common::TestState, config::test::ConfigBuilder};
-    use ic_btc_adapter_test_utils::{block_1, block_2, generate_header, generate_headers};
+    use crate::{
+        common::test_common::TestState,
+        config::test::ConfigBuilder,
+    };
+    use ic_btc_adapter_test_utils::{
+        block_1,
+        block_2,
+        generate_header,
+        generate_headers,
+    };
     use std::collections::HashSet;
 
     #[test]

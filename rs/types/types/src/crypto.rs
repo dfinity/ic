@@ -11,27 +11,48 @@ pub use hash::DOMAIN_IC_REQUEST;
 
 mod sign;
 
-pub use sign::{Signable, SignableMock};
+pub use sign::{
+    Signable,
+    SignableMock,
+};
 
 pub mod error;
 pub mod threshold_sig;
 
 use crate::crypto::threshold_sig::ni_dkg::NiDkgId;
 use crate::registry::RegistryClientError;
-use crate::{CountBytes, NodeId, RegistryVersion, SubnetId};
+use crate::{
+    CountBytes,
+    NodeId,
+    RegistryVersion,
+    SubnetId,
+};
 use core::fmt::Formatter;
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::CspPublicCoefficients;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::ThresholdSigPublicKeyBytesConversionError;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_protobuf::registry::crypto::v1::{PublicKey, X509PublicKeyCert};
+use ic_protobuf::registry::crypto::v1::{
+    PublicKey,
+    X509PublicKeyCert,
+};
 use phantom_newtype::Id;
 #[cfg(all(test, not(target_arch = "wasm32")))]
 use proptest_derive::Arbitrary;
-use serde::{Deserialize, Serialize};
-use std::{collections::BTreeSet, fmt, str::FromStr};
-use strum_macros::{Display, EnumIter};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use std::{
+    collections::BTreeSet,
+    fmt,
+    str::FromStr,
+};
+use strum_macros::{
+    Display,
+    EnumIter,
+};
 
 #[cfg(test)]
 mod tests;

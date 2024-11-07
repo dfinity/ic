@@ -1,6 +1,13 @@
-use crate::{parse_tokens, serde::tokens};
+use crate::{
+    parse_tokens,
+    serde::tokens,
+};
 use ic_nervous_system_proto::pb::v1::Tokens;
-use serde::{Deserialize, Deserializer, Serializer};
+use serde::{
+    Deserialize,
+    Deserializer,
+    Serializer,
+};
 
 pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<Tokens>, D::Error>
 where

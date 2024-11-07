@@ -2,19 +2,31 @@ use crate::{
     neuron::Neuron,
     neuron_store::NeuronStore,
     pb::v1::Topic,
-    storage::{with_stable_neuron_indexes, with_stable_neuron_store},
+    storage::{
+        with_stable_neuron_indexes,
+        with_stable_neuron_store,
+    },
 };
 
-use candid::{CandidType, Deserialize};
+use candid::{
+    CandidType,
+    Deserialize,
+};
 use ic_base_types::PrincipalId;
 use ic_cdk::println;
 use ic_nns_common::pb::v1::NeuronId;
 use icp_ledger::Subaccount;
 use serde::Serialize;
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::{
+        HashMap,
+        VecDeque,
+    },
     marker::PhantomData,
-    mem::{discriminant, Discriminant},
+    mem::{
+        discriminant,
+        Discriminant,
+    },
 };
 
 const MAX_VALIDATION_AGE_SECONDS: u64 = 60 * 60 * 24;
@@ -669,15 +681,30 @@ impl ValidationTask for StableNeuronStoreValidator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{cell::RefCell, collections::BTreeMap};
+    use std::{
+        cell::RefCell,
+        collections::BTreeMap,
+    };
 
     use ic_base_types::PrincipalId;
-    use maplit::{btreemap, hashmap};
+    use maplit::{
+        btreemap,
+        hashmap,
+    };
 
     use crate::{
-        neuron::{DissolveStateAndAge, NeuronBuilder},
-        pb::v1::{neuron::Followees, KnownNeuronData},
-        storage::{with_stable_neuron_indexes_mut, with_stable_neuron_store_mut},
+        neuron::{
+            DissolveStateAndAge,
+            NeuronBuilder,
+        },
+        pb::v1::{
+            neuron::Followees,
+            KnownNeuronData,
+        },
+        storage::{
+            with_stable_neuron_indexes_mut,
+            with_stable_neuron_store_mut,
+        },
     };
 
     thread_local! {

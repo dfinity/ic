@@ -1,7 +1,17 @@
-use candid::{CandidType, Deserialize, Principal};
+use candid::{
+    CandidType,
+    Deserialize,
+    Principal,
+};
 use ic_ledger_core::block::EncodedBlock;
 use ic_ledger_core::timestamp::TimeStamp;
-use icp_ledger::{AccountIdentifier, Block, BlockIndex, Memo, Operation};
+use icp_ledger::{
+    AccountIdentifier,
+    Block,
+    BlockIndex,
+    Memo,
+    Operation,
+};
 use serde_bytes::ByteBuf;
 
 pub mod logs;

@@ -1,13 +1,23 @@
 use std::{
     collections::HashMap,
-    os::unix::{net::UnixStream, prelude::FromRawFd},
-    sync::{Arc, Condvar, Mutex},
+    os::unix::{
+        net::UnixStream,
+        prelude::FromRawFd,
+    },
+    sync::{
+        Arc,
+        Condvar,
+        Mutex,
+    },
     thread,
 };
 
 use crate::{
     child_process_initialization,
-    controller_launcher_client_stub::{self, ControllerLauncherClientStub},
+    controller_launcher_client_stub::{
+        self,
+        ControllerLauncherClientStub,
+    },
     controller_launcher_service::ControllerLauncherService,
     launcher_service::LauncherService,
     process::spawn_socketed_process,
@@ -15,17 +25,27 @@ use crate::{
         self,
         ctllaunchersvc::SandboxExitedRequest,
         launchersvc::{
-            LaunchCompilerReply, LaunchCompilerRequest, LaunchSandboxReply, LaunchSandboxRequest,
-            TerminateReply, TerminateRequest,
+            LaunchCompilerReply,
+            LaunchCompilerRequest,
+            LaunchSandboxReply,
+            LaunchSandboxRequest,
+            TerminateReply,
+            TerminateRequest,
         },
     },
     rpc,
-    transport::{self, SocketReaderConfig},
+    transport::{
+        self,
+        SocketReaderConfig,
+    },
 };
 use ic_types::CanisterId;
 use nix::{
     errno::Errno,
-    sys::wait::{wait, WaitStatus},
+    sys::wait::{
+        wait,
+        WaitStatus,
+    },
     unistd::Pid,
 };
 

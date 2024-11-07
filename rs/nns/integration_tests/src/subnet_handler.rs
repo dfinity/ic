@@ -1,22 +1,46 @@
 use dfn_candid::candid;
-use ic_base_types::{PrincipalId, SubnetId};
+use ic_base_types::{
+    PrincipalId,
+    SubnetId,
+};
 use ic_canister_client_sender::Sender;
 use ic_limits::INITIAL_NOTARY_DELAY;
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_ID, TEST_NEURON_2_OWNER_KEYPAIR,
+    TEST_NEURON_1_ID,
+    TEST_NEURON_1_OWNER_KEYPAIR,
+    TEST_NEURON_2_ID,
+    TEST_NEURON_2_OWNER_KEYPAIR,
 };
-use ic_nns_common::types::{NeuronId, ProposalId};
-use ic_nns_governance_api::pb::v1::{ManageNeuronResponse, NnsFunction, ProposalStatus, Vote};
+use ic_nns_common::types::{
+    NeuronId,
+    ProposalId,
+};
+use ic_nns_governance_api::pb::v1::{
+    ManageNeuronResponse,
+    NnsFunction,
+    ProposalStatus,
+    Vote,
+};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    governance::{get_pending_proposals, submit_external_update_proposal, wait_for_final_state},
-    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
+    governance::{
+        get_pending_proposals,
+        submit_external_update_proposal,
+        wait_for_final_state,
+    },
+    itest_helpers::{
+        state_machine_test_on_nns_subnet,
+        NnsCanisters,
+    },
     registry::get_value_or_panic,
 };
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_keys::make_subnet_record_key;
 use ic_registry_subnet_type::SubnetType;
-use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest};
+use ic_registry_transport::{
+    insert,
+    pb::v1::RegistryAtomicMutateRequest,
+};
 use ic_types::ReplicaVersion;
 use prost::Message;
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;

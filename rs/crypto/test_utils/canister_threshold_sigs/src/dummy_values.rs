@@ -1,15 +1,36 @@
 use crate::{
-    create_idkg_params, mock_transcript, mock_unmasked_transcript_type, random_transcript_id,
+    create_idkg_params,
+    mock_transcript,
+    mock_unmasked_transcript_type,
+    random_transcript_id,
     set_of_nodes,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    IDkgComplaint, IDkgDealing, IDkgOpening, IDkgTranscriptId, IDkgTranscriptOperation,
-    IDkgTranscriptParams, InitialIDkgDealings, SignedIDkgDealing,
+    IDkgComplaint,
+    IDkgDealing,
+    IDkgOpening,
+    IDkgTranscriptId,
+    IDkgTranscriptOperation,
+    IDkgTranscriptParams,
+    InitialIDkgDealings,
+    SignedIDkgDealing,
 };
-use ic_types::crypto::{AlgorithmId, BasicSig, BasicSigOf};
+use ic_types::crypto::{
+    AlgorithmId,
+    BasicSig,
+    BasicSigOf,
+};
 use ic_types::signature::BasicSignature;
-use ic_types::{Height, NodeId, PrincipalId, SubnetId};
-use rand::{CryptoRng, Rng};
+use ic_types::{
+    Height,
+    NodeId,
+    PrincipalId,
+    SubnetId,
+};
+use rand::{
+    CryptoRng,
+    Rng,
+};
 use std::collections::BTreeSet;
 
 pub fn dummy_idkg_transcript_id_for_tests(id: u64) -> IDkgTranscriptId {

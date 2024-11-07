@@ -1,10 +1,20 @@
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_crypto_standalone_sig_verifier::{
-    ecdsa_p256_signature_from_der_bytes, rsa_signature_from_bytes,
+    ecdsa_p256_signature_from_der_bytes,
+    rsa_signature_from_bytes,
 };
 use ic_types::{
-    crypto::{AlgorithmId, BasicSig, BasicSigOf, Signable, UserPublicKey},
-    messages::{WebAuthnEnvelope, WebAuthnSignature},
+    crypto::{
+        AlgorithmId,
+        BasicSig,
+        BasicSigOf,
+        Signable,
+        UserPublicKey,
+    },
+    messages::{
+        WebAuthnEnvelope,
+        WebAuthnSignature,
+    },
 };
 use std::convert::TryFrom;
 
@@ -72,14 +82,21 @@ fn basic_sig_from_webauthn_sig(
 mod tests {
     use super::*;
     use crate::webauthn::tests::ecdsa::{
-        ECDSA_P256_PK_COSE_DER_WRAPPED_HEX, ECDSA_WEBAUTHN_SIG_HELLO_HEX,
+        ECDSA_P256_PK_COSE_DER_WRAPPED_HEX,
+        ECDSA_WEBAUTHN_SIG_HELLO_HEX,
     };
     use ic_crypto_standalone_sig_verifier::user_public_key_from_bytes;
     use ic_test_utilities::crypto::temp_crypto_component_with_fake_registry;
-    use ic_test_utilities_types::ids::{message_test_id, node_test_id};
+    use ic_test_utilities_types::ids::{
+        message_test_id,
+        node_test_id,
+    };
     use ic_types::{
         crypto::SignableMock,
-        messages::{Blob, Delegation},
+        messages::{
+            Blob,
+            Delegation,
+        },
         time::UNIX_EPOCH,
     };
 

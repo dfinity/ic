@@ -12,7 +12,10 @@
 //!
 
 use crate::{
-    wasm_utils::instrumentation::{InjectedImports, WasmMemoryType},
+    wasm_utils::instrumentation::{
+        InjectedImports,
+        WasmMemoryType,
+    },
     wasmtime_embedder::system_api_complexity::overhead_native,
     InternalErrorCode,
 };
@@ -21,11 +24,19 @@ use ic_registry_subnet_type::SubnetType;
 use ic_sys::PAGE_SIZE;
 use ic_types::NumInstructions;
 use ic_wasm_transform::Body;
-use wasmparser::{BlockType, FuncType, Operator, ValType};
+use wasmparser::{
+    BlockType,
+    FuncType,
+    Operator,
+    ValType,
+};
 
 use ic_types::NumBytes;
 
-use super::{instrumentation::SpecialIndices, SystemApiFunc};
+use super::{
+    instrumentation::SpecialIndices,
+    SystemApiFunc,
+};
 
 const MAX_32_BIT_STABLE_MEMORY_IN_PAGES: i64 = 64 * 1024; // 4GiB
 const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;

@@ -1,10 +1,16 @@
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    Arc,
+    Mutex,
+};
 
 use crate::SerializedModule;
 use ic_interfaces::execution_environment::HypervisorResult;
 use ic_types::NumBytes;
 use ic_utils_lru_cache::LruCache;
-use ic_wasm_types::{CanisterModule, WasmHash};
+use ic_wasm_types::{
+    CanisterModule,
+    WasmHash,
+};
 
 /// Stores the serialized modules of wasm code that has already been compiled so
 /// that it can be used again without recompiling.

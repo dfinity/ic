@@ -1,15 +1,31 @@
 //! CSP threshold signature traits
 
 use crate::api::CspThresholdSignError;
-use crate::types::{CspPublicCoefficients, CspSecretKeyConversionError, CspSignature};
+use crate::types::{
+    CspPublicCoefficients,
+    CspSecretKeyConversionError,
+    CspSignature,
+};
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
-    CspFsEncryptionPublicKey, CspNiDkgDealing, CspNiDkgTranscript, Epoch,
+    CspFsEncryptionPublicKey,
+    CspNiDkgDealing,
+    CspNiDkgTranscript,
+    Epoch,
 };
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
-use ic_types::crypto::{AlgorithmId, CryptoResult};
-use ic_types::{NodeIndex, NumberOfNodes};
-use serde::{Deserialize, Serialize};
+use ic_types::crypto::{
+    AlgorithmId,
+    CryptoResult,
+};
+use ic_types::{
+    NodeIndex,
+    NumberOfNodes,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::fmt;

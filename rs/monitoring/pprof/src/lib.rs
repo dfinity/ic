@@ -2,11 +2,18 @@
 
 use async_trait::async_trait;
 use lazy_static::lazy_static;
-use pprof::{protos::Message, ProfilerGuard, Report};
+use pprof::{
+    protos::Message,
+    ProfilerGuard,
+    Report,
+};
 use regex::Regex;
 use std::time::Duration;
 use thiserror::Error;
-use tokio::{task::spawn_blocking, time::sleep};
+use tokio::{
+    task::spawn_blocking,
+    time::sleep,
+};
 
 /// Errors returned by `profile()` and `flamegraph()`.
 #[derive(Debug, Error)]

@@ -1,7 +1,10 @@
 use std::sync::Arc;
 
 use crate::{
-    fetch::{NodeFetchError, NodesFetcher},
+    fetch::{
+        NodeFetchError,
+        NodesFetcher,
+    },
     node::Node,
     types::GlobalShared,
 };

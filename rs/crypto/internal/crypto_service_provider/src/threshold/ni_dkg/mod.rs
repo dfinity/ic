@@ -5,30 +5,55 @@
 //! stateless crypto lib.
 
 use crate::api::NiDkgCspClient;
-use crate::key_id::{KeyId, KeyIdInstantiationError};
-use crate::types::{CspPublicCoefficients, CspSecretKey};
-use crate::vault::api::{CspPublicKeyStoreError, PublicKeyStoreCspVault};
+use crate::key_id::{
+    KeyId,
+    KeyIdInstantiationError,
+};
+use crate::types::{
+    CspPublicCoefficients,
+    CspSecretKey,
+};
+use crate::vault::api::{
+    CspPublicKeyStoreError,
+    PublicKeyStoreCspVault,
+};
 use crate::Csp;
 use ic_crypto_internal_threshold_sig_bls12381::api::dkg_errors::InternalError;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
-    CspDkgLoadPrivateKeyError, CspDkgUpdateFsEpochError,
+    CspDkgLoadPrivateKeyError,
+    CspDkgUpdateFsEpochError,
 };
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381 as clib;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::types::CspFsEncryptionKeySet;
 use ic_crypto_internal_threshold_sig_bls12381::types as threshold_types;
 use ic_crypto_internal_types::encrypt::forward_secure::{
-    CspFsEncryptionPop, CspFsEncryptionPublicKey,
+    CspFsEncryptionPop,
+    CspFsEncryptionPublicKey,
 };
-use ic_crypto_internal_types::scope::{ConstScope, Scope};
+use ic_crypto_internal_types::scope::{
+    ConstScope,
+    Scope,
+};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
-    CspNiDkgDealing, CspNiDkgTranscript, Epoch,
+    CspNiDkgDealing,
+    CspNiDkgTranscript,
+    Epoch,
 };
 use ic_logger::debug;
-use ic_types::crypto::error::{KeyNotFoundError, MalformedDataError};
+use ic_types::crypto::error::{
+    KeyNotFoundError,
+    MalformedDataError,
+};
 use ic_types::crypto::AlgorithmId;
-use ic_types::{NodeIndex, NumberOfNodes};
-use std::collections::{BTreeMap, BTreeSet};
+use ic_types::{
+    NodeIndex,
+    NumberOfNodes,
+};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
 
 #[cfg(test)]
 mod tests;

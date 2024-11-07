@@ -1,14 +1,25 @@
 // Include the prost-build generated registry protos.
 pub mod pb;
 
-use std::{fmt, str};
+use std::{
+    fmt,
+    str,
+};
 
 use crate::pb::v1::{
-    registry_error::Code, registry_mutation::Type, Precondition, RegistryDelta, RegistryError,
-    RegistryGetChangesSinceResponse, RegistryMutation,
+    registry_error::Code,
+    registry_mutation::Type,
+    Precondition,
+    RegistryDelta,
+    RegistryError,
+    RegistryGetChangesSinceResponse,
+    RegistryMutation,
 };
 use prost::Message;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 /// The possible errors in registry responses.
 /// Per key errors are associated with a particular

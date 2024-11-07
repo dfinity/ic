@@ -1,11 +1,17 @@
 use crate::common::EXPECTED_SNS_CREATION_FEE;
 use canister_test::Project;
 use common::set_up_state_machine_with_nns;
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
+use ic_nns_constants::{
+    GOVERNANCE_CANISTER_ID,
+    SNS_WASM_CANISTER_ID,
+};
 use ic_nns_test_utils::sns_wasm;
 use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_wasm::{
-    pb::v1::{DeployedSns, ListDeployedSnsesResponse},
+    pb::v1::{
+        DeployedSns,
+        ListDeployedSnsesResponse,
+    },
     sns_wasm::assert_unique_canister_ids,
 };
 

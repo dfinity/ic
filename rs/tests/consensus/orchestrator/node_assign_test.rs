@@ -27,7 +27,10 @@ end::catalog[] */
 use anyhow::Result;
 use ic_base_types::NodeId;
 use ic_consensus_system_test_utils::{
-    node::{await_node_certified_height, get_node_certified_height},
+    node::{
+        await_node_certified_height,
+        get_node_certified_height,
+    },
     rw_message::install_nns_and_check_progress,
 };
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -37,13 +40,27 @@ use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::systest;
 use ic_system_test_driver::{
     driver::{
-        ic::{InternetComputer, Subnet},
+        ic::{
+            InternetComputer,
+            Subnet,
+        },
         test_env::TestEnv,
-        test_env_api::{HasPublicApiUrl, HasTopologySnapshot, HasVm},
+        test_env_api::{
+            HasPublicApiUrl,
+            HasTopologySnapshot,
+            HasVm,
+        },
     },
-    nns::{submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed},
+    nns::{
+        submit_external_proposal_with_test_id,
+        vote_execute_proposal_assert_executed,
+    },
     util::{
-        assert_create_agent, block_on, get_app_subnet_and_node, get_nns_node, runtime_from_url,
+        assert_create_agent,
+        block_on,
+        get_app_subnet_and_node,
+        get_nns_node,
+        runtime_from_url,
         MessageCanister,
     },
 };

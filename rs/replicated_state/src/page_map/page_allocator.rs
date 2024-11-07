@@ -1,8 +1,17 @@
-use ic_sys::{PageBytes, PageIndex};
-use serde::{Deserialize, Serialize};
+use ic_sys::{
+    PageBytes,
+    PageIndex,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::{
     fmt::Debug,
-    sync::atomic::{AtomicUsize, Ordering},
+    sync::atomic::{
+        AtomicUsize,
+        Ordering,
+    },
     sync::Arc,
 };
 mod page_bytes;
@@ -11,10 +20,18 @@ mod page_allocator_registry;
 
 pub mod mmap;
 
-use mmap::{PageAllocatorId, PageAllocatorInner, PageInner};
+use mmap::{
+    PageAllocatorId,
+    PageAllocatorInner,
+    PageInner,
+};
 
 pub use self::page_allocator_registry::PageAllocatorRegistry;
-use super::{FileDescriptor, FileOffset, PageAllocatorFileDescriptor};
+use super::{
+    FileDescriptor,
+    FileOffset,
+    PageAllocatorFileDescriptor,
+};
 use ic_sys::PAGE_SIZE;
 
 static ALLOCATED_PAGES: PageCounter = PageCounter::new();

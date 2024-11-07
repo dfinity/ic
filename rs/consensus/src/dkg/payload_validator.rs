@@ -1,10 +1,20 @@
 use std::collections::HashSet;
 
-use super::{payload_builder, utils, PayloadCreationError};
-use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
+use super::{
+    payload_builder,
+    utils,
+    PayloadCreationError,
+};
+use ic_consensus_utils::{
+    crypto::ConsensusCrypto,
+    pool_reader::PoolReader,
+};
 use ic_interfaces::{
     dkg::DkgPool,
-    validation::{ValidationError, ValidationResult},
+    validation::{
+        ValidationError,
+        ValidationResult,
+    },
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
@@ -13,14 +23,22 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::ValidationContext,
     consensus::{
-        dkg::{self, Dealings, Summary},
-        Block, BlockPayload,
+        dkg::{
+            self,
+            Dealings,
+            Summary,
+        },
+        Block,
+        BlockPayload,
     },
     crypto::{
-        threshold_sig::ni_dkg::errors::verify_dealing_error::DkgVerifyDealingError, CryptoError,
+        threshold_sig::ni_dkg::errors::verify_dealing_error::DkgVerifyDealingError,
+        CryptoError,
     },
     registry::RegistryClientError,
-    Height, NodeId, SubnetId,
+    Height,
+    NodeId,
+    SubnetId,
 };
 use prometheus::IntCounterVec;
 
@@ -274,20 +292,40 @@ fn validate_dealings_payload(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
+    use ic_consensus_mocks::{
+        dependencies_with_subnet_params,
+        Dependencies,
+    };
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities_consensus::fake::FakeContentSigner;
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::ids::{
-        node_test_id, subnet_test_id, NODE_1, NODE_2, NODE_3, SUBNET_1, SUBNET_2,
+        node_test_id,
+        subnet_test_id,
+        NODE_1,
+        NODE_2,
+        NODE_3,
+        SUBNET_1,
+        SUBNET_2,
     };
     use ic_types::{
         batch::BatchPayload,
         consensus::{
-            dkg::{self, DealingContent, Message},
-            idkg, DataPayload, Payload,
+            dkg::{
+                self,
+                DealingContent,
+                Message,
+            },
+            idkg,
+            DataPayload,
+            Payload,
         },
-        crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+        crypto::threshold_sig::ni_dkg::{
+            NiDkgDealing,
+            NiDkgId,
+            NiDkgTag,
+            NiDkgTargetSubnet,
+        },
         RegistryVersion,
     };
     use std::ops::Deref;

@@ -5,34 +5,78 @@ pub mod storage;
 pub mod test_utils;
 
 use bit_vec::BitVec;
-pub use checkpoint::{CheckpointSerialization, MappingSerialization};
+pub use checkpoint::{
+    CheckpointSerialization,
+    MappingSerialization,
+};
 use ic_config::flag_status::FlagStatus;
 use ic_config::state_manager::LsmtConfig;
-use ic_metrics::buckets::{decimal_buckets, linear_buckets};
+use ic_metrics::buckets::{
+    decimal_buckets,
+    linear_buckets,
+};
 use ic_metrics::MetricsRegistry;
-use ic_sys::{fs::write_all_vectored, PageBytes};
-pub use ic_sys::{PageIndex, PAGE_SIZE};
+use ic_sys::{
+    fs::write_all_vectored,
+    PageBytes,
+};
+pub use ic_sys::{
+    PageIndex,
+    PAGE_SIZE,
+};
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 pub use page_allocator::{
-    allocated_pages_count, PageAllocator, PageAllocatorRegistry, PageAllocatorSerialization,
-    PageDeltaSerialization, PageSerialization,
+    allocated_pages_count,
+    PageAllocator,
+    PageAllocatorRegistry,
+    PageAllocatorSerialization,
+    PageDeltaSerialization,
+    PageSerialization,
 };
 pub use storage::{
-    BaseFileSerialization, MergeCandidate, OverlayFileSerialization, Shard, StorageLayout,
-    StorageResult, StorageSerialization, MAX_NUMBER_OF_FILES,
+    BaseFileSerialization,
+    MergeCandidate,
+    OverlayFileSerialization,
+    Shard,
+    StorageLayout,
+    StorageResult,
+    StorageSerialization,
+    MAX_NUMBER_OF_FILES,
 };
-use storage::{OverlayFile, OverlayVersion, Storage};
+use storage::{
+    OverlayFile,
+    OverlayVersion,
+    Storage,
+};
 
-use ic_types::{Height, NumOsPages, MAX_STABLE_MEMORY_IN_BYTES};
+use ic_types::{
+    Height,
+    NumOsPages,
+    MAX_STABLE_MEMORY_IN_BYTES,
+};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
-use int_map::{Bounds, IntMap};
+use int_map::{
+    Bounds,
+    IntMap,
+};
 use libc::off_t;
 use page_allocator::Page;
-use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec};
-use serde::{Deserialize, Serialize};
+use prometheus::{
+    Histogram,
+    HistogramVec,
+    IntCounter,
+    IntCounterVec,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::collections::HashMap;
-use std::fs::{File, OpenOptions};
+use std::fs::{
+    File,
+    OpenOptions,
+};
 use std::ops::Range;
 use std::os::unix::io::RawFd;
 use std::path::Path;
@@ -135,7 +179,10 @@ struct WriteBuffer<'a> {
 
 impl<'a> WriteBuffer<'a> {
     fn apply_to_file(&mut self, file: &mut File, path: &Path) -> Result<(), PersistenceError> {
-        use std::io::{Seek, SeekFrom};
+        use std::io::{
+            Seek,
+            SeekFrom,
+        };
 
         let offset = self.start_index.get() * PAGE_SIZE as u64;
         file.seek(SeekFrom::Start(offset))

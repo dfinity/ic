@@ -1,7 +1,13 @@
 use crate::lifecycle::upgrade::UpgradeArgs;
 pub use crate::state::Mode;
-use crate::state::{replace_state, CkBtcMinterState};
-use candid::{CandidType, Deserialize};
+use crate::state::{
+    replace_state,
+    CkBtcMinterState,
+};
+use candid::{
+    CandidType,
+    Deserialize,
+};
 use ic_base_types::CanisterId;
 use ic_btc_interface::Network;
 use serde::Serialize;

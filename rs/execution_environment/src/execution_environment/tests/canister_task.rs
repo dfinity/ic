@@ -1,22 +1,44 @@
 use assert_matches::assert_matches;
-use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
+use ic_config::{
+    execution_environment::Config as HypervisorConfig,
+    subnet_config::SubnetConfig,
+};
 use ic_error_types::RejectCode;
-use ic_management_canister_types::{CanisterSettingsArgsBuilder, CanisterStatusType};
+use ic_management_canister_types::{
+    CanisterSettingsArgsBuilder,
+    CanisterStatusType,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
 use ic_replicated_state::page_map::PAGE_SIZE;
 use ic_replicated_state::NumWasmPages;
 use ic_state_machine_tests::StateMachine;
-use ic_state_machine_tests::{StateMachineBuilder, StateMachineConfig, WasmResult};
-use ic_test_utilities_execution_environment::{wat_compilation_cost, ExecutionTestBuilder};
+use ic_state_machine_tests::{
+    StateMachineBuilder,
+    StateMachineConfig,
+    WasmResult,
+};
+use ic_test_utilities_execution_environment::{
+    wat_compilation_cost,
+    ExecutionTestBuilder,
+};
 use ic_test_utilities_metrics::fetch_int_counter_vec;
 use ic_types::messages::CanisterTask;
 use ic_types::Cycles;
-use ic_types::{CanisterId, NumBytes};
-use ic_universal_canister::{wasm, UNIVERSAL_CANISTER_WASM};
+use ic_types::{
+    CanisterId,
+    NumBytes,
+};
+use ic_universal_canister::{
+    wasm,
+    UNIVERSAL_CANISTER_WASM,
+};
 use maplit::btreemap;
-use std::time::{Duration, UNIX_EPOCH};
+use std::time::{
+    Duration,
+    UNIX_EPOCH,
+};
 
 #[test]
 fn heartbeat_is_executed() {

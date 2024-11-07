@@ -181,12 +181,23 @@
 //! where they are matched with incoming signature requests.
 
 use crate::bouncer_metrics::BouncerMetrics;
-use crate::idkg::complaints::{IDkgComplaintHandler, IDkgComplaintHandlerImpl};
-use crate::idkg::metrics::{
-    timed_call, IDkgClientMetrics, CRITICAL_ERROR_IDKG_RETAIN_ACTIVE_TRANSCRIPTS,
+use crate::idkg::complaints::{
+    IDkgComplaintHandler,
+    IDkgComplaintHandlerImpl,
 };
-use crate::idkg::pre_signer::{IDkgPreSigner, IDkgPreSignerImpl};
-use crate::idkg::signer::{ThresholdSigner, ThresholdSignerImpl};
+use crate::idkg::metrics::{
+    timed_call,
+    IDkgClientMetrics,
+    CRITICAL_ERROR_IDKG_RETAIN_ACTIVE_TRANSCRIPTS,
+};
+use crate::idkg::pre_signer::{
+    IDkgPreSigner,
+    IDkgPreSignerImpl,
+};
+use crate::idkg::signer::{
+    ThresholdSigner,
+    ThresholdSignerImpl,
+};
 use crate::idkg::utils::IDkgBlockReaderImpl;
 
 use ic_consensus_utils::crypto::ConsensusCrypto;
@@ -194,23 +205,42 @@ use ic_consensus_utils::RoundRobin;
 use ic_interfaces::{
     consensus_pool::ConsensusBlockCache,
     crypto::IDkgProtocol,
-    idkg::{IDkgChangeSet, IDkgPool},
-    p2p::consensus::{Bouncer, BouncerFactory, BouncerValue, PoolMutationsProducer},
+    idkg::{
+        IDkgChangeSet,
+        IDkgPool,
+    },
+    p2p::consensus::{
+        Bouncer,
+        BouncerFactory,
+        BouncerValue,
+        PoolMutationsProducer,
+    },
 };
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{error, warn, ReplicaLogger};
+use ic_logger::{
+    error,
+    warn,
+    ReplicaLogger,
+};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::crypto::canister_threshold_sig::error::IDkgRetainKeysError;
 use ic_types::{
-    artifact::IDkgMessageId, consensus::idkg::IDkgBlockReader, malicious_flags::MaliciousFlags,
-    Height, NodeId, SubnetId,
+    artifact::IDkgMessageId,
+    consensus::idkg::IDkgBlockReader,
+    malicious_flags::MaliciousFlags,
+    Height,
+    NodeId,
+    SubnetId,
 };
 
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::{
+    Duration,
+    Instant,
+};
 
 pub(crate) mod complaints;
 #[cfg(any(feature = "malicious_code", test))]
@@ -226,10 +256,14 @@ pub(crate) mod test_utils;
 pub(crate) mod utils;
 
 pub(crate) use payload_builder::{
-    create_data_payload, create_summary_payload, make_bootstrap_summary,
+    create_data_payload,
+    create_summary_payload,
+    make_bootstrap_summary,
 };
 pub(crate) use payload_verifier::{
-    validate_payload, IDkgPayloadValidationFailure, InvalidIDkgPayloadReason,
+    validate_payload,
+    IDkgPayloadValidationFailure,
+    InvalidIDkgPayloadReason,
 };
 pub use stats::IDkgStatsImpl;
 
@@ -555,7 +589,8 @@ fn compute_bouncer(
 #[cfg(test)]
 mod tests {
     use self::test_utils::{
-        fake_completed_signature_request_context, fake_ecdsa_master_public_key_id,
+        fake_completed_signature_request_context,
+        fake_ecdsa_master_public_key_id,
         TestIDkgBlockReader,
     };
     use self::utils::get_context_request_id;
@@ -564,14 +599,31 @@ mod tests {
     use ic_test_utilities::state_manager::RefMockStateManager;
     use ic_types::consensus::idkg::IDkgUIDGenerator;
     use ic_types::consensus::idkg::{
-        complaint_prefix, dealing_prefix, dealing_support_prefix, ecdsa_sig_share_prefix,
-        opening_prefix, schnorr_sig_share_prefix, IDkgArtifactIdData, PreSigId,
+        complaint_prefix,
+        dealing_prefix,
+        dealing_support_prefix,
+        ecdsa_sig_share_prefix,
+        opening_prefix,
+        schnorr_sig_share_prefix,
+        IDkgArtifactIdData,
+        PreSigId,
     };
     use ic_types::{
-        consensus::idkg::{RequestId, SigShareIdData},
-        crypto::{canister_threshold_sig::idkg::IDkgTranscriptId, CryptoHash},
+        consensus::idkg::{
+            RequestId,
+            SigShareIdData,
+        },
+        crypto::{
+            canister_threshold_sig::idkg::IDkgTranscriptId,
+            CryptoHash,
+        },
     };
-    use ic_types_test_utils::ids::{NODE_1, NODE_2, SUBNET_1, SUBNET_2};
+    use ic_types_test_utils::ids::{
+        NODE_1,
+        NODE_2,
+        SUBNET_1,
+        SUBNET_2,
+    };
 
     use tests::test_utils::create_sig_inputs;
 

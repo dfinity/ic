@@ -2,33 +2,71 @@
 //! (in particular, when one method is suspended when it calls out to the ledger
 //! canister).
 use assert_matches::assert_matches;
-use common::{increase_dissolve_delay_raw, set_dissolve_delay_raw};
-use fixtures::{principal, NNSBuilder, NeuronBuilder, NNS};
-use futures::{channel::mpsc, future::FutureExt, StreamExt};
-use ic_nervous_system_common::{ledger::IcpLedger, E8};
-use ic_neurons_fund::{
-    NeuronsFundParticipationLimits, PolynomialMatchingFunction, SerializableFunction,
+use common::{
+    increase_dissolve_delay_raw,
+    set_dissolve_delay_raw,
 };
-use ic_nns_common::pb::v1::{NeuronId, ProposalId};
+use fixtures::{
+    principal,
+    NNSBuilder,
+    NeuronBuilder,
+    NNS,
+};
+use futures::{
+    channel::mpsc,
+    future::FutureExt,
+    StreamExt,
+};
+use ic_nervous_system_common::{
+    ledger::IcpLedger,
+    E8,
+};
+use ic_neurons_fund::{
+    NeuronsFundParticipationLimits,
+    PolynomialMatchingFunction,
+    SerializableFunction,
+};
+use ic_nns_common::pb::v1::{
+    NeuronId,
+    ProposalId,
+};
 use ic_nns_governance::{
-    governance::{Environment, Governance},
+    governance::{
+        Environment,
+        Governance,
+    },
     pb::v1::{
-        manage_neuron::Disburse, neuron::DissolveState,
-        neurons_fund_snapshot::NeuronsFundNeuronPortion, proposal::Action,
-        settle_neurons_fund_participation_request, CreateServiceNervousSystem,
-        IdealMatchedParticipationFunction, NetworkEconomics, NeuronsFundData,
-        NeuronsFundParticipation, NeuronsFundSnapshot, Proposal, ProposalData,
-        SettleNeuronsFundParticipationRequest, SwapParticipationLimits,
+        manage_neuron::Disburse,
+        neuron::DissolveState,
+        neurons_fund_snapshot::NeuronsFundNeuronPortion,
+        proposal::Action,
+        settle_neurons_fund_participation_request,
+        CreateServiceNervousSystem,
+        IdealMatchedParticipationFunction,
+        NetworkEconomics,
+        NeuronsFundData,
+        NeuronsFundParticipation,
+        NeuronsFundSnapshot,
+        Proposal,
+        ProposalData,
+        SettleNeuronsFundParticipationRequest,
+        SwapParticipationLimits,
     },
 };
 use ic_sns_swap::pb::v1::Lifecycle;
 use ic_sns_wasm::pb::v1::DeployedSns;
 use icp_ledger::AccountIdentifier;
-use interleaving::{InterleavingTestLedger, LedgerControlMessage};
+use interleaving::{
+    InterleavingTestLedger,
+    LedgerControlMessage,
+};
 use rust_decimal_macros::dec;
 use std::{
     pin::Pin,
-    sync::{atomic, atomic::Ordering as AOrdering},
+    sync::{
+        atomic,
+        atomic::Ordering as AOrdering,
+    },
     thread,
 };
 

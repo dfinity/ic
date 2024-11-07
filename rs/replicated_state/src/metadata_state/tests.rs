@@ -1,33 +1,74 @@
 use super::*;
 use crate::metadata_state::subnet_call_context_manager::{
-    InstallCodeCall, RawRandContext, StopCanisterCall, SubnetCallContext, SubnetCallContextManager,
+    InstallCodeCall,
+    RawRandContext,
+    StopCanisterCall,
+    SubnetCallContext,
+    SubnetCallContextManager,
 };
 use assert_matches::assert_matches;
-use ic_error_types::{ErrorCode, UserError};
+use ic_error_types::{
+    ErrorCode,
+    UserError,
+};
 use ic_limits::MAX_INGRESS_TTL;
-use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, IC_00};
+use ic_management_canister_types::{
+    EcdsaCurve,
+    EcdsaKeyId,
+    MasterPublicKeyId,
+    IC_00,
+};
 use ic_registry_routing_table::CanisterIdRange;
 use ic_test_utilities_types::{
     ids::{
-        canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id, SUBNET_0,
-        SUBNET_1, SUBNET_2,
+        canister_test_id,
+        message_test_id,
+        node_test_id,
+        subnet_test_id,
+        user_test_id,
+        SUBNET_0,
+        SUBNET_1,
+        SUBNET_2,
     },
-    messages::{RequestBuilder, ResponseBuilder},
-    xnet::{StreamHeaderBuilder, StreamSliceBuilder},
+    messages::{
+        RequestBuilder,
+        ResponseBuilder,
+    },
+    xnet::{
+        StreamHeaderBuilder,
+        StreamSliceBuilder,
+    },
 };
 use ic_types::{
     batch::BlockmakerMetrics,
-    canister_http::{CanisterHttpMethod, CanisterHttpRequestContext},
+    canister_http::{
+        CanisterHttpMethod,
+        CanisterHttpRequestContext,
+    },
     ingress::WasmResult,
-    messages::{CallbackId, CanisterCall, Payload, Request, RequestMetadata},
+    messages::{
+        CallbackId,
+        CanisterCall,
+        Payload,
+        Request,
+        RequestMetadata,
+    },
     time::CoarseTime,
-    Cycles, ExecutionRound,
+    Cycles,
+    ExecutionRound,
 };
-use ic_types::{canister_http::Transform, time::current_time};
+use ic_types::{
+    canister_http::Transform,
+    time::current_time,
+};
 use lazy_static::lazy_static;
 use maplit::btreemap;
 use proptest::prelude::*;
-use std::{ops::Range, sync::Arc, time::Duration};
+use std::{
+    ops::Range,
+    sync::Arc,
+    time::Duration,
+};
 use strum::IntoEnumIterator;
 
 struct DummyMetrics;

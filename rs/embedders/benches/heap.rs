@@ -1,4 +1,9 @@
-use criterion::{criterion_group, criterion_main, Criterion, Throughput};
+use criterion::{
+    criterion_group,
+    criterion_main,
+    Criterion,
+    Throughput,
+};
 use embedders_bench::PostSetupAction;
 
 const HEAP_WAT: &[u8] = include_bytes!("test-data/heap.wat");

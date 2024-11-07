@@ -1,64 +1,157 @@
 use async_trait::async_trait;
-use candid::{candid_method, Decode, Encode};
-use ic_base_types::{CanisterId, PrincipalId};
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
+use candid::{
+    candid_method,
+    Decode,
+    Encode,
+};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
+use ic_canisters_http_types::{
+    HttpRequest,
+    HttpResponse,
+    HttpResponseBuilder,
+};
 use ic_cdk::{
-    api::call::arg_data_raw, caller as ic_cdk_caller, heartbeat, post_upgrade, pre_upgrade,
-    println, query, spawn, update,
+    api::call::arg_data_raw,
+    caller as ic_cdk_caller,
+    heartbeat,
+    post_upgrade,
+    pre_upgrade,
+    println,
+    query,
+    spawn,
+    update,
 };
 use ic_management_canister_types::IC_00;
 use ic_nervous_system_canisters::cmc::CMCCanister;
 use ic_nervous_system_common::{
-    memory_manager_upgrade_storage::{load_protobuf, store_protobuf},
+    memory_manager_upgrade_storage::{
+        load_protobuf,
+        store_protobuf,
+    },
     serve_metrics,
 };
-use ic_nervous_system_runtime::{CdkRuntime, Runtime};
+use ic_nervous_system_runtime::{
+    CdkRuntime,
+    Runtime,
+};
 use ic_nns_common::{
-    access_control::{check_caller_is_gtc, check_caller_is_ledger},
-    pb::v1::{NeuronId as NeuronIdProto, ProposalId as ProposalIdProto},
-    types::{CallCanisterProposal, NeuronId, ProposalId},
+    access_control::{
+        check_caller_is_gtc,
+        check_caller_is_ledger,
+    },
+    pb::v1::{
+        NeuronId as NeuronIdProto,
+        ProposalId as ProposalIdProto,
+    },
+    types::{
+        CallCanisterProposal,
+        NeuronId,
+        ProposalId,
+    },
 };
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::{
-    decoder_config, encode_metrics,
-    governance::{Environment, Governance, HeapGrowthPotential, RngError, TimeWarp as GovTimeWarp},
+    decoder_config,
+    encode_metrics,
+    governance::{
+        Environment,
+        Governance,
+        HeapGrowthPotential,
+        RngError,
+        TimeWarp as GovTimeWarp,
+    },
     neuron_data_validation::NeuronDataValidationSummary,
-    pb::v1::{self as gov_pb, Governance as InternalGovernanceProto},
-    storage::{grow_upgrades_memory_to, validate_stable_storage, with_upgrades_memory},
+    pb::v1::{
+        self as gov_pb,
+        Governance as InternalGovernanceProto,
+    },
+    storage::{
+        grow_upgrades_memory_to,
+        validate_stable_storage,
+        with_upgrades_memory,
+    },
 };
 #[cfg(feature = "test")]
 use ic_nns_governance_api::test_api::TimeWarp;
 use ic_nns_governance_api::{
-    bitcoin::{BitcoinNetwork, BitcoinSetConfigProposal},
+    bitcoin::{
+        BitcoinNetwork,
+        BitcoinSetConfigProposal,
+    },
     pb::v1::{
         claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshNeuronFromAccountResponseResult,
-        governance::{GovernanceCachedMetrics, Migrations},
+        governance::{
+            GovernanceCachedMetrics,
+            Migrations,
+        },
         governance_error::ErrorType,
         manage_neuron::{
-            claim_or_refresh::{By, MemoAndController},
-            ClaimOrRefresh, NeuronIdOrSubaccount, RegisterVote,
+            claim_or_refresh::{
+                By,
+                MemoAndController,
+            },
+            ClaimOrRefresh,
+            NeuronIdOrSubaccount,
+            RegisterVote,
         },
-        manage_neuron_response, ClaimOrRefreshNeuronFromAccount,
-        ClaimOrRefreshNeuronFromAccountResponse, GetNeuronsFundAuditInfoRequest,
-        GetNeuronsFundAuditInfoResponse, Governance as ApiGovernanceProto, GovernanceError,
-        ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse, ListNodeProviderRewardsRequest,
-        ListNodeProviderRewardsResponse, ListNodeProvidersResponse, ListProposalInfo,
-        ListProposalInfoResponse, ManageNeuronCommandRequest, ManageNeuronRequest,
-        ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, Neuron, NeuronInfo,
-        NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary, RewardEvent,
-        SettleCommunityFundParticipation, SettleNeuronsFundParticipationRequest,
-        SettleNeuronsFundParticipationResponse, UpdateNodeProvider, Vote,
+        manage_neuron_response,
+        ClaimOrRefreshNeuronFromAccount,
+        ClaimOrRefreshNeuronFromAccountResponse,
+        GetNeuronsFundAuditInfoRequest,
+        GetNeuronsFundAuditInfoResponse,
+        Governance as ApiGovernanceProto,
+        GovernanceError,
+        ListKnownNeuronsResponse,
+        ListNeurons,
+        ListNeuronsResponse,
+        ListNodeProviderRewardsRequest,
+        ListNodeProviderRewardsResponse,
+        ListNodeProvidersResponse,
+        ListProposalInfo,
+        ListProposalInfoResponse,
+        ManageNeuronCommandRequest,
+        ManageNeuronRequest,
+        ManageNeuronResponse,
+        MonthlyNodeProviderRewards,
+        NetworkEconomics,
+        Neuron,
+        NeuronInfo,
+        NodeProvider,
+        Proposal,
+        ProposalInfo,
+        RestoreAgingSummary,
+        RewardEvent,
+        SettleCommunityFundParticipation,
+        SettleNeuronsFundParticipationRequest,
+        SettleNeuronsFundParticipationResponse,
+        UpdateNodeProvider,
+        Vote,
     },
-    subnet_rental::{SubnetRentalProposalPayload, SubnetRentalRequest},
+    subnet_rental::{
+        SubnetRentalProposalPayload,
+        SubnetRentalRequest,
+    },
 };
-use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsWasm};
+use ic_sns_wasm::pb::v1::{
+    AddWasmRequest,
+    SnsWasm,
+};
 use prost::Message;
-use rand::{RngCore, SeedableRng};
+use rand::{
+    RngCore,
+    SeedableRng,
+};
 use rand_chacha::ChaCha20Rng;
 use std::{
     boxed::Box,
     str::FromStr,
-    time::{Duration, SystemTime},
+    time::{
+        Duration,
+        SystemTime,
+    },
 };
 
 #[cfg(not(feature = "tla"))]
@@ -261,7 +354,11 @@ impl Environment for CanisterEnv {
         update: &gov_pb::ExecuteNnsFunction,
     ) -> Result<(), gov_pb::GovernanceError> {
         // use internal types, as this API is used in core
-        use gov_pb::{governance_error::ErrorType, GovernanceError, NnsFunction};
+        use gov_pb::{
+            governance_error::ErrorType,
+            GovernanceError,
+            NnsFunction,
+        };
 
         let mt = NnsFunction::try_from(update.nns_function).map_err(|_|
             // No update type specified.
@@ -930,7 +1027,11 @@ fn get_effective_payload(
     proposal_id: u64,
     proposal_timestamp_seconds: u64,
 ) -> Result<Vec<u8>, gov_pb::GovernanceError> {
-    use gov_pb::{governance_error::ErrorType, GovernanceError, NnsFunction};
+    use gov_pb::{
+        governance_error::ErrorType,
+        GovernanceError,
+        NnsFunction,
+    };
 
     const BITCOIN_SET_CONFIG_METHOD_NAME: &str = "set_config";
     const BITCOIN_MAINNET_CANISTER_ID: &str = "ghsi2-tqaaa-aaaan-aaaca-cai";

@@ -1,8 +1,18 @@
 use candid::Principal;
-use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
+use ic_nervous_system_common_test_keys::{
+    TEST_NEURON_1_ID,
+    TEST_NEURON_1_OWNER_KEYPAIR,
+};
 use ic_nervous_system_integration_tests::pocket_ic_helpers::install_nns_canisters;
-use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder};
-use std::{env, io::Write, process::Command};
+use pocket_ic::{
+    nonblocking::PocketIc,
+    PocketIcBuilder,
+};
+use std::{
+    env,
+    io::Write,
+    process::Command,
+};
 use tempfile::NamedTempFile;
 use url::Url;
 

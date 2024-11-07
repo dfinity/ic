@@ -2,7 +2,11 @@
 mod tests;
 
 use http::Uri;
-use ic_types::{NodeId, PrincipalId, RegistryVersion};
+use ic_types::{
+    NodeId,
+    PrincipalId,
+    RegistryVersion,
+};
 use std::convert::TryFrom;
 use std::fmt;
 use std::net::SocketAddr;

@@ -6,10 +6,16 @@
 mod tests;
 
 use super::groth20_bls12_381::types as groth20_bls12_381;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::fmt;
 use strum_macros::IntoStaticStr;
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::{
+    Zeroize,
+    ZeroizeOnDrop,
+};
 
 #[cfg(test)]
 use proptest_derive::Arbitrary;

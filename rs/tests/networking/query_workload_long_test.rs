@@ -23,17 +23,28 @@ use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_networking_subnet_update_workload::setup;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
-    canister_api::{CallMode, GenericRequest},
+    canister_api::{
+        CallMode,
+        GenericRequest,
+    },
     driver::{
         group::SystemTestGroup,
         ic::ImageSizeGiB,
         test_env::TestEnv,
-        test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
+        test_env_api::{
+            HasPublicApiUrl,
+            HasTopologySnapshot,
+            IcNodeContainer,
+        },
     },
     systest,
     util::spawn_round_robin_workload_engine,
 };
-use slog::{debug, info, Logger};
+use slog::{
+    debug,
+    info,
+    Logger,
+};
 use std::process::Command;
 use std::time::Duration;
 

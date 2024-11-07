@@ -2,16 +2,37 @@
 //! enabling testing consensus algorithm and implementation in the presence
 //! of malicious nodes.
 use crate::consensus::{
-    add_all_to_validated, block_maker, block_maker::BlockMaker, finalizer::Finalizer,
+    add_all_to_validated,
+    block_maker,
+    block_maker::BlockMaker,
+    finalizer::Finalizer,
     notary::Notary,
 };
 use ic_consensus_utils::pool_reader::PoolReader;
-use ic_interfaces::consensus_pool::{ChangeAction, HeightRange, Mutations};
-use ic_logger::{info, trace, ReplicaLogger};
+use ic_interfaces::consensus_pool::{
+    ChangeAction,
+    HeightRange,
+    Mutations,
+};
+use ic_logger::{
+    info,
+    trace,
+    ReplicaLogger,
+};
 use ic_types::{
     consensus::{
-        hashed, Block, BlockMetadata, BlockProposal, ConsensusMessage, ConsensusMessageHashable,
-        FinalizationContent, FinalizationShare, HasHeight, HashedBlock, NotarizationShare, Rank,
+        hashed,
+        Block,
+        BlockMetadata,
+        BlockProposal,
+        ConsensusMessage,
+        ConsensusMessageHashable,
+        FinalizationContent,
+        FinalizationShare,
+        HasHeight,
+        HashedBlock,
+        NotarizationShare,
+        Rank,
     },
     malicious_flags::MaliciousFlags,
     Time,
@@ -60,7 +81,8 @@ fn maliciously_propose_blocks(
     maliciously_equivocation_blockmaker: bool,
 ) -> Vec<BlockProposal> {
     use ic_protobuf::log::malicious_behaviour_log_entry::v1::{
-        MaliciousBehaviour, MaliciousBehaviourLogEntry,
+        MaliciousBehaviour,
+        MaliciousBehaviourLogEntry,
     };
     trace!(block_maker.log, "maliciously_propose_blocks");
     let number_of_proposals = 5;
@@ -195,7 +217,8 @@ fn maliciously_propose_empty_block(
 /// Maliciously notarize all unnotarized proposals for the current height.
 fn maliciously_notarize_all(notary: &Notary, pool: &PoolReader<'_>) -> Vec<NotarizationShare> {
     use ic_protobuf::log::malicious_behaviour_log_entry::v1::{
-        MaliciousBehaviour, MaliciousBehaviourLogEntry,
+        MaliciousBehaviour,
+        MaliciousBehaviourLogEntry,
     };
     trace!(notary.log, "maliciously_notarize");
     let mut notarization_shares = Vec::<NotarizationShare>::new();
@@ -238,7 +261,8 @@ fn maliciously_finalize_all(
     pool: &PoolReader<'_>,
 ) -> Vec<FinalizationShare> {
     use ic_protobuf::log::malicious_behaviour_log_entry::v1::{
-        MaliciousBehaviour, MaliciousBehaviourLogEntry,
+        MaliciousBehaviour,
+        MaliciousBehaviourLogEntry,
     };
     trace!(finalizer.log, "maliciously_finalize");
     let mut finalization_shares = Vec::new();

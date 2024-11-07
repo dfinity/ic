@@ -3,21 +3,41 @@
 use crate::p2p::consensus::UnvalidatedArtifact;
 use ic_base_types::RegistryVersion;
 use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{
+        try_from_option_field,
+        ProxyDecodeError,
+    },
     types::v1 as pb,
 };
 use ic_types::{
     artifact::ConsensusMessageId,
     consensus::{
-        Block, BlockProposal, CatchUpPackage, CatchUpPackageShare, ConsensusMessage, ContentEq,
-        EquivocationProof, Finalization, FinalizationShare, HasHeight, HashedBlock, Notarization,
-        NotarizationShare, RandomBeacon, RandomBeaconShare, RandomTape, RandomTapeShare,
+        Block,
+        BlockProposal,
+        CatchUpPackage,
+        CatchUpPackageShare,
+        ConsensusMessage,
+        ContentEq,
+        EquivocationProof,
+        Finalization,
+        FinalizationShare,
+        HasHeight,
+        HashedBlock,
+        Notarization,
+        NotarizationShare,
+        RandomBeacon,
+        RandomBeaconShare,
+        RandomTape,
+        RandomTapeShare,
     },
     crypto::CryptoHashOf,
     time::Time,
     Height,
 };
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::sync::Arc;
 use std::time::Instant;
 

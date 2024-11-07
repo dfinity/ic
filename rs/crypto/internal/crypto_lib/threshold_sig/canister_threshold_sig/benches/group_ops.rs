@@ -1,7 +1,10 @@
 use criterion::*;
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use rand::{CryptoRng, Rng};
+use rand::{
+    CryptoRng,
+    Rng,
+};
 
 fn random_point<R: Rng + CryptoRng>(curve_type: EccCurveType, rng: &mut R) -> EccPoint {
     EccPoint::mul_by_g(&EccScalar::random(curve_type, rng))

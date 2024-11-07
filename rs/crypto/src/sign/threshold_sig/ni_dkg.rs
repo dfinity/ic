@@ -2,16 +2,29 @@
 
 use super::*;
 use ic_crypto_internal_csp::CryptoServiceProvider;
-use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsScope};
-use ic_interfaces::crypto::{LoadTranscriptResult, NiDkgAlgorithm};
-use ic_logger::{debug, new_logger};
+use ic_crypto_internal_logmon::metrics::{
+    MetricsDomain,
+    MetricsScope,
+};
+use ic_interfaces::crypto::{
+    LoadTranscriptResult,
+    NiDkgAlgorithm,
+};
+use ic_logger::{
+    debug,
+    new_logger,
+};
 use ic_types::crypto::threshold_sig::ni_dkg::errors::create_dealing_error::DkgCreateDealingError;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::create_transcript_error::DkgCreateTranscriptError;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::key_removal_error::DkgKeyRemovalError;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::load_transcript_error::DkgLoadTranscriptError;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::verify_dealing_error::DkgVerifyDealingError;
 use ic_types::crypto::threshold_sig::ni_dkg::transcripts_to_retain::TranscriptsToRetain;
-use ic_types::crypto::threshold_sig::ni_dkg::{config::NiDkgConfig, NiDkgDealing, NiDkgTranscript};
+use ic_types::crypto::threshold_sig::ni_dkg::{
+    config::NiDkgConfig,
+    NiDkgDealing,
+    NiDkgTranscript,
+};
 use std::collections::HashSet;
 
 mod dealing;

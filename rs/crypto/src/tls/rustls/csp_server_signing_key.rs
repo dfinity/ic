@@ -1,7 +1,15 @@
 use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp::types::CspSignature;
-use ic_crypto_internal_csp::vault::api::{CspTlsSignError, CspVault};
-use rustls::{self, Error as TLSError, SignatureAlgorithm, SignatureScheme};
+use ic_crypto_internal_csp::vault::api::{
+    CspTlsSignError,
+    CspVault,
+};
+use rustls::{
+    self,
+    Error as TLSError,
+    SignatureAlgorithm,
+    SignatureScheme,
+};
 use std::fmt;
 use std::sync::Arc;
 

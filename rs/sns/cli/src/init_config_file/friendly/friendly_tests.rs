@@ -1,6 +1,13 @@
 use super::*;
-use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
-use ic_nervous_system_humanize::{parse_duration, parse_percentage, parse_tokens};
+use ic_nervous_system_common::{
+    E8,
+    ONE_DAY_SECONDS,
+};
+use ic_nervous_system_humanize::{
+    parse_duration,
+    parse_percentage,
+    parse_tokens,
+};
 use pretty_assertions::assert_eq;
 
 const NOMINAL_SECONDS_PER_YEAR: u64 = 365 * ONE_DAY_SECONDS + ONE_DAY_SECONDS / 4;

@@ -1,25 +1,45 @@
 use crate::ic_wasm::ICWasmModule;
 use ic_config::{
-    embedders::{Config, FeatureFlags},
+    embedders::{
+        Config,
+        FeatureFlags,
+    },
     flag_status::FlagStatus,
     subnet_config::SchedulerConfig,
 };
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::{
-    wasm_executor::{WasmExecutor, WasmExecutorImpl},
-    CompilationCache, WasmExecutionInput, WasmtimeEmbedder,
+    wasm_executor::{
+        WasmExecutor,
+        WasmExecutorImpl,
+    },
+    CompilationCache,
+    WasmExecutionInput,
+    WasmtimeEmbedder,
 };
-use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
+use ic_interfaces::execution_environment::{
+    ExecutionMode,
+    SubnetAvailableMemory,
+};
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::execution_state::{WasmBinary, WasmMetadata},
+    canister_state::execution_state::{
+        WasmBinary,
+        WasmMetadata,
+    },
     page_map::TestPageAllocatorFileDescriptorImpl,
-    ExecutionState, ExportedFunctions, Global, Memory, NetworkTopology,
+    ExecutionState,
+    ExportedFunctions,
+    Global,
+    Memory,
+    NetworkTopology,
 };
 use ic_system_api::{
-    sandbox_safe_system_state::SandboxSafeSystemState, ApiType, ExecutionParameters,
+    sandbox_safe_system_state::SandboxSafeSystemState,
+    ApiType,
+    ExecutionParameters,
     InstructionLimits,
 };
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
@@ -28,12 +48,21 @@ use ic_test_utilities_state::SystemStateBuilder;
 use ic_test_utilities_types::ids::user_test_id;
 use ic_types::{
     messages::RequestMetadata,
-    methods::{FuncRef, WasmMethod},
+    methods::{
+        FuncRef,
+        WasmMethod,
+    },
     time::UNIX_EPOCH,
-    ComputeAllocation, MemoryAllocation, NumBytes,
+    ComputeAllocation,
+    MemoryAllocation,
+    NumBytes,
 };
 use ic_wasm_types::CanisterModule;
-use std::{collections::BTreeSet, path::PathBuf, sync::Arc};
+use std::{
+    collections::BTreeSet,
+    path::PathBuf,
+    sync::Arc,
+};
 
 #[inline(always)]
 pub fn run_fuzzer(module: ICWasmModule) {
@@ -162,7 +191,10 @@ fn setup_execution_state(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use arbitrary::{Arbitrary, Unstructured};
+    use arbitrary::{
+        Arbitrary,
+        Unstructured,
+    };
 
     #[test]
     fn test_execute_with_wasm_executor_single_run() {

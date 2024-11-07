@@ -1,7 +1,14 @@
 use crate::{
     confidentiality_formatting::ConfidentialityFormatting,
     state::CanisterApi,
-    types::{ConfigResponse, OutputConfig, OutputRule, OutputRuleMetadata, RuleId, Version},
+    types::{
+        ConfigResponse,
+        OutputConfig,
+        OutputRule,
+        OutputRuleMetadata,
+        RuleId,
+        Version,
+    },
 };
 
 pub trait EntityFetcher {
@@ -158,7 +165,10 @@ impl From<FetchRuleError> for String {
 mod tests {
     use crate::confidentiality_formatting::MockConfidentialityFormatting;
     use crate::state::MockCanisterApi;
-    use crate::storage::{StorableConfig, StorableVersion};
+    use crate::storage::{
+        StorableConfig,
+        StorableVersion,
+    };
 
     use super::*;
 

@@ -7,12 +7,20 @@
 
 use p256::{
     elliptic_curve::{
-        generic_array::{typenum::Unsigned, GenericArray},
+        generic_array::{
+            typenum::Unsigned,
+            GenericArray,
+        },
         Curve,
     },
-    AffinePoint, NistP256, Scalar,
+    AffinePoint,
+    NistP256,
+    Scalar,
 };
-use rand::{CryptoRng, RngCore};
+use rand::{
+    CryptoRng,
+    RngCore,
+};
 use zeroize::ZeroizeOnDrop;
 
 /// An error indicating that decoding a key failed
@@ -92,7 +100,10 @@ impl DerivationPath {
     }
 
     fn ckd(idx: &[u8], input: &[u8], chain_code: &[u8; 32]) -> ([u8; 32], Scalar) {
-        use hmac::{Hmac, Mac};
+        use hmac::{
+            Hmac,
+            Mac,
+        };
         use p256::elliptic_curve::ops::Reduce;
         use sha2::Sha512;
 
@@ -124,7 +135,10 @@ impl DerivationPath {
         pt: AffinePoint,
         chain_code: &[u8; 32],
     ) -> ([u8; 32], Scalar, AffinePoint) {
-        use p256::elliptic_curve::{group::GroupEncoding, ops::MulByGenerator};
+        use p256::elliptic_curve::{
+            group::GroupEncoding,
+            ops::MulByGenerator,
+        };
         use p256::ProjectivePoint;
 
         let mut ckd_input = pt.to_bytes();
@@ -412,7 +426,10 @@ impl PrivateKey {
     ///
     /// The message is hashed with SHA-256
     pub fn sign_message(&self, message: &[u8]) -> [u8; 64] {
-        use p256::ecdsa::{signature::Signer, Signature};
+        use p256::ecdsa::{
+            signature::Signer,
+            Signature,
+        };
         let sig: Signature = self.key.sign(message);
         sig.to_bytes().into()
     }
@@ -424,7 +441,10 @@ impl PrivateKey {
             return None;
         }
 
-        use p256::ecdsa::{signature::hazmat::PrehashSigner, Signature};
+        use p256::ecdsa::{
+            signature::hazmat::PrehashSigner,
+            Signature,
+        };
         let sig: Signature = self
             .key
             .sign_prehash(digest)

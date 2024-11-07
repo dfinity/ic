@@ -1,15 +1,29 @@
 use super::*;
 use crate::{
-    neuron::{DissolveStateAndAge, NeuronBuilder},
+    neuron::{
+        DissolveStateAndAge,
+        NeuronBuilder,
+    },
     pb::v1::{
-        governance::{followers_map::Followers, FollowersMap},
+        governance::{
+            followers_map::Followers,
+            FollowersMap,
+        },
         neuron::DissolveState,
         Neuron as NeuronProto,
     },
-    test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
+    test_utils::{
+        MockEnvironment,
+        StubCMC,
+        StubIcpLedger,
+    },
 };
 use ic_base_types::PrincipalId;
-use ic_nervous_system_common::{assert_is_err, assert_is_ok, E8};
+use ic_nervous_system_common::{
+    assert_is_err,
+    assert_is_ok,
+    E8,
+};
 #[cfg(feature = "test")]
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
 use ic_nns_common::pb::v1::NeuronId;
@@ -19,9 +33,14 @@ use ic_protobuf::registry::dc::v1::DataCenterRecord;
 #[cfg(feature = "test")]
 use ic_sns_init::pb::v1::SnsInitPayload;
 #[cfg(feature = "test")]
-use ic_sns_init::pb::v1::{self as sns_init_pb};
+use ic_sns_init::pb::v1::{
+    self as sns_init_pb,
+};
 use lazy_static::lazy_static;
-use maplit::{btreemap, hashmap};
+use maplit::{
+    btreemap,
+    hashmap,
+};
 use std::convert::TryFrom;
 
 mod neurons_fund;
@@ -41,7 +60,11 @@ fn test_time_warp() {
 }
 
 mod settle_neurons_fund_participation_request_tests {
-    use settle_neurons_fund_participation_request::{Aborted, Committed, Result};
+    use settle_neurons_fund_participation_request::{
+        Aborted,
+        Committed,
+        Result,
+    };
     use SettleNeuronsFundParticipationRequest;
 
     use super::*;
@@ -141,7 +164,8 @@ mod settle_neurons_fund_participation_mem_tests {
     use crate::{
         governance::MAX_NEURONS_FUND_PARTICIPANTS,
         neurons_fund::{
-            neurons_fund_neuron::MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON, NeuronsFundNeuronPortion,
+            neurons_fund_neuron::MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON,
+            NeuronsFundNeuronPortion,
             NeuronsFundSnapshot,
         },
         pb::v1 as gov_pb,
@@ -220,7 +244,11 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
     use ic_nervous_system_proto::pb::v1 as pb;
     use ic_sns_init::pb::v1::sns_init_payload;
     use ic_sns_swap::pb::v1::NeuronBasketConstructionParameters;
-    use test_data::{CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING, IMAGE_1, IMAGE_2};
+    use test_data::{
+        CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING,
+        IMAGE_1,
+        IMAGE_2,
+    };
 
     // Alias types from crate::pb::v1::...
     //
@@ -517,7 +545,11 @@ mod convert_create_service_nervous_system_proposal_to_sns_init_payload_tests_wit
     use ic_nervous_system_proto::pb::v1 as pb;
     use ic_sns_init::pb::v1::sns_init_payload;
     use ic_sns_swap::pb::v1::NeuronBasketConstructionParameters;
-    use test_data::{CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING, IMAGE_1, IMAGE_2};
+    use test_data::{
+        CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING,
+        IMAGE_1,
+        IMAGE_2,
+    };
 
     // Alias types from crate::pb::v1::...
     //
@@ -850,9 +882,19 @@ mod metrics_tests {
         encode_metrics,
         governance::Governance,
         pb::v1::{
-            proposal, Governance as GovernanceProto, Motion, Proposal, ProposalData, Tally, Topic,
+            proposal,
+            Governance as GovernanceProto,
+            Motion,
+            Proposal,
+            ProposalData,
+            Tally,
+            Topic,
         },
-        test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
+        test_utils::{
+            MockEnvironment,
+            StubCMC,
+            StubIcpLedger,
+        },
     };
 
     #[test]
@@ -997,7 +1039,10 @@ mod metrics_tests {
 }
 
 mod neuron_archiving_tests {
-    use crate::neuron::{DissolveStateAndAge, NeuronBuilder};
+    use crate::neuron::{
+        DissolveStateAndAge,
+        NeuronBuilder,
+    };
     use ic_base_types::PrincipalId;
     use ic_nns_common::pb::v1::NeuronId;
     use icp_ledger::Subaccount;
@@ -1136,16 +1181,34 @@ mod neuron_archiving_tests {
 
 mod cast_vote_and_cascade_follow {
     use crate::{
-        governance::{Governance, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS},
-        neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
+        governance::{
+            Governance,
+            MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
+        },
+        neuron::{
+            DissolveStateAndAge,
+            Neuron,
+            NeuronBuilder,
+        },
         neuron_store::NeuronStore,
-        pb::v1::{neuron::Followees, Ballot, Topic, Vote},
+        pb::v1::{
+            neuron::Followees,
+            Ballot,
+            Topic,
+            Vote,
+        },
     };
     use ic_base_types::PrincipalId;
-    use ic_nns_common::pb::v1::{NeuronId, ProposalId};
+    use ic_nns_common::pb::v1::{
+        NeuronId,
+        ProposalId,
+    };
     use icp_ledger::Subaccount;
     use maplit::hashmap;
-    use std::collections::{BTreeMap, HashMap};
+    use std::collections::{
+        BTreeMap,
+        HashMap,
+    };
 
     fn make_ballot(voting_power: u64, vote: Vote) -> Ballot {
         Ballot {

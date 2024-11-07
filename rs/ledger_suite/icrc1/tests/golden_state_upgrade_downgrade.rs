@@ -1,15 +1,34 @@
-use crate::common::{index_ng_wasm, ledger_wasm, load_wasm_using_env_var};
+use crate::common::{
+    index_ng_wasm,
+    ledger_wasm,
+    load_wasm_using_env_var,
+};
 use crate::index::verify_ledger_archive_and_index_block_parity;
-use candid::{Encode, Nat, Principal};
+use candid::{
+    Encode,
+    Nat,
+    Principal,
+};
 use canister_test::Wasm;
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_icrc1::Block;
-use ic_icrc1_index_ng::{IndexArg, UpgradeArg as IndexUpgradeArg};
+use ic_icrc1_index_ng::{
+    IndexArg,
+    UpgradeArg as IndexUpgradeArg,
+};
 use ic_ledger_suite_state_machine_tests::in_memory_ledger::{
-    ApprovalKey, BurnsWithoutSpender, InMemoryLedger,
+    ApprovalKey,
+    BurnsWithoutSpender,
+    InMemoryLedger,
 };
 use ic_ledger_suite_state_machine_tests::{
-    generate_transactions, get_all_ledger_and_archive_blocks, get_blocks, list_archives,
+    generate_transactions,
+    get_all_ledger_and_archive_blocks,
+    get_blocks,
+    list_archives,
     TransactionGenerationParameters,
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_fiduciary_state_or_panic;
@@ -784,7 +803,10 @@ mod index {
     use ic_icrc1_index_ng::Status;
     use ic_state_machine_tests::WasmResult;
     use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
-    use std::time::{Duration, Instant};
+    use std::time::{
+        Duration,
+        Instant,
+    };
 
     pub fn get_all_index_blocks(
         state_machine: &StateMachine,

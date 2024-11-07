@@ -3,21 +3,39 @@ use assert_matches::assert_matches;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_node_key_generation::generate_node_keys_once;
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
-use ic_crypto_test_utils_ni_dkg::{initial_dkg_transcript_and_master_key, InitialNiDkgConfig};
-use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
+use ic_crypto_test_utils_ni_dkg::{
+    initial_dkg_transcript_and_master_key,
+    InitialNiDkgConfig,
+};
+use ic_crypto_test_utils_reproducible_rng::{
+    reproducible_rng,
+    ReproducibleRng,
+};
 use ic_crypto_utils_ni_dkg::extract_threshold_sig_public_key;
 use ic_nns_test_utils::registry::new_current_node_crypto_keys_mutations;
 use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_protobuf::registry::subnet::v1::{
-    CatchUpPackageContents, InitialNiDkgTranscriptRecord, SubnetListRecord,
+    CatchUpPackageContents,
+    InitialNiDkgTranscriptRecord,
+    SubnetListRecord,
 };
 use ic_registry_keys::make_catch_up_package_contents_key;
-use ic_registry_keys::{make_node_record_key, make_subnet_list_record_key};
+use ic_registry_keys::{
+    make_node_record_key,
+    make_subnet_list_record_key,
+};
 use ic_registry_transport::insert;
-use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTargetId, NiDkgTranscript};
+use ic_types::crypto::threshold_sig::ni_dkg::{
+    NiDkgTag,
+    NiDkgTargetId,
+    NiDkgTranscript,
+};
 use ic_types::crypto::CurrentNodePublicKeys;
 use ic_types::RegistryVersion;
-use ic_types_test_utils::ids::{SUBNET_1, SUBNET_2};
+use ic_types_test_utils::ids::{
+    SUBNET_1,
+    SUBNET_2,
+};
 use prost::Message;
 use rand::RngCore;
 use std::collections::BTreeSet;
@@ -600,21 +618,34 @@ fn run_test_orphaned_crypto_keys(
 mod ecdsa_signing_subnet_lists {
     use super::*;
     use crate::common::test_helpers::invariant_compliant_registry;
-    use ic_base_types::{subnet_id_into_protobuf, SubnetId};
-    use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId};
+    use ic_base_types::{
+        subnet_id_into_protobuf,
+        SubnetId,
+    };
+    use ic_management_canister_types::{
+        EcdsaCurve,
+        EcdsaKeyId,
+        MasterPublicKeyId,
+    };
     use ic_protobuf::registry::crypto::v1::ChainKeySigningSubnetList;
     use ic_protobuf::registry::crypto::v1::{
-        self as pb, master_public_key_id, MasterPublicKeyId as MasterPublicKeyIdPb,
+        self as pb,
+        master_public_key_id,
+        MasterPublicKeyId as MasterPublicKeyIdPb,
     };
     use ic_protobuf::registry::subnet::v1::{
-        ChainKeyConfig as ChainKeyConfigPb, KeyConfig as KeyConfigPb,
+        ChainKeyConfig as ChainKeyConfigPb,
+        KeyConfig as KeyConfigPb,
         SubnetRecord as SubnetRecordPb,
     };
     use ic_registry_keys::CHAIN_KEY_SIGNING_SUBNET_LIST_KEY_PREFIX;
     use ic_registry_subnet_features::KeyConfig;
     use ic_registry_transport::pb::v1::RegistryMutation;
     use ic_registry_transport::upsert;
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::{
+        node_test_id,
+        subnet_test_id,
+    };
     use ic_types::PrincipalId;
     use prost::Message;
     use rand::Rng;

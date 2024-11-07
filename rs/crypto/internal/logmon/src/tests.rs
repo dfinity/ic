@@ -1,8 +1,18 @@
 use crate::metrics::{
-    BooleanOperation, BooleanResult, KeyRotationResult, KeyType, MessageType, MetricsDomain,
-    MetricsResult, MetricsScope, ServiceType,
+    BooleanOperation,
+    BooleanResult,
+    KeyRotationResult,
+    KeyType,
+    MessageType,
+    MetricsDomain,
+    MetricsResult,
+    MetricsScope,
+    ServiceType,
 };
-use convert_case::{Case, Casing};
+use convert_case::{
+    Case,
+    Casing,
+};
 use strum::IntoEnumIterator;
 
 #[test]

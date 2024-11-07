@@ -7,9 +7,16 @@ use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381;
 use ic_crypto_test_utils::canister_signatures::canister_sig_pub_key_to_bytes;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
-use ic_types::crypto::{AlgorithmId, CryptoError};
+use ic_types::crypto::{
+    AlgorithmId,
+    CryptoError,
+};
 use ic_types::messages::Blob;
-use rand::{CryptoRng, Rng, RngCore};
+use rand::{
+    CryptoRng,
+    Rng,
+    RngCore,
+};
 
 #[test]
 fn should_verify_valid_signature() {

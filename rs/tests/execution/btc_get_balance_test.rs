@@ -1,30 +1,58 @@
 #[rustfmt::skip]
 
 use anyhow::{Result, bail};
-use bitcoincore_rpc::{Auth, Client, RpcApi};
+use bitcoincore_rpc::{
+    Auth,
+    Client,
+    RpcApi,
+};
 use candid::Decode;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    get_dependency_path, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, SshSession,
-    READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+    get_dependency_path,
+    HasPublicApiUrl,
+    HasTopologySnapshot,
+    IcNodeContainer,
+    SshSession,
+    READY_WAIT_TIMEOUT,
+    RETRY_BACKOFF,
 };
 use ic_system_test_driver::{
     driver::{
-        ic::{InternetComputer, Subnet},
-        universal_vm::{UniversalVm, UniversalVms},
+        ic::{
+            InternetComputer,
+            Subnet,
+        },
+        universal_vm::{
+            UniversalVm,
+            UniversalVms,
+        },
     },
     systest,
-    util::{block_on, runtime_from_url, UniversalCanister},
+    util::{
+        block_on,
+        runtime_from_url,
+        UniversalCanister,
+    },
 };
 use ic_tests_ckbtc::install_bitcoin_canister;
 use ic_types::Height;
-use ic_universal_canister::{management, wasm};
+use ic_universal_canister::{
+    management,
+    wasm,
+};
 use slog::info;
-use std::net::{IpAddr, SocketAddr};
+use std::net::{
+    IpAddr,
+    SocketAddr,
+};
 use std::sync::Arc;
-use std::{io::Read, path::Path};
+use std::{
+    io::Read,
+    path::Path,
+};
 
 /* tag::catalog[]
 Title:: Bitcoin integration test

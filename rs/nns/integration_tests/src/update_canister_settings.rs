@@ -1,20 +1,37 @@
 use candid::Nat;
-use ic_base_types::{CanisterId, PrincipalId};
-use ic_nervous_system_clients::canister_status::{DefiniteCanisterSettings, LogVisibility};
-use ic_nns_constants::{LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
+use ic_nervous_system_clients::canister_status::{
+    DefiniteCanisterSettings,
+    LogVisibility,
+};
+use ic_nns_constants::{
+    LIFELINE_CANISTER_ID,
+    REGISTRY_CANISTER_ID,
+    ROOT_CANISTER_ID,
+};
 use ic_nns_governance_api::pb::v1::{
     manage_neuron_response::Command,
     update_canister_settings::{
-        CanisterSettings, Controllers, LogVisibility as GovernanceLogVisibility,
+        CanisterSettings,
+        Controllers,
+        LogVisibility as GovernanceLogVisibility,
     },
-    MakeProposalRequest, ProposalActionRequest, UpdateCanisterSettings,
+    MakeProposalRequest,
+    ProposalActionRequest,
+    UpdateCanisterSettings,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     neuron_helpers::get_neuron_1,
     state_test_helpers::{
-        get_canister_status, nns_governance_make_proposal, nns_wait_for_proposal_execution,
-        setup_nns_canisters, state_machine_builder_for_nns_tests,
+        get_canister_status,
+        nns_governance_make_proposal,
+        nns_wait_for_proposal_execution,
+        setup_nns_canisters,
+        state_machine_builder_for_nns_tests,
     },
 };
 

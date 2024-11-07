@@ -1,9 +1,19 @@
 //! The certification public interface.
-use crate::validation::{ValidationError, ValidationResult};
+use crate::validation::{
+    ValidationError,
+    ValidationResult,
+};
 use ic_types::{
-    consensus::certification::{Certification, CertificationMessage, CertificationShare},
+    consensus::certification::{
+        Certification,
+        CertificationMessage,
+        CertificationShare,
+    },
     crypto::CryptoError,
-    CryptoHashOfPartialState, Height, RegistryVersion, SubnetId,
+    CryptoHashOfPartialState,
+    Height,
+    RegistryVersion,
+    SubnetId,
 };
 use std::collections::HashSet;
 

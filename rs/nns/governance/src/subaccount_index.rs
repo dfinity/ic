@@ -1,10 +1,16 @@
 use crate::{
-    pb::v1::{governance_error::ErrorType, GovernanceError},
+    pb::v1::{
+        governance_error::ErrorType,
+        GovernanceError,
+    },
     storage::validate_stable_btree_map,
 };
 
 use ic_nns_common::pb::v1::NeuronId;
-use ic_stable_structures::{Memory, StableBTreeMap};
+use ic_stable_structures::{
+    Memory,
+    StableBTreeMap,
+};
 use icp_ledger::Subaccount;
 
 #[cfg(feature = "test")]

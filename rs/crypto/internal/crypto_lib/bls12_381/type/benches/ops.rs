@@ -2,7 +2,10 @@ use criterion::*;
 use ic_crypto_internal_bls12_381_type::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use paste::paste;
-use rand::{CryptoRng, Rng};
+use rand::{
+    CryptoRng,
+    Rng,
+};
 use std::sync::Arc;
 
 fn random_g1<R: Rng + CryptoRng>(rng: &mut R) -> G1Projective {

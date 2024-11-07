@@ -1,4 +1,7 @@
-use ic_canister_client::{Agent, Sender};
+use ic_canister_client::{
+    Agent,
+    Sender,
+};
 use ic_protobuf::types::v1::CatchUpContent;
 use prost::Message;
 use reqwest::Url;

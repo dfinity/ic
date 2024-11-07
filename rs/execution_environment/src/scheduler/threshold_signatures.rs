@@ -1,10 +1,17 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
 
 use ic_crypto_prng::Csprng;
 use ic_interfaces::execution_environment::RegistryExecutionSettings;
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithThresholdContext;
-use ic_types::{consensus::idkg::PreSigId, ExecutionRound, Height};
+use ic_types::{
+    consensus::idkg::PreSigId,
+    ExecutionRound,
+    Height,
+};
 use rand::RngCore;
 
 use super::SchedulerMetrics;
@@ -104,12 +111,23 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
-    use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId};
+    use ic_management_canister_types::{
+        EcdsaCurve,
+        EcdsaKeyId,
+        SchnorrAlgorithm,
+        SchnorrKeyId,
+    };
     use ic_replicated_state::metadata_state::subnet_call_context_manager::{
-        EcdsaArguments, SchnorrArguments, SignWithThresholdContext, ThresholdArguments,
+        EcdsaArguments,
+        SchnorrArguments,
+        SignWithThresholdContext,
+        ThresholdArguments,
     };
     use ic_test_utilities_types::messages::RequestBuilder;
-    use ic_types::{messages::CallbackId, time::UNIX_EPOCH};
+    use ic_types::{
+        messages::CallbackId,
+        time::UNIX_EPOCH,
+    };
 
     fn ecdsa_key_id(i: u8) -> MasterPublicKeyId {
         MasterPublicKeyId::Ecdsa(EcdsaKeyId {

@@ -1,35 +1,73 @@
-use candid::{Encode, Principal};
-use ic_agent::agent::{http_transport::ReqwestTransport, CallResponse};
+use candid::{
+    Encode,
+    Principal,
+};
+use ic_agent::agent::{
+    http_transport::ReqwestTransport,
+    CallResponse,
+};
 use ic_cdk::api::management_canister::main::CanisterIdRecord;
 use ic_cdk::api::management_canister::provisional::ProvisionalCreateCanisterWithCyclesArgument;
 use ic_interfaces_registry::{
-    RegistryDataProvider, RegistryVersionedRecord, ZERO_REGISTRY_VERSION,
+    RegistryDataProvider,
+    RegistryVersionedRecord,
+    ZERO_REGISTRY_VERSION,
 };
 use ic_management_canister_types::ProvisionalCreateCanisterWithCyclesArgs;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_transport::pb::v1::{
-    registry_mutation::Type, RegistryAtomicMutateRequest, RegistryMutation,
+    registry_mutation::Type,
+    RegistryAtomicMutateRequest,
+    RegistryMutation,
 };
 use ic_utils::interfaces::ManagementCanister;
 use nix::sys::signal::Signal;
 use pocket_ic::common::rest::{
-    CreateHttpGatewayResponse, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayDetails,
-    HttpsConfig, InstanceConfig, SubnetConfigSet, SubnetKind, Topology,
+    CreateHttpGatewayResponse,
+    HttpGatewayBackend,
+    HttpGatewayConfig,
+    HttpGatewayDetails,
+    HttpsConfig,
+    InstanceConfig,
+    SubnetConfigSet,
+    SubnetKind,
+    Topology,
 };
-use pocket_ic::{update_candid, PocketIc, PocketIcBuilder, WasmResult};
-use rcgen::{CertificateParams, KeyPair};
+use pocket_ic::{
+    update_candid,
+    PocketIc,
+    PocketIcBuilder,
+    WasmResult,
+};
+use rcgen::{
+    CertificateParams,
+    KeyPair,
+};
 use registry_canister::init::RegistryCanisterInitPayload;
 use reqwest::blocking::Client;
 use reqwest::Client as NonblockingClient;
-use reqwest::{StatusCode, Url};
+use reqwest::{
+    StatusCode,
+    Url,
+};
 use slog::Level;
 use std::io::Read;
 use std::io::Write;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::{
+    IpAddr,
+    Ipv4Addr,
+    SocketAddr,
+};
 use std::path::PathBuf;
-use std::process::{Child, Command};
+use std::process::{
+    Child,
+    Command,
+};
 use std::time::Duration;
-use tempfile::{NamedTempFile, TempDir};
+use tempfile::{
+    NamedTempFile,
+    TempDir,
+};
 
 pub const LOCALHOST: &str = "127.0.0.1";
 

@@ -1,15 +1,27 @@
 use crate::registry::Registry;
-use ic_base_types::{NodeId, PrincipalId, SubnetId};
+use ic_base_types::{
+    NodeId,
+    PrincipalId,
+    SubnetId,
+};
 use ic_protobuf::registry::{
-    replica_version::v1::BlessedReplicaVersions, subnet::v1::SubnetListRecord,
+    replica_version::v1::BlessedReplicaVersions,
+    subnet::v1::SubnetListRecord,
     unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
 };
 use ic_registry_keys::{
-    make_api_boundary_node_record_key, make_blessed_replica_versions_key, make_node_record_key,
+    make_api_boundary_node_record_key,
+    make_blessed_replica_versions_key,
+    make_node_record_key,
     make_unassigned_nodes_config_record_key,
 };
 use prost::Message;
-use std::{cmp::Eq, collections::HashSet, convert::TryFrom, hash::Hash};
+use std::{
+    cmp::Eq,
+    collections::HashSet,
+    convert::TryFrom,
+    hash::Hash,
+};
 
 pub fn get_subnet_ids_from_subnet_list(subnet_list: SubnetListRecord) -> Vec<SubnetId> {
     subnet_list

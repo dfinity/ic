@@ -1,7 +1,14 @@
 use crate::state::eventlog::Event;
 use ic_stable_structures::{
-    log::{Log as StableLog, NoSuchEntry},
-    memory_manager::{MemoryId, MemoryManager, VirtualMemory},
+    log::{
+        Log as StableLog,
+        NoSuchEntry,
+    },
+    memory_manager::{
+        MemoryId,
+        MemoryManager,
+        VirtualMemory,
+    },
     DefaultMemoryImpl,
 };
 use std::cell::RefCell;

@@ -13,18 +13,35 @@ Success:: In the case where we only make 2/4 queries, we expect that there are n
 statistics, whilein the other cases we expect the test to succeed.
 
 end::catalog[] */
-use crate::{round_robin_query_call, single_update_call, wait_until_next_epoch};
+use crate::{
+    round_robin_query_call,
+    single_update_call,
+    wait_until_next_epoch,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
         test_env::TestEnv,
-        test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
+        test_env_api::{
+            HasPublicApiUrl,
+            HasTopologySnapshot,
+            IcNodeContainer,
+        },
     },
-    util::{block_on, UniversalCanister},
+    util::{
+        block_on,
+        UniversalCanister,
+    },
 };
-use ic_utils::{call::AsyncCall, interfaces::ManagementCanister};
+use ic_utils::{
+    call::AsyncCall,
+    interfaces::ManagementCanister,
+};
 use slog::info;
-use std::{ops::Range, time::Duration};
+use std::{
+    ops::Range,
+    time::Duration,
+};
 
 pub fn query_stats_basic(env: TestEnv) {
     query_stats_fault_tolerance(env, 0..4, true)

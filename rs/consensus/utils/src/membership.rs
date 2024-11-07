@@ -1,16 +1,28 @@
 use crate::{
-    active_high_threshold_committee, active_low_threshold_committee, registry_version_at_height,
+    active_high_threshold_committee,
+    active_low_threshold_committee,
+    registry_version_at_height,
 };
-use ic_crypto_prng::{Csprng, RandomnessPurpose};
+use ic_crypto_prng::{
+    Csprng,
+    RandomnessPurpose,
+};
 use ic_interfaces::consensus_pool::ConsensusPoolCache;
 use ic_interfaces_registry::RegistryClient;
 use ic_types::{
     consensus::{
-        get_committee_size, get_faults_tolerated, Committee, HasHeight, RandomBeacon, Rank,
+        get_committee_size,
+        get_faults_tolerated,
+        Committee,
+        HasHeight,
+        RandomBeacon,
+        Rank,
         Threshold,
     },
     registry::RegistryClientError,
-    Height, NodeId, SubnetId,
+    Height,
+    NodeId,
+    SubnetId,
 };
 use rand::seq::SliceRandom;
 use std::sync::Arc;

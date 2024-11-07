@@ -5,15 +5,30 @@ use crate::tls::rustls::node_cert_verifier::NodeClientCertVerifier;
 use crate::tls::tls_cert_from_registry;
 use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp::vault::api::CspVault;
-use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfigError, TlsPublicKeyCert};
+use ic_crypto_tls_interfaces::{
+    SomeOrAllNodes,
+    TlsConfigError,
+    TlsPublicKeyCert,
+};
 use ic_interfaces_registry::RegistryClient;
-use ic_types::{NodeId, RegistryVersion};
+use ic_types::{
+    NodeId,
+    RegistryVersion,
+};
 use rustls::{
-    crypto::ring::cipher_suite::{TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384},
-    server::{danger::ClientCertVerifier, NoClientAuth, ResolvesServerCert},
+    crypto::ring::cipher_suite::{
+        TLS13_AES_128_GCM_SHA256,
+        TLS13_AES_256_GCM_SHA384,
+    },
+    server::{
+        danger::ClientCertVerifier,
+        NoClientAuth,
+        ResolvesServerCert,
+    },
     sign::CertifiedKey,
     version::TLS13,
-    ServerConfig, SignatureScheme,
+    ServerConfig,
+    SignatureScheme,
 };
 use std::sync::Arc;
 

@@ -2,15 +2,24 @@ use anyhow::Result;
 use ic_agent::agent::RejectCode;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
+use ic_system_test_driver::driver::test_env_api::{
+    GetFirstHealthyNodeSnapshot,
+    HasPublicApiUrl,
+};
 use ic_system_test_driver::driver::{
-    ic::{InternetComputer, Subnet},
+    ic::{
+        InternetComputer,
+        Subnet,
+    },
     test_env::TestEnv,
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::*;
 use ic_types::Cycles;
-use ic_universal_canister::{management, wasm};
+use ic_universal_canister::{
+    management,
+    wasm,
+};
 use ic_utils::interfaces::ManagementCanister;
 
 fn main() -> Result<()> {

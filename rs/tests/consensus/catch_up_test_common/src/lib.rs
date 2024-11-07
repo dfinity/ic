@@ -10,17 +10,25 @@ const FINALIZATION_MIN_HEIGHT: &str = "artifact_pool_consensus_height_stat{pool_
 const FINALIZATION_MAX_HEIGHT: &str = "artifact_pool_consensus_height_stat{pool_type=\"validated\",stat=\"max\",type=\"finalization\"}";
 
 use ic_consensus_system_test_utils::node::{
-    await_node_certified_height, get_node_certified_height,
+    await_node_certified_height,
+    get_node_certified_height,
 };
 use ic_system_test_driver::{
     driver::{
         test_env::TestEnv,
         test_env_api::{
-            HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, READY_WAIT_TIMEOUT,
+            HasPublicApiUrl,
+            HasTopologySnapshot,
+            HasVm,
+            IcNodeContainer,
+            READY_WAIT_TIMEOUT,
             RETRY_BACKOFF,
         },
     },
-    util::{block_on, MetricsFetcher},
+    util::{
+        block_on,
+        MetricsFetcher,
+    },
 };
 use ic_types::Height;
 

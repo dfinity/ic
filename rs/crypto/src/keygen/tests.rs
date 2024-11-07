@@ -2,7 +2,10 @@ use super::*;
 use crate::common::test_utils::crypto_component::crypto_component_with_csp_and_vault;
 use assert_matches::assert_matches;
 use ic_base_types::SubnetId;
-use ic_base_types::{NodeId, PrincipalId};
+use ic_base_types::{
+    NodeId,
+    PrincipalId,
+};
 use ic_crypto_internal_csp::api::CspCreateMEGaKeyError;
 use ic_crypto_internal_csp::vault::api::ExternalPublicKeyError;
 use ic_crypto_internal_csp::vault::api::LocalPublicKeyError;
@@ -15,8 +18,10 @@ use ic_crypto_internal_threshold_sig_canister_threshold_sig::MEGaPublicKey;
 use ic_crypto_temp_crypto::EcdsaSubnetConfig;
 use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
 use ic_crypto_test_utils_keys::public_keys::{
-    valid_committee_signing_public_key, valid_dkg_dealing_encryption_public_key,
-    valid_idkg_dealing_encryption_public_key, valid_node_signing_public_key,
+    valid_committee_signing_public_key,
+    valid_dkg_dealing_encryption_public_key,
+    valid_idkg_dealing_encryption_public_key,
+    valid_node_signing_public_key,
     valid_tls_certificate_and_validation_time,
 };
 use ic_crypto_test_utils_local_csp_vault::MockLocalCspVault;
@@ -31,12 +36,18 @@ use ic_protobuf::registry::subnet::v1::SubnetListRecord;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_subnet_list_record_key;
 use ic_registry_keys::make_subnet_record_key;
-use ic_registry_keys::{make_crypto_node_key, make_crypto_tls_cert_key};
+use ic_registry_keys::{
+    make_crypto_node_key,
+    make_crypto_tls_cert_key,
+};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
 use ic_test_utilities_in_memory_logger::InMemoryReplicaLogger;
 use ic_test_utilities_time::FastForwardTimeSource;
-use ic_types::{crypto::KeyPurpose, RegistryVersion};
+use ic_types::{
+    crypto::KeyPurpose,
+    RegistryVersion,
+};
 use slog::Level;
 use std::sync::Arc;
 
@@ -934,7 +945,10 @@ mod rotate_idkg_dealing_encryption_keys {
     use ic_crypto_internal_threshold_sig_canister_threshold_sig::EccCurveType;
     use ic_crypto_test_utils_keys::public_keys::valid_idkg_dealing_encryption_public_key_2;
     use ic_crypto_test_utils_keys::public_keys::valid_idkg_dealing_encryption_public_key_3;
-    use ic_test_utilities_in_memory_logger::{assertions::LogEntriesAssert, InMemoryReplicaLogger};
+    use ic_test_utilities_in_memory_logger::{
+        assertions::LogEntriesAssert,
+        InMemoryReplicaLogger,
+    };
     use slog::Level;
 
     const TWO_WEEKS: Duration = Duration::from_secs(2 * 7 * 24 * 60 * 60);
@@ -1273,7 +1287,10 @@ mod rotate_idkg_dealing_encryption_keys {
         use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
         use ic_interfaces::crypto::KeyManager;
         use ic_protobuf::registry::subnet::v1::SubnetListRecord;
-        use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
+        use ic_registry_keys::{
+            make_subnet_list_record_key,
+            make_subnet_record_key,
+        };
 
         let mut vault = MockLocalCspVault::new();
         let mut counter = 0_u8;
@@ -1371,7 +1388,10 @@ mod rotate_idkg_dealing_encryption_keys {
         use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
         use ic_interfaces::crypto::KeyManager;
         use ic_protobuf::registry::subnet::v1::SubnetListRecord;
-        use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
+        use ic_registry_keys::{
+            make_subnet_list_record_key,
+            make_subnet_record_key,
+        };
 
         let mut vault = MockLocalCspVault::new();
         let mut counter = 0_u8;

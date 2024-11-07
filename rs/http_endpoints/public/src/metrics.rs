@@ -1,8 +1,18 @@
 use ic_metrics::{
-    buckets::{add_bucket, decimal_buckets, linear_buckets},
+    buckets::{
+        add_bucket,
+        decimal_buckets,
+        linear_buckets,
+    },
     MetricsRegistry,
 };
-use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
+use prometheus::{
+    Histogram,
+    HistogramVec,
+    IntCounter,
+    IntCounterVec,
+    IntGauge,
+};
 
 pub const LABEL_DETAIL: &str = "detail";
 pub const LABEL_PROTOCOL: &str = "protocol";

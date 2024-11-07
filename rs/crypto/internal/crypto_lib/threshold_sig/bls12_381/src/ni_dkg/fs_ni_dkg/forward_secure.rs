@@ -10,29 +10,58 @@
 
 pub use crate::ni_dkg::fs_ni_dkg::chunking::*;
 use crate::ni_dkg::fs_ni_dkg::dlog_recovery::{
-    CheatingDealerDlogSolver, HonestDealerDlogLookupTable,
+    CheatingDealerDlogSolver,
+    HonestDealerDlogLookupTable,
 };
 use crate::ni_dkg::fs_ni_dkg::encryption_key_pop::{
-    prove_pop, verify_pop, EncryptionKeyInstance, EncryptionKeyPop,
+    prove_pop,
+    verify_pop,
+    EncryptionKeyInstance,
+    EncryptionKeyPop,
 };
-use crate::ni_dkg::fs_ni_dkg::random_oracles::{random_oracle, HashedMap};
+use crate::ni_dkg::fs_ni_dkg::random_oracles::{
+    random_oracle,
+    HashedMap,
+};
 
 use crate::ni_dkg::fs_ni_dkg::forward_secure::CiphertextIntegrityError::{
-    CrszVectorsLengthMismatch, InvalidNidkgCiphertext,
+    CrszVectorsLengthMismatch,
+    InvalidNidkgCiphertext,
 };
-use crate::ni_dkg::groth20_bls12_381::types::{BTENodeBytes, FsEncryptionSecretKey};
+use crate::ni_dkg::groth20_bls12_381::types::{
+    BTENodeBytes,
+    FsEncryptionSecretKey,
+};
 use ic_crypto_internal_bls12_381_type::{
-    G1Affine, G1Projective, G2Affine, G2Prepared, G2Projective, Gt, Scalar,
+    G1Affine,
+    G1Projective,
+    G2Affine,
+    G2Prepared,
+    G2Projective,
+    Gt,
+    Scalar,
 };
-pub use ic_crypto_internal_types::curves::bls12_381::{FrBytes, G1Bytes, G2Bytes};
+pub use ic_crypto_internal_types::curves::bls12_381::{
+    FrBytes,
+    G1Bytes,
+    G2Bytes,
+};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
-    FsEncryptionCiphertextBytes, FsEncryptionPop, FsEncryptionPublicKey,
+    FsEncryptionCiphertextBytes,
+    FsEncryptionPop,
+    FsEncryptionPublicKey,
 };
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
 use lazy_static::lazy_static;
-use rand::{CryptoRng, RngCore};
+use rand::{
+    CryptoRng,
+    RngCore,
+};
 use std::collections::LinkedList;
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::{
+    Zeroize,
+    ZeroizeOnDrop,
+};
 
 /// Constant which controls the upper limit of epochs
 ///

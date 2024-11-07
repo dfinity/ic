@@ -59,7 +59,10 @@
 //! If you want to call temporarily_*_foo from integration tests, you will have
 //! to get rid of the #[cfg(test)] attributes, and also add pub.
 
-use std::{cell::Cell, thread::LocalKey};
+use std::{
+    cell::Cell,
+    thread::LocalKey,
+};
 
 // This could be generic. That is, add a T parameter. Currently, only bool is supported, because YAGNI.
 #[must_use]

@@ -5,33 +5,83 @@ use ic_cycles_account_manager::ResourceSaturation;
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::{
     ExecutionMode,
-    HypervisorError::{self, *},
-    HypervisorResult, OutOfInstructionsHandler, PerformanceCounterType, StableGrowOutcome,
-    StableMemoryApi, SubnetAvailableMemory, SystemApi, SystemApiCallCounters,
-    TrapCode::{self, CyclesAmountTooBigFor64Bit},
+    HypervisorError::{
+        self,
+        *,
+    },
+    HypervisorResult,
+    OutOfInstructionsHandler,
+    PerformanceCounterType,
+    StableGrowOutcome,
+    StableMemoryApi,
+    SubnetAvailableMemory,
+    SystemApi,
+    SystemApiCallCounters,
+    TrapCode::{
+        self,
+        CyclesAmountTooBigFor64Bit,
+    },
 };
-use ic_logger::{error, ReplicaLogger};
+use ic_logger::{
+    error,
+    ReplicaLogger,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::WASM_PAGE_SIZE_IN_BYTES, memory_required_to_push_request, Memory, NumWasmPages,
+    canister_state::WASM_PAGE_SIZE_IN_BYTES,
+    memory_required_to_push_request,
+    Memory,
+    NumWasmPages,
     PageIndex,
 };
 use ic_sys::PageBytes;
 use ic_types::{
     ingress::WasmResult,
-    messages::{CallContextId, RejectContext, Request, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
-    methods::{SystemMethod, WasmClosure},
-    CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
-    NumInstructions, NumOsPages, PrincipalId, SubnetId, Time, MAX_STABLE_MEMORY_IN_BYTES,
+    messages::{
+        CallContextId,
+        RejectContext,
+        Request,
+        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+    },
+    methods::{
+        SystemMethod,
+        WasmClosure,
+    },
+    CanisterId,
+    CanisterLog,
+    CanisterTimer,
+    ComputeAllocation,
+    Cycles,
+    MemoryAllocation,
+    NumBytes,
+    NumInstructions,
+    NumOsPages,
+    PrincipalId,
+    SubnetId,
+    Time,
+    MAX_STABLE_MEMORY_IN_BYTES,
 };
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 use ic_wasm_types::doc_ref;
-use request_in_prep::{into_request, RequestInPrep};
-use sandbox_safe_system_state::{CanisterStatusView, SandboxSafeSystemState, SystemStateChanges};
-use serde::{Deserialize, Serialize};
+use request_in_prep::{
+    into_request,
+    RequestInPrep,
+};
+use sandbox_safe_system_state::{
+    CanisterStatusView,
+    SandboxSafeSystemState,
+    SystemStateChanges,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use stable_memory::StableMemory;
 use std::{
-    convert::{From, TryFrom},
+    convert::{
+        From,
+        TryFrom,
+    },
     rc::Rc,
 };
 

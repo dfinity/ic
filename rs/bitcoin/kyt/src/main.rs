@@ -1,14 +1,31 @@
-use bitcoin::{consensus::Decodable, Address, Transaction};
+use bitcoin::{
+    consensus::Decodable,
+    Address,
+    Transaction,
+};
 use ic_btc_interface::Txid;
 use ic_btc_kyt::{
-    blocklist_contains, get_tx_cycle_cost, BtcNetwork, CheckAddressArgs, CheckAddressResponse,
-    CheckTransactionArgs, CheckTransactionIrrecoverableError, CheckTransactionResponse,
-    CheckTransactionRetriable, CheckTransactionStatus, KytArg, KytMode,
-    CHECK_TRANSACTION_CYCLES_REQUIRED, CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
+    blocklist_contains,
+    get_tx_cycle_cost,
+    BtcNetwork,
+    CheckAddressArgs,
+    CheckAddressResponse,
+    CheckTransactionArgs,
+    CheckTransactionIrrecoverableError,
+    CheckTransactionResponse,
+    CheckTransactionRetriable,
+    CheckTransactionStatus,
+    KytArg,
+    KytMode,
+    CHECK_TRANSACTION_CYCLES_REQUIRED,
+    CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
 };
 use ic_canisters_http_types as http;
 use ic_cdk::api::call::RejectionCode;
-use ic_cdk::api::management_canister::http_request::{HttpResponse, TransformArgs};
+use ic_cdk::api::management_canister::http_request::{
+    HttpResponse,
+    TransformArgs,
+};
 use std::str::FromStr;
 
 mod dashboard;
@@ -16,8 +33,18 @@ mod fetch;
 mod providers;
 mod state;
 
-use fetch::{FetchEnv, FetchResult, TryFetchResult};
-use state::{get_config, set_config, Config, FetchGuardError, HttpGetTxError};
+use fetch::{
+    FetchEnv,
+    FetchResult,
+    TryFetchResult,
+};
+use state::{
+    get_config,
+    set_config,
+    Config,
+    FetchGuardError,
+    HttpGetTxError,
+};
 
 pub fn is_response_too_large(code: &RejectionCode, message: &str) -> bool {
     code == &RejectionCode::SysFatal
@@ -192,7 +219,11 @@ impl FetchEnv for KytCanisterEnv {
                 }
                 let tx = match provider.btc_network() {
                     BtcNetwork::Regtest { .. } => {
-                        use serde_json::{from_slice, from_value, Value};
+                        use serde_json::{
+                            from_slice,
+                            from_value,
+                            Value,
+                        };
                         let json: Value = from_slice(response.body.as_slice()).map_err(|err| {
                             HttpGetTxError::TxEncoding(format!("JSON parsing error {}", err))
                         })?;
@@ -289,7 +320,10 @@ fn main() {}
 
 #[test]
 fn check_candid_interface_compatibility() {
-    use candid_parser::utils::{service_equal, CandidSource};
+    use candid_parser::utils::{
+        service_equal,
+        CandidSource,
+    };
 
     candid::export_service!();
 

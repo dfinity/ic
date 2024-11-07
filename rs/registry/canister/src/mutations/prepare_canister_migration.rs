@@ -1,12 +1,28 @@
-use crate::registry::{Registry, Version};
+use crate::registry::{
+    Registry,
+    Version,
+};
 use candid::CandidType;
 use ic_base_types::SubnetId;
-use ic_protobuf::registry::subnet::v1::{SubnetRecord, SubnetType};
-use ic_registry_routing_table::{
-    are_disjoint, is_subset_of, CanisterIdRange, CanisterIdRanges, WellFormedError,
+use ic_protobuf::registry::subnet::v1::{
+    SubnetRecord,
+    SubnetType,
 };
-use serde::{Deserialize, Serialize};
-use std::{convert::TryFrom, fmt};
+use ic_registry_routing_table::{
+    are_disjoint,
+    is_subset_of,
+    CanisterIdRange,
+    CanisterIdRanges,
+    WellFormedError,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use std::{
+    convert::TryFrom,
+    fmt,
+};
 
 const SUPPORTED_SUBNET_TYPES: [SubnetType; 2] =
     [SubnetType::Application, SubnetType::VerifiedApplication];
@@ -249,7 +265,9 @@ mod tests {
 
     use crate::{
         common::test_helpers::{
-            add_fake_subnet, get_invariant_compliant_subnet_record, invariant_compliant_registry,
+            add_fake_subnet,
+            get_invariant_compliant_subnet_record,
+            invariant_compliant_registry,
             prepare_registry_with_nodes,
         },
         mutations::routing_table::routing_table_into_registry_mutation,

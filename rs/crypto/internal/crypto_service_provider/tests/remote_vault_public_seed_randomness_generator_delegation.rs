@@ -5,7 +5,10 @@ use proptest::result::maybe_err;
 use std::sync::Arc;
 
 use ic_crypto_internal_csp::vault::api::PublicRandomSeedGeneratorError;
-use ic_crypto_internal_csp_proptest_utils::{arb_public_random_seed_generator_error, arb_seed};
+use ic_crypto_internal_csp_proptest_utils::{
+    arb_public_random_seed_generator_error,
+    arb_seed,
+};
 use ic_crypto_internal_seed::Seed;
 
 mod common;

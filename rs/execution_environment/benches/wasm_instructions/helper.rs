@@ -4,7 +4,10 @@ use crate::common::Wasm64;
 use execution_environment_bench::{
     common,
     wat_builder::{
-        Block, CONFIRMATION_LOOP_ITERATIONS, CONFIRMATION_REPEAT_TIMES, DEFAULT_LOOP_ITERATIONS,
+        Block,
+        CONFIRMATION_LOOP_ITERATIONS,
+        CONFIRMATION_REPEAT_TIMES,
+        DEFAULT_LOOP_ITERATIONS,
         DEFAULT_REPEAT_TIMES,
     },
 };

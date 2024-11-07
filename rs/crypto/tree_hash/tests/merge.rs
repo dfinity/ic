@@ -1,6 +1,11 @@
 use assert_matches::assert_matches;
 use ic_crypto_sha2::Sha256;
-use ic_crypto_tree_hash::{Digest, Label, WitnessBuilder, WitnessGenerationError};
+use ic_crypto_tree_hash::{
+    Digest,
+    Label,
+    WitnessBuilder,
+    WitnessGenerationError,
+};
 use ic_crypto_tree_hash_test_utils::MAX_HASH_TREE_DEPTH;
 use proptest::prelude::*;
 

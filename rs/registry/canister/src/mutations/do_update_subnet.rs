@@ -1,18 +1,40 @@
-use crate::{common::LOG_PREFIX, mutations::common::has_duplicates, registry::Registry};
-use candid::{CandidType, Deserialize};
-use dfn_core::println;
-use ic_base_types::{subnet_id_into_protobuf, SubnetId};
-use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
-use ic_protobuf::registry::subnet::v1::{
-    SubnetFeatures as SubnetFeaturesPb, SubnetRecord as SubnetRecordPb,
+use crate::{
+    common::LOG_PREFIX,
+    mutations::common::has_duplicates,
+    registry::Registry,
 };
-use ic_registry_keys::{make_chain_key_signing_subnet_list_key, make_subnet_record_key};
+use candid::{
+    CandidType,
+    Deserialize,
+};
+use dfn_core::println;
+use ic_base_types::{
+    subnet_id_into_protobuf,
+    SubnetId,
+};
+use ic_management_canister_types::{
+    EcdsaKeyId,
+    MasterPublicKeyId,
+};
+use ic_protobuf::registry::subnet::v1::{
+    SubnetFeatures as SubnetFeaturesPb,
+    SubnetRecord as SubnetRecordPb,
+};
+use ic_registry_keys::{
+    make_chain_key_signing_subnet_list_key,
+    make_subnet_record_key,
+};
 use ic_registry_subnet_features::{
-    ChainKeyConfig as ChainKeyConfigInternal, EcdsaConfig, KeyConfig as KeyConfigInternal,
+    ChainKeyConfig as ChainKeyConfigInternal,
+    EcdsaConfig,
+    KeyConfig as KeyConfigInternal,
     SubnetFeatures,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_registry_transport::{pb::v1::RegistryMutation, upsert};
+use ic_registry_transport::{
+    pb::v1::RegistryMutation,
+    upsert,
+};
 use prost::Message;
 use serde::Serialize;
 use std::collections::HashSet;
@@ -608,22 +630,38 @@ fn merge_subnet_record(
 mod tests {
     use super::*;
     use crate::common::test_helpers::{
-        add_fake_subnet, get_invariant_compliant_subnet_record, invariant_compliant_registry,
+        add_fake_subnet,
+        get_invariant_compliant_subnet_record,
+        invariant_compliant_registry,
         prepare_registry_with_nodes,
     };
-    use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId};
-    use ic_nervous_system_common_test_keys::{TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL};
+    use ic_management_canister_types::{
+        EcdsaCurve,
+        EcdsaKeyId,
+        SchnorrAlgorithm,
+        SchnorrKeyId,
+    };
+    use ic_nervous_system_common_test_keys::{
+        TEST_USER1_PRINCIPAL,
+        TEST_USER2_PRINCIPAL,
+    };
     use ic_protobuf::registry::{
         crypto::v1::MasterPublicKeyId as MasterPublicKeyIdPb,
         subnet::v1::{
-            ChainKeyConfig as ChainKeyConfigPb, EcdsaConfig as EcdsaConfigPb,
-            KeyConfig as KeyConfigPb, SubnetRecord as SubnetRecordPb,
+            ChainKeyConfig as ChainKeyConfigPb,
+            EcdsaConfig as EcdsaConfigPb,
+            KeyConfig as KeyConfigPb,
+            SubnetRecord as SubnetRecordPb,
         },
     };
     use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
     use ic_registry_subnet_type::SubnetType;
     use ic_test_utilities_types::ids::subnet_test_id;
-    use ic_types::{PrincipalId, ReplicaVersion, SubnetId};
+    use ic_types::{
+        PrincipalId,
+        ReplicaVersion,
+        SubnetId,
+    };
     use maplit::btreemap;
     use std::str::FromStr;
 

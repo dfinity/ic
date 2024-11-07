@@ -1,37 +1,71 @@
 use crate::{
-    common::doubles::{LedgerExpect, MockLedger},
-    now_fn, NNS_GOVERNANCE_CANISTER_ID, SWAP_CANISTER_ID,
+    common::doubles::{
+        LedgerExpect,
+        MockLedger,
+    },
+    now_fn,
+    NNS_GOVERNANCE_CANISTER_ID,
+    SWAP_CANISTER_ID,
 };
 use candid::Principal;
 use ic_base_types::PrincipalId;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::{
-    ledger::compute_neuron_staking_subaccount_bytes, DEFAULT_TRANSFER_FEE, E8, ONE_MONTH_SECONDS,
+    ledger::compute_neuron_staking_subaccount_bytes,
+    DEFAULT_TRANSFER_FEE,
+    E8,
+    ONE_MONTH_SECONDS,
 };
 use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
 use ic_sns_governance::pb::v1::{
-    claim_swap_neurons_response::{ClaimSwapNeuronsResult, ClaimedSwapNeurons, SwapNeuron},
-    ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus, NeuronId,
+    claim_swap_neurons_response::{
+        ClaimSwapNeuronsResult,
+        ClaimedSwapNeurons,
+        SwapNeuron,
+    },
+    ClaimSwapNeuronsResponse,
+    ClaimedSwapNeuronStatus,
+    NeuronId,
 };
 use ic_sns_swap::{
     memory,
     pb::v1::{
         error_refund_icp_response,
         set_mode_call_result::SetModeResult,
-        sns_neuron_recipe::{ClaimedStatus, Investor, Investor::Direct, NeuronAttributes},
-        CfNeuron, CfParticipant, DirectInvestment, ErrorRefundIcpRequest, ErrorRefundIcpResponse,
-        ListDirectParticipantsRequest, Participant, SetDappControllersCallResult,
-        SetDappControllersResponse, SetModeCallResult, SnsNeuronRecipe, Swap, SweepResult,
+        sns_neuron_recipe::{
+            ClaimedStatus,
+            Investor,
+            Investor::Direct,
+            NeuronAttributes,
+        },
+        CfNeuron,
+        CfParticipant,
+        DirectInvestment,
+        ErrorRefundIcpRequest,
+        ErrorRefundIcpResponse,
+        ListDirectParticipantsRequest,
+        Participant,
+        SetDappControllersCallResult,
+        SetDappControllersResponse,
+        SetModeCallResult,
+        SnsNeuronRecipe,
+        Swap,
+        SweepResult,
         TransferableAmount,
     },
     swap::{
-        principal_to_subaccount, CLAIM_SWAP_NEURONS_BATCH_SIZE, NEURON_BASKET_MEMO_RANGE_START,
+        principal_to_subaccount,
+        CLAIM_SWAP_NEURONS_BATCH_SIZE,
+        NEURON_BASKET_MEMO_RANGE_START,
     },
 };
 use icrc_ledger_types::icrc1::account::Account;
 use std::{
     str::FromStr,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc,
+        Mutex,
+    },
 };
 
 pub mod doubles;

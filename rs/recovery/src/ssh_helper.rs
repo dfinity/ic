@@ -1,8 +1,21 @@
 use crate::{
-    cli::wait_for_confirmation, command_helper::exec_cmd, error::RecoveryError, RecoveryResult,
+    cli::wait_for_confirmation,
+    command_helper::exec_cmd,
+    error::RecoveryError,
+    RecoveryResult,
 };
-use slog::{info, warn, Logger};
-use std::{net::IpAddr, path::PathBuf, process::Command, thread, time};
+use slog::{
+    info,
+    warn,
+    Logger,
+};
+use std::{
+    net::IpAddr,
+    path::PathBuf,
+    process::Command,
+    thread,
+    time,
+};
 
 const SSH_ARGS: &[&str] = &[
     "-o",

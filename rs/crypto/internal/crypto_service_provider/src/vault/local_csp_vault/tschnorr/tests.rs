@@ -1,27 +1,47 @@
 use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
 use crate::vault::local_csp_vault::{
     tschnorr::{
-        IDkgTranscriptInternalBytes, ThresholdSchnorrSigShareBytes, ThresholdSchnorrSignerCspVault,
+        IDkgTranscriptInternalBytes,
+        ThresholdSchnorrSigShareBytes,
+        ThresholdSchnorrSignerCspVault,
     },
-    CspSecretKey, ThresholdSchnorrCreateSigShareVaultError,
+    CspSecretKey,
+    ThresholdSchnorrCreateSigShareVaultError,
 };
 use crate::KeyId;
 use crate::LocalCspVault;
 use assert_matches::assert_matches;
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
-    CombinedCommitment, CommitmentOpeningBytes, EccCurveType, EccPoint, EccScalar, EccScalarBytes,
-    IDkgTranscriptInternal, IdkgProtocolAlgorithm, PolynomialCommitment, SimpleCommitment,
+    CombinedCommitment,
+    CommitmentOpeningBytes,
+    EccCurveType,
+    EccPoint,
+    EccScalar,
+    EccScalarBytes,
+    IDkgTranscriptInternal,
+    IdkgProtocolAlgorithm,
+    PolynomialCommitment,
+    SimpleCommitment,
 };
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_types::{
-    crypto::{canister_threshold_sig::ExtendedDerivationPath, AlgorithmId},
+    crypto::{
+        canister_threshold_sig::ExtendedDerivationPath,
+        AlgorithmId,
+    },
     Randomness,
 };
 use proptest::{
-    prelude::{any, Strategy},
+    prelude::{
+        any,
+        Strategy,
+    },
     proptest,
 };
-use rand::{CryptoRng, Rng};
+use rand::{
+    CryptoRng,
+    Rng,
+};
 
 mod create_schnorr_sig_share {
     use super::utils::*;

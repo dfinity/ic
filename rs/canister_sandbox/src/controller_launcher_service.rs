@@ -1,5 +1,8 @@
 use crate::protocol::ctllaunchersvc::*;
-use crate::rpc::{Call, DemuxServer};
+use crate::rpc::{
+    Call,
+    DemuxServer,
+};
 
 /// RPC interface exposed by the controller to the launcher.
 pub trait ControllerLauncherService: Send + Sync {

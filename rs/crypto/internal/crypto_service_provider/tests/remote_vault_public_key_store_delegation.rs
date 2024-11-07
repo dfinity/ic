@@ -1,11 +1,15 @@
 use ic_crypto_internal_csp_proptest_utils::{
-    arb_csp_public_key_store_error, arb_current_node_public_keys,
+    arb_csp_public_key_store_error,
+    arb_current_node_public_keys,
 };
 use ic_crypto_temp_crypto_vault::RemoteVaultEnvironment;
 use ic_crypto_test_utils_local_csp_vault::MockLocalCspVault;
 use proptest::prelude::any;
 use proptest::result::maybe_err;
-use proptest::{prop_assert_eq, proptest};
+use proptest::{
+    prop_assert_eq,
+    proptest,
+};
 use std::sync::Arc;
 
 mod common;

@@ -1,12 +1,21 @@
 use crate::{
     governance::{
-        tests::{MockEnvironment, StubCMC, StubIcpLedger},
+        tests::{
+            MockEnvironment,
+            StubCMC,
+            StubIcpLedger,
+        },
         Governance,
     },
     pb::v1::{
         manage_neuron::StakeMaturity,
-        manage_neuron_response::{MergeMaturityResponse, StakeMaturityResponse},
-        neuron, Governance as GovernanceProto, Neuron,
+        manage_neuron_response::{
+            MergeMaturityResponse,
+            StakeMaturityResponse,
+        },
+        neuron,
+        Governance as GovernanceProto,
+        Neuron,
     },
 };
 use ic_base_types::PrincipalId;

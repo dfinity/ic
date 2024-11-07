@@ -5,51 +5,112 @@ use crate::{
     consensus::{
         check_protocol_version,
         metrics::ValidatorMetrics,
-        status::{self, Status},
+        status::{
+            self,
+            Status,
+        },
         ConsensusMessageId,
     },
-    dkg, idkg,
+    dkg,
+    idkg,
 };
 use ic_consensus_utils::{
-    active_high_threshold_nidkg_id, active_low_threshold_nidkg_id,
+    active_high_threshold_nidkg_id,
+    active_low_threshold_nidkg_id,
     crypto::ConsensusCrypto,
     get_oldest_idkg_state_registry_version,
-    membership::{Membership, MembershipError},
+    membership::{
+        Membership,
+        MembershipError,
+    },
     pool_reader::PoolReader,
     RoundRobin,
 };
 use ic_interfaces::{
     batch_payload::ProposalContext,
-    consensus::{InvalidPayloadReason, PayloadBuilder, PayloadValidationFailure},
+    consensus::{
+        InvalidPayloadReason,
+        PayloadBuilder,
+        PayloadValidationFailure,
+    },
     consensus_pool::*,
     dkg::DkgPool,
     ingress_manager::IngressSelector,
     messaging::MessageRouting,
     time_source::TimeSource,
-    validation::{ValidationError, ValidationResult},
+    validation::{
+        ValidationError,
+        ValidationResult,
+    },
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::{StateHashError, StateManager, StateManagerError};
-use ic_logger::{trace, warn, ReplicaLogger};
+use ic_interfaces_state_manager::{
+    StateHashError,
+    StateManager,
+    StateManagerError,
+};
+use ic_logger::{
+    trace,
+    warn,
+    ReplicaLogger,
+};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::ValidationContext,
     consensus::{
-        Block, BlockMetadata, BlockPayload, BlockProposal, CatchUpContent, CatchUpPackage,
-        CatchUpShareContent, Committee, ConsensusMessage, ConsensusMessageHashable,
-        EquivocationProof, FinalizationContent, HasCommittee, HasHash, HasHeight, HasRank,
-        HasVersion, Notarization, NotarizationContent, RandomBeacon, RandomBeaconShare, RandomTape,
-        RandomTapeShare, Rank,
+        Block,
+        BlockMetadata,
+        BlockPayload,
+        BlockProposal,
+        CatchUpContent,
+        CatchUpPackage,
+        CatchUpShareContent,
+        Committee,
+        ConsensusMessage,
+        ConsensusMessageHashable,
+        EquivocationProof,
+        FinalizationContent,
+        HasCommittee,
+        HasHash,
+        HasHeight,
+        HasRank,
+        HasVersion,
+        Notarization,
+        NotarizationContent,
+        RandomBeacon,
+        RandomBeaconShare,
+        RandomTape,
+        RandomTapeShare,
+        Rank,
     },
-    crypto::{threshold_sig::ni_dkg::NiDkgId, CryptoError, CryptoHashOf, Signed},
+    crypto::{
+        threshold_sig::ni_dkg::NiDkgId,
+        CryptoError,
+        CryptoHashOf,
+        Signed,
+    },
     registry::RegistryClientError,
     replica_config::ReplicaConfig,
-    signature::{BasicSigned, MultiSignature, MultiSignatureShare, ThresholdSignatureShare},
-    Height, NodeId, RegistryVersion, SubnetId,
+    signature::{
+        BasicSigned,
+        MultiSignature,
+        MultiSignatureShare,
+        ThresholdSignatureShare,
+    },
+    Height,
+    NodeId,
+    RegistryVersion,
+    SubnetId,
 };
 use std::{
-    collections::{BTreeMap, HashSet},
-    sync::{Arc, RwLock},
+    collections::{
+        BTreeMap,
+        HashSet,
+    },
+    sync::{
+        Arc,
+        RwLock,
+    },
     time::Duration,
 };
 
@@ -1902,8 +1963,10 @@ pub mod test {
     use crate::{
         consensus::block_maker::get_block_maker_delay,
         idkg::test_utils::{
-            add_available_quadruple_to_payload, empty_idkg_payload,
-            fake_ecdsa_master_public_key_id, fake_signature_request_context_with_pre_sig,
+            add_available_quadruple_to_payload,
+            empty_idkg_payload,
+            fake_ecdsa_master_public_key_id,
+            fake_signature_request_context_with_pre_sig,
             fake_state_with_signature_requests,
         },
     };
@@ -1911,11 +1974,14 @@ pub mod test {
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
     use ic_config::artifact_pool::ArtifactPoolConfig;
     use ic_consensus_mocks::{
-        dependencies_with_subnet_params, dependencies_with_subnet_records_with_raw_state_manager,
-        Dependencies, RefMockPayloadBuilder,
+        dependencies_with_subnet_params,
+        dependencies_with_subnet_records_with_raw_state_manager,
+        Dependencies,
+        RefMockPayloadBuilder,
     };
     use ic_interfaces::{
-        messaging::XNetPayloadValidationFailure, p2p::consensus::MutablePool,
+        messaging::XNetPayloadValidationFailure,
+        p2p::consensus::MutablePool,
         time_source::TimeSource,
     };
     use ic_interfaces_mocks::messaging::RefMockMessageRouting;
@@ -1925,27 +1991,66 @@ pub mod test {
     use ic_registry_client_helpers::subnet::SubnetRegistry;
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
-    use ic_test_utilities::{crypto::CryptoReturningOk, state_manager::RefMockStateManager};
-    use ic_test_utilities_consensus::{assert_changeset_matches_pattern, fake::*, matches_pattern};
-    use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
+    use ic_test_utilities::{
+        crypto::CryptoReturningOk,
+        state_manager::RefMockStateManager,
+    };
+    use ic_test_utilities_consensus::{
+        assert_changeset_matches_pattern,
+        fake::*,
+        matches_pattern,
+    };
+    use ic_test_utilities_registry::{
+        add_subnet_record,
+        SubnetRecordBuilder,
+    };
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::{
-        ids::{node_test_id, subnet_test_id},
+        ids::{
+            node_test_id,
+            subnet_test_id,
+        },
         messages::SignedIngressBuilder,
     };
     use ic_types::{
-        batch::{BatchPayload, IngressPayload},
-        consensus::{
-            dkg, idkg::PreSigId, BlockPayload, CatchUpPackageShare, DataPayload, EquivocationProof,
-            Finalization, FinalizationShare, HashedBlock, HashedRandomBeacon, NotarizationShare,
-            Payload, RandomBeaconContent, RandomTapeContent, SummaryPayload,
+        batch::{
+            BatchPayload,
+            IngressPayload,
         },
-        crypto::{BasicSig, BasicSigOf, CombinedMultiSig, CombinedMultiSigOf, CryptoHash},
+        consensus::{
+            dkg,
+            idkg::PreSigId,
+            BlockPayload,
+            CatchUpPackageShare,
+            DataPayload,
+            EquivocationProof,
+            Finalization,
+            FinalizationShare,
+            HashedBlock,
+            HashedRandomBeacon,
+            NotarizationShare,
+            Payload,
+            RandomBeaconContent,
+            RandomTapeContent,
+            SummaryPayload,
+        },
+        crypto::{
+            BasicSig,
+            BasicSigOf,
+            CombinedMultiSig,
+            CombinedMultiSigOf,
+            CryptoHash,
+        },
         replica_config::ReplicaConfig,
         signature::ThresholdSignature,
-        CryptoHashOfState, ReplicaVersion, Time,
+        CryptoHashOfState,
+        ReplicaVersion,
+        Time,
     };
-    use std::sync::{Arc, RwLock};
+    use std::sync::{
+        Arc,
+        RwLock,
+    };
 
     pub fn assert_block_valid(results: &[ChangeAction], block: &BlockProposal) {
         match results.first() {

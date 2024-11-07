@@ -1,6 +1,9 @@
 mod contains_local_public_or_secret_key_error {
     use crate::vault::api::{
-        ExternalPublicKeyError, LocalPublicKeyError, NodeKeysError, SecretKeyError,
+        ExternalPublicKeyError,
+        LocalPublicKeyError,
+        NodeKeysError,
+        SecretKeyError,
     };
 
     #[test]

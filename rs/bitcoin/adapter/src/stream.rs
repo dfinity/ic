@@ -1,23 +1,47 @@
 use bitcoin::{
     consensus::serialize,
     network::message::RawNetworkMessage,
-    {consensus::encode, network::message::NetworkMessage},
+    {
+        consensus::encode,
+        network::message::NetworkMessage,
+    },
 };
 use futures::TryFutureExt;
 use http::Uri;
-use ic_logger::{debug, error, info, ReplicaLogger};
-use std::{io, net::SocketAddr, time::Duration};
+use ic_logger::{
+    debug,
+    error,
+    info,
+    ReplicaLogger,
+};
+use std::{
+    io,
+    net::SocketAddr,
+    time::Duration,
+};
 use thiserror::Error;
 use tokio::{
     io::AsyncWriteExt,
     net::{
-        tcp::{OwnedReadHalf, OwnedWriteHalf},
+        tcp::{
+            OwnedReadHalf,
+            OwnedWriteHalf,
+        },
         TcpStream,
     },
-    sync::mpsc::{Sender, UnboundedReceiver},
-    time::{sleep, timeout},
+    sync::mpsc::{
+        Sender,
+        UnboundedReceiver,
+    },
+    time::{
+        sleep,
+        timeout,
+    },
 };
-use tokio_socks::{tcp::Socks5Stream, Error as SocksError};
+use tokio_socks::{
+    tcp::Socks5Stream,
+    Error as SocksError,
+};
 
 /// This provides a default amount of time to wait before a timeout occurs while
 /// attempting to connect to a BTC node.
@@ -369,12 +393,18 @@ pub fn handle_stream(config: StreamConfig) -> tokio::task::JoinHandle<()> {
 #[cfg(test)]
 pub mod test {
 
-    use std::net::{IpAddr, Ipv4Addr};
+    use std::net::{
+        IpAddr,
+        Ipv4Addr,
+    };
 
     use crate::common::DEFAULT_CHANNEL_BUFFER_SIZE;
 
     use super::*;
-    use bitcoin::{consensus::Encodable, Network};
+    use bitcoin::{
+        consensus::Encodable,
+        Network,
+    };
     use ic_logger::replica_logger::no_op_logger;
 
     /// Test that large messages get rejected and we disconnect as a consequence.

@@ -1,12 +1,22 @@
-use crate::eth_rpc_client::providers::{EthereumProvider, RpcNodeProvider};
+use crate::eth_rpc_client::providers::{
+    EthereumProvider,
+    RpcNodeProvider,
+};
 
 const BLOCK_PI: RpcNodeProvider = RpcNodeProvider::Ethereum(EthereumProvider::BlockPi);
 const PUBLIC_NODE: RpcNodeProvider = RpcNodeProvider::Ethereum(EthereumProvider::PublicNode);
 const LLAMA_NODES: RpcNodeProvider = RpcNodeProvider::Ethereum(EthereumProvider::LlamaNodes);
 
 mod eth_rpc_client {
-    use crate::eth_rpc_client::providers::{EthereumProvider, RpcNodeProvider, SepoliaProvider};
-    use crate::eth_rpc_client::{EthRpcClient, TOTAL_NUMBER_OF_PROVIDERS};
+    use crate::eth_rpc_client::providers::{
+        EthereumProvider,
+        RpcNodeProvider,
+        SepoliaProvider,
+    };
+    use crate::eth_rpc_client::{
+        EthRpcClient,
+        TOTAL_NUMBER_OF_PROVIDERS,
+    };
     use crate::lifecycle::EthereumNetwork;
 
     #[test]
@@ -57,8 +67,15 @@ mod multi_call_results {
 
     mod reduce_with_equality {
         use crate::eth_rpc::HttpOutcallError;
-        use crate::eth_rpc_client::tests::{BLOCK_PI, PUBLIC_NODE};
-        use crate::eth_rpc_client::{MultiCallError, MultiCallResults, SingleCallError};
+        use crate::eth_rpc_client::tests::{
+            BLOCK_PI,
+            PUBLIC_NODE,
+        };
+        use crate::eth_rpc_client::{
+            MultiCallError,
+            MultiCallResults,
+            SingleCallError,
+        };
         use ic_cdk::api::call::RejectionCode;
 
         #[test]
@@ -208,9 +225,15 @@ mod multi_call_results {
 
     mod reduce_with_min_by_key {
         use crate::eth_rpc::Block;
-        use crate::eth_rpc_client::tests::{BLOCK_PI, PUBLIC_NODE};
+        use crate::eth_rpc_client::tests::{
+            BLOCK_PI,
+            PUBLIC_NODE,
+        };
         use crate::eth_rpc_client::MultiCallResults;
-        use crate::numeric::{BlockNumber, Wei};
+        use crate::numeric::{
+            BlockNumber,
+            Wei,
+        };
 
         #[test]
         fn should_get_minimum_block_number() {
@@ -244,10 +267,24 @@ mod multi_call_results {
     }
 
     mod reduce_with_stable_majority_by_key {
-        use crate::eth_rpc::{FeeHistory, HttpOutcallError};
-        use crate::eth_rpc_client::tests::{BLOCK_PI, LLAMA_NODES, PUBLIC_NODE};
-        use crate::eth_rpc_client::{MultiCallError, MultiCallResults, SingleCallError};
-        use crate::numeric::{BlockNumber, WeiPerGas};
+        use crate::eth_rpc::{
+            FeeHistory,
+            HttpOutcallError,
+        };
+        use crate::eth_rpc_client::tests::{
+            BLOCK_PI,
+            LLAMA_NODES,
+            PUBLIC_NODE,
+        };
+        use crate::eth_rpc_client::{
+            MultiCallError,
+            MultiCallResults,
+            SingleCallError,
+        };
+        use crate::numeric::{
+            BlockNumber,
+            WeiPerGas,
+        };
         use ic_cdk::api::call::RejectionCode;
 
         #[test]
@@ -470,8 +507,16 @@ mod multi_call_results {
 
     mod has_http_outcall_error_matching {
         use crate::eth_rpc::HttpOutcallError;
-        use crate::eth_rpc_client::tests::{BLOCK_PI, LLAMA_NODES, PUBLIC_NODE};
-        use crate::eth_rpc_client::{MultiCallError, MultiCallResults, SingleCallError};
+        use crate::eth_rpc_client::tests::{
+            BLOCK_PI,
+            LLAMA_NODES,
+            PUBLIC_NODE,
+        };
+        use crate::eth_rpc_client::{
+            MultiCallError,
+            MultiCallResults,
+            SingleCallError,
+        };
         use ic_cdk::api::call::RejectionCode;
         use proptest::prelude::any;
         use proptest::proptest;
@@ -540,8 +585,15 @@ mod multi_call_results {
 
 mod eth_get_transaction_receipt {
     use crate::eth_rpc::Hash;
-    use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
-    use crate::numeric::{BlockNumber, GasAmount, WeiPerGas};
+    use crate::eth_rpc_client::responses::{
+        TransactionReceipt,
+        TransactionStatus,
+    };
+    use crate::numeric::{
+        BlockNumber,
+        GasAmount,
+        WeiPerGas,
+    };
     use assert_matches::assert_matches;
     use proptest::proptest;
     use std::str::FromStr;
@@ -626,7 +678,10 @@ mod eth_get_transaction_receipt {
 }
 
 mod eth_get_transaction_count {
-    use crate::eth_rpc::{BlockSpec, BlockTag};
+    use crate::eth_rpc::{
+        BlockSpec,
+        BlockTag,
+    };
     use crate::eth_rpc_client::requests::GetTransactionCountParams;
     use crate::numeric::TransactionCount;
     use ic_ethereum_types::Address;
@@ -654,27 +709,73 @@ mod eth_get_transaction_count {
 
 mod evm_rpc_conversion {
     use crate::eth_rpc::SendRawTransactionResult;
-    use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
-    use crate::eth_rpc_client::tests::{BLOCK_PI, LLAMA_NODES, PUBLIC_NODE};
-    use crate::eth_rpc_client::{
-        providers::RpcNodeProvider, Block, Equality, FeeHistory, HttpOutcallError, LogEntry,
-        MinByKey, MultiCallError, MultiCallResults, Reduce, ReduceWithStrategy, SingleCallError,
+    use crate::eth_rpc_client::responses::{
+        TransactionReceipt,
+        TransactionStatus,
     };
-    use crate::numeric::{BlockNumber, TransactionCount, Wei};
+    use crate::eth_rpc_client::tests::{
+        BLOCK_PI,
+        LLAMA_NODES,
+        PUBLIC_NODE,
+    };
+    use crate::eth_rpc_client::{
+        providers::RpcNodeProvider,
+        Block,
+        Equality,
+        FeeHistory,
+        HttpOutcallError,
+        LogEntry,
+        MinByKey,
+        MultiCallError,
+        MultiCallResults,
+        Reduce,
+        ReduceWithStrategy,
+        SingleCallError,
+    };
+    use crate::numeric::{
+        BlockNumber,
+        TransactionCount,
+        Wei,
+    };
     use crate::test_fixtures::arb::{
-        arb_block, arb_evm_rpc_error, arb_fee_history, arb_gas_used_ratio, arb_hex, arb_hex20,
-        arb_hex256, arb_hex32, arb_hex_byte, arb_log_entry, arb_nat_256, arb_transaction_receipt,
+        arb_block,
+        arb_evm_rpc_error,
+        arb_fee_history,
+        arb_gas_used_ratio,
+        arb_hex,
+        arb_hex20,
+        arb_hex256,
+        arb_hex32,
+        arb_hex_byte,
+        arb_log_entry,
+        arb_nat_256,
+        arb_transaction_receipt,
     };
     use evm_rpc_client::{
-        Block as EvmBlock, EthMainnetService as EvmEthMainnetService, FeeHistory as EvmFeeHistory,
-        Hex, Hex20, Hex32, HttpOutcallError as EvmHttpOutcallError, LogEntry as EvmLogEntry,
-        MultiRpcResult as EvmMultiRpcResult, Nat256, RpcApi as EvmRpcApi, RpcError as EvmRpcError,
-        RpcResult as EvmRpcResult, RpcService as EvmRpcService,
+        Block as EvmBlock,
+        EthMainnetService as EvmEthMainnetService,
+        FeeHistory as EvmFeeHistory,
+        Hex,
+        Hex20,
+        Hex32,
+        HttpOutcallError as EvmHttpOutcallError,
+        LogEntry as EvmLogEntry,
+        MultiRpcResult as EvmMultiRpcResult,
+        Nat256,
+        RpcApi as EvmRpcApi,
+        RpcError as EvmRpcError,
+        RpcResult as EvmRpcResult,
+        RpcService as EvmRpcService,
         SendRawTransactionStatus as EvmSendRawTransactionStatus,
         TransactionReceipt as EvmTransactionReceipt,
     };
     use proptest::collection::vec;
-    use proptest::{option, prelude::Strategy, prop_assert_eq, proptest};
+    use proptest::{
+        option,
+        prelude::Strategy,
+        prop_assert_eq,
+        proptest,
+    };
     use std::collections::BTreeSet;
     use std::fmt::Debug;
 
@@ -1114,7 +1215,10 @@ mod evm_rpc_conversion {
     }
 
     pub fn arb_evm_rpc_block(minter_block: Block) -> impl Strategy<Value = EvmBlock> {
-        use proptest::{array, collection::vec};
+        use proptest::{
+            array,
+            collection::vec,
+        };
         //prop_map is limited to tuples of at most 11 elements, so we group the Nat and String fields
         (
             array::uniform2(option::of(arb_nat_256())),
@@ -1301,7 +1405,10 @@ mod evm_rpc_conversion {
 
     fn minter_and_evm_rpc_transaction_receipts(
     ) -> impl Strategy<Value = (Option<TransactionReceipt>, Option<EvmTransactionReceipt>)> {
-        use proptest::{option, prelude::Just};
+        use proptest::{
+            option,
+            prelude::Just,
+        };
         option::of(arb_transaction_receipt()).prop_flat_map(|minter_tx_receipt| {
             (
                 Just(minter_tx_receipt.clone()),
@@ -1313,7 +1420,11 @@ mod evm_rpc_conversion {
     fn arb_evm_rpc_transaction_receipt(
         minter_tx_receipt: Option<TransactionReceipt>,
     ) -> impl Strategy<Value = Option<EvmTransactionReceipt>> {
-        use proptest::{collection::vec, option, prelude::Just};
+        use proptest::{
+            collection::vec,
+            option,
+            prelude::Just,
+        };
 
         match minter_tx_receipt {
             None => Just(None).boxed(),
@@ -1368,7 +1479,10 @@ mod evm_rpc_conversion {
     ) -> impl Strategy<Value = EvmSendRawTransactionStatus> {
         use proptest::{
             option,
-            prelude::{prop_oneof, Just},
+            prelude::{
+                prop_oneof,
+                Just,
+            },
         };
         prop_oneof![
             option::of(arb_hex32()).prop_map(EvmSendRawTransactionStatus::Ok),

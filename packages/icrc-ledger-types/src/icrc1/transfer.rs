@@ -1,5 +1,12 @@
-use super::account::{Account, Subaccount};
-use candid::{CandidType, Deserialize, Nat};
+use super::account::{
+    Account,
+    Subaccount,
+};
+use candid::{
+    CandidType,
+    Deserialize,
+    Nat,
+};
 use serde::Serialize;
 use serde_bytes::ByteBuf;
 use std::fmt;

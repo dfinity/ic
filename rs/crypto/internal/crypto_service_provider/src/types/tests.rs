@@ -1,25 +1,44 @@
 use super::*;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_test_vectors::ed25519::{
-    TESTVEC_ED25519_STABILITY_1_SIG, TESTVEC_RFC8032_ED25519_1_SIG, TESTVEC_RFC8032_ED25519_2_SIG,
-    TESTVEC_RFC8032_ED25519_SHA_ABC_PK, TESTVEC_RFC8032_ED25519_SHA_ABC_SIG,
+    TESTVEC_ED25519_STABILITY_1_SIG,
+    TESTVEC_RFC8032_ED25519_1_SIG,
+    TESTVEC_RFC8032_ED25519_2_SIG,
+    TESTVEC_RFC8032_ED25519_SHA_ABC_PK,
+    TESTVEC_RFC8032_ED25519_SHA_ABC_SIG,
     TESTVEC_RFC8032_ED25519_SHA_ABC_SK,
 };
 use ic_crypto_internal_test_vectors::multi_bls12_381::TESTVEC_MULTI_BLS12_381_1_PK;
 use ic_crypto_internal_test_vectors::unhex::hex_to_byte_vec;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::types::{
-    BTENodeBytes, FsEncryptionKeySetWithPop, FsEncryptionSecretKey,
+    BTENodeBytes,
+    FsEncryptionKeySetWithPop,
+    FsEncryptionSecretKey,
 };
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::types::CspFsEncryptionKeySet;
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
-    EccCurveType, MEGaPrivateKey, MEGaPrivateKeyK256Bytes, MEGaPublicKeyK256Bytes,
+    EccCurveType,
+    MEGaPrivateKey,
+    MEGaPrivateKeyK256Bytes,
+    MEGaPublicKeyK256Bytes,
 };
-use ic_crypto_internal_types::curves::bls12_381::{FrBytes, G1Bytes, G2Bytes};
+use ic_crypto_internal_types::curves::bls12_381::{
+    FrBytes,
+    G1Bytes,
+    G2Bytes,
+};
 use ic_crypto_internal_types::encrypt::forward_secure::groth20_bls12_381::{
-    FsEncryptionPop, FsEncryptionPublicKey,
+    FsEncryptionPop,
+    FsEncryptionPublicKey,
 };
 use ic_crypto_secrets_containers::SecretArray;
-use ic_types::crypto::{AlgorithmId, BasicSig, BasicSigOf, CryptoHashableTestDummy, UserPublicKey};
+use ic_types::crypto::{
+    AlgorithmId,
+    BasicSig,
+    BasicSigOf,
+    CryptoHashableTestDummy,
+    UserPublicKey,
+};
 use std::convert::TryFrom;
 use strum::EnumCount;
 

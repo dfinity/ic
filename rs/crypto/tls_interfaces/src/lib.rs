@@ -4,11 +4,25 @@
 
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_types::registry::RegistryClientError;
-use ic_types::{NodeId, RegistryVersion};
-use rustls::{ClientConfig, ServerConfig};
-use serde::{Deserialize, Deserializer, Serialize};
+use ic_types::{
+    NodeId,
+    RegistryVersion,
+};
+use rustls::{
+    ClientConfig,
+    ServerConfig,
+};
+use serde::{
+    Deserialize,
+    Deserializer,
+    Serialize,
+};
 use std::collections::BTreeSet;
-use std::fmt::{self, Display, Formatter};
+use std::fmt::{
+    self,
+    Display,
+    Formatter,
+};
 use thiserror::Error;
 use x509_parser::certificate::X509Certificate;
 

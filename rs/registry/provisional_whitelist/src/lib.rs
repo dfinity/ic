@@ -1,8 +1,13 @@
 use ic_base_types::PrincipalId;
 use ic_protobuf::{
-    proxy::ProxyDecodeError, registry::provisional_whitelist::v1 as pb, types::v1 as pb_types,
+    proxy::ProxyDecodeError,
+    registry::provisional_whitelist::v1 as pb,
+    types::v1 as pb_types,
 };
-use std::{collections::BTreeSet, convert::TryFrom};
+use std::{
+    collections::BTreeSet,
+    convert::TryFrom,
+};
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum ProvisionalWhitelist {

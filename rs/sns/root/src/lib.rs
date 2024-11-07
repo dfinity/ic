@@ -1,29 +1,58 @@
 use crate::{
-    logs::{ERROR, INFO},
+    logs::{
+        ERROR,
+        INFO,
+    },
     pb::v1::{
-        set_dapp_controllers_response, CanisterCallError, ListSnsCanistersResponse,
-        ManageDappCanisterSettingsRequest, ManageDappCanisterSettingsResponse,
-        RegisterDappCanistersRequest, RegisterDappCanistersResponse, SetDappControllersRequest,
-        SetDappControllersResponse, SnsRootCanister,
+        set_dapp_controllers_response,
+        CanisterCallError,
+        ListSnsCanistersResponse,
+        ManageDappCanisterSettingsRequest,
+        ManageDappCanisterSettingsResponse,
+        RegisterDappCanistersRequest,
+        RegisterDappCanistersResponse,
+        SetDappControllersRequest,
+        SetDappControllersResponse,
+        SnsRootCanister,
     },
     types::Environment,
 };
 use async_trait::async_trait;
-use candid::{Decode, Encode, Nat};
-use futures::{future::join_all, join};
-use ic_base_types::{CanisterId, PrincipalId};
+use candid::{
+    Decode,
+    Encode,
+    Nat,
+};
+use futures::{
+    future::join_all,
+    join,
+};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_canister_log::log;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::CanisterStatusResultV2,
     management_canister_client::ManagementCanisterClient,
-    update_settings::{CanisterSettings, LogVisibility, UpdateSettings},
+    update_settings::{
+        CanisterSettings,
+        LogVisibility,
+        UpdateSettings,
+    },
 };
-use ic_nervous_system_runtime::{CdkRuntime, Runtime};
+use ic_nervous_system_runtime::{
+    CdkRuntime,
+    Runtime,
+};
 use ic_sns_swap::pb::v1::GetCanisterStatusRequest;
 use std::{
     cell::RefCell,
-    collections::{BTreeSet, HashSet},
+    collections::{
+        BTreeSet,
+        HashSet,
+    },
     fmt::Write,
     thread::LocalKey,
 };
@@ -878,18 +907,25 @@ async fn get_owned_canister_summary(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pb::v1::{set_dapp_controllers_request::CanisterIds, ListSnsCanistersResponse};
+    use crate::pb::v1::{
+        set_dapp_controllers_request::CanisterIds,
+        ListSnsCanistersResponse,
+    };
     use ic_nervous_system_clients::{
         canister_status::CanisterStatusResultFromManagementCanister,
         management_canister_client::{
-            MockManagementCanisterClient, MockManagementCanisterClientCall,
+            MockManagementCanisterClient,
+            MockManagementCanisterClientCall,
             MockManagementCanisterClientReply,
         },
     };
     use maplit::hashset;
     use std::{
         collections::VecDeque,
-        sync::{Arc, Mutex},
+        sync::{
+            Arc,
+            Mutex,
+        },
     };
 
     const NOW: u64 = 123_456_789;

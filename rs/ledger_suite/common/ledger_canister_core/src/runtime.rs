@@ -1,5 +1,8 @@
 use async_trait::async_trait;
-use candid::utils::{ArgumentDecoder, ArgumentEncoder};
+use candid::utils::{
+    ArgumentDecoder,
+    ArgumentEncoder,
+};
 use ic_base_types::CanisterId;
 
 #[async_trait]

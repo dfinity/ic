@@ -1,10 +1,19 @@
-use crate::tla_value::{TlaValue, ToTla};
+use crate::tla_value::{
+    TlaValue,
+    ToTla,
+};
 use crate::SourceLocation;
 use candid::CandidType;
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{
+        BTreeMap,
+        BTreeSet,
+    },
     fmt,
-    fmt::{Display, Formatter},
+    fmt::{
+        Display,
+        Formatter,
+    },
 };
 
 #[derive(Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord, CandidType)]

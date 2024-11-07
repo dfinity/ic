@@ -3,7 +3,10 @@
 // primitive provided by POSIX
 use socket2::Socket;
 use std::error::Error;
-use std::net::{IpAddr, SocketAddr};
+use std::net::{
+    IpAddr,
+    SocketAddr,
+};
 
 #[allow(dead_code)]
 pub struct NodePort {
@@ -32,7 +35,12 @@ pub fn allocate_ports(ip_address: &str, num_ports: u16) -> Result<Vec<NodePort>,
 ///
 /// Setting the flags after binding to the port has no effect.
 fn bind_tcp_socket_with_reuse(addr: SocketAddr) -> Result<Socket, Box<dyn Error>> {
-    use socket2::{Domain, Protocol, SockAddr, Type};
+    use socket2::{
+        Domain,
+        Protocol,
+        SockAddr,
+        Type,
+    };
     let domain = match &addr {
         SocketAddr::V4(_) => Domain::IPV4,
         SocketAddr::V6(_) => Domain::IPV6,
@@ -52,8 +60,14 @@ fn bind_tcp_socket_with_reuse(addr: SocketAddr) -> Result<Socket, Box<dyn Error>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nix::sys::wait::{waitpid, WaitStatus};
-    use nix::unistd::{fork, ForkResult};
+    use nix::sys::wait::{
+        waitpid,
+        WaitStatus,
+    };
+    use nix::unistd::{
+        fork,
+        ForkResult,
+    };
     use rusty_fork::rusty_fork_test;
     use std::process;
 

@@ -1,19 +1,45 @@
 use bitcoin::consensus::deserialize;
 use bitcoin::Transaction;
-use candid::{Decode, Encode};
+use candid::{
+    Decode,
+    Encode,
+};
 use hex::FromHex;
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_bitcoin_canister_mock::PushUtxoToAddress;
 use ic_btc_interface::{
-    GetCurrentFeePercentilesRequest, GetUtxosRequest, GetUtxosResponse, MillisatoshiPerByte,
-    Network, NetworkInRequest, OutPoint, Txid, Utxo,
+    GetCurrentFeePercentilesRequest,
+    GetUtxosRequest,
+    GetUtxosResponse,
+    MillisatoshiPerByte,
+    Network,
+    NetworkInRequest,
+    OutPoint,
+    Txid,
+    Utxo,
 };
-use ic_cdk::api::management_canister::bitcoin::{BitcoinNetwork, SendTransactionRequest};
-use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
+use ic_cdk::api::management_canister::bitcoin::{
+    BitcoinNetwork,
+    SendTransactionRequest,
+};
+use ic_state_machine_tests::{
+    StateMachine,
+    StateMachineBuilder,
+};
 use ic_test_utilities_load_wasm::load_wasm;
 use ic_types::Cycles;
-use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
-use rand::{thread_rng, Rng};
+use ic_universal_canister::{
+    call_args,
+    wasm,
+    UNIVERSAL_CANISTER_WASM,
+};
+use rand::{
+    thread_rng,
+    Rng,
+};
 use std::str::FromStr;
 
 fn generate_tx_id() -> Txid {

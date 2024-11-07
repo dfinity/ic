@@ -1,7 +1,16 @@
 //! The time source public interface.
-use ic_types::time::{Time, UNIX_EPOCH};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{Instant, SystemTime};
+use ic_types::time::{
+    Time,
+    UNIX_EPOCH,
+};
+use std::sync::atomic::{
+    AtomicU64,
+    Ordering,
+};
+use std::time::{
+    Instant,
+    SystemTime,
+};
 
 /// A interface that represent the source of time.
 pub trait TimeSource: Send + Sync {

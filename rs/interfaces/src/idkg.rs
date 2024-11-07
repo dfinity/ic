@@ -2,10 +2,19 @@
 
 use ic_types::artifact::IDkgMessageId;
 use ic_types::consensus::idkg::{
-    EcdsaSigShare, IDkgMessage, IDkgPrefixOf, IDkgStats, SchnorrSigShare, SigShare,
-    SignedIDkgComplaint, SignedIDkgOpening,
+    EcdsaSigShare,
+    IDkgMessage,
+    IDkgPrefixOf,
+    IDkgStats,
+    SchnorrSigShare,
+    SigShare,
+    SignedIDkgComplaint,
+    SignedIDkgOpening,
 };
-use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing};
+use ic_types::crypto::canister_threshold_sig::idkg::{
+    IDkgDealingSupport,
+    SignedIDkgDealing,
+};
 
 #[derive(Debug)]
 pub enum IDkgChangeAction {

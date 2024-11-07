@@ -1,39 +1,84 @@
 use assert_matches::assert_matches;
-use candid::{Nat, Principal};
+use candid::{
+    Nat,
+    Principal,
+};
 use ic_base_types::PrincipalId;
 use ic_cketh_minter::endpoints::events::{
-    EventPayload, EventSource, TransactionReceipt, TransactionStatus, UnsignedTransaction,
+    EventPayload,
+    EventSource,
+    TransactionReceipt,
+    TransactionStatus,
+    UnsignedTransaction,
 };
 use ic_cketh_minter::endpoints::CandidBlockTag::Finalized;
 use ic_cketh_minter::endpoints::{
-    CandidBlockTag, EthTransaction, GasFeeEstimate, MinterInfo, RetrieveEthStatus,
-    TxFinalizedStatus, WithdrawalError, WithdrawalStatus,
+    CandidBlockTag,
+    EthTransaction,
+    GasFeeEstimate,
+    MinterInfo,
+    RetrieveEthStatus,
+    TxFinalizedStatus,
+    WithdrawalError,
+    WithdrawalStatus,
 };
 use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
-use ic_cketh_minter::memo::{BurnMemo, MintMemo};
+use ic_cketh_minter::memo::{
+    BurnMemo,
+    MintMemo,
+};
 use ic_cketh_minter::numeric::BlockNumber;
-use ic_cketh_minter::{PROCESS_REIMBURSEMENT, SCRAPING_ETH_LOGS_INTERVAL};
+use ic_cketh_minter::{
+    PROCESS_REIMBURSEMENT,
+    SCRAPING_ETH_LOGS_INTERVAL,
+};
 use ic_cketh_test_utils::flow::{
-    double_and_increment_base_fee_per_gas, DepositCkEthParams, DepositParams,
+    double_and_increment_base_fee_per_gas,
+    DepositCkEthParams,
+    DepositParams,
     ProcessWithdrawalParams,
 };
-use ic_cketh_test_utils::mock::{JsonRpcMethod, MockJsonRpcProviders};
+use ic_cketh_test_utils::mock::{
+    JsonRpcMethod,
+    MockJsonRpcProviders,
+};
 use ic_cketh_test_utils::response::{
-    block_response, decode_transaction, default_signed_eip_1559_transaction, empty_logs,
-    hash_transaction, multi_logs_for_single_transaction,
+    block_response,
+    decode_transaction,
+    default_signed_eip_1559_transaction,
+    empty_logs,
+    hash_transaction,
+    multi_logs_for_single_transaction,
 };
 use ic_cketh_test_utils::{
-    use_evm_rpc_canister, CkEthSetup, JsonRpcProvider, CKETH_MINIMUM_WITHDRAWAL_AMOUNT,
-    CKETH_TRANSFER_FEE, CKETH_WITHDRAWAL_AMOUNT, DEFAULT_BLOCK_HASH, DEFAULT_BLOCK_NUMBER,
-    DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_DEPOSIT_LOG_INDEX, DEFAULT_DEPOSIT_TRANSACTION_HASH,
-    DEFAULT_PRINCIPAL_ID, DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS,
-    DEFAULT_WITHDRAWAL_TRANSACTION_HASH, EFFECTIVE_GAS_PRICE, ETH_HELPER_CONTRACT_ADDRESS,
-    EXPECTED_BALANCE, GAS_USED, LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MINTER_ADDRESS,
+    use_evm_rpc_canister,
+    CkEthSetup,
+    JsonRpcProvider,
+    CKETH_MINIMUM_WITHDRAWAL_AMOUNT,
+    CKETH_TRANSFER_FEE,
+    CKETH_WITHDRAWAL_AMOUNT,
+    DEFAULT_BLOCK_HASH,
+    DEFAULT_BLOCK_NUMBER,
+    DEFAULT_DEPOSIT_FROM_ADDRESS,
+    DEFAULT_DEPOSIT_LOG_INDEX,
+    DEFAULT_DEPOSIT_TRANSACTION_HASH,
+    DEFAULT_PRINCIPAL_ID,
+    DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS,
+    DEFAULT_WITHDRAWAL_TRANSACTION_HASH,
+    EFFECTIVE_GAS_PRICE,
+    ETH_HELPER_CONTRACT_ADDRESS,
+    EXPECTED_BALANCE,
+    GAS_USED,
+    LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL,
+    MINTER_ADDRESS,
 };
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
-use icrc_ledger_types::icrc3::transactions::{Burn, Mint};
+use icrc_ledger_types::icrc3::transactions::{
+    Burn,
+    Mint,
+};
 use num_traits::cast::ToPrimitive;
 use serde_json::json;
 use std::str::FromStr;

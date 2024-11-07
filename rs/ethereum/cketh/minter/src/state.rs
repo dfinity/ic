@@ -1,17 +1,38 @@
 use crate::address::ecdsa_public_key_to_address;
-use crate::erc20::{CkErc20Token, CkTokenSymbol};
-use crate::eth_logs::{EventSource, ReceivedEvent};
+use crate::erc20::{
+    CkErc20Token,
+    CkTokenSymbol,
+};
+use crate::eth_logs::{
+    EventSource,
+    ReceivedEvent,
+};
 use crate::eth_rpc::BlockTag;
-use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
+use crate::eth_rpc_client::responses::{
+    TransactionReceipt,
+    TransactionStatus,
+};
 use crate::lifecycle::upgrade::UpgradeArg;
 use crate::lifecycle::EthereumNetwork;
 use crate::logs::DEBUG;
 use crate::map::DedupMultiKeyMap;
 use crate::numeric::{
-    BlockNumber, Erc20Value, LedgerBurnIndex, LedgerMintIndex, TransactionNonce, Wei,
+    BlockNumber,
+    Erc20Value,
+    LedgerBurnIndex,
+    LedgerMintIndex,
+    TransactionNonce,
+    Wei,
 };
-use crate::state::eth_logs_scraping::{LogScrapingId, LogScrapings};
-use crate::state::transactions::{Erc20WithdrawalRequest, TransactionCallData, WithdrawalRequest};
+use crate::state::eth_logs_scraping::{
+    LogScrapingId,
+    LogScrapings,
+};
+use crate::state::transactions::{
+    Erc20WithdrawalRequest,
+    TransactionCallData,
+    WithdrawalRequest,
+};
 use crate::tx::GasFeeEstimate;
 use candid::Principal;
 use ic_canister_log::log;
@@ -19,8 +40,16 @@ use ic_cdk::api::management_canister::ecdsa::EcdsaPublicKeyResponse;
 use ic_crypto_secp256k1::PublicKey;
 use ic_ethereum_types::Address;
 use std::cell::RefCell;
-use std::collections::{btree_map, BTreeMap, BTreeSet, HashSet};
-use std::fmt::{Display, Formatter};
+use std::collections::{
+    btree_map,
+    BTreeMap,
+    BTreeSet,
+    HashSet,
+};
+use std::fmt::{
+    Display,
+    Formatter,
+};
 use strum_macros::EnumIter;
 use transactions::EthTransactions;
 
@@ -617,7 +646,10 @@ where
 
 pub async fn lazy_call_ecdsa_public_key() -> PublicKey {
     use ic_cdk::api::management_canister::ecdsa::{
-        ecdsa_public_key, EcdsaCurve, EcdsaKeyId, EcdsaPublicKeyArgument,
+        ecdsa_public_key,
+        EcdsaCurve,
+        EcdsaKeyId,
+        EcdsaPublicKeyArgument,
     };
 
     fn to_public_key(response: &EcdsaPublicKeyResponse) -> PublicKey {

@@ -1,7 +1,15 @@
 mod validate_address_as_destination {
-    use crate::address::{validate_address_as_destination, Address, AddressValidationError};
+    use crate::address::{
+        validate_address_as_destination,
+        Address,
+        AddressValidationError,
+    };
     use assert_matches::assert_matches;
-    use proptest::{prop_assert_eq, prop_assume, proptest};
+    use proptest::{
+        prop_assert_eq,
+        prop_assume,
+        proptest,
+    };
     use std::str::FromStr;
 
     #[test]

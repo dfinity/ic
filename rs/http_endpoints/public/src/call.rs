@@ -3,37 +3,62 @@ pub mod call_v2;
 pub mod call_v3;
 mod ingress_watcher;
 
-pub use ingress_watcher::{IngressWatcher, IngressWatcherHandle};
+pub use ingress_watcher::{
+    IngressWatcher,
+    IngressWatcherHandle,
+};
 
 use crate::{
-    common::{build_validator, validation_error_to_http_error},
-    HttpError, IngressFilterService,
+    common::{
+        build_validator,
+        validation_error_to_http_error,
+    },
+    HttpError,
+    IngressFilterService,
 };
 use hyper::StatusCode;
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_error_types::UserError;
 use ic_interfaces::ingress_pool::IngressPoolThrottler;
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{error, warn, ReplicaLogger};
+use ic_logger::{
+    error,
+    warn,
+    ReplicaLogger,
+};
 use ic_registry_client_helpers::{
     crypto::root_of_trust::RegistryRootOfTrustProvider,
     provisional_whitelist::ProvisionalWhitelistRegistry,
-    subnet::{IngressMessageSettings, SubnetRegistry},
+    subnet::{
+        IngressMessageSettings,
+        SubnetRegistry,
+    },
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
     malicious_flags::MaliciousFlags,
     messages::{
-        HttpCallContent, HttpRequestEnvelope, MessageId, SignedIngress, SignedIngressContent,
+        HttpCallContent,
+        HttpRequestEnvelope,
+        MessageId,
+        SignedIngress,
+        SignedIngressContent,
     },
     time::current_time,
-    CanisterId, CountBytes, NodeId, RegistryVersion, SubnetId,
+    CanisterId,
+    CountBytes,
+    NodeId,
+    RegistryVersion,
+    SubnetId,
 };
 use ic_validator::HttpRequestVerifier;
 use std::convert::TryInto;
 use std::sync::Mutex;
-use std::sync::{Arc, RwLock};
+use std::sync::{
+    Arc,
+    RwLock,
+};
 use tokio::sync::mpsc::UnboundedSender;
 use tower::ServiceExt;
 
@@ -316,7 +341,12 @@ impl IngressMessageSubmitter {
 mod test {
     use super::*;
     use ic_types::{
-        messages::{Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope},
+        messages::{
+            Blob,
+            HttpCallContent,
+            HttpCanisterUpdate,
+            HttpRequestEnvelope,
+        },
         time::expiry_time_from_now,
     };
     use std::convert::TryFrom;

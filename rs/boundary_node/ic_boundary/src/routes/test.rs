@@ -1,29 +1,55 @@
 use super::*;
 
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    Arc,
+    Mutex,
+};
 
 use anyhow::Error;
 use axum::{
-    body::Body, http::Request, middleware, response::IntoResponse, routing::method_routing::get,
+    body::Body,
+    http::Request,
+    middleware,
+    response::IntoResponse,
+    routing::method_routing::get,
     Router,
 };
 use ethnum::u256;
 use http::header::{
-    HeaderName, HeaderValue, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS,
+    HeaderName,
+    HeaderValue,
+    CONTENT_TYPE,
+    X_CONTENT_TYPE_OPTIONS,
+    X_FRAME_OPTIONS,
 };
 use ic_types::{
     messages::{
-        Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
-        HttpReadStateContent, HttpRequestEnvelope, HttpUserQuery,
+        Blob,
+        HttpCallContent,
+        HttpCanisterUpdate,
+        HttpQueryContent,
+        HttpReadState,
+        HttpReadStateContent,
+        HttpRequestEnvelope,
+        HttpUserQuery,
     },
     PrincipalId,
 };
 use prometheus::Registry;
-use tower::{Service, ServiceBuilder};
-use tower_http::{request_id::MakeRequestUuid, ServiceBuilderExt};
+use tower::{
+    Service,
+    ServiceBuilder,
+};
+use tower_http::{
+    request_id::MakeRequestUuid,
+    ServiceBuilderExt,
+};
 
 use crate::{
-    metrics::{metrics_middleware_status, HttpMetricParamsStatus},
+    metrics::{
+        metrics_middleware_status,
+        HttpMetricParamsStatus,
+    },
     persist::test::node,
     test_utils::setup_test_router,
 };

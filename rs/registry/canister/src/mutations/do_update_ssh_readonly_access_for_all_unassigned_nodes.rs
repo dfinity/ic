@@ -4,7 +4,10 @@ use crate::{
     registry::Registry,
 };
 
-use candid::{CandidType, Deserialize};
+use candid::{
+    CandidType,
+    Deserialize,
+};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use serde::Serialize;
@@ -40,16 +43,26 @@ pub struct UpdateSshReadOnlyAccessForAllUnassignedNodesPayload {
 #[cfg(test)]
 mod tests {
     use ic_protobuf::registry::replica_version::v1::{
-        BlessedReplicaVersions, ReplicaVersionRecord,
+        BlessedReplicaVersions,
+        ReplicaVersionRecord,
     };
-    use ic_registry_keys::{make_blessed_replica_versions_key, make_replica_version_key};
-    use ic_registry_transport::{insert, upsert};
+    use ic_registry_keys::{
+        make_blessed_replica_versions_key,
+        make_replica_version_key,
+    };
+    use ic_registry_transport::{
+        insert,
+        upsert,
+    };
     use prost::Message;
 
     use crate::{
         common::test_helpers::invariant_compliant_registry,
         mutations::{
-            common::{get_blessed_replica_versions, get_unassigned_nodes_record},
+            common::{
+                get_blessed_replica_versions,
+                get_unassigned_nodes_record,
+            },
             do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
         },
     };

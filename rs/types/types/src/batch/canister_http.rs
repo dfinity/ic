@@ -1,24 +1,51 @@
 use crate::{
     canister_http::{
-        CanisterHttpReject, CanisterHttpRequestId, CanisterHttpResponse,
-        CanisterHttpResponseContent, CanisterHttpResponseDivergence, CanisterHttpResponseMetadata,
-        CanisterHttpResponseShare, CanisterHttpResponseWithConsensus,
+        CanisterHttpReject,
+        CanisterHttpRequestId,
+        CanisterHttpResponse,
+        CanisterHttpResponseContent,
+        CanisterHttpResponseDivergence,
+        CanisterHttpResponseMetadata,
+        CanisterHttpResponseShare,
+        CanisterHttpResponseWithConsensus,
     },
-    crypto::{BasicSig, BasicSigOf, CryptoHash, CryptoHashOf, Signed},
+    crypto::{
+        BasicSig,
+        BasicSigOf,
+        CryptoHash,
+        CryptoHashOf,
+        Signed,
+    },
     messages::CallbackId,
-    signature::{BasicSignature, BasicSignatureBatch},
+    signature::{
+        BasicSignature,
+        BasicSignatureBatch,
+    },
     Time,
 };
-use ic_base_types::{NodeId, PrincipalId, RegistryVersion};
+use ic_base_types::{
+    NodeId,
+    PrincipalId,
+    RegistryVersion,
+};
 use ic_error_types::RejectCode;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{
+        try_from_option_field,
+        ProxyDecodeError,
+    },
     types::v1 as pb,
 };
-use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, convert::TryFrom};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use std::{
+    collections::BTreeMap,
+    convert::TryFrom,
+};
 
 pub const MAX_CANISTER_HTTP_PAYLOAD_SIZE: usize = 2 * 1024 * 1024; // 2 MiB
 

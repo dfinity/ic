@@ -1,26 +1,58 @@
 use crate::pb::v1::{
     sns_init_payload::InitialTokenDistribution::FractionalDeveloperVotingPower,
-    FractionalDeveloperVotingPower as FractionalDVP, SnsInitPayload, SwapDistribution,
+    FractionalDeveloperVotingPower as FractionalDVP,
+    SnsInitPayload,
+    SwapDistribution,
 };
 use candid::Principal;
-use ic_base_types::{CanisterId, PrincipalId};
-use ic_icrc1_index_ng::{IndexArg, InitArg};
-use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
+use ic_icrc1_index_ng::{
+    IndexArg,
+    InitArg,
+};
+use ic_icrc1_ledger::{
+    InitArgsBuilder as LedgerInitArgsBuilder,
+    LedgerArgument,
+};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::Tokens;
-use ic_nervous_system_common::{ledger_validation, DEFAULT_TRANSFER_FEE, E8};
-use ic_nervous_system_proto::pb::v1::{Canister, Countries};
+use ic_nervous_system_common::{
+    ledger_validation,
+    DEFAULT_TRANSFER_FEE,
+    E8,
+};
+use ic_nervous_system_proto::pb::v1::{
+    Canister,
+    Countries,
+};
 use ic_nns_constants::{
-    CYCLES_MINTING_CANISTER_ID, EXCHANGE_RATE_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
-    GOVERNANCE_CANISTER_ID as NNS_GOVERNANCE_CANISTER_ID, IDENTITY_CANISTER_ID,
-    LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, NNS_UI_CANISTER_ID,
-    REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    CYCLES_MINTING_CANISTER_ID,
+    EXCHANGE_RATE_CANISTER_ID,
+    GENESIS_TOKEN_CANISTER_ID,
+    GOVERNANCE_CANISTER_ID as NNS_GOVERNANCE_CANISTER_ID,
+    IDENTITY_CANISTER_ID,
+    LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID,
+    LIFELINE_CANISTER_ID,
+    NNS_UI_CANISTER_ID,
+    REGISTRY_CANISTER_ID,
+    ROOT_CANISTER_ID,
+    SNS_WASM_CANISTER_ID,
 };
 use ic_sns_governance::{
     init::GovernanceCanisterInitPayloadBuilder,
     pb::v1::{
-        governance::{SnsMetadata, Version},
-        Governance, NervousSystemParameters, Neuron, NeuronPermissionList, NeuronPermissionType,
+        governance::{
+            SnsMetadata,
+            Version,
+        },
+        Governance,
+        NervousSystemParameters,
+        Neuron,
+        NeuronPermissionList,
+        NeuronPermissionType,
         VotingRewardsParameters,
     },
 };
@@ -28,17 +60,30 @@ use ic_sns_root::pb::v1::SnsRootCanister;
 use ic_sns_swap::{
     neurons_fund,
     pb::v1::{
-        IdealMatchedParticipationFunction, Init as SwapInit, LinearScalingCoefficient,
-        NeuronBasketConstructionParameters, NeuronsFundParticipationConstraints,
+        IdealMatchedParticipationFunction,
+        Init as SwapInit,
+        LinearScalingCoefficient,
+        NeuronBasketConstructionParameters,
+        NeuronsFundParticipationConstraints,
     },
 };
-use icrc_ledger_types::{icrc::generic_metadata_value::MetadataValue, icrc1::account::Account};
+use icrc_ledger_types::{
+    icrc::generic_metadata_value::MetadataValue,
+    icrc1::account::Account,
+};
 use isocountry::CountryCode;
 use maplit::btreemap;
 use pb::v1::DappCanisters;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::{
-    collections::{BTreeMap, BTreeSet, HashSet},
+    collections::{
+        BTreeMap,
+        BTreeSet,
+        HashSet,
+    },
     num::NonZeroU64,
     str::FromStr,
     string::ToString,
@@ -1953,39 +1998,78 @@ impl SnsInitPayload {
 mod test {
     use crate::{
         pb::v1::{
-            AirdropDistribution, DappCanisters, DeveloperDistribution,
-            FractionalDeveloperVotingPower as FractionalDVP, NeuronDistribution, SwapDistribution,
+            AirdropDistribution,
+            DappCanisters,
+            DeveloperDistribution,
+            FractionalDeveloperVotingPower as FractionalDVP,
+            NeuronDistribution,
+            SwapDistribution,
         },
-        FractionalDeveloperVotingPower, MaxNeuronsFundParticipationValidationError,
+        FractionalDeveloperVotingPower,
+        MaxNeuronsFundParticipationValidationError,
         MinDirectParticipationThresholdValidationError,
         NeuronBasketConstructionParametersValidationError,
-        NeuronsFundParticipationConstraintsValidationError, RestrictedCountriesValidationError,
-        SnsCanisterIds, SnsInitPayload, ICRC1_TOKEN_LOGO_KEY, MAX_CONFIRMATION_TEXT_LENGTH,
-        MAX_DAPP_CANISTERS_COUNT, MAX_DIRECT_ICP_CONTRIBUTION_TO_SWAP,
+        NeuronsFundParticipationConstraintsValidationError,
+        RestrictedCountriesValidationError,
+        SnsCanisterIds,
+        SnsInitPayload,
+        ICRC1_TOKEN_LOGO_KEY,
+        MAX_CONFIRMATION_TEXT_LENGTH,
+        MAX_DAPP_CANISTERS_COUNT,
+        MAX_DIRECT_ICP_CONTRIBUTION_TO_SWAP,
         MAX_FALLBACK_CONTROLLER_PRINCIPAL_IDS_COUNT,
     };
-    use ic_base_types::{CanisterId, PrincipalId};
+    use ic_base_types::{
+        CanisterId,
+        PrincipalId,
+    };
     use ic_icrc1_ledger::LedgerArgument;
     use ic_nervous_system_common::{
-        ledger_validation::{self, MAX_TOKEN_NAME_LENGTH, MAX_TOKEN_SYMBOL_LENGTH},
-        E8, ONE_MONTH_SECONDS,
+        ledger_validation::{
+            self,
+            MAX_TOKEN_NAME_LENGTH,
+            MAX_TOKEN_SYMBOL_LENGTH,
+        },
+        E8,
+        ONE_MONTH_SECONDS,
     };
-    use ic_nervous_system_proto::pb::v1::{Canister, Countries};
+    use ic_nervous_system_proto::pb::v1::{
+        Canister,
+        Countries,
+    };
     use ic_nns_constants::{
-        CYCLES_MINTING_CANISTER_ID, EXCHANGE_RATE_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
-        GOVERNANCE_CANISTER_ID as NNS_GOVERNANCE_CANISTER_ID, IDENTITY_CANISTER_ID,
-        LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, NNS_UI_CANISTER_ID,
-        REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
+        CYCLES_MINTING_CANISTER_ID,
+        EXCHANGE_RATE_CANISTER_ID,
+        GENESIS_TOKEN_CANISTER_ID,
+        GOVERNANCE_CANISTER_ID as NNS_GOVERNANCE_CANISTER_ID,
+        IDENTITY_CANISTER_ID,
+        LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID,
+        LIFELINE_CANISTER_ID,
+        NNS_UI_CANISTER_ID,
+        REGISTRY_CANISTER_ID,
+        ROOT_CANISTER_ID,
+        SNS_WASM_CANISTER_ID,
     };
-    use ic_sns_governance::{governance::ValidGovernanceProto, pb::v1::governance::SnsMetadata};
+    use ic_sns_governance::{
+        governance::ValidGovernanceProto,
+        pb::v1::governance::SnsMetadata,
+    };
     use ic_sns_swap::pb::v1::{
-        IdealMatchedParticipationFunction, LinearScalingCoefficient,
-        NeuronBasketConstructionParameters, NeuronsFundParticipationConstraints,
+        IdealMatchedParticipationFunction,
+        LinearScalingCoefficient,
+        NeuronBasketConstructionParameters,
+        NeuronsFundParticipationConstraints,
     };
-    use icrc_ledger_types::{icrc::generic_metadata_value::MetadataValue, icrc1::account::Account};
+    use icrc_ledger_types::{
+        icrc::generic_metadata_value::MetadataValue,
+        icrc1::account::Account,
+    };
     use isocountry::CountryCode;
     use std::{
-        collections::{BTreeMap, HashSet},
+        collections::{
+            BTreeMap,
+            HashSet,
+        },
         convert::TryInto,
         num::NonZeroU64,
     };

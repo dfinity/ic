@@ -1,28 +1,83 @@
 use crate::{
-    manifest::{build_file_group_chunks, filter_out_zero_chunks, DiffScript},
+    manifest::{
+        build_file_group_chunks,
+        filter_out_zero_chunks,
+        DiffScript,
+    },
     state_sync::types::{
-        decode_manifest, decode_meta_manifest, state_sync_chunk_type, FileGroupChunks, Manifest,
-        MetaManifest, StateSyncChunk, StateSyncMessage, FILE_CHUNK_ID_OFFSET,
-        FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET, META_MANIFEST_CHUNK,
+        decode_manifest,
+        decode_meta_manifest,
+        state_sync_chunk_type,
+        FileGroupChunks,
+        Manifest,
+        MetaManifest,
+        StateSyncChunk,
+        StateSyncMessage,
+        FILE_CHUNK_ID_OFFSET,
+        FILE_GROUP_CHUNK_ID_OFFSET,
+        MANIFEST_CHUNK_ID_OFFSET,
+        META_MANIFEST_CHUNK,
     },
     state_sync::StateSync,
-    StateManagerMetrics, StateSyncMetrics, StateSyncRefs,
-    CRITICAL_ERROR_STATE_SYNC_CORRUPTED_CHUNKS, LABEL_COPY_CHUNKS, LABEL_COPY_FILES, LABEL_FETCH,
-    LABEL_FETCH_MANIFEST_CHUNK, LABEL_FETCH_META_MANIFEST_CHUNK, LABEL_FETCH_STATE_CHUNK,
-    LABEL_PREALLOCATE, LABEL_STATE_SYNC_MAKE_CHECKPOINT,
+    StateManagerMetrics,
+    StateSyncMetrics,
+    StateSyncRefs,
+    CRITICAL_ERROR_STATE_SYNC_CORRUPTED_CHUNKS,
+    LABEL_COPY_CHUNKS,
+    LABEL_COPY_FILES,
+    LABEL_FETCH,
+    LABEL_FETCH_MANIFEST_CHUNK,
+    LABEL_FETCH_META_MANIFEST_CHUNK,
+    LABEL_FETCH_STATE_CHUNK,
+    LABEL_PREALLOCATE,
+    LABEL_STATE_SYNC_MAKE_CHECKPOINT,
 };
-use ic_interfaces::p2p::state_sync::{AddChunkError, Chunk, ChunkId, Chunkable};
-use ic_logger::{debug, error, fatal, info, trace, warn, ReplicaLogger};
+use ic_interfaces::p2p::state_sync::{
+    AddChunkError,
+    Chunk,
+    ChunkId,
+    Chunkable,
+};
+use ic_logger::{
+    debug,
+    error,
+    fatal,
+    info,
+    trace,
+    warn,
+    ReplicaLogger,
+};
 use ic_state_layout::utils::do_copy_overwrite;
-use ic_state_layout::{error::LayoutError, CheckpointLayout, ReadOnly, RwPolicy, StateLayout};
+use ic_state_layout::{
+    error::LayoutError,
+    CheckpointLayout,
+    ReadOnly,
+    RwPolicy,
+    StateLayout,
+};
 use ic_sys::mmap::ScopedMmap;
-use ic_types::{malicious_flags::MaliciousFlags, CryptoHashOfState, Height};
+use ic_types::{
+    malicious_flags::MaliciousFlags,
+    CryptoHashOfState,
+    Height,
+};
 use std::os::unix::fs::FileExt;
-use std::path::{Path, PathBuf};
+use std::path::{
+    Path,
+    PathBuf,
+};
 use std::time::Instant;
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
-    sync::{Arc, Mutex},
+    collections::{
+        BTreeMap,
+        BTreeSet,
+        HashMap,
+        HashSet,
+    },
+    sync::{
+        Arc,
+        Mutex,
+    },
 };
 
 pub mod cache;

@@ -85,7 +85,10 @@ mod tests {
     use prometheus::core::Metric;
 
     use super::*;
-    use crate::{buckets::decimal_buckets, MetricsRegistry};
+    use crate::{
+        buckets::decimal_buckets,
+        MetricsRegistry,
+    };
 
     pub const LABEL_DETAIL: &str = "detail";
     pub const LABEL_OTHER: &str = "other";

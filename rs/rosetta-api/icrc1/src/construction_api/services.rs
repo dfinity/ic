@@ -1,23 +1,40 @@
 use super::types::{
-    ConstructionMetadataRequestOptions, ConstructionPayloadsRequestMetadata, SignedTransaction,
+    ConstructionMetadataRequestOptions,
+    ConstructionPayloadsRequestMetadata,
+    SignedTransaction,
     UnsignedTransaction,
 };
 use super::utils::{
-    extract_caller_principal_from_rosetta_core_operation, handle_construction_combine,
-    handle_construction_hash, handle_construction_parse, handle_construction_payloads,
+    extract_caller_principal_from_rosetta_core_operation,
+    handle_construction_combine,
+    handle_construction_hash,
+    handle_construction_parse,
+    handle_construction_payloads,
     handle_construction_submit,
 };
 use crate::common::constants::INGRESS_INTERVAL_OVERLAP;
 use crate::common::types::Error;
 use candid::Principal;
-use ic_base_types::{CanisterId, PrincipalId};
-use icrc_ledger_agent::{CallMode, Icrc1Agent};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
+use icrc_ledger_agent::{
+    CallMode,
+    Icrc1Agent,
+};
 use icrc_ledger_types::icrc1::account::Account;
 use num_bigint::BigInt;
-use rosetta_core::objects::{Amount, Currency, Operation, Signature};
+use rosetta_core::objects::{
+    Amount,
+    Currency,
+    Operation,
+    Signature,
+};
 use rosetta_core::response_types::*;
 use rosetta_core::{
-    convert::principal_id_from_public_key, objects::PublicKey,
+    convert::principal_id_from_public_key,
+    objects::PublicKey,
     response_types::ConstructionDeriveResponse,
 };
 use std::str::FromStr;
@@ -257,7 +274,10 @@ mod tests {
     use proptest::test_runner::Config as TestRunnerConfig;
     use proptest::test_runner::TestRunner;
     use rosetta_core::models::RosettaSupportedKeyPair;
-    use rosetta_core::models::{Ed25519KeyPair, Secp256k1KeyPair};
+    use rosetta_core::models::{
+        Ed25519KeyPair,
+        Secp256k1KeyPair,
+    };
 
     const NUM_TEST_CASES: u32 = 100;
     const NUM_BLOCKS: usize = 1;

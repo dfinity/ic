@@ -1,4 +1,7 @@
-use ic_sns_wasm_protobuf_generator::{generate_prost_files, ProtoPaths};
+use ic_sns_wasm_protobuf_generator::{
+    generate_prost_files,
+    ProtoPaths,
+};
 use std::path::PathBuf;
 
 fn main() {

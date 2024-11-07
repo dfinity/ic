@@ -1,4 +1,9 @@
-use candid::{CandidType, Deserialize, Int, Nat};
+use candid::{
+    CandidType,
+    Deserialize,
+    Int,
+    Nat,
+};
 use serde::Serialize;
 use serde_bytes::ByteBuf;
 

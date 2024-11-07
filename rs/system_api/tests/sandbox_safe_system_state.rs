@@ -1,29 +1,54 @@
-use ic_base_types::{CanisterId, NumBytes, NumSeconds, SubnetId};
+use ic_base_types::{
+    CanisterId,
+    NumBytes,
+    NumSeconds,
+    SubnetId,
+};
 use ic_config::subnet_config::SchedulerConfig;
 use ic_interfaces::execution_environment::SystemApi;
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types::{
-    CanisterIdRecord, CanisterSettingsArgs, Payload, UpdateSettingsArgs, IC_00,
+    CanisterIdRecord,
+    CanisterSettingsArgs,
+    Payload,
+    UpdateSettingsArgs,
+    IC_00,
 };
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_replicated_state::testing::SystemStateTesting;
-use ic_replicated_state::{NetworkTopology, SystemState};
+use ic_replicated_state::{
+    NetworkTopology,
+    SystemState,
+};
 use ic_system_api::sandbox_safe_system_state::SandboxSafeSystemState;
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_state::SystemStateBuilder;
 use ic_test_utilities_types::{
-    ids::{canister_test_id, subnet_test_id, user_test_id},
-    messages::{RequestBuilder, ResponseBuilder},
+    ids::{
+        canister_test_id,
+        subnet_test_id,
+        user_test_id,
+    },
+    messages::{
+        RequestBuilder,
+        ResponseBuilder,
+    },
 };
 use ic_types::nominal_cycles::NominalCycles;
 use ic_types::{
-    messages::{CanisterMessage, RequestMetadata, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
+    messages::{
+        CanisterMessage,
+        RequestMetadata,
+        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+    },
     time::UNIX_EPOCH,
-    ComputeAllocation, Cycles, NumInstructions,
+    ComputeAllocation,
+    Cycles,
+    NumInstructions,
 };
 use prometheus::IntCounter;
 use std::collections::BTreeSet;

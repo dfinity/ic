@@ -5,17 +5,41 @@
 // is defined in the `call` module.
 //
 
-use crate::execution::common::{validate_canister, validate_method};
+use crate::execution::common::{
+    validate_canister,
+    validate_method,
+};
 use crate::execution_environment::RoundLimits;
-use crate::{metrics::CallTreeMetricsNoOp, Hypervisor, NonReplicatedQueryKind};
+use crate::{
+    metrics::CallTreeMetricsNoOp,
+    Hypervisor,
+    NonReplicatedQueryKind,
+};
 use ic_error_types::UserError;
 use ic_interfaces::execution_environment::SystemApiCallCounters;
-use ic_replicated_state::{CallOrigin, CanisterState, NetworkTopology};
-use ic_system_api::{ApiType, ExecutionParameters};
+use ic_replicated_state::{
+    CallOrigin,
+    CanisterState,
+    NetworkTopology,
+};
+use ic_system_api::{
+    ApiType,
+    ExecutionParameters,
+};
 use ic_types::ingress::WasmResult;
-use ic_types::messages::{CallContextId, RequestMetadata};
-use ic_types::methods::{FuncRef, WasmMethod};
-use ic_types::{Cycles, NumInstructions, Time};
+use ic_types::messages::{
+    CallContextId,
+    RequestMetadata,
+};
+use ic_types::methods::{
+    FuncRef,
+    WasmMethod,
+};
+use ic_types::{
+    Cycles,
+    NumInstructions,
+    Time,
+};
 use prometheus::IntCounter;
 
 // Execute non replicated query.

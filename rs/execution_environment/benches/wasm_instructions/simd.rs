@@ -4,8 +4,14 @@
 //! * https://www.w3.org/TR/wasm-core-2/
 //! * https://github.com/WebAssembly/simd/blob/main/proposals/simd/SIMD.md
 
-use crate::helper::{benchmark_with_confirmation, first_or_all};
-use execution_environment_bench::{common::Benchmark, wat_builder::dst_type};
+use crate::helper::{
+    benchmark_with_confirmation,
+    first_or_all,
+};
+use execution_environment_bench::{
+    common::Benchmark,
+    wat_builder::dst_type,
+};
 
 const SET_X_V128: &str = "global.set $x_v128";
 const SET_X_I32: &str = "global.set $x_i32";

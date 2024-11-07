@@ -1,11 +1,20 @@
 mod init {
     use crate::lifecycle::init::InitArg;
-    use crate::numeric::{TransactionNonce, Wei};
+    use crate::numeric::{
+        TransactionNonce,
+        Wei,
+    };
     use crate::state::eth_logs_scraping::LogScrapingId;
-    use crate::state::{InvalidStateError, State};
+    use crate::state::{
+        InvalidStateError,
+        State,
+    };
     use crate::test_fixtures::valid_init_arg;
     use assert_matches::assert_matches;
-    use candid::{Nat, Principal};
+    use candid::{
+        Nat,
+        Principal,
+    };
     use num_bigint::BigUint;
 
     #[test]

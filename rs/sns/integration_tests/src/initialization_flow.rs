@@ -1,51 +1,98 @@
 use candid::Nat;
-use ic_base_types::{CanisterId, PrincipalId};
-use ic_nervous_system_common::{ExplosiveTokens, E8, ONE_DAY_SECONDS, ONE_TRILLION};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
+use ic_nervous_system_common::{
+    ExplosiveTokens,
+    E8,
+    ONE_DAY_SECONDS,
+    ONE_TRILLION,
+};
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL;
 use ic_nervous_system_proto::pb::v1::{
-    Canister, Duration, GlobalTimeOfDay, Image, Percentage, Tokens,
+    Canister,
+    Duration,
+    GlobalTimeOfDay,
+    Image,
+    Percentage,
+    Tokens,
 };
-use ic_nns_common::pb::v1::{NeuronId, ProposalId};
-use ic_nns_constants::{ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID};
+use ic_nns_common::pb::v1::{
+    NeuronId,
+    ProposalId,
+};
+use ic_nns_constants::{
+    ROOT_CANISTER_ID,
+    SNS_WASM_CANISTER_ID,
+};
 use ic_nns_governance_api::pb::v1::{
     create_service_nervous_system::{
         governance_parameters::VotingRewardParameters,
         initial_token_distribution::{
-            developer_distribution::NeuronDistribution, DeveloperDistribution, SwapDistribution,
+            developer_distribution::NeuronDistribution,
+            DeveloperDistribution,
+            SwapDistribution,
             TreasuryDistribution,
         },
         swap_parameters::NeuronBasketConstructionParameters,
-        GovernanceParameters, InitialTokenDistribution, LedgerParameters, SwapParameters,
+        GovernanceParameters,
+        InitialTokenDistribution,
+        LedgerParameters,
+        SwapParameters,
     },
-    manage_neuron_response, CreateServiceNervousSystem, MakeProposalRequest, ProposalActionRequest,
+    manage_neuron_response,
+    CreateServiceNervousSystem,
+    MakeProposalRequest,
+    ProposalActionRequest,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    neuron_helpers::{get_neuron_1, get_test_neurons_maturity_snapshot},
+    neuron_helpers::{
+        get_neuron_1,
+        get_test_neurons_maturity_snapshot,
+    },
     sns_wasm::add_real_wasms_to_sns_wasms,
     state_test_helpers::{
-        get_canister_status_from_root, get_controllers, list_deployed_snses,
-        nns_governance_make_proposal, nns_wait_for_proposal_execution,
-        nns_wait_for_proposal_failure, set_controllers, set_up_universal_canister,
-        setup_nns_canisters, sns_get_icp_treasury_account_balance, sns_governance_get_mode,
+        get_canister_status_from_root,
+        get_controllers,
+        list_deployed_snses,
+        nns_governance_make_proposal,
+        nns_wait_for_proposal_execution,
+        nns_wait_for_proposal_failure,
+        set_controllers,
+        set_up_universal_canister,
+        setup_nns_canisters,
+        sns_get_icp_treasury_account_balance,
+        sns_governance_get_mode,
         sns_swap_get_auto_finalization_status,
     },
 };
 use ic_sns_governance::pb::v1::{
-    governance::Mode::{Normal, PreInitializationSwap},
+    governance::Mode::{
+        Normal,
+        PreInitializationSwap,
+    },
     ListNeurons,
 };
 use ic_sns_swap::pb::v1::Lifecycle;
 use ic_sns_test_utils::state_test_helpers::{
-    get_lifecycle, get_sns_canisters_summary, list_community_fund_participants,
-    participate_in_swap, sns_governance_list_neurons, state_machine_builder_for_sns_tests,
+    get_lifecycle,
+    get_sns_canisters_summary,
+    list_community_fund_participants,
+    participate_in_swap,
+    sns_governance_list_neurons,
+    state_machine_builder_for_sns_tests,
 };
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::DEFAULT_TRANSFER_FEE;
 use lazy_static::lazy_static;
 use maplit::hashmap;
 use std::{
-    collections::{BTreeSet, HashMap},
+    collections::{
+        BTreeSet,
+        HashMap,
+    },
     time::UNIX_EPOCH,
 };
 

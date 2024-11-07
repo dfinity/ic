@@ -1,7 +1,10 @@
 use super::*;
 use candid::types::principal::Principal;
 use ic_base_types::PrincipalId;
-use ic_nervous_system_common::{E8, WIDE_RANGE_OF_U64_VALUES};
+use ic_nervous_system_common::{
+    E8,
+    WIDE_RANGE_OF_U64_VALUES,
+};
 use ic_sns_governance_token_valuation::Token;
 use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;

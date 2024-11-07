@@ -1,29 +1,67 @@
 use crate::driver::{
-    bootstrap::{init_ic, setup_and_start_vms},
-    farm::{Farm, HostFeature},
+    bootstrap::{
+        init_ic,
+        setup_and_start_vms,
+    },
+    farm::{
+        Farm,
+        HostFeature,
+    },
     node_software_version::NodeSoftwareVersion,
-    resource::{allocate_resources, get_resource_request, ResourceGroup},
-    test_env::{TestEnv, TestEnvAttribute},
-    test_env_api::{HasRegistryLocalStore, HasTopologySnapshot},
-    test_setup::{GroupSetup, InfraProvider},
+    resource::{
+        allocate_resources,
+        get_resource_request,
+        ResourceGroup,
+    },
+    test_env::{
+        TestEnv,
+        TestEnvAttribute,
+    },
+    test_env_api::{
+        HasRegistryLocalStore,
+        HasTopologySnapshot,
+    },
+    test_setup::{
+        GroupSetup,
+        InfraProvider,
+    },
 };
 use crate::k8s::tnet::TNet;
 use crate::util::block_on;
 use anyhow::Result;
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
-use ic_prep_lib::{node::NodeSecretKeyStore, subnet_configuration::SubnetRunningState};
+use ic_prep_lib::{
+    node::NodeSecretKeyStore,
+    subnet_configuration::SubnetRunningState,
+};
 use ic_regedit;
 use ic_registry_canister_api::IPv4Config;
-use ic_registry_subnet_features::{ChainKeyConfig, SubnetFeatures};
+use ic_registry_subnet_features::{
+    ChainKeyConfig,
+    SubnetFeatures,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behaviour::MaliciousBehaviour;
-use ic_types::{Height, NodeId, PrincipalId};
+use ic_types::{
+    Height,
+    NodeId,
+    PrincipalId,
+};
 use phantom_newtype::AmountOf;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use slog::info;
 use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
-use std::net::{Ipv6Addr, SocketAddr};
+use std::hash::{
+    Hash,
+    Hasher,
+};
+use std::net::{
+    Ipv6Addr,
+    SocketAddr,
+};
 use std::path::Path;
 use std::time::Duration;
 

@@ -4,8 +4,10 @@ use anyhow::Result;
 
 use canister_test::Canister;
 use ic_consensus_threshold_sig_system_test_utils::{
-    enable_chain_key_signing_with_timeout_and_rotation_period, get_public_key_with_logger,
-    make_key_ids_for_all_schemes, setup_without_ecdsa_on_nns,
+    enable_chain_key_signing_with_timeout_and_rotation_period,
+    get_public_key_with_logger,
+    make_key_ids_for_all_schemes,
+    setup_without_ecdsa_on_nns,
 };
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
@@ -13,10 +15,19 @@ use ic_system_test_driver::{
     driver::{
         group::SystemTestGroup,
         test_env::TestEnv,
-        test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
+        test_env_api::{
+            HasPublicApiUrl,
+            HasTopologySnapshot,
+            IcNodeContainer,
+        },
     },
     systest,
-    util::{block_on, runtime_from_url, MessageCanister, MetricsFetcher},
+    util::{
+        block_on,
+        runtime_from_url,
+        MessageCanister,
+        MetricsFetcher,
+    },
 };
 use slog::info;
 

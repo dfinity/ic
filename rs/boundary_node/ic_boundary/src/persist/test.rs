@@ -1,8 +1,18 @@
-use super::{principal_bytes_to_u256, Persist, PersistStatus, Persister, RouteSubnet, Routes};
+use super::{
+    principal_bytes_to_u256,
+    Persist,
+    PersistStatus,
+    Persister,
+    RouteSubnet,
+    Routes,
+};
 
 use std::{
     collections::HashMap,
-    net::{IpAddr, Ipv4Addr},
+    net::{
+        IpAddr,
+        Ipv4Addr,
+    },
     sync::Arc,
 };
 
@@ -13,7 +23,12 @@ use ethnum::u256;
 use ic_registry_subnet_type::SubnetType;
 
 use crate::{
-    snapshot::{node_test_id, CanisterRange, Node, Subnet},
+    snapshot::{
+        node_test_id,
+        CanisterRange,
+        Node,
+        Subnet,
+    },
     test_utils::valid_tls_certificate_and_validation_time,
 };
 

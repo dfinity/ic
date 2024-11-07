@@ -3,15 +3,26 @@ use candid::Nat;
 use dfn_core::CanisterId;
 use ic_ledger_core::block::BlockIndex;
 use ic_nervous_system_common::{
-    ledger::{ICRC1Ledger, IcpLedger},
+    ledger::{
+        ICRC1Ledger,
+        IcpLedger,
+    },
     NervousSystemError,
 };
 use ic_nervous_system_runtime::Runtime;
 use icp_ledger::{
-    AccountIdentifier, BinaryAccountBalanceArgs, Memo, Subaccount as IcpSubaccount, Tokens,
-    TransferArgs, TransferError,
+    AccountIdentifier,
+    BinaryAccountBalanceArgs,
+    Memo,
+    Subaccount as IcpSubaccount,
+    Tokens,
+    TransferArgs,
+    TransferError,
 };
-use icrc_ledger_types::icrc1::account::{Account, Subaccount};
+use icrc_ledger_types::icrc1::account::{
+    Account,
+    Subaccount,
+};
 use std::marker::PhantomData;
 
 pub struct IcpLedgerCanister<Rt: Runtime> {

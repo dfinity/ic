@@ -1,7 +1,10 @@
 use crate::crypto::canister_threshold_sig::error::IDkgTranscriptIdError;
 use crate::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
 use crate::Height;
-use ic_base_types::{PrincipalId, SubnetId};
+use ic_base_types::{
+    PrincipalId,
+    SubnetId,
+};
 
 #[test]
 fn should_increment_transcript_id_correctly() {

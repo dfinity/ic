@@ -1,23 +1,43 @@
 pub use super::types::*;
 use ic_artifact_pool::{
-    certification_pool::CertificationPoolImpl, consensus_pool::ConsensusPoolImpl,
-    dkg_pool::DkgPoolImpl, idkg_pool::IDkgPoolImpl,
+    certification_pool::CertificationPoolImpl,
+    consensus_pool::ConsensusPoolImpl,
+    dkg_pool::DkgPoolImpl,
+    idkg_pool::IDkgPoolImpl,
 };
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus::consensus::ConsensusBouncer;
 use ic_interfaces::{
     certification,
-    consensus_pool::{ChangeAction, Mutations as ConsensusChangeSet},
+    consensus_pool::{
+        ChangeAction,
+        Mutations as ConsensusChangeSet,
+    },
     dkg::ChangeAction as DkgChangeAction,
-    idkg::{IDkgChangeAction, IDkgChangeSet},
-    p2p::consensus::{MutablePool, PoolMutationsProducer},
+    idkg::{
+        IDkgChangeAction,
+        IDkgChangeSet,
+    },
+    p2p::consensus::{
+        MutablePool,
+        PoolMutationsProducer,
+    },
 };
-use ic_logger::{debug, ReplicaLogger};
+use ic_logger::{
+    debug,
+    ReplicaLogger,
+};
 use ic_metrics::MetricsRegistry;
 use ic_test_artifact_pool::ingress_pool::TestIngressPool;
-use ic_types::{consensus::ConsensusMessage, NodeId};
+use ic_types::{
+    consensus::ConsensusMessage,
+    NodeId,
+};
 use std::cell::RefCell;
-use std::sync::{Arc, RwLock};
+use std::sync::{
+    Arc,
+    RwLock,
+};
 
 /// A helper that drives consensus using a separate consensus artifact pool.
 impl<'a> ConsensusDriver<'a> {

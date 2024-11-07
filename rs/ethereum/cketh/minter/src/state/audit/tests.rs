@@ -1,16 +1,34 @@
 use crate::checked_amount::CheckedAmountOf;
-use crate::endpoints::events::{Event as CandidEvent, EventPayload, UnsignedTransaction};
+use crate::endpoints::events::{
+    Event as CandidEvent,
+    EventPayload,
+    UnsignedTransaction,
+};
 use crate::erc20::CkErc20Token;
-use crate::eth_logs::{LedgerSubaccount, ReceivedErc20Event, ReceivedEthEvent};
+use crate::eth_logs::{
+    LedgerSubaccount,
+    ReceivedErc20Event,
+    ReceivedEthEvent,
+};
 use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::lifecycle::EthereumNetwork;
 use crate::numeric::Wei;
-use crate::state::audit::{replay_events_internal, Event};
+use crate::state::audit::{
+    replay_events_internal,
+    Event,
+};
 use crate::state::transactions::{
-    Erc20WithdrawalRequest, Reimbursed, ReimbursementIndex, ReimbursementRequest, Subaccount,
+    Erc20WithdrawalRequest,
+    Reimbursed,
+    ReimbursementIndex,
+    ReimbursementRequest,
+    Subaccount,
 };
 use crate::tx::{
-    AccessList, AccessListItem, Eip1559TransactionRequest, SignedEip1559TransactionRequest,
+    AccessList,
+    AccessListItem,
+    Eip1559TransactionRequest,
+    SignedEip1559TransactionRequest,
     StorageKey,
 };
 use candid::Principal;
@@ -88,7 +106,8 @@ impl GetEventsFile {
 
     fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
         use crate::endpoints::events::{
-            AccessListItem as CandidAccessListItem, EventSource as CandidEventSource,
+            AccessListItem as CandidAccessListItem,
+            EventSource as CandidEventSource,
             ReimbursementIndex as CandidReimbursementIndex,
             TransactionStatus as CandidTransactionStatus,
         };
@@ -478,12 +497,21 @@ impl GetEventsFile {
 
     async fn retrieve_and_store_events(&self) {
         use crate::endpoints::events::GetEventsResult;
-        use candid::{CandidType, Decode, Encode};
+        use candid::{
+            CandidType,
+            Decode,
+            Encode,
+        };
         use flate2::bufread::GzEncoder;
         use flate2::Compression;
         use ic_agent::Agent;
         use std::fs::File;
-        use std::io::{BufReader, BufWriter, Read, Write};
+        use std::io::{
+            BufReader,
+            BufWriter,
+            Read,
+            Write,
+        };
 
         let agent = Agent::builder()
             .with_url("https://icp0.io")

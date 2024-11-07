@@ -1,4 +1,7 @@
-use crate::state::{mutate_state, CkBtcMinterState};
+use crate::state::{
+    mutate_state,
+    CkBtcMinterState,
+};
 use candid::Principal;
 use std::collections::BTreeSet;
 use std::marker::PhantomData;
@@ -123,14 +126,24 @@ pub fn retrieve_btc_guard(p: Principal) -> Result<Guard<RetrieveBtcUpdates>, Gua
 #[cfg(test)]
 mod tests {
     use crate::{
-        guard::{GuardError, MAX_CONCURRENT},
-        lifecycle::init::{init, BtcNetwork, InitArgs},
+        guard::{
+            GuardError,
+            MAX_CONCURRENT,
+        },
+        lifecycle::init::{
+            init,
+            BtcNetwork,
+            InitArgs,
+        },
         state::read_state,
     };
     use candid::Principal;
     use ic_base_types::CanisterId;
 
-    use super::{balance_update_guard, TimerLogicGuard};
+    use super::{
+        balance_update_guard,
+        TimerLogicGuard,
+    };
 
     fn test_principal(id: u64) -> Principal {
         Principal::try_from_slice(&id.to_le_bytes()).unwrap()

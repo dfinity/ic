@@ -1,11 +1,26 @@
 use ic_crypto_internal_csp::Csp;
 use ic_interfaces::time_source::SysTimeSource;
 use ic_limits::INITIAL_NOTARY_DELAY;
-use ic_protobuf::registry::crypto::v1::{EcdsaCurve, EcdsaKeyId};
-use ic_protobuf::registry::subnet::v1::{ChainKeyConfig, KeyConfig, SubnetRecord, SubnetType};
-use ic_types::{NodeId, ReplicaVersion, SubnetId};
+use ic_protobuf::registry::crypto::v1::{
+    EcdsaCurve,
+    EcdsaKeyId,
+};
+use ic_protobuf::registry::subnet::v1::{
+    ChainKeyConfig,
+    KeyConfig,
+    SubnetRecord,
+    SubnetType,
+};
+use ic_types::{
+    NodeId,
+    ReplicaVersion,
+    SubnetId,
+};
 use rand::rngs::OsRng;
-use rand::{CryptoRng, Rng};
+use rand::{
+    CryptoRng,
+    Rng,
+};
 use std::time::Duration;
 
 /// A crypto component set up in a temporary directory and using [`OsRng`]. The
@@ -23,81 +38,169 @@ impl<T: Rng + CryptoRng + 'static + Send + Sync> CryptoComponentRng for T {}
 pub mod internal {
     use super::*;
     use ic_base_types::PrincipalId;
-    use ic_config::crypto::{CryptoConfig, CspVaultType};
-    use ic_crypto::{CryptoComponent, CryptoComponentImpl};
-    use ic_crypto_interfaces_sig_verification::{BasicSigVerifierByPublicKey, CanisterSigVerifier};
+    use ic_config::crypto::{
+        CryptoConfig,
+        CspVaultType,
+    };
+    use ic_crypto::{
+        CryptoComponent,
+        CryptoComponentImpl,
+    };
+    use ic_crypto_interfaces_sig_verification::{
+        BasicSigVerifierByPublicKey,
+        CanisterSigVerifier,
+    };
     use ic_crypto_internal_csp::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
     use ic_crypto_internal_csp::secret_key_store::proto_store::ProtoSecretKeyStore;
     use ic_crypto_internal_csp::vault::local_csp_vault::ProdLocalCspVault;
     use ic_crypto_internal_csp::LocalCspVault;
-    use ic_crypto_internal_csp::{CryptoServiceProvider, Csp};
+    use ic_crypto_internal_csp::{
+        CryptoServiceProvider,
+        Csp,
+    };
     use ic_crypto_internal_logmon::metrics::CryptoMetrics;
     use ic_crypto_node_key_generation::{
-        generate_committee_signing_keys, generate_dkg_dealing_encryption_keys,
-        generate_idkg_dealing_encryption_keys, generate_node_signing_keys, generate_tls_keys,
+        generate_committee_signing_keys,
+        generate_dkg_dealing_encryption_keys,
+        generate_idkg_dealing_encryption_keys,
+        generate_node_signing_keys,
+        generate_tls_keys,
     };
     use ic_crypto_temp_crypto_vault::{
-        RemoteVaultEnvironment, TempCspVaultServer, TokioRuntimeOrHandle,
+        RemoteVaultEnvironment,
+        TempCspVaultServer,
+        TokioRuntimeOrHandle,
     };
-    use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfig, TlsConfigError, TlsPublicKeyCert};
+    use ic_crypto_tls_interfaces::{
+        SomeOrAllNodes,
+        TlsConfig,
+        TlsConfigError,
+        TlsPublicKeyCert,
+    };
     use ic_crypto_utils_basic_sig::conversions::derive_node_id;
     use ic_interfaces::crypto::{
-        BasicSigVerifier, BasicSigner, CheckKeysWithRegistryError, CurrentNodePublicKeysError,
-        IDkgDealingEncryptionKeyRotationError, IDkgKeyRotationResult, IDkgProtocol, KeyManager,
-        LoadTranscriptResult, MultiSigVerifier, MultiSigner, NiDkgAlgorithm,
-        ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner, ThresholdSchnorrSigVerifier,
-        ThresholdSchnorrSigner, ThresholdSigVerifier, ThresholdSigVerifierByPublicKey,
+        BasicSigVerifier,
+        BasicSigner,
+        CheckKeysWithRegistryError,
+        CurrentNodePublicKeysError,
+        IDkgDealingEncryptionKeyRotationError,
+        IDkgKeyRotationResult,
+        IDkgProtocol,
+        KeyManager,
+        LoadTranscriptResult,
+        MultiSigVerifier,
+        MultiSigner,
+        NiDkgAlgorithm,
+        ThresholdEcdsaSigVerifier,
+        ThresholdEcdsaSigner,
+        ThresholdSchnorrSigVerifier,
+        ThresholdSchnorrSigner,
+        ThresholdSigVerifier,
+        ThresholdSigVerifierByPublicKey,
         ThresholdSigner,
     };
     use ic_interfaces::time_source::TimeSource;
     use ic_interfaces_registry::RegistryClient;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_logger::{new_logger, ReplicaLogger};
+    use ic_logger::{
+        new_logger,
+        ReplicaLogger,
+    };
     use ic_protobuf::registry::subnet::v1::SubnetListRecord;
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_keys::{
-        make_crypto_node_key, make_crypto_tls_cert_key, make_subnet_list_record_key,
+        make_crypto_node_key,
+        make_crypto_tls_cert_key,
+        make_subnet_list_record_key,
         make_subnet_record_key,
     };
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_types::crypto::canister_threshold_sig::error::{
-        IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
-        IDkgOpenTranscriptError, IDkgRetainKeysError, IDkgVerifyComplaintError,
-        IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError,
-        IDkgVerifyInitialDealingsError, IDkgVerifyOpeningError, IDkgVerifyTranscriptError,
-        ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaCreateSigShareError,
-        ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
-        ThresholdSchnorrCombineSigSharesError, ThresholdSchnorrCreateSigShareError,
-        ThresholdSchnorrVerifyCombinedSigError, ThresholdSchnorrVerifySigShareError,
+        IDkgCreateDealingError,
+        IDkgCreateTranscriptError,
+        IDkgLoadTranscriptError,
+        IDkgOpenTranscriptError,
+        IDkgRetainKeysError,
+        IDkgVerifyComplaintError,
+        IDkgVerifyDealingPrivateError,
+        IDkgVerifyDealingPublicError,
+        IDkgVerifyInitialDealingsError,
+        IDkgVerifyOpeningError,
+        IDkgVerifyTranscriptError,
+        ThresholdEcdsaCombineSigSharesError,
+        ThresholdEcdsaCreateSigShareError,
+        ThresholdEcdsaVerifyCombinedSignatureError,
+        ThresholdEcdsaVerifySigShareError,
+        ThresholdSchnorrCombineSigSharesError,
+        ThresholdSchnorrCreateSigShareError,
+        ThresholdSchnorrVerifyCombinedSigError,
+        ThresholdSchnorrVerifySigShareError,
     };
     use ic_types::crypto::canister_threshold_sig::idkg::{
-        BatchSignedIDkgDealings, IDkgComplaint, IDkgOpening, IDkgTranscript, IDkgTranscriptParams,
-        InitialIDkgDealings, SignedIDkgDealing,
+        BatchSignedIDkgDealings,
+        IDkgComplaint,
+        IDkgOpening,
+        IDkgTranscript,
+        IDkgTranscriptParams,
+        InitialIDkgDealings,
+        SignedIDkgDealing,
     };
     use ic_types::crypto::canister_threshold_sig::{
-        ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
-        ThresholdSchnorrCombinedSignature, ThresholdSchnorrSigInputs, ThresholdSchnorrSigShare,
+        ThresholdEcdsaCombinedSignature,
+        ThresholdEcdsaSigInputs,
+        ThresholdEcdsaSigShare,
+        ThresholdSchnorrCombinedSignature,
+        ThresholdSchnorrSigInputs,
+        ThresholdSchnorrSigShare,
     };
     use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgConfig;
     use ic_types::crypto::threshold_sig::ni_dkg::errors::{
         create_dealing_error::DkgCreateDealingError,
-        create_transcript_error::DkgCreateTranscriptError, key_removal_error::DkgKeyRemovalError,
-        load_transcript_error::DkgLoadTranscriptError, verify_dealing_error::DkgVerifyDealingError,
+        create_transcript_error::DkgCreateTranscriptError,
+        key_removal_error::DkgKeyRemovalError,
+        load_transcript_error::DkgLoadTranscriptError,
+        verify_dealing_error::DkgVerifyDealingError,
     };
-    use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTranscript};
+    use ic_types::crypto::threshold_sig::ni_dkg::{
+        NiDkgDealing,
+        NiDkgId,
+        NiDkgTranscript,
+    };
     use ic_types::crypto::threshold_sig::IcRootOfTrust;
     use ic_types::crypto::{
-        BasicSigOf, CanisterSigOf, CombinedMultiSigOf, CombinedThresholdSigOf, CryptoResult,
-        CurrentNodePublicKeys, IndividualMultiSigOf, KeyPurpose, Signable, ThresholdSigShareOf,
+        BasicSigOf,
+        CanisterSigOf,
+        CombinedMultiSigOf,
+        CombinedThresholdSigOf,
+        CryptoResult,
+        CurrentNodePublicKeys,
+        IndividualMultiSigOf,
+        KeyPurpose,
+        Signable,
+        ThresholdSigShareOf,
         UserPublicKey,
     };
     use ic_types::signature::BasicSignatureBatch;
-    use ic_types::{NodeId, RegistryVersion, SubnetId};
+    use ic_types::{
+        NodeId,
+        RegistryVersion,
+        SubnetId,
+    };
     use rand::rngs::OsRng;
-    use rustls::{ClientConfig, ServerConfig};
-    use std::collections::{BTreeMap, BTreeSet, HashSet};
+    use rustls::{
+        ClientConfig,
+        ServerConfig,
+    };
+    use std::collections::{
+        BTreeMap,
+        BTreeSet,
+        HashSet,
+    };
     use std::ops::Deref;
-    use std::path::{Path, PathBuf};
+    use std::path::{
+        Path,
+        PathBuf,
+    };
     use std::sync::Arc;
     use tempfile::TempDir;
 

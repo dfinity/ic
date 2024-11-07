@@ -1,25 +1,49 @@
 use super::IDkgPayloadError;
 
-use crate::idkg::{pre_signer::IDkgTranscriptBuilder, utils::algorithm_for_key_id};
-use ic_logger::{debug, error, ReplicaLogger};
+use crate::idkg::{
+    pre_signer::IDkgTranscriptBuilder,
+    utils::algorithm_for_key_id,
+};
+use ic_logger::{
+    debug,
+    error,
+    ReplicaLogger,
+};
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_registry_subnet_features::ChainKeyConfig;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithThresholdContext;
 use ic_types::{
     consensus::idkg::{
         self,
-        common::{PreSignatureInCreation, PreSignatureRef},
-        ecdsa::{PreSignatureQuadrupleRef, QuadrupleInCreation},
-        schnorr::{PreSignatureTranscriptRef, TranscriptInCreation},
-        HasMasterPublicKeyId, IDkgUIDGenerator, PreSigId, TranscriptAttributes,
+        common::{
+            PreSignatureInCreation,
+            PreSignatureRef,
+        },
+        ecdsa::{
+            PreSignatureQuadrupleRef,
+            QuadrupleInCreation,
+        },
+        schnorr::{
+            PreSignatureTranscriptRef,
+            TranscriptInCreation,
+        },
+        HasMasterPublicKeyId,
+        IDkgUIDGenerator,
+        PreSigId,
+        TranscriptAttributes,
         UnmaskedTranscriptWithAttributes,
     },
     crypto::canister_threshold_sig::idkg::IDkgTranscript,
     messages::CallbackId,
-    Height, NodeId, RegistryVersion,
+    Height,
+    NodeId,
+    RegistryVersion,
 };
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
 
 /// Update the pre-signatures in the payload by:
 /// - making new configs when pre-conditions are met;
@@ -466,8 +490,12 @@ pub(super) mod test_utils {
     use std::collections::BTreeMap;
 
     use ic_types::{
-        consensus::idkg::{self, IDkgTranscriptParamsRef},
-        NodeId, RegistryVersion,
+        consensus::idkg::{
+            self,
+            IDkgTranscriptParamsRef,
+        },
+        NodeId,
+        RegistryVersion,
     };
 
     pub fn create_new_pre_signature_in_creation(
@@ -546,23 +574,41 @@ pub(super) mod tests {
     use super::*;
 
     use crate::idkg::test_utils::{
-        create_available_pre_signature, create_available_pre_signature_with_key_transcript,
-        fake_ecdsa_master_public_key_id, fake_master_public_key_ids_for_all_algorithms,
-        fake_schnorr_key_id, fake_schnorr_master_public_key_id,
-        fake_signature_request_context_with_pre_sig, set_up_idkg_payload, IDkgPayloadTestHelper,
-        TestIDkgBlockReader, TestIDkgTranscriptBuilder,
+        create_available_pre_signature,
+        create_available_pre_signature_with_key_transcript,
+        fake_ecdsa_master_public_key_id,
+        fake_master_public_key_ids_for_all_algorithms,
+        fake_schnorr_key_id,
+        fake_schnorr_master_public_key_id,
+        fake_signature_request_context_with_pre_sig,
+        set_up_idkg_payload,
+        IDkgPayloadTestHelper,
+        TestIDkgBlockReader,
+        TestIDkgTranscriptBuilder,
     };
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_canister_threshold_sigs::{
-        generate_key_transcript, CanisterThresholdSigTestEnvironment, IDkgParticipants,
+        generate_key_transcript,
+        CanisterThresholdSigTestEnvironment,
+        IDkgParticipants,
     };
-    use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
+    use ic_crypto_test_utils_reproducible_rng::{
+        reproducible_rng,
+        ReproducibleRng,
+    };
     use ic_logger::replica_logger::no_op_logger;
     use ic_management_canister_types::SchnorrAlgorithm;
     use ic_registry_subnet_features::KeyConfig;
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::{
+        node_test_id,
+        subnet_test_id,
+    };
     use ic_types::{
-        consensus::idkg::{common::PreSignatureRef, IDkgPayload, UnmaskedTranscript},
+        consensus::idkg::{
+            common::PreSignatureRef,
+            IDkgPayload,
+            UnmaskedTranscript,
+        },
         crypto::canister_threshold_sig::idkg::IDkgTranscriptId,
         SubnetId,
     };

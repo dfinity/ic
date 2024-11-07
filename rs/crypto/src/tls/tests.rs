@@ -1,6 +1,9 @@
 use super::*;
 use assert_matches::assert_matches;
-use ic_base_types::{PrincipalId, RegistryVersion};
+use ic_base_types::{
+    PrincipalId,
+    RegistryVersion,
+};
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_tls_cert_key;

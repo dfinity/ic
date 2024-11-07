@@ -1,20 +1,38 @@
 use canister_test::Runtime;
-use dfn_candid::{candid, candid_one};
+use dfn_candid::{
+    candid,
+    candid_one,
+};
 use ic_canister_client_sender::Sender;
-use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
+use ic_nervous_system_common_test_keys::{
+    TEST_NEURON_1_ID,
+    TEST_NEURON_1_OWNER_KEYPAIR,
+};
 use ic_nns_common::types::NeuronId;
 use ic_nns_governance::governance::REWARD_DISTRIBUTION_PERIOD_SECONDS;
 use ic_nns_governance_api::pb::v1::{
-    Ballot, Governance as GovernanceProto, GovernanceError, NetworkEconomics, Neuron, ProposalData,
-    RewardEvent, Vote,
+    Ballot,
+    Governance as GovernanceProto,
+    GovernanceError,
+    NetworkEconomics,
+    Neuron,
+    ProposalData,
+    RewardEvent,
+    Vote,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{
+        state_machine_test_on_nns_subnet,
+        NnsCanisters,
+    },
 };
 use std::{
     iter::once,
-    time::{Duration, SystemTime},
+    time::{
+        Duration,
+        SystemTime,
+    },
 };
 
 /// This is trying to the simplest possible integration test for reward

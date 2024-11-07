@@ -1,15 +1,36 @@
 use assert_matches::assert_matches;
-use candid::{Decode, Encode, Nat};
+use candid::{
+    Decode,
+    Encode,
+    Nat,
+};
 use ic_base_types::CanisterId;
 use ic_nns_test_utils::common::NnsInitPayloadsBuilder;
 use ic_nns_test_utils::state_test_helpers::setup_nns_canisters;
 use ic_state_machine_tests::StateMachine;
-use ic_tvl_canister::types::{TvlArgs as TVLInitArgs, TvlResult, TvlResultError};
-use ic_tvl_canister::{
-    multiply_e8s, FiatCurrency, TvlRequest, DEFAULT_UPDATE_PERIOD, ONE_DAY, OTHER_CURRENCIES,
+use ic_tvl_canister::types::{
+    TvlArgs as TVLInitArgs,
+    TvlResult,
+    TvlResultError,
 };
-use rand::{thread_rng, Rng};
-use xrc_mock::{ExchangeRate, Response, SetExchangeRate, XrcMockInitPayload};
+use ic_tvl_canister::{
+    multiply_e8s,
+    FiatCurrency,
+    TvlRequest,
+    DEFAULT_UPDATE_PERIOD,
+    ONE_DAY,
+    OTHER_CURRENCIES,
+};
+use rand::{
+    thread_rng,
+    Rng,
+};
+use xrc_mock::{
+    ExchangeRate,
+    Response,
+    SetExchangeRate,
+    XrcMockInitPayload,
+};
 
 const DEFAULT_ICP_RATE: u64 = 1_000_000_000;
 const E8S: u64 = 100_000_000;

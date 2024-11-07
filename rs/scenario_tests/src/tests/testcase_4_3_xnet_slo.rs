@@ -1,12 +1,28 @@
 use crate::api::handle::Ic;
-use crate::tests::{cleanup, locate_canisters, parallel_async};
-use candid::{CandidType, Deserialize};
+use crate::tests::{
+    cleanup,
+    locate_canisters,
+    parallel_async,
+};
+use candid::{
+    CandidType,
+    Deserialize,
+};
 use canister_test::*;
 use dfn_candid::candid;
 use ic_base_types::SubnetId;
-use std::{collections::BTreeMap, fmt::Display};
-use std::{str::FromStr, time::Duration};
-use xnet_test::{Metrics, NetworkTopology};
+use std::{
+    collections::BTreeMap,
+    fmt::Display,
+};
+use std::{
+    str::FromStr,
+    time::Duration,
+};
+use xnet_test::{
+    Metrics,
+    NetworkTopology,
+};
 
 /// For how long to run the test after canisters have been installed and
 /// `start()` was called. Not a `Duration` as we use it for computing how many

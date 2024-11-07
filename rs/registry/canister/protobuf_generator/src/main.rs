@@ -1,4 +1,7 @@
-use registry_canister_protobuf_generator::{generate_prost_files, ProtoPaths};
+use registry_canister_protobuf_generator::{
+    generate_prost_files,
+    ProtoPaths,
+};
 use std::path::PathBuf;
 
 fn main() {

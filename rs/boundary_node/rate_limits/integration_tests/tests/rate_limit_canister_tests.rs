@@ -1,11 +1,22 @@
-use candid::{Encode, Principal};
+use candid::{
+    Encode,
+    Principal,
+};
 use ic_crypto_sha2::Sha256;
 use ic_nns_test_utils::common::modify_wasm_bytes;
 use rate_limit_canister_integration_tests::pocket_ic_helpers::{
-    canister_call, get_installed_wasm_hash, install_rate_limit_canister_on_ii_subnet,
+    canister_call,
+    get_installed_wasm_hash,
+    install_rate_limit_canister_on_ii_subnet,
     setup_subnets_and_registry_canister,
 };
-use rate_limits_api::{AddConfigResponse, GetConfigResponse, InitArg, InputConfig, Version};
+use rate_limits_api::{
+    AddConfigResponse,
+    GetConfigResponse,
+    InitArg,
+    InputConfig,
+    Version,
+};
 
 const AUTHORIZED_PRINCIPAL: &str =
     "imx2d-dctwe-ircfz-emzus-bihdn-aoyzy-lkkdi-vi5vw-npnik-noxiy-mae";

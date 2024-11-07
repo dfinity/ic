@@ -1,5 +1,8 @@
 use ic_config::crypto::CryptoConfig;
-use ic_crypto::{CryptoComponent, CryptoComponentImpl};
+use ic_crypto::{
+    CryptoComponent,
+    CryptoComponentImpl,
+};
 use ic_crypto_internal_csp::Csp;
 use ic_crypto_internal_csp_test_utils::remote_csp_vault::start_new_remote_csp_vault_server_in_temp_dir;
 use ic_crypto_node_key_generation::generate_node_keys_once;

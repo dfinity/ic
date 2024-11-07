@@ -1,11 +1,21 @@
 use crate::{
     check::HealthCheckResult,
     node::Node,
-    snapshot::{NodesChanged, NodesSnapshotError, Snapshot},
+    snapshot::{
+        NodesChanged,
+        NodesSnapshotError,
+        Snapshot,
+    },
 };
 use rand::Rng;
-use simple_moving_average::{SumTreeSMA, SMA};
-use std::{collections::HashSet, time::Duration};
+use simple_moving_average::{
+    SumTreeSMA,
+    SMA,
+};
+use std::{
+    collections::HashSet,
+    time::Duration,
+};
 
 // Some big value >> health check timeout
 const MAX_LATENCY: Duration = Duration::from_secs(100);
@@ -141,11 +151,16 @@ mod tests {
     use simple_moving_average::SMA;
 
     use crate::{
-        check::HealthCheckResult, node::Node, snapshot::Snapshot,
+        check::HealthCheckResult,
+        node::Node,
+        snapshot::Snapshot,
         snapshot_latency_based::MAX_LATENCY,
     };
 
-    use super::{weighted_random_sampling, LatencyBasedSnapshot};
+    use super::{
+        weighted_random_sampling,
+        LatencyBasedSnapshot,
+    };
 
     #[test]
     fn test_snapshot_init() {

@@ -1,8 +1,13 @@
-use ic_base_types::{PrincipalId, PrincipalIdClass};
+use ic_base_types::{
+    PrincipalId,
+    PrincipalIdClass,
+};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     state_test_helpers::{
-        registry_get_changes_since, setup_nns_canisters, state_machine_builder_for_nns_tests,
+        registry_get_changes_since,
+        setup_nns_canisters,
+        state_machine_builder_for_nns_tests,
     },
 };
 use ic_registry_transport::pb::v1::RegistryGetChangesSinceResponse;

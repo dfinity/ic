@@ -8,21 +8,32 @@
 use super::*;
 use candid::{
     de::IDLDeserialize,
-    decode_args, encode_args,
+    decode_args,
+    encode_args,
     ser::IDLBuilder,
     types::principal::Principal,
-    utils::{ArgumentDecoder, ArgumentEncoder},
+    utils::{
+        ArgumentDecoder,
+        ArgumentEncoder,
+    },
     Encode,
 };
 use cycles_minting_canister::IcpXdrConversionRate;
 use ic_base_types::PrincipalId;
 use icrc_ledger_types::icrc3::transactions::{
-    GetTransactionsRequest, GetTransactionsResponse, Mint, Transaction,
+    GetTransactionsRequest,
+    GetTransactionsResponse,
+    Mint,
+    Transaction,
 };
 use lazy_static::lazy_static;
 use maplit::hashmap;
 use mockall::predicate;
-use std::{cell::RefCell, collections::HashMap, future::Future};
+use std::{
+    cell::RefCell,
+    collections::HashMap,
+    future::Future,
+};
 
 #[tokio::test]
 async fn test_try_get_balance_valuation_factors() {

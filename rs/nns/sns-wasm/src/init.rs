@@ -1,4 +1,7 @@
-use ic_base_types::{PrincipalId, SubnetId};
+use ic_base_types::{
+    PrincipalId,
+    SubnetId,
+};
 
 #[derive(Clone, Debug, candid::CandidType, candid::Deserialize)]
 pub struct SnsWasmCanisterInitPayload {

@@ -8,15 +8,26 @@ end::catalog[] */
 use ic_base_types::CanisterId;
 use ic_system_test_driver::driver::{
     test_env::TestEnv,
-    test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl},
+    test_env_api::{
+        GetFirstHealthyNodeSnapshot,
+        HasPublicApiUrl,
+    },
 };
 use ic_types::messages::{
-    Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpRequestEnvelope, HttpUserQuery,
+    Blob,
+    HttpCallContent,
+    HttpCanisterUpdate,
+    HttpQueryContent,
+    HttpRequestEnvelope,
+    HttpUserQuery,
 };
 use rand::RngCore;
 use rand_chacha::ChaCha8Rng;
 use reqwest::StatusCode;
-use std::time::{Duration, SystemTime};
+use std::time::{
+    Duration,
+    SystemTime,
+};
 
 const RND_SEED: u64 = 42;
 

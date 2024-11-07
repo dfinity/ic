@@ -1,6 +1,9 @@
 use clap::Parser;
 use ic_async_utils::shutdown_signal;
-use orchestrator::{args::OrchestratorArgs, orchestrator::Orchestrator};
+use orchestrator::{
+    args::OrchestratorArgs,
+    orchestrator::Orchestrator,
+};
 
 #[tokio::main]
 async fn main() {

@@ -1,9 +1,16 @@
 use super::CertificationCrypto;
 use ic_interfaces::{
-    certification::{Verifier, VerifierError},
+    certification::{
+        Verifier,
+        VerifierError,
+    },
     validation::ValidationResult,
 };
-use ic_types::{consensus::certification::Certification, RegistryVersion, SubnetId};
+use ic_types::{
+    consensus::certification::Certification,
+    RegistryVersion,
+    SubnetId,
+};
 use std::sync::Arc;
 
 /// VerifierImpl implements the verification of state hash certifications.
@@ -45,13 +52,22 @@ mod tests {
     use ic_test_utilities_consensus::fake::*;
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
-        consensus::certification::{Certification, CertificationContent},
+        consensus::certification::{
+            Certification,
+            CertificationContent,
+        },
         crypto::{
-            threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
-            CryptoHash, Signed,
+            threshold_sig::ni_dkg::{
+                NiDkgId,
+                NiDkgTag,
+                NiDkgTargetSubnet,
+            },
+            CryptoHash,
+            Signed,
         },
         signature::ThresholdSignature,
-        CryptoHashOfPartialState, Height,
+        CryptoHashOfPartialState,
+        Height,
     };
 
     fn fake_dkg_id(h: u64) -> NiDkgId {

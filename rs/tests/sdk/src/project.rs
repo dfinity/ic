@@ -1,5 +1,11 @@
-use serde_json::{json, Value};
-use slog::{info, Logger};
+use serde_json::{
+    json,
+    Value,
+};
+use slog::{
+    info,
+    Logger,
+};
 use std::fs;
 use std::path::Path;
 

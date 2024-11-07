@@ -1,7 +1,13 @@
 //! Defines [`MaliciousBehaviour`] that allows to control malicious flags.
 
-use crate::malicious_flags::{InvalidChunksAllowance, MaliciousFlags};
-use serde::{Deserialize, Serialize};
+use crate::malicious_flags::{
+    InvalidChunksAllowance,
+    MaliciousFlags,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::time::Duration;
 
 /// When testing our system we need to make some nodes act badly to make sure

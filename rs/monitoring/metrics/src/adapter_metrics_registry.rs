@@ -1,10 +1,22 @@
 #![allow(clippy::disallowed_types)]
-use crate::buckets::{add_bucket, decimal_buckets};
+use crate::buckets::{
+    add_bucket,
+    decimal_buckets,
+};
 use futures::future::join_all;
 use futures::future::FutureExt;
 use ic_adapter_metrics_client::AdapterMetrics;
-use prometheus::{proto::MetricFamily, Error, HistogramOpts, HistogramVec, Registry};
-use std::{sync::Arc, time::Duration};
+use prometheus::{
+    proto::MetricFamily,
+    Error,
+    HistogramOpts,
+    HistogramVec,
+    Registry,
+};
+use std::{
+    sync::Arc,
+    time::Duration,
+};
 use tokio::sync::RwLock;
 
 /// Registry for remote process adapters.

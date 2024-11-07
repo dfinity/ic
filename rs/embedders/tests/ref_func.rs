@@ -3,9 +3,13 @@
 
 use ic_test_utilities_embedders::WasmtimeInstanceBuilder;
 use ic_types::{
-    methods::{FuncRef, WasmMethod},
+    methods::{
+        FuncRef,
+        WasmMethod,
+    },
     time::UNIX_EPOCH,
-    Cycles, PrincipalId,
+    Cycles,
+    PrincipalId,
 };
 
 fn run_go_export(wat: &str) {

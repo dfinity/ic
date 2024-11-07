@@ -1,31 +1,72 @@
 use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
-use ic_error_types::{ErrorCode, UserError};
-use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
+use ic_error_types::{
+    ErrorCode,
+    UserError,
+};
+use ic_registry_routing_table::{
+    CanisterIdRange,
+    RoutingTable,
+};
 use ic_replicated_state::canister_state::system_state::wasm_chunk_store;
-use ic_replicated_state::{ExecutionTask, ReplicatedState};
-use ic_types::ingress::{IngressState, IngressStatus};
+use ic_replicated_state::{
+    ExecutionTask,
+    ReplicatedState,
+};
+use ic_types::ingress::{
+    IngressState,
+    IngressStatus,
+};
 use ic_types::{
-    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
+    CanisterId,
+    ComputeAllocation,
+    Cycles,
+    MemoryAllocation,
+    NumBytes,
+    NumInstructions,
 };
 
 use ic_cycles_account_manager::WasmExecutionMode;
 use ic_management_canister_types::InstallChunkedCodeArgsLegacy;
 use ic_management_canister_types::{
-    CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode,
-    CanisterInstallModeV2, EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgs, InstallCodeArgsV2,
-    Method, Payload, UploadChunkArgs, UploadChunkReply,
+    CanisterChange,
+    CanisterChangeDetails,
+    CanisterChangeOrigin,
+    CanisterInstallMode,
+    CanisterInstallModeV2,
+    EmptyBlob,
+    InstallChunkedCodeArgs,
+    InstallCodeArgs,
+    InstallCodeArgsV2,
+    Method,
+    Payload,
+    UploadChunkArgs,
+    UploadChunkReply,
 };
 use ic_replicated_state::canister_state::NextExecution;
 use ic_test_utilities_execution_environment::{
-    check_ingress_status, get_reply, ExecutionTest, ExecutionTestBuilder,
+    check_ingress_status,
+    get_reply,
+    ExecutionTest,
+    ExecutionTestBuilder,
 };
 use ic_test_utilities_metrics::fetch_int_counter;
 use ic_types::messages::MessageId;
-use ic_types::{ingress::WasmResult, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES};
+use ic_types::{
+    ingress::WasmResult,
+    MAX_STABLE_MEMORY_IN_BYTES,
+    MAX_WASM_MEMORY_IN_BYTES,
+};
 use ic_types_test_utils::ids::user_test_id;
-use ic_types_test_utils::ids::{canister_test_id, subnet_test_id};
-use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use ic_types_test_utils::ids::{
+    canister_test_id,
+    subnet_test_id,
+};
+use ic_universal_canister::{
+    call_args,
+    wasm,
+    UNIVERSAL_CANISTER_WASM,
+};
 use maplit::btreemap;
 use std::mem::size_of;
 

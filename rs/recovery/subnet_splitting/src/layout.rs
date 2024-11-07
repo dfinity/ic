@@ -1,9 +1,18 @@
 use crate::target_subnet::TargetSubnet;
 
 use ic_base_types::SubnetId;
-use ic_recovery::{error::RecoveryResult, Recovery, CHECKPOINTS, CUPS_DIR, IC_STATE};
+use ic_recovery::{
+    error::RecoveryResult,
+    Recovery,
+    CHECKPOINTS,
+    CUPS_DIR,
+    IC_STATE,
+};
 
-use std::path::{Path, PathBuf};
+use std::path::{
+    Path,
+    PathBuf,
+};
 
 #[derive(Clone)]
 /// Describes the layout of the working directory of subnet splitting:

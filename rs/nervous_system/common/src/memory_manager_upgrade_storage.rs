@@ -1,4 +1,8 @@
-use bytes::{buf::UninitSlice, Buf, BufMut};
+use bytes::{
+    buf::UninitSlice,
+    Buf,
+    BufMut,
+};
 use ic_stable_structures::Memory;
 use std::cmp::min;
 
@@ -397,14 +401,30 @@ mod test {
     use crate::{
         assert_is_err,
         memory_manager_upgrade_storage::{
-            load_protobuf, read_size_bytes, store_protobuf, SizeAwareReader, SizeAwareWriter,
-            StorageEncoding, OBJECT_SIZE_BYTES_RESERVED, STABLE_STRUCTURES_WASM_PAGE_SIZE,
+            load_protobuf,
+            read_size_bytes,
+            store_protobuf,
+            SizeAwareReader,
+            SizeAwareWriter,
+            StorageEncoding,
+            OBJECT_SIZE_BYTES_RESERVED,
+            STABLE_STRUCTURES_WASM_PAGE_SIZE,
             STORAGE_ENCODING_BYTES_RESERVED,
         },
     };
-    use bytes::{Buf, BufMut};
-    use ic_nns_governance_api::pb::v1::{Governance, NetworkEconomics, Neuron};
-    use ic_stable_structures::{vec_mem::VectorMemory, Memory};
+    use bytes::{
+        Buf,
+        BufMut,
+    };
+    use ic_nns_governance_api::pb::v1::{
+        Governance,
+        NetworkEconomics,
+        Neuron,
+    };
+    use ic_stable_structures::{
+        vec_mem::VectorMemory,
+        Memory,
+    };
     use prost::Message;
 
     fn allocate_governance(num_neurons: u64) -> Governance {

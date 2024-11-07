@@ -5,26 +5,51 @@ mod test {
     use bytes::Bytes;
     use http_body_util::Full;
     use hyper::Request;
-    use hyper_util::rt::{TokioExecutor, TokioIo};
-    use ic_https_outcalls_adapter::{Config, IncomingSource};
+    use hyper_util::rt::{
+        TokioExecutor,
+        TokioIo,
+    };
+    use ic_https_outcalls_adapter::{
+        Config,
+        IncomingSource,
+    };
     use ic_https_outcalls_service::{
-        https_outcalls_service_client::HttpsOutcallsServiceClient, HttpMethod, HttpsOutcallRequest,
+        https_outcalls_service_client::HttpsOutcallsServiceClient,
+        HttpMethod,
+        HttpsOutcallRequest,
     };
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use once_cell::sync::OnceCell;
     use rstest::rstest;
     use rustls::ServerConfig;
-    use std::{convert::TryFrom, env, io::Write, path::Path, sync::Arc};
+    use std::{
+        convert::TryFrom,
+        env,
+        io::Write,
+        path::Path,
+        sync::Arc,
+    };
     use tempfile::TempDir;
-    use tokio::net::{TcpSocket, UnixStream};
+    use tokio::net::{
+        TcpSocket,
+        UnixStream,
+    };
     use tokio_rustls::TlsAcceptor;
-    use tonic::transport::{Channel, Endpoint, Uri};
+    use tonic::transport::{
+        Channel,
+        Endpoint,
+        Uri,
+    };
     use tower::service_fn;
     use uuid::Uuid;
     use warp::{
         filters::BoxedFilter,
-        http::{header::HeaderValue, Response, StatusCode},
+        http::{
+            header::HeaderValue,
+            Response,
+            StatusCode,
+        },
         Filter,
     };
 
@@ -604,9 +629,16 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
     mod unix {
         use std::{
             pin::Pin,
-            task::{Context, Poll},
+            task::{
+                Context,
+                Poll,
+            },
         };
-        use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+        use tokio::io::{
+            AsyncRead,
+            AsyncWrite,
+            ReadBuf,
+        };
         use tonic::transport::server::Connected;
 
         #[derive(Debug)]

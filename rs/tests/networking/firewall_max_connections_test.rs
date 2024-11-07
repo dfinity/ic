@@ -22,15 +22,29 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
         group::SystemTestGroup,
-        ic::{InternetComputer, Subnet},
+        ic::{
+            InternetComputer,
+            Subnet,
+        },
         test_env::TestEnv,
-        test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, SshSession},
-        universal_vm::{UniversalVm, UniversalVms},
+        test_env_api::{
+            HasPublicApiUrl,
+            HasTopologySnapshot,
+            IcNodeContainer,
+            SshSession,
+        },
+        universal_vm::{
+            UniversalVm,
+            UniversalVms,
+        },
     },
     systest,
     util::block_on,
 };
-use slog::{debug, info};
+use slog::{
+    debug,
+    info,
+};
 use std::net::IpAddr;
 use std::time::Duration;
 use tokio::net::TcpStream;

@@ -1,8 +1,14 @@
 use ic_metrics::{
-    buckets::{decimal_buckets, decimal_buckets_with_zero},
+    buckets::{
+        decimal_buckets,
+        decimal_buckets_with_zero,
+    },
     MetricsRegistry,
 };
-use prometheus::{Histogram, HistogramVec};
+use prometheus::{
+    Histogram,
+    HistogramVec,
+};
 use std::time::Instant;
 
 const LABEL_STATUS: &str = "status";

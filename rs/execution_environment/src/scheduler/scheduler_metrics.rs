@@ -1,18 +1,39 @@
-use std::{collections::BTreeMap, time::Duration};
+use std::{
+    collections::BTreeMap,
+    time::Duration,
+};
 
 use ic_metrics::{
-    buckets::{decimal_buckets, decimal_buckets_with_zero, linear_buckets},
+    buckets::{
+        decimal_buckets,
+        decimal_buckets_with_zero,
+        linear_buckets,
+    },
     MetricsRegistry,
 };
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_types::nominal_cycles::NominalCycles;
 use prometheus::{
-    Gauge, GaugeVec, Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec,
+    Gauge,
+    GaugeVec,
+    Histogram,
+    HistogramVec,
+    IntCounter,
+    IntCounterVec,
+    IntGauge,
+    IntGaugeVec,
 };
 
 use crate::metrics::{
-    cycles_histogram, dts_pause_or_abort_histogram, duration_histogram, instructions_histogram,
-    memory_histogram, messages_histogram, slices_histogram, unique_sorted_buckets, ScopedMetrics,
+    cycles_histogram,
+    dts_pause_or_abort_histogram,
+    duration_histogram,
+    instructions_histogram,
+    memory_histogram,
+    messages_histogram,
+    slices_histogram,
+    unique_sorted_buckets,
+    ScopedMetrics,
 };
 
 pub(crate) const CANISTER_INVARIANT_BROKEN: &str = "scheduler_canister_invariant_broken";

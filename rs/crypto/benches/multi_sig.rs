@@ -1,13 +1,25 @@
 use criterion::measurement::Measurement;
 use criterion::BatchSize::SmallInput;
-use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion, Throughput};
+use criterion::{
+    criterion_group,
+    criterion_main,
+    BenchmarkGroup,
+    Criterion,
+    Throughput,
+};
 
 use ic_crypto_test_utils_multi_sigs::MultiSigTestEnvironment;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use ic_interfaces::crypto::{MultiSigVerifier, MultiSigner};
+use ic_interfaces::crypto::{
+    MultiSigVerifier,
+    MultiSigner,
+};
 use ic_types::crypto::SignableMock;
 use rand::prelude::*;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
 criterion_main!(benches);
 criterion_group!(benches, bench_multi_sig,);
 

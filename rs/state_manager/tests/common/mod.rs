@@ -2,38 +2,85 @@ use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
 use ic_config::{
     flag_status::FlagStatus,
-    state_manager::{lsmt_config_default, Config, LsmtConfig},
+    state_manager::{
+        lsmt_config_default,
+        Config,
+        LsmtConfig,
+    },
 };
 use ic_interfaces::{
-    certification::{InvalidCertificationReason, Verifier, VerifierError},
-    p2p::state_sync::{Chunk, ChunkId, Chunkable},
+    certification::{
+        InvalidCertificationReason,
+        Verifier,
+        VerifierError,
+    },
+    p2p::state_sync::{
+        Chunk,
+        ChunkId,
+        Chunkable,
+    },
     validation::ValidationResult,
 };
-use ic_interfaces_certified_stream_store::{CertifiedStreamStore, DecodeStreamError};
+use ic_interfaces_certified_stream_store::{
+    CertifiedStreamStore,
+    DecodeStreamError,
+};
 use ic_interfaces_state_manager::*;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::execution_state::WasmBinary;
-use ic_replicated_state::{testing::ReplicatedStateTesting, ReplicatedState, Stream};
-use ic_state_manager::{
-    state_sync::types::{StateSyncMessage, MANIFEST_CHUNK_ID_OFFSET},
-    state_sync::StateSync,
-    stream_encoding, StateManagerImpl,
+use ic_replicated_state::{
+    testing::ReplicatedStateTesting,
+    ReplicatedState,
+    Stream,
 };
-use ic_test_utilities_consensus::fake::{Fake, FakeVerifier};
+use ic_state_manager::{
+    state_sync::types::{
+        StateSyncMessage,
+        MANIFEST_CHUNK_ID_OFFSET,
+    },
+    state_sync::StateSync,
+    stream_encoding,
+    StateManagerImpl,
+};
+use ic_test_utilities_consensus::fake::{
+    Fake,
+    FakeVerifier,
+};
 use ic_test_utilities_logger::with_test_replica_logger;
-use ic_test_utilities_state::{initial_execution_state, new_canister_state};
+use ic_test_utilities_state::{
+    initial_execution_state,
+    new_canister_state,
+};
 use ic_test_utilities_tmpdir::tmpdir;
-use ic_test_utilities_types::ids::{subnet_test_id, user_test_id};
+use ic_test_utilities_types::ids::{
+    subnet_test_id,
+    user_test_id,
+};
 use ic_types::{
-    consensus::certification::{Certification, CertificationContent},
+    consensus::certification::{
+        Certification,
+        CertificationContent,
+    },
     crypto::Signed,
     signature::ThresholdSignature,
-    xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice},
-    CanisterId, CryptoHashOfState, Cycles, Height, RegistryVersion, SubnetId,
+    xnet::{
+        CertifiedStreamSlice,
+        StreamIndex,
+        StreamSlice,
+    },
+    CanisterId,
+    CryptoHashOfState,
+    Cycles,
+    Height,
+    RegistryVersion,
+    SubnetId,
 };
 use ic_wasm_types::CanisterModule;
-use std::{collections::HashSet, sync::Arc};
+use std::{
+    collections::HashSet,
+    sync::Arc,
+};
 
 pub const EMPTY_WASM: &[u8] = &[
     0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x00, 0x08, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x02,
@@ -302,7 +349,10 @@ pub fn modify_encoded_stream_helper<F: FnOnce(StreamSlice) -> Stream>(
 }
 
 pub fn wait_for_checkpoint(state_manager: &impl StateManager, h: Height) -> CryptoHashOfState {
-    use std::time::{Duration, Instant};
+    use std::time::{
+        Duration,
+        Instant,
+    };
 
     let timeout = Duration::from_secs(20);
     let started = Instant::now();

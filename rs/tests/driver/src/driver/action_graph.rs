@@ -1,7 +1,10 @@
 use std::collections::VecDeque;
 
 use crate::driver::{
-    plan::{EvalOrder, Plan},
+    plan::{
+        EvalOrder,
+        Plan,
+    },
     task::TaskIdT,
 };
 

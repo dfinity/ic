@@ -1,22 +1,48 @@
 use ic_crypto_internal_csp::api::{
-    CspSigner, CspThresholdSignError, NiDkgCspClient, ThresholdSignatureCspClient,
+    CspSigner,
+    CspThresholdSignError,
+    NiDkgCspClient,
+    ThresholdSignatureCspClient,
 };
 use ic_crypto_internal_csp::key_id::KeyId;
-use ic_crypto_internal_csp::types::{CspPop, CspPublicCoefficients, CspPublicKey, CspSignature};
+use ic_crypto_internal_csp::types::{
+    CspPop,
+    CspPublicCoefficients,
+    CspPublicKey,
+    CspSignature,
+};
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
-    CspDkgCreateDealingError, CspDkgCreateReshareDealingError, CspDkgCreateReshareTranscriptError,
-    CspDkgCreateTranscriptError, CspDkgLoadPrivateKeyError, CspDkgRetainThresholdKeysError,
-    CspDkgUpdateFsEpochError, CspDkgVerifyDealingError, CspDkgVerifyReshareDealingError,
+    CspDkgCreateDealingError,
+    CspDkgCreateReshareDealingError,
+    CspDkgCreateReshareTranscriptError,
+    CspDkgCreateTranscriptError,
+    CspDkgLoadPrivateKeyError,
+    CspDkgRetainThresholdKeysError,
+    CspDkgUpdateFsEpochError,
+    CspDkgVerifyDealingError,
+    CspDkgVerifyReshareDealingError,
 };
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
-    CspFsEncryptionPublicKey, CspNiDkgDealing, CspNiDkgTranscript, Epoch,
+    CspFsEncryptionPublicKey,
+    CspNiDkgDealing,
+    CspNiDkgTranscript,
+    Epoch,
 };
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
-use ic_types::crypto::{AlgorithmId, CryptoResult};
-use ic_types::{NodeIndex, NumberOfNodes};
+use ic_types::crypto::{
+    AlgorithmId,
+    CryptoResult,
+};
+use ic_types::{
+    NodeIndex,
+    NumberOfNodes,
+};
 use mockall::predicate::*;
 use mockall::*;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
 
 mock! {
     pub AllCryptoServiceProvider {}

@@ -1,55 +1,143 @@
 use crate::{
-    clients::{NnsGovernanceClient, SnsGovernanceClient, SnsRootClient},
+    clients::{
+        NnsGovernanceClient,
+        SnsGovernanceClient,
+        SnsRootClient,
+    },
     environment::CanisterEnvironment,
-    logs::{ERROR, INFO},
+    logs::{
+        ERROR,
+        INFO,
+    },
     memory,
     pb::v1::{
-        get_open_ticket_response, new_sale_ticket_response, set_dapp_controllers_call_result,
+        get_open_ticket_response,
+        new_sale_ticket_response,
+        set_dapp_controllers_call_result,
         set_mode_call_result,
         set_mode_call_result::SetModeResult,
-        settle_neurons_fund_participation_request, settle_neurons_fund_participation_response,
-        sns_neuron_recipe::{ClaimedStatus, Investor, NeuronAttributes},
-        BuyerState, CanisterCallError, CfInvestment, CfNeuron, CfParticipant, DerivedState,
-        DirectInvestment, ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapResponse,
-        GetAutoFinalizationStatusRequest, GetAutoFinalizationStatusResponse, GetBuyerStateRequest,
-        GetBuyerStateResponse, GetBuyersTotalResponse, GetDerivedStateResponse, GetInitRequest,
-        GetInitResponse, GetLifecycleRequest, GetLifecycleResponse, GetOpenTicketRequest,
-        GetOpenTicketResponse, GetSaleParametersRequest, GetSaleParametersResponse,
-        GetStateResponse, Icrc1Account, Init, Lifecycle, ListCommunityFundParticipantsRequest,
-        ListCommunityFundParticipantsResponse, ListDirectParticipantsRequest,
-        ListDirectParticipantsResponse, ListSnsNeuronRecipesRequest, ListSnsNeuronRecipesResponse,
-        NeuronBasketConstructionParameters, NeuronId as SwapNeuronId, NewSaleTicketRequest,
-        NewSaleTicketResponse, NotifyPaymentFailureResponse, Params, Participant,
-        RefreshBuyerTokensResponse, SetDappControllersCallResult, SetDappControllersRequest,
-        SetDappControllersResponse, SetModeCallResult, SettleNeuronsFundParticipationRequest,
-        SettleNeuronsFundParticipationResponse, SettleNeuronsFundParticipationResult,
-        SnsNeuronRecipe, Swap, SweepResult, Ticket, TransferableAmount,
+        settle_neurons_fund_participation_request,
+        settle_neurons_fund_participation_response,
+        sns_neuron_recipe::{
+            ClaimedStatus,
+            Investor,
+            NeuronAttributes,
+        },
+        BuyerState,
+        CanisterCallError,
+        CfInvestment,
+        CfNeuron,
+        CfParticipant,
+        DerivedState,
+        DirectInvestment,
+        ErrorRefundIcpRequest,
+        ErrorRefundIcpResponse,
+        FinalizeSwapResponse,
+        GetAutoFinalizationStatusRequest,
+        GetAutoFinalizationStatusResponse,
+        GetBuyerStateRequest,
+        GetBuyerStateResponse,
+        GetBuyersTotalResponse,
+        GetDerivedStateResponse,
+        GetInitRequest,
+        GetInitResponse,
+        GetLifecycleRequest,
+        GetLifecycleResponse,
+        GetOpenTicketRequest,
+        GetOpenTicketResponse,
+        GetSaleParametersRequest,
+        GetSaleParametersResponse,
+        GetStateResponse,
+        Icrc1Account,
+        Init,
+        Lifecycle,
+        ListCommunityFundParticipantsRequest,
+        ListCommunityFundParticipantsResponse,
+        ListDirectParticipantsRequest,
+        ListDirectParticipantsResponse,
+        ListSnsNeuronRecipesRequest,
+        ListSnsNeuronRecipesResponse,
+        NeuronBasketConstructionParameters,
+        NeuronId as SwapNeuronId,
+        NewSaleTicketRequest,
+        NewSaleTicketResponse,
+        NotifyPaymentFailureResponse,
+        Params,
+        Participant,
+        RefreshBuyerTokensResponse,
+        SetDappControllersCallResult,
+        SetDappControllersRequest,
+        SetDappControllersResponse,
+        SetModeCallResult,
+        SettleNeuronsFundParticipationRequest,
+        SettleNeuronsFundParticipationResponse,
+        SettleNeuronsFundParticipationResult,
+        SnsNeuronRecipe,
+        Swap,
+        SweepResult,
+        Ticket,
+        TransferableAmount,
     },
-    types::{NeuronsFundNeuron, ScheduledVestingEvent, TransferResult},
+    types::{
+        NeuronsFundNeuron,
+        ScheduledVestingEvent,
+        TransferResult,
+    },
 };
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_canister_log::log;
 use ic_cdk::api::call::RejectionCode;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
 use ic_nervous_system_common::{
-    i2d, ledger::compute_neuron_staking_subaccount_bytes, MAX_NEURONS_FOR_DIRECT_PARTICIPANTS,
+    i2d,
+    ledger::compute_neuron_staking_subaccount_bytes,
+    MAX_NEURONS_FOR_DIRECT_PARTICIPANTS,
 };
 use ic_nervous_system_proto::pb::v1::Principals;
-use ic_neurons_fund::{MatchedParticipationFunction, PolynomialNeuronsFundParticipation};
+use ic_neurons_fund::{
+    MatchedParticipationFunction,
+    PolynomialNeuronsFundParticipation,
+};
 use ic_sns_governance::pb::v1::{
-    claim_swap_neurons_request::{neuron_recipe, NeuronRecipe, NeuronRecipes},
-    claim_swap_neurons_response::{ClaimSwapNeuronsResult, SwapNeuron},
-    governance, ClaimSwapNeuronsError, ClaimSwapNeuronsRequest, ClaimedSwapNeuronStatus, NeuronId,
-    NeuronIds, SetMode, SetModeResponse,
+    claim_swap_neurons_request::{
+        neuron_recipe,
+        NeuronRecipe,
+        NeuronRecipes,
+    },
+    claim_swap_neurons_response::{
+        ClaimSwapNeuronsResult,
+        SwapNeuron,
+    },
+    governance,
+    ClaimSwapNeuronsError,
+    ClaimSwapNeuronsRequest,
+    ClaimedSwapNeuronStatus,
+    NeuronId,
+    NeuronIds,
+    SetMode,
+    SetModeResponse,
 };
 use ic_stable_structures::{
-    storable::{Blob, Bound},
-    GrowFailed, Storable,
+    storable::{
+        Blob,
+        Bound,
+    },
+    GrowFailed,
+    Storable,
 };
 use icp_ledger::DEFAULT_TRANSFER_FEE;
-use icrc_ledger_types::icrc1::account::{Account, Subaccount};
-use itertools::{Either, Itertools};
+use icrc_ledger_types::icrc1::account::{
+    Account,
+    Subaccount,
+};
+use itertools::{
+    Either,
+    Itertools,
+};
 use maplit::btreemap;
 use prost::Message;
 use rust_decimal::prelude::ToPrimitive;
@@ -58,9 +146,15 @@ use std::{
     cmp::Ordering,
     collections::BTreeMap,
     fmt,
-    num::{NonZeroU128, NonZeroU64},
+    num::{
+        NonZeroU128,
+        NonZeroU64,
+    },
     ops::{
-        Bound::{Included, Unbounded},
+        Bound::{
+            Included,
+            Unbounded,
+        },
         Div,
     },
     str::FromStr,
@@ -334,7 +428,10 @@ impl IcpTargetProgress {
 mod swap_participation {
     use crate::{
         logs::ERROR,
-        swap::{Lifecycle, Swap},
+        swap::{
+            Lifecycle,
+            Swap,
+        },
     };
     use ic_canister_log::log;
 
@@ -2335,7 +2432,10 @@ impl Swap {
         &mut self,
         nns_governance_client: &mut impl NnsGovernanceClient,
     ) -> SettleNeuronsFundParticipationResult {
-        use settle_neurons_fund_participation_request::{Aborted, Committed};
+        use settle_neurons_fund_participation_request::{
+            Aborted,
+            Committed,
+        };
 
         // Check if any work needs to be done.
         if !self.cf_participants.is_empty() {
@@ -3852,12 +3952,18 @@ mod tests {
     use super::*;
     use crate::{
         pb::v1::{
-            new_sale_ticket_response::Ok, CfNeuron, CfParticipant,
-            NeuronBasketConstructionParameters, Params,
+            new_sale_ticket_response::Ok,
+            CfNeuron,
+            CfParticipant,
+            NeuronBasketConstructionParameters,
+            Params,
         },
         swap_builder::SwapBuilder,
     };
-    use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
+    use ic_nervous_system_common::{
+        E8,
+        ONE_DAY_SECONDS,
+    };
     use pretty_assertions::assert_eq;
     use proptest::prelude::proptest;
     use std::collections::HashSet;

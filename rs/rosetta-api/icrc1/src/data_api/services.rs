@@ -7,12 +7,17 @@ use crate::common::constants::MAX_TRANSACTIONS_PER_SEARCH_TRANSACTIONS_REQUEST;
 use crate::common::constants::STATUS_COMPLETED;
 use crate::common::types::OperationType;
 use crate::common::{
-    constants::{NODE_VERSION, ROSETTA_VERSION},
+    constants::{
+        NODE_VERSION,
+        ROSETTA_VERSION,
+    },
     storage::storage_client::StorageClient,
     types::Error,
     utils::utils::{
-        convert_timestamp_to_millis, get_rosetta_block_from_block_identifier,
-        get_rosetta_block_from_partial_block_identifier, icrc1_rosetta_block_to_rosetta_core_block,
+        convert_timestamp_to_millis,
+        get_rosetta_block_from_block_identifier,
+        get_rosetta_block_from_partial_block_identifier,
+        icrc1_rosetta_block_to_rosetta_core_block,
         icrc1_rosetta_block_to_rosetta_core_transaction,
     },
 };
@@ -22,11 +27,19 @@ use candid::Nat;
 use candid::Principal;
 use ic_ledger_core::tokens::Zero;
 use icrc_ledger_types::icrc1::account::Account;
-use num_bigint::{BigInt, BigUint};
+use num_bigint::{
+    BigInt,
+    BigUint,
+};
 use rosetta_core::miscellaneous::OperationStatus;
 use rosetta_core::request_types::SearchTransactionsRequest;
 use rosetta_core::response_types::SearchTransactionsResponse;
-use rosetta_core::{identifiers::*, miscellaneous::Version, objects::*, response_types::*};
+use rosetta_core::{
+    identifiers::*,
+    miscellaneous::Version,
+    objects::*,
+    response_types::*,
+};
 use strum::IntoEnumIterator;
 
 pub fn network_list(ledger_id: &Principal) -> NetworkListResponse {

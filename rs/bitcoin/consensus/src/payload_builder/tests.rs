@@ -1,16 +1,32 @@
-use crate::{payload_builder::parse, BitcoinPayloadBuilder};
+use crate::{
+    payload_builder::parse,
+    BitcoinPayloadBuilder,
+};
 use ic_btc_interface::Network;
 use ic_btc_replica_types::{
-    BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
-    BitcoinReject, GetSuccessorsRequestInitial, GetSuccessorsResponseComplete,
+    BitcoinAdapterRequestWrapper,
+    BitcoinAdapterResponse,
+    BitcoinAdapterResponseWrapper,
+    BitcoinReject,
+    GetSuccessorsRequestInitial,
+    GetSuccessorsResponseComplete,
 };
 use ic_config::bitcoin_payload_builder_config::Config;
 use ic_error_types::RejectCode;
 use ic_interfaces::{
-    batch_payload::{BatchPayloadBuilder, PastPayload, ProposalContext},
+    batch_payload::{
+        BatchPayloadBuilder,
+        PastPayload,
+        ProposalContext,
+    },
     self_validating_payload::SelfValidatingPayloadBuilder,
 };
-use ic_interfaces_adapter_client::{Options, RpcAdapterClient, RpcError, RpcResult};
+use ic_interfaces_adapter_client::{
+    Options,
+    RpcAdapterClient,
+    RpcError,
+    RpcResult,
+};
 use ic_interfaces_registry::RegistryValue;
 use ic_interfaces_registry_mocks::MockRegistryClient;
 use ic_interfaces_state_manager_mocks::MockStateManager;
@@ -20,12 +36,21 @@ use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_test_utilities::self_validating_payload_builder::FakeSelfValidatingPayloadBuilder;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_state::ReplicatedStateBuilder;
-use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+use ic_test_utilities_types::ids::{
+    node_test_id,
+    subnet_test_id,
+};
 use ic_types::{
     batch::ValidationContext,
-    crypto::{CryptoHash, CryptoHashOf},
+    crypto::{
+        CryptoHash,
+        CryptoHashOf,
+    },
     time::UNIX_EPOCH,
-    Height, NumBytes, RegistryVersion, SubnetId,
+    Height,
+    NumBytes,
+    RegistryVersion,
+    SubnetId,
 };
 use mockall::mock;
 use std::sync::Arc;

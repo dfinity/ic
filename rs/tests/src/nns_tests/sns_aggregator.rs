@@ -1,47 +1,93 @@
 use std::{
     sync::{
-        atomic::{AtomicUsize, Ordering},
+        atomic::{
+            AtomicUsize,
+            Ordering,
+        },
         Arc,
     },
-    time::{Duration, Instant},
+    time::{
+        Duration,
+        Instant,
+    },
 };
 
-use anyhow::{bail, Context};
-use candid::{Decode, Principal};
+use anyhow::{
+    bail,
+    Context,
+};
+use candid::{
+    Decode,
+    Principal,
+};
 use ic_agent::Agent;
 use ic_registry_subnet_type::SubnetType;
-use ic_sns_swap::pb::v1::{GetStateResponse, Params};
+use ic_sns_swap::pb::v1::{
+    GetStateResponse,
+    Params,
+};
 use ic_system_test_driver::canister_agent::HasCanisterAgentCapability;
 use ic_system_test_driver::{
     canister_agent::CanisterAgent,
-    canister_api::{CallMode, SnsRequestProvider},
+    canister_api::{
+        CallMode,
+        SnsRequestProvider,
+    },
     canister_requests,
     generic_workload_engine::{
         engine::Engine,
-        metrics::{LoadTestMetrics, RequestOutcome},
+        metrics::{
+            LoadTestMetrics,
+            RequestOutcome,
+        },
     },
-    sns_client::{openchat_create_service_nervous_system_proposal, SnsClient},
+    sns_client::{
+        openchat_create_service_nervous_system_proposal,
+        SnsClient,
+    },
 };
 use ic_system_test_driver::{
     driver::{
         ic::InternetComputer,
-        test_env::{TestEnv, TestEnvAttribute},
+        test_env::{
+            TestEnv,
+            TestEnvAttribute,
+        },
         test_env_api::{
-            get_dependency_path, load_wasm, GetFirstHealthyNodeSnapshot, HasPublicApiUrl,
-            HasTopologySnapshot, IcNodeContainer,
+            get_dependency_path,
+            load_wasm,
+            GetFirstHealthyNodeSnapshot,
+            HasPublicApiUrl,
+            HasTopologySnapshot,
+            IcNodeContainer,
         },
     },
     util::block_on,
 };
 use ic_utils::{
     call::SyncCall,
-    interfaces::{http_request::HttpResponse, HttpRequestCanister, ManagementCanister},
+    interfaces::{
+        http_request::HttpResponse,
+        HttpRequestCanister,
+        ManagementCanister,
+    },
 };
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use serde_json::Value;
-use slog::{info, Logger};
+use slog::{
+    info,
+    Logger,
+};
 
-use super::sns_deployment::{self, install_nns, install_sns, SnsSaleParticipants};
+use super::sns_deployment::{
+    self,
+    install_nns,
+    install_sns,
+    SnsSaleParticipants,
+};
 
 use ic_base_types::PrincipalId;
 

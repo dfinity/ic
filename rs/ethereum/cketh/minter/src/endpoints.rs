@@ -1,12 +1,29 @@
 use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::ledger_client::LedgerBurnError;
 use crate::numeric::LedgerBurnIndex;
-use crate::state::{transactions, transactions::EthWithdrawalRequest};
-use crate::tx::{SignedEip1559TransactionRequest, TransactionPrice};
-use candid::{CandidType, Deserialize, Nat, Principal};
+use crate::state::{
+    transactions,
+    transactions::EthWithdrawalRequest,
+};
+use crate::tx::{
+    SignedEip1559TransactionRequest,
+    TransactionPrice,
+};
+use candid::{
+    CandidType,
+    Deserialize,
+    Nat,
+    Principal,
+};
 use icrc_ledger_types::icrc1::account::Account;
-use minicbor::{Decode, Encode};
-use std::fmt::{Display, Formatter};
+use minicbor::{
+    Decode,
+    Encode,
+};
+use std::fmt::{
+    Display,
+    Formatter,
+};
 use std::str::FromStr;
 
 pub mod ckerc20;
@@ -283,7 +300,12 @@ pub struct AddCkErc20Token {
 pub mod events {
     use crate::lifecycle::init::InitArg;
     use crate::lifecycle::upgrade::UpgradeArg;
-    use candid::{CandidType, Deserialize, Nat, Principal};
+    use candid::{
+        CandidType,
+        Deserialize,
+        Nat,
+        Principal,
+    };
     use serde_bytes::ByteBuf;
 
     #[derive(Clone, Debug, CandidType, Deserialize)]

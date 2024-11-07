@@ -1,8 +1,17 @@
 use ic_metrics::{
-    buckets::{decimal_buckets, exponential_buckets},
+    buckets::{
+        decimal_buckets,
+        exponential_buckets,
+    },
     MetricsRegistry,
 };
-use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
+use prometheus::{
+    Histogram,
+    HistogramVec,
+    IntCounter,
+    IntCounterVec,
+    IntGauge,
+};
 
 pub(crate) const LABEL_GET_SUCCESSOR: &str = "get_successor";
 pub(crate) const LABEL_REQUEST_TYPE: &str = "type";

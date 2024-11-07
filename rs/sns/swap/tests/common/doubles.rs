@@ -1,26 +1,50 @@
 use async_trait::async_trait;
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_ledger_core::Tokens;
-use ic_nervous_system_common::{ledger::ICRC1Ledger, NervousSystemError};
+use ic_nervous_system_common::{
+    ledger::ICRC1Ledger,
+    NervousSystemError,
+};
 use ic_nervous_system_common_test_utils::SpyLedger;
 use ic_sns_governance::pb::v1::{
-    manage_neuron_response, manage_neuron_response::ClaimOrRefreshResponse,
-    ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, ManageNeuron, ManageNeuronResponse, SetMode,
+    manage_neuron_response,
+    manage_neuron_response::ClaimOrRefreshResponse,
+    ClaimSwapNeuronsRequest,
+    ClaimSwapNeuronsResponse,
+    ManageNeuron,
+    ManageNeuronResponse,
+    SetMode,
     SetModeResponse,
 };
 use ic_sns_swap::{
-    clients::{NnsGovernanceClient, SnsGovernanceClient, SnsRootClient},
+    clients::{
+        NnsGovernanceClient,
+        SnsGovernanceClient,
+        SnsRootClient,
+    },
     environment::CanisterClients,
     pb::v1::{
-        set_dapp_controllers_request::CanisterIds, CanisterCallError, SetDappControllersRequest,
-        SetDappControllersResponse, SettleNeuronsFundParticipationRequest,
+        set_dapp_controllers_request::CanisterIds,
+        CanisterCallError,
+        SetDappControllersRequest,
+        SetDappControllersResponse,
+        SettleNeuronsFundParticipationRequest,
         SettleNeuronsFundParticipationResponse,
     },
 };
-use icrc_ledger_types::icrc1::account::{Account, Subaccount};
+use icrc_ledger_types::icrc1::account::{
+    Account,
+    Subaccount,
+};
 use std::{
     collections::VecDeque,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc,
+        Mutex,
+    },
 };
 
 /// Expect that no SNS root calls will be made. Explode otherwise.

@@ -1,13 +1,24 @@
 use super::*;
 use crate::{
-    neuron::{DissolveStateAndAge, NeuronBuilder},
-    pb::v1::manage_neuron::{SetDissolveTimestamp, StartDissolving},
-    temporarily_disable_private_neuron_enforcement, temporarily_disable_voting_power_adjustment,
-    temporarily_enable_private_neuron_enforcement, temporarily_enable_voting_power_adjustment,
+    neuron::{
+        DissolveStateAndAge,
+        NeuronBuilder,
+    },
+    pb::v1::manage_neuron::{
+        SetDissolveTimestamp,
+        StartDissolving,
+    },
+    temporarily_disable_private_neuron_enforcement,
+    temporarily_disable_voting_power_adjustment,
+    temporarily_enable_private_neuron_enforcement,
+    temporarily_enable_voting_power_adjustment,
 };
 use ic_cdk::println;
 
-use ic_nervous_system_common::{E8, ONE_YEAR_SECONDS};
+use ic_nervous_system_common::{
+    E8,
+    ONE_YEAR_SECONDS,
+};
 use ic_stable_structures::Storable;
 use icp_ledger::Subaccount;
 use prost::Message;

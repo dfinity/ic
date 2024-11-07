@@ -1,9 +1,18 @@
-use candid::{CandidType, Deserialize, Int, Nat, Principal};
+use candid::{
+    CandidType,
+    Deserialize,
+    Int,
+    Nat,
+    Principal,
+};
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
 use serde::Serialize;
 use serde_bytes::ByteBuf;
-use sha2::{Digest, Sha256};
+use sha2::{
+    Digest,
+    Sha256,
+};
 use std::collections::BTreeMap;
 
 use crate::icrc1::account::Account;
@@ -520,8 +529,15 @@ fn test_test_vectors() {
 
 #[cfg(test)]
 pub fn arb_value() -> impl proptest::prelude::Strategy<Value = Value> {
-    use num_bigint::{BigInt, Sign};
-    use proptest::prelude::{any, prop_oneof, Just};
+    use num_bigint::{
+        BigInt,
+        Sign,
+    };
+    use proptest::prelude::{
+        any,
+        prop_oneof,
+        Just,
+    };
     use proptest::strategy::Strategy;
 
     // https://altsysrq.github.io/proptest-book/proptest/tutorial/recursive.html
@@ -552,7 +568,10 @@ pub fn arb_value() -> impl proptest::prelude::Strategy<Value = Value> {
 
 #[test]
 fn test_value_to_icrc3value_roundtrip() {
-    use proptest::{prop_assert_eq, proptest};
+    use proptest::{
+        prop_assert_eq,
+        proptest,
+    };
     fn remove_nat64(value: Value) -> Value {
         match value {
             Value::Nat64(n) => Value::Nat(candid::Nat::from(n)),

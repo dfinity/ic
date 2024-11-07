@@ -1,11 +1,20 @@
-use crate::{common::LOG_PREFIX, registry::Registry};
+use crate::{
+    common::LOG_PREFIX,
+    registry::Registry,
+};
 
-use candid::{CandidType, Deserialize};
+use candid::{
+    CandidType,
+    Deserialize,
+};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_protobuf::registry::firewall::v1::FirewallConfig;
 use ic_registry_keys::make_firewall_config_record_key;
-use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation};
+use ic_registry_transport::pb::v1::{
+    registry_mutation,
+    RegistryMutation,
+};
 use prost::Message;
 use serde::Serialize;
 

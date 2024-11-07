@@ -1,9 +1,20 @@
 use tla_instrumentation::{
-    Label, ResolvedStatePair, TlaConstantAssignment, ToTla, Update, VarAssignment,
+    Label,
+    ResolvedStatePair,
+    TlaConstantAssignment,
+    ToTla,
+    Update,
+    VarAssignment,
 };
 
-use super::common::{default_account, governance_account_id};
-use super::{extract_common_constants, post_process_trace};
+use super::common::{
+    default_account,
+    governance_account_id,
+};
+use super::{
+    extract_common_constants,
+    post_process_trace,
+};
 
 pub fn split_neuron_desc() -> Update {
     const PID: &str = "Split_Neuron";

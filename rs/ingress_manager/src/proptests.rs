@@ -13,23 +13,42 @@
 //! We therefore build multiple proptests, where we keep most properties fixed and only leave a
 //! small number of values variable.
 
-use crate::tests::{access_ingress_pool, setup_with_params};
+use crate::tests::{
+    access_ingress_pool,
+    setup_with_params,
+};
 use ic_interfaces::{
     ingress_manager::IngressSelector,
     ingress_pool::ChangeAction,
-    p2p::consensus::{MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
+    p2p::consensus::{
+        MutablePool,
+        UnvalidatedArtifact,
+        ValidatedPoolReader,
+    },
     time_source::TimeSource,
 };
 use ic_limits::MAX_INGRESS_TTL;
-use ic_test_utilities_state::{CanisterStateBuilder, ReplicatedStateBuilder};
+use ic_test_utilities_state::{
+    CanisterStateBuilder,
+    ReplicatedStateBuilder,
+};
 use ic_test_utilities_time::FastForwardTimeSource;
 use ic_test_utilities_types::{
-    ids::{canister_test_id, node_test_id},
+    ids::{
+        canister_test_id,
+        node_test_id,
+    },
     messages::SignedIngressBuilder,
 };
 use ic_types::{
-    artifact::IngressMessageId, batch::ValidationContext, messages::SignedIngress,
-    time::UNIX_EPOCH, CountBytes, Height, NumBytes, RegistryVersion,
+    artifact::IngressMessageId,
+    batch::ValidationContext,
+    messages::SignedIngress,
+    time::UNIX_EPOCH,
+    CountBytes,
+    Height,
+    NumBytes,
+    RegistryVersion,
 };
 use proptest::prelude::*;
 use std::collections::HashSet;

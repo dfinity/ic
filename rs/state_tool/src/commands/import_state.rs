@@ -1,11 +1,20 @@
 //! Imports replicated state from an external location.
 
 use crate::commands::utils;
-use ic_state_layout::{CheckpointLayout, RwPolicy};
-use ic_sys::fs::{clone_file, copy_file_sparse};
+use ic_state_layout::{
+    CheckpointLayout,
+    RwPolicy,
+};
+use ic_sys::fs::{
+    clone_file,
+    copy_file_sparse,
+};
 use ic_types::Height;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{
+    Path,
+    PathBuf,
+};
 use std::string::ToString;
 
 /// Copies SRC into DST recursively.

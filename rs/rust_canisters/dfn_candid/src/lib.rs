@@ -1,11 +1,23 @@
 use candid::de::IDLDeserialize;
 pub use candid::{
-    decode_args_with_config, encode_args, encode_one,
-    utils::{ArgumentDecoder, ArgumentEncoder},
+    decode_args_with_config,
+    encode_args,
+    encode_one,
+    utils::{
+        ArgumentDecoder,
+        ArgumentEncoder,
+    },
 };
-use candid::{CandidType, DecoderConfig};
+use candid::{
+    CandidType,
+    DecoderConfig,
+};
 use on_wire::witness;
-use on_wire::{FromWire, IntoWire, NewType};
+use on_wire::{
+    FromWire,
+    IntoWire,
+    NewType,
+};
 use serde::de::DeserializeOwned;
 
 pub struct Candid<T>(pub T);

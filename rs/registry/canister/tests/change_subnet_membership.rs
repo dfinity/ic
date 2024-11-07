@@ -9,13 +9,24 @@ use dfn_candid::candid;
 use ic_base_types::NodeId;
 use ic_nns_test_utils::{
     itest_helpers::{
-        forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
+        forward_call_via_universal_canister,
+        local_test_on_nns_subnet,
+        set_up_registry_canister,
         set_up_universal_canister,
     },
-    registry::{get_value_or_panic, prepare_registry},
+    registry::{
+        get_value_or_panic,
+        prepare_registry,
+    },
 };
-use ic_protobuf::registry::subnet::v1::{SubnetListRecord, SubnetRecord};
-use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
+use ic_protobuf::registry::subnet::v1::{
+    SubnetListRecord,
+    SubnetRecord,
+};
+use ic_registry_keys::{
+    make_subnet_list_record_key,
+    make_subnet_record_key,
+};
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder,
     mutations::do_change_subnet_membership::ChangeSubnetMembershipPayload,

@@ -1,26 +1,44 @@
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::Arc,
+    time::Duration,
+};
 
 use discower_bowndary::{
-    check::{HealthCheck, HealthCheckImpl},
-    fetch::{NodesFetcher, NodesFetcherImpl},
+    check::{
+        HealthCheck,
+        HealthCheckImpl,
+    },
+    fetch::{
+        NodesFetcher,
+        NodesFetcherImpl,
+    },
     node::Node,
     route_provider::HealthCheckRouteProvider,
     snapshot::Snapshot,
     snapshot_health_based::HealthBasedSnapshot,
     snapshot_latency_based::LatencyBasedSnapshot,
-    transport::{TransportProvider, TransportProviderImpl},
+    transport::{
+        TransportProvider,
+        TransportProviderImpl,
+    },
 };
 use ic_agent::{
     agent::http_transport::{
-        reqwest_transport::reqwest::Client, route_provider::RouteProvider, ReqwestTransport,
+        reqwest_transport::reqwest::Client,
+        route_provider::RouteProvider,
+        ReqwestTransport,
     },
     export::Principal,
     identity::BasicIdentity,
-    Agent, AgentError,
+    Agent,
+    AgentError,
 };
 use tokio::{
     task::JoinHandle,
-    time::{sleep_until, Instant},
+    time::{
+        sleep_until,
+        Instant,
+    },
 };
 
 const IC0_DOMAIN: &str = "ic0.app";

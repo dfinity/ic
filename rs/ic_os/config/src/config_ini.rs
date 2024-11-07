@@ -1,11 +1,17 @@
 use regex::Regex;
 use std::collections::HashMap;
 use std::fs::read_to_string;
-use std::net::{Ipv4Addr, Ipv6Addr};
+use std::net::{
+    Ipv4Addr,
+    Ipv6Addr,
+};
 use std::path::Path;
 
 use anyhow::bail;
-use anyhow::{Context, Result};
+use anyhow::{
+    Context,
+    Result,
+};
 
 pub type ConfigMap = HashMap<String, String>;
 pub struct ConfigIniSettings {

@@ -4,11 +4,18 @@ use ic_base_types::RegistryVersion;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_types::{
     artifact::CanisterHttpResponseId,
-    canister_http::{CanisterHttpResponse, CanisterHttpResponseShare},
+    canister_http::{
+        CanisterHttpResponse,
+        CanisterHttpResponseShare,
+    },
     consensus::Threshold,
-    crypto::{CryptoError, CryptoHashOf},
+    crypto::{
+        CryptoError,
+        CryptoHashOf,
+    },
     messages::CallbackId,
-    NodeId, Time,
+    NodeId,
+    Time,
 };
 
 #[derive(Debug)]

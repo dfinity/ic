@@ -25,21 +25,33 @@ end::catalog[] */
 use anyhow::Result;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_consensus_system_test_utils::upgrade::{
-    assert_assigned_replica_version, bless_replica_version_with_urls,
-    deploy_guestos_to_all_subnet_nodes, get_assigned_replica_version, UpdateImageType,
+    assert_assigned_replica_version,
+    bless_replica_version_with_urls,
+    deploy_guestos_to_all_subnet_nodes,
+    get_assigned_replica_version,
+    UpdateImageType,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::systest;
 use ic_system_test_driver::{
     driver::{
-        ic::{InternetComputer, Subnet},
+        ic::{
+            InternetComputer,
+            Subnet,
+        },
         test_env::TestEnv,
         test_env_api::*,
     },
-    util::{block_on, get_nns_node},
+    util::{
+        block_on,
+        get_nns_node,
+    },
 };
-use ic_types::{Height, ReplicaVersion};
+use ic_types::{
+    Height,
+    ReplicaVersion,
+};
 use slog::info;
 use std::convert::TryFrom;
 
