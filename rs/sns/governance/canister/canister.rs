@@ -40,7 +40,8 @@ use ic_sns_governance::{
     },
     logs::{ERROR, INFO},
     pb::v1::{
-        ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, FailStuckUpgradeInProgressRequest,
+        get_running_sns_version_response::UpgradeInProgress, ClaimSwapNeuronsRequest,
+        ClaimSwapNeuronsResponse, FailStuckUpgradeInProgressRequest,
         FailStuckUpgradeInProgressResponse, GetMaturityModulationRequest,
         GetMaturityModulationResponse, GetMetadataRequest, GetMetadataResponse, GetMode,
         GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
@@ -467,9 +468,16 @@ async fn get_root_canister_status(_: ()) -> CanisterStatusResultV2 {
 #[query]
 fn get_running_sns_version(_: GetRunningSnsVersionRequest) -> GetRunningSnsVersionResponse {
     log!(INFO, "get_running_sns_version");
+    let pending_version = governance().proto.pending_version.clone();
+    let upgrade_in_progress = pending_version.map(|upgrade_in_progress| UpgradeInProgress {
+        target_version: upgrade_in_progress.target_version.clone(),
+        mark_failed_at_seconds: upgrade_in_progress.mark_failed_at_seconds,
+        checking_upgrade_lock: upgrade_in_progress.checking_upgrade_lock,
+        proposal_id: upgrade_in_progress.proposal_id,
+    });
     GetRunningSnsVersionResponse {
         deployed_version: governance().proto.deployed_version.clone(),
-        pending_version: governance().proto.pending_version.clone(),
+        pending_version: upgrade_in_progress,
     }
 }
 
