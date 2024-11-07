@@ -15,8 +15,10 @@ use ic_icrc1::{
     endpoints::{convert_transfer_error, StandardRecord},
     Operation, Transaction,
 };
+use ic_icrc1_ledger::{
+    is_ready, ledger_state, panic_if_not_ready, set_ledger_state, LEDGER_VERSION, UPGRADES_MEMORY,
+};
 use ic_icrc1_ledger::{InitArgs, Ledger, LedgerArgument, LedgerField, LedgerState};
-use ic_icrc1_ledger::{LEDGER_VERSION, UPGRADES_MEMORY};
 use ic_ledger_canister_core::ledger::{
     apply_transaction, archive_blocks, LedgerAccess, LedgerContext, LedgerData,
     TransferError as CoreTransferError,
@@ -135,7 +137,7 @@ fn pre_upgrade() {
     let start = ic_cdk::api::instruction_counter();
     UPGRADES_MEMORY.with_borrow_mut(|bs| {
         Access::with_ledger(|ledger| {
-            if !ledger.is_ready() {
+            if !is_ready() {
                 // This means that migration did not complete and the correct state
                 // of the ledger is still in UPGRADES_MEMORY.
                 ic_cdk::println!("Ledger not ready, skipping write to UPGRADES_MEMORY.");
@@ -233,8 +235,8 @@ fn post_upgrade(args: Option<LedgerArgument>) {
 
     PRE_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow_mut() = pre_upgrade_instructions_consumed);
 
+    set_ledger_state(LedgerState::Migrating(LedgerField::Allowances));
     Access::with_ledger_mut(|ledger| {
-        ledger.state = LedgerState::Migrating(LedgerField::Allowances);
         ledger.clear_arrivals();
     });
     log_message("Migration started.");
@@ -257,7 +259,7 @@ fn migrate_next_part(instruction_limit: u64) {
 
     Access::with_ledger_mut(|ledger| {
         while instruction_counter() < instruction_limit {
-            let field = match ledger.state.clone() {
+            let field = match ledger_state() {
                 LedgerState::Migrating(ledger_field) => ledger_field,
                 LedgerState::Ready => break,
             };
@@ -266,14 +268,16 @@ fn migrate_next_part(instruction_limit: u64) {
                     if ledger.migrate_one_allowance() {
                         migrated_allowances += 1;
                     } else {
-                        ledger.state = LedgerState::Migrating(LedgerField::AllowancesExpirations);
+                        set_ledger_state(LedgerState::Migrating(
+                            LedgerField::AllowancesExpirations,
+                        ));
                     }
                 }
                 LedgerField::AllowancesExpirations => {
                     if ledger.migrate_one_expiration() {
                         migrated_expirations += 1;
                     } else {
-                        ledger.state = LedgerState::Ready;
+                        set_ledger_state(LedgerState::Ready);
                     }
                 }
             }
@@ -281,7 +285,7 @@ fn migrate_next_part(instruction_limit: u64) {
         let instructions_mingration = instruction_counter() - instructions_mingration_start;
         let msg = format!("Number of elements migrated: allowances: {migrated_allowances} expirations: {migrated_expirations}. Migration step instructions: {instructions_mingration}, total instructions used in message: {}." ,
             instruction_counter());
-        if !ledger.is_ready() {
+        if !is_ready() {
             log_message(
                 format!("Migration partially done. Scheduling the next part. {msg}").as_str(),
             );
@@ -952,14 +956,6 @@ fn icrc21_canister_call_consent_message(
         token_symbol,
         decimals,
     )
-}
-
-fn is_ready() -> bool {
-    Access::with_ledger(|ledger| ledger.is_ready())
-}
-
-fn panic_if_not_ready() {
-    Access::with_ledger(|ledger| ledger.panic_if_not_ready());
 }
 
 #[query]

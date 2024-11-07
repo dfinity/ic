@@ -359,6 +359,8 @@ thread_local! {
     pub static UPGRADES_MEMORY: RefCell<VirtualMemory<DefaultMemoryImpl>> = MEMORY_MANAGER.with(|memory_manager|
         RefCell::new(memory_manager.borrow().get(UPGRADES_MEMORY_ID)));
 
+    pub static LEDGER_STATE: RefCell<LedgerState> = RefCell::new(LedgerState::Ready);
+
     // (from, spender) -> allowance - map storing ledger allowances.
     #[allow(clippy::type_complexity)]
     pub static ALLOWANCES_MEMORY: RefCell<StableBTreeMap<(Account, Account), Allowance<Tokens>, VirtualMemory<DefaultMemoryImpl>>> =
@@ -370,13 +372,13 @@ thread_local! {
         MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(ALLOWANCES_EXPIRATIONS_MEMORY_ID))));
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Copy, Clone, Serialize, Deserialize, Debug)]
 pub enum LedgerField {
     Allowances,
     AllowancesExpirations,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Copy, Clone, Serialize, Deserialize, Debug)]
 pub enum LedgerState {
     Migrating(LedgerField),
     Ready,
@@ -424,9 +426,6 @@ pub struct Ledger {
 
     #[serde(default = "default_ledger_version")]
     pub ledger_version: u64,
-
-    #[serde(default)]
-    pub state: LedgerState,
 }
 
 fn default_maximum_number_of_accounts() -> usize {
@@ -525,7 +524,6 @@ impl Ledger {
                 .try_into()
                 .unwrap(),
             ledger_version: LEDGER_VERSION,
-            state: LedgerState::Ready,
         };
 
         for (account, balance) in initial_balances.into_iter() {
@@ -545,16 +543,6 @@ impl Ledger {
         }
 
         ledger
-    }
-
-    pub fn is_ready(&self) -> bool {
-        matches!(self.state, LedgerState::Ready)
-    }
-
-    pub fn panic_if_not_ready(&self) {
-        if !self.is_ready() {
-            ic_cdk::trap("The Ledger is not ready");
-        }
     }
 
     pub fn migrate_one_allowance(&mut self) -> bool {
@@ -593,22 +581,22 @@ impl LedgerContext for Ledger {
     type Tokens = Tokens;
 
     fn balances(&self) -> &Balances<Self::BalancesStore> {
-        self.panic_if_not_ready();
+        panic_if_not_ready();
         &self.balances
     }
 
     fn balances_mut(&mut self) -> &mut Balances<Self::BalancesStore> {
-        self.panic_if_not_ready();
+        panic_if_not_ready();
         &mut self.balances
     }
 
     fn approvals(&self) -> &AllowanceTable<Self::AllowancesData> {
-        self.panic_if_not_ready();
+        panic_if_not_ready();
         &self.stable_approvals
     }
 
     fn approvals_mut(&mut self) -> &mut AllowanceTable<Self::AllowancesData> {
-        self.panic_if_not_ready();
+        panic_if_not_ready();
         &mut self.stable_approvals
     }
 
@@ -967,6 +955,24 @@ impl Ledger {
             archived_blocks,
         }
     }
+}
+
+pub fn is_ready() -> bool {
+    LEDGER_STATE.with(|s| matches!(*s.borrow(), LedgerState::Ready))
+}
+
+pub fn panic_if_not_ready() {
+    if !is_ready() {
+        ic_cdk::trap("The Ledger is not ready");
+    }
+}
+
+pub fn ledger_state() -> LedgerState {
+    LEDGER_STATE.with(|s| *s.borrow())
+}
+
+pub fn set_ledger_state(ledger_state: LedgerState) {
+    LEDGER_STATE.with(|s| *s.borrow_mut() = ledger_state);
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
