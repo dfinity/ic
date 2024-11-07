@@ -30,7 +30,7 @@ const REGISTRY_CANISTER_ID: &str = "bnz7o-iuaaa-aaaaa-qaaaa-cai";
 const MEMORY_ID_ALLOWED_PRINCIPALS: u8 = 0;
 
 lazy_static! {
-    static ref REGISTRY_LISTER: Box<dyn List> = {
+    static ref API_BOUNDARY_NODES_LISTER: Box<dyn List> = {
         let cid =
             Principal::from_text(REGISTRY_CANISTER_ID).expect("failed to construct principal");
 
@@ -55,7 +55,7 @@ fn timers() {
         // Switch to async
         spawn(async {
             // List registry entries
-            let ids = match REGISTRY_LISTER.list().await {
+            let ids = match API_BOUNDARY_NODES_LISTER.list().await {
                 Ok(ids) => ids,
 
                 // Abort on failure
