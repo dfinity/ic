@@ -375,7 +375,7 @@ impl Track for Tracker {
 
                 // Leader means we're being asked to generate a salt
                 // and encrypt it for others
-                Err(QueryError::Leader(mode, pairs)) => {
+                Err(QueryError::LeaderDuty(mode, pairs)) => {
                     let salt = match mode {
                         // Generate salt
                         LeaderMode::Bootstrap => {
