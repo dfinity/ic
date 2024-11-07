@@ -40,6 +40,8 @@ fn should_parse_constructor_parameters() {
             || canister == TargetCanister::IcpArchive3
             //canister lives outside the monorepo
             || canister == TargetCanister::EvmRpc
+            || canister == TargetCanister::CyclesLedger
+            || canister == TargetCanister::ExchangeRateCanister
         {
             continue;
         }
