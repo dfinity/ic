@@ -5296,8 +5296,6 @@ fn test_callback_limits_impl(
         // Enough cycles for more than a handful of concurrent calls.
         .with_initial_canister_cycles(1_000_000_000_000_000)
         .with_manual_execution()
-        .with_canister_sandboxing_disabled()
-        .with_deterministic_time_slicing_disabled()
         .build();
 
     let a_id = test.universal_canister().unwrap();
