@@ -11,6 +11,7 @@ use crate::{
         governance_error::ErrorType,
         manage_neuron::{configure::Operation, Configure},
         neuron::{DissolveState as NeuronDissolveState, Followees},
+        proposal::Action,
         AbridgedNeuron, Ballot, BallotInfo, GovernanceError, KnownNeuronData,
         Neuron as NeuronProto, NeuronInfo, NeuronStakeTransfer, NeuronState, NeuronType, Topic,
         Visibility, Vote,
@@ -1788,6 +1789,79 @@ impl TryFrom<StoredDissolveStateAndAge> for DissolveStateAndAge {
             }
         }
     }
+}
+
+/// Adds up the potential voting power of all neurons.
+///
+/// # Potential Voting Power vs. Deciding Voting Power
+///
+/// If all neurons keep themselves refreshed, then deciding voting power =
+/// potential voting power. Whereas, if a neuron has not refreshed recently
+/// enough, the amount of voting power it can exercise is less than its
+/// potential.
+///
+/// # Weird Special Case: ManageNeuron
+///
+/// Voting power is weird in the case of ManageNeuron
+/// proposals. In that case, only the followees of the targetted neuron can
+/// vote, and they all get 1 voting power, regardless of refresh. Also,
+/// these proposals have no rewards. Therefore, in the case of ManageNeuron,
+/// this returns ballots_len.
+///
+/// # When Err
+///
+/// There is no "practical" input that can cause Err to be returned.
+/// (See comments in the body.)
+pub(crate) fn total_potential_voting_power<'a>(
+    neurons: impl Iterator<Item = &'a Neuron>,
+    now_seconds: u64,
+    action: &Action,
+    ballots_len: usize,
+) -> Result<u64, GovernanceError> {
+    // ManageNeuron proposals are special.
+    if let Action::ManageNeuron(_) = action {
+        return u64::try_from(ballots_len)
+            // Really can't see how this Err could happen, esp on 32-bit
+            // WASM. If Err did occur, that would indicate that we
+            // somehow have > 2^64 ballots, which is an overwhelming
+            // amount such that we wouldn't be able to get far enough
+            // for this function to even be called.
+            .map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::ResourceExhausted,
+                    format!(
+                        "Unable to determine total potential voting power of \
+                         a ManageNeuron proposal: {:?}",
+                        err,
+                    ),
+                )
+            });
+    }
+
+    let mut result = 0_u64;
+
+    for neuron in neurons {
+        // Increment result.
+        result = result
+            .checked_add(neuron.potential_voting_power(now_seconds))
+            // Bail if there was overflow. FWIW, total voting power would have
+            // to grow by 500x for this to happen. Since voting power is limited
+            // by the supply of ICP, this really can't happen any time soon
+            // (assuming the rules more or less stay the same).
+            .ok_or_else(|| {
+                GovernanceError::new_with_message(
+                    ErrorType::ResourceExhausted,
+                    format!(
+                        "Total potential voting power overflowed u64: \
+                         total_so_far = {}, neuron_id = {}",
+                        result,
+                        neuron.id().id,
+                    ),
+                )
+            })?;
+    }
+
+    Ok(result)
 }
 
 #[cfg(test)]
