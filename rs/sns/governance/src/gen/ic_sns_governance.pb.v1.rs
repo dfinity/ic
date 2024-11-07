@@ -789,7 +789,7 @@ pub mod proposal {
         ManageDappCanisterSettings(super::ManageDappCanisterSettings),
         /// Advance SNS target version.
         ///
-        /// Id = 15;
+        /// Id = 15.
         #[prost(message, tag = "19")]
         AdvanceSnsTargetVersion(super::AdvanceSnsTargetVersion),
     }
