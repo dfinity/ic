@@ -18,7 +18,8 @@ use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamErr
 use ic_interfaces_state_manager::*;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types::{
-    CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2,
+    CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, InstallChunkedCodeArgs,
+    LoadCanisterSnapshotArgs, TakeCanisterSnapshotArgs, UploadChunkArgs,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_features::SubnetFeatures;
@@ -33,10 +34,7 @@ use ic_replicated_state::{
     ReplicatedState, Stream, SubnetTopology,
 };
 use ic_state_layout::{CheckpointLayout, ReadOnly, StateLayout, SYSTEM_METADATA_FILE, WASM_FILE};
-use ic_state_machine_tests::{
-    InstallChunkedCodeArgs, LoadCanisterSnapshotArgs, StateMachine, StateMachineBuilder,
-    TakeCanisterSnapshotArgs, UploadChunkArgs,
-};
+use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_state_manager::manifest::{build_meta_manifest, manifest_from_path, validate_manifest};
 use ic_state_manager::{
     state_sync::{
@@ -6556,9 +6554,7 @@ fn can_create_and_restore_snapshot() {
 
 #[test]
 fn restore_heap_from_snapshot() {
-    let env = StateMachineBuilder::new()
-        .with_canister_snapshots(true)
-        .build();
+    let env = StateMachineBuilder::new().build();
     env.set_checkpoints_enabled(false);
 
     let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
@@ -6625,9 +6621,7 @@ fn restore_heap_from_snapshot() {
 
 #[test]
 fn restore_stable_memory_from_snapshot() {
-    let env = StateMachineBuilder::new()
-        .with_canister_snapshots(true)
-        .build();
+    let env = StateMachineBuilder::new().build();
     env.set_checkpoints_enabled(false);
 
     let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
@@ -6704,9 +6698,7 @@ fn restore_stable_memory_from_snapshot() {
 
 #[test]
 fn restore_binary_from_snapshot() {
-    let env = StateMachineBuilder::new()
-        .with_canister_snapshots(true)
-        .build();
+    let env = StateMachineBuilder::new().build();
     env.set_checkpoints_enabled(false);
 
     let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
@@ -6769,9 +6761,7 @@ fn restore_binary_from_snapshot() {
 
 #[test]
 fn restore_chunk_store_from_snapshot() {
-    let env = StateMachineBuilder::new()
-        .with_canister_snapshots(true)
-        .build();
+    let env = StateMachineBuilder::new().build();
     env.set_checkpoints_enabled(false);
 
     let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);

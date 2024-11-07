@@ -2,7 +2,8 @@ use super::*;
 use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
     pb::v1::manage_neuron::{SetDissolveTimestamp, StartDissolving},
-    temporarily_disable_private_neuron_enforcement, temporarily_enable_private_neuron_enforcement,
+    temporarily_disable_private_neuron_enforcement, temporarily_disable_voting_power_adjustment,
+    temporarily_enable_private_neuron_enforcement, temporarily_enable_voting_power_adjustment,
 };
 use ic_cdk::println;
 
@@ -537,4 +538,214 @@ fn test_visibility_when_converting_neuron_to_neuron_info_and_neuron_proto() {
         let neuron_proto = NeuronProto::from(neuron.clone());
         assert_eq!(neuron_proto.visibility, Some(Visibility::Public as i32),);
     }
+}
+
+#[test]
+fn test_adjust_voting_power_enabled() {
+    let _restore_on_drop = temporarily_enable_voting_power_adjustment();
+
+    let principal_id = PrincipalId::new_user_test_id(42);
+    let created_timestamp_seconds = 1729791574;
+
+    let neuron = NeuronBuilder::new(
+        NeuronId { id: 42 },
+        Subaccount::try_from(vec![42u8; 32].as_slice()).unwrap(),
+        principal_id,
+        DissolveStateAndAge::NotDissolving {
+            dissolve_delay_seconds: 12 * ONE_MONTH_SECONDS,
+            aging_since_timestamp_seconds: created_timestamp_seconds + 42,
+        },
+        created_timestamp_seconds, // created
+    )
+    .with_cached_neuron_stake_e8s(100 * E8)
+    .build();
+    let original_potential_voting_power = neuron.potential_voting_power(created_timestamp_seconds);
+    assert!(original_potential_voting_power > 0);
+
+    // At first, there is no difference between deciding and potential voting
+    // power. The neuron is considered "current".
+    assert_eq!(
+        neuron.deciding_voting_power(created_timestamp_seconds),
+        original_potential_voting_power,
+    );
+
+    // In fact, for the next 6 months, the two remain the same.
+    let mut previous_potential_voting_power = original_potential_voting_power;
+    for months in 1..=6 {
+        let now_seconds = created_timestamp_seconds + months * ONE_MONTH_SECONDS;
+        let current_potential_voting_power = neuron.potential_voting_power(now_seconds);
+
+        assert_eq!(
+            neuron.deciding_voting_power(now_seconds),
+            current_potential_voting_power,
+        );
+
+        // This is not verifying the code under test, but is here just as a
+        // sanity check. The reason we expect potential voting power to keep
+        // rising is because of age bonus.
+        assert!(
+            current_potential_voting_power > previous_potential_voting_power,
+            "at {} months: {} vs. {}",
+            months,
+            original_potential_voting_power,
+            previous_potential_voting_power,
+        );
+
+        previous_potential_voting_power = current_potential_voting_power;
+    }
+
+    // Now, we are in the adjustment period where the neuron has not been
+    // updated in "too long" of a time, and as a result, it is now experiencing
+    // voting power reduction penalties.
+    for months in [0.0, 0.01, 0.1, 0.25, 0.5, 0.75, 0.9, 0.99] {
+        let now_seconds =
+            created_timestamp_seconds + ((6.0 + months) * ONE_MONTH_SECONDS as f64) as u64;
+
+        fn relative_error(observed_value: f64, expected_value: f64) -> f64 {
+            assert!(expected_value.abs() > 1e-9);
+            (observed_value - expected_value) / expected_value
+        }
+
+        let observed = neuron.deciding_voting_power(now_seconds);
+        let current_potential_voting_power = neuron.potential_voting_power(now_seconds);
+        let expected = (1.0 - months) * current_potential_voting_power as f64;
+        let err = relative_error(
+            observed as f64,
+            // Expected value.
+            expected,
+        );
+        assert!(
+            err < 1e-6, // Relative error is less than 1 ppm (parts per million).
+            "at {} months: {} vs. {} ({:+0.}% off potential {})",
+            6.0 + months,
+            observed,
+            expected,
+            100.0 * err,
+            current_potential_voting_power,
+        );
+    }
+
+    // Starting at 7 months of no voting power refresh, deciding voting power
+    // goes all the way down to 0.
+    for months in 7..=10 {
+        let now_seconds = created_timestamp_seconds + months * ONE_MONTH_SECONDS;
+        assert_eq!(neuron.deciding_voting_power(now_seconds), 0,);
+    }
+}
+
+#[test]
+fn test_adjust_voting_power_disabled() {
+    let _restore_on_drop = temporarily_disable_voting_power_adjustment();
+
+    let principal_id = PrincipalId::new_user_test_id(42);
+    let created_timestamp_seconds = 1729791574;
+
+    let neuron = NeuronBuilder::new(
+        NeuronId { id: 42 },
+        Subaccount::try_from(vec![42u8; 32].as_slice()).unwrap(),
+        principal_id,
+        DissolveStateAndAge::NotDissolving {
+            dissolve_delay_seconds: 12 * ONE_MONTH_SECONDS,
+            aging_since_timestamp_seconds: created_timestamp_seconds + 42,
+        },
+        created_timestamp_seconds, // created
+    )
+    .with_cached_neuron_stake_e8s(100 * E8)
+    .build();
+    let original_potential_voting_power = neuron.potential_voting_power(created_timestamp_seconds);
+    assert!(original_potential_voting_power > 0);
+
+    // At all times, deciding voting power is exactly the same as potential
+    // voting power, because adjustment is disabled.
+    for months in [
+        0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 6.001, 6.1, 6.25, 6.5, 6.75, 6.9, 6.999, 7.0, 7.001,
+        7.1, 7.25, 7.5, 8.0, 9.0, 10.0,
+    ] {
+        let now_seconds = created_timestamp_seconds + (months * ONE_MONTH_SECONDS as f64) as u64;
+        let current_potential_voting_power = neuron.potential_voting_power(now_seconds);
+
+        assert_eq!(
+            neuron.deciding_voting_power(now_seconds),
+            current_potential_voting_power,
+        );
+    }
+}
+
+#[test]
+fn test_total_potential_voting_power() {
+    let _restore_on_drop = temporarily_enable_voting_power_adjustment();
+    const CREATED_TIMESTAMP_SECONDS: u64 = 1729791574;
+
+    fn new_neuron(i: u64) -> Neuron {
+        let controller = PrincipalId::new_user_test_id(i);
+        let d = i / 10_u64.pow(i.ilog10());
+
+        NeuronBuilder::new(
+            NeuronId { id: i },
+            Subaccount::try_from([d as u8; 32].as_slice()).unwrap(),
+            controller,
+            DissolveStateAndAge::NotDissolving {
+                dissolve_delay_seconds: 12 * ONE_MONTH_SECONDS,
+                aging_since_timestamp_seconds: CREATED_TIMESTAMP_SECONDS + 42,
+            },
+            CREATED_TIMESTAMP_SECONDS,
+        )
+        .with_cached_neuron_stake_e8s(i * E8)
+        .build()
+    }
+
+    let neurons = vec![new_neuron(10), new_neuron(200), new_neuron(3_000)];
+
+    let now_seconds = CREATED_TIMESTAMP_SECONDS + 999;
+    let expected = neurons
+        .iter()
+        .map(|neuron| neuron.potential_voting_power(now_seconds))
+        .sum();
+    assert_eq!(
+        total_potential_voting_power(
+            neurons.iter(),
+            now_seconds,
+            &Action::Motion(Default::default()),
+            7,
+        ),
+        Ok(expected),
+    );
+
+    // Similar to previous; this time though, Action::ManageNeuron, the weird
+    // special case.
+    assert_eq!(
+        total_potential_voting_power(
+            neurons.iter(),
+            now_seconds,
+            &Action::ManageNeuron(Default::default()),
+            7,
+        ),
+        Ok(7),
+    );
+
+    // Not affected by refresh.
+    let now_seconds = CREATED_TIMESTAMP_SECONDS + 20 * ONE_YEAR_SECONDS;
+    let expected = neurons
+        .iter()
+        .map(|neuron| neuron.potential_voting_power(now_seconds))
+        .sum();
+    assert_eq!(
+        total_potential_voting_power(
+            neurons.iter(),
+            now_seconds,
+            &Action::Motion(Default::default()),
+            7,
+        ),
+        Ok(expected),
+    );
+    let total_deciding_voting_power: u64 = neurons
+        .iter()
+        .map(|neuron| neuron.deciding_voting_power(now_seconds))
+        .sum();
+    assert!(
+        total_deciding_voting_power < expected,
+        "{} vs. {}",
+        total_deciding_voting_power,
+        expected,
+    );
 }

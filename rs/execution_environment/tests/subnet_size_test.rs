@@ -316,6 +316,8 @@ fn apply_filter(
                 initial_config.update_message_execution_fee;
             filtered_config.ten_update_instructions_execution_fee =
                 initial_config.ten_update_instructions_execution_fee;
+            filtered_config.ten_update_instructions_execution_fee_wasm64 =
+                initial_config.ten_update_instructions_execution_fee_wasm64;
             filtered_config
         }
         KeepFeesFilter::IngressInduction => {
@@ -713,6 +715,8 @@ fn trillion_cycles(value: f64) -> Cycles {
 }
 
 fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountManagerConfig {
+    let ten_update_instructions_execution_fee_in_cycles = 10;
+    const WASM64_INSTRUCTION_COST_MULTIPLIER: u128 = 2;
     match subnet_type {
         SubnetType::System => CyclesAccountManagerConfig {
             reference_subnet_size: DEFAULT_REFERENCE_SUBNET_SIZE,
@@ -720,6 +724,7 @@ fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountMa
             compute_percent_allocated_per_second_fee: Cycles::new(0),
             update_message_execution_fee: Cycles::new(0),
             ten_update_instructions_execution_fee: Cycles::new(0),
+            ten_update_instructions_execution_fee_wasm64: Cycles::new(0),
             xnet_call_fee: Cycles::new(0),
             xnet_byte_transmission_fee: Cycles::new(0),
             ingress_message_reception_fee: Cycles::new(0),
@@ -743,14 +748,20 @@ fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountMa
         },
         SubnetType::Application | SubnetType::VerifiedApplication => CyclesAccountManagerConfig {
             reference_subnet_size: DEFAULT_REFERENCE_SUBNET_SIZE,
-            canister_creation_fee: Cycles::new(100_000_000_000),
+            canister_creation_fee: Cycles::new(500_000_000_000),
             compute_percent_allocated_per_second_fee: Cycles::new(10_000_000),
 
             // The following fields are set based on a thought experiment where
             // we estimated how many resources a representative benchmark on a
             // verified subnet is using.
             update_message_execution_fee: Cycles::new(5_000_000),
-            ten_update_instructions_execution_fee: Cycles::new(10),
+            ten_update_instructions_execution_fee: Cycles::new(
+                ten_update_instructions_execution_fee_in_cycles,
+            ),
+            ten_update_instructions_execution_fee_wasm64: Cycles::new(
+                WASM64_INSTRUCTION_COST_MULTIPLIER
+                    * ten_update_instructions_execution_fee_in_cycles,
+            ),
             xnet_call_fee: Cycles::new(260_000),
             xnet_byte_transmission_fee: Cycles::new(1_000),
             ingress_message_reception_fee: Cycles::new(1_200_000),

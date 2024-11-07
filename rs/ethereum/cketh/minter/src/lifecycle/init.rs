@@ -2,7 +2,7 @@ use crate::endpoints::CandidBlockTag;
 use crate::eth_rpc::BlockTag;
 use crate::lifecycle::EthereumNetwork;
 use crate::numeric::{BlockNumber, TransactionNonce, Wei};
-use crate::state::eth_logs_scraping::LogScrapingState;
+use crate::state::eth_logs_scraping::{LogScrapingId, LogScrapings};
 use crate::state::transactions::EthTransactions;
 use crate::state::{InvalidStateError, State};
 use candid::types::number::Nat;
@@ -70,15 +70,14 @@ impl TryFrom<InitArg> for State {
                         "ERROR: last_scraped_block_number is at maximum value".to_string(),
                     )
                 })?;
-        let mut eth_log_scraping = LogScrapingState::new(last_scraped_block_number);
+        let mut log_scrapings = LogScrapings::new(last_scraped_block_number);
         if let Some(contract_address) = eth_helper_contract_address {
-            eth_log_scraping
-                .set_contract_address(contract_address)
+            log_scrapings
+                .set_contract_address(LogScrapingId::EthDepositWithoutSubaccount, contract_address)
                 .map_err(|e| {
                     InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {:?}", e))
                 })?;
         }
-        let erc20_log_scraping = LogScrapingState::new(last_scraped_block_number);
         let state = Self {
             ethereum_network,
             ecdsa_key_name,
@@ -102,8 +101,7 @@ impl TryFrom<InitArg> for State {
             evm_rpc_id: None,
             ckerc20_tokens: Default::default(),
             erc20_balances: Default::default(),
-            eth_log_scraping,
-            erc20_log_scraping,
+            log_scrapings,
         };
         state.validate_config()?;
         Ok(state)
