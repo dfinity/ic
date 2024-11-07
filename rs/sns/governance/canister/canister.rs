@@ -614,12 +614,13 @@ ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method
 pub fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
         "/journal" => {
-            let journal = governance()
+            let journal_entries = &governance()
                 .proto
                 .upgrade_journal
                 .as_ref()
-                .expect("The upgrade journal is empty for this SNS.");
-            serve_journal(journal)
+                .expect("The upgrade journal is not initialized for this SNS.")
+                .entries;
+            serve_journal(journal_entries)
         }
         "/metrics" => serve_metrics(encode_metrics),
         "/logs" => serve_logs_v2(request, &INFO, &ERROR),
