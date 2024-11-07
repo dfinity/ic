@@ -97,8 +97,7 @@ pub struct ThresholdSigDataStoreImpl {
     // VecDeque used as queue: `push_back` to add, `pop_front` to remove
     low_threshold_dkg_id_insertion_order: VecDeque<NiDkgId>,
     high_threshold_dkg_id_insertion_order: VecDeque<NiDkgId>,
-    high_threshold_for_key_id_dkg_id_insertion_order:
-        BTreeMap<MasterPublicKeyId, VecDeque<NiDkgId>>,
+    high_threshold_for_key_dkg_id_insertion_order: BTreeMap<MasterPublicKeyId, VecDeque<NiDkgId>>,
 }
 
 #[derive(Default)]
@@ -140,7 +139,7 @@ impl ThresholdSigDataStoreImpl {
             high_threshold_dkg_id_insertion_order: VecDeque::with_capacity(
                 max_num_of_dkg_ids_per_tag_or_key,
             ),
-            high_threshold_for_key_id_dkg_id_insertion_order: BTreeMap::new(),
+            high_threshold_for_key_dkg_id_insertion_order: BTreeMap::new(),
         }
     }
 
@@ -160,7 +159,7 @@ impl ThresholdSigDataStoreImpl {
                 }
                 NiDkgTag::HighThresholdForKey(master_public_key_id) => {
                     match self
-                        .high_threshold_for_key_id_dkg_id_insertion_order
+                        .high_threshold_for_key_dkg_id_insertion_order
                         .get_mut(master_public_key_id)
                     {
                         Some(insertion_order) => insertion_order.push_back(dkg_id.clone()),
@@ -168,7 +167,7 @@ impl ThresholdSigDataStoreImpl {
                             let mut buf =
                                 VecDeque::with_capacity(self.max_num_of_dkg_ids_per_tag_or_key);
                             buf.push_back(dkg_id.clone());
-                            self.high_threshold_for_key_id_dkg_id_insertion_order
+                            self.high_threshold_for_key_dkg_id_insertion_order
                                 .insert(master_public_key_id.clone(), buf);
                         }
                     }
@@ -185,7 +184,7 @@ impl ThresholdSigDataStoreImpl {
             NiDkgTag::LowThreshold => Some(&mut self.low_threshold_dkg_id_insertion_order),
             NiDkgTag::HighThreshold => Some(&mut self.high_threshold_dkg_id_insertion_order),
             NiDkgTag::HighThresholdForKey(master_public_key_id) => self
-                .high_threshold_for_key_id_dkg_id_insertion_order
+                .high_threshold_for_key_dkg_id_insertion_order
                 .get_mut(master_public_key_id),
         };
         if let Some(insertion_order) = dkg_id_insertion_order {
