@@ -4,8 +4,8 @@ use crate::common::rest::{
     HttpGatewayConfig, HttpGatewayInfo, HttpsConfig, InstanceConfig, InstanceId,
     MockCanisterHttpResponse, RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId,
     RawCanisterResult, RawCycles, RawEffectivePrincipal, RawMessageId, RawMockCanisterHttpResponse,
-    RawSetStableMemory, RawStableMemory, RawSubmitIngressResult, RawSubnetId, RawTime,
-    RawVerifyCanisterSigArg, RawWasmResult, SubnetId, Topology,
+    RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubmitIngressResult, RawSubnetId,
+    RawTime, RawVerifyCanisterSigArg, RawWasmResult, SubnetId, Topology,
 };
 use crate::management_canister::{
     CanisterId, CanisterIdRecord, CanisterInstallMode, CanisterInstallModeUpgradeInner,
@@ -454,6 +454,22 @@ impl PocketIc {
     pub async fn advance_time(&self, duration: Duration) {
         let now = self.get_time().await;
         self.set_time(now + duration).await;
+    }
+
+    /// Get the controllers of a canister.
+    /// Panics if the canister does not exist.
+    #[instrument(ret, skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string()))]
+    pub async fn get_controllers(&self, canister_id: CanisterId) -> Vec<Principal> {
+        let endpoint = "read/get_controllers";
+        let result: Vec<RawPrincipalId> = self
+            .post(
+                endpoint,
+                RawCanisterId {
+                    canister_id: canister_id.as_slice().to_vec(),
+                },
+            )
+            .await;
+        result.into_iter().map(|p| p.into()).collect()
     }
 
     /// Get the current cycles balance of a canister.

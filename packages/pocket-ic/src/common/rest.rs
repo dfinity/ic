@@ -242,6 +242,28 @@ pub struct RawCycles {
 }
 
 #[derive(Clone, Serialize, Eq, PartialEq, Ord, PartialOrd, Deserialize, Debug, JsonSchema)]
+pub struct RawPrincipalId {
+    // raw bytes of the principal
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
+    pub principal_id: Vec<u8>,
+}
+
+impl From<Principal> for RawPrincipalId {
+    fn from(principal: Principal) -> Self {
+        Self {
+            principal_id: principal.as_slice().to_vec(),
+        }
+    }
+}
+
+impl From<RawPrincipalId> for Principal {
+    fn from(raw_principal_id: RawPrincipalId) -> Self {
+        Principal::from_slice(&raw_principal_id.principal_id)
+    }
+}
+
+#[derive(Clone, Serialize, Eq, PartialEq, Ord, PartialOrd, Deserialize, Debug, JsonSchema)]
 pub struct RawCanisterId {
     // raw bytes of the principal
     #[serde(deserialize_with = "base64::deserialize")]
