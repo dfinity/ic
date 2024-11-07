@@ -3,6 +3,7 @@ use ic_error_types::{ErrorCode, RejectCode};
 use ic_interfaces::execution_environment::{
     IngressHistoryError, IngressHistoryReader, IngressHistoryWriter,
 };
+use ic_interfaces::time_source::system_time_now;
 use ic_interfaces_state_manager::{StateManagerError, StateReader};
 use ic_logger::{fatal, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
@@ -82,6 +83,8 @@ pub struct IngressHistoryWriterImpl {
     // Wrapped in a RwLock for interior mutability, otherwise &self in methods
     // has to be &mut self.
     received_time: RwLock<HashMap<MessageId, TransitionStartTime>>,
+    message_state_transition_received_duration_seconds: Histogram,
+    message_state_transition_processing_duration_seconds: Histogram,
     message_state_transition_completed_ic_duration_seconds: Histogram,
     message_state_transition_completed_wall_clock_duration_seconds: Histogram,
     message_state_transition_failed_ic_duration_seconds: HistogramVec,
@@ -102,6 +105,18 @@ impl IngressHistoryWriterImpl {
             config,
             log,
             received_time: RwLock::new(HashMap::new()),
+            message_state_transition_received_duration_seconds: metrics_registry.histogram(
+                "message_state_transition_received_duration_seconds",
+                "Time taken by messages to get from block maker into ingress queue",
+                // 10ms, 20ms, 50ms, ..., 100s, 200s, 500s
+                decimal_buckets(-2,2),
+            ),
+            message_state_transition_processing_duration_seconds: metrics_registry.histogram(
+                "message_state_transition_processing_duration_seconds",
+                "Time taken by messages to get from block maker to execution",
+                // 10ms, 20ms, 50ms, ..., 100s, 200s, 500s
+                decimal_buckets(-2,2),
+            ),
             message_state_transition_completed_ic_duration_seconds: metrics_registry.histogram(
                 "message_state_transition_completed_ic_duration_seconds",
                 "The IC time taken for a message to transition from the Received state to Completed state",
@@ -159,8 +174,50 @@ impl IngressHistoryWriter for IngressHistoryWriterImpl {
                 status
             );
         }
+
         use IngressState::*;
         use IngressStatus::*;
+
+        // Computes the time elapsed between the message's block time (which should be a
+        // close approximation of the wall time when the message was included into a
+        // block) and the current wall time.
+        let seconds_since_block_made = |message_id| {
+            let received_time = self.received_time.read().unwrap();
+            received_time.get(message_id).map(|timer| {
+                system_time_now()
+                    .saturating_duration_since(timer.ic_time)
+                    .as_secs_f64()
+            })
+        };
+        match (&current_status, &status) {
+            // Newly received message: observe its induction latency.
+            (
+                Unknown,
+                Known {
+                    state: Received, ..
+                },
+            ) => {
+                seconds_since_block_made(&message_id).map(|seconds| {
+                    self.message_state_transition_received_duration_seconds
+                        .observe(seconds);
+                });
+            }
+
+            // Message popped from ingress queue: observe its processing latency.
+            (
+                Known {
+                    state: Received, ..
+                },
+                Known { state, .. },
+            ) if state != &Received => {
+                seconds_since_block_made(&message_id).map(|seconds| {
+                    self.message_state_transition_processing_duration_seconds
+                        .observe(seconds);
+                });
+            }
+            _ => {}
+        }
+
         match &status {
             Known {
                 state: Received, ..
