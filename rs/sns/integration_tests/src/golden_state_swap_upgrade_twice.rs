@@ -17,7 +17,9 @@ use std::str::FromStr;
 /// in particular, the last time timers were initialized, reset, and executed. Or course, this is
 /// time-sensitive and upgrade-sensitive.
 fn redact_timers(swap_state: &mut GetStateResponse) {
-    swap_state.swap.as_mut().map(|swap| swap.timers = None);
+    if let Some(swap) = swap_state.swap.as_mut() {
+        swap.timers = None
+    }
 }
 
 fn get_state(
