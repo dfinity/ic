@@ -11,15 +11,15 @@ use ic_types::{
         common::{PreSignatureInCreation, PreSignatureRef},
         ecdsa::{PreSignatureQuadrupleRef, QuadrupleInCreation},
         schnorr::{PreSignatureTranscriptRef, TranscriptInCreation},
-        HasMasterPublicKeyId, IDkgUIDGenerator, PreSigId, TranscriptAttributes,
-        UnmaskedTranscriptWithAttributes,
+        HasMasterPublicKeyId, IDkgMasterPublicKeyId, IDkgUIDGenerator, PreSigId,
+        TranscriptAttributes, UnmaskedTranscriptWithAttributes,
     },
     crypto::canister_threshold_sig::idkg::IDkgTranscript,
     messages::CallbackId,
     Height, NodeId, RegistryVersion,
 };
-
 use std::collections::{BTreeMap, BTreeSet};
+use std::ops::Deref;
 
 /// Update the pre-signatures in the payload by:
 /// - making new configs when pre-conditions are met;
@@ -313,20 +313,24 @@ pub(super) fn purge_old_key_pre_signatures(
 pub(super) fn make_new_pre_signatures_if_needed(
     chain_key_config: &ChainKeyConfig,
     idkg_payload: &mut idkg::IDkgPayload,
-    matched_pre_signatures_per_key_id: &BTreeMap<MasterPublicKeyId, usize>,
+    matched_pre_signatures_per_key_id: &BTreeMap<IDkgMasterPublicKeyId, usize>,
 ) {
     for (key_id, key_transcript) in &idkg_payload.key_transcripts {
         let Some(key_transcript) = key_transcript.current.as_ref() else {
             continue;
         };
 
+        let Some(key_id) = IDkgMasterPublicKeyId::try_from(key_id.clone()).ok() else {
+            continue;
+        };
+
         let matched_pre_signature = matched_pre_signatures_per_key_id
-            .get(key_id)
+            .get(&key_id)
             .copied()
             .unwrap_or_default();
 
         let unassigned_pre_signatures = idkg_payload
-            .iter_pre_signature_ids(key_id)
+            .iter_pre_signature_ids(&key_id)
             .count()
             .saturating_sub(matched_pre_signature);
 
@@ -335,7 +339,7 @@ pub(super) fn make_new_pre_signatures_if_needed(
             &node_ids,
             key_transcript.registry_version(),
             chain_key_config,
-            key_id,
+            &key_id,
             &mut idkg_payload.uid_generator,
             unassigned_pre_signatures,
         );
@@ -350,7 +354,7 @@ fn make_new_pre_signatures_if_needed_helper(
     subnet_nodes: &[NodeId],
     registry_version: RegistryVersion,
     chain_key_config: &ChainKeyConfig,
-    key_id: &MasterPublicKeyId,
+    key_id: &IDkgMasterPublicKeyId,
     uid_generator: &mut IDkgUIDGenerator,
     unassigned_pre_signatures: usize,
 ) -> BTreeMap<PreSigId, PreSignatureInCreation> {
@@ -365,7 +369,7 @@ fn make_new_pre_signatures_if_needed_helper(
                 MasterPublicKeyId::Ecdsa(_) | MasterPublicKeyId::Schnorr(_)
             )
         })
-        .find(|key_config| &key_config.key_id == key_id)
+        .find(|key_config| &key_config.key_id == key_id.deref())
         .map(|key_config| key_config.pre_signatures_to_create_in_advance as usize)
     else {
         return new_pre_signatures;
@@ -376,7 +380,7 @@ fn make_new_pre_signatures_if_needed_helper(
     }
 
     for _ in 0..(pre_signatures_to_create - unassigned_pre_signatures) {
-        match key_id {
+        match key_id.deref() {
             MasterPublicKeyId::Ecdsa(ecdsa_key_id) => {
                 let kappa_config = new_random_unmasked_config(
                     key_id,
@@ -418,7 +422,7 @@ fn make_new_pre_signatures_if_needed_helper(
 /// Create a new masked random transcript config and advance the
 /// next_unused_transcript_id by one.
 fn new_random_config(
-    key_id: &MasterPublicKeyId,
+    key_id: &IDkgMasterPublicKeyId,
     subnet_nodes: &[NodeId],
     summary_registry_version: RegistryVersion,
     uid_generator: &mut idkg::IDkgUIDGenerator,
@@ -439,7 +443,7 @@ fn new_random_config(
 /// Create a new random unmasked transcript config and advance the
 /// next_unused_transcript_id by one.
 pub fn new_random_unmasked_config(
-    key_id: &MasterPublicKeyId,
+    key_id: &IDkgMasterPublicKeyId,
     subnet_nodes: &[NodeId],
     summary_registry_version: RegistryVersion,
     uid_generator: &mut idkg::IDkgUIDGenerator,
@@ -602,10 +606,10 @@ pub(super) mod tests {
         let mut uid_generator = IDkgUIDGenerator::new(subnet_id, height);
         let pre_signatures_to_create_in_advance = 4;
 
-        let mut create_pre_signatures = |key_id: &MasterPublicKeyId, unassigned| {
+        let mut create_pre_signatures = |key_id: &IDkgMasterPublicKeyId, unassigned| {
             let chain_key_config = ChainKeyConfig {
                 key_configs: vec![KeyConfig {
-                    key_id: key_id.clone(),
+                    key_id: key_id.clone().into(),
                     pre_signatures_to_create_in_advance,
                     max_queue_size: 1,
                 }],
@@ -694,7 +698,7 @@ pub(super) mod tests {
         make_new_pre_signatures_if_needed(
             &chain_key_config,
             &mut idkg_payload,
-            &BTreeMap::from([(key_id.clone().into(), pre_signature_already_matched)]),
+            &BTreeMap::from([(key_id.clone(), pre_signature_already_matched)]),
         );
 
         assert_eq!(
@@ -748,7 +752,9 @@ pub(super) mod tests {
         for algorithm in SchnorrAlgorithm::iter() {
             let key_id = fake_schnorr_key_id(algorithm);
             let blinder_config = new_random_unmasked_config(
-                &MasterPublicKeyId::Schnorr(key_id.clone()),
+                &MasterPublicKeyId::Schnorr(key_id.clone())
+                    .try_into()
+                    .unwrap(),
                 &receivers.get().iter().cloned().collect::<Vec<_>>(),
                 env.newest_registry_version,
                 &mut uid_generator,

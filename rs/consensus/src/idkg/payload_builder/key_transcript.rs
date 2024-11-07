@@ -126,7 +126,7 @@ pub(super) fn update_next_key_transcript(
                     dealers_set,
                     receivers_set,
                     registry_version,
-                    algorithm_for_key_id(&key_transcript.key_id()),
+                    algorithm_for_key_id(&key_transcript.key_id().try_into().unwrap()),
                 ),
             );
         }

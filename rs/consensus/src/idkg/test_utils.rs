@@ -401,7 +401,7 @@ impl TestIDkgBlockReader {
     }
 
     pub(crate) fn for_complainer_test(
-        key_id: &MasterPublicKeyId,
+        key_id: &IDkgMasterPublicKeyId,
         height: Height,
         active_refs: Vec<TranscriptRef>,
     ) -> Self {
@@ -879,7 +879,7 @@ pub(crate) fn create_transcript_id_with_height(id: u64, height: Height) -> IDkgT
 
 // Creates a test transcript
 pub(crate) fn create_transcript(
-    key_id: &MasterPublicKeyId,
+    key_id: &IDkgMasterPublicKeyId,
     transcript_id: IDkgTranscriptId,
     receiver_list: &[NodeId],
 ) -> IDkgTranscript {
@@ -900,7 +900,7 @@ pub(crate) fn create_transcript(
 
 /// Creates a test transcript param with registry version 0
 pub(crate) fn create_transcript_param(
-    key_id: &MasterPublicKeyId,
+    key_id: &IDkgMasterPublicKeyId,
     transcript_id: IDkgTranscriptId,
     dealer_list: &[NodeId],
     receiver_list: &[NodeId],
@@ -916,7 +916,7 @@ pub(crate) fn create_transcript_param(
 
 /// Creates a test transcript param for a specific registry version
 pub(crate) fn create_transcript_param_with_registry_version(
-    key_id: &MasterPublicKeyId,
+    key_id: &IDkgMasterPublicKeyId,
     transcript_id: IDkgTranscriptId,
     dealer_list: &[NodeId],
     receiver_list: &[NodeId],
@@ -1069,7 +1069,7 @@ pub(crate) fn create_dealing(
 
 // Creates a test signed dealing with internal payload
 pub(crate) fn create_dealing_with_payload<R: Rng + CryptoRng>(
-    key_id: &MasterPublicKeyId,
+    key_id: &IDkgMasterPublicKeyId,
     transcript_id: IDkgTranscriptId,
     dealer_id: NodeId,
     rng: &mut R,
@@ -1178,7 +1178,7 @@ pub(crate) fn create_ecdsa_sig_inputs_with_args(
     );
     assert_eq!(
         algorithm_id,
-        algorithm_for_key_id(&MasterPublicKeyId::Ecdsa(key_id.clone()))
+        algorithm_for_key_id(&MasterPublicKeyId::Ecdsa(key_id.clone()).try_into().unwrap())
     );
     let kappa_unmasked_id = transcript_id(20);
     let lambda_masked_id = transcript_id(30);
@@ -1294,7 +1294,11 @@ pub(crate) fn create_schnorr_sig_inputs_with_args(
     );
     assert_eq!(
         algorithm_id,
-        algorithm_for_key_id(&MasterPublicKeyId::Schnorr(key_id.clone()))
+        algorithm_for_key_id(
+            &MasterPublicKeyId::Schnorr(key_id.clone())
+                .try_into()
+                .unwrap()
+        )
     );
     let blinder_unmasked_id = transcript_id(10);
     let mut idkg_transcripts = BTreeMap::new();

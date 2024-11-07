@@ -610,7 +610,8 @@ pub(crate) fn create_data_payload_helper_2(
 
     // We count the number of pre-signatures in the payload that were already matched,
     // such that they can be replenished.
-    let mut matched_pre_signatures_per_key_id = BTreeMap::new();
+    let mut matched_pre_signatures_per_key_id: BTreeMap<IDkgMasterPublicKeyId, usize> =
+        BTreeMap::new();
 
     for context in all_signing_requests.values() {
         if context
@@ -619,7 +620,7 @@ pub(crate) fn create_data_payload_helper_2(
             .is_some_and(|(pid, _)| idkg_payload.available_pre_signatures.contains_key(pid))
         {
             *matched_pre_signatures_per_key_id
-                .entry(context.key_id())
+                .entry(context.key_id().try_into().unwrap())
                 .or_insert(0) += 1;
         }
     }
@@ -1333,7 +1334,7 @@ mod tests {
                 assert_eq!(request.key_id(), key_id.clone().into());
                 assert_eq!(
                     reshare_params.as_ref().algorithm_id,
-                    algorithm_for_key_id(&key_id.clone().into())
+                    algorithm_for_key_id(&key_id.clone())
                 );
                 for transcript_ref in reshare_params.as_ref().get_refs() {
                     assert_ne!(transcript_ref.height, new_summary_height);
@@ -1385,7 +1386,7 @@ mod tests {
                 assert_eq!(request.key_id(), key_id.clone().into());
                 assert_eq!(
                     reshare_params.as_ref().algorithm_id,
-                    algorithm_for_key_id(&key_id.clone().into())
+                    algorithm_for_key_id(&key_id.clone())
                 );
                 for transcript_ref in reshare_params.as_ref().get_refs() {
                     assert_eq!(transcript_ref.height, new_summary_height);
