@@ -12,13 +12,15 @@ use lazy_static::lazy_static;
 use universal_canister::Ops;
 
 lazy_static! {
-    /// The WASM of the Universal Canister. This is only used in tests.
-    pub static ref UNIVERSAL_CANISTER_WASM: Vec<u8> = {
-        let uc_wasm_path = std::env::var("UNIVERSAL_CANISTER_WASM_PATH")
-            .expect("UNIVERSAL_CANISTER_WASM_PATH not set");
-        std::fs::read(&uc_wasm_path)
-            .unwrap_or_else(|e| panic!("Could not read WASM from {:?}: {e:?}", uc_wasm_path))
-    };
+    /// The WASM of the Universal Canister.
+    pub static ref UNIVERSAL_CANISTER_WASM: Vec<u8> = get_universal_canister_wasm();
+}
+
+pub fn get_universal_canister_wasm() -> Vec<u8> {
+    let uc_wasm_path = std::env::var("UNIVERSAL_CANISTER_WASM_PATH")
+        .expect("UNIVERSAL_CANISTER_WASM_PATH not set");
+    std::fs::read(&uc_wasm_path)
+        .unwrap_or_else(|e| panic!("Could not read WASM from {:?}: {e:?}", uc_wasm_path))
 }
 
 pub fn get_universal_canister_wasm_sha256() -> [u8; 32] {
