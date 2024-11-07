@@ -416,7 +416,11 @@ impl CkEthSetup {
         amount: Nat,
         recipient: String,
     ) -> WithdrawalFlow {
-        let arg = WithdrawalArg { amount, recipient };
+        let arg = WithdrawalArg {
+            amount,
+            recipient,
+            from_subaccount: None,
+        };
         let message_id = self.env.send_ingress(
             PrincipalId::from(from),
             self.minter_id,
