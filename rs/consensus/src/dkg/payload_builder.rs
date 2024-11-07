@@ -1321,10 +1321,10 @@ mod tests {
                         match tag {
                             NiDkgTag::LowThreshold => 3,
                             NiDkgTag::HighThreshold => 5,
-                            /////////////////////////////////////////
-                            // TODO: check with Consensus team
+                            /////////////////////////////////////////////////////
+                            // TODO(CON-1413): extend this test once we can create local transcript configs for vetKeys that were requested by registry
+                            /////////////////////////////////////////////////////
                             NiDkgTag::HighThresholdForKey(_) => panic!("not applicable"),
-                            /////////////////////////////////////////
                         }
                     );
 
