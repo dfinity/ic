@@ -19,7 +19,10 @@ pub const EXPECTED_SNS_CREATION_FEE: u128 = 180 * ONE_TRILLION as u128;
 pub fn set_up_state_machine_with_nns() -> StateMachine {
     // We don't want the underlying warnings of the StateMachine
     state_test_helpers::reduce_state_machine_logging_unless_env_set();
-    let machine = StateMachineBuilder::new().with_current_time().build();
+    let machine = StateMachineBuilder::new()
+        .with_nns_subnet()
+        .with_current_time()
+        .build();
 
     let nns_init_payload = NnsInitPayloadsBuilder::new()
         .with_initial_invariant_compliant_mutations()

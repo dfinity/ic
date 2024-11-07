@@ -47,7 +47,10 @@ use icp_ledger::{
 use icrc_ledger_types::icrc1::account::Account;
 
 pub fn state_machine_builder_for_sns_tests() -> StateMachineBuilder {
-    StateMachineBuilder::new().with_current_time()
+    StateMachineBuilder::new()
+        .with_nns_subnet()
+        .with_sns_subnet()
+        .with_current_time()
 }
 
 #[derive(Copy, Clone, Debug)]
