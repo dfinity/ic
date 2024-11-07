@@ -1,5 +1,6 @@
-use std::{cell::RefCell, time::Duration};
+use std::{cell::RefCell, thread::LocalKey, time::Duration};
 
+use acl::{Authorize, Authorizer, WithAuthorize};
 use anonymization_interface::{
     self as ifc, InitArg, QueryResponse, RegisterResponse, SubmitResponse,
 };
@@ -12,11 +13,18 @@ use ic_stable_structures::{
     DefaultMemoryImpl, StableBTreeMap,
 };
 use lazy_static::lazy_static;
+use queue::{
+    Pair, Querier, Query, QueryError, Register, RegisterError, Registrator, Submit, SubmitError,
+    Submitter,
+};
 use registry::{Client, List};
 
+mod acl;
+mod queue;
 mod registry;
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
+type LocalRef<T> = &'static LocalKey<RefCell<T>>;
 
 type StableMap<K, V> = StableBTreeMap<K, V, Memory>;
 type StableSet<T> = StableMap<T, ()>;
@@ -27,6 +35,9 @@ thread_local! {
 }
 
 const MEMORY_ID_ALLOWED_PRINCIPALS: u8 = 0;
+const MEMORY_ID_PUBLIC_KEYS: u8 = 1;
+const MEMORY_ID_QUEUE: u8 = 2;
+const MEMORY_ID_ENCRYPTTED_VALUES: u8 = 3;
 
 lazy_static! {
     static ref API_BOUNDARY_NODES_LISTER: Box<dyn List> = {
@@ -43,6 +54,51 @@ thread_local! {
             MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(MEMORY_ID_ALLOWED_PRINCIPALS))),
         )
     );
+
+    static AUTHORIZER: RefCell<Box<dyn Authorize>> = RefCell::new({
+        let v = Authorizer::new(&ALLOWED_PRINCIPALS);
+        Box::new(v)
+    });
+}
+
+thread_local! {
+    static PUBLIC_KEYS: RefCell<StableMap<Principal, Vec<u8>>> = RefCell::new(
+        StableMap::init(
+            MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(MEMORY_ID_PUBLIC_KEYS))),
+        )
+    );
+
+    static QUEUE: RefCell<StableSet<Principal>> = RefCell::new(
+        StableMap::init(
+            MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(MEMORY_ID_QUEUE))),
+        )
+    );
+
+    static ENCRYPTED_VALUES: RefCell<StableMap<Principal, Vec<u8>>> = RefCell::new(
+        StableMap::init(
+            MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(MEMORY_ID_ENCRYPTTED_VALUES))),
+        )
+    );
+}
+
+thread_local! {
+    static REGISTRATOR: RefCell<Box<dyn Register>> = RefCell::new({
+        let v = Registrator::new(&PUBLIC_KEYS, &QUEUE, &ENCRYPTED_VALUES);
+        let v = WithAuthorize(v, &AUTHORIZER);
+        Box::new(v)
+    });
+
+    static QUERIER: RefCell<Box<dyn Query>> = RefCell::new({
+        let v = Querier::new(&ENCRYPTED_VALUES);
+        let v = WithAuthorize(v, &AUTHORIZER);
+        Box::new(v)
+    });
+
+    static SUBMITTER: RefCell<Box<dyn Submit>> = RefCell::new({
+        let v = Submitter::new(&QUEUE, &ENCRYPTED_VALUES);
+        let v = WithAuthorize(v, &AUTHORIZER);
+        Box::new(v)
+    });
 }
 
 // Timers
@@ -101,16 +157,39 @@ fn post_upgrade() {
 }
 
 #[ic_cdk::update]
-fn register(_pubkey: Vec<u8>) -> RegisterResponse {
-    unimplemented!()
+fn register(pubkey: Vec<u8>) -> RegisterResponse {
+    match REGISTRATOR.with(|v| v.borrow().register(&pubkey)) {
+        Ok(_) => RegisterResponse::Ok,
+        Err(err) => RegisterResponse::Err(match err {
+            RegisterError::Unauthorized => ifc::RegisterError::Unauthorized,
+            RegisterError::UnexpectedError(err) => {
+                ifc::RegisterError::UnexpectedError(err.to_string())
+            }
+        }),
+    }
 }
 
 #[ic_cdk::query]
 fn query() -> QueryResponse {
-    unimplemented!()
+    match QUERIER.with(|v| v.borrow().query()) {
+        Ok(v) => QueryResponse::Ok(v),
+        Err(err) => QueryResponse::Err(match err {
+            QueryError::Unauthorized => ifc::QueryError::Unauthorized,
+            QueryError::UnexpectedError(err) => ifc::QueryError::UnexpectedError(err.to_string()),
+        }),
+    }
 }
 
 #[ic_cdk::update]
-fn submit(_vs: Vec<ifc::Pair>) -> SubmitResponse {
-    unimplemented!()
+fn submit(vs: Vec<ifc::Pair>) -> SubmitResponse {
+    // Convert input
+    let vs: Vec<Pair> = vs.iter().map(Into::into).collect();
+
+    match SUBMITTER.with(|v| v.borrow().submit(&vs)) {
+        Ok(_) => SubmitResponse::Ok,
+        Err(err) => SubmitResponse::Err(match err {
+            SubmitError::Unauthorized => ifc::SubmitError::Unauthorized,
+            SubmitError::UnexpectedError(err) => ifc::SubmitError::UnexpectedError(err.to_string()),
+        }),
+    }
 }
