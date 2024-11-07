@@ -41,7 +41,7 @@ RUN cd /tmp/ && \
     echo "fbadb376afa7c883f87f70795700a8a200f7fd45412532cc1938a24d41078011  node_exporter-1.8.1.linux-amd64.tar.gz" > node_exporter.sha256 && \
     shasum -c node_exporter.sha256
 
-# Download 6.11 kernel and modules
+# Download >=6.11 kernel and modules
 RUN cd /tmp/ && \
     curl -L -O http://mirrors.kernel.org/ubuntu/pool/main/l/linux/linux-modules-6.11.0-8-generic_6.11.0-8.8_amd64.deb && \
     curl -L -O http://mirrors.kernel.org/ubuntu/pool/main/l/linux-signed/linux-image-6.11.0-8-generic_6.11.0-8.8_amd64.deb && \
@@ -91,15 +91,15 @@ RUN cd /tmp/ && \
     tar --strip-components=1 -C /usr/local/bin/ -zvxf node_exporter-1.8.1.linux-amd64.tar.gz node_exporter-1.8.1.linux-amd64/node_exporter && \
     rm /tmp/node_exporter-1.8.1.linux-amd64.tar.gz
 
-# Install 6.11 kernel
+# Install >=6.11 kernel
 COPY --from=download /tmp/linux-modules-6.11.0-8-generic_6.11.0-8.8_amd64.deb /tmp/linux-modules-6.11.0-8-generic_6.11.0-8.8_amd64.deb
 COPY --from=download /tmp/linux-image-6.11.0-8-generic_6.11.0-8.8_amd64.deb /tmp/linux-image-6.11.0-8-generic_6.11.0-8.8_amd64.deb
 COPY --from=download /tmp/linux-image-virtual-hwe-24.04_6.11.0-8.8_amd64.deb /tmp/linux-image-virtual-hwe-24.04_6.11.0-8.8_amd64.deb
 
-RUN cd /tmp/ && \
-    dpkg -i /tmp/linux-modules-6.11.0-8-generic_6.11.0-8.8_amd64.deb && \
-    dpkg -i /tmp/linux-image-6.11.0-8-generic_6.11.0-8.8_amd64.deb && \
-    dpkg -i /tmp/linux-image-virtual-hwe-24.04_6.11.0-8.8_amd64.deb && \
+RUN apt-get install -y --no-install-recommends \
+    /tmp/linux-modules-6.11.0-8-generic_6.11.0-8.8_amd64.deb \
+    /tmp/linux-image-6.11.0-8-generic_6.11.0-8.8_amd64.deb \
+    /tmp/linux-image-virtual-hwe-24.04_6.11.0-8.8_amd64.deb && \
     rm /tmp/linux-modules-6.11.0-8-generic_6.11.0-8.8_amd64.deb && \
     rm /tmp/linux-image-6.11.0-8-generic_6.11.0-8.8_amd64.deb && \
     rm /tmp/linux-image-virtual-hwe-24.04_6.11.0-8.8_amd64.deb

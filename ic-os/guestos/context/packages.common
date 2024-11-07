@@ -7,11 +7,6 @@
 # Need kernel to boot anything
 initramfs-tools
 
-# Resolve some dependencies manualy for 6.11
-kmod
-linux-base
-wireless-regdb
-
 # Need systemd for boot process
 systemd
 systemd-sysv
