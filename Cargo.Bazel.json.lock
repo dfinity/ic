@@ -1,5 +1,5 @@
 {
-  "checksum": "b196ba1920132c8d03ed28d5a8f9271c16d99641a78405d9d12c46a8b0069a90",
+  "checksum": "877d69ba52152602ee93a98f47a65a79a6c164cbedda792ae24196858429b7e4",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -201,11 +201,11 @@
               "target": "bytes"
             },
             {
-              "id": "futures-core 0.3.31",
+              "id": "futures-core 0.3.30",
               "target": "futures_core"
             },
             {
-              "id": "futures-sink 0.3.31",
+              "id": "futures-sink 0.3.30",
               "target": "futures_sink"
             },
             {
@@ -305,7 +305,7 @@
               "target": "ahash"
             },
             {
-              "id": "base64 0.22.1",
+              "id": "base64 0.22.0",
               "target": "base64"
             },
             {
@@ -333,7 +333,7 @@
               "target": "flate2"
             },
             {
-              "id": "futures-core 0.3.31",
+              "id": "futures-core 0.3.30",
               "target": "futures_core"
             },
             {
@@ -537,7 +537,7 @@
               "target": "regex_lite"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
@@ -597,7 +597,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures-core 0.3.31",
+              "id": "futures-core 0.3.30",
               "target": "futures_core"
             },
             {
@@ -676,11 +676,11 @@
               "target": "actix_utils"
             },
             {
-              "id": "futures-core 0.3.31",
+              "id": "futures-core 0.3.30",
               "target": "futures_core"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             },
             {
@@ -748,7 +748,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures-core 0.3.31",
+              "id": "futures-core 0.3.30",
               "target": "futures_core"
             },
             {
@@ -929,11 +929,11 @@
               "target": "encoding_rs"
             },
             {
-              "id": "futures-core 0.3.31",
+              "id": "futures-core 0.3.30",
               "target": "futures_core"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             },
             {
@@ -973,11 +973,11 @@
               "target": "regex_lite"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "serde_json"
             },
             {
@@ -997,7 +997,7 @@
               "target": "time"
             },
             {
-              "id": "url 2.5.3",
+              "id": "url 2.5.2",
               "target": "url"
             }
           ],
@@ -1080,7 +1080,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -1650,15 +1650,15 @@
               "target": "schemars"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "serde_json"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -2249,14 +2249,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "anyhow 1.0.93": {
+    "anyhow 1.0.72": {
       "name": "anyhow",
-      "version": "1.0.93",
+      "version": "1.0.72",
       "package_url": "https://github.com/dtolnay/anyhow",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/anyhow/1.0.93/download",
-          "sha256": "4c95c10ba0b00a02636238b814946408b1322d5ac4760326e6fb8ec956d85775"
+          "url": "https://static.crates.io/crates/anyhow/1.0.72/download",
+          "sha256": "3b13c32d80ecc7ab747b80c3784bce54ee8a7a0cc4fbda9bf4cda2cf6fe90854"
         }
       },
       "targets": [
@@ -2300,14 +2300,14 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.72",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.0.93"
+        "version": "1.0.72"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -2624,11 +2624,11 @@
               "target": "percent_encoding"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "serde_json"
             }
           ],
@@ -2722,11 +2722,11 @@
               "target": "quote"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -2888,7 +2888,7 @@
               "target": "rusticata_macros"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -2965,7 +2965,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             },
             {
@@ -3025,7 +3025,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -3073,11 +3073,11 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "serde_json"
             }
           ],
@@ -3281,7 +3281,7 @@
               "target": "event_listener_strategy"
             },
             {
-              "id": "futures-core 0.3.31",
+              "id": "futures-core 0.3.30",
               "target": "futures_core"
             },
             {
@@ -3354,7 +3354,7 @@
               "target": "flate2"
             },
             {
-              "id": "futures-core 0.3.31",
+              "id": "futures-core 0.3.30",
               "target": "futures_core"
             },
             {
@@ -3423,11 +3423,11 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.72",
               "target": "anyhow"
             },
             {
-              "id": "futures 0.3.31",
+              "id": "futures 0.3.30",
               "target": "futures"
             },
             {
@@ -3499,7 +3499,7 @@
               "target": "concurrent_queue"
             },
             {
-              "id": "futures-io 0.3.31",
+              "id": "futures-io 0.3.30",
               "target": "futures_io"
             },
             {
@@ -3705,7 +3705,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -3760,7 +3760,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures 0.3.31",
+              "id": "futures 0.3.30",
               "target": "futures"
             },
             {
@@ -3816,7 +3816,7 @@
         "deps": {
           "common": [
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -3868,7 +3868,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures-core 0.3.31",
+              "id": "futures-core 0.3.30",
               "target": "futures_core"
             },
             {
@@ -3936,7 +3936,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -4037,7 +4037,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -4100,7 +4100,7 @@
               "target": "async_net"
             },
             {
-              "id": "futures 0.3.31",
+              "id": "futures 0.3.30",
               "target": "futures"
             },
             {
@@ -4124,7 +4124,7 @@
               "target": "rustls_pki_types"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -4447,7 +4447,7 @@
               "target": "bytes"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             },
             {
@@ -4495,11 +4495,11 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "serde_json"
             },
             {
@@ -4605,7 +4605,7 @@
               "target": "bytes"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             },
             {
@@ -4720,7 +4720,7 @@
               "target": "bytes"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             },
             {
@@ -4748,7 +4748,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
@@ -4821,7 +4821,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -4874,7 +4874,7 @@
               "target": "axum"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             },
             {
@@ -4976,7 +4976,7 @@
               "target": "bytes"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             },
             {
@@ -5082,7 +5082,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures-core 0.3.31",
+              "id": "futures-core 0.3.30",
               "target": "futures_core"
             },
             {
@@ -5155,7 +5155,7 @@
               "target": "fastrand"
             },
             {
-              "id": "futures-core 0.3.31",
+              "id": "futures-core 0.3.30",
               "target": "futures_core"
             },
             {
@@ -5561,14 +5561,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "base64 0.22.1": {
+    "base64 0.22.0": {
       "name": "base64",
-      "version": "0.22.1",
+      "version": "0.22.0",
       "package_url": "https://github.com/marshallpierce/rust-base64",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/base64/0.22.1/download",
-          "sha256": "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
+          "url": "https://static.crates.io/crates/base64/0.22.0/download",
+          "sha256": "9475866fec1451be56a3c2400fd081ff546538961565ccb5b7142cbd22bc7a51"
         }
       },
       "targets": [
@@ -5599,7 +5599,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.22.1"
+        "version": "0.22.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -5739,7 +5739,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -5965,7 +5965,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -6082,7 +6082,7 @@
               "target": "shlex"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -6216,7 +6216,7 @@
               "target": "shlex"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -6636,7 +6636,7 @@
               "target": "secp256k1"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -6731,7 +6731,7 @@
               "target": "secp256k1"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde",
               "alias": "actual_serde"
             }
@@ -7150,7 +7150,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -7210,7 +7210,7 @@
               "alias": "internals"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -7329,11 +7329,11 @@
               "target": "log"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "serde_json"
             }
           ],
@@ -7384,11 +7384,11 @@
               "target": "bitcoin"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "serde_json"
             }
           ],
@@ -7447,7 +7447,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.72",
               "target": "anyhow"
             },
             {
@@ -7487,7 +7487,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.72",
               "target": "anyhow"
             }
           ],
@@ -7785,7 +7785,7 @@
               "target": "async_task"
             },
             {
-              "id": "futures-io 0.3.31",
+              "id": "futures-io 0.3.30",
               "target": "futures_io"
             },
             {
@@ -8579,7 +8579,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.72",
               "target": "anyhow"
             },
             {
@@ -8615,7 +8615,7 @@
               "target": "rustc_version"
             },
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "serde_json"
             },
             {
@@ -8682,7 +8682,7 @@
               "target": "semver"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -8749,7 +8749,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.72",
               "target": "anyhow"
             },
             {
@@ -8785,7 +8785,7 @@
               "target": "quote"
             },
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "serde_json"
             },
             {
@@ -8988,7 +8988,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
@@ -9269,7 +9269,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -9563,7 +9563,7 @@
               "target": "once_cell"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -9631,7 +9631,7 @@
               "target": "once_cell"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -9700,7 +9700,7 @@
               "target": "once_cell"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -9867,7 +9867,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -9971,7 +9971,7 @@
               "target": "semver"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
@@ -10042,7 +10042,7 @@
               "target": "ic_cdk"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -10164,7 +10164,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.72",
               "target": "anyhow"
             },
             {
@@ -10200,7 +10200,7 @@
               "target": "pretty"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
@@ -10208,7 +10208,7 @@
               "target": "serde_bytes"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -10287,7 +10287,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -10346,7 +10346,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.72",
               "target": "anyhow"
             },
             {
@@ -10386,7 +10386,7 @@
               "target": "pretty"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -10450,7 +10450,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -10516,11 +10516,11 @@
               "target": "semver"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "serde_json"
             }
           ],
@@ -10895,11 +10895,11 @@
               "target": "regex_syntax"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "serde_json"
             },
             {
@@ -11546,7 +11546,7 @@
               "target": "num_traits"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -11798,7 +11798,7 @@
               "target": "ciborium_ll"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -12487,7 +12487,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -12744,11 +12744,11 @@
               "target": "reqwest"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "serde_json"
             },
             {
@@ -12760,11 +12760,11 @@
               "target": "serde_with"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
-              "id": "url 2.5.3",
+              "id": "url 2.5.2",
               "target": "url"
             },
             {
@@ -13073,7 +13073,7 @@
               "target": "pretty_assertions"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -13887,11 +13887,11 @@
               "target": "log"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "serde_json"
             }
           ],
@@ -13946,11 +13946,11 @@
               "target": "bitcoin_private"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "serde_json"
             }
           ],
@@ -14167,7 +14167,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -14177,7 +14177,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "serde_derive 1.0.214",
+              "id": "serde_derive 1.0.203",
               "target": "serde_derive"
             }
           ],
@@ -14522,7 +14522,7 @@
               "target": "cranelift_bitset"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -14532,7 +14532,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "serde_derive 1.0.214",
+              "id": "serde_derive 1.0.203",
               "target": "serde_derive"
             }
           ],
@@ -14901,7 +14901,7 @@
               "target": "criterion_plot"
             },
             {
-              "id": "futures 0.3.31",
+              "id": "futures 0.3.30",
               "target": "futures"
             },
             {
@@ -14937,11 +14937,11 @@
               "target": "regex"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "serde_json"
             },
             {
@@ -14963,7 +14963,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "serde_derive 1.0.214",
+              "id": "serde_derive 1.0.203",
               "target": "serde_derive"
             }
           ],
@@ -16200,7 +16200,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -16259,7 +16259,7 @@
               "target": "ryu"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -16574,7 +16574,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -17104,7 +17104,7 @@
               "target": "strsim"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -17269,7 +17269,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -17682,7 +17682,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -17801,7 +17801,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -17856,7 +17856,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -18211,7 +18211,7 @@
               "target": "aide"
             },
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.72",
               "target": "anyhow"
             },
             {
@@ -18516,11 +18516,11 @@
               "target": "fs_extra"
             },
             {
-              "id": "futures 0.3.31",
+              "id": "futures 0.3.30",
               "target": "futures"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             },
             {
@@ -18708,7 +18708,7 @@
               "target": "icrc1_test_suite"
             },
             {
-              "id": "idna 1.0.3",
+              "id": "idna 1.0.2",
               "target": "idna"
             },
             {
@@ -19050,7 +19050,7 @@
               "target": "regex"
             },
             {
-              "id": "reqwest 0.12.9",
+              "id": "reqwest 0.12.8",
               "target": "reqwest"
             },
             {
@@ -19142,7 +19142,7 @@
               "target": "semver"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
@@ -19158,7 +19158,7 @@
               "target": "serde_cbor"
             },
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "serde_json"
             },
             {
@@ -19270,7 +19270,7 @@
               "target": "textplots"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -19394,7 +19394,7 @@
               "target": "turmoil"
             },
             {
-              "id": "url 2.5.3",
+              "id": "url 2.5.2",
               "target": "url"
             },
             {
@@ -19823,7 +19823,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -20127,7 +20127,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -20379,7 +20379,7 @@
               "target": "rand_core"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
@@ -20387,7 +20387,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -21071,7 +21071,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -21135,7 +21135,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -21350,7 +21350,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -21671,11 +21671,11 @@
               "target": "once_cell"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "serde_json"
             }
           ],
@@ -21761,11 +21761,11 @@
               "target": "regex"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "serde_json"
             },
             {
@@ -21773,7 +21773,7 @@
               "target": "sha3"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -22049,11 +22049,11 @@
               "target": "rlp"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "serde_json"
             },
             {
@@ -22061,7 +22061,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -22130,7 +22130,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -22815,7 +22815,7 @@
               "target": "num_bigint"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
@@ -22823,11 +22823,11 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
-              "id": "url 2.5.3",
+              "id": "url 2.5.2",
               "target": "url"
             }
           ],
@@ -23955,7 +23955,7 @@
               "target": "nonempty"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -24262,14 +24262,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "futures 0.3.31": {
+    "futures 0.3.30": {
       "name": "futures",
-      "version": "0.3.31",
+      "version": "0.3.30",
       "package_url": "https://github.com/rust-lang/futures-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/futures/0.3.31/download",
-          "sha256": "65bc07b1a8bc7c85c5f2e110c476c7389b4554ba72af57d8445ea63a576b0876"
+          "url": "https://static.crates.io/crates/futures/0.3.30/download",
+          "sha256": "645c6916888f6cb6350d2550b80fb63e734897a8498abe35cfb732b6487804b0"
         }
       },
       "targets": [
@@ -24305,38 +24305,38 @@
         "deps": {
           "common": [
             {
-              "id": "futures-channel 0.3.31",
+              "id": "futures-channel 0.3.30",
               "target": "futures_channel"
             },
             {
-              "id": "futures-core 0.3.31",
+              "id": "futures-core 0.3.30",
               "target": "futures_core"
             },
             {
-              "id": "futures-executor 0.3.31",
+              "id": "futures-executor 0.3.30",
               "target": "futures_executor"
             },
             {
-              "id": "futures-io 0.3.31",
+              "id": "futures-io 0.3.30",
               "target": "futures_io"
             },
             {
-              "id": "futures-sink 0.3.31",
+              "id": "futures-sink 0.3.30",
               "target": "futures_sink"
             },
             {
-              "id": "futures-task 0.3.31",
+              "id": "futures-task 0.3.30",
               "target": "futures_task"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.31"
+        "version": "0.3.30"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -24345,14 +24345,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "futures-channel 0.3.31": {
+    "futures-channel 0.3.30": {
       "name": "futures-channel",
-      "version": "0.3.31",
+      "version": "0.3.30",
       "package_url": "https://github.com/rust-lang/futures-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/futures-channel/0.3.31/download",
-          "sha256": "2dff15bf788c671c1934e366d07e30c1814a8ef514e1af724a602e8a2fbe1b10"
+          "url": "https://static.crates.io/crates/futures-channel/0.3.30/download",
+          "sha256": "eac8f7d7865dcb88bd4373ab671c8cf4508703796caa2b1985a9ca867b3fcb78"
         }
       },
       "targets": [
@@ -24387,18 +24387,18 @@
         "deps": {
           "common": [
             {
-              "id": "futures-core 0.3.31",
+              "id": "futures-core 0.3.30",
               "target": "futures_core"
             },
             {
-              "id": "futures-sink 0.3.31",
+              "id": "futures-sink 0.3.30",
               "target": "futures_sink"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.31"
+        "version": "0.3.30"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -24407,14 +24407,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "futures-core 0.3.31": {
+    "futures-core 0.3.30": {
       "name": "futures-core",
-      "version": "0.3.31",
+      "version": "0.3.30",
       "package_url": "https://github.com/rust-lang/futures-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/futures-core/0.3.31/download",
-          "sha256": "05f29059c0c2090612e8d742178b0580d2dc940c837851ad723096f87af6663e"
+          "url": "https://static.crates.io/crates/futures-core/0.3.30/download",
+          "sha256": "dfc6580bb841c5a68e9ef15c77ccc837b40a7504914d52e47b8b0e9bbda25a1d"
         }
       },
       "targets": [
@@ -24445,7 +24445,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.31"
+        "version": "0.3.30"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -24454,14 +24454,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "futures-executor 0.3.31": {
+    "futures-executor 0.3.30": {
       "name": "futures-executor",
-      "version": "0.3.31",
+      "version": "0.3.30",
       "package_url": "https://github.com/rust-lang/futures-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/futures-executor/0.3.31/download",
-          "sha256": "1e28d1d997f585e54aebc3f97d39e72338912123a67330d723fdbb564d646c9f"
+          "url": "https://static.crates.io/crates/futures-executor/0.3.30/download",
+          "sha256": "a576fc72ae164fca6b9db127eaa9a9dda0d61316034f33a0a0d4eda41f02b01d"
         }
       },
       "targets": [
@@ -24493,22 +24493,22 @@
         "deps": {
           "common": [
             {
-              "id": "futures-core 0.3.31",
+              "id": "futures-core 0.3.30",
               "target": "futures_core"
             },
             {
-              "id": "futures-task 0.3.31",
+              "id": "futures-task 0.3.30",
               "target": "futures_task"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.31"
+        "version": "0.3.30"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -24517,14 +24517,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "futures-io 0.3.31": {
+    "futures-io 0.3.30": {
       "name": "futures-io",
-      "version": "0.3.31",
+      "version": "0.3.30",
       "package_url": "https://github.com/rust-lang/futures-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/futures-io/0.3.31/download",
-          "sha256": "9e5c1b78ca4aae1ac06c48a526a655760685149f0d465d21f37abfe57ce075c6"
+          "url": "https://static.crates.io/crates/futures-io/0.3.30/download",
+          "sha256": "a44623e20b9681a318efdd71c299b6b222ed6f231972bfe2f224ebad6311f0c1"
         }
       },
       "targets": [
@@ -24554,7 +24554,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.31"
+        "version": "0.3.30"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -24613,11 +24613,11 @@
               "target": "fastrand"
             },
             {
-              "id": "futures-core 0.3.31",
+              "id": "futures-core 0.3.30",
               "target": "futures_core"
             },
             {
-              "id": "futures-io 0.3.31",
+              "id": "futures-io 0.3.30",
               "target": "futures_io"
             },
             {
@@ -24649,14 +24649,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "futures-macro 0.3.31": {
+    "futures-macro 0.3.30": {
       "name": "futures-macro",
-      "version": "0.3.31",
+      "version": "0.3.30",
       "package_url": "https://github.com/rust-lang/futures-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/futures-macro/0.3.31/download",
-          "sha256": "162ee34ebcb7c64a8abebc059ce0fee27c2262618d7b60ed8faf72fef13c3650"
+          "url": "https://static.crates.io/crates/futures-macro/0.3.30/download",
+          "sha256": "87750cf4b7a4c0625b1529e4c543c2182106e4dedc60a2a6455e00d212c489ac"
         }
       },
       "targets": [
@@ -24689,14 +24689,14 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.31"
+        "version": "0.3.30"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -24744,7 +24744,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures-io 0.3.31",
+              "id": "futures-io 0.3.30",
               "target": "futures_io"
             },
             {
@@ -24769,14 +24769,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "futures-sink 0.3.31": {
+    "futures-sink 0.3.30": {
       "name": "futures-sink",
-      "version": "0.3.31",
+      "version": "0.3.30",
       "package_url": "https://github.com/rust-lang/futures-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/futures-sink/0.3.31/download",
-          "sha256": "e575fab7d1e0dcb8d0c7bcf9a63ee213816ab51902e6d244a95819acacf1d4f7"
+          "url": "https://static.crates.io/crates/futures-sink/0.3.30/download",
+          "sha256": "9fb8e00e87438d937621c1c6269e53f536c14d3fbd6a042bb24879e57d474fb5"
         }
       },
       "targets": [
@@ -24807,7 +24807,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.31"
+        "version": "0.3.30"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -24816,14 +24816,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "futures-task 0.3.31": {
+    "futures-task 0.3.30": {
       "name": "futures-task",
-      "version": "0.3.31",
+      "version": "0.3.30",
       "package_url": "https://github.com/rust-lang/futures-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/futures-task/0.3.31/download",
-          "sha256": "f90f7dce0722e95104fcb095585910c0977252f286e354b5e3bd38902cd99988"
+          "url": "https://static.crates.io/crates/futures-task/0.3.30/download",
+          "sha256": "38d84fa142264698cdce1a9f9172cf383a0c82de1bddcf3092901442c4097004"
         }
       },
       "targets": [
@@ -24853,7 +24853,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.31"
+        "version": "0.3.30"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -24901,14 +24901,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "futures-util 0.3.31": {
+    "futures-util 0.3.30": {
       "name": "futures-util",
-      "version": "0.3.31",
+      "version": "0.3.30",
       "package_url": "https://github.com/rust-lang/futures-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/futures-util/0.3.31/download",
-          "sha256": "9fa08315bb612088cc391249efdc3bc77536f16c91f6cf495e6fbe85b20a4a81"
+          "url": "https://static.crates.io/crates/futures-util/0.3.30/download",
+          "sha256": "3d6401deb83407ab3da39eba7e33987a73c3df0c82b4bb5813ee871c19c41d48"
         }
       },
       "targets": [
@@ -24952,23 +24952,23 @@
         "deps": {
           "common": [
             {
-              "id": "futures-channel 0.3.31",
+              "id": "futures-channel 0.3.30",
               "target": "futures_channel"
             },
             {
-              "id": "futures-core 0.3.31",
+              "id": "futures-core 0.3.30",
               "target": "futures_core"
             },
             {
-              "id": "futures-io 0.3.31",
+              "id": "futures-io 0.3.30",
               "target": "futures_io"
             },
             {
-              "id": "futures-sink 0.3.31",
+              "id": "futures-sink 0.3.30",
               "target": "futures_sink"
             },
             {
-              "id": "futures-task 0.3.31",
+              "id": "futures-task 0.3.30",
               "target": "futures_task"
             },
             {
@@ -24994,13 +24994,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "futures-macro 0.3.31",
+              "id": "futures-macro 0.3.30",
               "target": "futures_macro"
             }
           ],
           "selects": {}
         },
-        "version": "0.3.31"
+        "version": "0.3.30"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -25715,7 +25715,7 @@
               "target": "dashmap"
             },
             {
-              "id": "futures 0.3.31",
+              "id": "futures 0.3.30",
               "target": "futures"
             },
             {
@@ -25867,15 +25867,15 @@
               "target": "fnv"
             },
             {
-              "id": "futures-core 0.3.31",
+              "id": "futures-core 0.3.30",
               "target": "futures_core"
             },
             {
-              "id": "futures-sink 0.3.31",
+              "id": "futures-sink 0.3.30",
               "target": "futures_sink"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             },
             {
@@ -25954,15 +25954,15 @@
               "target": "fnv"
             },
             {
-              "id": "futures-core 0.3.31",
+              "id": "futures-core 0.3.30",
               "target": "futures_core"
             },
             {
-              "id": "futures-sink 0.3.31",
+              "id": "futures-sink 0.3.30",
               "target": "futures_sink"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             },
             {
@@ -26175,7 +26175,7 @@
               "target": "allocator_api2"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -26830,7 +26830,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -27109,15 +27109,15 @@
               "target": "data_encoding"
             },
             {
-              "id": "futures-channel 0.3.31",
+              "id": "futures-channel 0.3.30",
               "target": "futures_channel"
             },
             {
-              "id": "futures-io 0.3.31",
+              "id": "futures-io 0.3.30",
               "target": "futures_io"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             },
             {
@@ -27157,7 +27157,7 @@
               "target": "rustls_pemfile"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -27177,7 +27177,7 @@
               "target": "tracing"
             },
             {
-              "id": "url 2.5.3",
+              "id": "url 2.5.2",
               "target": "url"
             },
             {
@@ -27266,7 +27266,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             },
             {
@@ -27302,7 +27302,7 @@
               "target": "smallvec"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -27985,7 +27985,7 @@
               "target": "bytes"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             },
             {
@@ -28249,7 +28249,7 @@
               "target": "humantime"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -28317,15 +28317,15 @@
               "target": "bytes"
             },
             {
-              "id": "futures-channel 0.3.31",
+              "id": "futures-channel 0.3.30",
               "target": "futures_channel"
             },
             {
-              "id": "futures-core 0.3.31",
+              "id": "futures-core 0.3.30",
               "target": "futures_core"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             },
             {
@@ -28435,11 +28435,11 @@
               "target": "bytes"
             },
             {
-              "id": "futures-channel 0.3.31",
+              "id": "futures-channel 0.3.30",
               "target": "futures_channel"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             },
             {
@@ -28530,7 +28530,7 @@
               "target": "bytes"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             },
             {
@@ -28619,7 +28619,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             },
             {
@@ -28838,7 +28838,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             },
             {
@@ -29137,7 +29137,7 @@
               "target": "hyper_util"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -29277,11 +29277,11 @@
               "target": "bytes"
             },
             {
-              "id": "futures-channel 0.3.31",
+              "id": "futures-channel 0.3.30",
               "target": "futures_channel"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             },
             {
@@ -29551,7 +29551,7 @@
               "target": "ed25519_consensus"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             },
             {
@@ -29611,7 +29611,7 @@
               "target": "rangemap"
             },
             {
-              "id": "reqwest 0.12.9",
+              "id": "reqwest 0.12.8",
               "target": "reqwest"
             },
             {
@@ -29623,7 +29623,7 @@
               "target": "sec1"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
@@ -29643,7 +29643,7 @@
               "target": "simple_asn1"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -29651,7 +29651,7 @@
               "target": "time"
             },
             {
-              "id": "url 2.5.3",
+              "id": "url 2.5.2",
               "target": "url"
             }
           ],
@@ -30398,7 +30398,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/ic-bn-lib",
           "commitish": {
-            "Rev": "526d34d15cfbf369d8baf2dae9932aa18d570a1d"
+            "Rev": "0b453eb968f3b5de668c0c07eb9ad473f8fdbb3a"
           }
         }
       },
@@ -30428,7 +30428,7 @@
               "target": "ahash"
             },
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.72",
               "target": "anyhow"
             },
             {
@@ -30444,7 +30444,7 @@
               "target": "backoff"
             },
             {
-              "id": "base64 0.22.1",
+              "id": "base64 0.22.0",
               "target": "base64"
             },
             {
@@ -30468,11 +30468,11 @@
               "target": "fqdn"
             },
             {
-              "id": "futures 0.3.31",
+              "id": "futures 0.3.30",
               "target": "futures"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             },
             {
@@ -30512,7 +30512,7 @@
               "target": "instant_acme"
             },
             {
-              "id": "mockall 0.13.0",
+              "id": "mockall 0.12.1",
               "target": "mockall"
             },
             {
@@ -30544,7 +30544,7 @@
               "target": "rcgen"
             },
             {
-              "id": "reqwest 0.12.9",
+              "id": "reqwest 0.12.8",
               "target": "reqwest"
             },
             {
@@ -30568,11 +30568,11 @@
               "target": "scopeguard"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "serde_json"
             },
             {
@@ -30592,7 +30592,7 @@
               "target": "systemstat"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -30624,7 +30624,7 @@
               "target": "tracing"
             },
             {
-              "id": "url 2.5.3",
+              "id": "url 2.5.2",
               "target": "url"
             },
             {
@@ -30714,7 +30714,7 @@
               "target": "candid"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
@@ -30812,7 +30812,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -30883,7 +30883,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
@@ -30899,7 +30899,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -30962,7 +30962,7 @@
               "target": "nom"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -31017,7 +31017,7 @@
               "target": "ic0"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
@@ -31085,7 +31085,7 @@
               "target": "ic0"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
@@ -31153,7 +31153,7 @@
               "target": "ic0"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
@@ -31221,7 +31221,7 @@
               "target": "ic0"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
@@ -31293,7 +31293,7 @@
               "target": "quote"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
@@ -31360,7 +31360,7 @@
               "target": "quote"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
@@ -31427,7 +31427,7 @@
               "target": "quote"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
@@ -31494,7 +31494,7 @@
               "target": "quote"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
@@ -31502,7 +31502,7 @@
               "target": "serde_tokenstream"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -31561,7 +31561,7 @@
               "target": "quote"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
@@ -31569,7 +31569,7 @@
               "target": "serde_tokenstream"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -31616,7 +31616,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures 0.3.31",
+              "id": "futures 0.3.30",
               "target": "futures"
             },
             {
@@ -31628,7 +31628,7 @@
               "target": "ic0"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
@@ -31723,7 +31723,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -31782,7 +31782,7 @@
               "target": "hex"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
@@ -31837,7 +31837,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
@@ -31908,11 +31908,11 @@
               "target": "ic_representation_independent_hash"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -31974,7 +31974,7 @@
               "target": "candid"
             },
             {
-              "id": "futures 0.3.31",
+              "id": "futures 0.3.30",
               "target": "futures"
             },
             {
@@ -32006,7 +32006,7 @@
               "target": "ic_utils"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -32198,7 +32198,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -32351,7 +32351,7 @@
               "target": "ciborium"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
@@ -32418,7 +32418,7 @@
               "target": "leb128"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
@@ -32430,7 +32430,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -32496,7 +32496,7 @@
               "target": "candid"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             },
             {
@@ -32512,7 +32512,7 @@
               "target": "semver"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
@@ -32528,7 +32528,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -32766,7 +32766,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.72",
               "target": "anyhow"
             },
             {
@@ -32786,15 +32786,15 @@
               "target": "rustc_demangle"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "serde_json"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -32849,7 +32849,7 @@
               "target": "candid"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -33124,7 +33124,7 @@
               "target": "data_encoding"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
@@ -33132,7 +33132,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -33182,7 +33182,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.72",
               "target": "anyhow"
             },
             {
@@ -33190,11 +33190,11 @@
               "target": "candid"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -33253,7 +33253,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.72",
               "target": "anyhow"
             },
             {
@@ -33261,7 +33261,7 @@
               "target": "candid"
             },
             {
-              "id": "futures 0.3.31",
+              "id": "futures 0.3.30",
               "target": "futures"
             },
             {
@@ -33900,7 +33900,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -34166,14 +34166,74 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "idna 1.0.3": {
+    "idna 0.5.0": {
       "name": "idna",
-      "version": "1.0.3",
+      "version": "0.5.0",
       "package_url": "https://github.com/servo/rust-url/",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/idna/1.0.3/download",
-          "sha256": "686f825264d630750a544639377bae737628043f20d38bbc029e8f29ea968a7e"
+          "url": "https://static.crates.io/crates/idna/0.5.0/download",
+          "sha256": "634d9b1461af396cad843f47fdba5597a4f9e6ddd4bfb6ff5d85028c25cb12f6"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "idna",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "idna",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc",
+            "default",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "unicode-bidi 0.3.13",
+              "target": "unicode_bidi"
+            },
+            {
+              "id": "unicode-normalization 0.1.22",
+              "target": "unicode_normalization"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.5.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "idna 1.0.2": {
+      "name": "idna",
+      "version": "1.0.2",
+      "package_url": "https://github.com/servo/rust-url/",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/idna/1.0.2/download",
+          "sha256": "bd69211b9b519e98303c015e21a007e293db403b6c85b9b124e133d25e242cdd"
         }
       },
       "targets": [
@@ -34207,8 +34267,12 @@
         "deps": {
           "common": [
             {
-              "id": "idna_adapter 1.2.0",
-              "target": "idna_adapter"
+              "id": "icu_normalizer 1.5.0",
+              "target": "icu_normalizer"
+            },
+            {
+              "id": "icu_properties 1.5.1",
+              "target": "icu_properties"
             },
             {
               "id": "smallvec 1.13.2",
@@ -34222,67 +34286,9 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.0.3"
+        "version": "1.0.2"
       },
       "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
-    "idna_adapter 1.2.0": {
-      "name": "idna_adapter",
-      "version": "1.2.0",
-      "package_url": "https://github.com/hsivonen/idna_adapter",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/idna_adapter/1.2.0/download",
-          "sha256": "daca1df1c957320b2cf139ac61e7bd64fed304c5040df000a745aa1de3b4ef71"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "idna_adapter",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "idna_adapter",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "compiled_data"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "icu_normalizer 1.5.0",
-              "target": "icu_normalizer"
-            },
-            {
-              "id": "icu_properties 1.5.1",
-              "target": "icu_properties"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "1.2.0"
-      },
-      "license": "Apache-2.0 OR MIT",
       "license_ids": [
         "Apache-2.0",
         "MIT"
@@ -34462,7 +34468,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -34714,7 +34720,7 @@
               "target": "hashbrown"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -35166,7 +35172,7 @@
         "deps": {
           "common": [
             {
-              "id": "base64 0.22.1",
+              "id": "base64 0.22.0",
               "target": "base64"
             },
             {
@@ -35206,15 +35212,15 @@
               "target": "rustls_pki_types"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "serde_json"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -35276,7 +35282,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -35471,7 +35477,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -35625,11 +35631,11 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -35915,7 +35921,7 @@
               "target": "log"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -36125,11 +36131,11 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "serde_json"
             },
             {
@@ -36185,7 +36191,7 @@
               "target": "pest"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -36257,11 +36263,11 @@
               "target": "regex"
             },
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "serde_json"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -36330,11 +36336,11 @@
               "target": "base64"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "serde_json"
             }
           ],
@@ -36394,11 +36400,11 @@
               "target": "base64"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "serde_json"
             }
           ],
@@ -36559,7 +36565,7 @@
         "deps": {
           "common": [
             {
-              "id": "base64 0.22.1",
+              "id": "base64 0.22.0",
               "target": "base64"
             },
             {
@@ -36571,7 +36577,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
@@ -36579,7 +36585,7 @@
               "target": "serde_value"
             },
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "serde_json"
             }
           ],
@@ -36781,7 +36787,7 @@
         "deps": {
           "common": [
             {
-              "id": "base64 0.22.1",
+              "id": "base64 0.22.0",
               "target": "base64"
             },
             {
@@ -36797,7 +36803,7 @@
               "target": "either"
             },
             {
-              "id": "futures 0.3.31",
+              "id": "futures 0.3.30",
               "target": "futures"
             },
             {
@@ -36861,11 +36867,11 @@
               "target": "secrecy"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "serde_json"
             },
             {
@@ -36873,7 +36879,7 @@
               "target": "serde_yaml"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -36956,15 +36962,15 @@
               "target": "k8s_openapi"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "serde_json"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -39273,15 +39279,15 @@
         "deps": {
           "common": [
             {
-              "id": "futures-core 0.3.31",
+              "id": "futures-core 0.3.30",
               "target": "futures_core"
             },
             {
-              "id": "futures-sink 0.3.31",
+              "id": "futures-sink 0.3.30",
               "target": "futures_sink"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             },
             {
@@ -39333,7 +39339,7 @@
         "deps": {
           "common": [
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -39651,7 +39657,7 @@
               "target": "regex_syntax"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -40344,7 +40350,7 @@
               "target": "memchr"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -40900,7 +40906,7 @@
               "target": "exitcode"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             },
             {
@@ -40980,7 +40986,7 @@
               "target": "rustls_pemfile"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
@@ -41008,7 +41014,7 @@
               "target": "tower_http"
             },
             {
-              "id": "url 2.5.3",
+              "id": "url 2.5.2",
               "target": "url"
             }
           ],
@@ -41673,6 +41679,83 @@
       ],
       "license_file": null
     },
+    "mockall 0.12.1": {
+      "name": "mockall",
+      "version": "0.12.1",
+      "package_url": "https://github.com/asomers/mockall",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/mockall/0.12.1/download",
+          "sha256": "43766c2b5203b10de348ffe19f7e54564b64f3d6018ff7648d1e2d6d3a0f0a48"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "mockall",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "mockall",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "cfg-if 1.0.0",
+              "target": "cfg_if"
+            },
+            {
+              "id": "downcast 0.11.0",
+              "target": "downcast"
+            },
+            {
+              "id": "fragile 2.0.0",
+              "target": "fragile"
+            },
+            {
+              "id": "lazy_static 1.4.0",
+              "target": "lazy_static"
+            },
+            {
+              "id": "predicates 3.1.2",
+              "target": "predicates"
+            },
+            {
+              "id": "predicates-tree 1.0.9",
+              "target": "predicates_tree"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "mockall_derive 0.12.1",
+              "target": "mockall_derive"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.12.1"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "mockall 0.13.0": {
       "name": "mockall",
       "version": "0.13.0",
@@ -41746,6 +41829,66 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "mockall_derive 0.12.1": {
+      "name": "mockall_derive",
+      "version": "0.12.1",
+      "package_url": "https://github.com/asomers/mockall",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/mockall_derive/0.12.1/download",
+          "sha256": "af7cbce79ec385a1d4f54baa90a76401eb15d9cab93685f62e7e9f942aa00ae2"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "mockall_derive",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "mockall_derive",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "cfg-if 1.0.0",
+              "target": "cfg_if"
+            },
+            {
+              "id": "proc-macro2 1.0.89",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.37",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.66",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.12.1"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "mockall_derive 0.13.0": {
       "name": "mockall_derive",
       "version": "0.13.0",
@@ -41806,7 +41949,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -41878,7 +42021,7 @@
               "target": "colored"
             },
             {
-              "id": "futures 0.3.31",
+              "id": "futures 0.3.30",
               "target": "futures"
             },
             {
@@ -41898,7 +42041,7 @@
               "target": "regex"
             },
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "serde_json"
             },
             {
@@ -42003,7 +42146,7 @@
               "target": "event_listener"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             },
             {
@@ -42031,7 +42174,7 @@
               "target": "tagptr"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -42182,7 +42325,7 @@
               "target": "encoding_rs"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             },
             {
@@ -42395,7 +42538,7 @@
               "target": "quote"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
@@ -42484,11 +42627,11 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "serde_json"
             },
             {
@@ -42500,7 +42643,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -43267,7 +43410,7 @@
               "target": "num_traits"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -43372,7 +43515,7 @@
               "target": "rand"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
@@ -43954,7 +44097,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -44600,7 +44743,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -44901,11 +45044,11 @@
         "deps": {
           "common": [
             {
-              "id": "futures-core 0.3.31",
+              "id": "futures-core 0.3.30",
               "target": "futures_core"
             },
             {
-              "id": "futures-sink 0.3.31",
+              "id": "futures-sink 0.3.30",
               "target": "futures_sink"
             },
             {
@@ -44921,7 +45064,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -44989,11 +45132,11 @@
         "deps": {
           "common": [
             {
-              "id": "futures-core 0.3.31",
+              "id": "futures-core 0.3.30",
               "target": "futures_core"
             },
             {
-              "id": "futures-sink 0.3.31",
+              "id": "futures-sink 0.3.30",
               "target": "futures_sink"
             },
             {
@@ -45005,7 +45148,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -45073,7 +45216,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures-core 0.3.31",
+              "id": "futures-core 0.3.30",
               "target": "futures_core"
             },
             {
@@ -45097,7 +45240,7 @@
               "target": "prost"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -45419,11 +45562,11 @@
         "deps": {
           "common": [
             {
-              "id": "futures-channel 0.3.31",
+              "id": "futures-channel 0.3.30",
               "target": "futures_channel"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             },
             {
@@ -45439,7 +45582,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -45502,11 +45645,11 @@
         "deps": {
           "common": [
             {
-              "id": "futures-channel 0.3.31",
+              "id": "futures-channel 0.3.30",
               "target": "futures_channel"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             },
             {
@@ -45522,7 +45665,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -45595,15 +45738,15 @@
               "target": "crossbeam_channel"
             },
             {
-              "id": "futures-channel 0.3.31",
+              "id": "futures-channel 0.3.30",
               "target": "futures_channel"
             },
             {
-              "id": "futures-executor 0.3.31",
+              "id": "futures-executor 0.3.30",
               "target": "futures_executor"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             },
             {
@@ -45623,7 +45766,7 @@
               "target": "rand"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -45696,15 +45839,15 @@
               "target": "crossbeam_channel"
             },
             {
-              "id": "futures-channel 0.3.31",
+              "id": "futures-channel 0.3.30",
               "target": "futures_channel"
             },
             {
-              "id": "futures-executor 0.3.31",
+              "id": "futures-executor 0.3.30",
               "target": "futures_executor"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             },
             {
@@ -45732,7 +45875,7 @@
               "target": "regex"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -45808,15 +45951,15 @@
               "target": "crossbeam_channel"
             },
             {
-              "id": "futures-channel 0.3.31",
+              "id": "futures-channel 0.3.30",
               "target": "futures_channel"
             },
             {
-              "id": "futures-executor 0.3.31",
+              "id": "futures-executor 0.3.30",
               "target": "futures_executor"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             },
             {
@@ -45844,7 +45987,7 @@
               "target": "rand"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -45925,15 +46068,15 @@
         "deps": {
           "common": [
             {
-              "id": "futures-channel 0.3.31",
+              "id": "futures-channel 0.3.30",
               "target": "futures_channel"
             },
             {
-              "id": "futures-executor 0.3.31",
+              "id": "futures-executor 0.3.30",
               "target": "futures_executor"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             },
             {
@@ -45957,11 +46100,11 @@
               "target": "rand"
             },
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "serde_json"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -46421,7 +46564,7 @@
               "target": "byte_slice_cast"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -47458,7 +47601,7 @@
         "deps": {
           "common": [
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -47591,7 +47734,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -48089,7 +48232,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -48337,7 +48480,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -48471,7 +48614,7 @@
               "target": "socket2"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -48534,7 +48677,7 @@
               "target": "fastrand"
             },
             {
-              "id": "futures-io 0.3.31",
+              "id": "futures-io 0.3.30",
               "target": "futures_io"
             }
           ],
@@ -48923,7 +49066,7 @@
               "target": "ic_cdk"
             },
             {
-              "id": "reqwest 0.12.9",
+              "id": "reqwest 0.12.8",
               "target": "reqwest"
             },
             {
@@ -48931,7 +49074,7 @@
               "target": "schemars"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
@@ -48939,7 +49082,7 @@
               "target": "serde_bytes"
             },
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "serde_json"
             },
             {
@@ -49239,7 +49382,7 @@
               "target": "embedded_io"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -49412,7 +49555,7 @@
               "target": "tempfile"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -49999,7 +50142,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -50215,7 +50358,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -50980,7 +51123,7 @@
               "target": "protobuf"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -51263,7 +51406,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -51493,7 +51636,7 @@
               "target": "regex"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             },
             {
@@ -51599,7 +51742,7 @@
               "target": "regex"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             },
             {
@@ -51650,7 +51793,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.72",
               "target": "anyhow"
             },
             {
@@ -51666,7 +51809,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -51713,7 +51856,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.72",
               "target": "anyhow"
             },
             {
@@ -51729,7 +51872,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -52670,7 +52813,7 @@
               "target": "socket2"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -52758,7 +52901,7 @@
               "target": "slab"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -54215,7 +54358,7 @@
               "target": "parking_lot"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -54714,7 +54857,7 @@
               "target": "syscall"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -55447,11 +55590,11 @@
               "target": "bytes"
             },
             {
-              "id": "futures-core 0.3.31",
+              "id": "futures-core 0.3.30",
               "target": "futures_core"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             },
             {
@@ -55459,11 +55602,11 @@
               "target": "http"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "serde_json"
             },
             {
@@ -55479,7 +55622,7 @@
               "target": "tower_service"
             },
             {
-              "id": "url 2.5.3",
+              "id": "url 2.5.2",
               "target": "url"
             }
           ],
@@ -56532,14 +56675,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "reqwest 0.12.9": {
+    "reqwest 0.12.8": {
       "name": "reqwest",
-      "version": "0.12.9",
+      "version": "0.12.8",
       "package_url": "https://github.com/seanmonstar/reqwest",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/reqwest/0.12.9/download",
-          "sha256": "a77c62af46e79de0a562e1a9849205ffcb7fc1238876e9bd743357570e04046f"
+          "url": "https://static.crates.io/crates/reqwest/0.12.8/download",
+          "sha256": "f713147fbe92361e52392c73b8c9e48c04c6625bce969ef54dc901e58e042a7b"
         }
       },
       "targets": [
@@ -56574,9 +56717,7 @@
             "multipart",
             "rustls-tls",
             "rustls-tls-native-roots",
-            "rustls-tls-native-roots-no-provider",
             "rustls-tls-webpki-roots",
-            "rustls-tls-webpki-roots-no-provider",
             "socks",
             "stream"
           ],
@@ -56585,7 +56726,7 @@
         "deps": {
           "common": [
             {
-              "id": "base64 0.22.1",
+              "id": "base64 0.22.0",
               "target": "base64"
             },
             {
@@ -56593,11 +56734,11 @@
               "target": "bytes"
             },
             {
-              "id": "futures-core 0.3.31",
+              "id": "futures-core 0.3.30",
               "target": "futures_core"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             },
             {
@@ -56609,11 +56750,11 @@
               "target": "mime_guess"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "serde_json"
             },
             {
@@ -56629,14 +56770,14 @@
               "target": "tower_service"
             },
             {
-              "id": "url 2.5.3",
+              "id": "url 2.5.2",
               "target": "url"
             }
           ],
           "selects": {
             "aarch64-apple-darwin": [
               {
-                "id": "futures-channel 0.3.31",
+                "id": "futures-channel 0.3.30",
                 "target": "futures_channel"
               },
               {
@@ -56686,7 +56827,7 @@
             ],
             "aarch64-apple-ios": [
               {
-                "id": "futures-channel 0.3.31",
+                "id": "futures-channel 0.3.30",
                 "target": "futures_channel"
               },
               {
@@ -56736,7 +56877,7 @@
             ],
             "aarch64-apple-ios-sim": [
               {
-                "id": "futures-channel 0.3.31",
+                "id": "futures-channel 0.3.30",
                 "target": "futures_channel"
               },
               {
@@ -56786,7 +56927,7 @@
             ],
             "aarch64-fuchsia": [
               {
-                "id": "futures-channel 0.3.31",
+                "id": "futures-channel 0.3.30",
                 "target": "futures_channel"
               },
               {
@@ -56836,7 +56977,7 @@
             ],
             "aarch64-linux-android": [
               {
-                "id": "futures-channel 0.3.31",
+                "id": "futures-channel 0.3.30",
                 "target": "futures_channel"
               },
               {
@@ -56886,7 +57027,7 @@
             ],
             "aarch64-pc-windows-msvc": [
               {
-                "id": "futures-channel 0.3.31",
+                "id": "futures-channel 0.3.30",
                 "target": "futures_channel"
               },
               {
@@ -56936,7 +57077,7 @@
             ],
             "aarch64-unknown-linux-gnu": [
               {
-                "id": "futures-channel 0.3.31",
+                "id": "futures-channel 0.3.30",
                 "target": "futures_channel"
               },
               {
@@ -56986,7 +57127,7 @@
             ],
             "aarch64-unknown-nixos-gnu": [
               {
-                "id": "futures-channel 0.3.31",
+                "id": "futures-channel 0.3.30",
                 "target": "futures_channel"
               },
               {
@@ -57036,7 +57177,7 @@
             ],
             "aarch64-unknown-nto-qnx710": [
               {
-                "id": "futures-channel 0.3.31",
+                "id": "futures-channel 0.3.30",
                 "target": "futures_channel"
               },
               {
@@ -57086,7 +57227,7 @@
             ],
             "arm-unknown-linux-gnueabi": [
               {
-                "id": "futures-channel 0.3.31",
+                "id": "futures-channel 0.3.30",
                 "target": "futures_channel"
               },
               {
@@ -57136,7 +57277,7 @@
             ],
             "armv7-linux-androideabi": [
               {
-                "id": "futures-channel 0.3.31",
+                "id": "futures-channel 0.3.30",
                 "target": "futures_channel"
               },
               {
@@ -57186,7 +57327,7 @@
             ],
             "armv7-unknown-linux-gnueabi": [
               {
-                "id": "futures-channel 0.3.31",
+                "id": "futures-channel 0.3.30",
                 "target": "futures_channel"
               },
               {
@@ -57306,7 +57447,7 @@
             ],
             "i686-apple-darwin": [
               {
-                "id": "futures-channel 0.3.31",
+                "id": "futures-channel 0.3.30",
                 "target": "futures_channel"
               },
               {
@@ -57356,7 +57497,7 @@
             ],
             "i686-linux-android": [
               {
-                "id": "futures-channel 0.3.31",
+                "id": "futures-channel 0.3.30",
                 "target": "futures_channel"
               },
               {
@@ -57406,7 +57547,7 @@
             ],
             "i686-pc-windows-msvc": [
               {
-                "id": "futures-channel 0.3.31",
+                "id": "futures-channel 0.3.30",
                 "target": "futures_channel"
               },
               {
@@ -57456,7 +57597,7 @@
             ],
             "i686-unknown-freebsd": [
               {
-                "id": "futures-channel 0.3.31",
+                "id": "futures-channel 0.3.30",
                 "target": "futures_channel"
               },
               {
@@ -57506,7 +57647,7 @@
             ],
             "i686-unknown-linux-gnu": [
               {
-                "id": "futures-channel 0.3.31",
+                "id": "futures-channel 0.3.30",
                 "target": "futures_channel"
               },
               {
@@ -57556,7 +57697,7 @@
             ],
             "powerpc-unknown-linux-gnu": [
               {
-                "id": "futures-channel 0.3.31",
+                "id": "futures-channel 0.3.30",
                 "target": "futures_channel"
               },
               {
@@ -57606,7 +57747,7 @@
             ],
             "riscv32imc-unknown-none-elf": [
               {
-                "id": "futures-channel 0.3.31",
+                "id": "futures-channel 0.3.30",
                 "target": "futures_channel"
               },
               {
@@ -57656,7 +57797,7 @@
             ],
             "riscv64gc-unknown-none-elf": [
               {
-                "id": "futures-channel 0.3.31",
+                "id": "futures-channel 0.3.30",
                 "target": "futures_channel"
               },
               {
@@ -57706,7 +57847,7 @@
             ],
             "s390x-unknown-linux-gnu": [
               {
-                "id": "futures-channel 0.3.31",
+                "id": "futures-channel 0.3.30",
                 "target": "futures_channel"
               },
               {
@@ -57756,7 +57897,7 @@
             ],
             "thumbv7em-none-eabi": [
               {
-                "id": "futures-channel 0.3.31",
+                "id": "futures-channel 0.3.30",
                 "target": "futures_channel"
               },
               {
@@ -57806,7 +57947,7 @@
             ],
             "thumbv8m.main-none-eabi": [
               {
-                "id": "futures-channel 0.3.31",
+                "id": "futures-channel 0.3.30",
                 "target": "futures_channel"
               },
               {
@@ -57868,7 +58009,7 @@
             ],
             "x86_64-apple-darwin": [
               {
-                "id": "futures-channel 0.3.31",
+                "id": "futures-channel 0.3.30",
                 "target": "futures_channel"
               },
               {
@@ -57918,7 +58059,7 @@
             ],
             "x86_64-apple-ios": [
               {
-                "id": "futures-channel 0.3.31",
+                "id": "futures-channel 0.3.30",
                 "target": "futures_channel"
               },
               {
@@ -57968,7 +58109,7 @@
             ],
             "x86_64-fuchsia": [
               {
-                "id": "futures-channel 0.3.31",
+                "id": "futures-channel 0.3.30",
                 "target": "futures_channel"
               },
               {
@@ -58018,7 +58159,7 @@
             ],
             "x86_64-linux-android": [
               {
-                "id": "futures-channel 0.3.31",
+                "id": "futures-channel 0.3.30",
                 "target": "futures_channel"
               },
               {
@@ -58068,7 +58209,7 @@
             ],
             "x86_64-pc-windows-msvc": [
               {
-                "id": "futures-channel 0.3.31",
+                "id": "futures-channel 0.3.30",
                 "target": "futures_channel"
               },
               {
@@ -58118,7 +58259,7 @@
             ],
             "x86_64-unknown-freebsd": [
               {
-                "id": "futures-channel 0.3.31",
+                "id": "futures-channel 0.3.30",
                 "target": "futures_channel"
               },
               {
@@ -58168,7 +58309,7 @@
             ],
             "x86_64-unknown-linux-gnu": [
               {
-                "id": "futures-channel 0.3.31",
+                "id": "futures-channel 0.3.30",
                 "target": "futures_channel"
               },
               {
@@ -58218,7 +58359,7 @@
             ],
             "x86_64-unknown-nixos-gnu": [
               {
-                "id": "futures-channel 0.3.31",
+                "id": "futures-channel 0.3.30",
                 "target": "futures_channel"
               },
               {
@@ -58268,7 +58409,7 @@
             ],
             "x86_64-unknown-none": [
               {
-                "id": "futures-channel 0.3.31",
+                "id": "futures-channel 0.3.30",
                 "target": "futures_channel"
               },
               {
@@ -58319,7 +58460,7 @@
           }
         },
         "edition": "2021",
-        "version": "0.12.9"
+        "version": "0.12.8"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -59431,7 +59572,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures 0.3.31",
+              "id": "futures 0.3.30",
               "target": "futures"
             },
             {
@@ -59538,7 +59679,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             },
             {
@@ -59797,7 +59938,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -61243,7 +61384,7 @@
               "target": "async_web_client"
             },
             {
-              "id": "base64 0.22.1",
+              "id": "base64 0.22.0",
               "target": "base64"
             },
             {
@@ -61255,7 +61396,7 @@
               "target": "chrono"
             },
             {
-              "id": "futures 0.3.31",
+              "id": "futures 0.3.30",
               "target": "futures"
             },
             {
@@ -61283,15 +61424,15 @@
               "target": "ring"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "serde_json"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -62535,11 +62676,11 @@
               "target": "build_script_build"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "serde_json"
             }
           ],
@@ -63066,7 +63207,7 @@
               "target": "secp256k1_sys"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -63137,7 +63278,7 @@
               "target": "secp256k1_sys"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -63509,7 +63650,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
@@ -63853,7 +63994,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -63877,14 +64018,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "serde 1.0.214": {
+    "serde 1.0.203": {
       "name": "serde",
-      "version": "1.0.214",
+      "version": "1.0.203",
       "package_url": "https://github.com/serde-rs/serde",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/serde/1.0.214/download",
-          "sha256": "f55c3193aca71c12ad7890f1785d2b73e1b9f63a0bbc353c08ef26fe03fc56b5"
+          "url": "https://static.crates.io/crates/serde/1.0.203/download",
+          "sha256": "7253ab4de971e72fb7be983802300c30b5a7f0c2e56fab8abfc6a214307c0094"
         }
       },
       "targets": [
@@ -63932,7 +64073,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "build_script_build"
             }
           ],
@@ -63942,13 +64083,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "serde_derive 1.0.214",
+              "id": "serde_derive 1.0.203",
               "target": "serde_derive"
             }
           ],
           "selects": {}
         },
-        "version": "1.0.214"
+        "version": "1.0.203"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -64005,7 +64146,7 @@
               "target": "hex"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -64056,7 +64197,7 @@
               "target": "ordered_float"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -64107,7 +64248,7 @@
               "target": "js_sys"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
@@ -64165,7 +64306,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -64224,7 +64365,7 @@
               "target": "half"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -64240,14 +64381,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "serde_derive 1.0.214": {
+    "serde_derive 1.0.203": {
       "name": "serde_derive",
-      "version": "1.0.214",
+      "version": "1.0.203",
       "package_url": "https://github.com/serde-rs/serde",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/serde_derive/1.0.214/download",
-          "sha256": "de523f781f095e28fa605cdce0f8307e451cc0fd14e2eb4cd2e98a355b147766"
+          "url": "https://static.crates.io/crates/serde_derive/1.0.203/download",
+          "sha256": "500cbc0ebeb6f46627f50f3f5811ccf6bf00643be300b4c3eabc0ef55dc5b5ba"
         }
       },
       "targets": [
@@ -64286,14 +64427,14 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
           "selects": {}
         },
         "edition": "2015",
-        "version": "1.0.214"
+        "version": "1.0.203"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -64358,14 +64499,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "serde_json 1.0.132": {
+    "serde_json 1.0.127": {
       "name": "serde_json",
-      "version": "1.0.132",
+      "version": "1.0.127",
       "package_url": "https://github.com/serde-rs/json",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/serde_json/1.0.132/download",
-          "sha256": "d726bfaff4b320266d395898905d0eba0345aae23b54aee3a737e260fd46db03"
+          "url": "https://static.crates.io/crates/serde_json/1.0.127/download",
+          "sha256": "8043c06d9f82bd7271361ed64f415fe5e12a77fdb52e573e7f06a516dea329ad"
         }
       },
       "targets": [
@@ -64425,18 +64566,18 @@
               "target": "ryu"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.0.132"
+        "version": "1.0.127"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -64489,7 +64630,7 @@
               "target": "itoa"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -64541,11 +64682,11 @@
               "target": "percent_encoding"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             }
           ],
@@ -64597,7 +64738,7 @@
               "target": "regex"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -64653,7 +64794,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -64705,7 +64846,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
@@ -64764,11 +64905,11 @@
               "target": "quote"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -64827,7 +64968,7 @@
               "target": "ryu"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -64883,7 +65024,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -64954,7 +65095,7 @@
               "target": "base64"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -65083,7 +65224,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -65139,7 +65280,7 @@
               "target": "ryu"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
@@ -65203,7 +65344,7 @@
               "target": "ryu"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
@@ -66103,7 +66244,7 @@
               "target": "num_traits"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -66771,11 +66912,11 @@
               "target": "erased_serde"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "serde_json"
             },
             {
@@ -67110,7 +67251,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -67233,7 +67374,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -67983,7 +68124,7 @@
               "target": "precomputed_hash"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -68175,7 +68316,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -68240,7 +68381,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -68412,7 +68553,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -68480,7 +68621,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -68949,14 +69090,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "syn 2.0.87": {
+    "syn 2.0.66": {
       "name": "syn",
-      "version": "2.0.87",
+      "version": "2.0.66",
       "package_url": "https://github.com/dtolnay/syn",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/syn/2.0.87/download",
-          "sha256": "25aa4ce346d03a6dcd68dd8b4010bcb74e54e62c90c573f394c46eae99aba32d"
+          "url": "https://static.crates.io/crates/syn/2.0.66/download",
+          "sha256": "c42f3f41a2de00b01c0aaad383c5a45241efc8b2d1eda5661812fda5f3cdcff5"
         }
       },
       "targets": [
@@ -69067,7 +69208,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "2.0.87"
+        "version": "2.0.66"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -69153,7 +69294,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures-core 0.3.31",
+              "id": "futures-core 0.3.30",
               "target": "futures_core"
             }
           ],
@@ -69215,7 +69356,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -69876,7 +70017,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.72",
               "target": "anyhow"
             },
             {
@@ -69884,7 +70025,7 @@
               "target": "fnv"
             },
             {
-              "id": "futures 0.3.31",
+              "id": "futures 0.3.30",
               "target": "futures"
             },
             {
@@ -69904,7 +70045,7 @@
               "target": "rand"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
@@ -69912,7 +70053,7 @@
               "target": "static_assertions"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -70510,7 +70651,7 @@
               "target": "structmeta"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -70671,14 +70812,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "thiserror 1.0.68": {
+    "thiserror 1.0.65": {
       "name": "thiserror",
-      "version": "1.0.68",
+      "version": "1.0.65",
       "package_url": "https://github.com/dtolnay/thiserror",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/thiserror/1.0.68/download",
-          "sha256": "02dd99dc800bbb97186339685293e1cc5d9df1f8fae2d0aecd9ff1c77efea892"
+          "url": "https://static.crates.io/crates/thiserror/1.0.65/download",
+          "sha256": "5d11abd9594d9b38965ef50805c5e469ca9cc6f197f883f717e0269a3057b3d5"
         }
       },
       "targets": [
@@ -70715,7 +70856,7 @@
         "deps": {
           "common": [
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "build_script_build"
             }
           ],
@@ -70725,13 +70866,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "thiserror-impl 1.0.68",
+              "id": "thiserror-impl 1.0.65",
               "target": "thiserror_impl"
             }
           ],
           "selects": {}
         },
-        "version": "1.0.68"
+        "version": "1.0.65"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -70748,14 +70889,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "thiserror-impl 1.0.68": {
+    "thiserror-impl 1.0.65": {
       "name": "thiserror-impl",
-      "version": "1.0.68",
+      "version": "1.0.65",
       "package_url": "https://github.com/dtolnay/thiserror",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/thiserror-impl/1.0.68/download",
-          "sha256": "a7c61ec9a6f64d2793d8a45faba21efbe3ced62a886d44c36a009b2b519b4c7e"
+          "url": "https://static.crates.io/crates/thiserror-impl/1.0.65/download",
+          "sha256": "ae71770322cbd277e69d762a16c444af02aa0575ac0d174f0b9562d3b37f8602"
         }
       },
       "targets": [
@@ -70788,14 +70929,14 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.0.68"
+        "version": "1.0.65"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -71812,11 +71953,11 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "serde_json"
             }
           ],
@@ -72017,7 +72158,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -72632,7 +72773,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -72687,7 +72828,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             },
             {
@@ -72958,11 +73099,11 @@
               "target": "bytes"
             },
             {
-              "id": "futures-core 0.3.31",
+              "id": "futures-core 0.3.30",
               "target": "futures_core"
             },
             {
-              "id": "futures-sink 0.3.31",
+              "id": "futures-sink 0.3.30",
               "target": "futures_sink"
             },
             {
@@ -72970,11 +73111,11 @@
               "target": "pin_project"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "serde_json"
             }
           ],
@@ -73042,11 +73183,11 @@
               "target": "either"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -73105,7 +73246,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures-core 0.3.31",
+              "id": "futures-core 0.3.30",
               "target": "futures_core"
             },
             {
@@ -73168,7 +73309,7 @@
               "target": "bytes"
             },
             {
-              "id": "futures-core 0.3.31",
+              "id": "futures-core 0.3.30",
               "target": "futures_core"
             },
             {
@@ -73232,7 +73373,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             },
             {
@@ -73313,19 +73454,19 @@
               "target": "bytes"
             },
             {
-              "id": "futures-core 0.3.31",
+              "id": "futures-core 0.3.30",
               "target": "futures_core"
             },
             {
-              "id": "futures-io 0.3.31",
+              "id": "futures-io 0.3.30",
               "target": "futures_io"
             },
             {
-              "id": "futures-sink 0.3.31",
+              "id": "futures-sink 0.3.30",
               "target": "futures_sink"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             },
             {
@@ -73390,7 +73531,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -73559,7 +73700,7 @@
               "target": "axum"
             },
             {
-              "id": "base64 0.22.1",
+              "id": "base64 0.22.0",
               "target": "base64"
             },
             {
@@ -73716,7 +73857,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -73791,11 +73932,11 @@
         "deps": {
           "common": [
             {
-              "id": "futures-core 0.3.31",
+              "id": "futures-core 0.3.30",
               "target": "futures_core"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             },
             {
@@ -73916,11 +74057,11 @@
         "deps": {
           "common": [
             {
-              "id": "futures-core 0.3.31",
+              "id": "futures-core 0.3.30",
               "target": "futures_core"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             },
             {
@@ -74148,7 +74289,7 @@
               "target": "bytes"
             },
             {
-              "id": "futures-core 0.3.31",
+              "id": "futures-core 0.3.30",
               "target": "futures_core"
             },
             {
@@ -74374,7 +74515,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             },
             {
@@ -74468,7 +74609,7 @@
               "target": "pin_project"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -74602,7 +74743,7 @@
               "target": "crossbeam_channel"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -74665,7 +74806,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -75049,7 +75190,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
@@ -75203,11 +75344,11 @@
               "target": "regex"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "serde_json"
             },
             {
@@ -75289,7 +75430,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "serde_json"
             }
           ],
@@ -75391,15 +75532,15 @@
               "target": "data_encoding"
             },
             {
-              "id": "futures-channel 0.3.31",
+              "id": "futures-channel 0.3.30",
               "target": "futures_channel"
             },
             {
-              "id": "futures-io 0.3.31",
+              "id": "futures-io 0.3.30",
               "target": "futures_io"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             },
             {
@@ -75423,7 +75564,7 @@
               "target": "smallvec"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -75439,7 +75580,7 @@
               "target": "tracing"
             },
             {
-              "id": "url 2.5.3",
+              "id": "url 2.5.2",
               "target": "url"
             }
           ],
@@ -75515,7 +75656,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             },
             {
@@ -75539,7 +75680,7 @@
               "target": "smallvec"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -75699,11 +75840,11 @@
               "target": "sha1"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
-              "id": "url 2.5.3",
+              "id": "url 2.5.2",
               "target": "url"
             },
             {
@@ -75765,7 +75906,7 @@
               "target": "bytes"
             },
             {
-              "id": "futures 0.3.31",
+              "id": "futures 0.3.30",
               "target": "futures"
             },
             {
@@ -76709,14 +76850,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "url 2.5.3": {
+    "url 2.5.2": {
       "name": "url",
-      "version": "2.5.3",
+      "version": "2.5.2",
       "package_url": "https://github.com/servo/rust-url",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/url/2.5.3/download",
-          "sha256": "8d157f1b96d14500ffdc1f10ba712e780825526c03d9a49b4d0324b0d9113ada"
+          "url": "https://static.crates.io/crates/url/2.5.2/download",
+          "sha256": "22784dbdf76fdde8af1aeda5622b546b422b6fc585325248a2bf9f5e41e94d6c"
         }
       },
       "targets": [
@@ -76741,8 +76882,7 @@
         "crate_features": {
           "common": [
             "default",
-            "serde",
-            "std"
+            "serde"
           ],
           "selects": {}
         },
@@ -76753,7 +76893,7 @@
               "target": "form_urlencoded"
             },
             {
-              "id": "idna 1.0.3",
+              "id": "idna 0.5.0",
               "target": "idna"
             },
             {
@@ -76761,14 +76901,14 @@
               "target": "percent_encoding"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "2.5.3"
+        "version": "2.5.2"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -77062,7 +77202,7 @@
               "target": "getrandom"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -77298,11 +77438,11 @@
               "target": "regex"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "serde_json"
             },
             {
@@ -77573,7 +77713,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.72",
               "target": "anyhow"
             },
             {
@@ -77778,11 +77918,11 @@
               "target": "bytes"
             },
             {
-              "id": "futures-channel 0.3.31",
+              "id": "futures-channel 0.3.30",
               "target": "futures_channel"
             },
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             },
             {
@@ -77830,11 +77970,11 @@
               "target": "scoped_tls"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "serde_json"
             },
             {
@@ -78074,7 +78214,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             },
             {
@@ -78261,7 +78401,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             },
             {
@@ -78555,7 +78695,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.72",
               "target": "anyhow"
             },
             {
@@ -78626,7 +78766,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures-util 0.3.31",
+              "id": "futures-util 0.3.30",
               "target": "futures_util"
             },
             {
@@ -78774,7 +78914,7 @@
               "target": "semver"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -78851,7 +78991,7 @@
               "target": "semver"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -78928,7 +79068,7 @@
               "target": "semver"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             }
           ],
@@ -78976,7 +79116,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.72",
               "target": "anyhow"
             },
             {
@@ -79032,7 +79172,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.72",
               "target": "anyhow"
             },
             {
@@ -79110,7 +79250,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.72",
               "target": "anyhow"
             },
             {
@@ -79162,7 +79302,7 @@
               "target": "rayon"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
@@ -79431,7 +79571,7 @@
               "target": "paste"
             },
             {
-              "id": "serde_derive 1.0.214",
+              "id": "serde_derive 1.0.203",
               "target": "serde_derive"
             },
             {
@@ -79566,7 +79706,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.72",
               "target": "anyhow"
             },
             {
@@ -79578,7 +79718,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             },
             {
@@ -79693,7 +79833,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.72",
               "target": "anyhow"
             },
             {
@@ -79745,7 +79885,7 @@
               "target": "target_lexicon"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -79817,7 +79957,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.72",
               "target": "anyhow"
             },
             {
@@ -79849,7 +79989,7 @@
               "target": "postcard"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
@@ -79879,7 +80019,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "serde_derive 1.0.214",
+              "id": "serde_derive 1.0.203",
               "target": "serde_derive"
             }
           ],
@@ -79925,7 +80065,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.72",
               "target": "anyhow"
             },
             {
@@ -80035,7 +80175,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -80082,7 +80222,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.72",
               "target": "anyhow"
             },
             {
@@ -83514,7 +83654,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.93",
+              "id": "anyhow 1.0.72",
               "target": "anyhow"
             },
             {
@@ -83534,11 +83674,11 @@
               "target": "semver"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "serde_json"
             },
             {
@@ -83556,7 +83696,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "serde_derive 1.0.214",
+              "id": "serde_derive 1.0.203",
               "target": "serde_derive"
             }
           ],
@@ -83736,11 +83876,11 @@
               "target": "data_encoding"
             },
             {
-              "id": "serde 1.0.214",
+              "id": "serde 1.0.203",
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.132",
+              "id": "serde_json 1.0.127",
               "target": "serde_json"
             }
           ],
@@ -83944,7 +84084,7 @@
               "target": "rusticata_macros"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 1.0.65",
               "target": "thiserror"
             },
             {
@@ -84317,7 +84457,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             },
             {
@@ -84431,7 +84571,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -84540,7 +84680,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             },
             {
@@ -84654,7 +84794,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -84775,7 +84915,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.87",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
@@ -86157,7 +86297,7 @@
     "actix-web 4.9.0",
     "addr 0.15.6",
     "aide 0.13.4",
-    "anyhow 1.0.93",
+    "anyhow 1.0.72",
     "arbitrary 1.3.2",
     "arc-swap 1.7.1",
     "arrayvec 0.7.4",
@@ -86236,8 +86376,8 @@
     "form_urlencoded 1.2.1",
     "fqdn 0.3.11",
     "fs_extra 1.3.0",
-    "futures 0.3.31",
-    "futures-util 0.3.31",
+    "futures 0.3.30",
+    "futures-util 0.3.30",
     "get_if_addrs 0.5.3",
     "getrandom 0.2.10",
     "group 0.13.0",
@@ -86285,7 +86425,7 @@
     "ic_principal 0.1.1",
     "icrc1-test-env 0.1.1",
     "icrc1-test-suite 0.1.1",
-    "idna 1.0.3",
+    "idna 1.0.2",
     "indexmap 2.2.6",
     "indicatif 0.17.5",
     "indoc 1.0.9",
@@ -86374,7 +86514,7 @@
     "rayon 1.10.0",
     "rcgen 0.13.1",
     "regex 1.11.0",
-    "reqwest 0.12.9",
+    "reqwest 0.12.8",
     "rgb 0.8.37",
     "ring 0.17.7",
     "ripemd 0.1.3",
@@ -86399,11 +86539,11 @@
     "scraper 0.17.1",
     "secp256k1 0.22.2",
     "semver 1.0.22",
-    "serde 1.0.214",
+    "serde 1.0.203",
     "serde-bytes-repr 0.1.5",
     "serde_bytes 0.11.15",
     "serde_cbor 0.11.2",
-    "serde_json 1.0.132",
+    "serde_json 1.0.127",
     "serde_regex 1.1.0",
     "serde_with 1.14.0",
     "serde_yaml 0.9.34+deprecated",
@@ -86433,7 +86573,7 @@
     "test-strategy 0.3.1",
     "tester 0.7.0",
     "textplots 0.8.4",
-    "thiserror 1.0.68",
+    "thiserror 1.0.65",
     "thousands 0.2.0",
     "threadpool 1.8.1",
     "tikv-jemalloc-ctl 0.5.4",
@@ -86464,7 +86604,7 @@
     "tracing-subscriber 0.3.18",
     "trust-dns-resolver 0.22.0",
     "turmoil 0.6.3",
-    "url 2.5.3",
+    "url 2.5.2",
     "uuid 1.10.0",
     "vsock 0.4.0",
     "walkdir 2.3.3",

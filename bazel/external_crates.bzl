@@ -568,7 +568,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-bn-lib": crate.spec(
                 git = "https://github.com/dfinity/ic-bn-lib",
-                rev = "526d34d15cfbf369d8baf2dae9932aa18d570a1d",
+                #rev = "526d34d15cfbf369d8baf2dae9932aa18d570a1d",
+                branch = "url-test",
             ),
             "ic-btc-interface": crate.spec(
                 version = "^0.2.2",
@@ -1377,7 +1378,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.6.3",
             ),
             "url": crate.spec(
-                version = "^2.5.2",
+                # 2.5.3 switches to IDNA 1.x sub-dep and seems to inflate the size of the canisters
+                version = "=2.5.2",
                 features = [
                     "serde",
                 ],
