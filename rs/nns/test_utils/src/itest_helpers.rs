@@ -13,7 +13,7 @@ use canister_test::{
 };
 use cycles_minting_canister::CyclesCanisterInitPayload;
 use dfn_candid::{candid_one, CandidOne};
-use futures::{FutureExt};
+use futures::FutureExt;
 use ic_base_types::CanisterId;
 use ic_canister_client_sender::Sender;
 use ic_config::Config;

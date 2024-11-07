@@ -4,7 +4,7 @@ pub use ic_types::ingress::WasmResult;
 use candid::Principal;
 use ic_management_canister_types::{
     CanisterInstallMode, CanisterSettingsArgs, CanisterStatusResultV2, InstallCodeArgs,
-    ProvisionalCreateCanisterWithCyclesArgs,
+    ProvisionalCreateCanisterWithCyclesArgs, UpdateSettingsArgs,
 };
 use ic_protobuf::state::ingress::v1::ErrorCode as ErrorCodeProto;
 use ic_types::messages::MessageId;
@@ -380,13 +380,18 @@ impl StateMachine {
         canister_id: &CanisterId,
         settings: CanisterSettingsArgs,
     ) -> Result<(), UserError> {
+        let update_settings_args = UpdateSettingsArgs {
+            canister_id: canister_id.get(),
+            settings,
+            sender_canister_version: None,
+        };
         post_process(call_candid_as::<_, ()>(
             &self.sm,
             Principal::management_canister(),
             RawEffectivePrincipal::CanisterId(canister_id.get().to_vec()),
             Principal::anonymous(),
             "update_settings",
-            (settings,),
+            (update_settings_args,),
         ))
     }
 
