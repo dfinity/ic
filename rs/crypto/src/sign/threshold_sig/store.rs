@@ -198,12 +198,17 @@ impl ThresholdSigDataStoreImpl {
     }
 
     fn assert_length_invariant(&self) {
+        let high_threshold_for_key_id_dkg_id_insertion_order_len: usize = self
+            .high_threshold_for_key_dkg_id_insertion_order
+            .values()
+            .map(|v| v.len())
+            .sum();
         assert_eq!(
             self.store.len(),
             self.low_threshold_dkg_id_insertion_order.len()
-                + self.high_threshold_dkg_id_insertion_order.len(),
-            "The combined length of the queues maintaining DKG ID insertion order must be the \
-            same as that of the map containing the DKG ID data."
+                + self.high_threshold_dkg_id_insertion_order.len()
+                + high_threshold_for_key_id_dkg_id_insertion_order_len,
+            "ThresholdSigDataStore length invariant violated"
         );
     }
 }
