@@ -13,7 +13,6 @@ use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_management_canister_types::{
     CanisterInstallMode, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
-    UpdateSettingsArgs,
 };
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
@@ -329,37 +328,16 @@ pub fn set_controllers(
     target: CanisterId,
     controllers: Vec<PrincipalId>,
 ) {
-    update_with_sender(
-        machine,
-        CanisterId::ic_00(),
-        "update_settings",
-        UpdateSettingsArgs {
-            canister_id: target.into(),
-            settings: CanisterSettingsArgsBuilder::new()
-                .with_controllers(controllers)
-                .build(),
-            sender_canister_version: None,
-        },
-        sender,
-    )
-    .unwrap()
+    machine.set_controllers(target, sender, controllers);
 }
 
 /// Gets controllers for a canister.
 pub fn get_controllers(
     machine: &StateMachine,
-    sender: PrincipalId,
+    _sender: PrincipalId,
     target: CanisterId,
 ) -> Vec<PrincipalId> {
-    let result: CanisterStatusResultV2 = update_with_sender(
-        machine,
-        CanisterId::ic_00(),
-        "canister_status",
-        CanisterIdRecord::from(target),
-        sender,
-    )
-    .unwrap();
-    result.controllers()
+    machine.get_controllers(target)
 }
 
 /// Get status for a canister.

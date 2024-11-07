@@ -204,6 +204,32 @@ impl StateMachine {
         self.sm.root_key().unwrap()
     }
 
+    pub fn get_controllers(&self, canister_id: CanisterId) -> Vec<PrincipalId> {
+        self.sm
+            .get_controllers(canister_id.into())
+            .into_iter()
+            .map(PrincipalId)
+            .collect()
+    }
+
+    pub fn set_controllers(
+        &self,
+        canister_id: CanisterId,
+        sender: PrincipalId,
+        new_controllers: Vec<PrincipalId>,
+    ) {
+        self.sm
+            .set_controllers(
+                canister_id.into(),
+                Some(sender.into()),
+                new_controllers
+                    .into_iter()
+                    .map(|controller| controller.0)
+                    .collect(),
+            )
+            .unwrap();
+    }
+
     pub fn await_ingress(
         &self,
         msg_id: MessageId,
