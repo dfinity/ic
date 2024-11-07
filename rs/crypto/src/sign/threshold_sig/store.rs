@@ -80,12 +80,20 @@ impl TranscriptData {
 /// data was inserted _first_ is removed, that is, DKG IDs are purged in
 /// insertion order.
 ///
-/// The maximum number of threshold signature data stored per tag is defined by
-/// `CAPACITY_PER_TAG`. For the moment there are two tags, `LowThreshold` and `HighThreshold`,
-/// meaning that the total capacity of the threshold signature data store is `2 * CAPACITY_PER_TAG`.
+/// The maximum number of threshold signature data stored per tag or key is defined by
+/// `CAPACITY_PER_TAG_OR_KEY`. For the moment there are three tags:
+/// * `LowThreshold`
+/// * `HighThreshold`
+/// * `HighThresholdForKey(MasterPublicKeyId)`
+///
+/// and that the total capacity of the threshold signature data store is
+/// `2*CAPACITY_PER_TAG_OR_KEY + K*CAPACITY_PER_TAG_OR_KEY` where `K` is
+/// the number of different `MasterPublicKeyId`s that are stored on the
+/// subnet. In production, currently at most 3 keys are stored pe subnet
+/// (1 ECDSA key, 2 Schnorr keys).
 pub struct ThresholdSigDataStoreImpl {
     store: BTreeMap<NiDkgId, ThresholdSigData>,
-    max_num_of_dkg_ids_per_tag: usize,
+    max_num_of_dkg_ids_per_tag_or_key: usize,
     // VecDeque used as queue: `push_back` to add, `pop_front` to remove
     low_threshold_dkg_id_insertion_order: VecDeque<NiDkgId>,
     high_threshold_dkg_id_insertion_order: VecDeque<NiDkgId>,
@@ -118,19 +126,19 @@ impl ThresholdSigDataStoreImpl {
     ///
     /// # Panics
     /// If `max_num_of_dkg_ids_per_tag` is smaller than 1.
-    fn new_with_max_size(max_num_of_dkg_ids_per_tag: usize) -> Self {
+    fn new_with_max_size(max_num_of_dkg_ids_per_tag_or_key: usize) -> Self {
         assert!(
-            max_num_of_dkg_ids_per_tag >= 1,
+            max_num_of_dkg_ids_per_tag_or_key >= 1,
             "The maximum size per tag must be at least 1"
         );
         ThresholdSigDataStoreImpl {
             store: BTreeMap::new(),
-            max_num_of_dkg_ids_per_tag,
+            max_num_of_dkg_ids_per_tag_or_key,
             low_threshold_dkg_id_insertion_order: VecDeque::with_capacity(
-                max_num_of_dkg_ids_per_tag,
+                max_num_of_dkg_ids_per_tag_or_key,
             ),
             high_threshold_dkg_id_insertion_order: VecDeque::with_capacity(
-                max_num_of_dkg_ids_per_tag,
+                max_num_of_dkg_ids_per_tag_or_key,
             ),
             high_threshold_for_key_id_dkg_id_insertion_order: BTreeMap::new(),
         }
@@ -157,7 +165,8 @@ impl ThresholdSigDataStoreImpl {
                     {
                         Some(insertion_order) => insertion_order.push_back(dkg_id.clone()),
                         None => {
-                            let mut buf = VecDeque::with_capacity(self.max_num_of_dkg_ids_per_tag);
+                            let mut buf =
+                                VecDeque::with_capacity(self.max_num_of_dkg_ids_per_tag_or_key);
                             buf.push_back(dkg_id.clone());
                             self.high_threshold_for_key_id_dkg_id_insertion_order
                                 .insert(master_public_key_id.clone(), buf);
@@ -180,7 +189,7 @@ impl ThresholdSigDataStoreImpl {
                 .get_mut(master_public_key_id),
         };
         if let Some(insertion_order) = dkg_id_insertion_order {
-            if insertion_order.len() > self.max_num_of_dkg_ids_per_tag {
+            if insertion_order.len() > self.max_num_of_dkg_ids_per_tag_or_key {
                 let oldest_dkg_id = insertion_order
                     .pop_front()
                     .expect("dkg store unexpectedly empty");
