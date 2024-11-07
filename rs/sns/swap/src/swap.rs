@@ -58,7 +58,6 @@ use crate::{
         ListSnsNeuronRecipesRequest,
         ListSnsNeuronRecipesResponse,
         NeuronBasketConstructionParameters,
-        NeuronId as SwapNeuronId,
         NewSaleTicketRequest,
         NewSaleTicketResponse,
         NotifyPaymentFailureResponse,
