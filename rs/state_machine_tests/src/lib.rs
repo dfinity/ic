@@ -2296,6 +2296,12 @@ impl StateMachine {
         let requires_full_state_hash =
             batch_number.get() % checkpoint_interval_length_plus_one == 0;
 
+        let time_of_next_round = Time::from_nanos_since_unix_epoch(
+            self.time_of_next_round()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos() as u64,
+        );
         let batch = Batch {
             batch_number,
             batch_summary,
@@ -2313,7 +2319,7 @@ impl StateMachine {
             idkg_subnet_public_keys: self.idkg_subnet_public_keys.clone(),
             idkg_pre_signature_ids: BTreeMap::new(),
             registry_version: self.registry_client.get_latest_version(),
-            time: self.get_time_of_next_round(),
+            time: time_of_next_round,
             consensus_responses: payload.consensus_responses,
             blockmaker_metrics: BlockmakerMetrics::new_for_test(),
             replica_version: ReplicaVersion::default(),
@@ -2334,9 +2340,8 @@ impl StateMachine {
 
         self.check_critical_errors();
 
-        let time_of_next_round = self.time_of_next_round();
-        self.set_time(time_of_next_round);
-        *self.time_of_last_round.write().unwrap() = time_of_next_round;
+        self.set_time(time_of_next_round.into());
+        *self.time_of_last_round.write().unwrap() = time_of_next_round.into();
 
         batch_number
     }
@@ -2430,7 +2435,7 @@ impl StateMachine {
     /// Returns the state machine time at the beginning of next round
     /// under the assumption that time won't be advanced before that
     /// round is finalized.
-    pub fn time_of_next_round(&self) -> SystemTime {
+    fn time_of_next_round(&self) -> SystemTime {
         let time = self.time();
         if time == *self.time_of_last_round.read().unwrap() {
             time + Self::EXECUTE_ROUND_TIME_INCREMENT
@@ -2443,16 +2448,6 @@ impl StateMachine {
     pub fn get_time(&self) -> Time {
         Time::from_nanos_since_unix_epoch(
             self.time()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos() as u64,
-        )
-    }
-
-    /// Returns the state machine time at the beginning of next round.
-    pub fn get_time_of_next_round(&self) -> Time {
-        Time::from_nanos_since_unix_epoch(
-            self.time_of_next_round()
                 .duration_since(SystemTime::UNIX_EPOCH)
                 .unwrap()
                 .as_nanos() as u64,

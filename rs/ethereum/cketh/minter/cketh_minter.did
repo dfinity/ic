@@ -201,6 +201,9 @@ type MinterInfo = record {
     // Last scraped block number for logs of the ERC20 helper contract.
     last_erc20_scraped_block_number: opt nat;
 
+    // Last scraped block number for logs of the deposit with subaccount helper contract.
+    last_deposit_with_subaccount_scraped_block_number: opt nat;
+
     // Canister ID of the ckETH ledger.
     cketh_ledger_id: opt principal;
 
@@ -453,6 +456,9 @@ type Event = record {
             block_number : nat;
         };
         SyncedErc20ToBlock : record {
+            block_number : nat;
+        };
+        SyncedDepositWithSubaccountToBlock : record {
             block_number : nat;
         };
         AcceptedEthWithdrawalRequest : record {

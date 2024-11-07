@@ -1,0 +1,30 @@
+# Fix for https://github.com/bytecodealliance/wasmtime/issues/9553
+diff --git a/cranelift/isle/isle/src/codegen.rs b/cranelift/isle/isle/src/codegen.rs
+index 158285832..d292e43c0 100644
+--- a/cranelift/isle/isle/src/codegen.rs
++++ b/cranelift/isle/isle/src/codegen.rs
+@@ -127,9 +127,6 @@ impl<'a> Codegen<'a> {
+             "// Generated automatically from the instruction-selection DSL code in:",
+         )
+         .unwrap();
+-        for file in &self.files.file_names {
+-            writeln!(code, "// - {file}").unwrap();
+-        }
+
+         if !options.exclude_global_allow_pragmas {
+             writeln!(
+@@ -641,12 +638,11 @@ impl<L: Length, C> Length for ContextIterWrapper<L, C> {{
+                             stack.push((Self::validate_block(ret_kind, body), "", scope));
+                         }
+
+-                        &ControlFlow::Return { pos, result } => {
++                        &ControlFlow::Return { pos: _pos, result } => {
+                             writeln!(
+                                 ctx.out,
+-                                "{}// Rule at {}.",
++                                "{}",
+                                 &ctx.indent,
+-                                pos.pretty_print_line(&self.files)
+                             )?;
+                             write!(ctx.out, "{}", &ctx.indent)?;
+                             match ret_kind {

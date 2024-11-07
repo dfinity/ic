@@ -677,8 +677,7 @@ async fn mint_tokens(request: MintTokensRequest) -> MintTokensResponse {
 #[cfg(feature = "test")]
 #[update]
 fn advance_target_version(request: AdvanceTargetVersionRequest) -> AdvanceTargetVersionResponse {
-    governance_mut().proto.target_version = request.target_version;
-    AdvanceTargetVersionResponse {}
+    governance_mut().advance_target_version(request)
 }
 
 fn main() {

@@ -58,7 +58,7 @@ use icp_ledger::{
 };
 use itertools::Itertools;
 use on_wire::FromWire;
-use slog::{debug, info};
+use slog::{debug, info, Logger};
 use std::{
     collections::BTreeMap,
     convert::{TryFrom, TryInto},
@@ -1850,4 +1850,16 @@ pub fn expiry_time() -> Duration {
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap()
         + Duration::from_secs(4 * 60)
+}
+
+/// Time the duration of the given closure and log it.
+pub fn timeit<F, R>(log: Logger, description: &str, f: F) -> R
+where
+    F: FnOnce() -> R,
+{
+    let start = Instant::now();
+    let result = f(); // Run the closure
+    let duration = start.elapsed();
+    info!(log, "Executed '{}' in: {:?}", description, duration);
+    result
 }

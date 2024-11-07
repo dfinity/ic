@@ -3387,6 +3387,20 @@ pub mod upgrade_journal_entry {
         PartialEq,
         ::prost::Message,
     )]
+    pub struct TargetVersionReset {
+        #[prost(message, optional, tag = "1")]
+        pub old_target_version: ::core::option::Option<super::governance::Version>,
+        #[prost(message, optional, tag = "2")]
+        pub new_target_version: ::core::option::Option<super::governance::Version>,
+    }
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
     pub struct UpgradeStarted {
         #[prost(message, optional, tag = "1")]
         pub current_version: ::core::option::Option<super::governance::Version>,
@@ -3475,7 +3489,7 @@ pub mod upgrade_journal_entry {
         #[prost(message, tag = "2")]
         TargetVersionSet(TargetVersionSet),
         #[prost(message, tag = "3")]
-        TargetVersionReset(TargetVersionSet),
+        TargetVersionReset(TargetVersionReset),
         #[prost(message, tag = "4")]
         UpgradeStarted(UpgradeStarted),
         #[prost(message, tag = "5")]

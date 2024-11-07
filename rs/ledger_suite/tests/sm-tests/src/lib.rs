@@ -461,7 +461,7 @@ fn get_transactions(
     get_transactions_as(env, archive, start, length, "get_transactions".to_string())
 }
 
-fn get_blocks(
+pub fn get_blocks(
     env: &StateMachine,
     archive: Principal,
     start: u64,
@@ -1443,7 +1443,9 @@ where
         vec![(Account::from(p1.0), 10_000_000)],
     );
 
-    let now = system_time_to_nanos(env.time_of_next_round());
+    // advance time so that time does not grow implicitly when executing a round
+    env.advance_time(Duration::from_secs(1));
+    let now = system_time_to_nanos(env.time());
     let tx_window = TX_WINDOW.as_nanos() as u64;
 
     assert_eq!(
@@ -1463,7 +1465,9 @@ where
         )
     );
 
-    let now = system_time_to_nanos(env.time_of_next_round());
+    // advance time so that time does not grow implicitly when executing a round
+    env.advance_time(Duration::from_secs(1));
+    let now = system_time_to_nanos(env.time());
 
     assert_eq!(
         Err(TransferError::CreatedInFuture { ledger_time: now }),
@@ -2377,7 +2381,11 @@ pub fn test_upgrade_serialization(
                         tx_index += 1;
                     }
                     tx_index_target += ADDITIONAL_TX_BATCH_SIZE;
-                    in_memory_ledger.verify_balances_and_allowances(&env, ledger_id);
+                    in_memory_ledger.verify_balances_and_allowances(
+                        &env,
+                        ledger_id,
+                        tx_index as u64,
+                    );
                 };
                 add_tx_and_verify();
 
