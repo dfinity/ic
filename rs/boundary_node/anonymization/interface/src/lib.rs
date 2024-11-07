@@ -28,7 +28,7 @@ pub enum LeaderMode {
 pub enum QueryError {
     Unauthorized,
     Unavailable,
-    Leader(LeaderMode, Vec<Pair>),
+    LeaderDuty(LeaderMode, Vec<Pair>),
     UnexpectedError(String),
 }
 

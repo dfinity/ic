@@ -20,7 +20,7 @@ type RegisterResponse = variant {
 type QueryError = variant {
     Unauthorized;
     Unavailable;
-    Leader : record { LeaderMode; vec Pair };
+    LeaderDuty : record { LeaderMode; vec Pair };
     UnexpectedError : text;
 };
 
