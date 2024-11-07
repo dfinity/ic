@@ -11,7 +11,7 @@ use crate::{
         reassemble_governance_proto, split_governance_proto, HeapGovernanceData, XdrConversionRate,
     },
     migrations::maybe_run_migrations,
-    neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
+    neuron::{types::total_potential_voting_power, DissolveStateAndAge, Neuron, NeuronBuilder},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{metrics::NeuronSubsetMetrics, NeuronMetrics, NeuronStore},
     neurons_fund::{
@@ -3846,6 +3846,7 @@ impl Governance {
                 data.get_deadline_timestamp_seconds(voting_period_seconds),
             ),
             derived_proposal_information: data.derived_proposal_information.clone(),
+            total_potential_voting_power: data.total_potential_voting_power,
         }
     }
 
@@ -5521,6 +5522,13 @@ impl Governance {
             ));
         }
 
+        let total_potential_voting_power = Some(total_potential_voting_power(
+            self.neuron_store.voting_eligible_neurons(now_seconds),
+            now_seconds,
+            &action,
+            ballots.len(),
+        )?);
+
         // In some cases we want to customize some aspects of the proposal
         let proposal = if let Action::ManageNeuron(ref manage_neuron) = action {
             // We want to customize the title for manage neuron proposals, to
@@ -5559,7 +5567,6 @@ impl Governance {
         let proposal_num = self.next_proposal_id();
         let proposal_id = ProposalId { id: proposal_num };
 
-        // Create the proposal.
         let wait_for_quiet_state = if wait_for_quiet_enabled {
             Some(WaitForQuietState {
                 current_deadline_timestamp_seconds: now_seconds
@@ -5568,6 +5575,8 @@ impl Governance {
         } else {
             None
         };
+
+        // Create the proposal.
         let mut proposal_data = ProposalData {
             id: Some(proposal_id),
             proposer: Some(*proposer_id),
@@ -5576,6 +5585,7 @@ impl Governance {
             proposal_timestamp_seconds: now_seconds,
             ballots,
             wait_for_quiet_state,
+            total_potential_voting_power,
             ..Default::default()
         };
 
@@ -5671,7 +5681,7 @@ impl Governance {
                 // No neuron in the stable storage should have maturity.
 
                 for neuron in self.neuron_store.voting_eligible_neurons(now_seconds) {
-                    let voting_power = neuron.voting_power(now_seconds);
+                    let voting_power = neuron.deciding_voting_power(now_seconds);
 
                     total_power += voting_power as u128;
 

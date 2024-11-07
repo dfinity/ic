@@ -164,6 +164,7 @@ jobs:
   bazel-build-all-config-check:
     <<: *dind-large-setup
     name: Bazel Build All Config Check
+    if: ${{ contains(github.event.pull_request.labels.*.name, 'CI_BUILD_CHECK') }}
     steps:
       - <<: *checkout
       - <<: *docker-login
@@ -264,6 +265,10 @@ jobs:
   build-ic:
     name: Build IC
     <<: *dind-large-setup
+    # keep options from dind-large-setup but run on dind-small-setup
+    runs-on:
+      group: ch1
+      labels: dind-small
     if: ${{ github.event_name != 'merge_group' }}
     steps:
       - <<: *checkout
@@ -349,7 +354,9 @@ jobs:
 
   cargo-clippy-linux:
     name: Cargo Clippy Linux
-    <<: *dind-large-setup
+    <<: *dind-small-setup
+    runs-on:
+      group: ch1
     steps:
       - <<: *checkout
       - name: Filter Rust Files [*.{rs,toml,lock}]
@@ -380,7 +387,9 @@ jobs:
 
   cargo-build-release-linux:
     name: Cargo Build Release Linux
-    <<: *dind-large-setup
+    <<: *dind-small-setup
+    runs-on:
+      group: ch1
     steps:
       - <<: *checkout
       - name: Filter Rust Files [*.{rs,toml,lock}]

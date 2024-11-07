@@ -5406,7 +5406,6 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "async-stream",
- "axum",
  "byte-unit",
  "bytes",
  "futures",
@@ -5414,8 +5413,6 @@ dependencies = [
  "hyper 1.5.0",
  "rand 0.8.5",
  "slog",
- "sync_wrapper 1.0.1",
- "thiserror",
  "tokio",
  "tonic",
 ]
@@ -10115,6 +10112,7 @@ dependencies = [
  "ic-nervous-system-common-test-keys",
  "ic-nervous-system-common-test-utils",
  "ic-nervous-system-governance",
+ "ic-nervous-system-linear-map",
  "ic-nervous-system-proto",
  "ic-nervous-system-root",
  "ic-nervous-system-runtime",
@@ -19984,7 +19982,6 @@ dependencies = [
  "axum",
  "clap 4.5.20",
  "http 1.1.0",
- "ic-async-utils",
  "itertools 0.12.1",
  "reqwest 0.12.8",
  "thiserror",
