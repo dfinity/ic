@@ -184,7 +184,7 @@ impl<T: Query> Query for WithLogs<T> {
             Err(err) => match err {
                 QueryError::Unauthorized => "unauthorized",
                 QueryError::Unavailable => "unavailable",
-                QueryError::Leader(mode, _) => match mode {
+                QueryError::LeaderDuty(mode, _) => match mode {
                     LeaderMode::Bootstrap => "leader-bootstrap",
                     LeaderMode::Refresh => "leader-refresh",
                 },
