@@ -14,6 +14,7 @@ use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConf
 use ic_types::{CanisterId, Cycles, NumBytes};
 
 use libfuzzer_sys::{fuzz_target, test_input_wrap};
+use slog::Level;
 use std::cell::RefCell;
 use std::ffi::CString;
 use std::os::raw::c_char;
@@ -133,6 +134,7 @@ fn setup_env() -> (StateMachine, CanisterId) {
         .with_config(Some(config))
         .with_subnet_type(subnet_type)
         .with_checkpoints_enabled(false)
+        .with_log_level(Some(Level::Critical))
         .build();
     let canister_id = env.create_canister_with_cycles(
         None,
