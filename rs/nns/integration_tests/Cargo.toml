@@ -57,7 +57,6 @@ ic-sns-swap = { path = "../../sns/swap" }
 ic-stable-structures = { workspace = true }
 icp-ledger = { path = "../../ledger_suite/icp" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
-itertools = { workspace = true }
 lazy_static = { workspace = true }
 lifeline = { path = "../handlers/lifeline/impl" }
 prometheus-parse = { workspace = true }
@@ -99,9 +98,11 @@ ic-test-utilities = { path = "../../test_utilities" }
 ic-types = { path = "../../types/types" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
 ic-xrc-types = "1.0.0"
+itertools = { workspace = true }
 maplit = "1.0.2"
 on_wire = { path = "../../rust_canisters/on_wire" }
 phantom_newtype = { path = "../../phantom_newtype" }
+pocket-ic = { path = "../../../packages/pocket-ic" }
 rand = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
 rustc-hash = "1.1.0"

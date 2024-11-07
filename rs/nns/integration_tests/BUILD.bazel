@@ -33,7 +33,6 @@ BASE_DEPENDENCIES = [
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-cdk-timers",
     "@crate_index//:ic-stable-structures",
-    "@crate_index//:itertools",
     "@crate_index//:lazy_static",
     "@crate_index//:prometheus-parse",
     "@crate_index//:prost",
@@ -42,7 +41,6 @@ BASE_DEPENDENCIES = [
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
     "//conditions:default": [
         "//packages/icrc-ledger-types:icrc_ledger_types",
-        "//packages/pocket-ic",
         "//rs/canister_client/sender",
         "//rs/config",
         "//rs/crypto",
@@ -119,6 +117,7 @@ MACRO_DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//packages/pocket-ic",
     "//rs/nervous_system/common/test_utils",
     "//rs/nervous_system/integration_tests:nervous_system_integration_tests",
     "//rs/nns/test_utils/golden_nns_state",
@@ -126,6 +125,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:ic-cbor",
     "@crate_index//:ic-certificate-verification",
     "@crate_index//:ic-certification",
+    "@crate_index//:itertools",
     "@crate_index//:serde_cbor",
 ]
 
