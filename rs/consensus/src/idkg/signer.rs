@@ -1096,7 +1096,7 @@ mod tests {
             create_request_id(&mut uid_generator, height),
             create_request_id(&mut uid_generator, height),
         );
-        let wrong_key_id = match key_id.deref() {
+        let wrong_key_id = match key_id.inner() {
             MasterPublicKeyId::Ecdsa(_) => {
                 fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Ed25519)
             }
@@ -1286,7 +1286,7 @@ mod tests {
                     &state,
                 );
                 let requested_signatures_count = block_reader.requested_signatures().count();
-                let expected_complaints_count = match key_id.deref() {
+                let expected_complaints_count = match key_id.inner() {
                     MasterPublicKeyId::Ecdsa(_) => requested_signatures_count * 5,
                     MasterPublicKeyId::Schnorr(_) => requested_signatures_count * 2,
                     MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
@@ -1334,7 +1334,7 @@ mod tests {
                     caller: user_test_id(1).get(),
                     derivation_path: vec![],
                 };
-                let (receivers, inputs) = match key_id.deref() {
+                let (receivers, inputs) = match key_id.inner() {
                     MasterPublicKeyId::Ecdsa(_) => {
                         let inputs = generate_tecdsa_protocol_inputs(
                             &env,
@@ -1547,7 +1547,7 @@ mod tests {
         });
 
         // A share for the second context with mismatching schemes
-        let key_id_wrong_scheme = match key_id.deref() {
+        let key_id_wrong_scheme = match key_id.inner() {
             MasterPublicKeyId::Ecdsa(_) => {
                 fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Ed25519)
             }

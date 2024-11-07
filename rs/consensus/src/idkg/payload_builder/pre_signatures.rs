@@ -19,7 +19,6 @@ use ic_types::{
     Height, NodeId, RegistryVersion,
 };
 use std::collections::{BTreeMap, BTreeSet};
-use std::ops::Deref;
 
 /// Update the pre-signatures in the payload by:
 /// - making new configs when pre-conditions are met;
@@ -369,7 +368,7 @@ fn make_new_pre_signatures_if_needed_helper(
                 MasterPublicKeyId::Ecdsa(_) | MasterPublicKeyId::Schnorr(_)
             )
         })
-        .find(|key_config| &key_config.key_id == key_id.deref())
+        .find(|key_config| &key_config.key_id == key_id.inner())
         .map(|key_config| key_config.pre_signatures_to_create_in_advance as usize)
     else {
         return new_pre_signatures;
@@ -380,7 +379,7 @@ fn make_new_pre_signatures_if_needed_helper(
     }
 
     for _ in 0..(pre_signatures_to_create - unassigned_pre_signatures) {
-        match key_id.deref() {
+        match key_id.inner() {
             MasterPublicKeyId::Ecdsa(ecdsa_key_id) => {
                 let kappa_config = new_random_unmasked_config(
                     key_id,
@@ -572,7 +571,7 @@ pub(super) mod tests {
         SubnetId,
     };
     use idkg::IDkgTranscriptOperationRef;
-    use std::ops::Deref;
+
     use strum::IntoEnumIterator;
 
     fn set_up(
@@ -724,7 +723,7 @@ pub(super) mod tests {
                 }
             }
         }
-        let expected_transcript_ids = match key_id.deref() {
+        let expected_transcript_ids = match key_id.inner() {
             MasterPublicKeyId::Ecdsa(_) => 2 * expected_pre_signatures_in_creation,
             MasterPublicKeyId::Schnorr(_) => expected_pre_signatures_in_creation,
             MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),

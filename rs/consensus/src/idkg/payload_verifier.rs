@@ -632,7 +632,6 @@ mod test {
         Height,
     };
     use std::collections::BTreeSet;
-    use std::ops::Deref;
 
     #[test]
     fn test_validate_transcript_refs_all_algorithms() {
@@ -1038,7 +1037,7 @@ mod test {
         let fake_response =
             CompletedSignature::Unreported(ic_types::batch::ConsensusResponse::new(
                 CallbackId::from(0),
-                ic_types::messages::Payload::Data(match key_id.deref() {
+                ic_types::messages::Payload::Data(match key_id.inner() {
                     MasterPublicKeyId::Ecdsa(_) => {
                         SignWithECDSAReply { signature: vec![] }.encode()
                     }
@@ -1074,7 +1073,7 @@ mod test {
         // Insert agreement for context matched with pre-signature of different scheme
         let mut idkg_payload_mismatched_context =
             empty_idkg_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
-        let wrong_key_id = match key_id.deref() {
+        let wrong_key_id = match key_id.inner() {
             MasterPublicKeyId::Ecdsa(_) => {
                 fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Ed25519)
             }

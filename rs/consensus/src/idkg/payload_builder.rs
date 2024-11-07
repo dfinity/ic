@@ -299,7 +299,7 @@ fn create_summary_payload_helper(
     // with the new key and different transcript IDs.
     idkg_summary
         .ongoing_xnet_reshares
-        .retain(|request, _| !new_key_transcripts.contains(request.master_key_id.deref()));
+        .retain(|request, _| !new_key_transcripts.contains(request.master_key_id.inner()));
 
     idkg_summary.uid_generator.update_height(height)?;
     update_summary_refs(height, &mut idkg_summary, block_reader)?;
@@ -1079,7 +1079,7 @@ mod tests {
 
         signature_builder.signatures.insert(
             get_context_request_id(&context.1).unwrap(),
-            match key_id.deref() {
+            match key_id.inner() {
                 MasterPublicKeyId::Ecdsa(_) => {
                     CombinedSignature::Ecdsa(ThresholdEcdsaCombinedSignature {
                         signature: vec![1; 32],
@@ -1906,7 +1906,7 @@ mod tests {
                 derivation_path: vec![],
             };
             let algorithm = algorithm_for_key_id(&key_id);
-            let test_inputs = match key_id.deref() {
+            let test_inputs = match key_id.inner() {
                 MasterPublicKeyId::Ecdsa(_) => {
                     TestSigInputs::from(&generate_tecdsa_protocol_inputs(
                         &env,

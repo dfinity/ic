@@ -62,7 +62,6 @@ use ic_types::{Height, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetI
 use rand::{CryptoRng, Rng};
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
-use std::ops::Deref;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use strum::IntoEnumIterator;
@@ -1147,7 +1146,7 @@ pub(crate) fn create_sig_inputs_with_args(
     height: Height,
     key_id: &IDkgMasterPublicKeyId,
 ) -> TestSigInputs {
-    match key_id.deref() {
+    match key_id.inner() {
         MasterPublicKeyId::Ecdsa(key_id) => {
             create_ecdsa_sig_inputs_with_args(caller, receivers, key_unmasked, height, key_id)
         }
@@ -1348,7 +1347,7 @@ pub(crate) fn create_signature_share_with_nonce(
     request_id: RequestId,
     nonce: u8,
 ) -> IDkgMessage {
-    match key_id.deref() {
+    match key_id.inner() {
         MasterPublicKeyId::Ecdsa(_) => IDkgMessage::EcdsaSigShare(EcdsaSigShare {
             signer_id,
             request_id,

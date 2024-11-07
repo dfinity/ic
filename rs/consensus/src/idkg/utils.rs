@@ -40,7 +40,6 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     convert::TryInto,
     fmt::{self, Display, Formatter},
-    ops::Deref,
     sync::Arc,
 };
 
@@ -450,7 +449,7 @@ pub(crate) fn inspect_idkg_chain_key_initializations(
 }
 
 pub(crate) fn algorithm_for_key_id(key_id: &IDkgMasterPublicKeyId) -> AlgorithmId {
-    match key_id.deref() {
+    match key_id.inner() {
         MasterPublicKeyId::Ecdsa(ecdsa_key_id) => match ecdsa_key_id.curve {
             EcdsaCurve::Secp256k1 => AlgorithmId::ThresholdEcdsaSecp256k1,
         },

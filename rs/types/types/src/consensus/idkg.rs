@@ -86,17 +86,23 @@ impl From<IDkgMasterPublicKeyId> for MasterPublicKeyId {
     }
 }
 
+impl IDkgMasterPublicKeyId {
+    pub fn inner(&self) -> &MasterPublicKeyId {
+        &self.0
+    }
+}
+
 impl std::ops::Deref for IDkgMasterPublicKeyId {
     type Target = MasterPublicKeyId;
 
     fn deref(&self) -> &<Self as std::ops::Deref>::Target {
-        &self.0
+        self.inner()
     }
 }
 
 impl std::borrow::Borrow<MasterPublicKeyId> for IDkgMasterPublicKeyId {
     fn borrow(&self) -> &MasterPublicKeyId {
-        &self.0
+        self.inner()
     }
 }
 

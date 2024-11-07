@@ -155,6 +155,13 @@ pub(crate) fn update_signature_agreements(
 
 #[cfg(test)]
 mod tests {
+    use crate::idkg::test_utils::{
+        create_available_pre_signature, empty_idkg_payload_with_key_ids, empty_response,
+        fake_completed_signature_request_context, fake_ecdsa_idkg_master_public_key_id,
+        fake_master_public_key_ids_for_all_algorithms, fake_signature_request_context,
+        fake_signature_request_context_with_pre_sig, set_up_idkg_payload,
+        TestThresholdSignatureBuilder,
+    };
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_management_canister_types::MasterPublicKeyId;
@@ -167,15 +174,6 @@ mod tests {
         Height,
     };
     use std::collections::BTreeSet;
-    use std::ops::Deref;
-
-    use crate::idkg::test_utils::{
-        create_available_pre_signature, empty_idkg_payload_with_key_ids, empty_response,
-        fake_completed_signature_request_context, fake_ecdsa_idkg_master_public_key_id,
-        fake_master_public_key_ids_for_all_algorithms, fake_signature_request_context,
-        fake_signature_request_context_with_pre_sig, set_up_idkg_payload,
-        TestThresholdSignatureBuilder,
-    };
 
     use super::*;
 
@@ -297,7 +295,7 @@ mod tests {
                     pseudo_random_id: [i as u8; 32],
                     height: Height::from(1),
                 },
-                match key_id.deref() {
+                match key_id.inner() {
                     MasterPublicKeyId::Ecdsa(_) => {
                         CombinedSignature::Ecdsa(ThresholdEcdsaCombinedSignature {
                             signature: vec![i as u8; 32],
