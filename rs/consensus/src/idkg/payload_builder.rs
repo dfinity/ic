@@ -1334,7 +1334,7 @@ mod tests {
             }
             let block_reader = block_chain_reader(
                 &pool_reader,
-                &pool_reader.get_highest_summary_block(),
+                &pool_reader.get_highest_finalized_summary_block(),
                 &parent_block,
                 None,
                 &no_op_logger(),
@@ -1566,7 +1566,7 @@ mod tests {
             summary.single_key_transcript_mut().current = Some(current_key_transcript);
             let block_reader = block_chain_reader(
                 &pool_reader,
-                &pool_reader.get_highest_summary_block(),
+                &pool_reader.get_highest_finalized_summary_block(),
                 &parent_block,
                 None,
                 &no_op_logger(),
