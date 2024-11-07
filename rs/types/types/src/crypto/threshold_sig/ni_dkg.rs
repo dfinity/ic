@@ -33,7 +33,6 @@ mod tests;
 /// Allows to distinguish protocol executions in high and low threshold
 /// settings.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, EnumCount, Serialize)]
-#[cfg_attr(test, derive(ExhaustiveSet))]
 #[repr(isize)]
 pub enum NiDkgTag {
     LowThreshold = 1,
