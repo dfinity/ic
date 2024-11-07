@@ -2,6 +2,7 @@
 mod tests;
 
 use crate::endpoints::{EthTransaction, RetrieveEthStatus, TxFinalizedStatus, WithdrawalStatus};
+use crate::eth_logs::LedgerSubaccount;
 use crate::eth_rpc::Hash;
 use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::eth_rpc_client::responses::TransactionStatus;
@@ -75,10 +76,10 @@ impl WithdrawalRequest {
         }
     }
 
-    pub fn from_subaccount(&self) -> &Option<Subaccount> {
+    pub fn from_subaccount(&self) -> Option<&LedgerSubaccount> {
         match self {
-            WithdrawalRequest::CkEth(request) => &request.from_subaccount,
-            WithdrawalRequest::CkErc20(request) => &request.from_subaccount,
+            WithdrawalRequest::CkEth(request) => request.from_subaccount.as_ref(),
+            WithdrawalRequest::CkErc20(request) => request.from_subaccount.as_ref(),
         }
     }
 
@@ -97,7 +98,9 @@ impl WithdrawalRequest {
             ByWithdrawalId(index) => &self.cketh_ledger_burn_index() == index,
             ByRecipient(address) => &self.payee() == address,
             BySenderAccount(Account { owner, subaccount }) => {
-                &self.from() == owner && self.from_subaccount() == &subaccount.map(Subaccount)
+                &self.from() == owner
+                    && self.from_subaccount()
+                        == subaccount.and_then(LedgerSubaccount::from_bytes).as_ref()
             }
         }
     }
@@ -132,7 +135,7 @@ pub struct EthWithdrawalRequest {
     pub from: Principal,
     /// The subaccount from which the minter burned ckETH.
     #[n(4)]
-    pub from_subaccount: Option<Subaccount>,
+    pub from_subaccount: Option<LedgerSubaccount>,
     /// The IC time at which the withdrawal request arrived.
     #[n(5)]
     pub created_at: Option<u64>,
@@ -167,7 +170,7 @@ pub struct Erc20WithdrawalRequest {
     pub from: Principal,
     /// The subaccount from which the minter burned ckETH.
     #[n(8)]
-    pub from_subaccount: Option<Subaccount>,
+    pub from_subaccount: Option<LedgerSubaccount>,
     /// The IC time at which the withdrawal request arrived.
     #[n(9)]
     pub created_at: u64,
@@ -241,7 +244,7 @@ pub struct ReimbursementRequest {
     #[cbor(n(2), with = "crate::cbor::principal")]
     pub to: Principal,
     #[n(3)]
-    pub to_subaccount: Option<Subaccount>,
+    pub to_subaccount: Option<LedgerSubaccount>,
     /// Transaction hash of the failed ETH transaction.
     /// We use this hash to link the mint reimbursement transaction
     /// on the ledger with the failed ETH transaction.
@@ -271,16 +274,6 @@ pub enum ReimbursedError {
     /// The reimbursement request is quarantined to avoid any double minting and
     /// will not be further processed without manual intervention.
     Quarantined,
-}
-
-#[derive(Clone, Eq, PartialEq, Decode, Encode)]
-#[cbor(transparent)]
-pub struct Subaccount(#[cbor(n(0), with = "minicbor::bytes")] pub [u8; 32]);
-
-impl fmt::Debug for Subaccount {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        write!(f, "{}", hex::encode(self.0))
-    }
 }
 
 struct DebugPrincipal<'a>(&'a Principal);

@@ -15,7 +15,7 @@ use ic_cketh_minter::state::audit::{apply_state_transition, EventType};
 use ic_cketh_minter::state::eth_logs_scraping::LogScrapingId;
 use ic_cketh_minter::state::transactions::{
     create_transaction, Erc20WithdrawalRequest, EthWithdrawalRequest, ReimbursementIndex,
-    Subaccount, WithdrawalRequest,
+    WithdrawalRequest,
 };
 use ic_cketh_minter::state::State;
 use ic_cketh_minter::tx::{
