@@ -3,8 +3,9 @@ name = "anonymization-backend"
 version = "0.1.0"
 edition = "2021"
 
-[lib]
-crate-type = ["cdylib"]
+[[bin]]
+name = "anonymization-backend"
+path = "src/lib.rs"
 
 [dependencies]
 anyhow = { workspace = true }
@@ -13,6 +14,7 @@ candid = { workspace = true }
 ic-cdk = { workspace = true }
 ic-cdk-timers = { workspace = true }
 ic-stable-structures = { workspace = true }
+ic-nns-constants = { path = "../../../nns/constants" }
 lazy_static = { workspace = true }
 prometheus = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
