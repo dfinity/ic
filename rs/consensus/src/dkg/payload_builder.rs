@@ -1212,10 +1212,10 @@ mod tests {
                     match tag {
                         NiDkgTag::LowThreshold => 3,
                         NiDkgTag::HighThreshold => 5,
-                        /////////////////////////////////////////
-                        // TODO: check with Consensus team
+                        /////////////////////////////////////////////////////
+                        // TODO(CON-1417): extend this test once we have support for vetKD transcripts in registry CUPs
+                        /////////////////////////////////////////////////////
                         NiDkgTag::HighThresholdForKey(_) => panic!("not applicable"),
-                        /////////////////////////////////////////
                     }
                 );
             }
