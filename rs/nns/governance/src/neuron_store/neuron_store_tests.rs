@@ -653,9 +653,10 @@ fn test_prune_some_following() {
         },
     };
 
-    let fresh_neuron = simple_neuron_builder(1)
+    let mut fresh_neuron = simple_neuron_builder(1)
         .with_followees(followees.clone())
         .build();
+    fresh_neuron.refresh_voting_power(CREATED_TIMESTAMP_SECONDS - 7 * ONE_MONTH_SECONDS + 1);
 
     // Similar to fresh_neuron, except voting power was refrshed a "long" time
     // ago.
@@ -665,8 +666,8 @@ fn test_prune_some_following() {
     stale_neuron.refresh_voting_power(CREATED_TIMESTAMP_SECONDS - 7 * ONE_MONTH_SECONDS - 1);
 
     let mut neuron_store = NeuronStore::new(btreemap! {
-        1 => fresh_neuron,
-        2 => stale_neuron,
+        fresh_neuron.id().id => fresh_neuron.clone(),
+        stale_neuron.id().id => stale_neuron.clone(),
     });
 
     // Step 2: Call code under test.
@@ -682,8 +683,16 @@ fn test_prune_some_following() {
 
     // Step 3: Inspect results.
 
+    // Assert that fresh neuron did not change.
     neuron_store
-        .with_neuron(&NeuronId { id: 1 }, |stale_neuron| {
+        .with_neuron(&fresh_neuron.id(), |fresh_neuron| {
+            assert_eq!(fresh_neuron.followees, followees);
+        })
+        .unwrap();
+
+    // Assert that the stale neuron did in fact change.
+    neuron_store
+        .with_neuron(&stale_neuron.id(), |stale_neuron| {
             assert_eq!(
                 stale_neuron.followees,
                 hashmap! {
@@ -694,13 +703,6 @@ fn test_prune_some_following() {
                     },
                 },
             );
-        })
-        .unwrap();
-
-    // Assert that the recently refreshed neuron did not change.
-    neuron_store
-        .with_neuron(&NeuronId { id: 2 }, |fresh_neuron| {
-            assert_eq!(fresh_neuron.followees, followees);
         })
         .unwrap();
 

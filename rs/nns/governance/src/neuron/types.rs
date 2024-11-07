@@ -564,9 +564,9 @@ impl Neuron {
     /// If the neuron refreshed recently, no followee neuron IDs are removed
     /// (and returns 0).
     pub(crate) fn prune_following(&mut self, now_seconds: u64) -> u64 {
-        let earliest_timestamp_seconds = now_seconds - 7 * ONE_MONTH_SECONDS;
-        let too_soon = self.voting_power_refreshed_timestamp_seconds < earliest_timestamp_seconds;
-        if too_soon {
+        let is_fresh =
+            self.voting_power_refreshed_timestamp_seconds >= now_seconds - 7 * ONE_MONTH_SECONDS;
+        if is_fresh {
             return 0;
         }
 
