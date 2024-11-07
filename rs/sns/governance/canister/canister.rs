@@ -22,7 +22,7 @@ use ic_nervous_system_clients::{
 };
 use ic_nervous_system_common::{
     dfn_core_stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
-    serve_logs, serve_logs_v2, serve_metrics,
+    serve_journal, serve_logs, serve_logs_v2, serve_metrics,
 };
 use ic_nervous_system_proto::pb::v1::{
     GetTimersRequest, GetTimersResponse, ResetTimersRequest, ResetTimersResponse, Timers,
@@ -613,6 +613,14 @@ ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method
 #[query(hidden = true, decoding_quota = 10000)]
 pub fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
+        "/journal" => {
+            let journal = governance()
+                .proto
+                .upgrade_journal
+                .as_ref()
+                .expect("The upgrade journal is empty for this SNS.");
+            serve_journal(journal)
+        }
         "/metrics" => serve_metrics(encode_metrics),
         "/logs" => serve_logs_v2(request, &INFO, &ERROR),
 
