@@ -43,7 +43,7 @@ use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamErr
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateHashError, StateManager, StateReader};
 use ic_limits::{MAX_INGRESS_TTL, PERMITTED_DRIFT, SMALL_APP_SUBNET_MAX_SIZE};
-use ic_logger::{debug, error, ReplicaLogger};
+use ic_logger::{error, ReplicaLogger};
 use ic_management_canister_types::{
     self as ic00, CanisterIdRecord, InstallCodeArgs, MasterPublicKeyId, Method, Payload,
 };
@@ -1410,19 +1410,35 @@ impl StateMachine {
         {
             match context.args {
                 ThresholdArguments::Ecdsa(_) if self.is_ecdsa_signing_enabled => {
-                    if let Some(response) = self.build_sign_with_ecdsa_reply(context) {
-                        payload.consensus_responses.push(ConsensusResponse::new(
-                            *id,
-                            MsgPayload::Data(response.encode()),
-                        ));
+                    match self.build_sign_with_ecdsa_reply(context) {
+                        Ok(response) => {
+                            payload.consensus_responses.push(ConsensusResponse::new(
+                                *id,
+                                MsgPayload::Data(response.encode()),
+                            ));
+                        }
+                        Err(reject_context) => {
+                            payload.consensus_responses.push(ConsensusResponse::new(
+                                *id,
+                                MsgPayload::Reject(reject_context),
+                            ));
+                        }
                     }
                 }
                 ThresholdArguments::Schnorr(_) if self.is_schnorr_signing_enabled => {
-                    if let Some(response) = self.build_sign_with_schnorr_reply(context) {
-                        payload.consensus_responses.push(ConsensusResponse::new(
-                            *id,
-                            MsgPayload::Data(response.encode()),
-                        ));
+                    match self.build_sign_with_schnorr_reply(context) {
+                        Ok(response) => {
+                            payload.consensus_responses.push(ConsensusResponse::new(
+                                *id,
+                                MsgPayload::Data(response.encode()),
+                            ));
+                        }
+                        Err(reject_context) => {
+                            payload.consensus_responses.push(ConsensusResponse::new(
+                                *id,
+                                MsgPayload::Reject(reject_context),
+                            ));
+                        }
                     }
                 }
                 _ => {}
@@ -2137,7 +2153,7 @@ impl StateMachine {
     fn build_sign_with_ecdsa_reply(
         &self,
         context: &SignWithThresholdContext,
-    ) -> Option<SignWithECDSAReply> {
+    ) -> Result<SignWithECDSAReply, RejectContext> {
         assert!(context.is_ecdsa());
 
         if let Some(SignatureSecretKey::EcdsaSecp256k1(k)) =
@@ -2151,21 +2167,23 @@ impl StateMachine {
             let signature = dk
                 .sign_digest_with_ecdsa(&context.ecdsa_args().message_hash)
                 .to_vec();
-            Some(SignWithECDSAReply { signature })
+            Ok(SignWithECDSAReply { signature })
         } else {
-            debug!(
-                self.replica_logger,
-                "No ECDSA key with key id {} found",
-                context.key_id()
-            );
-            None
+            Err(RejectContext::new(
+                RejectCode::CanisterError,
+                format!(
+                    "Subnet {} does not hold threshold key {}.",
+                    self.subnet_id,
+                    context.key_id()
+                ),
+            ))
         }
     }
 
     fn build_sign_with_schnorr_reply(
         &self,
         context: &SignWithThresholdContext,
-    ) -> Option<SignWithSchnorrReply> {
+    ) -> Result<SignWithSchnorrReply, RejectContext> {
         assert!(context.is_schnorr());
 
         let signature = match self.idkg_subnet_secret_keys.get(&context.key_id()) {
@@ -2189,15 +2207,18 @@ impl StateMachine {
                 dk.sign_message(&context.schnorr_args().message).to_vec()
             }
             _ => {
-                debug!(
-                    self.replica_logger,
-                    "No Schnorr key with specified key id found"
-                );
-                return None;
+                return Err(RejectContext::new(
+                    RejectCode::CanisterError,
+                    format!(
+                        "Subnet {} does not hold threshold key {}.",
+                        self.subnet_id,
+                        context.key_id()
+                    ),
+                ));
             }
         };
 
-        Some(SignWithSchnorrReply { signature })
+        Ok(SignWithSchnorrReply { signature })
     }
 
     /// If set to true, the state machine will handle sign_with_ecdsa calls during `tick()`.
@@ -2224,19 +2245,35 @@ impl StateMachine {
         {
             match context.args {
                 ThresholdArguments::Ecdsa(_) if self.is_ecdsa_signing_enabled => {
-                    if let Some(response) = self.build_sign_with_ecdsa_reply(context) {
-                        payload.consensus_responses.push(ConsensusResponse::new(
-                            *id,
-                            MsgPayload::Data(response.encode()),
-                        ));
+                    match self.build_sign_with_ecdsa_reply(context) {
+                        Ok(response) => {
+                            payload.consensus_responses.push(ConsensusResponse::new(
+                                *id,
+                                MsgPayload::Data(response.encode()),
+                            ));
+                        }
+                        Err(reject_context) => {
+                            payload.consensus_responses.push(ConsensusResponse::new(
+                                *id,
+                                MsgPayload::Reject(reject_context),
+                            ));
+                        }
                     }
                 }
                 ThresholdArguments::Schnorr(_) if self.is_schnorr_signing_enabled => {
-                    if let Some(response) = self.build_sign_with_schnorr_reply(context) {
-                        payload.consensus_responses.push(ConsensusResponse::new(
-                            *id,
-                            MsgPayload::Data(response.encode()),
-                        ));
+                    match self.build_sign_with_schnorr_reply(context) {
+                        Ok(response) => {
+                            payload.consensus_responses.push(ConsensusResponse::new(
+                                *id,
+                                MsgPayload::Data(response.encode()),
+                            ));
+                        }
+                        Err(reject_context) => {
+                            payload.consensus_responses.push(ConsensusResponse::new(
+                                *id,
+                                MsgPayload::Reject(reject_context),
+                            ));
+                        }
                     }
                 }
                 _ => {}
