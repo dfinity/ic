@@ -501,14 +501,14 @@ mod subaccount {
         #[n(0)]
         pub field_before: u64,
         #[n(1)]
-        pub from_subaccount: Option<Subaccount>,
+        pub from_subaccount: Option<LegacySubaccount>,
         #[n(2)]
         pub field_after: u64,
     }
 
     #[derive(Clone, Debug, Eq, PartialEq, Decode, Encode)]
     #[cbor(transparent)]
-    pub struct Subaccount(#[cbor(n(0), with = "minicbor::bytes")] pub [u8; 32]);
+    pub struct LegacySubaccount(#[cbor(n(0), with = "minicbor::bytes")] pub [u8; 32]);
 
     #[derive(Clone, Debug, Eq, PartialEq, Decode, Encode)]
     pub struct WithLedgerSubaccount {

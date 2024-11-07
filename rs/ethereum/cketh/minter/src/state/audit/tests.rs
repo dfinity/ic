@@ -310,7 +310,7 @@ impl GetEventsFile {
                     destination: destination.parse().unwrap(),
                     ledger_burn_index: map_nat(ledger_burn_index),
                     from,
-                    from_subaccount: from_subaccount.map(Subaccount),
+                    from_subaccount: from_subaccount.and_then(LedgerSubaccount::from_bytes),
                     created_at,
                 }),
                 EventPayload::CreatedTransaction {
@@ -421,7 +421,7 @@ impl GetEventsFile {
                     ckerc20_ledger_id,
                     ckerc20_ledger_burn_index: map_nat(ckerc20_ledger_burn_index),
                     from,
-                    from_subaccount: from_subaccount.map(Subaccount),
+                    from_subaccount: from_subaccount.and_then(LedgerSubaccount::from_bytes),
                     created_at,
                 }),
                 EventPayload::FailedErc20WithdrawalRequest {
@@ -433,7 +433,7 @@ impl GetEventsFile {
                     ledger_burn_index: map_nat(withdrawal_id),
                     reimbursed_amount: reimbursed_amount.try_into().unwrap(),
                     to,
-                    to_subaccount: to_subaccount.map(Subaccount),
+                    to_subaccount: to_subaccount.and_then(LedgerSubaccount::from_bytes),
                     transaction_hash: None,
                 }),
                 EventPayload::MintedCkErc20 {

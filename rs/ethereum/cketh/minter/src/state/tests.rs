@@ -1,6 +1,6 @@
 use crate::endpoints::CandidBlockTag;
 use crate::eth_logs::{
-    EventSource, LedgerSubaccount, ReceivedErc20Event, ReceivedEthEvent, ReceivedEvent,
+    EventSource, ReceivedErc20Event, ReceivedEthEvent, ReceivedEvent,
 };
 use crate::eth_rpc::BlockTag;
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
@@ -18,7 +18,7 @@ use crate::state::event::{Event, EventType};
 use crate::state::transactions::{Erc20WithdrawalRequest, ReimbursementIndex};
 use crate::state::{Erc20Balances, State};
 use crate::test_fixtures::{
-    arb::{arb_address, arb_checked_amount_of, arb_hash},
+    arb::{arb_address, arb_checked_amount_of, arb_hash, arb_ledger_subaccount},
     initial_state,
 };
 use crate::tx::{
@@ -527,10 +527,6 @@ mod erc20 {
 
 fn arb_principal() -> impl Strategy<Value = Principal> {
     pvec(any::<u8>(), 0..=29).prop_map(|bytes| Principal::from_slice(&bytes))
-}
-
-fn arb_ledger_subaccount() -> impl Strategy<Value = Option<LedgerSubaccount>> {
-    uniform32(any::<u8>()).prop_map(LedgerSubaccount::from_bytes)
 }
 
 fn arb_u256() -> impl Strategy<Value = u256> {

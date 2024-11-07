@@ -226,7 +226,7 @@ mod arbitrary {
             any::<u64>(),
             arb_checked_amount_of(),
             arb_principal(),
-            option::of(arb_subaccount()),
+            arb_ledger_subaccount(),
             option::of(arb_hash()),
         )
             .prop_map(

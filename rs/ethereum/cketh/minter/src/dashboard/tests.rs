@@ -1102,7 +1102,7 @@ fn cketh_withdrawal_request_with_index(ledger_burn_index: LedgerBurnIndex) -> Et
         destination: Address::from_str(DEFAULT_RECIPIENT_ADDRESS).unwrap(),
         withdrawal_amount: Wei::new(DEFAULT_WITHDRAWAL_AMOUNT),
         from: candid::Principal::from_str(DEFAULT_PRINCIPAL).unwrap(),
-        from_subaccount: Some(Subaccount(DEFAULT_SUBACCOUNT)),
+        from_subaccount: LedgerSubaccount::from_bytes(DEFAULT_SUBACCOUNT),
         created_at: None,
     }
 }
@@ -1124,7 +1124,7 @@ fn ckerc20_withdrawal_request_with_index(
         ckerc20_ledger_id: ckerc20_token.ckerc20_ledger_id,
         ckerc20_ledger_burn_index: (cketh_ledger_burn_index.get() + 1_u64).into(),
         from: candid::Principal::from_str(DEFAULT_PRINCIPAL).unwrap(),
-        from_subaccount: Some(Subaccount(DEFAULT_SUBACCOUNT)),
+        from_subaccount: LedgerSubaccount::from_bytes(DEFAULT_SUBACCOUNT),
         created_at: 1712305423000000000,
     }
 }
