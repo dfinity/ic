@@ -144,6 +144,12 @@ if [ "$(id -u)" = "1000" ]; then
         )
     fi
 
+    if findmnt /hoststorage >/dev/null; then
+        PODMAN_RUN_ARGS+=(
+            --mount type=bind,source="/hoststorage/cache/ic_target",target="/ic/target"
+        )
+    fi
+
     USHELL=$(getent passwd "$USER" | cut -d : -f 7)
     if [[ "$USHELL" != *"/bash" ]] && [[ "$USHELL" != *"/zsh" ]] && [[ "$USHELL" != *"/fish" ]]; then
         USHELL=/usr/bin/bash
