@@ -15,7 +15,7 @@ use ic_stable_structures::{
 use lazy_static::lazy_static;
 use queue::{
     Pair, Querier, Query, QueryError, Register, RegisterError, Registrator, Submit, SubmitError,
-    Submitter,
+    Submitter, WithDedupe, WithLeaderAssignment, WithLeaderCheck, WithUnassignLeader,
 };
 use registry::{Client, List};
 
@@ -28,6 +28,7 @@ type LocalRef<T> = &'static LocalKey<RefCell<T>>;
 
 type StableMap<K, V> = StableBTreeMap<K, V, Memory>;
 type StableSet<T> = StableMap<T, ()>;
+type StableValue<T> = StableMap<(), T>;
 
 thread_local! {
     static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> =
@@ -38,6 +39,7 @@ const MEMORY_ID_ALLOWED_PRINCIPALS: u8 = 0;
 const MEMORY_ID_PUBLIC_KEYS: u8 = 1;
 const MEMORY_ID_QUEUE: u8 = 2;
 const MEMORY_ID_ENCRYPTTED_VALUES: u8 = 3;
+const MEMORY_ID_LEADER_ASSIGNMENT: u8 = 4;
 
 lazy_static! {
     static ref API_BOUNDARY_NODES_LISTER: Box<dyn List> = {
@@ -79,23 +81,33 @@ thread_local! {
             MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(MEMORY_ID_ENCRYPTTED_VALUES))),
         )
     );
+
+    static LEADER_ASSIGNMENT: RefCell<StableValue<Principal>> = RefCell::new(
+        StableValue::init(
+            MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(MEMORY_ID_LEADER_ASSIGNMENT))),
+        )
+    );
 }
 
 thread_local! {
     static REGISTRATOR: RefCell<Box<dyn Register>> = RefCell::new({
         let v = Registrator::new(&PUBLIC_KEYS, &QUEUE, &ENCRYPTED_VALUES);
+        let v = WithUnassignLeader(v, &LEADER_ASSIGNMENT);
+        let v = WithDedupe(v, &PUBLIC_KEYS);
         let v = WithAuthorize(v, &AUTHORIZER);
         Box::new(v)
     });
 
     static QUERIER: RefCell<Box<dyn Query>> = RefCell::new({
         let v = Querier::new(&ENCRYPTED_VALUES);
+        let v = WithLeaderAssignment(v, &LEADER_ASSIGNMENT, &QUEUE, &PUBLIC_KEYS, &ENCRYPTED_VALUES);
         let v = WithAuthorize(v, &AUTHORIZER);
         Box::new(v)
     });
 
     static SUBMITTER: RefCell<Box<dyn Submit>> = RefCell::new({
         let v = Submitter::new(&QUEUE, &ENCRYPTED_VALUES);
+        let v = WithLeaderCheck(v, &LEADER_ASSIGNMENT);
         let v = WithAuthorize(v, &AUTHORIZER);
         Box::new(v)
     });
@@ -127,7 +139,83 @@ fn timers() {
                     ps.insert(p.to_owned(), ());
                 });
             });
+
+            // Remove stale public-keys
+            PUBLIC_KEYS.with(|ks| {
+                let mut ks = ks.borrow_mut();
+
+                let stale: Vec<Principal> = ks
+                    .iter()
+                    .filter_map(|(p, _)| (!ids.contains(&p)).then_some(p))
+                    .collect();
+
+                for p in stale {
+                    ks.remove(&p);
+                }
+            });
+
+            // Remove stale encrypted values
+            ENCRYPTED_VALUES.with(|vs| {
+                let mut vs = vs.borrow_mut();
+
+                let stale: Vec<Principal> = vs
+                    .iter()
+                    .filter_map(|(p, _)| (!ids.contains(&p)).then_some(p))
+                    .collect();
+
+                for p in stale {
+                    vs.remove(&p);
+                }
+            });
+
+            // Remove stale queue entries
+            QUEUE.with(|q| {
+                let mut q = q.borrow_mut();
+
+                let stale: Vec<Principal> = q
+                    .iter()
+                    .filter_map(|(p, _)| (!ids.contains(&p)).then_some(p))
+                    .collect();
+
+                for p in stale {
+                    q.remove(&p);
+                }
+            });
         });
+    });
+
+    // Leader
+    set_timer_interval(Duration::from_secs(30), || {
+        // Collect candidates that have registered a public-key
+        let ps: Vec<Principal> =
+            PUBLIC_KEYS.with(|ks| ks.borrow().iter().map(|(p, _)| p).collect());
+
+        // Clear previous assignment
+        if ps.is_empty() {
+            LEADER_ASSIGNMENT.with(|v| v.borrow_mut().remove(&()));
+            return;
+        }
+
+        // Choose the next leader
+        let p = match LEADER_ASSIGNMENT
+            .with(|v| {
+                v.borrow().get(&()).map(|v| {
+                    ps.iter()
+                        .position(|&p| p == v)
+                        // Select next in line
+                        .map(|i| ps.get((i + 1) % ps.len()))
+                })
+            })
+            .flatten()
+            .flatten()
+        {
+            Some(p) => p,
+
+            // Assign first available
+            None => &ps[0],
+        };
+
+        LEADER_ASSIGNMENT.with(|v| v.borrow_mut().insert((), p.to_owned()));
     });
 }
 
@@ -175,6 +263,11 @@ fn query() -> QueryResponse {
         Ok(v) => QueryResponse::Ok(v),
         Err(err) => QueryResponse::Err(match err {
             QueryError::Unauthorized => ifc::QueryError::Unauthorized,
+            QueryError::Unavailable => ifc::QueryError::Unavailable,
+            QueryError::LeaderDuty(mode, ps) => ifc::QueryError::LeaderDuty(
+                (&mode).into(),                      // mode
+                ps.iter().map(Into::into).collect(), // pairs
+            ),
             QueryError::UnexpectedError(err) => ifc::QueryError::UnexpectedError(err.to_string()),
         }),
     }

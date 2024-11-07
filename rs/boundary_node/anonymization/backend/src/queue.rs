@@ -4,7 +4,7 @@ use ic_cdk::caller;
 
 use crate::{
     acl::{Authorize, AuthorizeError, WithAuthorize},
-    LocalRef, StableMap, StableSet,
+    LocalRef, StableMap, StableSet, StableValue,
 };
 
 #[derive(Clone)]
@@ -47,9 +47,9 @@ pub trait Register {
 }
 
 pub struct Registrator {
-    _pubkeys: LocalRef<StableMap<Principal, Vec<u8>>>,
-    _queue: LocalRef<StableSet<Principal>>,
-    _encrypted_values: LocalRef<StableMap<Principal, Vec<u8>>>,
+    pubkeys: LocalRef<StableMap<Principal, Vec<u8>>>,
+    queue: LocalRef<StableSet<Principal>>,
+    encrypted_values: LocalRef<StableMap<Principal, Vec<u8>>>,
 }
 
 impl Registrator {
@@ -59,16 +59,74 @@ impl Registrator {
         encrypted_values: LocalRef<StableMap<Principal, Vec<u8>>>,
     ) -> Self {
         Self {
-            _pubkeys: pubkeys,
-            _queue: queue,
-            _encrypted_values: encrypted_values,
+            pubkeys,
+            queue,
+            encrypted_values,
         }
     }
 }
 
 impl Register for Registrator {
-    fn register(&self, _pubkey: &[u8]) -> Result<(), RegisterError> {
-        unimplemented!()
+    fn register(&self, pubkey: &[u8]) -> Result<(), RegisterError> {
+        // Register public-key
+        self.pubkeys.with(|ks| {
+            ks.borrow_mut().insert(
+                caller(),          // principal
+                pubkey.to_owned(), // pubkey
+            )
+        });
+
+        // Remove previous encrypted value, if any exist
+        self.encrypted_values
+            .with(|vs| vs.borrow_mut().remove(&caller()));
+
+        // Add to queue
+        self.queue.with(|q| {
+            q.borrow_mut().insert(
+                caller(), // principal
+                (),       // unit
+            )
+        });
+
+        Ok(())
+    }
+}
+
+pub struct WithDedupe<T>(pub T, pub LocalRef<StableMap<Principal, Vec<u8>>>);
+
+impl<T: Register> Register for WithDedupe<T> {
+    fn register(&self, pubkey: &[u8]) -> Result<(), RegisterError> {
+        // Ignore duplicate registrations
+        if let Some(v) = self.1.with(|ks| ks.borrow().get(&caller())) {
+            if v.eq(pubkey) {
+                return Ok(());
+            }
+        }
+
+        self.0.register(pubkey)
+    }
+}
+
+pub struct WithUnassignLeader<T>(
+    pub T,
+    pub LocalRef<StableValue<Principal>>, // LeaderAssignment
+);
+
+impl<T: Register> Register for WithUnassignLeader<T> {
+    fn register(&self, pubkey: &[u8]) -> Result<(), RegisterError> {
+        // Unassign if leader
+        self.1.with(|p| {
+            let mut p = p.borrow_mut();
+
+            if match p.get(&()) {
+                Some(p) => caller() == p,
+                None => false,
+            } {
+                p.remove(&());
+            }
+        });
+
+        self.0.register(pubkey)
     }
 }
 
@@ -107,6 +165,12 @@ pub enum QueryError {
     #[error("Unauthorized")]
     Unauthorized,
 
+    #[error("Unavailable")]
+    Unavailable,
+
+    #[error("LeaderDuty")]
+    LeaderDuty(LeaderMode, Vec<Pair>),
+
     #[error(transparent)]
     UnexpectedError(#[from] anyhow::Error),
 }
@@ -116,20 +180,72 @@ pub trait Query {
 }
 
 pub struct Querier {
-    _encrypted_values: LocalRef<StableMap<Principal, Vec<u8>>>,
+    encrypted_values: LocalRef<StableMap<Principal, Vec<u8>>>,
 }
 
 impl Querier {
     pub fn new(encrypted_values: LocalRef<StableMap<Principal, Vec<u8>>>) -> Self {
-        Self {
-            _encrypted_values: encrypted_values,
-        }
+        Self { encrypted_values }
     }
 }
 
 impl Query for Querier {
     fn query(&self) -> Result<Vec<u8>, QueryError> {
-        unimplemented!()
+        self.encrypted_values
+            .with(|vs| vs.borrow().get(&caller()))
+            .ok_or(QueryError::Unavailable)
+    }
+}
+
+pub struct WithLeaderAssignment<T>(
+    pub T,
+    pub LocalRef<StableValue<Principal>>, // LeaderAssignment
+    pub LocalRef<StableSet<Principal>>,   // Queue
+    pub LocalRef<StableMap<Principal, Vec<u8>>>, // PublicKeys
+    pub LocalRef<StableMap<Principal, Vec<u8>>>, // EncryptedValues
+);
+
+impl<T: Query> Query for WithLeaderAssignment<T> {
+    fn query(&self) -> Result<Vec<u8>, QueryError> {
+        // Check leader assignment
+        let is_leader = match self.1.with(|p| p.borrow().get(&())) {
+            Some(p) => caller() == p,
+            None => false,
+        };
+
+        if !is_leader {
+            return self.0.query();
+        }
+
+        // Check queue
+        let ps: Vec<Principal> = self.2.with(|q| q.borrow().iter().map(|(k, _)| k).collect());
+
+        // Ignore when queue is empty
+        if ps.is_empty() {
+            return self.0.query();
+        }
+
+        // Convert to principal public-key pairs
+        let ps: Vec<Pair> = ps
+            .into_iter()
+            .filter_map(|p| self.3.with(|ks| ks.borrow().get(&p).map(|k| Pair(p, k))))
+            .collect();
+
+        // Ignore if there are missing public-keys
+        if ps.is_empty() {
+            return self.0.query();
+        }
+
+        // Decide on mode
+        let mode = match self.4.with(|vs| vs.borrow().is_empty()) {
+            true => LeaderMode::Bootstrap,
+            _ => LeaderMode::Refresh,
+        };
+
+        Err(QueryError::LeaderDuty(
+            mode, // mode
+            ps,   // principal pubkey pairs
+        ))
     }
 }
 
@@ -162,8 +278,8 @@ pub trait Submit {
 }
 
 pub struct Submitter {
-    _queue: LocalRef<StableSet<Principal>>,
-    _encrypted_values: LocalRef<StableMap<Principal, Vec<u8>>>,
+    queue: LocalRef<StableSet<Principal>>,
+    encrypted_values: LocalRef<StableMap<Principal, Vec<u8>>>,
 }
 
 impl Submitter {
@@ -172,15 +288,59 @@ impl Submitter {
         encrypted_values: LocalRef<StableMap<Principal, Vec<u8>>>,
     ) -> Self {
         Self {
-            _queue: queue,
-            _encrypted_values: encrypted_values,
+            queue,
+            encrypted_values,
         }
     }
 }
 
 impl Submit for Submitter {
-    fn submit(&self, _ps: &[Pair]) -> Result<(), SubmitError> {
-        unimplemented!()
+    fn submit(&self, ps: &[Pair]) -> Result<(), SubmitError> {
+        // Discard pairs that arent in the queue
+        let ps: Vec<&Pair> = ps
+            .iter()
+            .filter(|Pair(p, _)| self.queue.with(|q| q.borrow().contains_key(p)))
+            .collect();
+
+        ps.iter().for_each(|Pair(p, ct)| {
+            // Set encrypted values
+            self.encrypted_values.with(|vs| {
+                vs.borrow_mut().insert(
+                    p.to_owned(),  // principal
+                    ct.to_owned(), // ciphertext
+                )
+            });
+
+            // Remove from queue once complete
+            self.queue.with(|q| {
+                q.borrow_mut().remove(
+                    p, // principal
+                )
+            });
+        });
+
+        Ok(())
+    }
+}
+
+pub struct WithLeaderCheck<T>(
+    pub T,
+    pub LocalRef<StableValue<Principal>>, // LeaderAssignment
+);
+
+impl<T: Submit> Submit for WithLeaderCheck<T> {
+    fn submit(&self, ps: &[Pair]) -> Result<(), SubmitError> {
+        // Check leader assignment
+        let is_leader = match self.1.with(|p| p.borrow().get(&())) {
+            Some(p) => caller() == p,
+            None => false,
+        };
+
+        if !is_leader {
+            return Err(SubmitError::Unauthorized);
+        }
+
+        self.0.submit(ps)
     }
 }
 
