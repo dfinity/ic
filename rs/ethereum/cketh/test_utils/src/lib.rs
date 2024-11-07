@@ -410,19 +410,20 @@ impl CkEthSetup {
         }
     }
 
-    pub fn call_minter_withdraw_eth(
+    pub fn call_minter_withdraw_eth<T: Into<Account>>(
         self,
-        from: Principal,
+        from: T,
         amount: Nat,
         recipient: String,
     ) -> WithdrawalFlow {
+        let from = from.into();
         let arg = WithdrawalArg {
             amount,
             recipient,
-            from_subaccount: None,
+            from_subaccount: from.subaccount,
         };
         let message_id = self.env.send_ingress(
-            PrincipalId::from(from),
+            PrincipalId::from(from.owner),
             self.minter_id,
             "withdraw_eth",
             Encode!(&arg).expect("failed to encode withdraw args"),
