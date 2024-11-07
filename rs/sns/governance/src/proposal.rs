@@ -1761,7 +1761,7 @@ fn validate_and_render_advance_sns_target_version_proposal(
         sns_governance_canister_id,
     );
 
-    return Ok((render, ActionAuxiliary::AdvanceSnsTargetVersion(new_target)));
+    Ok((render, ActionAuxiliary::AdvanceSnsTargetVersion(new_target)))
 }
 
 impl ProposalData {

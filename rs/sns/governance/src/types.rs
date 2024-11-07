@@ -2865,7 +2865,7 @@ impl TryFrom<&CachedUpgradeStepsPb> for CachedUpgradeSteps {
         };
 
         let (head, tail) = if let Some((head, tail)) = upgrade_steps.versions.split_first() {
-            (head.clone(), tail.iter().cloned().collect())
+            (head.clone(), tail.to_vec())
         } else {
             return Err(
                 "Cannot interpret CachedUpgradeSteps: upgrade_steps must not be empty.".to_string(),
@@ -2904,8 +2904,12 @@ impl CachedUpgradeSteps {
         self.head.clone()
     }
 
+    // Clippy wants us to implement `Iterator for CachedUpgradeSteps`, but that would require adding
+    // iterator-specific state to this type, which is an overkill for the purpose of having a simple
+    // self-consuming method with an intuitive name.
+    #[allow(clippy::should_implement_trait)]
     pub fn into_iter(self) -> impl Iterator<Item = Version> {
-        Iterator::chain(std::iter::once(self.head), self.tail.into_iter())
+        Iterator::chain(std::iter::once(self.head), self.tail)
     }
 
     pub fn period_of_validity_timestamps_seconds(&self) -> (u64, u64) {

@@ -574,7 +574,7 @@ message Proposal {
 
     // Advance SNS target version.
     //
-    // Id = 15;
+    // Id = 15.
     AdvanceSnsTargetVersion advance_sns_target_version = 19;
   }
 }
