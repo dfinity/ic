@@ -1,3 +1,4 @@
+use ic_base_types::PrincipalId;
 use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::subnet_config::SubnetConfig;
 use ic_management_canister_types::{
@@ -7,8 +8,7 @@ use ic_management_canister_types::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
-    ErrorCode, PrincipalId, StateMachine, StateMachineBuilder, StateMachineConfig,
-    SubmitIngressError, UserError,
+    ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig, SubmitIngressError, UserError,
 };
 use ic_test_utilities::universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use ic_test_utilities_execution_environment::{get_reply, wat_canister, wat_fn};
@@ -317,7 +317,9 @@ fn test_appending_logs_in_replied_update_call(#[strategy("\\PC*")] message: Stri
             .update("test", wat_fn().debug_print(message.as_bytes()))
             .build_wasm(),
     );
-    let timestamp = system_time_to_nanos(env.time_of_next_round());
+    // advance time so that time does not grow implicitly when executing a round
+    env.advance_time(Duration::from_secs(1));
+    let timestamp = system_time_to_nanos(env.time());
     let _ = env.execute_ingress(canister_id, "test", vec![]);
     let result = fetch_canister_logs(&env, controller, canister_id);
     assert_eq!(
@@ -334,7 +336,9 @@ fn test_appending_logs_in_trapped_update_call(#[strategy("\\PC*")] message: Stri
             .update("test", wat_fn().debug_print(message.as_bytes()).trap())
             .build_wasm(),
     );
-    let timestamp = system_time_to_nanos(env.time_of_next_round());
+    // advance time so that time does not grow implicitly when executing a round
+    env.advance_time(Duration::from_secs(1));
+    let timestamp = system_time_to_nanos(env.time());
     let _ = env.execute_ingress(canister_id, "test", vec![]);
     let result = fetch_canister_logs(&env, controller, canister_id);
     assert_eq!(
@@ -354,7 +358,9 @@ fn test_appending_logs_in_replied_replicated_query_call(#[strategy("\\PC*")] mes
             .query("test", wat_fn().debug_print(message.as_bytes()))
             .build_wasm(),
     );
-    let timestamp = system_time_to_nanos(env.time_of_next_round());
+    // advance time so that time does not grow implicitly when executing a round
+    env.advance_time(Duration::from_secs(1));
+    let timestamp = system_time_to_nanos(env.time());
     let _ = env.execute_ingress(canister_id, "test", vec![]);
     let result = fetch_canister_logs(&env, controller, canister_id);
     assert_eq!(
@@ -371,7 +377,9 @@ fn test_appending_logs_in_trapped_replicated_query_call(#[strategy("\\PC*")] mes
             .query("test", wat_fn().debug_print(message.as_bytes()).trap())
             .build_wasm(),
     );
-    let timestamp = system_time_to_nanos(env.time_of_next_round());
+    // advance time so that time does not grow implicitly when executing a round
+    env.advance_time(Duration::from_secs(1));
+    let timestamp = system_time_to_nanos(env.time());
     let _ = env.execute_ingress(canister_id, "test", vec![]);
     let result = fetch_canister_logs(&env, controller, canister_id);
     assert_eq!(
@@ -400,13 +408,15 @@ fn test_canister_log_record_index_increment_for_different_calls() {
             .build_wasm(),
     );
 
+    // advance time so that time does not grow implicitly when executing a round
+    env.advance_time(Duration::from_secs(1));
     // First call.
-    let timestamp_01 = system_time_to_nanos(env.time_of_next_round());
+    let timestamp_01 = system_time_to_nanos(env.time());
     let _ = env.execute_ingress(canister_id, "test1", vec![]);
 
     // Second call.
     env.advance_time(Duration::from_nanos(123_456));
-    let timestamp_23 = system_time_to_nanos(env.time_of_next_round());
+    let timestamp_23 = system_time_to_nanos(env.time());
     let _ = env.execute_ingress(canister_id, "test2", vec![]);
 
     let result = fetch_canister_logs(&env, controller, canister_id);
@@ -439,8 +449,10 @@ fn test_canister_log_record_index_increment_after_node_restart() {
     );
     env.set_checkpoints_enabled(true);
 
+    // advance time so that time does not grow implicitly when executing a round
+    env.advance_time(Duration::from_secs(1));
     // First call.
-    let timestamp_01 = system_time_to_nanos(env.time_of_next_round());
+    let timestamp_01 = system_time_to_nanos(env.time());
     let _ = env.execute_ingress(canister_id, "test1", vec![]);
 
     // Node restart.
@@ -448,7 +460,7 @@ fn test_canister_log_record_index_increment_after_node_restart() {
     env.advance_time(Duration::from_nanos(123_456));
 
     // Second call.
-    let timestamp_23 = system_time_to_nanos(env.time_of_next_round());
+    let timestamp_23 = system_time_to_nanos(env.time());
     let _ = env.execute_ingress(canister_id, "test2", vec![]);
 
     let result = fetch_canister_logs(&env, controller, canister_id);
@@ -470,8 +482,10 @@ fn test_logging_in_trapped_wasm_execution() {
             .update("test", wat_fn().stable_grow(1).stable_read(0, 70_000))
             .build_wasm(),
     );
+    // advance time so that time does not grow implicitly when executing a round
+    env.advance_time(Duration::from_secs(1));
     // Grow stable memory by 1 page (64kb), reading outside of the page should trap.
-    let timestamp = system_time_to_nanos(env.time_of_next_round());
+    let timestamp = system_time_to_nanos(env.time());
     let _ = env.execute_ingress(canister_id, "test", vec![]);
     let result = fetch_canister_logs(&env, controller, canister_id);
     assert_eq!(
@@ -488,7 +502,9 @@ fn test_logging_in_trapped_wasm_execution() {
 fn test_logging_explicit_canister_trap_without_message() {
     let (env, canister_id, controller) =
         setup_with_controller(wat_canister().update("test", wat_fn().trap()).build_wasm());
-    let timestamp = system_time_to_nanos(env.time_of_next_round());
+    // advance time so that time does not grow implicitly when executing a round
+    env.advance_time(Duration::from_secs(1));
+    let timestamp = system_time_to_nanos(env.time());
     let _ = env.execute_ingress(canister_id, "test", vec![]);
     let result = fetch_canister_logs(&env, controller, canister_id);
     assert_eq!(
@@ -504,7 +520,9 @@ fn test_logging_explicit_canister_trap_with_message() {
             .update("test", wat_fn().trap_with_blob(b"some text"))
             .build_wasm(),
     );
-    let timestamp = system_time_to_nanos(env.time_of_next_round());
+    // advance time so that time does not grow implicitly when executing a round
+    env.advance_time(Duration::from_secs(1));
+    let timestamp = system_time_to_nanos(env.time());
     let _ = env.execute_ingress(canister_id, "test", vec![]);
     let result = fetch_canister_logs(&env, controller, canister_id);
     assert_eq!(
@@ -626,7 +644,7 @@ fn test_deleting_logs_on_reinstall() {
     env.advance_time(TIME_STEP);
 
     // Prepopulate log.
-    let timestamp_1_update = system_time_to_nanos(env.time_of_next_round());
+    let timestamp_1_update = system_time_to_nanos(env.time());
     let _ = env.execute_ingress(canister_id, "test_1", vec![]);
     env.advance_time(TIME_STEP);
 
@@ -656,7 +674,7 @@ fn test_deleting_logs_on_reinstall() {
     env.advance_time(TIME_STEP);
 
     // Populate log after reinstall.
-    let timestamp_2_update = system_time_to_nanos(env.time_of_next_round());
+    let timestamp_2_update = system_time_to_nanos(env.time());
     let _ = env.execute_ingress(canister_id, "test_2", vec![]);
     env.advance_time(TIME_STEP);
 
@@ -682,7 +700,7 @@ fn test_deleting_logs_on_uninstall() {
     env.advance_time(TIME_STEP);
 
     // Prepopulate log.
-    let timestamp_1_update = system_time_to_nanos(env.time_of_next_round());
+    let timestamp_1_update = system_time_to_nanos(env.time());
     let _ = env.execute_ingress(canister_id, "test_1", vec![]);
     env.advance_time(TIME_STEP);
 
@@ -732,12 +750,12 @@ fn test_logging_debug_print_persists_over_upgrade() {
     env.advance_time(TIME_STEP);
 
     // Pre-populate log.
-    let timestamp_before_upgrade = system_time_to_nanos(env.time_of_next_round());
+    let timestamp_before_upgrade = system_time_to_nanos(env.time());
     let _ = env.execute_ingress(canister_id, "test", vec![]);
     env.advance_time(TIME_STEP);
 
     // Upgrade canister.
-    let timestamp_upgrade = system_time_to_nanos(env.time_of_next_round());
+    let timestamp_upgrade = system_time_to_nanos(env.time());
     let _ = env.upgrade_canister(
         canister_id,
         wat_canister()
@@ -751,7 +769,7 @@ fn test_logging_debug_print_persists_over_upgrade() {
     );
     env.advance_time(TIME_STEP);
 
-    let timestamp_after_upgrade = system_time_to_nanos(env.time_of_next_round());
+    let timestamp_after_upgrade = system_time_to_nanos(env.time());
     let _ = env.execute_ingress(canister_id, "test", vec![]);
     env.advance_time(TIME_STEP);
 
@@ -781,7 +799,7 @@ fn test_logging_trap_at_install_start() {
     env.advance_time(TIME_STEP);
 
     // Install canister with a trap in the start function.
-    let timestamp_install = system_time_to_nanos(env.time_of_next_round());
+    let timestamp_install = system_time_to_nanos(env.time());
     let result = env.install_wasm_in_mode(
         canister_id,
         CanisterInstallMode::Install,
@@ -814,7 +832,7 @@ fn test_logging_trap_at_install_init() {
     env.advance_time(TIME_STEP);
 
     // Install canister with a trap in the init function.
-    let timestamp_install = system_time_to_nanos(env.time_of_next_round());
+    let timestamp_install = system_time_to_nanos(env.time());
     let result = env.install_wasm_in_mode(
         canister_id,
         CanisterInstallMode::Install,
@@ -857,12 +875,12 @@ fn test_logging_trap_in_pre_upgrade() {
     env.advance_time(TIME_STEP);
 
     // Pre-populate log.
-    let timestamp_before_upgrade = system_time_to_nanos(env.time_of_next_round());
+    let timestamp_before_upgrade = system_time_to_nanos(env.time());
     let _ = env.execute_ingress(canister_id, "test", vec![]);
     env.advance_time(TIME_STEP);
 
     // Upgrade canister.
-    let timestamp_upgrade = system_time_to_nanos(env.time_of_next_round());
+    let timestamp_upgrade = system_time_to_nanos(env.time());
     let result = env.upgrade_canister(
         canister_id,
         wat_canister()
@@ -879,7 +897,7 @@ fn test_logging_trap_in_pre_upgrade() {
     env.advance_time(TIME_STEP);
 
     // Populate log after failed upgrade.
-    let timestamp_after_upgrade = system_time_to_nanos(env.time_of_next_round());
+    let timestamp_after_upgrade = system_time_to_nanos(env.time());
     let _ = env.execute_ingress(canister_id, "test", vec![]);
     env.advance_time(TIME_STEP);
 
@@ -914,12 +932,12 @@ fn test_logging_trap_after_upgrade_in_start() {
     env.advance_time(TIME_STEP);
 
     // Pre-populate log.
-    let timestamp_before_upgrade = system_time_to_nanos(env.time_of_next_round());
+    let timestamp_before_upgrade = system_time_to_nanos(env.time());
     let _ = env.execute_ingress(canister_id, "test", vec![]);
     env.advance_time(TIME_STEP);
 
     // Upgrade canister.
-    let timestamp_upgrade = system_time_to_nanos(env.time_of_next_round());
+    let timestamp_upgrade = system_time_to_nanos(env.time());
     let result = env.upgrade_canister(
         canister_id,
         wat_canister()
@@ -936,7 +954,7 @@ fn test_logging_trap_after_upgrade_in_start() {
     env.advance_time(TIME_STEP);
 
     // Populate log after failed upgrade.
-    let timestamp_after_upgrade = system_time_to_nanos(env.time_of_next_round());
+    let timestamp_after_upgrade = system_time_to_nanos(env.time());
     let _ = env.execute_ingress(canister_id, "test", vec![]);
     env.advance_time(TIME_STEP);
 
@@ -972,12 +990,12 @@ fn test_logging_trap_after_upgrade_in_post_upgrade() {
     env.advance_time(TIME_STEP);
 
     // Pre-populate log.
-    let timestamp_before_upgrade = system_time_to_nanos(env.time_of_next_round());
+    let timestamp_before_upgrade = system_time_to_nanos(env.time());
     let _ = env.execute_ingress(canister_id, "test", vec![]);
     env.advance_time(TIME_STEP);
 
     // Upgrade canister.
-    let timestamp_upgrade = system_time_to_nanos(env.time_of_next_round());
+    let timestamp_upgrade = system_time_to_nanos(env.time());
     let result = env.upgrade_canister(
         canister_id,
         wat_canister()
@@ -998,7 +1016,7 @@ fn test_logging_trap_after_upgrade_in_post_upgrade() {
     env.advance_time(TIME_STEP);
 
     // Populate log after failed upgrade.
-    let timestamp_after_upgrade = system_time_to_nanos(env.time_of_next_round());
+    let timestamp_after_upgrade = system_time_to_nanos(env.time());
     let _ = env.execute_ingress(canister_id, "test", vec![]);
     env.advance_time(TIME_STEP);
 
@@ -1042,7 +1060,9 @@ fn test_logging_debug_print_over_dts() {
             .build_wasm(),
     );
 
-    let timestamp = system_time_to_nanos(env.time_of_next_round());
+    // advance time so that time does not grow implicitly when executing a round
+    env.advance_time(Duration::from_secs(1));
+    let timestamp = system_time_to_nanos(env.time());
     // Slice #0 is processed inside `send_ingress` in round #0.
     let _msg_id = env.send_ingress(PrincipalId::new_anonymous(), canister_id, "test", vec![]);
     // Since one slice was processed in `send_ingress` iterate over one slice less.
@@ -1093,7 +1113,9 @@ fn test_logging_trap_over_dts() {
             .build_wasm(),
     );
 
-    let timestamp = system_time_to_nanos(env.time_of_next_round());
+    // advance time so that time does not grow implicitly when executing a round
+    env.advance_time(Duration::from_secs(1));
+    let timestamp = system_time_to_nanos(env.time());
     // Slice #0 is processed inside `send_ingress` in round #0.
     let _msg_id = env.send_ingress(PrincipalId::new_anonymous(), canister_id, "test", vec![]);
     // Since one slice was processed in `send_ingress` iterate over one slice less.
@@ -1186,8 +1208,10 @@ fn test_logging_of_long_running_dts_over_checkpoint() {
         canister_log_response(vec![])
     );
 
+    // advance time so that time does not grow implicitly when executing a round
+    env.advance_time(Duration::from_secs(1));
     // Rounds #B0 and further: Afther the checkpoint process the message again through all the slices.
-    let timestamp_after_checkpoint = system_time_to_nanos(env.time_of_next_round());
+    let timestamp_after_checkpoint = system_time_to_nanos(env.time());
     for i in 0..number_of_slices {
         let result = fetch_canister_logs(&env, controller, canister_id);
         assert_eq!(
@@ -1200,7 +1224,7 @@ fn test_logging_of_long_running_dts_over_checkpoint() {
         env.advance_time(TIME_STEP);
     }
     // Round to process short message.
-    let timestamp_short = system_time_to_nanos(env.time_of_next_round());
+    let timestamp_short = system_time_to_nanos(env.time());
     env.tick();
     env.advance_time(TIME_STEP);
 
@@ -1248,7 +1272,9 @@ fn test_canister_log_on_reply() {
     let (env, canister_id, controller) = setup_with_controller(UNIVERSAL_CANISTER_WASM.to_vec());
 
     let instructions_per_slice = MAX_INSTRUCTIONS_PER_SLICE.get();
-    let timestamp_init = system_time_to_nanos(env.time_of_next_round());
+    // advance time so that time does not grow implicitly when executing a round
+    env.advance_time(Duration::from_secs(1));
+    let timestamp_init = system_time_to_nanos(env.time());
     let _ = env.execute_ingress(
         canister_id,
         "update",
@@ -1302,7 +1328,9 @@ fn test_canister_log_on_cleanup() {
     // Test that the log is recorded inside cleanup callback.
     let (env, canister_id, controller) = setup_with_controller(UNIVERSAL_CANISTER_WASM.to_vec());
 
-    let timestamp_init = system_time_to_nanos(env.time_of_next_round());
+    // advance time so that time does not grow implicitly when executing a round
+    env.advance_time(Duration::from_secs(1));
+    let timestamp_init = system_time_to_nanos(env.time());
     let instructions_per_slice = MAX_INSTRUCTIONS_PER_SLICE.get();
     let _ = env.execute_ingress(
         canister_id,

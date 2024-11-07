@@ -35,10 +35,44 @@ const EXCLUDED: &[&str] = &[
     "$0 ~ /Call from query method traps (in query call)/",
 ];
 
+pub fn group_all() -> Vec<&'static str> {
+    [group_01(), group_02(), group_03()].concat()
+}
+
+pub fn group_01() -> Vec<&'static str> {
+    vec![
+        "($0 ~ /canister history/)",
+        "($0 ~ /canister version/)",
+        "($0 ~ /canister global timer/)",
+        "($0 ~ /canister http/)",
+        "($0 ~ /WebAssembly module validation/)",
+    ]
+}
+
+pub fn group_02() -> Vec<&'static str> {
+    vec![
+        "($0 ~ /stable memory/)",
+        "($0 ~ /inter-canister calls/)",
+        "($0 ~ /uninstall/)",
+        "($0 ~ /read state/)",
+        "($0 ~ /cycles/)",
+    ]
+}
+
+pub fn group_03() -> Vec<&'static str> {
+    vec!["($0 ~ /NNS canisters/)"]
+}
+
 pub fn setup_impl(env: TestEnv, deploy_bn_and_nns_canisters: bool, http_requests: bool) {
     use ic_system_test_driver::driver::test_env_api::secs;
     use ic_system_test_driver::util::block_on;
     use std::env;
+
+    let vm_resources = VmResources {
+        vcpus: Some(NrOfVCPUs::new(16)),
+        memory_kibibytes: None,
+        boot_image_minimal_size_gibibytes: None,
+    };
 
     // If requested, deploy a Boundary Node concurrently with deploying the rest of the testnet:
     let mut deploy_bn_thread: Option<JoinHandle<BoundaryNodeWithVm>> = None;
@@ -46,6 +80,7 @@ pub fn setup_impl(env: TestEnv, deploy_bn_and_nns_canisters: bool, http_requests
     if deploy_bn_and_nns_canisters {
         deploy_bn_thread = Some(spawn(move || {
             BoundaryNode::new(String::from(BOUNDARY_NODE_NAME))
+                .with_vm_resources(vm_resources)
                 .allocate_vm(&cloned_env)
                 .expect("Allocation of BoundaryNode failed.")
         }));
@@ -74,12 +109,6 @@ pub fn setup_impl(env: TestEnv, deploy_bn_and_nns_canisters: bool, http_requests
             canister_http::start_httpbin_on_uvm(&cloned_env);
         }))
     }
-
-    let vm_resources = VmResources {
-        vcpus: Some(NrOfVCPUs::new(16)),
-        memory_kibibytes: None,
-        boot_image_minimal_size_gibibytes: None,
-    };
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
@@ -271,6 +300,9 @@ pub fn run_ic_ref_test(
 ) {
     let mut cmd = Command::new(ic_ref_test_path);
     cmd.env("IC_TEST_DATA", ic_test_data_path)
+        .arg("+RTS")
+        .arg(format!("-N{}", jobs))
+        .arg("-RTS")
         .arg(format!("-j{}", jobs))
         .arg("--pattern")
         .arg(tests_to_pattern(excluded_tests, included_tests))
@@ -337,7 +369,7 @@ pub fn with_endpoint(
         peer_subnet_config,
         excluded_tests,
         included_tests,
-        64,
+        16,
     );
 }
 

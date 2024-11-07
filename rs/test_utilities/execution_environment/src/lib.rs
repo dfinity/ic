@@ -2085,11 +2085,6 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_snapshots(mut self, status: FlagStatus) -> Self {
-        self.execution_config.canister_snapshots = status;
-        self
-    }
-
     pub fn with_best_effort_responses(mut self, status: FlagStatus) -> Self {
         self.execution_config
             .embedders_config

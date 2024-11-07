@@ -152,7 +152,7 @@ pub fn aggregate<
     Message: Eq + Ord + Clone + std::fmt::Debug + HasHeight + HasCommittee,
     CryptoMessage,
     Signature: Ord,
-    KeySelector: Copy,
+    KeySelector,
     CommitteeSignature,
     Shares: Iterator<Item = Signed<Message, Signature>>,
 >(
@@ -216,11 +216,6 @@ pub(crate) fn group_shares<C: Eq + Ord, S: Ord, Shares: Iterator<Item = Signed<C
     })
 }
 
-/// Return the hash of a block as a string.
-pub fn get_block_hash_string(block: &Block) -> String {
-    hex::encode(ic_types::crypto::crypto_hash(block).get().0)
-}
-
 /// Helper function to lookup replica version, and log errors if any.
 pub fn lookup_replica_version(
     registry_client: &(impl RegistryClient + ?Sized),
@@ -267,7 +262,7 @@ pub fn active_low_threshold_nidkg_id(
 ) -> Option<NiDkgId> {
     get_active_data_at(reader, height, |block, height| {
         get_transcript_data_at_given_summary(block, height, NiDkgTag::LowThreshold, |transcript| {
-            transcript.dkg_id
+            transcript.dkg_id.clone()
         })
     })
 }
@@ -279,7 +274,7 @@ pub fn active_high_threshold_nidkg_id(
 ) -> Option<NiDkgId> {
     get_active_data_at(reader, height, |block, height| {
         get_transcript_data_at_given_summary(block, height, NiDkgTag::HighThreshold, |transcript| {
-            transcript.dkg_id
+            transcript.dkg_id.clone()
         })
     })
 }

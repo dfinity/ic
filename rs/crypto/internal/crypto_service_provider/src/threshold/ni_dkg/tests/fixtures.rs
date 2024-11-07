@@ -7,37 +7,14 @@ use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPu
 use ic_types::crypto::threshold_sig::ni_dkg::config::dealers::NiDkgDealers;
 use ic_types::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;
 use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgThreshold;
-use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTargetSubnet};
 use ic_types::crypto::AlgorithmId;
-use ic_types::{Height, NodeId, SubnetId};
-use ic_types_test_utils::ids::{node_test_id, subnet_test_id};
+use ic_types::NodeId;
+use ic_types_test_utils::ids::node_test_id;
 use rand::seq::IteratorRandom;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 use strum::IntoEnumIterator;
 
-// Generate random data structures:
-// Alternatively we could implement Distribution for all of these types.
-// Deriving Rand may be enough for many.  See: https://stackoverflow.com/questions/48490049/how-do-i-choose-a-random-value-from-an-enum
-pub fn random_height(rng: &mut ChaCha20Rng) -> Height {
-    Height::from(rng.gen::<u64>())
-}
-pub fn random_subnet_id(rng: &mut ChaCha20Rng) -> SubnetId {
-    subnet_test_id(rng.gen::<u64>())
-}
-pub fn random_ni_dkg_tag(rng: &mut ChaCha20Rng) -> NiDkgTag {
-    NiDkgTag::iter()
-        .choose(rng)
-        .expect("Could not choose a NiDkgTag")
-}
-pub fn random_ni_dkg_id(rng: &mut ChaCha20Rng) -> NiDkgId {
-    NiDkgId {
-        start_block_height: random_height(rng),
-        dealer_subnet: random_subnet_id(rng),
-        target_subnet: NiDkgTargetSubnet::Local,
-        dkg_tag: random_ni_dkg_tag(rng),
-    }
-}
 pub fn random_algorithm_id(rng: &mut ChaCha20Rng) -> AlgorithmId {
     AlgorithmId::iter()
         .choose(rng)
@@ -67,7 +44,6 @@ impl MockNode {
     pub fn create_dealing(
         &self,
         algorithm_id: AlgorithmId,
-        dkg_id: NiDkgId,
         dealer_index: NodeIndex,
         threshold: NumberOfNodes,
         epoch: Epoch,
@@ -85,14 +61,7 @@ impl MockNode {
             )
         } else {
             self.csp
-                .create_dealing(
-                    algorithm_id,
-                    dkg_id,
-                    dealer_index,
-                    threshold,
-                    epoch,
-                    receiver_keys,
-                )
+                .create_dealing(algorithm_id, dealer_index, threshold, epoch, receiver_keys)
                 .map_err(ni_dkg_errors::CspDkgCreateReshareDealingError::from)
         }
     }
@@ -150,7 +119,6 @@ impl MockNetwork {
 #[derive(Clone, Debug)]
 pub struct MockDkgConfig {
     pub algorithm_id: AlgorithmId,
-    pub dkg_id: NiDkgId,
     pub dealers: NiDkgDealers,
     pub receivers: NiDkgReceivers,
     pub receiver_keys: BTreeMap<NodeIndex, CspFsEncryptionPublicKey>,
@@ -210,7 +178,6 @@ impl MockDkgConfig {
 
         // Config values
         let algorithm_id = AlgorithmId::NiDkg_Groth20_Bls12_381;
-        let dkg_id = random_ni_dkg_id(rng);
         let max_corrupt_dealers = rng.gen_range(0..num_dealers); // Need at least one honest dealer.
         let threshold = rng.gen_range(min_threshold..=num_receivers); // threshold <= num_receivers
         let epoch = Epoch::from(rng.gen::<u32>());
@@ -223,7 +190,6 @@ impl MockDkgConfig {
         let resharing_transcript = last_dkg.map(|(_last_config, last_transcript)| last_transcript);
         MockDkgConfig {
             algorithm_id,
-            dkg_id,
             dealers,
             receivers,
             receiver_keys,
@@ -272,7 +238,6 @@ impl StateWithDealings {
                     .expect("Could not find dealer in nodes");
                 let dealing = node.create_dealing(
                     config.algorithm_id,
-                    config.dkg_id,
                     config
                         .dealers
                         .position(node.node_id)
@@ -319,7 +284,6 @@ impl StateWithVerifiedDealings {
                 let test_result = if let Some(transcript) = &config.resharing_transcript {
                     static_api::verify_resharing_dealing(
                         config.algorithm_id,
-                        config.dkg_id,
                         dealer_index,
                         config.threshold.get(),
                         config.epoch,
@@ -330,7 +294,6 @@ impl StateWithVerifiedDealings {
                 } else {
                     static_api::verify_dealing(
                         config.algorithm_id,
-                        config.dkg_id,
                         dealer_index,
                         config.threshold.get(),
                         config.epoch,
@@ -438,7 +401,6 @@ impl StateWithTranscript {
             node.csp
                 .load_threshold_signing_key(
                     self.config.algorithm_id,
-                    self.config.dkg_id,
                     self.config.epoch,
                     self.transcript.clone(),
                     node_index,

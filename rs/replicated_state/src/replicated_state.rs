@@ -35,7 +35,7 @@ use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::Arc;
 use strum_macros::{EnumCount, EnumIter};
 
@@ -668,6 +668,18 @@ impl ReplicatedState {
         canisters_memory_usage + subnet_memory_usage
     }
 
+    /// Computes the memory taken by best-effort response messages.
+    pub fn best_effort_message_memory_taken(&self) -> NumBytes {
+        let canisters_memory_usage: NumBytes = self
+            .canisters_iter()
+            .map(|canister| canister.system_state.best_effort_message_memory_usage())
+            .sum();
+        let subnet_memory_usage =
+            (self.subnet_queues.best_effort_message_memory_usage() as u64).into();
+
+        canisters_memory_usage + subnet_memory_usage
+    }
+
     /// Returns the total memory taken by the ingress history in bytes.
     pub fn total_ingress_memory_taken(&self) -> NumBytes {
         self.metadata.ingress_history.memory_usage()
@@ -967,6 +979,96 @@ impl ReplicatedState {
         }
 
         (expired_callback_count, errors)
+    }
+
+    /// Enforces the best-effort message limit by repeatedly shedding the largest
+    /// best-effort message of the canister with the highest best-effort message
+    /// memory usage until the total memory usage drops below the limit.
+    ///
+    /// Returns the number of messages and message bytes that were shed.
+    ///
+    /// Time complexity: `O(n * log(n))`.
+    pub fn enforce_best_effort_message_limit(&mut self, limit: NumBytes) -> (u64, NumBytes) {
+        const ZERO_BYTES: NumBytes = NumBytes::new(0);
+
+        // Check if we need to do anything at all before constructing a priority queue.
+        let mut memory_usage = self.best_effort_message_memory_taken();
+        if memory_usage <= limit {
+            // No need to do anything.
+            return (0, 0.into());
+        }
+
+        // Construct a priority queue of canisters by best-effort message memory usage.
+        let mut priority_queue: BTreeSet<_> = self
+            .canister_states
+            .iter()
+            .filter_map(|(canister_id, canister)| {
+                let memory_usage = canister.system_state.best_effort_message_memory_usage();
+                if memory_usage > ZERO_BYTES {
+                    Some((memory_usage, *canister_id))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        let subnet_queues_memory_usage = self.subnet_queues.best_effort_message_memory_usage();
+        if subnet_queues_memory_usage > 0 {
+            priority_queue.insert((
+                (subnet_queues_memory_usage as u64).into(),
+                self.metadata.own_subnet_id.into(),
+            ));
+        }
+
+        let mut shed_messages = 0;
+        let mut shed_message_bytes = 0.into();
+
+        // Shed messages from the canisters with the largest memory usage until we are
+        // below the limit.
+        //
+        // The `is_empty()` check is a safety net, in case a canister somehow reports
+        // non-zero best-effort memory usage but then fails to shed a message.
+        while memory_usage > limit && !priority_queue.is_empty() {
+            let (memory_usage_before, canister_id) = priority_queue.pop_last().unwrap();
+
+            let (message_shed, memory_usage_after) = if canister_id.get()
+                == self.metadata.own_subnet_id.get()
+            {
+                // Shed from the subnet queues.
+                let message_shed = self
+                    .subnet_queues
+                    .shed_largest_message(&canister_id, &self.canister_states);
+                let memory_usage_after =
+                    (self.subnet_queues.best_effort_message_memory_usage() as u64).into();
+                (message_shed, memory_usage_after)
+            } else {
+                // Shed from a canister's queues: remove the canister, shed its largest message,
+                // replace it.
+                let mut canister = self.canister_states.remove(&canister_id).unwrap();
+                let message_shed = canister
+                    .system_state
+                    .shed_largest_message(&canister_id, &self.canister_states);
+                let memory_usage_after = canister.system_state.best_effort_message_memory_usage();
+                self.canister_states.insert(canister_id, canister);
+                (message_shed, memory_usage_after)
+            };
+            debug_assert!(message_shed);
+
+            // Replace the canister in the priority queue iff its memory usage is still
+            // non-zero AND a message was actually shed.
+            if memory_usage_after > ZERO_BYTES && message_shed {
+                priority_queue.insert((memory_usage_after, canister_id));
+            }
+
+            // Update the total memory usage.
+            debug_assert!(memory_usage_before > memory_usage_after);
+            let memory_usage_delta = memory_usage_before - memory_usage_after;
+            memory_usage -= memory_usage_delta;
+
+            shed_messages += message_shed as u64;
+            shed_message_bytes += memory_usage_delta;
+            debug_assert_eq!(self.best_effort_message_memory_taken(), memory_usage);
+        }
+        (shed_messages, shed_message_bytes)
     }
 
     /// Splits the replicated state as part of subnet splitting phase 1, retaining

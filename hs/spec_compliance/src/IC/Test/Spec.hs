@@ -2474,14 +2474,14 @@ icTests my_sub other_sub conf =
                                                                                                                delegationEnv defaultSK dels req >>= postQueryCBOR cid >>= code400
 
                                                                                                              goodTestCase name mkReq mkDels =
-                                                                                                               simpleTestCase name ecid $ \cid -> good cid (fst $ mkReq cid) (snd $ mkReq cid) (mkDels cid)
+                                                                                                               testCase name $ let cid = store_canister_id in good cid (fst $ mkReq cid) (snd $ mkReq cid) (mkDels cid)
 
                                                                                                              badTestCase name mkReq read_state_error_code mkDels =
                                                                                                                testGroup
                                                                                                                  name
-                                                                                                                 [ simpleTestCase "in submit" ecid $ \cid -> badSubmit cid (fst $ mkReq cid) (mkDels cid),
-                                                                                                                   simpleTestCase "in read_state" ecid $ \cid -> badRead cid (fst $ mkReq cid) (mkDels cid) read_state_error_code,
-                                                                                                                   simpleTestCase "in query" ecid $ \cid -> badQuery cid (snd $ mkReq cid) (mkDels cid)
+                                                                                                                 [ testCase "in submit" $ let cid = store_canister_id in badSubmit cid (fst $ mkReq cid) (mkDels cid),
+                                                                                                                   testCase "in read_state" $ let cid = store_canister_id in badRead cid (fst $ mkReq cid) (mkDels cid) read_state_error_code,
+                                                                                                                   testCase "in query" $ let cid = store_canister_id in badQuery cid (snd $ mkReq cid) (mkDels cid)
                                                                                                                  ]
 
                                                                                                              withEd25519 = zip [createSecretKeyEd25519 (BS.singleton n) | n <- [0 ..]]
@@ -2552,7 +2552,8 @@ icTests my_sub other_sub conf =
                                                                                                                  ("mixed delegations", otherUser, delEnv [defaultSK, webAuthnRSASK, ecdsaSK, secp256k1SK])
                                                                                                                ]
                                                                                                                $ \(name, user, env) ->
-                                                                                                                 [ simpleTestCase (name ++ " in query") ecid $ \cid -> do
+                                                                                                                 [ testCase (name ++ " in query") $ do
+                                                                                                                     let cid = store_canister_id
                                                                                                                      let cbor =
                                                                                                                            rec
                                                                                                                              [ "request_type" =: GText "query",
@@ -2564,7 +2565,8 @@ icTests my_sub other_sub conf =
                                                                                                                      req <- addExpiry cbor
                                                                                                                      signed_req <- env req
                                                                                                                      postQueryCBOR cid signed_req >>= okCBOR >>= queryResponse >>= \res -> isQueryReply ecid (requestId req, res) >>= is "",
-                                                                                                                   simpleTestCase (name ++ " in update") ecid $ \cid -> do
+                                                                                                                   testCase (name ++ " in update") $ do
+                                                                                                                     let cid = store_canister_id
                                                                                                                      req <-
                                                                                                                        addExpiry $
                                                                                                                          rec
@@ -2590,7 +2592,8 @@ icTests my_sub other_sub conf =
                                                                                                            <&> \(name, env, mod_req) ->
                                                                                                              testGroup
                                                                                                                name
-                                                                                                               [ simpleTestCase "in query" ecid $ \cid -> do
+                                                                                                               [ testCase "in query" $ do
+                                                                                                                   let cid = store_canister_id
                                                                                                                    let good_cbor =
                                                                                                                          rec
                                                                                                                            [ "request_type" =: GText "query",
@@ -2613,29 +2616,39 @@ icTests my_sub other_sub conf =
                                                                                                                    res <- queryResponse res
                                                                                                                    isQueryReply ecid (rid, res) >>= is ""
                                                                                                                    env (mod_req bad_req) >>= postQueryCBOR cid >>= code4xx,
-                                                                                                                 simpleTestCase "in empty read state request" ecid $ \cid -> do
+                                                                                                                 testCase "in empty read state request" $ do
+                                                                                                                   let cid = store_canister_id
                                                                                                                    good_req <- addNonce >=> addExpiry $ readStateEmpty
                                                                                                                    envelope defaultSK good_req >>= postReadStateCBOR cid >>= code2xx
                                                                                                                    env (mod_req good_req) >>= postReadStateCBOR cid >>= code4xx,
-                                                                                                                 simpleTestCase "in call" ecid $ \cid -> do
-                                                                                                                   good_req <-
-                                                                                                                     addNonce >=> addExpiry $
-                                                                                                                       rec
-                                                                                                                         [ "request_type" =: GText "call",
-                                                                                                                           "sender" =: GBlob defaultUser,
-                                                                                                                           "canister_id" =: GBlob cid,
-                                                                                                                           "method_name" =: GText "query",
-                                                                                                                           "arg" =: GBlob (run reply)
-                                                                                                                         ]
-                                                                                                                   let req = mod_req good_req
-                                                                                                                   env req >>= postCallCBOR cid >>= code202_or_4xx
-
-                                                                                                                   -- Also check that the request was not created
-                                                                                                                   ingressDelay
-                                                                                                                   getRequestStatus defaultUser cid (requestId req) >>= is UnknownStatus
+                                                                                                                 testCase "in call" $ do
+                                                                                                                   let cid = store_canister_id
+                                                                                                                   let good_cbor =
+                                                                                                                         rec
+                                                                                                                           [ "request_type" =: GText "call",
+                                                                                                                             "sender" =: GBlob defaultUser,
+                                                                                                                             "canister_id" =: GBlob cid,
+                                                                                                                             "method_name" =: GText "query",
+                                                                                                                             "arg" =: GBlob (run ((debugPrint $ i2b $ int 0) >>> reply))
+                                                                                                                           ]
+                                                                                                                   let bad_cbor =
+                                                                                                                         rec
+                                                                                                                           [ "request_type" =: GText "call",
+                                                                                                                             "sender" =: GBlob defaultUser,
+                                                                                                                             "canister_id" =: GBlob cid,
+                                                                                                                             "method_name" =: GText "query",
+                                                                                                                             "arg" =: GBlob (run ((debugPrint $ i2b $ int 1) >>> reply))
+                                                                                                                           ]
+                                                                                                                   good_req <- addNonce >=> addExpiry $ good_cbor
+                                                                                                                   bad_req <- addNonce >=> addExpiry $ bad_cbor
+                                                                                                                   let req = mod_req bad_req
+                                                                                                                   env req >>= postCallCBOR cid >>= code4xx
 
                                                                                                                    -- check that with a valid signature, this would have worked
                                                                                                                    awaitCall cid good_req >>= isReply >>= is ""
+
+                                                                                                                   -- Also check that the request was not created
+                                                                                                                   getRequestStatus defaultUser cid (requestId req) >>= is UnknownStatus
                                                                                                                ],
                                                                                                        testGroup "Canister signatures" $
                                                                                                          let genId cid seed =
