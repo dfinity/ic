@@ -17,11 +17,12 @@ DEFAULT_RUSTC_FLAGS = [
     "-Coverflow_checks",
     "-Copt-level=3",
     "-Clink-dead-code",
-    "-Cinstrument-coverage",
     "-Cdebug-assertions",
     "-Ccodegen-units=1",
     "-Zextra-const-ub-checks",
     "-Zstrict-init-checks",
+    # TODO(PSEC): Add configuration to enable only during profiling
+    # "-Cinstrument-coverage",
 ]
 
 DEFAULT_SANITIZERS = [

@@ -11,8 +11,7 @@ use ic_config::{
 use ic_management_canister_types::{CanisterInstallMode, CanisterSettingsArgsBuilder};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
-use ic_types::CanisterId;
-use ic_types::Cycles;
+use ic_types::{CanisterId, Cycles, NumBytes};
 
 use libfuzzer_sys::{fuzz_target, test_input_wrap};
 use std::cell::RefCell;
@@ -125,6 +124,7 @@ fn setup_env() -> (StateMachine, CanisterId) {
             },
             ..Default::default()
         },
+        max_compilation_cache_size: NumBytes::new(10 * 1024 * 1024), // 10MiB
         ..Default::default()
     };
     let subnet_type = SubnetType::System;
@@ -137,7 +137,11 @@ fn setup_env() -> (StateMachine, CanisterId) {
     let canister_id = env.create_canister_with_cycles(
         None,
         Cycles::from(u128::MAX / 2),
-        Some(CanisterSettingsArgsBuilder::new().build()),
+        Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_wasm_memory_limit(100 * 1024 * 1024)
+                .build(),
+        ),
     );
     let wasm = wat::parse_str(HELLO_WORLD_WAT).unwrap();
     env.install_wasm_in_mode(canister_id, CanisterInstallMode::Install, wasm, vec![])
