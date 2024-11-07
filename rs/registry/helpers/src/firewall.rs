@@ -102,45 +102,42 @@ impl<T: RegistryClient + ?Sized> FirewallRegistry for T {
     ) -> RegistryClientResult<Vec<IpAddr>> {
         let system_subnet_node_ids: Vec<NodeId> = self
             .get_system_subnet_ids(version)?
-            .map(|system_subnet_ids| {
-                system_subnet_ids
-                    .into_iter()
-                    .flat_map(
-                        |subnet_id| match self.get_node_ids_on_subnet(subnet_id, version) {
-                            Ok(Some(node_ids)) => node_ids,
-                            Ok(None) => vec![],
-                            Err(_) => vec![],
-                        },
-                    )
-                    .collect()
-            })
-            .unwrap_or_default();
-
-        let system_subnet_node_ips: Vec<IpAddr> = system_subnet_node_ids
+            .unwrap_or_default()
             .into_iter()
-            .flat_map(|node_id| {
-                match deserialize_registry_value::<NodeRecord>(
-                    self.get_value(&make_node_record_key(node_id), version),
-                ) {
-                    Ok(Some(node_record)) => {
-                        let mut endpoints: Vec<ConnectionEndpoint> = Vec::new();
-                        if let Some(xnet_record) = node_record.xnet {
-                            endpoints.push(xnet_record)
-                        };
-                        if let Some(http_record) = node_record.http {
-                            endpoints.push(http_record)
-                        };
-                        endpoints
-                    }
-                    _ => vec![],
-                }
-            })
-            .filter_map(|connection_endpoint| connection_endpoint.ip_addr.parse::<IpAddr>().ok())
-            .collect::<HashSet<IpAddr>>()
+            .map(
+                |subnet_id| match self.get_node_ids_on_subnet(subnet_id, version) {
+                    Ok(Some(node_ids)) => Ok(node_ids),
+                    Ok(None) => Ok(vec![]),
+                    Err(e) => Err(e),
+                },
+            )
+            .collect::<Result<Vec<Vec<NodeId>>, _>>()?
             .into_iter()
+            .flatten()
             .collect();
 
-        Ok(Some(system_subnet_node_ips))
+        let mut system_subnet_endpoints: HashSet<IpAddr> = HashSet::new();
+
+        for node_id in system_subnet_node_ids {
+            if let Some(node_record) = deserialize_registry_value::<NodeRecord>(
+                self.get_value(&make_node_record_key(node_id), version),
+            )? {
+                if let Some(ip_addr) = node_record
+                    .xnet
+                    .and_then(|endpoint| endpoint.ip_addr.parse::<IpAddr>().ok())
+                {
+                    system_subnet_endpoints.insert(ip_addr);
+                }
+                if let Some(ip_addr) = node_record
+                    .http
+                    .and_then(|endpoint| endpoint.ip_addr.parse::<IpAddr>().ok())
+                {
+                    system_subnet_endpoints.insert(ip_addr);
+                }
+            }
+        }
+
+        Ok(Some(Vec::from_iter(system_subnet_endpoints)))
     }
 }
 

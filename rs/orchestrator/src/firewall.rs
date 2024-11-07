@@ -35,7 +35,7 @@ enum Role {
     BoundaryNode,
 }
 
-const SOCKS_PROXY_PORT: u32 = 1080;
+const SOCKS_PROXY_PORT: u16 = 1080;
 
 /// Provides function to continuously check the Registry to determine if there
 /// has been a change in the firewall config, and if so, updates the node's
@@ -180,7 +180,7 @@ impl Firewall {
     ) -> (FirewallRule, FirewallRule, FirewallRule) {
         // First, get all the registry versions between the latest CUP and the latest version
         // in the registry inclusive.
-        let registry_versions: Vec<RegistryVersion> = self.get_registry_versions(registry_version);
+        let registry_versions = self.get_registry_versions(registry_version);
 
         // Get the union of all the node IP addresses from the registry
         let node_whitelist_ips: BTreeSet<IpAddr> = registry_versions
@@ -199,7 +199,7 @@ impl Firewall {
             .collect();
 
         // Then split it to v4 and v6 separately
-        let (node_ipv4s, node_ipv6s) = split_ips_by_address_family(node_whitelist_ips);
+        let (node_ipv4s, node_ipv6s) = split_ips_by_address_family(&node_whitelist_ips);
 
         info!(
             self.logger,
@@ -260,7 +260,7 @@ impl Firewall {
     ) -> FirewallRule {
         // First, get all the registry versions between the latest CUP and the latest version
         // in the registry inclusive.
-        let registry_versions: Vec<RegistryVersion> = self.get_registry_versions(registry_version);
+        let registry_versions = self.get_registry_versions(registry_version);
 
         // Get the IPs of all nodes on system subnets
         let system_subnet_node_ips: BTreeSet<IpAddr> = registry_versions
@@ -280,7 +280,7 @@ impl Firewall {
 
         // Then split it to v4 and v6 separately
         let (system_subnet_node_ipv4s, system_subnet_node_ipv6s) =
-            split_ips_by_address_family(system_subnet_node_ips);
+            split_ips_by_address_family(&system_subnet_node_ips);
         info!(
             self.logger,
             "Whitelisting system subnet node IP addresses ({} v4 and {} v6) for the SOCKS proxy on the firewall",
@@ -291,7 +291,7 @@ impl Firewall {
         FirewallRule {
             ipv4_prefixes: system_subnet_node_ipv4s,
             ipv6_prefixes: system_subnet_node_ipv6s,
-            ports: vec![SOCKS_PROXY_PORT],
+            ports: vec![SOCKS_PROXY_PORT.into()],
             action: FirewallAction::Allow as i32,
             comment: "system subnet nodes for SOCKS proxy".to_string(),
             user: None,
@@ -665,7 +665,7 @@ fn action_to_nftables_action(action: Option<FirewallAction>) -> String {
 }
 
 /// takes a list of IP address and returns a list containing only IPv4 and one only IPv6 addresses
-fn split_ips_by_address_family(ips: BTreeSet<IpAddr>) -> (Vec<String>, Vec<String>) {
+fn split_ips_by_address_family(ips: &BTreeSet<IpAddr>) -> (Vec<String>, Vec<String>) {
     let ipv4s: Vec<String> = ips
         .iter()
         .filter(|ip| ip.is_ipv4())
