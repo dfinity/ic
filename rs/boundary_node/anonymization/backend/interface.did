@@ -55,9 +55,13 @@ type HttpResponse = record {
 };
 
 service : (InitArg) -> {
-    // Service
+    // register a public-key for a given caller
     "register" : (blob) -> (RegisterResponse);
+
+    // query for an encrypted-value for a given caller
     "query" : () -> (QueryResponse) query;
+
+    // submit a set of encrypted-values for peers
     "submit" : (vec Pair) -> (SubmitResponse);
 
     // Metrics (Http Interface)
