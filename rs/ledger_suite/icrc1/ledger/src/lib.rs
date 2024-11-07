@@ -359,7 +359,7 @@ thread_local! {
     pub static UPGRADES_MEMORY: RefCell<VirtualMemory<DefaultMemoryImpl>> = MEMORY_MANAGER.with(|memory_manager|
         RefCell::new(memory_manager.borrow().get(UPGRADES_MEMORY_ID)));
 
-    pub static LEDGER_STATE: RefCell<LedgerState> = RefCell::new(LedgerState::Ready);
+    pub static LEDGER_STATE: RefCell<LedgerState> = const { RefCell::new(LedgerState::Ready) };
 
     // (from, spender) -> allowance - map storing ledger allowances.
     #[allow(clippy::type_complexity)]
