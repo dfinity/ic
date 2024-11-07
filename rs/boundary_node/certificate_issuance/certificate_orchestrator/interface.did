@@ -94,7 +94,7 @@ type ListRegistrationsError = variant {
 };
 
 type ListRegistrationsResponse = variant {
-    Ok;
+    Ok: vec record { text; Registration };
     Err: ListRegistrationsError;
 };
 

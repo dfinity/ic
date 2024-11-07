@@ -2,7 +2,16 @@ use std::{cell::RefCell, cmp::Reverse, collections::BTreeMap, thread::LocalKey, 
 
 use candid::{candid_method, Principal};
 use certificate_orchestrator_interface::{
-    BoundedString, CreateRegistrationError, CreateRegistrationResponse, DispenseTaskError, DispenseTaskResponse, EncryptedPair, ExportCertificatesCertifiedResponse, ExportCertificatesError, ExportCertificatesResponse, ExportPackage, GetCertificateError, GetCertificateResponse, GetRegistrationError, GetRegistrationResponse, HeaderField, HttpRequest, HttpResponse, Id, InitArg, ListAllowedPrincipalsError, ListAllowedPrincipalsResponse, ListRegistrationsResponse, ListTasksResponse, ModifyAllowedPrincipalError, ModifyAllowedPrincipalResponse, Name, PeekTaskError, PeekTaskResponse, QueueTaskError, QueueTaskResponse, Registration, RemoveRegistrationError, RemoveRegistrationResponse, State, UpdateRegistrationError, UpdateRegistrationResponse, UpdateType, UploadCertificateError, UploadCertificateResponse
+    BoundedString, CreateRegistrationError, CreateRegistrationResponse, DispenseTaskError,
+    DispenseTaskResponse, EncryptedPair, ExportCertificatesCertifiedResponse,
+    ExportCertificatesError, ExportCertificatesResponse, ExportPackage, GetCertificateError,
+    GetCertificateResponse, GetRegistrationError, GetRegistrationResponse, HeaderField,
+    HttpRequest, HttpResponse, Id, InitArg, ListAllowedPrincipalsError,
+    ListAllowedPrincipalsResponse, ListRegistrationsError, ListRegistrationsResponse,
+    ListTasksResponse, ModifyAllowedPrincipalError, ModifyAllowedPrincipalResponse, Name,
+    PeekTaskError, PeekTaskResponse, QueueTaskError, QueueTaskResponse, Registration,
+    RemoveRegistrationError, RemoveRegistrationResponse, State, UpdateRegistrationError,
+    UpdateRegistrationResponse, UpdateType, UploadCertificateError, UploadCertificateResponse,
 };
 use ic_cdk::{
     api::{id, time},
@@ -335,6 +344,12 @@ thread_local! {
         let r = WithAuthorize(r, &MAIN_AUTHORIZER);
         let r = WithMetrics(r, &COUNTER_REMOVE_REGISTRATION_TOTAL);
         Box::new(r)
+    });
+
+    static REGISTRATION_LISTER: RefCell<Box<dyn registration::List>> = RefCell::new({
+        let v = registration::Lister::new(&REGISTRATIONS);
+        let v = WithAuthorize(v, &ROOT_AUTHORIZER);
+        Box::new(v)
     });
 }
 
@@ -673,7 +688,15 @@ fn remove_registration(id: Id) -> RemoveRegistrationResponse {
 #[query(name = "listRegistrations")]
 #[candid_method(query, rename = "listRegistrations")]
 fn list_registrations() -> ListRegistrationsResponse {
-    ListRegistrationsResponse::Ok(())
+    match REGISTRATION_LISTER.with(|v| v.borrow().list()) {
+        Ok(rs) => ListRegistrationsResponse::Ok(rs),
+        Err(err) => ListRegistrationsResponse::Err(match err {
+            registration::ListError::Unauthorized => ListRegistrationsError::Unauthorized,
+            registration::ListError::UnexpectedError(err) => {
+                ListRegistrationsError::UnexpectedError(err.to_string())
+            }
+        }),
+    }
 }
 
 // Certificates

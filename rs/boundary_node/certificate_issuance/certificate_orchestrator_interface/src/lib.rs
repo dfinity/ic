@@ -288,7 +288,7 @@ pub enum ListRegistrationsError {
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub enum ListRegistrationsResponse {
-    Ok(()),
+    Ok(Vec<(String, Registration)>),
     Err(ListRegistrationsError),
 }
 
