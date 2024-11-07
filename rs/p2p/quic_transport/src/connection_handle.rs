@@ -6,8 +6,8 @@
 //!
 
 use anyhow::{anyhow, Context};
-use axum::http::{Method, Request, Response, Version};
 use bytes::Bytes;
+use http::{Method, Request, Response, Version};
 use ic_base_types::NodeId;
 use ic_protobuf::transport::v1 as pb;
 use prost::Message;
@@ -46,15 +46,15 @@ impl Drop for SendStreamDropGuard {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct ConnectionHandle {
-    pub peer_id: NodeId,
+pub struct ConnectionHandle {
+    peer_id: NodeId,
     pub connection: Connection,
-    pub metrics: QuicTransportMetrics,
+    metrics: QuicTransportMetrics,
     conn_id: ConnId,
 }
 
 impl ConnectionHandle {
-    pub(crate) fn new(
+    pub fn new(
         peer_id: NodeId,
         connection: Connection,
         metrics: QuicTransportMetrics,
@@ -68,14 +68,11 @@ impl ConnectionHandle {
         }
     }
 
-    pub(crate) fn conn_id(&self) -> ConnId {
+    pub fn conn_id(&self) -> ConnId {
         self.conn_id
     }
 
-    pub(crate) async fn rpc(
-        &self,
-        request: Request<Bytes>,
-    ) -> Result<Response<Bytes>, anyhow::Error> {
+    pub async fn rpc(&self, request: Request<Bytes>) -> Result<Response<Bytes>, anyhow::Error> {
         let _timer = self
             .metrics
             .connection_handle_duration_seconds

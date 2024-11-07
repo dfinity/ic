@@ -548,7 +548,7 @@ impl ConnectionManager {
                     peer_id,
                     run_stream_acceptor(
                         self.log.clone(),
-                        req_handler_connection_handle.peer_id,
+                        peer_id,
                         req_handler_connection_handle.conn_id(),
                         req_handler_connection_handle.connection,
                         self.metrics.clone(),
