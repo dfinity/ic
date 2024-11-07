@@ -1727,7 +1727,7 @@ fn test_call_unknown_canister() {
             call_args().on_reject(wasm().reject_message().reject())
         )),
         Ok(WasmResult::Reject(s)) if s.contains(
-            "Canister yjeau-xiaaa-aaaaa-aabsa-cai not found"
+            "No route to canister yjeau-xiaaa-aaaaa-aabsa-cai"
         )
     );
 }
