@@ -31,7 +31,7 @@ async fn should_replay_events_for_mainnet() {
     assert_eq!(state.ethereum_network, EthereumNetwork::Mainnet);
     assert_eq!(
         state.eth_balance.eth_balance(),
-        Wei::from(963_862_214_315_907_950_601_u128)
+        Wei::from( 973_769_498_742_712_741_454_u128)
     );
 }
 
@@ -46,7 +46,7 @@ async fn should_replay_events_for_sepolia() {
     assert_eq!(state.ethereum_network, EthereumNetwork::Sepolia);
     assert_eq!(
         state.eth_balance.eth_balance(),
-        Wei::from(23_921_100_389_314_727_754_717_u128)
+        Wei::from(23_921_238_021_909_121_554_717_u128)
     );
 }
 
