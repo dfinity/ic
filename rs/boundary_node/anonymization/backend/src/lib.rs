@@ -6,6 +6,7 @@ use anonymization_interface::{
 use candid::Principal;
 use ic_cdk::{id, spawn};
 use ic_cdk_timers::set_timer_interval;
+use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_stable_structures::{
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
     DefaultMemoryImpl, StableBTreeMap,
@@ -25,14 +26,11 @@ thread_local! {
         RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
 }
 
-const REGISTRY_CANISTER_ID: &str = "bnz7o-iuaaa-aaaaa-qaaaa-cai";
-
 const MEMORY_ID_ALLOWED_PRINCIPALS: u8 = 0;
 
 lazy_static! {
     static ref API_BOUNDARY_NODES_LISTER: Box<dyn List> = {
-        let cid =
-            Principal::from_text(REGISTRY_CANISTER_ID).expect("failed to construct principal");
+        let cid = Principal::from(REGISTRY_CANISTER_ID);
 
         let v = Client::new(cid);
         Box::new(v)

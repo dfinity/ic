@@ -363,6 +363,7 @@ dependencies = [
  "candid",
  "ic-cdk 0.16.0",
  "ic-cdk-timers",
+ "ic-nns-constants",
  "ic-stable-structures",
  "lazy_static",
  "prometheus",
