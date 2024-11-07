@@ -31,10 +31,26 @@ RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommend
     curl \
     perl
 
-# Download and verify QEMU
+# Download >=9.1 qemu and extra requirements
 RUN cd /tmp/ && \
-    curl -L -O https://download.qemu.org/qemu-6.2.0.tar.xz && \
-    echo "68e15d8e45ac56326e0b9a4afa8b49a3dfe8aba3488221d098c84698bca65b45  qemu-6.2.0.tar.xz" > qemu.sha256 && \
+    curl -L -O http://mirrors.kernel.org/ubuntu/pool/main/n/nettle/libhogweed6t64_3.10.1-1_amd64.deb && \
+    curl -L -O http://mirrors.kernel.org/ubuntu/pool/main/n/nettle/libnettle8t64_3.10.1-1_amd64.deb && \
+    curl -L -O http://mirrors.kernel.org/ubuntu/pool/main/d/device-tree-compiler/libfdt1_1.7.2-2build1_amd64.deb && \
+    curl -L -O http://mirrors.kernel.org/ubuntu/pool/main/g/gnutls28/libgnutls30t64_3.8.9-2ubuntu2_amd64.deb && \
+    curl -L -O http://mirrors.kernel.org/ubuntu/pool/main/b/brltty/libbrlapi0.8_6.7-1ubuntu2_amd64.deb && \
+    curl -L -O http://mirrors.kernel.org/ubuntu/pool/main/libp/libpng1.6/libpng16-16t64_1.6.46-4_amd64.deb && \
+    curl -L -O http://mirrors.kernel.org/ubuntu/pool/main/q/qemu/qemu-system-data_9.2.0+ds-4ubuntu3_all.deb && \
+    curl -L -O http://mirrors.kernel.org/ubuntu/pool/main/q/qemu/qemu-system-common_9.2.0+ds-4ubuntu3_amd64.deb && \
+    curl -L -O http://mirrors.kernel.org/ubuntu/pool/main/q/qemu/qemu-system-x86_9.2.0+ds-4ubuntu3_amd64.deb && \
+    echo "82f72d19d66ee9d1b34c4ecfbb57ab7076c175497feb20d072d09dc5051eddce  libhogweed6t64_3.10.1-1_amd64.deb" >> qemu.sha256 && \
+    echo "0b83efca58629427e6e89ced5b268e8b5db6a38bb17f1c9704530528f1c24576  libnettle8t64_3.10.1-1_amd64.deb" >> qemu.sha256 && \
+    echo "79f3e6595584613a1f140085f4043f6f3ee2a0e7f04aaa8fd1fd2cf6d0e45a65  libfdt1_1.7.2-2build1_amd64.deb" >> qemu.sha256 && \
+    echo "ab83b2354f429a2a00c9f79a2f9cb9a1b68c2649d508197ca3321aff5878a22f  libgnutls30t64_3.8.9-2ubuntu2_amd64.deb" >> qemu.sha256 && \
+    echo "487903267c199ed6b5769d2414a401cbb33aa456a08a5b6a35f2e60747c595cf  libbrlapi0.8_6.7-1ubuntu2_amd64.deb" >> qemu.sha256 && \
+    echo "9539db2305a4c6b140a44a62039ce577a22211bab2d6a0a9c07580f3571be765  libpng16-16t64_1.6.46-4_amd64.deb" >> qemu.sha256 && \
+    echo "a43394993bfc9e67ad8c6788f7eac8e35f08eff2466c469c3fec2987c17f74a1  qemu-system-data_9.2.0+ds-4ubuntu3_all.deb" >> qemu.sha256 && \
+    echo "92da46a8d50145b87d2ac00027eeb3f25e1dc334d177f1733198ef67c3be7f89  qemu-system-common_9.2.0+ds-4ubuntu3_amd64.deb" >> qemu.sha256 && \
+    echo "eb74f962d49c21ef37a3bdc980e6fd2c453025b7bcc3a232577adb60c6bacf64  qemu-system-x86_9.2.0+ds-4ubuntu3_amd64.deb" >> qemu.sha256 && \
     shasum -c qemu.sha256
 
 # Download and verify node_exporter
@@ -46,38 +62,6 @@ RUN cd /tmp/ && \
 
 #
 # Second build stage:
-# - Compile downloaded archives from first build stage
-#
-FROM ubuntu:24.04 AS build
-
-USER root:root
-
-ENV TZ=UTC
-RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
-# Install QEMU build dependencies
-RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommends install \
-    ca-certificates \
-    build-essential \
-    libglib2.0-dev \
-    libpixman-1-dev \
-    libusb-1.0-0-dev \
-    ninja-build \
-    pkg-config \
-    python3 \
-    python3-setuptools
-
-# Configure and compile QEMU
-COPY --from=download /tmp/qemu-6.2.0.tar.xz /tmp/qemu-6.2.0.tar.xz
-RUN cd /tmp/ && \
-    tar xJf qemu-6.2.0.tar.xz && \
-    cd /tmp/qemu-6.2.0 && \
-    ./configure --target-list=x86_64-softmmu --enable-kvm --enable-libusb && \
-    echo "Compiling qemu..." && \
-    make -j 2 >/dev/null 2>&1 && \
-    DESTDIR="/out" ninja -C build install
-
-#
-# Third build stage:
 # - Download and cache minimal Ubuntu Server 20.04 LTS Docker image.
 # - Install and cache upstream packages from built-in Ubuntu repositories.
 # - Install compiled packages from the second stage.
@@ -104,9 +88,36 @@ RUN apt-get -y update && \
     apt-get -y --no-install-recommends install $(for P in ${PACKAGE_FILES}; do cat /tmp/$P | sed -e "s/#.*//" ; done) && \
     rm /tmp/packages.*
 
-# Install QEMU
-COPY --from=build /out/usr/local/bin/qemu-system-x86_64 /usr/local/bin/
-COPY --from=build /out/usr/local/share/qemu /usr/local/share/qemu
+# Install >=9.1 qemu and extra requirements
+COPY --from=download /tmp/libhogweed6t64_3.10.1-1_amd64.deb /tmp/libhogweed6t64_3.10.1-1_amd64.deb
+COPY --from=download /tmp/libnettle8t64_3.10.1-1_amd64.deb /tmp/libnettle8t64_3.10.1-1_amd64.deb
+COPY --from=download /tmp/libfdt1_1.7.2-2build1_amd64.deb /tmp/libfdt1_1.7.2-2build1_amd64.deb
+COPY --from=download /tmp/libgnutls30t64_3.8.9-2ubuntu2_amd64.deb /tmp/libgnutls30t64_3.8.9-2ubuntu2_amd64.deb
+COPY --from=download /tmp/libbrlapi0.8_6.7-1ubuntu2_amd64.deb /tmp/libbrlapi0.8_6.7-1ubuntu2_amd64.deb
+COPY --from=download /tmp/libpng16-16t64_1.6.46-4_amd64.deb /tmp/libpng16-16t64_1.6.46-4_amd64.deb
+COPY --from=download /tmp/qemu-system-data_9.2.0+ds-4ubuntu3_all.deb /tmp/qemu-system-data_9.2.0+ds-4ubuntu3_all.deb
+COPY --from=download /tmp/qemu-system-common_9.2.0+ds-4ubuntu3_amd64.deb /tmp/qemu-system-common_9.2.0+ds-4ubuntu3_amd64.deb
+COPY --from=download /tmp/qemu-system-x86_9.2.0+ds-4ubuntu3_amd64.deb /tmp/qemu-system-x86_9.2.0+ds-4ubuntu3_amd64.deb
+
+RUN apt-get install -y --no-install-recommends \
+    /tmp/libhogweed6t64_3.10.1-1_amd64.deb \
+    /tmp/libnettle8t64_3.10.1-1_amd64.deb \
+    /tmp/libfdt1_1.7.2-2build1_amd64.deb \
+    /tmp/libgnutls30t64_3.8.9-2ubuntu2_amd64.deb \
+    /tmp/libbrlapi0.8_6.7-1ubuntu2_amd64.deb \
+    /tmp/libpng16-16t64_1.6.46-4_amd64.deb \
+    /tmp/qemu-system-data_9.2.0+ds-4ubuntu3_all.deb \
+    /tmp/qemu-system-common_9.2.0+ds-4ubuntu3_amd64.deb \
+    /tmp/qemu-system-x86_9.2.0+ds-4ubuntu3_amd64.deb && \
+    rm /tmp/libhogweed6t64_3.10.1-1_amd64.deb && \
+    rm /tmp/libnettle8t64_3.10.1-1_amd64.deb && \
+    rm /tmp/libfdt1_1.7.2-2build1_amd64.deb && \
+    rm /tmp/libgnutls30t64_3.8.9-2ubuntu2_amd64.deb && \
+    rm /tmp/libbrlapi0.8_6.7-1ubuntu2_amd64.deb && \
+    rm /tmp/libpng16-16t64_1.6.46-4_amd64.deb && \
+    rm /tmp/qemu-system-data_9.2.0+ds-4ubuntu3_all.deb && \
+    rm /tmp/qemu-system-common_9.2.0+ds-4ubuntu3_amd64.deb && \
+    rm /tmp/qemu-system-x86_9.2.0+ds-4ubuntu3_amd64.deb
 
 # Install node_exporter
 COPY --from=download /tmp/node_exporter-1.8.1.linux-amd64.tar.gz /tmp/node_exporter-1.8.1.linux-amd64.tar.gz
