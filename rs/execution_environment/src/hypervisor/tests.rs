@@ -5363,8 +5363,8 @@ fn test_callback_limits_impl(
     );
 
     // The first `expected_successful_calls` calls have succeeded.
-    for i in 0..expected_successful_calls {
-        let ingress_status = test.ingress_status(&ingress_ids[i]);
+    for ingress_id in ingress_ids.iter().take(expected_successful_calls) {
+        let ingress_status = test.ingress_status(ingress_id);
         let result = check_ingress_status(ingress_status).unwrap();
         assert_matches!(result, WasmResult::Reply(_));
     }
