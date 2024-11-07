@@ -324,6 +324,8 @@ impl CkErc20Setup {
             amount: amount.into(),
             ckerc20_ledger_id,
             recipient: recipient.into(),
+            from_cketh_subaccount: None,
+            from_ckerc20_subaccount: None,
         };
         let message_id = self.env.send_ingress(
             PrincipalId::from(from),
