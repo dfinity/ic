@@ -10751,6 +10751,7 @@ dependencies = [
  "bytes",
  "criterion",
  "futures",
+ "http 1.1.0",
  "ic-async-utils",
  "ic-base-types",
  "ic-crypto-tls-interfaces",
