@@ -67,7 +67,6 @@ locales
 moreutils
 mtools
 nvme-cli
-ovmf
 pciutils
 python3-libvirt
 python3-requests
@@ -76,3 +75,6 @@ xxd
 # Install select components from future releases
 # Install >=9.1 qemu
 qemu-system-x86/plucky # Top level
+
+# Install >=2024-05-24 OVMF
+ovmf/oracular # Top level
