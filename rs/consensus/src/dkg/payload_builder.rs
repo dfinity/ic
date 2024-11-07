@@ -489,6 +489,9 @@ pub(crate) fn get_configs_for_local_transcripts(
     registry_version: RegistryVersion,
 ) -> Result<Vec<NiDkgConfig>, PayloadCreationError> {
     let mut new_configs = Vec::new();
+    ////////////////////////////////////////////////////////////////////////////////
+    // TODO(CON-1413): In addition to iterating over TAGS, also iterate over all vetKD keys that were requested by registry
+    ///////////////////////////////////////////////////////////////////////////////
     for tag in TAGS.iter() {
         let dkg_id = NiDkgId {
             start_block_height,
@@ -498,23 +501,8 @@ pub(crate) fn get_configs_for_local_transcripts(
         };
         let (dealers, resharing_transcript) = match tag {
             NiDkgTag::LowThreshold => (node_ids.clone(), None),
-            NiDkgTag::HighThreshold => {
-                let resharing_transcript = reshared_transcripts.get(&NiDkgTag::HighThreshold);
-                (
-                    resharing_transcript
-                        .map(|transcript| transcript.committee.get().clone())
-                        .unwrap_or_else(|| node_ids.clone()),
-                    resharing_transcript.cloned(),
-                )
-            }
-            ////////////////////////////////////////////////////////////////////////////////
-            // TODO: how to behave here? The code below is copied+adapted from the HighThreshold case. However,
-            // this code currently won't be executed because we iterate over TAGS, which is a const that does not
-            // and cannot contain an NiDkgTag::HighThresholdForKey entry
-            ///////////////////////////////////////////////////////////////////////////////
-            NiDkgTag::HighThresholdForKey(master_public_key_id) => {
-                let resharing_transcript = reshared_transcripts
-                    .get(&NiDkgTag::HighThresholdForKey(master_public_key_id.clone()));
+            NiDkgTag::HighThreshold | NiDkgTag::HighThresholdForKey(_) => {
+                let resharing_transcript = reshared_transcripts.get(tag);
                 (
                     resharing_transcript
                         .map(|transcript| transcript.committee.get().clone())
