@@ -2,15 +2,7 @@ use std::{cell::RefCell, cmp::Reverse, collections::BTreeMap, thread::LocalKey, 
 
 use candid::{candid_method, Principal};
 use certificate_orchestrator_interface::{
-    BoundedString, CreateRegistrationError, CreateRegistrationResponse, DispenseTaskError,
-    DispenseTaskResponse, EncryptedPair, ExportCertificatesCertifiedResponse,
-    ExportCertificatesError, ExportCertificatesResponse, ExportPackage, GetCertificateError,
-    GetCertificateResponse, GetRegistrationError, GetRegistrationResponse, HeaderField,
-    HttpRequest, HttpResponse, Id, InitArg, ListAllowedPrincipalsError,
-    ListAllowedPrincipalsResponse, ModifyAllowedPrincipalError, ModifyAllowedPrincipalResponse,
-    Name, PeekTaskError, PeekTaskResponse, QueueTaskError, QueueTaskResponse, Registration,
-    RemoveRegistrationError, RemoveRegistrationResponse, State, UpdateRegistrationError,
-    UpdateRegistrationResponse, UpdateType, UploadCertificateError, UploadCertificateResponse,
+    BoundedString, CreateRegistrationError, CreateRegistrationResponse, DispenseTaskError, DispenseTaskResponse, EncryptedPair, ExportCertificatesCertifiedResponse, ExportCertificatesError, ExportCertificatesResponse, ExportPackage, GetCertificateError, GetCertificateResponse, GetRegistrationError, GetRegistrationResponse, HeaderField, HttpRequest, HttpResponse, Id, InitArg, ListAllowedPrincipalsError, ListAllowedPrincipalsResponse, ListRegistrationsResponse, ListTasksResponse, ModifyAllowedPrincipalError, ModifyAllowedPrincipalResponse, Name, PeekTaskError, PeekTaskResponse, QueueTaskError, QueueTaskResponse, Registration, RemoveRegistrationError, RemoveRegistrationResponse, State, UpdateRegistrationError, UpdateRegistrationResponse, UpdateType, UploadCertificateError, UploadCertificateResponse
 };
 use ic_cdk::{
     api::{id, time},
@@ -678,6 +670,12 @@ fn remove_registration(id: Id) -> RemoveRegistrationResponse {
     }
 }
 
+#[query(name = "listRegistrations")]
+#[candid_method(query, rename = "listRegistrations")]
+fn list_registrations() -> ListRegistrationsResponse {
+    ListRegistrationsResponse::Ok(())
+}
+
 // Certificates
 
 #[query(name = "getCertificate")]
@@ -796,6 +794,12 @@ fn dispense_task() -> DispenseTaskResponse {
             }
         }),
     }
+}
+
+#[query(name = "listTasks")]
+#[candid_method(query, rename = "listTasks")]
+fn list_tasks() -> ListTasksResponse {
+    ListTasksResponse::Ok(())
 }
 
 // Metrics
