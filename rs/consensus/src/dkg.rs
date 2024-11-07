@@ -148,7 +148,7 @@ impl DkgImpl {
 
         let content =
             match ic_interfaces::crypto::NiDkgAlgorithm::create_dealing(&*self.crypto, config) {
-                Ok(dealing) => DealingContent::new(dealing, config.dkg_id()),
+                Ok(dealing) => DealingContent::new(dealing, config.dkg_id().clone()),
                 Err(err) => {
                     match config.dkg_id().target_subnet {
                         NiDkgTargetSubnet::Local => error!(
@@ -216,7 +216,7 @@ impl DkgImpl {
             return Mutations::from(ChangeAction::RemoveFromUnvalidated((*message).clone()));
         }
 
-        let message_dkg_id = message.content.dkg_id;
+        let message_dkg_id = &message.content.dkg_id;
 
         // If the dealing refers to a DKG interval starting at a different height,
         // we skip it.
@@ -226,7 +226,7 @@ impl DkgImpl {
 
         // If the dealing refers a config which is not among the ongoing DKGs,
         // we reject it.
-        let config = match configs.get(&message_dkg_id) {
+        let config = match configs.get(message_dkg_id) {
             Some(config) => config,
             None => {
                 return get_handle_invalid_change_action(
@@ -311,7 +311,7 @@ impl DkgImpl {
 
 fn contains_dkg_messages(dkg_pool: &dyn DkgPool, config: &NiDkgConfig, replica_id: NodeId) -> bool {
     dkg_pool.get_validated().any(|message| {
-        message.content.dkg_id == config.dkg_id() && message.signature.signer == replica_id
+        &message.content.dkg_id == config.dkg_id() && message.signature.signer == replica_id
     })
 }
 
@@ -348,7 +348,7 @@ impl<T: DkgPool> PoolMutationsProducer<T> for DkgImpl {
             .get_unvalidated()
             // Group all unvalidated dealings by dealer.
             .fold(BTreeMap::new(), |mut map, dealing| {
-                let key = (dealing.signature.signer, dealing.content.dkg_id);
+                let key = (dealing.signature.signer, dealing.content.dkg_id.clone());
                 let dealings: &mut Vec<_> = map.entry(key).or_default();
                 dealings.push(dealing);
                 processed += 1;
@@ -499,10 +499,12 @@ pub fn make_registry_cup_from_cup_contents(
 
     let low_dkg_id = dkg_summary
         .current_transcript(&NiDkgTag::LowThreshold)
-        .dkg_id;
+        .dkg_id
+        .clone();
     let high_dkg_id = dkg_summary
         .current_transcript(&NiDkgTag::HighThreshold)
-        .dkg_id;
+        .dkg_id
+        .clone();
 
     // In a NNS subnet recovery case the block validation context needs to reference a registry
     // version of the NNS to be recovered. Otherwise the validation context points to a registry
@@ -1017,7 +1019,7 @@ mod tests {
 
             // Verify that the first summary block contains only two local configs and the
             // two errors for the remote DKG request.
-            let block: Block = PoolReader::new(&pool).get_highest_summary_block();
+            let block: Block = PoolReader::new(&pool).get_highest_finalized_summary_block();
             if let BlockPayload::Summary(summary) = block.payload.as_ref() {
                 assert_eq!(
                     summary.dkg.configs.len(),
@@ -1248,7 +1250,7 @@ mod tests {
 
             // Now we create a message with an unknown Dkg id and verify
             // that it gets rejected.
-            let mut invalid_dkg_id = valid_dealing_message.content.dkg_id;
+            let mut invalid_dkg_id = valid_dealing_message.content.dkg_id.clone();
             invalid_dkg_id.dealer_subnet = subnet_test_id(444);
             let mut invalid_dealing_message = valid_dealing_message.clone();
             invalid_dealing_message.content.dkg_id = invalid_dkg_id;
@@ -1326,7 +1328,7 @@ mod tests {
             let dkg_id_from_future = NiDkgId {
                 start_block_height: ic_types::Height::from(1000),
                 dealer_subnet: valid_dealing_message.content.dkg_id.dealer_subnet,
-                dkg_tag: valid_dealing_message.content.dkg_id.dkg_tag,
+                dkg_tag: valid_dealing_message.content.dkg_id.dkg_tag.clone(),
                 target_subnet: NiDkgTargetSubnet::Local,
             };
             let mut dealing_message_from_future = valid_dealing_message;
@@ -1508,7 +1510,8 @@ mod tests {
                     // Verify that the first summary block contains only two local configs.
                     pool_1.advance_round_normal_operation_n(dkg_interval_length + 1);
                     pool_2.advance_round_normal_operation_n(dkg_interval_length + 1);
-                    let block: Block = PoolReader::new(&pool_1).get_highest_summary_block();
+                    let block: Block =
+                        PoolReader::new(&pool_1).get_highest_finalized_summary_block();
                     if let BlockPayload::Summary(summary) = block.payload.as_ref() {
                         assert_eq!(summary.dkg.configs.len(), 2);
                         for (dkg_id, _) in summary.dkg.configs.iter() {
@@ -1526,7 +1529,8 @@ mod tests {
                     // block contains only two local and two remote configs.
                     pool_1.advance_round_normal_operation_n(dkg_interval_length + 1);
                     pool_2.advance_round_normal_operation_n(dkg_interval_length + 1);
-                    let block: Block = PoolReader::new(&pool_1).get_highest_summary_block();
+                    let block: Block =
+                        PoolReader::new(&pool_1).get_highest_finalized_summary_block();
                     if let BlockPayload::Summary(summary) = block.payload.as_ref() {
                         assert_eq!(summary.dkg.configs.len(), 4);
                     } else {

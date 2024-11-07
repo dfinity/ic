@@ -33,7 +33,6 @@ use backoff::backoff::Backoff;
 use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
 use hyper::header;
 use ic_http_endpoints_public::cors_layer;
-use ic_state_machine_tests::Level;
 use ic_types::{CanisterId, SubnetId};
 use pocket_ic::common::rest::{
     self, ApiResponse, AutoProgressConfig, ExtendedSubnetConfigSet, HttpGatewayConfig,
@@ -44,6 +43,7 @@ use pocket_ic::common::rest::{
 };
 use pocket_ic::WasmResult;
 use serde::Serialize;
+use slog::Level;
 use std::str::FromStr;
 use std::{collections::BTreeMap, fs::File, sync::Arc, time::Duration};
 use tokio::{runtime::Runtime, sync::RwLock, time::Instant};

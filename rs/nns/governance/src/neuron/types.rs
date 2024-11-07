@@ -3,7 +3,7 @@ use crate::{
         LOG_PREFIX, MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
         MAX_NEURON_RECENT_BALLOTS, MAX_NUM_HOT_KEYS_PER_NEURON,
     },
-    is_private_neuron_enforcement_enabled,
+    is_private_neuron_enforcement_enabled, is_voting_power_adjustment_enabled,
     neuron::{combine_aged_stakes, dissolve_state_and_age::DissolveStateAndAge, neuron_stake_e8s},
     neuron_store::NeuronStoreError,
     pb::v1::{
@@ -11,6 +11,7 @@ use crate::{
         governance_error::ErrorType,
         manage_neuron::{configure::Operation, Configure},
         neuron::{DissolveState as NeuronDissolveState, Followees},
+        proposal::Action,
         AbridgedNeuron, Ballot, BallotInfo, GovernanceError, KnownNeuronData,
         Neuron as NeuronProto, NeuronInfo, NeuronStakeTransfer, NeuronState, NeuronType, Topic,
         Visibility, Vote,
@@ -19,13 +20,17 @@ use crate::{
 };
 use ic_base_types::PrincipalId;
 use ic_cdk::println;
-use ic_nervous_system_common::ONE_DAY_SECONDS;
+use ic_nervous_system_common::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
+use ic_nervous_system_linear_map::LinearMap;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use icp_ledger::Subaccount;
-use std::collections::{BTreeSet, HashMap};
+use rust_decimal::Decimal;
+use std::{
+    collections::{BTreeSet, HashMap},
+    time::Duration,
+};
 
-/// A neuron type internal to the governance crate. Currently, this type is identical to the
-/// prost-generated Neuron type (except for derivations for prost). Gradually, this type will evolve
+/// A neuron type internal to the governance crate. Gradually, this type will evolve
 /// towards having all private fields while exposing methods for mutations, which allows it to hold
 /// invariants.
 #[derive(Clone, Debug)]
@@ -348,6 +353,49 @@ impl Neuron {
             > 0
     }
 
+    fn deciding_voting_power_adjustment_factor(
+        duration_since_voting_power_refreshed: Duration,
+    ) -> Decimal {
+        let linear_map = LinearMap::new(
+            Decimal::from(6 * ONE_MONTH_SECONDS)..Decimal::from(7 * ONE_MONTH_SECONDS), // from
+            Decimal::from(1)..Decimal::from(0),                                         // to
+        );
+
+        linear_map
+            .apply(Decimal::from(
+                duration_since_voting_power_refreshed.as_secs(),
+            ))
+            .clamp(Decimal::from(0), Decimal::from(1))
+    }
+
+    /// How much swap this neuron has when it casts its vote on proposals.
+    pub fn deciding_voting_power(&self, now_seconds: u64) -> u64 {
+        // Main inputs.
+        let adjustment_factor: Decimal = if is_voting_power_adjustment_enabled() {
+            Self::deciding_voting_power_adjustment_factor(Duration::from_secs(
+                now_seconds.saturating_sub(self.voting_power_refreshed_timestamp_seconds),
+            ))
+        } else {
+            Decimal::from(1)
+        };
+        let potential_voting_power = self.potential_voting_power(now_seconds);
+
+        // Main calculation.
+        let result = adjustment_factor * Decimal::from(potential_voting_power);
+
+        // Convert (back) to u64.
+        let result = result.round();
+        u64::try_from(result).unwrap_or_else(|err| {
+            // Log and fall back to potential voting power. Assuming
+            // adjustment_factor is in [0, 1], I see no way this can happen.
+            println!(
+                "{}ERROR: Unable to convert deciding voting power {} * {} back to u64: {:?}",
+                LOG_PREFIX, adjustment_factor, potential_voting_power, err,
+            );
+            potential_voting_power
+        })
+    }
+
     /// Return the voting power of this neuron.
     ///
     /// The voting power is the stake of the neuron modified by a
@@ -355,7 +403,7 @@ impl Neuron {
     /// the maximum bonus of 100% received at an 8 year dissolve
     /// delay. The voting power is further modified by the age of
     /// the neuron giving up to 25% bonus after four years.
-    pub fn voting_power(&self, now_seconds: u64) -> u64 {
+    pub fn potential_voting_power(&self, now_seconds: u64) -> u64 {
         // We compute the stake adjustments in u128.
         let stake = self.stake_e8s() as u128;
         // Dissolve delay is capped to eight years, but we cap it
@@ -834,13 +882,15 @@ impl Neuron {
 
         let visibility = self.visibility().map(|visibility| visibility as i32);
 
+        let potential_voting_power = self.potential_voting_power(now_seconds);
+
         NeuronInfo {
             retrieved_at_timestamp_seconds: now_seconds,
             state: self.state(now_seconds) as i32,
             age_seconds: self.age_seconds(now_seconds),
             dissolve_delay_seconds: self.dissolve_delay_seconds(now_seconds),
             recent_ballots,
-            voting_power: self.voting_power(now_seconds),
+            voting_power: potential_voting_power,
             created_timestamp_seconds: self.created_timestamp_seconds,
             stake_e8s: self.minted_stake_e8s(),
             joined_community_fund_timestamp_seconds,
@@ -1739,6 +1789,79 @@ impl TryFrom<StoredDissolveStateAndAge> for DissolveStateAndAge {
             }
         }
     }
+}
+
+/// Adds up the potential voting power of all neurons.
+///
+/// # Potential Voting Power vs. Deciding Voting Power
+///
+/// If all neurons keep themselves refreshed, then deciding voting power =
+/// potential voting power. Whereas, if a neuron has not refreshed recently
+/// enough, the amount of voting power it can exercise is less than its
+/// potential.
+///
+/// # Weird Special Case: ManageNeuron
+///
+/// Voting power is weird in the case of ManageNeuron
+/// proposals. In that case, only the followees of the targetted neuron can
+/// vote, and they all get 1 voting power, regardless of refresh. Also,
+/// these proposals have no rewards. Therefore, in the case of ManageNeuron,
+/// this returns ballots_len.
+///
+/// # When Err
+///
+/// There is no "practical" input that can cause Err to be returned.
+/// (See comments in the body.)
+pub(crate) fn total_potential_voting_power<'a>(
+    neurons: impl Iterator<Item = &'a Neuron>,
+    now_seconds: u64,
+    action: &Action,
+    ballots_len: usize,
+) -> Result<u64, GovernanceError> {
+    // ManageNeuron proposals are special.
+    if let Action::ManageNeuron(_) = action {
+        return u64::try_from(ballots_len)
+            // Really can't see how this Err could happen, esp on 32-bit
+            // WASM. If Err did occur, that would indicate that we
+            // somehow have > 2^64 ballots, which is an overwhelming
+            // amount such that we wouldn't be able to get far enough
+            // for this function to even be called.
+            .map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::ResourceExhausted,
+                    format!(
+                        "Unable to determine total potential voting power of \
+                         a ManageNeuron proposal: {:?}",
+                        err,
+                    ),
+                )
+            });
+    }
+
+    let mut result = 0_u64;
+
+    for neuron in neurons {
+        // Increment result.
+        result = result
+            .checked_add(neuron.potential_voting_power(now_seconds))
+            // Bail if there was overflow. FWIW, total voting power would have
+            // to grow by 500x for this to happen. Since voting power is limited
+            // by the supply of ICP, this really can't happen any time soon
+            // (assuming the rules more or less stay the same).
+            .ok_or_else(|| {
+                GovernanceError::new_with_message(
+                    ErrorType::ResourceExhausted,
+                    format!(
+                        "Total potential voting power overflowed u64: \
+                         total_so_far = {}, neuron_id = {}",
+                        result,
+                        neuron.id().id,
+                    ),
+                )
+            })?;
+    }
+
+    Ok(result)
 }
 
 #[cfg(test)]

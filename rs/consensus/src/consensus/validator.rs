@@ -203,10 +203,10 @@ impl SignatureVerify for RandomTape {
         let dkg_id = active_low_threshold_nidkg_id(pool.as_cache(), self.height())
             .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?;
         if self.signature.signer == dkg_id {
-            crypto.verify_aggregate(self, self.signature.signer)?;
+            crypto.verify_aggregate(self, self.signature.signer.clone())?;
             Ok(())
         } else {
-            Err(InvalidArtifactReason::InappropriateDkgId(self.signature.signer).into())
+            Err(InvalidArtifactReason::InappropriateDkgId(self.signature.signer.clone()).into())
         }
     }
 }
@@ -244,10 +244,10 @@ impl SignatureVerify for RandomBeacon {
         let dkg_id = active_low_threshold_nidkg_id(pool.as_cache(), self.height())
             .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?;
         if self.signature.signer == dkg_id {
-            crypto.verify_aggregate(self, self.signature.signer)?;
+            crypto.verify_aggregate(self, self.signature.signer.clone())?;
             Ok(())
         } else {
-            Err(InvalidArtifactReason::InappropriateDkgId(self.signature.signer).into())
+            Err(InvalidArtifactReason::InappropriateDkgId(self.signature.signer.clone()).into())
         }
     }
 }
