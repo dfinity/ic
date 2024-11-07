@@ -193,7 +193,7 @@ fn test_store_simplest_nontrivial_case() {
     );
 
     // 4. Bad read: Unknown NeuronId. This should result in a NotFound Err.
-    let bad_read_result = store.read(NeuronId { id: 0xDEAD_BEEF }, NeuronSections::default());
+    let bad_read_result = store.read(NeuronId { id: 0xDEAD_BEEF }, NeuronSections::NONE);
     match &bad_read_result {
         Err(err) => match err {
             NeuronStoreError::NeuronNotFound { neuron_id } => {
@@ -278,7 +278,7 @@ fn test_store_simplest_nontrivial_case() {
     assert_that_red_herring_neurons_are_untouched(&store);
 
     // 8. Read to verify bad update.
-    let read_result = store.read(NeuronId { id: 0xDEAD_BEEF }, NeuronSections::default());
+    let read_result = store.read(NeuronId { id: 0xDEAD_BEEF }, NeuronSections::NONE);
     match &read_result {
         // This is what we expected.
         Err(err) => {
@@ -330,7 +330,7 @@ fn test_store_simplest_nontrivial_case() {
     assert_that_red_herring_neurons_are_untouched(&store);
 
     // 13. Read to verify delete.
-    let read_result = store.read(NeuronId { id: 42 }, NeuronSections::default());
+    let read_result = store.read(NeuronId { id: 42 }, NeuronSections::NONE);
     match &read_result {
         // This is what we expected.
         Err(err) => {
@@ -455,27 +455,27 @@ fn test_partial_read() {
         }
     };
 
-    partial_read_test_helper(NeuronSections::default());
+    partial_read_test_helper(NeuronSections::NONE);
     partial_read_test_helper(NeuronSections::ALL);
     partial_read_test_helper(NeuronSections {
         hot_keys: true,
-        ..NeuronSections::default()
+        ..NeuronSections::NONE
     });
     partial_read_test_helper(NeuronSections {
         followees: true,
-        ..NeuronSections::default()
+        ..NeuronSections::NONE
     });
     partial_read_test_helper(NeuronSections {
         recent_ballots: true,
-        ..NeuronSections::default()
+        ..NeuronSections::NONE
     });
     partial_read_test_helper(NeuronSections {
         known_neuron_data: true,
-        ..NeuronSections::default()
+        ..NeuronSections::NONE
     });
     partial_read_test_helper(NeuronSections {
         transfer: true,
-        ..NeuronSections::default()
+        ..NeuronSections::NONE
     });
 }
 
