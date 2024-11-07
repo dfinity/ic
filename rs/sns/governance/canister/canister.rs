@@ -613,7 +613,7 @@ ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method
 #[query(hidden = true, decoding_quota = 10000)]
 pub fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
-        "/journal" => {
+        "/journal/json" => {
             let journal_entries = &governance()
                 .proto
                 .upgrade_journal
