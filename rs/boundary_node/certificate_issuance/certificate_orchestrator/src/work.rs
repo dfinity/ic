@@ -1,5 +1,6 @@
 use std::{cmp::Reverse, time::Duration};
 
+use anyhow::anyhow;
 use certificate_orchestrator_interface::{Id, Registration};
 use ic_cdk::caller;
 use priority_queue::PriorityQueue;
@@ -175,6 +176,71 @@ impl<T: Peek> Peek for WithMetrics<T> {
         });
 
         out
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ListError {
+    #[error("Unauthorized")]
+    Unauthorized,
+
+    #[error(transparent)]
+    UnexpectedError(#[from] anyhow::Error),
+}
+
+pub trait List {
+    fn list(&self) -> Result<Vec<(String, u64, Registration)>, ListError>;
+}
+
+pub struct Lister {
+    tasks: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
+    registrations: LocalRef<StableMap<StorableId, Registration>>,
+}
+
+impl Lister {
+    pub fn new(
+        tasks: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
+        registrations: LocalRef<StableMap<StorableId, Registration>>,
+    ) -> Self {
+        Self {
+            tasks,
+            registrations,
+        }
+    }
+}
+
+impl List for Lister {
+    fn list(&self) -> Result<Vec<(String, u64, Registration)>, ListError> {
+        self.tasks.with(|tasks| {
+            tasks
+                .borrow()
+                .iter()
+                .map(|(id, Reverse(timestamp))| {
+                    match self
+                        .registrations
+                        .with(|rs| rs.borrow().get(&id.to_owned().into()))
+                    {
+                        Some(r) => Ok((id.to_owned(), timestamp.to_owned(), r)),
+                        None => {
+                            Err(anyhow!("invalid state: task id not found in registrations").into())
+                        }
+                    }
+                })
+                .collect()
+        })
+    }
+}
+
+impl<T: List, A: Authorize> List for WithAuthorize<T, A> {
+    fn list(&self) -> Result<Vec<(String, u64, Registration)>, ListError> {
+        if let Err(err) = self.1.authorize(&caller()) {
+            return Err(match err {
+                AuthorizeError::Unauthorized => ListError::Unauthorized,
+                AuthorizeError::UnexpectedError(err) => ListError::UnexpectedError(err),
+            });
+        };
+
+        self.0.list()
     }
 }
 

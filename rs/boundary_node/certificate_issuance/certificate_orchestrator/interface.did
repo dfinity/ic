@@ -171,7 +171,7 @@ type ListTasksError = variant {
 };
 
 type ListTasksResponse = variant {
-    Ok: Id;
+    Ok: vec record { text; nat64; Registration };
     Err: ListTasksError;
 };
 

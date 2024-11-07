@@ -2,16 +2,7 @@ use std::{cell::RefCell, cmp::Reverse, collections::BTreeMap, thread::LocalKey, 
 
 use candid::{candid_method, Principal};
 use certificate_orchestrator_interface::{
-    BoundedString, CreateRegistrationError, CreateRegistrationResponse, DispenseTaskError,
-    DispenseTaskResponse, EncryptedPair, ExportCertificatesCertifiedResponse,
-    ExportCertificatesError, ExportCertificatesResponse, ExportPackage, GetCertificateError,
-    GetCertificateResponse, GetRegistrationError, GetRegistrationResponse, HeaderField,
-    HttpRequest, HttpResponse, Id, InitArg, ListAllowedPrincipalsError,
-    ListAllowedPrincipalsResponse, ListRegistrationsError, ListRegistrationsResponse,
-    ListTasksResponse, ModifyAllowedPrincipalError, ModifyAllowedPrincipalResponse, Name,
-    PeekTaskError, PeekTaskResponse, QueueTaskError, QueueTaskResponse, Registration,
-    RemoveRegistrationError, RemoveRegistrationResponse, State, UpdateRegistrationError,
-    UpdateRegistrationResponse, UpdateType, UploadCertificateError, UploadCertificateResponse,
+    BoundedString, CreateRegistrationError, CreateRegistrationResponse, DispenseTaskError, DispenseTaskResponse, EncryptedPair, ExportCertificatesCertifiedResponse, ExportCertificatesError, ExportCertificatesResponse, ExportPackage, GetCertificateError, GetCertificateResponse, GetRegistrationError, GetRegistrationResponse, HeaderField, HttpRequest, HttpResponse, Id, InitArg, ListAllowedPrincipalsError, ListAllowedPrincipalsResponse, ListRegistrationsError, ListRegistrationsResponse, ListTasksError, ListTasksResponse, ModifyAllowedPrincipalError, ModifyAllowedPrincipalResponse, Name, PeekTaskError, PeekTaskResponse, QueueTaskError, QueueTaskResponse, Registration, RemoveRegistrationError, RemoveRegistrationResponse, State, UpdateRegistrationError, UpdateRegistrationResponse, UpdateType, UploadCertificateError, UploadCertificateResponse
 };
 use ic_cdk::{
     api::{id, time},
@@ -391,6 +382,12 @@ thread_local! {
         let d = WithAuthorize(d, &MAIN_AUTHORIZER);
         let d = WithMetrics(d, &COUNTER_PEEK_TASK_TOTAL);
         Box::new(d)
+    });
+
+    static TASKS_LISTER: RefCell<Box<dyn work::List>> = RefCell::new({
+        let v = work::Lister::new(&TASKS, &REGISTRATIONS);
+        let v = WithAuthorize(v, &ROOT_AUTHORIZER);
+        Box::new(v)
     });
 
     static DISPENSER: RefCell<Box<dyn Dispense>> = RefCell::new({
@@ -822,7 +819,15 @@ fn dispense_task() -> DispenseTaskResponse {
 #[query(name = "listTasks")]
 #[candid_method(query, rename = "listTasks")]
 fn list_tasks() -> ListTasksResponse {
-    ListTasksResponse::Ok(())
+    match TASKS_LISTER.with(|v| v.borrow().list()) {
+        Ok(ts) => ListTasksResponse::Ok(ts),
+        Err(err) => ListTasksResponse::Err(match err {
+            work::ListError::Unauthorized => ListTasksError::Unauthorized,
+            work::ListError::UnexpectedError(err) => {
+                ListTasksError::UnexpectedError(err.to_string())
+            }
+        }),
+    }
 }
 
 // Metrics

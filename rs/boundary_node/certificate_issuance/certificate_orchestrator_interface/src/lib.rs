@@ -391,7 +391,7 @@ pub enum ListTasksError {
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub enum ListTasksResponse {
-    Ok(()),
+    Ok(Vec<(String, u64, Registration)>),
     Err(ListTasksError),
 }
 
