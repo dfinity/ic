@@ -186,11 +186,11 @@ fn timers() {
 
     // Leader
     set_timer_interval(Duration::from_secs(30), || {
-        // Collect candidates
+        // Collect candidates that have registered a public-key
         let ps: Vec<Principal> =
             PUBLIC_KEYS.with(|ks| ks.borrow().iter().map(|(p, _)| p).collect());
 
-        // Clear assignment
+        // Clear previous assignment
         if ps.is_empty() {
             LEADER_ASSIGNMENT.with(|v| v.borrow_mut().remove(&()));
             return;
