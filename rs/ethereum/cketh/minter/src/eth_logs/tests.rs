@@ -474,7 +474,9 @@ mod subaccount {
 
     proptest! {
         #[test]
-        fn should_have_same_none_encoding(field_before in any::<u64>(), field_after in any::<u64>()) {
+        fn should_migrate_struct_with_legacy_subaccount_set_to_none_to_new_struct_with_ledger_subaccount(
+            field_before in any::<u64>(), field_after in any::<u64>()
+        ) {
             let legacy = WithLegacySubaccount {
                 field_before,
                 from_subaccount: None,
@@ -485,7 +487,7 @@ mod subaccount {
             let decoded: WithLedgerSubaccount =
                 minicbor::decode(&buf).expect("decoding should succeed");
 
-            assert_eq!(
+            prop_assert_eq!(
                 decoded,
                 WithLedgerSubaccount {
                     field_before: legacy.field_before,

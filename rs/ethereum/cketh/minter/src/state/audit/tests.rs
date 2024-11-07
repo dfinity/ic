@@ -31,7 +31,7 @@ async fn should_replay_events_for_mainnet() {
     assert_eq!(state.ethereum_network, EthereumNetwork::Mainnet);
     assert_eq!(
         state.eth_balance.eth_balance(),
-        Wei::from( 973_769_498_742_712_741_454_u128)
+        Wei::from(973_769_498_742_712_741_454_u128)
     );
 }
 
