@@ -503,7 +503,7 @@ async fn vote_prune_some_following() {
 
     async fn get_full_neuron(pocket_ic: &PocketIc, id: u64) -> Neuron {
         let mut result =
-            nns::governance::list_neurons(&pocket_ic, PrincipalId::new_user_test_id(id))
+            nns::governance::list_neurons(pocket_ic, PrincipalId::new_user_test_id(id))
                 .await
                 .full_neurons;
 
