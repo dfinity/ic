@@ -89,7 +89,7 @@ impl TranscriptData {
 /// and the total capacity of the threshold signature data store is
 /// `2*CAPACITY_PER_TAG_OR_KEY + K*CAPACITY_PER_TAG_OR_KEY` where `K` is
 /// the number of different `MasterPublicKeyId`s that are stored on the
-/// subnet. In production, currently at most 3 keys are stored pe subnet
+/// subnet. In production, currently at most 3 keys are stored per subnet
 /// (1 ECDSA key, 2 Schnorr keys).
 pub struct ThresholdSigDataStoreImpl {
     store: BTreeMap<NiDkgId, ThresholdSigData>,
