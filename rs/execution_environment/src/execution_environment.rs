@@ -464,7 +464,7 @@ impl ExecutionEnvironment {
             - state.guaranteed_response_message_memory_taken().get() as i64
     }
 
-    /// Computes number of callbacks available up tp the subnet's callback soft cap.
+    /// Computes number of callbacks available up to the subnet's callback soft cap.
     pub fn subnet_available_callbacks(&self, state: &ReplicatedState) -> i64 {
         self.config
             .subnet_callback_soft_cap
@@ -3147,9 +3147,11 @@ impl ExecutionEnvironment {
             | ExecutionTask::Heartbeat
             | ExecutionTask::GlobalTimer
             | ExecutionTask::OnLowWasmMemory => {
-                unreachable!("Function abort_paused_execution_and_return_task is only called after 
-                the paused task is returned from TaskQueue, hence no task other than PausedExecution 
-                and PausedInstallCode should appear in paused_task except if there is a bug.")
+                unreachable!(
+                    "Function abort_paused_execution_and_return_task is only called after
+                    the paused task is returned from TaskQueue, hence no task other than PausedExecution
+                    and PausedInstallCode should appear in paused_task except if there is a bug."
+                )
             }
         }
     }

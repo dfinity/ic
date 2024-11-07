@@ -134,6 +134,11 @@ impl SystemStateChanges {
         self.cycles_balance_change.get_removed_cycles()
     }
 
+    /// Returns number of newly created callbacks (i.e. enqueued requests).
+    pub fn callbacks_created(&self) -> usize {
+        self.requests.len()
+    }
+
     fn error<S: ToString>(message: S) -> HypervisorError {
         HypervisorError::WasmEngineError(WasmEngineError::FailedToApplySystemChanges(
             message.to_string(),

@@ -657,6 +657,8 @@ pub(crate) struct SchedulerTestBuilder {
     scheduler_config: SchedulerConfig,
     initial_canister_cycles: Cycles,
     subnet_message_memory: u64,
+    subnet_callback_soft_cap: usize,
+    canister_callback_quota: usize,
     registry_settings: RegistryExecutionSettings,
     allocatable_compute_capacity_in_percent: usize,
     rate_limiting_of_instructions: bool,
@@ -682,6 +684,8 @@ impl Default for SchedulerTestBuilder {
             scheduler_config,
             initial_canister_cycles: Cycles::new(1_000_000_000_000_000_000),
             subnet_message_memory: config.subnet_message_memory_capacity.get(),
+            subnet_callback_soft_cap: config.subnet_callback_soft_cap,
+            canister_callback_quota: config.canister_callback_quota,
             registry_settings: test_registry_settings(),
             allocatable_compute_capacity_in_percent: 100,
             rate_limiting_of_instructions: false,
@@ -713,6 +717,20 @@ impl SchedulerTestBuilder {
     pub fn with_subnet_message_memory(self, subnet_message_memory: u64) -> Self {
         Self {
             subnet_message_memory,
+            ..self
+        }
+    }
+
+    pub fn with_subnet_callback_soft_cap(self, subnet_callback_soft_cap: usize) -> Self {
+        Self {
+            subnet_callback_soft_cap,
+            ..self
+        }
+    }
+
+    pub fn with_canister_callback_quota(self, canister_callback_quota: usize) -> Self {
+        Self {
+            canister_callback_quota,
             ..self
         }
     }
@@ -853,6 +871,8 @@ impl SchedulerTestBuilder {
         let config = ic_config::execution_environment::Config {
             allocatable_compute_capacity_in_percent: self.allocatable_compute_capacity_in_percent,
             subnet_message_memory_capacity: NumBytes::from(self.subnet_message_memory),
+            subnet_callback_soft_cap: self.subnet_callback_soft_cap,
+            canister_callback_quota: self.canister_callback_quota,
             rate_limiting_of_instructions,
             rate_limiting_of_heap_delta,
             deterministic_time_slicing,
@@ -872,6 +892,7 @@ impl SchedulerTestBuilder {
             deterministic_time_slicing,
             config.embedders_config.cost_to_compile_wasm_instruction,
             SchedulerConfig::application_subnet().dirty_page_overhead,
+            self.canister_callback_quota,
         );
         let hypervisor = Arc::new(hypervisor);
         let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);

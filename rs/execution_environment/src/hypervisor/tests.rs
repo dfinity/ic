@@ -5284,6 +5284,123 @@ fn system_state_apply_change_fails() {
     };
 }
 
+/// Tests that given specific canister callback quota and subnet available
+/// callback numbers, exactly the expected number of calls succeed.
+fn test_callback_limits_impl(
+    canister_callback_quota: usize,
+    subnet_available_callbacks: i64,
+    expected_successful_calls: usize,
+) {
+    let mut test = ExecutionTestBuilder::new()
+        .with_canister_callback_quota(canister_callback_quota)
+        // Enough cycles for more than a handful of concurrent calls.
+        .with_initial_canister_cycles(1_000_000_000_000_000)
+        .with_manual_execution()
+        .with_canister_sandboxing_disabled()
+        .with_deterministic_time_slicing_disabled()
+        .build();
+
+    let a_id = test.universal_canister().unwrap();
+
+    // A no-op update call.
+    let a0 = wasm().message_payload().reply().build();
+
+    // An update call that makes one self-call.
+    let a1 = wasm()
+        .inter_update(
+            a_id,
+            call_args()
+                .other_side(a0.clone())
+                .on_reject(wasm().reject_message().reject()),
+        )
+        .build();
+
+    // Set the size of the subnet-wide shared callback pool.
+    test.set_subnet_available_callbacks(subnet_available_callbacks);
+
+    // Make `expected_successful_calls + 1` calls to `a1`.
+    let mut ingress_ids = Vec::new();
+    for _ in 0..expected_successful_calls + 1 {
+        let (ingress_id, _) = test.ingress_raw(a_id, "update", a1.clone());
+        ingress_ids.push(ingress_id);
+        assert_eq!(
+            test.canister_state(a_id).next_execution(),
+            NextExecution::StartNew,
+        );
+        test.execute_message(a_id);
+    }
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::None,
+    );
+
+    // Only `expected_successful_calls` calls have resulted in a downstream call.
+    test.induct_messages();
+    for _ in 0..expected_successful_calls {
+        assert_eq!(
+            test.canister_state(a_id).next_execution(),
+            NextExecution::StartNew,
+        );
+        test.execute_message(a_id);
+    }
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::None,
+    );
+
+    // Process `expected_successful_calls` responses.
+    test.induct_messages();
+    for _ in 0..expected_successful_calls {
+        assert_eq!(
+            test.canister_state(a_id).next_execution(),
+            NextExecution::StartNew,
+        );
+        test.execute_message(a_id);
+    }
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::None,
+    );
+
+    // The first `expected_successful_calls` calls have succeeded.
+    for i in 0..expected_successful_calls {
+        let ingress_status = test.ingress_status(&ingress_ids[i]);
+        let result = check_ingress_status(ingress_status).unwrap();
+        assert_matches!(result, WasmResult::Reply(_));
+    }
+
+    // The last call has failed synchronously when invoking `call_perform`.
+    let ingress_status = test.ingress_status(&ingress_ids[expected_successful_calls]);
+    assert_matches!(ingress_status, IngressStatus::Known {
+            state: IngressState::Failed(err),
+            ..
+        } if err.description().contains("call_perform failed"));
+
+    // Sanity check that the round limits were accurately updated.
+    assert_eq!(
+        test.subnet_available_callbacks(),
+        subnet_available_callbacks - expected_successful_calls as i64
+    );
+}
+
+#[test]
+fn call_perform_fails_when_out_of_callback_quota() {
+    // With a canister callback quota of 3 and 1 available callback in the shared
+    // subnet pool, we expect only 3 downstream calls to be allowed.
+    let canister_callback_quota = 3;
+    let subnet_available_callbacks = 1;
+    test_callback_limits_impl(canister_callback_quota, subnet_available_callbacks, 3);
+}
+
+#[test]
+fn call_perform_fails_when_out_of_subnet_callbacks() {
+    // With a canister callback quota of 3 and 4 available callbacks in the shared
+    // subnet pool, we expect only 4 downstream calls to be allowed.
+    let canister_callback_quota = 3;
+    let subnet_available_callbacks = 4;
+    test_callback_limits_impl(canister_callback_quota, subnet_available_callbacks, 4);
+}
+
 #[test]
 fn cycles_correct_if_update_fails() {
     let mut test = ExecutionTestBuilder::new().with_manual_execution().build();

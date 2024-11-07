@@ -52,6 +52,12 @@ const SUBNET_WASM_CUSTOM_SECTIONS_MEMORY_CAPACITY: NumBytes = NumBytes::new(2 * 
 /// The number of bytes reserved for response callback executions.
 const SUBNET_MEMORY_RESERVATION: NumBytes = NumBytes::new(10 * GIB);
 
+/// The soft limit on the subnet-wide number of callbacks. Beyond this
+pub const SUBNET_CALLBACK_SOFT_CAP: usize = 1_000_000;
+
+/// The number of callbacks that are guaranteed to each canister.
+pub const CANISTER_CALLBACK_QUOTA: usize = 50;
+
 /// The duration a stop_canister has to stop the canister before timing out.
 pub const STOP_CANISTER_TIMEOUT_DURATION: Duration = Duration::from_secs(5 * 60); // 5 minutes
 
@@ -201,13 +207,13 @@ pub struct Config {
     pub max_canister_memory_size: NumBytes,
 
     /// The soft limit on the subnet-wide number of callbacks. Beyond this
-    /// limit, canisters will only be allowed to make downstream calls if they
-    /// have not reached their individual quota.
+    /// limit, canisters will only be allowed to make downstream calls up to their
+    /// individual quota.
     pub subnet_callback_soft_cap: usize,
 
     /// The number of callbacks that are guaranteed to each canister. Beyond
     /// this quota, canisters will only be allowed to make downstream calls if
-    /// the subnet-wide spft cap has not been reached.
+    /// the subnet-wide soft cap has not been reached.
     pub canister_callback_quota: usize,
 
     /// The default value used when provisioning a canister
@@ -338,8 +344,8 @@ impl Default for Config {
             max_canister_memory_size: NumBytes::new(
                 MAX_STABLE_MEMORY_IN_BYTES + MAX_WASM_MEMORY_IN_BYTES,
             ),
-            subnet_callback_soft_cap: 1_000_000,
-            canister_callback_quota: 50,
+            subnet_callback_soft_cap: SUBNET_CALLBACK_SOFT_CAP,
+            canister_callback_quota: CANISTER_CALLBACK_QUOTA,
             default_provisional_cycles_balance: Cycles::new(100_000_000_000_000),
             // The default freeze threshold is 30 days.
             default_freeze_threshold: NumSeconds::from(30 * 24 * 60 * 60),

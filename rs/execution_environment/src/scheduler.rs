@@ -691,8 +691,9 @@ impl SchedulerImpl {
             instructions: round_limits.instructions,
             subnet_available_memory: (round_limits.subnet_available_memory
                 / self.config.scheduler_cores as i64),
-            // XXX: Since this is enforcing a soft cap, it seems counterproductive to divide
-            // the available callbacks between the threads.
+            // This is a soft cap, it is unnecessary to strictly divide the pool among
+            // the threads. If it is exceeded, canisters can still rely on their guaranteed
+            // callback quota.
             subnet_available_callbacks: round_limits.subnet_available_callbacks,
             compute_allocation_used: round_limits.compute_allocation_used,
         };
@@ -712,12 +713,7 @@ impl SchedulerImpl {
                 let logger = new_logger!(self.log; messaging.round => round_id.get());
                 let rate_limiting_of_heap_delta = self.rate_limiting_of_heap_delta;
                 let deterministic_time_slicing = self.deterministic_time_slicing;
-                let round_limits = RoundLimits {
-                    instructions: round_limits.instructions,
-                    subnet_available_memory: round_limits_per_thread.subnet_available_memory,
-                    subnet_available_callbacks: round_limits_per_thread.subnet_available_callbacks,
-                    compute_allocation_used: round_limits.compute_allocation_used,
-                };
+                let round_limits = round_limits_per_thread.clone();
                 let config = &self.config;
                 scope.execute(move || {
                     *result = execute_canisters_on_thread(
@@ -748,6 +744,7 @@ impl SchedulerImpl {
         let mut total_instructions_executed = NumInstructions::from(0);
         let mut max_instructions_executed_per_thread = NumInstructions::from(0);
         let mut heap_delta = NumBytes::from(0);
+        let mut callbacks_created = 0;
         for mut result in results_by_thread.into_iter() {
             canisters.append(&mut result.canisters);
             executed_canister_ids.extend(result.executed_canister_ids);
@@ -773,11 +770,16 @@ impl SchedulerImpl {
                 result.messages_executed,
             );
             heap_delta += result.heap_delta;
+
+            callbacks_created += round_limits_per_thread.subnet_available_callbacks
+                - result.round_limits.subnet_available_callbacks;
         }
 
         // Since there are multiple threads, we update the global limit using
         // the thread that executed the most instructions.
         round_limits.instructions -= as_round_instructions(max_instructions_executed_per_thread);
+
+        round_limits.subnet_available_callbacks -= callbacks_created;
 
         self.metrics
             .instructions_consumed_per_round

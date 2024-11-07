@@ -1159,6 +1159,70 @@ fn charging_for_message_memory_works() {
     );
 }
 
+/// Tests that given specific subnet callback soft cap and guaranteed canister
+/// callback quota values, two canisters trying to call themselves recursively
+/// twice will result in the execution of a specific number of messages.
+fn test_subnet_callback_soft_cap_impl(
+    subnet_callback_soft_cap: usize,
+    canister_callback_quota: usize,
+    expected_message_executions: u64,
+) {
+    let mut test = SchedulerTestBuilder::new()
+        .with_subnet_callback_soft_cap(subnet_callback_soft_cap)
+        .with_canister_callback_quota(canister_callback_quota)
+        .build();
+
+    for _ in 0..2 {
+        let canister = test.create_canister();
+        test.send_ingress(
+            canister,
+            ingress(1).call(
+                other_side(canister, 1).call(other_side(canister, 1), on_response(1)),
+                on_response(1),
+            ),
+        );
+    }
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_metrics
+            .update_transactions_total,
+        expected_message_executions
+    );
+}
+
+#[test]
+fn subnet_callback_soft_cap_exceeded() {
+    // Given a shared pool size of 2 callbacks, the canisters should be able to
+    // execute the first call but not the second one (i.e. 3 messages each).
+    let subnet_callback_soft_cap = 2;
+    let canister_callback_quota = 0;
+    test_subnet_callback_soft_cap_impl(subnet_callback_soft_cap, canister_callback_quota, 6);
+}
+
+#[test]
+fn subnet_callback_soft_cap_not_exceeded() {
+    // Given a shared pool of 3 callbacks, the canisters should each be able to
+    // execute both their calls (5 messages each). This is because each of the 2
+    // execution threads is allowed full use of the remaining pool (1 callback).
+    let subnet_callback_soft_cap = 3;
+    let canister_callback_quota = 0;
+    test_subnet_callback_soft_cap_impl(subnet_callback_soft_cap, canister_callback_quota, 10);
+}
+
+#[test]
+fn subnet_callback_soft_cap_ignored() {
+    // A shared pool size of 2 callbacks (which would prevent the canisters from
+    // making a second call) is ignored if the canisters have available callback
+    // quota (with each canister executing 2 calls, i.e. 5 messages).
+    let subnet_callback_soft_cap = 2;
+    let canister_callback_quota = 10;
+    test_subnet_callback_soft_cap_impl(subnet_callback_soft_cap, canister_callback_quota, 10);
+}
+
 #[test]
 fn dont_execute_any_canisters_if_not_enough_instructions_in_round() {
     let instructions_per_message = NumInstructions::from(5);

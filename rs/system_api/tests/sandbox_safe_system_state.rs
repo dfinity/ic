@@ -1,4 +1,5 @@
 use ic_base_types::{CanisterId, NumBytes, NumSeconds, SubnetId};
+use ic_config::execution_environment::SUBNET_CALLBACK_SOFT_CAP;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_interfaces::execution_environment::SystemApi;
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
@@ -38,7 +39,6 @@ use ic_cycles_account_manager::WasmExecutionMode;
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1 << 30);
 const INITIAL_CYCLES: Cycles = Cycles::new(5_000_000_000_000);
 const WASM_EXECUTION_MODE: WasmExecutionMode = WasmExecutionMode::Wasm32;
-const SUBNET_CALLBACK_SOFT_CAP: u64 = 1_000_000;
 
 #[test]
 fn push_output_request_fails_not_enough_cycles_for_request() {

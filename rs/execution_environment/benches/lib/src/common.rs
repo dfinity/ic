@@ -41,7 +41,7 @@ use std::sync::Arc;
 
 pub const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(500_000_000_000);
 pub const SUBNET_AVAILABLE_CALLBACKS: i64 = 1_000_000;
-pub const CANISTER_CALLBACK_QUOTA: u64 = 58;
+pub const CANISTER_CALLBACK_QUOTA: u64 = 50;
 // Note: this canister ID is required for the `ic0_mint_cycles()`
 pub const LOCAL_CANISTER_ID: u64 = CYCLES_MINTING_CANISTER_INDEX_IN_NNS_SUBNET;
 pub const REMOTE_CANISTER_ID: u64 = 1;
