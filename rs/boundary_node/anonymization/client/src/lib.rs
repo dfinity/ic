@@ -1,10 +1,18 @@
-use std::time::SystemTime;
+use std::{sync::Arc, time::SystemTime};
 
 use anonymization_interface::{self as ifc};
-use anyhow::{anyhow, Context};
+use anyhow::{anyhow, Context, Error};
 use async_trait::async_trait;
 use candid::{Decode, Encode, Principal};
 use ic_canister_client::Agent;
+use rsa::{
+    pkcs1::{DecodeRsaPublicKey, EncodeRsaPublicKey},
+    rand_core::CryptoRngCore,
+    Pkcs1v15Encrypt, RsaPrivateKey, RsaPublicKey,
+};
+
+const SALT_SIZE: usize = 64;
+const RSA_KEY_SIZE: usize = 2048;
 
 #[derive(Debug, thiserror::Error)]
 pub enum RegisterError {
@@ -253,6 +261,177 @@ impl Submit for Canister {
                 Error::Unauthorized => SubmitError::Unauthorized,
                 Error::UnexpectedError(err) => SubmitError::UnexpectedError(anyhow!(err)),
             }),
+        }
+    }
+}
+
+// Canister methods
+
+pub struct CanisterMethods {
+    /// register method tied to canister
+    register: Arc<dyn Register>,
+
+    /// query method tied to canister
+    query: Arc<dyn Query>,
+
+    /// submit method tied to canister
+    submit: Arc<dyn Submit>,
+}
+
+impl From<Canister> for CanisterMethods {
+    fn from(value: Canister) -> Self {
+        Self {
+            register: Arc::new(value.clone()),
+            query: Arc::new(value.clone()),
+            submit: Arc::new(value.clone()),
+        }
+    }
+}
+
+// Client
+
+#[async_trait]
+pub trait Track: Sync + Send {
+    async fn track(&mut self, cb: impl Fn(Vec<u8>) + Send + Sync) -> Result<(), Error>;
+}
+
+pub struct Tracker {
+    /// rng for generating a salt when needed
+    rng: Box<dyn CryptoRngCore + Send + Sync>,
+
+    /// canister client for salt sharing
+    canister: CanisterMethods,
+
+    /// Ephemeral private key for identifying client
+    pkey: RsaPrivateKey,
+
+    /// Current value of the salt
+    cur: Option<Vec<u8>>,
+}
+
+impl Tracker {
+    pub fn new(
+        mut rng: Box<dyn CryptoRngCore + Send + Sync>,
+        canister: CanisterMethods,
+    ) -> Result<Self, Error> {
+        // Generate private key
+        let pkey = RsaPrivateKey::new(&mut rng, RSA_KEY_SIZE)
+            .context("failed to generate rsa private key")?;
+
+        Ok(Self {
+            rng,
+            canister,
+            pkey,
+            cur: None,
+        })
+    }
+
+    fn vec_pubkey(&self) -> Vec<u8> {
+        self.pkey
+            .to_public_key()
+            .to_pkcs1_der()
+            .expect("failed to encode public-key")
+            .to_vec()
+    }
+}
+
+#[async_trait]
+impl Track for Tracker {
+    async fn track(&mut self, cb: impl Fn(Vec<u8>) + Send + Sync) -> Result<(), Error> {
+        // Register public-key
+        loop {
+            if self
+                .canister
+                .register
+                .register(&self.vec_pubkey())
+                .await
+                .is_ok()
+            {
+                break;
+            }
+        }
+
+        loop {
+            match self.canister.query.query().await {
+                // Ok means we got a new salt value
+                Ok(ct) => {
+                    // Decrypt salt
+                    let salt = match self.pkey.decrypt(
+                        Pkcs1v15Encrypt, // padding
+                        &ct,             // ciphertext
+                    ) {
+                        Ok(v) => v,
+
+                        // Retry on failure
+                        Err(_) => continue,
+                    };
+
+                    // Set value
+                    self.cur = Some(salt.to_owned());
+
+                    // Trigger callback
+                    cb(salt);
+                }
+
+                // Leader means we're being asked to generate a salt
+                // and encrypt it for others
+                Err(QueryError::LeaderDuty(mode, pairs)) => {
+                    let salt = match mode {
+                        // Generate salt
+                        LeaderMode::Bootstrap => {
+                            let mut salt = vec![0u8; SALT_SIZE];
+                            self.rng.fill_bytes(&mut salt);
+                            salt
+                        }
+
+                        LeaderMode::Refresh => {
+                            match &self.cur {
+                                // Re-use existing salt
+                                Some(salt) => salt.to_owned(),
+
+                                // Do nothing
+                                None => continue,
+                            }
+                        }
+                    };
+
+                    // Encrypt salt for each principal
+                    let mut out = vec![];
+
+                    for Pair(p, pk) in pairs {
+                        // Parse public-key
+                        let pubkey = match RsaPublicKey::from_pkcs1_der(&pk) {
+                            Ok(v) => v,
+
+                            // Skip invalid keys
+                            Err(_) => continue,
+                        };
+
+                        // Encrypt salt for principal
+                        let ct = match pubkey.encrypt(
+                            &mut self.rng,   // rng
+                            Pkcs1v15Encrypt, // padding
+                            &salt,           // msg
+                        ) {
+                            Ok(v) => v,
+
+                            // Skip on failure
+                            Err(_) => continue,
+                        };
+
+                        // Append to result
+                        out.push(Pair(
+                            p,  // principal
+                            ct, // ciphertext
+                        ));
+                    }
+
+                    // Submit encrypted salt values
+                    let _ = self.canister.submit.submit(&out).await;
+                }
+
+                Err(_) => continue,
+            }
         }
     }
 }
