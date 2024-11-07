@@ -1,6 +1,7 @@
 use candid::Principal;
+use prometheus::labels;
 
-use crate::{LocalRef, StableSet};
+use crate::{LocalRef, StableSet, WithMetrics};
 
 #[derive(Debug, thiserror::Error)]
 pub enum AuthorizeError {
@@ -53,3 +54,25 @@ impl Authorize for Box<dyn Authorize> {
 }
 
 pub struct WithAuthorize<T, A>(pub T, pub A);
+
+impl<T: Authorize> Authorize for WithMetrics<T> {
+    fn authorize(&self, p: &Principal) -> Result<(), AuthorizeError> {
+        let out = self.0.authorize(p);
+
+        self.1.with(|c| {
+            c.borrow()
+                .with(&labels! {
+                    "status" => match &out {
+                        Ok(_) => "ok",
+                        Err(err) => match err {
+                            AuthorizeError::Unauthorized => "unauthorized",
+                            AuthorizeError::UnexpectedError(_) => "fail",
+                        },
+                    },
+                })
+                .inc()
+        });
+
+        out
+    }
+}
