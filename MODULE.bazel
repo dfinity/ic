@@ -194,6 +194,14 @@ oci.pull(
 )
 use_repo(oci, "rust_base", "rust_base_linux_amd64")
 
+# used in various places as base
+oci.pull(
+    name = "ubuntu_base",
+    image = "ghcr.io/dfinity/ubuntu@sha256:965fbcae990b0467ed5657caceaec165018ef44a4d2d46c7cdea80a9dff0d1ea",
+    platforms = ["linux/amd64"],
+)
+use_repo(oci, "ubuntu_base", "ubuntu_base_linux_amd64")
+
 # used by boundary node tests
 oci.pull(
     name = "coredns",
