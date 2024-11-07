@@ -1,12 +1,18 @@
 use assert_matches::assert_matches;
+use ic_base_types::PrincipalId;
+use ic_nervous_system_common::{E8, ONE_MONTH_SECONDS};
+use ic_nervous_system_integration_tests::pocket_ic_helpers::{install_canister, nns};
 use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
+use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance_api::pb::v1::{
     governance_error::ErrorType,
     manage_neuron_response::{Command, FollowResponse},
-    Tally, Topic, Vote,
+    neuron::{DissolveState, Followees},
+    Neuron, Tally, Topic, Vote,
 };
+use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_nns_test_utils::{
-    common::NnsInitPayloadsBuilder,
+    common::{build_test_governance_wasm, NnsInitPayloadsBuilder},
     neuron_helpers::{
         get_neuron_1, get_neuron_2, get_neuron_3, get_nonexistent_neuron, get_unauthorized_neuron,
         submit_proposal, TestNeuronOwner,
@@ -19,6 +25,11 @@ use ic_nns_test_utils::{
     },
 };
 use ic_state_machine_tests::StateMachine;
+use itertools::Itertools;
+use maplit::hashmap;
+use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder};
+use prost::Message;
+use std::time::{Duration, SystemTime};
 
 const VALID_TOPIC: i32 = Topic::ParticipantManagement as i32;
 const INVALID_TOPIC: i32 = 69420;
@@ -377,6 +388,153 @@ fn vote_propagation_with_following() {
     assert_eq!(ballot_n2, (VOTING_POWER_NEURON_2, Vote::Yes));
     let ballot_n3 = check_ballots(&state_machine, &proposal_id, &n3);
     assert_eq!(ballot_n3, (VOTING_POWER_NEURON_3, Vote::Yes));
+}
+
+/// Each neuron in this scenario represents a different case:
+///
+/// 1. Storage Location:
+///    1. Heap          - Active neuron.
+///    2. Stable Memory - Inactive neuron.
+/// 2. Voting Power Refreshed
+///    1. Recently - No prune.
+///    2. Long Ago - Needs pruning.
+#[tokio::test]
+async fn vote_prune_some_following() {
+    // Step 1: Prepare the world. (This mainly consists of initializing NNS
+    // governance canister with some neurons.)
+
+    let pocket_ic = PocketIcBuilder::new().with_nns_subnet().build_async().await;
+
+    let now_seconds = pocket_ic
+        .get_time()
+        .await
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    // To ensure neurons are not considered "active" (for the purposes of storage location).
+    let earlier_timestamp_seconds = now_seconds - ONE_MONTH_SECONDS;
+
+    let followees = hashmap! {
+        // When pruning is needed, this gets erased.
+        Topic::Governance as i32 => Followees {
+            followees: vec![NeuronId { id: 1000 }],
+        },
+
+        // This NEVER gets erased.
+        Topic::NeuronManagement as i32 => Followees {
+            followees: vec![NeuronId { id: 1001 }],
+        },
+    };
+
+    let neuron_base = Neuron {
+        dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
+            earlier_timestamp_seconds,
+        )),
+        created_timestamp_seconds: earlier_timestamp_seconds,
+        aging_since_timestamp_seconds: u64::MAX,
+
+        // This is where possible changes occur. (Thus, we will inspect this
+        // later to verify that the code under test did its job.)
+        followees: followees.clone(),
+
+        ..Default::default()
+    };
+
+    let seven_months_ago_timestamp_seconds = now_seconds - 7 * ONE_MONTH_SECONDS;
+    let voting_power_refreshed_timestamp_seconds_neuron_values = vec![
+        seven_months_ago_timestamp_seconds - 99, // Long ago -> needs pruning.
+        seven_months_ago_timestamp_seconds + 99, // Recent -> no prune (but almost).
+    ];
+
+    let cached_neuron_stake_e8s_neuron_values = vec![
+        0,       // inactive -> stable memory
+        42 * E8, // active -> heap
+    ];
+
+    let neurons = voting_power_refreshed_timestamp_seconds_neuron_values
+        .into_iter()
+        .cartesian_product(cached_neuron_stake_e8s_neuron_values.into_iter())
+        .collect::<Vec<_>>();
+
+    let neurons = (42..)
+        .zip(neurons.into_iter())
+        .map(
+            |(id, (voting_power_refreshed_timestamp_seconds, cached_neuron_stake_e8s))| Neuron {
+                id: Some(NeuronId { id }),
+                controller: Some(PrincipalId::new_user_test_id(id)),
+                account: vec![id as u8; 32],
+                cached_neuron_stake_e8s,
+                voting_power_refreshed_timestamp_seconds: Some(
+                    voting_power_refreshed_timestamp_seconds,
+                ),
+                ..neuron_base.clone()
+            },
+        )
+        .collect::<Vec<_>>();
+
+    assert_eq!(neurons.len(), 4);
+
+    let governance_proto = GovernanceCanisterInitPayloadBuilder::new()
+        .with_additional_neurons(neurons)
+        .build();
+
+    install_canister(
+        &pocket_ic,
+        "NNS Governance",
+        GOVERNANCE_CANISTER_ID,
+        governance_proto.encode_to_vec(),
+        // TODO: Once following pruning is released, replace with vanilla
+        // build_governance_wasm(). For now, the feature is only enabled when
+        // built with feature = "test".
+        build_test_governance_wasm(),
+        Some(ROOT_CANISTER_ID.get()),
+    )
+    .await;
+
+    // Step 2: Call the code under test.
+
+    // Wait for pruning to occur in the background.
+    for _ in 0..100 {
+        pocket_ic.advance_time(Duration::from_secs(1)).await;
+        pocket_ic.tick().await;
+    }
+
+    // Step 3: Inspect results
+
+    async fn get_full_neuron(pocket_ic: &PocketIc, id: u64) -> Neuron {
+        let mut result =
+            nns::governance::list_neurons(&pocket_ic, PrincipalId::new_user_test_id(id))
+                .await
+                .full_neurons;
+
+        assert_eq!(result.len(), 1);
+
+        result.pop().unwrap()
+    }
+
+    // Assert that neurons that were refreshed "long" ago were pruned.
+    for id in [42, 43] {
+        let neuron = get_full_neuron(&pocket_ic, id).await;
+
+        assert_eq!(
+            neuron.followees,
+            hashmap! {
+                Topic::NeuronManagement as i32 => Followees {
+                    followees: vec![NeuronId { id: 1001 }],
+                }
+            },
+            "{}",
+            id,
+        );
+    }
+
+    // Assert that neurons that were refreshed recently were NOT modified.
+    for id in [44, 45] {
+        let neuron = get_full_neuron(&pocket_ic, id).await;
+
+        // Assert that neuron was pruned.
+        assert_eq!(neuron.followees, followees, "{}", id,);
+    }
 }
 
 fn split_neuron(state_machine: &StateMachine, neuron: &TestNeuronOwner, amount: u64) -> NeuronId {
