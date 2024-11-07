@@ -8,7 +8,6 @@
 use anyhow::{anyhow, Context};
 use bytes::Bytes;
 use http::{Method, Request, Response, Version};
-use ic_base_types::NodeId;
 use ic_protobuf::transport::v1 as pb;
 use prost::Message;
 use quinn::{Connection, RecvStream, SendStream, VarInt};
@@ -47,21 +46,14 @@ impl Drop for SendStreamDropGuard {
 
 #[derive(Clone, Debug)]
 pub struct ConnectionHandle {
-    peer_id: NodeId,
     pub connection: Connection,
     metrics: QuicTransportMetrics,
     conn_id: ConnId,
 }
 
 impl ConnectionHandle {
-    pub fn new(
-        peer_id: NodeId,
-        connection: Connection,
-        metrics: QuicTransportMetrics,
-        conn_id: ConnId,
-    ) -> Self {
+    pub fn new(connection: Connection, metrics: QuicTransportMetrics, conn_id: ConnId) -> Self {
         Self {
-            peer_id,
             connection,
             metrics,
             conn_id,
@@ -124,15 +116,13 @@ impl ConnectionHandle {
                 .inc();
         })?;
 
-        let mut response = read_response(recv_stream).await.inspect_err(|_| {
+        let response = read_response(recv_stream).await.inspect_err(|_| {
             self.metrics
                 .connection_handle_errors_total
                 .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_READ])
                 .inc();
         })?;
 
-        // Propagate PeerId from this request to upper layers.
-        response.extensions_mut().insert(self.peer_id);
         in_counter.inc_by(response.body().len() as u64);
         Ok(response)
     }
