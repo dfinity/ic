@@ -885,7 +885,7 @@ impl PocketIc {
         runtime.block_on(async { self.pocket_ic.get_subnet_metrics(subnet_id).await })
     }
 
-    fn update_call_with_effective_principal(
+    pub fn update_call_with_effective_principal(
         &self,
         canister_id: CanisterId,
         effective_principal: RawEffectivePrincipal,

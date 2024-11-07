@@ -299,8 +299,10 @@ impl<'a> Runtime {
     pub fn get_management_canister(&'a self) -> Canister<'a> {
         let effective_canister_id = match self {
             Runtime::Remote(r) => r.effective_canister_id,
-            _ => PrincipalId::default(),
+            Runtime::Local(_) => PrincipalId::default(),
+            Runtime::StateMachine(sm) => PrincipalId(sm.get_default_effective_canister_id()),
         };
+        println!("effective: {}", effective_canister_id);
         Canister {
             runtime: self,
             effective_canister_id,
@@ -987,7 +989,13 @@ impl<'a> Update<'a> {
             }
             Runtime::StateMachine(state_machine) => {
                 let result = state_machine
-                    .execute_ingress(canister.canister_id, &self.method_name, payload)
+                    .execute_ingress_as_with_effective_canister_id(
+                        canister.effective_canister_id(),
+                        PrincipalId::new_anonymous(),
+                        canister.canister_id,
+                        &self.method_name,
+                        payload,
+                    )
                     .map_err(|e| e.to_string())?;
                 state_machine.advance_time(Duration::from_millis(1));
                 state_machine.tick();
@@ -1030,7 +1038,8 @@ impl<'a> Update<'a> {
             }
             Runtime::StateMachine(state_machine) => {
                 let result = state_machine
-                    .execute_ingress_as(
+                    .execute_ingress_as_with_effective_canister_id(
+                        canister.effective_canister_id(),
                         sender.get_principal_id(),
                         canister.canister_id,
                         &self.method_name,

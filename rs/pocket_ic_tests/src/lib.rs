@@ -51,6 +51,14 @@ impl StateMachineBuilder {
         }
     }
 
+    pub fn with_nns_subnet(self) -> Self {
+        Self {
+            sm_builder: self.sm_builder.with_nns_subnet(),
+            has_subnet: true,
+            ..self
+        }
+    }
+
     pub fn with_ii_subnet(self) -> Self {
         Self {
             sm_builder: self.sm_builder.with_ii_subnet(),
@@ -156,11 +164,16 @@ impl StateMachine {
     }
 
     pub fn get_subnet_id(&self) -> SubnetId {
+        let topology = self.sm.topology();
         SubnetId::from(PrincipalId(
-            self.sm
-                .get_subnet(self.sm.topology().default_effective_canister_id.into())
+            topology
+                .get_subnet(self.get_default_effective_canister_id())
                 .unwrap(),
         ))
+    }
+
+    pub fn get_default_effective_canister_id(&self) -> Principal {
+        self.sm.topology().default_effective_canister_id.into()
     }
 
     pub fn get_subnet_ids(&self) -> Vec<SubnetId> {
@@ -408,6 +421,26 @@ impl StateMachine {
                 sender.0,
                 &method.to_string(),
                 method_payload,
+            )
+            .map(wasm_result)
+            .map_err(user_error)
+    }
+
+    pub fn execute_ingress_as_with_effective_canister_id(
+        &self,
+        effective_canister_id: PrincipalId,
+        sender: PrincipalId,
+        canister_id: CanisterId,
+        method: impl ToString,
+        payload: Vec<u8>,
+    ) -> Result<WasmResult, UserError> {
+        self.sm
+            .update_call_with_effective_principal(
+                canister_id.into(),
+                RawEffectivePrincipal::CanisterId(effective_canister_id.to_vec()),
+                sender.into(),
+                &method.to_string(),
+                payload,
             )
             .map(wasm_result)
             .map_err(user_error)

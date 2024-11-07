@@ -13,7 +13,7 @@ use canister_test::{
 };
 use cycles_minting_canister::CyclesCanisterInitPayload;
 use dfn_candid::{candid_one, CandidOne};
-use futures::{future::join_all, FutureExt};
+use futures::{FutureExt};
 use ic_base_types::CanisterId;
 use ic_canister_client_sender::Sender;
 use ic_config::Config;
@@ -69,6 +69,8 @@ impl NnsCanisters<'_> {
     /// Creates and installs all of the NNS canisters that are scheduled to
     /// exist at genesis, and sets the controller on each canister.
     pub async fn set_up(runtime: &'_ Runtime, init_payloads: NnsInitPayloads) -> NnsCanisters<'_> {
+        Self::set_up_at_ids(runtime, init_payloads).await
+        /*
         let since_start_secs = {
             let s = SystemTime::now();
             move || (SystemTime::now().duration_since(s).unwrap()).as_secs_f32()
@@ -157,6 +159,7 @@ impl NnsCanisters<'_> {
             nns_ui,
             sns_wasms,
         }
+        */
     }
 
     /// Creates and installs all of the NNS canisters at the right ids that are scheduled to
