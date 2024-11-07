@@ -84,3 +84,9 @@ search_dirs_pattern(ssh_keygen_t, locale_t, locale_t)
 # go to a different policy module.
 search_dirs_pattern(ssh_keygen_t, tmp_t, tmp_t)
 manage_files_pattern(ssh_keygen_t, initrc_tmp_t, initrc_tmp_t)
+
+###############################################################################
+# nftables
+# allow reading from /dev/urandom
+require { type iptables_t }
+dev_read_urand(iptables_t)
