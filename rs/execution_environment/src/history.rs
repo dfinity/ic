@@ -189,6 +189,7 @@ impl IngressHistoryWriter for IngressHistoryWriterImpl {
                     .as_secs_f64()
             })
         };
+        // Latency instrumentation.
         match (&current_status, &status) {
             // Newly received message: observe its induction latency.
             (
@@ -197,10 +198,10 @@ impl IngressHistoryWriter for IngressHistoryWriterImpl {
                     state: Received, ..
                 },
             ) => {
-                seconds_since_block_made(&message_id).map(|seconds| {
+                if let Some(seconds) = seconds_since_block_made(&message_id) {
                     self.message_state_transition_received_duration_seconds
                         .observe(seconds);
-                });
+                }
             }
 
             // Message popped from ingress queue: observe its processing latency.
@@ -210,10 +211,10 @@ impl IngressHistoryWriter for IngressHistoryWriterImpl {
                 },
                 Known { state, .. },
             ) if state != &Received => {
-                seconds_since_block_made(&message_id).map(|seconds| {
+                if let Some(seconds) = seconds_since_block_made(&message_id) {
                     self.message_state_transition_processing_duration_seconds
                         .observe(seconds);
-                });
+                }
             }
             _ => {}
         }
