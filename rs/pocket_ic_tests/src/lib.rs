@@ -228,11 +228,13 @@ impl StateMachine {
         wasm: Vec<u8>,
         payload: Vec<u8>,
     ) -> Result<(), UserError> {
+        let controllers = self.sm.get_controllers(canister_id.into());
+        let sender = controllers.first().unwrap();
         post_process(call_candid_as(
             &self.sm,
             Principal::management_canister(),
             RawEffectivePrincipal::CanisterId(canister_id.get().to_vec()),
-            Principal::anonymous(),
+            *sender,
             "install_code",
             (InstallCodeArgs {
                 mode,
