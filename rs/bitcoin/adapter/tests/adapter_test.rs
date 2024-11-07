@@ -29,6 +29,11 @@ type BitcoinAdapterClient = Box<
     dyn RpcAdapterClient<BitcoinAdapterRequestWrapper, Response = BitcoinAdapterResponseWrapper>,
 >;
 
+enum AdapterState {
+    Idle,
+    Active,
+}
+
 struct ForkTestData {
     blocks: Vec<BlockHash>,
     exclude_start: usize,
@@ -159,7 +164,7 @@ fn start_adapter_and_client(
     urls: Vec<SocketAddr>,
     logger: ReplicaLogger,
     network: bitcoin::Network,
-    is_idle: bool,
+    adapter_state: AdapterState,
 ) -> (BitcoinAdapterClient, TempPath) {
     let metrics_registry = MetricsRegistry::new();
     let res = Builder::new()
@@ -185,7 +190,7 @@ fn start_adapter_and_client(
     let anchor: BlockHash = "0000000000000000035908aacac4c97fb4e172a1758bbbba2ee2b188765780eb"
         .parse()
         .unwrap();
-    if !is_idle {
+    if let AdapterState::Active = adapter_state {
         // We send this request to make sure the adapter is not idle.
         let _ = make_get_successors_request(&res.0, anchor.to_vec(), vec![]);
     }
@@ -199,7 +204,7 @@ fn start_idle_adapter_and_client(
     logger: ReplicaLogger,
     network: bitcoin::Network,
 ) -> (BitcoinAdapterClient, TempPath) {
-    start_adapter_and_client(rt, urls, logger, network, true)
+    start_adapter_and_client(rt, urls, logger, network, AdapterState::Idle)
 }
 
 fn start_active_adapter_and_client(
@@ -208,7 +213,7 @@ fn start_active_adapter_and_client(
     logger: ReplicaLogger,
     network: bitcoin::Network,
 ) -> (BitcoinAdapterClient, TempPath) {
-    start_adapter_and_client(rt, urls, logger, network, false)
+    start_adapter_and_client(rt, urls, logger, network, AdapterState::Active)
 }
 
 fn wait_for_blocks(client: &Client, blocks: u64) {
