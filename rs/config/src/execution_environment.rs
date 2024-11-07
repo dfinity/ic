@@ -145,7 +145,7 @@ pub const MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT: usize = 3000;
 /// - existing canisters will get their field initialized as follows:
 ///   - let `halfway_to_max = (memory_usage + 4GiB) / 2`
 ///   - use the maximum of `default_wasm_memory_limit` and `halfway_to_max`.
-pub const DEFAULT_WASM_MEMORY_LIMIT: NumBytes = NumBytes::new(3 * GIB);
+pub const DEFAULT_WASM_MEMORY_LIMIT: NumBytes = NumBytes::new(12 * GIB);
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[serde(default)]

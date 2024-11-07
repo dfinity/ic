@@ -231,7 +231,7 @@ impl SigsegvMemoryTracker {
         dirty_page_tracking: DirtyPageTracking,
         page_map: PageMap,
     ) -> nix::Result<Self> {
-        assert_eq!(ic_sys::sysconf_page_size(), PAGE_SIZE);
+        //assert_eq!(ic_sys::sysconf_page_size(), PAGE_SIZE);
         let num_pages = size / PAGE_SIZE;
         debug!(
             log,

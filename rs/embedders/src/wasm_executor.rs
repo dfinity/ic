@@ -647,7 +647,9 @@ pub fn process(
     // Execute Wasm code until it finishes or exceeds the message instruction
     // limit. With deterministic time slicing, this call may execute multiple
     // slices before it returns.
+    let time_now = std::time::Instant::now();
     let run_result = instance.run(func_ref);
+    println!("Execution time: {:?}", time_now.elapsed());
 
     // Get the executed/remaining instructions for the message and the slice.
     let instruction_counter = instance.instruction_counter();
@@ -670,6 +672,7 @@ pub fn process(
         .min(message_instruction_limit);
     let message_instructions_left = message_instruction_limit - message_instructions_executed;
 
+    let copy_time = std::time::Instant::now();
     // In case the message dirtied too many pages, as a performance optimization we will
     // yield the control to the replica and then resume copying dirty pages in a new execution slice.
     let num_dirty_pages = if let Ok(ref res) = run_result {
@@ -805,6 +808,7 @@ pub fn process(
             None
         }
     };
+    println!("Dirty page copy time: {:?}", copy_time.elapsed());
 
     // If the dirty page optimization slicing has been performed, we know the dirty page copying
     // was a heavy operation, therefore we take into account its overhead in number of instructions
