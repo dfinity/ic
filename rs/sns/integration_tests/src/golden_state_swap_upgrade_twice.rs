@@ -5,46 +5,20 @@ use ic_nns_test_utils::sns_wasm::{
     build_swap_sns_wasm, create_modified_sns_wasm, ensure_sns_wasm_gzipped,
 };
 use ic_pocket_ic_tests::StateMachine;
-use ic_sns_swap::pb::v1::{DerivedState, GetStateRequest, GetStateResponse, Swap};
+use ic_sns_swap::pb::v1::{GetStateRequest, GetStateResponse, Swap};
 use ic_sns_wasm::pb::v1::SnsWasm;
 use ic_types::{CanisterId, PrincipalId};
 use pretty_assertions::assert_eq;
 use std::str::FromStr;
 
-// TODO[NNS1-3386]: Remove this function once all existing Swaps are upgraded.
-fn redact_unavailable_swap_fields(swap_state: &mut GetStateResponse) {
-    // The following fields were added to the swap state later than some of the Swap canisters'
-    // last upgrade. These fields will become available after those canisters are upgraded.
-    //
-    // Why is it okay to redact these fields in this test? This test accompanies a data migration
-    // that sets these fields for Swaps that don't yet have it in post_upgrade.
-    {
-        let swap = swap_state.swap.clone().unwrap();
-        swap_state.swap = Some(Swap {
-            timers: None,
-            direct_participation_icp_e8s: None,
-            neurons_fund_participation_icp_e8s: None,
-            ..swap
-        });
-    }
-
-    // The following fields were added to the derived state later than some of the Swap canisters'
-    // last upgrade. These fields will become available after those canisters are upgraded.
-    //
-    // Why is it okay to redact these fields in this test? As the name suggests, these fields are
-    // part of Swap's *derived* state, i.e., they are not stored in canister memory but recomputed
-    // upon request. Therefore, the only reason they might not have reasonable values is when
-    // the Swap canister's *persisted* state (`swap_state.swap`) too incomplete to compute them.
-    {
-        let derived = swap_state.derived.unwrap();
-        swap_state.derived = Some(DerivedState {
-            direct_participant_count: None,
-            cf_participant_count: None,
-            cf_neuron_count: None,
-            direct_participation_icp_e8s: None,
-            neurons_fund_participation_icp_e8s: None,
-            ..derived
-        });
+/// This function redacts the `timers` field, as they are not supposed to match before and after
+/// an upgrade. As the in-code documentation suggests, the `timers` field contains "information
+/// about the timers that perform periodic tasks of this Swap canister." This information includes,
+/// in particular, the last time timers were initialized, reset, and executed. Or course, this is
+/// time-sensitive and upgrade-sensitive.
+fn redact_timers(swap_state: &mut GetStateResponse) {
+    if let Some(swap) = swap_state.swap.as_mut() {
+        swap.timers = None
     }
 }
 
@@ -119,12 +93,9 @@ fn run_test_for_swap(state_machine: &StateMachine, swap_canister_id: &str, sns_n
             })
         );
 
-        // Some fields need to be redacted as they were introduced after some Swaps were created.
-        redact_unavailable_swap_fields(&mut swap_post_state);
-
-        // Since some SNSs do have (some of) the new fields, we need to redact the same set of
-        // fields from the pre-state, too.
-        redact_unavailable_swap_fields(&mut swap_pre_state);
+        // Timers need to be redacted as they are expected to change due to the upgrade.
+        redact_timers(&mut swap_post_state);
+        redact_timers(&mut swap_pre_state);
 
         // Otherwise, the states before and after the migration should match.
         assert_eq!(
