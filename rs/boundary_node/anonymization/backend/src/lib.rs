@@ -264,7 +264,7 @@ fn query() -> QueryResponse {
         Err(err) => QueryResponse::Err(match err {
             QueryError::Unauthorized => ifc::QueryError::Unauthorized,
             QueryError::Unavailable => ifc::QueryError::Unavailable,
-            QueryError::LeaderMode(mode, ps) => ifc::QueryError::Leader(
+            QueryError::LeaderDuty(mode, ps) => ifc::QueryError::LeaderDuty(
                 (&mode).into(),                      // mode
                 ps.iter().map(Into::into).collect(), // pairs
             ),

@@ -168,8 +168,8 @@ pub enum QueryError {
     #[error("Unavailable")]
     Unavailable,
 
-    #[error("LeaderMode")]
-    LeaderMode(LeaderMode, Vec<Pair>),
+    #[error("LeaderDuty")]
+    LeaderDuty(LeaderMode, Vec<Pair>),
 
     #[error(transparent)]
     UnexpectedError(#[from] anyhow::Error),
@@ -242,7 +242,7 @@ impl<T: Query> Query for WithLeaderAssignment<T> {
             _ => LeaderMode::Refresh,
         };
 
-        Err(QueryError::LeaderMode(
+        Err(QueryError::LeaderDuty(
             mode, // mode
             ps,   // principal pubkey pairs
         ))
