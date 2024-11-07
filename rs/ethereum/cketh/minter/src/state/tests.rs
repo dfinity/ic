@@ -1,7 +1,5 @@
 use crate::endpoints::CandidBlockTag;
-use crate::eth_logs::{
-    EventSource, ReceivedErc20Event, ReceivedEthEvent, ReceivedEvent,
-};
+use crate::eth_logs::{EventSource, ReceivedErc20Event, ReceivedEthEvent, ReceivedEvent};
 use crate::eth_rpc::BlockTag;
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::init::InitArg;

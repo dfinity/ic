@@ -47,11 +47,12 @@ pub fn valid_init_arg() -> InitArg {
 }
 
 pub mod arb {
-    use candid::Principal;
     use crate::checked_amount::CheckedAmountOf;
+    use crate::eth_logs::LedgerSubaccount;
     use crate::eth_rpc::{Block, Data, FeeHistory, FixedSizeData, Hash, LogEntry};
     use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
     use crate::numeric::BlockRangeInclusive;
+    use candid::Principal;
     use evm_rpc_client::{
         Hex, Hex20, Hex256, Hex32, HexByte, HttpOutcallError as EvmHttpOutcallError,
         JsonRpcError as EvmJsonRpcError, Nat256, ProviderError as EvmProviderError,
@@ -66,7 +67,6 @@ pub mod arb {
         prelude::{any, Just, Strategy},
         prop_oneof,
     };
-    use crate::eth_logs::LedgerSubaccount;
 
     pub fn arb_checked_amount_of<Unit>() -> impl Strategy<Value = CheckedAmountOf<Unit>> {
         use proptest::arbitrary::any;
