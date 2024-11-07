@@ -162,6 +162,7 @@ _SANDBOX_DATA = [
     "//rs/canister_sandbox",
     "//rs/canister_sandbox:compiler_sandbox",
     "//rs/canister_sandbox:sandbox_launcher",
+    "//rs/pocket_ic_server:pocket-ic-server",
 ]
 
 # Env needed for testing with canister_sandbox
@@ -169,6 +170,7 @@ _SANDBOX_ENV = {
     "COMPILER_BINARY": "$(rootpath //rs/canister_sandbox:compiler_sandbox)",
     "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox:sandbox_launcher)",
     "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
+    "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
 }
 
 def rust_test_suite_with_extra_srcs(name, srcs, extra_srcs, **kwargs):

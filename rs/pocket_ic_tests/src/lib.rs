@@ -169,16 +169,8 @@ impl StateMachine {
         self.sm.get_time()
     }
 
-    pub fn time_of_next_round(&self) -> SystemTime {
-        todo!()
-    }
-
     pub fn get_time(&self) -> Time {
         self.time().try_into().unwrap()
-    }
-
-    pub fn get_time_of_next_round(&self) -> Time {
-        self.time_of_next_round().try_into().unwrap()
     }
 
     pub fn advance_time(&self, amount: Duration) {
