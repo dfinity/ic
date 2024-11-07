@@ -11,14 +11,13 @@ use ic_types::{CanisterId, PrincipalId};
 use pretty_assertions::assert_eq;
 use std::str::FromStr;
 
-/// This function redacts the timers, as they are not supposed to match before and after an upgrade.
-/// For example, the field `swap.timers.last_reset_timestamp_seconds` would change.
-fn redact_timer_related_swap_fields(swap_state: &mut GetStateResponse) {
-    let swap = swap_state.swap.clone().unwrap();
-    swap_state.swap = Some(Swap {
-        timers: None,
-        ..swap
-    });
+/// This function redacts the `timers` field, as they are not supposed to match before and after
+/// an upgrade. As the in-code documentation suggests, the `timers` field contains "information
+/// about the timers that perform periodic tasks of this Swap canister." This information includes,
+/// in particular, the last time timers were initialized, reset, and executed. Or course, this is
+/// time-sensitive and upgrade-sensitive.
+fn redact_timers(swap_state: &mut GetStateResponse) {
+    swap_state.swap.as_mut().map(|swap| swap.timers = None);
 }
 
 fn get_state(
@@ -93,8 +92,8 @@ fn run_test_for_swap(state_machine: &StateMachine, swap_canister_id: &str, sns_n
         );
 
         // Timers need to be redacted as they are expected to change due to the upgrade.
-        redact_timer_related_swap_fields(&mut swap_post_state);
-        redact_timer_related_swap_fields(&mut swap_pre_state);
+        redact_timers(&mut swap_post_state);
+        redact_timers(&mut swap_pre_state);
 
         // Otherwise, the states before and after the migration should match.
         assert_eq!(
