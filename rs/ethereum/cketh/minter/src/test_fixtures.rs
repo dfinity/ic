@@ -47,6 +47,7 @@ pub fn valid_init_arg() -> InitArg {
 }
 
 pub mod arb {
+    use candid::Principal;
     use crate::checked_amount::CheckedAmountOf;
     use crate::eth_rpc::{Block, Data, FeeHistory, FixedSizeData, Hash, LogEntry};
     use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
@@ -65,6 +66,7 @@ pub mod arb {
         prelude::{any, Just, Strategy},
         prop_oneof,
     };
+    use crate::eth_logs::LedgerSubaccount;
 
     pub fn arb_checked_amount_of<Unit>() -> impl Strategy<Value = CheckedAmountOf<Unit>> {
         use proptest::arbitrary::any;
@@ -81,6 +83,14 @@ pub mod arb {
         use proptest::arbitrary::any;
         use proptest::array::uniform32;
         uniform32(any::<u8>()).prop_map(Nat256::from_be_bytes)
+    }
+
+    pub fn arb_principal() -> impl Strategy<Value = Principal> {
+        vec(any::<u8>(), 0..=29).prop_map(|bytes| Principal::from_slice(&bytes))
+    }
+
+    pub fn arb_ledger_subaccount() -> impl Strategy<Value = Option<LedgerSubaccount>> {
+        uniform32(any::<u8>()).prop_map(LedgerSubaccount::from_bytes)
     }
 
     pub fn arb_hex_byte() -> impl Strategy<Value = HexByte> {
