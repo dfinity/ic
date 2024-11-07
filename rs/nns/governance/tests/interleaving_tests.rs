@@ -89,7 +89,7 @@ fn test_cant_increase_dissolve_delay_while_disbursing() {
     // for the signal that the ledger transfer has been initiated
     let neuron_id_clone = neuron_id;
     thread::spawn(move || {
-        // DO NOT MERGE - this is a hack
+        // this is a hack
         // We have to re-add neurons because of thread_local
         boxed
             .neuron_store
@@ -312,7 +312,7 @@ fn test_cant_interleave_calls_to_settle_neurons_fund() {
         .expect("Could not find the neuron we just added!");
 
     let thread_handle = thread::spawn(move || {
-        // DO NOT MERGE - this is a hack
+        // this is a hack
         // We have to re-add neurons because of thread_local
         boxed
             .governance

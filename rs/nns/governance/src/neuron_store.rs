@@ -327,7 +327,7 @@ impl PartialEq for NeuronStore {
             use_stable_memory_for_all_neurons: _,
             use_stable_following_index: _,
         } = self;
-        // TODO DO NOT MERGE - make this work for stable
+
         *heap_neurons == other.heap_neurons && *topic_followee_index == other.topic_followee_index
     }
 }
@@ -752,11 +752,12 @@ impl NeuronStore {
         }
     }
 
+    // TODO remove this after we no longer need to validate neurons in heap.
     /// Returns Neurons in heap starting with the first one whose ID is >= begin.
     ///
     /// The len of the result is at most limit. It is also maximal; that is, if the return value has
     /// len < limit, then the caller can assume that there are no more Neurons.
-    pub fn active_neurons_range<R>(&self, range: R) -> impl Iterator<Item = &Neuron> + '_
+    pub fn heap_neurons_range<R>(&self, range: R) -> impl Iterator<Item = &Neuron> + '_
     where
         R: RangeBounds<NeuronId>,
     {
@@ -778,7 +779,6 @@ impl NeuronStore {
 
         let range = neuron_id_range_to_u64_range(&range);
 
-        // TODO DO NOT MERGE we need to deal with this usage of heap_neurons
         self.heap_neurons.range(range).map(|(_, neuron)| neuron)
     }
 
@@ -843,54 +843,51 @@ impl NeuronStore {
     pub fn create_ballots_for_standard_proposal(
         &self,
         now_seconds: u64,
-    ) -> (HashMap<u64, Ballot>, u128) {
+    ) -> (
+        HashMap<u64, Ballot>,
+        u128, /*deciding_voting_power*/
+        u128, /*potential_voting_power*/
+    ) {
         let mut ballots = HashMap::<u64, Ballot>::new();
-        let mut total_power: u128 = 0;
+        let mut deciding_voting_power: u128 = 0;
+        let mut potential_voting_power: u128 = 0;
+
+        let mut process_neuron = |neuron: Neuron| {
+            if neuron.is_inactive(now_seconds)
+                || neuron.dissolve_delay_seconds(now_seconds)
+                    < MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
+            {
+                return;
+            }
+
+            let voting_power = neuron.deciding_voting_power(now_seconds);
+            deciding_voting_power += voting_power as u128;
+            potential_voting_power += neuron.potential_voting_power(now_seconds) as u128;
+            ballots.insert(
+                neuron.id().id,
+                Ballot {
+                    vote: Vote::Unspecified as i32,
+                    voting_power,
+                },
+            );
+        };
+
         if self.use_stable_memory_for_all_neurons {
             with_stable_neuron_store(|stable_store| {
                 // Not including unneeded sections gives us greater than 20x instructions improvement
                 for neuron in stable_store.range_neurons_sections(.., NeuronSections::default()) {
-                    if neuron.is_inactive(now_seconds)
-                        || neuron.dissolve_delay_seconds(now_seconds)
-                            < MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
-                    {
-                        continue;
-                    }
-
-                    let voting_power = neuron.deciding_voting_power(now_seconds);
-                    total_power += voting_power as u128;
-                    ballots.insert(
-                        neuron.id().id,
-                        Ballot {
-                            vote: Vote::Unspecified as i32,
-                            voting_power,
-                        },
-                    );
+                    process_neuron(neuron);
                 }
             })
         } else {
             self.with_active_neurons_iter(|iter| {
                 for neuron in iter {
-                    if neuron.is_inactive(now_seconds)
-                        || neuron.dissolve_delay_seconds(now_seconds)
-                            < MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
-                    {
-                        continue;
-                    }
-
-                    let voting_power = neuron.deciding_voting_power(now_seconds);
-                    total_power += voting_power as u128;
-                    ballots.insert(
-                        neuron.id().id,
-                        Ballot {
-                            vote: Vote::Unspecified as i32,
-                            voting_power,
-                        },
-                    );
+                    process_neuron(neuron);
                 }
             });
         }
-        (ballots, total_power)
+
+        (ballots, deciding_voting_power, potential_voting_power)
     }
 
     /// Returns the full neuron if the given principal is authorized - either it can vote for the

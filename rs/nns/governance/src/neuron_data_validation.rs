@@ -396,7 +396,7 @@ impl<Validator: CardinalityAndRangeValidator + Send + Sync> ValidationTask
     fn validate_next_chunk(&mut self, neuron_store: &NeuronStore) -> Vec<ValidationIssue> {
         if let Some(next_neuron_id) = self.heap_next_neuron_id.take() {
             neuron_store
-                .active_neurons_range(next_neuron_id..)
+                .heap_neurons_range(next_neuron_id..)
                 .take(Validator::HEAP_NEURON_RANGE_CHUNK_SIZE)
                 .flat_map(|neuron| {
                     self.heap_next_neuron_id = neuron.id().next();
