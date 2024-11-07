@@ -209,13 +209,16 @@ async fn call_sync_v3(
     };
 
     let ingres_submission = ingress_submitter
-        .register_certification_subscription()
+        .try_register_message_subscriber()
         .await
         .try_submit();
 
-    if let Err(ingress_submission) = ingres_submission {
-        return CallV3Response::HttpError(ingress_submission);
-    }
+    let ingress_certification_subscriber = match ingres_submission {
+        Ok(ingress_certification_subscriber) => ingress_certification_subscriber,
+        // Submitting the ingress message failed.
+        Err(ingress_error) => return CallV3Response::HttpError(ingress_error),
+    };
+
     // The ingress message was submitted successfully.
     // From this point on we only return a certificate or `Accepted 202``.
     let certification_subscriber = match certification_subscriber {

@@ -105,7 +105,7 @@ pub(super) async fn handler(
     let ingress_submitter = ingress_validator
         .validate_ingress_message(request, effective_canister_id)
         .await?
-        .register_certification_subscription()
+        .try_register_message_subscriber()
         .await;
 
     let certification_subscriber = ingress_submitter.try_submit()?;

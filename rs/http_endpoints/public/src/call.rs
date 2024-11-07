@@ -324,7 +324,7 @@ impl IngressMessageSubmitter<NotSubscribed> {
     }
 
     /// Subscribes to the ingress message.
-    pub(crate) async fn register_certification_subscription(
+    pub(crate) async fn try_register_message_subscriber(
         self,
     ) -> IngressMessageSubmitter<Subscribed> {
         let message_id = self.message_id();
@@ -333,7 +333,6 @@ impl IngressMessageSubmitter<NotSubscribed> {
             .subscriber
             .ingress_watcher_handle
             .subscribe_for_certification(message_id)
-            .timeout()
             .await;
 
         IngressMessageSubmitter {
