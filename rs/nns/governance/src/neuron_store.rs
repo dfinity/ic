@@ -1435,7 +1435,7 @@ fn groom_neurons(
             (Bound::Excluded(exclusive_lower_bound), Bound::Unbounded),
             NeuronSections {
                 followees: true,
-                ..Default::default()
+                ..NeuronSections::NONE
             },
             |neuron: &mut Neuron| -> /* carry on */ bool {
                 last_neuron_id = neuron.id();
