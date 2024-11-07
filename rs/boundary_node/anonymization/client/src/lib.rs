@@ -72,7 +72,7 @@ pub enum QueryError {
     Unavailable,
 
     #[error("leader assignment received")]
-    Leader(LeaderMode, Vec<Pair>),
+    LeaderDuty(LeaderMode, Vec<Pair>),
 
     #[error(transparent)]
     UnexpectedError(#[from] anyhow::Error),
@@ -99,7 +99,12 @@ pub trait Submit: Sync + Send {
 
 #[derive(Clone)]
 pub struct Canister {
+    // Agent for interacting with the IC
+    // Note the use of `ic_canister_client::Agent` instead of `ic_cdk::Agent`
+    // Ths reason for this is that `ic_canister_client` allows accepting a custom signer
     agent: Agent,
+
+    // cid for the secret-sharing canister
     cid: Principal,
 }
 
@@ -195,8 +200,8 @@ impl Query for Canister {
             Response::Err(err) => Err(match err {
                 Error::Unauthorized => QueryError::Unauthorized,
                 Error::Unavailable => QueryError::Unavailable,
-                Error::Leader(mode, ks) => {
-                    QueryError::Leader(
+                Error::LeaderDuty(mode, ks) => {
+                    QueryError::LeaderDuty(
                         mode.into(),                         // mode
                         ks.iter().map(Into::into).collect(), // public-keys
                     )
