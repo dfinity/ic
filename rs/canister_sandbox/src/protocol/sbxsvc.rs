@@ -79,6 +79,22 @@ pub struct OpenWasmSerializedRequest {
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct OpenWasmSerializedReply(pub HypervisorResult<()>);
 
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+pub struct OpenWasmViaFileRequest {
+    /// Id used to later refer to this canister runner. Must be unique
+    /// per sandbox instance.
+    pub wasm_id: WasmId,
+
+    /// The serialization of a previously compiled `wasmtime::Module` in a file.
+    pub serialized_module: RawFd,
+}
+
+impl EnumerateInnerFileDescriptors for OpenWasmViaFileRequest {
+    fn enumerate_fds<'a>(&'a mut self, fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {
+        fds.push(self.serialized_module);
+    }
+}
+
 /// Request to close the indicated wasm object.
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct CloseWasmRequest {
@@ -314,6 +330,25 @@ pub struct CreateExecutionStateSerializedReply(
     pub HypervisorResult<CreateExecutionStateSerializedSuccessReply>,
 );
 
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+pub struct CreateExecutionStateViaFileRequest {
+    pub wasm_id: WasmId,
+    pub serialized_module: OnDiskSerializedModule,
+    pub wasm_page_map: PageMapSerialization,
+    pub next_wasm_memory_id: MemoryId,
+    pub canister_id: CanisterId,
+    pub stable_memory_page_map: PageMapSerialization,
+}
+
+impl EnumerateInnerFileDescriptors for CreateExecutionStateViaFileRequest {
+    fn enumerate_fds<'a>(&'a mut self, fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {
+        fds.push(serialized_module.bytes);
+        fds.push(serialized_module.initial_state_data);
+        self.wasm_page_map.enumerate_fds(fds);
+        self.stable_memory_page_map.enumerate_fds(fds);
+    }
+}
+
 /// All possible requests to a sandboxed process.
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
@@ -321,6 +356,7 @@ pub enum Request {
     Terminate(TerminateRequest),
     OpenWasm(OpenWasmRequest),
     OpenWasmSerialized(OpenWasmSerializedRequest),
+    OpenWasmViaFile(OpenWasmViaFileRequest),
     CloseWasm(CloseWasmRequest),
     OpenMemory(OpenMemoryRequest),
     CloseMemory(CloseMemoryRequest),
@@ -329,6 +365,7 @@ pub enum Request {
     AbortExecution(AbortExecutionRequest),
     CreateExecutionState(CreateExecutionStateRequest),
     CreateExecutionStateSerialized(CreateExecutionStateSerializedRequest),
+    CreateExecutionStateViaFile(CreateExecutionStateViaFileRequest),
 }
 
 impl EnumerateInnerFileDescriptors for Request {
@@ -337,6 +374,8 @@ impl EnumerateInnerFileDescriptors for Request {
             Request::OpenMemory(request) => request.enumerate_fds(fds),
             Request::CreateExecutionState(request) => request.enumerate_fds(fds),
             Request::CreateExecutionStateSerialized(request) => request.enumerate_fds(fds),
+            Request::OpenWasmViaFile(request) => request.enumerate_fds(fds),
+            Request::CreateExecetionStateViaFile(request) => request.enumerate_fds(fds),
             Request::Terminate(_)
             | Request::OpenWasm(_)
             | Request::OpenWasmSerialized(_)
@@ -356,6 +395,8 @@ pub enum Reply {
     Terminate(TerminateReply),
     OpenWasm(OpenWasmReply),
     OpenWasmSerialized(OpenWasmSerializedReply),
+    /// Reuse the same reply as for Serialized requests.
+    OpenWasmViaFile(OpenWasmSerializedReply),
     CloseWasm(CloseWasmReply),
     OpenMemory(OpenMemoryReply),
     CloseMemory(CloseMemoryReply),
@@ -364,6 +405,8 @@ pub enum Reply {
     AbortExecution(AbortExecutionReply),
     CreateExecutionState(CreateExecutionStateReply),
     CreateExecutionStateSerialized(CreateExecutionStateSerializedReply),
+    /// Reuse the same reply as for Serialized requests.
+    CreateExecutionStateViaFile(CreateExecutionStateSerializedReply),
 }
 
 impl EnumerateInnerFileDescriptors for Reply {
@@ -478,6 +521,8 @@ mod tests {
         });
         assert_eq!(round_trip_request(&msg), msg);
     }
+
+    // TODO add round trip tests.
 
     #[test]
     fn round_trip_open_wasm_serialized_reply() {

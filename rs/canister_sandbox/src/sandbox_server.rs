@@ -51,6 +51,17 @@ impl SandboxService for SandboxServer {
         rpc::Call::new_resolved(Ok(OpenWasmSerializedReply(result)))
     }
 
+    fn open_wasm_via_file(
+        &self,
+        req: OpenWasmViaFileRequest,
+    ) -> rpc::Call<OpenWasmSerializedReply> {
+        let result = self
+            .manager
+            .open_wasm_via_file(req.wasm_id, &req.serialized_module)
+            .map(|_| ());
+        rpc::Call::new_resolved(Ok(OpenWasmSerializedReply(result)))
+    }
+
     fn close_wasm(&self, req: CloseWasmRequest) -> rpc::Call<CloseWasmReply> {
         self.manager.close_wasm(req.wasm_id);
         rpc::Call::new_resolved(Ok(CloseWasmReply { success: true }))
@@ -121,6 +132,21 @@ impl SandboxService for SandboxServer {
         req: CreateExecutionStateSerializedRequest,
     ) -> rpc::Call<CreateExecutionStateSerializedReply> {
         let result = self.manager.create_execution_state_serialized(
+            req.wasm_id,
+            req.serialized_module,
+            req.wasm_page_map,
+            req.next_wasm_memory_id,
+            req.canister_id,
+            req.stable_memory_page_map,
+        );
+        rpc::Call::new_resolved(Ok(CreateExecutionStateSerializedReply(result)))
+    }
+
+    fn create_execution_state_via_file(
+        &self,
+        req: CreateExecutionStateViaFileRequest,
+    ) -> rpc::Call<CreateExecutionStateSerializedReply> {
+        let result = self.manager.create_execution_state_via_file(
             req.wasm_id,
             req.serialized_module,
             req.wasm_page_map,

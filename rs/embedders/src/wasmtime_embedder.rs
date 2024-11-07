@@ -7,6 +7,8 @@ use std::{
     cell::Ref,
     collections::HashMap,
     convert::TryFrom,
+    fs::File,
+    io::Read,
     mem::size_of,
     sync::{atomic::Ordering, Arc, Mutex},
 };
@@ -327,6 +329,28 @@ impl WasmtimeEmbedder {
         serialized_module: &SerializedModuleBytes,
     ) -> HypervisorResult<InstancePre<StoreData>> {
         let module = self.deserialize_module(serialized_module)?;
+        self.pre_instantiate(&module)
+    }
+
+    fn deserialize_from_file(&self, mut serialized_module: File) -> HypervisorResult<Module> {
+        // TODO: Use new Module::deserialize_open_file to not copy bytes.
+        let mut bytes = vec![];
+        let _ = serialized_module.read_to_end(&mut bytes).unwrap();
+        // TODO: Safety
+        unsafe {
+            Module::deserialize(&self.create_engine()?, &bytes).map_err(|err| {
+                HypervisorError::WasmEngineError(WasmEngineError::FailedToDeserializeModule(
+                    format!("{:?}", err),
+                ))
+            })
+        }
+    }
+
+    pub fn read_file_and_pre_instantiate(
+        &self,
+        serialized_module: File,
+    ) -> HypervisorResult<InstancePre<StoreData>> {
+        let module = self.deserialize_from_file(serialized_module)?;
         self.pre_instantiate(&module)
     }
 

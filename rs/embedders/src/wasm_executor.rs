@@ -385,10 +385,25 @@ impl WasmExecutorImpl {
             })
         } else {
             match compilation_cache.get(&wasm_binary.binary) {
-                Some(Ok(serialized_module)) => {
+                Some(Ok(StoredCompilation::Memory(serialized_module))) => {
                     let instance_pre = self
                         .wasm_embedder
                         .deserialize_module_and_pre_instantiate(&serialized_module.bytes);
+                    let cache = EmbedderCache::new(instance_pre.clone());
+                    *guard = Some(cache.clone());
+                    match instance_pre {
+                        Ok(_) => Ok(CacheLookup {
+                            cache,
+                            serialized_module: Some(serialized_module),
+                            compilation_result: None,
+                        }),
+                        Err(err) => Err(err),
+                    }
+                }
+                Some(Ok(StoredCompilation::Disk(serialized_module))) => {
+                    let instance_pre = self
+                        .wasm_embedder
+                        .deserialize_from_file(&serialized_module.bytes);
                     let cache = EmbedderCache::new(instance_pre.clone());
                     *guard = Some(cache.clone());
                     match instance_pre {

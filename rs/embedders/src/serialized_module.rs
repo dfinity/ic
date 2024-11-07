@@ -211,33 +211,4 @@ impl OnDiskSerializedModule {
             is_wasm64: self.is_wasm64,
         }
     }
-
-    // pub(crate) fn new(
-    //     module: &Module,
-    //     instrumentation_output: InstrumentationOutput,
-    //     validation_details: WasmValidationDetails,
-    //     is_wasm64: bool,
-    //     bytes_file: File,
-    //     initial_state_file: File,
-    // ) -> HypervisorResult<Self> {
-    //     let bytes = SerializedModuleBytes::try_from(module)?;
-    //     let initial_state_data = InitialStateData {
-    //         exported_functions: instrumentation_output.exported_functions,
-    //         data_segments: instrumentation_output.data,
-    //         wasm_metadata: validation_details.wasm_metadata,
-    //     };
-    //     // TODO handle unwrap
-    //     bytes_file.write_all(bytes.0).unwrap();
-    //     // TODO handle unwrap
-    //     initial_state_file
-    //         .write_all(bincode::serialize(initial_state_data).unwrap())
-    //         .unwrap();
-    //     Ok(Self {
-    //         bytes: bytes_file.into_raw_fd(),
-    //         initial_state_data: initial_state_file.into_raw_fd(),
-    //         compilation_cost: instrumentation_output.compilation_cost,
-    //         imports_details: validation_details.imports_details,
-    //         is_wasm64,
-    //     })
-    // }
 }

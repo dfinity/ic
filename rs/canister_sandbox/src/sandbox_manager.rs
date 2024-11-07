@@ -26,6 +26,7 @@ use crate::protocol::structs::{
 };
 use crate::{controller_service::ControllerService, protocol};
 use ic_config::embedders::Config as EmbeddersConfig;
+use ic_embedders::OnDiskSerializedModule;
 use ic_embedders::{
     wasm_executor::WasmStateChanges,
     wasm_utils::{compile, decoding::decode_wasm, Segments},
@@ -348,6 +349,30 @@ impl SandboxManager {
         }
     }
 
+    pub fn open_wasm_via_file(
+        &self,
+        wasm_id: WasmId,
+        serialized_module_file: RawFd,
+    ) -> HypervisorResult<(Arc<EmbedderCache>, Duration)> {
+        let mut guard = self.repr.lock().unwrap();
+        assert!(
+            !guard.caches.contains_key(&wasm_id),
+            "Failed to open wasm session {}: id is already in use",
+            wasm_id,
+        );
+        let deserialization_timer = Instant::now();
+        let instance_pre = self
+            .embedder
+            .read_file_and_pre_instantiate(File::from_raw_fd(erialized_module_file));
+        let cache = Arc::new(EmbedderCache::new(instance_pre.clone()));
+        let deserialization_time = deserialization_timer.elapsed();
+        guard.caches.insert(wasm_id, Arc::clone(&cache));
+        match instance_pre {
+            Ok(_) => Ok((cache, deserialization_time)),
+            Err(err) => Err(err),
+        }
+    }
+
     /// Closes previously opened wasm instance, by id.
     pub fn close_wasm(&self, wasm_id: WasmId) {
         let mut guard = self.repr.lock().unwrap();
@@ -514,6 +539,38 @@ impl SandboxManager {
             .create_initial_memory_and_globals(
                 &embedder_cache,
                 &serialized_module.data_segments,
+                wasm_page_map,
+                next_wasm_memory_id,
+                canister_id,
+                stable_memory_page_map,
+            )?;
+        Ok(CreateExecutionStateSerializedSuccessReply {
+            wasm_memory_modifications,
+            exported_globals,
+            deserialization_time,
+            total_sandbox_time: timer.elapsed(),
+        })
+    }
+
+    pub fn create_execution_state_via_file(
+        &self,
+        wasm_id: WasmId,
+        serialized_module: OnDiskSerializedModule,
+        wasm_page_map: PageMapSerialization,
+        next_wasm_memory_id: MemoryId,
+        canister_id: CanisterId,
+        stable_memory_page_map: PageMapSerialization,
+    ) -> HypervisorResult<CreateExecutionStateSerializedSuccessReply> {
+        let timer = Instant::now();
+        let (embedder_cache, deserialization_time) =
+            self.open_wasm_via_file(wasm_id, serialized_module.bytes)?;
+        let initial_state_data =
+            bincode::deserialize_from(File::from_raw_fd(serialized_module.initial_state_data))
+                .unwrap();
+        let (wasm_memory_modifications, exported_globals) = self
+            .create_initial_memory_and_globals(
+                &embedder_cache,
+                &initial_state_data.data_segments,
                 wasm_page_map,
                 next_wasm_memory_id,
                 canister_id,

@@ -79,21 +79,23 @@ impl CompilationCache {
     pub fn get(
         &self,
         canister_module: &CanisterModule,
-    ) -> Option<HypervisorResult<Arc<SerializedModule>>> {
+    ) -> Option<HypervisorResult<StoredCompilation>> {
         match self {
             Self::Memory { cache } => cache
                 .lock()
                 .unwrap()
                 .get(&WasmHash::from(canister_module))
-                .map(|o| o.clone().map_err(|e| e.clone())),
+                .map(|o| match o {
+                    Ok(m) => Ok(StoredCompilation::Memory(Arc::clone(m))),
+                    Err(e) => Err(e.clone()),
+                }),
             Self::Disk { dir: _, cache } => cache
                 .lock()
                 .unwrap()
                 .get(&WasmHash::from(canister_module))
-                .map(|o| {
-                    o.as_ref()
-                        .map_err(|e| e.clone())
-                        .map(|s| Arc::new(s.into_serialized_module()))
+                .map(|o| match o {
+                    Ok(m) => Ok(StoredCompilation::Disk(m.clone())),
+                    Err(e) => Err(e.clone()),
                 }),
         }
     }
@@ -105,4 +107,9 @@ impl CompilationCache {
             Self::Disk { dir: _, cache } => cache.lock().unwrap().clear(),
         }
     }
+}
+
+pub enum StoredCompilation {
+    Memory(Arc<SerializedModule>),
+    Disk(OnDiskSerializedModule),
 }
