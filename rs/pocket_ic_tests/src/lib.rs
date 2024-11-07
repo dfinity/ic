@@ -32,6 +32,7 @@ impl Default for StateMachine {
 
 pub struct StateMachineBuilder {
     sm_builder: PocketIcBuilder,
+    has_subnet: bool,
     time: Option<SystemTime>,
 }
 
@@ -45,6 +46,7 @@ impl StateMachineBuilder {
     pub fn new() -> Self {
         Self {
             sm_builder: PocketIcBuilder::new(),
+            has_subnet: false,
             time: None,
         }
     }
@@ -52,6 +54,7 @@ impl StateMachineBuilder {
     pub fn with_ii_subnet(self) -> Self {
         Self {
             sm_builder: self.sm_builder.with_ii_subnet(),
+            has_subnet: true,
             ..self
         }
     }
@@ -59,6 +62,7 @@ impl StateMachineBuilder {
     pub fn with_bitcoin_subnet(self) -> Self {
         Self {
             sm_builder: self.sm_builder.with_bitcoin_subnet(),
+            has_subnet: true,
             ..self
         }
     }
@@ -66,6 +70,7 @@ impl StateMachineBuilder {
     pub fn with_fiduciary_subnet(self) -> Self {
         Self {
             sm_builder: self.sm_builder.with_fiduciary_subnet(),
+            has_subnet: true,
             ..self
         }
     }
@@ -82,6 +87,7 @@ impl StateMachineBuilder {
                 .sm_builder
                 .with_subnet_state(subnet_kind, subnet_id.get().0, state_dir)
                 .with_nonmainnet_features(nonmainnet_features),
+            has_subnet: true,
             ..self
         }
     }
@@ -101,7 +107,11 @@ impl StateMachineBuilder {
     }
 
     pub fn build(self) -> StateMachine {
-        let sm = self.sm_builder.build();
+        let mut sm_builder = self.sm_builder;
+        if !self.has_subnet {
+            sm_builder = sm_builder.with_application_subnet();
+        }
+        let sm = sm_builder.build();
         if let Some(time) = self.time {
             sm.set_time(time);
         }
