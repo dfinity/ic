@@ -276,11 +276,14 @@ pub enum ReimbursedError {
     Quarantined,
 }
 
-struct DebugPrincipal<'a>(&'a Principal);
+struct DisplayOption<'a, T>(&'a Option<T>);
 
-impl fmt::Debug for DebugPrincipal<'_> {
+impl<T: fmt::Display> fmt::Display for DisplayOption<'_, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        write!(f, "{}", self.0)
+        match self.0 {
+            Some(t) => write!(f, "Some({})", t),
+            None => write!(f, "None"),
+        }
     }
 }
 
@@ -298,8 +301,11 @@ impl fmt::Debug for EthWithdrawalRequest {
             .field("withdrawal_amount", withdrawal_amount)
             .field("destination", destination)
             .field("ledger_burn_index", ledger_burn_index)
-            .field("from", &DebugPrincipal(from))
-            .field("from_subaccount", from_subaccount)
+            .field("from", &format_args!("{}", from))
+            .field(
+                "from_subaccount",
+                &format_args!("{}", DisplayOption(from_subaccount)),
+            )
             .field("created_at", created_at)
             .finish()
     }
@@ -325,10 +331,13 @@ impl fmt::Debug for Erc20WithdrawalRequest {
             .field("erc20_contract_address", erc20_contract_address)
             .field("destination", destination)
             .field("cketh_ledger_burn_index", cketh_ledger_burn_index)
-            .field("ckerc20_ledger_id", &DebugPrincipal(ckerc20_ledger_id))
+            .field("ckerc20_ledger_id", &format_args!("{}", ckerc20_ledger_id))
             .field("ckerc20_ledger_burn_index", ckerc20_ledger_burn_index)
-            .field("from", &DebugPrincipal(from))
-            .field("from_subaccount", from_subaccount)
+            .field("from", &format_args!("{}", from))
+            .field(
+                "from_subaccount",
+                &format_args!("{}", DisplayOption(from_subaccount)),
+            )
             .field("created_at", created_at)
             .finish()
     }
