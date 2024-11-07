@@ -1408,41 +1408,7 @@ impl StateMachine {
             .subnet_call_context_manager
             .sign_with_threshold_contexts
         {
-            match context.args {
-                ThresholdArguments::Ecdsa(_) if self.is_ecdsa_signing_enabled => {
-                    match self.build_sign_with_ecdsa_reply(context) {
-                        Ok(response) => {
-                            payload.consensus_responses.push(ConsensusResponse::new(
-                                *id,
-                                MsgPayload::Data(response.encode()),
-                            ));
-                        }
-                        Err(reject_context) => {
-                            payload.consensus_responses.push(ConsensusResponse::new(
-                                *id,
-                                MsgPayload::Reject(reject_context),
-                            ));
-                        }
-                    }
-                }
-                ThresholdArguments::Schnorr(_) if self.is_schnorr_signing_enabled => {
-                    match self.build_sign_with_schnorr_reply(context) {
-                        Ok(response) => {
-                            payload.consensus_responses.push(ConsensusResponse::new(
-                                *id,
-                                MsgPayload::Data(response.encode()),
-                            ));
-                        }
-                        Err(reject_context) => {
-                            payload.consensus_responses.push(ConsensusResponse::new(
-                                *id,
-                                MsgPayload::Reject(reject_context),
-                            ));
-                        }
-                    }
-                }
-                _ => {}
-            }
+            self.process_threshold_signing_request(id, context, &mut payload);
         }
 
         // Finally execute the payload.
@@ -2221,6 +2187,49 @@ impl StateMachine {
         Ok(SignWithSchnorrReply { signature })
     }
 
+    fn process_threshold_signing_request(
+        &self,
+        id: &CallbackId,
+        context: &SignWithThresholdContext,
+        payload: &mut PayloadBuilder,
+    ) {
+        match context.args {
+            ThresholdArguments::Ecdsa(_) if self.is_ecdsa_signing_enabled => {
+                match self.build_sign_with_ecdsa_reply(context) {
+                    Ok(response) => {
+                        payload.consensus_responses.push(ConsensusResponse::new(
+                            *id,
+                            MsgPayload::Data(response.encode()),
+                        ));
+                    }
+                    Err(reject_context) => {
+                        payload.consensus_responses.push(ConsensusResponse::new(
+                            *id,
+                            MsgPayload::Reject(reject_context),
+                        ));
+                    }
+                }
+            }
+            ThresholdArguments::Schnorr(_) if self.is_schnorr_signing_enabled => {
+                match self.build_sign_with_schnorr_reply(context) {
+                    Ok(response) => {
+                        payload.consensus_responses.push(ConsensusResponse::new(
+                            *id,
+                            MsgPayload::Data(response.encode()),
+                        ));
+                    }
+                    Err(reject_context) => {
+                        payload.consensus_responses.push(ConsensusResponse::new(
+                            *id,
+                            MsgPayload::Reject(reject_context),
+                        ));
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
     /// If set to true, the state machine will handle sign_with_ecdsa calls during `tick()`.
     pub fn set_ecdsa_signing_enabled(&mut self, value: bool) {
         self.is_ecdsa_signing_enabled = value;
@@ -2243,41 +2252,7 @@ impl StateMachine {
             .subnet_call_context_manager
             .sign_with_threshold_contexts
         {
-            match context.args {
-                ThresholdArguments::Ecdsa(_) if self.is_ecdsa_signing_enabled => {
-                    match self.build_sign_with_ecdsa_reply(context) {
-                        Ok(response) => {
-                            payload.consensus_responses.push(ConsensusResponse::new(
-                                *id,
-                                MsgPayload::Data(response.encode()),
-                            ));
-                        }
-                        Err(reject_context) => {
-                            payload.consensus_responses.push(ConsensusResponse::new(
-                                *id,
-                                MsgPayload::Reject(reject_context),
-                            ));
-                        }
-                    }
-                }
-                ThresholdArguments::Schnorr(_) if self.is_schnorr_signing_enabled => {
-                    match self.build_sign_with_schnorr_reply(context) {
-                        Ok(response) => {
-                            payload.consensus_responses.push(ConsensusResponse::new(
-                                *id,
-                                MsgPayload::Data(response.encode()),
-                            ));
-                        }
-                        Err(reject_context) => {
-                            payload.consensus_responses.push(ConsensusResponse::new(
-                                *id,
-                                MsgPayload::Reject(reject_context),
-                            ));
-                        }
-                    }
-                }
-                _ => {}
-            }
+            self.process_threshold_signing_request(id, context, &mut payload);
         }
 
         self.execute_payload(payload);
