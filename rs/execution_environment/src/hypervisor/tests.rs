@@ -5385,8 +5385,8 @@ fn test_callback_limits_impl(
 
 #[test]
 fn call_perform_fails_when_out_of_callback_quota() {
-    // With a canister callback quota of 3 and 1 available callback in the shared
-    // subnet pool, we expect only 3 downstream calls to be allowed.
+    // With a canister callback quota of 3; and 1 available callback in the shared
+    // subnet pool; we expect only 3 downstream calls to be allowed.
     let canister_callback_quota = 3;
     let subnet_available_callbacks = 1;
     test_callback_limits_impl(canister_callback_quota, subnet_available_callbacks, 3);
@@ -5394,8 +5394,8 @@ fn call_perform_fails_when_out_of_callback_quota() {
 
 #[test]
 fn call_perform_fails_when_out_of_subnet_callbacks() {
-    // With a canister callback quota of 3 and 4 available callbacks in the shared
-    // subnet pool, we expect only 4 downstream calls to be allowed.
+    // With a canister callback quota of 3; and 4 available callbacks in the shared
+    // subnet pool; we expect only 4 downstream calls to be allowed.
     let canister_callback_quota = 3;
     let subnet_available_callbacks = 4;
     test_callback_limits_impl(canister_callback_quota, subnet_available_callbacks, 4);

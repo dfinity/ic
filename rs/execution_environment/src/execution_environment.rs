@@ -440,6 +440,8 @@ impl ExecutionEnvironment {
     }
 
     /// Computes the current amount of memory available on the subnet.
+    ///
+    /// Time complexity: `O(|canisters|)`.
     pub fn subnet_available_memory(&self, state: &ReplicatedState) -> SubnetAvailableMemory {
         let memory_taken = state.memory_taken();
         SubnetAvailableMemory::new(
@@ -459,12 +461,16 @@ impl ExecutionEnvironment {
     ///
     /// This is a more efficient alternative to `memory_taken()` for cases when only
     /// the message memory usage is necessary.
+    ///
+    /// Time complexity: `O(|canisters|)`.
     pub fn subnet_available_message_memory(&self, state: &ReplicatedState) -> i64 {
         self.config.subnet_message_memory_capacity.get() as i64
             - state.guaranteed_response_message_memory_taken().get() as i64
     }
 
     /// Computes number of callbacks available up to the subnet's callback soft cap.
+    ///
+    /// Time complexity: `O(|canisters|)`.
     pub fn subnet_available_callbacks(&self, state: &ReplicatedState) -> i64 {
         self.config
             .subnet_callback_soft_cap

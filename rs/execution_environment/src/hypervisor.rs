@@ -450,13 +450,15 @@ impl Hypervisor {
                     self.canister_callback_quota
                         .saturating_sub(ccm.callbacks().len())
                 }) as u64;
+        // Maximum between remaining canister quota and available subnet shared pool.
+        let available_callbacks = subnet_available_callbacks.max(canister_available_callbacks);
         let static_system_state = SandboxSafeSystemState::new(
             system_state,
             *self.cycles_account_manager,
             network_topology,
             self.dirty_page_overhead,
             execution_parameters.compute_allocation,
-            canister_available_callbacks.max(subnet_available_callbacks),
+            available_callbacks,
             request_metadata,
             api_type.caller(),
             api_type.call_context_id(),
