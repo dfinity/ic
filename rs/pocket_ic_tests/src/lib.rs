@@ -59,6 +59,14 @@ impl StateMachineBuilder {
         }
     }
 
+    pub fn with_sns_subnet(self) -> Self {
+        Self {
+            sm_builder: self.sm_builder.with_sns_subnet(),
+            has_subnet: true,
+            ..self
+        }
+    }
+
     pub fn with_ii_subnet(self) -> Self {
         Self {
             sm_builder: self.sm_builder.with_ii_subnet(),
