@@ -346,6 +346,10 @@ fn test_single_neuron_proposal_new() {
                                 current_deadline_timestamp_seconds: 999111017,
                             }),
                         )),
+                        ProposalDataChange::TotalPotentialVotingPower(OptionChange::Different(
+                            None,
+                            Some(1),
+                        )),
                     ],
                 )]),
                 GovernanceChange::Metrics(OptionChange::Different(
@@ -1067,6 +1071,10 @@ async fn test_cascade_following_new() {
                         Some(WaitForQuietStateDesc {
                             current_deadline_timestamp_seconds: 999111001,
                         }),
+                    )),
+                    ProposalDataChange::TotalPotentialVotingPower(OptionChange::Different(
+                        None,
+                        Some(10_125_000_000)
                     )),
                 ],
             )]),
