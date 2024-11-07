@@ -7,17 +7,23 @@
 
 pub mod management;
 
-use hex_literal::hex;
 use ic_types::Cycles;
+use lazy_static::lazy_static;
 use universal_canister::Ops;
-/// The binary of the universal canister as compiled from
-/// `rs/universal_canister/impl`.
-///
-/// For steps on how to produce it, please see the README in
-/// `rs/universal_canister`.
-pub const UNIVERSAL_CANISTER_WASM: &[u8] = include_bytes!("universal-canister.wasm.gz");
-pub const UNIVERSAL_CANISTER_WASM_SHA256: [u8; 32] =
-    hex!("9c0b4ed1d729ffdd0e8d194df3be621f58a2fb86e1f1bbf556d89f43637de303");
+
+lazy_static! {
+    /// The WASM of the Universal Canister. This is only used in tests.
+    pub static ref UNIVERSAL_CANISTER_WASM: Vec<u8> = {
+        let uc_wasm_path = std::env::var("UNIVERSAL_CANISTER_WASM_PATH")
+            .expect("UNIVERSAL_CANISTER_WASM_PATH not set");
+        std::fs::read(&uc_wasm_path)
+            .unwrap_or_else(|e| panic!("Could not read WASM from {:?}: {e:?}", uc_wasm_path))
+    };
+}
+
+pub fn get_universal_canister_wasm_sha256() -> [u8; 32] {
+    ic_crypto_sha2::Sha256::hash(&*UNIVERSAL_CANISTER_WASM)
+}
 
 /// A succinct shortcut for creating a `PayloadBuilder`, which is used to encode
 /// instructions to be executed by the UC.
@@ -851,14 +857,6 @@ impl CallArgs {
 #[cfg(test)]
 mod test {
     use super::*;
-    #[test]
-    fn check_hardcoded_sha256_is_up_to_date() {
-        assert_eq!(
-            UNIVERSAL_CANISTER_WASM_SHA256,
-            ic_crypto_sha2::Sha256::hash(UNIVERSAL_CANISTER_WASM)
-        );
-    }
-
     #[test]
     fn try_from_macro_works() {
         assert_eq!(Ops::GetGlobalCounter, Ops::try_from(65).unwrap());

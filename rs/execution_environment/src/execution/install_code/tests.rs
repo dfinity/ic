@@ -1426,7 +1426,7 @@ fn install_chunked_works_from_whitelist() {
     let canister_id = test.create_canister(CYCLES);
 
     // Upload two chunks that make up the universal canister.
-    let uc_wasm = UNIVERSAL_CANISTER_WASM;
+    let uc_wasm = &*UNIVERSAL_CANISTER_WASM;
     let wasm_module_hash = ic_crypto_sha2::Sha256::hash(uc_wasm).to_vec();
     let chunk1 = &uc_wasm[..uc_wasm.len() / 2];
     let chunk2 = &uc_wasm[uc_wasm.len() / 2..];
@@ -1487,7 +1487,7 @@ fn install_chunked_defaults_to_using_target_as_store() {
     let canister_id = test.create_canister(CYCLES);
 
     // Upload universal canister.
-    let uc_wasm = UNIVERSAL_CANISTER_WASM;
+    let uc_wasm = &*UNIVERSAL_CANISTER_WASM;
     let wasm_module_hash = ic_crypto_sha2::Sha256::hash(uc_wasm).to_vec();
     let hash = UploadChunkReply::decode(&get_reply(
         test.subnet_message(
@@ -1535,7 +1535,7 @@ fn install_chunked_recorded_in_history() {
     let canister_id = test.create_canister(CYCLES);
 
     // Upload universal canister.
-    let uc_wasm = UNIVERSAL_CANISTER_WASM;
+    let uc_wasm = &*UNIVERSAL_CANISTER_WASM;
     let wasm_module_hash = ic_crypto_sha2::Sha256::hash(uc_wasm).to_vec();
     let hash = UploadChunkReply::decode(&get_reply(
         test.subnet_message(
@@ -1604,13 +1604,12 @@ fn install_chunked_works_from_other_canister() {
     let store_canister = test.create_canister(CYCLES);
 
     // Upload universal canister chunk.
-    let uc_wasm = UNIVERSAL_CANISTER_WASM;
     let hash = UploadChunkReply::decode(&get_reply(
         test.subnet_message(
             "upload_chunk",
             UploadChunkArgs {
                 canister_id: store_canister.into(),
-                chunk: uc_wasm.to_vec(),
+                chunk: UNIVERSAL_CANISTER_WASM.to_vec(),
             }
             .encode(),
         ),
@@ -1651,13 +1650,12 @@ fn install_chunked_works_with_legacy_args() {
     let store_canister = test.create_canister(CYCLES);
 
     // Upload universal canister chunk.
-    let uc_wasm = UNIVERSAL_CANISTER_WASM;
     let hash = UploadChunkReply::decode(&get_reply(
         test.subnet_message(
             "upload_chunk",
             UploadChunkArgs {
                 canister_id: store_canister.into(),
-                chunk: uc_wasm.to_vec(),
+                chunk: UNIVERSAL_CANISTER_WASM.to_vec(),
             }
             .encode(),
         ),
@@ -1697,13 +1695,12 @@ fn install_chunked_fails_with_wrong_chunk_hash() {
     let canister_id = test.create_canister(CYCLES);
 
     // Upload universal canister chunk.
-    let uc_wasm = UNIVERSAL_CANISTER_WASM;
     let hash = UploadChunkReply::decode(&get_reply(
         test.subnet_message(
             "upload_chunk",
             UploadChunkArgs {
                 canister_id: canister_id.into(),
-                chunk: uc_wasm.to_vec(),
+                chunk: UNIVERSAL_CANISTER_WASM.to_vec(),
             }
             .encode(),
         ),
@@ -1743,13 +1740,12 @@ fn install_chunked_fails_with_wrong_wasm_hash() {
     let canister_id = test.create_canister(CYCLES);
 
     // Upload universal canister chunk.
-    let uc_wasm = UNIVERSAL_CANISTER_WASM;
     let hash = UploadChunkReply::decode(&get_reply(
         test.subnet_message(
             "upload_chunk",
             UploadChunkArgs {
                 canister_id: canister_id.into(),
-                chunk: uc_wasm.to_vec(),
+                chunk: UNIVERSAL_CANISTER_WASM.to_vec(),
             }
             .encode(),
         ),
@@ -1790,7 +1786,7 @@ fn install_chunked_fails_when_store_canister_not_found() {
     // Store canister doesn't actually exist.
     let store_canister = canister_test_id(0);
 
-    let hash = ic_crypto_sha2::Sha256::hash(UNIVERSAL_CANISTER_WASM).to_vec();
+    let hash = ic_crypto_sha2::Sha256::hash(&*UNIVERSAL_CANISTER_WASM).to_vec();
 
     // Install the universal canister
     let error = test
@@ -1820,13 +1816,12 @@ fn install_chunked_works_from_controller_of_store() {
     let store_canister = test.create_canister(CYCLES);
     let target_canister = test.create_canister(CYCLES);
     // Upload universal canister chunk to store.
-    let uc_wasm = UNIVERSAL_CANISTER_WASM;
     let hash = UploadChunkReply::decode(&get_reply(
         test.subnet_message(
             "upload_chunk",
             UploadChunkArgs {
                 canister_id: store_canister.into(),
-                chunk: uc_wasm.to_vec(),
+                chunk: UNIVERSAL_CANISTER_WASM.to_vec(),
             }
             .encode(),
         ),
@@ -1836,7 +1831,7 @@ fn install_chunked_works_from_controller_of_store() {
 
     // Create universal canister and use it to install on target.
     let uc = test
-        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
     test.set_controller(store_canister, uc.into()).unwrap();
     test.set_controller(target_canister, uc.into()).unwrap();
@@ -1875,13 +1870,12 @@ fn install_chunked_fails_from_noncontroller_of_store() {
     let store_canister = test.create_canister(CYCLES);
     let target_canister = test.create_canister(CYCLES);
     // Upload universal canister chunk to store.
-    let uc_wasm = UNIVERSAL_CANISTER_WASM;
     let hash = UploadChunkReply::decode(&get_reply(
         test.subnet_message(
             "upload_chunk",
             UploadChunkArgs {
                 canister_id: store_canister.into(),
-                chunk: uc_wasm.to_vec(),
+                chunk: UNIVERSAL_CANISTER_WASM.to_vec(),
             }
             .encode(),
         ),
@@ -1892,7 +1886,7 @@ fn install_chunked_fails_from_noncontroller_of_store() {
     // Create universal canister and use it to install on target.
     // Don't make it a controller of the store.
     let uc = test
-        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
     test.set_controller(target_canister, uc.into()).unwrap();
 
@@ -1945,19 +1939,18 @@ fn install_chunked_succeeds_from_store_canister() {
     // Install universal canister to canister which will also be the store and
     // make it a controller of the target.
     let store_canister = test
-        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
     test.set_controller(target_canister, store_canister.into())
         .unwrap();
 
     // Upload universal canister chunk to store.
-    let uc_wasm = UNIVERSAL_CANISTER_WASM;
     let hash = UploadChunkReply::decode(&get_reply(
         test.subnet_message(
             "upload_chunk",
             UploadChunkArgs {
                 canister_id: store_canister.into(),
-                chunk: uc_wasm.to_vec(),
+                chunk: UNIVERSAL_CANISTER_WASM.to_vec(),
             }
             .encode(),
         ),

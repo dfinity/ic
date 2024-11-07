@@ -12,7 +12,7 @@ use ic_cdk::api::management_canister::bitcoin::{BitcoinNetwork, SendTransactionR
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_test_utilities_load_wasm::load_wasm;
 use ic_types::Cycles;
-use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use ic_universal_canister::{call_args, get_universal_canister_wasm, wasm};
 use rand::{thread_rng, Rng};
 use std::str::FromStr;
 
@@ -59,7 +59,7 @@ fn test_install_bitcoin_mock_canister() {
         .build();
 
     let caller = env
-        .install_canister(UNIVERSAL_CANISTER_WASM.to_vec(), vec![], None)
+        .install_canister(get_universal_canister_wasm(), vec![], None)
         .expect("failed to install the universal canister");
     install_bitcoin_mock_canister(&env);
 

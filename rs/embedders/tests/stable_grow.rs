@@ -4,7 +4,7 @@ use proptest::{
 };
 
 use canister_test::{CanisterInstallMode, InstallCodeArgs};
-use ic_test_utilities::universal_canister::{wasm, UNIVERSAL_CANISTER_WASM};
+use ic_test_utilities::universal_canister::{get_universal_canister_wasm, wasm};
 use ic_test_utilities_execution_environment::ExecutionTestBuilder;
 use ic_types::{ingress::WasmResult, Cycles};
 
@@ -33,7 +33,7 @@ fn run_memory_grows(grows: &[GrowCommand]) {
     let args = InstallCodeArgs::new(
         CanisterInstallMode::Install,
         canister_id,
-        UNIVERSAL_CANISTER_WASM.to_vec(),
+        get_universal_canister_wasm(),
         vec![],
         None,
         None,

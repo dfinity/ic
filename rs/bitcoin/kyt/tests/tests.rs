@@ -10,7 +10,7 @@ use ic_btc_kyt::{
 };
 use ic_test_utilities_load_wasm::load_wasm;
 use ic_types::Cycles;
-use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use ic_universal_canister::{call_args, get_universal_canister_wasm, wasm};
 use pocket_ic::{
     common::rest::{
         CanisterHttpHeader, CanisterHttpReply, CanisterHttpRequest, CanisterHttpResponse,
@@ -68,7 +68,7 @@ impl Setup {
         env.add_cycles(caller, 100_000_000_000_000);
         env.install_canister(
             caller,
-            UNIVERSAL_CANISTER_WASM.to_vec(),
+            get_universal_canister_wasm(),
             vec![],
             Some(controller),
         );
