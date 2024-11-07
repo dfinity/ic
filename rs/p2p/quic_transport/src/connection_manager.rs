@@ -27,41 +27,92 @@
 //!     - Currently there is a periodic check that checks the status of the connection
 //!       and reconnects if necessary.
 use std::{
-    collections::{BTreeSet, HashMap},
+    collections::{
+        BTreeSet,
+        HashMap,
+    },
     net::SocketAddr,
-    sync::{Arc, RwLock},
+    sync::{
+        Arc,
+        RwLock,
+    },
     time::Duration,
 };
 
 use axum::{
-    body::Body, body::HttpBody, extract::Request, extract::State, middleware::from_fn_with_state,
-    middleware::Next, Router,
+    body::Body,
+    body::HttpBody,
+    extract::Request,
+    extract::State,
+    middleware::from_fn_with_state,
+    middleware::Next,
+    Router,
 };
 use futures::StreamExt;
 use ic_async_utils::JoinMap;
 use ic_base_types::NodeId;
-use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfig, TlsConfigError};
+use ic_crypto_tls_interfaces::{
+    SomeOrAllNodes,
+    TlsConfig,
+    TlsConfigError,
+};
 use ic_crypto_utils_tls::node_id_from_certificate_der;
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{error, info, ReplicaLogger};
+use ic_logger::{
+    error,
+    info,
+    ReplicaLogger,
+};
 use ic_metrics::MetricsRegistry;
 use quinn::{
-    crypto::rustls::{QuicClientConfig, QuicServerConfig},
-    AsyncUdpSocket, ConnectError, Connection, ConnectionError, Endpoint, EndpointConfig, Incoming,
-    Runtime, TokioRuntime, VarInt,
+    crypto::rustls::{
+        QuicClientConfig,
+        QuicServerConfig,
+    },
+    AsyncUdpSocket,
+    ConnectError,
+    Connection,
+    ConnectionError,
+    Endpoint,
+    EndpointConfig,
+    Incoming,
+    Runtime,
+    TokioRuntime,
+    VarInt,
 };
 use rustls::pki_types::CertificateDer;
-use socket2::{Domain, Protocol, SockAddr, Socket, Type};
+use socket2::{
+    Domain,
+    Protocol,
+    SockAddr,
+    Socket,
+    Type,
+};
 use thiserror::Error;
-use tokio::{runtime::Handle, select, task::JoinSet};
-use tokio_util::{sync::CancellationToken, time::DelayQueue};
+use tokio::{
+    runtime::Handle,
+    select,
+    task::JoinSet,
+};
+use tokio_util::{
+    sync::CancellationToken,
+    time::DelayQueue,
+};
 
 use crate::{
     connection_handle::ConnectionHandle,
-    metrics::{CONNECTION_RESULT_FAILED_LABEL, CONNECTION_RESULT_SUCCESS_LABEL},
-    ConnId, Shutdown, SubnetTopology,
+    metrics::{
+        CONNECTION_RESULT_FAILED_LABEL,
+        CONNECTION_RESULT_SUCCESS_LABEL,
+    },
+    ConnId,
+    Shutdown,
+    SubnetTopology,
 };
-use crate::{metrics::QuicTransportMetrics, request_handler::run_stream_acceptor};
+use crate::{
+    metrics::QuicTransportMetrics,
+    request_handler::run_stream_acceptor,
+};
 
 /// The value of 25MB is chosen from experiments and the BDP product shown below to support
 /// around 2Gb/s.

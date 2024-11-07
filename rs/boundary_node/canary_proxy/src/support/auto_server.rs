@@ -5,24 +5,54 @@
 
 use futures_util::ready;
 use std::future::Future;
-use std::io::{Error as IoError, ErrorKind, Result as IoResult};
+use std::io::{
+    Error as IoError,
+    ErrorKind,
+    Result as IoResult,
+};
 use std::marker::PhantomPinned;
 use std::pin::Pin;
-use std::task::{Context, Poll};
-use std::{error::Error as StdError, marker::Unpin, time::Duration};
+use std::task::{
+    Context,
+    Poll,
+};
+use std::{
+    error::Error as StdError,
+    marker::Unpin,
+    time::Duration,
+};
 
 use bytes::Bytes;
-use http::{Request, Response};
+use http::{
+    Request,
+    Response,
+};
 use hyper::{
-    body::{Body, Incoming},
-    rt::{bounds::Http2ServerConnExec, Timer},
-    server::conn::{http1, http2},
+    body::{
+        Body,
+        Incoming,
+    },
+    rt::{
+        bounds::Http2ServerConnExec,
+        Timer,
+    },
+    server::conn::{
+        http1,
+        http2,
+    },
     service::Service,
 };
 use pin_project_lite::pin_project;
-use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+use tokio::io::{
+    AsyncRead,
+    AsyncWrite,
+    ReadBuf,
+};
 
-use crate::support::{Rewind, TokioIo};
+use crate::support::{
+    Rewind,
+    TokioIo,
+};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -457,13 +487,36 @@ impl<E> Http2Builder<'_, E> {
 
 #[cfg(test)]
 mod tests {
-    use crate::support::{tokio_executor::TokioExecutor, ServerBuilder, TokioIo};
-    use http::{Request, Response};
+    use crate::support::{
+        tokio_executor::TokioExecutor,
+        ServerBuilder,
+        TokioIo,
+    };
+    use http::{
+        Request,
+        Response,
+    };
     use http_body::Body;
-    use http_body_util::{BodyExt, Empty, Full};
-    use hyper::{body, body::Bytes, client, service::service_fn};
-    use std::{convert::Infallible, error::Error as StdError, net::SocketAddr};
-    use tokio::net::{TcpListener, TcpStream};
+    use http_body_util::{
+        BodyExt,
+        Empty,
+        Full,
+    };
+    use hyper::{
+        body,
+        body::Bytes,
+        client,
+        service::service_fn,
+    };
+    use std::{
+        convert::Infallible,
+        error::Error as StdError,
+        net::SocketAddr,
+    };
+    use tokio::net::{
+        TcpListener,
+        TcpStream,
+    };
 
     const BODY: &[u8] = b"Hello, world!";
 

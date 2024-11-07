@@ -1,10 +1,15 @@
 use crate::errors::ApiError;
 use crate::models::amount::tokens_to_amount;
 use crate::models::{
-    ConstructionMetadataRequest, ConstructionMetadataRequestOptions, ConstructionMetadataResponse,
+    ConstructionMetadataRequest,
+    ConstructionMetadataRequestOptions,
+    ConstructionMetadataResponse,
     ConstructionPayloadsRequestMetadata,
 };
-use crate::request_handler::{verify_network_id, RosettaRequestHandler};
+use crate::request_handler::{
+    verify_network_id,
+    RosettaRequestHandler,
+};
 use crate::request_types::RequestType;
 
 impl RosettaRequestHandler {

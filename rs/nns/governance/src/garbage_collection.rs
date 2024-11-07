@@ -1,10 +1,19 @@
 use crate::{
-    governance::{Governance, LOG_PREFIX},
-    pb::v1::{ProposalData, Topic},
+    governance::{
+        Governance,
+        LOG_PREFIX,
+    },
+    pb::v1::{
+        ProposalData,
+        Topic,
+    },
 };
 use lazy_static::lazy_static;
 use maplit::hashset;
-use std::collections::{HashMap, HashSet};
+use std::collections::{
+    HashMap,
+    HashSet,
+};
 
 lazy_static! {
     static ref TOPICS_EXEMPT_FROM_GARBAGE_COLLECTION: HashSet<Topic> =

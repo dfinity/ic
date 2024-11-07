@@ -1,15 +1,37 @@
 use ic_ledger_canister_blocks_synchronizer::{
-    balance_book::{BalanceBook, ClientBalancesStore},
-    blocks::{BlockStoreError, Blocks},
+    balance_book::{
+        BalanceBook,
+        ClientBalancesStore,
+    },
+    blocks::{
+        BlockStoreError,
+        Blocks,
+    },
     timestamp_to_iso8601,
 };
-use ic_ledger_canister_blocks_synchronizer_test_utils::{create_tmp_dir, sample_data::Scribe};
-use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction};
-use ic_ledger_core::{
-    approvals::AllowanceTable, approvals::HeapAllowancesData, balances::BalancesStore,
-    block::BlockType, timestamp::TimeStamp, tokens::CheckedAdd, Tokens,
+use ic_ledger_canister_blocks_synchronizer_test_utils::{
+    create_tmp_dir,
+    sample_data::Scribe,
 };
-use icp_ledger::{apply_operation, AccountIdentifier, Block, Operation};
+use ic_ledger_canister_core::ledger::{
+    LedgerContext,
+    LedgerTransaction,
+};
+use ic_ledger_core::{
+    approvals::AllowanceTable,
+    approvals::HeapAllowancesData,
+    balances::BalancesStore,
+    block::BlockType,
+    timestamp::TimeStamp,
+    tokens::CheckedAdd,
+    Tokens,
+};
+use icp_ledger::{
+    apply_operation,
+    AccountIdentifier,
+    Block,
+    Operation,
+};
 use rusqlite::params;
 use std::path::Path;
 

@@ -2,14 +2,30 @@
 use crate::RecoveryResult;
 use crate::{
     error::RecoveryError,
-    file_sync_helper::{read_file, write_file},
+    file_sync_helper::{
+        read_file,
+        write_file,
+    },
 };
-use ic_base_types::{CanisterId, SubnetId};
+use ic_base_types::{
+    CanisterId,
+    SubnetId,
+};
 use ic_replay::{
-    cmd::{ClapSubnetId, ReplayToolArgs, SubCommand},
-    player::{ReplayError, StateParams},
+    cmd::{
+        ClapSubnetId,
+        ReplayToolArgs,
+        SubCommand,
+    },
+    player::{
+        ReplayError,
+        StateParams,
+    },
 };
-use std::{path::PathBuf, str::FromStr};
+use std::{
+    path::PathBuf,
+    str::FromStr,
+};
 
 pub const OUTPUT_FILE_NAME: &str = "replay_result.txt";
 

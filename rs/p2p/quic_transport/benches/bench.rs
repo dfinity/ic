@@ -1,26 +1,50 @@
 use std::{
-    net::{Ipv4Addr, SocketAddr},
+    net::{
+        Ipv4Addr,
+        SocketAddr,
+    },
     sync::Arc,
     time::Duration,
 };
 
 use axum::http::Request;
-use axum::{routing::any, Router};
+use axum::{
+    routing::any,
+    Router,
+};
 use bytes::Bytes;
 use criterion::{
-    criterion_group, criterion_main, measurement::WallTime, BatchSize, BenchmarkGroup, Criterion,
+    criterion_group,
+    criterion_main,
+    measurement::WallTime,
+    BatchSize,
+    BenchmarkGroup,
+    Criterion,
     Throughput,
 };
 use ic_base_types::NodeId;
-use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
+use ic_logger::{
+    replica_logger::no_op_logger,
+    ReplicaLogger,
+};
 use ic_metrics::MetricsRegistry;
 use ic_p2p_test_utils::{
-    create_registry_handle, temp_crypto_component_with_tls_keys, RegistryConsensusHandle,
+    create_registry_handle,
+    temp_crypto_component_with_tls_keys,
+    RegistryConsensusHandle,
 };
-use ic_quic_transport::{create_udp_socket, QuicTransport, SubnetTopology, Transport};
+use ic_quic_transport::{
+    create_udp_socket,
+    QuicTransport,
+    SubnetTopology,
+    Transport,
+};
 use ic_types_test_utils::ids::node_test_id;
 use tokio::{
-    runtime::{Handle, Runtime},
+    runtime::{
+        Handle,
+        Runtime,
+    },
     sync::watch,
     task::JoinSet,
 };

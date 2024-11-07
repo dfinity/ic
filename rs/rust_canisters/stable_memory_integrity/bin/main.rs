@@ -1,5 +1,11 @@
-use ic_cdk::api::stable::{stable_read, stable_size};
-use ic_cdk_macros::{query, update};
+use ic_cdk::api::stable::{
+    stable_read,
+    stable_size,
+};
+use ic_cdk_macros::{
+    query,
+    update,
+};
 
 use ic_stable_memory_integrity::StableOperationResult;
 

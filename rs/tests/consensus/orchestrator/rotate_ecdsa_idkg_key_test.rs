@@ -24,11 +24,17 @@ Success::
 end::catalog[] */
 
 use std::collections::HashMap;
-use std::time::{Duration, SystemTime};
+use std::time::{
+    Duration,
+    SystemTime,
+};
 
 use anyhow::bail;
 use anyhow::Result;
-use ic_base_types::{NodeId, RegistryVersion};
+use ic_base_types::{
+    NodeId,
+    RegistryVersion,
+};
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_consensus_system_test_utils::subnet::enable_chain_key_on_subnet;
 use ic_consensus_threshold_sig_system_test_utils::make_key_ids_for_all_schemes;
@@ -39,13 +45,27 @@ use ic_registry_keys::make_crypto_node_key;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
-use ic_system_test_driver::driver::{test_env::TestEnv, test_env_api::*};
+use ic_system_test_driver::driver::ic::{
+    InternetComputer,
+    Subnet,
+};
+use ic_system_test_driver::driver::{
+    test_env::TestEnv,
+    test_env_api::*,
+};
 use ic_system_test_driver::systest;
-use ic_system_test_driver::util::{block_on, get_nns_node, MessageCanister};
+use ic_system_test_driver::util::{
+    block_on,
+    get_nns_node,
+    MessageCanister,
+};
 use ic_types::crypto::KeyPurpose;
 use ic_types::Height;
-use slog::{info, warn, Logger};
+use slog::{
+    info,
+    warn,
+    Logger,
+};
 
 const DKG_INTERVAL: u64 = 9;
 const SUBNET_SIZE: usize = 3;

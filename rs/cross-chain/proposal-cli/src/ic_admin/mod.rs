@@ -6,7 +6,11 @@ use crate::proposal::ProposalTemplate;
 use askama::Template;
 use candid::Principal;
 use clap::Args;
-use std::path::{Path, PathBuf, StripPrefixError};
+use std::path::{
+    Path,
+    PathBuf,
+    StripPrefixError,
+};
 
 #[derive(Clone, Debug, Args)]
 pub struct IcAdminArgs {

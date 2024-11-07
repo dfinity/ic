@@ -1,14 +1,26 @@
-use crate::erc20::{CkErc20Token, CkTokenSymbol};
+use crate::erc20::{
+    CkErc20Token,
+    CkTokenSymbol,
+};
 use crate::logs::DEBUG;
 use crate::memo::BurnMemo;
 use crate::numeric::LedgerBurnIndex;
 use crate::state::State;
-use candid::{Nat, Principal};
+use candid::{
+    Nat,
+    Principal,
+};
 use ic_canister_log::log;
-use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
+use icrc_ledger_client_cdk::{
+    CdkRuntime,
+    ICRC1Client,
+};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
-use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
+use icrc_ledger_types::icrc2::transfer_from::{
+    TransferFromArgs,
+    TransferFromError,
+};
 use num_traits::ToPrimitive;
 
 pub struct LedgerClient {

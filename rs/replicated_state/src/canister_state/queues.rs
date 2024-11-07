@@ -7,29 +7,66 @@ mod tests;
 pub use self::input_schedule::CanisterQueuesLoopDetector;
 use self::input_schedule::InputSchedule;
 use self::message_pool::{
-    Context, InboundReference, Kind, MessagePool, OutboundReference, SomeReference,
+    Context,
+    InboundReference,
+    Kind,
+    MessagePool,
+    OutboundReference,
+    SomeReference,
 };
-use self::queue::{CanisterQueue, IngressQueue, InputQueue, OutputQueue};
+use self::queue::{
+    CanisterQueue,
+    IngressQueue,
+    InputQueue,
+    OutputQueue,
+};
 use crate::replicated_state::MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN;
-use crate::{CanisterState, CheckpointLoadingMetrics, InputQueueType, InputSource, StateError};
+use crate::{
+    CanisterState,
+    CheckpointLoadingMetrics,
+    InputQueueType,
+    InputSource,
+    StateError,
+};
 use ic_base_types::PrincipalId;
 use ic_error_types::RejectCode;
 use ic_management_canister_types::IC_00;
-use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_protobuf::proxy::{
+    try_from_option_field,
+    ProxyDecodeError,
+};
 use ic_protobuf::state::queues::v1 as pb_queues;
 use ic_protobuf::state::queues::v1::canister_queues::CanisterQueuePair;
 use ic_protobuf::types::v1 as pb_types;
 use ic_types::messages::{
-    CallbackId, Ingress, Payload, RejectContext, Request, RequestOrResponse, Response,
-    MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE,
+    CallbackId,
+    Ingress,
+    Payload,
+    RejectContext,
+    Request,
+    RequestOrResponse,
+    Response,
+    MAX_RESPONSE_COUNT_BYTES,
+    NO_DEADLINE,
 };
-use ic_types::{CanisterId, CountBytes, Time};
+use ic_types::{
+    CanisterId,
+    CountBytes,
+    Time,
+};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use message_pool::ToContext;
 use prost::Message;
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
-use std::convert::{From, TryFrom};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+    VecDeque,
+};
+use std::convert::{
+    From,
+    TryFrom,
+};
 use std::sync::Arc;
 use strum::EnumCount;
 
@@ -2008,10 +2045,22 @@ pub fn memory_required_to_push_request(req: &Request) -> usize {
 
 pub mod testing {
     use super::input_schedule::testing::InputScheduleTesting;
-    use super::{CanisterQueues, MessageStore};
-    use crate::{InputQueueType, StateError};
-    use ic_types::messages::{Request, RequestOrResponse};
-    use ic_types::{CanisterId, Time};
+    use super::{
+        CanisterQueues,
+        MessageStore,
+    };
+    use crate::{
+        InputQueueType,
+        StateError,
+    };
+    use ic_types::messages::{
+        Request,
+        RequestOrResponse,
+    };
+    use ic_types::{
+        CanisterId,
+        Time,
+    };
     use std::collections::VecDeque;
     use std::sync::Arc;
 

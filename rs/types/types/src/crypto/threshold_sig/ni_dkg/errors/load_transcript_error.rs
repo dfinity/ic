@@ -1,7 +1,11 @@
 //! Errors related to loading the transcript.
-use crate::crypto::error::{InternalError, InvalidArgumentError};
+use crate::crypto::error::{
+    InternalError,
+    InvalidArgumentError,
+};
 use crate::crypto::threshold_sig::ni_dkg::errors::{
-    FsEncryptionPublicKeyNotInRegistryError, MalformedFsEncryptionPublicKeyError,
+    FsEncryptionPublicKeyNotInRegistryError,
+    MalformedFsEncryptionPublicKeyError,
 };
 use crate::registry::RegistryClientError;
 use core::fmt;

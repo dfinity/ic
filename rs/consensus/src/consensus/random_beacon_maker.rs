@@ -3,12 +3,24 @@
 use ic_consensus_utils::{
     active_low_threshold_nidkg_id,
     crypto::ConsensusCrypto,
-    membership::{Membership, MembershipError},
+    membership::{
+        Membership,
+        MembershipError,
+    },
     pool_reader::PoolReader,
 };
-use ic_logger::{error, trace, ReplicaLogger};
+use ic_logger::{
+    error,
+    trace,
+    ReplicaLogger,
+};
 use ic_types::{
-    consensus::{HasCommittee, RandomBeacon, RandomBeaconContent, RandomBeaconShare},
+    consensus::{
+        HasCommittee,
+        RandomBeacon,
+        RandomBeaconContent,
+        RandomBeaconShare,
+    },
     replica_config::ReplicaConfig,
 };
 use std::sync::Arc;
@@ -105,7 +117,10 @@ impl RandomBeaconMaker {
 mod tests {
     //! BeaconMaker unit tests
     use super::*;
-    use ic_consensus_mocks::{dependencies, Dependencies};
+    use ic_consensus_mocks::{
+        dependencies,
+        Dependencies,
+    };
     use ic_interfaces::consensus_pool::ConsensusPool;
     use ic_logger::replica_logger::no_op_logger;
 

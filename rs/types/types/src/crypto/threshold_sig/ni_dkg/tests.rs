@@ -1,10 +1,19 @@
 use super::*;
 use crate::crypto::tests::set_of;
 use crate::NumberOfNodes;
-use ic_crypto_internal_types::curves::bls12_381::{FrBytes, G1Bytes, G2Bytes};
+use ic_crypto_internal_types::curves::bls12_381::{
+    FrBytes,
+    G1Bytes,
+    G2Bytes,
+};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
-    Dealing, EncryptedShares, PublicCoefficientsBytes, ZKProofDec, ZKProofShare, NUM_CHUNKS,
+    Dealing,
+    EncryptedShares,
+    PublicCoefficientsBytes,
+    ZKProofDec,
+    ZKProofShare,
+    NUM_CHUNKS,
     NUM_ZK_REPETITIONS,
 };
 

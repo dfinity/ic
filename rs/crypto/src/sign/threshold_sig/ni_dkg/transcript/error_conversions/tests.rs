@@ -1,6 +1,8 @@
 mod load_transcript_error_conversions {
     use ic_crypto_internal_threshold_sig_bls12381::api::dkg_errors::{
-        InvalidArgumentError, KeyNotFoundError, MalformedSecretKeyError,
+        InvalidArgumentError,
+        KeyNotFoundError,
+        MalformedSecretKeyError,
     };
     use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::CspDkgLoadPrivateKeyError;
     use ic_types::crypto::error::MalformedDataError;

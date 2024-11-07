@@ -3,48 +3,95 @@ use crate::{
     pb::{
         hash_to_hex_string,
         v1::{
-            add_wasm_response, AddWasmRequest, AddWasmResponse, DappCanistersTransferResult,
-            DeployNewSnsRequest, DeployNewSnsResponse, DeployedSns,
-            GetDeployedSnsByProposalIdRequest, GetDeployedSnsByProposalIdResponse,
-            GetNextSnsVersionRequest, GetNextSnsVersionResponse, GetProposalIdThatAddedWasmRequest,
-            GetProposalIdThatAddedWasmResponse, GetSnsSubnetIdsResponse,
+            add_wasm_response,
+            AddWasmRequest,
+            AddWasmResponse,
+            DappCanistersTransferResult,
+            DeployNewSnsRequest,
+            DeployNewSnsResponse,
+            DeployedSns,
+            GetDeployedSnsByProposalIdRequest,
+            GetDeployedSnsByProposalIdResponse,
+            GetNextSnsVersionRequest,
+            GetNextSnsVersionResponse,
+            GetProposalIdThatAddedWasmRequest,
+            GetProposalIdThatAddedWasmResponse,
+            GetSnsSubnetIdsResponse,
             GetWasmMetadataRequest as GetWasmMetadataRequestPb,
-            GetWasmMetadataResponse as GetWasmMetadataResponsePb, GetWasmRequest, GetWasmResponse,
-            InsertUpgradePathEntriesRequest, InsertUpgradePathEntriesResponse,
-            ListDeployedSnsesRequest, ListDeployedSnsesResponse, ListUpgradeStep,
-            ListUpgradeStepsRequest, ListUpgradeStepsResponse,
-            MetadataSection as MetadataSectionPb, SnsCanisterIds, SnsCanisterType, SnsUpgrade,
-            SnsVersion, SnsWasm, SnsWasmError, SnsWasmStableIndex, StableCanisterState,
-            UpdateSnsSubnetListRequest, UpdateSnsSubnetListResponse,
+            GetWasmMetadataResponse as GetWasmMetadataResponsePb,
+            GetWasmRequest,
+            GetWasmResponse,
+            InsertUpgradePathEntriesRequest,
+            InsertUpgradePathEntriesResponse,
+            ListDeployedSnsesRequest,
+            ListDeployedSnsesResponse,
+            ListUpgradeStep,
+            ListUpgradeStepsRequest,
+            ListUpgradeStepsResponse,
+            MetadataSection as MetadataSectionPb,
+            SnsCanisterIds,
+            SnsCanisterType,
+            SnsUpgrade,
+            SnsVersion,
+            SnsWasm,
+            SnsWasmError,
+            SnsWasmStableIndex,
+            StableCanisterState,
+            UpdateSnsSubnetListRequest,
+            UpdateSnsSubnetListResponse,
         },
     },
     stable_memory::SnsWasmStableMemory,
     wasm_metadata::MetadataSection,
 };
 use candid::Encode;
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_cdk::api::stable::StableMemory;
 use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
-use ic_nervous_system_common::{ONE_TRILLION, SNS_CREATION_FEE};
+use ic_nervous_system_common::{
+    ONE_TRILLION,
+    SNS_CREATION_FEE,
+};
 use ic_nervous_system_proto::pb::v1::Canister;
 use ic_nns_constants::{
     DEFAULT_SNS_GOVERNANCE_CANISTER_WASM_MEMORY_LIMIT,
     DEFAULT_SNS_NON_GOVERNANCE_CANISTER_WASM_MEMORY_LIMIT,
 };
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
+use ic_nns_constants::{
+    GOVERNANCE_CANISTER_ID,
+    ROOT_CANISTER_ID,
+};
 use ic_nns_handler_root_interface::{
-    client::NnsRootCanisterClient, ChangeCanisterControllersRequest,
+    client::NnsRootCanisterClient,
+    ChangeCanisterControllersRequest,
     ChangeCanisterControllersResult,
 };
 use ic_sns_governance::pb::v1::governance::Version;
-use ic_sns_init::{pb::v1::SnsInitPayload, SnsCanisterInitPayloads};
+use ic_sns_init::{
+    pb::v1::SnsInitPayload,
+    SnsCanisterInitPayloads,
+};
 use ic_sns_root::GetSnsCanistersSummaryResponse;
-use ic_types::{Cycles, SubnetId};
+use ic_types::{
+    Cycles,
+    SubnetId,
+};
 use ic_wasm;
-use maplit::{btreemap, hashmap};
+use maplit::{
+    btreemap,
+    hashmap,
+};
 use std::{
     cell::RefCell,
-    collections::{hash_map::Entry, BTreeMap, HashMap, HashSet},
+    collections::{
+        hash_map::Entry,
+        BTreeMap,
+        HashMap,
+        HashSet,
+    },
     convert::TryInto,
     iter::zip,
     thread::LocalKey,
@@ -360,7 +407,10 @@ where
     /// Try reading the metadata sections of a WASM with the given hash from stable memory,
     /// if such a WASM exists.
     fn read_wasm_metadata_or_err(wasm: &SnsWasm) -> Result<Vec<MetadataSection>, String> {
-        use ic_wasm::{metadata, utils};
+        use ic_wasm::{
+            metadata,
+            utils,
+        };
 
         // We don't care for symbol names in the WASM module as we just want the custom sections
         // containing the metadata.
@@ -1996,20 +2046,37 @@ impl From<GetSnsCanistersSummaryResponse> for SnsCanisterIds {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{canister_stable_memory::TestCanisterStableMemory, pb::v1::SnsUpgrade};
+    use crate::{
+        canister_stable_memory::TestCanisterStableMemory,
+        pb::v1::SnsUpgrade,
+    };
     use async_trait::async_trait;
     use ic_base_types::PrincipalId;
     use ic_crypto_sha2::Sha256;
     use ic_nervous_system_common_test_utils::wasm_helpers;
-    use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
-    use ic_nns_handler_root_interface::client::{
-        SpyNnsRootCanisterClient, SpyNnsRootCanisterClientCall, SpyNnsRootCanisterClientReply,
+    use ic_nns_constants::{
+        GOVERNANCE_CANISTER_ID,
+        ROOT_CANISTER_ID,
     };
-    use ic_sns_init::pb::v1::{DappCanisters, SnsInitPayload};
-    use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id};
+    use ic_nns_handler_root_interface::client::{
+        SpyNnsRootCanisterClient,
+        SpyNnsRootCanisterClientCall,
+        SpyNnsRootCanisterClientReply,
+    };
+    use ic_sns_init::pb::v1::{
+        DappCanisters,
+        SnsInitPayload,
+    };
+    use ic_test_utilities_types::ids::{
+        canister_test_id,
+        subnet_test_id,
+    };
     use pretty_assertions::assert_eq;
     use std::{
-        sync::{Arc, Mutex},
+        sync::{
+            Arc,
+            Mutex,
+        },
         vec,
     };
 
@@ -5014,7 +5081,8 @@ mod test {
     mod get_wasm_metadata {
         use super::*;
         use crate::pb::v1::{
-            get_wasm_metadata_response, GetWasmMetadataRequest as GetWasmMetadataRequestPb,
+            get_wasm_metadata_response,
+            GetWasmMetadataRequest as GetWasmMetadataRequestPb,
             GetWasmMetadataResponse as GetWasmMetadataResponsePb,
             MetadataSection as MetadataSectionPb,
         };
@@ -5042,7 +5110,10 @@ mod test {
                 hash: Some(hash.to_vec()),
             });
 
-            use get_wasm_metadata_response::{Ok, Result};
+            use get_wasm_metadata_response::{
+                Ok,
+                Result,
+            };
             assert_eq!(
                 response,
                 GetWasmMetadataResponsePb {
@@ -5126,7 +5197,10 @@ mod test {
             let response =
                 canister.get_wasm_metadata(GetWasmMetadataRequestPb { hash: Some(hash) });
 
-            use get_wasm_metadata_response::{Ok, Result};
+            use get_wasm_metadata_response::{
+                Ok,
+                Result,
+            };
             assert_eq!(
                 response,
                 GetWasmMetadataResponsePb {
@@ -5176,7 +5250,10 @@ mod test {
             let response =
                 canister.get_wasm_metadata(GetWasmMetadataRequestPb { hash: Some(hash) });
 
-            use get_wasm_metadata_response::{Ok, Result};
+            use get_wasm_metadata_response::{
+                Ok,
+                Result,
+            };
             assert_eq!(
                 response,
                 GetWasmMetadataResponsePb {
@@ -5225,7 +5302,10 @@ mod test {
             let response =
                 canister.get_wasm_metadata(GetWasmMetadataRequestPb { hash: Some(hash) });
 
-            use get_wasm_metadata_response::{Ok, Result};
+            use get_wasm_metadata_response::{
+                Ok,
+                Result,
+            };
             assert_eq!(
                 response,
                 GetWasmMetadataResponsePb {

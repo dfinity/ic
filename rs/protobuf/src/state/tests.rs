@@ -1,7 +1,13 @@
 use prost::Message;
 
-use crate::state::queues::v1::{request_or_response::R, *};
-use crate::types::v1::{CanisterId, PrincipalId};
+use crate::state::queues::v1::{
+    request_or_response::R,
+    *,
+};
+use crate::types::v1::{
+    CanisterId,
+    PrincipalId,
+};
 
 /// Tests that `prost` can correctly encode and then decode a protobuf of over 2 GB.
 #[test]

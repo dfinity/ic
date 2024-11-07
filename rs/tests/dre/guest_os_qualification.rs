@@ -1,16 +1,24 @@
 use ic_protobuf::registry::subnet::v1::SubnetType;
 use ic_system_test_driver::driver::{
     group::SystemTestGroup,
-    test_env_api::{read_dependency_from_env_to_string, read_dependency_to_string},
+    test_env_api::{
+        read_dependency_from_env_to_string,
+        read_dependency_to_string,
+    },
 };
 use os_qualification_utils::{
     defs::QualificationExecutor,
     steps::{
         ensure_elected_version::EnsureElectedVersion,
-        retire_elected_version::RetireElectedVersions, update_subnet_type::UpdateSubnetType,
-        workload::Workload, xnet::XNet,
+        retire_elected_version::RetireElectedVersions,
+        update_subnet_type::UpdateSubnetType,
+        workload::Workload,
+        xnet::XNet,
     },
-    ConfigurableSubnet, ConfigurableUnassignedNodes, IcConfig, SubnetSimple,
+    ConfigurableSubnet,
+    ConfigurableUnassignedNodes,
+    IcConfig,
+    SubnetSimple,
 };
 use std::time::Duration;
 

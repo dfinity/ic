@@ -9,29 +9,51 @@ use ic_config::crypto::CryptoConfig;
 use ic_crypto_node_key_generation::generate_node_keys_once;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_test_utils::registry::{
-    get_committee_signing_key, get_dkg_dealing_key, get_idkg_dealing_encryption_key,
-    get_node_operator_record, get_node_record, get_node_signing_key, get_transport_tls_certificate,
+    get_committee_signing_key,
+    get_dkg_dealing_key,
+    get_idkg_dealing_encryption_key,
+    get_node_operator_record,
+    get_node_record,
+    get_node_signing_key,
+    get_transport_tls_certificate,
     new_node_keys_and_node_id,
 };
 use ic_nns_test_utils::{
     itest_helpers::{
-        forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
+        forward_call_via_universal_canister,
+        local_test_on_nns_subnet,
+        set_up_registry_canister,
         set_up_universal_canister,
     },
-    registry::{get_value_or_panic, prepare_registry, TEST_ID},
+    registry::{
+        get_value_or_panic,
+        prepare_registry,
+        TEST_ID,
+    },
 };
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::{
-    node::v1::{ConnectionEndpoint, NodeRecord},
+    node::v1::{
+        ConnectionEndpoint,
+        NodeRecord,
+    },
     node_operator::v1::NodeOperatorRecord,
     subnet::v1::SubnetRecord,
 };
 use ic_registry_keys::{
-    make_crypto_node_key, make_node_operator_record_key, make_node_record_key,
+    make_crypto_node_key,
+    make_node_operator_record_key,
+    make_node_record_key,
     make_subnet_record_key,
 };
-use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest};
-use ic_test_utilities_types::ids::{node_test_id, user_test_id};
+use ic_registry_transport::{
+    insert,
+    pb::v1::RegistryAtomicMutateRequest,
+};
+use ic_test_utilities_types::ids::{
+    node_test_id,
+    user_test_id,
+};
 use ic_types::crypto::KeyPurpose;
 use ic_types::NodeId;
 use prost::Message;

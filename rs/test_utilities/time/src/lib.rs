@@ -1,7 +1,16 @@
 use ic_interfaces::time_source::TimeSource;
-use ic_types::time::{Time, UNIX_EPOCH};
-use std::sync::{Arc, RwLock};
-use std::time::{Duration, Instant};
+use ic_types::time::{
+    Time,
+    UNIX_EPOCH,
+};
+use std::sync::{
+    Arc,
+    RwLock,
+};
+use std::time::{
+    Duration,
+    Instant,
+};
 
 /// A pure implementation of [TimeSource] that requires manual
 /// fast forward to advance time.

@@ -1,12 +1,19 @@
 use candid::candid_method;
 use ic_cdk_macros::init;
 use ic_xrc_types::{
-    Asset, AssetClass, ExchangeRate, ExchangeRateMetadata, GetExchangeRateRequest,
+    Asset,
+    AssetClass,
+    ExchangeRate,
+    ExchangeRateMetadata,
+    GetExchangeRateRequest,
     GetExchangeRateResult,
 };
 use std::cell::RefCell;
 use std::collections::BTreeMap;
-use xrc_mock::{SetExchangeRate, XrcMockInitPayload};
+use xrc_mock::{
+    SetExchangeRate,
+    XrcMockInitPayload,
+};
 
 fn main() {}
 

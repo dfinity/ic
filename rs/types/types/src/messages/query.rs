@@ -1,9 +1,17 @@
 use crate::{
     messages::{
-        http::{representation_independent_hash_call_or_query, CallOrQuery},
-        HasCanisterId, HttpRequestError, HttpUserQuery, MessageId,
+        http::{
+            representation_independent_hash_call_or_query,
+            CallOrQuery,
+        },
+        HasCanisterId,
+        HttpRequestError,
+        HttpUserQuery,
+        MessageId,
     },
-    CanisterId, PrincipalId, UserId,
+    CanisterId,
+    PrincipalId,
+    UserId,
 };
 use ic_management_canister_types::IC_00;
 use std::convert::TryFrom;
@@ -103,7 +111,10 @@ impl HasCanisterId for Query {
 
 #[cfg(test)]
 mod test {
-    use super::super::{Blob, HttpUserQuery};
+    use super::super::{
+        Blob,
+        HttpUserQuery,
+    };
     use maplit::btreemap;
     use serde::Deserialize;
     use serde_cbor::Value;

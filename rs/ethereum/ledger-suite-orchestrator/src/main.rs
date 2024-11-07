@@ -1,14 +1,30 @@
 use ic_cdk::api::management_canister::main::{
-    canister_status, CanisterIdRecord, CanisterStatusResponse,
+    canister_status,
+    CanisterIdRecord,
+    CanisterStatusResponse,
 };
-use ic_cdk_macros::{init, post_upgrade, query, update};
+use ic_cdk_macros::{
+    init,
+    post_upgrade,
+    query,
+    update,
+};
 use ic_ledger_suite_orchestrator::candid::Erc20Contract as CandidErc20Contract;
-use ic_ledger_suite_orchestrator::candid::{ManagedCanisterIds, OrchestratorArg, OrchestratorInfo};
+use ic_ledger_suite_orchestrator::candid::{
+    ManagedCanisterIds,
+    OrchestratorArg,
+    OrchestratorInfo,
+};
 use ic_ledger_suite_orchestrator::lifecycle;
 use ic_ledger_suite_orchestrator::scheduler::{
-    encode_orchestrator_metrics, Erc20Token, IC_CANISTER_RUNTIME,
+    encode_orchestrator_metrics,
+    Erc20Token,
+    IC_CANISTER_RUNTIME,
 };
-use ic_ledger_suite_orchestrator::state::{read_state, TokenId};
+use ic_ledger_suite_orchestrator::state::{
+    read_state,
+    TokenId,
+};
 use ic_ledger_suite_orchestrator::storage::read_wasm_store;
 use ic_ledger_suite_orchestrator::storage::TASKS;
 
@@ -123,7 +139,11 @@ fn http_request(
                 .build()
         }
         "/logs" => {
-            use ic_ledger_suite_orchestrator::logs::{Log, Priority, Sort};
+            use ic_ledger_suite_orchestrator::logs::{
+                Log,
+                Priority,
+                Sort,
+            };
             use std::str::FromStr;
 
             let max_skip_timestamp = match req.raw_query_param("time") {

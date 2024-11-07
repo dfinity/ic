@@ -3,9 +3,17 @@ use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use itertools::izip;
 use paste::paste;
 use rand::seq::IteratorRandom;
-use rand::{CryptoRng, Rng, RngCore, SeedableRng};
+use rand::{
+    CryptoRng,
+    Rng,
+    RngCore,
+    SeedableRng,
+};
 use rand_chacha::ChaCha20Rng;
-use sha2::{Digest, Sha256};
+use sha2::{
+    Digest,
+    Sha256,
+};
 
 fn scalar_test_encoding(scalar: Scalar, expected_value: &'static str) {
     assert_eq!(hex::encode(scalar.serialize()), expected_value);

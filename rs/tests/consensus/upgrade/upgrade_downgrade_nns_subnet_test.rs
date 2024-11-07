@@ -2,17 +2,26 @@ use std::time::Duration;
 
 use anyhow::Result;
 
-use ic_consensus_system_test_upgrade_common::{bless_branch_version, upgrade};
+use ic_consensus_system_test_upgrade_common::{
+    bless_branch_version,
+    upgrade,
+};
 use ic_consensus_system_test_utils::rw_message::{
-    can_read_msg_with_retries, install_nns_and_check_progress,
+    can_read_msg_with_retries,
+    install_nns_and_check_progress,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::ic::{
+    InternetComputer,
+    Subnet,
+};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::HasPublicApiUrl;
 use ic_system_test_driver::driver::test_env_api::{
-    read_dependency_to_string, GetFirstHealthyNodeSnapshot, HasTopologySnapshot,
+    read_dependency_to_string,
+    GetFirstHealthyNodeSnapshot,
+    HasTopologySnapshot,
 };
 use ic_system_test_driver::systest;
 use ic_types::Height;

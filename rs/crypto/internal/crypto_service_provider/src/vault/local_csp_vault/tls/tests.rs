@@ -25,7 +25,10 @@ mod keygen {
     use mockall::Sequence;
     use proptest::proptest;
     use rand::SeedableRng;
-    use rand::{CryptoRng, Rng};
+    use rand::{
+        CryptoRng,
+        Rng,
+    };
     use std::collections::BTreeSet;
     use std::sync::Arc;
     use std::time::Duration;
@@ -33,7 +36,11 @@ mod keygen {
     use time::macros::format_description;
     use time::PrimitiveDateTime;
     use x509_parser::num_bigint;
-    use x509_parser::{certificate::X509Certificate, prelude::FromDer, x509::X509Name}; // re-export of num_bigint
+    use x509_parser::{
+        certificate::X509Certificate,
+        prelude::FromDer,
+        x509::X509Name,
+    }; // re-export of num_bigint
 
     const NANOS_PER_SEC: i64 = 1_000_000_000;
 
@@ -433,7 +440,11 @@ mod sign {
     use crate::Csp;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_types::crypto::AlgorithmId;
-    use rand::{CryptoRng, Rng, SeedableRng};
+    use rand::{
+        CryptoRng,
+        Rng,
+        SeedableRng,
+    };
     use rand_chacha::ChaCha20Rng;
 
     #[test]

@@ -1,39 +1,85 @@
 use crate::{
-    governance::{Governance, TimeWarp, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER},
-    logs::{ERROR, INFO},
+    governance::{
+        Governance,
+        TimeWarp,
+        NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER,
+    },
+    logs::{
+        ERROR,
+        INFO,
+    },
     pb::{
         sns_root_types::{
-            set_dapp_controllers_request::CanisterIds, ManageDappCanisterSettingsRequest,
-            RegisterDappCanistersRequest, SetDappControllersRequest,
+            set_dapp_controllers_request::CanisterIds,
+            ManageDappCanisterSettingsRequest,
+            RegisterDappCanistersRequest,
+            SetDappControllersRequest,
         },
         v1::{
             claim_swap_neurons_request::{
-                neuron_recipe::{self, Participant},
-                NeuronRecipe, NeuronRecipes,
+                neuron_recipe::{
+                    self,
+                    Participant,
+                },
+                NeuronRecipe,
+                NeuronRecipes,
             },
-            claim_swap_neurons_response::{ClaimSwapNeuronsResult, ClaimedSwapNeurons, SwapNeuron},
+            claim_swap_neurons_response::{
+                ClaimSwapNeuronsResult,
+                ClaimedSwapNeurons,
+                SwapNeuron,
+            },
             get_neuron_response,
             governance::{
                 self,
-                neuron_in_flight_command::{self, SyncCommand},
+                neuron_in_flight_command::{
+                    self,
+                    SyncCommand,
+                },
                 SnsMetadata,
             },
             governance_error::ErrorType,
             manage_neuron,
             manage_neuron_response::{
-                self, DisburseMaturityResponse, MergeMaturityResponse, StakeMaturityResponse,
+                self,
+                DisburseMaturityResponse,
+                MergeMaturityResponse,
+                StakeMaturityResponse,
             },
             nervous_system_function::FunctionType,
             neuron::Followees,
             proposal::Action,
-            upgrade_journal_entry, ClaimSwapNeuronsError, ClaimSwapNeuronsResponse,
-            ClaimedSwapNeuronStatus, DefaultFollowees, DeregisterDappCanisters, Empty,
-            ExecuteGenericNervousSystemFunction, GovernanceError, ManageDappCanisterSettings,
-            ManageLedgerParameters, ManageNeuronResponse, ManageSnsMetadata, MintSnsTokens, Motion,
-            NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId, NeuronIds,
-            NeuronPermission, NeuronPermissionList, NeuronPermissionType, ProposalId,
-            RegisterDappCanisters, RewardEvent, TransferSnsTreasuryFunds,
-            UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote, VotingRewardsParameters,
+            upgrade_journal_entry,
+            ClaimSwapNeuronsError,
+            ClaimSwapNeuronsResponse,
+            ClaimedSwapNeuronStatus,
+            DefaultFollowees,
+            DeregisterDappCanisters,
+            Empty,
+            ExecuteGenericNervousSystemFunction,
+            GovernanceError,
+            ManageDappCanisterSettings,
+            ManageLedgerParameters,
+            ManageNeuronResponse,
+            ManageSnsMetadata,
+            MintSnsTokens,
+            Motion,
+            NervousSystemFunction,
+            NervousSystemParameters,
+            Neuron,
+            NeuronId,
+            NeuronIds,
+            NeuronPermission,
+            NeuronPermissionList,
+            NeuronPermissionType,
+            ProposalId,
+            RegisterDappCanisters,
+            RewardEvent,
+            TransferSnsTreasuryFunds,
+            UpgradeSnsControlledCanister,
+            UpgradeSnsToNextVersion,
+            Vote,
+            VotingRewardsParameters,
         },
     },
     proposal::ValidGenericNervousSystemFunction,
@@ -46,19 +92,33 @@ use ic_icrc1_ledger::UpgradeArgs as LedgerUpgradeArgs;
 use ic_ledger_core::tokens::TOKEN_SUBDIVIDABLE_BY;
 use ic_management_canister_types::CanisterInstallModeError;
 use ic_nervous_system_common::{
-    ledger_validation::MAX_LOGO_LENGTH, NervousSystemError, DEFAULT_TRANSFER_FEE, ONE_DAY_SECONDS,
-    ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
+    ledger_validation::MAX_LOGO_LENGTH,
+    NervousSystemError,
+    DEFAULT_TRANSFER_FEE,
+    ONE_DAY_SECONDS,
+    ONE_MONTH_SECONDS,
+    ONE_YEAR_SECONDS,
 };
 use ic_nervous_system_common_validation::validate_proposal_url;
-use ic_nervous_system_proto::pb::v1::{Duration as PbDuration, Percentage};
+use ic_nervous_system_proto::pb::v1::{
+    Duration as PbDuration,
+    Percentage,
+};
 use ic_sns_governance_proposal_criticality::{
-    ProposalCriticality, VotingDurationParameters, VotingPowerThresholds,
+    ProposalCriticality,
+    VotingDurationParameters,
+    VotingPowerThresholds,
 };
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use lazy_static::lazy_static;
 use maplit::btreemap;
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    collections::{
+        BTreeMap,
+        BTreeSet,
+        HashMap,
+        HashSet,
+    },
     convert::TryFrom,
     fmt,
 };
@@ -2537,7 +2597,10 @@ pub mod test_helpers {
     use std::{
         borrow::BorrowMut,
         collections::HashMap,
-        sync::{Arc, RwLock},
+        sync::{
+            Arc,
+            RwLock,
+        },
     };
 
     type CanisterCallResult = Result<Vec<u8>, (Option<i32>, String)>;
@@ -2774,15 +2837,24 @@ pub(crate) mod tests {
     use crate::pb::v1::{
         claim_swap_neurons_request::neuron_recipe,
         governance::Mode::PreInitializationSwap,
-        nervous_system_function::{FunctionType, GenericNervousSystemFunction},
+        nervous_system_function::{
+            FunctionType,
+            GenericNervousSystemFunction,
+        },
         neuron::Followees,
-        ExecuteGenericNervousSystemFunction, Proposal, ProposalData, VotingRewardsParameters,
+        ExecuteGenericNervousSystemFunction,
+        Proposal,
+        ProposalData,
+        VotingRewardsParameters,
     };
     use ic_base_types::PrincipalId;
     use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
     use ic_nervous_system_proto::pb::v1::Principals;
     use lazy_static::lazy_static;
-    use maplit::{btreemap, hashset};
+    use maplit::{
+        btreemap,
+        hashset,
+    };
     use std::convert::TryInto;
 
     #[test]

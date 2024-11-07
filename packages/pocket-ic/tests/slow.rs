@@ -1,5 +1,14 @@
-use candid::{Encode, Principal};
-use pocket_ic::{common::rest::DtsFlag, PocketIc, PocketIcBuilder, UserError, WasmResult};
+use candid::{
+    Encode,
+    Principal,
+};
+use pocket_ic::{
+    common::rest::DtsFlag,
+    PocketIc,
+    PocketIcBuilder,
+    UserError,
+    WasmResult,
+};
 use std::time::Duration;
 
 // 200T cycles

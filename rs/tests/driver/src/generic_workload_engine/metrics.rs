@@ -1,16 +1,28 @@
 use std::fmt::Display;
 use std::time::Instant;
 use std::{
-    cmp::{max, min},
-    collections::{BTreeMap, HashMap},
+    cmp::{
+        max,
+        min,
+    },
+    collections::{
+        BTreeMap,
+        HashMap,
+    },
     time::Duration,
 };
 
 use async_trait::async_trait;
 use itertools::Itertools;
-use slog::{info, Logger};
+use slog::{
+    info,
+    Logger,
+};
 
-use crate::util::{add_box_drawing_left_border, pad_all_lines_but_first};
+use crate::util::{
+    add_box_drawing_left_border,
+    pad_all_lines_but_first,
+};
 
 use super::engine::Engine;
 

@@ -1,12 +1,18 @@
 use ic_system_test_driver::driver::{
     log_events,
-    report::{SystemGroupSummary, TaskReport},
+    report::{
+        SystemGroupSummary,
+        TaskReport,
+    },
     test_env_api::FarmBaseUrl,
 };
 use std::{
     env,
     path::PathBuf,
-    process::{Command, Output},
+    process::{
+        Command,
+        Output,
+    },
 };
 use tempfile::Builder;
 

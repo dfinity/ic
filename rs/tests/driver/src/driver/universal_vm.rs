@@ -8,28 +8,51 @@ use crate::driver::ic::VmAllocationStrategy;
 use crate::driver::ic::VmResources;
 use crate::driver::resource::AllocatedVm;
 use crate::driver::resource::{
-    allocate_resources, get_resource_request_for_universal_vm, DiskImage,
+    allocate_resources,
+    get_resource_request_for_universal_vm,
+    DiskImage,
 };
 use crate::driver::test_env::SshKeyGen;
-use crate::driver::test_env::{TestEnv, TestEnvAttribute};
-use crate::driver::test_env_api::{
-    get_dependency_path, get_ssh_session_from_env, HasTestEnv, HasVmName, RetrieveIpv4Addr,
-    SshSession, RETRY_BACKOFF, SSH_RETRY_TIMEOUT,
+use crate::driver::test_env::{
+    TestEnv,
+    TestEnvAttribute,
 };
-use crate::driver::test_setup::{GroupSetup, InfraProvider};
+use crate::driver::test_env_api::{
+    get_dependency_path,
+    get_ssh_session_from_env,
+    HasTestEnv,
+    HasVmName,
+    RetrieveIpv4Addr,
+    SshSession,
+    RETRY_BACKOFF,
+    SSH_RETRY_TIMEOUT,
+};
+use crate::driver::test_setup::{
+    GroupSetup,
+    InfraProvider,
+};
 use crate::k8s::datavolume::DataVolumeContentType;
 use crate::k8s::images::upload_image;
 use crate::k8s::tnet::TNet;
 use crate::retry_with_msg;
 use crate::util::block_on;
-use anyhow::{bail, Result};
+use anyhow::{
+    bail,
+    Result,
+};
 use chrono::Duration;
 use chrono::Utc;
 use slog::info;
 use ssh2::Session;
-use std::fs::{self, File};
+use std::fs::{
+    self,
+    File,
+};
 use std::io::Write;
-use std::net::{IpAddr, Ipv4Addr};
+use std::net::{
+    IpAddr,
+    Ipv4Addr,
+};
 use std::os::unix::prelude::PermissionsExt;
 use std::path::Path;
 use std::path::PathBuf;

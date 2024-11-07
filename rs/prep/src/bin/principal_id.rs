@@ -1,11 +1,17 @@
-use clap::{Parser, ValueEnum};
+use clap::{
+    Parser,
+    ValueEnum,
+};
 use ic_types::PrincipalId;
 use std::{
     env,
     fs::File,
     io,
     io::Read,
-    path::{Path, PathBuf},
+    path::{
+        Path,
+        PathBuf,
+    },
     string::ToString,
 };
 use x509_cert::der; // re-export of der crate

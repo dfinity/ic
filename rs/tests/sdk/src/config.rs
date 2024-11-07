@@ -1,6 +1,10 @@
 use ic_system_test_driver::driver::{
     test_env::TestEnv,
-    test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
+    test_env_api::{
+        HasPublicApiUrl,
+        HasTopologySnapshot,
+        IcNodeContainer,
+    },
 };
 use serde_json::json;
 use slog::info;

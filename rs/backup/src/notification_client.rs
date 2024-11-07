@@ -1,7 +1,11 @@
 use std::path::Path;
 
 use crate::util::block_on;
-use slog::{error, info, Logger};
+use slog::{
+    error,
+    info,
+    Logger,
+};
 use std::time::Duration;
 use url::Url;
 

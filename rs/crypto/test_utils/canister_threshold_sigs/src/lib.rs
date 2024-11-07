@@ -1,38 +1,89 @@
 //! Utilities for testing IDkg and canister threshold signature operations.
 
-use crate::node::{Node, Nodes};
+use crate::node::{
+    Node,
+    Nodes,
+};
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::test_utils::{
-    corrupt_dealing, ComplaintCorrupter,
+    corrupt_dealing,
+    ComplaintCorrupter,
 };
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
-    IDkgComplaintInternal, IDkgDealingInternal, NodeIndex, Seed,
+    IDkgComplaintInternal,
+    IDkgDealingInternal,
+    NodeIndex,
+    Seed,
 };
-use ic_crypto_temp_crypto::{TempCryptoComponent, TempCryptoComponentGeneric};
+use ic_crypto_temp_crypto::{
+    TempCryptoComponent,
+    TempCryptoComponentGeneric,
+};
 use ic_interfaces::crypto::{
-    BasicSigner, IDkgProtocol, KeyManager, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
-    ThresholdSchnorrSigVerifier, ThresholdSchnorrSigner,
+    BasicSigner,
+    IDkgProtocol,
+    KeyManager,
+    ThresholdEcdsaSigVerifier,
+    ThresholdEcdsaSigner,
+    ThresholdSchnorrSigVerifier,
+    ThresholdSchnorrSigner,
 };
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::crypto::canister_threshold_sig::idkg::InitialIDkgDealings;
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    BatchSignedIDkgDealing, BatchSignedIDkgDealings, IDkgComplaint, IDkgDealers, IDkgDealing,
-    IDkgMaskedTranscriptOrigin, IDkgOpening, IDkgReceivers, IDkgTranscript, IDkgTranscriptId,
-    IDkgTranscriptOperation, IDkgTranscriptParams, IDkgTranscriptType,
-    IDkgUnmaskedTranscriptOrigin, SignedIDkgDealing,
+    BatchSignedIDkgDealing,
+    BatchSignedIDkgDealings,
+    IDkgComplaint,
+    IDkgDealers,
+    IDkgDealing,
+    IDkgMaskedTranscriptOrigin,
+    IDkgOpening,
+    IDkgReceivers,
+    IDkgTranscript,
+    IDkgTranscriptId,
+    IDkgTranscriptOperation,
+    IDkgTranscriptParams,
+    IDkgTranscriptType,
+    IDkgUnmaskedTranscriptOrigin,
+    SignedIDkgDealing,
 };
 use ic_types::crypto::canister_threshold_sig::{
-    EcdsaPreSignatureQuadruple, ExtendedDerivationPath, SchnorrPreSignatureTranscript,
-    ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
-    ThresholdSchnorrCombinedSignature, ThresholdSchnorrSigInputs, ThresholdSchnorrSigShare,
+    EcdsaPreSignatureQuadruple,
+    ExtendedDerivationPath,
+    SchnorrPreSignatureTranscript,
+    ThresholdEcdsaCombinedSignature,
+    ThresholdEcdsaSigInputs,
+    ThresholdEcdsaSigShare,
+    ThresholdSchnorrCombinedSignature,
+    ThresholdSchnorrSigInputs,
+    ThresholdSchnorrSigShare,
 };
-use ic_types::crypto::{AlgorithmId, BasicSig, BasicSigOf, KeyPurpose, Signed};
-use ic_types::signature::{BasicSignature, BasicSignatureBatch};
-use ic_types::{Height, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId};
+use ic_types::crypto::{
+    AlgorithmId,
+    BasicSig,
+    BasicSigOf,
+    KeyPurpose,
+    Signed,
+};
+use ic_types::signature::{
+    BasicSignature,
+    BasicSignatureBatch,
+};
+use ic_types::{
+    Height,
+    NodeId,
+    PrincipalId,
+    Randomness,
+    RegistryVersion,
+    SubnetId,
+};
 use rand::prelude::*;
 use rand_chacha::ChaCha20Rng;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
 use std::sync::Arc;
 use strum_macros::EnumIter;
 
@@ -291,11 +342,23 @@ pub fn build_params_from_previous<R: RngCore + CryptoRng>(
 }
 
 pub mod node {
-    use crate::{IDkgParticipants, IDkgParticipantsRandom};
-    use ic_crypto_temp_crypto::{TempCryptoComponent, TempCryptoComponentGeneric};
+    use crate::{
+        IDkgParticipants,
+        IDkgParticipantsRandom,
+    };
+    use ic_crypto_temp_crypto::{
+        TempCryptoComponent,
+        TempCryptoComponentGeneric,
+    };
     use ic_interfaces::crypto::{
-        BasicSigVerifier, BasicSigner, CurrentNodePublicKeysError, IDkgProtocol, KeyManager,
-        ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner, ThresholdSchnorrSigVerifier,
+        BasicSigVerifier,
+        BasicSigner,
+        CurrentNodePublicKeysError,
+        IDkgProtocol,
+        KeyManager,
+        ThresholdEcdsaSigVerifier,
+        ThresholdEcdsaSigner,
+        ThresholdSchnorrSigVerifier,
         ThresholdSchnorrSigner,
     };
     use ic_logger::ReplicaLogger;
@@ -304,34 +367,80 @@ pub mod node {
     use ic_test_utilities_in_memory_logger::InMemoryReplicaLogger;
     use ic_types::consensus::get_faults_tolerated;
     use ic_types::crypto::canister_threshold_sig::error::{
-        IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
-        IDkgOpenTranscriptError, IDkgRetainKeysError, IDkgVerifyComplaintError,
-        IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError,
-        IDkgVerifyInitialDealingsError, IDkgVerifyOpeningError, IDkgVerifyTranscriptError,
-        ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaCreateSigShareError,
-        ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
-        ThresholdSchnorrCombineSigSharesError, ThresholdSchnorrCreateSigShareError,
-        ThresholdSchnorrVerifyCombinedSigError, ThresholdSchnorrVerifySigShareError,
+        IDkgCreateDealingError,
+        IDkgCreateTranscriptError,
+        IDkgLoadTranscriptError,
+        IDkgOpenTranscriptError,
+        IDkgRetainKeysError,
+        IDkgVerifyComplaintError,
+        IDkgVerifyDealingPrivateError,
+        IDkgVerifyDealingPublicError,
+        IDkgVerifyInitialDealingsError,
+        IDkgVerifyOpeningError,
+        IDkgVerifyTranscriptError,
+        ThresholdEcdsaCombineSigSharesError,
+        ThresholdEcdsaCreateSigShareError,
+        ThresholdEcdsaVerifyCombinedSignatureError,
+        ThresholdEcdsaVerifySigShareError,
+        ThresholdSchnorrCombineSigSharesError,
+        ThresholdSchnorrCreateSigShareError,
+        ThresholdSchnorrVerifyCombinedSigError,
+        ThresholdSchnorrVerifySigShareError,
     };
     use ic_types::crypto::canister_threshold_sig::idkg::{
-        BatchSignedIDkgDealing, BatchSignedIDkgDealings, IDkgComplaint, IDkgDealers, IDkgOpening,
-        IDkgReceivers, IDkgTranscript, IDkgTranscriptOperation, IDkgTranscriptParams,
-        InitialIDkgDealings, SignedIDkgDealing,
+        BatchSignedIDkgDealing,
+        BatchSignedIDkgDealings,
+        IDkgComplaint,
+        IDkgDealers,
+        IDkgOpening,
+        IDkgReceivers,
+        IDkgTranscript,
+        IDkgTranscriptOperation,
+        IDkgTranscriptParams,
+        InitialIDkgDealings,
+        SignedIDkgDealing,
     };
     use ic_types::crypto::canister_threshold_sig::{
-        ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
-        ThresholdSchnorrCombinedSignature, ThresholdSchnorrSigInputs, ThresholdSchnorrSigShare,
+        ThresholdEcdsaCombinedSignature,
+        ThresholdEcdsaSigInputs,
+        ThresholdEcdsaSigShare,
+        ThresholdSchnorrCombinedSignature,
+        ThresholdSchnorrSigInputs,
+        ThresholdSchnorrSigShare,
     };
-    use ic_types::crypto::{BasicSigOf, CryptoResult, CurrentNodePublicKeys, Signable};
+    use ic_types::crypto::{
+        BasicSigOf,
+        CryptoResult,
+        CurrentNodePublicKeys,
+        Signable,
+    };
     use ic_types::signature::BasicSignatureBatch;
-    use ic_types::{NodeId, RegistryVersion};
+    use ic_types::{
+        NodeId,
+        RegistryVersion,
+    };
     use rand::seq::IteratorRandom;
-    use rand::{CryptoRng, Rng, RngCore, SeedableRng};
+    use rand::{
+        CryptoRng,
+        Rng,
+        RngCore,
+        SeedableRng,
+    };
     use rand_chacha::ChaCha20Rng;
     use std::cmp::Ordering;
-    use std::collections::btree_set::{IntoIter, Iter};
-    use std::collections::{BTreeMap, BTreeSet, HashSet};
-    use std::fmt::{Debug, Formatter};
+    use std::collections::btree_set::{
+        IntoIter,
+        Iter,
+    };
+    use std::collections::{
+        BTreeMap,
+        BTreeSet,
+        HashSet,
+    };
+    use std::fmt::{
+        Debug,
+        Formatter,
+    };
     use std::sync::Arc;
 
     /// Node involved in IDKG protocol as a receiver or as a dealer or both.
@@ -2881,12 +2990,18 @@ pub fn generate_initial_dealings<R: RngCore + CryptoRng>(
 
 pub mod ecdsa {
     use super::{
-        generate_key_transcript, generate_tecdsa_protocol_inputs,
-        CanisterThresholdSigTestEnvironment, IDkgParticipants,
+        generate_key_transcript,
+        generate_tecdsa_protocol_inputs,
+        CanisterThresholdSigTestEnvironment,
+        IDkgParticipants,
     };
-    use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealers, IDkgReceivers};
+    use ic_types::crypto::canister_threshold_sig::idkg::{
+        IDkgDealers,
+        IDkgReceivers,
+    };
     use ic_types::crypto::canister_threshold_sig::{
-        ExtendedDerivationPath, ThresholdEcdsaSigInputs,
+        ExtendedDerivationPath,
+        ThresholdEcdsaSigInputs,
     };
     use ic_types::crypto::AlgorithmId;
     use ic_types::PrincipalId;
@@ -2937,12 +3052,18 @@ pub mod ecdsa {
 
 pub mod schnorr {
     use super::{
-        generate_key_transcript, generate_tschnorr_protocol_inputs,
-        CanisterThresholdSigTestEnvironment, IDkgParticipants,
+        generate_key_transcript,
+        generate_tschnorr_protocol_inputs,
+        CanisterThresholdSigTestEnvironment,
+        IDkgParticipants,
     };
-    use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealers, IDkgReceivers};
+    use ic_types::crypto::canister_threshold_sig::idkg::{
+        IDkgDealers,
+        IDkgReceivers,
+    };
     use ic_types::crypto::canister_threshold_sig::{
-        ExtendedDerivationPath, ThresholdSchnorrSigInputs,
+        ExtendedDerivationPath,
+        ThresholdSchnorrSigInputs,
     };
     use ic_types::crypto::AlgorithmId;
     use ic_types::PrincipalId;

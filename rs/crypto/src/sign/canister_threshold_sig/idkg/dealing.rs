@@ -1,25 +1,40 @@
 //! Implementations of IDkgProtocol related to dealings
 
-use crate::sign::basic_sig::{BasicSigVerifierInternal, BasicSignerInternal};
+use crate::sign::basic_sig::{
+    BasicSigVerifierInternal,
+    BasicSignerInternal,
+};
 use crate::sign::canister_threshold_sig::idkg::utils::{
-    fetch_idkg_dealing_encryption_public_key_from_registry, key_id_from_mega_public_key_or_panic,
-    retrieve_mega_public_key_from_registry, MegaKeyFromRegistryError,
+    fetch_idkg_dealing_encryption_public_key_from_registry,
+    key_id_from_mega_public_key_or_panic,
+    retrieve_mega_public_key_from_registry,
+    MegaKeyFromRegistryError,
 };
 use ic_base_types::RegistryVersion;
 use ic_crypto_internal_csp::api::CspSigner;
 use ic_crypto_internal_csp::vault::api::{
-    CspVault, IDkgCreateDealingVaultError, IDkgDealingInternalBytes,
+    CspVault,
+    IDkgCreateDealingVaultError,
+    IDkgDealingInternalBytes,
 };
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
-    publicly_verify_dealing, IDkgDealingInternal, IDkgTranscriptOperationInternal,
+    publicly_verify_dealing,
+    IDkgDealingInternal,
+    IDkgTranscriptOperationInternal,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_types::crypto::canister_threshold_sig::error::{
-    IDkgCreateDealingError, IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError,
+    IDkgCreateDealingError,
+    IDkgVerifyDealingPrivateError,
+    IDkgVerifyDealingPublicError,
     IDkgVerifyInitialDealingsError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    IDkgDealing, IDkgReceivers, IDkgTranscriptParams, InitialIDkgDealings, SignedIDkgDealing,
+    IDkgDealing,
+    IDkgReceivers,
+    IDkgTranscriptParams,
+    InitialIDkgDealings,
+    SignedIDkgDealing,
 };
 use ic_types::signature::BasicSignature;
 use ic_types::NodeId;

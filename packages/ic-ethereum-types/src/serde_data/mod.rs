@@ -3,8 +3,14 @@
 #[cfg(test)]
 mod tests;
 
-use hex::{FromHex, ToHex};
-use serde::de::{Error, Visitor};
+use hex::{
+    FromHex,
+    ToHex,
+};
+use serde::de::{
+    Error,
+    Visitor,
+};
 use serde::Deserializer;
 use serde::Serializer;
 use std::fmt;

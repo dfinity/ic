@@ -1,57 +1,112 @@
 use crate::sns::root::get_sns_canisters_summary;
 use assert_matches::assert_matches;
-use candid::{Nat, Principal};
+use candid::{
+    Nat,
+    Principal,
+};
 use canister_test::Wasm;
-use futures::{stream, StreamExt};
-use ic_base_types::{CanisterId, PrincipalId};
+use futures::{
+    stream,
+    StreamExt,
+};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::{
-    assert_is_ok, i2d, ledger::compute_distribution_subaccount_bytes, E8, ONE_DAY_SECONDS,
+    assert_is_ok,
+    i2d,
+    ledger::compute_distribution_subaccount_bytes,
+    E8,
+    ONE_DAY_SECONDS,
 };
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL;
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
     pocket_ic_helpers::{
-        add_wasms_to_sns_wasm, install_canister_with_controllers, install_nns_canisters, nns,
-        sns::{self, swap::SwapFinalizationStatus},
+        add_wasms_to_sns_wasm,
+        install_canister_with_controllers,
+        install_nns_canisters,
+        nns,
+        sns::{
+            self,
+            swap::SwapFinalizationStatus,
+        },
     },
 };
-use ic_nervous_system_proto::pb::v1::{Duration as DurationPb, Tokens as TokensPb};
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
+use ic_nervous_system_proto::pb::v1::{
+    Duration as DurationPb,
+    Tokens as TokensPb,
+};
+use ic_nns_constants::{
+    GOVERNANCE_CANISTER_ID,
+    ROOT_CANISTER_ID,
+};
 use ic_nns_governance::neurons_fund::neurons_fund_neuron::pick_most_important_hotkeys;
 use ic_nns_governance_api::pb::v1::{
     create_service_nervous_system::initial_token_distribution::developer_distribution::NeuronDistribution,
-    get_neurons_fund_audit_info_response, neurons_fund_snapshot::NeuronsFundNeuronPortion,
-    CreateServiceNervousSystem, Neuron,
+    get_neurons_fund_audit_info_response,
+    neurons_fund_snapshot::NeuronsFundNeuronPortion,
+    CreateServiceNervousSystem,
+    Neuron,
 };
 use ic_sns_governance::{
     governance::TREASURY_SUBACCOUNT_NONCE,
-    pb::v1::{self as sns_pb, NeuronPermissionType},
+    pb::v1::{
+        self as sns_pb,
+        NeuronPermissionType,
+    },
 };
 use ic_sns_init::distributions::MAX_DEVELOPER_DISTRIBUTION_COUNT;
 use ic_sns_root::CanisterSummary;
 use ic_sns_swap::{
     pb::v1::{
-        new_sale_ticket_response, set_dapp_controllers_call_result, set_mode_call_result,
-        settle_neurons_fund_participation_result, BuyerState, FinalizeSwapResponse,
-        GetDerivedStateResponse, Lifecycle, RefreshBuyerTokensResponse,
-        SetDappControllersCallResult, SetDappControllersResponse, SetModeCallResult,
-        SettleNeuronsFundParticipationResult, SweepResult,
+        new_sale_ticket_response,
+        set_dapp_controllers_call_result,
+        set_mode_call_result,
+        settle_neurons_fund_participation_result,
+        BuyerState,
+        FinalizeSwapResponse,
+        GetDerivedStateResponse,
+        Lifecycle,
+        RefreshBuyerTokensResponse,
+        SetDappControllersCallResult,
+        SetDappControllersResponse,
+        SetModeCallResult,
+        SettleNeuronsFundParticipationResult,
+        SweepResult,
     },
     swap::principal_to_subaccount,
 };
 use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
-use icp_ledger::{AccountIdentifier, DEFAULT_TRANSFER_FEE};
-use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
+use icp_ledger::{
+    AccountIdentifier,
+    DEFAULT_TRANSFER_FEE,
+};
+use icrc_ledger_types::icrc1::{
+    account::Account,
+    transfer::TransferArg,
+};
 use maplit::btreemap;
 use pocket_ic::PocketIcBuilder;
 use rust_decimal::{
-    prelude::{FromPrimitive, ToPrimitive},
+    prelude::{
+        FromPrimitive,
+        ToPrimitive,
+    },
     Decimal,
 };
 use std::{
-    collections::{BTreeMap, BTreeSet},
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    collections::{
+        BTreeMap,
+        BTreeSet,
+    },
+    time::{
+        Duration,
+        SystemTime,
+        UNIX_EPOCH,
+    },
 };
 
 #[derive(Copy, Clone, Debug)]
@@ -990,7 +1045,10 @@ async fn test_sns_lifecycle(
                 } else {
                     (Some(0), Some(0))
                 };
-            use settle_neurons_fund_participation_result::{Ok, Possibility};
+            use settle_neurons_fund_participation_result::{
+                Ok,
+                Possibility,
+            };
             Some(SettleNeuronsFundParticipationResult {
                 possibility: Some(Possibility::Ok(Ok {
                     neurons_fund_participation_icp_e8s,

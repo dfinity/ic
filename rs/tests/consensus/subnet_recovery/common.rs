@@ -33,43 +33,90 @@ use canister_test::Canister;
 use ic_base_types::NodeId;
 use ic_consensus_system_test_utils::{
     rw_message::{
-        can_read_msg, cannot_store_msg, cert_state_makes_progress_with_retries,
-        install_nns_and_check_progress, store_message,
+        can_read_msg,
+        cannot_store_msg,
+        cert_state_makes_progress_with_retries,
+        install_nns_and_check_progress,
+        store_message,
     },
     set_sandbox_env_vars,
     ssh_access::execute_bash_command,
     subnet::{
-        assert_subnet_is_healthy, disable_chain_key_on_subnet, enable_chain_key_signing_on_subnet,
+        assert_subnet_is_healthy,
+        disable_chain_key_on_subnet,
+        enable_chain_key_signing_on_subnet,
     },
 };
 use ic_consensus_threshold_sig_system_test_utils::{
-    create_new_subnet_with_keys, make_key_ids_for_all_schemes, run_chain_key_signature_test,
+    create_new_subnet_with_keys,
+    make_key_ids_for_all_schemes,
+    run_chain_key_signature_test,
 };
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_protobuf::types::v1 as pb;
 use ic_recovery::{
-    app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs, StepType},
+    app_subnet_recovery::{
+        AppSubnetRecovery,
+        AppSubnetRecoveryArgs,
+        StepType,
+    },
     steps::Step,
-    NodeMetrics, Recovery, RecoveryArgs,
+    NodeMetrics,
+    Recovery,
+    RecoveryArgs,
 };
-use ic_recovery::{file_sync_helper, get_node_metrics};
-use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
+use ic_recovery::{
+    file_sync_helper,
+    get_node_metrics,
+};
+use ic_registry_subnet_features::{
+    ChainKeyConfig,
+    KeyConfig,
+    DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::constants::SSH_USERNAME;
 use ic_system_test_driver::driver::driver_setup::{
-    SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR,
+    SSH_AUTHORIZED_PRIV_KEYS_DIR,
+    SSH_AUTHORIZED_PUB_KEYS_DIR,
 };
-use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
-use ic_system_test_driver::driver::{test_env::TestEnv, test_env_api::*};
+use ic_system_test_driver::driver::ic::{
+    InternetComputer,
+    Subnet,
+};
+use ic_system_test_driver::driver::{
+    test_env::TestEnv,
+    test_env_api::*,
+};
 use ic_system_test_driver::util::*;
-use ic_types::{consensus::CatchUpPackage, Height, ReplicaVersion, SubnetId};
+use ic_types::{
+    consensus::CatchUpPackage,
+    Height,
+    ReplicaVersion,
+    SubnetId,
+};
 use prost::Message;
-use serde::{Deserialize, Serialize};
-use slog::{info, Logger};
-use std::{collections::BTreeMap, convert::TryFrom};
-use std::{io::Read, time::Duration};
-use std::{io::Write, path::Path};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use slog::{
+    info,
+    Logger,
+};
+use std::{
+    collections::BTreeMap,
+    convert::TryFrom,
+};
+use std::{
+    io::Read,
+    time::Duration,
+};
+use std::{
+    io::Write,
+    path::Path,
+};
 use url::Url;
 
 const DKG_INTERVAL: u64 = 9;

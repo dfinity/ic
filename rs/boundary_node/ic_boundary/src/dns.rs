@@ -1,8 +1,16 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::{
+    net::SocketAddr,
+    sync::Arc,
+};
 
 use arc_swap::ArcSwapOption;
 use futures_util::future::ready;
-use reqwest::dns::{Addrs, Name, Resolve, Resolving};
+use reqwest::dns::{
+    Addrs,
+    Name,
+    Resolve,
+    Resolving,
+};
 
 use crate::snapshot::RegistrySnapshot;
 

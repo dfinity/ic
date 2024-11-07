@@ -2,15 +2,34 @@ use std::sync::Arc;
 
 use anyhow::anyhow;
 use arc_swap::ArcSwapOption;
-use ic_crypto_utils_tls::{node_id_from_certificate_der, NodeIdFromCertificateDerError};
+use ic_crypto_utils_tls::{
+    node_id_from_certificate_der,
+    NodeIdFromCertificateDerError,
+};
 use rustls::{
-    client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
-    crypto::{verify_tls12_signature, verify_tls13_signature},
-    pki_types::{CertificateDer, ServerName, UnixTime},
-    CertificateError, DigitallySignedStruct, Error as RustlsError,
+    client::danger::{
+        HandshakeSignatureValid,
+        ServerCertVerified,
+        ServerCertVerifier,
+    },
+    crypto::{
+        verify_tls12_signature,
+        verify_tls13_signature,
+    },
+    pki_types::{
+        CertificateDer,
+        ServerName,
+        UnixTime,
+    },
+    CertificateError,
+    DigitallySignedStruct,
+    Error as RustlsError,
 };
 use x509_parser::{
-    prelude::{FromDer, X509Certificate},
+    prelude::{
+        FromDer,
+        X509Certificate,
+    },
     time::ASN1Time,
 };
 

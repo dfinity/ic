@@ -1,7 +1,11 @@
-use ic_interfaces_registry::{RegistryDataProvider, RegistryTransportRecord};
+use ic_interfaces_registry::{
+    RegistryDataProvider,
+    RegistryTransportRecord,
+};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_types::{
-    crypto::threshold_sig::ThresholdSigPublicKey, registry::RegistryDataProviderError,
+    crypto::threshold_sig::ThresholdSigPublicKey,
+    registry::RegistryDataProviderError,
     RegistryVersion,
 };
 use std::sync::Arc;

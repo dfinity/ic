@@ -2,7 +2,10 @@ use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_tls_cert_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_types::{NodeId, RegistryVersion};
+use ic_types::{
+    NodeId,
+    RegistryVersion,
+};
 use std::sync::Arc;
 
 pub const REG_V1: RegistryVersion = RegistryVersion::new(1);

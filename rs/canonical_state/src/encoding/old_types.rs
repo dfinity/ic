@@ -4,7 +4,10 @@
 //! made here.
 
 use std::{
-    convert::{TryFrom, TryInto},
+    convert::{
+        TryFrom,
+        TryInto,
+    },
     sync::Arc,
 };
 
@@ -12,14 +15,26 @@ use crate::CertificationVersion;
 
 use super::types;
 use crate::encoding::types::{
-    Bytes, Cycles, Funds, Response, StreamFlagBits as StreamFlagBitsV17,
+    Bytes,
+    Cycles,
+    Funds,
+    Response,
+    StreamFlagBits as StreamFlagBitsV17,
     STREAM_DEFAULT_FLAGS as STREAM_DEFAULT_FLAGS_V17,
     STREAM_SUPPORTED_FLAGS as STREAM_SUPPORTED_FLAGS_V17,
 };
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_types::messages::NO_DEADLINE;
-use ic_types::xnet::{RejectReason, RejectSignal, StreamHeader, StreamIndex};
-use serde::{Deserialize, Serialize};
+use ic_types::xnet::{
+    RejectReason,
+    RejectSignal,
+    StreamHeader,
+    StreamIndex,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::collections::VecDeque;
 
 /// Copy of `types::RequestOrResponse` at canonical version 17 (before the

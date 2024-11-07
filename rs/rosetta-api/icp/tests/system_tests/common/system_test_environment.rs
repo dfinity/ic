@@ -2,15 +2,25 @@ use crate::common::utils::get_custom_agent;
 use crate::common::utils::get_test_agent;
 use crate::common::utils::wait_for_rosetta_to_catch_up_with_icp_ledger;
 use crate::common::{
-    constants::{DEFAULT_INITIAL_BALANCE, STARTING_CYCLES_PER_CANISTER},
+    constants::{
+        DEFAULT_INITIAL_BALANCE,
+        STARTING_CYCLES_PER_CANISTER,
+    },
     utils::test_identity,
 };
-use candid::{Encode, Principal};
+use candid::{
+    Encode,
+    Principal,
+};
 use ic_agent::Identity;
 use ic_icp_rosetta_client::RosettaClient;
 use ic_icp_rosetta_client::RosettaTransferArgs;
 use ic_icp_rosetta_runner::RosettaOptions;
-use ic_icp_rosetta_runner::{start_rosetta, RosettaContext, RosettaOptionsBuilder};
+use ic_icp_rosetta_runner::{
+    start_rosetta,
+    RosettaContext,
+    RosettaOptionsBuilder,
+};
 use ic_icrc1_test_utils::minter_identity;
 use ic_icrc1_test_utils::ArgWithCaller;
 use ic_icrc1_test_utils::LedgerEndpointArg;
@@ -30,12 +40,18 @@ use ic_nns_test_utils::common::build_registry_wasm;
 use ic_nns_test_utils::common::build_root_wasm;
 use ic_rosetta_test_utils::path_from_env;
 use ic_types::PrincipalId;
-use icp_ledger::{AccountIdentifier, LedgerCanisterInitPayload};
+use icp_ledger::{
+    AccountIdentifier,
+    LedgerCanisterInitPayload,
+};
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::account::Account;
 use num_traits::cast::ToPrimitive;
 use pocket_ic::CanisterSettings;
-use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder};
+use pocket_ic::{
+    nonblocking::PocketIc,
+    PocketIcBuilder,
+};
 use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 use rosetta_core::identifiers::NetworkIdentifier;

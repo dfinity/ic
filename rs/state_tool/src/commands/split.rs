@@ -4,7 +4,10 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_state_manager::split::resolve_ranges_and_split;
-use ic_types::{PrincipalId, Time};
+use ic_types::{
+    PrincipalId,
+    Time,
+};
 use std::path::PathBuf;
 
 /// Loads the latest checkpoint under the given root; splits off the state of

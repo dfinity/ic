@@ -1,4 +1,7 @@
-use ic_crypto_sha2::{Context, Sha256};
+use ic_crypto_sha2::{
+    Context,
+    Sha256,
+};
 use std::hash::Hash;
 
 const EXPECTED_DIGEST: [u8; 32] = [

@@ -3,7 +3,12 @@
 use ic_crypto_internal_logmon::metrics::MetricsResult;
 use ic_metrics::MetricsRegistry;
 use ic_test_utilities_metrics::{
-    fetch_counter_vec, fetch_gauge, fetch_gauge_vec, fetch_int_counter, labels, Labels,
+    fetch_counter_vec,
+    fetch_gauge,
+    fetch_gauge_vec,
+    fetch_int_counter,
+    labels,
+    Labels,
 };
 
 pub struct MetricsObservationsAssert {

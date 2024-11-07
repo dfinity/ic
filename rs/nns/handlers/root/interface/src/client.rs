@@ -1,6 +1,8 @@
 use crate::{
-    ChangeCanisterControllersError, ChangeCanisterControllersRequest,
-    ChangeCanisterControllersResponse, ChangeCanisterControllersResult,
+    ChangeCanisterControllersError,
+    ChangeCanisterControllersRequest,
+    ChangeCanisterControllersResponse,
+    ChangeCanisterControllersResult,
 };
 use async_trait::async_trait;
 use dfn_candid::candid_one;
@@ -9,13 +11,19 @@ use ic_base_types::PrincipalId;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::{
-        CanisterStatusResult, CanisterStatusType, DefiniteCanisterSettings, LogVisibility,
+        CanisterStatusResult,
+        CanisterStatusType,
+        DefiniteCanisterSettings,
+        LogVisibility,
     },
 };
 use ic_nns_constants::ROOT_CANISTER_ID;
 use std::{
     collections::VecDeque,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc,
+        Mutex,
+    },
 };
 
 /// A trait for interacting with the APIs of the NNS Root Canister.

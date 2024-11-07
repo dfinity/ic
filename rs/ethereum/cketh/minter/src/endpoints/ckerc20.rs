@@ -1,6 +1,11 @@
 use crate::ledger_client::LedgerBurnError;
 use crate::state::transactions::Erc20WithdrawalRequest;
-use candid::{CandidType, Deserialize, Nat, Principal};
+use candid::{
+    CandidType,
+    Deserialize,
+    Nat,
+    Principal,
+};
 
 #[derive(CandidType, Deserialize)]
 pub struct WithdrawErc20Arg {

@@ -1,10 +1,23 @@
 use ic_canonical_state::{
-    size_limit_visitor::{Matcher::*, SizeLimitVisitor},
-    subtree_visitor::{Pattern, SubtreeVisitor},
-    traverse, Control, LabelLike, Visitor, MAX_SUPPORTED_CERTIFICATION_VERSION,
+    size_limit_visitor::{
+        Matcher::*,
+        SizeLimitVisitor,
+    },
+    subtree_visitor::{
+        Pattern,
+        SubtreeVisitor,
+    },
+    traverse,
+    Control,
+    LabelLike,
+    Visitor,
+    MAX_SUPPORTED_CERTIFICATION_VERSION,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{testing::ReplicatedStateTesting, ReplicatedState};
+use ic_replicated_state::{
+    testing::ReplicatedStateTesting,
+    ReplicatedState,
+};
 use ic_test_utilities_state::arb_stream;
 use ic_test_utilities_types::ids::subnet_test_id;
 use proptest::prelude::*;

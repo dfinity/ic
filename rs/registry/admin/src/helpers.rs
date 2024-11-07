@@ -1,20 +1,37 @@
 use crate::{
-    types::{NodeDetails, SubnetRecord},
+    types::{
+        NodeDetails,
+        SubnetRecord,
+    },
     SubnetDescriptor,
 };
 use ic_canister_client::Sender;
-use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
+use ic_nervous_system_common_test_keys::{
+    TEST_NEURON_1_ID,
+    TEST_NEURON_1_OWNER_KEYPAIR,
+};
 use ic_nns_common::types::NeuronId;
 use ic_protobuf::registry::subnet::v1::{
-    SubnetListRecord as SubnetListRecordPb, SubnetRecord as SubnetRecordPb,
+    SubnetListRecord as SubnetListRecordPb,
+    SubnetRecord as SubnetRecordPb,
 };
-use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
+use ic_registry_keys::{
+    make_subnet_list_record_key,
+    make_subnet_record_key,
+};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_transport::Error;
-use ic_types::{PrincipalId, SubnetId};
+use ic_types::{
+    PrincipalId,
+    SubnetId,
+};
 use indexmap::IndexMap;
 use prost::Message;
-use std::{convert::TryFrom, fs::read_to_string, path::PathBuf};
+use std::{
+    convert::TryFrom,
+    fs::read_to_string,
+    path::PathBuf,
+};
 use url::Url;
 
 pub(crate) async fn get_subnet_record_pb(

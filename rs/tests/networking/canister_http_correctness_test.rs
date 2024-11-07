@@ -18,12 +18,22 @@ end::catalog[] */
 use anyhow::Result;
 use assert_matches::assert_matches;
 use canister_http::*;
-use canister_test::{Canister, Runtime};
+use canister_test::{
+    Canister,
+    Runtime,
+};
 use dfn_candid::candid_one;
-use ic_base_types::{CanisterId, NumBytes};
+use ic_base_types::{
+    CanisterId,
+    NumBytes,
+};
 use ic_cdk::api::call::RejectionCode;
 use ic_management_canister_types::{
-    BoundedHttpHeaders, CanisterHttpRequestArgs, HttpHeader, HttpMethod, TransformContext,
+    BoundedHttpHeaders,
+    CanisterHttpRequestArgs,
+    HttpHeader,
+    HttpMethod,
+    TransformContext,
     TransformFunc,
 };
 use ic_system_test_driver::driver::group::SystemTestGroup;
@@ -33,9 +43,15 @@ use ic_system_test_driver::systest;
 use ic_system_test_driver::util::block_on;
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_types::messages::RequestBuilder;
-use ic_types::canister_http::{CanisterHttpRequestContext, MAX_CANISTER_HTTP_REQUEST_BYTES};
+use ic_types::canister_http::{
+    CanisterHttpRequestContext,
+    MAX_CANISTER_HTTP_REQUEST_BYTES,
+};
 use ic_types::time::UNIX_EPOCH;
-use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
+use proxy_canister::{
+    RemoteHttpRequest,
+    RemoteHttpResponse,
+};
 use std::convert::TryFrom;
 
 struct Handlers<'a> {

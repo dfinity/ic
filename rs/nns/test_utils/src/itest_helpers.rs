@@ -3,51 +3,90 @@
 
 use crate::{
     common::NnsInitPayloads,
-    governance::{submit_external_update_proposal, wait_for_final_state},
+    governance::{
+        submit_external_update_proposal,
+        wait_for_final_state,
+    },
     state_test_helpers::state_machine_builder_for_nns_tests,
 };
 use candid::Encode;
 use canister_test::{
-    local_test_with_config_e, local_test_with_config_with_mutations_on_system_subnet, Canister,
-    Project, Runtime, Wasm,
+    local_test_with_config_e,
+    local_test_with_config_with_mutations_on_system_subnet,
+    Canister,
+    Project,
+    Runtime,
+    Wasm,
 };
 use cycles_minting_canister::CyclesCanisterInitPayload;
-use dfn_candid::{candid_one, CandidOne};
-use futures::{future::join_all, FutureExt};
+use dfn_candid::{
+    candid_one,
+    CandidOne,
+};
+use futures::{
+    future::join_all,
+    FutureExt,
+};
 use ic_base_types::CanisterId;
 use ic_canister_client_sender::Sender;
 use ic_config::Config;
 use ic_management_canister_types::CanisterInstallMode;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
-    canister_status::{CanisterStatusResult, CanisterStatusType},
+    canister_status::{
+        CanisterStatusResult,
+        CanisterStatusType,
+    },
 };
-use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
+use ic_nervous_system_common_test_keys::{
+    TEST_NEURON_1_ID,
+    TEST_NEURON_1_OWNER_KEYPAIR,
+};
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_common::{
     init::LifelineCanisterInitPayload,
-    types::{NeuronId, ProposalId},
+    types::{
+        NeuronId,
+        ProposalId,
+    },
 };
 use ic_nns_constants::*;
 use ic_nns_governance_api::{
-    pb::v1::{Governance, NnsFunction, ProposalStatus},
+    pb::v1::{
+        Governance,
+        NnsFunction,
+        ProposalStatus,
+    },
     test_api::TimeWarp,
 };
 use ic_nns_gtc::pb::v1::Gtc;
 use ic_nns_handler_root::init::RootCanisterInitPayload;
 use ic_registry_transport::pb::v1::RegistryMutation;
-use ic_sns_wasm::{init::SnsWasmCanisterInitPayload, pb::v1::AddWasmRequest};
+use ic_sns_wasm::{
+    init::SnsWasmCanisterInitPayload,
+    pb::v1::AddWasmRequest,
+};
 use ic_test_utilities::universal_canister::{
-    call_args, wasm as universal_canister_argument_builder, UNIVERSAL_CANISTER_WASM,
+    call_args,
+    wasm as universal_canister_argument_builder,
+    UNIVERSAL_CANISTER_WASM,
 };
 use ic_types::Cycles;
 use icp_ledger as ledger;
 use ledger::LedgerCanisterInitPayload;
 use lifeline::LIFELINE_CANISTER_WASM;
-use on_wire::{bytes, IntoWire};
+use on_wire::{
+    bytes,
+    IntoWire,
+};
 use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayload;
-use std::{future::Future, path::Path, thread, time::SystemTime};
+use std::{
+    future::Future,
+    path::Path,
+    thread,
+    time::SystemTime,
+};
 
 /// All the NNS canisters that exist at genesis.
 #[derive(Clone)]

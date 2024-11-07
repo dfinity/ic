@@ -2,17 +2,30 @@ use crate::{
     collector,
     content_length::ContentLength,
     message::Message,
-    metrics::{FUTURE_STARTED, REQUEST_STARTING},
-    plan::{EngineCall, Plan},
+    metrics::{
+        FUTURE_STARTED,
+        REQUEST_STARTING,
+    },
+    plan::{
+        EngineCall,
+        Plan,
+    },
     stats::Fact,
     RequestType,
 };
 use backoff::backoff::Backoff;
 use ic_canister_client::{
-    prepare_update, update_path, Agent, HttpClientConfig, Sender as AgentSender,
+    prepare_update,
+    update_path,
+    Agent,
+    HttpClientConfig,
+    Sender as AgentSender,
 };
 use ic_types::{
-    messages::{Blob, MessageId},
+    messages::{
+        Blob,
+        MessageId,
+    },
     time::expiry_time_from_now,
     CanisterId,
 };
@@ -20,21 +33,39 @@ use ic_types::{
 use byte_unit::Byte;
 use futures::StreamExt;
 use itertools::Either;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::{
     collections::HashMap,
-    env, fs,
+    env,
+    fs,
     str::FromStr,
-    time::{Duration, Instant},
+    time::{
+        Duration,
+        Instant,
+    },
 };
 use tokio::{
-    sync::mpsc::{channel, Receiver, Sender},
+    sync::mpsc::{
+        channel,
+        Receiver,
+        Sender,
+    },
     time::sleep_until,
 };
-use url::{Host, Url};
+use url::{
+    Host,
+    Url,
+};
 
 use crate::metrics::{
-    LATENCY_HISTOGRAM, QUERY_REPLY, UPDATE_SENT, UPDATE_SENT_REPLY, UPDATE_WAIT_REPLY,
+    LATENCY_HISTOGRAM,
+    QUERY_REPLY,
+    UPDATE_SENT,
+    UPDATE_SENT_REPLY,
+    UPDATE_WAIT_REPLY,
 };
 
 #[derive(Debug, Deserialize, Serialize)]

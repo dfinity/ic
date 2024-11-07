@@ -1,42 +1,104 @@
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_canister_log::log;
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_cdk::{api::time, caller, id, init, post_upgrade, pre_upgrade, query, update};
+use ic_canisters_http_types::{
+    HttpRequest,
+    HttpResponse,
+    HttpResponseBuilder,
+};
+use ic_cdk::{
+    api::time,
+    caller,
+    id,
+    init,
+    post_upgrade,
+    pre_upgrade,
+    query,
+    update,
+};
 use ic_cdk_timers::TimerId;
 use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::CanisterStatusResultV2,
-    management_canister_client::{ManagementCanisterClient, ManagementCanisterClientImpl},
+    management_canister_client::{
+        ManagementCanisterClient,
+        ManagementCanisterClientImpl,
+    },
 };
-use ic_nervous_system_common::{serve_logs, serve_logs_v2, serve_metrics};
+use ic_nervous_system_common::{
+    serve_logs,
+    serve_logs_v2,
+    serve_metrics,
+};
 use ic_nervous_system_proto::pb::v1::{
-    GetTimersRequest, GetTimersResponse, ResetTimersRequest, ResetTimersResponse, Timers,
+    GetTimersRequest,
+    GetTimersResponse,
+    ResetTimersRequest,
+    ResetTimersResponse,
+    Timers,
 };
 use ic_nervous_system_runtime::CdkRuntime;
 use ic_sns_swap::{
-    logs::{ERROR, INFO},
+    logs::{
+        ERROR,
+        INFO,
+    },
     memory::UPGRADES_MEMORY,
     pb::v1::{
-        ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapRequest, FinalizeSwapResponse,
-        GetAutoFinalizationStatusRequest, GetAutoFinalizationStatusResponse, GetBuyerStateRequest,
-        GetBuyerStateResponse, GetBuyersTotalRequest, GetBuyersTotalResponse,
-        GetCanisterStatusRequest, GetDerivedStateRequest, GetDerivedStateResponse, GetInitRequest,
-        GetInitResponse, GetLifecycleRequest, GetLifecycleResponse, GetOpenTicketRequest,
-        GetOpenTicketResponse, GetSaleParametersRequest, GetSaleParametersResponse,
-        GetStateRequest, GetStateResponse, Init, ListCommunityFundParticipantsRequest,
-        ListCommunityFundParticipantsResponse, ListDirectParticipantsRequest,
-        ListDirectParticipantsResponse, ListSnsNeuronRecipesRequest, ListSnsNeuronRecipesResponse,
-        NewSaleTicketRequest, NewSaleTicketResponse, NotifyPaymentFailureRequest,
-        NotifyPaymentFailureResponse, RefreshBuyerTokensRequest, RefreshBuyerTokensResponse, Swap,
+        ErrorRefundIcpRequest,
+        ErrorRefundIcpResponse,
+        FinalizeSwapRequest,
+        FinalizeSwapResponse,
+        GetAutoFinalizationStatusRequest,
+        GetAutoFinalizationStatusResponse,
+        GetBuyerStateRequest,
+        GetBuyerStateResponse,
+        GetBuyersTotalRequest,
+        GetBuyersTotalResponse,
+        GetCanisterStatusRequest,
+        GetDerivedStateRequest,
+        GetDerivedStateResponse,
+        GetInitRequest,
+        GetInitResponse,
+        GetLifecycleRequest,
+        GetLifecycleResponse,
+        GetOpenTicketRequest,
+        GetOpenTicketResponse,
+        GetSaleParametersRequest,
+        GetSaleParametersResponse,
+        GetStateRequest,
+        GetStateResponse,
+        Init,
+        ListCommunityFundParticipantsRequest,
+        ListCommunityFundParticipantsResponse,
+        ListDirectParticipantsRequest,
+        ListDirectParticipantsResponse,
+        ListSnsNeuronRecipesRequest,
+        ListSnsNeuronRecipesResponse,
+        NewSaleTicketRequest,
+        NewSaleTicketResponse,
+        NotifyPaymentFailureRequest,
+        NotifyPaymentFailureResponse,
+        RefreshBuyerTokensRequest,
+        RefreshBuyerTokensResponse,
+        Swap,
     },
 };
-use ic_stable_structures::{writer::Writer, Memory};
+use ic_stable_structures::{
+    writer::Writer,
+    Memory,
+};
 use prost::Message;
 use std::{
     cell::RefCell,
     str::FromStr,
-    time::{Duration, SystemTime},
+    time::{
+        Duration,
+        SystemTime,
+    },
 };
 
 const RUN_PERIODIC_TASKS_INTERVAL: Duration = Duration::from_secs(60);

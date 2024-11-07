@@ -4,8 +4,14 @@ use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::RegistryVersion;
 use prost::Message;
-use std::path::{Path, PathBuf};
-use std::{convert::TryFrom, fmt};
+use std::path::{
+    Path,
+    PathBuf,
+};
+use std::{
+    convert::TryFrom,
+    fmt,
+};
 
 /// Adds the k/v entry to the given data provider.
 pub fn write_registry_entry<P, M>(

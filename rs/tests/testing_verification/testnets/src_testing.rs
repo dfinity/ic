@@ -40,30 +40,55 @@
 use anyhow::Result;
 
 use candid::Encode;
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::boundary_node::BoundaryNodeVm;
-use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::ic::{
+    InternetComputer,
+    Subnet,
+};
 use ic_system_test_driver::driver::{
     boundary_node::BoundaryNode,
     group::SystemTestGroup,
-    prometheus_vm::{HasPrometheus, PrometheusVm},
+    prometheus_vm::{
+        HasPrometheus,
+        PrometheusVm,
+    },
     test_env::TestEnv,
     test_env_api::{
-        await_boundary_node_healthy, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+        await_boundary_node_healthy,
+        HasPublicApiUrl,
+        HasTopologySnapshot,
+        IcNodeContainer,
     },
 };
-use ic_system_test_driver::util::{block_on, create_canister};
-use ic_xrc_types::{Asset, AssetClass, ExchangeRateMetadata};
+use ic_system_test_driver::util::{
+    block_on,
+    create_canister,
+};
+use ic_xrc_types::{
+    Asset,
+    AssetClass,
+    ExchangeRateMetadata,
+};
 use nns_dapp::{
-    install_ii_nns_dapp_and_subnet_rental, nns_dapp_customizations, set_authorized_subnets,
+    install_ii_nns_dapp_and_subnet_rental,
+    nns_dapp_customizations,
+    set_authorized_subnets,
     set_icp_xdr_exchange_rate,
 };
 use std::env;
 use std::str::FromStr;
-use xrc_mock::{ExchangeRate, Response, XrcMockInitPayload};
+use xrc_mock::{
+    ExchangeRate,
+    Response,
+    XrcMockInitPayload,
+};
 
 const DEFAULT_XRC_PRINCIPAL_STR: &str = "uf6dk-hyaaa-aaaaq-qaaaq-cai";
 

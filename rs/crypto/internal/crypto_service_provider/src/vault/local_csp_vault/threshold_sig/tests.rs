@@ -4,7 +4,10 @@ use crate::vault::local_csp_vault::LocalCspVault;
 use crate::vault::test_utils;
 use ic_crypto_internal_seed::Seed;
 use proptest::prelude::*;
-use rand::{Rng, SeedableRng};
+use rand::{
+    Rng,
+    SeedableRng,
+};
 use rand_chacha::ChaChaRng;
 
 // Slow tests

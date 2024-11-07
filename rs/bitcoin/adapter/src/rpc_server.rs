@@ -1,23 +1,57 @@
 use crate::{
-    config::{Config, IncomingSource},
-    get_successors_handler::{GetSuccessorsRequest, GetSuccessorsResponse},
-    metrics::{ServiceMetrics, LABEL_GET_SUCCESSOR, LABEL_SEND_TRANSACTION},
-    GetSuccessorsHandler, TransactionManagerRequest,
+    config::{
+        Config,
+        IncomingSource,
+    },
+    get_successors_handler::{
+        GetSuccessorsRequest,
+        GetSuccessorsResponse,
+    },
+    metrics::{
+        ServiceMetrics,
+        LABEL_GET_SUCCESSOR,
+        LABEL_SEND_TRANSACTION,
+    },
+    GetSuccessorsHandler,
+    TransactionManagerRequest,
 };
-use bitcoin::{consensus::Encodable, hashes::Hash, BlockHash};
-use ic_async_utils::{incoming_from_first_systemd_socket, incoming_from_path};
+use bitcoin::{
+    consensus::Encodable,
+    hashes::Hash,
+    BlockHash,
+};
+use ic_async_utils::{
+    incoming_from_first_systemd_socket,
+    incoming_from_path,
+};
 use ic_btc_service::{
-    btc_service_server::{BtcService, BtcServiceServer},
-    BtcServiceGetSuccessorsRequest, BtcServiceGetSuccessorsResponse,
-    BtcServiceSendTransactionRequest, BtcServiceSendTransactionResponse,
+    btc_service_server::{
+        BtcService,
+        BtcServiceServer,
+    },
+    BtcServiceGetSuccessorsRequest,
+    BtcServiceGetSuccessorsResponse,
+    BtcServiceSendTransactionRequest,
+    BtcServiceSendTransactionResponse,
 };
-use ic_logger::{debug, ReplicaLogger};
+use ic_logger::{
+    debug,
+    ReplicaLogger,
+};
 use ic_metrics::MetricsRegistry;
-use std::convert::{TryFrom, TryInto};
+use std::convert::{
+    TryFrom,
+    TryInto,
+};
 use std::time::Instant;
 use tokio::sync::mpsc;
 use tokio::sync::watch;
-use tonic::{transport::Server, Request, Response, Status};
+use tonic::{
+    transport::Server,
+    Request,
+    Response,
+    Status,
+};
 
 struct BtcServiceImpl {
     last_received_tx: watch::Sender<Option<Instant>>,

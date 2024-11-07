@@ -1,4 +1,7 @@
-use crate::{EntryType, TVL_TIMESERIES};
+use crate::{
+    EntryType,
+    TVL_TIMESERIES,
+};
 use std::fmt;
 use std::io::Write;
 

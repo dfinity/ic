@@ -3,7 +3,10 @@ use std::{
     future::Future,
     hash::Hash,
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{
+            AtomicBool,
+            Ordering,
+        },
         Arc,
     },
 };
@@ -11,7 +14,11 @@ use std::{
 use futures_util::FutureExt;
 use tokio::{
     runtime::Handle,
-    task::{AbortHandle, JoinError, JoinSet},
+    task::{
+        AbortHandle,
+        JoinError,
+        JoinSet,
+    },
 };
 
 /// Poor man's implementation of tokio_util::JoinMap.
@@ -128,9 +135,15 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::{sync::Arc, time::Duration};
+    use std::{
+        sync::Arc,
+        time::Duration,
+    };
 
-    use tokio::{runtime::Handle, sync::Barrier};
+    use tokio::{
+        runtime::Handle,
+        sync::Barrier,
+    };
 
     use super::JoinMap;
 

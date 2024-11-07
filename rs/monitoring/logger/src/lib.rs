@@ -1,14 +1,31 @@
-use ic_config::logger::{Config as LoggerConfig, LogDestination, LogFormat};
-use slog::{o, Drain, Logger};
-use slog_async::{AsyncGuard, OverflowStrategy};
+use ic_config::logger::{
+    Config as LoggerConfig,
+    LogDestination,
+    LogFormat,
+};
+use slog::{
+    o,
+    Drain,
+    Logger,
+};
+use slog_async::{
+    AsyncGuard,
+    OverflowStrategy,
+};
 use slog_scope::GlobalLoggerGuard;
 use std::io;
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    Arc,
+    Mutex,
+};
 
 pub mod context_logger;
 pub mod replica_logger;
 
-pub use crate::replica_logger::{no_op_logger, ReplicaLogger};
+pub use crate::replica_logger::{
+    no_op_logger,
+    ReplicaLogger,
+};
 
 pub fn new_replica_logger(log: slog::Logger, config: &LoggerConfig) -> ReplicaLogger {
     use crate::replica_logger::LogEntryLogger;

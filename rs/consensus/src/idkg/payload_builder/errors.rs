@@ -4,13 +4,17 @@ use ic_types::{
     consensus::idkg,
     crypto::canister_threshold_sig::{
         error::{
-            EcdsaPresignatureQuadrupleCreationError, IDkgParamsValidationError,
-            IDkgTranscriptIdError, ThresholdEcdsaSigInputsCreationError,
+            EcdsaPresignatureQuadrupleCreationError,
+            IDkgParamsValidationError,
+            IDkgTranscriptIdError,
+            ThresholdEcdsaSigInputsCreationError,
         },
         idkg::InitialIDkgDealings,
     },
     registry::RegistryClientError,
-    Height, RegistryVersion, SubnetId,
+    Height,
+    RegistryVersion,
+    SubnetId,
 };
 
 use super::InvalidChainCacheError;

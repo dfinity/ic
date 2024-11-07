@@ -5,18 +5,32 @@ pub mod hash;
 pub(crate) mod known_tags;
 
 use ciborium::tag::Required;
-use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction, TxApplyError};
+use ic_ledger_canister_core::ledger::{
+    LedgerContext,
+    LedgerTransaction,
+    TxApplyError,
+};
 use ic_ledger_core::{
-    approvals::{AllowanceTable, HeapAllowancesData},
+    approvals::{
+        AllowanceTable,
+        HeapAllowancesData,
+    },
     balances::Balances,
-    block::{BlockType, EncodedBlock, FeeCollector},
+    block::{
+        BlockType,
+        EncodedBlock,
+        FeeCollector,
+    },
     timestamp::TimeStamp,
     tokens::TokensType,
 };
 use ic_ledger_hash_of::HashOf;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 use std::collections::BTreeMap;
 

@@ -1,29 +1,67 @@
 use crate::{
-    error::{RecoveryError, RecoveryResult},
+    error::{
+        RecoveryError,
+        RecoveryResult,
+    },
     file_sync_helper::read_file,
-    util::{block_on, write_public_key_to_file},
+    util::{
+        block_on,
+        write_public_key_to_file,
+    },
 };
-use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
-use ic_crypto_utils_threshold_sig_der::{parse_threshold_sig_key, public_key_to_der};
+use ic_base_types::{
+    NodeId,
+    PrincipalId,
+    RegistryVersion,
+    SubnetId,
+};
+use ic_crypto_utils_threshold_sig_der::{
+    parse_threshold_sig_key,
+    public_key_to_der,
+};
 use ic_interfaces_registry::RegistryClientResult;
 use ic_protobuf::registry::{
     crypto::v1::PublicKey,
-    subnet::v1::{SubnetListRecord, SubnetRecord},
+    subnet::v1::{
+        SubnetListRecord,
+        SubnetRecord,
+    },
 };
-use ic_registry_client::client::{RegistryClient, RegistryClientImpl, ThresholdSigPublicKey};
-use ic_registry_client_helpers::{routing_table::RoutingTableRegistry, subnet::SubnetRegistry};
-use ic_registry_keys::{make_crypto_threshold_signing_pubkey_key, make_subnet_list_record_key};
+use ic_registry_client::client::{
+    RegistryClient,
+    RegistryClientImpl,
+    ThresholdSigPublicKey,
+};
+use ic_registry_client_helpers::{
+    routing_table::RoutingTableRegistry,
+    subnet::SubnetRegistry,
+};
+use ic_registry_keys::{
+    make_crypto_threshold_signing_pubkey_key,
+    make_subnet_list_record_key,
+};
 use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_replicator::RegistryReplicator;
-use ic_registry_routing_table::{CanisterMigrations, RoutingTable};
+use ic_registry_routing_table::{
+    CanisterMigrations,
+    RoutingTable,
+};
 use ic_registry_subnet_features::ChainKeyConfig;
 use prost::Message;
-use slog::{error, info, warn, Logger};
+use slog::{
+    error,
+    info,
+    warn,
+    Logger,
+};
 use url::Url;
 
 use std::{
-    path::{Path, PathBuf},
+    path::{
+        Path,
+        PathBuf,
+    },
     sync::Arc,
     time::Duration,
 };

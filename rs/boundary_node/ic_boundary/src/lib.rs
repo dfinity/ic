@@ -18,4 +18,8 @@ pub mod test_utils;
 mod tls_verify;
 
 pub use crate::core::main;
-pub use crate::routes::{status, Health, RootKey};
+pub use crate::routes::{
+    status,
+    Health,
+    RootKey,
+};

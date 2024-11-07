@@ -1,19 +1,40 @@
-use dfn_candid::{candid, candid_one};
+use dfn_candid::{
+    candid,
+    candid_one,
+};
 use ic_canister_client_sender::Sender;
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_ID, TEST_NEURON_3_ID,
+    TEST_NEURON_1_ID,
+    TEST_NEURON_1_OWNER_KEYPAIR,
+    TEST_NEURON_2_ID,
+    TEST_NEURON_3_ID,
 };
-use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
+use ic_nns_common::{
+    pb::v1::NeuronId,
+    types::ProposalId,
+};
 use ic_nns_governance_api::pb::v1::{
-    manage_neuron::NeuronIdOrSubaccount, manage_neuron_response::Command as CommandResponse,
-    GovernanceError, KnownNeuron, KnownNeuronData, ListKnownNeuronsResponse, MakeProposalRequest,
-    ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, NeuronInfo,
-    ProposalActionRequest, ProposalStatus,
+    manage_neuron::NeuronIdOrSubaccount,
+    manage_neuron_response::Command as CommandResponse,
+    GovernanceError,
+    KnownNeuron,
+    KnownNeuronData,
+    ListKnownNeuronsResponse,
+    MakeProposalRequest,
+    ManageNeuronCommandRequest,
+    ManageNeuronRequest,
+    ManageNeuronResponse,
+    NeuronInfo,
+    ProposalActionRequest,
+    ProposalStatus,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::wait_for_final_state,
-    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{
+        state_machine_test_on_nns_subnet,
+        NnsCanisters,
+    },
 };
 
 /// Integration test for the known neuron functionality.

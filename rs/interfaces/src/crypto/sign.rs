@@ -23,15 +23,29 @@
 //! Please refer to the trait documentation for details.
 
 use ic_types::crypto::{
-    BasicSigOf, CombinedMultiSigOf, CryptoResult, IndividualMultiSigOf, Signable,
+    BasicSigOf,
+    CombinedMultiSigOf,
+    CryptoResult,
+    IndividualMultiSigOf,
+    Signable,
 };
 use ic_types::signature::BasicSignatureBatch;
-use ic_types::{NodeId, RegistryVersion};
-use std::collections::{BTreeMap, BTreeSet};
+use ic_types::{
+    NodeId,
+    RegistryVersion,
+};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
 
 pub mod threshold_sig;
 
-pub use threshold_sig::{ThresholdSigVerifier, ThresholdSigVerifierByPublicKey, ThresholdSigner};
+pub use threshold_sig::{
+    ThresholdSigVerifier,
+    ThresholdSigVerifierByPublicKey,
+    ThresholdSigner,
+};
 
 pub mod canister_threshold_sig;
 

@@ -1,8 +1,14 @@
 use crate::{
-    governance::{governance_minting_account, neuron_subaccount},
+    governance::{
+        governance_minting_account,
+        neuron_subaccount,
+    },
     neuron::Neuron,
     neuron_store::NeuronStore,
-    pb::v1::{governance_error::ErrorType, GovernanceError},
+    pb::v1::{
+        governance_error::ErrorType,
+        GovernanceError,
+    },
 };
 
 use ic_nervous_system_common::ledger::IcpLedger;

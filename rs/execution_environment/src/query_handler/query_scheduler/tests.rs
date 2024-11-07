@@ -1,7 +1,11 @@
 use std::{
     sync::{
-        atomic::{AtomicU32, Ordering},
-        Arc, Mutex,
+        atomic::{
+            AtomicU32,
+            Ordering,
+        },
+        Arc,
+        Mutex,
     },
     time::Duration,
 };
@@ -12,8 +16,12 @@ use ic_types_test_utils::ids::canister_test_id;
 use crate::query_handler::query_scheduler::internal::DEFAULT_QUERY_DURATION;
 
 use super::{
-    internal::{Query, QuerySchedulerInternal},
-    QueryScheduler, QuerySchedulerFlag,
+    internal::{
+        Query,
+        QuerySchedulerInternal,
+    },
+    QueryScheduler,
+    QuerySchedulerFlag,
 };
 
 #[test]

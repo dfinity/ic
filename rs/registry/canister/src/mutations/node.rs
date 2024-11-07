@@ -1,4 +1,7 @@
-use crate::{common::LOG_PREFIX, registry::Registry};
+use crate::{
+    common::LOG_PREFIX,
+    registry::Registry,
+};
 use ic_base_types::NodeId;
 use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_registry_keys::make_node_record_key;

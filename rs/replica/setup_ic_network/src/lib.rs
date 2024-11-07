@@ -3,41 +3,79 @@
 //! Specifically, it constructs all the artifact pools and the Consensus/P2P
 //! time source.
 
-use ic_artifact_manager::{create_artifact_handler, create_ingress_handlers};
+use ic_artifact_manager::{
+    create_artifact_handler,
+    create_ingress_handlers,
+};
 use ic_artifact_pool::{
-    canister_http_pool::CanisterHttpPoolImpl, certification_pool::CertificationPoolImpl,
-    consensus_pool::ConsensusPoolImpl, dkg_pool::DkgPoolImpl, idkg_pool::IDkgPoolImpl,
+    canister_http_pool::CanisterHttpPoolImpl,
+    certification_pool::CertificationPoolImpl,
+    consensus_pool::ConsensusPoolImpl,
+    dkg_pool::DkgPoolImpl,
+    idkg_pool::IDkgPoolImpl,
     ingress_pool::IngressPoolImpl,
 };
-use ic_config::{artifact_pool::ArtifactPoolConfig, transport::TransportConfig};
+use ic_config::{
+    artifact_pool::ArtifactPoolConfig,
+    transport::TransportConfig,
+};
 use ic_consensus::{
-    certification::{CertificationCrypto, CertifierBouncer, CertifierImpl},
-    consensus::{dkg_key_manager::DkgKeyManager, ConsensusBouncer, ConsensusImpl},
-    dkg, idkg,
+    certification::{
+        CertificationCrypto,
+        CertifierBouncer,
+        CertifierImpl,
+    },
+    consensus::{
+        dkg_key_manager::DkgKeyManager,
+        ConsensusBouncer,
+        ConsensusImpl,
+    },
+    dkg,
+    idkg,
 };
 use ic_consensus_manager::ConsensusManagerBuilder;
-use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
+use ic_consensus_utils::{
+    crypto::ConsensusCrypto,
+    pool_reader::PoolReader,
+};
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_https_outcalls_consensus::{
-    gossip::CanisterHttpGossipImpl, payload_builder::CanisterHttpPayloadBuilderImpl,
+    gossip::CanisterHttpGossipImpl,
+    payload_builder::CanisterHttpPayloadBuilderImpl,
     pool_manager::CanisterHttpPoolManagerImpl,
 };
-use ic_ingress_manager::{bouncer::IngressBouncer, IngressManager, RandomStateKind};
+use ic_ingress_manager::{
+    bouncer::IngressBouncer,
+    IngressManager,
+    RandomStateKind,
+};
 use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
     execution_environment::IngressHistoryReader,
-    messaging::{MessageRouting, XNetPayloadBuilder},
+    messaging::{
+        MessageRouting,
+        XNetPayloadBuilder,
+    },
     p2p::artifact_manager::JoinGuard,
     p2p::state_sync::StateSyncClient,
     self_validating_payload::SelfValidatingPayloadBuilder,
-    time_source::{SysTimeSource, TimeSource},
+    time_source::{
+        SysTimeSource,
+        TimeSource,
+    },
 };
 use ic_interfaces_adapter_client::NonBlockingChannel;
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::{StateManager, StateReader};
-use ic_logger::{info, replica_logger::ReplicaLogger};
+use ic_interfaces_state_manager::{
+    StateManager,
+    StateReader,
+};
+use ic_logger::{
+    info,
+    replica_logger::ReplicaLogger,
+};
 use ic_metrics::MetricsRegistry;
 use ic_quic_transport::create_udp_socket;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
@@ -45,19 +83,37 @@ use ic_replicated_state::ReplicatedState;
 use ic_state_manager::state_sync::types::StateSyncMessage;
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
-    canister_http::{CanisterHttpRequest, CanisterHttpResponse},
-    consensus::{CatchUpPackage, HasHeight},
+    canister_http::{
+        CanisterHttpRequest,
+        CanisterHttpResponse,
+    },
+    consensus::{
+        CatchUpPackage,
+        HasHeight,
+    },
     malicious_flags::MaliciousFlags,
     messages::SignedIngress,
     replica_config::ReplicaConfig,
-    Height, NodeId, SubnetId,
+    Height,
+    NodeId,
+    SubnetId,
 };
 use std::{
-    net::{IpAddr, SocketAddr},
+    net::{
+        IpAddr,
+        SocketAddr,
+    },
     str::FromStr,
-    sync::{Arc, Mutex, RwLock},
+    sync::{
+        Arc,
+        Mutex,
+        RwLock,
+    },
 };
-use tokio::sync::{mpsc::UnboundedSender, watch};
+use tokio::sync::{
+    mpsc::UnboundedSender,
+    watch,
+};
 use tower_http::trace::TraceLayer;
 
 /// [IC-1718]: Whether the `hashes-in-blocks` feature is enabled. If the flag is set to `true`, we

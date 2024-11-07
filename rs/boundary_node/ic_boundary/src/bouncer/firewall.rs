@@ -1,18 +1,34 @@
-use std::{collections::HashSet, net::IpAddr, str::FromStr, sync::Arc};
+use std::{
+    collections::HashSet,
+    net::IpAddr,
+    str::FromStr,
+    sync::Arc,
+};
 
-use anyhow::{anyhow, Context, Error};
+use anyhow::{
+    anyhow,
+    Context,
+    Error,
+};
 use async_trait::async_trait;
 use nftables::{
     batch::Batch,
     expr::Expression,
     schema,
-    schema::{NfListObject, Nftables},
+    schema::{
+        NfListObject,
+        Nftables,
+    },
     types,
 };
 use serde_json::json;
 use tracing::debug;
 
-use super::{exec::Execute, Decision, Firewall};
+use super::{
+    exec::Execute,
+    Decision,
+    Firewall,
+};
 
 // Handles either IPv4 or IPv6 set.
 // It must pre-exist, can be created with e.g.
@@ -250,7 +266,10 @@ mod test {
     use crate::bouncer::Decision;
     use std::{
         sync::Mutex,
-        time::{Duration, Instant},
+        time::{
+            Duration,
+            Instant,
+        },
     };
 
     const MOCK_SET_OK4: &str = r#"{"nftables": [{"metainfo": {"version": "1.0.2", "release_name": "Lester Gooch", "json_schema_version": 1}}, {"set": {"family": "ip", "name": "blackhole", "table": "filter", "type": "ipv4_addr", "handle": 49, "elem": ["1.1.1.1", "2.2.2.2", "3.3.3.3"]}}]}"#;

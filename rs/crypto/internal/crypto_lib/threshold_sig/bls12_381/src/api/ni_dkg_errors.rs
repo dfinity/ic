@@ -3,14 +3,26 @@
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_types::crypto::AlgorithmId;
-use ic_types::{NodeIndex, NumberOfNodes};
-use serde::{Deserialize, Serialize};
+use ic_types::{
+    NodeIndex,
+    NumberOfNodes,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 // These are the base error types used by ni_dkg
 // TODO(CRP-574): Move these up, out of dkg.
 pub use super::dkg_errors::{
-    InternalError, InvalidArgumentError, KeyNotFoundError, MalformedDataError, MalformedPopError,
-    MalformedPublicKeyError, MalformedSecretKeyError, SizeError,
+    InternalError,
+    InvalidArgumentError,
+    KeyNotFoundError,
+    MalformedDataError,
+    MalformedPopError,
+    MalformedPublicKeyError,
+    MalformedSecretKeyError,
+    SizeError,
 };
 
 /// The receiver set isn't properly indexed.

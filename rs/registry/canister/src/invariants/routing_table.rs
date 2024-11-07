@@ -1,12 +1,22 @@
-use crate::invariants::common::{InvariantCheckError, RegistrySnapshot};
+use crate::invariants::common::{
+    InvariantCheckError,
+    RegistrySnapshot,
+};
 
 use std::convert::TryFrom;
 
 use ic_protobuf::registry::routing_table::v1::{
-    CanisterMigrations as pbCanisterMigrations, RoutingTable as pbRoutingTable,
+    CanisterMigrations as pbCanisterMigrations,
+    RoutingTable as pbRoutingTable,
 };
-use ic_registry_keys::{make_canister_migrations_record_key, make_routing_table_record_key};
-use ic_registry_routing_table::{CanisterMigrations, RoutingTable};
+use ic_registry_keys::{
+    make_canister_migrations_record_key,
+    make_routing_table_record_key,
+};
+use ic_registry_routing_table::{
+    CanisterMigrations,
+    RoutingTable,
+};
 use prost::Message;
 
 /// Routing table invariants hold if reading and conversion succeed.
@@ -85,14 +95,23 @@ mod tests {
 
     use super::*;
     use crate::invariants::routing_table::{
-        check_canister_migrations_invariants, check_routing_table_invariants,
+        check_canister_migrations_invariants,
+        check_routing_table_invariants,
     };
     use ic_base_types::CanisterId;
     use ic_protobuf::registry::routing_table::v1::{
-        CanisterMigrations as PbCanisterMigrations, RoutingTable as PbRoutingTable,
+        CanisterMigrations as PbCanisterMigrations,
+        RoutingTable as PbRoutingTable,
     };
-    use ic_registry_keys::{make_canister_migrations_record_key, make_routing_table_record_key};
-    use ic_registry_routing_table::{CanisterIdRange, CanisterMigrations, RoutingTable};
+    use ic_registry_keys::{
+        make_canister_migrations_record_key,
+        make_routing_table_record_key,
+    };
+    use ic_registry_routing_table::{
+        CanisterIdRange,
+        CanisterMigrations,
+        RoutingTable,
+    };
     use ic_test_utilities_types::ids::subnet_test_id;
     use maplit::btreemap;
     use prost::Message;

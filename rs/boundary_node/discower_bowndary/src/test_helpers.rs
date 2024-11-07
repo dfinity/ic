@@ -1,6 +1,10 @@
 use ic_agent::agent::http_transport::route_provider::RouteProvider;
 use std::collections::HashMap;
-use std::{fmt::Debug, hash::Hash, sync::Arc};
+use std::{
+    fmt::Debug,
+    hash::Hash,
+    sync::Arc,
+};
 
 pub fn route_n_times(n: usize, f: Arc<impl RouteProvider>) -> Vec<String> {
     (0..n)

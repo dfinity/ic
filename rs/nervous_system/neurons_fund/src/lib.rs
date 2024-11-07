@@ -8,13 +8,23 @@
 
 use std::num::NonZeroU64;
 
-use ic_nervous_system_common::{binary_search, E8};
+use ic_nervous_system_common::{
+    binary_search,
+    E8,
+};
 use rust_decimal::{
-    prelude::{FromPrimitive, ToPrimitive},
-    Decimal, RoundingStrategy,
+    prelude::{
+        FromPrimitive,
+        ToPrimitive,
+    },
+    Decimal,
+    RoundingStrategy,
 };
 use rust_decimal_macros::dec;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 #[cfg(test)]
 mod binomial_tests;

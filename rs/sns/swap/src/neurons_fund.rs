@@ -6,8 +6,11 @@ use crate::pb::v1::{
     NeuronsFundParticipationConstraints as NeuronsFundParticipationConstraintsPb,
 };
 use ic_neurons_fund::{
-    DeserializableFunction, IdealMatchingFunction, PolynomialMatchingFunction,
-    ValidatedLinearScalingCoefficient, ValidatedNeuronsFundParticipationConstraints,
+    DeserializableFunction,
+    IdealMatchingFunction,
+    PolynomialMatchingFunction,
+    ValidatedLinearScalingCoefficient,
+    ValidatedNeuronsFundParticipationConstraints,
     MAX_LINEAR_SCALING_COEFFICIENT_VEC_LEN,
     MAX_MATCHING_FUNCTION_SERIALIZED_REPRESENTATION_SIZE_BYTES,
 };

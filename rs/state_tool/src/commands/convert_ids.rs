@@ -1,6 +1,9 @@
 use std::str::FromStr;
 
-use ic_types::{CanisterId, PrincipalId};
+use ic_types::{
+    CanisterId,
+    PrincipalId,
+};
 
 pub fn do_canister_id_to_hex(canister_id: String) -> Result<(), String> {
     let canister = CanisterId::from_str(&canister_id).map_err(|e| e.to_string())?;

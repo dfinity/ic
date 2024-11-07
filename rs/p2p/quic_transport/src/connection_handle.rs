@@ -5,20 +5,41 @@
 //! connection.
 //!
 
-use anyhow::{anyhow, Context};
-use axum::http::{Method, Request, Response, Version};
+use anyhow::{
+    anyhow,
+    Context,
+};
+use axum::http::{
+    Method,
+    Request,
+    Response,
+    Version,
+};
 use bytes::Bytes;
 use ic_base_types::NodeId;
 use ic_protobuf::transport::v1 as pb;
 use prost::Message;
-use quinn::{Connection, RecvStream, SendStream, VarInt};
+use quinn::{
+    Connection,
+    RecvStream,
+    SendStream,
+    VarInt,
+};
 
 use crate::{
     metrics::{
-        QuicTransportMetrics, ERROR_TYPE_FINISH, ERROR_TYPE_OPEN, ERROR_TYPE_READ,
-        ERROR_TYPE_STOPPED, ERROR_TYPE_WRITE, REQUEST_TYPE_PUSH, REQUEST_TYPE_RPC,
+        QuicTransportMetrics,
+        ERROR_TYPE_FINISH,
+        ERROR_TYPE_OPEN,
+        ERROR_TYPE_READ,
+        ERROR_TYPE_STOPPED,
+        ERROR_TYPE_WRITE,
+        REQUEST_TYPE_PUSH,
+        REQUEST_TYPE_RPC,
     },
-    ConnId, MessagePriority, MAX_MESSAGE_SIZE_BYTES,
+    ConnId,
+    MessagePriority,
+    MAX_MESSAGE_SIZE_BYTES,
 };
 
 /// QUIC error code for stream cancellation. See
@@ -220,15 +241,24 @@ mod tests {
     use assert_matches::assert_matches;
     use bytes::Bytes;
     use ic_p2p_test_utils::{
-        generate_self_signed_cert, turmoil::CustomUdp, SkipServerVerification,
+        generate_self_signed_cert,
+        turmoil::CustomUdp,
+        SkipServerVerification,
     };
     use quinn::{
-        crypto::rustls::QuicClientConfig, ClientConfig, Endpoint, EndpointConfig, ReadError,
+        crypto::rustls::QuicClientConfig,
+        ClientConfig,
+        Endpoint,
+        EndpointConfig,
+        ReadError,
         ReadToEndError,
     };
     use rstest::rstest;
     use std::{
-        net::{Ipv4Addr, SocketAddr},
+        net::{
+            Ipv4Addr,
+            SocketAddr,
+        },
         sync::Arc,
     };
     use tokio::sync::Barrier;

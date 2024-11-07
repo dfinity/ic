@@ -1,8 +1,14 @@
 use ic_utils::byte_slice_fmt::truncate_and_format;
 #[cfg(test)]
 use proptest_derive::Arbitrary;
-use serde::{Deserialize, Serialize};
-use std::{fmt, ops::Deref};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use std::{
+    fmt,
+    ops::Deref,
+};
 
 /// A binary "blob", i.e. a byte array.
 ///

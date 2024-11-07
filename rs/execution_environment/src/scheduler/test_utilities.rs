@@ -1,76 +1,179 @@
 use std::{
-    collections::{BTreeMap, HashMap, VecDeque},
-    convert::{TryFrom, TryInto},
+    collections::{
+        BTreeMap,
+        HashMap,
+        VecDeque,
+    },
+    convert::{
+        TryFrom,
+        TryInto,
+    },
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc,
+        Mutex,
+    },
 };
 
-use ic_base_types::{CanisterId, NumBytes, PrincipalId, SubnetId};
+use ic_base_types::{
+    CanisterId,
+    NumBytes,
+    PrincipalId,
+    SubnetId,
+};
 use ic_config::{
     flag_status::FlagStatus,
-    subnet_config::{SchedulerConfig, SubnetConfig},
+    subnet_config::{
+        SchedulerConfig,
+        SubnetConfig,
+    },
 };
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::{
     wasm_executor::{
-        CanisterStateChanges, PausedWasmExecution, SliceExecutionOutput, WasmExecutionResult,
+        CanisterStateChanges,
+        PausedWasmExecution,
+        SliceExecutionOutput,
+        WasmExecutionResult,
         WasmExecutor,
     },
-    CompilationCache, CompilationResult, WasmExecutionInput,
+    CompilationCache,
+    CompilationResult,
+    WasmExecutionInput,
 };
 use ic_error_types::UserError;
 use ic_interfaces::execution_environment::{
-    ChainKeySettings, ExecutionRoundSummary, ExecutionRoundType, HypervisorError, HypervisorResult,
-    IngressHistoryWriter, InstanceStats, RegistryExecutionSettings, Scheduler,
-    SystemApiCallCounters, WasmExecutionOutput,
+    ChainKeySettings,
+    ExecutionRoundSummary,
+    ExecutionRoundType,
+    HypervisorError,
+    HypervisorResult,
+    IngressHistoryWriter,
+    InstanceStats,
+    RegistryExecutionSettings,
+    Scheduler,
+    SystemApiCallCounters,
+    WasmExecutionOutput,
 };
-use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
+use ic_logger::{
+    replica_logger::no_op_logger,
+    ReplicaLogger,
+};
 use ic_management_canister_types::{
-    CanisterInstallMode, CanisterStatusType, InstallCodeArgs, MasterPublicKeyId, Method, Payload,
+    CanisterInstallMode,
+    CanisterStatusType,
+    InstallCodeArgs,
+    MasterPublicKeyId,
+    Method,
+    Payload,
     IC_00,
 };
 use ic_metrics::MetricsRegistry;
-use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
+use ic_registry_routing_table::{
+    CanisterIdRange,
+    RoutingTable,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::execution_state::{self, WasmMetadata},
+    canister_state::execution_state::{
+        self,
+        WasmMetadata,
+    },
     page_map::TestPageAllocatorFileDescriptorImpl,
-    testing::{CanisterQueuesTesting, ReplicatedStateTesting},
-    CanisterState, ExecutionState, ExportedFunctions, InputQueueType, Memory, ReplicatedState,
+    testing::{
+        CanisterQueuesTesting,
+        ReplicatedStateTesting,
+    },
+    CanisterState,
+    ExecutionState,
+    ExportedFunctions,
+    InputQueueType,
+    Memory,
+    ReplicatedState,
 };
 use ic_system_api::{
-    sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateChanges},
-    ApiType, ExecutionParameters,
+    sandbox_safe_system_state::{
+        SandboxSafeSystemState,
+        SystemStateChanges,
+    },
+    ApiType,
+    ExecutionParameters,
 };
 use ic_test_utilities::state_manager::FakeStateManager;
-use ic_test_utilities_execution_environment::{generate_subnets, test_registry_settings};
+use ic_test_utilities_execution_environment::{
+    generate_subnets,
+    test_registry_settings,
+};
 use ic_test_utilities_state::CanisterStateBuilder;
 use ic_test_utilities_types::{
-    ids::{canister_test_id, subnet_test_id, user_test_id},
-    messages::{RequestBuilder, SignedIngressBuilder},
+    ids::{
+        canister_test_id,
+        subnet_test_id,
+        user_test_id,
+    },
+    messages::{
+        RequestBuilder,
+        SignedIngressBuilder,
+    },
 };
 use ic_types::{
     consensus::idkg::PreSigId,
-    crypto::{canister_threshold_sig::MasterPublicKey, AlgorithmId},
-    ingress::{IngressState, IngressStatus},
-    messages::{
-        CallContextId, Ingress, MessageId, Request, RequestOrResponse, Response, NO_DEADLINE,
+    crypto::{
+        canister_threshold_sig::MasterPublicKey,
+        AlgorithmId,
     },
-    methods::{Callback, FuncRef, SystemMethod, WasmClosure, WasmMethod},
-    CanisterTimer, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NumInstructions,
-    Randomness, ReplicaVersion, Time, UserId,
+    ingress::{
+        IngressState,
+        IngressStatus,
+    },
+    messages::{
+        CallContextId,
+        Ingress,
+        MessageId,
+        Request,
+        RequestOrResponse,
+        Response,
+        NO_DEADLINE,
+    },
+    methods::{
+        Callback,
+        FuncRef,
+        SystemMethod,
+        WasmClosure,
+        WasmMethod,
+    },
+    CanisterTimer,
+    ComputeAllocation,
+    Cycles,
+    ExecutionRound,
+    MemoryAllocation,
+    NumInstructions,
+    Randomness,
+    ReplicaVersion,
+    Time,
+    UserId,
 };
 use ic_wasm_types::CanisterModule;
 use maplit::btreemap;
 use std::time::Duration;
 
 use crate::{
-    as_round_instructions, ExecutionEnvironment, Hypervisor, IngressHistoryWriterImpl, RoundLimits,
+    as_round_instructions,
+    ExecutionEnvironment,
+    Hypervisor,
+    IngressHistoryWriterImpl,
+    RoundLimits,
 };
 
-use super::{RoundSchedule, SchedulerImpl};
+use super::{
+    RoundSchedule,
+    SchedulerImpl,
+};
 use crate::metrics::MeasurementScope;
-use ic_crypto_prng::{Csprng, RandomnessPurpose::ExecutionThread};
+use ic_crypto_prng::{
+    Csprng,
+    RandomnessPurpose::ExecutionThread,
+};
 use ic_types::time::UNIX_EPOCH;
 use std::collections::BTreeSet;
 

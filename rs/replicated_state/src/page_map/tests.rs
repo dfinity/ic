@@ -3,21 +3,40 @@ use super::{
     page_allocator::PageAllocatorSerialization,
     storage::BaseFileSerialization,
     storage::StorageLayout,
-    test_utils::{base_only_storage_layout, ShardedTestStorageLayout},
-    Buffer, FileDescriptor, MemoryInstructions, MemoryMapOrData, PageAllocatorRegistry, PageIndex,
-    PageMap, PageMapSerialization, PersistenceError, Shard, StorageMetrics,
-    TestPageAllocatorFileDescriptorImpl, WRITE_BUCKET_PAGES,
+    test_utils::{
+        base_only_storage_layout,
+        ShardedTestStorageLayout,
+    },
+    Buffer,
+    FileDescriptor,
+    MemoryInstructions,
+    MemoryMapOrData,
+    PageAllocatorRegistry,
+    PageIndex,
+    PageMap,
+    PageMapSerialization,
+    PersistenceError,
+    Shard,
+    StorageMetrics,
+    TestPageAllocatorFileDescriptorImpl,
+    WRITE_BUCKET_PAGES,
 };
 use ic_config::flag_status::FlagStatus;
 use ic_config::state_manager::LsmtConfig;
 use ic_metrics::MetricsRegistry;
 use ic_sys::PAGE_SIZE;
-use ic_types::{Height, MAX_STABLE_MEMORY_IN_BYTES};
+use ic_types::{
+    Height,
+    MAX_STABLE_MEMORY_IN_BYTES,
+};
 use nix::unistd::dup;
 use std::sync::Arc;
 use std::{
     fs::OpenOptions,
-    path::{Path, PathBuf},
+    path::{
+        Path,
+        PathBuf,
+    },
 };
 use tempfile::Builder;
 

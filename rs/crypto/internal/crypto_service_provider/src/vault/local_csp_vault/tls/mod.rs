@@ -1,18 +1,44 @@
 //! TLS handshake operations provided by the CSP vault
 use crate::key_id::KeyId;
-use crate::public_key_store::{PublicKeySetOnceError, PublicKeyStore};
-use crate::secret_key_store::{SecretKeyStore, SecretKeyStoreInsertionError};
-use crate::types::{CspSecretKey, CspSignature};
-use crate::vault::api::{CspTlsKeygenError, CspTlsSignError, TlsHandshakeCspVault};
+use crate::public_key_store::{
+    PublicKeySetOnceError,
+    PublicKeyStore,
+};
+use crate::secret_key_store::{
+    SecretKeyStore,
+    SecretKeyStoreInsertionError,
+};
+use crate::types::{
+    CspSecretKey,
+    CspSignature,
+};
+use crate::vault::api::{
+    CspTlsKeygenError,
+    CspTlsSignError,
+    TlsHandshakeCspVault,
+};
 use crate::vault::local_csp_vault::LocalCspVault;
-use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
-use ic_crypto_internal_tls::{generate_tls_key_pair_der, TlsKeyPairAndCertGenerationError};
+use ic_crypto_internal_logmon::metrics::{
+    MetricsDomain,
+    MetricsResult,
+    MetricsScope,
+};
+use ic_crypto_internal_tls::{
+    generate_tls_key_pair_der,
+    TlsKeyPairAndCertGenerationError,
+};
 use ic_crypto_node_key_validation::ValidTlsCertificate;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_types::crypto::AlgorithmId;
-use ic_types::{NodeId, Time};
-use rand::{CryptoRng, Rng};
+use ic_types::{
+    NodeId,
+    Time,
+};
+use rand::{
+    CryptoRng,
+    Rng,
+};
 use std::time::Duration;
 use time::macros::datetime;
 

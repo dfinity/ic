@@ -1,6 +1,12 @@
 use dfn_core::api::print;
-use dfn_macro::{query, update};
-use std::ptr::{addr_of, addr_of_mut};
+use dfn_macro::{
+    query,
+    update,
+};
+use std::ptr::{
+    addr_of,
+    addr_of_mut,
+};
 
 static mut MYVEC: Vec<u8> = Vec::new();
 const ARRAYSIZE: usize = 10;

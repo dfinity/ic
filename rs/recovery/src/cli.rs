@@ -1,27 +1,55 @@
 //! Calls the recovery library.
 use crate::{
-    app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs},
+    app_subnet_recovery::{
+        AppSubnetRecovery,
+        AppSubnetRecoveryArgs,
+    },
     args_merger::merge,
     error::GracefulExpect,
     get_node_heights_from_metrics,
-    nns_recovery_failover_nodes::{NNSRecoveryFailoverNodes, NNSRecoveryFailoverNodesArgs},
-    nns_recovery_same_nodes::{NNSRecoverySameNodes, NNSRecoverySameNodesArgs},
+    nns_recovery_failover_nodes::{
+        NNSRecoveryFailoverNodes,
+        NNSRecoveryFailoverNodesArgs,
+    },
+    nns_recovery_same_nodes::{
+        NNSRecoverySameNodes,
+        NNSRecoverySameNodesArgs,
+    },
     recovery_iterator::RecoveryIterator,
-    recovery_state::{HasRecoveryState, RecoveryState},
+    recovery_state::{
+        HasRecoveryState,
+        RecoveryState,
+    },
     registry_helper::RegistryHelper,
     steps::Step,
     util,
     util::subnet_id_from_str,
-    NeuronArgs, RecoveryArgs,
+    NeuronArgs,
+    RecoveryArgs,
 };
 use core::fmt::Debug;
-use ic_types::{NodeId, ReplicaVersion, SubnetId};
-use serde::{de::DeserializeOwned, Serialize};
-use slog::{info, warn, Logger};
+use ic_types::{
+    NodeId,
+    ReplicaVersion,
+    SubnetId,
+};
+use serde::{
+    de::DeserializeOwned,
+    Serialize,
+};
+use slog::{
+    info,
+    warn,
+    Logger,
+};
 use std::{
     convert::TryFrom,
     fmt::Display,
-    io::{stdin, stdout, Write},
+    io::{
+        stdin,
+        stdout,
+        Write,
+    },
     str::FromStr,
 };
 use strum::EnumMessage;

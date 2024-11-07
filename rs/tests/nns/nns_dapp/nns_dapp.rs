@@ -1,7 +1,13 @@
 use candid::Principal;
-use candid::{CandidType, Encode};
+use candid::{
+    CandidType,
+    Encode,
+};
 use ic_base_types::SubnetId;
-use ic_icrc1_ledger::{InitArgsBuilder, LedgerArgument};
+use ic_icrc1_ledger::{
+    InitArgsBuilder,
+    LedgerArgument,
+};
 use ic_ledger_core::Tokens;
 use ic_nns_constants::SUBNET_RENTAL_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
@@ -9,15 +15,30 @@ use ic_system_test_driver::driver::{
     boundary_node::BoundaryNodeVm,
     test_env::TestEnv,
     test_env_api::{
-        load_wasm, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
+        load_wasm,
+        HasPublicApiUrl,
+        HasTopologySnapshot,
+        IcNodeContainer,
+        IcNodeSnapshot,
         NnsCustomizations,
     },
 };
-use ic_system_test_driver::nns::{set_authorized_subnetwork_list, update_xdr_per_icp};
+use ic_system_test_driver::nns::{
+    set_authorized_subnetwork_list,
+    update_xdr_per_icp,
+};
 use ic_system_test_driver::sns_client::add_subnet_to_sns_deploy_whitelist;
-use ic_system_test_driver::util::{block_on, create_canister, install_canister, runtime_from_url};
+use ic_system_test_driver::util::{
+    block_on,
+    create_canister,
+    install_canister,
+    runtime_from_url,
+};
 use icp_ledger::AccountIdentifier;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use slog::info;
 use std::collections::HashMap;
 

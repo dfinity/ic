@@ -2,27 +2,51 @@ use ic00::BitcoinGetBlockHeadersArgs;
 use ic_async_utils::incoming_from_path;
 use ic_base_types::CanisterId;
 use ic_btc_interface::NetworkInRequest as BitcoinNetwork;
-use ic_btc_replica_types::{GetSuccessorsResponseComplete, GetSuccessorsResponsePartial};
+use ic_btc_replica_types::{
+    GetSuccessorsResponseComplete,
+    GetSuccessorsResponsePartial,
+};
 use ic_btc_service::{
-    btc_service_server::{BtcService, BtcServiceServer},
-    BtcServiceGetSuccessorsRequest, BtcServiceGetSuccessorsResponse,
-    BtcServiceSendTransactionRequest, BtcServiceSendTransactionResponse,
+    btc_service_server::{
+        BtcService,
+        BtcServiceServer,
+    },
+    BtcServiceGetSuccessorsRequest,
+    BtcServiceGetSuccessorsResponse,
+    BtcServiceSendTransactionRequest,
+    BtcServiceSendTransactionResponse,
 };
 use ic_config::bitcoin_payload_builder_config::Config as BitcoinPayloadBuilderConfig;
 use ic_config::{
-    execution_environment::{BitcoinConfig, Config as HypervisorConfig},
+    execution_environment::{
+        BitcoinConfig,
+        Config as HypervisorConfig,
+    },
     subnet_config::SubnetConfig,
 };
 use ic_error_types::RejectCode;
 use ic_management_canister_types::{
-    self as ic00, BitcoinGetBalanceArgs, BitcoinGetCurrentFeePercentilesArgs,
-    BitcoinGetSuccessorsArgs, BitcoinGetUtxosArgs, BitcoinSendTransactionArgs,
-    BitcoinSendTransactionInternalArgs, EmptyBlob, Method, Payload,
+    self as ic00,
+    BitcoinGetBalanceArgs,
+    BitcoinGetCurrentFeePercentilesArgs,
+    BitcoinGetSuccessorsArgs,
+    BitcoinGetUtxosArgs,
+    BitcoinSendTransactionArgs,
+    BitcoinSendTransactionInternalArgs,
+    EmptyBlob,
+    Method,
+    Payload,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replica_tests as utils;
-use ic_state_machine_tests::{StateMachine, StateMachineConfig};
-use ic_test_utilities::universal_canister::{call_args, wasm};
+use ic_state_machine_tests::{
+    StateMachine,
+    StateMachineConfig,
+};
+use ic_test_utilities::universal_canister::{
+    call_args,
+    wasm,
+};
 use ic_types::ingress::WasmResult;
 use std::str::FromStr;
 use std::sync::Arc;

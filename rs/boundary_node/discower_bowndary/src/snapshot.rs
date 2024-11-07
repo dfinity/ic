@@ -1,4 +1,7 @@
-use crate::{check::HealthCheckResult, node::Node};
+use crate::{
+    check::HealthCheckResult,
+    node::Node,
+};
 use std::fmt::Debug;
 
 pub const IC0_SEED_DOMAIN: &str = "ic0.app";

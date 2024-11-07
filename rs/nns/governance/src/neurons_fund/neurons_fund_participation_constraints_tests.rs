@@ -2,9 +2,15 @@ use super::*;
 use assert_matches::assert_matches;
 use ic_nervous_system_common::E8;
 use ic_neurons_fund::{
-    rescale_to_icp, MatchingFunction, SerializableFunction, ValidatedLinearScalingCoefficient,
+    rescale_to_icp,
+    MatchingFunction,
+    SerializableFunction,
+    ValidatedLinearScalingCoefficient,
 };
-use maplit::{btreemap, btreeset};
+use maplit::{
+    btreemap,
+    btreeset,
+};
 
 fn new_neurons_fund_neuron(id: u64, maturity_equivalent_icp_e8s: u64) -> NeuronsFundNeuron {
     let id = NeuronId { id };

@@ -1,50 +1,112 @@
 use crate::{
-    canister_manager::{uninstall_canister, AddCanisterChangeToHistory},
+    canister_manager::{
+        uninstall_canister,
+        AddCanisterChangeToHistory,
+    },
     execution_environment::{
-        as_num_instructions, as_round_instructions, execute_canister, ExecuteCanisterResult,
-        ExecutionEnvironment, RoundInstructions, RoundLimits,
+        as_num_instructions,
+        as_round_instructions,
+        execute_canister,
+        ExecuteCanisterResult,
+        ExecutionEnvironment,
+        RoundInstructions,
+        RoundLimits,
     },
     metrics::MeasurementScope,
     util::process_responses,
 };
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SchedulerConfig;
-use ic_crypto_prng::{Csprng, RandomnessPurpose::ExecutionThread};
+use ic_crypto_prng::{
+    Csprng,
+    RandomnessPurpose::ExecutionThread,
+};
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_error_types::{ErrorCode, UserError};
-use ic_interfaces::execution_environment::{
-    ExecutionRoundSummary, ExecutionRoundType, RegistryExecutionSettings,
+use ic_error_types::{
+    ErrorCode,
+    UserError,
 };
 use ic_interfaces::execution_environment::{
-    IngressHistoryWriter, Scheduler, SubnetAvailableMemory,
+    ExecutionRoundSummary,
+    ExecutionRoundType,
+    RegistryExecutionSettings,
 };
-use ic_logger::{debug, error, fatal, info, new_logger, warn, ReplicaLogger};
-use ic_management_canister_types::{CanisterStatusType, MasterPublicKeyId, Method as Ic00Method};
+use ic_interfaces::execution_environment::{
+    IngressHistoryWriter,
+    Scheduler,
+    SubnetAvailableMemory,
+};
+use ic_logger::{
+    debug,
+    error,
+    fatal,
+    info,
+    new_logger,
+    warn,
+    ReplicaLogger,
+};
+use ic_management_canister_types::{
+    CanisterStatusType,
+    MasterPublicKeyId,
+    Method as Ic00Method,
+};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{
     canister_state::{
-        execution_state::NextScheduledMethod, system_state::CyclesUseCase, NextExecution,
+        execution_state::NextScheduledMethod,
+        system_state::CyclesUseCase,
+        NextExecution,
     },
     num_bytes_try_from,
     page_map::PageAllocatorFileDescriptor,
-    CanisterState, CanisterStatus, ExecutionTask, InputQueueType, NetworkTopology, NumWasmPages,
+    CanisterState,
+    CanisterStatus,
+    ExecutionTask,
+    InputQueueType,
+    NetworkTopology,
+    NumWasmPages,
     ReplicatedState,
 };
 use ic_system_api::InstructionLimits;
 use ic_types::{
     consensus::idkg::PreSigId,
     crypto::canister_threshold_sig::MasterPublicKey,
-    ingress::{IngressState, IngressStatus},
-    messages::{CanisterMessage, Ingress, MessageId, Response, NO_DEADLINE},
-    CanisterId, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NumBytes,
-    NumInstructions, NumSlices, Randomness, ReplicaVersion, SubnetId, Time,
+    ingress::{
+        IngressState,
+        IngressStatus,
+    },
+    messages::{
+        CanisterMessage,
+        Ingress,
+        MessageId,
+        Response,
+        NO_DEADLINE,
+    },
+    CanisterId,
+    ComputeAllocation,
+    Cycles,
+    ExecutionRound,
+    MemoryAllocation,
+    NumBytes,
+    NumInstructions,
+    NumSlices,
+    Randomness,
+    ReplicaVersion,
+    SubnetId,
+    Time,
     MAX_WASM_MEMORY_IN_BYTES,
 };
-use ic_types::{nominal_cycles::NominalCycles, NumMessages};
+use ic_types::{
+    nominal_cycles::NominalCycles,
+    NumMessages,
+};
 use num_rational::Ratio;
 use std::{
     cell::RefCell,
-    collections::{BTreeMap, BTreeSet},
+    collections::{
+        BTreeMap,
+        BTreeSet,
+    },
     str::FromStr,
     sync::Arc,
 };

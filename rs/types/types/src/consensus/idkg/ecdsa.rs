@@ -1,26 +1,49 @@
 //! Threshold ECDSA transcripts and references related definitions.
 use crate::crypto::{
     canister_threshold_sig::error::{
-        EcdsaPresignatureQuadrupleCreationError, ThresholdEcdsaSigInputsCreationError,
+        EcdsaPresignatureQuadrupleCreationError,
+        ThresholdEcdsaSigInputsCreationError,
     },
     canister_threshold_sig::{
-        EcdsaPreSignatureQuadruple, ExtendedDerivationPath, ThresholdEcdsaSigInputs,
+        EcdsaPreSignatureQuadruple,
+        ExtendedDerivationPath,
+        ThresholdEcdsaSigInputs,
     },
 };
-use crate::{Height, Randomness};
+use crate::{
+    Height,
+    Randomness,
+};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types::EcdsaKeyId;
-use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_protobuf::proxy::{
+    try_from_option_field,
+    ProxyDecodeError,
+};
 use ic_protobuf::types::v1 as pb;
-use serde::{Deserialize, Serialize};
-use std::convert::{AsMut, AsRef, TryFrom, TryInto};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use std::convert::{
+    AsMut,
+    AsRef,
+    TryFrom,
+    TryInto,
+};
 use std::hash::Hash;
 
 use super::{
-    IDkgBlockReader, IDkgTranscriptParamsRef, MaskedTranscript, RandomTranscriptParams,
-    RandomUnmaskedTranscriptParams, TranscriptLookupError, TranscriptRef,
-    UnmaskedTimesMaskedParams, UnmaskedTranscript,
+    IDkgBlockReader,
+    IDkgTranscriptParamsRef,
+    MaskedTranscript,
+    RandomTranscriptParams,
+    RandomUnmaskedTranscriptParams,
+    TranscriptLookupError,
+    TranscriptRef,
+    UnmaskedTimesMaskedParams,
+    UnmaskedTranscript,
 };
 
 /// ECDSA Quadruple in creation.

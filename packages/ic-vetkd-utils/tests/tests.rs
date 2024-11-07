@@ -1,6 +1,9 @@
 use ic_bls12_381::*;
 use ic_vetkd_utils::*;
-use rand::{Rng, SeedableRng};
+use rand::{
+    Rng,
+    SeedableRng,
+};
 
 mod test_utils;
 

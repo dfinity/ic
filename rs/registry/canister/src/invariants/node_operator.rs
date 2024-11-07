@@ -1,9 +1,18 @@
 use std::convert::TryFrom;
 
-use ic_protobuf::registry::{node::v1::NodeRecord, node_operator::v1::NodeOperatorRecord};
-use ic_registry_keys::{make_node_operator_record_key, NODE_RECORD_KEY_PREFIX};
+use ic_protobuf::registry::{
+    node::v1::NodeRecord,
+    node_operator::v1::NodeOperatorRecord,
+};
+use ic_registry_keys::{
+    make_node_operator_record_key,
+    NODE_RECORD_KEY_PREFIX,
+};
 
-use crate::invariants::common::{InvariantCheckError, RegistrySnapshot};
+use crate::invariants::common::{
+    InvariantCheckError,
+    RegistrySnapshot,
+};
 
 use ic_base_types::PrincipalId;
 use prost::Message;

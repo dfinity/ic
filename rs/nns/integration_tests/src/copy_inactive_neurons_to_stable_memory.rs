@@ -1,16 +1,28 @@
 use candid::Encode;
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_clients::canister_status::CanisterStatusType;
 use ic_nervous_system_common_test_utils::get_gauge;
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
+use ic_nns_constants::{
+    GOVERNANCE_CANISTER_ID,
+    ROOT_CANISTER_ID,
+};
 use ic_nns_governance_api::pb::v1::governance::migration::MigrationStatus;
 use ic_nns_test_utils::state_test_helpers::{
-    get_canister_status, nns_create_super_powerful_neuron, nns_get_migrations,
-    nns_propose_upgrade_nns_canister, scrape_metrics,
+    get_canister_status,
+    nns_create_super_powerful_neuron,
+    nns_get_migrations,
+    nns_propose_upgrade_nns_canister,
+    scrape_metrics,
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
-use std::{env, fs};
+use std::{
+    env,
+    fs,
+};
 
 #[test]
 fn test_copy_inactive_neurons_to_stable_memory() {

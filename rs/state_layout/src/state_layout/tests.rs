@@ -1,19 +1,37 @@
 use super::*;
 
 use ic_management_canister_types::{
-    CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode, IC_00,
+    CanisterChange,
+    CanisterChangeDetails,
+    CanisterChangeOrigin,
+    CanisterInstallMode,
+    IC_00,
 };
 use ic_replicated_state::{
-    canister_state::system_state::{CanisterHistory, OnLowWasmMemoryHookStatus},
+    canister_state::system_state::{
+        CanisterHistory,
+        OnLowWasmMemoryHookStatus,
+    },
     metadata_state::subnet_call_context_manager::InstallCodeCallId,
     page_map::Shard,
     NumWasmPages,
 };
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_tmpdir::tmpdir;
-use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, ResponseBuilder};
-use ic_test_utilities_types::{ids::canister_test_id, ids::user_test_id};
-use ic_types::messages::{CanisterCall, CanisterMessage, CanisterMessageOrTask};
+use ic_test_utilities_types::messages::{
+    IngressBuilder,
+    RequestBuilder,
+    ResponseBuilder,
+};
+use ic_test_utilities_types::{
+    ids::canister_test_id,
+    ids::user_test_id,
+};
+use ic_types::messages::{
+    CanisterCall,
+    CanisterMessage,
+    CanisterMessageOrTask,
+};
 use ic_types::time::UNIX_EPOCH;
 use itertools::Itertools;
 use proptest::prelude::*;

@@ -2,8 +2,15 @@
 #![forbid(unsafe_code)]
 #![deny(clippy::unwrap_used)]
 
-use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
-use simple_asn1::{ASN1Block, OID};
+use ic_types::crypto::{
+    AlgorithmId,
+    CryptoError,
+    CryptoResult,
+};
+use simple_asn1::{
+    ASN1Block,
+    OID,
+};
 
 #[cfg(test)]
 mod tests;

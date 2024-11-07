@@ -1,30 +1,84 @@
 use super::*;
-use crate::message_routing::{LABEL_REMOTE, METRIC_TIME_IN_BACKLOG, METRIC_TIME_IN_STREAM};
+use crate::message_routing::{
+    LABEL_REMOTE,
+    METRIC_TIME_IN_BACKLOG,
+    METRIC_TIME_IN_STREAM,
+};
 use assert_matches::assert_matches;
-use ic_base_types::{NumSeconds, PrincipalId};
-use ic_certification_version::{CertificationVersion, CURRENT_CERTIFICATION_VERSION};
+use ic_base_types::{
+    NumSeconds,
+    PrincipalId,
+};
+use ic_certification_version::{
+    CertificationVersion,
+    CURRENT_CERTIFICATION_VERSION,
+};
 use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_interfaces::messaging::LABEL_VALUE_CANISTER_NOT_FOUND;
 use ic_metrics::MetricsRegistry;
-use ic_registry_routing_table::{CanisterIdRange, CanisterIdRanges, RoutingTable};
+use ic_registry_routing_table::{
+    CanisterIdRange,
+    CanisterIdRanges,
+    RoutingTable,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::metadata_state::StreamMap;
 use ic_replicated_state::replicated_state::LABEL_VALUE_OUT_OF_MEMORY;
-use ic_replicated_state::testing::{ReplicatedStateTesting, SystemStateTesting};
-use ic_replicated_state::{CanisterStatus, ReplicatedState, Stream, SystemState};
+use ic_replicated_state::testing::{
+    ReplicatedStateTesting,
+    SystemStateTesting,
+};
+use ic_replicated_state::{
+    CanisterStatus,
+    ReplicatedState,
+    Stream,
+    SystemState,
+};
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
-    fetch_histogram_stats, fetch_histogram_vec_count, fetch_int_counter, fetch_int_counter_vec,
-    fetch_int_gauge_vec, metric_vec, nonzero_values, HistogramStats, MetricVec,
+    fetch_histogram_stats,
+    fetch_histogram_vec_count,
+    fetch_int_counter,
+    fetch_int_counter_vec,
+    fetch_int_gauge_vec,
+    metric_vec,
+    nonzero_values,
+    HistogramStats,
+    MetricVec,
 };
-use ic_test_utilities_state::{new_canister_state, register_callback};
-use ic_test_utilities_types::ids::{user_test_id, SUBNET_12, SUBNET_23, SUBNET_27};
-use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
+use ic_test_utilities_state::{
+    new_canister_state,
+    register_callback,
+};
+use ic_test_utilities_types::ids::{
+    user_test_id,
+    SUBNET_12,
+    SUBNET_23,
+    SUBNET_27,
+};
+use ic_test_utilities_types::messages::{
+    RequestBuilder,
+    ResponseBuilder,
+};
 use ic_test_utilities_types::xnet::StreamHeaderBuilder;
-use ic_types::messages::{CallbackId, Payload, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE};
+use ic_types::messages::{
+    CallbackId,
+    Payload,
+    MAX_RESPONSE_COUNT_BYTES,
+    NO_DEADLINE,
+};
 use ic_types::time::UNIX_EPOCH;
-use ic_types::xnet::{RejectReason, RejectSignal, StreamFlags, StreamIndexedQueue};
-use ic_types::{CanisterId, CountBytes, Cycles};
+use ic_types::xnet::{
+    RejectReason,
+    RejectSignal,
+    StreamFlags,
+    StreamIndexedQueue,
+};
+use ic_types::{
+    CanisterId,
+    CountBytes,
+    Cycles,
+};
 use lazy_static::lazy_static;
 use maplit::btreemap;
 use pretty_assertions::assert_eq;

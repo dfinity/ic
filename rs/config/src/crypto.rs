@@ -3,7 +3,10 @@
 // defined in another module).
 #![allow(clippy::unit_arg)]
 
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
@@ -11,7 +14,11 @@ use std::path::PathBuf;
 use tempfile::TempDir;
 
 #[cfg(test)]
-use proptest::prelude::{any, prop_oneof, Strategy};
+use proptest::prelude::{
+    any,
+    prop_oneof,
+    Strategy,
+};
 #[cfg(test)]
 use proptest_derive::Arbitrary;
 use std::fs::Permissions;

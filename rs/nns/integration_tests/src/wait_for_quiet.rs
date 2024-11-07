@@ -1,26 +1,44 @@
-use dfn_candid::{candid, candid_one};
+use dfn_candid::{
+    candid,
+    candid_one,
+};
 use ic_canister_client_sender::Sender;
 use ic_nervous_system_common::ONE_DAY_SECONDS;
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_ID,
+    TEST_NEURON_1_OWNER_KEYPAIR,
+    TEST_NEURON_1_OWNER_PRINCIPAL,
+    TEST_NEURON_2_ID,
     TEST_NEURON_2_OWNER_KEYPAIR,
 };
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance_api::{
     pb::v1::{
         add_or_remove_node_provider::Change,
-        manage_neuron::{self, NeuronIdOrSubaccount},
+        manage_neuron::{
+            self,
+            NeuronIdOrSubaccount,
+        },
         manage_neuron_response::Command as CommandResponse,
         neuron::DissolveState,
-        AddOrRemoveNodeProvider, MakeProposalRequest, ManageNeuronCommandRequest,
-        ManageNeuronRequest, ManageNeuronResponse, Neuron, NodeProvider, ProposalActionRequest,
-        ProposalInfo, Vote,
+        AddOrRemoveNodeProvider,
+        MakeProposalRequest,
+        ManageNeuronCommandRequest,
+        ManageNeuronRequest,
+        ManageNeuronResponse,
+        Neuron,
+        NodeProvider,
+        ProposalActionRequest,
+        ProposalInfo,
+        Vote,
     },
     test_api::TimeWarp,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{
+        state_machine_test_on_nns_subnet,
+        NnsCanisters,
+    },
 };
 
 #[test]

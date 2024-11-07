@@ -1,33 +1,61 @@
 use assert_matches::assert_matches;
 use candid::Encode;
 use dfn_candid::candid;
-use ic_base_types::{subnet_id_try_from_protobuf, PrincipalId, SubnetId};
+use ic_base_types::{
+    subnet_id_try_from_protobuf,
+    PrincipalId,
+    SubnetId,
+};
 use ic_management_canister_types::{
-    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
+    EcdsaCurve,
+    EcdsaKeyId,
+    MasterPublicKeyId,
+    SchnorrAlgorithm,
+    SchnorrKeyId,
 };
 use ic_nns_test_utils::registry::TEST_ID;
 use ic_nns_test_utils::{
     itest_helpers::{
-        forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
-        set_up_universal_canister, try_call_via_universal_canister,
+        forward_call_via_universal_canister,
+        local_test_on_nns_subnet,
+        set_up_registry_canister,
+        set_up_universal_canister,
+        try_call_via_universal_canister,
     },
-    registry::{get_value_or_panic, invariant_compliant_mutation_as_atomic_req},
+    registry::{
+        get_value_or_panic,
+        invariant_compliant_mutation_as_atomic_req,
+    },
 };
 use ic_protobuf::registry::crypto::v1::ChainKeySigningSubnetList;
 use ic_protobuf::registry::subnet::v1::{
-    ChainKeyConfig as ChainKeyConfigPb, EcdsaConfig as EcdsaConfigPb, SubnetRecord,
+    ChainKeyConfig as ChainKeyConfigPb,
+    EcdsaConfig as EcdsaConfigPb,
+    SubnetRecord,
 };
-use ic_registry_keys::{make_chain_key_signing_subnet_list_key, make_subnet_record_key};
+use ic_registry_keys::{
+    make_chain_key_signing_subnet_list_key,
+    make_subnet_record_key,
+};
 use ic_registry_subnet_features::{
-    ChainKeyConfig as ChainKeyConfigInternal, EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+    ChainKeyConfig as ChainKeyConfigInternal,
+    EcdsaConfig,
+    DEFAULT_ECDSA_MAX_QUEUE_SIZE,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest};
+use ic_registry_transport::{
+    insert,
+    pb::v1::RegistryAtomicMutateRequest,
+};
 use ic_types::ReplicaVersion;
 use prost::Message;
-use registry_canister::mutations::do_update_subnet::{ChainKeyConfig, KeyConfig};
+use registry_canister::mutations::do_update_subnet::{
+    ChainKeyConfig,
+    KeyConfig,
+};
 use registry_canister::{
-    init::RegistryCanisterInitPayloadBuilder, mutations::do_update_subnet::UpdateSubnetPayload,
+    init::RegistryCanisterInitPayloadBuilder,
+    mutations::do_update_subnet::UpdateSubnetPayload,
 };
 use std::str::FromStr;
 

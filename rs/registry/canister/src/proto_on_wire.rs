@@ -1,4 +1,8 @@
-use on_wire::{FromWire, IntoWire, NewType};
+use on_wire::{
+    FromWire,
+    IntoWire,
+    NewType,
+};
 
 /// Auxiliary type required for `protobuf` function below to work.
 pub struct Protobuf<A>(pub A);

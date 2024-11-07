@@ -1,5 +1,8 @@
 use crate::execution_environment::QUERY_EXECUTION_THREADS_TOTAL;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 

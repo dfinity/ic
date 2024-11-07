@@ -1,6 +1,15 @@
-use std::ffi::{OsStr, OsString};
+use std::ffi::{
+    OsStr,
+    OsString,
+};
 use std::io::Write;
-use std::{fs, io, io::Error, path::Path, path::PathBuf};
+use std::{
+    fs,
+    io,
+    io::Error,
+    path::Path,
+    path::PathBuf,
+};
 
 #[cfg(target_family = "unix")] // Otherwise, clippy complains about lack of use.
 use std::io::ErrorKind::AlreadyExists;
@@ -141,9 +150,19 @@ pub fn copy_file_sparse(from: &Path, to: &Path) -> io::Result<u64> {
 
     use cvt::*;
     use fs::OpenOptions;
-    use io::{ErrorKind, Read};
-    use libc::{ftruncate64, lseek64};
-    use std::os::unix::{fs::OpenOptionsExt, fs::PermissionsExt, io::AsRawFd};
+    use io::{
+        ErrorKind,
+        Read,
+    };
+    use libc::{
+        ftruncate64,
+        lseek64,
+    };
+    use std::os::unix::{
+        fs::OpenOptionsExt,
+        fs::PermissionsExt,
+        io::AsRawFd,
+    };
 
     unsafe fn copy_file_range(
         fd_in: libc::c_int,
@@ -532,7 +551,10 @@ fn tmp_name() -> String {
     /// The character length of the random string used for temporary file names.
     const TMP_NAME_LEN: usize = 7;
 
-    use rand::{distributions::Alphanumeric, Rng};
+    use rand::{
+        distributions::Alphanumeric,
+        Rng,
+    };
 
     let mut rng = rand::thread_rng();
     std::iter::repeat(())
@@ -767,7 +789,10 @@ fn clone_file_impl(src: &Path, dst: &Path) -> Result<(), FileCloneError> {
 
 #[cfg(target_os = "macos")]
 fn clone_file_impl(src: &Path, dst: &Path) -> Result<(), FileCloneError> {
-    use libc::{c_char, c_int};
+    use libc::{
+        c_char,
+        c_int,
+    };
     use std::ffi::CString;
     use std::os::unix::ffi::OsStrExt;
 
@@ -891,7 +916,10 @@ mod tests {
     #[cfg(target_family = "unix")]
     mod are_hard_links_to_the_same_inode {
         use crate::fs::write_string_using_tmp_file;
-        use crate::fs::{are_hard_links_to_the_same_inode, create_hard_link_to_existing_file};
+        use crate::fs::{
+            are_hard_links_to_the_same_inode,
+            create_hard_link_to_existing_file,
+        };
         use assert_matches::assert_matches;
         use std::fs;
         use std::io::ErrorKind::NotFound;
@@ -1057,7 +1085,9 @@ mod tests {
     #[cfg(target_family = "unix")]
     mod is_regular_file {
         use crate::fs::{
-            create_hard_link_to_existing_file, is_regular_file, write_string_using_tmp_file,
+            create_hard_link_to_existing_file,
+            is_regular_file,
+            write_string_using_tmp_file,
         };
         use assert_matches::assert_matches;
         use std::fs;
@@ -1142,11 +1172,17 @@ mod tests {
 
     #[cfg(target_family = "unix")]
     mod open_existing_file_for_write {
-        use crate::fs::{open_existing_file_for_write, write_string_using_tmp_file};
+        use crate::fs::{
+            open_existing_file_for_write,
+            write_string_using_tmp_file,
+        };
         use assert_matches::assert_matches;
         use std::fs::create_dir;
         use std::fs::Permissions;
-        use std::io::ErrorKind::{NotFound, PermissionDenied};
+        use std::io::ErrorKind::{
+            NotFound,
+            PermissionDenied,
+        };
         use std::os::unix::fs::PermissionsExt;
 
         #[test]
@@ -1202,11 +1238,17 @@ mod tests {
 
     #[cfg(target_family = "unix")]
     mod remove_file {
-        use crate::fs::{remove_file, write_string_using_tmp_file};
+        use crate::fs::{
+            remove_file,
+            write_string_using_tmp_file,
+        };
         use assert_matches::assert_matches;
         use std::fs::create_dir;
         use std::fs::Permissions;
-        use std::io::ErrorKind::{NotFound, PermissionDenied};
+        use std::io::ErrorKind::{
+            NotFound,
+            PermissionDenied,
+        };
         use std::os::unix::fs::PermissionsExt;
 
         #[test]

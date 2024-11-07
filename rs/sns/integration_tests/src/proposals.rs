@@ -1,38 +1,80 @@
 use canister_test::Canister;
-use dfn_candid::{candid, candid_one};
+use dfn_candid::{
+    candid,
+    candid_one,
+};
 use ic_canister_client_sender::Sender;
 use ic_ledger_core::Tokens;
-use ic_nervous_system_common::{i2d, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS};
+use ic_nervous_system_common::{
+    i2d,
+    ONE_DAY_SECONDS,
+    ONE_MONTH_SECONDS,
+    ONE_YEAR_SECONDS,
+};
 use ic_nervous_system_common_test_keys::{
-    TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR, TEST_USER3_KEYPAIR, TEST_USER4_KEYPAIR,
+    TEST_USER1_KEYPAIR,
+    TEST_USER2_KEYPAIR,
+    TEST_USER3_KEYPAIR,
+    TEST_USER4_KEYPAIR,
 };
 use ic_sns_governance::{
     pb::v1::{
-        get_proposal_response::Result::{Error, Proposal as ResponseProposal},
-        governance_error::ErrorType::{self, PreconditionFailed},
+        get_proposal_response::Result::{
+            Error,
+            Proposal as ResponseProposal,
+        },
+        governance_error::ErrorType::{
+            self,
+            PreconditionFailed,
+        },
         manage_neuron_response::Command,
         proposal::Action,
-        Ballot, GetProposal, GetProposalResponse, ListProposals, ListProposalsResponse,
-        ManageNeuronResponse, Motion, NervousSystemParameters, NeuronId, NeuronPermissionList,
-        NeuronPermissionType, Proposal, ProposalData, ProposalDecisionStatus, ProposalId,
-        ProposalRewardStatus, RewardEvent, Vote, VotingRewardsParameters,
+        Ballot,
+        GetProposal,
+        GetProposalResponse,
+        ListProposals,
+        ListProposalsResponse,
+        ManageNeuronResponse,
+        Motion,
+        NervousSystemParameters,
+        NeuronId,
+        NeuronPermissionList,
+        NeuronPermissionType,
+        Proposal,
+        ProposalData,
+        ProposalDecisionStatus,
+        ProposalId,
+        ProposalRewardStatus,
+        RewardEvent,
+        Vote,
+        VotingRewardsParameters,
     },
     proposal::{
-        PROPOSAL_MOTION_TEXT_BYTES_MAX, PROPOSAL_SUMMARY_BYTES_MAX, PROPOSAL_TITLE_BYTES_MAX,
+        PROPOSAL_MOTION_TEXT_BYTES_MAX,
+        PROPOSAL_SUMMARY_BYTES_MAX,
+        PROPOSAL_TITLE_BYTES_MAX,
         PROPOSAL_URL_CHAR_MAX,
     },
     reward,
 };
 use ic_sns_test_utils::itest_helpers::state_machine_test_on_sns_subnet;
 use ic_sns_test_utils::{
-    itest_helpers::{local_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder, UserInfo},
+    itest_helpers::{
+        local_test_on_sns_subnet,
+        SnsCanisters,
+        SnsTestsInitPayloadBuilder,
+        UserInfo,
+    },
     now_seconds,
 };
 use icrc_ledger_types::icrc1::account::Account;
 use on_wire::bytes;
 use std::{
     collections::BTreeMap,
-    time::{SystemTime, UNIX_EPOCH},
+    time::{
+        SystemTime,
+        UNIX_EPOCH,
+    },
 };
 
 const MOTION_PROPOSAL_ACTION_TYPE: u64 = 1;

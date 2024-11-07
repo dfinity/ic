@@ -1,6 +1,8 @@
 use crate::fake::FakeDriver;
 use ic_nns_governance::{
-    encode_metrics, governance::Governance, governance_proto_builder::GovernanceProtoBuilder,
+    encode_metrics,
+    governance::Governance,
+    governance_proto_builder::GovernanceProtoBuilder,
     pb::v1::RewardEvent,
 };
 

@@ -34,7 +34,12 @@
 //! ```
 use std::sync::Arc;
 
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{
+    Deserialize,
+    Deserializer,
+    Serialize,
+    Serializer,
+};
 
 pub fn serialize_arc<T: Serialize, S: Serializer>(
     data: &Arc<T>,

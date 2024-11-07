@@ -12,27 +12,49 @@
 //!
 use std::time::Duration;
 
-use anyhow::{anyhow, Context};
+use anyhow::{
+    anyhow,
+    Context,
+};
 use axum::{
     body::Body,
-    http::{Method, Request, Response, Version},
+    http::{
+        Method,
+        Request,
+        Response,
+        Version,
+    },
     Router,
 };
 use bytes::Bytes;
 use ic_base_types::NodeId;
-use ic_logger::{info, ReplicaLogger};
+use ic_logger::{
+    info,
+    ReplicaLogger,
+};
 use ic_protobuf::transport::v1 as pb;
 use prost::Message;
-use quinn::{Connection, RecvStream, SendStream};
+use quinn::{
+    Connection,
+    RecvStream,
+    SendStream,
+};
 use tower::ServiceExt;
 use tracing::instrument;
 
 use crate::{
     metrics::{
-        QuicTransportMetrics, ERROR_TYPE_ACCEPT, ERROR_TYPE_APP, ERROR_TYPE_FINISH,
-        ERROR_TYPE_READ, ERROR_TYPE_STOPPED, ERROR_TYPE_WRITE, STREAM_TYPE_BIDI,
+        QuicTransportMetrics,
+        ERROR_TYPE_ACCEPT,
+        ERROR_TYPE_APP,
+        ERROR_TYPE_FINISH,
+        ERROR_TYPE_READ,
+        ERROR_TYPE_STOPPED,
+        ERROR_TYPE_WRITE,
+        STREAM_TYPE_BIDI,
     },
-    ConnId, MAX_MESSAGE_SIZE_BYTES,
+    ConnId,
+    MAX_MESSAGE_SIZE_BYTES,
 };
 
 const QUIC_METRIC_SCRAPE_INTERVAL: Duration = Duration::from_secs(5);

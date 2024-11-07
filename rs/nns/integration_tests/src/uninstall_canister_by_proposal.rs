@@ -3,14 +3,22 @@ use ic_base_types::CanisterId;
 use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
 use ic_nns_constants::LIFELINE_CANISTER_INDEX_IN_NNS_SUBNET;
 use ic_nns_governance_api::pb::v1::{
-    manage_neuron_response::{Command, MakeProposalResponse},
-    ExecuteNnsFunction, MakeProposalRequest, NnsFunction, ProposalActionRequest,
+    manage_neuron_response::{
+        Command,
+        MakeProposalResponse,
+    },
+    ExecuteNnsFunction,
+    MakeProposalRequest,
+    NnsFunction,
+    ProposalActionRequest,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     neuron_helpers::get_neuron_1,
     state_test_helpers::{
-        get_canister_status_from_root, nns_governance_make_proposal, setup_nns_canisters,
+        get_canister_status_from_root,
+        nns_governance_make_proposal,
+        setup_nns_canisters,
         state_machine_builder_for_nns_tests,
     },
 };

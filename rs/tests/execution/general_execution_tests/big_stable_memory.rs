@@ -2,7 +2,10 @@ use ic_agent::agent::RejectCode;
 use ic_system_test_driver::{
     driver::{
         test_env::TestEnv,
-        test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl},
+        test_env_api::{
+            GetFirstHealthyNodeSnapshot,
+            HasPublicApiUrl,
+        },
     },
     util::*,
 };

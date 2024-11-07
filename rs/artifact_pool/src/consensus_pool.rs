@@ -2,32 +2,76 @@ use crate::backup::Backup;
 use crate::height_index::HeightIndexedInstants;
 use crate::{
     consensus_pool_cache::{
-        get_highest_finalized_block, update_summary_block, ConsensusBlockChainImpl,
+        get_highest_finalized_block,
+        update_summary_block,
+        ConsensusBlockChainImpl,
         ConsensusCacheImpl,
     },
     inmemory_pool::InMemoryPoolSection,
-    metrics::{LABEL_POOL_TYPE, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED},
+    metrics::{
+        LABEL_POOL_TYPE,
+        POOL_TYPE_UNVALIDATED,
+        POOL_TYPE_VALIDATED,
+    },
 };
-use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
+use ic_config::artifact_pool::{
+    ArtifactPoolConfig,
+    PersistentPoolBackend,
+};
 use ic_interfaces::p2p::consensus::ArtifactWithOpt;
 use ic_interfaces::{
     consensus_pool::{
-        ChangeAction, ConsensusBlockCache, ConsensusBlockChain, ConsensusPool, ConsensusPoolCache,
-        ConsensusTime, HeightIndexedPool, HeightRange, Mutations, PoolSection,
-        PurgeableArtifactType, UnvalidatedConsensusArtifact, ValidatedConsensusArtifact,
+        ChangeAction,
+        ConsensusBlockCache,
+        ConsensusBlockChain,
+        ConsensusPool,
+        ConsensusPoolCache,
+        ConsensusTime,
+        HeightIndexedPool,
+        HeightRange,
+        Mutations,
+        PoolSection,
+        PurgeableArtifactType,
+        UnvalidatedConsensusArtifact,
+        ValidatedConsensusArtifact,
     },
-    p2p::consensus::{ArtifactTransmit, ArtifactTransmits, MutablePool, ValidatedPoolReader},
+    p2p::consensus::{
+        ArtifactTransmit,
+        ArtifactTransmits,
+        MutablePool,
+        ValidatedPoolReader,
+    },
     time_source::TimeSource,
 };
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{
+    warn,
+    ReplicaLogger,
+};
 use ic_metrics::buckets::linear_buckets;
 use ic_protobuf::types::v1 as pb;
 use ic_types::crypto::CryptoHashOf;
 use ic_types::NodeId;
-use ic_types::{artifact::ConsensusMessageId, consensus::*, Height, SubnetId, Time};
-use prometheus::{histogram_opts, labels, opts, Histogram, IntCounter, IntGauge};
+use ic_types::{
+    artifact::ConsensusMessageId,
+    consensus::*,
+    Height,
+    SubnetId,
+    Time,
+};
+use prometheus::{
+    histogram_opts,
+    labels,
+    opts,
+    Histogram,
+    IntCounter,
+    IntGauge,
+};
 use std::time::Instant;
-use std::{marker::PhantomData, sync::Arc, time::Duration};
+use std::{
+    marker::PhantomData,
+    sync::Arc,
+    time::Duration,
+};
 
 #[derive(Clone, Debug)]
 pub enum PoolSectionOp<T> {
@@ -1034,7 +1078,10 @@ impl ValidatedPoolReader<ConsensusMessage> for ConsensusPoolImpl {
 
 #[cfg(test)]
 mod tests {
-    use crate::backup::{BackupAge, PurgingError};
+    use crate::backup::{
+        BackupAge,
+        PurgingError,
+    };
 
     use super::*;
     use ic_interfaces::p2p::consensus::UnvalidatedArtifact;
@@ -1043,21 +1090,48 @@ mod tests {
     use ic_metrics::MetricsRegistry;
     use ic_protobuf::types::v1 as pb;
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
-    use ic_test_utilities::{crypto::CryptoReturningOk, state_manager::FakeStateManager};
-    use ic_test_utilities_consensus::{fake::*, make_genesis};
-    use ic_test_utilities_registry::{setup_registry, SubnetRecordBuilder};
+    use ic_test_utilities::{
+        crypto::CryptoReturningOk,
+        state_manager::FakeStateManager,
+    };
+    use ic_test_utilities_consensus::{
+        fake::*,
+        make_genesis,
+    };
+    use ic_test_utilities_registry::{
+        setup_registry,
+        SubnetRecordBuilder,
+    };
     use ic_test_utilities_time::FastForwardTimeSource;
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::{
+        node_test_id,
+        subnet_test_id,
+    };
     use ic_types::{
         artifact::IdentifiableArtifact,
         batch::ValidationContext,
-        consensus::{BlockProposal, RandomBeacon},
-        crypto::{crypto_hash, CryptoHash, CryptoHashOf},
+        consensus::{
+            BlockProposal,
+            RandomBeacon,
+        },
+        crypto::{
+            crypto_hash,
+            CryptoHash,
+            CryptoHashOf,
+        },
         time::UNIX_EPOCH,
-        RegistryVersion, ReplicaVersion,
+        RegistryVersion,
+        ReplicaVersion,
     };
     use prost::Message;
-    use std::{collections::HashMap, convert::TryFrom, fs, io::Read, path::Path, sync::RwLock};
+    use std::{
+        collections::HashMap,
+        convert::TryFrom,
+        fs,
+        io::Read,
+        path::Path,
+        sync::RwLock,
+    };
 
     fn new_from_cup_without_bytes(
         node_id: NodeId,

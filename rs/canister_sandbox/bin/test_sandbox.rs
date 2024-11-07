@@ -1,9 +1,19 @@
 use ic_canister_sandbox_backend_lib::{
-    protocol, protocol::sbxsvc, rpc, sandbox_service, transport, transport::SocketReaderConfig,
+    protocol,
+    protocol::sbxsvc,
+    rpc,
+    sandbox_service,
+    transport,
+    transport::SocketReaderConfig,
 };
 use ic_embedders::{
-    wasm_utils::{Segments, WasmImportsDetails},
-    CompilationResult, SerializedModule, SerializedModuleBytes,
+    wasm_utils::{
+        Segments,
+        WasmImportsDetails,
+    },
+    CompilationResult,
+    SerializedModule,
+    SerializedModuleBytes,
 };
 use ic_replicated_state::canister_state::execution_state::WasmMetadata;
 use ic_types::NumInstructions;

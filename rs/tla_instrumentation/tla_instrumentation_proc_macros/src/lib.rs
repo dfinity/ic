@@ -1,7 +1,10 @@
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{parse_macro_input, ItemFn};
+use syn::{
+    parse_macro_input,
+    ItemFn,
+};
 
 /// Used to annotate top-level methods (which de-facto start an update call)
 #[proc_macro_attribute]

@@ -1,33 +1,70 @@
-use crate::chain_key::{InitialChainKeyConfigInternal, KeyConfigRequestInternal};
-use crate::{common::LOG_PREFIX, registry::Registry};
-use candid::{CandidType, Deserialize, Encode};
-use dfn_core::api::{call, CanisterId};
+use crate::chain_key::{
+    InitialChainKeyConfigInternal,
+    KeyConfigRequestInternal,
+};
+use crate::{
+    common::LOG_PREFIX,
+    registry::Registry,
+};
+use candid::{
+    CandidType,
+    Deserialize,
+    Encode,
+};
+use dfn_core::api::{
+    call,
+    CanisterId,
+};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
-use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
+use ic_base_types::{
+    NodeId,
+    PrincipalId,
+    RegistryVersion,
+    SubnetId,
+};
 use ic_management_canister_types::{
-    EcdsaKeyId, MasterPublicKeyId, SetupInitialDKGArgs, SetupInitialDKGResponse,
+    EcdsaKeyId,
+    MasterPublicKeyId,
+    SetupInitialDKGArgs,
+    SetupInitialDKGResponse,
 };
 use ic_protobuf::registry::{
     node::v1::NodeRecord,
     subnet::v1::{
-        CatchUpPackageContents, ChainKeyConfig as ChainKeyConfigPb, EcdsaConfig as EcdsaConfigPb,
-        SubnetFeatures as SubnetFeaturesPb, SubnetRecord,
+        CatchUpPackageContents,
+        ChainKeyConfig as ChainKeyConfigPb,
+        EcdsaConfig as EcdsaConfigPb,
+        SubnetFeatures as SubnetFeaturesPb,
+        SubnetRecord,
     },
 };
 use ic_registry_keys::{
-    make_catch_up_package_contents_key, make_crypto_threshold_signing_pubkey_key,
-    make_node_record_key, make_subnet_list_record_key, make_subnet_record_key,
+    make_catch_up_package_contents_key,
+    make_crypto_threshold_signing_pubkey_key,
+    make_node_record_key,
+    make_subnet_list_record_key,
+    make_subnet_record_key,
 };
 use ic_registry_subnet_features::{
-    EcdsaConfig, KeyConfig as KeyConfigInternal, SubnetFeatures, DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+    EcdsaConfig,
+    KeyConfig as KeyConfigInternal,
+    SubnetFeatures,
+    DEFAULT_ECDSA_MAX_QUEUE_SIZE,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation, RegistryValue};
+use ic_registry_transport::pb::v1::{
+    registry_mutation,
+    RegistryMutation,
+    RegistryValue,
+};
 use on_wire::bytes;
 use prost::Message;
 use serde::Serialize;
-use std::{collections::HashSet, convert::TryFrom};
+use std::{
+    collections::HashSet,
+    convert::TryFrom,
+};
 
 impl Registry {
     /// Adds the new subnet to the registry.
@@ -650,11 +687,16 @@ impl From<CreateSubnetPayload> for SubnetRecord {
 mod test {
     use super::*;
     use crate::common::test_helpers::{
-        add_fake_subnet, get_invariant_compliant_subnet_record, invariant_compliant_registry,
+        add_fake_subnet,
+        get_invariant_compliant_subnet_record,
+        invariant_compliant_registry,
         prepare_registry_with_nodes,
     };
     use ic_management_canister_types::EcdsaCurve;
-    use ic_nervous_system_common_test_keys::{TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL};
+    use ic_nervous_system_common_test_keys::{
+        TEST_USER1_PRINCIPAL,
+        TEST_USER2_PRINCIPAL,
+    };
     use ic_registry_subnet_features::ChainKeyConfig;
     use ic_types::ReplicaVersion;
 

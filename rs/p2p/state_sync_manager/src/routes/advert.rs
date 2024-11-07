@@ -3,7 +3,10 @@ use std::sync::Arc;
 use axum::{
     body::Bytes,
     extract::State,
-    http::{Request, StatusCode},
+    http::{
+        Request,
+        StatusCode,
+    },
     Extension,
 };
 use bytes::BytesMut;

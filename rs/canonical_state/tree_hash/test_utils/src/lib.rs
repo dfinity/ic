@@ -1,16 +1,35 @@
 use ic_canonical_state_tree_hash::{
-    hash_tree::{hash_lazy_tree, HashTree},
-    lazy_tree::{LazyFork, LazyTree},
+    hash_tree::{
+        hash_lazy_tree,
+        HashTree,
+    },
+    lazy_tree::{
+        LazyFork,
+        LazyTree,
+    },
 };
 use ic_crypto_tree_hash::{
-    hasher::Hasher, Digest, FlatMap, HashTree as CryptoHashTree, HashTreeBuilder,
-    HashTreeBuilderImpl, Label, LabeledTree, MixedHashTree, Witness, WitnessGenerator,
+    hasher::Hasher,
+    Digest,
+    FlatMap,
+    HashTree as CryptoHashTree,
+    HashTreeBuilder,
+    HashTreeBuilderImpl,
+    Label,
+    LabeledTree,
+    MixedHashTree,
+    Witness,
+    WitnessGenerator,
     WitnessGeneratorImpl,
 };
 use ic_crypto_tree_hash_test_utils::{
-    merge_path_into_labeled_tree, partial_trees_to_leaves_and_empty_subtrees,
+    merge_path_into_labeled_tree,
+    partial_trees_to_leaves_and_empty_subtrees,
 };
-use rand::{CryptoRng, Rng};
+use rand::{
+    CryptoRng,
+    Rng,
+};
 use std::collections::VecDeque;
 use std::sync::Arc;
 

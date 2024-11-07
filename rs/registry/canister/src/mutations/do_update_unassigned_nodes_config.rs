@@ -1,13 +1,21 @@
 use crate::{
-    common::LOG_PREFIX, mutations::common::check_replica_version_is_blessed, registry::Registry,
+    common::LOG_PREFIX,
+    mutations::common::check_replica_version_is_blessed,
+    registry::Registry,
 };
 
-use candid::{CandidType, Deserialize};
+use candid::{
+    CandidType,
+    Deserialize,
+};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_protobuf::registry::unassigned_nodes_config::v1::UnassignedNodesConfigRecord;
 use ic_registry_keys::make_unassigned_nodes_config_record_key;
-use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation};
+use ic_registry_transport::pb::v1::{
+    registry_mutation,
+    RegistryMutation,
+};
 use prost::Message;
 use serde::Serialize;
 
@@ -67,10 +75,17 @@ pub struct UpdateUnassignedNodesConfigPayload {
 #[cfg(test)]
 mod tests {
     use ic_protobuf::registry::replica_version::v1::{
-        BlessedReplicaVersions, ReplicaVersionRecord,
+        BlessedReplicaVersions,
+        ReplicaVersionRecord,
     };
-    use ic_registry_keys::{make_blessed_replica_versions_key, make_replica_version_key};
-    use ic_registry_transport::{insert, upsert};
+    use ic_registry_keys::{
+        make_blessed_replica_versions_key,
+        make_replica_version_key,
+    };
+    use ic_registry_transport::{
+        insert,
+        upsert,
+    };
     use prost::Message;
 
     use crate::{

@@ -1,33 +1,63 @@
-use candid::{Decode, Encode};
+use candid::{
+    Decode,
+    Encode,
+};
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::Sender;
 use ic_ledger_core::tokens::CheckedAdd;
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_KEYPAIR,
+    TEST_NEURON_1_OWNER_KEYPAIR,
+    TEST_NEURON_1_OWNER_PRINCIPAL,
+    TEST_NEURON_2_OWNER_KEYPAIR,
     TEST_NEURON_2_OWNER_PRINCIPAL,
 };
 use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_constants::{GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
-use ic_nns_governance_api::pb::v1::{GovernanceError, Neuron, NeuronInfo};
+use ic_nns_constants::{
+    GENESIS_TOKEN_CANISTER_ID,
+    GOVERNANCE_CANISTER_ID,
+    LEDGER_CANISTER_ID,
+};
+use ic_nns_governance_api::pb::v1::{
+    GovernanceError,
+    Neuron,
+    NeuronInfo,
+};
 use ic_nns_gtc::{
     pb::v1::AccountState,
     test_constants::{
-        TestIdentity, TEST_IDENTITY_1, TEST_IDENTITY_2, TEST_IDENTITY_3, TEST_IDENTITY_4,
+        TestIdentity,
+        TEST_IDENTITY_1,
+        TEST_IDENTITY_2,
+        TEST_IDENTITY_3,
+        TEST_IDENTITY_4,
     },
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     state_test_helpers::{
-        get_neuron_ids, ledger_account_balance, nns_governance_get_full_neuron,
-        nns_governance_get_neuron_info, setup_nns_canisters, state_machine_builder_for_nns_tests,
+        get_neuron_ids,
+        ledger_account_balance,
+        nns_governance_get_full_neuron,
+        nns_governance_get_neuron_info,
+        setup_nns_canisters,
+        state_machine_builder_for_nns_tests,
     },
 };
 use ic_state_machine_tests::StateMachine;
 use ic_types::ingress::WasmResult;
 use icp_ledger::{
-    AccountIdentifier, BinaryAccountBalanceArgs, Subaccount, Tokens, DEFAULT_TRANSFER_FEE,
+    AccountIdentifier,
+    BinaryAccountBalanceArgs,
+    Subaccount,
+    Tokens,
+    DEFAULT_TRANSFER_FEE,
 };
-use std::{collections::HashSet, convert::TryFrom, sync::Arc, time::SystemTime};
+use std::{
+    collections::HashSet,
+    convert::TryFrom,
+    sync::Arc,
+    time::SystemTime,
+};
 
 /// Seed Round (SR) neurons are released over 48 months in the following tests
 pub const SR_MONTHS_TO_RELEASE: u8 = 48;

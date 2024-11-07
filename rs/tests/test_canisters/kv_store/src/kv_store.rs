@@ -1,4 +1,9 @@
-use std::{cell::RefCell, collections::HashMap, convert::AsRef, hash::Hash};
+use std::{
+    cell::RefCell,
+    collections::HashMap,
+    convert::AsRef,
+    hash::Hash,
+};
 
 use candid::CandidType;
 use serde::Deserialize;

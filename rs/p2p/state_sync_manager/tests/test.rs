@@ -1,30 +1,52 @@
 use std::{
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{
+            AtomicBool,
+            Ordering,
+        },
         Arc,
     },
     time::Duration,
 };
 
 use crate::common::{
-    create_node, latency_30ms_throughput_1000mbits, latency_50ms_throughput_300mbits,
-    SharableMockChunkable, State,
+    create_node,
+    latency_30ms_throughput_1000mbits,
+    latency_50ms_throughput_300mbits,
+    SharableMockChunkable,
+    State,
 };
 use common::SharableMockStateSync;
-use ic_interfaces::p2p::state_sync::{AddChunkError, ChunkId, StateSyncArtifactId};
+use ic_interfaces::p2p::state_sync::{
+    AddChunkError,
+    ChunkId,
+    StateSyncArtifactId,
+};
 use ic_logger::info;
 use ic_memory_transport::TransportRouter;
 use ic_p2p_test_utils::{
     mocks::MockStateSync,
     turmoil::{
-        add_peer_manager_to_sim, add_transport_to_sim, wait_for, wait_for_timeout, waiter_fut,
+        add_peer_manager_to_sim,
+        add_transport_to_sim,
+        wait_for,
+        wait_for_timeout,
+        waiter_fut,
         PeerManagerAction,
     },
     ConnectivityChecker,
 };
 use ic_test_utilities_logger::with_test_replica_logger;
-use ic_types::{crypto::CryptoHash, Height, RegistryVersion};
-use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3};
+use ic_types::{
+    crypto::CryptoHash,
+    Height,
+    RegistryVersion,
+};
+use ic_types_test_utils::ids::{
+    NODE_1,
+    NODE_2,
+    NODE_3,
+};
 use tokio::sync::Notify;
 use turmoil::Builder;
 

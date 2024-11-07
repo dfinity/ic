@@ -1,5 +1,8 @@
 use super::*;
-use ic_canister_log::{declare_log_buffer, log};
+use ic_canister_log::{
+    declare_log_buffer,
+    log,
+};
 use serde_bytes::ByteBuf;
 use serde_json::json;
 use std::time::SystemTime;

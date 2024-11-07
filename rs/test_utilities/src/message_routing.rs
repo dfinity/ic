@@ -1,8 +1,20 @@
-use ic_interfaces::messaging::{MessageRouting, MessageRoutingError};
-use ic_interfaces_state_manager::{CertificationScope, StateManager};
+use ic_interfaces::messaging::{
+    MessageRouting,
+    MessageRoutingError,
+};
+use ic_interfaces_state_manager::{
+    CertificationScope,
+    StateManager,
+};
 use ic_replicated_state::ReplicatedState;
-use ic_types::{batch::Batch, Height};
-use std::sync::{Arc, RwLock};
+use ic_types::{
+    batch::Batch,
+    Height,
+};
+use std::sync::{
+    Arc,
+    RwLock,
+};
 
 pub struct FakeMessageRouting {
     pub batches: RwLock<Vec<Batch>>,

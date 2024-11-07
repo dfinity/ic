@@ -3,9 +3,15 @@ use candid::Principal;
 use icrc_ledger_types::icrc1::account::Account;
 use std::default::Default;
 use std::path::Path;
-use std::process::{Child, Command};
+use std::process::{
+    Child,
+    Command,
+};
 use std::str::FromStr;
-use tokio::time::{sleep, Duration};
+use tokio::time::{
+    sleep,
+    Duration,
+};
 
 pub const DEFAULT_DECIMAL_PLACES: u8 = 8;
 pub const DEFAULT_TOKEN_SYMBOL: &str = "XTST";

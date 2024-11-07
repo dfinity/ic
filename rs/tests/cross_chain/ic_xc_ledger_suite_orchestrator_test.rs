@@ -1,34 +1,67 @@
 #[rustfmt::skip]
 
 use anyhow::{anyhow, bail, Result};
-use candid::{Encode, Nat, Principal};
-use canister_test::{Canister, Runtime, Wasm};
+use candid::{
+    Encode,
+    Nat,
+    Principal,
+};
+use canister_test::{
+    Canister,
+    Runtime,
+    Wasm,
+};
 use dfn_candid::candid_one;
 use ic_base_types::CanisterId;
 use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_ledger_suite_orchestrator::candid::{
-    AddErc20Arg, Erc20Contract, InitArg, LedgerInitArg, ManagedCanisterIds, OrchestratorArg,
+    AddErc20Arg,
+    Erc20Contract,
+    InitArg,
+    LedgerInitArg,
+    ManagedCanisterIds,
+    OrchestratorArg,
     UpgradeArg,
 };
 use ic_management_canister_types::CanisterInstallMode;
 use ic_nervous_system_clients::canister_status::CanisterStatusResult;
-use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
+use ic_nervous_system_common_test_keys::{
+    TEST_NEURON_1_ID,
+    TEST_NEURON_1_OWNER_KEYPAIR,
+};
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
+use ic_nns_constants::{
+    GOVERNANCE_CANISTER_ID,
+    ROOT_CANISTER_ID,
+};
 use ic_nns_test_utils::governance::submit_external_update_proposal;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::ic::{
+    InternetComputer,
+    Subnet,
+};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    get_dependency_path, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsCustomizations,
+    get_dependency_path,
+    HasPublicApiUrl,
+    HasTopologySnapshot,
+    IcNodeContainer,
+    NnsCustomizations,
 };
 use ic_system_test_driver::nns::vote_and_execute_proposal;
 use ic_system_test_driver::systest;
-use ic_system_test_driver::util::{block_on, runtime_from_url};
+use ic_system_test_driver::util::{
+    block_on,
+    runtime_from_url,
+};
 use ic_wasm_types::CanisterModule;
 use slog::info;
-use std::{future::Future, path::Path, time::Duration};
+use std::{
+    future::Future,
+    path::Path,
+    time::Duration,
+};
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -194,8 +227,14 @@ async fn install_nns_controlled_canister<'a>(
 ) -> Canister<'a> {
     use ic_canister_client::Sender;
     use ic_nervous_system_clients::canister_status::CanisterStatusType;
-    use ic_nns_common::types::{NeuronId, ProposalId};
-    use ic_nns_governance_api::pb::v1::{NnsFunction, ProposalStatus};
+    use ic_nns_common::types::{
+        NeuronId,
+        ProposalId,
+    };
+    use ic_nns_governance_api::pb::v1::{
+        NnsFunction,
+        ProposalStatus,
+    };
 
     let canister = application_subnet_runtime
         .create_canister(Some(u128::MAX))
@@ -265,8 +304,14 @@ async fn upgrade_ledger_suite_orchestrator_by_nns_proposal<'a>(
 ) {
     use ic_canister_client::Sender;
     use ic_nervous_system_clients::canister_status::CanisterStatusType;
-    use ic_nns_common::types::{NeuronId, ProposalId};
-    use ic_nns_governance_api::pb::v1::{NnsFunction, ProposalStatus};
+    use ic_nns_common::types::{
+        NeuronId,
+        ProposalId,
+    };
+    use ic_nns_governance_api::pb::v1::{
+        NnsFunction,
+        ProposalStatus,
+    };
 
     let wasm = canister_wasm.as_slice().to_vec();
     let proposal_payload = ChangeCanisterRequest::new(

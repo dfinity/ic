@@ -1,15 +1,25 @@
 use anyhow::Result;
 
 use bitcoincore_rpc::RpcApi;
-use candid::{Nat, Principal};
+use candid::{
+    Nat,
+    Principal,
+};
 use ic_base_types::PrincipalId;
 use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::{
     lifecycle::upgrade::UpgradeArgs,
-    state::{eventlog::Event, Mode, RetrieveBtcRequest},
+    state::{
+        eventlog::Event,
+        Mode,
+        RetrieveBtcRequest,
+    },
     updates::{
         get_withdrawal_account::compute_subaccount,
-        retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError},
+        retrieve_btc::{
+            RetrieveBtcArgs,
+            RetrieveBtcError,
+        },
         update_balance::UtxoStatus,
     },
 };
@@ -17,24 +27,57 @@ use ic_system_test_driver::{
     driver::{
         group::SystemTestGroup,
         test_env::TestEnv,
-        test_env_api::{HasPublicApiUrl, IcNodeContainer},
+        test_env_api::{
+            HasPublicApiUrl,
+            IcNodeContainer,
+        },
     },
     systest,
-    util::{assert_create_agent, block_on, runtime_from_url, UniversalCanister},
+    util::{
+        assert_create_agent,
+        block_on,
+        runtime_from_url,
+        UniversalCanister,
+    },
 };
 use ic_tests_ckbtc::{
-    activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_kyt,
-    install_ledger, install_minter, set_kyt_api_key, setup, subnet_sys,
+    activate_ecdsa_signature,
+    create_canister,
+    install_bitcoin_canister,
+    install_kyt,
+    install_ledger,
+    install_minter,
+    set_kyt_api_key,
+    setup,
+    subnet_sys,
     utils::{
-        assert_account_balance, assert_burn_transaction, assert_mint_transaction, ensure_wallet,
-        generate_blocks, get_btc_address, get_btc_client, update_balance,
-        upgrade_canister_with_args, wait_for_bitcoin_balance, BTC_BLOCK_REWARD,
+        assert_account_balance,
+        assert_burn_transaction,
+        assert_mint_transaction,
+        ensure_wallet,
+        generate_blocks,
+        get_btc_address,
+        get_btc_client,
+        update_balance,
+        upgrade_canister_with_args,
+        wait_for_bitcoin_balance,
+        BTC_BLOCK_REWARD,
     },
-    BTC_MIN_CONFIRMATIONS, KYT_FEE, RETRIEVE_BTC_MIN_AMOUNT, TEST_KEY_LOCAL, TRANSFER_FEE,
+    BTC_MIN_CONFIRMATIONS,
+    KYT_FEE,
+    RETRIEVE_BTC_MIN_AMOUNT,
+    TEST_KEY_LOCAL,
+    TRANSFER_FEE,
 };
 use icrc_ledger_agent::Icrc1Agent;
-use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
-use slog::{debug, info};
+use icrc_ledger_types::icrc1::{
+    account::Account,
+    transfer::TransferArg,
+};
+use slog::{
+    debug,
+    info,
+};
 
 /// Test retrieve_btc method of the minter canister.
 pub fn test_retrieve_btc(env: TestEnv) {

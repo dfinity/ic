@@ -1,12 +1,22 @@
 use async_trait::async_trait;
-use ic_agent::{export::Principal, Agent, AgentError};
-use std::{fmt::Debug, sync::Arc};
+use ic_agent::{
+    export::Principal,
+    Agent,
+    AgentError,
+};
+use std::{
+    fmt::Debug,
+    sync::Arc,
+};
 use thiserror::Error;
 use url::Url;
 
 use crate::{
     node::Node,
-    transport::{TransportProvider, TransportProviderError},
+    transport::{
+        TransportProvider,
+        TransportProviderError,
+    },
 };
 
 #[async_trait]

@@ -1,8 +1,17 @@
-use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
-use ic_types::{ingress::WasmResult, CanisterId};
+use ic_test_utilities_execution_environment::{
+    ExecutionTest,
+    ExecutionTestBuilder,
+};
+use ic_types::{
+    ingress::WasmResult,
+    CanisterId,
+};
 use proptest::{
     prelude::*,
-    test_runner::{TestRng, TestRunner},
+    test_runner::{
+        TestRng,
+        TestRunner,
+    },
 };
 
 fn make_module_wat(heap_size: usize) -> String {

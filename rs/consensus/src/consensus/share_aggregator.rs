@@ -4,21 +4,32 @@
 //! Finalizations from finalization shares.
 use crate::consensus::random_tape_maker::RANDOM_TAPE_CHECK_MAX_HEIGHT_RANGE;
 use ic_consensus_utils::{
-    active_high_threshold_nidkg_id, active_low_threshold_nidkg_id, aggregate,
-    crypto::ConsensusCrypto, membership::Membership, pool_reader::PoolReader,
+    active_high_threshold_nidkg_id,
+    active_low_threshold_nidkg_id,
+    aggregate,
+    crypto::ConsensusCrypto,
+    membership::Membership,
+    pool_reader::PoolReader,
     registry_version_at_height,
 };
 use ic_interfaces::messaging::MessageRouting;
 use ic_logger::ReplicaLogger;
 use ic_types::{
     consensus::{
-        CatchUpContent, ConsensusMessage, ConsensusMessageHashable, FinalizationContent, HasHeight,
+        CatchUpContent,
+        ConsensusMessage,
+        ConsensusMessageHashable,
+        FinalizationContent,
+        HasHeight,
         RandomTapeContent,
     },
     crypto::Signed,
     Height,
 };
-use std::{cmp::min, sync::Arc};
+use std::{
+    cmp::min,
+    sync::Arc,
+};
 
 /// The ShareAggregator is responsible for aggregating shares of random beacons,
 /// notarizations, and finalizations into full objects
@@ -187,21 +198,41 @@ fn to_messages<T: ConsensusMessageHashable>(artifacts: Vec<T>) -> Vec<ConsensusM
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_consensus_mocks::{dependencies, dependencies_with_subnet_params, Dependencies};
+    use ic_consensus_mocks::{
+        dependencies,
+        dependencies_with_subnet_params,
+        Dependencies,
+    };
     use ic_interfaces::consensus_pool::ConsensusPool;
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::message_routing::FakeMessageRouting;
-    use ic_test_utilities_consensus::fake::{FakeContentSigner, FakeSigner};
+    use ic_test_utilities_consensus::fake::{
+        FakeContentSigner,
+        FakeSigner,
+    };
     use ic_test_utilities_registry::SubnetRecordBuilder;
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::{
+        node_test_id,
+        subnet_test_id,
+    };
     use ic_types::{
         consensus::{
-            CatchUpPackage, CatchUpPackageShare, CatchUpShareContent, FinalizationShare,
-            HashedBlock, HashedRandomBeacon, NotarizationShare, RandomBeaconShare,
+            CatchUpPackage,
+            CatchUpPackageShare,
+            CatchUpShareContent,
+            FinalizationShare,
+            HashedBlock,
+            HashedRandomBeacon,
+            NotarizationShare,
+            RandomBeaconShare,
         },
-        crypto::{CryptoHash, CryptoHashOf},
+        crypto::{
+            CryptoHash,
+            CryptoHashOf,
+        },
         signature::ThresholdSignatureShare,
-        NodeId, RegistryVersion,
+        NodeId,
+        RegistryVersion,
     };
     use std::sync::Arc;
 

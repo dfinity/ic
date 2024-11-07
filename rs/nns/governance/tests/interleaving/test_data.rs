@@ -1,12 +1,28 @@
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_nns_governance::{
     governance::test_data::CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING,
-    pb::v1::{proposal::Action, Proposal},
+    pb::v1::{
+        proposal::Action,
+        Proposal,
+    },
 };
-use ic_sns_root::{CanisterSummary, GetSnsCanistersSummaryResponse};
-use ic_sns_swap::pb::v1::{GetStateResponse, Init, Swap};
+use ic_sns_root::{
+    CanisterSummary,
+    GetSnsCanistersSummaryResponse,
+};
+use ic_sns_swap::pb::v1::{
+    GetStateResponse,
+    Init,
+    Swap,
+};
 use ic_sns_wasm::pb::v1::{
-    DeployNewSnsResponse, DeployedSns, ListDeployedSnsesResponse, SnsCanisterIds,
+    DeployNewSnsResponse,
+    DeployedSns,
+    ListDeployedSnsesResponse,
+    SnsCanisterIds,
 };
 use lazy_static::lazy_static;
 

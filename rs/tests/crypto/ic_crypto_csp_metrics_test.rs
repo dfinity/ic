@@ -25,7 +25,9 @@ use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::InternetComputer;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    GetFirstHealthyNodeSnapshot, HasTopologySnapshot, IcNodeContainer,
+    GetFirstHealthyNodeSnapshot,
+    HasTopologySnapshot,
+    IcNodeContainer,
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::MetricsFetcher;

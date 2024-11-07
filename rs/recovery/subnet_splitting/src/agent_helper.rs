@@ -1,15 +1,40 @@
-use ic_agent::{export::Principal, hash_tree::Label, lookup_value, Agent, Certificate};
-use ic_base_types::SubnetId;
-use ic_crypto_utils_threshold_sig_der::{parse_threshold_sig_key, public_key_to_der};
-use ic_recovery::{
-    error::{RecoveryError, RecoveryResult},
-    file_sync_helper::{read_bytes, write_bytes},
-    util::{block_on, write_public_key_to_file},
+use ic_agent::{
+    export::Principal,
+    hash_tree::Label,
+    lookup_value,
+    Agent,
+    Certificate,
 };
-use slog::{debug, info, Logger};
+use ic_base_types::SubnetId;
+use ic_crypto_utils_threshold_sig_der::{
+    parse_threshold_sig_key,
+    public_key_to_der,
+};
+use ic_recovery::{
+    error::{
+        RecoveryError,
+        RecoveryResult,
+    },
+    file_sync_helper::{
+        read_bytes,
+        write_bytes,
+    },
+    util::{
+        block_on,
+        write_public_key_to_file,
+    },
+};
+use slog::{
+    debug,
+    info,
+    Logger,
+};
 use url::Url;
 
-use std::{fmt::Display, path::Path};
+use std::{
+    fmt::Display,
+    path::Path,
+};
 
 const NNS_REGISTRY_CANISTER_ID: &str = "rwlgt-iiaaa-aaaaa-aaaaa-cai";
 

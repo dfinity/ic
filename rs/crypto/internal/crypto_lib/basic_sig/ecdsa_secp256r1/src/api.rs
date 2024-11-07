@@ -1,7 +1,11 @@
 //! ECDSA signature methods
 use super::types;
 use ic_crypto_internal_basic_sig_der_utils::PkixAlgorithmIdentifier;
-use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
+use ic_types::crypto::{
+    AlgorithmId,
+    CryptoError,
+    CryptoResult,
+};
 use simple_asn1::oid;
 
 /// Return the algorithm identifier associated with ECDSA P-256

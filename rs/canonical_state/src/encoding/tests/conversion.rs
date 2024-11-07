@@ -1,13 +1,32 @@
 use super::test_fixtures::*;
-use crate::encoding::types::{self, StreamFlagBits, STREAM_DEFAULT_FLAGS, STREAM_SUPPORTED_FLAGS};
-use crate::{all_supported_versions, CertificationVersion, MAX_SUPPORTED_CERTIFICATION_VERSION};
+use crate::encoding::types::{
+    self,
+    StreamFlagBits,
+    STREAM_DEFAULT_FLAGS,
+    STREAM_SUPPORTED_FLAGS,
+};
+use crate::{
+    all_supported_versions,
+    CertificationVersion,
+    MAX_SUPPORTED_CERTIFICATION_VERSION,
+};
 use assert_matches::assert_matches;
 use ic_error_types::RejectCode;
 use ic_protobuf::proxy::ProxyDecodeError;
-use ic_types::messages::{Payload, RejectContext, RequestOrResponse};
+use ic_types::messages::{
+    Payload,
+    RejectContext,
+    RequestOrResponse,
+};
 use ic_types::xnet::RejectReason;
-use std::convert::{TryFrom, TryInto};
-use strum::{EnumCount, IntoEnumIterator};
+use std::convert::{
+    TryFrom,
+    TryInto,
+};
+use strum::{
+    EnumCount,
+    IntoEnumIterator,
+};
 
 #[test]
 fn stream_flags_constant_default_and_default_are_equivalent() {

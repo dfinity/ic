@@ -1,18 +1,46 @@
 #![allow(clippy::disallowed_types)]
-use dfn_protobuf::{ProtoBuf, ToProto};
+use dfn_protobuf::{
+    ProtoBuf,
+    ToProto,
+};
 use ic_agent::agent::http_transport::reqwest_transport::ReqwestTransport;
 use ic_agent::identity::AnonymousIdentity;
-use ic_agent::{Agent, AgentError, NonceGenerator};
+use ic_agent::{
+    Agent,
+    AgentError,
+    NonceGenerator,
+};
 use ic_ledger_core::block::EncodedBlock;
 use ic_types::CanisterId;
-use icp_ledger::protobuf::{ArchiveIndexEntry, ArchiveIndexResponse, TipOfChainRequest};
-use icp_ledger::{BlockArg, BlockIndex, BlockRes, GetBlocksArgs, GetBlocksRes, TipOfChainRes};
-use on_wire::{FromWire, IntoWire};
+use icp_ledger::protobuf::{
+    ArchiveIndexEntry,
+    ArchiveIndexResponse,
+    TipOfChainRequest,
+};
+use icp_ledger::{
+    BlockArg,
+    BlockIndex,
+    BlockRes,
+    GetBlocksArgs,
+    GetBlocksRes,
+    TipOfChainRes,
+};
+use on_wire::{
+    FromWire,
+    IntoWire,
+};
 use std::collections::VecDeque;
 use std::convert::TryFrom;
 use std::sync::Arc;
-use tokio::task::{spawn, JoinHandle};
-use tracing::{debug, trace, warn};
+use tokio::task::{
+    spawn,
+    JoinHandle,
+};
+use tracing::{
+    debug,
+    trace,
+    warn,
+};
 use url::Url;
 
 #[derive(Default)]

@@ -1,5 +1,7 @@
 use crate::{
-    certification::recertify_registry, pb::v1::RegistryCanisterStableStorage, registry::Registry,
+    certification::recertify_registry,
+    pb::v1::RegistryCanisterStableStorage,
+    registry::Registry,
 };
 use prost::Message;
 
@@ -57,8 +59,14 @@ pub fn canister_post_upgrade(registry: &mut Registry, stable_storage: &[u8]) {
 mod test {
     use super::*;
     use crate::{
-        common::test_helpers::{empty_mutation, invariant_compliant_registry},
-        registry::{EncodedVersion, Version},
+        common::test_helpers::{
+            empty_mutation,
+            invariant_compliant_registry,
+        },
+        registry::{
+            EncodedVersion,
+            Version,
+        },
         registry_lifecycle::Registry,
     };
 

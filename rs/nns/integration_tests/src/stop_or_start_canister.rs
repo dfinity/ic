@@ -2,19 +2,31 @@ use candid::Encode;
 use ic_base_types::CanisterId;
 use ic_nervous_system_clients::canister_status::CanisterStatusType;
 use ic_nervous_system_root::change_canister::{
-    CanisterAction as RootCanisterAction, StopOrStartCanisterRequest,
+    CanisterAction as RootCanisterAction,
+    StopOrStartCanisterRequest,
 };
-use ic_nns_constants::{REGISTRY_CANISTER_ID, ROOT_CANISTER_ID};
+use ic_nns_constants::{
+    REGISTRY_CANISTER_ID,
+    ROOT_CANISTER_ID,
+};
 use ic_nns_governance_api::pb::v1::{
-    manage_neuron_response::Command, stop_or_start_canister::CanisterAction, ExecuteNnsFunction,
-    MakeProposalRequest, NnsFunction, ProposalActionRequest, StopOrStartCanister,
+    manage_neuron_response::Command,
+    stop_or_start_canister::CanisterAction,
+    ExecuteNnsFunction,
+    MakeProposalRequest,
+    NnsFunction,
+    ProposalActionRequest,
+    StopOrStartCanister,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     neuron_helpers::get_neuron_1,
     state_test_helpers::{
-        get_canister_status, nns_governance_make_proposal, nns_wait_for_proposal_execution,
-        setup_nns_canisters, state_machine_builder_for_nns_tests,
+        get_canister_status,
+        nns_governance_make_proposal,
+        nns_wait_for_proposal_execution,
+        setup_nns_canisters,
+        state_machine_builder_for_nns_tests,
     },
 };
 

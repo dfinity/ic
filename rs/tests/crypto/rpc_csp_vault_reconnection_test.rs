@@ -27,18 +27,33 @@ Coverage::
 
 end::catalog[] */
 
-use anyhow::{bail, Result};
+use anyhow::{
+    bail,
+    Result,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::InternetComputer;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-    IcNodeSnapshot, SshSession,
+    GetFirstHealthyNodeSnapshot,
+    HasPublicApiUrl,
+    HasTopologySnapshot,
+    IcNodeContainer,
+    IcNodeSnapshot,
+    SshSession,
 };
 use ic_system_test_driver::systest;
-use ic_system_test_driver::util::{assert_create_agent, block_on, MessageCanister};
-use slog::{debug, info, Logger};
+use ic_system_test_driver::util::{
+    assert_create_agent,
+    block_on,
+    MessageCanister,
+};
+use slog::{
+    debug,
+    info,
+    Logger,
+};
 use std::time::Duration;
 
 const FIFTEEN_MINUTES: Duration = Duration::from_secs(15 * 60);

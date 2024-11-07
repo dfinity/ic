@@ -1,10 +1,19 @@
 use crate::mutations::node_management::common::{
-    find_subnet_for_node, get_node_operator_id_for_node, get_node_operator_record,
-    get_subnet_list_record, make_remove_node_registry_mutations,
+    find_subnet_for_node,
+    get_node_operator_id_for_node,
+    get_node_operator_record,
+    get_subnet_list_record,
+    make_remove_node_registry_mutations,
     make_update_node_operator_mutation,
 };
-use crate::{common::LOG_PREFIX, registry::Registry};
-use candid::{CandidType, Deserialize};
+use crate::{
+    common::LOG_PREFIX,
+    registry::Registry,
+};
+use candid::{
+    CandidType,
+    Deserialize,
+};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_base_types::NodeId;

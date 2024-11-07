@@ -5,12 +5,18 @@ use ic_crypto_internal_csp::vault::vault_from_config;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_internal_test_vectors::test_data;
 use ic_crypto_standalone_sig_verifier::{
-    ecdsa_p256_signature_from_der_bytes, rsa_signature_from_bytes, user_public_key_from_bytes,
+    ecdsa_p256_signature_from_der_bytes,
+    rsa_signature_from_bytes,
+    user_public_key_from_bytes,
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_types::crypto::{BasicSigOf, SignableMock, UserPublicKey};
+use ic_types::crypto::{
+    BasicSigOf,
+    SignableMock,
+    UserPublicKey,
+};
 use std::sync::Arc;
 
 #[test]

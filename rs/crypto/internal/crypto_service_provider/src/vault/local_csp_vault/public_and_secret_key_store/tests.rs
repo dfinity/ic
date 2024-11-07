@@ -4,18 +4,25 @@ mod key_id_computations {
     use super::*;
     use crate::vault::api::PublicKeyStoreCspVault;
     use crate::vault::local_csp_vault::public_and_secret_key_store::{
-        compute_committee_signing_key_id, compute_dkg_dealing_encryption_key_id,
-        compute_idkg_dealing_encryption_key_id, compute_node_signing_key_id,
-        compute_tls_certificate_key_id, ExternalPublicKeyError,
+        compute_committee_signing_key_id,
+        compute_dkg_dealing_encryption_key_id,
+        compute_idkg_dealing_encryption_key_id,
+        compute_node_signing_key_id,
+        compute_tls_certificate_key_id,
+        ExternalPublicKeyError,
     };
     use crate::vault::test_utils::pks_and_sks::{
-        generate_idkg_dealing_encryption_key_pair, NODE_1,
+        generate_idkg_dealing_encryption_key_pair,
+        NODE_1,
     };
     use crate::CspVault;
     use assert_matches::assert_matches;
     use ic_crypto_internal_types::encrypt::forward_secure::groth20_bls12_381;
     use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
-    use ic_protobuf::registry::crypto::v1::{AlgorithmId as AlgorithmIdProto, X509PublicKeyCert};
+    use ic_protobuf::registry::crypto::v1::{
+        AlgorithmId as AlgorithmIdProto,
+        X509PublicKeyCert,
+    };
     use ic_types::crypto::AlgorithmId;
     use ic_types_test_utils::ids::node_test_id;
     use std::sync::Arc;
@@ -190,10 +197,13 @@ mod public_key_comparisons {
     use super::*;
     use crate::vault::api::LocalPublicKeyError;
     use crate::vault::local_csp_vault::public_and_secret_key_store::{
-        compare_public_keys, LocalNodePublicKeyResults, LocalNodePublicKeys,
+        compare_public_keys,
+        LocalNodePublicKeyResults,
+        LocalNodePublicKeys,
     };
     use crate::vault::test_utils::pks_and_sks::{
-        convert_to_external_public_keys, generate_all_keys,
+        convert_to_external_public_keys,
+        generate_all_keys,
     };
     use assert_matches::assert_matches;
     use ic_types::crypto::CurrentNodePublicKeys;
@@ -444,9 +454,16 @@ mod pks_and_sks_contains {
     use crate::vault::api::PublicAndSecretKeyStoreCspVault;
     use crate::vault::api::PublicKeyStoreCspVault;
     use crate::vault::api::{
-        BasicSignatureCspVault, ExternalPublicKeyError, LocalPublicKeyError,
-        MultiSignatureCspVault, NiDkgCspVault, NodeKeysError, NodeKeysErrors,
-        PksAndSksContainsErrors, SecretKeyError, TlsHandshakeCspVault,
+        BasicSignatureCspVault,
+        ExternalPublicKeyError,
+        LocalPublicKeyError,
+        MultiSignatureCspVault,
+        NiDkgCspVault,
+        NodeKeysError,
+        NodeKeysErrors,
+        PksAndSksContainsErrors,
+        SecretKeyError,
+        TlsHandshakeCspVault,
     };
     use crate::vault::test_utils::pks_and_sks::convert_to_external_public_keys;
     use crate::vault::test_utils::pks_and_sks::generate_all_keys;
@@ -891,21 +908,32 @@ mod validate_pks_and_sks {
     use crate::secret_key_store::SecretKeyStore;
     use crate::types::CspPublicKey;
     use crate::vault::api::ValidatePksAndSksKeyPairError::{
-        PublicKeyInvalid, PublicKeyNotFound, SecretKeyNotFound,
+        PublicKeyInvalid,
+        PublicKeyNotFound,
+        SecretKeyNotFound,
     };
-    use crate::vault::api::{PublicAndSecretKeyStoreCspVault, ValidatePksAndSksError};
+    use crate::vault::api::{
+        PublicAndSecretKeyStoreCspVault,
+        ValidatePksAndSksError,
+    };
     use crate::vault::local_csp_vault::public_and_secret_key_store::LocalNodePublicKeys;
     use crate::LocalCspVault;
     use assert_matches::assert_matches;
     use ic_crypto_internal_types::encrypt::forward_secure::CspFsEncryptionPublicKey;
     use ic_crypto_test_utils_keys::public_keys::{
-        valid_committee_signing_public_key, valid_dkg_dealing_encryption_public_key,
-        valid_idkg_dealing_encryption_public_key, valid_idkg_dealing_encryption_public_key_2,
-        valid_idkg_dealing_encryption_public_key_3, valid_node_signing_public_key,
+        valid_committee_signing_public_key,
+        valid_dkg_dealing_encryption_public_key,
+        valid_idkg_dealing_encryption_public_key,
+        valid_idkg_dealing_encryption_public_key_2,
+        valid_idkg_dealing_encryption_public_key_3,
+        valid_node_signing_public_key,
         valid_tls_certificate_and_validation_time,
     };
     use ic_crypto_tls_interfaces::TlsPublicKeyCert;
-    use ic_protobuf::registry::crypto::v1::{PublicKey, X509PublicKeyCert};
+    use ic_protobuf::registry::crypto::v1::{
+        PublicKey,
+        X509PublicKeyCert,
+    };
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_types::time::Time;
     use std::collections::HashSet;

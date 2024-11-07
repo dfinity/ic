@@ -1,22 +1,56 @@
 use crate::{
-    routing, scheduling,
-    state_machine::{StateMachine, StateMachineImpl},
+    routing,
+    scheduling,
+    state_machine::{
+        StateMachine,
+        StateMachineImpl,
+    },
 };
-use ic_config::execution_environment::{BitcoinConfig, Config as HypervisorConfig};
+use ic_config::execution_environment::{
+    BitcoinConfig,
+    Config as HypervisorConfig,
+};
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_interfaces::{crypto::ErrorReproducibility, execution_environment::ChainKeySettings};
 use ic_interfaces::{
-    execution_environment::{IngressHistoryWriter, RegistryExecutionSettings, Scheduler},
-    messaging::{MessageRouting, MessageRoutingError},
+    crypto::ErrorReproducibility,
+    execution_environment::ChainKeySettings,
+};
+use ic_interfaces::{
+    execution_environment::{
+        IngressHistoryWriter,
+        RegistryExecutionSettings,
+        Scheduler,
+    },
+    messaging::{
+        MessageRouting,
+        MessageRoutingError,
+    },
 };
 use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::{CertificationScope, StateManager, StateManagerError};
+use ic_interfaces_state_manager::{
+    CertificationScope,
+    StateManager,
+    StateManagerError,
+};
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
-use ic_logger::{debug, fatal, info, warn, ReplicaLogger};
-use ic_metrics::buckets::{add_bucket, decimal_buckets, decimal_buckets_with_zero};
+use ic_logger::{
+    debug,
+    fatal,
+    info,
+    warn,
+    ReplicaLogger,
+};
+use ic_metrics::buckets::{
+    add_bucket,
+    decimal_buckets,
+    decimal_buckets_with_zero,
+};
 use ic_metrics::MetricsRegistry;
-use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_protobuf::proxy::{
+    try_from_option_field,
+    ProxyDecodeError,
+};
 use ic_query_stats::QueryStatsAggregatorMetrics;
 use ic_registry_client_helpers::{
     api_boundary_node::ApiBoundaryNodeRegistry,
@@ -25,34 +59,80 @@ use ic_registry_client_helpers::{
     node::NodeRegistry,
     provisional_whitelist::ProvisionalWhitelistRegistry,
     routing_table::RoutingTableRegistry,
-    subnet::{get_node_ids_from_subnet_record, SubnetListRegistry, SubnetRegistry},
+    subnet::{
+        get_node_ids_from_subnet_record,
+        SubnetListRegistry,
+        SubnetRegistry,
+    },
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
-use ic_registry_subnet_features::{ChainKeyConfig, SubnetFeatures};
+use ic_registry_subnet_features::{
+    ChainKeyConfig,
+    SubnetFeatures,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    metadata_state::ApiBoundaryNodeEntry, NetworkTopology, ReplicatedState, SubnetTopology,
+    metadata_state::ApiBoundaryNodeEntry,
+    NetworkTopology,
+    ReplicatedState,
+    SubnetTopology,
 };
 use ic_types::{
-    batch::{Batch, BatchSummary},
-    crypto::{threshold_sig::ThresholdSigPublicKey, KeyPurpose},
+    batch::{
+        Batch,
+        BatchSummary,
+    },
+    crypto::{
+        threshold_sig::ThresholdSigPublicKey,
+        KeyPurpose,
+    },
     malicious_flags::MaliciousFlags,
     registry::RegistryClientError,
-    xnet::{StreamHeader, StreamIndex},
-    Height, NodeId, NumBytes, PrincipalIdBlobParseError, RegistryVersion, SubnetId, Time,
+    xnet::{
+        StreamHeader,
+        StreamIndex,
+    },
+    Height,
+    NodeId,
+    NumBytes,
+    PrincipalIdBlobParseError,
+    RegistryVersion,
+    SubnetId,
+    Time,
 };
 use ic_utils_thread::JoinOnDrop;
 #[cfg(test)]
 use mockall::automock;
-use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
+use prometheus::{
+    Histogram,
+    HistogramVec,
+    IntCounter,
+    IntCounterVec,
+    IntGauge,
+    IntGaugeVec,
+};
 use std::ops::Range;
-use std::sync::mpsc::{sync_channel, TrySendError};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::mpsc::{
+    sync_channel,
+    TrySendError,
+};
+use std::sync::{
+    Arc,
+    Mutex,
+    RwLock,
+};
 use std::thread::sleep;
 use std::{
-    collections::{BTreeMap, BTreeSet, VecDeque},
+    collections::{
+        BTreeMap,
+        BTreeSet,
+        VecDeque,
+    },
     convert::TryFrom,
-    net::{Ipv4Addr, Ipv6Addr},
+    net::{
+        Ipv4Addr,
+        Ipv6Addr,
+    },
     time::Instant,
 };
 use tracing::instrument;

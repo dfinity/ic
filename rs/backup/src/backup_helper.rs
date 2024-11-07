@@ -1,26 +1,67 @@
 use crate::{
     notification_client::NotificationClient,
-    util::{block_on, sleep_secs},
+    util::{
+        block_on,
+        sleep_secs,
+    },
 };
 use anyhow::Context;
-use chrono::{DateTime, Utc};
-use ic_recovery::{
-    command_helper::exec_cmd, error::RecoveryError, file_sync_helper::download_binary,
+use chrono::{
+    DateTime,
+    Utc,
 };
-use ic_registry_client::client::{RegistryClient, RegistryClientImpl};
-use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
-use ic_types::{ReplicaVersion, SubnetId};
-use rand::{seq::SliceRandom, thread_rng};
-use slog::{debug, error, info, warn, Logger};
+use ic_recovery::{
+    command_helper::exec_cmd,
+    error::RecoveryError,
+    file_sync_helper::download_binary,
+};
+use ic_registry_client::client::{
+    RegistryClient,
+    RegistryClientImpl,
+};
+use ic_registry_client_helpers::{
+    node::NodeRegistry,
+    subnet::SubnetRegistry,
+};
+use ic_types::{
+    ReplicaVersion,
+    SubnetId,
+};
+use rand::{
+    seq::SliceRandom,
+    thread_rng,
+};
+use slog::{
+    debug,
+    error,
+    info,
+    warn,
+    Logger,
+};
 use std::{
     collections::BTreeMap,
     ffi::OsStr,
-    fs::{create_dir_all, read_dir, remove_dir_all, DirEntry, File},
+    fs::{
+        create_dir_all,
+        read_dir,
+        remove_dir_all,
+        DirEntry,
+        File,
+    },
     io::Write,
     net::IpAddr,
-    path::{Path, PathBuf},
-    process::{Command, Stdio},
-    sync::{Arc, Mutex},
+    path::{
+        Path,
+        PathBuf,
+    },
+    process::{
+        Command,
+        Stdio,
+    },
+    sync::{
+        Arc,
+        Mutex,
+    },
     time::Instant,
 };
 

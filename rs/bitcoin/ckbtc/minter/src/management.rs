@@ -3,16 +3,34 @@
 use crate::logs::P0;
 use crate::tx;
 use crate::ECDSAPublicKey;
-use candid::{CandidType, Principal};
+use candid::{
+    CandidType,
+    Principal,
+};
 use ic_btc_interface::{
-    Address, GetCurrentFeePercentilesRequest, GetUtxosRequest, GetUtxosResponse,
-    MillisatoshiPerByte, Network, Utxo, UtxosFilterInRequest,
+    Address,
+    GetCurrentFeePercentilesRequest,
+    GetUtxosRequest,
+    GetUtxosResponse,
+    MillisatoshiPerByte,
+    Network,
+    Utxo,
+    UtxosFilterInRequest,
 };
 use ic_canister_log::log;
 use ic_cdk::api::call::RejectionCode;
-use ic_ckbtc_kyt::{DepositRequest, Error as KytError, FetchAlertsResponse, WithdrawalAttempt};
+use ic_ckbtc_kyt::{
+    DepositRequest,
+    Error as KytError,
+    FetchAlertsResponse,
+    WithdrawalAttempt,
+};
 use ic_management_canister_types::{
-    DerivationPath, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId,
+    DerivationPath,
+    ECDSAPublicKeyArgs,
+    ECDSAPublicKeyResponse,
+    EcdsaCurve,
+    EcdsaKeyId,
 };
 use serde::de::DeserializeOwned;
 use std::fmt;
@@ -275,7 +293,10 @@ pub async fn sign_with_ecdsa(
     message_hash: [u8; 32],
 ) -> Result<Vec<u8>, CallError> {
     use ic_cdk::api::management_canister::ecdsa::{
-        sign_with_ecdsa, EcdsaCurve, EcdsaKeyId, SignWithEcdsaArgument,
+        sign_with_ecdsa,
+        EcdsaCurve,
+        EcdsaKeyId,
+        SignWithEcdsaArgument,
     };
 
     let result = sign_with_ecdsa(SignWithEcdsaArgument {

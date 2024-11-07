@@ -1,7 +1,11 @@
 use lazy_static::lazy_static;
 use prometheus::{
-    register_histogram_vec, register_int_counter, register_int_counter_vec, HistogramVec,
-    IntCounter, IntCounterVec,
+    register_histogram_vec,
+    register_int_counter,
+    register_int_counter_vec,
+    HistogramVec,
+    IntCounter,
+    IntCounterVec,
 };
 
 // Metrics for Prometheus

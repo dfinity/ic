@@ -1,14 +1,24 @@
 use std::{
-    sync::mpsc::{self, Receiver, Sender},
+    sync::mpsc::{
+        self,
+        Receiver,
+        Sender,
+    },
     thread,
 };
 
-use ic_interfaces::execution_environment::{HypervisorError, OutOfInstructionsHandler};
+use ic_interfaces::execution_environment::{
+    HypervisorError,
+    OutOfInstructionsHandler,
+};
 use ic_types::NumInstructions;
 
 use crate::dts::MAX_NUM_SLICES;
 
-use super::{DeterministicTimeSlicingHandler, PausedExecution};
+use super::{
+    DeterministicTimeSlicingHandler,
+    PausedExecution,
+};
 
 #[test]
 fn dts_state_updates() {

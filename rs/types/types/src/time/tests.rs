@@ -1,4 +1,8 @@
-use crate::time::{TimeInstantiationError, NANOS_PER_MILLI, NANOS_PER_SEC};
+use crate::time::{
+    TimeInstantiationError,
+    NANOS_PER_MILLI,
+    NANOS_PER_SEC,
+};
 use crate::Time;
 use assert_matches::assert_matches;
 use std::time::SystemTime;

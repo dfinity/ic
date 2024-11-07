@@ -1,22 +1,52 @@
 use crate::metrics::MetricsAssert;
 use crate::universal_canister::UniversalCanister;
 use crate::{
-    assert_reply, ledger_wasm, out_of_band_upgrade, stop_canister, LedgerAccount,
-    LedgerMetadataValue, LedgerSuiteOrchestrator, MINTER_PRINCIPAL,
+    assert_reply,
+    ledger_wasm,
+    out_of_band_upgrade,
+    stop_canister,
+    LedgerAccount,
+    LedgerMetadataValue,
+    LedgerSuiteOrchestrator,
+    MINTER_PRINCIPAL,
 };
-use candid::{Decode, Encode, Nat, Principal};
-use ic_base_types::{CanisterId, PrincipalId};
+use candid::{
+    Decode,
+    Encode,
+    Nat,
+    Principal,
+};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_icrc1_ledger::ChangeArchiveOptions;
-use ic_ledger_suite_orchestrator::candid::{AddErc20Arg, ManagedCanisterIds};
-use ic_ledger_suite_orchestrator::state::{IndexWasm, LedgerWasm};
+use ic_ledger_suite_orchestrator::candid::{
+    AddErc20Arg,
+    ManagedCanisterIds,
+};
+use ic_ledger_suite_orchestrator::state::{
+    IndexWasm,
+    LedgerWasm,
+};
 use ic_management_canister_types::{
-    CanisterInfoResponse, CanisterInstallMode, CanisterStatusResultV2, InstallCodeArgs, Method,
+    CanisterInfoResponse,
+    CanisterInstallMode,
+    CanisterStatusResultV2,
+    InstallCodeArgs,
+    Method,
     Payload,
 };
 use ic_state_machine_tests::StateMachine;
-use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
+use icrc_ledger_types::icrc1::transfer::{
+    TransferArg,
+    TransferError,
+};
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
-use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
+use icrc_ledger_types::icrc3::blocks::{
+    GetBlocksRequest,
+    GetBlocksResult,
+};
 use std::collections::BTreeSet;
 
 pub struct AddErc20TokenFlow {
@@ -266,7 +296,10 @@ impl ManagedCanistersAssert {
     }
 
     pub fn upgrade_ledger_to_change_archive_options(&self, archive_options: ChangeArchiveOptions) {
-        use ic_icrc1_ledger::{LedgerArgument, UpgradeArgs as LedgerUpgradeArgs};
+        use ic_icrc1_ledger::{
+            LedgerArgument,
+            UpgradeArgs as LedgerUpgradeArgs,
+        };
 
         let module_hash_before = self
             .ledger_canister_status()

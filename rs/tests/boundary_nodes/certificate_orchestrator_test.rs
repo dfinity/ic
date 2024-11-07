@@ -13,37 +13,85 @@ Coverage:: The certificate orchestrator interface works as expected.
 
 end::catalog[] */
 
-use anyhow::{anyhow, bail, Error, Result};
-use candid::{Decode, Encode, Principal};
+use anyhow::{
+    anyhow,
+    bail,
+    Error,
+    Result,
+};
+use candid::{
+    Decode,
+    Encode,
+    Principal,
+};
 use certificate_orchestrator_interface::{
-    BoundedString, CreateRegistrationError, CreateRegistrationResponse, DispenseTaskError,
-    DispenseTaskResponse, EncryptedPair, ExportCertificatesError, ExportCertificatesResponse,
-    GetRegistrationError, GetRegistrationResponse, Id, InitArg, ListAllowedPrincipalsError,
-    ListAllowedPrincipalsResponse, ModifyAllowedPrincipalError, ModifyAllowedPrincipalResponse,
-    PeekTaskError, PeekTaskResponse, QueueTaskError, QueueTaskResponse, RemoveRegistrationError,
-    RemoveRegistrationResponse, State, UpdateRegistrationError, UpdateRegistrationResponse,
-    UpdateType, UploadCertificateError, UploadCertificateResponse,
+    BoundedString,
+    CreateRegistrationError,
+    CreateRegistrationResponse,
+    DispenseTaskError,
+    DispenseTaskResponse,
+    EncryptedPair,
+    ExportCertificatesError,
+    ExportCertificatesResponse,
+    GetRegistrationError,
+    GetRegistrationResponse,
+    Id,
+    InitArg,
+    ListAllowedPrincipalsError,
+    ListAllowedPrincipalsResponse,
+    ModifyAllowedPrincipalError,
+    ModifyAllowedPrincipalResponse,
+    PeekTaskError,
+    PeekTaskResponse,
+    QueueTaskError,
+    QueueTaskResponse,
+    RemoveRegistrationError,
+    RemoveRegistrationResponse,
+    State,
+    UpdateRegistrationError,
+    UpdateRegistrationResponse,
+    UpdateType,
+    UploadCertificateError,
+    UploadCertificateResponse,
 };
 use k256::elliptic_curve::SecretKey;
-use rand::{rngs::OsRng, SeedableRng};
+use rand::{
+    rngs::OsRng,
+    SeedableRng,
+};
 use rand_chacha::ChaChaRng;
 use slog::info;
 use std::{
     env,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{
+        Duration,
+        SystemTime,
+        UNIX_EPOCH,
+    },
 };
 use tokio::runtime::Runtime;
 
-use ic_agent::{identity::Secp256k1Identity, Agent, Identity};
+use ic_agent::{
+    identity::Secp256k1Identity,
+    Agent,
+    Identity,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
-        group::{SystemTestGroup, SystemTestSubGroup},
+        group::{
+            SystemTestGroup,
+            SystemTestSubGroup,
+        },
         ic::InternetComputer,
         test_env::TestEnv,
         test_env_api::{
-            GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-            READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+            GetFirstHealthyNodeSnapshot,
+            HasPublicApiUrl,
+            HasTopologySnapshot,
+            IcNodeContainer,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
         },
     },
     systest,

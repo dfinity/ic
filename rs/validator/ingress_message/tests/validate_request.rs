@@ -1,18 +1,35 @@
 use assert_matches::assert_matches;
-use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
+use ic_crypto_test_utils_reproducible_rng::{
+    reproducible_rng,
+    ReproducibleRng,
+};
 use ic_registry_client_helpers::node_operator::PrincipalId;
 use ic_types::messages::Blob;
 use ic_types::messages::HttpRequestContent;
 use ic_types::CanisterId;
-use ic_types::{Time, UserId};
+use ic_types::{
+    Time,
+    UserId,
+};
 use ic_validator_http_request_test_utils::DirectAuthenticationScheme::{
-    CanisterSignature, UserKeyPair,
+    CanisterSignature,
+    UserKeyPair,
 };
 use ic_validator_http_request_test_utils::{
-    all_authentication_schemes, all_authentication_schemes_except, canister_signature,
-    hard_coded_root_of_trust, random_user_key_pair, AuthenticationScheme, CanisterSigner,
-    DirectAuthenticationScheme, HttpRequestBuilder, HttpRequestEnvelopeContent, RootOfTrust,
-    CANISTER_ID_SIGNER, CANISTER_SIGNATURE_SEED, CURRENT_TIME,
+    all_authentication_schemes,
+    all_authentication_schemes_except,
+    canister_signature,
+    hard_coded_root_of_trust,
+    random_user_key_pair,
+    AuthenticationScheme,
+    CanisterSigner,
+    DirectAuthenticationScheme,
+    HttpRequestBuilder,
+    HttpRequestEnvelopeContent,
+    RootOfTrust,
+    CANISTER_ID_SIGNER,
+    CANISTER_SIGNATURE_SEED,
+    CURRENT_TIME,
 };
 use ic_validator_ingress_message::AuthenticationError;
 use ic_validator_ingress_message::AuthenticationError::DelegationContainsCyclesError;
@@ -21,9 +38,18 @@ use ic_validator_ingress_message::AuthenticationError::InvalidBasicSignature;
 use ic_validator_ingress_message::AuthenticationError::InvalidCanisterSignature;
 use ic_validator_ingress_message::RequestValidationError::MissingSignature;
 use ic_validator_ingress_message::TimeProvider;
-use ic_validator_ingress_message::{HttpRequestVerifier, RequestValidationError};
-use ic_validator_ingress_message::{IngressMessageVerifier, IngressMessageVerifierBuilder};
-use rand::{CryptoRng, Rng};
+use ic_validator_ingress_message::{
+    HttpRequestVerifier,
+    RequestValidationError,
+};
+use ic_validator_ingress_message::{
+    IngressMessageVerifier,
+    IngressMessageVerifierBuilder,
+};
+use rand::{
+    CryptoRng,
+    Rng,
+};
 use std::fmt::Debug;
 use std::str::FromStr;
 
@@ -136,7 +162,10 @@ mod request_nonce {
 mod ingress_expiry {
     use super::*;
     use crate::RequestValidationError::InvalidIngressExpiry;
-    use ic_validator_http_request_test_utils::{AuthenticationScheme, HttpRequestBuilder};
+    use ic_validator_http_request_test_utils::{
+        AuthenticationScheme,
+        HttpRequestBuilder,
+    };
     use std::time::Duration;
 
     #[test]
@@ -307,8 +336,14 @@ mod ingress_expiry {
 
 mod read_state_request {
     use super::*;
-    use crate::RequestValidationError::{PathTooLongError, TooManyPathsError};
-    use ic_crypto_tree_hash::{Label, Path};
+    use crate::RequestValidationError::{
+        PathTooLongError,
+        TooManyPathsError,
+    };
+    use ic_crypto_tree_hash::{
+        Label,
+        Path,
+    };
     use rand::prelude::SliceRandom;
     use std::ops::RangeInclusive;
 
@@ -483,7 +518,10 @@ mod anonymous_request {
     use crate::RequestValidationError::AnonymousSignatureNotAllowed;
     use ic_canister_client_sender::Ed25519KeyPair;
     use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
-    use ic_validator_http_request_test_utils::AuthenticationScheme::{Anonymous, Direct};
+    use ic_validator_http_request_test_utils::AuthenticationScheme::{
+        Anonymous,
+        Direct,
+    };
 
     #[test]
     fn should_validate_anonymous_request() {
@@ -737,7 +775,10 @@ mod authenticated_requests_direct_canister_signature {
     use crate::RequestValidationError::InvalidSignature;
     use crate::RequestValidationError::UserIdDoesNotMatchPublicKey;
     use ic_validator_http_request_test_utils::AuthenticationScheme::Direct;
-    use ic_validator_http_request_test_utils::{flip_a_bit_mut, HttpRequestEnvelopeFactory};
+    use ic_validator_http_request_test_utils::{
+        flip_a_bit_mut,
+        HttpRequestEnvelopeFactory,
+    };
 
     #[test]
     fn should_validate_request_signed_by_canister() {
@@ -1022,16 +1063,35 @@ mod authenticated_requests_delegations {
     use super::*;
     use crate::RequestValidationError::InvalidDelegation;
     use crate::RequestValidationError::InvalidDelegationExpiry;
-    use crate::RequestValidationError::{CanisterNotInDelegationTargets, InvalidSignature};
-    use crate::{HttpRequestVerifier, RequestValidationError};
+    use crate::RequestValidationError::{
+        CanisterNotInDelegationTargets,
+        InvalidSignature,
+    };
+    use crate::{
+        HttpRequestVerifier,
+        RequestValidationError,
+    };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-    use ic_types::messages::{HttpRequest, Query, ReadState, SignedIngressContent};
-    use ic_types::{CanisterId, Time};
+    use ic_types::messages::{
+        HttpRequest,
+        Query,
+        ReadState,
+        SignedIngressContent,
+    };
+    use ic_types::{
+        CanisterId,
+        Time,
+    };
     use ic_validator_http_request_test_utils::{
-        AuthenticationScheme, DelegationChain, DelegationChainBuilder,
+        AuthenticationScheme,
+        DelegationChain,
+        DelegationChainBuilder,
         HttpRequestEnvelopeContentWithCanisterId,
     };
-    use rand::{CryptoRng, Rng};
+    use rand::{
+        CryptoRng,
+        Rng,
+    };
     use std::time::Duration;
 
     const MAXIMUM_NUMBER_OF_DELEGATIONS: usize = 20; // !changing this number might be breaking!
@@ -1903,7 +1963,10 @@ fn random_user_key_pairs<R: Rng + CryptoRng>(
 }
 
 fn max_ingress_expiry_at(current_time: Time) -> Time {
-    use ic_limits::{MAX_INGRESS_TTL, PERMITTED_DRIFT_AT_VALIDATOR};
+    use ic_limits::{
+        MAX_INGRESS_TTL,
+        PERMITTED_DRIFT_AT_VALIDATOR,
+    };
     current_time + MAX_INGRESS_TTL + PERMITTED_DRIFT_AT_VALIDATOR
 }
 

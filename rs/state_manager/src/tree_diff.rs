@@ -1,5 +1,10 @@
 #![allow(dead_code)]
-use ic_crypto_tree_hash::{Digest, HashTree, Label, Path};
+use ic_crypto_tree_hash::{
+    Digest,
+    HashTree,
+    Label,
+    Path,
+};
 use ic_types::crypto::CryptoHash;
 use std::collections::BTreeMap;
 use std::fmt;

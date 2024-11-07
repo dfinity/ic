@@ -1,15 +1,32 @@
 use crate::{
-    error::{OrchestratorError, OrchestratorResult},
+    error::{
+        OrchestratorError,
+        OrchestratorResult,
+    },
     metrics::OrchestratorMetrics,
     registry_helper::RegistryHelper,
 };
-use ic_logger::{debug, warn, ReplicaLogger};
+use ic_logger::{
+    debug,
+    warn,
+    ReplicaLogger,
+};
 use ic_registry_client_helpers::unassigned_nodes::UnassignedNodeRegistry;
-use ic_types::{NodeId, RegistryVersion, SubnetId};
+use ic_types::{
+    NodeId,
+    RegistryVersion,
+    SubnetId,
+};
 use std::{
     io::Write,
-    process::{Command, Stdio},
-    sync::{Arc, RwLock},
+    process::{
+        Command,
+        Stdio,
+    },
+    sync::{
+        Arc,
+        RwLock,
+    },
 };
 
 #[derive(Default)]

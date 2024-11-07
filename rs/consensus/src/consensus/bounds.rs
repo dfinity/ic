@@ -2,12 +2,21 @@
 //! be always bounded in size. This module contains checks for invariants that we
 //! want to uphold at all times.
 
-use ic_consensus_utils::{pool_reader::PoolReader, registry_version_at_height};
+use ic_consensus_utils::{
+    pool_reader::PoolReader,
+    registry_version_at_height,
+};
 use ic_interfaces_registry::RegistryClient;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
-use ic_types::{consensus::get_faults_tolerated, replica_config::ReplicaConfig};
+use ic_types::{
+    consensus::get_faults_tolerated,
+    replica_config::ReplicaConfig,
+};
 
-use super::{notary::ACCEPTABLE_NOTARIZATION_CUP_GAP, MINIMUM_CHAIN_LENGTH};
+use super::{
+    notary::ACCEPTABLE_NOTARIZATION_CUP_GAP,
+    MINIMUM_CHAIN_LENGTH,
+};
 
 /// Summary of when the consensus pool exceeds certain bounds.
 #[derive(Eq, PartialEq, Debug)]
@@ -175,9 +184,15 @@ pub fn validated_pool_within_bounds(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
+    use ic_consensus_mocks::{
+        dependencies_with_subnet_params,
+        Dependencies,
+    };
     use ic_test_utilities_registry::SubnetRecordBuilder;
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::{
+        node_test_id,
+        subnet_test_id,
+    };
 
     #[test]
     fn test_pool_bounds() {

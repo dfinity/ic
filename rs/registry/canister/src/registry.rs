@@ -1,13 +1,18 @@
 use crate::{
     common::LOG_PREFIX,
     pb::v1::{
-        registry_stable_storage::Version as ReprVersion, ChangelogEntry, RegistryStableStorage,
+        registry_stable_storage::Version as ReprVersion,
+        ChangelogEntry,
+        RegistryStableStorage,
     },
 };
 use ic_certified_map::RbTree;
 use ic_registry_transport::{
     pb::v1::{
-        registry_mutation::Type, RegistryAtomicMutateRequest, RegistryDelta, RegistryMutation,
+        registry_mutation::Type,
+        RegistryAtomicMutateRequest,
+        RegistryDelta,
+        RegistryMutation,
         RegistryValue,
     },
     Error,
@@ -16,7 +21,10 @@ use ic_types::messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64;
 use prost::Message;
 use std::{
     cmp::max,
-    collections::{BTreeMap, VecDeque},
+    collections::{
+        BTreeMap,
+        VecDeque,
+    },
     fmt,
 };
 
@@ -468,9 +476,22 @@ fn pb_encode(msg: &impl prost::Message) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_registry_transport::{delete, insert, update, upsert};
-    use rand::{Rng, SeedableRng};
-    use rand_distr::{Alphanumeric, Distribution, Poisson, Uniform};
+    use ic_registry_transport::{
+        delete,
+        insert,
+        update,
+        upsert,
+    };
+    use rand::{
+        Rng,
+        SeedableRng,
+    };
+    use rand_distr::{
+        Alphanumeric,
+        Distribution,
+        Poisson,
+        Uniform,
+    };
 
     /// Simulate a round-trip through stable memory, which is an essential part
     /// of the upgrade process.

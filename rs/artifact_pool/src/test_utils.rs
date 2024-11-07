@@ -7,23 +7,58 @@
 //! By implementing this trait on a Pool implementation (in a test submodule),
 //! the tests in this module can be used to test the Pool implementation.
 
-use crate::consensus_pool::{MutablePoolSection, PoolSectionOp, PoolSectionOps};
+use crate::consensus_pool::{
+    MutablePoolSection,
+    PoolSectionOp,
+    PoolSectionOps,
+};
 use ic_interfaces::consensus_pool::{
-    HeightIndexedPool, HeightRange, PoolSection, PurgeableArtifactType, ValidatedConsensusArtifact,
+    HeightIndexedPool,
+    HeightRange,
+    PoolSection,
+    PurgeableArtifactType,
+    ValidatedConsensusArtifact,
 };
 use ic_logger::ReplicaLogger;
-use ic_test_utilities_consensus::{fake::*, make_genesis};
-use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+use ic_test_utilities_consensus::{
+    fake::*,
+    make_genesis,
+};
+use ic_test_utilities_types::ids::{
+    node_test_id,
+    subnet_test_id,
+};
 use ic_types::{
     artifact::ConsensusMessageId,
     consensus::{
-        dkg::Summary, Block, BlockPayload, BlockProposal, ConsensusMessage,
-        ConsensusMessageHashable, EquivocationProof, Finalization, FinalizationContent,
-        FinalizationShare, Notarization, NotarizationContent, NotarizationShare, RandomBeacon,
-        RandomBeaconContent, RandomBeaconShare, RandomTape, RandomTapeContent, RandomTapeShare,
+        dkg::Summary,
+        Block,
+        BlockPayload,
+        BlockProposal,
+        ConsensusMessage,
+        ConsensusMessageHashable,
+        EquivocationProof,
+        Finalization,
+        FinalizationContent,
+        FinalizationShare,
+        Notarization,
+        NotarizationContent,
+        NotarizationShare,
+        RandomBeacon,
+        RandomBeaconContent,
+        RandomBeaconShare,
+        RandomTape,
+        RandomTapeContent,
+        RandomTapeShare,
         Rank,
     },
-    crypto::{BasicSigOf, CryptoHash, CryptoHashOf, ThresholdSigShare, ThresholdSigShareOf},
+    crypto::{
+        BasicSigOf,
+        CryptoHash,
+        CryptoHashOf,
+        ThresholdSigShare,
+        ThresholdSigShareOf,
+    },
     signature::*,
     time::UNIX_EPOCH,
     Height,
@@ -31,7 +66,10 @@ use ic_types::{
 use std::{
     collections::HashSet,
     panic,
-    path::{Path, PathBuf},
+    path::{
+        Path,
+        PathBuf,
+    },
     time::Duration,
 };
 

@@ -1,8 +1,15 @@
 use crate::rosetta_tests::{
     ledger_client::LedgerClient,
     lib::{
-        create_ledger_client, do_multiple_txn, do_multiple_txn_external, make_user_ed25519,
-        one_day_from_now_nanos, raw_construction, sign, to_public_key, NeuronDetails,
+        create_ledger_client,
+        do_multiple_txn,
+        do_multiple_txn_external,
+        make_user_ed25519,
+        one_day_from_now_nanos,
+        raw_construction,
+        sign,
+        to_public_key,
+        NeuronDetails,
     },
     rosetta_client::RosettaApiClient,
     setup::setup,
@@ -11,19 +18,42 @@ use crate::rosetta_tests::{
 use assert_json_diff::assert_json_eq;
 use ic_ledger_core::Tokens;
 use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_governance_api::pb::v1::{neuron::DissolveState, Neuron};
+use ic_nns_governance_api::pb::v1::{
+    neuron::DissolveState,
+    Neuron,
+};
 use ic_rosetta_api::{
     convert::neuron_subaccount_bytes_from_public_key,
-    request::{request_result::RequestResult, Request},
-    request_types::{AddHotKey, Follow, PublicKeyOrPrincipal},
+    request::{
+        request_result::RequestResult,
+        Request,
+    },
+    request_types::{
+        AddHotKey,
+        Follow,
+        PublicKeyOrPrincipal,
+    },
 };
-use ic_rosetta_test_utils::{EdKeypair, RequestInfo};
-use ic_system_test_driver::{driver::test_env::TestEnv, util::block_on};
-use serde_json::{json, Value};
+use ic_rosetta_test_utils::{
+    EdKeypair,
+    RequestInfo,
+};
+use ic_system_test_driver::{
+    driver::test_env::TestEnv,
+    util::block_on,
+};
+use serde_json::{
+    json,
+    Value,
+};
 use std::{
     collections::HashMap,
     sync::Arc,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{
+        Duration,
+        SystemTime,
+        UNIX_EPOCH,
+    },
 };
 
 const PORT: u32 = 8108;

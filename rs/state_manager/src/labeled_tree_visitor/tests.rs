@@ -1,6 +1,15 @@
 use super::*;
-use ic_canonical_state::visitor::{named_blob, named_num, named_subtree, subtree};
-use ic_crypto_tree_hash::{flatmap, FlatMap, LabeledTree::*};
+use ic_canonical_state::visitor::{
+    named_blob,
+    named_num,
+    named_subtree,
+    subtree,
+};
+use ic_crypto_tree_hash::{
+    flatmap,
+    FlatMap,
+    LabeledTree::*,
+};
 use proptest::prelude::*;
 
 // Sample tree traversal:

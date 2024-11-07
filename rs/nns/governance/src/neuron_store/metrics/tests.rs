@@ -1,15 +1,31 @@
 use super::*;
 use crate::{
-    neuron::{DissolveStateAndAge, NeuronBuilder},
-    pb::v1::{KnownNeuronData, NeuronType},
+    neuron::{
+        DissolveStateAndAge,
+        NeuronBuilder,
+    },
+    pb::v1::{
+        KnownNeuronData,
+        NeuronType,
+    },
 };
 use ic_base_types::PrincipalId;
-use ic_nervous_system_common::{E8, ONE_DAY_SECONDS, ONE_YEAR_SECONDS};
+use ic_nervous_system_common::{
+    E8,
+    ONE_DAY_SECONDS,
+    ONE_YEAR_SECONDS,
+};
 use ic_nns_common::pb::v1::NeuronId;
 use icp_ledger::Subaccount;
-use maplit::{btreemap, hashmap};
+use maplit::{
+    btreemap,
+    hashmap,
+};
 use pretty_assertions::assert_eq;
-use std::{collections::BTreeMap, str::FromStr};
+use std::{
+    collections::BTreeMap,
+    str::FromStr,
+};
 
 fn create_test_neuron_builder(
     id: u64,

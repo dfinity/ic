@@ -3,12 +3,25 @@
 use async_trait::async_trait;
 use futures::channel::{
     mpsc::UnboundedSender as USender,
-    oneshot::{self, Sender as OSender},
+    oneshot::{
+        self,
+        Sender as OSender,
+    },
 };
 use ic_base_types::CanisterId;
-use ic_nervous_system_common::{ledger::IcpLedger, NervousSystemError};
-use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
-use std::sync::{atomic, atomic::Ordering as AOrdering};
+use ic_nervous_system_common::{
+    ledger::IcpLedger,
+    NervousSystemError,
+};
+use icp_ledger::{
+    AccountIdentifier,
+    Subaccount,
+    Tokens,
+};
+use std::sync::{
+    atomic,
+    atomic::Ordering as AOrdering,
+};
 
 pub mod test_data;
 

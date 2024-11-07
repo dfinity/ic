@@ -1,5 +1,8 @@
 use crate::errors::ApiError;
-use crate::request::request_result::{convert_to_request_result_metadata, RequestResult};
+use crate::request::request_result::{
+    convert_to_request_result_metadata,
+    RequestResult,
+};
 use crate::request::transaction_results::TransactionResults;
 use crate::request::Request;
 use rosetta_core::objects::ObjectMap;
@@ -7,7 +10,10 @@ use serde_json::Value;
 
 use crate::models::operation::OperationType;
 use crate::models::Operation;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 #[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct TransactionOperationResults {

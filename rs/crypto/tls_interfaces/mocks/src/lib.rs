@@ -1,7 +1,17 @@
-use ic_base_types::{NodeId, RegistryVersion};
-use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfig, TlsConfigError};
+use ic_base_types::{
+    NodeId,
+    RegistryVersion,
+};
+use ic_crypto_tls_interfaces::{
+    SomeOrAllNodes,
+    TlsConfig,
+    TlsConfigError,
+};
 use mockall::*;
-use rustls::{ClientConfig, ServerConfig};
+use rustls::{
+    ClientConfig,
+    ServerConfig,
+};
 
 mock! {
 

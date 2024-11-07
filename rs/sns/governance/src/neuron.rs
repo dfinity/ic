@@ -1,8 +1,18 @@
 use crate::{
     pb::v1::{
-        governance_error::ErrorType, manage_neuron, neuron::DissolveState, proposal::Action,
-        Ballot, Empty, GovernanceError, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
-        NeuronPermissionType, Vote,
+        governance_error::ErrorType,
+        manage_neuron,
+        neuron::DissolveState,
+        proposal::Action,
+        Ballot,
+        Empty,
+        GovernanceError,
+        Neuron,
+        NeuronId,
+        NeuronPermission,
+        NeuronPermissionList,
+        NeuronPermissionType,
+        Vote,
     },
     types::function_id_to_proposal_criticality,
 };
@@ -11,9 +21,18 @@ use ic_sns_governance_proposal_criticality::ProposalCriticality;
 use icrc_ledger_types::icrc1::account::Subaccount;
 use std::{
     cmp::Ordering,
-    collections::{BTreeMap, HashSet},
-    convert::{TryFrom, TryInto},
-    fmt::{Display, Formatter},
+    collections::{
+        BTreeMap,
+        HashSet,
+    },
+    convert::{
+        TryFrom,
+        TryInto,
+    },
+    fmt::{
+        Display,
+        Formatter,
+    },
     iter::FromIterator,
     str::FromStr,
 };
@@ -272,7 +291,10 @@ impl Neuron {
         // If the function is not critical, and this Neuron does not have followees specifically for
         // the function, then fall back to the "catch-all" following.
         if followee_neuron_ids.is_empty() {
-            use ProposalCriticality::{Critical, Normal};
+            use ProposalCriticality::{
+                Critical,
+                Normal,
+            };
             match function_id_to_proposal_criticality(function_id) {
                 Normal => {
                     let fallback_pseudo_function_id = u64::from(&Action::Unspecified(Empty {}));

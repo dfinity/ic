@@ -1,16 +1,34 @@
-use ic_crypto_interfaces_sig_verification::{BasicSigVerifierByPublicKey, CanisterSigVerifier};
+use ic_crypto_interfaces_sig_verification::{
+    BasicSigVerifierByPublicKey,
+    CanisterSigVerifier,
+};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspNiDkgDealing;
 use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_crypto_test_utils_canister_threshold_sigs::dummy_values;
 use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
 use ic_interfaces::crypto::{
-    BasicSigVerifier, BasicSigner, CheckKeysWithRegistryError, CurrentNodePublicKeysError,
-    IDkgDealingEncryptionKeyRotationError, IDkgKeyRotationResult, IDkgProtocol, KeyManager,
-    LoadTranscriptResult, NiDkgAlgorithm, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
-    ThresholdSchnorrSigVerifier, ThresholdSchnorrSigner, ThresholdSigVerifier,
-    ThresholdSigVerifierByPublicKey, ThresholdSigner,
+    BasicSigVerifier,
+    BasicSigner,
+    CheckKeysWithRegistryError,
+    CurrentNodePublicKeysError,
+    IDkgDealingEncryptionKeyRotationError,
+    IDkgKeyRotationResult,
+    IDkgProtocol,
+    KeyManager,
+    LoadTranscriptResult,
+    NiDkgAlgorithm,
+    ThresholdEcdsaSigVerifier,
+    ThresholdEcdsaSigner,
+    ThresholdSchnorrSigVerifier,
+    ThresholdSchnorrSigner,
+    ThresholdSigVerifier,
+    ThresholdSigVerifierByPublicKey,
+    ThresholdSigner,
 };
-use ic_interfaces::crypto::{MultiSigVerifier, MultiSigner};
+use ic_interfaces::crypto::{
+    MultiSigVerifier,
+    MultiSigner,
+};
 use ic_interfaces_registry::RegistryClient;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
@@ -24,19 +42,48 @@ use ic_types::crypto::threshold_sig::ni_dkg::errors::key_removal_error::DkgKeyRe
 use ic_types::crypto::threshold_sig::ni_dkg::errors::load_transcript_error::DkgLoadTranscriptError;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::verify_dealing_error::DkgVerifyDealingError;
 use ic_types::crypto::threshold_sig::ni_dkg::{
-    config::NiDkgConfig, NiDkgDealing, NiDkgId, NiDkgTranscript,
+    config::NiDkgConfig,
+    NiDkgDealing,
+    NiDkgId,
+    NiDkgTranscript,
 };
 use ic_types::crypto::{
-    AlgorithmId, BasicSig, BasicSigOf, CanisterSigOf, CombinedMultiSig, CombinedMultiSigOf,
-    CombinedThresholdSig, CombinedThresholdSigOf, CryptoResult, CurrentNodePublicKeys,
-    IndividualMultiSig, IndividualMultiSigOf, Signable, ThresholdSigShare, ThresholdSigShareOf,
+    AlgorithmId,
+    BasicSig,
+    BasicSigOf,
+    CanisterSigOf,
+    CombinedMultiSig,
+    CombinedMultiSigOf,
+    CombinedThresholdSig,
+    CombinedThresholdSigOf,
+    CryptoResult,
+    CurrentNodePublicKeys,
+    IndividualMultiSig,
+    IndividualMultiSigOf,
+    Signable,
+    ThresholdSigShare,
+    ThresholdSigShareOf,
     UserPublicKey,
 };
-use ic_types::signature::{BasicSignature, BasicSignatureBatch};
+use ic_types::signature::{
+    BasicSignature,
+    BasicSignatureBatch,
+};
 use ic_types::*;
-use ic_types::{NodeId, RegistryVersion};
-use rand::{rngs::StdRng, RngCore, SeedableRng};
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use ic_types::{
+    NodeId,
+    RegistryVersion,
+};
+use rand::{
+    rngs::StdRng,
+    RngCore,
+    SeedableRng,
+};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+    HashSet,
+};
 use std::sync::Arc;
 
 pub fn empty_fake_registry() -> Arc<dyn RegistryClient> {

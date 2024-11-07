@@ -2,21 +2,39 @@ use std::sync::Arc;
 
 use crate::{
     metrics::ConsensusManagerMetrics,
-    receiver::{build_axum_router, ConsensusManagerReceiver},
+    receiver::{
+        build_axum_router,
+        ConsensusManagerReceiver,
+    },
     sender::ConsensusManagerSender,
 };
 use axum::Router;
 use ic_base_types::NodeId;
-use ic_interfaces::p2p::consensus::{ArtifactAssembler, ArtifactTransmit};
+use ic_interfaces::p2p::consensus::{
+    ArtifactAssembler,
+    ArtifactTransmit,
+};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
-use ic_quic_transport::{ConnId, Shutdown, SubnetTopology, Transport};
-use ic_types::artifact::{IdentifiableArtifact, PbArtifact, UnvalidatedArtifactMutation};
+use ic_quic_transport::{
+    ConnId,
+    Shutdown,
+    SubnetTopology,
+    Transport,
+};
+use ic_types::artifact::{
+    IdentifiableArtifact,
+    PbArtifact,
+    UnvalidatedArtifactMutation,
+};
 use phantom_newtype::AmountOf;
 use tokio::{
     runtime::Handle,
     sync::{
-        mpsc::{Receiver, UnboundedSender},
+        mpsc::{
+            Receiver,
+            UnboundedSender,
+        },
         watch,
     },
 };

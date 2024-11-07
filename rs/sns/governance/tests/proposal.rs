@@ -1,5 +1,9 @@
 use ic_nervous_system_proto::pb::v1::Percentage;
-use ic_sns_governance::pb::v1::{ProposalData, Tally, Vote};
+use ic_sns_governance::pb::v1::{
+    ProposalData,
+    Tally,
+    Vote,
+};
 use proptest::proptest;
 
 mod early_decision {

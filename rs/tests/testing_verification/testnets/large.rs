@@ -44,19 +44,35 @@ use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::boundary_node::BoundaryNodeVm;
 use ic_system_test_driver::driver::ic::{
-    AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources,
+    AmountOfMemoryKiB,
+    ImageSizeGiB,
+    InternetComputer,
+    NrOfVCPUs,
+    Subnet,
+    VmResources,
 };
 use ic_system_test_driver::driver::{
     boundary_node::BoundaryNode,
     group::SystemTestGroup,
-    prometheus_vm::{HasPrometheus, PrometheusVm},
+    prometheus_vm::{
+        HasPrometheus,
+        PrometheusVm,
+    },
     test_env::TestEnv,
-    test_env_api::{await_boundary_node_healthy, HasTopologySnapshot, IcNodeContainer},
+    test_env_api::{
+        await_boundary_node_healthy,
+        HasTopologySnapshot,
+        IcNodeContainer,
+    },
 };
 use ic_system_test_driver::sns_client::add_all_wasms_to_sns_wasm;
 use nns_dapp::{
-    install_ii_nns_dapp_and_subnet_rental, install_sns_aggregator, nns_dapp_customizations,
-    set_authorized_subnets, set_icp_xdr_exchange_rate, set_sns_subnet,
+    install_ii_nns_dapp_and_subnet_rental,
+    install_sns_aggregator,
+    nns_dapp_customizations,
+    set_authorized_subnets,
+    set_icp_xdr_exchange_rate,
+    set_sns_subnet,
 };
 
 const NUM_FULL_CONSENSUS_APP_SUBNETS: u64 = 1;

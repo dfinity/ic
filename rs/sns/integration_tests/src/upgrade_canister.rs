@@ -1,43 +1,87 @@
 use candid::Encode;
-use canister_test::{Canister, Project, Runtime, Wasm};
+use canister_test::{
+    Canister,
+    Project,
+    Runtime,
+    Wasm,
+};
 use dfn_candid::candid_one;
 use dfn_core::bytes;
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_canister_client_sender::Sender;
 use ic_ledger_core::Tokens;
-use ic_management_canister_types::{CanisterInstallMode, CanisterSettingsArgsBuilder};
+use ic_management_canister_types::{
+    CanisterInstallMode,
+    CanisterSettingsArgsBuilder,
+};
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
-    canister_status::{CanisterStatusResult, CanisterStatusType},
+    canister_status::{
+        CanisterStatusResult,
+        CanisterStatusType,
+    },
 };
 use ic_nervous_system_common::ONE_YEAR_SECONDS;
-use ic_nervous_system_common_test_keys::{TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR};
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
+use ic_nervous_system_common_test_keys::{
+    TEST_USER1_KEYPAIR,
+    TEST_USER2_KEYPAIR,
+};
+use ic_nns_constants::{
+    GOVERNANCE_CANISTER_ID,
+    LEDGER_CANISTER_ID,
+};
 use ic_nns_test_utils::state_test_helpers::{
-    create_canister, sns_claim_staked_neuron, sns_make_proposal, sns_stake_neuron,
-    sns_wait_for_proposal_execution, update,
+    create_canister,
+    sns_claim_staked_neuron,
+    sns_make_proposal,
+    sns_stake_neuron,
+    sns_wait_for_proposal_execution,
+    update,
 };
 use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
 use ic_sns_governance::pb::v1::{
-    governance_error::ErrorType, proposal::Action, NervousSystemParameters, NeuronId,
-    NeuronPermissionList, NeuronPermissionType, Proposal, UpgradeSnsControlledCanister,
+    governance_error::ErrorType,
+    proposal::Action,
+    NervousSystemParameters,
+    NeuronId,
+    NeuronPermissionList,
+    NeuronPermissionType,
+    Proposal,
+    UpgradeSnsControlledCanister,
 };
 use ic_sns_test_utils::{
     itest_helpers::{
-        install_governance_canister, install_ledger_canister, install_root_canister,
-        install_swap_canister, local_test_on_sns_subnet, state_machine_test_on_sns_subnet,
-        SnsCanisters, SnsTestsInitPayloadBuilder, UserInfo,
+        install_governance_canister,
+        install_ledger_canister,
+        install_root_canister,
+        install_swap_canister,
+        local_test_on_sns_subnet,
+        state_machine_test_on_sns_subnet,
+        SnsCanisters,
+        SnsTestsInitPayloadBuilder,
+        UserInfo,
     },
     state_test_helpers::{
-        setup_sns_canisters, sns_root_register_dapp_canisters, state_machine_builder_for_sns_tests,
+        setup_sns_canisters,
+        sns_root_register_dapp_canisters,
+        state_machine_builder_for_sns_tests,
         SnsTestCanisterIds,
     },
 };
 use ic_state_machine_tests::StateMachine;
-use ic_universal_canister::{wasm, UNIVERSAL_CANISTER_WASM};
+use ic_universal_canister::{
+    wasm,
+    UNIVERSAL_CANISTER_WASM,
+};
 use itertools::Itertools;
 use lazy_static::lazy_static;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{
+    SystemTime,
+    UNIX_EPOCH,
+};
 use tokio::time::Duration;
 
 // The minimum WASM payload.

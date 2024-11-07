@@ -1,24 +1,45 @@
 use anyhow::Result;
 
-use candid::{Decode, Encode, Principal};
+use candid::{
+    Decode,
+    Encode,
+    Principal,
+};
 use ic_base_types::PrincipalId;
 use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::updates::{
-    get_btc_address::GetBtcAddressArgs, get_withdrawal_account::compute_subaccount,
-    retrieve_btc::RetrieveBtcArgs, update_balance::UpdateBalanceArgs,
+    get_btc_address::GetBtcAddressArgs,
+    get_withdrawal_account::compute_subaccount,
+    retrieve_btc::RetrieveBtcArgs,
+    update_balance::UpdateBalanceArgs,
 };
 use ic_system_test_driver::{
     driver::{
         group::SystemTestGroup,
         test_env::TestEnv,
-        test_env_api::{HasPublicApiUrl, IcNodeContainer},
+        test_env_api::{
+            HasPublicApiUrl,
+            IcNodeContainer,
+        },
     },
     systest,
-    util::{assert_create_agent, block_on, runtime_from_url},
+    util::{
+        assert_create_agent,
+        block_on,
+        runtime_from_url,
+    },
 };
 use ic_tests_ckbtc::{
-    activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_kyt,
-    install_ledger, install_minter, set_kyt_api_key, setup, subnet_sys, ADDRESS_LENGTH,
+    activate_ecdsa_signature,
+    create_canister,
+    install_bitcoin_canister,
+    install_kyt,
+    install_ledger,
+    install_minter,
+    set_kyt_api_key,
+    setup,
+    subnet_sys,
+    ADDRESS_LENGTH,
     TEST_KEY_LOCAL,
 };
 use icrc_ledger_types::icrc1::account::Account;

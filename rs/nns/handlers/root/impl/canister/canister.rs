@@ -1,44 +1,74 @@
 use candid::candid_method;
-use dfn_candid::{candid, candid_one, candid_one_with_config};
+use dfn_candid::{
+    candid,
+    candid_one,
+    candid_one_with_config,
+};
 use dfn_core::{
     api::caller,
-    endpoint::{over, over_async},
+    endpoint::{
+        over,
+        over_async,
+    },
     stable,
 };
-use ic_base_types::{CanisterId, PrincipalId};
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
+use ic_canisters_http_types::{
+    HttpRequest,
+    HttpResponse,
+    HttpResponseBuilder,
+};
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::CanisterStatusResult,
     management_canister_client::{
-        LimitedOutstandingCallsManagementCanisterClient, ManagementCanisterClient,
+        LimitedOutstandingCallsManagementCanisterClient,
+        ManagementCanisterClient,
         ManagementCanisterClientImpl,
     },
 };
 use ic_nervous_system_common::serve_metrics;
 use ic_nervous_system_root::{
     change_canister::{
-        change_canister, AddCanisterRequest, CanisterAction, ChangeCanisterRequest,
+        change_canister,
+        AddCanisterRequest,
+        CanisterAction,
+        ChangeCanisterRequest,
         StopOrStartCanisterRequest,
     },
     LOG_PREFIX,
 };
 use ic_nervous_system_runtime::DfnRuntime;
 use ic_nns_common::{
-    access_control::{check_caller_is_governance, check_caller_is_sns_w},
+    access_control::{
+        check_caller_is_governance,
+        check_caller_is_sns_w,
+    },
     types::CallCanisterProposal,
 };
 use ic_nns_constants::{
-    ALL_NNS_CANISTER_IDS, GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID, ROOT_CANISTER_ID,
+    ALL_NNS_CANISTER_IDS,
+    GOVERNANCE_CANISTER_ID,
+    LIFELINE_CANISTER_ID,
+    ROOT_CANISTER_ID,
 };
 use ic_nns_handler_root::{
-    canister_management, encode_metrics,
-    root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot},
+    canister_management,
+    encode_metrics,
+    root_proposals::{
+        GovernanceUpgradeRootProposal,
+        RootProposalBallot,
+    },
     PROXIED_CANISTER_CALLS_TRACKER,
 };
 use ic_nns_handler_root_interface::{
-    ChangeCanisterControllersRequest, ChangeCanisterControllersResponse,
-    UpdateCanisterSettingsRequest, UpdateCanisterSettingsResponse,
+    ChangeCanisterControllersRequest,
+    ChangeCanisterControllersResponse,
+    UpdateCanisterSettingsRequest,
+    UpdateCanisterSettingsResponse,
 };
 use std::cell::RefCell;
 

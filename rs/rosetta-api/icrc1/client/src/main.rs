@@ -1,5 +1,8 @@
 use candid::Nat;
-use clap::{Parser, Subcommand};
+use clap::{
+    Parser,
+    Subcommand,
+};
 use ic_agent::identity::BasicIdentity;
 use ic_icrc_rosetta_client::RosettaClient;
 use icrc_ledger_types::icrc1::account::Account;

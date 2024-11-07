@@ -8,7 +8,10 @@ use crate::vault::api::BasicSignatureCspVault;
 use crate::vault::api::MultiSignatureCspVault;
 use crate::vault::api::PublicKeyStoreCspVault;
 use crate::vault::api::SecretKeyStoreCspVault;
-use crate::vault::api::{CspMultiSignatureError, CspMultiSignatureKeygenError};
+use crate::vault::api::{
+    CspMultiSignatureError,
+    CspMultiSignatureKeygenError,
+};
 use crate::vault::local_csp_vault::multi_sig::committee_signing_pk_to_proto;
 use crate::vault::local_csp_vault::multi_sig::SecretKeyStoreInsertionError;
 use crate::Csp;

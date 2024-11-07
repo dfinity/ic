@@ -13,16 +13,36 @@
 //! Every message is preceded with the length of the messages. All messages are encoded using
 //! `bincode`.
 
-use crate::driver::constants::{PANIC_LOG_PREFIX, SUBREPORT_LOG_PREFIX};
+use crate::driver::constants::{
+    PANIC_LOG_PREFIX,
+    SUBREPORT_LOG_PREFIX,
+};
 use crate::driver::event::TaskId;
 use bincode;
-use serde::{Deserialize, Serialize};
-use slog::{error, warn, Drain, Level, Logger, OwnedKVList, Record};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use slog::{
+    error,
+    warn,
+    Drain,
+    Level,
+    Logger,
+    OwnedKVList,
+    Record,
+};
 use std::{
-    io::{self, Write},
+    io::{
+        self,
+        Write,
+    },
     os::unix::net::UnixStream,
     path::Path,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc,
+        Mutex,
+    },
 };
 use tokio::net::UnixListener;
 
@@ -227,10 +247,20 @@ impl ReportOrFailure {
 mod tests {
     use super::*;
     use assert_matches::assert_matches;
-    use crossbeam_channel::{unbounded, Sender};
+    use crossbeam_channel::{
+        unbounded,
+        Sender,
+    };
     use rand::Rng;
-    use slog::{info, o, warn};
-    use std::{path::PathBuf, sync::Arc};
+    use slog::{
+        info,
+        o,
+        warn,
+    };
+    use std::{
+        path::PathBuf,
+        sync::Arc,
+    };
     use tokio::runtime::Runtime;
 
     #[test]
@@ -336,7 +366,13 @@ mod tests {
 /// Serialize/Deserialization of log events.
 mod ser {
     use super::*;
-    use slog::{b, Level, Record, RecordLocation, RecordStatic};
+    use slog::{
+        b,
+        Level,
+        Record,
+        RecordLocation,
+        RecordStatic,
+    };
     use std::collections::HashSet;
 
     /// Turn a LogRecord into a slog::Record<'_> and use equivalent, but globally allocated strings

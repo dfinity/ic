@@ -1,8 +1,18 @@
-use crate::state::event::{Event, EventType};
+use crate::state::event::{
+    Event,
+    EventType,
+};
 use ic_stable_structures::{
     log::Log as StableLog,
-    memory_manager::{MemoryId, MemoryManager, VirtualMemory},
-    storable::{Bound, Storable},
+    memory_manager::{
+        MemoryId,
+        MemoryManager,
+        VirtualMemory,
+    },
+    storable::{
+        Bound,
+        Storable,
+    },
     DefaultMemoryImpl,
 };
 use std::borrow::Cow;

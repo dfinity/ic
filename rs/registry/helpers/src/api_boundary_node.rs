@@ -1,8 +1,15 @@
-use ic_base_types::{NodeId, RegistryVersion};
-use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
+use ic_base_types::{
+    NodeId,
+    RegistryVersion,
+};
+use ic_interfaces_registry::{
+    RegistryClient,
+    RegistryClientResult,
+};
 use ic_protobuf::registry::api_boundary_node::v1::ApiBoundaryNodeRecord;
 use ic_registry_keys::{
-    get_api_boundary_node_record_node_id, make_api_boundary_node_record_key,
+    get_api_boundary_node_record_node_id,
+    make_api_boundary_node_record_key,
     API_BOUNDARY_NODE_RECORD_KEY_PREFIX,
 };
 use ic_types::registry::RegistryClientError;

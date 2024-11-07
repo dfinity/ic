@@ -5,10 +5,19 @@ use crate::keygen::utils::dkg_dealing_encryption_pk_to_proto;
 use crate::types::CspPublicCoefficients;
 use crate::vault::api::CspVault;
 use crate::vault::test_utils::ni_dkg::fixtures::{
-    random_algorithm_id, MockDkgConfig, MockNetwork, MockNode, StateWithConfig, StateWithDealings,
-    StateWithTranscript, StateWithVerifiedDealings,
+    random_algorithm_id,
+    MockDkgConfig,
+    MockNetwork,
+    MockNode,
+    StateWithConfig,
+    StateWithDealings,
+    StateWithTranscript,
+    StateWithVerifiedDealings,
 };
-use crate::vault::{test_utils, KeyIdInstantiationError};
+use crate::vault::{
+    test_utils,
+    KeyIdInstantiationError,
+};
 use assert_matches::assert_matches;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::dkg_errors::InternalError;
@@ -17,15 +26,22 @@ use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::CspDkgCreateR
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg as internal_types;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::PublicCoefficientsBytes;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
-    CspFsEncryptionPop, CspFsEncryptionPublicKey,
+    CspFsEncryptionPop,
+    CspFsEncryptionPublicKey,
 };
 use ic_types::crypto::AlgorithmId;
-use ic_types::{NodeIndex, NumberOfNodes};
+use ic_types::{
+    NodeIndex,
+    NumberOfNodes,
+};
 use ic_types_test_utils::ids::NODE_42;
 use rand::prelude::IteratorRandom;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
 use std::sync::Arc;
 
 /// Verifies that non-interactive DKG works if all players act correctly.

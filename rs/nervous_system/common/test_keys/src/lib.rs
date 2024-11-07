@@ -1,6 +1,12 @@
 use ic_base_types::PrincipalId;
-use ic_canister_client_sender::{ed25519_public_key_to_der, Ed25519KeyPair};
-use ic_types::crypto::{AlgorithmId, UserPublicKey};
+use ic_canister_client_sender::{
+    ed25519_public_key_to_der,
+    Ed25519KeyPair,
+};
+use ic_types::crypto::{
+    AlgorithmId,
+    UserPublicKey,
+};
 use lazy_static::lazy_static;
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;

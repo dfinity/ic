@@ -1,6 +1,8 @@
 use super::*;
 use crate::sign::canister_threshold_sig::idkg::utils::{
-    index_and_dealing_of_dealer, retrieve_mega_public_key_from_registry, MegaKeyFromRegistryError,
+    index_and_dealing_of_dealer,
+    retrieve_mega_public_key_from_registry,
+    MegaKeyFromRegistryError,
 };
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::verify_complaint as idkg_verify_complaint;
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::IDkgComplaintInternal;

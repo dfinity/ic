@@ -1,4 +1,7 @@
-use candid::{CandidType, Deserialize};
+use candid::{
+    CandidType,
+    Deserialize,
+};
 use serde_bytes::ByteBuf;
 
 #[derive(Clone, Debug, CandidType, Deserialize)]

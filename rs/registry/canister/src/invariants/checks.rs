@@ -10,7 +10,10 @@ use crate::{
         hostos_version::check_hostos_version_invariants,
         node_operator::check_node_operator_invariants,
         replica_version::check_replica_version_invariants,
-        routing_table::{check_canister_migrations_invariants, check_routing_table_invariants},
+        routing_table::{
+            check_canister_migrations_invariants,
+            check_routing_table_invariants,
+        },
         subnet::check_subnet_invariants,
         unassigned_nodes_config::check_unassigned_nodes_config_invariants,
     },
@@ -20,7 +23,10 @@ use crate::{
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_nervous_system_string::clamp_debug_len;
-use ic_registry_transport::pb::v1::{registry_mutation::Type, RegistryMutation};
+use ic_registry_transport::pb::v1::{
+    registry_mutation::Type,
+    RegistryMutation,
+};
 
 impl Registry {
     pub fn check_changelog_version_invariants(&self) {
@@ -161,17 +167,27 @@ mod tests {
     use ic_protobuf::registry::{
         node_operator::v1::NodeOperatorRecord,
         routing_table::v1::{
-            CanisterMigrations as PbCanisterMigrations, RoutingTable as PbRoutingTable,
+            CanisterMigrations as PbCanisterMigrations,
+            RoutingTable as PbRoutingTable,
         },
     };
     use ic_registry_keys::{
-        make_canister_migrations_record_key, make_node_operator_record_key,
+        make_canister_migrations_record_key,
+        make_node_operator_record_key,
         make_routing_table_record_key,
     };
-    use ic_registry_routing_table::{CanisterIdRange, CanisterMigrations, RoutingTable};
+    use ic_registry_routing_table::{
+        CanisterIdRange,
+        CanisterMigrations,
+        RoutingTable,
+    };
     use ic_registry_transport::{
-        delete, insert,
-        pb::v1::{RegistryAtomicMutateRequest, RegistryMutation},
+        delete,
+        insert,
+        pb::v1::{
+            RegistryAtomicMutateRequest,
+            RegistryMutation,
+        },
     };
     use ic_test_utilities_types::ids::subnet_test_id;
     use maplit::btreemap;

@@ -2,7 +2,10 @@ use ic_http_utils::file_downloader::FileDownloadError;
 use ic_state_manager::CheckpointError;
 use std::{
     error::Error,
-    fmt::{self, Display},
+    fmt::{
+        self,
+        Display,
+    },
     io,
     path::Path,
     process::Command,

@@ -14,37 +14,74 @@ Coverage:: The rate-limit canister interface works as expected.
 
 end::catalog[] */
 
-use anyhow::{bail, Result};
-use candid::{Decode, Encode, Principal};
+use anyhow::{
+    bail,
+    Result,
+};
+use candid::{
+    Decode,
+    Encode,
+    Principal,
+};
 use k256::elliptic_curve::SecretKey;
-use rand::{rngs::OsRng, SeedableRng};
+use rand::{
+    rngs::OsRng,
+    SeedableRng,
+};
 use rand_chacha::ChaChaRng;
-use slog::{info, Logger};
+use slog::{
+    info,
+    Logger,
+};
 use std::env;
 use tokio::runtime::Runtime;
 
 use ic_agent::{
-    identity::{AnonymousIdentity, Secp256k1Identity},
-    Agent, Identity,
+    identity::{
+        AnonymousIdentity,
+        Secp256k1Identity,
+    },
+    Agent,
+    Identity,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
-        group::{SystemTestGroup, SystemTestSubGroup},
+        group::{
+            SystemTestGroup,
+            SystemTestSubGroup,
+        },
         ic::InternetComputer,
         test_env::TestEnv,
         test_env_api::{
-            GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-            READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+            GetFirstHealthyNodeSnapshot,
+            HasPublicApiUrl,
+            HasTopologySnapshot,
+            IcNodeContainer,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
         },
     },
-    retry_with_msg_async, systest,
+    retry_with_msg_async,
+    systest,
     util::agent_observes_canister_module,
 };
 use rate_limits_api::{
-    v1::{RateLimitRule, RequestType},
-    AddConfigResponse, DiscloseRulesArg, DiscloseRulesResponse, GetConfigResponse,
-    GetRuleByIdResponse, IncidentId, InitArg, InputConfig, InputRule, OutputRuleMetadata, RuleId,
+    v1::{
+        RateLimitRule,
+        RequestType,
+    },
+    AddConfigResponse,
+    DiscloseRulesArg,
+    DiscloseRulesResponse,
+    GetConfigResponse,
+    GetRuleByIdResponse,
+    IncidentId,
+    InitArg,
+    InputConfig,
+    InputRule,
+    OutputRuleMetadata,
+    RuleId,
     Version,
 };
 

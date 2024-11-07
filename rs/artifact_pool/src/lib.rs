@@ -24,11 +24,20 @@ mod rocksdb_iterator;
 #[cfg(target_os = "macos")]
 mod rocksdb_pool;
 
-use ic_interfaces::{consensus_pool::ValidatedArtifact, p2p::consensus::UnvalidatedArtifact};
-use ic_types::{ReplicaVersion, Time};
+use ic_interfaces::{
+    consensus_pool::ValidatedArtifact,
+    p2p::consensus::UnvalidatedArtifact,
+};
+use ic_types::{
+    ReplicaVersion,
+    Time,
+};
 use std::convert::TryFrom;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{
+    Path,
+    PathBuf,
+};
 
 pub fn get_replica_version<P: AsRef<Path>>(filepath: P) -> Option<ReplicaVersion> {
     std::fs::read_to_string(filepath)

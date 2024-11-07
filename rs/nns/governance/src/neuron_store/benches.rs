@@ -1,13 +1,32 @@
 use super::*;
 use crate::{
-    governance::{MAX_FOLLOWEES_PER_TOPIC, MAX_NEURON_RECENT_BALLOTS, MAX_NUM_HOT_KEYS_PER_NEURON},
-    neuron::{DissolveStateAndAge, NeuronBuilder},
-    pb::v1::{neuron::Followees, BallotInfo, Vote},
+    governance::{
+        MAX_FOLLOWEES_PER_TOPIC,
+        MAX_NEURON_RECENT_BALLOTS,
+        MAX_NUM_HOT_KEYS_PER_NEURON,
+    },
+    neuron::{
+        DissolveStateAndAge,
+        NeuronBuilder,
+    },
+    pb::v1::{
+        neuron::Followees,
+        BallotInfo,
+        Vote,
+    },
 };
-use canbench_rs::{bench, bench_fn, BenchResult};
+use canbench_rs::{
+    bench,
+    bench_fn,
+    BenchResult,
+};
 use ic_nns_common::pb::v1::ProposalId;
 use maplit::hashmap;
-use rand::{rngs::StdRng, RngCore, SeedableRng};
+use rand::{
+    rngs::StdRng,
+    RngCore,
+    SeedableRng,
+};
 
 /// Whether the neuron should be stored in heap or stable storage.
 #[derive(Copy, Clone)]

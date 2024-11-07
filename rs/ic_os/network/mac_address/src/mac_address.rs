@@ -1,12 +1,22 @@
 use std::fmt;
 use std::process::Command;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{
+    bail,
+    Context,
+    Result,
+};
 use regex::Regex;
-use sha2::{Digest, Sha256};
+use sha2::{
+    Digest,
+    Sha256,
+};
 
 use crate::node_type::NodeType;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use utils::intersperse;
 
 /// Wrapper types for MAC addresses

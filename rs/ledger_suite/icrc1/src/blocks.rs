@@ -1,14 +1,30 @@
-use crate::known_tags::{BIGNUM, NEG_BIGNUM, SELF_DESCRIBED};
-use crate::{Block, Transaction};
-use candid::{Int, Nat};
+use crate::known_tags::{
+    BIGNUM,
+    NEG_BIGNUM,
+    SELF_DESCRIBED,
+};
+use crate::{
+    Block,
+    Transaction,
+};
+use candid::{
+    Int,
+    Nat,
+};
 use ciborium::into_writer;
 use ciborium::value::Value as CiboriumValue;
-use ic_ledger_core::block::{BlockType, EncodedBlock};
+use ic_ledger_core::block::{
+    BlockType,
+    EncodedBlock,
+};
 use ic_ledger_core::tokens::TokensType;
 use icrc_ledger_types::icrc::generic_value::Value as GenericValue;
 use icrc_ledger_types::icrc3::blocks::GenericBlock;
 use icrc_ledger_types::icrc3::transactions::GenericTransaction;
-use num_traits::{Signed, ToPrimitive};
+use num_traits::{
+    Signed,
+    ToPrimitive,
+};
 use serde_bytes::ByteBuf;
 use std::collections::BTreeMap;
 use thiserror::Error;
@@ -148,7 +164,11 @@ fn icrc1_block_from_value(
             ))))
         }
         CiboriumValue::Tag(NEG_BIGNUM, value) => {
-            use num_bigint::{BigInt, BigUint, Sign};
+            use num_bigint::{
+                BigInt,
+                BigUint,
+                Sign,
+            };
             let value_bytes = value.into_bytes().map_err(|_| {
                 ValueDecodingError::UnsupportedValueType("non-bytes negative bignums")
             })?;

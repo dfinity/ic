@@ -1,5 +1,8 @@
 use crate::protocol::launchersvc::*;
-use crate::rpc::{Call, DemuxServer};
+use crate::rpc::{
+    Call,
+    DemuxServer,
+};
 
 pub trait LauncherService: Send + Sync {
     /// Launch a new sandboxed process.

@@ -27,17 +27,27 @@ use ic_nns_governance_api::pb::v1::NnsFunction;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
-        ic::{InternetComputer, Subnet},
+        ic::{
+            InternetComputer,
+            Subnet,
+        },
         test_env::TestEnv,
         test_env_api::{
-            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
+            HasPublicApiUrl,
+            HasTopologySnapshot,
+            IcNodeContainer,
+            NnsInstallationBuilder,
         },
     },
     nns::{
-        submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed,
+        submit_external_proposal_with_test_id,
+        vote_execute_proposal_assert_executed,
         vote_execute_proposal_assert_failed,
     },
-    util::{block_on, runtime_from_url},
+    util::{
+        block_on,
+        runtime_from_url,
+    },
 };
 use ic_types::Height;
 use registry_canister::mutations::node_management::do_remove_nodes::RemoveNodesPayload;

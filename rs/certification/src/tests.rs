@@ -1,23 +1,45 @@
 use std::str::FromStr;
 
 use assert_matches::assert_matches;
-use rand::{thread_rng, Rng};
+use rand::{
+    thread_rng,
+    Rng,
+};
 
-use ic_base_types::{CanisterId, PrincipalId, SubnetId};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+    SubnetId,
+};
 use ic_certification_test_utils::{
-    encoded_time, serialize_to_cbor, CertificateBuilder, CertificateData::CanisterData,
-    CertificateData::CustomTree, CertificateData::SubnetData,
+    encoded_time,
+    serialize_to_cbor,
+    CertificateBuilder,
+    CertificateData::CanisterData,
+    CertificateData::CustomTree,
+    CertificateData::SubnetData,
 };
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use ic_crypto_tree_hash::{flatmap, Digest, Label, LabeledTree};
-use ic_crypto_utils_threshold_sig_der::{parse_threshold_sig_key_from_der, public_key_to_der};
+use ic_crypto_tree_hash::{
+    flatmap,
+    Digest,
+    Label,
+    LabeledTree,
+};
+use ic_crypto_utils_threshold_sig_der::{
+    parse_threshold_sig_key_from_der,
+    public_key_to_der,
+};
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::Time;
 
 use crate::{
-    validate_subnet_delegation_certificate, validate_subnet_delegation_certificate_with_cache,
-    verify_certified_data, verify_certified_data_with_cache, CertificateValidationError,
+    validate_subnet_delegation_certificate,
+    validate_subnet_delegation_certificate_with_cache,
+    verify_certified_data,
+    verify_certified_data_with_cache,
+    CertificateValidationError,
 };
 
 fn verify_certified_data_with_and_without_cache(

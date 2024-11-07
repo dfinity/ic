@@ -1,9 +1,21 @@
-use crate::{consensus::PayloadValidationError, validation::ValidationResult};
+use crate::{
+    consensus::PayloadValidationError,
+    validation::ValidationResult,
+};
 use ic_base_types::NumBytes;
 use ic_types::{
-    batch::ValidationContext, consensus::BlockPayload, crypto::CryptoHashOf, Height, NodeId, Time,
+    batch::ValidationContext,
+    consensus::BlockPayload,
+    crypto::CryptoHashOf,
+    Height,
+    NodeId,
+    Time,
 };
-use prost::{bytes::BufMut, DecodeError, Message};
+use prost::{
+    bytes::BufMut,
+    DecodeError,
+    Message,
+};
 
 /// A list of [`PastPayload`] will be passed to invocation of
 ///  [`BatchPayloadBuilder::build_payload`].

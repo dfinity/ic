@@ -2,8 +2,15 @@ use crate::registry::Registry;
 use candid::CandidType;
 use ic_base_types::SubnetId;
 use ic_registry_keys::make_subnet_record_key;
-use ic_registry_routing_table::{is_subset_of, CanisterIdRange, CanisterIdRanges};
-use serde::{Deserialize, Serialize};
+use ic_registry_routing_table::{
+    is_subset_of,
+    CanisterIdRange,
+    CanisterIdRanges,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::convert::TryFrom;
 
 impl Registry {

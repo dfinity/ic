@@ -2,7 +2,12 @@
 use ic_crypto_internal_bls12_381_type::*;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::encryption_key_pop::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use rand::{CryptoRng, Rng, RngCore, SeedableRng};
+use rand::{
+    CryptoRng,
+    Rng,
+    RngCore,
+    SeedableRng,
+};
 
 fn setup_pop_instance_and_witness<R: RngCore + CryptoRng>(
     rng: &mut R,

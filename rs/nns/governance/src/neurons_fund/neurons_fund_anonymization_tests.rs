@@ -9,7 +9,10 @@ use crate::{
     },
 };
 use ic_base_types::PrincipalId;
-use ic_neurons_fund::{PolynomialMatchingFunction, SerializableFunction};
+use ic_neurons_fund::{
+    PolynomialMatchingFunction,
+    SerializableFunction,
+};
 use ic_nns_common::pb::v1::NeuronId;
 
 #[test]

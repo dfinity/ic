@@ -2,38 +2,68 @@ use rand::seq::SliceRandom;
 use regex::Regex;
 use slog::Logger;
 use std::collections::BTreeMap;
-use std::net::{Ipv4Addr, Ipv6Addr};
+use std::net::{
+    Ipv4Addr,
+    Ipv6Addr,
+};
 use std::str::FromStr;
 use url::Url;
 
 use anyhow::Result;
 use backon::Retryable;
-use backon::{ConstantBuilder, ExponentialBuilder};
+use backon::{
+    ConstantBuilder,
+    ExponentialBuilder,
+};
 use k8s_openapi::api::core::v1::{
-    ConfigMap, PersistentVolumeClaim, Pod, Secret, Service, TypedLocalObjectReference,
+    ConfigMap,
+    PersistentVolumeClaim,
+    Pod,
+    Secret,
+    Service,
+    TypedLocalObjectReference,
 };
 use k8s_openapi::api::networking::v1::Ingress;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::OwnerReference;
 use k8s_openapi::chrono::DateTime;
 use k8s_openapi::chrono::Duration;
 use k8s_openapi::chrono::Utc;
-use kube::api::{DeleteParams, PostParams};
+use kube::api::{
+    DeleteParams,
+    PostParams,
+};
 use kube::core::ObjectMeta;
 use kube::ResourceExt;
 use kube::{
-    api::{Api, DynamicObject, GroupVersionKind},
+    api::{
+        Api,
+        DynamicObject,
+        GroupVersionKind,
+    },
     Client,
 };
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use tokio;
 use tracing::*;
 
 use crate::driver::farm::{
-    Certificate, CreateVmRequest, DnsRecord, DnsRecordType, ImageLocation, PlaynetCertificate,
-    VMCreateResponse, VmSpec,
+    Certificate,
+    CreateVmRequest,
+    DnsRecord,
+    DnsRecordType,
+    ImageLocation,
+    PlaynetCertificate,
+    VMCreateResponse,
+    VmSpec,
 };
 use crate::driver::resource::ImageType;
-use crate::driver::test_env::{TestEnv, TestEnvAttribute};
+use crate::driver::test_env::{
+    TestEnv,
+    TestEnvAttribute,
+};
 use crate::k8s::config::*;
 use crate::k8s::datavolume::*;
 use crate::k8s::persistentvolumeclaim::*;

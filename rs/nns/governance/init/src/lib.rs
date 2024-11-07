@@ -1,7 +1,10 @@
 #[cfg(not(target_arch = "wasm32"))]
 use icp_ledger::Subaccount;
 #[cfg(not(target_arch = "wasm32"))]
-use rand::{RngCore, SeedableRng};
+use rand::{
+    RngCore,
+    SeedableRng,
+};
 #[cfg(not(target_arch = "wasm32"))]
 use rand_chacha::ChaCha20Rng;
 #[cfg(not(target_arch = "wasm32"))]
@@ -10,7 +13,10 @@ use std::path::Path;
 use ic_base_types::PrincipalId;
 use ic_nns_common::types::NeuronId;
 use ic_nns_governance_api::pb::v1::{
-    Governance, NetworkEconomics, Neuron, XdrConversionRate as XdrConversionRatePb,
+    Governance,
+    NetworkEconomics,
+    Neuron,
+    XdrConversionRate as XdrConversionRatePb,
 };
 
 // To update or add more, add print statements to `with_test_neurons` to print
@@ -91,10 +97,17 @@ impl GovernanceCanisterInitPayloadBuilder {
 
         const TWELVE_MONTHS_SECONDS: u64 = 30 * 12 * 24 * 60 * 60;
         use ic_nervous_system_common_test_keys::{
-            TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_ID,
-            TEST_NEURON_2_OWNER_PRINCIPAL, TEST_NEURON_3_ID, TEST_NEURON_3_OWNER_PRINCIPAL,
+            TEST_NEURON_1_ID,
+            TEST_NEURON_1_OWNER_PRINCIPAL,
+            TEST_NEURON_2_ID,
+            TEST_NEURON_2_OWNER_PRINCIPAL,
+            TEST_NEURON_3_ID,
+            TEST_NEURON_3_OWNER_PRINCIPAL,
         };
-        use ic_nns_governance_api::pb::v1::{neuron::DissolveState, Neuron};
+        use ic_nns_governance_api::pb::v1::{
+            neuron::DissolveState,
+            Neuron,
+        };
 
         let mut neuron1 = {
             let neuron_id = NeuronIdProto::from(self.new_neuron_id());
@@ -228,8 +241,12 @@ impl GovernanceCanisterInitPayloadBuilder {
         use ic_nervous_system_common::ledger;
         use ic_nns_common::types::NeuronId;
         use ic_nns_governance_api::pb::v1::{
-            neuron::{DissolveState, Followees},
-            Neuron, Topic,
+            neuron::{
+                DissolveState,
+                Followees,
+            },
+            Neuron,
+            Topic,
         };
         use std::str::FromStr;
 

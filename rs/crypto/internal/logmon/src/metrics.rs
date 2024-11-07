@@ -4,7 +4,13 @@ mod bls12_381_sig_cache;
 
 use ic_metrics::MetricsRegistry;
 use prometheus::{
-    Gauge, Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec,
+    Gauge,
+    Histogram,
+    HistogramVec,
+    IntCounter,
+    IntCounterVec,
+    IntGauge,
+    IntGaugeVec,
 };
 use std::ops::Add;
 use std::time::Instant;

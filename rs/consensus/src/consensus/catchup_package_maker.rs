@@ -14,19 +14,37 @@
 //! block is considered finalized.
 
 use ic_consensus_utils::{
-    active_high_threshold_nidkg_id, crypto::ConsensusCrypto,
-    get_oldest_idkg_state_registry_version, membership::Membership, pool_reader::PoolReader,
+    active_high_threshold_nidkg_id,
+    crypto::ConsensusCrypto,
+    get_oldest_idkg_state_registry_version,
+    membership::Membership,
+    pool_reader::PoolReader,
 };
 use ic_interfaces::messaging::MessageRouting;
 use ic_interfaces_state_manager::{
-    PermanentStateHashError::*, StateHashError, StateManager, TransientStateHashError::*,
+    PermanentStateHashError::*,
+    StateHashError,
+    StateManager,
+    TransientStateHashError::*,
 };
-use ic_logger::{debug, error, trace, ReplicaLogger};
+use ic_logger::{
+    debug,
+    error,
+    trace,
+    ReplicaLogger,
+};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     consensus::{
-        Block, CatchUpContent, CatchUpPackage, CatchUpPackageShare, CatchUpShareContent,
-        HasCommittee, HasHeight, HashedBlock, HashedRandomBeacon,
+        Block,
+        CatchUpContent,
+        CatchUpPackage,
+        CatchUpPackageShare,
+        CatchUpShareContent,
+        HasCommittee,
+        HasHeight,
+        HashedBlock,
+        HashedRandomBeacon,
     },
     replica_config::ReplicaConfig,
 };
@@ -267,25 +285,42 @@ impl CatchUpPackageMaker {
 mod tests {
     //! CatchUpPackageMaker unit tests
     use crate::idkg::test_utils::{
-        add_available_quadruple_to_payload, empty_idkg_payload, fake_ecdsa_master_public_key_id,
-        fake_signature_request_context_with_pre_sig, fake_state_with_signature_requests,
+        add_available_quadruple_to_payload,
+        empty_idkg_payload,
+        fake_ecdsa_master_public_key_id,
+        fake_signature_request_context_with_pre_sig,
+        fake_state_with_signature_requests,
     };
 
     use super::*;
     use ic_consensus_mocks::{
-        dependencies_with_subnet_params, dependencies_with_subnet_records_with_raw_state_manager,
+        dependencies_with_subnet_params,
+        dependencies_with_subnet_records_with_raw_state_manager,
         Dependencies,
     };
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::message_routing::FakeMessageRouting;
     use ic_test_utilities_registry::SubnetRecordBuilder;
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
-    use ic_types::{
-        consensus::{idkg::PreSigId, BlockPayload, Payload, SummaryPayload},
-        crypto::CryptoHash,
-        CryptoHashOfState, Height, RegistryVersion,
+    use ic_test_utilities_types::ids::{
+        node_test_id,
+        subnet_test_id,
     };
-    use std::sync::{Arc, RwLock};
+    use ic_types::{
+        consensus::{
+            idkg::PreSigId,
+            BlockPayload,
+            Payload,
+            SummaryPayload,
+        },
+        crypto::CryptoHash,
+        CryptoHashOfState,
+        Height,
+        RegistryVersion,
+    };
+    use std::sync::{
+        Arc,
+        RwLock,
+    };
 
     #[test]
     fn test_catch_up_package_maker() {

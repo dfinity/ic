@@ -1,4 +1,7 @@
-use std::{fmt::Debug, marker::PhantomData};
+use std::{
+    fmt::Debug,
+    marker::PhantomData,
+};
 
 mod std_get_implementations;
 

@@ -1,4 +1,7 @@
-use super::{IcAdminArgs, IcAdminTemplate};
+use super::{
+    IcAdminArgs,
+    IcAdminTemplate,
+};
 use askama::Template;
 
 #[test]

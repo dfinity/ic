@@ -1,7 +1,13 @@
 use assert_matches::assert_matches;
-use ic_crypto_tree_hash::{prune_witness, HashTreeBuilder, Witness, WitnessGenerator};
+use ic_crypto_tree_hash::{
+    prune_witness,
+    HashTreeBuilder,
+    Witness,
+    WitnessGenerator,
+};
 use ic_crypto_tree_hash_test_utils::{
-    arbitrary::arbitrary_labeled_tree, hash_tree_builder_from_labeled_tree,
+    arbitrary::arbitrary_labeled_tree,
+    hash_tree_builder_from_labeled_tree,
 };
 use proptest::prelude::*;
 

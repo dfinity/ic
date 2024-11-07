@@ -3,98 +3,248 @@
 //! complex/weird configurations of neurons and proposals against which several
 //! tests are run.
 use crate::fake::{
-    DAPP_CANISTER_ID, DEVELOPER_PRINCIPAL_ID, NODE_PROVIDER_REWARD, SNS_GOVERNANCE_CANISTER_ID,
-    SNS_LEDGER_ARCHIVE_CANISTER_ID, SNS_LEDGER_CANISTER_ID, SNS_LEDGER_INDEX_CANISTER_ID,
-    SNS_ROOT_CANISTER_ID, TARGET_SWAP_CANISTER_ID,
+    DAPP_CANISTER_ID,
+    DEVELOPER_PRINCIPAL_ID,
+    NODE_PROVIDER_REWARD,
+    SNS_GOVERNANCE_CANISTER_ID,
+    SNS_LEDGER_ARCHIVE_CANISTER_ID,
+    SNS_LEDGER_CANISTER_ID,
+    SNS_LEDGER_INDEX_CANISTER_ID,
+    SNS_ROOT_CANISTER_ID,
+    TARGET_SWAP_CANISTER_ID,
 };
 use assert_matches::assert_matches;
 use async_trait::async_trait;
-use candid::{Decode, Encode};
+use candid::{
+    Decode,
+    Encode,
+};
 use common::increase_dissolve_delay_raw;
-use comparable::{Changed, I32Change, MapChange, OptionChange, StringChange, U64Change, VecChange};
+use comparable::{
+    Changed,
+    I32Change,
+    MapChange,
+    OptionChange,
+    StringChange,
+    U64Change,
+    VecChange,
+};
 use fixtures::{
-    account, environment_fixture::CanisterCallReply, new_motion_proposal, principal, NNSBuilder,
-    NNSStateChange, NeuronBuilder, ProposalNeuronBehavior, NNS,
+    account,
+    environment_fixture::CanisterCallReply,
+    new_motion_proposal,
+    principal,
+    NNSBuilder,
+    NNSStateChange,
+    NeuronBuilder,
+    ProposalNeuronBehavior,
+    NNS,
 };
 use futures::future::FutureExt;
-use ic_base_types::{CanisterId, NumBytes, PrincipalId};
+use ic_base_types::{
+    CanisterId,
+    NumBytes,
+    PrincipalId,
+};
 use ic_crypto_sha2::Sha256;
-use ic_nervous_system_clients::canister_status::{CanisterStatusResultV2, CanisterStatusType};
+use ic_nervous_system_clients::canister_status::{
+    CanisterStatusResultV2,
+    CanisterStatusType,
+};
 use ic_nervous_system_common::{
     cmc::CMC,
     ledger,
-    ledger::{compute_neuron_staking_subaccount_bytes, IcpLedger},
-    NervousSystemError, E8, ONE_DAY_SECONDS, ONE_YEAR_SECONDS,
+    ledger::{
+        compute_neuron_staking_subaccount_bytes,
+        IcpLedger,
+    },
+    NervousSystemError,
+    E8,
+    ONE_DAY_SECONDS,
+    ONE_YEAR_SECONDS,
 };
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
+    TEST_NEURON_1_OWNER_PRINCIPAL,
+    TEST_NEURON_2_OWNER_PRINCIPAL,
 };
-use ic_nervous_system_common_test_utils::{LedgerReply, SpyLedger};
-use ic_nervous_system_proto::pb::v1::{Duration, GlobalTimeOfDay, Image};
+use ic_nervous_system_common_test_utils::{
+    LedgerReply,
+    SpyLedger,
+};
+use ic_nervous_system_proto::pb::v1::{
+    Duration,
+    GlobalTimeOfDay,
+    Image,
+};
 use ic_neurons_fund::{
-    NeuronsFundParticipationLimits, PolynomialMatchingFunction, SerializableFunction,
+    NeuronsFundParticipationLimits,
+    PolynomialMatchingFunction,
+    SerializableFunction,
 };
 use ic_nns_common::{
-    pb::v1::{NeuronId, ProposalId},
+    pb::v1::{
+        NeuronId,
+        ProposalId,
+    },
     types::UpdateIcpXdrConversionRatePayload,
 };
 use ic_nns_constants::{
-    GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    GOVERNANCE_CANISTER_ID,
+    LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID,
+    SNS_WASM_CANISTER_ID,
 };
 use ic_nns_governance::{
     governance::{
         get_node_provider_reward,
         test_data::{
-            CREATE_SERVICE_NERVOUS_SYSTEM, CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING,
+            CREATE_SERVICE_NERVOUS_SYSTEM,
+            CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING,
         },
-        Environment, Governance, HeapGrowthPotential, RngError,
-        EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX, INITIAL_NEURON_DISSOLVE_DELAY,
-        MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS, MAX_NEURON_CREATION_SPIKE,
-        MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
-        PROPOSAL_MOTION_TEXT_BYTES_MAX, REWARD_DISTRIBUTION_PERIOD_SECONDS,
+        Environment,
+        Governance,
+        HeapGrowthPotential,
+        RngError,
+        EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX,
+        INITIAL_NEURON_DISSOLVE_DELAY,
+        MAX_DISSOLVE_DELAY_SECONDS,
+        MAX_NEURON_AGE_FOR_AGE_BONUS,
+        MAX_NEURON_CREATION_SPIKE,
+        MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
+        MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
+        PROPOSAL_MOTION_TEXT_BYTES_MAX,
+        REWARD_DISTRIBUTION_PERIOD_SECONDS,
         WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS,
     },
     governance_proto_builder::GovernanceProtoBuilder,
     is_private_neuron_enforcement_enabled,
     pb::v1::{
         add_or_remove_node_provider::Change,
-        governance::{GovernanceCachedMetrics, GovernanceCachedMetricsChange, MigrationsDesc},
+        governance::{
+            GovernanceCachedMetrics,
+            GovernanceCachedMetricsChange,
+            MigrationsDesc,
+        },
         governance_error::ErrorType::{
-            self, InsufficientFunds, NotAuthorized, NotFound, PreconditionFailed, ResourceExhausted,
+            self,
+            InsufficientFunds,
+            NotAuthorized,
+            NotFound,
+            PreconditionFailed,
+            ResourceExhausted,
         },
         install_code::CanisterInstallMode,
         manage_neuron::{
             self,
-            claim_or_refresh::{By, MemoAndController},
+            claim_or_refresh::{
+                By,
+                MemoAndController,
+            },
             configure::Operation,
             disburse::Amount,
-            ChangeAutoStakeMaturity, ClaimOrRefresh, Command, Configure, Disburse,
-            DisburseToNeuron, IncreaseDissolveDelay, JoinCommunityFund, LeaveCommunityFund,
-            MergeMaturity, NeuronIdOrSubaccount, SetVisibility, Spawn, Split, StartDissolving,
+            ChangeAutoStakeMaturity,
+            ClaimOrRefresh,
+            Command,
+            Configure,
+            Disburse,
+            DisburseToNeuron,
+            IncreaseDissolveDelay,
+            JoinCommunityFund,
+            LeaveCommunityFund,
+            MergeMaturity,
+            NeuronIdOrSubaccount,
+            SetVisibility,
+            Spawn,
+            Split,
+            StartDissolving,
         },
-        manage_neuron_response::{self, Command as CommandResponse, ConfigureResponse},
-        neuron::{self, DissolveState, Followees},
+        manage_neuron_response::{
+            self,
+            Command as CommandResponse,
+            ConfigureResponse,
+        },
+        neuron::{
+            self,
+            DissolveState,
+            Followees,
+        },
         neurons_fund_snapshot::NeuronsFundNeuronPortion,
-        proposal::{self, Action, ActionDesc},
-        reward_node_provider::{RewardMode, RewardToAccount, RewardToNeuron},
-        settle_neurons_fund_participation_request, swap_background_information,
-        AddOrRemoveNodeProvider, Ballot, BallotChange, BallotInfo, BallotInfoChange,
-        CreateServiceNervousSystem, Empty, ExecuteNnsFunction, Governance as GovernanceProto,
-        GovernanceChange, GovernanceError, IdealMatchedParticipationFunction, InstallCode,
-        KnownNeuron, KnownNeuronData, ListNeurons, ListNeuronsResponse, ListProposalInfo,
-        ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse, MonthlyNodeProviderRewards,
-        Motion, NetworkEconomics, Neuron, NeuronChange, NeuronState, NeuronType, NeuronsFundData,
-        NeuronsFundParticipation, NeuronsFundSnapshot, NnsFunction, NodeProvider, Proposal,
-        ProposalChange, ProposalData, ProposalDataChange,
-        ProposalRewardStatus::{self, AcceptVotes, ReadyToSettle},
-        ProposalStatus::{self, Rejected},
-        RewardEvent, RewardNodeProvider, RewardNodeProviders,
-        SettleNeuronsFundParticipationRequest, SwapBackgroundInformation, SwapParticipationLimits,
-        Tally, TallyChange, Topic, UpdateNodeProvider, Visibility, Vote, WaitForQuietState,
+        proposal::{
+            self,
+            Action,
+            ActionDesc,
+        },
+        reward_node_provider::{
+            RewardMode,
+            RewardToAccount,
+            RewardToNeuron,
+        },
+        settle_neurons_fund_participation_request,
+        swap_background_information,
+        AddOrRemoveNodeProvider,
+        Ballot,
+        BallotChange,
+        BallotInfo,
+        BallotInfoChange,
+        CreateServiceNervousSystem,
+        Empty,
+        ExecuteNnsFunction,
+        Governance as GovernanceProto,
+        GovernanceChange,
+        GovernanceError,
+        IdealMatchedParticipationFunction,
+        InstallCode,
+        KnownNeuron,
+        KnownNeuronData,
+        ListNeurons,
+        ListNeuronsResponse,
+        ListProposalInfo,
+        ListProposalInfoResponse,
+        ManageNeuron,
+        ManageNeuronResponse,
+        MonthlyNodeProviderRewards,
+        Motion,
+        NetworkEconomics,
+        Neuron,
+        NeuronChange,
+        NeuronState,
+        NeuronType,
+        NeuronsFundData,
+        NeuronsFundParticipation,
+        NeuronsFundSnapshot,
+        NnsFunction,
+        NodeProvider,
+        Proposal,
+        ProposalChange,
+        ProposalData,
+        ProposalDataChange,
+        ProposalRewardStatus::{
+            self,
+            AcceptVotes,
+            ReadyToSettle,
+        },
+        ProposalStatus::{
+            self,
+            Rejected,
+        },
+        RewardEvent,
+        RewardNodeProvider,
+        RewardNodeProviders,
+        SettleNeuronsFundParticipationRequest,
+        SwapBackgroundInformation,
+        SwapParticipationLimits,
+        Tally,
+        TallyChange,
+        Topic,
+        UpdateNodeProvider,
+        Visibility,
+        Vote,
+        WaitForQuietState,
         WaitForQuietStateDesc,
     },
-    temporarily_disable_private_neuron_enforcement, temporarily_disable_set_visibility_proposals,
-    temporarily_enable_private_neuron_enforcement, temporarily_enable_set_visibility_proposals,
+    temporarily_disable_private_neuron_enforcement,
+    temporarily_disable_set_visibility_proposals,
+    temporarily_enable_private_neuron_enforcement,
+    temporarily_enable_set_visibility_proposals,
     DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
 };
 use ic_nns_governance_api::{
@@ -103,36 +253,78 @@ use ic_nns_governance_api::{
 };
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_sns_init::pb::v1::SnsInitPayload;
-use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
+use ic_sns_root::{
+    GetSnsCanistersSummaryRequest,
+    GetSnsCanistersSummaryResponse,
+};
 use ic_sns_swap::pb::v1::{
     self as sns_swap_pb,
-    IdealMatchedParticipationFunction as IdealMatchedParticipationFunctionSwapPb, Lifecycle,
-    LinearScalingCoefficient, NeuronsFundParticipationConstraints,
+    IdealMatchedParticipationFunction as IdealMatchedParticipationFunctionSwapPb,
+    Lifecycle,
+    LinearScalingCoefficient,
+    NeuronsFundParticipationConstraints,
 };
 use ic_sns_wasm::pb::v1::{
-    DeployNewSnsRequest, DeployNewSnsResponse, DeployedSns, ListDeployedSnsesRequest,
-    ListDeployedSnsesResponse, SnsWasmError,
+    DeployNewSnsRequest,
+    DeployNewSnsResponse,
+    DeployedSns,
+    ListDeployedSnsesRequest,
+    ListDeployedSnsesResponse,
+    SnsWasmError,
 };
-use icp_ledger::{protobuf, AccountIdentifier, Memo, Subaccount, Tokens};
+use icp_ledger::{
+    protobuf,
+    AccountIdentifier,
+    Memo,
+    Subaccount,
+    Tokens,
+};
 use lazy_static::lazy_static;
-use maplit::{btreemap, hashmap};
-use pretty_assertions::{assert_eq, assert_ne};
+use maplit::{
+    btreemap,
+    hashmap,
+};
+use pretty_assertions::{
+    assert_eq,
+    assert_ne,
+};
 use proptest::prelude::proptest;
-use rand::{prelude::IteratorRandom, rngs::StdRng, Rng, SeedableRng};
+use rand::{
+    prelude::IteratorRandom,
+    rngs::StdRng,
+    Rng,
+    SeedableRng,
+};
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 use rust_decimal_macros::dec;
 use std::{
     cmp::Ordering,
-    collections::{BTreeMap, HashSet, VecDeque},
-    convert::{TryFrom, TryInto},
-    iter::{self, once},
+    collections::{
+        BTreeMap,
+        HashSet,
+        VecDeque,
+    },
+    convert::{
+        TryFrom,
+        TryInto,
+    },
+    iter::{
+        self,
+        once,
+    },
     ops::Div,
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc,
+        Mutex,
+    },
 };
 
 #[cfg(feature = "tla")]
-use ic_nns_governance::governance::tla::{check_traces as tla_check_traces, TLA_TRACES_LKEY};
+use ic_nns_governance::governance::tla::{
+    check_traces as tla_check_traces,
+    TLA_TRACES_LKEY,
+};
 #[cfg(feature = "tla")]
 use tla_instrumentation_proc_macros::with_tla_trace_check;
 
@@ -12198,7 +12390,10 @@ const NEURONS_FUND_INVESTMENT_E8S: u64 = 61 * E8;
 /// what it was before the method invocation.
 #[tokio::test]
 async fn test_settle_neurons_fund_participation_restores_lifecycle_on_sns_w_failure() {
-    use settle_neurons_fund_participation_request::{Committed, Result};
+    use settle_neurons_fund_participation_request::{
+        Committed,
+        Result,
+    };
 
     // Step 1: Prepare the world.
 
@@ -12329,7 +12524,10 @@ async fn test_settle_neurons_fund_participation_restores_lifecycle_on_sns_w_fail
 /// what it was before the method invocation.
 #[tokio::test]
 async fn test_settle_neurons_fund_participation_restores_lifecycle_on_ledger_failure() {
-    use settle_neurons_fund_participation_request::{Committed, Result};
+    use settle_neurons_fund_participation_request::{
+        Committed,
+        Result,
+    };
 
     // Step 1: Prepare the world.
 
@@ -12673,7 +12871,10 @@ async fn test_create_service_nervous_system_settles_neurons_fund_commit() {
 
     // Settle NF participation (Commit).
     {
-        use settle_neurons_fund_participation_request::{Committed, Result};
+        use settle_neurons_fund_participation_request::{
+            Committed,
+            Result,
+        };
         let response = gov
             .settle_neurons_fund_participation(
                 *TARGET_SWAP_CANISTER_ID,
@@ -12820,7 +13021,10 @@ async fn test_create_service_nervous_system_settles_neurons_fund_abort() {
 
     // Settle NF participation (Abort).
     {
-        use settle_neurons_fund_participation_request::{Aborted, Result};
+        use settle_neurons_fund_participation_request::{
+            Aborted,
+            Result,
+        };
         let response = gov
             .settle_neurons_fund_participation(
                 *TARGET_SWAP_CANISTER_ID,
@@ -12972,7 +13176,10 @@ async fn test_create_service_nervous_system_proposal_execution_fails() {
 
 #[tokio::test]
 async fn test_settle_neurons_fund_is_idempotent_for_create_service_nervous_system() {
-    use settle_neurons_fund_participation_request::{Committed, Result};
+    use settle_neurons_fund_participation_request::{
+        Committed,
+        Result,
+    };
 
     let network_economics = NetworkEconomics::with_default_values();
 

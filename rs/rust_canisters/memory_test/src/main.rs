@@ -1,12 +1,19 @@
 //! This module contains a canister used for testing memory operations.
 
 use dfn_core::{
-    api::{self, ic0, trap_with},
+    api::{
+        self,
+        ic0,
+        trap_with,
+    },
     stable,
 };
 use rand::Rng;
 use rand_pcg::Lcg64Xsh32;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::cell::RefCell;
 use std::mem;
 

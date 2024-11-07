@@ -1,7 +1,16 @@
 use ic_config::execution_environment::Config;
-use ic_error_types::{ErrorCode::CanisterNotFound, UserError};
-use ic_execution_environment::{IngressHistoryReaderImpl, IngressHistoryWriterImpl};
-use ic_interfaces::execution_environment::{IngressHistoryReader, IngressHistoryWriter};
+use ic_error_types::{
+    ErrorCode::CanisterNotFound,
+    UserError,
+};
+use ic_execution_environment::{
+    IngressHistoryReaderImpl,
+    IngressHistoryWriterImpl,
+};
+use ic_interfaces::execution_environment::{
+    IngressHistoryReader,
+    IngressHistoryWriter,
+};
 use ic_interfaces_state_manager::Labeled;
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_metrics::MetricsRegistry;
@@ -10,15 +19,25 @@ use ic_replicated_state::ReplicatedState;
 use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_types::ids::{
-    canister_test_id, message_test_id, subnet_test_id, user_test_id,
+    canister_test_id,
+    message_test_id,
+    subnet_test_id,
+    user_test_id,
 };
 use ic_types::{
-    ingress::{IngressState, IngressStatus, WasmResult},
+    ingress::{
+        IngressState,
+        IngressStatus,
+        WasmResult,
+    },
     time::UNIX_EPOCH,
     Height,
 };
 use std::sync::Arc;
-use tokio::sync::mpsc::{channel, error::TryRecvError};
+use tokio::sync::mpsc::{
+    channel,
+    error::TryRecvError,
+};
 
 use IngressStatus::*;
 

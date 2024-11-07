@@ -1,8 +1,18 @@
 use ic_cup_explorer::get_catchup_content;
-use ic_protobuf::registry::{node::v1::NodeRecord, subnet::v1::SubnetRecord};
-use ic_registry_keys::{make_node_record_key, make_subnet_record_key};
+use ic_protobuf::registry::{
+    node::v1::NodeRecord,
+    subnet::v1::SubnetRecord,
+};
+use ic_registry_keys::{
+    make_node_record_key,
+    make_subnet_record_key,
+};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
-use ic_types::{NodeId, PrincipalId, SubnetId};
+use ic_types::{
+    NodeId,
+    PrincipalId,
+    SubnetId,
+};
 use prost::Message;
 use reqwest::Url;
 use std::convert::TryFrom;

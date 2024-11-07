@@ -22,14 +22,23 @@ mod keygen {
 }
 
 mod serialization {
-    use crate::types::{PublicKeyBytes, SecretKeyBytes};
+    use crate::types::{
+        PublicKeyBytes,
+        SecretKeyBytes,
+    };
     use crate::{
-        public_key_from_der, secret_key_from_pkcs8_v1_der, secret_key_to_pkcs8_v1_der,
-        secret_key_to_pkcs8_v2_der, KeyDecodingError,
+        public_key_from_der,
+        secret_key_from_pkcs8_v1_der,
+        secret_key_to_pkcs8_v1_der,
+        secret_key_to_pkcs8_v2_der,
+        KeyDecodingError,
     };
     use assert_matches::assert_matches;
     use ic_crypto_internal_test_vectors::unhex::hex_to_32_bytes;
-    use ic_crypto_secrets_containers::{SecretArray, SecretBytes};
+    use ic_crypto_secrets_containers::{
+        SecretArray,
+        SecretBytes,
+    };
 
     // Example DER-pk from https://tools.ietf.org/html/rfc8410#section-10.1
     const PK_DER_BASE64: &str = "MCowBQYDK2VwAyEAGb9ECWmEzf6FQbrBZ9w7lshQhqowtrbLDFw4rXAxZuE";
@@ -151,12 +160,24 @@ mod serialization {
 }
 
 mod ed25519_cr_yp_to {
-    use crate::types::{PublicKeyBytes, SecretKeyBytes};
-    use crate::{sign, verify};
-    use ic_crypto_internal_test_vectors::unhex::{hex_to_32_bytes, hex_to_byte_vec};
+    use crate::types::{
+        PublicKeyBytes,
+        SecretKeyBytes,
+    };
+    use crate::{
+        sign,
+        verify,
+    };
+    use ic_crypto_internal_test_vectors::unhex::{
+        hex_to_32_bytes,
+        hex_to_byte_vec,
+    };
     use ic_crypto_secrets_containers::SecretArray;
     use std::fs::File;
-    use std::io::{prelude::*, BufReader};
+    use std::io::{
+        prelude::*,
+        BufReader,
+    };
     use std::path::PathBuf;
 
     /// Performs a subset of the regression tests done in http://ed25519.cr.yp.to/python/sign.py
@@ -213,8 +234,14 @@ mod ed25519_cr_yp_to {
 mod sign {
 
     use crate::sign;
-    use crate::types::{SecretKeyBytes, SignatureBytes};
-    use ic_crypto_internal_test_vectors::ed25519::{crypto_lib_testvec, Ed25519TestVector};
+    use crate::types::{
+        SecretKeyBytes,
+        SignatureBytes,
+    };
+    use ic_crypto_internal_test_vectors::ed25519::{
+        crypto_lib_testvec,
+        Ed25519TestVector,
+    };
     use ic_crypto_secrets_containers::SecretArray;
     use strum::IntoEnumIterator;
 
@@ -246,7 +273,10 @@ mod sign {
 }
 
 mod wycheproof {
-    use crate::types::{PublicKeyBytes, SignatureBytes};
+    use crate::types::{
+        PublicKeyBytes,
+        SignatureBytes,
+    };
     use crate::verify;
     use std::convert::TryInto;
 
@@ -291,11 +321,23 @@ mod wycheproof {
 }
 
 mod verify {
-    use crate::types::{PublicKeyBytes, SecretKeyBytes, SignatureBytes};
-    use crate::{public_key_from_der, public_key_to_der, sign, verify};
+    use crate::types::{
+        PublicKeyBytes,
+        SecretKeyBytes,
+        SignatureBytes,
+    };
+    use crate::{
+        public_key_from_der,
+        public_key_to_der,
+        sign,
+        verify,
+    };
     use ic_crypto_internal_test_vectors::ed25519::Ed25519TestVector::RFC8032_ED25519_1;
     use ic_crypto_internal_test_vectors::ed25519::Ed25519TestVector::RFC8032_ED25519_SHA_ABC;
-    use ic_crypto_internal_test_vectors::ed25519::{crypto_lib_testvec, Ed25519TestVector};
+    use ic_crypto_internal_test_vectors::ed25519::{
+        crypto_lib_testvec,
+        Ed25519TestVector,
+    };
     use ic_crypto_secrets_containers::SecretArray;
     use strum::IntoEnumIterator;
 
@@ -409,7 +451,10 @@ mod verify {
 
 mod verify_public_key {
     use crate::types::PublicKeyBytes;
-    use crate::{keypair_from_rng, verify_public_key};
+    use crate::{
+        keypair_from_rng,
+        verify_public_key,
+    };
     use curve25519_dalek::edwards::CompressedEdwardsY;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 
@@ -457,10 +502,16 @@ mod verify_public_key {
 }
 
 mod non_malleability {
-    use crate::types::{PublicKeyBytes, SignatureBytes};
+    use crate::types::{
+        PublicKeyBytes,
+        SignatureBytes,
+    };
     use crate::verify;
     use assert_matches::assert_matches;
-    use ic_crypto_internal_test_vectors::ed25519::{crypto_lib_testvec, Ed25519TestVector};
+    use ic_crypto_internal_test_vectors::ed25519::{
+        crypto_lib_testvec,
+        Ed25519TestVector,
+    };
     use ic_types::crypto::CryptoError;
     use num_bigint::BigUint;
     use strum::IntoEnumIterator;

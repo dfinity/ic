@@ -1,11 +1,17 @@
 use std::fs::File;
 use std::path::PathBuf;
 
-use anyhow::{anyhow, Result};
+use anyhow::{
+    anyhow,
+    Result,
+};
 use clap::Parser;
 use tar::Builder;
 
-use dflate::{add_file_to_archive, scan_file_for_holes};
+use dflate::{
+    add_file_to_archive,
+    scan_file_for_holes,
+};
 
 /// Create deterministic tar archives quickly.
 #[derive(Parser)]

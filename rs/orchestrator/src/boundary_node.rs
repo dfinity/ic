@@ -1,14 +1,30 @@
 use crate::{
-    error::{OrchestratorError, OrchestratorResult},
+    error::{
+        OrchestratorError,
+        OrchestratorResult,
+    },
     metrics::OrchestratorMetrics,
-    process_manager::{Process, ProcessManager},
+    process_manager::{
+        Process,
+        ProcessManager,
+    },
     registry_helper::RegistryHelper,
 };
-use ic_logger::{info, warn, ReplicaLogger};
-use ic_types::{NodeId, ReplicaVersion};
+use ic_logger::{
+    info,
+    warn,
+    ReplicaLogger,
+};
+use ic_types::{
+    NodeId,
+    ReplicaVersion,
+};
 use std::{
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc,
+        Mutex,
+    },
 };
 
 struct BoundaryNodeProcess {

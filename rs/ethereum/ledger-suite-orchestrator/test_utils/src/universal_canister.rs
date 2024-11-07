@@ -1,12 +1,25 @@
 use crate::assert_reply;
-use ic_base_types::{CanisterId, PrincipalId};
-pub use ic_management_canister_types::{
-    CanisterChangeDetails, CanisterInfoResponse, CanisterInstallMode,
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
 };
-use ic_management_canister_types::{CanisterInfoRequest, Method, Payload};
+pub use ic_management_canister_types::{
+    CanisterChangeDetails,
+    CanisterInfoResponse,
+    CanisterInstallMode,
+};
+use ic_management_canister_types::{
+    CanisterInfoRequest,
+    Method,
+    Payload,
+};
 use ic_state_machine_tests::StateMachine;
 use ic_types::Cycles;
-use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use ic_universal_canister::{
+    call_args,
+    wasm,
+    UNIVERSAL_CANISTER_WASM,
+};
 use std::sync::Arc;
 
 pub struct UniversalCanister {

@@ -1,7 +1,15 @@
 use crate::pb::v1::manage_neuron::{
-    configure::Operation, AddHotKey, ChangeAutoStakeMaturity, IncreaseDissolveDelay,
-    JoinCommunityFund, LeaveCommunityFund, RemoveHotKey, SetDissolveTimestamp, SetVisibility,
-    StartDissolving, StopDissolving,
+    configure::Operation,
+    AddHotKey,
+    ChangeAutoStakeMaturity,
+    IncreaseDissolveDelay,
+    JoinCommunityFund,
+    LeaveCommunityFund,
+    RemoveHotKey,
+    SetDissolveTimestamp,
+    SetVisibility,
+    StartDissolving,
+    StopDissolving,
 };
 
 impl From<IncreaseDissolveDelay> for Operation {

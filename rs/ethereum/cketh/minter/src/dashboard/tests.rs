@@ -1,29 +1,59 @@
 use crate::dashboard::tests::assertions::DashboardAssert;
 use crate::dashboard::DashboardTemplate;
 use crate::erc20::CkErc20Token;
-use candid::{Nat, Principal};
-use ic_cketh_minter::eth_logs::{
-    EventSource, LedgerSubaccount, ReceivedErc20Event, ReceivedEthEvent,
+use candid::{
+    Nat,
+    Principal,
 };
-use ic_cketh_minter::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
+use ic_cketh_minter::eth_logs::{
+    EventSource,
+    LedgerSubaccount,
+    ReceivedErc20Event,
+    ReceivedEthEvent,
+};
+use ic_cketh_minter::eth_rpc_client::responses::{
+    TransactionReceipt,
+    TransactionStatus,
+};
 use ic_cketh_minter::lifecycle::EthereumNetwork;
 use ic_cketh_minter::numeric::{
-    BlockNumber, CkTokenAmount, Erc20Value, GasAmount, LedgerBurnIndex, LedgerMintIndex, LogIndex,
-    TransactionNonce, Wei, WeiPerGas,
+    BlockNumber,
+    CkTokenAmount,
+    Erc20Value,
+    GasAmount,
+    LedgerBurnIndex,
+    LedgerMintIndex,
+    LogIndex,
+    TransactionNonce,
+    Wei,
+    WeiPerGas,
 };
-use ic_cketh_minter::state::audit::{apply_state_transition, EventType};
+use ic_cketh_minter::state::audit::{
+    apply_state_transition,
+    EventType,
+};
 use ic_cketh_minter::state::eth_logs_scraping::LogScrapingId;
 use ic_cketh_minter::state::transactions::{
-    create_transaction, Erc20WithdrawalRequest, EthWithdrawalRequest, ReimbursementIndex,
-    Subaccount, WithdrawalRequest,
+    create_transaction,
+    Erc20WithdrawalRequest,
+    EthWithdrawalRequest,
+    ReimbursementIndex,
+    Subaccount,
+    WithdrawalRequest,
 };
 use ic_cketh_minter::state::State;
 use ic_cketh_minter::tx::{
-    Eip1559Signature, Eip1559TransactionRequest, GasFeeEstimate, SignedEip1559TransactionRequest,
+    Eip1559Signature,
+    Eip1559TransactionRequest,
+    GasFeeEstimate,
+    SignedEip1559TransactionRequest,
     TransactionPrice,
 };
 use ic_ethereum_types::Address;
-use maplit::{btreemap, btreeset};
+use maplit::{
+    btreemap,
+    btreeset,
+};
 use std::str::FromStr;
 
 #[test]
@@ -1248,7 +1278,10 @@ mod assertions {
     use ic_cketh_minter::erc20::CkErc20Token;
     use ic_cketh_minter::state::eth_logs_scraping::LogScrapingId;
     use scraper::Selector;
-    use scraper::{ElementRef, Html};
+    use scraper::{
+        ElementRef,
+        Html,
+    };
 
     pub struct DashboardAssert {
         rendered_html: String,

@@ -1,12 +1,23 @@
 mod parser {
     use crate::eth_logs::parser::ReceivedEthOrErc20LogParser;
     use crate::eth_logs::{
-        LedgerSubaccount, LogParser, ReceivedErc20Event, ReceivedErc20LogParser, ReceivedEthEvent,
-        ReceivedEthLogParser, RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_EVENT_TOPIC,
+        LedgerSubaccount,
+        LogParser,
+        ReceivedErc20Event,
+        ReceivedErc20LogParser,
+        ReceivedEthEvent,
+        ReceivedEthLogParser,
+        RECEIVED_ERC20_EVENT_TOPIC,
+        RECEIVED_ETH_EVENT_TOPIC,
         RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC,
     };
     use crate::eth_rpc::LogEntry;
-    use crate::numeric::{BlockNumber, Erc20Value, LogIndex, Wei};
+    use crate::numeric::{
+        BlockNumber,
+        Erc20Value,
+        LogIndex,
+        Wei,
+    };
     use candid::Principal;
     use ic_sha3::Keccak256;
     use std::str::FromStr;
@@ -210,7 +221,11 @@ mod parser {
 
     #[test]
     fn should_not_parse_removed_event() {
-        use crate::eth_logs::{EventSource, EventSourceError, ReceivedEventError};
+        use crate::eth_logs::{
+            EventSource,
+            EventSourceError,
+            ReceivedEventError,
+        };
         let event = r#"{
             "address": "0xb44b5e756a894775fc32eddf3314bb1b1944dc34",
             "topics": [
@@ -250,10 +265,14 @@ mod scraping {
         use crate::erc20::CkErc20Token;
         use crate::eth_logs::scraping::Scrape;
         use crate::eth_logs::{
-            LogScraping, ReceivedEthOrErc20LogScraping,
+            LogScraping,
+            ReceivedEthOrErc20LogScraping,
             RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC,
         };
-        use crate::eth_rpc::{FixedSizeData, Topic};
+        use crate::eth_rpc::{
+            FixedSizeData,
+            Topic,
+        };
         use crate::lifecycle::EthereumNetwork;
         use crate::numeric::BlockNumber;
         use crate::state::eth_logs_scraping::LogScrapingId;
@@ -458,7 +477,13 @@ mod parse_principal_from_slice {
 
 mod subaccount {
     use crate::eth_logs::LedgerSubaccount;
-    use proptest::{array::uniform32, prelude::any, prop_assert_eq, prop_assume, proptest};
+    use proptest::{
+        array::uniform32,
+        prelude::any,
+        prop_assert_eq,
+        prop_assume,
+        proptest,
+    };
 
     proptest! {
         #[test]

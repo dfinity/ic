@@ -2,7 +2,10 @@
 //!
 //! Used for extracting stream slices of limited size for XNet Endpoint.
 
-use crate::visitor::{Control, Visitor};
+use crate::visitor::{
+    Control,
+    Visitor,
+};
 
 #[cfg(test)]
 mod tests;

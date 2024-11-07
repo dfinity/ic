@@ -1,9 +1,23 @@
 use crate::api::handle::Ic;
-use candid::{CandidType, Deserialize, Principal};
-use canister_test::{Canister, Runtime};
+use candid::{
+    CandidType,
+    Deserialize,
+    Principal,
+};
+use canister_test::{
+    Canister,
+    Runtime,
+};
 use dfn_candid::candid;
-use futures::{future::join_all, Future};
-use ic_base_types::{CanisterId, PrincipalId, SubnetId};
+use futures::{
+    future::join_all,
+    Future,
+};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+    SubnetId,
+};
 use std::collections::BTreeMap;
 use std::iter::FromIterator;
 use std::str::FromStr;

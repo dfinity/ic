@@ -1,5 +1,13 @@
-use ic_canonical_state::{Control, Visitor};
-use ic_crypto_tree_hash::{HashTree, HashTreeBuilder, HashTreeBuilderImpl, Label};
+use ic_canonical_state::{
+    Control,
+    Visitor,
+};
+use ic_crypto_tree_hash::{
+    HashTree,
+    HashTreeBuilder,
+    HashTreeBuilderImpl,
+    Label,
+};
 use ic_replicated_state::ReplicatedState;
 
 /// A visitor that constructs a hash tree by traversing a replicated
@@ -60,43 +68,100 @@ pub fn hash_state(state: &ReplicatedState) -> HashTree {
 mod tests {
     use super::*;
     use hex::FromHex;
-    use ic_base_types::{NumBytes, NumSeconds};
-    use ic_canonical_state::{all_supported_versions, CertificationVersion};
-    use ic_crypto_tree_hash::Digest;
-    use ic_error_types::{ErrorCode, UserError};
-    use ic_management_canister_types::{
-        EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
+    use ic_base_types::{
+        NumBytes,
+        NumSeconds,
     };
-    use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
+    use ic_canonical_state::{
+        all_supported_versions,
+        CertificationVersion,
+    };
+    use ic_crypto_tree_hash::Digest;
+    use ic_error_types::{
+        ErrorCode,
+        UserError,
+    };
+    use ic_management_canister_types::{
+        EcdsaCurve,
+        EcdsaKeyId,
+        MasterPublicKeyId,
+        SchnorrAlgorithm,
+        SchnorrKeyId,
+    };
+    use ic_registry_routing_table::{
+        CanisterIdRange,
+        RoutingTable,
+    };
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
         canister_state::{
-            execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
+            execution_state::{
+                CustomSection,
+                CustomSectionType,
+                WasmBinary,
+                WasmMetadata,
+            },
             system_state::CyclesUseCase,
         },
-        metadata_state::{ApiBoundaryNodeEntry, Stream, SubnetMetrics},
-        page_map::{PageIndex, PAGE_SIZE},
+        metadata_state::{
+            ApiBoundaryNodeEntry,
+            Stream,
+            SubnetMetrics,
+        },
+        page_map::{
+            PageIndex,
+            PAGE_SIZE,
+        },
         testing::ReplicatedStateTesting,
-        ExecutionState, ExportedFunctions, Global, Memory, NumWasmPages, PageMap, ReplicatedState,
+        ExecutionState,
+        ExportedFunctions,
+        Global,
+        Memory,
+        NumWasmPages,
+        PageMap,
+        ReplicatedState,
     };
     use ic_test_utilities_state::new_canister_state;
     use ic_test_utilities_types::ids::{
-        canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id,
+        canister_test_id,
+        message_test_id,
+        node_test_id,
+        subnet_test_id,
+        user_test_id,
     };
-    use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
+    use ic_test_utilities_types::messages::{
+        RequestBuilder,
+        ResponseBuilder,
+    };
     use ic_types::{
         crypto::CryptoHash,
-        ingress::{IngressState, IngressStatus},
-        messages::{RequestMetadata, NO_DEADLINE},
+        ingress::{
+            IngressState,
+            IngressStatus,
+        },
+        messages::{
+            RequestMetadata,
+            NO_DEADLINE,
+        },
         nominal_cycles::NominalCycles,
         time::CoarseTime,
-        xnet::{RejectReason, StreamFlags, StreamIndex, StreamIndexedQueue},
-        CryptoHashOfPartialState, Cycles, Time,
+        xnet::{
+            RejectReason,
+            StreamFlags,
+            StreamIndex,
+            StreamIndexedQueue,
+        },
+        CryptoHashOfPartialState,
+        Cycles,
+        Time,
     };
     use ic_wasm_types::CanisterModule;
     use maplit::btreemap;
     use std::{
-        collections::{BTreeMap, BTreeSet},
+        collections::{
+            BTreeMap,
+            BTreeSet,
+        },
         sync::Arc,
     };
 
@@ -130,7 +195,10 @@ mod tests {
     #[test]
     fn partial_hash_detects_changes_in_streams() {
         use ic_replicated_state::metadata_state::Stream;
-        use ic_types::xnet::{StreamIndex, StreamIndexedQueue};
+        use ic_types::xnet::{
+            StreamIndex,
+            StreamIndexedQueue,
+        };
 
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
 

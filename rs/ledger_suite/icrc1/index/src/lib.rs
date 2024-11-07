@@ -1,23 +1,53 @@
-use candid::{CandidType, Nat};
-use ic_base_types::{CanisterId, PrincipalId};
-use ic_canister_profiler::{measure_span, SpanStats};
-use ic_cdk::api::stable::{StableReader, StableWriter};
+use candid::{
+    CandidType,
+    Nat,
+};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
+use ic_canister_profiler::{
+    measure_span,
+    SpanStats,
+};
+use ic_cdk::api::stable::{
+    StableReader,
+    StableWriter,
+};
 use ic_ledger_canister_core::runtime::total_memory_size_bytes;
 use icrc_ledger_types::icrc1::transfer::BlockIndex;
 use icrc_ledger_types::icrc3::archive::QueryTxArchiveFn;
 use icrc_ledger_types::icrc3::transactions::{
-    Approve, GetTransactionsResponse, Transaction, TransactionRange, Transfer,
+    Approve,
+    GetTransactionsResponse,
+    Transaction,
+    TransactionRange,
+    Transfer,
 };
 use icrc_ledger_types::{
-    icrc1::account::Account, icrc1::account::Subaccount, icrc3::archive::ArchivedRange,
+    icrc1::account::Account,
+    icrc1::account::Subaccount,
+    icrc3::archive::ArchivedRange,
     icrc3::transactions::GetTransactionsRequest,
 };
 use num_traits::cast::ToPrimitive;
-use scopeguard::{guard, ScopeGuard};
-use serde::{Deserialize, Serialize};
+use scopeguard::{
+    guard,
+    ScopeGuard,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::cell::RefCell;
-use std::collections::{btree_map, BTreeMap};
-use std::ops::Bound::{Included, Unbounded};
+use std::collections::{
+    btree_map,
+    BTreeMap,
+};
+use std::ops::Bound::{
+    Included,
+    Unbounded,
+};
 use std::time::Duration;
 
 // Maximum number of subaccounts that can be returned
@@ -513,16 +543,30 @@ pub fn post_upgrade() {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{btree_map, BTreeMap};
+    use std::collections::{
+        btree_map,
+        BTreeMap,
+    };
 
     use candid::Nat;
-    use ic_base_types::{CanisterId, PrincipalId};
+    use ic_base_types::{
+        CanisterId,
+        PrincipalId,
+    };
     use icrc_ledger_types::icrc1::account::Account;
 
-    use proptest::{option, proptest};
+    use proptest::{
+        option,
+        proptest,
+    };
 
     use crate::{
-        add_tx, get_account_transactions_ids, with_index, GetAccountTransactionsArgs, Index, INDEX,
+        add_tx,
+        get_account_transactions_ids,
+        with_index,
+        GetAccountTransactionsArgs,
+        Index,
+        INDEX,
     };
 
     fn account(n: u64) -> Account {

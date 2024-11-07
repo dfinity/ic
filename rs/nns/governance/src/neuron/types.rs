@@ -1,32 +1,65 @@
 use crate::{
     governance::{
-        LOG_PREFIX, MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
-        MAX_NEURON_RECENT_BALLOTS, MAX_NUM_HOT_KEYS_PER_NEURON,
+        LOG_PREFIX,
+        MAX_DISSOLVE_DELAY_SECONDS,
+        MAX_NEURON_AGE_FOR_AGE_BONUS,
+        MAX_NEURON_RECENT_BALLOTS,
+        MAX_NUM_HOT_KEYS_PER_NEURON,
     },
-    is_private_neuron_enforcement_enabled, is_voting_power_adjustment_enabled,
-    neuron::{combine_aged_stakes, dissolve_state_and_age::DissolveStateAndAge, neuron_stake_e8s},
+    is_private_neuron_enforcement_enabled,
+    is_voting_power_adjustment_enabled,
+    neuron::{
+        combine_aged_stakes,
+        dissolve_state_and_age::DissolveStateAndAge,
+        neuron_stake_e8s,
+    },
     neuron_store::NeuronStoreError,
     pb::v1::{
         abridged_neuron::DissolveState as AbridgedNeuronDissolveState,
         governance_error::ErrorType,
-        manage_neuron::{configure::Operation, Configure},
-        neuron::{DissolveState as NeuronDissolveState, Followees},
+        manage_neuron::{
+            configure::Operation,
+            Configure,
+        },
+        neuron::{
+            DissolveState as NeuronDissolveState,
+            Followees,
+        },
         proposal::Action,
-        AbridgedNeuron, Ballot, BallotInfo, GovernanceError, KnownNeuronData,
-        Neuron as NeuronProto, NeuronInfo, NeuronStakeTransfer, NeuronState, NeuronType, Topic,
-        Visibility, Vote,
+        AbridgedNeuron,
+        Ballot,
+        BallotInfo,
+        GovernanceError,
+        KnownNeuronData,
+        Neuron as NeuronProto,
+        NeuronInfo,
+        NeuronStakeTransfer,
+        NeuronState,
+        NeuronType,
+        Topic,
+        Visibility,
+        Vote,
     },
     DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
 };
 use ic_base_types::PrincipalId;
 use ic_cdk::println;
-use ic_nervous_system_common::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
+use ic_nervous_system_common::{
+    ONE_DAY_SECONDS,
+    ONE_MONTH_SECONDS,
+};
 use ic_nervous_system_linear_map::LinearMap;
-use ic_nns_common::pb::v1::{NeuronId, ProposalId};
+use ic_nns_common::pb::v1::{
+    NeuronId,
+    ProposalId,
+};
 use icp_ledger::Subaccount;
 use rust_decimal::Decimal;
 use std::{
-    collections::{BTreeSet, HashMap},
+    collections::{
+        BTreeSet,
+        HashMap,
+    },
     time::Duration,
 };
 
@@ -733,7 +766,10 @@ impl Neuron {
         caller: &PrincipalId,
         configure: &Operation,
     ) -> Result<(), GovernanceError> {
-        use Operation::{JoinCommunityFund, LeaveCommunityFund};
+        use Operation::{
+            JoinCommunityFund,
+            LeaveCommunityFund,
+        };
 
         match configure {
             // The controller and hotkeys are allowed to change Neuron Fund membership.

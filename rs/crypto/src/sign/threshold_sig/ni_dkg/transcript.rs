@@ -16,7 +16,8 @@ mod creation {
     use crate::sign::threshold_sig::ni_dkg::utils::dealer_index_in_dealers_or_panic;
     use ic_crypto_internal_threshold_sig_bls12381::api::dkg_errors::InvalidArgumentError;
     use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
-        CspNiDkgDealing, CspNiDkgTranscript,
+        CspNiDkgDealing,
+        CspNiDkgTranscript,
     };
     use ic_types::crypto::threshold_sig::ni_dkg::config::dealers::NiDkgDealers;
 

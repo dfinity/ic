@@ -1,4 +1,9 @@
-use crate::eth_rpc::{Hash, JsonRpcReply, JsonRpcResult, SendRawTransactionResult};
+use crate::eth_rpc::{
+    Hash,
+    JsonRpcReply,
+    JsonRpcResult,
+    SendRawTransactionResult,
+};
 use crate::logs::DEBUG;
 use ic_canister_log::log;
 

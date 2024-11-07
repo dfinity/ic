@@ -1,4 +1,7 @@
-use ic_base_types::{CanisterId, NumBytes};
+use ic_base_types::{
+    CanisterId,
+    NumBytes,
+};
 use ic_error_types::UserError;
 use ic_interfaces::execution_environment::SystemApiCallCounters;
 use ic_metrics::MetricsRegistry;
@@ -7,12 +10,28 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::QueryStats,
     ingress::WasmResult,
-    messages::{Query, QuerySource},
-    CountBytes, Cycles, PrincipalId, Time, UserId,
+    messages::{
+        Query,
+        QuerySource,
+    },
+    CountBytes,
+    Cycles,
+    PrincipalId,
+    Time,
+    UserId,
 };
 use ic_utils_lru_cache::LruCache;
-use prometheus::{Histogram, IntCounter, IntGauge};
-use std::{collections::BTreeMap, mem::size_of_val, sync::Mutex, time::Duration};
+use prometheus::{
+    Histogram,
+    IntCounter,
+    IntGauge,
+};
+use std::{
+    collections::BTreeMap,
+    mem::size_of_val,
+    sync::Mutex,
+    time::Duration,
+};
 
 use crate::metrics::duration_histogram;
 

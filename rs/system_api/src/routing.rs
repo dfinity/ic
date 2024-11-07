@@ -1,18 +1,42 @@
 use std::collections::BTreeSet;
 use std::str::FromStr;
 
-use ic_base_types::{CanisterId, PrincipalId, SubnetId};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+    SubnetId,
+};
 use ic_btc_interface::NetworkInRequest as BitcoinNetwork;
 use ic_error_types::UserError;
 use ic_management_canister_types::{
-    BitcoinGetBalanceArgs, BitcoinGetBlockHeadersArgs, BitcoinGetCurrentFeePercentilesArgs,
-    BitcoinGetUtxosArgs, BitcoinSendTransactionArgs, CanisterIdRecord, CanisterInfoRequest,
-    ClearChunkStoreArgs, ComputeInitialIDkgDealingsArgs, DeleteCanisterSnapshotArgs,
-    ECDSAPublicKeyArgs, InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs,
-    LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs,
-    Payload, ProvisionalTopUpCanisterArgs, SchnorrPublicKeyArgs, SignWithECDSAArgs,
-    SignWithSchnorrArgs, StoredChunksArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
-    UpdateSettingsArgs, UploadChunkArgs,
+    BitcoinGetBalanceArgs,
+    BitcoinGetBlockHeadersArgs,
+    BitcoinGetCurrentFeePercentilesArgs,
+    BitcoinGetUtxosArgs,
+    BitcoinSendTransactionArgs,
+    CanisterIdRecord,
+    CanisterInfoRequest,
+    ClearChunkStoreArgs,
+    ComputeInitialIDkgDealingsArgs,
+    DeleteCanisterSnapshotArgs,
+    ECDSAPublicKeyArgs,
+    InstallChunkedCodeArgs,
+    InstallCodeArgsV2,
+    ListCanisterSnapshotArgs,
+    LoadCanisterSnapshotArgs,
+    MasterPublicKeyId,
+    Method as Ic00Method,
+    NodeMetricsHistoryArgs,
+    Payload,
+    ProvisionalTopUpCanisterArgs,
+    SchnorrPublicKeyArgs,
+    SignWithECDSAArgs,
+    SignWithSchnorrArgs,
+    StoredChunksArgs,
+    TakeCanisterSnapshotArgs,
+    UninstallCodeArgs,
+    UpdateSettingsArgs,
+    UploadChunkArgs,
 };
 use ic_replicated_state::NetworkTopology;
 use itertools::Itertools;
@@ -394,10 +418,19 @@ mod tests {
     use candid::Encode;
     use ic_base_types::RegistryVersion;
     use ic_management_canister_types::{
-        DerivationPath, EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId, SignWithECDSAArgs,
+        DerivationPath,
+        EcdsaCurve,
+        EcdsaKeyId,
+        SchnorrAlgorithm,
+        SchnorrKeyId,
+        SignWithECDSAArgs,
     };
     use ic_replicated_state::SubnetTopology;
-    use ic_test_utilities_types::ids::{canister_test_id, node_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::{
+        canister_test_id,
+        node_test_id,
+        subnet_test_id,
+    };
     use maplit::btreemap;
     use serde_bytes::ByteBuf;
 

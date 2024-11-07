@@ -3,18 +3,33 @@
 use clap::Parser;
 use ic_base_types::CanisterId;
 use ic_nns_constants::{
-    CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID,
-    LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID,
+    CYCLES_MINTING_CANISTER_ID,
+    GENESIS_TOKEN_CANISTER_ID,
+    GOVERNANCE_CANISTER_ID,
+    LEDGER_CANISTER_ID,
+    REGISTRY_CANISTER_ID,
 };
-use ic_nns_governance_api::pb::v1::{Governance as GovernanceProto, Neuron};
+use ic_nns_governance_api::pb::v1::{
+    Governance as GovernanceProto,
+    Neuron,
+};
 use ic_nns_gtc::pb::v1::Gtc as GtcProto;
-use icp_ledger::{AccountIdentifier, Subaccount};
+use icp_ledger::{
+    AccountIdentifier,
+    Subaccount,
+};
 use prost::Message;
 use std::{
     convert::TryInto,
     fs::File,
-    io::{Read, Write},
-    path::{Path, PathBuf},
+    io::{
+        Read,
+        Write,
+    },
+    path::{
+        Path,
+        PathBuf,
+    },
     string::ToString,
 };
 

@@ -1,26 +1,56 @@
 use ic_config::{
-    embedders::Config as EmbeddersConfig, flag_status::FlagStatus, subnet_config::SchedulerConfig,
+    embedders::Config as EmbeddersConfig,
+    flag_status::FlagStatus,
+    subnet_config::SchedulerConfig,
 };
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::wasm_utils::compile;
 use ic_embedders::WasmtimeEmbedder;
-use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
-use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
+use ic_interfaces::execution_environment::{
+    ExecutionMode,
+    SubnetAvailableMemory,
+};
+use ic_logger::{
+    replica_logger::no_op_logger,
+    ReplicaLogger,
+};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{Memory, NetworkTopology, NumWasmPages};
+use ic_replicated_state::{
+    Memory,
+    NetworkTopology,
+    NumWasmPages,
+};
 use ic_sys::PAGE_SIZE;
-use ic_system_api::{sandbox_safe_system_state::SandboxSafeSystemState, ApiType, SystemApiImpl};
-use ic_system_api::{DefaultOutOfInstructionsHandler, ExecutionParameters, InstructionLimits};
+use ic_system_api::{
+    sandbox_safe_system_state::SandboxSafeSystemState,
+    ApiType,
+    SystemApiImpl,
+};
+use ic_system_api::{
+    DefaultOutOfInstructionsHandler,
+    ExecutionParameters,
+    InstructionLimits,
+};
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_state::SystemStateBuilder;
-use ic_test_utilities_types::ids::{call_context_test_id, user_test_id};
+use ic_test_utilities_types::ids::{
+    call_context_test_id,
+    user_test_id,
+};
 use ic_types::MemoryAllocation;
 use ic_types::{
     messages::RequestMetadata,
-    methods::{FuncRef, WasmMethod},
+    methods::{
+        FuncRef,
+        WasmMethod,
+    },
     time::UNIX_EPOCH,
-    ComputeAllocation, Cycles, NumBytes, NumInstructions, PrincipalId,
+    ComputeAllocation,
+    Cycles,
+    NumBytes,
+    NumInstructions,
+    PrincipalId,
 };
 use ic_wasm_types::BinaryEncodedWasm;
 use lazy_static::lazy_static;
@@ -481,13 +511,21 @@ mod tests {
     use super::*;
 
     use ic_embedders::{
-        wasm_executor::compute_page_delta, wasm_utils::instrumentation::instruction_to_cost,
-        wasm_utils::instrumentation::WasmMemoryType, wasmtime_embedder::CanisterMemoryType,
+        wasm_executor::compute_page_delta,
+        wasm_utils::instrumentation::instruction_to_cost,
+        wasm_utils::instrumentation::WasmMemoryType,
+        wasmtime_embedder::CanisterMemoryType,
     };
     // Get .current() trait method
-    use ic_interfaces::execution_environment::{HypervisorError, SystemApi};
+    use ic_interfaces::execution_environment::{
+        HypervisorError,
+        SystemApi,
+    };
     use ic_logger::ReplicaLogger;
-    use ic_replicated_state::{PageIndex, PageMap};
+    use ic_replicated_state::{
+        PageIndex,
+        PageMap,
+    };
     use ic_system_api::ModificationTracking;
     use ic_test_utilities_types::ids::canister_test_id;
     use proptest::strategy::ValueTree;
@@ -786,7 +824,10 @@ mod tests {
         //! or write, in addition to 7 instructions required for setup.
 
         use super::{
-            get_num_instructions_consumed, SubnetType, MAX_NUM_INSTRUCTIONS, STABLE_OP_BYTES,
+            get_num_instructions_consumed,
+            SubnetType,
+            MAX_NUM_INSTRUCTIONS,
+            STABLE_OP_BYTES,
         };
         use ic_config::subnet_config::SchedulerConfig;
         use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;

@@ -1,13 +1,27 @@
 use crate::pb::v1::{
     governance::{
-        FollowersMap, GovernanceCachedMetrics, MakingSnsProposal, Migrations, NeuronInFlightCommand,
+        FollowersMap,
+        GovernanceCachedMetrics,
+        MakingSnsProposal,
+        Migrations,
+        NeuronInFlightCommand,
     },
     neuron::Followees,
-    Governance as GovernanceProto, MonthlyNodeProviderRewards, NetworkEconomics, Neuron,
-    NeuronStakeTransfer, NodeProvider, ProposalData, RestoreAgingSummary, RewardEvent,
+    Governance as GovernanceProto,
+    MonthlyNodeProviderRewards,
+    NetworkEconomics,
+    Neuron,
+    NeuronStakeTransfer,
+    NodeProvider,
+    ProposalData,
+    RestoreAgingSummary,
+    RewardEvent,
     XdrConversionRate as XdrConversionRatePb,
 };
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{
+    BTreeMap,
+    HashMap,
+};
 
 /// A GovernanceProto representation on the heap, which should have everything except for neurons.
 /// This should never be serialized by itself, but reassembled into GovernanceProto in pre_upgrade.
@@ -249,10 +263,17 @@ pub fn reassemble_governance_proto(
 mod tests {
     use super::*;
 
-    use crate::pb::v1::{governance::followers_map::Followers, Neuron, ProposalData};
+    use crate::pb::v1::{
+        governance::followers_map::Followers,
+        Neuron,
+        ProposalData,
+    };
 
     use ic_nns_common::pb::v1::NeuronId;
-    use maplit::{btreemap, hashmap};
+    use maplit::{
+        btreemap,
+        hashmap,
+    };
 
     // The members are chosen to be the simplest form that's not their default().
     fn simple_governance_proto() -> GovernanceProto {

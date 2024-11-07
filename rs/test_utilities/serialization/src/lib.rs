@@ -1,10 +1,17 @@
 #[cfg(test)]
 mod prost {
     use ic_protobuf::messaging::xnet::v1::{
-        witness::{Fork, Known, WitnessEnum},
+        witness::{
+            Fork,
+            Known,
+            WitnessEnum,
+        },
         Witness,
     };
-    use prost::{DecodeError, Message};
+    use prost::{
+        DecodeError,
+        Message,
+    };
 
     /// Produces a recursive `Witness` of the requested height.
     fn recursive_witness(height: usize) -> Witness {
@@ -58,7 +65,10 @@ mod prost {
 #[cfg(test)]
 mod serde_cbor {
     use assert_matches::assert_matches;
-    use serde_cbor::{from_slice, Value};
+    use serde_cbor::{
+        from_slice,
+        Value,
+    };
 
     /// Returns a CBOR encoded vector containing a vector, containing a vector, etc.
     /// recursively to the requested depth.
@@ -94,7 +104,10 @@ mod serde_cbor {
 #[cfg(test)]
 mod serde_json {
     use assert_matches::assert_matches;
-    use serde_json::{from_slice, Value};
+    use serde_json::{
+        from_slice,
+        Value,
+    };
 
     /// Returns a JSON encoded vector containing a vector, containing a vector, etc.
     /// recursively to the requested depth.

@@ -1,13 +1,22 @@
 use ic_http_utils::file_downloader::FileDownloadError;
 use ic_image_upgrader::error::UpgradeError;
 use ic_types::{
-    registry::RegistryClientError, replica_version::ReplicaVersionParseError, Height, NodeId,
-    RegistryVersion, ReplicaVersion, SubnetId,
+    registry::RegistryClientError,
+    replica_version::ReplicaVersionParseError,
+    Height,
+    NodeId,
+    RegistryVersion,
+    ReplicaVersion,
+    SubnetId,
 };
 use std::{
     error::Error,
-    fmt, io,
-    path::{Path, PathBuf},
+    fmt,
+    io,
+    path::{
+        Path,
+        PathBuf,
+    },
 };
 
 pub(crate) type OrchestratorResult<T> = Result<T, OrchestratorError>;

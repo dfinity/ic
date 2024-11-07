@@ -1,17 +1,35 @@
 use assert_matches::assert_matches;
 use ic_base_types::CanisterId;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{CanisterState, InputQueueType, StateError};
+use ic_replicated_state::{
+    CanisterState,
+    InputQueueType,
+    StateError,
+};
 use ic_test_utilities_state::{
-    get_running_canister, get_stopped_canister, get_stopping_canister, register_callback,
+    get_running_canister,
+    get_stopped_canister,
+    get_stopping_canister,
+    register_callback,
 };
 use ic_test_utilities_types::{
     ids::canister_test_id,
-    messages::{RequestBuilder, ResponseBuilder},
+    messages::{
+        RequestBuilder,
+        ResponseBuilder,
+    },
 };
 use ic_types::{
-    messages::{CallbackId, Request, RequestOrResponse, NO_DEADLINE},
-    time::{CoarseTime, UNIX_EPOCH},
+    messages::{
+        CallbackId,
+        Request,
+        RequestOrResponse,
+        NO_DEADLINE,
+    },
+    time::{
+        CoarseTime,
+        UNIX_EPOCH,
+    },
     Time,
 };
 use std::sync::Arc;

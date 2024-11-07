@@ -2,32 +2,66 @@
 //! Consensus batches (PayloadBuilder). It is also used to validate the Ingress
 //! messages of Consensus payloads and to keep track of finalized Ingress
 //! Messages to ensure that no message is added to a block more than once.
-use crate::{CustomRandomState, IngressManager};
+use crate::{
+    CustomRandomState,
+    IngressManager,
+};
 use ic_cycles_account_manager::IngressInductionCost;
 use ic_interfaces::{
-    execution_environment::{IngressHistoryError, IngressHistoryReader},
+    execution_environment::{
+        IngressHistoryError,
+        IngressHistoryReader,
+    },
     ingress_manager::{
-        IngressPayloadValidationError, IngressPayloadValidationFailure, IngressSelector,
-        IngressSetQuery, InvalidIngressPayloadReason,
+        IngressPayloadValidationError,
+        IngressPayloadValidationFailure,
+        IngressSelector,
+        IngressSetQuery,
+        InvalidIngressPayloadReason,
     },
     ingress_pool::ValidatedIngressArtifact,
-    validation::{ValidationError, ValidationResult},
+    validation::{
+        ValidationError,
+        ValidationResult,
+    },
 };
-use ic_limits::{MAX_INGRESS_TTL, SMALL_APP_SUBNET_MAX_SIZE};
+use ic_limits::{
+    MAX_INGRESS_TTL,
+    SMALL_APP_SUBNET_MAX_SIZE,
+};
 use ic_logger::warn;
 use ic_management_canister_types::CanisterStatusType;
 use ic_registry_client_helpers::subnet::IngressMessageSettings;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     artifact::IngressMessageId,
-    batch::{IngressPayload, ValidationContext},
+    batch::{
+        IngressPayload,
+        ValidationContext,
+    },
     consensus::Payload,
-    ingress::{IngressSets, IngressStatus},
-    messages::{extract_effective_canister_id, MessageId, SignedIngress},
-    CanisterId, CountBytes, Cycles, Height, NumBytes, Time,
+    ingress::{
+        IngressSets,
+        IngressStatus,
+    },
+    messages::{
+        extract_effective_canister_id,
+        MessageId,
+        SignedIngress,
+    },
+    CanisterId,
+    CountBytes,
+    Cycles,
+    Height,
+    NumBytes,
+    Time,
 };
 use ic_validator::RequestValidationError;
-use std::{collections::BTreeMap, collections::HashMap, sync::Arc};
+use std::{
+    collections::BTreeMap,
+    collections::HashMap,
+    sync::Arc,
+};
 
 /// Number of round-robin iterations that need to happen, before we weaken the selection
 /// rule #2. This weakening helps the ingress selector progress when the quota is either
@@ -649,7 +683,12 @@ mod tests {
     // would compile but panic at runtime.
     use super::*;
     use crate::{
-        tests::{access_ingress_pool, setup, setup_registry, setup_with_params},
+        tests::{
+            access_ingress_pool,
+            setup,
+            setup_registry,
+            setup_with_params,
+        },
         RandomStateKind,
     };
     use assert_matches::assert_matches;
@@ -657,13 +696,24 @@ mod tests {
     use ic_interfaces::{
         execution_environment::IngressHistoryError,
         ingress_pool::ChangeAction,
-        p2p::consensus::{MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
+        p2p::consensus::{
+            MutablePool,
+            UnvalidatedArtifact,
+            ValidatedPoolReader,
+        },
         time_source::TimeSource,
     };
     use ic_interfaces_mocks::consensus_pool::MockConsensusTime;
-    use ic_interfaces_state_manager::{StateManagerError, StateManagerResult};
+    use ic_interfaces_state_manager::{
+        StateManagerError,
+        StateManagerResult,
+    };
     use ic_interfaces_state_manager_mocks::MockStateManager;
-    use ic_management_canister_types::{CanisterIdRecord, Payload, IC_00};
+    use ic_management_canister_types::{
+        CanisterIdRecord,
+        Payload,
+        IC_00,
+    };
     use ic_metrics::MetricsRegistry;
     use ic_replicated_state::CanisterState;
     use ic_test_utilities::{
@@ -673,25 +723,46 @@ mod tests {
     };
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_state::{
-        CanisterStateBuilder, MockIngressHistory, ReplicatedStateBuilder,
+        CanisterStateBuilder,
+        MockIngressHistory,
+        ReplicatedStateBuilder,
     };
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::{
-        ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id},
+        ids::{
+            canister_test_id,
+            node_test_id,
+            subnet_test_id,
+            user_test_id,
+        },
         messages::SignedIngressBuilder,
     };
     use ic_types::{
         artifact::IngressMessageId,
         batch::IngressPayload,
-        ingress::{IngressState, IngressStatus},
+        ingress::{
+            IngressState,
+            IngressStatus,
+        },
         malicious_flags::MaliciousFlags,
-        messages::{MessageId, SignedIngress},
-        time::{expiry_time_from_now, UNIX_EPOCH},
-        Height, RegistryVersion,
+        messages::{
+            MessageId,
+            SignedIngress,
+        },
+        time::{
+            expiry_time_from_now,
+            UNIX_EPOCH,
+        },
+        Height,
+        RegistryVersion,
     };
     use rand::RngCore;
     use std::sync::RwLock;
-    use std::{collections::HashSet, convert::TryInto, time::Duration};
+    use std::{
+        collections::HashSet,
+        convert::TryInto,
+        time::Duration,
+    };
 
     const MAX_SIZE: usize = 1000;
     const MAX_SIZE_AS_NUM_BYTES: NumBytes = NumBytes::new(MAX_SIZE as u64);

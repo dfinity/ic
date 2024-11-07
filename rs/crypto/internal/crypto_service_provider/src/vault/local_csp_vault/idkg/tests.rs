@@ -3,7 +3,10 @@ use crate::keygen::utils::idkg_dealing_encryption_pk_to_proto;
 use crate::public_key_store::temp_pubkey_store::TempPublicKeyStore;
 use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
 use crate::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
-use crate::secret_key_store::{SecretKeyStore, SecretKeyStoreInsertionError};
+use crate::secret_key_store::{
+    SecretKeyStore,
+    SecretKeyStoreInsertionError,
+};
 use crate::vault::api::IDkgProtocolCspVault;
 use crate::vault::local_csp_vault::idkg::SecretKeyStoreWriteError;
 use crate::vault::local_csp_vault::PublicKeyStore;
@@ -17,11 +20,22 @@ use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    BatchSignedIDkgDealing, IDkgDealing, SignedIDkgDealing,
+    BatchSignedIDkgDealing,
+    IDkgDealing,
+    SignedIDkgDealing,
 };
-use ic_types::crypto::{BasicSig, BasicSigOf};
-use ic_types::signature::{BasicSignature, BasicSignatureBatch};
-use ic_types::{NodeId, PrincipalId};
+use ic_types::crypto::{
+    BasicSig,
+    BasicSigOf,
+};
+use ic_types::signature::{
+    BasicSignature,
+    BasicSignatureBatch,
+};
+use ic_types::{
+    NodeId,
+    PrincipalId,
+};
 use mockall::Sequence;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
@@ -319,20 +333,33 @@ mod idkg_gen_dealing_encryption_key_pair {
 
 mod idkg_retain_active_keys {
     use super::*;
-    use crate::canister_threshold::{IDKG_MEGA_SCOPE, IDKG_THRESHOLD_KEYS_SCOPE};
+    use crate::canister_threshold::{
+        IDKG_MEGA_SCOPE,
+        IDKG_THRESHOLD_KEYS_SCOPE,
+    };
     use crate::key_id::KeyId;
     use crate::keygen::utils::mega_public_key_from_proto;
     use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
-    use crate::public_key_store::{PublicKeyRetainError, PublicKeyStore};
+    use crate::public_key_store::{
+        PublicKeyRetainError,
+        PublicKeyStore,
+    };
     use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
     use crate::secret_key_store::SecretKeyStoreWriteError;
-    use crate::vault::api::{IDkgProtocolCspVault, PublicKeyStoreCspVault, SecretKeyStoreCspVault};
+    use crate::vault::api::{
+        IDkgProtocolCspVault,
+        PublicKeyStoreCspVault,
+        SecretKeyStoreCspVault,
+    };
     use crate::vault::local_csp_vault::idkg::PublicKeyRetainCheckError;
     use crate::LocalCspVault;
     use crate::SecretKeyStore;
     use assert_matches::assert_matches;
     use ic_crypto_internal_threshold_sig_canister_threshold_sig::MEGaPublicKey;
-    use ic_crypto_internal_types::scope::{ConstScope, Scope};
+    use ic_crypto_internal_types::scope::{
+        ConstScope,
+        Scope,
+    };
     use ic_crypto_test_utils_keys::public_keys::valid_idkg_dealing_encryption_public_key;
     use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
     use ic_protobuf::registry::crypto::v1::PublicKey;
@@ -875,10 +902,16 @@ mod idkg_retain_active_keys {
 
 mod idkg_create_dealing {
     use super::*;
-    use crate::vault::api::{IDkgCreateDealingVaultError, IDkgDealingInternalBytes};
+    use crate::vault::api::{
+        IDkgCreateDealingVaultError,
+        IDkgDealingInternalBytes,
+    };
     use assert_matches::assert_matches;
     use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
-        CombinedCommitment, EccCurveType, IDkgTranscriptInternal, PolynomialCommitmentType,
+        CombinedCommitment,
+        EccCurveType,
+        IDkgTranscriptInternal,
+        PolynomialCommitmentType,
     };
     use ic_crypto_internal_threshold_sig_canister_threshold_sig_test_utils::random_polynomial_commitment;
     use ic_crypto_internal_types::NodeIndex;
@@ -888,15 +921,22 @@ mod idkg_create_dealing {
     use ic_types::{
         crypto::{
             canister_threshold_sig::idkg::{
-                IDkgMaskedTranscriptOrigin, IDkgReceivers, IDkgTranscript, IDkgTranscriptOperation,
+                IDkgMaskedTranscriptOrigin,
+                IDkgReceivers,
+                IDkgTranscript,
+                IDkgTranscriptOperation,
                 IDkgTranscriptType,
             },
             AlgorithmId,
         },
-        NumberOfNodes, RegistryVersion,
+        NumberOfNodes,
+        RegistryVersion,
     };
     use ic_types_test_utils::ids::node_test_id;
-    use rand::{CryptoRng, Rng};
+    use rand::{
+        CryptoRng,
+        Rng,
+    };
 
     #[test]
     fn should_work() {
@@ -1085,15 +1125,23 @@ mod idkg_load_transcript {
     use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
     use crate::secret_key_store::SecretKeyStoreWriteError;
     use crate::types::CspSecretKey;
-    use crate::vault::api::{IDkgDealingInternalBytes, IDkgTranscriptInternalBytes};
+    use crate::vault::api::{
+        IDkgDealingInternalBytes,
+        IDkgTranscriptInternalBytes,
+    };
     use crate::vault::local_csp_vault::idkg::IDkgDealingInternal;
     use assert_matches::assert_matches;
     use ic_crypto_internal_basic_sig_ed25519::types as ed25519_types;
     use ic_crypto_internal_seed::Seed;
     use ic_crypto_internal_threshold_sig_canister_threshold_sig::test_utils::corrupt_dealing;
     use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
-        EccCurveType, EccPoint, EccScalar, IDkgComplaintInternal, IDkgTranscriptInternal,
-        IDkgTranscriptOperationInternal, MEGaCiphertext,
+        EccCurveType,
+        EccPoint,
+        EccScalar,
+        IDkgComplaintInternal,
+        IDkgTranscriptInternal,
+        IDkgTranscriptOperationInternal,
+        MEGaCiphertext,
     };
     use ic_crypto_internal_types::NodeIndex;
     use ic_crypto_secrets_containers::SecretArray;
@@ -1102,7 +1150,10 @@ mod idkg_load_transcript {
     use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptOperation;
     use ic_types::crypto::AlgorithmId;
     use ic_types::NumberOfNodes;
-    use rand::{CryptoRng, Rng};
+    use rand::{
+        CryptoRng,
+        Rng,
+    };
     use std::collections::BTreeMap;
 
     /// In this test collection, we only use one party, so the dealer is the
@@ -1486,14 +1537,21 @@ mod idkg_load_transcript_with_openings {
     use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
     use crate::secret_key_store::SecretKeyStoreWriteError;
     use crate::types::CspSecretKey;
-    use crate::vault::api::{IDkgDealingInternalBytes, IDkgTranscriptInternalBytes};
+    use crate::vault::api::{
+        IDkgDealingInternalBytes,
+        IDkgTranscriptInternalBytes,
+    };
     use crate::vault::local_csp_vault::idkg::IDkgDealingInternal;
     use assert_matches::assert_matches;
     use ic_crypto_internal_basic_sig_ed25519::types as ed25519_types;
     use ic_crypto_internal_seed::Seed;
     use ic_crypto_internal_threshold_sig_canister_threshold_sig::test_utils::corrupt_dealing;
     use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
-        EccCurveType, EccPoint, EccScalar, IDkgTranscriptInternal, IDkgTranscriptOperationInternal,
+        EccCurveType,
+        EccPoint,
+        EccScalar,
+        IDkgTranscriptInternal,
+        IDkgTranscriptOperationInternal,
         MEGaCiphertext,
     };
     use ic_crypto_internal_types::NodeIndex;
@@ -1503,7 +1561,10 @@ mod idkg_load_transcript_with_openings {
     use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptOperation;
     use ic_types::crypto::AlgorithmId;
     use ic_types::NumberOfNodes;
-    use rand::{CryptoRng, Rng};
+    use rand::{
+        CryptoRng,
+        Rng,
+    };
     use std::collections::BTreeMap;
 
     type CustomVaultFn = Box<dyn FnOnce(LocalCspVaultForTest) -> Box<dyn IDkgProtocolCspVault>>;
@@ -1915,14 +1976,19 @@ mod idkg_load_transcript_with_openings {
 
 mod idkg_open_dealing {
     use super::*;
-    use crate::{types::CspSecretKey, vault::api::IDkgDealingInternalBytes};
+    use crate::{
+        types::CspSecretKey,
+        vault::api::IDkgDealingInternalBytes,
+    };
     use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
-        CommitmentOpening, MEGaPublicKeyK256Bytes,
+        CommitmentOpening,
+        MEGaPublicKeyK256Bytes,
     };
     use ic_types::{
         crypto::{
             canister_threshold_sig::{
-                error::IDkgOpenTranscriptError, idkg::IDkgTranscriptOperation,
+                error::IDkgOpenTranscriptError,
+                idkg::IDkgTranscriptOperation,
             },
             AlgorithmId,
         },

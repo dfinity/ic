@@ -5,28 +5,55 @@
 //! bad state) and optionally replacing any (potentially) broken nodes in the
 //! subnet with a set of known-good nodes
 
-use crate::chain_key::{InitialChainKeyConfigInternal, KeyConfigRequestInternal};
+use crate::chain_key::{
+    InitialChainKeyConfigInternal,
+    KeyConfigRequestInternal,
+};
 use crate::{
     common::LOG_PREFIX,
     mutations::do_create_subnet::EcdsaInitialConfig,
-    registry::{Registry, Version},
+    registry::{
+        Registry,
+        Version,
+    },
 };
-use candid::{CandidType, Deserialize, Encode};
-use dfn_core::api::{call, CanisterId};
+use candid::{
+    CandidType,
+    Deserialize,
+    Encode,
+};
+use dfn_core::api::{
+    call,
+    CanisterId,
+};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
-use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
-use ic_management_canister_types::{
-    MasterPublicKeyId, SetupInitialDKGArgs, SetupInitialDKGResponse,
+use ic_base_types::{
+    NodeId,
+    PrincipalId,
+    RegistryVersion,
+    SubnetId,
 };
-use ic_protobuf::registry::subnet::v1::{ChainKeyConfig as ChainKeyConfigPb, RegistryStoreUri};
+use ic_management_canister_types::{
+    MasterPublicKeyId,
+    SetupInitialDKGArgs,
+    SetupInitialDKGResponse,
+};
+use ic_protobuf::registry::subnet::v1::{
+    ChainKeyConfig as ChainKeyConfigPb,
+    RegistryStoreUri,
+};
 use ic_registry_keys::{
-    make_catch_up_package_contents_key, make_crypto_threshold_signing_pubkey_key,
+    make_catch_up_package_contents_key,
+    make_crypto_threshold_signing_pubkey_key,
     make_subnet_record_key,
 };
 use ic_registry_subnet_features::KeyConfig as KeyConfigInternal;
 use ic_registry_transport::{
-    pb::v1::{registry_mutation, RegistryMutation},
+    pb::v1::{
+        registry_mutation,
+        RegistryMutation,
+    },
     upsert,
 };
 use on_wire::bytes;
@@ -516,20 +543,41 @@ mod test {
     use super::*;
     use crate::{
         common::test_helpers::{
-            add_fake_subnet, get_invariant_compliant_subnet_record, invariant_compliant_registry,
+            add_fake_subnet,
+            get_invariant_compliant_subnet_record,
+            invariant_compliant_registry,
             prepare_registry_with_nodes,
         },
         mutations::{
-            do_create_subnet::{EcdsaInitialConfig, EcdsaKeyRequest},
-            do_recover_subnet::{panic_if_record_changed_across_versions, RecoverSubnetPayload},
+            do_create_subnet::{
+                EcdsaInitialConfig,
+                EcdsaKeyRequest,
+            },
+            do_recover_subnet::{
+                panic_if_record_changed_across_versions,
+                RecoverSubnetPayload,
+            },
         },
         registry::Registry,
     };
     use ic_base_types::SubnetId;
-    use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId};
-    use ic_protobuf::registry::subnet::v1::{ChainKeyConfig as ChainKeyConfigPb, SubnetRecord};
-    use ic_registry_subnet_features::{ChainKeyConfig, EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
-    use ic_registry_transport::{delete, upsert};
+    use ic_management_canister_types::{
+        EcdsaCurve,
+        EcdsaKeyId,
+    };
+    use ic_protobuf::registry::subnet::v1::{
+        ChainKeyConfig as ChainKeyConfigPb,
+        SubnetRecord,
+    };
+    use ic_registry_subnet_features::{
+        ChainKeyConfig,
+        EcdsaConfig,
+        DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+    };
+    use ic_registry_transport::{
+        delete,
+        upsert,
+    };
     use ic_test_utilities_types::ids::subnet_test_id;
 
     fn get_default_recover_subnet_payload(subnet_id: SubnetId) -> RecoverSubnetPayload {

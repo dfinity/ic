@@ -1,6 +1,10 @@
 use std::net::Ipv6Addr;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{
+    bail,
+    Context,
+    Result,
+};
 
 use config::config_ini::ConfigMap;
 

@@ -2,14 +2,23 @@ mod common;
 
 use crate::common::raw_canister_id_range_into;
 use candid::Principal;
-use ic_registry_routing_table::{canister_id_into_u64, CanisterIdRange};
+use ic_registry_routing_table::{
+    canister_id_into_u64,
+    CanisterIdRange,
+};
 use ic_registry_subnet_type::SubnetType;
 use pocket_ic::common::rest::DtsFlag;
 use pocket_ic::PocketIcBuilder;
-use rcgen::{CertificateParams, KeyPair};
+use rcgen::{
+    CertificateParams,
+    KeyPair,
+};
 use spec_compliance::run_ic_ref_test;
 use std::io::Write;
-use std::process::{Command, Stdio};
+use std::process::{
+    Command,
+    Stdio,
+};
 use std::time::Duration;
 use tempfile::NamedTempFile;
 

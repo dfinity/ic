@@ -1,5 +1,6 @@
 use ic_crypto_test_utils_canister_threshold_sigs::{
-    generate_initial_dealings, CanisterThresholdSigTestEnvironment,
+    generate_initial_dealings,
+    CanisterThresholdSigTestEnvironment,
 };
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_types::crypto::AlgorithmId;

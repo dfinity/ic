@@ -30,24 +30,52 @@
 
 use crate::internal_state::InternalState;
 use ic_config::{
-    metrics::{Config as MetricsConfig, Exporter},
+    metrics::{
+        Config as MetricsConfig,
+        Exporter,
+    },
     Config,
 };
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key;
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
-use ic_interfaces_registry::{RegistryClient, RegistryDataProvider, ZERO_REGISTRY_VERSION};
-use ic_logger::{debug, info, warn, ReplicaLogger};
+use ic_interfaces_registry::{
+    RegistryClient,
+    RegistryDataProvider,
+    ZERO_REGISTRY_VERSION,
+};
+use ic_logger::{
+    debug,
+    info,
+    warn,
+    ReplicaLogger,
+};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client::client::RegistryClientImpl;
-use ic_registry_local_store::{Changelog, ChangelogEntry, KeyMutation, LocalStore, LocalStoreImpl};
+use ic_registry_local_store::{
+    Changelog,
+    ChangelogEntry,
+    KeyMutation,
+    LocalStore,
+    LocalStoreImpl,
+};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
-use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, NodeId, RegistryVersion};
+use ic_types::{
+    crypto::threshold_sig::ThresholdSigPublicKey,
+    NodeId,
+    RegistryVersion,
+};
 use metrics::RegistryreplicatorMetrics;
 use std::{
-    io::{Error, ErrorKind},
+    io::{
+        Error,
+        ErrorKind,
+    },
     net::SocketAddr,
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{
+            AtomicBool,
+            Ordering,
+        },
         Arc,
     },
     time::Duration,

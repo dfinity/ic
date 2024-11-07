@@ -2,20 +2,41 @@ use crate::{
     state_test_helpers::state_machine_builder_for_sns_tests,
     SNS_MAX_CANISTER_MEMORY_ALLOCATION_IN_BYTES,
 };
-use candid::{types::number::Nat, Principal};
-use canister_test::{local_test_with_config_e, Canister, CanisterIdRecord, Project, Runtime, Wasm};
-use dfn_candid::{candid_one, CandidOne};
+use candid::{
+    types::number::Nat,
+    Principal,
+};
+use canister_test::{
+    local_test_with_config_e,
+    Canister,
+    CanisterIdRecord,
+    Project,
+    Runtime,
+    Wasm,
+};
+use dfn_candid::{
+    candid_one,
+    CandidOne,
+};
 use futures::FutureExt;
 use ic_canister_client_sender::Sender;
 use ic_config::Config;
 use ic_crypto_sha2::Sha256;
-use ic_icrc1_index_ng::{IndexArg, InitArg};
+use ic_icrc1_index_ng::{
+    IndexArg,
+    InitArg,
+};
 use ic_icrc1_ledger::{
-    InitArgs as LedgerInitArgs, InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument,
+    InitArgs as LedgerInitArgs,
+    InitArgsBuilder as LedgerInitArgsBuilder,
+    LedgerArgument,
 };
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::Tokens;
-use ic_nervous_system_clients::canister_status::{CanisterStatusResult, CanisterStatusType};
+use ic_nervous_system_clients::canister_status::{
+    CanisterStatusResult,
+    CanisterStatusType,
+};
 use ic_nervous_system_common::DEFAULT_TRANSFER_FEE;
 use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID as NNS_GOVERNANCE_CANISTER_ID,
@@ -25,35 +46,83 @@ use ic_sns_governance::{
     governance::TimeWarp,
     init::GovernanceCanisterInitPayloadBuilder,
     pb::v1::{
-        self as sns_governance_pb, get_neuron_response, get_proposal_response,
+        self as sns_governance_pb,
+        get_neuron_response,
+        get_proposal_response,
         manage_neuron::{
-            claim_or_refresh::{By, MemoAndController},
+            claim_or_refresh::{
+                By,
+                MemoAndController,
+            },
             configure::Operation,
             disburse::Amount,
-            AddNeuronPermissions, ClaimOrRefresh, Command, Configure, Disburse, Follow,
-            IncreaseDissolveDelay, RegisterVote, RemoveNeuronPermissions, Split, StartDissolving,
+            AddNeuronPermissions,
+            ClaimOrRefresh,
+            Command,
+            Configure,
+            Disburse,
+            Follow,
+            IncreaseDissolveDelay,
+            RegisterVote,
+            RemoveNeuronPermissions,
+            Split,
+            StartDissolving,
         },
         manage_neuron_response::{
-            AddNeuronPermissionsResponse, Command as CommandResponse,
+            AddNeuronPermissionsResponse,
+            Command as CommandResponse,
             RemoveNeuronPermissionsResponse,
         },
         proposal::Action,
-        Account as AccountProto, GetMaturityModulationRequest, GetMaturityModulationResponse,
-        GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse, Governance,
-        GovernanceError, ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse,
-        ListProposals, ListProposalsResponse, ManageNeuron, ManageNeuronResponse, Motion,
-        NervousSystemParameters, Neuron, NeuronId, NeuronPermissionList, Proposal, ProposalData,
-        ProposalId, RegisterDappCanisters, RewardEvent, Subaccount as SubaccountProto, Vote,
+        Account as AccountProto,
+        GetMaturityModulationRequest,
+        GetMaturityModulationResponse,
+        GetNeuron,
+        GetNeuronResponse,
+        GetProposal,
+        GetProposalResponse,
+        Governance,
+        GovernanceError,
+        ListNervousSystemFunctionsResponse,
+        ListNeurons,
+        ListNeuronsResponse,
+        ListProposals,
+        ListProposalsResponse,
+        ManageNeuron,
+        ManageNeuronResponse,
+        Motion,
+        NervousSystemParameters,
+        Neuron,
+        NeuronId,
+        NeuronPermissionList,
+        Proposal,
+        ProposalData,
+        ProposalId,
+        RegisterDappCanisters,
+        RewardEvent,
+        Subaccount as SubaccountProto,
+        Vote,
     },
 };
 use ic_sns_init::SnsCanisterInitPayloads;
 use ic_sns_root::{
-    pb::v1::SnsRootCanister, GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse,
+    pb::v1::SnsRootCanister,
+    GetSnsCanistersSummaryRequest,
+    GetSnsCanistersSummaryResponse,
 };
-use ic_sns_swap::pb::v1::{Init as SwapInit, NeuronBasketConstructionParameters};
-use ic_types::{CanisterId, PrincipalId};
+use ic_sns_swap::pb::v1::{
+    Init as SwapInit,
+    NeuronBasketConstructionParameters,
+};
+use ic_types::{
+    CanisterId,
+    PrincipalId,
+};
 use icrc_ledger_types::icrc1::{
-    account::{Account, Subaccount},
+    account::{
+        Account,
+        Subaccount,
+    },
     transfer::TransferArg,
 };
 use maplit::btreemap;
@@ -61,7 +130,11 @@ use on_wire::IntoWire;
 use std::{
     future::Future,
     thread,
-    time::{Duration, Instant, SystemTime},
+    time::{
+        Duration,
+        Instant,
+        SystemTime,
+    },
 };
 
 /// Constant nonce to use when generating the subaccount. Using a constant nonce

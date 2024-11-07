@@ -1,21 +1,40 @@
 use std::{
     sync::{
-        atomic::{AtomicUsize, Ordering},
+        atomic::{
+            AtomicUsize,
+            Ordering,
+        },
         Arc,
     },
-    time::{Duration, Instant},
+    time::{
+        Duration,
+        Instant,
+    },
 };
 
 use anyhow::bail;
 use async_trait::async_trait;
-use ic_agent::{Agent, Identity};
+use ic_agent::{
+    Agent,
+    Identity,
+};
 
 use crate::{
-    canister_api::{CallMode, Request, Response},
-    driver::test_env_api::{HasPublicApiUrl, IcNodeSnapshot},
+    canister_api::{
+        CallMode,
+        Request,
+        Response,
+    },
+    driver::test_env_api::{
+        HasPublicApiUrl,
+        IcNodeSnapshot,
+    },
     generic_workload_engine::metrics::RequestOutcome,
     retry_with_msg_async,
-    util::{assert_create_agent, assert_create_agent_with_identity},
+    util::{
+        assert_create_agent,
+        assert_create_agent_with_identity,
+    },
 };
 
 /// An agent that is well-suited for interacting with arbitrary IC canisters.

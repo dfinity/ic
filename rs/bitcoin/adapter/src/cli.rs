@@ -1,8 +1,15 @@
 //! A parser for the command line flags and configuration file.
-use crate::config::{address_limits, Config};
+use crate::config::{
+    address_limits,
+    Config,
+};
 use clap::Parser;
 use http::Uri;
-use std::{fs::File, io, path::PathBuf};
+use std::{
+    fs::File,
+    io,
+    path::PathBuf,
+};
 use thiserror::Error;
 
 #[allow(missing_docs)]

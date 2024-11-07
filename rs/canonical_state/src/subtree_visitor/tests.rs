@@ -1,8 +1,25 @@
 use super::*;
-use crate::test_visitors::{NoopVisitor, PathVisitor, TraceEntry, TracingVisitor, Value};
-use crate::visitor::{named_blob, named_num, named_subtree, subtree};
+use crate::test_visitors::{
+    NoopVisitor,
+    PathVisitor,
+    TraceEntry,
+    TracingVisitor,
+    Value,
+};
+use crate::visitor::{
+    named_blob,
+    named_num,
+    named_subtree,
+    subtree,
+};
 use Pattern as P;
-use TraceEntry::{EndSubtree, EnterEdge, StartSubtree, VisitBlob, VisitNum};
+use TraceEntry::{
+    EndSubtree,
+    EnterEdge,
+    StartSubtree,
+    VisitBlob,
+    VisitNum,
+};
 
 /// Sample tree traversal:
 ///

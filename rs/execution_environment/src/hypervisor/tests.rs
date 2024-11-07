@@ -1,50 +1,103 @@
 use crate::hypervisor::tests::WasmResult::Reply;
 use assert_matches::assert_matches;
-use candid::{Decode, Encode};
-use ic_base_types::{NumSeconds, PrincipalId};
+use candid::{
+    Decode,
+    Encode,
+};
+use ic_base_types::{
+    NumSeconds,
+    PrincipalId,
+};
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
 use ic_embedders::wasm_utils::instrumentation::WasmMemoryType;
-use ic_error_types::{ErrorCode, RejectCode};
-use ic_interfaces::execution_environment::{HypervisorError, SubnetAvailableMemory};
+use ic_error_types::{
+    ErrorCode,
+    RejectCode,
+};
+use ic_interfaces::execution_environment::{
+    HypervisorError,
+    SubnetAvailableMemory,
+};
 use ic_management_canister_types::{
-    CanisterChange, CanisterHttpResponsePayload, CanisterStatusType, CanisterUpgradeOptions,
+    CanisterChange,
+    CanisterHttpResponsePayload,
+    CanisterStatusType,
+    CanisterUpgradeOptions,
 };
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::{NextExecution, WASM_PAGE_SIZE_IN_BYTES};
+use ic_replicated_state::canister_state::{
+    NextExecution,
+    WASM_PAGE_SIZE_IN_BYTES,
+};
 use ic_replicated_state::testing::CanisterQueuesTesting;
 use ic_replicated_state::testing::SystemStateTesting;
 use ic_replicated_state::{
-    canister_state::execution_state::CustomSectionType, ExportedFunctions, Global, PageIndex,
+    canister_state::execution_state::CustomSectionType,
+    ExportedFunctions,
+    Global,
+    PageIndex,
 };
-use ic_replicated_state::{NumWasmPages, PageMap};
+use ic_replicated_state::{
+    NumWasmPages,
+    PageMap,
+};
 use ic_sys::PAGE_SIZE;
 use ic_system_api::MAX_CALL_TIMEOUT_SECONDS;
 use ic_test_utilities::assert_utils::assert_balance_equals;
 use ic_test_utilities_execution_environment::{
-    assert_empty_reply, check_ingress_status, cycles_reserved_for_app_and_verified_app_subnets,
-    get_reply, wasm_compilation_cost, wat_compilation_cost, ExecutionTest, ExecutionTestBuilder,
+    assert_empty_reply,
+    check_ingress_status,
+    cycles_reserved_for_app_and_verified_app_subnets,
+    get_reply,
+    wasm_compilation_cost,
+    wat_compilation_cost,
+    ExecutionTest,
+    ExecutionTestBuilder,
 };
 use ic_test_utilities_metrics::fetch_int_counter;
-use ic_test_utilities_metrics::{fetch_histogram_vec_stats, metric_vec, HistogramStats};
-use ic_types::messages::{CanisterMessage, NO_DEADLINE};
+use ic_test_utilities_metrics::{
+    fetch_histogram_vec_stats,
+    metric_vec,
+    HistogramStats,
+};
+use ic_types::messages::{
+    CanisterMessage,
+    NO_DEADLINE,
+};
 use ic_types::time::CoarseTime;
 use ic_types::Time;
 use ic_types::{
-    ingress::{IngressState, IngressStatus, WasmResult},
+    ingress::{
+        IngressState,
+        IngressStatus,
+        WasmResult,
+    },
     messages::CanisterTask,
     messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
     methods::WasmMethod,
-    CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, MAX_STABLE_MEMORY_IN_BYTES,
+    CanisterId,
+    ComputeAllocation,
+    Cycles,
+    NumBytes,
+    NumInstructions,
+    MAX_STABLE_MEMORY_IN_BYTES,
 };
-use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use ic_universal_canister::{
+    call_args,
+    wasm,
+    UNIVERSAL_CANISTER_WASM,
+};
 #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 use proptest::prelude::*;
 #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
-use proptest::test_runner::{TestRng, TestRunner};
+use proptest::test_runner::{
+    TestRng,
+    TestRunner,
+};
 use std::collections::BTreeSet;
 use std::mem::size_of;
 use std::time::Duration;

@@ -1,22 +1,45 @@
 use crate::payload_builder::tests::{
-    add_own_share_to_pool, add_received_shares_to_pool, default_validation_context,
-    metadata_to_share, metadata_to_shares, test_config_with_http_feature, test_proposal_context,
+    add_own_share_to_pool,
+    add_received_shares_to_pool,
+    default_validation_context,
+    metadata_to_share,
+    metadata_to_shares,
+    test_config_with_http_feature,
+    test_proposal_context,
 };
 use ic_error_types::RejectCode;
-use ic_interfaces::batch_payload::{BatchPayloadBuilder, PastPayload};
+use ic_interfaces::batch_payload::{
+    BatchPayloadBuilder,
+    PastPayload,
+};
 use ic_test_utilities_types::ids::canister_test_id;
 use ic_types::{
     canister_http::{
-        CanisterHttpReject, CanisterHttpResponse, CanisterHttpResponseContent,
-        CanisterHttpResponseMetadata, CanisterHttpResponseShare,
+        CanisterHttpReject,
+        CanisterHttpResponse,
+        CanisterHttpResponseContent,
+        CanisterHttpResponseMetadata,
+        CanisterHttpResponseShare,
     },
-    crypto::{crypto_hash, CryptoHash, CryptoHashOf},
+    crypto::{
+        crypto_hash,
+        CryptoHash,
+        CryptoHashOf,
+    },
     messages::CallbackId,
     time::UNIX_EPOCH,
-    Height, NumBytes, RegistryVersion,
+    Height,
+    NumBytes,
+    RegistryVersion,
 };
-use proptest::{arbitrary::any, prelude::*};
-use std::{ops::DerefMut, time::Duration};
+use proptest::{
+    arbitrary::any,
+    prelude::*,
+};
+use std::{
+    ops::DerefMut,
+    time::Duration,
+};
 
 const SUBNET_SIZE: usize = 13;
 const MAX_PAYLOAD_SIZE_BYTES: usize = 4 * 1024 * 1024;

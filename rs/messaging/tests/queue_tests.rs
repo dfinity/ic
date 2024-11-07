@@ -1,17 +1,45 @@
 use assert_matches::assert_matches;
-use candid::{Decode, Encode};
+use candid::{
+    Decode,
+    Encode,
+};
 use canister_test::Project;
-use ic_base_types::{CanisterId, SubnetId};
+use ic_base_types::{
+    CanisterId,
+    SubnetId,
+};
 use ic_interfaces_certified_stream_store::EncodeStreamError;
-use ic_registry_routing_table::{routing_table_insert_subnet, RoutingTable};
+use ic_registry_routing_table::{
+    routing_table_insert_subnet,
+    RoutingTable,
+};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{testing::CanisterQueuesTesting, ReplicatedState};
-use ic_state_machine_tests::{StateMachine, StateMachineBuilder, UserError, WasmResult};
+use ic_replicated_state::{
+    testing::CanisterQueuesTesting,
+    ReplicatedState,
+};
+use ic_state_machine_tests::{
+    StateMachine,
+    StateMachineBuilder,
+    UserError,
+    WasmResult,
+};
 use ic_test_utilities_metrics::fetch_int_counter_vec;
-use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1, SUBNET_2};
+use ic_test_utilities_types::ids::{
+    SUBNET_0,
+    SUBNET_1,
+    SUBNET_2,
+};
 use ic_types::{
-    messages::{CallbackId, Payload, RequestOrResponse},
-    xnet::{StreamHeader, StreamIndexedQueue},
+    messages::{
+        CallbackId,
+        Payload,
+        RequestOrResponse,
+    },
+    xnet::{
+        StreamHeader,
+        StreamIndexedQueue,
+    },
     Cycles,
 };
 use maplit::btreemap;
@@ -565,7 +593,10 @@ impl std::fmt::Debug for MessageSnapshot {
 
 impl From<&RequestOrResponse> for MessageSnapshot {
     fn from(msg: &RequestOrResponse) -> Self {
-        use RequestOrResponse::{Request, Response};
+        use RequestOrResponse::{
+            Request,
+            Response,
+        };
         match msg {
             Request(request) => Self::Request(request.sender_reply_callback),
             Response(response) if matches!(response.response_payload, Payload::Data(_)) => {
@@ -687,7 +718,10 @@ fn update_callback_id_trackers(
     add_callback_id_tracker: &mut BTreeSet<CallbackId>,
     remove_callback_id_tracker: &mut BTreeSet<CallbackId>,
 ) -> Result<(), String> {
-    use RequestOrResponse::{Request, Response};
+    use RequestOrResponse::{
+        Request,
+        Response,
+    };
     match msg {
         Request(request) => {
             if !add_callback_id_tracker.insert(request.sender_reply_callback) {
@@ -909,7 +943,10 @@ fn induct_and_observe_until_stale(
 /// include all the relevant subnet splitting scenarios.
 #[test]
 fn state_machine_subnet_splitting_test() {
-    use RequestOrResponse::{Request, Response};
+    use RequestOrResponse::{
+        Request,
+        Response,
+    };
     let old_subnets_proxy = SubnetPairProxy::with_new_subnets();
     old_subnets_proxy.mark_remote_canister_as_being_migrated();
 

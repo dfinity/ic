@@ -1,7 +1,13 @@
 use crate::query_handler::QueryScheduler;
-use crate::{metrics::IngressFilterMetrics, ExecutionEnvironment};
+use crate::{
+    metrics::IngressFilterMetrics,
+    ExecutionEnvironment,
+};
 use ic_error_types::UserError;
-use ic_interfaces::execution_environment::{ExecutionMode, IngressFilterService};
+use ic_interfaces::execution_environment::{
+    ExecutionMode,
+    IngressFilterService,
+};
 use ic_interfaces_state_manager::StateReader;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replicated_state::ReplicatedState;
@@ -10,9 +16,15 @@ use std::convert::Infallible;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::task::{Context, Poll};
+use std::task::{
+    Context,
+    Poll,
+};
 use tokio::sync::oneshot;
-use tower::{util::BoxCloneService, Service};
+use tower::{
+    util::BoxCloneService,
+    Service,
+};
 
 #[derive(Clone)]
 pub(crate) struct IngressFilterServiceImpl {

@@ -1,10 +1,21 @@
 use crate::icrc1::transfer::BlockIndex;
 
 use super::{
-    blocks::{BlockRange, GetBlocksRequest},
-    transactions::{GetTransactionsRequest, TransactionRange},
+    blocks::{
+        BlockRange,
+        GetBlocksRequest,
+    },
+    transactions::{
+        GetTransactionsRequest,
+        TransactionRange,
+    },
 };
-use candid::{CandidType, Deserialize, Nat, Principal};
+use candid::{
+    CandidType,
+    Deserialize,
+    Nat,
+    Principal,
+};
 use serde::Serialize;
 use std::marker::PhantomData;
 

@@ -1,22 +1,56 @@
-use crate::DirectAuthenticationScheme::{CanisterSignature, UserKeyPair};
-use ic_canister_client_sender::{ed25519_public_key_to_der, Ed25519KeyPair};
-use ic_certification_test_utils::{generate_root_of_trust, serialize_to_cbor};
+use crate::DirectAuthenticationScheme::{
+    CanisterSignature,
+    UserKeyPair,
+};
+use ic_canister_client_sender::{
+    ed25519_public_key_to_der,
+    Ed25519KeyPair,
+};
+use ic_certification_test_utils::{
+    generate_root_of_trust,
+    serialize_to_cbor,
+};
 use ic_crypto_internal_basic_sig_iccsa_test_utils::CanisterState;
 use ic_crypto_internal_threshold_sig_bls12381::types::SecretKeyBytes;
 use ic_crypto_tree_hash::Path;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
-use ic_types::crypto::{CanisterSig, Signable};
+use ic_types::crypto::{
+    CanisterSig,
+    Signable,
+};
 use ic_types::messages::{
-    Blob, Delegation, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
-    HttpReadStateContent, HttpRequest, HttpRequestEnvelope, HttpUserQuery, MessageId, Query,
-    ReadState, SignedDelegation, SignedIngressContent,
+    Blob,
+    Delegation,
+    HttpCallContent,
+    HttpCanisterUpdate,
+    HttpQueryContent,
+    HttpReadState,
+    HttpReadStateContent,
+    HttpRequest,
+    HttpRequestEnvelope,
+    HttpUserQuery,
+    MessageId,
+    Query,
+    ReadState,
+    SignedDelegation,
+    SignedIngressContent,
 };
 use ic_types::time::GENESIS;
-use ic_types::{CanisterId, PrincipalId, Time};
-use rand::{CryptoRng, Rng};
+use ic_types::{
+    CanisterId,
+    PrincipalId,
+    Time,
+};
+use rand::{
+    CryptoRng,
+    Rng,
+};
 use simple_asn1::OID;
 use std::convert::identity;
-use std::fmt::{Debug, Formatter};
+use std::fmt::{
+    Debug,
+    Formatter,
+};
 use strum_macros::EnumCount;
 
 #[cfg(test)]
@@ -379,7 +413,8 @@ impl CanisterSigner {
         use ic_certification_test_utils::CertificateData;
         use ic_crypto_iccsa::types::Signature;
         use ic_crypto_internal_basic_sig_iccsa_test_utils::{
-            new_canister_state_tree, witness_from_tree,
+            new_canister_state_tree,
+            witness_from_tree,
         };
 
         let canister_state = {

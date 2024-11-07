@@ -2,29 +2,54 @@
 use crate::sign::basic_sig::BasicSigVerifierInternal;
 use crate::sign::canister_threshold_sig::idkg::complaint::verify_complaint;
 use crate::sign::canister_threshold_sig::idkg::utils::{
-    index_and_batch_signed_dealing_of_dealer, index_and_dealing_of_dealer,
-    key_id_from_mega_public_key_or_panic, retrieve_mega_public_key_from_registry,
+    index_and_batch_signed_dealing_of_dealer,
+    index_and_dealing_of_dealer,
+    key_id_from_mega_public_key_or_panic,
+    retrieve_mega_public_key_from_registry,
 };
 use ic_crypto_internal_csp::api::CspSigner;
-use ic_crypto_internal_csp::vault::api::{CspVault, IDkgTranscriptInternalBytes};
+use ic_crypto_internal_csp::vault::api::{
+    CspVault,
+    IDkgTranscriptInternalBytes,
+};
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
     create_transcript as idkg_create_transcript,
     verify_dealing_opening as idkg_verify_dealing_opening,
-    verify_transcript as idkg_verify_transcript, CommitmentOpening, IDkgComplaintInternal,
-    IDkgDealingInternal, IDkgTranscriptInternal, IDkgTranscriptOperationInternal,
+    verify_transcript as idkg_verify_transcript,
+    CommitmentOpening,
+    IDkgComplaintInternal,
+    IDkgDealingInternal,
+    IDkgTranscriptInternal,
+    IDkgTranscriptOperationInternal,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_types::crypto::canister_threshold_sig::error::{
-    IDkgCreateTranscriptError, IDkgLoadTranscriptError, IDkgOpenTranscriptError,
-    IDkgVerifyOpeningError, IDkgVerifyTranscriptError,
+    IDkgCreateTranscriptError,
+    IDkgLoadTranscriptError,
+    IDkgOpenTranscriptError,
+    IDkgVerifyOpeningError,
+    IDkgVerifyTranscriptError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    BatchSignedIDkgDealing, BatchSignedIDkgDealings, IDkgComplaint, IDkgOpening, IDkgTranscript,
-    IDkgTranscriptParams, IDkgTranscriptType,
+    BatchSignedIDkgDealing,
+    BatchSignedIDkgDealings,
+    IDkgComplaint,
+    IDkgOpening,
+    IDkgTranscript,
+    IDkgTranscriptParams,
+    IDkgTranscriptType,
 };
 use ic_types::crypto::CryptoError;
-use ic_types::{NodeId, NodeIndex, NumberOfNodes, RegistryVersion};
-use serde::{Deserialize, Serialize};
+use ic_types::{
+    NodeId,
+    NodeIndex,
+    NumberOfNodes,
+    RegistryVersion,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::sync::Arc;

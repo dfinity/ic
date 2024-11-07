@@ -1,15 +1,31 @@
 use crate::InternalHttpQueryHandler;
-use ic_base_types::{CanisterId, NumSeconds};
+use ic_base_types::{
+    CanisterId,
+    NumSeconds,
+};
 use ic_config::execution_environment::INSTRUCTION_OVERHEAD_PER_QUERY_CALL;
-use ic_error_types::{ErrorCode, UserError};
+use ic_error_types::{
+    ErrorCode,
+    UserError,
+};
 use ic_registry_subnet_type::SubnetType;
-use ic_test_utilities::universal_canister::{call_args, wasm};
-use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
+use ic_test_utilities::universal_canister::{
+    call_args,
+    wasm,
+};
+use ic_test_utilities_execution_environment::{
+    ExecutionTest,
+    ExecutionTestBuilder,
+};
 use ic_test_utilities_types::ids::user_test_id;
 use ic_types::{
     ingress::WasmResult,
-    messages::{Query, QuerySource},
-    Cycles, NumInstructions,
+    messages::{
+        Query,
+        QuerySource,
+    },
+    Cycles,
+    NumInstructions,
 };
 use std::sync::Arc;
 

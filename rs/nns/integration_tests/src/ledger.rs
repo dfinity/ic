@@ -7,29 +7,56 @@ use ic_canister_client_sender::Sender;
 use ic_nervous_system_common::ledger;
 use ic_nervous_system_common_test_keys::TEST_USER1_KEYPAIR;
 use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
-use ic_nns_constants::{ALL_NNS_CANISTER_IDS, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID};
+use ic_nns_constants::{
+    ALL_NNS_CANISTER_IDS,
+    GENESIS_TOKEN_CANISTER_ID,
+    GOVERNANCE_CANISTER_ID,
+};
 use ic_nns_governance::governance::INITIAL_NEURON_DISSOLVE_DELAY;
 use ic_nns_governance_api::pb::v1::{
     claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshResult,
     governance_error::ErrorType,
     manage_neuron::{
-        claim_or_refresh::{By, MemoAndController},
-        ClaimOrRefresh, Command, Disburse, NeuronIdOrSubaccount,
+        claim_or_refresh::{
+            By,
+            MemoAndController,
+        },
+        ClaimOrRefresh,
+        Command,
+        Disburse,
+        NeuronIdOrSubaccount,
     },
     manage_neuron_response::Command as CommandResponse,
-    ClaimOrRefreshNeuronFromAccount, ClaimOrRefreshNeuronFromAccountResponse, GovernanceError,
-    ManageNeuron, ManageNeuronResponse, Neuron,
+    ClaimOrRefreshNeuronFromAccount,
+    ClaimOrRefreshNeuronFromAccountResponse,
+    GovernanceError,
+    ManageNeuron,
+    ManageNeuronResponse,
+    Neuron,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{
+        state_machine_test_on_nns_subnet,
+        NnsCanisters,
+    },
     state_test_helpers::nns_start_dissolving,
 };
 use icp_ledger::{
-    tokens_from_proto, AccountBalanceArgs, AccountIdentifier, BlockIndex,
-    LedgerCanisterInitPayload, Memo, SendArgs, Tokens, DEFAULT_TRANSFER_FEE,
+    tokens_from_proto,
+    AccountBalanceArgs,
+    AccountIdentifier,
+    BlockIndex,
+    LedgerCanisterInitPayload,
+    Memo,
+    SendArgs,
+    Tokens,
+    DEFAULT_TRANSFER_FEE,
 };
-use std::{collections::HashMap, time::Duration};
+use std::{
+    collections::HashMap,
+    time::Duration,
+};
 
 // This tests the whole neuron lifecycle in integration with the ledger. Namely
 // tests that the neuron can be staked from a ledger account. That the neuron

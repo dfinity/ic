@@ -1,5 +1,9 @@
 mod client;
-use crate::protocol::{Command, Request, Response};
+use crate::protocol::{
+    Command,
+    Request,
+    Response,
+};
 
 /// Send a command to the host vsock server
 pub fn send_command(command: Command, port: u32) -> Response {

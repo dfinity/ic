@@ -6,7 +6,10 @@
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 
 use ic_crypto_tree_hash_fuzz_check_witness_equality_utils::test_absence_witness;
-use libfuzzer_sys::{fuzz_mutator, fuzz_target};
+use libfuzzer_sys::{
+    fuzz_mutator,
+    fuzz_target,
+};
 
 mod common;
 

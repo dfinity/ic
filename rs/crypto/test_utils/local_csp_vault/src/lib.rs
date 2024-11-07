@@ -1,6 +1,14 @@
-use ic_crypto_internal_csp::api::{CspCreateMEGaKeyError, CspThresholdSignError};
+use ic_crypto_internal_csp::api::{
+    CspCreateMEGaKeyError,
+    CspThresholdSignError,
+};
 use ic_crypto_internal_csp::key_id::KeyId;
-use ic_crypto_internal_csp::types::{CspPop, CspPublicKey, CspSignature, ExternalPublicKeys};
+use ic_crypto_internal_csp::types::{
+    CspPop,
+    CspPublicKey,
+    CspSignature,
+    ExternalPublicKeys,
+};
 use ic_crypto_internal_csp::vault::api::BasicSignatureCspVault;
 use ic_crypto_internal_csp::vault::api::CspBasicSignatureError;
 use ic_crypto_internal_csp::vault::api::CspBasicSignatureKeygenError;
@@ -32,29 +40,52 @@ use ic_crypto_internal_csp::vault::api::ValidatePksAndSksError;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
-    CommitmentOpening, IDkgComplaintInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
+    CommitmentOpening,
+    IDkgComplaintInternal,
+    MEGaPublicKey,
+    ThresholdEcdsaSigShareInternal,
 };
 use ic_crypto_internal_types::encrypt::forward_secure::{
-    CspFsEncryptionPop, CspFsEncryptionPublicKey,
+    CspFsEncryptionPop,
+    CspFsEncryptionPublicKey,
 };
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
-    CspNiDkgDealing, CspNiDkgTranscript, Epoch,
+    CspNiDkgDealing,
+    CspNiDkgTranscript,
+    Epoch,
 };
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_types::crypto::canister_threshold_sig::error::{
-    IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
-    IDkgVerifyDealingPrivateError, ThresholdEcdsaCreateSigShareError,
+    IDkgLoadTranscriptError,
+    IDkgOpenTranscriptError,
+    IDkgRetainKeysError,
+    IDkgVerifyDealingPrivateError,
+    ThresholdEcdsaCreateSigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::{
-    idkg::{BatchSignedIDkgDealing, IDkgTranscriptOperation},
+    idkg::{
+        BatchSignedIDkgDealing,
+        IDkgTranscriptOperation,
+    },
     ExtendedDerivationPath,
 };
-use ic_types::crypto::{AlgorithmId, CurrentNodePublicKeys};
-use ic_types::{NodeId, NodeIndex, NumberOfNodes, Randomness};
+use ic_types::crypto::{
+    AlgorithmId,
+    CurrentNodePublicKeys,
+};
+use ic_types::{
+    NodeId,
+    NodeIndex,
+    NumberOfNodes,
+    Randomness,
+};
 use mockall::mock;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
 
 mock! {
     pub LocalCspVault {}

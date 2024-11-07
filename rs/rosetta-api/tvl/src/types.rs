@@ -1,4 +1,7 @@
-use candid::{CandidType, Nat};
+use candid::{
+    CandidType,
+    Nat,
+};
 use ic_base_types::PrincipalId;
 
 #[derive(Eq, PartialEq, Debug, CandidType, candid::Deserialize)]

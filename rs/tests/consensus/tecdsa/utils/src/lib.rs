@@ -1,45 +1,107 @@
-use candid::{CandidType, Deserialize, Encode, Principal};
-use canister_test::{Canister, Cycles};
+use candid::{
+    CandidType,
+    Deserialize,
+    Encode,
+    Principal,
+};
+use canister_test::{
+    Canister,
+    Cycles,
+};
 use ic_agent::AgentError;
-use ic_base_types::{NodeId, SubnetId};
+use ic_base_types::{
+    NodeId,
+    SubnetId,
+};
 use ic_canister_client::Sender;
-use ic_config::subnet_config::{ECDSA_SIGNATURE_FEE, SCHNORR_SIGNATURE_FEE};
+use ic_config::subnet_config::{
+    ECDSA_SIGNATURE_FEE,
+    SCHNORR_SIGNATURE_FEE,
+};
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_management_canister_types::{
-    DerivationPath, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId,
-    MasterPublicKeyId, Payload, SchnorrAlgorithm, SchnorrKeyId, SchnorrPublicKeyArgs,
-    SchnorrPublicKeyResponse, SignWithECDSAArgs, SignWithECDSAReply, SignWithSchnorrArgs,
+    DerivationPath,
+    ECDSAPublicKeyArgs,
+    ECDSAPublicKeyResponse,
+    EcdsaCurve,
+    EcdsaKeyId,
+    MasterPublicKeyId,
+    Payload,
+    SchnorrAlgorithm,
+    SchnorrKeyId,
+    SchnorrPublicKeyArgs,
+    SchnorrPublicKeyResponse,
+    SignWithECDSAArgs,
+    SignWithECDSAReply,
+    SignWithSchnorrArgs,
     SignWithSchnorrReply,
 };
 use ic_message::ForwardParams;
-use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
+use ic_nervous_system_common_test_keys::{
+    TEST_NEURON_1_ID,
+    TEST_NEURON_1_OWNER_KEYPAIR,
+};
 use ic_nns_common::types::NeuronId;
-use ic_nns_governance_api::pb::v1::{NnsFunction, ProposalStatus};
+use ic_nns_governance_api::pb::v1::{
+    NnsFunction,
+    ProposalStatus,
+};
 use ic_nns_test_utils::governance::submit_external_update_proposal;
 use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
-    canister_api::{CallMode, Request},
+    canister_api::{
+        CallMode,
+        Request,
+    },
     driver::{
-        ic::{InternetComputer, Subnet},
+        ic::{
+            InternetComputer,
+            Subnet,
+        },
         test_env::TestEnv,
         test_env_api::{
-            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
+            HasPublicApiUrl,
+            HasTopologySnapshot,
+            IcNodeContainer,
+            NnsInstallationBuilder,
         },
     },
     nns::vote_and_execute_proposal,
-    util::{block_on, MessageCanister},
+    util::{
+        block_on,
+        MessageCanister,
+    },
 };
-use ic_types::{Height, PrincipalId, ReplicaVersion};
+use ic_types::{
+    Height,
+    PrincipalId,
+    ReplicaVersion,
+};
 use ic_types_test_utils::ids::subnet_test_id;
-use k256::ecdsa::{signature::hazmat::PrehashVerifier, Signature, VerifyingKey};
+use k256::ecdsa::{
+    signature::hazmat::PrehashVerifier,
+    Signature,
+    VerifyingKey,
+};
 use registry_canister::mutations::{
     do_create_subnet::{
-        CreateSubnetPayload, InitialChainKeyConfig, KeyConfig as KeyConfigCreate, KeyConfigRequest,
+        CreateSubnetPayload,
+        InitialChainKeyConfig,
+        KeyConfig as KeyConfigCreate,
+        KeyConfigRequest,
     },
-    do_update_subnet::{ChainKeyConfig, KeyConfig as KeyConfigUpdate, UpdateSubnetPayload},
+    do_update_subnet::{
+        ChainKeyConfig,
+        KeyConfig as KeyConfigUpdate,
+        UpdateSubnetPayload,
+    },
 };
-use slog::{debug, info, Logger};
+use slog::{
+    debug,
+    info,
+    Logger,
+};
 use std::time::Duration;
 
 pub const KEY_ID1: &str = "secp256k1";
@@ -786,7 +848,11 @@ pub fn verify_bip340_signature(sec1_pk: &[u8], sig: &[u8], msg: &[u8]) -> bool {
 }
 
 pub fn verify_ed25519_signature(pk: &[u8], sig: &[u8], msg: &[u8]) -> bool {
-    use ed25519_dalek::{Signature, Verifier, VerifyingKey};
+    use ed25519_dalek::{
+        Signature,
+        Verifier,
+        VerifyingKey,
+    };
 
     let pk: [u8; 32] = pk.try_into().expect("Public key wrong size");
     let vk = VerifyingKey::from_bytes(&pk).unwrap();

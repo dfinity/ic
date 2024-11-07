@@ -1,11 +1,32 @@
 use crate::dashboard::tests::assertions::DashboardAssert;
-use crate::dashboard::{filters, DashboardTemplate, Fetched, Status, DEFAULT_TX_TABLE_PAGE_SIZE};
-use crate::state::{Config, Timestamp, TransactionKytData};
-use crate::{dashboard, state};
+use crate::dashboard::{
+    filters,
+    DashboardTemplate,
+    Fetched,
+    Status,
+    DEFAULT_TX_TABLE_PAGE_SIZE,
+};
+use crate::state::{
+    Config,
+    Timestamp,
+    TransactionKytData,
+};
+use crate::{
+    dashboard,
+    state,
+};
 use bitcoin::Address;
-use bitcoin::{absolute::LockTime, transaction::Version, Transaction};
+use bitcoin::{
+    absolute::LockTime,
+    transaction::Version,
+    Transaction,
+};
 use ic_btc_interface::Txid;
-use ic_btc_kyt::{blocklist::BTC_ADDRESS_BLOCKLIST, BtcNetwork, KytMode};
+use ic_btc_kyt::{
+    blocklist::BTC_ADDRESS_BLOCKLIST,
+    BtcNetwork,
+    KytMode,
+};
 use std::str::FromStr;
 
 fn mock_txid(v: usize) -> Txid {
@@ -113,7 +134,10 @@ fn should_display_statuses() {
 #[test]
 fn test_pagination() {
     use askama::Template;
-    use scraper::{Html, Selector};
+    use scraper::{
+        Html,
+        Selector,
+    };
 
     state::set_config(
         state::Config::new_and_validate(BtcNetwork::Mainnet, KytMode::Normal).unwrap(),

@@ -1,10 +1,19 @@
-use crate::{common::LOG_PREFIX, registry::Registry};
+use crate::{
+    common::LOG_PREFIX,
+    registry::Registry,
+};
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
-use ic_protobuf::registry::dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord};
+use ic_protobuf::registry::dc::v1::{
+    AddOrRemoveDataCentersProposalPayload,
+    DataCenterRecord,
+};
 use ic_registry_keys::make_data_center_record_key;
-use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation};
+use ic_registry_transport::pb::v1::{
+    registry_mutation,
+    RegistryMutation,
+};
 use prost::Message;
 
 impl Registry {
@@ -68,7 +77,10 @@ impl Registry {
 mod test {
     use crate::registry::Registry;
     use ic_nns_test_utils::registry::invariant_compliant_mutation;
-    use ic_protobuf::registry::dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord};
+    use ic_protobuf::registry::dc::v1::{
+        AddOrRemoveDataCentersProposalPayload,
+        DataCenterRecord,
+    };
     use ic_registry_keys::make_data_center_record_key;
     use prost::Message;
 

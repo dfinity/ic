@@ -1,16 +1,29 @@
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{
+        BTreeMap,
+        BTreeSet,
+    },
     ptr::addr_of_mut,
 };
 
 // Also possible to define a wrapper macro, in order to ensure that logging is only
 // done when certain crate features are enabled
 use tla_instrumentation::{
-    tla_log_label, tla_log_locals, tla_log_request, tla_log_response,
-    tla_value::{TlaValue, ToTla},
-    Destination, InstrumentationState,
+    tla_log_label,
+    tla_log_locals,
+    tla_log_request,
+    tla_log_response,
+    tla_value::{
+        TlaValue,
+        ToTla,
+    },
+    Destination,
+    InstrumentationState,
 };
-use tla_instrumentation_proc_macros::{tla_function, tla_update_method};
+use tla_instrumentation_proc_macros::{
+    tla_function,
+    tla_update_method,
+};
 
 mod common;
 use common::check_tla_trace;
@@ -27,10 +40,20 @@ mod tla_stuff {
     pub const CAN_NAME: &str = "mycan";
 
     use local_key::task_local;
-    use std::{collections::BTreeMap, sync::RwLock};
+    use std::{
+        collections::BTreeMap,
+        sync::RwLock,
+    };
     use tla_instrumentation::{
-        GlobalState, InstrumentationState, Label, TlaConstantAssignment, TlaValue, ToTla, Update,
-        UpdateTrace, VarAssignment,
+        GlobalState,
+        InstrumentationState,
+        Label,
+        TlaConstantAssignment,
+        TlaValue,
+        ToTla,
+        Update,
+        UpdateTrace,
+        VarAssignment,
     };
 
     task_local! {
@@ -112,7 +135,12 @@ mod tla_stuff {
 }
 
 use tla_stuff::{
-    my_f_desc, CAN_NAME, PID, TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY, TLA_TRACES_MUTEX,
+    my_f_desc,
+    CAN_NAME,
+    PID,
+    TLA_INSTRUMENTATION_STATE,
+    TLA_TRACES_LKEY,
+    TLA_TRACES_MUTEX,
 };
 
 struct StructCanister {

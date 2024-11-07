@@ -81,4 +81,10 @@
 //! ```
 
 #![forbid(unsafe_code)]
-pub use ic_crypto_internal_sha2::{Context, DomainSeparationContext, Sha224, Sha256, Sha512};
+pub use ic_crypto_internal_sha2::{
+    Context,
+    DomainSeparationContext,
+    Sha224,
+    Sha256,
+    Sha512,
+};

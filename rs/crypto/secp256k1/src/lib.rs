@@ -7,12 +7,22 @@
 
 use k256::{
     elliptic_curve::{
-        generic_array::{typenum::Unsigned, GenericArray},
+        generic_array::{
+            typenum::Unsigned,
+            GenericArray,
+        },
         Curve,
     },
-    AffinePoint, Scalar, Secp256k1,
+    AffinePoint,
+    Scalar,
+    Secp256k1,
 };
-use rand::{CryptoRng, Rng, RngCore, SeedableRng};
+use rand::{
+    CryptoRng,
+    Rng,
+    RngCore,
+    SeedableRng,
+};
 use zeroize::ZeroizeOnDrop;
 
 /// An error indicating that decoding a key failed
@@ -99,8 +109,14 @@ impl DerivationPath {
     }
 
     fn ckd(idx: &[u8], input: &[u8], chain_code: &[u8; 32]) -> ([u8; 32], Scalar) {
-        use hmac::{Hmac, Mac};
-        use k256::{elliptic_curve::ops::Reduce, sha2::Sha512};
+        use hmac::{
+            Hmac,
+            Mac,
+        };
+        use k256::{
+            elliptic_curve::ops::Reduce,
+            sha2::Sha512,
+        };
 
         let mut hmac = Hmac::<Sha512>::new_from_slice(chain_code)
             .expect("HMAC-SHA-512 should accept 256 bit key");
@@ -131,7 +147,9 @@ impl DerivationPath {
         chain_code: &[u8; 32],
     ) -> ([u8; 32], Scalar, AffinePoint) {
         use k256::elliptic_curve::{
-            group::prime::PrimeCurveAffine, group::GroupEncoding, ops::MulByGenerator,
+            group::prime::PrimeCurveAffine,
+            group::GroupEncoding,
+            ops::MulByGenerator,
         };
         use k256::ProjectivePoint;
 
@@ -356,7 +374,11 @@ impl PrivateKey {
     /// For security the seed should be at least 256 bits and
     /// randomly generated
     pub fn generate_from_seed(seed: &[u8]) -> Self {
-        use k256::{elliptic_curve::ops::Reduce, sha2::Digest, sha2::Sha256};
+        use k256::{
+            elliptic_curve::ops::Reduce,
+            sha2::Digest,
+            sha2::Sha256,
+        };
 
         let digest: [u8; 32] = {
             let mut sha256 = Sha256::new();
@@ -465,7 +487,10 @@ impl PrivateKey {
     /// The message is hashed with SHA-256 and the signature is
     /// normalized (using the minimum-s approach of BitCoin)
     pub fn sign_message_with_ecdsa(&self, message: &[u8]) -> [u8; 64] {
-        use k256::ecdsa::{signature::Signer, Signature};
+        use k256::ecdsa::{
+            signature::Signer,
+            Signature,
+        };
 
         let ecdsa = k256::ecdsa::SigningKey::from(&self.key);
         let sig: Signature = ecdsa.sign(message);
@@ -485,7 +510,10 @@ impl PrivateKey {
             return self.sign_digest_with_ecdsa(&zdigest);
         }
 
-        use k256::ecdsa::{signature::hazmat::PrehashSigner, Signature};
+        use k256::ecdsa::{
+            signature::hazmat::PrehashSigner,
+            Signature,
+        };
         let ecdsa = k256::ecdsa::SigningKey::from(&self.key);
         let sig: Signature = ecdsa.sign_prehash(digest).expect("Failed to sign digest");
         sig.to_bytes().into()

@@ -357,7 +357,10 @@ mod logging {
 
 mod single_call_bincode {
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-    use rand::{Rng, RngCore};
+    use rand::{
+        Rng,
+        RngCore,
+    };
     use serde::Serialize;
     use std::pin::Pin;
     use tokio_serde::Serializer;

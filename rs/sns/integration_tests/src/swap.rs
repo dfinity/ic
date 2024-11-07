@@ -1,6 +1,13 @@
-use candid::{Decode, Encode, Principal};
+use candid::{
+    Decode,
+    Encode,
+    Principal,
+};
 use ic_sns_swap::pb::v1::{
-    GetStateRequest, GetStateResponse, Init, NeuronBasketConstructionParameters,
+    GetStateRequest,
+    GetStateResponse,
+    Init,
+    NeuronBasketConstructionParameters,
 };
 use ic_sns_test_utils::state_test_helpers::state_machine_builder_for_sns_tests;
 use pretty_assertions::assert_eq;

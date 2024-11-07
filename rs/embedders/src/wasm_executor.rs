@@ -4,37 +4,95 @@ use std::sync::Arc;
 
 use ic_replicated_state::canister_state::execution_state::WasmBinary;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
-use ic_replicated_state::{ExportedFunctions, Global, Memory, NumWasmPages, PageMap};
-use ic_system_api::sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateChanges};
-use ic_system_api::{ApiType, DefaultOutOfInstructionsHandler};
-use ic_types::methods::{FuncRef, WasmMethod};
+use ic_replicated_state::{
+    ExportedFunctions,
+    Global,
+    Memory,
+    NumWasmPages,
+    PageMap,
+};
+use ic_system_api::sandbox_safe_system_state::{
+    SandboxSafeSystemState,
+    SystemStateChanges,
+};
+use ic_system_api::{
+    ApiType,
+    DefaultOutOfInstructionsHandler,
+};
+use ic_types::methods::{
+    FuncRef,
+    WasmMethod,
+};
 use ic_types::NumOsPages;
 use prometheus::IntCounter;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use wasmtime::Module;
 
 use crate::wasmtime_embedder::CanisterMemoryType;
 use crate::{
-    wasm_utils::{compile, decoding::decode_wasm, Segments, WasmImportsDetails},
+    wasm_utils::{
+        compile,
+        decoding::decode_wasm,
+        Segments,
+        WasmImportsDetails,
+    },
     wasmtime_embedder::WasmtimeInstance,
-    CompilationCache, CompilationResult, SerializedModule, WasmExecutionInput, WasmtimeEmbedder,
+    CompilationCache,
+    CompilationResult,
+    SerializedModule,
+    WasmExecutionInput,
+    WasmtimeEmbedder,
 };
 use ic_config::flag_status::FlagStatus;
 use ic_interfaces::execution_environment::{
-    HypervisorError, HypervisorResult, InstanceStats, OutOfInstructionsHandler,
-    SubnetAvailableMemory, SystemApi, SystemApiCallCounters, WasmExecutionOutput,
+    HypervisorError,
+    HypervisorResult,
+    InstanceStats,
+    OutOfInstructionsHandler,
+    SubnetAvailableMemory,
+    SystemApi,
+    SystemApiCallCounters,
+    WasmExecutionOutput,
 };
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{
+    warn,
+    ReplicaLogger,
+};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::canister_state::execution_state::NextScheduledMethod;
-use ic_replicated_state::{EmbedderCache, ExecutionState};
-use ic_sys::{page_bytes_from_ptr, PageBytes, PageIndex, PAGE_SIZE};
-use ic_system_api::{ExecutionParameters, ModificationTracking, SystemApiImpl};
+use ic_replicated_state::{
+    EmbedderCache,
+    ExecutionState,
+};
+use ic_sys::{
+    page_bytes_from_ptr,
+    PageBytes,
+    PageIndex,
+    PAGE_SIZE,
+};
+use ic_system_api::{
+    ExecutionParameters,
+    ModificationTracking,
+    SystemApiImpl,
+};
 use ic_types::ExecutionRound;
-use ic_types::{CanisterId, NumBytes, NumInstructions};
-use ic_wasm_types::{BinaryEncodedWasm, CanisterModule};
+use ic_types::{
+    CanisterId,
+    NumBytes,
+    NumInstructions,
+};
+use ic_wasm_types::{
+    BinaryEncodedWasm,
+    CanisterModule,
+};
 use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
+use std::hash::{
+    Hash,
+    Hasher,
+};
 
 const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
 

@@ -1,9 +1,21 @@
-use ic_crypto_internal_csp::types::{CspPop, CspPublicKey, CspSecretKey};
+use ic_crypto_internal_csp::types::{
+    CspPop,
+    CspPublicKey,
+    CspSecretKey,
+};
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_types::crypto::{
-    BasicSig, BasicSigOf, IndividualMultiSig, IndividualMultiSigOf, KeyPurpose, SignableMock,
+    BasicSig,
+    BasicSigOf,
+    IndividualMultiSig,
+    IndividualMultiSigOf,
+    KeyPurpose,
+    SignableMock,
 };
-use ic_types::{NodeId, RegistryVersion};
+use ic_types::{
+    NodeId,
+    RegistryVersion,
+};
 use strum_macros::EnumIter;
 
 pub mod basic_sig;

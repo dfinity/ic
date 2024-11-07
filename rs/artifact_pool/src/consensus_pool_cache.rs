@@ -1,17 +1,34 @@
 //! We define a cache for consensus objects/values that is updated whenever
 //! consensus updates the consensus pool.
 use ic_interfaces::consensus_pool::{
-    ChainIterator, ChangeAction, ConsensusBlockCache, ConsensusBlockChain, ConsensusBlockChainErr,
-    ConsensusPool, ConsensusPoolCache, ConsensusTime,
+    ChainIterator,
+    ChangeAction,
+    ConsensusBlockCache,
+    ConsensusBlockChain,
+    ConsensusBlockChainErr,
+    ConsensusPool,
+    ConsensusPoolCache,
+    ConsensusTime,
 };
 use ic_protobuf::types::v1 as pb;
 use ic_types::{
-    consensus::{Block, CatchUpPackage, ConsensusMessage, Finalization, HasHeight, HashedBlock},
-    Height, Time,
+    consensus::{
+        Block,
+        CatchUpPackage,
+        ConsensusMessage,
+        Finalization,
+        HasHeight,
+        HashedBlock,
+    },
+    Height,
+    Time,
 };
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
-use std::sync::{Arc, RwLock};
+use std::sync::{
+    Arc,
+    RwLock,
+};
 
 /// Implementation of [`ConsensusBlockCache`] and [`ConsensusPoolCache`].
 pub(crate) struct ConsensusCacheImpl {
@@ -466,13 +483,28 @@ impl ConsensusBlockChain for ConsensusBlockChainImpl {
 mod test {
     use super::*;
     use crate::test_utils::fake_block_proposal;
-    use ic_interfaces::consensus_pool::{ValidatedConsensusArtifact, HEIGHT_CONSIDERED_BEHIND};
-    use ic_test_artifact_pool::consensus_pool::{Round, TestConsensusPool};
-    use ic_test_utilities::{crypto::CryptoReturningOk, state_manager::FakeStateManager};
+    use ic_interfaces::consensus_pool::{
+        ValidatedConsensusArtifact,
+        HEIGHT_CONSIDERED_BEHIND,
+    };
+    use ic_test_artifact_pool::consensus_pool::{
+        Round,
+        TestConsensusPool,
+    };
+    use ic_test_utilities::{
+        crypto::CryptoReturningOk,
+        state_manager::FakeStateManager,
+    };
     use ic_test_utilities_consensus::fake::*;
-    use ic_test_utilities_registry::{setup_registry, SubnetRecordBuilder};
+    use ic_test_utilities_registry::{
+        setup_registry,
+        SubnetRecordBuilder,
+    };
     use ic_test_utilities_time::FastForwardTimeSource;
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::{
+        node_test_id,
+        subnet_test_id,
+    };
     use ic_types::consensus::*;
     use ic_types::time::UNIX_EPOCH;
     use std::sync::Arc;

@@ -6,8 +6,15 @@ use std::time::Duration;
 use crate::execution_environment::SUBNET_HEAP_DELTA_CAPACITY;
 use ic_base_types::NumBytes;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::{Cycles, ExecutionRound, NumInstructions};
-use serde::{Deserialize, Serialize};
+use ic_types::{
+    Cycles,
+    ExecutionRound,
+    NumInstructions,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 const GIB: u64 = 1024 * 1024 * 1024;
 const M: u64 = 1_000_000;

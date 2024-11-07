@@ -1,18 +1,38 @@
 use crate::vault::remote_csp_vault::TarpcCspVaultRequest;
 use crate::vault::remote_csp_vault::TarpcCspVaultResponse;
 use bincode::config::Options;
-use bytes::{Bytes, BytesMut};
+use bytes::{
+    Bytes,
+    BytesMut,
+};
 use core::marker::PhantomData;
 use educe::Educe;
-use ic_crypto_internal_logmon::metrics::{CryptoMetrics, MessageType, MetricsDomain, ServiceType};
-use ic_logger::{debug, ReplicaLogger};
-use serde::{Deserialize, Serialize};
+use ic_crypto_internal_logmon::metrics::{
+    CryptoMetrics,
+    MessageType,
+    MetricsDomain,
+    ServiceType,
+};
+use ic_logger::{
+    debug,
+    ReplicaLogger,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::io;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Instant;
-use tarpc::{ClientMessage, Response};
-use tokio_serde::{Deserializer, Serializer};
+use tarpc::{
+    ClientMessage,
+    Response,
+};
+use tokio_serde::{
+    Deserializer,
+    Serializer,
+};
 
 /// An instantiation of the `bincode` codec use in a transport.
 ///

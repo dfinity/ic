@@ -1,23 +1,56 @@
-use candid::{Decode, Encode, Nat, Principal};
+use candid::{
+    Decode,
+    Encode,
+    Nat,
+    Principal,
+};
 use ic_agent::{
-    hash_tree::{Label, LookupResult},
+    hash_tree::{
+        Label,
+        LookupResult,
+    },
     Agent,
 };
 use ic_cbor::CertificateToCbor;
 use ic_certification::{
-    hash_tree::{HashTreeNode, SubtreeLookupResult},
-    Certificate, HashTree,
+    hash_tree::{
+        HashTreeNode,
+        SubtreeLookupResult,
+    },
+    Certificate,
+    HashTree,
 };
 use icrc_ledger_types::icrc::generic_value::Hash;
 use icrc_ledger_types::icrc1::account::Account;
-use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError};
-use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
-use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
-use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
-use icrc_ledger_types::icrc3::archive::{ArchivedRange, QueryBlockArchiveFn};
-use icrc_ledger_types::icrc3::blocks::{DataCertificate, GetBlocksRequest, GetBlocksResponse};
+use icrc_ledger_types::icrc1::transfer::{
+    BlockIndex,
+    TransferArg,
+    TransferError,
+};
+use icrc_ledger_types::icrc2::allowance::{
+    Allowance,
+    AllowanceArgs,
+};
+use icrc_ledger_types::icrc2::approve::{
+    ApproveArgs,
+    ApproveError,
+};
+use icrc_ledger_types::icrc2::transfer_from::{
+    TransferFromArgs,
+    TransferFromError,
+};
+use icrc_ledger_types::icrc3::archive::{
+    ArchivedRange,
+    QueryBlockArchiveFn,
+};
+use icrc_ledger_types::icrc3::blocks::{
+    DataCertificate,
+    GetBlocksRequest,
+    GetBlocksResponse,
+};
 use icrc_ledger_types::{
-    icrc::generic_metadata_value::MetadataValue as Value, icrc3::blocks::BlockRange,
+    icrc::generic_metadata_value::MetadataValue as Value,
+    icrc3::blocks::BlockRange,
 };
 
 #[derive(Debug)]

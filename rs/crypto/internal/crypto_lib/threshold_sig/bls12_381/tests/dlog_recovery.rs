@@ -1,4 +1,9 @@
-use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, Gt, Scalar};
+use ic_crypto_internal_bls12_381_type::{
+    G1Affine,
+    G2Affine,
+    Gt,
+    Scalar,
+};
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::dlog_recovery::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::Rng;

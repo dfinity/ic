@@ -1,4 +1,7 @@
-use arbitrary::{Arbitrary, Unstructured};
+use arbitrary::{
+    Arbitrary,
+    Unstructured,
+};
 use clap::Parser;
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_logger::replica_logger::no_op_logger;
@@ -13,7 +16,10 @@ use ic_wasm::ICWasmModule;
 use wasmprinter::print_bytes;
 
 use ic_embedders::{
-    wasm_utils::{decoding::decode_wasm, validate_and_instrument_for_testing},
+    wasm_utils::{
+        decoding::decode_wasm,
+        validate_and_instrument_for_testing,
+    },
     WasmtimeEmbedder,
 };
 

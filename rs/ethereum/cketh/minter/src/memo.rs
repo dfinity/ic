@@ -4,11 +4,18 @@ mod tests;
 use crate::erc20::CkTokenSymbol;
 use crate::eth_logs::ReceivedEvent;
 use crate::eth_rpc::Hash;
-use crate::numeric::{Erc20Value, LogIndex};
+use crate::numeric::{
+    Erc20Value,
+    LogIndex,
+};
 use crate::state::transactions::ReimbursementRequest;
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::transfer::Memo;
-use minicbor::{Decode, Encode, Encoder};
+use minicbor::{
+    Decode,
+    Encode,
+    Encoder,
+};
 
 /// Encodes minter memo as a binary blob.
 fn encode<T: minicbor::Encode<()>>(t: &T) -> Vec<u8> {

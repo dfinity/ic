@@ -1,25 +1,76 @@
-use candid::{CandidType, Principal};
-use candid_parser::utils::{service_equal, CandidSource};
+use candid::{
+    CandidType,
+    Principal,
+};
+use candid_parser::utils::{
+    service_equal,
+    CandidSource,
+};
 use canister_test::*;
-use dfn_candid::{candid, candid_one, CandidOne};
+use dfn_candid::{
+    candid,
+    candid_one,
+    CandidOne,
+};
 use dfn_protobuf::protobuf;
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_canister_client_sender::Sender;
-use ic_canisters_http_types::{HttpRequest, HttpResponse};
+use ic_canisters_http_types::{
+    HttpRequest,
+    HttpResponse,
+};
 use ic_ledger_canister_core::archive::ArchiveOptions;
-use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
+use ic_ledger_core::tokens::{
+    CheckedAdd,
+    CheckedSub,
+};
 use ic_ledger_core::{
-    block::{BlockIndex, BlockType, EncodedBlock},
+    block::{
+        BlockIndex,
+        BlockType,
+        EncodedBlock,
+    },
     timestamp::TimeStamp,
 };
 use icp_ledger::{
-    tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Archives, BinaryAccountBalanceArgs,
-    Block, BlockArg, BlockRange, BlockRes, CandidBlock, GetBlocksArgs, GetBlocksError,
-    GetBlocksRes, GetBlocksResult, GetEncodedBlocksResult, IterBlocksArgs, IterBlocksRes,
-    LedgerCanisterInitPayload, LedgerCanisterPayload, LedgerCanisterUpgradePayload, Memo,
-    NotifyCanisterArgs, Operation, QueryBlocksResponse, QueryEncodedBlocksResponse, SendArgs,
-    Subaccount, Tokens, TotalSupplyArgs, Transaction, TransferArgs, TransferError, TransferFee,
-    TransferFeeArgs, DEFAULT_TRANSFER_FEE,
+    tokens_from_proto,
+    AccountBalanceArgs,
+    AccountIdentifier,
+    Archives,
+    BinaryAccountBalanceArgs,
+    Block,
+    BlockArg,
+    BlockRange,
+    BlockRes,
+    CandidBlock,
+    GetBlocksArgs,
+    GetBlocksError,
+    GetBlocksRes,
+    GetBlocksResult,
+    GetEncodedBlocksResult,
+    IterBlocksArgs,
+    IterBlocksRes,
+    LedgerCanisterInitPayload,
+    LedgerCanisterPayload,
+    LedgerCanisterUpgradePayload,
+    Memo,
+    NotifyCanisterArgs,
+    Operation,
+    QueryBlocksResponse,
+    QueryEncodedBlocksResponse,
+    SendArgs,
+    Subaccount,
+    Tokens,
+    TotalSupplyArgs,
+    Transaction,
+    TransferArgs,
+    TransferError,
+    TransferFee,
+    TransferFeeArgs,
+    DEFAULT_TRANSFER_FEE,
 };
 use icrc_ledger_types::icrc1::account::Account;
 use on_wire::IntoWire;
@@ -27,9 +78,15 @@ use serde::Deserialize;
 use serde_bytes::ByteBuf;
 use std::convert::TryFrom;
 use std::sync::Mutex;
-use std::time::{Duration, SystemTime};
+use std::time::{
+    Duration,
+    SystemTime,
+};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{
+        HashMap,
+        HashSet,
+    },
     path::PathBuf,
 };
 

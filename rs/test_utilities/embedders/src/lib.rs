@@ -1,25 +1,52 @@
-use std::{convert::TryFrom, rc::Rc};
+use std::{
+    convert::TryFrom,
+    rc::Rc,
+};
 
 use ic_base_types::NumBytes;
-use ic_config::{flag_status::FlagStatus, subnet_config::SchedulerConfig};
+use ic_config::{
+    flag_status::FlagStatus,
+    subnet_config::SchedulerConfig,
+};
 use ic_cycles_account_manager::ResourceSaturation;
-use ic_embedders::{wasm_utils::compile, wasmtime_embedder::WasmtimeInstance, WasmtimeEmbedder};
+use ic_embedders::{
+    wasm_utils::compile,
+    wasmtime_embedder::WasmtimeInstance,
+    WasmtimeEmbedder,
+};
 use ic_interfaces::execution_environment::{
-    ExecutionMode, HypervisorError, SubnetAvailableMemory, SystemApi,
+    ExecutionMode,
+    HypervisorError,
+    SubnetAvailableMemory,
+    SystemApi,
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::NumWasmPages;
-use ic_replicated_state::{Global, Memory, NetworkTopology, PageMap};
+use ic_replicated_state::{
+    Global,
+    Memory,
+    NetworkTopology,
+    PageMap,
+};
 use ic_system_api::{
-    sandbox_safe_system_state::SandboxSafeSystemState, ExecutionParameters, InstructionLimits,
-    ModificationTracking, SystemApiImpl,
+    sandbox_safe_system_state::SandboxSafeSystemState,
+    ExecutionParameters,
+    InstructionLimits,
+    ModificationTracking,
+    SystemApiImpl,
 };
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_state::SystemStateBuilder;
-use ic_test_utilities_types::ids::{canister_test_id, user_test_id};
+use ic_test_utilities_types::ids::{
+    canister_test_id,
+    user_test_id,
+};
 use ic_types::{
-    messages::RequestMetadata, time::UNIX_EPOCH, ComputeAllocation, MemoryAllocation,
+    messages::RequestMetadata,
+    time::UNIX_EPOCH,
+    ComputeAllocation,
+    MemoryAllocation,
     NumInstructions,
 };
 use ic_wasm_types::BinaryEncodedWasm;

@@ -1,19 +1,32 @@
 use crate::helpers::{
-    get_proposer_and_sender, parse_proposal_url, shortened_pids_string, summary_from_string_or_file,
+    get_proposer_and_sender,
+    parse_proposal_url,
+    shortened_pids_string,
+    summary_from_string_or_file,
 };
-use crate::types::{ProposalMetadata, ProposalPayload};
+use crate::types::{
+    ProposalMetadata,
+    ProposalPayload,
+};
 use crate::ProposalTitle;
 use async_trait::async_trait;
 use clap::Parser;
 use ic_admin_derive::derive_common_proposal_fields;
-use ic_canister_client::{Agent, Sender};
+use ic_canister_client::{
+    Agent,
+    Sender,
+};
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_nns_common::types::NeuronId;
 use ic_prep_lib::subnet_configuration::get_default_config_params;
 use ic_protobuf::registry::subnet::v1::SubnetFeatures as SubnetFeaturesPb;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::{NodeId, PrincipalId, ReplicaVersion};
+use ic_types::{
+    NodeId,
+    PrincipalId,
+    ReplicaVersion,
+};
 use registry_canister::mutations::do_create_subnet;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -310,7 +323,12 @@ impl ProposalPayload<do_create_subnet::CreateSubnetPayload> for ProposeToCreateS
 mod tests {
     use std::str::FromStr;
 
-    use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId};
+    use ic_management_canister_types::{
+        EcdsaCurve,
+        EcdsaKeyId,
+        SchnorrAlgorithm,
+        SchnorrKeyId,
+    };
     use ic_types::PrincipalId;
 
     use super::*;

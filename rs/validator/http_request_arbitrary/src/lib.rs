@@ -1,9 +1,21 @@
-use arbitrary::{Arbitrary, Result, Unstructured};
+use arbitrary::{
+    Arbitrary,
+    Result,
+    Unstructured,
+};
 use ic_base_types::CanisterId;
-use ic_crypto_tree_hash::{Label, Path};
+use ic_crypto_tree_hash::{
+    Label,
+    Path,
+};
 use ic_types::messages::{
-    Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
-    HttpReadStateContent, HttpUserQuery,
+    Blob,
+    HttpCallContent,
+    HttpCanisterUpdate,
+    HttpQueryContent,
+    HttpReadState,
+    HttpReadStateContent,
+    HttpUserQuery,
 };
 use std::ops::RangeInclusive;
 

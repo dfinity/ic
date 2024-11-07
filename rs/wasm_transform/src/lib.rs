@@ -1,8 +1,20 @@
 use std::ops::Range;
 
 use wasmparser::{
-    BinaryReaderError, Export, GlobalType, Import, MemoryType, Name, Operator, Parser, Payload,
-    RefType, SubType, Subsections, TableType, ValType,
+    BinaryReaderError,
+    Export,
+    GlobalType,
+    Import,
+    MemoryType,
+    Name,
+    Operator,
+    Parser,
+    Payload,
+    RefType,
+    SubType,
+    Subsections,
+    TableType,
+    ValType,
 };
 
 mod convert;

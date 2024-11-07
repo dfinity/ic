@@ -1,6 +1,13 @@
-use canister_test::{Canister, Runtime, Wasm};
+use canister_test::{
+    Canister,
+    Runtime,
+    Wasm,
+};
 use dfn_candid::candid;
-use futures::{future::join_all, Future};
+use futures::{
+    future::join_all,
+    Future,
+};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::get_dependency_path;
 use slog::info;

@@ -1,10 +1,24 @@
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use indicatif::{
+    MultiProgress,
+    ProgressBar,
+    ProgressStyle,
+};
 
-use crate::{message::Message, plan::Plan};
+use crate::{
+    message::Message,
+    plan::Plan,
+};
 use std::{
-    sync::mpsc::{channel, Receiver, Sender},
+    sync::mpsc::{
+        channel,
+        Receiver,
+        Sender,
+    },
     thread,
-    time::{Duration, SystemTime},
+    time::{
+        Duration,
+        SystemTime,
+    },
 };
 
 /// Kicks off the collector which is a background thread. The collector will

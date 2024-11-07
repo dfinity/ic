@@ -1,17 +1,32 @@
-use ic_certification::{verify_certified_data, CertificateValidationError};
-use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
+use ic_certification::{
+    verify_certified_data,
+    CertificateValidationError,
+};
+use ic_crypto_tree_hash::{
+    LabeledTree,
+    MixedHashTree,
+};
 use ic_interfaces_registry::RegistryTransportRecord;
 use ic_registry_transport::pb::v1::{
-    registry_mutation::Type, CertifiedResponse, RegistryAtomicMutateRequest,
+    registry_mutation::Type,
+    CertifiedResponse,
+    RegistryAtomicMutateRequest,
 };
 use ic_types::{
-    crypto::threshold_sig::ThresholdSigPublicKey, CanisterId, RegistryVersion, SubnetId, Time,
+    crypto::threshold_sig::ThresholdSigPublicKey,
+    CanisterId,
+    RegistryVersion,
+    SubnetId,
+    Time,
 };
 use prost::Message;
 use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
-use tree_deserializer::{types::Leb128EncodedU64, LabeledTreeDeserializer};
+use tree_deserializer::{
+    types::Leb128EncodedU64,
+    LabeledTreeDeserializer,
+};
 
 #[cfg(test)]
 mod tests;

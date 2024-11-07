@@ -1,5 +1,10 @@
 use hex_literal::hex;
-use ic_crypto_secp256k1::{DerivationPath, KeyDecodingError, PrivateKey, PublicKey};
+use ic_crypto_secp256k1::{
+    DerivationPath,
+    KeyDecodingError,
+    PrivateKey,
+    PublicKey,
+};
 use rand::Rng;
 use rand_chacha::ChaCha20Rng;
 
@@ -505,8 +510,15 @@ fn key_derivation_matches_bip32() {
 
 mod try_recovery_from_digest {
     use crate::test_rng;
-    use ic_crypto_secp256k1::{PrivateKey, PublicKey, RecoveryError};
-    use k256::ecdsa::{Signature, VerifyingKey};
+    use ic_crypto_secp256k1::{
+        PrivateKey,
+        PublicKey,
+        RecoveryError,
+    };
+    use k256::ecdsa::{
+        Signature,
+        VerifyingKey,
+    };
     use rand::Rng;
 
     #[test]

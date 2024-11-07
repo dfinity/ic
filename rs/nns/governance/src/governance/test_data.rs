@@ -7,9 +7,14 @@ use super::*;
 use ic_nervous_system_common::E8;
 use ic_nervous_system_proto::pb::v1 as pb;
 use ic_neurons_fund::{
-    NeuronsFundParticipationLimits, PolynomialMatchingFunction, SerializableFunction,
+    NeuronsFundParticipationLimits,
+    PolynomialMatchingFunction,
+    SerializableFunction,
 };
-use ic_sns_swap::pb::v1::{IdealMatchedParticipationFunction, LinearScalingCoefficient};
+use ic_sns_swap::pb::v1::{
+    IdealMatchedParticipationFunction,
+    LinearScalingCoefficient,
+};
 use lazy_static::lazy_static;
 use rust_decimal_macros::dec;
 
@@ -21,11 +26,15 @@ mod src {
     pub use crate::pb::v1::create_service_nervous_system::{
         governance_parameters::VotingRewardParameters,
         initial_token_distribution::{
-            developer_distribution::NeuronDistribution, DeveloperDistribution, SwapDistribution,
+            developer_distribution::NeuronDistribution,
+            DeveloperDistribution,
+            SwapDistribution,
             TreasuryDistribution,
         },
         swap_parameters::NeuronBasketConstructionParameters,
-        GovernanceParameters, InitialTokenDistribution, SwapParameters,
+        GovernanceParameters,
+        InitialTokenDistribution,
+        SwapParameters,
     };
 } // end mod src
 

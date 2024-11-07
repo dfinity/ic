@@ -1,6 +1,12 @@
 use super::*;
-use candid_parser::utils::{service_equal, CandidSource};
-use ic_sns_governance::pb::v1::{DisburseMaturityInProgress, Neuron};
+use candid_parser::utils::{
+    service_equal,
+    CandidSource,
+};
+use ic_sns_governance::pb::v1::{
+    DisburseMaturityInProgress,
+    Neuron,
+};
 use maplit::btreemap;
 
 /// This is NOT affected by

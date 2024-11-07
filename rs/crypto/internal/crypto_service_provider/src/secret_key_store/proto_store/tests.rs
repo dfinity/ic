@@ -1,9 +1,15 @@
 use super::*;
 use crate::canister_threshold::IDKG_MEGA_SCOPE;
 use crate::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
-use crate::secret_key_store::test_utils::{make_key_id, make_secret_key};
+use crate::secret_key_store::test_utils::{
+    make_key_id,
+    make_secret_key,
+};
 use crate::secret_key_store::{
-    scope::ConstScope, Scope, SecretKeyStore, SecretKeyStoreInsertionError,
+    scope::ConstScope,
+    Scope,
+    SecretKeyStore,
+    SecretKeyStoreInsertionError,
 };
 use crate::types::CspSecretKey;
 use assert_matches::assert_matches;
@@ -12,7 +18,11 @@ use ic_crypto_internal_csp_test_utils::files::mk_temp_dir_with_permissions;
 use ic_crypto_internal_multi_sig_bls12381::types::SecretKeyBytes;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::types::CspFsEncryptionKeySet;
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
-    EccCurveType, MEGaKeySetK256Bytes, MEGaPrivateKey, MEGaPrivateKeyK256Bytes, MEGaPublicKey,
+    EccCurveType,
+    MEGaKeySetK256Bytes,
+    MEGaPrivateKey,
+    MEGaPrivateKeyK256Bytes,
+    MEGaPublicKey,
     MEGaPublicKeyK256Bytes,
 };
 use ic_crypto_internal_tls::TlsEd25519SecretKeyDerBytes;
@@ -23,8 +33,14 @@ use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 use std::fs::Permissions;
 use std::os::unix::fs::PermissionsExt;
-use std::panic::{catch_unwind, AssertUnwindSafe};
-use tempfile::{tempdir as tempdir_deleted_at_end_of_scope, TempDir};
+use std::panic::{
+    catch_unwind,
+    AssertUnwindSafe,
+};
+use tempfile::{
+    tempdir as tempdir_deleted_at_end_of_scope,
+    TempDir,
+};
 
 #[test]
 #[should_panic]

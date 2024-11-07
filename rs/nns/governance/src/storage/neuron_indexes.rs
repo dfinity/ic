@@ -1,6 +1,10 @@
 use crate::{
     account_id_index::NeuronAccountIdIndex,
-    known_neuron_index::{AddKnownNeuronError, KnownNeuronIndex, RemoveKnownNeuronError},
+    known_neuron_index::{
+        AddKnownNeuronError,
+        KnownNeuronIndex,
+        RemoveKnownNeuronError,
+    },
     neuron::Neuron,
     neuron_store::NeuronStoreError,
     pb::v1::Topic,
@@ -9,19 +13,30 @@ use crate::{
 use ic_base_types::PrincipalId;
 use ic_nervous_system_governance::index::{
     neuron_following::{
-        add_neuron_followees, remove_neuron_followees, HeapNeuronFollowingIndex,
-        NeuronFollowingIndex, StableNeuronFollowingIndex,
+        add_neuron_followees,
+        remove_neuron_followees,
+        HeapNeuronFollowingIndex,
+        NeuronFollowingIndex,
+        StableNeuronFollowingIndex,
     },
     neuron_principal::{
-        add_neuron_id_principal_ids, remove_neuron_id_principal_ids, StableNeuronPrincipalIndex,
+        add_neuron_id_principal_ids,
+        remove_neuron_id_principal_ids,
+        StableNeuronPrincipalIndex,
     },
 };
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use icp_ledger::AccountIdentifier;
 use std::{
-    collections::{BTreeSet, HashSet},
-    fmt::{Display, Formatter},
+    collections::{
+        BTreeSet,
+        HashSet,
+    },
+    fmt::{
+        Display,
+        Formatter,
+    },
 };
 
 // Because many arguments are needed to construct a StableNeuronIndexes,

@@ -1,9 +1,26 @@
-use crate::api::e2e::testnet::{Testnet, TestnetT};
-use crate::api::handle::{Ic, Node, Subnet};
+use crate::api::e2e::testnet::{
+    Testnet,
+    TestnetT,
+};
+use crate::api::handle::{
+    Ic,
+    Node,
+    Subnet,
+};
 use canister_test::*;
-use ic_canister_client::{Agent, HttpClient, Sender};
-use ic_crypto_ed25519::{PrivateKey, PublicKey};
-use ic_types::{NodeId, SubnetId};
+use ic_canister_client::{
+    Agent,
+    HttpClient,
+    Sender,
+};
+use ic_crypto_ed25519::{
+    PrivateKey,
+    PublicKey,
+};
+use ic_types::{
+    NodeId,
+    SubnetId,
+};
 use std::sync::Arc;
 use url::Url;
 

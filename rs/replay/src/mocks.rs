@@ -1,12 +1,22 @@
 use ic_interfaces::{
     batch_payload::ProposalContext,
-    consensus::{PayloadBuilder, PayloadValidationError},
+    consensus::{
+        PayloadBuilder,
+        PayloadValidationError,
+    },
     validation::ValidationResult,
 };
 use ic_types::{
-    batch::{BatchPayload, ValidationContext},
-    consensus::{block_maker::SubnetRecords, Payload},
-    Height, Time,
+    batch::{
+        BatchPayload,
+        ValidationContext,
+    },
+    consensus::{
+        block_maker::SubnetRecords,
+        Payload,
+    },
+    Height,
+    Time,
 };
 
 /// A mock we're using to instantiate the consensus Validator. Since notarizations

@@ -3,29 +3,56 @@
 use assert_matches::assert_matches;
 use async_trait::async_trait;
 use futures::future::FutureExt;
-use ic_base_types::{CanisterId, PrincipalId};
-use ic_nervous_system_common::{cmc::CMC, ledger::IcpLedger, NervousSystemError};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
+use ic_nervous_system_common::{
+    cmc::CMC,
+    ledger::IcpLedger,
+    NervousSystemError,
+};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::{
     governance::{
-        Environment, Governance, HeapGrowthPotential, RngError,
+        Environment,
+        Governance,
+        HeapGrowthPotential,
+        RngError,
         HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES,
     },
     pb::v1::{
         governance_error::ErrorType,
         install_code::CanisterInstallMode,
         manage_neuron::{
-            claim_or_refresh::{By, MemoAndController},
-            ClaimOrRefresh, Command,
+            claim_or_refresh::{
+                By,
+                MemoAndController,
+            },
+            ClaimOrRefresh,
+            Command,
         },
         manage_neuron_response::Command as CommandResponse,
-        neuron, proposal, ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError,
-        InstallCode, ManageNeuron, ManageNeuronResponse, Motion, NetworkEconomics, Neuron,
+        neuron,
+        proposal,
+        ExecuteNnsFunction,
+        Governance as GovernanceProto,
+        GovernanceError,
+        InstallCode,
+        ManageNeuron,
+        ManageNeuronResponse,
+        Motion,
+        NetworkEconomics,
+        Neuron,
         Proposal,
     },
 };
-use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
+use icp_ledger::{
+    AccountIdentifier,
+    Subaccount,
+    Tokens,
+};
 use maplit::btreemap;
 use std::convert::TryFrom;
 

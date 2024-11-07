@@ -8,11 +8,20 @@
 use candid::Principal;
 use ic_cdk::api::call::RejectionCode;
 use ic_cdk::caller;
-use ic_cdk_macros::{query, update};
-use ic_management_canister_types::{
-    CanisterHttpResponsePayload, HttpHeader, Payload, TransformArgs,
+use ic_cdk_macros::{
+    query,
+    update,
 };
-use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
+use ic_management_canister_types::{
+    CanisterHttpResponsePayload,
+    HttpHeader,
+    Payload,
+    TransformArgs,
+};
+use proxy_canister::{
+    RemoteHttpRequest,
+    RemoteHttpResponse,
+};
 use std::cell::RefCell;
 use std::collections::HashMap;
 

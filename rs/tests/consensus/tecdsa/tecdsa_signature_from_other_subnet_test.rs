@@ -2,7 +2,9 @@ use anyhow::Result;
 
 use canister_test::Canister;
 use ic_consensus_threshold_sig_system_test_utils::{
-    enable_chain_key_signing, get_public_key_and_test_signature, make_key_ids_for_all_schemes,
+    enable_chain_key_signing,
+    get_public_key_and_test_signature,
+    make_key_ids_for_all_schemes,
     setup,
 };
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -11,10 +13,18 @@ use ic_system_test_driver::{
     driver::{
         group::SystemTestGroup,
         test_env::TestEnv,
-        test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
+        test_env_api::{
+            HasPublicApiUrl,
+            HasTopologySnapshot,
+            IcNodeContainer,
+        },
     },
     systest,
-    util::{block_on, runtime_from_url, MessageCanister},
+    util::{
+        block_on,
+        runtime_from_url,
+        MessageCanister,
+    },
 };
 use itertools::Itertools;
 

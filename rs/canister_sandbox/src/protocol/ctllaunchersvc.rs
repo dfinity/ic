@@ -1,7 +1,10 @@
 //! A service provided by the controller to the launcher.
 
 use ic_types::CanisterId;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 use crate::fdenum::EnumerateInnerFileDescriptors;
 

@@ -1,16 +1,32 @@
 use ic_error_types::UserError;
 use ic_management_canister_types::QueryMethod;
 use ic_metrics::{
-    buckets::{decimal_buckets, decimal_buckets_with_zero},
+    buckets::{
+        decimal_buckets,
+        decimal_buckets_with_zero,
+    },
     MetricsRegistry,
 };
 use ic_system_api::sandbox_safe_system_state::RequestMetadataStats;
 use ic_types::{
-    NumInstructions, NumMessages, NumSlices, Time, MAX_STABLE_MEMORY_IN_BYTES,
+    NumInstructions,
+    NumMessages,
+    NumSlices,
+    Time,
+    MAX_STABLE_MEMORY_IN_BYTES,
     MAX_WASM_MEMORY_IN_BYTES,
 };
-use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec};
-use std::{cell::RefCell, rc::Rc, time::Instant};
+use prometheus::{
+    Histogram,
+    HistogramVec,
+    IntCounter,
+    IntCounterVec,
+};
+use std::{
+    cell::RefCell,
+    rc::Rc,
+    time::Instant,
+};
 
 pub(crate) const QUERY_HANDLER_CRITICAL_ERROR: &str = "query_handler_critical_error";
 pub(crate) const SYSTEM_API_DATA_CERTIFICATE_COPY: &str = "data_certificate_copy";

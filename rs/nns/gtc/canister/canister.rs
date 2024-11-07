@@ -1,17 +1,32 @@
 use candid::candid_method;
-use dfn_candid::{candid, candid_one};
+use dfn_candid::{
+    candid,
+    candid_one,
+};
 use dfn_core::{
-    api::{arg_data, caller, now},
-    over, over_async, stable,
+    api::{
+        arg_data,
+        caller,
+        now,
+    },
+    over,
+    over_async,
+    stable,
 };
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_gtc::{
-    pb::v1::{AccountState, Gtc},
+    pb::v1::{
+        AccountState,
+        Gtc,
+    },
     LOG_PREFIX,
 };
 use ic_nns_gtc_accounts::FORWARD_WHITELIST;
 use prost::Message;
-use std::{ptr::addr_of_mut, time::SystemTime};
+use std::{
+    ptr::addr_of_mut,
+    time::SystemTime,
+};
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;

@@ -1,7 +1,14 @@
-use crate::pb::v1::{AccountState, Gtc, TransferredNeuron};
+use crate::pb::v1::{
+    AccountState,
+    Gtc,
+    TransferredNeuron,
+};
 use dfn_candid::candid;
 use dfn_core::{
-    api::{call, now},
+    api::{
+        call,
+        now,
+    },
     println,
 };
 use ic_base_types::PrincipalId;
@@ -9,8 +16,14 @@ use ic_crypto_secp256k1::PublicKey;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance_api::pb::v1::GovernanceError;
-use sha3::{Digest, Keccak256};
-use std::{collections::HashSet, time::SystemTime};
+use sha3::{
+    Digest,
+    Keccak256,
+};
+use std::{
+    collections::HashSet,
+    time::SystemTime,
+};
 
 pub mod pb;
 
@@ -308,9 +321,16 @@ fn public_key_to_principal(public_key: &PublicKey) -> PrincipalId {
 }
 
 pub mod test_constants {
-    use super::{decode_hex_public_key, public_key_to_gtc_address, public_key_to_principal};
+    use super::{
+        decode_hex_public_key,
+        public_key_to_gtc_address,
+        public_key_to_principal,
+    };
     use ic_base_types::PrincipalId;
-    use ic_crypto_secp256k1::{PrivateKey, PublicKey};
+    use ic_crypto_secp256k1::{
+        PrivateKey,
+        PublicKey,
+    };
     use std::str::FromStr;
 
     /// An identity used to make calls to the GTC canister in tests

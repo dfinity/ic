@@ -1,13 +1,27 @@
-use crate::{ReplicatedState, StateError};
+use crate::{
+    ReplicatedState,
+    StateError,
+};
 use ic_btc_replica_types::{
-    BitcoinAdapterResponse, BitcoinAdapterResponseWrapper, BlockBlob,
-    GetSuccessorsResponseComplete, GetSuccessorsResponsePartial,
+    BitcoinAdapterResponse,
+    BitcoinAdapterResponseWrapper,
+    BlockBlob,
+    GetSuccessorsResponseComplete,
+    GetSuccessorsResponsePartial,
 };
 use ic_error_types::RejectCode;
-use ic_management_canister_types::{BitcoinGetSuccessorsResponse, EmptyBlob, Payload as _};
+use ic_management_canister_types::{
+    BitcoinGetSuccessorsResponse,
+    EmptyBlob,
+    Payload as _,
+};
 use ic_types::{
     batch::ConsensusResponse,
-    messages::{CallbackId, Payload, RejectContext},
+    messages::{
+        CallbackId,
+        Payload,
+        RejectContext,
+    },
 };
 use std::cmp::min;
 

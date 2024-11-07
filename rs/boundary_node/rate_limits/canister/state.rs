@@ -3,13 +3,32 @@ use mockall::automock;
 use rate_limits_api::IncidentId;
 
 use crate::{
-    add_config::{INIT_SCHEMA_VERSION, INIT_VERSION},
-    storage::{
-        LocalRef, StableMap, StorableConfig, StorableIncidentId, StorableIncidentMetadata,
-        StorablePrincipal, StorableRuleId, StorableRuleMetadata, StorableVersion,
-        AUTHORIZED_PRINCIPAL, CONFIGS, INCIDENTS, RULES,
+    add_config::{
+        INIT_SCHEMA_VERSION,
+        INIT_VERSION,
     },
-    types::{InputConfig, InputRule, RuleId, Timestamp, Version},
+    storage::{
+        LocalRef,
+        StableMap,
+        StorableConfig,
+        StorableIncidentId,
+        StorableIncidentMetadata,
+        StorablePrincipal,
+        StorableRuleId,
+        StorableRuleMetadata,
+        StorableVersion,
+        AUTHORIZED_PRINCIPAL,
+        CONFIGS,
+        INCIDENTS,
+        RULES,
+    },
+    types::{
+        InputConfig,
+        InputRule,
+        RuleId,
+        Timestamp,
+        Version,
+    },
 };
 
 #[automock]

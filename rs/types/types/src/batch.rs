@@ -8,31 +8,62 @@ mod self_validating;
 mod xnet;
 
 pub use self::{
-    canister_http::{CanisterHttpPayload, MAX_CANISTER_HTTP_PAYLOAD_SIZE},
+    canister_http::{
+        CanisterHttpPayload,
+        MAX_CANISTER_HTTP_PAYLOAD_SIZE,
+    },
     execution_environment::{
-        CanisterQueryStats, LocalQueryStats, QueryStats, QueryStatsPayload, RawQueryStats,
+        CanisterQueryStats,
+        LocalQueryStats,
+        QueryStats,
+        QueryStatsPayload,
+        RawQueryStats,
         TotalQueryStats,
     },
-    ingress::{IngressPayload, IngressPayloadError},
-    self_validating::{SelfValidatingPayload, MAX_BITCOIN_PAYLOAD_IN_BYTES},
+    ingress::{
+        IngressPayload,
+        IngressPayloadError,
+    },
+    self_validating::{
+        SelfValidatingPayload,
+        MAX_BITCOIN_PAYLOAD_IN_BYTES,
+    },
     xnet::XNetPayload,
 };
 use crate::{
     consensus::idkg::PreSigId,
     crypto::canister_threshold_sig::MasterPublicKey,
-    messages::{CallbackId, Payload, SignedIngress},
+    messages::{
+        CallbackId,
+        Payload,
+        SignedIngress,
+    },
     xnet::CertifiedStreamSlice,
-    Height, Randomness, RegistryVersion, ReplicaVersion, SubnetId, Time,
+    Height,
+    Randomness,
+    RegistryVersion,
+    ReplicaVersion,
+    SubnetId,
+    Time,
 };
 use ic_base_types::NodeId;
 use ic_btc_replica_types::BitcoinAdapterResponse;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types::MasterPublicKeyId;
-use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
-use serde::{Deserialize, Serialize};
+use ic_protobuf::{
+    proxy::ProxyDecodeError,
+    types::v1 as pb,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{
+        BTreeMap,
+        BTreeSet,
+    },
     convert::TryInto,
     hash::Hash,
 };

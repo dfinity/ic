@@ -3,17 +3,27 @@ use super::*;
 use crate::certified_slice_pool::CertifiedSliceError;
 use assert_matches::assert_matches;
 use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
-use ic_interfaces::messaging::{InvalidXNetPayload, XNetPayloadValidationFailure};
+use ic_interfaces::messaging::{
+    InvalidXNetPayload,
+    XNetPayloadValidationFailure,
+};
 use ic_interfaces_certified_stream_store_mocks::MockCertifiedStreamStore;
 use ic_interfaces_state_manager::StateManagerError;
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
-    fetch_histogram_stats, fetch_histogram_vec_count, fetch_int_counter_vec, metric_vec,
-    HistogramStats, MetricVec,
+    fetch_histogram_stats,
+    fetch_histogram_vec_count,
+    fetch_int_counter_vec,
+    metric_vec,
+    HistogramStats,
+    MetricVec,
 };
-use ic_test_utilities_types::ids::{SUBNET_1, SUBNET_2};
+use ic_test_utilities_types::ids::{
+    SUBNET_1,
+    SUBNET_2,
+};
 use maplit::btreemap;
 use mockall::predicate::eq;
 

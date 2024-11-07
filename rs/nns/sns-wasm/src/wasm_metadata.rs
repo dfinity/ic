@@ -1,6 +1,8 @@
 use crate::pb::v1::{
-    get_wasm_metadata_response, GetWasmMetadataRequest as GetWasmMetadataRequestPb,
-    GetWasmMetadataResponse as GetWasmMetadataResponsePb, MetadataSection as MetadataSectionPb,
+    get_wasm_metadata_response,
+    GetWasmMetadataRequest as GetWasmMetadataRequestPb,
+    GetWasmMetadataResponse as GetWasmMetadataResponsePb,
+    MetadataSection as MetadataSectionPb,
     SnsWasmError as SnsWasmErrorPb,
 };
 
@@ -106,7 +108,10 @@ impl TryFrom<MetadataSectionPb> for MetadataSection {
 
 impl From<Result<Vec<MetadataSection>, String>> for GetWasmMetadataResponsePb {
     fn from(src: Result<Vec<MetadataSection>, String>) -> Self {
-        use get_wasm_metadata_response::{Ok, Result};
+        use get_wasm_metadata_response::{
+            Ok,
+            Result,
+        };
         let result = match src {
             Err(message) => Result::Error(SnsWasmErrorPb { message }),
             Ok(sections) => Result::Ok(Ok {

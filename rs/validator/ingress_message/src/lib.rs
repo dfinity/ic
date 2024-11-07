@@ -1,8 +1,14 @@
 //! A standalone crate for validating an [`HttpRequest`] according to the
 //! [Internet Computer Specification](https://internetcomputer.org/docs/current/references/ic-interface-spec#http-interface).
 use ic_types::messages::HttpRequest;
-use ic_types::{CanisterId, UserId};
-use std::fmt::{Display, Formatter};
+use ic_types::{
+    CanisterId,
+    UserId,
+};
+use std::fmt::{
+    Display,
+    Formatter,
+};
 
 mod internal;
 

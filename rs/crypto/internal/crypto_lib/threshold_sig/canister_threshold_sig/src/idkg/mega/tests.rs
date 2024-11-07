@@ -1,4 +1,9 @@
-use crate::{CanisterThresholdError, IDkgDealingInternal, MEGaPrivateKey, SecretShares};
+use crate::{
+    CanisterThresholdError,
+    IDkgDealingInternal,
+    MEGaPrivateKey,
+    SecretShares,
+};
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 

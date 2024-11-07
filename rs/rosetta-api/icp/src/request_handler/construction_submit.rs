@@ -1,9 +1,19 @@
 use crate::errors::ApiError;
-use crate::models::{ConstructionSubmitRequest, ConstructionSubmitResponse, SignedTransaction};
+use crate::models::{
+    ConstructionSubmitRequest,
+    ConstructionSubmitResponse,
+    SignedTransaction,
+};
 use crate::request::transaction_operation_results::TransactionOperationResults;
 use crate::request::transaction_results::TransactionResults;
-use crate::request_handler::{verify_network_id, RosettaRequestHandler};
-use crate::transaction_id::{self, TransactionIdentifier};
+use crate::request_handler::{
+    verify_network_id,
+    RosettaRequestHandler,
+};
+use crate::transaction_id::{
+    self,
+    TransactionIdentifier,
+};
 use std::str::FromStr;
 
 impl RosettaRequestHandler {

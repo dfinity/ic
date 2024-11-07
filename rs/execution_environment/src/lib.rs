@@ -16,16 +16,35 @@ pub mod util;
 
 use crate::ingress_filter::IngressFilterServiceImpl;
 pub use execution_environment::{
-    as_num_instructions, as_round_instructions, execute_canister, CompilationCostHandling,
-    ExecuteMessageResult, ExecutionEnvironment, ExecutionResponse, RoundInstructions, RoundLimits,
+    as_num_instructions,
+    as_round_instructions,
+    execute_canister,
+    CompilationCostHandling,
+    ExecuteMessageResult,
+    ExecutionEnvironment,
+    ExecutionResponse,
+    RoundInstructions,
+    RoundLimits,
 };
-pub use history::{IngressHistoryReaderImpl, IngressHistoryWriterImpl};
-pub use hypervisor::{Hypervisor, HypervisorMetrics};
+pub use history::{
+    IngressHistoryReaderImpl,
+    IngressHistoryWriterImpl,
+};
+pub use hypervisor::{
+    Hypervisor,
+    HypervisorMetrics,
+};
 use ic_base_types::PrincipalId;
-use ic_config::{execution_environment::Config, subnet_config::SchedulerConfig};
+use ic_config::{
+    execution_environment::Config,
+    subnet_config::SchedulerConfig,
+};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_interfaces::execution_environment::{
-    IngressFilterService, IngressHistoryReader, IngressHistoryWriter, QueryExecutionService,
+    IngressFilterService,
+    IngressHistoryReader,
+    IngressHistoryWriter,
+    QueryExecutionService,
     Scheduler,
 };
 use ic_interfaces_state_manager::StateReader;
@@ -34,14 +53,26 @@ use ic_metrics::MetricsRegistry;
 use ic_query_stats::QueryStatsPayloadBuilderParams;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
-use ic_replicated_state::{CallOrigin, NetworkTopology, ReplicatedState};
+use ic_replicated_state::{
+    CallOrigin,
+    NetworkTopology,
+    ReplicatedState,
+};
 use ic_types::{
-    messages::{CallContextId, MessageId},
-    Height, SubnetId,
+    messages::{
+        CallContextId,
+        MessageId,
+    },
+    Height,
+    SubnetId,
 };
 pub use metrics::IngressFilterMetrics;
 pub use query_handler::InternalHttpQueryHandler;
-use query_handler::{HttpQueryHandler, QueryScheduler, QuerySchedulerFlag};
+use query_handler::{
+    HttpQueryHandler,
+    QueryScheduler,
+    QuerySchedulerFlag,
+};
 pub use scheduler::RoundSchedule;
 use scheduler::SchedulerImpl;
 use std::sync::Arc;

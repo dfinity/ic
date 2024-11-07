@@ -1,30 +1,56 @@
-use super::{parse_principal_id, verify_principal_ids};
+use super::{
+    parse_principal_id,
+    verify_principal_ids,
+};
 use crate::{
-    common::{into_cbor, Cbor, WithTimeout},
-    HttpError, ReplicaHealthStatus,
+    common::{
+        into_cbor,
+        Cbor,
+        WithTimeout,
+    },
+    HttpError,
+    ReplicaHealthStatus,
 };
 
 use axum::{
     body::Body,
     extract::State,
-    response::{IntoResponse, Response},
+    response::{
+        IntoResponse,
+        Response,
+    },
     Router,
 };
 use crossbeam::atomic::AtomicCell;
 use http::Request;
 use hyper::StatusCode;
-use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path, TooLongPathError};
+use ic_crypto_tree_hash::{
+    sparse_labeled_tree_from_paths,
+    Label,
+    Path,
+    TooLongPathError,
+};
 use ic_interfaces_state_manager::StateReader;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     messages::{
-        Blob, Certificate, CertificateDelegation, HttpReadStateContent, HttpReadStateResponse,
-        HttpRequest, HttpRequestEnvelope, ReadState,
+        Blob,
+        Certificate,
+        CertificateDelegation,
+        HttpReadStateContent,
+        HttpReadStateResponse,
+        HttpRequest,
+        HttpRequestEnvelope,
+        ReadState,
     },
-    CanisterId, PrincipalId,
+    CanisterId,
+    PrincipalId,
 };
 use std::{
-    convert::{Infallible, TryFrom},
+    convert::{
+        Infallible,
+        TryFrom,
+    },
     sync::Arc,
 };
 use tokio::sync::OnceCell;
@@ -213,8 +239,14 @@ fn verify_paths(paths: &[Path], effective_principal_id: PrincipalId) -> Result<(
 #[cfg(test)]
 mod test {
     use super::*;
-    use ic_crypto_tree_hash::{Label, Path};
-    use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id};
+    use ic_crypto_tree_hash::{
+        Label,
+        Path,
+    };
+    use ic_test_utilities_types::ids::{
+        canister_test_id,
+        subnet_test_id,
+    };
     use serde_bytes::ByteBuf;
 
     #[test]

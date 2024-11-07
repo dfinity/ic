@@ -1,16 +1,31 @@
 use crate::{
-    convert, convert::principal_id_from_public_key_or_principal, errors::ApiError, models,
-    models::seconds::Seconds, request_types::*,
+    convert,
+    convert::principal_id_from_public_key_or_principal,
+    errors::ApiError,
+    models,
+    models::seconds::Seconds,
+    request_types::*,
 };
 use dfn_candid::CandidOne;
-use ic_nns_governance_api::pb::v1::manage_neuron::{self, configure, Command, Configure};
+use ic_nns_governance_api::pb::v1::manage_neuron::{
+    self,
+    configure,
+    Command,
+    Configure,
+};
 use ic_types::PrincipalId;
 use icp_ledger::Tokens;
 use on_wire::FromWire;
-use std::convert::{TryFrom, TryInto};
+use std::convert::{
+    TryFrom,
+    TryInto,
+};
 
 use crate::models::Operation;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 pub mod request_result;
 mod serde_transfer;

@@ -2,37 +2,78 @@
 use crate::{
     consensus::{
         metrics::BlockMakerMetrics,
-        status::{self, Status},
+        status::{
+            self,
+            Status,
+        },
         ConsensusCrypto,
     },
     dkg::payload_builder::create_payload as create_dkg_payload,
-    idkg::{self, metrics::IDkgPayloadMetrics},
+    idkg::{
+        self,
+        metrics::IDkgPayloadMetrics,
+    },
 };
 use ic_consensus_utils::{
-    find_lowest_ranked_non_disqualified_proposals, get_notarization_delay_settings,
-    get_subnet_record, membership::Membership, pool_reader::PoolReader,
+    find_lowest_ranked_non_disqualified_proposals,
+    get_notarization_delay_settings,
+    get_subnet_record,
+    membership::Membership,
+    pool_reader::PoolReader,
 };
 use ic_interfaces::{
-    consensus::PayloadBuilder, dkg::DkgPool, idkg::IDkgPool, time_source::TimeSource,
+    consensus::PayloadBuilder,
+    dkg::DkgPool,
+    idkg::IDkgPool,
+    time_source::TimeSource,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
-use ic_logger::{debug, error, trace, warn, ReplicaLogger};
+use ic_logger::{
+    debug,
+    error,
+    trace,
+    warn,
+    ReplicaLogger,
+};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    batch::{BatchPayload, ValidationContext},
+    batch::{
+        BatchPayload,
+        ValidationContext,
+    },
     consensus::{
-        block_maker::SubnetRecords, dkg, hashed, Block, BlockMetadata, BlockPayload, BlockProposal,
-        DataPayload, HasHeight, HasRank, HashedBlock, Payload, RandomBeacon, Rank, SummaryPayload,
+        block_maker::SubnetRecords,
+        dkg,
+        hashed,
+        Block,
+        BlockMetadata,
+        BlockPayload,
+        BlockProposal,
+        DataPayload,
+        HasHeight,
+        HasRank,
+        HashedBlock,
+        Payload,
+        RandomBeacon,
+        Rank,
+        SummaryPayload,
     },
     replica_config::ReplicaConfig,
     time::current_time,
-    CountBytes, Height, NodeId, RegistryVersion, SubnetId,
+    CountBytes,
+    Height,
+    NodeId,
+    RegistryVersion,
+    SubnetId,
 };
 use num_traits::ops::saturating::SaturatingSub;
 use std::{
-    sync::{Arc, RwLock},
+    sync::{
+        Arc,
+        RwLock,
+    },
     time::Duration,
 };
 
@@ -609,19 +650,36 @@ mod tests {
     use crate::idkg::test_utils::create_idkg_pool;
 
     use super::*;
-    use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies, MockPayloadBuilder};
+    use ic_consensus_mocks::{
+        dependencies_with_subnet_params,
+        Dependencies,
+        MockPayloadBuilder,
+    };
     use ic_interfaces::consensus_pool::ConsensusPool;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
-    use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_registry::{
+        add_subnet_record,
+        SubnetRecordBuilder,
+    };
+    use ic_test_utilities_types::ids::{
+        node_test_id,
+        subnet_test_id,
+    };
     use ic_types::{
-        consensus::{dkg, HasHeight, HasVersion},
+        consensus::{
+            dkg,
+            HasHeight,
+            HasVersion,
+        },
         crypto::CryptoHash,
         *,
     };
     use rstest::rstest;
-    use std::sync::{Arc, RwLock};
+    use std::sync::{
+        Arc,
+        RwLock,
+    };
 
     #[test]
     fn test_block_maker() {

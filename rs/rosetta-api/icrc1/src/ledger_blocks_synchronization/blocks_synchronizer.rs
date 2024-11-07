@@ -1,16 +1,33 @@
 #![allow(clippy::disallowed_types)]
 use crate::common::storage::types::RosettaBlock;
 use crate::common::{
-    storage::storage_client::StorageClient, utils::utils::create_progress_bar_if_needed,
+    storage::storage_client::StorageClient,
+    utils::utils::create_progress_bar_if_needed,
 };
-use anyhow::{bail, Context};
-use candid::{Decode, Encode, Nat};
+use anyhow::{
+    bail,
+    Context,
+};
+use candid::{
+    Decode,
+    Encode,
+    Nat,
+};
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
-use icrc_ledger_types::icrc3::blocks::{BlockRange, GetBlocksRequest, GetBlocksResponse};
+use icrc_ledger_types::icrc3::blocks::{
+    BlockRange,
+    GetBlocksRequest,
+    GetBlocksResponse,
+};
 use num_traits::ToPrimitive;
 use serde_bytes::ByteBuf;
-use std::{cmp, collections::HashMap, ops::RangeInclusive, sync::Arc};
+use std::{
+    cmp,
+    collections::HashMap,
+    ops::RangeInclusive,
+    sync::Arc,
+};
 use tokio::sync::Mutex as AsyncMutex;
 use tracing::info;
 

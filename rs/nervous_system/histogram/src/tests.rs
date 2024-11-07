@@ -2,7 +2,11 @@ use super::*;
 
 use ic_metrics_encoder::MetricsEncoder;
 use pretty_assertions::assert_eq;
-use prometheus_parse::{HistogramCount, Scrape, Value};
+use prometheus_parse::{
+    HistogramCount,
+    Scrape,
+    Value,
+};
 use std::collections::HashMap;
 
 #[test]

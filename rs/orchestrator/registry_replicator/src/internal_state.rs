@@ -1,28 +1,65 @@
-use ic_interfaces_registry::{RegistryClient, ZERO_REGISTRY_VERSION};
-use ic_logger::{info, warn, ReplicaLogger};
+use ic_interfaces_registry::{
+    RegistryClient,
+    ZERO_REGISTRY_VERSION,
+};
+use ic_logger::{
+    info,
+    warn,
+    ReplicaLogger,
+};
 use ic_protobuf::{
     registry::{
         node::v1::ConnectionEndpoint,
         routing_table::v1::RoutingTable as PbRoutingTable,
-        subnet::v1::{SubnetListRecord, SubnetRecord, SubnetType},
+        subnet::v1::{
+            SubnetListRecord,
+            SubnetRecord,
+            SubnetType,
+        },
     },
-    types::v1::{PrincipalId as PrincipalIdProto, SubnetId as SubnetIdProto},
+    types::v1::{
+        PrincipalId as PrincipalIdProto,
+        SubnetId as SubnetIdProto,
+    },
 };
 use ic_registry_client_helpers::{
     crypto::CryptoRegistry,
     routing_table::RoutingTableRegistry,
-    subnet::{SubnetRegistry, SubnetTransportRegistry},
+    subnet::{
+        SubnetRegistry,
+        SubnetTransportRegistry,
+    },
 };
 use ic_registry_keys::{
-    make_routing_table_record_key, make_subnet_list_record_key, make_subnet_record_key,
+    make_routing_table_record_key,
+    make_subnet_list_record_key,
+    make_subnet_record_key,
     ROOT_SUBNET_ID_KEY,
 };
-use ic_registry_local_store::{Changelog, ChangelogEntry, KeyMutation, LocalStore};
+use ic_registry_local_store::{
+    Changelog,
+    ChangelogEntry,
+    KeyMutation,
+    LocalStore,
+};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
-use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
-use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, NodeId, RegistryVersion, SubnetId};
+use ic_registry_routing_table::{
+    CanisterIdRange,
+    RoutingTable,
+};
+use ic_types::{
+    crypto::threshold_sig::ThresholdSigPublicKey,
+    NodeId,
+    RegistryVersion,
+    SubnetId,
+};
 use std::{
-    collections::BTreeMap, convert::TryFrom, fmt::Debug, net::IpAddr, str::FromStr, sync::Arc,
+    collections::BTreeMap,
+    convert::TryFrom,
+    fmt::Debug,
+    net::IpAddr,
+    str::FromStr,
+    sync::Arc,
     time::Duration,
 };
 use url::Url;

@@ -1,12 +1,33 @@
 use crate::memory::push_entry;
-use crate::memory::{EntryType, TVL_TIMESERIES};
-use crate::state::{mutate_state, read_state, replace_state};
-use crate::types::{
-    Asset, AssetClass, GetExchangeRateRequest, GetExchangeRateResult, GovernanceCachedMetrics,
-    GovernanceError, TvlArgs, TvlResult, TvlResultError,
+use crate::memory::{
+    EntryType,
+    TVL_TIMESERIES,
 };
-use candid::utils::{ArgumentDecoder, ArgumentEncoder};
-use candid::{CandidType, Nat, Principal};
+use crate::state::{
+    mutate_state,
+    read_state,
+    replace_state,
+};
+use crate::types::{
+    Asset,
+    AssetClass,
+    GetExchangeRateRequest,
+    GetExchangeRateResult,
+    GovernanceCachedMetrics,
+    GovernanceError,
+    TvlArgs,
+    TvlResult,
+    TvlResultError,
+};
+use candid::utils::{
+    ArgumentDecoder,
+    ArgumentEncoder,
+};
+use candid::{
+    CandidType,
+    Nat,
+    Principal,
+};
 use ic_base_types::PrincipalId;
 use state::TvlState;
 use std::str::FromStr;

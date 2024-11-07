@@ -1,12 +1,24 @@
 //! ICCSA (Internet Computer Canister Signature Algorithm) API
-use crate::types::{PublicKey, PublicKeyBytes, Signature, SignatureBytes};
+use crate::types::{
+    PublicKey,
+    PublicKeyBytes,
+    Signature,
+    SignatureBytes,
+};
 use ic_certification::CertificateValidationError;
 use ic_crypto_internal_basic_sig_der_utils as der_utils;
 use ic_crypto_sha2::Sha256;
-use ic_crypto_tree_hash::{Digest, LabeledTree};
+use ic_crypto_tree_hash::{
+    Digest,
+    LabeledTree,
+};
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::{
-    crypto::{AlgorithmId, CryptoError, CryptoResult},
+    crypto::{
+        AlgorithmId,
+        CryptoError,
+        CryptoResult,
+    },
     CanisterId,
 };
 use std::convert::TryFrom;

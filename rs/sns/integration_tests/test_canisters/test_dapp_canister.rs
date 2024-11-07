@@ -1,5 +1,8 @@
 use dfn_candid::candid_one;
-use dfn_core::{over, println};
+use dfn_core::{
+    over,
+    println,
+};
 
 fn main() {}
 

@@ -1,16 +1,42 @@
 use ic_config::execution_environment::Config;
-use ic_error_types::{ErrorCode, RejectCode};
-use ic_interfaces::execution_environment::{
-    IngressHistoryError, IngressHistoryReader, IngressHistoryWriter,
+use ic_error_types::{
+    ErrorCode,
+    RejectCode,
 };
-use ic_interfaces_state_manager::{StateManagerError, StateReader};
-use ic_logger::{fatal, ReplicaLogger};
-use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+use ic_interfaces::execution_environment::{
+    IngressHistoryError,
+    IngressHistoryReader,
+    IngressHistoryWriter,
+};
+use ic_interfaces_state_manager::{
+    StateManagerError,
+    StateReader,
+};
+use ic_logger::{
+    fatal,
+    ReplicaLogger,
+};
+use ic_metrics::{
+    buckets::decimal_buckets,
+    MetricsRegistry,
+};
 use ic_replicated_state::ReplicatedState;
-use ic_types::{ingress::IngressState, ingress::IngressStatus, messages::MessageId, Height, Time};
-use prometheus::{Histogram, HistogramVec};
+use ic_types::{
+    ingress::IngressState,
+    ingress::IngressStatus,
+    messages::MessageId,
+    Height,
+    Time,
+};
+use prometheus::{
+    Histogram,
+    HistogramVec,
+};
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::{
+    Arc,
+    RwLock,
+};
 use std::time::Instant;
 use tokio::sync::mpsc::Sender;
 

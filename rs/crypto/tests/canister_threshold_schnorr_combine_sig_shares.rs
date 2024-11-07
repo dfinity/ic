@@ -1,6 +1,7 @@
 use assert_matches::assert_matches;
 use ic_crypto_test_utils_canister_threshold_sigs::{
-    random_crypto_component_not_in_receivers, schnorr::environment_with_sig_inputs,
+    random_crypto_component_not_in_receivers,
+    schnorr::environment_with_sig_inputs,
     schnorr_sig_share_from_each_receiver,
 };
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;

@@ -3,7 +3,10 @@ use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::{
     governance::Governance,
     pb::v1::{
-        manage_neuron, manage_neuron::NeuronIdOrSubaccount, ManageNeuron, ManageNeuronResponse,
+        manage_neuron,
+        manage_neuron::NeuronIdOrSubaccount,
+        ManageNeuron,
+        ManageNeuronResponse,
     },
 };
 

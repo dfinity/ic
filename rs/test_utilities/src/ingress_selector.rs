@@ -1,15 +1,25 @@
 use ic_interfaces::{
-    ingress_manager::{IngressPayloadValidationError, IngressSelector, IngressSetQuery},
+    ingress_manager::{
+        IngressPayloadValidationError,
+        IngressSelector,
+        IngressSetQuery,
+    },
     validation::ValidationResult,
 };
 use ic_types::{
     artifact::IngressMessageId,
-    batch::{IngressPayload, ValidationContext},
+    batch::{
+        IngressPayload,
+        ValidationContext,
+    },
     consensus::Payload,
     ingress::IngressSets,
     messages::SignedIngress,
     time::UNIX_EPOCH,
-    CountBytes, Height, NumBytes, Time,
+    CountBytes,
+    Height,
+    NumBytes,
+    Time,
 };
 use std::collections::VecDeque;
 use std::sync::Mutex;

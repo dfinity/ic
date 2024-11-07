@@ -1,7 +1,11 @@
 #[cfg(test)]
 mod tests;
 
-use crate::state::{mutate_state, State, TaskType};
+use crate::state::{
+    mutate_state,
+    State,
+    TaskType,
+};
 use candid::Principal;
 use std::collections::BTreeSet;
 use std::marker::PhantomData;

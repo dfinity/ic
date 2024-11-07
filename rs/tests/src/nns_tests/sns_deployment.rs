@@ -1,11 +1,26 @@
 use std::{
-    collections::{BTreeSet, HashMap},
+    collections::{
+        BTreeSet,
+        HashMap,
+    },
     str::FromStr,
-    time::{Duration, Instant},
+    time::{
+        Duration,
+        Instant,
+    },
 };
 
-use candid::{Decode, Nat, Principal};
-use ic_agent::{agent::EnvelopeContent, Agent, Identity, Signature};
+use candid::{
+    Decode,
+    Nat,
+    Principal,
+};
+use ic_agent::{
+    agent::EnvelopeContent,
+    Agent,
+    Identity,
+    Signature,
+};
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::ed25519_public_key_to_der;
 use ic_icrc1_test_utils::KeyPairGenerator;
@@ -15,61 +30,124 @@ use ic_nervous_system_proto::pb::v1::Canister;
 use ic_nns_governance_api::pb::v1::CreateServiceNervousSystem;
 use ic_rosetta_test_utils::EdKeypair;
 use ic_system_test_driver::{
-    canister_agent::{CanisterAgent, HasCanisterAgentCapability},
+    canister_agent::{
+        CanisterAgent,
+        HasCanisterAgentCapability,
+    },
     canister_api::{
-        CallMode, CanisterHttpRequestProvider, Icrc1RequestProvider, Icrc1TransferRequest,
-        NnsDappRequestProvider, Request, Response, SnsRequestProvider,
+        CallMode,
+        CanisterHttpRequestProvider,
+        Icrc1RequestProvider,
+        Icrc1TransferRequest,
+        NnsDappRequestProvider,
+        Request,
+        Response,
+        SnsRequestProvider,
     },
     canister_requests,
     driver::{
         farm::HostFeature,
-        prometheus_vm::{HasPrometheus, PrometheusVm},
+        prometheus_vm::{
+            HasPrometheus,
+            PrometheusVm,
+        },
         test_env::TestEnv,
         test_env_api::{
-            GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, IcNodeSnapshot,
-            NnsCustomizations, TEST_USER1_STARTING_TOKENS,
+            GetFirstHealthyNodeSnapshot,
+            HasPublicApiUrl,
+            HasTopologySnapshot,
+            IcNodeSnapshot,
+            NnsCustomizations,
+            TEST_USER1_STARTING_TOKENS,
         },
     },
     generic_workload_engine::{
         engine::Engine,
-        metrics::{LoadTestMetrics, LoadTestOutcome, RequestOutcome},
+        metrics::{
+            LoadTestMetrics,
+            LoadTestOutcome,
+            RequestOutcome,
+        },
     },
     sns_client::openchat_create_service_nervous_system_proposal,
-    types::{CanisterStatusResult, CreateCanisterResult},
+    types::{
+        CanisterStatusResult,
+        CreateCanisterResult,
+    },
     util::UniversalCanister,
 };
 use rosetta_core::models::RosettaSupportedKeyPair;
 
 use ic_sns_governance::pb::v1::governance::Mode;
 use ic_sns_swap::{
-    pb::v1::{new_sale_ticket_response, Lifecycle},
+    pb::v1::{
+        new_sale_ticket_response,
+        Lifecycle,
+    },
     swap::principal_to_subaccount,
 };
-use ic_types::{Cycles, Height};
-use ic_universal_canister::{management, wasm};
-use icp_ledger::{AccountIdentifier, Subaccount};
+use ic_types::{
+    Cycles,
+    Height,
+};
+use ic_universal_canister::{
+    management,
+    wasm,
+};
+use icp_ledger::{
+    AccountIdentifier,
+    Subaccount,
+};
 use icrc_ledger_agent::Icrc1Agent;
-use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
-use serde::{Deserialize, Serialize};
+use icrc_ledger_types::icrc1::{
+    account::Account,
+    transfer::TransferArg,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use slog::info;
 use tokio::runtime::Builder;
 
 use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_system_test_driver::{
-    sns_client::{SnsClient, SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S},
-    util::{assert_create_agent_with_identity, block_on},
+    sns_client::{
+        SnsClient,
+        SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S,
+    },
+    util::{
+        assert_create_agent_with_identity,
+        block_on,
+    },
 };
 
 use ic_system_test_driver::driver::{
-    ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
+    ic::{
+        AmountOfMemoryKiB,
+        ImageSizeGiB,
+        InternetComputer,
+        NrOfVCPUs,
+        Subnet,
+        VmResources,
+    },
     test_env::TestEnvAttribute,
 };
 
-use ic_nervous_system_common_test_keys::{TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL};
-use ic_nns_constants::{LEDGER_CANISTER_ID, ROOT_CANISTER_ID};
+use ic_nervous_system_common_test_keys::{
+    TEST_USER1_KEYPAIR,
+    TEST_USER1_PRINCIPAL,
+};
+use ic_nns_constants::{
+    LEDGER_CANISTER_ID,
+    ROOT_CANISTER_ID,
+};
 use ic_registry_subnet_type::SubnetType;
 
-use crate::nns_tests::{neurons_fund::NnsNfNeuron, sns_aggregator::AggregatorClient};
+use crate::nns_tests::{
+    neurons_fund::NnsNfNeuron,
+    sns_aggregator::AggregatorClient,
+};
 
 const WORKLOAD_GENERATION_DURATION: Duration = Duration::from_secs(60);
 

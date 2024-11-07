@@ -2,7 +2,10 @@
 use ic_crypto_tree_hash::MixedHashTree;
 use ic_types::messages::Blob;
 use ic_types::CanisterId;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 mod conversions;
 mod generic_traits;

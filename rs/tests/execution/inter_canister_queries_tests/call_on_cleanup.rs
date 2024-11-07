@@ -1,13 +1,19 @@
 use assert_matches::assert_matches;
 use ic_agent::{
-    agent::{RejectCode, RejectResponse},
+    agent::{
+        RejectCode,
+        RejectResponse,
+    },
     AgentError,
 };
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::GetFirstHealthyNodeSnapshot;
 use ic_system_test_driver::driver::test_env_api::HasPublicApiUrl;
 use ic_system_test_driver::util::*;
-use ic_universal_canister::{call_args, wasm};
+use ic_universal_canister::{
+    call_args,
+    wasm,
+};
 
 pub fn is_called_if_reply_traps(env: TestEnv) {
     let logger = env.logger();

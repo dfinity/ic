@@ -1,17 +1,39 @@
 use crate::{
-    metrics::{POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED},
-    pool_common::{HasLabel, PoolSection},
+    metrics::{
+        POOL_TYPE_UNVALIDATED,
+        POOL_TYPE_VALIDATED,
+    },
+    pool_common::{
+        HasLabel,
+        PoolSection,
+    },
 };
 use ic_interfaces::{
-    dkg::{ChangeAction, DkgPool, Mutations},
+    dkg::{
+        ChangeAction,
+        DkgPool,
+        Mutations,
+    },
     p2p::consensus::{
-        ArtifactTransmit, ArtifactTransmits, ArtifactWithOpt, MutablePool, UnvalidatedArtifact,
+        ArtifactTransmit,
+        ArtifactTransmits,
+        ArtifactWithOpt,
+        MutablePool,
+        UnvalidatedArtifact,
         ValidatedPoolReader,
     },
 };
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{
+    warn,
+    ReplicaLogger,
+};
 use ic_metrics::MetricsRegistry;
-use ic_types::{consensus, consensus::dkg, consensus::dkg::DkgMessageId, Height};
+use ic_types::{
+    consensus,
+    consensus::dkg,
+    consensus::dkg::DkgMessageId,
+    Height,
+};
 use prometheus::IntCounter;
 
 /// The DkgPool is used to store messages that are exchanged between replicas in
@@ -192,9 +214,17 @@ mod test {
     use ic_interfaces::dkg::DkgPool;
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities_consensus::fake::FakeSigner;
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::{
+        node_test_id,
+        subnet_test_id,
+    };
     use ic_types::{
-        crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+        crypto::threshold_sig::ni_dkg::{
+            NiDkgDealing,
+            NiDkgId,
+            NiDkgTag,
+            NiDkgTargetSubnet,
+        },
         signature::BasicSignature,
         time::UNIX_EPOCH,
         NodeId,

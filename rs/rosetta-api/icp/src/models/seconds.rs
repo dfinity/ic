@@ -1,5 +1,11 @@
-use serde::{Deserialize, Serialize};
-use std::time::{Duration, SystemTime};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use std::time::{
+    Duration,
+    SystemTime,
+};
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 /// A number of seconds since Unix epoch.

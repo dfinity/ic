@@ -1,67 +1,140 @@
 use assert_matches::assert_matches;
 use async_trait::async_trait;
-use candid::{types::number::Nat, Encode};
-use canister_test::{Canister, Runtime};
+use candid::{
+    types::number::Nat,
+    Encode,
+};
+use canister_test::{
+    Canister,
+    Runtime,
+};
 use dfn_candid::candid_one;
 use ic_base_types::CanisterId;
 use ic_canister_client_sender::Sender;
 use ic_crypto_sha2::Sha256;
 use ic_ledger_core::{
-    tokens::{CheckedAdd, TOKEN_SUBDIVIDABLE_BY},
+    tokens::{
+        CheckedAdd,
+        TOKEN_SUBDIVIDABLE_BY,
+    },
     Tokens,
 };
 use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
 use ic_nervous_system_common::{
-    cmc::FakeCmc, i2d, NervousSystemError, DEFAULT_TRANSFER_FEE, ONE_YEAR_SECONDS,
+    cmc::FakeCmc,
+    i2d,
+    NervousSystemError,
+    DEFAULT_TRANSFER_FEE,
+    ONE_YEAR_SECONDS,
 };
 use ic_nervous_system_common_test_keys::{
-    TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR, TEST_USER3_KEYPAIR, TEST_USER4_KEYPAIR,
+    TEST_USER1_KEYPAIR,
+    TEST_USER2_KEYPAIR,
+    TEST_USER3_KEYPAIR,
+    TEST_USER4_KEYPAIR,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    itest_helpers::{forward_call_via_universal_canister, set_up_universal_canister, NnsCanisters},
+    itest_helpers::{
+        forward_call_via_universal_canister,
+        set_up_universal_canister,
+        NnsCanisters,
+    },
 };
 use ic_sns_governance::{
     governance::Governance,
-    neuron::{NeuronState, DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER},
+    neuron::{
+        NeuronState,
+        DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
+    },
     pb::v1::{
-        governance::{self, SnsMetadata},
+        governance::{
+            self,
+            SnsMetadata,
+        },
         governance_error::ErrorType,
         manage_neuron::{
-            claim_or_refresh::{By, MemoAndController},
+            claim_or_refresh::{
+                By,
+                MemoAndController,
+            },
             configure::Operation,
-            AddNeuronPermissions, ClaimOrRefresh, Command, Configure, DisburseMaturity,
-            IncreaseDissolveDelay, RemoveNeuronPermissions, StakeMaturity,
+            AddNeuronPermissions,
+            ClaimOrRefresh,
+            Command,
+            Configure,
+            DisburseMaturity,
+            IncreaseDissolveDelay,
+            RemoveNeuronPermissions,
+            StakeMaturity,
         },
         manage_neuron_response::Command as CommandResponse,
-        neuron::DissolveState::{self, DissolveDelaySeconds},
+        neuron::DissolveState::{
+            self,
+            DissolveDelaySeconds,
+        },
         proposal::Action,
-        Account as AccountProto, Ballot, Empty, Governance as GovernanceProto, GovernanceError,
-        ListNeurons, ListNeuronsResponse, ManageNeuron, ManageNeuronResponse, Motion,
-        NervousSystemParameters, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
-        NeuronPermissionType, Proposal, ProposalData, ProposalId, ProposalRewardStatus,
-        RewardEvent, Vote, VotingRewardsParameters, WaitForQuietState,
+        Account as AccountProto,
+        Ballot,
+        Empty,
+        Governance as GovernanceProto,
+        GovernanceError,
+        ListNeurons,
+        ListNeuronsResponse,
+        ManageNeuron,
+        ManageNeuronResponse,
+        Motion,
+        NervousSystemParameters,
+        Neuron,
+        NeuronId,
+        NeuronPermission,
+        NeuronPermissionList,
+        NeuronPermissionType,
+        Proposal,
+        ProposalData,
+        ProposalId,
+        ProposalRewardStatus,
+        RewardEvent,
+        Vote,
+        VotingRewardsParameters,
+        WaitForQuietState,
     },
-    types::{test_helpers::NativeEnvironment, Environment},
+    types::{
+        test_helpers::NativeEnvironment,
+        Environment,
+    },
 };
 use ic_sns_test_utils::{
     icrc1,
     itest_helpers::{
-        local_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder, UserInfo, NONCE,
+        local_test_on_sns_subnet,
+        SnsCanisters,
+        SnsTestsInitPayloadBuilder,
+        UserInfo,
+        NONCE,
     },
     now_seconds,
 };
 use ic_types::PrincipalId;
 use icrc_ledger_types::icrc1::{
-    account::{Account, Subaccount},
-    transfer::{Memo, TransferArg},
+    account::{
+        Account,
+        Subaccount,
+    },
+    transfer::{
+        Memo,
+        TransferArg,
+    },
 };
 use maplit::btreemap;
 use rust_decimal_macros::dec;
 use std::{
     collections::HashSet,
     convert::TryInto,
-    iter::{zip, FromIterator},
+    iter::{
+        zip,
+        FromIterator,
+    },
     time::SystemTime,
 };
 

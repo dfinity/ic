@@ -1,21 +1,42 @@
 use std::collections::BTreeSet;
 
-use crate::{common::LOG_PREFIX, registry::Registry};
+use crate::{
+    common::LOG_PREFIX,
+    registry::Registry,
+};
 
-use candid::{CandidType, Deserialize};
+use candid::{
+    CandidType,
+    Deserialize,
+};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
-use ic_base_types::{PrincipalId, SubnetId};
+use ic_base_types::{
+    PrincipalId,
+    SubnetId,
+};
 use ic_protobuf::registry::{
-    replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
-    subnet::v1::{SubnetListRecord, SubnetRecord},
+    replica_version::v1::{
+        BlessedReplicaVersions,
+        ReplicaVersionRecord,
+    },
+    subnet::v1::{
+        SubnetListRecord,
+        SubnetRecord,
+    },
     unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
 };
 use ic_registry_keys::{
-    make_blessed_replica_versions_key, make_replica_version_key, make_subnet_list_record_key,
-    make_subnet_record_key, make_unassigned_nodes_config_record_key,
+    make_blessed_replica_versions_key,
+    make_replica_version_key,
+    make_subnet_list_record_key,
+    make_subnet_record_key,
+    make_unassigned_nodes_config_record_key,
 };
-use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation};
+use ic_registry_transport::pb::v1::{
+    registry_mutation,
+    RegistryMutation,
+};
 use prost::Message;
 use serde::Serialize;
 

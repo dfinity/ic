@@ -7,21 +7,46 @@
 //! can finish within the execution limit.
 
 use dfn_core::println;
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_nervous_system_common::dfn_core_stable_mem_utils::BufferedStableMemWriter;
 use ic_sns_governance::{
     governance::HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES,
     pb::v1::{
-        governance::{Mode, NeuronInFlightCommand, SnsMetadata},
-        nervous_system_function::{FunctionType, GenericNervousSystemFunction},
-        neuron::{DissolveState, Followees},
+        governance::{
+            Mode,
+            NeuronInFlightCommand,
+            SnsMetadata,
+        },
+        nervous_system_function::{
+            FunctionType,
+            GenericNervousSystemFunction,
+        },
+        neuron::{
+            DissolveState,
+            Followees,
+        },
         proposal::Action,
-        Ballot, Governance as GovernanceProto, Motion, NervousSystemFunction,
-        NervousSystemParameters, Neuron, NeuronId, NeuronPermission, NeuronPermissionType,
-        Proposal, ProposalData, ProposalId, WaitForQuietState,
+        Ballot,
+        Governance as GovernanceProto,
+        Motion,
+        NervousSystemFunction,
+        NervousSystemParameters,
+        Neuron,
+        NeuronId,
+        NeuronPermission,
+        NeuronPermissionType,
+        Proposal,
+        ProposalData,
+        ProposalId,
+        WaitForQuietState,
     },
     proposal::{
-        MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS, PROPOSAL_SUMMARY_BYTES_MAX, PROPOSAL_TITLE_BYTES_MAX,
+        MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
+        PROPOSAL_SUMMARY_BYTES_MAX,
+        PROPOSAL_TITLE_BYTES_MAX,
         PROPOSAL_URL_CHAR_MAX,
     },
     types::native_action_ids,
@@ -29,7 +54,11 @@ use ic_sns_governance::{
 use icrc_ledger_types::icrc1::account::Subaccount;
 use pretty_bytes::converter;
 use prost::Message;
-use rand::{rngs::StdRng, RngCore, SeedableRng};
+use rand::{
+    rngs::StdRng,
+    RngCore,
+    SeedableRng,
+};
 use std::collections::BTreeMap;
 
 const LOG_PREFIX: &str = "[Governance mem test] ";

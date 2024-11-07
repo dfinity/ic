@@ -1,4 +1,9 @@
-use ic_types::xnet::{RejectSignal, StreamFlags, StreamHeader, StreamIndex};
+use ic_types::xnet::{
+    RejectSignal,
+    StreamFlags,
+    StreamHeader,
+    StreamIndex,
+};
 use std::collections::VecDeque;
 
 /// Builder for StreamHeader objects.  Allows for creation of a default struct

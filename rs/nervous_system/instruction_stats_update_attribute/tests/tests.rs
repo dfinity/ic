@@ -1,5 +1,8 @@
 use ic_nervous_system_instruction_stats_update_attribute::update;
-use std::{cell::RefCell, collections::BTreeMap};
+use std::{
+    cell::RefCell,
+    collections::BTreeMap,
+};
 
 thread_local! {
     static WAS_CALLED: RefCell<Vec<&'static str>> = Default::default();

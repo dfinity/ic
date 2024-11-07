@@ -3,7 +3,10 @@ use ic_crypto_internal_threshold_sig_canister_threshold_sig::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_types::crypto::AlgorithmId;
 use ic_types::NumberOfNodes;
-use rand::{CryptoRng, Rng};
+use rand::{
+    CryptoRng,
+    Rng,
+};
 
 fn create_random_dealing<R: CryptoRng + Rng>(
     threshold: u32,

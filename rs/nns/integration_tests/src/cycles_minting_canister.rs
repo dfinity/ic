@@ -1,50 +1,117 @@
 use assert_matches::assert_matches;
-use candid::{Decode, Encode, Nat};
+use candid::{
+    Decode,
+    Encode,
+    Nat,
+};
 use canister_test::Canister;
 use cycles_minting_canister::{
-    CanisterSettingsArgs, ChangeSubnetTypeAssignmentArgs, CreateCanister, CreateCanisterError,
-    IcpXdrConversionRateCertifiedResponse, NotifyCreateCanister, NotifyError, NotifyErrorCode,
-    NotifyMintCyclesArg, NotifyMintCyclesSuccess, NotifyTopUp, SubnetListWithType,
-    SubnetTypesToSubnetsResponse, UpdateSubnetTypeArgs, BAD_REQUEST_CYCLES_PENALTY,
-    MEMO_CREATE_CANISTER, MEMO_MINT_CYCLES, MEMO_TOP_UP_CANISTER,
+    CanisterSettingsArgs,
+    ChangeSubnetTypeAssignmentArgs,
+    CreateCanister,
+    CreateCanisterError,
+    IcpXdrConversionRateCertifiedResponse,
+    NotifyCreateCanister,
+    NotifyError,
+    NotifyErrorCode,
+    NotifyMintCyclesArg,
+    NotifyMintCyclesSuccess,
+    NotifyTopUp,
+    SubnetListWithType,
+    SubnetTypesToSubnetsResponse,
+    UpdateSubnetTypeArgs,
+    BAD_REQUEST_CYCLES_PENALTY,
+    MEMO_CREATE_CANISTER,
+    MEMO_MINT_CYCLES,
+    MEMO_TOP_UP_CANISTER,
 };
 use dfn_candid::candid_one;
 use dfn_protobuf::protobuf;
 use ic_canister_client_sender::Sender;
-use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
+use ic_ledger_core::tokens::{
+    CheckedAdd,
+    CheckedSub,
+};
 // TODO(EXC-1687): remove temporary alias `Ic00CanisterSettingsArgs`.
 use ic_management_canister_types::{
-    CanisterIdRecord, CanisterInfoResponse, CanisterSettingsArgs as Ic00CanisterSettingsArgs,
-    CanisterSettingsArgsBuilder, CanisterStatusResultV2,
+    CanisterIdRecord,
+    CanisterInfoResponse,
+    CanisterSettingsArgs as Ic00CanisterSettingsArgs,
+    CanisterSettingsArgsBuilder,
+    CanisterStatusResultV2,
 };
 use ic_nervous_system_clients::canister_status::CanisterStatusResult;
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL,
-    TEST_USER2_PRINCIPAL, TEST_USER3_PRINCIPAL,
+    TEST_NEURON_1_ID,
+    TEST_NEURON_1_OWNER_KEYPAIR,
+    TEST_USER1_KEYPAIR,
+    TEST_USER1_PRINCIPAL,
+    TEST_USER2_PRINCIPAL,
+    TEST_USER3_PRINCIPAL,
 };
-use ic_nns_common::types::{NeuronId, ProposalId, UpdateIcpXdrConversionRatePayload};
+use ic_nns_common::types::{
+    NeuronId,
+    ProposalId,
+    UpdateIcpXdrConversionRatePayload,
+};
 use ic_nns_constants::{
-    CYCLES_LEDGER_CANISTER_ID, CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID,
-    LEDGER_CANISTER_INDEX_IN_NNS_SUBNET, ROOT_CANISTER_ID,
+    CYCLES_LEDGER_CANISTER_ID,
+    CYCLES_MINTING_CANISTER_ID,
+    GOVERNANCE_CANISTER_ID,
+    LEDGER_CANISTER_INDEX_IN_NNS_SUBNET,
+    ROOT_CANISTER_ID,
 };
-use ic_nns_governance_api::pb::v1::{NnsFunction, ProposalStatus};
+use ic_nns_governance_api::pb::v1::{
+    NnsFunction,
+    ProposalStatus,
+};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    governance::{submit_external_update_proposal, wait_for_final_state},
-    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
+    governance::{
+        submit_external_update_proposal,
+        wait_for_final_state,
+    },
+    itest_helpers::{
+        state_machine_test_on_nns_subnet,
+        NnsCanisters,
+    },
     neuron_helpers::get_neuron_1,
     state_test_helpers::{
-        cmc_set_default_authorized_subnetworks, set_up_universal_canister, setup_cycles_ledger,
-        setup_nns_canisters, state_machine_builder_for_nns_tests, update_with_sender,
+        cmc_set_default_authorized_subnetworks,
+        set_up_universal_canister,
+        setup_cycles_ledger,
+        setup_nns_canisters,
+        state_machine_builder_for_nns_tests,
+        update_with_sender,
     },
 };
-use ic_state_machine_tests::{StateMachine, WasmResult};
-use ic_test_utilities::universal_canister::{call_args, wasm};
-use ic_types::{CanisterId, Cycles, PrincipalId};
+use ic_state_machine_tests::{
+    StateMachine,
+    WasmResult,
+};
+use ic_test_utilities::universal_canister::{
+    call_args,
+    wasm,
+};
+use ic_types::{
+    CanisterId,
+    Cycles,
+    PrincipalId,
+};
 use ic_types_test_utils::ids::subnet_test_id;
 use icp_ledger::{
-    tokens_from_proto, AccountBalanceArgs, AccountIdentifier, BlockIndex, CyclesResponse, Memo,
-    NotifyCanisterArgs, SendArgs, Subaccount, Tokens, TransferArgs, TransferError,
+    tokens_from_proto,
+    AccountBalanceArgs,
+    AccountIdentifier,
+    BlockIndex,
+    CyclesResponse,
+    Memo,
+    NotifyCanisterArgs,
+    SendArgs,
+    Subaccount,
+    Tokens,
+    TransferArgs,
+    TransferError,
     DEFAULT_TRANSFER_FEE,
 };
 use icrc_ledger_types::icrc1::account::Account;

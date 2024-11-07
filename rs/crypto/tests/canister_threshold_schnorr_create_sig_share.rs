@@ -1,10 +1,15 @@
 use assert_matches::assert_matches;
 use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_crypto_test_utils_canister_threshold_sigs::{
-    generate_key_transcript, random_node_id_excluding, schnorr::environment_with_sig_inputs,
+    generate_key_transcript,
+    random_node_id_excluding,
+    schnorr::environment_with_sig_inputs,
 };
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use ic_interfaces::crypto::{IDkgProtocol, ThresholdSchnorrSigner};
+use ic_interfaces::crypto::{
+    IDkgProtocol,
+    ThresholdSchnorrSigner,
+};
 use ic_types::crypto::canister_threshold_sig::error::ThresholdSchnorrCreateSigShareError;
 use ic_types::crypto::AlgorithmId;
 use maplit::hashset;

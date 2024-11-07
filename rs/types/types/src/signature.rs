@@ -1,12 +1,22 @@
 use crate::{
-    crypto::threshold_sig::ni_dkg::NiDkgId, crypto::*, node_id_into_protobuf,
-    node_id_try_from_option, CountBytes, NodeId,
+    crypto::threshold_sig::ni_dkg::NiDkgId,
+    crypto::*,
+    node_id_into_protobuf,
+    node_id_try_from_option,
+    CountBytes,
+    NodeId,
 };
 use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{
+        try_from_option_field,
+        ProxyDecodeError,
+    },
     types::v1 as pb,
 };
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::collections::BTreeMap;
 
 /// BasicSignature captures basic signature on a value and the identity of the

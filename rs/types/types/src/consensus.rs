@@ -1,7 +1,10 @@
 //! Defines types used internally by consensus components.
 use crate::{
     artifact::ConsensusMessageId,
-    batch::{BatchPayload, ValidationContext},
+    batch::{
+        BatchPayload,
+        ValidationContext,
+    },
     crypto::threshold_sig::ni_dkg::NiDkgId,
     crypto::*,
     replica_version::ReplicaVersion,
@@ -12,12 +15,21 @@ use ic_base_types::subnet_id_try_from_option;
 use ic_base_types::PrincipalIdError;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_protobuf::types::v1::{self as pb, consensus_message::Msg};
+use ic_protobuf::types::v1::{
+    self as pb,
+    consensus_message::Msg,
+};
 use ic_protobuf::{
     log::block_log_entry::v1::BlockLogEntry,
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{
+        try_from_option_field,
+        ProxyDecodeError,
+    },
 };
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::cmp::PartialOrd;
 use std::convert::TryInto;
 use std::hash::Hash;
@@ -33,9 +45,18 @@ pub mod thunk;
 
 pub use catchup::*;
 use hashed::Hashed;
-pub use payload::{BlockPayload, DataPayload, Payload, PayloadType, SummaryPayload};
+pub use payload::{
+    BlockPayload,
+    DataPayload,
+    Payload,
+    PayloadType,
+    SummaryPayload,
+};
 
-use self::artifact::{IdentifiableArtifact, PbArtifact};
+use self::artifact::{
+    IdentifiableArtifact,
+    PbArtifact,
+};
 
 /// Abstract messages with height attribute
 pub trait HasHeight {

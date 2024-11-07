@@ -1,18 +1,37 @@
 use crate::{
-    governance::{Governance, MockEnvironment, ONE_MONTH_SECONDS},
-    pb::v1::{
-        governance::{seed_accounts::SeedAccount, SeedAccounts},
-        Governance as GovernanceProto, Neuron, NeuronType,
+    governance::{
+        Governance,
+        MockEnvironment,
+        ONE_MONTH_SECONDS,
     },
-    seed_accounts::{AccountState, SEED_NEURON_DISTRIBUTION_COUNT},
+    pb::v1::{
+        governance::{
+            seed_accounts::SeedAccount,
+            SeedAccounts,
+        },
+        Governance as GovernanceProto,
+        Neuron,
+        NeuronType,
+    },
+    seed_accounts::{
+        AccountState,
+        SEED_NEURON_DISTRIBUTION_COUNT,
+    },
 };
 use candid::Encode;
 use ic_base_types::PrincipalId;
-use ic_nervous_system_common::{cmc::MockCMC, ledger::MockIcpLedger, E8};
+use ic_nervous_system_common::{
+    cmc::MockCMC,
+    ledger::MockIcpLedger,
+    E8,
+};
 use ic_nns_common::pb::v1::NeuronId;
 use icp_ledger::Subaccount;
 use maplit::btreemap;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{
+    SystemTime,
+    UNIX_EPOCH,
+};
 
 fn create_mock_environment(now_timestamp_seconds: Option<u64>) -> MockEnvironment {
     let mut environment = MockEnvironment::new();

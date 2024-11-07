@@ -2,7 +2,10 @@
 
 use ic_metrics::buckets::decimal_buckets;
 use ic_metrics::MetricsRegistry;
-use prometheus::{HistogramVec, IntGauge};
+use prometheus::{
+    HistogramVec,
+    IntGauge,
+};
 
 pub(crate) struct Metrics {
     /// Most recent registry version fetched by the client

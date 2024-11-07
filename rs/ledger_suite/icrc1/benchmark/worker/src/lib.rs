@@ -1,11 +1,27 @@
-use candid::{CandidType, Nat, Principal};
-use ic_base_types::{CanisterId, PrincipalId};
-use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
+use candid::{
+    CandidType,
+    Nat,
+    Principal,
+};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
+use icrc_ledger_client_cdk::{
+    CdkRuntime,
+    ICRC1Client,
+};
 use icrc_ledger_types::icrc1::account::Account;
-use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg};
+use icrc_ledger_types::icrc1::transfer::{
+    Memo,
+    TransferArg,
+};
 use num_traits::ToPrimitive;
 use rand::RngCore;
-use rand_chacha::{rand_core::SeedableRng, ChaCha8Rng};
+use rand_chacha::{
+    rand_core::SeedableRng,
+    ChaCha8Rng,
+};
 use std::cell::RefCell;
 use std::cmp::min;
 

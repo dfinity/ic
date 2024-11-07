@@ -1,11 +1,21 @@
 //! Implements `BufferedStableMemWriter` and `BufferedStableMemReader` types for
 //! buffered serialization and deserialization to/from stable memory.
 
-use bytes::{buf::UninitSlice, Buf, BufMut};
+use bytes::{
+    buf::UninitSlice,
+    Buf,
+    BufMut,
+};
 use dfn_core::stable;
 #[cfg(test)]
-use std::sync::{Arc, Mutex};
-use std::{cmp::min, convert::TryFrom};
+use std::sync::{
+    Arc,
+    Mutex,
+};
+use std::{
+    cmp::min,
+    convert::TryFrom,
+};
 
 /// A trait for stable memory operations, to allow testing.
 trait StableMemory {
@@ -311,7 +321,11 @@ impl Buf for BufferedStableMemReader {
 mod test {
     use super::*;
     use bytes::Buf;
-    use ic_nns_governance_api::pb::v1::{Governance, NetworkEconomics, Neuron};
+    use ic_nns_governance_api::pb::v1::{
+        Governance,
+        NetworkEconomics,
+        Neuron,
+    };
     use prost::Message;
 
     fn allocate_governance(num_neurons: u64) -> Governance {

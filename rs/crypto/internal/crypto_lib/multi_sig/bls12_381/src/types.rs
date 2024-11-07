@@ -1,9 +1,19 @@
 //! BLS12-381 multisignature types.
 #![allow(clippy::unit_arg)] // Arbitrary is a unit arg in: derive(proptest_derive::Arbitrary)
-use ic_crypto_internal_bls12_381_type::{G1Projective, G2Projective, Scalar};
+use ic_crypto_internal_bls12_381_type::{
+    G1Projective,
+    G2Projective,
+    Scalar,
+};
 use ic_crypto_secrets_containers::SecretArray;
-use serde::{Deserialize, Serialize};
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use zeroize::{
+    Zeroize,
+    ZeroizeOnDrop,
+};
 
 #[cfg(test)]
 pub mod arbitrary;

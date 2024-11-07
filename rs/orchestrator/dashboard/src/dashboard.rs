@@ -4,11 +4,21 @@
 
 use async_trait::async_trait;
 use std::io::BufRead;
-use std::net::{IpAddr, Ipv6Addr, SocketAddr};
+use std::net::{
+    IpAddr,
+    Ipv6Addr,
+    SocketAddr,
+};
 use tokio::sync::watch::Receiver;
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    net::{TcpListener, TcpStream},
+    io::{
+        AsyncReadExt,
+        AsyncWriteExt,
+    },
+    net::{
+        TcpListener,
+        TcpStream,
+    },
 };
 
 /// A simplest HTTP dashboard that listens to a port and responds to GET

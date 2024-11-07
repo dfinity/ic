@@ -1,13 +1,30 @@
-use axum::{http::Request, Router};
+use axum::{
+    http::Request,
+    Router,
+};
 use bytes::Bytes;
-use consensus::{TestConsensus, U64Artifact};
+use consensus::{
+    TestConsensus,
+    U64Artifact,
+};
 use futures::{
-    future::{join_all, BoxFuture},
+    future::{
+        join_all,
+        BoxFuture,
+    },
     FutureExt,
 };
 use ic_artifact_downloader::FetchArtifact;
-use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
-use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
+use ic_base_types::{
+    NodeId,
+    PrincipalId,
+    RegistryVersion,
+    SubnetId,
+};
+use ic_crypto_temp_crypto::{
+    NodeKeysToGenerate,
+    TempCryptoComponent,
+};
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::p2p::artifact_manager::JoinGuard;
 use ic_interfaces_mocks::consensus_pool::MockConsensusPoolCache;
@@ -15,33 +32,65 @@ use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_peer_manager::start_peer_manager;
 use ic_protobuf::registry::{
-    node::v1::{ConnectionEndpoint, NodeRecord},
+    node::v1::{
+        ConnectionEndpoint,
+        NodeRecord,
+    },
     subnet::v1::SubnetRecord,
 };
-use ic_quic_transport::{create_udp_socket, ConnId, QuicTransport, SubnetTopology, Transport};
+use ic_quic_transport::{
+    create_udp_socket,
+    ConnId,
+    QuicTransport,
+    SubnetTopology,
+    Transport,
+};
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_node_record_key;
 use ic_registry_local_registry::LocalRegistry;
-use ic_registry_local_store::{compact_delta_to_changelog, LocalStoreImpl, LocalStoreWriter};
+use ic_registry_local_store::{
+    compact_delta_to_changelog,
+    LocalStoreImpl,
+    LocalStoreWriter,
+};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities_registry::add_subnet_record;
 use ic_test_utilities_types::ids::subnet_test_id;
-use rcgen::{generate_simple_self_signed, CertifiedKey};
-use rustls::pki_types::{CertificateDer, PrivatePkcs8KeyDer, ServerName, UnixTime};
+use rcgen::{
+    generate_simple_self_signed,
+    CertifiedKey,
+};
+use rustls::pki_types::{
+    CertificateDer,
+    PrivatePkcs8KeyDer,
+    ServerName,
+    UnixTime,
+};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{
+        HashMap,
+        HashSet,
+    },
     net::SocketAddr,
     str::FromStr,
     sync::{
-        atomic::{AtomicU64, Ordering},
-        Arc, Mutex, RwLock,
+        atomic::{
+            AtomicU64,
+            Ordering,
+        },
+        Arc,
+        Mutex,
+        RwLock,
     },
     time::Duration,
 };
 use tempfile::TempDir;
 use tokio::{
     runtime::Handle,
-    sync::watch::{self, Receiver},
+    sync::watch::{
+        self,
+        Receiver,
+    },
     task::JoinHandle,
 };
 use turmoil::start_test_processor;

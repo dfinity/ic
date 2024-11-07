@@ -1,5 +1,9 @@
 use sha3::{
-    digest::{ExtendableOutputReset, Update, XofReader},
+    digest::{
+        ExtendableOutputReset,
+        Update,
+        XofReader,
+    },
     Shake256,
 };
 

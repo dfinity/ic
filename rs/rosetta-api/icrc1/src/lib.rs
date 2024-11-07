@@ -1,6 +1,9 @@
 #![allow(clippy::disallowed_types)]
 
-use anyhow::{bail, Context};
+use anyhow::{
+    bail,
+    Context,
+};
 use common::storage::storage_client::StorageClient;
 use common::storage::types::MetadataEntry;
 use ic_base_types::CanisterId;
@@ -11,7 +14,10 @@ use num_traits::ToPrimitive;
 use rosetta_core::objects::Currency;
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc,
+        Mutex,
+    },
 };
 use tokio::sync::Mutex as AsyncMutex;
 pub mod common;

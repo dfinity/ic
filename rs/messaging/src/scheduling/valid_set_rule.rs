@@ -1,31 +1,65 @@
 use ic_base_types::NumBytes;
-use ic_cycles_account_manager::{CyclesAccountManager, IngressInductionCost};
-use ic_error_types::{ErrorCode, UserError};
+use ic_cycles_account_manager::{
+    CyclesAccountManager,
+    IngressInductionCost,
+};
+use ic_error_types::{
+    ErrorCode,
+    UserError,
+};
 use ic_interfaces::{
     execution_environment::IngressHistoryWriter,
     messaging::{
-        IngressInductionError, LABEL_VALUE_CANISTER_METHOD_NOT_FOUND,
-        LABEL_VALUE_CANISTER_NOT_FOUND, LABEL_VALUE_CANISTER_OUT_OF_CYCLES,
-        LABEL_VALUE_CANISTER_STOPPED, LABEL_VALUE_CANISTER_STOPPING,
-        LABEL_VALUE_INGRESS_HISTORY_FULL, LABEL_VALUE_INVALID_MANAGEMENT_PAYLOAD,
+        IngressInductionError,
+        LABEL_VALUE_CANISTER_METHOD_NOT_FOUND,
+        LABEL_VALUE_CANISTER_NOT_FOUND,
+        LABEL_VALUE_CANISTER_OUT_OF_CYCLES,
+        LABEL_VALUE_CANISTER_STOPPED,
+        LABEL_VALUE_CANISTER_STOPPING,
+        LABEL_VALUE_INGRESS_HISTORY_FULL,
+        LABEL_VALUE_INVALID_MANAGEMENT_PAYLOAD,
     },
 };
-use ic_limits::{INGRESS_HISTORY_MAX_MESSAGES, SMALL_APP_SUBNET_MAX_SIZE};
-use ic_logger::{debug, error, trace, ReplicaLogger};
+use ic_limits::{
+    INGRESS_HISTORY_MAX_MESSAGES,
+    SMALL_APP_SUBNET_MAX_SIZE,
+};
+use ic_logger::{
+    debug,
+    error,
+    trace,
+    ReplicaLogger,
+};
 use ic_management_canister_types::CanisterStatusType;
-use ic_metrics::{buckets::decimal_buckets, buckets::linear_buckets, MetricsRegistry};
+use ic_metrics::{
+    buckets::decimal_buckets,
+    buckets::linear_buckets,
+    MetricsRegistry,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    ingress::{IngressState, IngressStatus},
+    ingress::{
+        IngressState,
+        IngressStatus,
+    },
     messages::{
-        extract_effective_canister_id, HttpRequestContent, Ingress, ParseIngressError,
+        extract_effective_canister_id,
+        HttpRequestContent,
+        Ingress,
+        ParseIngressError,
         SignedIngressContent,
     },
     time::expiry_time_from_now,
-    SubnetId, Time,
+    SubnetId,
+    Time,
 };
-use prometheus::{Histogram, HistogramVec, IntCounterVec, IntGauge};
+use prometheus::{
+    Histogram,
+    HistogramVec,
+    IntCounterVec,
+    IntGauge,
+};
 use std::sync::Arc;
 
 struct VsrMetrics {

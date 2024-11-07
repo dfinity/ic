@@ -1,16 +1,30 @@
 use super::api::CspSigner;
-use super::types::{CspPop, CspPublicKey, CspSignature};
+use super::types::{
+    CspPop,
+    CspPublicKey,
+    CspSignature,
+};
 use super::Csp;
 use crate::key_id::KeyId;
 use crate::types::MultiBls12_381_Signature;
-use crate::vault::api::{CspBasicSignatureError, CspMultiSignatureError};
+use crate::vault::api::{
+    CspBasicSignatureError,
+    CspMultiSignatureError,
+};
 use ic_crypto_internal_basic_sig_ecdsa_secp256k1 as ecdsa_secp256k1;
 use ic_crypto_internal_basic_sig_ecdsa_secp256r1 as ecdsa_secp256r1;
 use ic_crypto_internal_basic_sig_ed25519 as ed25519;
-use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult};
+use ic_crypto_internal_logmon::metrics::{
+    MetricsDomain,
+    MetricsResult,
+};
 use ic_crypto_internal_multi_sig_bls12381 as multi_sig;
 use ic_crypto_sha2::Sha256;
-use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
+use ic_types::crypto::{
+    AlgorithmId,
+    CryptoError,
+    CryptoResult,
+};
 
 #[cfg(test)]
 mod tests;

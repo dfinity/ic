@@ -25,7 +25,10 @@ use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::account::Subaccount;
 use icrc_ledger_types::icrc1::account::DEFAULT_SUBACCOUNT;
 use num_bigint::BigInt;
-use reqwest::{Client, Url};
+use reqwest::{
+    Client,
+    Url,
+};
 use rosetta_core::identifiers::NetworkIdentifier;
 use rosetta_core::identifiers::PartialBlockIdentifier;
 use rosetta_core::identifiers::TransactionIdentifier;
@@ -37,7 +40,10 @@ use rosetta_core::objects::PublicKey;
 use rosetta_core::objects::Signature;
 use rosetta_core::request_types::*;
 use rosetta_core::response_types::*;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::fmt::Debug;
 use url::ParseError;
 

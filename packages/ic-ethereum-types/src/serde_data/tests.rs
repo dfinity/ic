@@ -1,7 +1,14 @@
 use proptest::arbitrary::any;
 use proptest::collection::vec;
-use proptest::{prop_assert, prop_assert_eq, proptest};
-use serde::{Deserialize, Serialize};
+use proptest::{
+    prop_assert,
+    prop_assert_eq,
+    proptest,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 proptest! {
     #[test]

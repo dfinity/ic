@@ -1,6 +1,9 @@
 //! Test that the test utils work correctly
 use super::*;
-use ic_types::{NodeIndex, NumberOfNodes};
+use ic_types::{
+    NodeIndex,
+    NumberOfNodes,
+};
 use proptest::prelude::*;
 use std::fmt::Debug;
 

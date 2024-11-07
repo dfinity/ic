@@ -1,20 +1,43 @@
-use crossbeam_channel::{Sender, TrySendError};
-use ic_config::{execution_environment::Config, flag_status::FlagStatus};
-use ic_logger::{info, warn, ReplicaLogger};
+use crossbeam_channel::{
+    Sender,
+    TrySendError,
+};
+use ic_config::{
+    execution_environment::Config,
+    flag_status::FlagStatus,
+};
+use ic_logger::{
+    info,
+    warn,
+    ReplicaLogger,
+};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
-    batch::{CanisterQueryStats, LocalQueryStats, QueryStats},
-    epoch_from_height, CanisterId, Height, QueryStatsEpoch,
+    batch::{
+        CanisterQueryStats,
+        LocalQueryStats,
+        QueryStats,
+    },
+    epoch_from_height,
+    CanisterId,
+    Height,
+    QueryStatsEpoch,
 };
 use std::sync::Mutex;
-use std::{collections::BTreeMap, sync::RwLock};
+use std::{
+    collections::BTreeMap,
+    sync::RwLock,
+};
 
 mod metrics;
 mod payload_builder;
 mod state_machine;
 
 pub use self::metrics::QueryStatsAggregatorMetrics;
-pub use self::payload_builder::{QueryStatsPayloadBuilderImpl, QueryStatsPayloadBuilderParams};
+pub use self::payload_builder::{
+    QueryStatsPayloadBuilderImpl,
+    QueryStatsPayloadBuilderParams,
+};
 pub use self::state_machine::deliver_query_stats;
 
 use self::metrics::CollectorMetrics;

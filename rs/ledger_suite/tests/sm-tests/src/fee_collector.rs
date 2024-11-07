@@ -1,9 +1,20 @@
 use super::*;
 use crate::{
-    arb_account, install_ledger, total_supply, transfer, ChangeFeeCollector, InitArgs,
-    LedgerArgument, UpgradeArgs, FEE, MINTER,
+    arb_account,
+    install_ledger,
+    total_supply,
+    transfer,
+    ChangeFeeCollector,
+    InitArgs,
+    LedgerArgument,
+    UpgradeArgs,
+    FEE,
+    MINTER,
 };
-use candid::{CandidType, Encode};
+use candid::{
+    CandidType,
+    Encode,
+};
 use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc3::blocks::GenericBlock;
 use proptest::prelude::Strategy;

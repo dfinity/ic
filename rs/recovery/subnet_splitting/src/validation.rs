@@ -1,17 +1,33 @@
 use crate::{
-    agent_helper::{AgentHelper, StateTree},
+    agent_helper::{
+        AgentHelper,
+        StateTree,
+    },
     state_tool_helper::StateToolHelper,
     utils::get_cup,
 };
 
 use ic_base_types::SubnetId;
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
-use ic_recovery::error::{RecoveryError, RecoveryResult};
-use ic_types::{consensus::HasHeight, crypto::threshold_sig::ThresholdSigPublicKey};
-use slog::{error, info, Logger};
+use ic_recovery::error::{
+    RecoveryError,
+    RecoveryResult,
+};
+use ic_types::{
+    consensus::HasHeight,
+    crypto::threshold_sig::ThresholdSigPublicKey,
+};
+use slog::{
+    error,
+    info,
+    Logger,
+};
 use url::Url;
 
-use std::{fmt::Display, path::Path};
+use std::{
+    fmt::Display,
+    path::Path,
+};
 
 /// Validates the following artifacts:
 /// 1. NNS signed State Tree;

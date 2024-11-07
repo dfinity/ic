@@ -11,46 +11,117 @@ mod tests;
 mod xnet_client_tests;
 
 use crate::certified_slice_pool::{
-    certified_slice_count_bytes, CertifiedSliceError, CertifiedSlicePool, CertifiedSliceResult,
+    certified_slice_count_bytes,
+    CertifiedSliceError,
+    CertifiedSlicePool,
+    CertifiedSliceResult,
 };
 use async_trait::async_trait;
 use http_body_util::BodyExt;
-use hyper::{Request, StatusCode, Uri};
+use hyper::{
+    Request,
+    StatusCode,
+    Uri,
+};
 use hyper_util::client::legacy::Client;
-use hyper_util::rt::{TokioExecutor, TokioTimer};
+use hyper_util::rt::{
+    TokioExecutor,
+    TokioTimer,
+};
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::messaging::{
-    InvalidXNetPayload, XNetPayloadBuilder, XNetPayloadValidationError,
+    InvalidXNetPayload,
+    XNetPayloadBuilder,
+    XNetPayloadValidationError,
     XNetPayloadValidationFailure,
 };
 use ic_interfaces::validation::ValidationError;
 use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::{StateManager, StateManagerError};
+use ic_interfaces_state_manager::{
+    StateManager,
+    StateManagerError,
+};
 use ic_limits::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
-use ic_logger::{error, info, log, warn, ReplicaLogger};
-use ic_metrics::buckets::{decimal_buckets, decimal_buckets_with_zero};
+use ic_logger::{
+    error,
+    info,
+    log,
+    warn,
+    ReplicaLogger,
+};
+use ic_metrics::buckets::{
+    decimal_buckets,
+    decimal_buckets_with_zero,
+};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::messaging::xnet::v1 as pb;
-use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
-use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetListRegistry};
+use ic_protobuf::proxy::{
+    ProtoProxy,
+    ProxyDecodeError,
+};
+use ic_registry_client_helpers::{
+    node::NodeRegistry,
+    subnet::SubnetListRegistry,
+};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{replicated_state::ReplicatedStateMessageRouting, ReplicatedState};
-use ic_types::batch::{ValidationContext, XNetPayload};
+use ic_replicated_state::{
+    replicated_state::ReplicatedStateMessageRouting,
+    ReplicatedState,
+};
+use ic_types::batch::{
+    ValidationContext,
+    XNetPayload,
+};
 use ic_types::registry::RegistryClientError;
-use ic_types::xnet::{CertifiedStreamSlice, RejectSignal, StreamIndex};
-use ic_types::{Height, NodeId, NumBytes, RegistryVersion, SubnetId};
+use ic_types::xnet::{
+    CertifiedStreamSlice,
+    RejectSignal,
+    StreamIndex,
+};
+use ic_types::{
+    Height,
+    NodeId,
+    NumBytes,
+    RegistryVersion,
+    SubnetId,
+};
 use ic_xnet_hyper::TlsConnector;
 use ic_xnet_uri::XNetAuthority;
-use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
-pub use proximity::{GenRangeFn, ProximityMap};
-use rand::{rngs::StdRng, thread_rng, Rng};
-use std::collections::{BTreeMap, VecDeque};
+use prometheus::{
+    Histogram,
+    HistogramVec,
+    IntCounter,
+    IntCounterVec,
+    IntGauge,
+};
+pub use proximity::{
+    GenRangeFn,
+    ProximityMap,
+};
+use rand::{
+    rngs::StdRng,
+    thread_rng,
+    Rng,
+};
+use std::collections::{
+    BTreeMap,
+    VecDeque,
+};
 use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::sync::{
+    Arc,
+    Mutex,
+};
+use std::time::{
+    Duration,
+    Instant,
+};
 use thiserror::Error;
-use tokio::{runtime, sync::mpsc};
+use tokio::{
+    runtime,
+    sync::mpsc,
+};
 
 /// Message and signal indices into a XNet stream or stream slice.
 ///
@@ -1696,9 +1767,20 @@ impl XNetClientError {
 /// Internal functionality, exposed for use by integration tests.
 pub mod testing {
     pub use super::{
-        EndpointLocator, GenRangeFn, PoolRefillTask, ProximityMap, RefillTaskHandle, XNetClient,
-        XNetClientError, XNetEndpointResolver, XNetPayloadBuilderMetrics, LABEL_STATUS,
-        METRIC_BUILD_PAYLOAD_DURATION, METRIC_SLICE_MESSAGES, METRIC_SLICE_PAYLOAD_SIZE,
-        POOL_SLICE_BYTE_SIZE_MAX, STATUS_SUCCESS,
+        EndpointLocator,
+        GenRangeFn,
+        PoolRefillTask,
+        ProximityMap,
+        RefillTaskHandle,
+        XNetClient,
+        XNetClientError,
+        XNetEndpointResolver,
+        XNetPayloadBuilderMetrics,
+        LABEL_STATUS,
+        METRIC_BUILD_PAYLOAD_DURATION,
+        METRIC_SLICE_MESSAGES,
+        METRIC_SLICE_PAYLOAD_SIZE,
+        POOL_SLICE_BYTE_SIZE_MAX,
+        STATUS_SUCCESS,
     };
 }

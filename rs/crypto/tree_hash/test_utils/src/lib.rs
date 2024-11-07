@@ -36,7 +36,10 @@ pub fn new_random_labeled_tree<R: rand::Rng>(
     min_leaves: u32,
 ) -> LabeledTree<Vec<u8>> {
     use arbitrary::arbitrary_well_formed_mixed_hash_tree_with_params;
-    use proptest::strategy::{Strategy, ValueTree};
+    use proptest::strategy::{
+        Strategy,
+        ValueTree,
+    };
     loop {
         let mut seed = [0u8; 32];
         rng.fill_bytes(&mut seed);

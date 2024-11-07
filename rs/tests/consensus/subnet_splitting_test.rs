@@ -29,32 +29,66 @@ use ic_base_types::SubnetId;
 use ic_consensus_system_test_utils::subnet::assert_subnet_is_healthy;
 use ic_consensus_system_test_utils::{
     rw_message::{
-        can_read_msg, cert_state_makes_progress_with_retries, install_nns_and_check_progress,
+        can_read_msg,
+        cert_state_makes_progress_with_retries,
+        install_nns_and_check_progress,
         store_message,
     },
     set_sandbox_env_vars,
 };
-use ic_recovery::{file_sync_helper, get_node_metrics, RecoveryArgs};
+use ic_recovery::{
+    file_sync_helper,
+    get_node_metrics,
+    RecoveryArgs,
+};
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
-use ic_subnet_splitting::subnet_splitting::{StepType, SubnetSplitting, SubnetSplittingArgs};
-use ic_system_test_driver::{driver::group::SystemTestGroup, systest};
+use ic_subnet_splitting::subnet_splitting::{
+    StepType,
+    SubnetSplitting,
+    SubnetSplittingArgs,
+};
+use ic_system_test_driver::{
+    driver::group::SystemTestGroup,
+    systest,
+};
 use ic_system_test_driver::{
     driver::{
         constants::SSH_USERNAME,
-        driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR},
-        ic::{InternetComputer, Subnet},
+        driver_setup::{
+            SSH_AUTHORIZED_PRIV_KEYS_DIR,
+            SSH_AUTHORIZED_PUB_KEYS_DIR,
+        },
+        ic::{
+            InternetComputer,
+            Subnet,
+        },
         test_env::TestEnv,
-        test_env_api::{IcNodeSnapshot, SubnetSnapshot, *},
+        test_env_api::{
+            IcNodeSnapshot,
+            SubnetSnapshot,
+            *,
+        },
     },
     util::*,
 };
-use ic_types::{CanisterId, Height, PrincipalId, ReplicaVersion};
+use ic_types::{
+    CanisterId,
+    Height,
+    PrincipalId,
+    ReplicaVersion,
+};
 
 use anyhow::Result;
 use candid::Principal;
-use slog::{info, Logger};
-use std::{thread, time::Duration};
+use slog::{
+    info,
+    Logger,
+};
+use std::{
+    thread,
+    time::Duration,
+};
 
 const DKG_INTERVAL: u64 = 9;
 const APP_NODES: usize = 1;

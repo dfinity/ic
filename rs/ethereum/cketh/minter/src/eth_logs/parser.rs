@@ -1,11 +1,26 @@
 use crate::eth_logs::{
-    parse_principal_from_slice, EventSource, EventSourceError, LedgerSubaccount,
-    ReceivedErc20Event, ReceivedEthEvent, ReceivedEvent, ReceivedEventError,
-    RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_EVENT_TOPIC,
+    parse_principal_from_slice,
+    EventSource,
+    EventSourceError,
+    LedgerSubaccount,
+    ReceivedErc20Event,
+    ReceivedEthEvent,
+    ReceivedEvent,
+    ReceivedEventError,
+    RECEIVED_ERC20_EVENT_TOPIC,
+    RECEIVED_ETH_EVENT_TOPIC,
     RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC,
 };
-use crate::eth_rpc::{Data, FixedSizeData, LogEntry};
-use crate::numeric::{BlockNumber, Erc20Value, Wei};
+use crate::eth_rpc::{
+    Data,
+    FixedSizeData,
+    LogEntry,
+};
+use crate::numeric::{
+    BlockNumber,
+    Erc20Value,
+    Wei,
+};
 use candid::Principal;
 use ic_ethereum_types::Address;
 

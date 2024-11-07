@@ -1,6 +1,13 @@
 use candid::candid_method;
-use ic_cdk_macros::{init, update};
-use ic_icrc1_benchmark_generator::{InitArgs, RunScenarioResult, Scenario};
+use ic_cdk_macros::{
+    init,
+    update,
+};
+use ic_icrc1_benchmark_generator::{
+    InitArgs,
+    RunScenarioResult,
+    Scenario,
+};
 use serde_bytes::ByteBuf;
 
 fn main() {}

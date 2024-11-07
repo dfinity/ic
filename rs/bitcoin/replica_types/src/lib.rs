@@ -9,11 +9,20 @@ use ic_btc_interface::Network;
 use ic_error_types::RejectCode;
 use ic_protobuf::{
     bitcoin::v1,
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{
+        try_from_option_field,
+        ProxyDecodeError,
+    },
     types::v1::RejectCode as pbRejectCode,
 };
-use serde::{Deserialize, Serialize};
-use std::convert::{TryFrom, TryInto};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use std::convert::{
+    TryFrom,
+    TryInto,
+};
 use std::mem::size_of_val;
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]

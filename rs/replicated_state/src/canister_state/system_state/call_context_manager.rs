@@ -3,24 +3,51 @@ mod tests;
 
 use ic_interfaces::execution_environment::HypervisorError;
 use ic_management_canister_types::IC_00;
-use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_protobuf::proxy::{
+    try_from_option_field,
+    ProxyDecodeError,
+};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_protobuf::types::v1 as pb_types;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{
-    CallContextId, CallbackId, CanisterCall, CanisterCallOrTask, MessageId, Request,
-    RequestMetadata, Response, NO_DEADLINE,
+    CallContextId,
+    CallbackId,
+    CanisterCall,
+    CanisterCallOrTask,
+    MessageId,
+    Request,
+    RequestMetadata,
+    Response,
+    NO_DEADLINE,
 };
 use ic_types::methods::Callback;
 use ic_types::time::CoarseTime;
 use ic_types::{
-    user_id_into_protobuf, user_id_try_from_protobuf, CanisterId, Cycles, Funds, NumInstructions,
-    PrincipalId, Time, UserId,
+    user_id_into_protobuf,
+    user_id_try_from_protobuf,
+    CanisterId,
+    Cycles,
+    Funds,
+    NumInstructions,
+    PrincipalId,
+    Time,
+    UserId,
 };
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::collections::btree_map::Entry;
-use std::collections::{BTreeMap, BTreeSet};
-use std::convert::{From, TryFrom, TryInto};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
+use std::convert::{
+    From,
+    TryFrom,
+    TryInto,
+};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -1119,7 +1146,10 @@ fn calculate_callback_deadlines(
 }
 
 pub mod testing {
-    use super::{CallContext, CallContextManager};
+    use super::{
+        CallContext,
+        CallContextManager,
+    };
     use ic_types::messages::CallContextId;
 
     /// Exposes `CallContextManager` internals for use in other modules' or crates'

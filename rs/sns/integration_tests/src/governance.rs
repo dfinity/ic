@@ -1,9 +1,16 @@
 use dfn_candid::candid_one;
 use ic_sns_governance::pb::v1::{
-    GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
+    GetSnsInitializationParametersRequest,
+    GetSnsInitializationParametersResponse,
 };
-use ic_sns_init::{pb::v1::SnsInitPayload, SnsCanisterIds};
-use ic_sns_test_utils::itest_helpers::{local_test_on_sns_subnet, SnsCanisters};
+use ic_sns_init::{
+    pb::v1::SnsInitPayload,
+    SnsCanisterIds,
+};
+use ic_sns_test_utils::itest_helpers::{
+    local_test_on_sns_subnet,
+    SnsCanisters,
+};
 use ic_types::PrincipalId;
 
 #[test]

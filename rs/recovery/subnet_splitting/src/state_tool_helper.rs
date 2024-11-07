@@ -2,21 +2,44 @@ use crate::utils::canister_id_ranges_to_strings;
 
 use ic_base_types::SubnetId;
 use ic_recovery::{
-    error::{RecoveryError, RecoveryResult},
-    file_sync_helper::{download_binary, path_exists, write_bytes, write_file},
+    error::{
+        RecoveryError,
+        RecoveryResult,
+    },
+    file_sync_helper::{
+        download_binary,
+        path_exists,
+        write_bytes,
+        write_file,
+    },
     util::block_on,
 };
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
-use ic_state_tool::commands::{manifest::compute_manifest, verify_manifest::verify_manifest};
-use ic_types::{ReplicaVersion, Time};
-use slog::{info, Logger};
+use ic_state_tool::commands::{
+    manifest::compute_manifest,
+    verify_manifest::verify_manifest,
+};
+use ic_types::{
+    ReplicaVersion,
+    Time,
+};
+use slog::{
+    info,
+    Logger,
+};
 
 use std::{
     fs::File,
     iter::once,
-    path::{Path, PathBuf},
-    process::{Command, Stdio},
+    path::{
+        Path,
+        PathBuf,
+    },
+    process::{
+        Command,
+        Stdio,
+    },
 };
 
 const BINARY_NAME: &str = "state-tool";

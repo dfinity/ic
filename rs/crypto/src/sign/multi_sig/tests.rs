@@ -8,7 +8,10 @@ use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::crypto::SignableMock;
-use ic_types_test_utils::ids::{NODE_1, NODE_2};
+use ic_types_test_utils::ids::{
+    NODE_1,
+    NODE_2,
+};
 
 mod test_multi_sign {
     use super::*;
@@ -36,7 +39,8 @@ mod test_multi_sig_verification {
     use crate::common::test_utils::hex_to_byte_vec;
     use crate::common::test_utils::multi_bls12_381;
     use crate::common::test_utils::multi_bls12_381::MultiBls12381TestVector::{
-        STABILITY_1, STABILITY_2,
+        STABILITY_1,
+        STABILITY_2,
     };
     use ic_crypto_internal_test_vectors::multi_bls12_381::TESTVEC_MULTI_BLS12_381_COMB_SIG_1_2;
     use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;

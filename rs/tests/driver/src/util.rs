@@ -2,37 +2,78 @@ use crate::{
     canister_agent::CanisterAgent,
     canister_api::GenericRequest,
     driver::{
-        group::{MAX_RUNTIME_BLOCKING_THREADS, MAX_RUNTIME_THREADS},
+        group::{
+            MAX_RUNTIME_BLOCKING_THREADS,
+            MAX_RUNTIME_THREADS,
+        },
         test_env_api::*,
     },
-    generic_workload_engine::{engine::Engine, metrics::LoadTestMetrics},
-    retry_with_msg, retry_with_msg_async,
+    generic_workload_engine::{
+        engine::Engine,
+        metrics::LoadTestMetrics,
+    },
+    retry_with_msg,
+    retry_with_msg_async,
     types::*,
 };
 use anyhow::bail;
-use candid::{Decode, Encode};
-use canister_test::{Canister, RemoteTestRuntime, Runtime, Wasm};
-use dfn_protobuf::{protobuf, ProtoBuf};
+use candid::{
+    Decode,
+    Encode,
+};
+use canister_test::{
+    Canister,
+    RemoteTestRuntime,
+    Runtime,
+    Wasm,
+};
+use dfn_protobuf::{
+    protobuf,
+    ProtoBuf,
+};
 use futures::{
-    future::{join_all, select_all, try_join_all},
+    future::{
+        join_all,
+        select_all,
+        try_join_all,
+    },
     FutureExt,
 };
 use ic_agent::{
     agent::{
-        http_transport::reqwest_transport::{reqwest, ReqwestTransport},
-        CallResponse, EnvelopeContent, RejectCode, RejectResponse,
+        http_transport::reqwest_transport::{
+            reqwest,
+            ReqwestTransport,
+        },
+        CallResponse,
+        EnvelopeContent,
+        RejectCode,
+        RejectResponse,
     },
     export::Principal,
     identity::BasicIdentity,
-    Agent, AgentError, Identity, Signature,
+    Agent,
+    AgentError,
+    Identity,
+    Signature,
 };
-use ic_canister_client::{Agent as DeprecatedAgent, Sender};
+use ic_canister_client::{
+    Agent as DeprecatedAgent,
+    Sender,
+};
 use ic_config::ConfigOptional;
 use ic_limits::MAX_INGRESS_TTL;
-use ic_management_canister_types::{CanisterStatusResult, EmptyBlob, Payload};
+use ic_management_canister_types::{
+    CanisterStatusResult,
+    EmptyBlob,
+    Payload,
+};
 use ic_message::ForwardParams;
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
+use ic_nns_constants::{
+    GOVERNANCE_CANISTER_ID,
+    ROOT_CANISTER_ID,
+};
 use ic_nns_governance_api::pb::v1::{
     create_service_nervous_system::{
         swap_parameters::NeuronBasketConstructionParameters as GovApiNeuronBasketConstructionParameters,
@@ -43,34 +84,80 @@ use ic_nns_governance_api::pb::v1::{
 use ic_nns_test_utils::governance::upgrade_nns_canister_with_args_by_proposal;
 use ic_registry_subnet_type::SubnetType;
 use ic_rosetta_api::convert::to_arg;
-use ic_sns_swap::pb::v1::{NeuronBasketConstructionParameters, Params};
+use ic_sns_swap::pb::v1::{
+    NeuronBasketConstructionParameters,
+    Params,
+};
 use ic_types::{
-    messages::{HttpCallContent, HttpQueryContent},
-    CanisterId, Cycles, PrincipalId,
+    messages::{
+        HttpCallContent,
+        HttpQueryContent,
+    },
+    CanisterId,
+    Cycles,
+    PrincipalId,
 };
 use ic_universal_canister::{
-    call_args, wasm as universal_canister_argument_builder, UNIVERSAL_CANISTER_WASM,
+    call_args,
+    wasm as universal_canister_argument_builder,
+    UNIVERSAL_CANISTER_WASM,
 };
-use ic_utils::{call::AsyncCall, interfaces::ManagementCanister};
+use ic_utils::{
+    call::AsyncCall,
+    interfaces::ManagementCanister,
+};
 use icp_ledger::{
-    tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Memo, SendArgs, Subaccount, Tokens,
+    tokens_from_proto,
+    AccountBalanceArgs,
+    AccountIdentifier,
+    Memo,
+    SendArgs,
+    Subaccount,
+    Tokens,
     DEFAULT_TRANSFER_FEE,
 };
 use itertools::Itertools;
 use on_wire::FromWire;
-use slog::{debug, info, Logger};
+use slog::{
+    debug,
+    info,
+    Logger,
+};
 use std::{
     collections::BTreeMap,
-    convert::{TryFrom, TryInto},
+    convert::{
+        TryFrom,
+        TryInto,
+    },
     fmt::Debug,
     future::Future,
-    net::{IpAddr, Ipv6Addr, SocketAddr, SocketAddrV6},
-    time::{Duration, Instant, SystemTime},
+    net::{
+        IpAddr,
+        Ipv6Addr,
+        SocketAddr,
+        SocketAddrV6,
+    },
+    time::{
+        Duration,
+        Instant,
+        SystemTime,
+    },
 };
 use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines},
-    net::{TcpSocket, TcpStream},
-    runtime::{Builder, Handle as THandle},
+    io::{
+        AsyncBufReadExt,
+        AsyncWriteExt,
+        BufReader,
+        Lines,
+    },
+    net::{
+        TcpSocket,
+        TcpStream,
+    },
+    runtime::{
+        Builder,
+        Handle as THandle,
+    },
 };
 use url::Url;
 

@@ -1,17 +1,48 @@
 use crate::crypto::canister_threshold_sig::idkg::tests::test_utils::random_transcript_id;
 use crate::crypto::canister_threshold_sig::idkg::{
-    BatchSignedIDkgDealing, IDkgDealers, IDkgDealing, IDkgMaskedTranscriptOrigin, IDkgReceivers,
-    IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
-    IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin, SignedIDkgDealing,
+    BatchSignedIDkgDealing,
+    IDkgDealers,
+    IDkgDealing,
+    IDkgMaskedTranscriptOrigin,
+    IDkgReceivers,
+    IDkgTranscript,
+    IDkgTranscriptId,
+    IDkgTranscriptOperation,
+    IDkgTranscriptParams,
+    IDkgTranscriptType,
+    IDkgUnmaskedTranscriptOrigin,
+    SignedIDkgDealing,
 };
-use crate::crypto::{AlgorithmId, BasicSig, BasicSigOf};
-use crate::signature::{BasicSignature, BasicSignatureBatch};
-use crate::{Height, NodeId, PrincipalId, RegistryVersion, SubnetId};
+use crate::crypto::{
+    AlgorithmId,
+    BasicSig,
+    BasicSigOf,
+};
+use crate::signature::{
+    BasicSignature,
+    BasicSignatureBatch,
+};
+use crate::{
+    Height,
+    NodeId,
+    PrincipalId,
+    RegistryVersion,
+    SubnetId,
+};
 use assert_matches::assert_matches;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use maplit::{btreemap, btreeset};
-use rand::{CryptoRng, Rng};
-use std::collections::{BTreeMap, BTreeSet};
+use maplit::{
+    btreemap,
+    btreeset,
+};
+use rand::{
+    CryptoRng,
+    Rng,
+};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
 
 type Itt = IDkgTranscriptType;
 type Imto = IDkgMaskedTranscriptOrigin;

@@ -5,7 +5,10 @@ use ic_crypto_tree_hash::*;
 use ic_crypto_tree_hash_test_utils::*;
 use proptest::prelude::*;
 use rand::Rng;
-use rand::{CryptoRng, RngCore};
+use rand::{
+    CryptoRng,
+    RngCore,
+};
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
@@ -2463,7 +2466,10 @@ fn first_sub_witness_test() {
 
 #[test]
 fn labeled_tree_lookup() {
-    use LabeledTree::{Leaf, SubTree};
+    use LabeledTree::{
+        Leaf,
+        SubTree,
+    };
     let t: LabeledTree<Vec<u8>> = SubTree(flatmap! {
         Label::from("sig") => SubTree(flatmap!{
                 Label::from("a") => SubTree(flatmap!{
@@ -2490,8 +2496,15 @@ fn labeled_tree_lookup() {
 
 #[test]
 fn mixed_hash_tree_lookup() {
-    use LookupStatus::{Absent, Found, Unknown};
-    use MixedHashTree::{Empty, Leaf};
+    use LookupStatus::{
+        Absent,
+        Found,
+        Unknown,
+    };
+    use MixedHashTree::{
+        Empty,
+        Leaf,
+    };
 
     let t = mfork(
         mlabeled(&Label::from("1"), mleaf("test1")),

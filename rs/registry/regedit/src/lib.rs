@@ -8,16 +8,32 @@ mod snapshot;
 mod source;
 mod tests;
 
-use anyhow::{anyhow, Result};
-use args::{universal_projection, Command, RegistrySpec, SourceSpec, VersionSpec};
+use anyhow::{
+    anyhow,
+    Result,
+};
+use args::{
+    universal_projection,
+    Command,
+    RegistrySpec,
+    SourceSpec,
+    VersionSpec,
+};
 use ic_base_types::RegistryVersion;
 use ic_registry_local_store::{
-    changelog_to_compact_delta, KeyMutation, LocalStoreImpl, LocalStoreWriter,
+    changelog_to_compact_delta,
+    KeyMutation,
+    LocalStoreImpl,
+    LocalStoreWriter,
 };
 use normalization::NormalizedSnapshot;
 use serde_json::Value;
 use snapshot::Snapshot;
-use std::{fs::File, io::Write, path::PathBuf};
+use std::{
+    fs::File,
+    io::Write,
+    path::PathBuf,
+};
 
 fn registry_spec_to_snapshot(registry_spec: RegistrySpec) -> Result<Snapshot> {
     let cl = source::get_changelog(registry_spec.source)?;

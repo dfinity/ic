@@ -1,15 +1,29 @@
-use std::{sync::Arc, time::Instant};
+use std::{
+    sync::Arc,
+    time::Instant,
+};
 
-use anyhow::{anyhow, Error};
+use anyhow::{
+    anyhow,
+    Error,
+};
 use async_trait::async_trait;
 use chacha20poly1305::{
-    aead::{rand_core::RngCore, Aead, OsRng},
-    XChaCha20Poly1305, XNonce,
+    aead::{
+        rand_core::RngCore,
+        Aead,
+        OsRng,
+    },
+    XChaCha20Poly1305,
+    XNonce,
 };
 use opentelemetry::KeyValue;
 use tracing::info;
 
-use crate::metrics::{MetricParams, WithMetrics};
+use crate::metrics::{
+    MetricParams,
+    WithMetrics,
+};
 
 const NONCE_LEN: usize = 24;
 

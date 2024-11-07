@@ -4,7 +4,13 @@ use std::collections::HashMap;
 
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::WasmtimeEmbedder;
-use wasmtime::{Config, Engine, Instance, Module, Store};
+use wasmtime::{
+    Config,
+    Engine,
+    Instance,
+    Module,
+    Store,
+};
 
 use ic_wasm_types::BinaryEncodedWasm;
 

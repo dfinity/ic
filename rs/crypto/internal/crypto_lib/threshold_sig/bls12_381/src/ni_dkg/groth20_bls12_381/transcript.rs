@@ -1,7 +1,8 @@
 //! Non-interactive key generation transcript methods.
 
 use super::dealing::{
-    verify_all_shares_are_present_and_well_formatted, verify_public_coefficients_match_threshold,
+    verify_all_shares_are_present_and_well_formatted,
+    verify_public_coefficients_match_threshold,
     verify_threshold,
 };
 use super::encryption::decrypt;
@@ -9,14 +10,22 @@ use crate::api::ni_dkg_errors;
 use crate::ni_dkg::fs_ni_dkg::forward_secure::SecretKey as ForwardSecureSecretKey;
 use crate::types as threshold_types;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381 as g20;
-use ic_types::{NodeIndex, NumberOfNodes};
+use ic_types::{
+    NodeIndex,
+    NumberOfNodes,
+};
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
-use std::ops::{AddAssign, MulAssign};
+use std::ops::{
+    AddAssign,
+    MulAssign,
+};
 
 // Code reuse
 use crate::api::ni_dkg_errors::{
-    CspDkgCreateReshareTranscriptError, CspDkgCreateTranscriptError, InvalidArgumentError,
+    CspDkgCreateReshareTranscriptError,
+    CspDkgCreateTranscriptError,
+    InvalidArgumentError,
     SizeError,
 };
 

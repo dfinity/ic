@@ -5,7 +5,12 @@ use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp::types::CspSignature;
 use ic_crypto_internal_csp::vault::api::CspTlsSignError;
 use ic_crypto_test_utils_local_csp_vault::MockLocalCspVault;
-use rustls::{sign::SigningKey, Error as TLSError, SignatureAlgorithm, SignatureScheme};
+use rustls::{
+    sign::SigningKey,
+    Error as TLSError,
+    SignatureAlgorithm,
+    SignatureScheme,
+};
 use std::sync::Arc;
 
 #[test]

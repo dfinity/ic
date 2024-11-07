@@ -4,14 +4,26 @@ use crate::crypto::threshold_sig::ni_dkg::config::NiDkgThreshold;
 #[cfg(test)]
 use crate::NodeId;
 use crate::NumberOfNodes;
-use crate::{Height, PrincipalId, PrincipalIdBlobParseError, RegistryVersion, SubnetId};
+use crate::{
+    Height,
+    PrincipalId,
+    PrincipalIdBlobParseError,
+    RegistryVersion,
+    SubnetId,
+};
 use core::fmt;
-use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{CspNiDkgDealing, CspNiDkgTranscript};
+use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
+    CspNiDkgDealing,
+    CspNiDkgTranscript,
+};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::types::v1 as pb;
 use ic_protobuf::types::v1::NiDkgId as NiDkgIdProto;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::collections::BTreeSet;
 use std::convert::TryFrom;
 use strum_macros::EnumIter;

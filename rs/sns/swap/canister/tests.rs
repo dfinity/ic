@@ -1,12 +1,21 @@
 use super::*;
-use candid_parser::utils::{service_equal, CandidSource};
+use candid_parser::utils::{
+    service_equal,
+    CandidSource,
+};
 use ic_nervous_system_clients::{
     canister_status::{
-        CanisterStatusResultFromManagementCanister, CanisterStatusResultV2, CanisterStatusType,
-        DefiniteCanisterSettingsArgs, DefiniteCanisterSettingsFromManagementCanister,
+        CanisterStatusResultFromManagementCanister,
+        CanisterStatusResultV2,
+        CanisterStatusType,
+        DefiniteCanisterSettingsArgs,
+        DefiniteCanisterSettingsFromManagementCanister,
         LogVisibility,
     },
-    management_canister_client::{MockManagementCanisterClient, MockManagementCanisterClientReply},
+    management_canister_client::{
+        MockManagementCanisterClient,
+        MockManagementCanisterClientReply,
+    },
 };
 
 /// This is NOT affected by

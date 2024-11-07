@@ -1,7 +1,13 @@
 //! Computes manifest of a checkpoint.
 
-use ic_state_manager::manifest::{manifest_from_path, manifest_hash};
-use std::path::{Path, PathBuf};
+use ic_state_manager::manifest::{
+    manifest_from_path,
+    manifest_hash,
+};
+use std::path::{
+    Path,
+    PathBuf,
+};
 
 /// Computes the manifest (chunk hashes, file hashes and root hash) of the
 /// checkpoint rooted at `path`.

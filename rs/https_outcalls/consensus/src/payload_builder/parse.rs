@@ -1,11 +1,25 @@
-use ic_interfaces::batch_payload::{iterator_to_bytes, slice_to_messages, PastPayload};
-use ic_logger::{error, ReplicaLogger};
+use ic_interfaces::batch_payload::{
+    iterator_to_bytes,
+    slice_to_messages,
+    PastPayload,
+};
+use ic_logger::{
+    error,
+    ReplicaLogger,
+};
 use ic_protobuf::{
     proxy::ProxyDecodeError,
     types::v1 as pb,
-    types::v1::{canister_http_response_message::MessageType, CanisterHttpResponseMessage},
+    types::v1::{
+        canister_http_response_message::MessageType,
+        CanisterHttpResponseMessage,
+    },
 };
-use ic_types::{batch::CanisterHttpPayload, messages::CallbackId, NumBytes};
+use ic_types::{
+    batch::CanisterHttpPayload,
+    messages::CallbackId,
+    NumBytes,
+};
 use std::collections::HashSet;
 
 pub(crate) fn bytes_to_payload(data: &[u8]) -> Result<CanisterHttpPayload, ProxyDecodeError> {

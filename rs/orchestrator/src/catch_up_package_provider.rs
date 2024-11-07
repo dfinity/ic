@@ -31,29 +31,61 @@
 //! with its subnet and allows us to upgrade the protocol with breaking changes on any protocol layer.
 
 use crate::{
-    error::{OrchestratorError, OrchestratorResult},
+    error::{
+        OrchestratorError,
+        OrchestratorResult,
+    },
     registry_helper::RegistryHelper,
     utils::http_endpoint_to_url,
 };
-use http_body_util::{BodyExt, Full};
-use hyper::{body::Bytes, Method, Request};
+use http_body_util::{
+    BodyExt,
+    Full,
+};
+use hyper::{
+    body::Bytes,
+    Method,
+    Request,
+};
 use hyper_rustls::HttpsConnectorBuilder;
-use hyper_util::{client::legacy::Client, rt::TokioExecutor};
+use hyper_util::{
+    client::legacy::Client,
+    rt::TokioExecutor,
+};
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::crypto::ThresholdSigVerifierByPublicKey;
-use ic_logger::{info, warn, ReplicaLogger};
-use ic_protobuf::{registry::node::v1::NodeRecord, types::v1 as pb};
+use ic_logger::{
+    info,
+    warn,
+    ReplicaLogger,
+};
+use ic_protobuf::{
+    registry::node::v1::NodeRecord,
+    types::v1 as pb,
+};
 use ic_sys::fs::write_protobuf_using_tmp_file;
 use ic_types::{
     consensus::{
-        catchup::{CatchUpContentProtobufBytes, CatchUpPackage, CatchUpPackageParam},
+        catchup::{
+            CatchUpContentProtobufBytes,
+            CatchUpPackage,
+            CatchUpPackageParam,
+        },
         HasHeight,
     },
     crypto::*,
-    Height, NodeId, RegistryVersion, SubnetId,
+    Height,
+    NodeId,
+    RegistryVersion,
+    SubnetId,
 };
 use prost::Message;
-use std::{convert::TryFrom, fs::File, path::PathBuf, sync::Arc};
+use std::{
+    convert::TryFrom,
+    fs::File,
+    path::PathBuf,
+    sync::Arc,
+};
 
 /// Fetches catch-up packages from peers and local storage.
 ///

@@ -1,14 +1,31 @@
 //! Protocol buffer equivalents to `LabeledTree<Vec<u8>>` and `Witness`, for
 //! backwards- and forwards-compatible XNet wire format.
 
-use crate::{Digest, FlatMap, Label, LabeledTree, MixedHashTree, Witness};
+use crate::{
+    Digest,
+    FlatMap,
+    Label,
+    LabeledTree,
+    MixedHashTree,
+    Witness,
+};
 use ic_protobuf::messaging::xnet::v1 as pb;
-use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError, ProxyDecodeError::*};
-use std::convert::{TryFrom, TryInto};
+use ic_protobuf::proxy::{
+    try_from_option_field,
+    ProxyDecodeError,
+    ProxyDecodeError::*,
+};
+use std::convert::{
+    TryFrom,
+    TryInto,
+};
 
 type LabeledTreeOfBytes = LabeledTree<Vec<u8>>;
 
-use pb::{labeled_tree, labeled_tree::NodeEnum};
+use pb::{
+    labeled_tree,
+    labeled_tree::NodeEnum,
+};
 
 /// Converts the contents of a `LabeledTree::SubTree`into the contents of a
 /// `pb::labeled_tree::NodeEnum::SubTree`.
@@ -65,7 +82,10 @@ impl TryFrom<pb::LabeledTree> for LabeledTreeOfBytes {
     }
 }
 
-use pb::{witness, witness::WitnessEnum};
+use pb::{
+    witness,
+    witness::WitnessEnum,
+};
 impl From<Box<Witness>> for Box<pb::Witness> {
     fn from(value: Box<Witness>) -> Self {
         Box::new((*value).into())
@@ -141,7 +161,11 @@ impl TryFrom<pb::Witness> for Witness {
 
 impl From<MixedHashTree> for pb::MixedHashTree {
     fn from(tree: MixedHashTree) -> Self {
-        use pb::mixed_hash_tree::{Fork, Labeled, TreeEnum};
+        use pb::mixed_hash_tree::{
+            Fork,
+            Labeled,
+            TreeEnum,
+        };
         use MixedHashTree as T;
 
         let tree_enum = match tree {

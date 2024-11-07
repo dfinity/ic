@@ -19,10 +19,16 @@
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::api::set_certified_data;
-use ic_certified_map::{labeled, HashTree};
+use ic_certified_map::{
+    labeled,
+    HashTree,
+};
 use ic_protobuf::messaging::xnet::v1 as pb;
 
-use crate::registry::{Registry, Version};
+use crate::registry::{
+    Registry,
+    Version,
+};
 
 /// The maximum amount of bytes a 64-bit number can occupy when encoded in
 /// LEB128.
@@ -40,7 +46,11 @@ pub fn current_version_tree(v: Version) -> HashTree<'static> {
 /// Encodes a hash tree into the protobuf representation expected by
 /// the registry client.
 pub fn hash_tree_to_proto(tree: HashTree<'_>) -> pb::MixedHashTree {
-    use pb::mixed_hash_tree::{Fork, Labeled, TreeEnum};
+    use pb::mixed_hash_tree::{
+        Fork,
+        Labeled,
+        TreeEnum,
+    };
     use HashTree::*;
 
     let tree_enum = match tree {
@@ -65,7 +75,11 @@ pub fn hash_tree_to_proto(tree: HashTree<'_>) -> pb::MixedHashTree {
 #[cfg(target_arch = "wasm32")]
 /// Updates the certified data for the canister from the current registry state
 pub fn recertify_registry(registry: &Registry) {
-    use ic_certified_map::{fork_hash, labeled_hash, AsHashTree};
+    use ic_certified_map::{
+        fork_hash,
+        labeled_hash,
+        AsHashTree,
+    };
 
     let root_hash = fork_hash(
         &current_version_tree(registry.latest_version()).reconstruct(),

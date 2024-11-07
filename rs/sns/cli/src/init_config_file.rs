@@ -1,7 +1,10 @@
 use crate::generate_sns_init_payload;
 use anyhow::Result;
 use clap::Parser;
-use std::{path::PathBuf, str::FromStr};
+use std::{
+    path::PathBuf,
+    str::FromStr,
+};
 
 pub(crate) mod friendly;
 

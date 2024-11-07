@@ -1,17 +1,42 @@
 use std::sync::Arc;
 
-use anyhow::{anyhow, Context};
+use anyhow::{
+    anyhow,
+    Context,
+};
 use async_trait::async_trait;
-use candid::{CandidType, Decode, Deserialize, Encode, Principal};
-use certificate_orchestrator_interface::{self as ifc, EncryptedPair, IcCertificate, Id};
-use futures::{stream, StreamExt, TryStreamExt};
-use ic_agent::{hash_tree::HashTree, Agent, Certificate};
+use candid::{
+    CandidType,
+    Decode,
+    Deserialize,
+    Encode,
+    Principal,
+};
+use certificate_orchestrator_interface::{
+    self as ifc,
+    EncryptedPair,
+    IcCertificate,
+    Id,
+};
+use futures::{
+    stream,
+    StreamExt,
+    TryStreamExt,
+};
+use ic_agent::{
+    hash_tree::HashTree,
+    Agent,
+    Certificate,
+};
 use mockall::automock;
 use serde::Serialize;
 
 use crate::{
     decoder_config,
-    encode::{Decode, Encode},
+    encode::{
+        Decode,
+        Encode,
+    },
     verification::Verify,
 };
 
@@ -91,7 +116,10 @@ impl CanisterCertGetter {
 #[async_trait]
 impl GetCert for CanisterCertGetter {
     async fn get_cert(&self, id: &Id) -> Result<Pair, GetCertError> {
-        use ifc::{GetCertificateError as Error, GetCertificateResponse as Response};
+        use ifc::{
+            GetCertificateError as Error,
+            GetCertificateResponse as Response,
+        };
 
         let args = Encode!(&id).context("failed to encode arg")?;
 
@@ -139,7 +167,10 @@ impl CanisterUploader {
 #[async_trait]
 impl Upload for CanisterUploader {
     async fn upload(&self, id: &Id, pair: Pair) -> Result<(), UploadError> {
-        use ifc::{UploadCertificateError as Error, UploadCertificateResponse as Response};
+        use ifc::{
+            UploadCertificateError as Error,
+            UploadCertificateResponse as Response,
+        };
 
         let pair = EncryptedPair(
             self.encoder.encode(&pair.0).await?,
@@ -189,7 +220,8 @@ impl Export for CanisterExporter {
         limit: u64,
     ) -> Result<(Vec<Package>, IcCertificate), ExportError> {
         use ifc::{
-            ExportCertificatesCertifiedResponse as Response, ExportCertificatesError as Error,
+            ExportCertificatesCertifiedResponse as Response,
+            ExportCertificatesError as Error,
         };
 
         let args = Encode!(&key, &limit).context("failed to encode arg")?;

@@ -1,27 +1,50 @@
 #[cfg(test)]
 mod tests;
 
-use crate::endpoints::{EthTransaction, RetrieveEthStatus, TxFinalizedStatus, WithdrawalStatus};
+use crate::endpoints::{
+    EthTransaction,
+    RetrieveEthStatus,
+    TxFinalizedStatus,
+    WithdrawalStatus,
+};
 use crate::eth_rpc::Hash;
 use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::eth_rpc_client::responses::TransactionStatus;
 use crate::lifecycle::EthereumNetwork;
 use crate::map::MultiKeyMap;
 use crate::numeric::{
-    CkTokenAmount, Erc20Value, GasAmount, LedgerBurnIndex, LedgerMintIndex, TransactionCount,
-    TransactionNonce, Wei,
+    CkTokenAmount,
+    Erc20Value,
+    GasAmount,
+    LedgerBurnIndex,
+    LedgerMintIndex,
+    TransactionCount,
+    TransactionNonce,
+    Wei,
 };
 use crate::state::event::EventType;
 use crate::tx::{
-    Eip1559TransactionRequest, FinalizedEip1559Transaction, GasFeeEstimate, ResubmissionStrategy,
-    SignedEip1559TransactionRequest, SignedTransactionRequest, TransactionRequest,
+    Eip1559TransactionRequest,
+    FinalizedEip1559Transaction,
+    GasFeeEstimate,
+    ResubmissionStrategy,
+    SignedEip1559TransactionRequest,
+    SignedTransactionRequest,
+    TransactionRequest,
 };
 use candid::Principal;
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
-use minicbor::{Decode, Encode};
+use minicbor::{
+    Decode,
+    Encode,
+};
 use std::cmp::min;
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+    VecDeque,
+};
 use std::fmt;
 
 #[derive(Clone, Eq, PartialEq, Debug)]

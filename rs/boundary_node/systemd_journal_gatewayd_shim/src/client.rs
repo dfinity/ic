@@ -1,6 +1,13 @@
-use anyhow::{Context, Error};
+use anyhow::{
+    Context,
+    Error,
+};
 use async_trait::async_trait;
-use reqwest::{Client, Request, Response};
+use reqwest::{
+    Client,
+    Request,
+    Response,
+};
 
 #[async_trait]
 pub trait HttpClient: Send + Sync {

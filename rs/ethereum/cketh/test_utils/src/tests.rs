@@ -1,14 +1,22 @@
 use crate::response::{
-    default_erc20_signed_eip_1559_transaction, default_signed_eip_1559_transaction,
-    encode_transaction, fee_history_json_value, hash_transaction,
+    default_erc20_signed_eip_1559_transaction,
+    default_signed_eip_1559_transaction,
+    encode_transaction,
+    fee_history_json_value,
+    hash_transaction,
 };
 use crate::{
-    DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION, DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_FEE,
-    DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_HASH, DEFAULT_WITHDRAWAL_TRANSACTION,
+    DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION,
+    DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_FEE,
+    DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_HASH,
+    DEFAULT_WITHDRAWAL_TRANSACTION,
     DEFAULT_WITHDRAWAL_TRANSACTION_HASH,
 };
 use ic_cketh_minter::eth_rpc::FeeHistory;
-use ic_cketh_minter::numeric::{GasAmount, Wei};
+use ic_cketh_minter::numeric::{
+    GasAmount,
+    Wei,
+};
 use ic_cketh_minter::tx::estimate_transaction_fee;
 
 #[test]

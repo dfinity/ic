@@ -2,15 +2,31 @@ use batch::BatchPayload;
 use ic_artifact_pool::consensus_pool::ConsensusPoolImpl;
 use ic_artifact_pool::dkg_pool::DkgPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
-use ic_consensus_utils::{membership::Membership, pool_reader::PoolReader};
+use ic_consensus_utils::{
+    membership::Membership,
+    pool_reader::PoolReader,
+};
 use ic_interfaces::{
     consensus_pool::{
-        ChangeAction, ConsensusBlockCache, ConsensusBlockChain, ConsensusPool, ConsensusPoolCache,
-        Mutations, PoolSection, UnvalidatedConsensusArtifact, ValidatedConsensusArtifact,
+        ChangeAction,
+        ConsensusBlockCache,
+        ConsensusBlockChain,
+        ConsensusPool,
+        ConsensusPoolCache,
+        Mutations,
+        PoolSection,
+        UnvalidatedConsensusArtifact,
+        ValidatedConsensusArtifact,
     },
-    crypto::{MultiSigner, ThresholdSigner},
+    crypto::{
+        MultiSigner,
+        ThresholdSigner,
+    },
     dkg::DkgPool,
-    p2p::consensus::{ArtifactTransmits, MutablePool},
+    p2p::consensus::{
+        ArtifactTransmits,
+        MutablePool,
+    },
     time_source::TimeSource,
 };
 use ic_interfaces_registry::RegistryClient;
@@ -20,12 +36,26 @@ use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_test_utilities::crypto::CryptoReturningOk;
 use ic_test_utilities_consensus::fake::*;
-use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+use ic_test_utilities_types::ids::{
+    node_test_id,
+    subnet_test_id,
+};
 use ic_types::signature::*;
-use ic_types::{artifact::ConsensusMessageId, batch::ValidationContext};
-use ic_types::{consensus::*, crypto::*, *};
 use ic_types::{
-    crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+    artifact::ConsensusMessageId,
+    batch::ValidationContext,
+};
+use ic_types::{
+    consensus::*,
+    crypto::*,
+    *,
+};
+use ic_types::{
+    crypto::threshold_sig::ni_dkg::{
+        NiDkgId,
+        NiDkgTag,
+        NiDkgTargetSubnet,
+    },
     time::UNIX_EPOCH,
 };
 use std::sync::Arc;

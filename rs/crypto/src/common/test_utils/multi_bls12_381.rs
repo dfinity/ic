@@ -3,7 +3,9 @@
 //! standardized test vectors.
 use super::*;
 use ic_crypto_internal_csp_test_utils::types::{
-    csp_pk_multi_bls12381_from_hex, csp_pop_multi_bls12381_from_hex, csp_sk_multi_bls12381_from_hex,
+    csp_pk_multi_bls12381_from_hex,
+    csp_pop_multi_bls12381_from_hex,
+    csp_sk_multi_bls12381_from_hex,
 };
 use ic_crypto_internal_test_vectors::multi_bls12_381::*;
 

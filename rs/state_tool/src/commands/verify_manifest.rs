@@ -1,6 +1,9 @@
 use ic_state_manager::manifest::validate_manifest;
 use ic_state_manager::state_sync::types::{
-    ChunkInfo, FileInfo, Manifest, MAX_SUPPORTED_STATE_SYNC_VERSION,
+    ChunkInfo,
+    FileInfo,
+    Manifest,
+    MAX_SUPPORTED_STATE_SYNC_VERSION,
 };
 use ic_types::crypto::CryptoHash;
 use ic_types::state_sync::StateSyncVersion;
@@ -8,8 +11,14 @@ use ic_types::CryptoHashOfState;
 use std::{
     convert::TryInto,
     fs::File,
-    io::{BufRead, BufReader},
-    path::{Path, PathBuf},
+    io::{
+        BufRead,
+        BufReader,
+    },
+    path::{
+        Path,
+        PathBuf,
+    },
     str::FromStr,
 };
 
@@ -148,14 +157,27 @@ pub fn do_verify_manifest(file: &Path) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use std::io::{Seek, Write};
+    use std::io::{
+        Seek,
+        Write,
+    };
 
     use ic_state_manager::manifest::{
-        hash::{chunk_hasher, file_hasher},
+        hash::{
+            chunk_hasher,
+            file_hasher,
+        },
         manifest_hash,
     };
-    use ic_state_manager::state_sync::types::{ChunkInfo, FileInfo, Manifest};
-    use ic_types::state_sync::{StateSyncVersion, CURRENT_STATE_SYNC_VERSION};
+    use ic_state_manager::state_sync::types::{
+        ChunkInfo,
+        FileInfo,
+        Manifest,
+    };
+    use ic_types::state_sync::{
+        StateSyncVersion,
+        CURRENT_STATE_SYNC_VERSION,
+    };
 
     use super::verify_manifest;
 

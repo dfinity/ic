@@ -2,7 +2,12 @@ use crate::utils::canister_id_range_to_string;
 
 use ic_base_types::SubnetId;
 use ic_recovery::admin_helper::{
-    quote, AdminHelper, CommandHelper, IcAdmin, SSH_READONLY_ACCESS_ARG, SUMMARY_ARG,
+    quote,
+    AdminHelper,
+    CommandHelper,
+    IcAdmin,
+    SSH_READONLY_ACCESS_ARG,
+    SUMMARY_ARG,
 };
 use ic_registry_routing_table::CanisterIdRange;
 
@@ -126,7 +131,10 @@ mod tests {
     use ic_base_types::PrincipalId;
     use url::Url;
 
-    use std::{path::PathBuf, str::FromStr};
+    use std::{
+        path::PathBuf,
+        str::FromStr,
+    };
 
     const FAKE_IC_ADMIN_DIR: &str = "/fake/ic/admin/dir/";
     const FAKE_NNS_URL: &str = "https://fake_nns_url.com:8080";

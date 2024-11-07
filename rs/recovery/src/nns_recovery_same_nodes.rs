@@ -1,22 +1,45 @@
 use crate::{
-    cli::{print_height_info, read_optional, read_optional_version},
-    error::{GracefulExpect, RecoveryError},
+    cli::{
+        print_height_info,
+        read_optional,
+        read_optional_version,
+    },
+    error::{
+        GracefulExpect,
+        RecoveryError,
+    },
     file_sync_helper::create_dir,
     recovery_iterator::RecoveryIterator,
     registry_helper::RegistryPollingStrategy,
-    RecoveryArgs, RecoveryResult, CUPS_DIR,
+    RecoveryArgs,
+    RecoveryResult,
+    CUPS_DIR,
 };
 use clap::Parser;
 use ic_base_types::SubnetId;
 use ic_types::ReplicaVersion;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use slog::Logger;
-use std::{iter::Peekable, net::IpAddr, path::PathBuf};
+use std::{
+    iter::Peekable,
+    net::IpAddr,
+    path::PathBuf,
+};
 use strum::IntoEnumIterator;
-use strum_macros::{EnumIter, EnumMessage, EnumString};
+use strum_macros::{
+    EnumIter,
+    EnumMessage,
+    EnumString,
+};
 use url::Url;
 
-use crate::{Recovery, Step};
+use crate::{
+    Recovery,
+    Step,
+};
 
 #[derive(
     Copy, Clone, PartialEq, Debug, Deserialize, EnumIter, EnumMessage, EnumString, Serialize,

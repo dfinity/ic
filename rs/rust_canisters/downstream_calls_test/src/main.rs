@@ -1,5 +1,12 @@
-use candid::{candid_method, Decode, Encode};
-use downstream_calls_test::{CallOrResponse, State};
+use candid::{
+    candid_method,
+    Decode,
+    Encode,
+};
+use downstream_calls_test::{
+    CallOrResponse,
+    State,
+};
 use ic_cdk::api::call::call_raw;
 use ic_cdk_macros::update;
 

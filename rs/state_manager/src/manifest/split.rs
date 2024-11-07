@@ -1,16 +1,35 @@
-use super::hash::{chunk_hasher, file_hasher, ManifestHash};
-use super::{validate_manifest_internal_consistency, write_chunk_hash, ManifestValidationError};
+use super::hash::{
+    chunk_hasher,
+    file_hasher,
+    ManifestHash,
+};
+use super::{
+    validate_manifest_internal_consistency,
+    write_chunk_hash,
+    ManifestValidationError,
+};
 use crate::state_sync::types::{
-    ChunkInfo, FileInfo, Manifest, ManifestData, DEFAULT_CHUNK_SIZE,
+    ChunkInfo,
+    FileInfo,
+    Manifest,
+    ManifestData,
+    DEFAULT_CHUNK_SIZE,
     MAX_SUPPORTED_STATE_SYNC_VERSION,
 };
-use ic_base_types::{subnet_id_into_protobuf, SubnetId};
+use ic_base_types::{
+    subnet_id_into_protobuf,
+    SubnetId,
+};
 use ic_protobuf::state::system_metadata::v1 as pb_metadata;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::SystemMetadata;
 use ic_state_layout::{
-    canister_id_from_path, INGRESS_HISTORY_FILE, SPLIT_MARKER_FILE, STATS_FILE, SUBNET_QUEUES_FILE,
+    canister_id_from_path,
+    INGRESS_HISTORY_FILE,
+    SPLIT_MARKER_FILE,
+    STATS_FILE,
+    SUBNET_QUEUES_FILE,
     SYSTEM_METADATA_FILE,
 };
 use ic_types::state_sync::StateSyncVersion;

@@ -1,68 +1,173 @@
-use candid::{candid_method, Decode, Nat, Principal};
-use dfn_candid::{candid, candid_one, CandidOne};
+use candid::{
+    candid_method,
+    Decode,
+    Nat,
+    Principal,
+};
+use dfn_candid::{
+    candid,
+    candid_one,
+    CandidOne,
+};
 #[allow(unused_imports)]
 use dfn_core::BytesS;
 use dfn_core::{
-    api::{caller, data_certificate, print, set_certified_data, time_nanos, trap_with},
-    endpoint::reject_on_decode_error::{over, over_async, over_async_may_reject},
-    over_init, printer, setup,
+    api::{
+        caller,
+        data_certificate,
+        print,
+        set_certified_data,
+        time_nanos,
+        trap_with,
+    },
+    endpoint::reject_on_decode_error::{
+        over,
+        over_async,
+        over_async_may_reject,
+    },
+    over_init,
+    printer,
+    setup,
 };
 use dfn_protobuf::protobuf;
 use ic_base_types::CanisterId;
-use ic_canister_log::{LogEntry, Sink};
-use ic_icrc1::endpoints::{convert_transfer_error, StandardRecord};
+use ic_canister_log::{
+    LogEntry,
+    Sink,
+};
+use ic_icrc1::endpoints::{
+    convert_transfer_error,
+    StandardRecord,
+};
 use ic_ledger_canister_core::runtime::total_memory_size_bytes;
 use ic_ledger_canister_core::{
-    archive::{Archive, ArchiveOptions},
+    archive::{
+        Archive,
+        ArchiveOptions,
+    },
     ledger::{
-        apply_transaction, archive_blocks, block_locations, find_block_in_archive, LedgerAccess,
+        apply_transaction,
+        archive_blocks,
+        block_locations,
+        find_block_in_archive,
+        LedgerAccess,
         TransferError as CoreTransferError,
     },
     range_utils,
 };
 use ic_ledger_core::{
-    block::{BlockIndex, BlockType, EncodedBlock},
+    block::{
+        BlockIndex,
+        BlockType,
+        EncodedBlock,
+    },
     timestamp::TimeStamp,
-    tokens::{Tokens, DECIMAL_PLACES},
+    tokens::{
+        Tokens,
+        DECIMAL_PLACES,
+    },
 };
-use ic_stable_structures::reader::{BufferedReader, Reader};
-use ic_stable_structures::writer::{BufferedWriter, Writer};
+use ic_stable_structures::reader::{
+    BufferedReader,
+    Reader,
+};
+use ic_stable_structures::writer::{
+    BufferedWriter,
+    Writer,
+};
 #[cfg(feature = "icp-allowance-getter")]
 use icp_ledger::IcpAllowanceArgs;
 use icp_ledger::{
-    max_blocks_per_request, protobuf, tokens_into_proto, AccountBalanceArgs, AccountIdBlob,
-    AccountIdentifier, ArchiveInfo, ArchivedBlocksRange, ArchivedEncodedBlocksRange, Archives,
-    BinaryAccountBalanceArgs, Block, BlockArg, BlockRes, CandidBlock, Decimals, FeatureFlags,
-    GetBlocksArgs, InitArgs, IterBlocksArgs, LedgerCanisterPayload, Memo, Name, Operation,
-    PaymentError, QueryBlocksResponse, QueryEncodedBlocksResponse, SendArgs, Subaccount, Symbol,
-    TipOfChainRes, TotalSupplyArgs, Transaction, TransferArgs, TransferError, TransferFee,
-    TransferFeeArgs, MEMO_SIZE_BYTES,
+    max_blocks_per_request,
+    protobuf,
+    tokens_into_proto,
+    AccountBalanceArgs,
+    AccountIdBlob,
+    AccountIdentifier,
+    ArchiveInfo,
+    ArchivedBlocksRange,
+    ArchivedEncodedBlocksRange,
+    Archives,
+    BinaryAccountBalanceArgs,
+    Block,
+    BlockArg,
+    BlockRes,
+    CandidBlock,
+    Decimals,
+    FeatureFlags,
+    GetBlocksArgs,
+    InitArgs,
+    IterBlocksArgs,
+    LedgerCanisterPayload,
+    Memo,
+    Name,
+    Operation,
+    PaymentError,
+    QueryBlocksResponse,
+    QueryEncodedBlocksResponse,
+    SendArgs,
+    Subaccount,
+    Symbol,
+    TipOfChainRes,
+    TotalSupplyArgs,
+    Transaction,
+    TransferArgs,
+    TransferError,
+    TransferFee,
+    TransferFeeArgs,
+    MEMO_SIZE_BYTES,
 };
 use icrc_ledger_types::icrc1::transfer::TransferError as Icrc1TransferError;
-use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
-use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
+use icrc_ledger_types::icrc2::allowance::{
+    Allowance,
+    AllowanceArgs,
+};
+use icrc_ledger_types::icrc2::approve::{
+    ApproveArgs,
+    ApproveError,
+};
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value,
     icrc21::lib::build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints,
     icrc3::archive::QueryArchiveFn,
 };
 use icrc_ledger_types::{
-    icrc1::account::Account, icrc2::transfer_from::TransferFromArgs,
+    icrc1::account::Account,
+    icrc2::transfer_from::TransferFromArgs,
     icrc2::transfer_from::TransferFromError,
 };
 use icrc_ledger_types::{
     icrc1::transfer::TransferArg,
-    icrc21::{errors::Icrc21Error, requests::ConsentMessageRequest, responses::ConsentInfo},
+    icrc21::{
+        errors::Icrc21Error,
+        requests::ConsentMessageRequest,
+        responses::ConsentInfo,
+    },
 };
-use ledger_canister::{Ledger, LEDGER, LEDGER_VERSION, MAX_MESSAGE_SIZE_BYTES, UPGRADES_MEMORY};
+use ledger_canister::{
+    Ledger,
+    LEDGER,
+    LEDGER_VERSION,
+    MAX_MESSAGE_SIZE_BYTES,
+    UPGRADES_MEMORY,
+};
 use num_traits::cast::ToPrimitive;
 #[allow(unused_imports)]
 use on_wire::IntoWire;
 use std::cell::RefCell;
-use std::io::{Read, Write};
+use std::io::{
+    Read,
+    Write,
+};
 use std::{
-    collections::{HashMap, HashSet},
-    sync::{Arc, RwLock},
+    collections::{
+        HashMap,
+        HashSet,
+    },
+    sync::{
+        Arc,
+        RwLock,
+    },
     time::Duration,
 };
 
@@ -394,7 +499,11 @@ pub async fn notify(
     to_subaccount: Option<Subaccount>,
     notify_using_protobuf: bool,
 ) -> Result<BytesS, String> {
-    use dfn_core::api::{call_bytes_with_cleanup, call_with_cleanup, Funds};
+    use dfn_core::api::{
+        call_bytes_with_cleanup,
+        call_with_cleanup,
+        Funds,
+    };
     use dfn_protobuf::ProtoBuf;
 
     NOTIFY_METHOD_CALLS.with(|n| *n.borrow_mut() += 1);
@@ -1685,7 +1794,11 @@ fn get_canidid_interface() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use candid_parser::utils::{service_compatible, service_equal, CandidSource};
+    use candid_parser::utils::{
+        service_compatible,
+        service_equal,
+        CandidSource,
+    };
     use std::path::PathBuf;
 
     #[test]

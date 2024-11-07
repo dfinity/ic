@@ -1,4 +1,7 @@
-use anyhow::{Context, Error};
+use anyhow::{
+    Context,
+    Error,
+};
 use itertools::join;
 use std::fmt;
 use std::fs;

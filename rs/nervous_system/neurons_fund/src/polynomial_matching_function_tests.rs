@@ -1,5 +1,9 @@
 use super::*;
-use crate::{DeserializableFunction, SerializableFunction, E8};
+use crate::{
+    DeserializableFunction,
+    SerializableFunction,
+    E8,
+};
 use assert_matches::assert_matches;
 use ic_nervous_system_common::WIDE_RANGE_OF_U64_VALUES;
 use lazy_static::lazy_static;

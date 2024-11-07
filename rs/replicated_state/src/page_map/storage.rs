@@ -2,30 +2,73 @@
 //! represented on disk, without any parts of a PageMap which are purely represented in memory.
 
 use std::{
-    collections::{BTreeMap, BTreeSet},
-    fs::{File, OpenOptions},
-    io::{Read, Seek, SeekFrom, Write},
+    collections::{
+        BTreeMap,
+        BTreeSet,
+    },
+    fs::{
+        File,
+        OpenOptions,
+    },
+    io::{
+        Read,
+        Seek,
+        SeekFrom,
+        Write,
+    },
     ops::Range,
-    path::{Path, PathBuf},
+    path::{
+        Path,
+        PathBuf,
+    },
     sync::Arc,
 };
 
 use crate::page_map::{
-    checkpoint::{Checkpoint, Mapping, ZEROED_PAGE},
-    CheckpointSerialization, MappingSerialization, MemoryInstruction, MemoryInstructions,
-    MemoryMapOrData, PageDelta, PersistenceError, StorageMetrics, LABEL_OP_FLUSH, LABEL_OP_MERGE,
-    LABEL_TYPE_INDEX, LABEL_TYPE_PAGE_DATA,
+    checkpoint::{
+        Checkpoint,
+        Mapping,
+        ZEROED_PAGE,
+    },
+    CheckpointSerialization,
+    MappingSerialization,
+    MemoryInstruction,
+    MemoryInstructions,
+    MemoryMapOrData,
+    PageDelta,
+    PersistenceError,
+    StorageMetrics,
+    LABEL_OP_FLUSH,
+    LABEL_OP_MERGE,
+    LABEL_TYPE_INDEX,
+    LABEL_TYPE_PAGE_DATA,
 };
 
 use bit_vec::BitVec;
 use ic_config::state_manager::LsmtConfig;
-use ic_sys::{PageBytes, PageIndex, PAGE_SIZE};
+use ic_sys::{
+    PageBytes,
+    PageIndex,
+    PAGE_SIZE,
+};
 use ic_types::Height;
-use itertools::{izip, Itertools};
-use phantom_newtype::{AmountOf, Id};
-use serde::{Deserialize, Serialize};
+use itertools::{
+    izip,
+    Itertools,
+};
+use phantom_newtype::{
+    AmountOf,
+    Id,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::cmp::Ordering;
-use strum_macros::{EnumCount, EnumIter};
+use strum_macros::{
+    EnumCount,
+    EnumIter,
+};
 
 /// The (soft) maximum of the number of overlay files.
 /// There is no limit on the number of overlays while reading,

@@ -1,60 +1,123 @@
 use crate::{
     canister_agent::HasCanisterAgentCapability,
-    canister_api::{CallMode, ListDeployedSnsesRequest, SnsRequestProvider},
+    canister_api::{
+        CallMode,
+        ListDeployedSnsesRequest,
+        SnsRequestProvider,
+    },
     driver::{
-        test_env::{TestEnv, TestEnvAttribute},
-        test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl},
+        test_env::{
+            TestEnv,
+            TestEnvAttribute,
+        },
+        test_env_api::{
+            GetFirstHealthyNodeSnapshot,
+            HasPublicApiUrl,
+        },
     },
     nns::{
-        get_governance_canister, submit_external_proposal_with_test_id,
+        get_governance_canister,
+        submit_external_proposal_with_test_id,
         vote_execute_proposal_assert_executed,
     },
     util::{
-        block_on, create_service_nervous_system_into_params, deposit_cycles, runtime_from_url,
-        to_principal_id, UniversalCanister,
+        block_on,
+        create_service_nervous_system_into_params,
+        deposit_cycles,
+        runtime_from_url,
+        to_principal_id,
+        UniversalCanister,
     },
 };
-use anyhow::{bail, Context};
-use candid::{Decode, Encode, Principal};
-use canister_test::{Project, Runtime};
+use anyhow::{
+    bail,
+    Context,
+};
+use candid::{
+    Decode,
+    Encode,
+    Principal,
+};
+use canister_test::{
+    Project,
+    Runtime,
+};
 use dfn_candid::candid_one;
-use ic_agent::{Agent, AgentError};
-use ic_base_types::{CanisterId, PrincipalId, SubnetId};
+use ic_agent::{
+    Agent,
+    AgentError,
+};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+    SubnetId,
+};
 use ic_canister_client::Sender;
 use ic_nervous_system_common::E8;
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL,
+    TEST_NEURON_1_ID,
+    TEST_NEURON_1_OWNER_KEYPAIR,
+    TEST_NEURON_1_OWNER_PRINCIPAL,
 };
-use ic_nervous_system_proto::pb::v1::{Duration, Image, Percentage, Tokens};
+use ic_nervous_system_proto::pb::v1::{
+    Duration,
+    Image,
+    Percentage,
+    Tokens,
+};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use ic_nns_governance_api::pb::v1::{
     create_service_nervous_system::{
         governance_parameters::VotingRewardParameters,
         initial_token_distribution::{
-            developer_distribution::NeuronDistribution, DeveloperDistribution, SwapDistribution,
+            developer_distribution::NeuronDistribution,
+            DeveloperDistribution,
+            SwapDistribution,
             TreasuryDistribution,
         },
         swap_parameters::NeuronBasketConstructionParameters,
-        GovernanceParameters, InitialTokenDistribution, LedgerParameters, SwapParameters,
+        GovernanceParameters,
+        InitialTokenDistribution,
+        LedgerParameters,
+        SwapParameters,
     },
     manage_neuron::Command,
     manage_neuron_response::Command as CommandResp,
     proposal::Action,
-    CreateServiceNervousSystem, ManageNeuron, ManageNeuronResponse, NnsFunction, OpenSnsTokenSwap,
+    CreateServiceNervousSystem,
+    ManageNeuron,
+    ManageNeuronResponse,
+    NnsFunction,
+    OpenSnsTokenSwap,
     Proposal,
 };
 use ic_nns_test_utils::sns_wasm::ensure_sns_wasm_gzipped;
 use ic_sns_governance::pb::v1::governance::Mode;
 use ic_sns_init::pb::v1::SnsInitPayload;
-use ic_sns_swap::pb::v1::{GetStateRequest, GetStateResponse, Init, Lifecycle};
+use ic_sns_swap::pb::v1::{
+    GetStateRequest,
+    GetStateResponse,
+    Init,
+    Lifecycle,
+};
 use ic_sns_wasm::pb::v1::{
-    AddWasmRequest, SnsCanisterIds, SnsCanisterType, SnsWasm, UpdateSnsSubnetListRequest,
+    AddWasmRequest,
+    SnsCanisterIds,
+    SnsCanisterType,
+    SnsWasm,
+    UpdateSnsSubnetListRequest,
 };
 use ic_types::Cycles;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use slog::info;
-use std::{str::FromStr, time::SystemTime};
+use std::{
+    str::FromStr,
+    time::SystemTime,
+};
 
 pub const SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S: u64 = E8;
 pub const SNS_SALE_PARAM_MAX_PARTICIPANT_ICP_E8S: u64 = 250_000 * E8;

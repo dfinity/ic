@@ -1,7 +1,20 @@
-use candid::{CandidType, Decode, Encode, Nat, Principal};
-use ic_base_types::{CanisterId, PrincipalId};
+use candid::{
+    CandidType,
+    Decode,
+    Encode,
+    Nat,
+    Principal,
+};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_nns_constants::ALL_NNS_CANISTER_IDS;
-use pocket_ic::{CanisterSettings, PocketIc, WasmResult};
+use pocket_ic::{
+    CanisterSettings,
+    PocketIc,
+    WasmResult,
+};
 use serde::Deserialize;
 
 pub mod index;

@@ -1,5 +1,8 @@
 use crate::objects::*;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::fmt::Display;
 
 /// SyncStatus is used to provide additional context about an implementation's

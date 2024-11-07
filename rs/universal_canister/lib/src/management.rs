@@ -1,6 +1,14 @@
 use crate::CallInterface;
-use crate::{wasm, Call};
-use candid::{CandidType, Deserialize, Encode, Principal};
+use crate::{
+    wasm,
+    Call,
+};
+use candid::{
+    CandidType,
+    Deserialize,
+    Encode,
+    Principal,
+};
 use std::convert::TryFrom;
 
 /// Creates a new canister.

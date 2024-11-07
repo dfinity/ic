@@ -1,27 +1,56 @@
 use assert_matches::assert_matches;
-use candid::{Decode, Encode, Nat};
+use candid::{
+    Decode,
+    Encode,
+    Nat,
+};
 use ic_base_types::CanisterId;
 use ic_base_types::PrincipalId;
-use ic_icrc1::{Block, Operation, Transaction};
-use ic_icrc1_index::{
-    GetAccountTransactionsArgs, GetTransactions, GetTransactionsResult, InitArgs as IndexInitArgs,
-    ListSubaccountsArgs, TransactionWithId,
+use ic_icrc1::{
+    Block,
+    Operation,
+    Transaction,
 };
-use ic_icrc1_ledger::{FeatureFlags, InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
+use ic_icrc1_index::{
+    GetAccountTransactionsArgs,
+    GetTransactions,
+    GetTransactionsResult,
+    InitArgs as IndexInitArgs,
+    ListSubaccountsArgs,
+    TransactionWithId,
+};
+use ic_icrc1_ledger::{
+    FeatureFlags,
+    InitArgsBuilder as LedgerInitArgsBuilder,
+    LedgerArgument,
+};
 use ic_icrc1_tokens_u64::U64;
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::{
-    block::{BlockIndex, BlockType, EncodedBlock},
+    block::{
+        BlockIndex,
+        BlockType,
+        EncodedBlock,
+    },
     timestamp::TimeStamp,
     tokens::Zero,
 };
 use ic_ledger_hash_of::HashOf;
 use ic_rosetta_test_utils::test_http_request_decoding_quota;
 use ic_state_machine_tests::StateMachine;
-use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
-use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
+use icrc_ledger_types::icrc1::transfer::{
+    Memo,
+    TransferArg,
+    TransferError,
+};
+use icrc_ledger_types::icrc2::approve::{
+    ApproveArgs,
+    ApproveError,
+};
 use icrc_ledger_types::{
-    icrc1::account::Account, icrc1::account::Subaccount, icrc3::archive::ArchiveInfo,
+    icrc1::account::Account,
+    icrc1::account::Subaccount,
+    icrc3::archive::ArchiveInfo,
 };
 use num_traits::cast::ToPrimitive;
 use std::path::PathBuf;
@@ -669,7 +698,10 @@ fn test_index_http_request_decoding_quota() {
 mod metrics {
     use crate::index_wasm;
     use candid::Principal;
-    use ic_base_types::{CanisterId, PrincipalId};
+    use ic_base_types::{
+        CanisterId,
+        PrincipalId,
+    };
     use ic_icrc1_index::InitArgs;
 
     #[test]

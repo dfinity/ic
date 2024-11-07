@@ -1,11 +1,18 @@
-use std::net::{Ipv6Addr, SocketAddrV6};
-use std::time::{Duration, Instant};
+use std::net::{
+    Ipv6Addr,
+    SocketAddrV6,
+};
+use std::time::{
+    Duration,
+    Instant,
+};
 
 use anyhow::anyhow;
 use anyhow::Context;
 use candid::Principal;
 use ic_boundary_nodes_system_test_utils::{
-    constants::BOUNDARY_NODE_NAME, helpers::BoundaryNodeHttpsConfig,
+    constants::BOUNDARY_NODE_NAME,
+    helpers::BoundaryNodeHttpsConfig,
 };
 use ic_protobuf::registry::routing_table::v1::RoutingTable as PbRoutingTable;
 use ic_registry_keys::make_routing_table_record_key;
@@ -14,23 +21,51 @@ use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     canister_agent::CanisterAgent,
-    canister_api::{CallMode, GenericRequest},
+    canister_api::{
+        CallMode,
+        GenericRequest,
+    },
     driver::{
-        boundary_node::{BoundaryNode, BoundaryNodeVm},
+        boundary_node::{
+            BoundaryNode,
+            BoundaryNodeVm,
+        },
         farm::HostFeature,
-        ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
-        prometheus_vm::{HasPrometheus, PrometheusVm},
+        ic::{
+            AmountOfMemoryKiB,
+            ImageSizeGiB,
+            InternetComputer,
+            NrOfVCPUs,
+            Subnet,
+            VmResources,
+        },
+        prometheus_vm::{
+            HasPrometheus,
+            PrometheusVm,
+        },
         test_env::TestEnv,
         test_env_api::{
-            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
-            RetrieveIpv4Addr, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+            HasPublicApiUrl,
+            HasTopologySnapshot,
+            IcNodeContainer,
+            NnsInstallationBuilder,
+            RetrieveIpv4Addr,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
         },
     },
     generic_workload_engine::{
         engine::Engine,
-        metrics::{LoadTestMetrics, RequestOutcome},
+        metrics::{
+            LoadTestMetrics,
+            RequestOutcome,
+        },
     },
-    util::{block_on, create_agent_mapping, spawn_round_robin_workload_engine},
+    util::{
+        block_on,
+        create_agent_mapping,
+        spawn_round_robin_workload_engine,
+    },
 };
 use prost::Message;
 use rand::rngs::StdRng;
@@ -40,7 +75,10 @@ use rand::Rng;
 use rand::RngCore;
 use rand::SeedableRng;
 use slog::info;
-use tokio::runtime::{Builder, Runtime};
+use tokio::runtime::{
+    Builder,
+    Runtime,
+};
 
 const COUNTER_CANISTER_WAT: &str = "rs/tests/counter.wat";
 // Size of the payload sent to the counter canister in update("write") call.

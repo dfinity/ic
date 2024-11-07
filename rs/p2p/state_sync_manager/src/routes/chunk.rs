@@ -1,14 +1,26 @@
 use std::sync::Arc;
 
-use crate::metrics::{OngoingStateSyncMetrics, StateSyncManagerHandlerMetrics};
+use crate::metrics::{
+    OngoingStateSyncMetrics,
+    StateSyncManagerHandlerMetrics,
+};
 use crate::ongoing::DownloadChunkError;
 use axum::{
     body::Bytes,
     extract::State,
-    http::{Request, Response, StatusCode},
+    http::{
+        Request,
+        Response,
+        StatusCode,
+    },
 };
 use bytes::BytesMut;
-use ic_interfaces::p2p::state_sync::{Chunk, ChunkId, StateSyncArtifactId, StateSyncClient};
+use ic_interfaces::p2p::state_sync::{
+    Chunk,
+    ChunkId,
+    StateSyncArtifactId,
+    StateSyncClient,
+};
 use ic_logger::ReplicaLogger;
 use ic_protobuf::p2p::v1 as pb;
 use prost::Message;

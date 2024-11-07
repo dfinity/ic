@@ -1,7 +1,14 @@
 use super::*;
 use crate::crypto::threshold_sig::ni_dkg::dummy_internal_transcript;
-use crate::crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTargetSubnet};
-use crate::{Height, PrincipalId, SubnetId};
+use crate::crypto::threshold_sig::ni_dkg::{
+    NiDkgTag,
+    NiDkgTargetSubnet,
+};
+use crate::{
+    Height,
+    PrincipalId,
+    SubnetId,
+};
 
 pub const NODE_1: u64 = 1;
 pub const NODE_2: u64 = 2;

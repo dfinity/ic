@@ -1,7 +1,15 @@
-use crate::in_memory_ledger::{ApprovalKey, InMemoryLedger, InMemoryLedgerState, Tokens};
+use crate::in_memory_ledger::{
+    ApprovalKey,
+    InMemoryLedger,
+    InMemoryLedgerState,
+    Tokens,
+};
 use ic_ledger_core::approvals::Allowance;
 use ic_ledger_core::timestamp::TimeStamp;
-use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
+use ic_ledger_core::tokens::{
+    CheckedAdd,
+    CheckedSub,
+};
 use ic_types::PrincipalId;
 use icrc_ledger_types::icrc1::account::Account;
 

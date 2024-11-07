@@ -3,13 +3,17 @@ use ic_nervous_system_integration_tests::pocket_ic_helpers::sns;
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
     pocket_ic_helpers::{
-        add_wasm_via_nns_proposal, add_wasms_to_sns_wasm, install_nns_canisters, nns,
+        add_wasm_via_nns_proposal,
+        add_wasms_to_sns_wasm,
+        install_nns_canisters,
+        nns,
     },
 };
 use ic_nns_test_utils::sns_wasm::create_modified_sns_wasm;
 use ic_sns_governance::pb::v1::governance::Versions;
 use ic_sns_governance::{
-    governance::UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS, pb::v1 as sns_pb,
+    governance::UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS,
+    pb::v1 as sns_pb,
 };
 use ic_sns_swap::pb::v1::Lifecycle;
 use ic_sns_wasm::pb::v1::SnsCanisterType;

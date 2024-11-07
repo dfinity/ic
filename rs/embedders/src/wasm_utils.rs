@@ -1,22 +1,49 @@
 use std::{
-    collections::{BTreeSet, HashMap},
+    collections::{
+        BTreeSet,
+        HashMap,
+    },
     time::Instant,
 };
 
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_interfaces::execution_environment::HypervisorResult;
 use ic_replicated_state::{
-    canister_state::{execution_state::WasmMetadata, WASM_PAGE_SIZE_IN_BYTES},
-    EmbedderCache, NumWasmPages, PageIndex,
+    canister_state::{
+        execution_state::WasmMetadata,
+        WASM_PAGE_SIZE_IN_BYTES,
+    },
+    EmbedderCache,
+    NumWasmPages,
+    PageIndex,
 };
-use ic_sys::{PageBytes, PAGE_SIZE};
-use ic_types::{methods::WasmMethod, NumInstructions};
-use ic_wasm_types::{BinaryEncodedWasm, WasmInstrumentationError};
-use serde::{Deserialize, Serialize};
+use ic_sys::{
+    PageBytes,
+    PAGE_SIZE,
+};
+use ic_types::{
+    methods::WasmMethod,
+    NumInstructions,
+};
+use ic_wasm_types::{
+    BinaryEncodedWasm,
+    WasmInstrumentationError,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
-use self::{instrumentation::instrument, validation::validate_wasm_binary};
+use self::{
+    instrumentation::instrument,
+    validation::validate_wasm_binary,
+};
 use crate::wasmtime_embedder::StoreData;
-use crate::{serialized_module::SerializedModule, CompilationResult, WasmtimeEmbedder};
+use crate::{
+    serialized_module::SerializedModule,
+    CompilationResult,
+    WasmtimeEmbedder,
+};
 use wasmtime::InstancePre;
 
 pub mod decoding;

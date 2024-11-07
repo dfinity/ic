@@ -1,19 +1,36 @@
 use crate::{
-    environment::Environment, mutate_state, read_state, set_icp_xdr_conversion_rate, State,
+    environment::Environment,
+    mutate_state,
+    read_state,
+    set_icp_xdr_conversion_rate,
+    State,
     ONE_MINUTE_SECONDS,
 };
 use async_trait::async_trait;
 use candid::CandidType;
 use cycles_minting_canister::IcpXdrConversionRate;
 use dfn_candid::candid_one;
-use dfn_core::{api::call_with_cleanup, CanisterId};
+use dfn_core::{
+    api::call_with_cleanup,
+    CanisterId,
+};
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayloadReason;
 use ic_xrc_types::{
-    Asset, AssetClass, ExchangeRate, ExchangeRateError, GetExchangeRateRequest,
+    Asset,
+    AssetClass,
+    ExchangeRate,
+    ExchangeRateError,
+    GetExchangeRateRequest,
     GetExchangeRateResult,
 };
-use serde::{Deserialize, Serialize};
-use std::{cell::RefCell, thread::LocalKey};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use std::{
+    cell::RefCell,
+    thread::LocalKey,
+};
 
 const ICP_SYMBOL: &str = "ICP";
 /// CXDR is an asset whose rate is derived from more sources than the XDR rate.
@@ -503,7 +520,10 @@ mod test {
     use std::{
         cell::RefCell,
         collections::VecDeque,
-        sync::{Arc, Mutex},
+        sync::{
+            Arc,
+            Mutex,
+        },
         time::UNIX_EPOCH,
     };
 

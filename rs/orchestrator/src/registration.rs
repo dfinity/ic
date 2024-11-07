@@ -1,40 +1,76 @@
 #![allow(dead_code)]
 use crate::{
-    error::{OrchestratorError, OrchestratorResult},
-    metrics::{KeyRotationStatus, OrchestratorMetrics},
-    signer::{Hsm, NodeProviderSigner, Signer},
+    error::{
+        OrchestratorError,
+        OrchestratorResult,
+    },
+    metrics::{
+        KeyRotationStatus,
+        OrchestratorMetrics,
+    },
+    signer::{
+        Hsm,
+        NodeProviderSigner,
+        Signer,
+    },
     utils::http_endpoint_to_url,
 };
 use candid::Encode;
-use ic_canister_client::{Agent, Sender};
+use ic_canister_client::{
+    Agent,
+    Sender,
+};
 use ic_config::{
     http_handler::Config as HttpConfig,
     initial_ipv4_config::IPv4Config as InitialIPv4Config,
     message_routing::Config as MsgRoutingConfig,
-    metrics::{Config as MetricsConfig, Exporter},
+    metrics::{
+        Config as MetricsConfig,
+        Exporter,
+    },
     transport::TransportConfig,
     Config,
 };
 use ic_interfaces::crypto::IDkgKeyRotationResult;
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{info, warn, ReplicaLogger};
+use ic_logger::{
+    info,
+    warn,
+    ReplicaLogger,
+};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_protobuf::registry::crypto::v1::PublicKey;
-use ic_registry_canister_api::{AddNodePayload, IPv4Config, UpdateNodeDirectlyPayload};
+use ic_registry_canister_api::{
+    AddNodePayload,
+    IPv4Config,
+    UpdateNodeDirectlyPayload,
+};
 use ic_registry_client_helpers::{
     crypto::CryptoRegistry,
-    subnet::{SubnetRegistry, SubnetTransportRegistry},
+    subnet::{
+        SubnetRegistry,
+        SubnetTransportRegistry,
+    },
 };
 use ic_registry_local_store::LocalStore;
 use ic_sys::utility_command::UtilityCommand;
-use ic_types::{crypto::KeyPurpose, messages::MessageId, NodeId, RegistryVersion, SubnetId};
+use ic_types::{
+    crypto::KeyPurpose,
+    messages::MessageId,
+    NodeId,
+    RegistryVersion,
+    SubnetId,
+};
 use idna::domain_to_ascii_strict;
 use prost::Message;
 use rand::prelude::*;
 use std::{
     net::IpAddr,
     sync::Arc,
-    time::{Duration, SystemTime},
+    time::{
+        Duration,
+        SystemTime,
+    },
 };
 use url::Url;
 
@@ -768,8 +804,12 @@ mod tests {
         use super::*;
         use ic_crypto_temp_crypto::EcdsaSubnetConfig;
         use ic_interfaces::crypto::{
-            BasicSigner, CheckKeysWithRegistryError, CurrentNodePublicKeysError,
-            IDkgDealingEncryptionKeyRotationError, KeyManager, KeyRotationOutcome,
+            BasicSigner,
+            CheckKeysWithRegistryError,
+            CurrentNodePublicKeysError,
+            IDkgDealingEncryptionKeyRotationError,
+            KeyManager,
+            KeyRotationOutcome,
             ThresholdSigVerifierByPublicKey,
         };
         use ic_logger::replica_logger::no_op_logger;
@@ -777,23 +817,32 @@ mod tests {
         use ic_protobuf::registry::subnet::v1::SubnetListRecord;
         use ic_registry_client_fake::FakeRegistryClient;
         use ic_registry_keys::{
-            make_crypto_node_key, make_subnet_list_record_key, make_subnet_record_key,
+            make_crypto_node_key,
+            make_subnet_list_record_key,
+            make_subnet_record_key,
         };
         use ic_registry_local_store::LocalStoreImpl;
         use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
         use ic_test_utilities_in_memory_logger::{
-            assertions::LogEntriesAssert, InMemoryReplicaLogger,
+            assertions::LogEntriesAssert,
+            InMemoryReplicaLogger,
         };
         use ic_types::{
             consensus::CatchUpContentProtobufBytes,
             crypto::{
-                AlgorithmId, BasicSigOf, CombinedThresholdSigOf, CryptoResult,
+                AlgorithmId,
+                BasicSigOf,
+                CombinedThresholdSigOf,
+                CryptoResult,
                 CurrentNodePublicKeys,
             },
             registry::RegistryClientError,
             PrincipalId,
         };
-        use mockall::{predicate::*, *};
+        use mockall::{
+            predicate::*,
+            *,
+        };
         use slog::Level;
         use std::time::UNIX_EPOCH;
         use tempfile::TempDir;

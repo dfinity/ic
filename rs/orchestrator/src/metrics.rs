@@ -1,6 +1,14 @@
-use prometheus::{IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
+use prometheus::{
+    IntCounter,
+    IntCounterVec,
+    IntGauge,
+    IntGaugeVec,
+};
 use strum::IntoEnumIterator;
-use strum_macros::{EnumIter, IntoStaticStr};
+use strum_macros::{
+    EnumIter,
+    IntoStaticStr,
+};
 
 pub const PROMETHEUS_HTTP_PORT: u16 = 9091;
 

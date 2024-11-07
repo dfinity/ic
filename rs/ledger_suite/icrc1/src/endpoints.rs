@@ -6,7 +6,13 @@ use ic_ledger_core::tokens::TokensType;
 use icrc_ledger_types::icrc1::transfer::TransferError;
 use icrc_ledger_types::icrc2::approve::ApproveError;
 use icrc_ledger_types::icrc2::transfer_from::TransferFromError;
-use icrc_ledger_types::icrc3::transactions::{Approve, Burn, Mint, Transaction, Transfer};
+use icrc_ledger_types::icrc3::transactions::{
+    Approve,
+    Burn,
+    Mint,
+    Transaction,
+    Transfer,
+};
 use serde::Deserialize;
 
 pub fn convert_transfer_error<Tokens: TokensType>(

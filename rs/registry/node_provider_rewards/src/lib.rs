@@ -2,10 +2,19 @@ use ic_base_types::PrincipalId;
 use ic_protobuf::registry::{
     dc::v1::DataCenterRecord,
     node_operator::v1::NodeOperatorRecord,
-    node_rewards::v2::{NodeRewardRate, NodeRewardsTable},
+    node_rewards::v2::{
+        NodeRewardRate,
+        NodeRewardsTable,
+    },
 };
-use logs::{LogEntry, RewardsPerNodeProviderLog};
-use std::collections::{BTreeMap, HashMap};
+use logs::{
+    LogEntry,
+    RewardsPerNodeProviderLog,
+};
+use std::collections::{
+    BTreeMap,
+    HashMap,
+};
 pub mod logs;
 
 pub struct RewardsPerNodeProvider {

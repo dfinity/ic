@@ -1,28 +1,55 @@
 pub mod common;
 
 use crate::common::{
-    default_certified_state_reader, default_get_latest_state, default_latest_certified_height,
-    default_read_certified_state, get_free_localhost_socket_addr,
-    test_agent::{self, wait_for_status_healthy, IngressMessage},
-    HttpEndpointBuilder, MockIngressPoolThrottler,
+    default_certified_state_reader,
+    default_get_latest_state,
+    default_latest_certified_height,
+    default_read_certified_state,
+    get_free_localhost_socket_addr,
+    test_agent::{
+        self,
+        wait_for_status_healthy,
+        IngressMessage,
+    },
+    HttpEndpointBuilder,
+    MockIngressPoolThrottler,
 };
 use async_trait::async_trait;
 use axum::body::Body;
-use hyper::{Method, Request, StatusCode};
-use hyper_util::{client::legacy::Client, rt::TokioExecutor};
+use hyper::{
+    Method,
+    Request,
+    StatusCode,
+};
+use hyper_util::{
+    client::legacy::Client,
+    rt::TokioExecutor,
+};
 use ic_config::http_handler::Config;
 use ic_interfaces_state_manager_mocks::MockStateManager;
-use ic_pprof::{Error, PprofCollector};
-use ic_types::{ingress::WasmResult, time::current_time};
+use ic_pprof::{
+    Error,
+    PprofCollector,
+};
+use ic_types::{
+    ingress::WasmResult,
+    time::current_time,
+};
 use rstest::rstest;
 use std::{
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{
+            AtomicBool,
+            Ordering,
+        },
         Arc,
     },
     time::Duration,
 };
-use tokio::{runtime::Runtime, sync::Notify};
+use tokio::{
+    runtime::Runtime,
+    sync::Notify,
+};
 
 /// Test concurrency limiter for `/query` endpoint and that when the load shedder kicks in
 /// we return 429.

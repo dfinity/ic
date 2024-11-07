@@ -1,5 +1,16 @@
-use cargo_metadata::{DependencyKind, Metadata, Node, Package, PackageId, Version};
-use std::collections::{HashMap, HashSet, VecDeque};
+use cargo_metadata::{
+    DependencyKind,
+    Metadata,
+    Node,
+    Package,
+    PackageId,
+    Version,
+};
+use std::collections::{
+    HashMap,
+    HashSet,
+    VecDeque,
+};
 use std::fmt;
 
 /// A pattern for matching package names in a [Rule].

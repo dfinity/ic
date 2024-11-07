@@ -1,28 +1,64 @@
-use bitcoin::{consensus::encode::deserialize, Address, Amount, Block, BlockHash};
-use bitcoincore_rpc::{bitcoincore_rpc_json::CreateRawTransactionInput, Auth, Client, RpcApi};
-use bitcoind::{BitcoinD, Conf, P2P};
+use bitcoin::{
+    consensus::encode::deserialize,
+    Address,
+    Amount,
+    Block,
+    BlockHash,
+};
+use bitcoincore_rpc::{
+    bitcoincore_rpc_json::CreateRawTransactionInput,
+    Auth,
+    Client,
+    RpcApi,
+};
+use bitcoind::{
+    BitcoinD,
+    Conf,
+    P2P,
+};
 use ic_btc_adapter::{
-    config::{Config, IncomingSource},
+    config::{
+        Config,
+        IncomingSource,
+    },
     start_server,
 };
 use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
 use ic_btc_interface::Network;
 use ic_btc_replica_types::{
-    BitcoinAdapterRequestWrapper, BitcoinAdapterResponseWrapper, GetSuccessorsRequestInitial,
+    BitcoinAdapterRequestWrapper,
+    BitcoinAdapterResponseWrapper,
+    GetSuccessorsRequestInitial,
     SendTransactionRequest,
 };
 use ic_config::adapters::AdaptersConfig;
 use ic_config::bitcoin_payload_builder_config::Config as BitcoinPayloadBuilderConfig;
-use ic_interfaces_adapter_client::{Options, RpcAdapterClient, RpcError};
-use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
+use ic_interfaces_adapter_client::{
+    Options,
+    RpcAdapterClient,
+    RpcError,
+};
+use ic_logger::{
+    replica_logger::no_op_logger,
+    ReplicaLogger,
+};
 use ic_metrics::MetricsRegistry;
 use std::{
-    collections::{HashMap, HashSet},
-    net::{SocketAddr, SocketAddrV4},
+    collections::{
+        HashMap,
+        HashSet,
+    },
+    net::{
+        SocketAddr,
+        SocketAddrV4,
+    },
     path::Path,
     str::FromStr,
 };
-use tempfile::{Builder, TempPath};
+use tempfile::{
+    Builder,
+    TempPath,
+};
 use tokio::runtime::Runtime;
 
 type BitcoinAdapterClient = Box<

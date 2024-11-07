@@ -1,21 +1,42 @@
 use std::{
     sync::Arc,
-    time::{SystemTime, UNIX_EPOCH},
+    time::{
+        SystemTime,
+        UNIX_EPOCH,
+    },
 };
 
 use axum::{
     body::Body,
     extract::Path,
-    http::{Request, Response},
-    Extension, Json,
+    http::{
+        Request,
+        Response,
+    },
+    Extension,
+    Json,
 };
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 use crate::{
     certificate::Export,
-    check::{Check, CheckError},
+    check::{
+        Check,
+        CheckError,
+    },
     registration::{
-        Create, CreateError, Get, GetError, Id, Remove, RemoveError, Update, UpdateError,
+        Create,
+        CreateError,
+        Get,
+        GetError,
+        Id,
+        Remove,
+        RemoveError,
+        Update,
+        UpdateError,
         UpdateType,
     },
     work::Queue,
@@ -319,7 +340,13 @@ mod tests {
 
     use crate::{
         check::MockCheck,
-        registration::{MockGet, MockRemove, MockUpdate, Registration, State},
+        registration::{
+            MockGet,
+            MockRemove,
+            MockUpdate,
+            Registration,
+            State,
+        },
     };
 
     #[tokio::test]

@@ -14,7 +14,11 @@
 //! let mac = hmac.finish();
 //! ```
 
-pub use ic_crypto_internal_sha2::{Sha224, Sha256, Sha512};
+pub use ic_crypto_internal_sha2::{
+    Sha224,
+    Sha256,
+    Sha512,
+};
 
 const IPAD: u8 = 0x36;
 const OPAD: u8 = 0x5C;

@@ -1,5 +1,8 @@
 use serde_json::Value;
-use slog::{warn, Logger};
+use slog::{
+    warn,
+    Logger,
+};
 
 /// Merges two serializable objects ignoring all the None values of [new]. For each field where
 /// there is a difference between the old and the new value, will emit a warning with the
@@ -51,7 +54,10 @@ mod tests {
     use std::path::PathBuf;
     use url::Url;
 
-    use crate::{util, RecoveryArgs};
+    use crate::{
+        util,
+        RecoveryArgs,
+    };
 
     use super::*;
 

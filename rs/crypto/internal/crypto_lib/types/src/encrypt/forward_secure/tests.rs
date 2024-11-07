@@ -77,7 +77,10 @@ mod proto_to_csp_fs_enc_pubkey_conversions_tests {
 
 mod proto_to_csp_fs_enc_pop_conversions_tests {
     use super::*;
-    use crate::curves::bls12_381::{FrBytes, G1Bytes};
+    use crate::curves::bls12_381::{
+        FrBytes,
+        G1Bytes,
+    };
 
     #[test]
     fn should_convert_proto_to_pop() {

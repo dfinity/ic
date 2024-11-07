@@ -4,7 +4,8 @@ use std::time::Duration;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::systest;
 use ic_tests::nns_tests::sns_deployment::{
-    initiate_token_swap_with_oc_parameters, sns_setup_with_many_sale_participants,
+    initiate_token_swap_with_oc_parameters,
+    sns_setup_with_many_sale_participants,
     workload_many_users_rps100_refresh_buyer_tokens,
     workload_many_users_rps200_refresh_buyer_tokens,
     workload_many_users_rps20_refresh_buyer_tokens,

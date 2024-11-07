@@ -1,14 +1,25 @@
 use candid::Nat;
 use ic_base_types::PrincipalId;
 use ic_cketh_minter::memo::MintMemo;
-use ic_cketh_test_utils::ckerc20::{CkErc20Setup, DepositCkErc20WithSubaccountParams, ONE_USDC};
+use ic_cketh_test_utils::ckerc20::{
+    CkErc20Setup,
+    DepositCkErc20WithSubaccountParams,
+    ONE_USDC,
+};
 use ic_cketh_test_utils::flow::{
-    DepositCkEthParams, DepositCkEthWithSubaccountParams, DepositParams,
+    DepositCkEthParams,
+    DepositCkEthWithSubaccountParams,
+    DepositParams,
 };
 use ic_cketh_test_utils::{
-    CkEthSetup, DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_DEPOSIT_LOG_INDEX,
-    DEFAULT_DEPOSIT_TRANSACTION_HASH, DEFAULT_ERC20_DEPOSIT_LOG_INDEX,
-    DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH, DEFAULT_PRINCIPAL_ID, DEFAULT_USER_SUBACCOUNT,
+    CkEthSetup,
+    DEFAULT_DEPOSIT_FROM_ADDRESS,
+    DEFAULT_DEPOSIT_LOG_INDEX,
+    DEFAULT_DEPOSIT_TRANSACTION_HASH,
+    DEFAULT_ERC20_DEPOSIT_LOG_INDEX,
+    DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH,
+    DEFAULT_PRINCIPAL_ID,
+    DEFAULT_USER_SUBACCOUNT,
     EXPECTED_BALANCE,
 };
 use icrc_ledger_types::icrc1::account::Account;

@@ -1,19 +1,39 @@
 use criterion::measurement::Measurement;
 use criterion::BatchSize::SmallInput;
-use criterion::{criterion_group, criterion_main, BenchmarkGroup, BenchmarkId, Criterion};
+use criterion::{
+    criterion_group,
+    criterion_main,
+    BenchmarkGroup,
+    BenchmarkId,
+    Criterion,
+};
 use ic_crypto::THRESHOLD_SIG_DATA_STORE_CAPACITY_PER_TAG;
 use ic_crypto_temp_crypto::TempCryptoComponentGeneric;
 use ic_crypto_test_utils::crypto_for;
 use ic_crypto_test_utils_ni_dkg::{
-    load_transcript, run_ni_dkg_and_create_single_transcript, sign_threshold_for_each,
-    NiDkgTestEnvironment, RandomNiDkgConfig,
+    load_transcript,
+    run_ni_dkg_and_create_single_transcript,
+    sign_threshold_for_each,
+    NiDkgTestEnvironment,
+    RandomNiDkgConfig,
 };
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use ic_interfaces::crypto::{NiDkgAlgorithm, ThresholdSigVerifier, ThresholdSigner};
+use ic_interfaces::crypto::{
+    NiDkgAlgorithm,
+    ThresholdSigVerifier,
+    ThresholdSigner,
+};
 use ic_types::consensus::Threshold;
-use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTranscript};
+use ic_types::crypto::threshold_sig::ni_dkg::{
+    NiDkgId,
+    NiDkgTag,
+    NiDkgTranscript,
+};
 use ic_types::crypto::SignableMock;
-use ic_types::{Height, NodeId};
+use ic_types::{
+    Height,
+    NodeId,
+};
 use rand::prelude::*;
 use rand::seq::SliceRandom;
 use rand_chacha::ChaCha20Rng;

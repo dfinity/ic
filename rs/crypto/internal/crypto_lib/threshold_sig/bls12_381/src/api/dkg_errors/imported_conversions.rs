@@ -6,8 +6,14 @@
 // TODO (CRP-817): Get the tests from there.
 mod create_dealing_error_conversions_v2 {
     // TODO (CRP-818): Remove the v2 and merge.
-    use crate::api::ni_dkg_errors::{CspDkgCreateDealingError, CspDkgCreateReshareDealingError};
-    use ic_types::crypto::error::{InternalError, InvalidArgumentError};
+    use crate::api::ni_dkg_errors::{
+        CspDkgCreateDealingError,
+        CspDkgCreateReshareDealingError,
+    };
+    use ic_types::crypto::error::{
+        InternalError,
+        InvalidArgumentError,
+    };
     use ic_types::crypto::threshold_sig::ni_dkg::errors::create_dealing_error::DkgCreateDealingError;
     use ic_types::crypto::threshold_sig::ni_dkg::errors::MalformedFsEncryptionPublicKeyError;
 
@@ -99,7 +105,10 @@ mod create_dealing_error_conversions_v2 {
 // From: crypto/src/sign/threshold_sig/ni_dkg/dealing/error_conversions.rs
 mod verify_dealing_error_conversions {
 
-    use crate::api::ni_dkg_errors::{CspDkgVerifyDealingError, CspDkgVerifyReshareDealingError};
+    use crate::api::ni_dkg_errors::{
+        CspDkgVerifyDealingError,
+        CspDkgVerifyReshareDealingError,
+    };
     use ic_types::crypto::threshold_sig::ni_dkg::errors::verify_dealing_error::DkgVerifyDealingError;
     use ic_types::crypto::threshold_sig::ni_dkg::errors::MalformedFsEncryptionPublicKeyError;
 
@@ -179,7 +188,10 @@ mod verify_dealing_error_conversions {
 }
 
 mod retain_active_keys_error_conversions {
-    use crate::api::ni_dkg_errors::{CspDkgRetainThresholdKeysError, CspDkgUpdateFsEpochError};
+    use crate::api::ni_dkg_errors::{
+        CspDkgRetainThresholdKeysError,
+        CspDkgUpdateFsEpochError,
+    };
     use ic_types::crypto::error::InternalError;
     use ic_types::crypto::threshold_sig::ni_dkg::errors::key_removal_error::DkgKeyRemovalError;
 

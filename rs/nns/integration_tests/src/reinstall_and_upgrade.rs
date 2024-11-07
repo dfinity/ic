@@ -1,31 +1,71 @@
 use candid::Encode;
-use canister_test::{Canister, Project, Wasm};
+use canister_test::{
+    Canister,
+    Project,
+    Wasm,
+};
 use dfn_candid::candid_one;
 use ic_canister_client_sender::Sender;
 use ic_management_canister_types::CanisterInstallMode;
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_2_ID, TEST_NEURON_2_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_PRINCIPAL,
+    TEST_NEURON_2_ID,
+    TEST_NEURON_2_OWNER_KEYPAIR,
+    TEST_NEURON_2_OWNER_PRINCIPAL,
 };
-use ic_nns_common::types::{NeuronId, UpdateIcpXdrConversionRatePayload};
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID};
-use ic_nns_governance_api::pb::v1::{Governance as GovernanceProto, NnsFunction};
+use ic_nns_common::types::{
+    NeuronId,
+    UpdateIcpXdrConversionRatePayload,
+};
+use ic_nns_constants::{
+    GOVERNANCE_CANISTER_ID,
+    LIFELINE_CANISTER_ID,
+};
+use ic_nns_governance_api::pb::v1::{
+    Governance as GovernanceProto,
+    NnsFunction,
+};
 use ic_nns_gtc::{
-    pb::v1::{AccountState, Gtc as GtcProto},
-    test_constants::{TEST_IDENTITY_1, TEST_IDENTITY_2, TEST_IDENTITY_3, TEST_IDENTITY_4},
+    pb::v1::{
+        AccountState,
+        Gtc as GtcProto,
+    },
+    test_constants::{
+        TEST_IDENTITY_1,
+        TEST_IDENTITY_2,
+        TEST_IDENTITY_3,
+        TEST_IDENTITY_4,
+    },
 };
 use ic_nns_test_utils::{
-    common::{NnsInitPayloads, NnsInitPayloadsBuilder},
+    common::{
+        NnsInitPayloads,
+        NnsInitPayloadsBuilder,
+    },
     governance::{
-        bump_gzip_timestamp, get_pending_proposals, reinstall_nns_canister_by_proposal,
-        submit_external_update_proposal, upgrade_nns_canister_by_proposal,
+        bump_gzip_timestamp,
+        get_pending_proposals,
+        reinstall_nns_canister_by_proposal,
+        submit_external_update_proposal,
+        upgrade_nns_canister_by_proposal,
         upgrade_nns_canister_with_arg_by_proposal,
     },
-    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{
+        state_machine_test_on_nns_subnet,
+        NnsCanisters,
+    },
 };
-use icp_ledger::{LedgerCanisterInitPayload, LedgerCanisterPayload, Tokens};
+use icp_ledger::{
+    LedgerCanisterInitPayload,
+    LedgerCanisterPayload,
+    Tokens,
+};
 use lifeline::LIFELINE_CANISTER_WASM;
 use prost::Message;
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use std::{
+    collections::HashMap,
+    path::PathBuf,
+    sync::Arc,
+};
 
 /// Seed Round (SR) neurons are released over 48 months in the following tests
 const SR_MONTHS_TO_RELEASE: u8 = 48;

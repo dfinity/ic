@@ -1,4 +1,8 @@
-use ic_canister_log::{declare_log_buffer, export, log};
+use ic_canister_log::{
+    declare_log_buffer,
+    export,
+    log,
+};
 
 mod buf_mod {
     use ic_canister_log::declare_log_buffer;

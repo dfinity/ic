@@ -1,9 +1,18 @@
 use std::fs::File;
 use std::path::Path;
 
-use anyhow::{Context, Result};
-use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, DisplayFromStr};
+use anyhow::{
+    Context,
+    Result,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use serde_with::{
+    serde_as,
+    DisplayFromStr,
+};
 use url::Url;
 
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
@@ -48,7 +57,12 @@ pub fn get_deployment_settings(deployment_json: &Path) -> Result<DeploymentSetti
 }
 
 mod comma_urls {
-    use serde::{de, Deserialize, Deserializer, Serializer};
+    use serde::{
+        de,
+        Deserialize,
+        Deserializer,
+        Serializer,
+    };
     use url::Url;
 
     pub(crate) fn serialize<S>(urls: &[Url], s: S) -> Result<S::Ok, S::Error>
@@ -80,7 +94,10 @@ mod comma_urls {
 mod test {
     use super::*;
     use once_cell::sync::Lazy;
-    use serde_json::{json, Value};
+    use serde_json::{
+        json,
+        Value,
+    };
 
     static DEPLOYMENT_VALUE: Lazy<Value> = Lazy::new(|| {
         json!({

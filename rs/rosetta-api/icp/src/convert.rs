@@ -2,37 +2,81 @@ mod state;
 
 use crate::convert::state::State;
 use crate::errors::ApiError;
-use crate::models::amount::{from_amount, ledgeramount_from_amount};
+use crate::models::amount::{
+    from_amount,
+    ledgeramount_from_amount,
+};
 use crate::models::operation::OperationType;
-use crate::models::{self, AccountIdentifier, BlockIdentifier, Operation};
+use crate::models::{
+    self,
+    AccountIdentifier,
+    BlockIdentifier,
+    Operation,
+};
 use crate::request::request_result::RequestResult;
 use crate::request::transaction_operation_results::TransactionOperationResults;
 use crate::request::transaction_results::TransactionResults;
 use crate::request::Request;
 use crate::request_types::{
-    ChangeAutoStakeMaturityMetadata, DisburseMetadata, FollowMetadata, KeyMetadata,
-    MergeMaturityMetadata, NeuronIdentifierMetadata, NeuronInfoMetadata, PublicKeyOrPrincipal,
-    RegisterVoteMetadata, RequestResultMetadata, SetDissolveTimestampMetadata, SpawnMetadata,
-    StakeMaturityMetadata, Status, STATUS_COMPLETED,
+    ChangeAutoStakeMaturityMetadata,
+    DisburseMetadata,
+    FollowMetadata,
+    KeyMetadata,
+    MergeMaturityMetadata,
+    NeuronIdentifierMetadata,
+    NeuronInfoMetadata,
+    PublicKeyOrPrincipal,
+    RegisterVoteMetadata,
+    RequestResultMetadata,
+    SetDissolveTimestampMetadata,
+    SpawnMetadata,
+    StakeMaturityMetadata,
+    Status,
+    STATUS_COMPLETED,
 };
 use crate::transaction_id::TransactionIdentifier;
-use crate::{convert, errors};
+use crate::{
+    convert,
+    errors,
+};
 use dfn_protobuf::ProtoBuf;
 use ic_crypto_tree_hash::Path;
 use ic_ledger_canister_blocks_synchronizer::blocks::HashedBlock;
 use ic_ledger_core::block::BlockType;
 use ic_ledger_hash_of::HashOf;
-use ic_types::messages::{HttpCanisterUpdate, HttpReadState};
-use ic_types::{CanisterId, PrincipalId};
+use ic_types::messages::{
+    HttpCanisterUpdate,
+    HttpReadState,
+};
+use ic_types::{
+    CanisterId,
+    PrincipalId,
+};
 use icp_ledger::{
-    Block, BlockIndex, Operation as LedgerOperation, SendArgs, Subaccount, TimeStamp, Tokens,
+    Block,
+    BlockIndex,
+    Operation as LedgerOperation,
+    SendArgs,
+    Subaccount,
+    TimeStamp,
+    Tokens,
     Transaction,
 };
-use on_wire::{FromWire, IntoWire};
+use on_wire::{
+    FromWire,
+    IntoWire,
+};
 use rosetta_core::convert::principal_id_from_public_key;
 use serde_json::map::Map;
-use serde_json::{from_value, Number, Value};
-use std::convert::{TryFrom, TryInto};
+use serde_json::{
+    from_value,
+    Number,
+    Value,
+};
+use std::convert::{
+    TryFrom,
+    TryInto,
+};
 
 /// This module converts from ledger_canister data structures to Rosetta data
 /// structures

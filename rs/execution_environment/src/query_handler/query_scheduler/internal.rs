@@ -1,11 +1,21 @@
 use std::{
-    collections::{HashMap, VecDeque},
-    sync::{Arc, Condvar, Mutex},
+    collections::{
+        HashMap,
+        VecDeque,
+    },
+    sync::{
+        Arc,
+        Condvar,
+        Mutex,
+    },
     time::Duration,
 };
 
 use ic_base_types::CanisterId;
-use ic_metrics::{buckets::decimal_buckets_with_zero, MetricsRegistry};
+use ic_metrics::{
+    buckets::decimal_buckets_with_zero,
+    MetricsRegistry,
+};
 use prometheus::Histogram;
 use tracing::instrument;
 

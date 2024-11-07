@@ -1,6 +1,15 @@
-use ic_types::crypto::{AlgorithmId, BasicSig, BasicSigOf, UserPublicKey, DOMAIN_IC_REQUEST};
+use ic_types::crypto::{
+    AlgorithmId,
+    BasicSig,
+    BasicSigOf,
+    UserPublicKey,
+    DOMAIN_IC_REQUEST,
+};
 use ic_types::messages::MessageId;
-use rand::{CryptoRng, Rng};
+use rand::{
+    CryptoRng,
+    Rng,
+};
 
 pub fn ed25519_signature_and_public_key<R: Rng + CryptoRng>(
     request_id: &MessageId,

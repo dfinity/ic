@@ -1,75 +1,150 @@
 use axum::body::Body;
 use hyper::{
-    client::conn::http1::{handshake, SendRequest},
-    Method, Request, StatusCode,
+    client::conn::http1::{
+        handshake,
+        SendRequest,
+    },
+    Method,
+    Request,
+    StatusCode,
 };
 use hyper_util::rt::TokioIo;
 use ic_config::http_handler::Config;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
-use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
+use ic_crypto_tree_hash::{
+    LabeledTree,
+    MixedHashTree,
+};
 use ic_error_types::UserError;
 use ic_http_endpoints_public::start_server;
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
-    execution_environment::{IngressFilterService, QueryExecutionResponse, QueryExecutionService},
+    execution_environment::{
+        IngressFilterService,
+        QueryExecutionResponse,
+        QueryExecutionService,
+    },
     ingress_pool::IngressPoolThrottler,
 };
 use ic_interfaces_mocks::consensus_pool::MockConsensusPoolCache;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_registry_mocks::MockRegistryClient;
-use ic_interfaces_state_manager::{CertifiedStateSnapshot, Labeled, StateReader};
+use ic_interfaces_state_manager::{
+    CertifiedStateSnapshot,
+    Labeled,
+    StateReader,
+};
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
-use ic_pprof::{Pprof, PprofCollector};
+use ic_pprof::{
+    Pprof,
+    PprofCollector,
+};
 use ic_protobuf::registry::{
-    crypto::v1::{AlgorithmId as AlgorithmIdProto, PublicKey as PublicKeyProto},
+    crypto::v1::{
+        AlgorithmId as AlgorithmIdProto,
+        PublicKey as PublicKeyProto,
+    },
     provisional_whitelist::v1::ProvisionalWhitelist as ProvisionalWhitelistProto,
     subnet::v1::SubnetRecord,
 };
 use ic_registry_keys::{
-    make_crypto_threshold_signing_pubkey_key, make_provisional_whitelist_record_key,
+    make_crypto_threshold_signing_pubkey_key,
+    make_provisional_whitelist_record_key,
     make_subnet_record_key,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
-use ic_registry_routing_table::{CanisterMigrations, RoutingTable};
+use ic_registry_routing_table::{
+    CanisterMigrations,
+    RoutingTable,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_snapshots::CanisterSnapshots, CanisterQueues, NetworkTopology, ReplicatedState,
+    canister_snapshots::CanisterSnapshots,
+    CanisterQueues,
+    NetworkTopology,
+    ReplicatedState,
     SystemMetadata,
 };
-use ic_test_utilities::crypto::{temp_crypto_component_with_fake_registry, CryptoReturningOk};
+use ic_test_utilities::crypto::{
+    temp_crypto_component_with_fake_registry,
+    CryptoReturningOk,
+};
 use ic_test_utilities_state::ReplicatedStateBuilder;
-use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+use ic_test_utilities_types::ids::{
+    node_test_id,
+    subnet_test_id,
+};
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
     batch::RawQueryStats,
-    consensus::certification::{Certification, CertificationContent},
+    consensus::certification::{
+        Certification,
+        CertificationContent,
+    },
     crypto::{
         threshold_sig::{
-            ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+            ni_dkg::{
+                NiDkgId,
+                NiDkgTag,
+                NiDkgTargetSubnet,
+            },
             ThresholdSigPublicKey,
         },
-        CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, Signed,
+        CombinedThresholdSig,
+        CombinedThresholdSigOf,
+        CryptoHash,
+        Signed,
     },
     malicious_flags::MaliciousFlags,
-    messages::{CertificateDelegation, MessageId, Query, SignedIngress, SignedIngressContent},
+    messages::{
+        CertificateDelegation,
+        MessageId,
+        Query,
+        SignedIngress,
+        SignedIngressContent,
+    },
     signature::ThresholdSignature,
     time::UNIX_EPOCH,
-    CryptoHashOfPartialState, Height, RegistryVersion,
+    CryptoHashOfPartialState,
+    Height,
+    RegistryVersion,
 };
-use mockall::{mock, predicate::*};
+use mockall::{
+    mock,
+    predicate::*,
+};
 use prost::Message;
-use std::{collections::BTreeMap, convert::Infallible, net::SocketAddr, sync::Arc, sync::RwLock};
+use std::{
+    collections::BTreeMap,
+    convert::Infallible,
+    net::SocketAddr,
+    sync::Arc,
+    sync::RwLock,
+};
 use tokio::{
-    net::{TcpSocket, TcpStream},
+    net::{
+        TcpSocket,
+        TcpStream,
+    },
     sync::{
-        mpsc::{channel, unbounded_channel, Sender, UnboundedReceiver},
-        watch, OnceCell,
+        mpsc::{
+            channel,
+            unbounded_channel,
+            Sender,
+            UnboundedReceiver,
+        },
+        watch,
+        OnceCell,
     },
 };
-use tower::{util::BoxCloneService, Service, ServiceExt};
+use tower::{
+    util::BoxCloneService,
+    Service,
+    ServiceExt,
+};
 use tower_test::mock::Handle;
 
 pub type IngressFilterHandle =
@@ -511,12 +586,22 @@ impl HttpEndpointBuilder {
 
 pub mod test_agent {
     use super::*;
-    use ic_crypto_tree_hash::{Label, Path};
+    use ic_crypto_tree_hash::{
+        Label,
+        Path,
+    };
 
     use ic_types::{
         messages::{
-            Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
-            HttpReadStateContent, HttpRequestEnvelope, HttpUserQuery, SignedIngress,
+            Blob,
+            HttpCallContent,
+            HttpCanisterUpdate,
+            HttpQueryContent,
+            HttpReadState,
+            HttpReadStateContent,
+            HttpRequestEnvelope,
+            HttpUserQuery,
+            SignedIngress,
         },
         time::current_time,
         PrincipalId,

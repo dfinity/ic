@@ -1,6 +1,16 @@
-use candid::{decode_one, encode_args, CandidType};
-use ic_management_canister_types::{EmptyBlob, Payload};
-use ic_state_machine_tests::{StateMachine, WasmResult};
+use candid::{
+    decode_one,
+    encode_args,
+    CandidType,
+};
+use ic_management_canister_types::{
+    EmptyBlob,
+    Payload,
+};
+use ic_state_machine_tests::{
+    StateMachine,
+    WasmResult,
+};
 use serde::Deserialize;
 
 // https://github.com/dfinity/motoko/blob/master/test/perf/qr.mo

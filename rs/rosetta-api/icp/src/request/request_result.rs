@@ -1,11 +1,17 @@
 use crate::request::Request;
-use crate::request_types::{RequestResultMetadata, Status};
+use crate::request_types::{
+    RequestResultMetadata,
+    Status,
+};
 use crate::transaction_id::TransactionIdentifier;
 use icp_ledger::BlockIndex;
 use rosetta_core::objects::ObjectMap;
 
 use crate::errors;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct RequestResult {

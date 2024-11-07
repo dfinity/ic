@@ -1,5 +1,9 @@
 use ic_metrics::buckets::decimal_buckets;
-use prometheus::{Histogram, IntCounterVec, IntGauge};
+use prometheus::{
+    Histogram,
+    IntCounterVec,
+    IntGauge,
+};
 
 pub const PROMETHEUS_HTTP_PORT: u16 = 9092;
 

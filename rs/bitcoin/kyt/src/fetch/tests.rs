@@ -1,11 +1,28 @@
 use super::*;
-use crate::{providers::Provider, CheckTransactionIrrecoverableError};
+use crate::{
+    providers::Provider,
+    CheckTransactionIrrecoverableError,
+};
 use bitcoin::{
-    absolute::LockTime, address::Address, hashes::Hash, transaction::Version, Amount, OutPoint,
-    PubkeyHash, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Witness,
+    absolute::LockTime,
+    address::Address,
+    hashes::Hash,
+    transaction::Version,
+    Amount,
+    OutPoint,
+    PubkeyHash,
+    ScriptBuf,
+    Sequence,
+    Transaction,
+    TxIn,
+    TxOut,
+    Witness,
 };
 use ic_btc_kyt::{
-    blocklist, BtcNetwork, KytMode, CHECK_TRANSACTION_CYCLES_REQUIRED,
+    blocklist,
+    BtcNetwork,
+    KytMode,
+    CHECK_TRANSACTION_CYCLES_REQUIRED,
     CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
 };
 use ic_cdk::api::call::RejectionCode;

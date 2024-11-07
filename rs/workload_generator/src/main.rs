@@ -7,18 +7,29 @@ extern crate slog_scope;
 // extern crate tokio;
 use byte_unit::Byte;
 use chrono::Utc;
-use clap::{value_parser, Arg, ValueEnum};
+use clap::{
+    value_parser,
+    Arg,
+    ValueEnum,
+};
 use slog::Drain;
 use std::{
     ffi::OsString,
-    fs, io,
-    path::{Path, PathBuf},
+    fs,
+    io,
+    path::{
+        Path,
+        PathBuf,
+    },
     process::Command,
     str::FromStr,
     time::Duration,
 };
 
-use std::{convert::TryFrom, net::SocketAddrV4};
+use std::{
+    convert::TryFrom,
+    net::SocketAddrV4,
+};
 
 mod canister;
 mod chart;
@@ -30,11 +41,27 @@ mod metrics;
 mod plan;
 mod stats;
 
-use ic_canister_client::{HttpClient, HttpClientConfig, Sender as AgentSender};
+use ic_canister_client::{
+    HttpClient,
+    HttpClientConfig,
+    Sender as AgentSender,
+};
 use ic_canister_client_sender::ed25519_public_key_to_der;
-use ic_config::metrics::{Config as MetricsConfig, Exporter};
-use ic_test_identity::{get_pair, TEST_IDENTITY_KEYPAIR, TEST_IDENTITY_KEYPAIR_HARD_CODED};
-use ic_types::{messages::Blob, CanisterId, PrincipalId, UserId};
+use ic_config::metrics::{
+    Config as MetricsConfig,
+    Exporter,
+};
+use ic_test_identity::{
+    get_pair,
+    TEST_IDENTITY_KEYPAIR,
+    TEST_IDENTITY_KEYPAIR_HARD_CODED,
+};
+use ic_types::{
+    messages::Blob,
+    CanisterId,
+    PrincipalId,
+    UserId,
+};
 use stats::Summary;
 
 #[cfg(debug_assertions)]

@@ -1,24 +1,45 @@
 #[cfg(test)]
 mod tests;
 
-use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
+use ic_base_types::{
+    NodeId,
+    PrincipalId,
+    RegistryVersion,
+    SubnetId,
+};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::{
-    node::{NodeRecord, NodeRegistry},
+    node::{
+        NodeRecord,
+        NodeRegistry,
+    },
     subnet::SubnetRegistry,
 };
-use prometheus::{GaugeVec, IntCounter, Opts};
-use rand::{thread_rng, Rng};
+use prometheus::{
+    GaugeVec,
+    IntCounter,
+    Opts,
+};
+use rand::{
+    thread_rng,
+    Rng,
+};
 use std::{
     collections::BTreeMap,
     convert::TryFrom,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc,
+        Mutex,
+    },
     time::Duration,
 };
 
-use super::{get_node_operator_id, Error};
+use super::{
+    get_node_operator_id,
+    Error,
+};
 
 /// Function that generates a random value in the range [`low`, `high`), i.e.
 /// inclusive of `low` and exclusive of `high`

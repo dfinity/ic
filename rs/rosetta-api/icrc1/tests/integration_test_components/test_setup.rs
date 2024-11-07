@@ -1,5 +1,6 @@
 use crate::common::local_replica::{
-    create_and_install_icrc_ledger, icrc_ledger_default_args_builder,
+    create_and_install_icrc_ledger,
+    icrc_ledger_default_args_builder,
 };
 use pocket_ic::PocketIcBuilder;
 

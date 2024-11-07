@@ -1,45 +1,117 @@
-use ic_base_types::{NumBytes, NumSeconds};
+use ic_base_types::{
+    NumBytes,
+    NumSeconds,
+};
 use ic_config::flag_status::FlagStatus;
-use ic_logger::{error, info, warn, ReplicaLogger};
+use ic_logger::{
+    error,
+    info,
+    warn,
+    ReplicaLogger,
+};
 use ic_management_canister_types::LogVisibilityV2;
-use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+use ic_metrics::{
+    buckets::decimal_buckets,
+    MetricsRegistry,
+};
 use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{
+        try_from_option_field,
+        ProxyDecodeError,
+    },
     state::{
         canister_snapshot_bits::v1 as pb_canister_snapshot_bits,
-        canister_state_bits::v1 as pb_canister_state_bits, ingress::v1 as pb_ingress,
-        queues::v1 as pb_queues, stats::v1 as pb_stats, system_metadata::v1 as pb_metadata,
+        canister_state_bits::v1 as pb_canister_state_bits,
+        ingress::v1 as pb_ingress,
+        queues::v1 as pb_queues,
+        stats::v1 as pb_stats,
+        system_metadata::v1 as pb_metadata,
     },
 };
 use ic_replicated_state::{
     canister_state::{
-        execution_state::{NextScheduledMethod, WasmMetadata},
+        execution_state::{
+            NextScheduledMethod,
+            WasmMetadata,
+        },
         system_state::{
-            wasm_chunk_store::WasmChunkStoreMetadata, CanisterHistory, CyclesUseCase,
+            wasm_chunk_store::WasmChunkStoreMetadata,
+            CanisterHistory,
+            CyclesUseCase,
             OnLowWasmMemoryHookStatus,
         },
     },
-    page_map::{Shard, StorageLayout, StorageResult},
-    CallContextManager, CanisterStatus, ExecutionTask, ExportedFunctions, Global, NumWasmPages,
+    page_map::{
+        Shard,
+        StorageLayout,
+        StorageResult,
+    },
+    CallContextManager,
+    CanisterStatus,
+    ExecutionTask,
+    ExportedFunctions,
+    Global,
+    NumWasmPages,
 };
-use ic_sys::{fs::sync_path, mmap::ScopedMmap};
+use ic_sys::{
+    fs::sync_path,
+    mmap::ScopedMmap,
+};
 use ic_types::{
-    batch::TotalQueryStats, nominal_cycles::NominalCycles, AccumulatedPriority, CanisterId,
-    CanisterLog, ComputeAllocation, Cycles, ExecutionRound, Height, LongExecutionMode,
-    MemoryAllocation, NumInstructions, PrincipalId, SnapshotId, Time,
+    batch::TotalQueryStats,
+    nominal_cycles::NominalCycles,
+    AccumulatedPriority,
+    CanisterId,
+    CanisterLog,
+    ComputeAllocation,
+    Cycles,
+    ExecutionRound,
+    Height,
+    LongExecutionMode,
+    MemoryAllocation,
+    NumInstructions,
+    PrincipalId,
+    SnapshotId,
+    Time,
 };
 use ic_utils::thread::maybe_parallel_map;
-use ic_wasm_types::{CanisterModule, WasmHash};
-use prometheus::{Histogram, IntCounterVec};
-use std::collections::{BTreeMap, BTreeSet};
-use std::convert::{identity, From, TryFrom, TryInto};
+use ic_wasm_types::{
+    CanisterModule,
+    WasmHash,
+};
+use prometheus::{
+    Histogram,
+    IntCounterVec,
+};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
+use std::convert::{
+    identity,
+    From,
+    TryFrom,
+    TryInto,
+};
 use std::ffi::OsStr;
 use std::fs::OpenOptions;
-use std::io::{Error, Write};
+use std::io::{
+    Error,
+    Write,
+};
 use std::marker::PhantomData;
-use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::path::{
+    Path,
+    PathBuf,
+};
+use std::sync::atomic::{
+    AtomicBool,
+    Ordering,
+};
+use std::sync::{
+    Arc,
+    Mutex,
+};
 use std::time::Instant;
 
 use crate::error::LayoutError;

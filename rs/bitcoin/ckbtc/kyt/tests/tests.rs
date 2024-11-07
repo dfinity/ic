@@ -1,14 +1,32 @@
 use assert_matches::assert_matches;
-use candid::{Decode, Encode, Principal};
+use candid::{
+    Decode,
+    Encode,
+    Principal,
+};
 use ic_ckbtc_kyt::{
-    Alert, AlertLevel, DepositRequest, Error as KytError, ExposureType, FetchAlertsResponse,
-    InitArg, KytMode, LifecycleArg, SetApiKeyArg,
+    Alert,
+    AlertLevel,
+    DepositRequest,
+    Error as KytError,
+    ExposureType,
+    FetchAlertsResponse,
+    InitArg,
+    KytMode,
+    LifecycleArg,
+    SetApiKeyArg,
 };
 use ic_management_canister_types::CanisterHttpResponsePayload;
-use ic_state_machine_tests::{StateMachine, WasmResult};
+use ic_state_machine_tests::{
+    StateMachine,
+    WasmResult,
+};
 use ic_test_utilities_load_wasm::load_wasm;
 use ic_types::canister_http::CanisterHttpRequestContext;
-use ic_types::ingress::{IngressState, IngressStatus};
+use ic_types::ingress::{
+    IngressState,
+    IngressStatus,
+};
 use ic_types::Cycles;
 
 const MAX_TICKS: usize = 10;

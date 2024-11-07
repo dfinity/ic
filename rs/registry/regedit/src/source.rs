@@ -1,7 +1,10 @@
 use crate::args::SourceSpec;
 use anyhow::Result;
 use ic_registry_client::client::{
-    RegistryDataProvider, RegistryTransportRecord, RegistryVersion, ZERO_REGISTRY_VERSION,
+    RegistryDataProvider,
+    RegistryTransportRecord,
+    RegistryVersion,
+    ZERO_REGISTRY_VERSION,
 };
 use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_nns_data_provider_wrappers::create_nns_data_provider;

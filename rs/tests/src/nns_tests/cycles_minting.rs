@@ -1,62 +1,143 @@
 use ic_system_test_driver::{
     driver::{
-        test_env::{HasIcPrepDir, TestEnv},
+        test_env::{
+            HasIcPrepDir,
+            TestEnv,
+        },
         test_env_api::{
-            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
+            HasPublicApiUrl,
+            HasTopologySnapshot,
+            IcNodeContainer,
+            NnsInstallationBuilder,
         },
     },
     nns::{
-        change_subnet_type_assignment, change_subnet_type_assignment_with_failure,
-        get_governance_canister, set_authorized_subnetwork_list,
-        set_authorized_subnetwork_list_with_failure, submit_external_proposal_with_test_id,
-        update_subnet_type, update_xdr_per_icp,
+        change_subnet_type_assignment,
+        change_subnet_type_assignment_with_failure,
+        get_governance_canister,
+        set_authorized_subnetwork_list,
+        set_authorized_subnetwork_list_with_failure,
+        submit_external_proposal_with_test_id,
+        update_subnet_type,
+        update_xdr_per_icp,
     },
-    util::{block_on, runtime_from_url},
+    util::{
+        block_on,
+        runtime_from_url,
+    },
 };
 
-use canister_test::{Canister, Project, Wasm};
+use canister_test::{
+    Canister,
+    Project,
+    Wasm,
+};
 use cycles_minting_canister::{
-    create_canister_txn, top_up_canister_txn, CreateCanisterResult,
-    IcpXdrConversionRateCertifiedResponse, NotifyCreateCanister, NotifyError, NotifyTopUp,
-    SubnetFilter, SubnetSelection, TokensToCycles, TopUpCanisterResult, CREATE_CANISTER_REFUND_FEE,
+    create_canister_txn,
+    top_up_canister_txn,
+    CreateCanisterResult,
+    IcpXdrConversionRateCertifiedResponse,
+    NotifyCreateCanister,
+    NotifyError,
+    NotifyTopUp,
+    SubnetFilter,
+    SubnetSelection,
+    TokensToCycles,
+    TopUpCanisterResult,
+    CREATE_CANISTER_REFUND_FEE,
     DEFAULT_CYCLES_PER_XDR,
 };
-use dfn_candid::{candid_one, CandidOne};
-use dfn_protobuf::{ProtoBuf, ToProto};
-use ic_canister_client::{Agent, Ed25519KeyPair, HttpClient, Sender};
+use dfn_candid::{
+    candid_one,
+    CandidOne,
+};
+use dfn_protobuf::{
+    ProtoBuf,
+    ToProto,
+};
+use ic_canister_client::{
+    Agent,
+    Ed25519KeyPair,
+    HttpClient,
+    Sender,
+};
 use ic_certification::verify_certified_data;
 use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_crypto_tree_hash::MixedHashTree;
 use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_from_der;
-use ic_ledger_core::{block::BlockType, tokens::CheckedAdd};
+use ic_ledger_core::{
+    block::BlockType,
+    tokens::CheckedAdd,
+};
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
-use ic_management_canister_types::{CanisterIdRecord, CanisterStatusResult};
+use ic_management_canister_types::{
+    CanisterIdRecord,
+    CanisterStatusResult,
+};
 use ic_nervous_system_clients::canister_status::CanisterStatusResult as RootCanisterStatusResult;
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL,
+    TEST_NEURON_1_ID,
+    TEST_NEURON_1_OWNER_KEYPAIR,
+    TEST_USER1_KEYPAIR,
+    TEST_USER1_PRINCIPAL,
     TEST_USER2_KEYPAIR,
 };
-use ic_nns_common::types::{NeuronId, UpdateIcpXdrConversionRatePayload};
+use ic_nns_common::types::{
+    NeuronId,
+    UpdateIcpXdrConversionRatePayload,
+};
 use ic_nns_constants::{
-    CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, ROOT_CANISTER_ID,
+    CYCLES_MINTING_CANISTER_ID,
+    GOVERNANCE_CANISTER_ID,
+    LEDGER_CANISTER_ID,
+    ROOT_CANISTER_ID,
 };
 use ic_nns_governance_api::pb::v1::NnsFunction;
 use ic_nns_test_utils::governance::{
-    submit_external_update_proposal_allowing_error, upgrade_nns_canister_by_proposal,
+    submit_external_update_proposal_allowing_error,
+    upgrade_nns_canister_by_proposal,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::ic::InternetComputer;
-use ic_types::{CanisterId, Cycles, PrincipalId};
+use ic_types::{
+    CanisterId,
+    Cycles,
+    PrincipalId,
+};
 use icp_ledger::{
-    protobuf::TipOfChainRequest, tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Block,
-    BlockArg, BlockIndex, BlockRes, CyclesResponse, Memo, NotifyCanisterArgs, Operation,
-    Subaccount, TipOfChainRes, Tokens, TransferArgs, TransferError, DEFAULT_TRANSFER_FEE,
+    protobuf::TipOfChainRequest,
+    tokens_from_proto,
+    AccountBalanceArgs,
+    AccountIdentifier,
+    Block,
+    BlockArg,
+    BlockIndex,
+    BlockRes,
+    CyclesResponse,
+    Memo,
+    NotifyCanisterArgs,
+    Operation,
+    Subaccount,
+    TipOfChainRes,
+    Tokens,
+    TransferArgs,
+    TransferError,
+    DEFAULT_TRANSFER_FEE,
 };
 use num_traits::ToPrimitive;
-use on_wire::{FromWire, IntoWire};
-use rand::{rngs::StdRng, SeedableRng};
+use on_wire::{
+    FromWire,
+    IntoWire,
+};
+use rand::{
+    rngs::StdRng,
+    SeedableRng,
+};
 use slog::info;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{
+    AtomicU64,
+    Ordering,
+};
 use url::Url;
 
 fn make_user_ed25519(seed: u64) -> (ic_canister_client_sender::Ed25519KeyPair, PrincipalId) {

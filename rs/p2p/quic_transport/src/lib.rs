@@ -29,30 +29,51 @@
 //!
 //!
 use std::{
-    collections::{BTreeSet, HashMap},
+    collections::{
+        BTreeSet,
+        HashMap,
+    },
     fmt::Debug,
     future::Future,
     net::SocketAddr,
-    sync::{Arc, RwLock},
+    sync::{
+        Arc,
+        RwLock,
+    },
 };
 
 use anyhow::anyhow;
 use async_trait::async_trait;
 use axum::{
-    http::{Request, Response},
+    http::{
+        Request,
+        Response,
+    },
     Router,
 };
 use bytes::Bytes;
-use ic_base_types::{NodeId, RegistryVersion};
+use ic_base_types::{
+    NodeId,
+    RegistryVersion,
+};
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{info, ReplicaLogger};
+use ic_logger::{
+    info,
+    ReplicaLogger,
+};
 use ic_metrics::MetricsRegistry;
 use phantom_newtype::AmountOf;
 use quinn::AsyncUdpSocket;
 use tokio::sync::watch;
-use tokio::task::{JoinError, JoinHandle};
-use tokio_util::{sync::CancellationToken, task::task_tracker::TaskTracker};
+use tokio::task::{
+    JoinError,
+    JoinHandle,
+};
+use tokio_util::{
+    sync::CancellationToken,
+    task::task_tracker::TaskTracker,
+};
 use tracing::instrument;
 
 use crate::connection_handle::ConnectionHandle;

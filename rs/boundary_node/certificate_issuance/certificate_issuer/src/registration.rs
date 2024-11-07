@@ -1,12 +1,22 @@
 use std::sync::Arc;
 
-use anyhow::{anyhow, Context};
+use anyhow::{
+    anyhow,
+    Context,
+};
 use async_trait::async_trait;
-use candid::{Decode, Encode, Principal};
+use candid::{
+    Decode,
+    Encode,
+    Principal,
+};
 use certificate_orchestrator_interface as ifc;
 use ic_agent::Agent;
 use mockall::automock;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 use crate::decoder_config;
 use crate::work::ProcessError;
@@ -159,7 +169,10 @@ pub struct CanisterGetter(pub Arc<Agent>, pub Principal);
 #[async_trait]
 impl Get for CanisterGetter {
     async fn get(&self, id: &Id) -> Result<Registration, GetError> {
-        use ifc::{GetRegistrationError as Error, GetRegistrationResponse as Response};
+        use ifc::{
+            GetRegistrationError as Error,
+            GetRegistrationResponse as Response,
+        };
 
         let args = Encode!(&id).context("failed to encode arg")?;
 
@@ -190,7 +203,10 @@ pub struct CanisterCreator(pub Arc<Agent>, pub Principal);
 #[async_trait]
 impl Create for CanisterCreator {
     async fn create(&self, name: &str, canister: &Principal) -> Result<Id, CreateError> {
-        use ifc::{CreateRegistrationError as Error, CreateRegistrationResponse as Response};
+        use ifc::{
+            CreateRegistrationError as Error,
+            CreateRegistrationResponse as Response,
+        };
 
         let args = Encode!(&name.to_string(), canister).context("failed to encode arg")?;
 
@@ -223,7 +239,10 @@ pub struct CanisterUpdater(pub Arc<Agent>, pub Principal);
 #[async_trait]
 impl Update for CanisterUpdater {
     async fn update(&self, id: &Id, typ: &UpdateType) -> Result<(), UpdateError> {
-        use ifc::{UpdateRegistrationError as Error, UpdateRegistrationResponse as Response};
+        use ifc::{
+            UpdateRegistrationError as Error,
+            UpdateRegistrationResponse as Response,
+        };
 
         let typ: ifc::UpdateType = typ.to_owned().into();
         let args = Encode!(&id, &typ).context("failed to encode arg")?;
@@ -255,7 +274,10 @@ pub struct CanisterRemover(pub Arc<Agent>, pub Principal);
 #[async_trait]
 impl Remove for CanisterRemover {
     async fn remove(&self, id: &Id) -> Result<(), RemoveError> {
-        use ifc::{RemoveRegistrationError as Error, RemoveRegistrationResponse as Response};
+        use ifc::{
+            RemoveRegistrationError as Error,
+            RemoveRegistrationResponse as Response,
+        };
 
         let args = Encode!(&id).context("failed to encode arg")?;
 

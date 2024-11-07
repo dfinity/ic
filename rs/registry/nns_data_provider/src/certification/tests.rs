@@ -1,18 +1,37 @@
-use super::{decode_certified_deltas, CertificationError};
-use ic_certification_test_utils::{CertificateBuilder, CertificateData};
+use super::{
+    decode_certified_deltas,
+    CertificationError,
+};
+use ic_certification_test_utils::{
+    CertificateBuilder,
+    CertificateData,
+};
 use ic_crypto_tree_hash::{
-    flatmap, Digest, FlatMap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree,
+    flatmap,
+    Digest,
+    FlatMap,
+    HashTreeBuilder,
+    HashTreeBuilderImpl,
+    Label,
+    LabeledTree,
     WitnessGenerator,
 };
 use ic_interfaces_registry::RegistryTransportRecord;
 use ic_registry_transport::{
     delete,
-    pb::v1::{CertifiedResponse, RegistryAtomicMutateRequest, RegistryMutation},
+    pb::v1::{
+        CertifiedResponse,
+        RegistryAtomicMutateRequest,
+        RegistryMutation,
+    },
     upsert,
 };
 use ic_types::{
-    crypto::threshold_sig::ThresholdSigPublicKey, crypto::CombinedThresholdSig, CanisterId,
-    RegistryVersion, Time,
+    crypto::threshold_sig::ThresholdSigPublicKey,
+    crypto::CombinedThresholdSig,
+    CanisterId,
+    RegistryVersion,
+    Time,
 };
 use prost::Message;
 use std::string::ToString;

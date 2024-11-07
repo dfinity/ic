@@ -5,7 +5,9 @@ use axum::{
     body::Body,
     extract::Request,
     middleware::Next,
-    middleware::{self},
+    middleware::{
+        self,
+    },
     response::IntoResponse,
     routing::method_routing::post,
     Router,
@@ -13,13 +15,21 @@ use axum::{
 use http::StatusCode;
 use ic_bn_lib::http::ConnInfo;
 use ic_types::{
-    messages::{Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope},
+    messages::{
+        Blob,
+        HttpCallContent,
+        HttpCanisterUpdate,
+        HttpRequestEnvelope,
+    },
     CanisterId,
 };
 use tower::Service;
 
 use crate::{
-    routes::{test::test_route_subnet_with_id, ApiError},
+    routes::{
+        test::test_route_subnet_with_id,
+        ApiError,
+    },
     test_utils::setup_test_router,
 };
 

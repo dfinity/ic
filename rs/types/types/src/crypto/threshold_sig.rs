@@ -1,15 +1,22 @@
 //! Defines threshold signature types.
-use crate::crypto::threshold_sig::ni_dkg::{NiDkgTranscript, ThresholdSigPublicKeyError};
+use crate::crypto::threshold_sig::ni_dkg::{
+    NiDkgTranscript,
+    ThresholdSigPublicKeyError,
+};
 use crate::crypto::AlgorithmId;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspNiDkgTranscript;
 pub use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::ThresholdSigPublicKeyBytesConversionError;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::{
-    bls12_381, CspNiDkgTranscriptToCspThresholdSigPublicKeyConversionError,
+    bls12_381,
+    CspNiDkgTranscriptToCspThresholdSigPublicKeyConversionError,
 };
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::convert::TryFrom;
 
 pub mod errors;

@@ -1,6 +1,9 @@
 //! ReplicaVersion can be converted to/from string representation.
 use once_cell::sync::OnceCell;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::convert::TryFrom;
 use std::error::Error;
 use std::fmt;

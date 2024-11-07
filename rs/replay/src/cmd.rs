@@ -1,5 +1,12 @@
-use clap::{Parser, Subcommand};
-use ic_types::{CanisterId, PrincipalId, SubnetId};
+use clap::{
+    Parser,
+    Subcommand,
+};
+use ic_types::{
+    CanisterId,
+    PrincipalId,
+    SubnetId,
+};
 use icp_ledger::AccountIdentifier;
 use std::path::PathBuf;
 

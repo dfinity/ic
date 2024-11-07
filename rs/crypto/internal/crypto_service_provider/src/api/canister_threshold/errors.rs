@@ -2,7 +2,10 @@
 use crate::KeyId;
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::CanisterThresholdSerializationError;
 use ic_interfaces::crypto::IDkgDealingEncryptionKeyRotationError;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 /// Errors encountered during generation of a MEGa encryption key pair.
 #[derive(Clone, Debug, Deserialize, Serialize)]

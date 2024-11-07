@@ -4,26 +4,62 @@ use anyhow::{bail, Result};
 use ic_agent::Agent;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
-    canister_api::{CallMode, GenericRequest},
+    canister_api::{
+        CallMode,
+        GenericRequest,
+    },
     driver::{
         farm::HostFeature,
         group::SystemTestGroup,
-        ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
-        prometheus_vm::{HasPrometheus, PrometheusVm},
-        simulate_network::{ProductionSubnetTopology, SimulateNetwork},
+        ic::{
+            AmountOfMemoryKiB,
+            ImageSizeGiB,
+            InternetComputer,
+            NrOfVCPUs,
+            Subnet,
+            VmResources,
+        },
+        prometheus_vm::{
+            HasPrometheus,
+            PrometheusVm,
+        },
+        simulate_network::{
+            ProductionSubnetTopology,
+            SimulateNetwork,
+        },
         test_env::TestEnv,
         test_env_api::{
-            get_dependency_path, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-            NnsInstallationBuilder, SubnetSnapshot, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+            get_dependency_path,
+            HasPublicApiUrl,
+            HasTopologySnapshot,
+            IcNodeContainer,
+            NnsInstallationBuilder,
+            SubnetSnapshot,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
         },
-        universal_vm::{UniversalVm, UniversalVms},
+        universal_vm::{
+            UniversalVm,
+            UniversalVms,
+        },
     },
     systest,
-    util::{agent_observes_canister_module, block_on, spawn_round_robin_workload_engine},
+    util::{
+        agent_observes_canister_module,
+        block_on,
+        spawn_round_robin_workload_engine,
+    },
 };
-use slog::{debug, info, Logger};
+use slog::{
+    debug,
+    info,
+    Logger,
+};
 use std::{
-    net::{IpAddr, SocketAddr},
+    net::{
+        IpAddr,
+        SocketAddr,
+    },
     time::Duration,
 };
 

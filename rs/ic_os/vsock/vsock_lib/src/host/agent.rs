@@ -1,9 +1,25 @@
 use crate::host::command_utilities::handle_command_output;
-use crate::host::hsm::{attach_hsm, detach_hsm};
-use crate::protocol::{Command, HostOSVsockVersion, NotifyData, Payload, Response, UpgradeData};
+use crate::host::hsm::{
+    attach_hsm,
+    detach_hsm,
+};
+use crate::protocol::{
+    Command,
+    HostOSVsockVersion,
+    NotifyData,
+    Payload,
+    Response,
+    UpgradeData,
+};
 use sha2::Digest;
-use std::fs::{File, OpenOptions};
-use std::io::{Read, Write};
+use std::fs::{
+    File,
+    OpenOptions,
+};
+use std::io::{
+    Read,
+    Write,
+};
 
 pub fn dispatch(command: &Command) -> Response {
     use Command::*;

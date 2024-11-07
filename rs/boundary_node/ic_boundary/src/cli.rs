@@ -1,9 +1,18 @@
-use std::{net::SocketAddr, path::PathBuf};
+use std::{
+    net::SocketAddr,
+    path::PathBuf,
+};
 
-use clap::{Args, Parser};
+use clap::{
+    Args,
+    Parser,
+};
 use url::Url;
 
-use crate::core::{AUTHOR_NAME, SERVICE_NAME};
+use crate::core::{
+    AUTHOR_NAME,
+    SERVICE_NAME,
+};
 
 #[derive(Parser)]
 #[clap(name = SERVICE_NAME)]

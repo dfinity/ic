@@ -1,11 +1,28 @@
 use crate::page_map::{
-    FileDescriptor, FileOffset, MemoryInstructions, MemoryMapOrData, PageIndex, PersistenceError,
+    FileDescriptor,
+    FileOffset,
+    MemoryInstructions,
+    MemoryMapOrData,
+    PageIndex,
+    PersistenceError,
 };
-use ic_sys::{mmap::ScopedMmap, PAGE_SIZE};
-use ic_sys::{page_bytes_from_ptr, PageBytes};
+use ic_sys::{
+    mmap::ScopedMmap,
+    PAGE_SIZE,
+};
+use ic_sys::{
+    page_bytes_from_ptr,
+    PageBytes,
+};
 use lazy_static::lazy_static;
-use serde::{Deserialize, Serialize};
-use std::fs::{File, OpenOptions};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use std::fs::{
+    File,
+    OpenOptions,
+};
 use std::os::unix::io::AsRawFd;
 use std::os::unix::prelude::FromRawFd;
 use std::path::Path;

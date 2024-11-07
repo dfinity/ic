@@ -1,5 +1,8 @@
 use ic_crypto_internal_bls12_381_type::Scalar;
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::{
+    Zeroize,
+    ZeroizeOnDrop,
+};
 
 /// The size of a chunk in bytes
 pub const CHUNK_BYTES: usize = 2;

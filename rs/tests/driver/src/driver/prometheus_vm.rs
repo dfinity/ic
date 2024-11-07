@@ -1,8 +1,14 @@
 use std::{
     collections::HashMap,
-    fs::{self, File},
+    fs::{
+        self,
+        File,
+    },
     net::Ipv6Addr,
-    path::{Path, PathBuf},
+    path::{
+        Path,
+        PathBuf,
+    },
     time::Duration,
 };
 
@@ -11,24 +17,50 @@ use maplit::hashmap;
 use reqwest::Url;
 use serde::Serialize;
 use serde_json::json;
-use slog::{debug, info};
+use slog::{
+    debug,
+    info,
+};
 
 use crate::driver::{
     constants::SSH_USERNAME,
     farm::HostFeature,
-    ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmAllocationStrategy, VmResources},
+    ic::{
+        AmountOfMemoryKiB,
+        ImageSizeGiB,
+        NrOfVCPUs,
+        VmAllocationStrategy,
+        VmResources,
+    },
     log_events,
-    resource::{DiskImage, ImageType},
+    resource::{
+        DiskImage,
+        ImageType,
+    },
     test_env::TestEnv,
     test_env_api::{
-        get_dependency_path, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
-        RetrieveIpv4Addr, SshSession, TopologySnapshot,
+        get_dependency_path,
+        HasTopologySnapshot,
+        IcNodeContainer,
+        IcNodeSnapshot,
+        RetrieveIpv4Addr,
+        SshSession,
+        TopologySnapshot,
     },
-    test_setup::{GroupSetup, InfraProvider},
-    universal_vm::{UniversalVm, UniversalVms},
+    test_setup::{
+        GroupSetup,
+        InfraProvider,
+    },
+    universal_vm::{
+        UniversalVm,
+        UniversalVms,
+    },
 };
 use crate::driver::{
-    farm::{DnsRecord, DnsRecordType},
+    farm::{
+        DnsRecord,
+        DnsRecordType,
+    },
     test_env::TestEnvAttribute,
     test_env_api::CreateDnsRecords,
 };

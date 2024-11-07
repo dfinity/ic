@@ -2,11 +2,24 @@
 
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_metrics::{
-    buckets::{decimal_buckets, linear_buckets},
+    buckets::{
+        decimal_buckets,
+        linear_buckets,
+    },
     MetricsRegistry,
 };
-use ic_types::consensus::idkg::{HasMasterPublicKeyId, IDkgPayload};
-use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
+use ic_types::consensus::idkg::{
+    HasMasterPublicKeyId,
+    IDkgPayload,
+};
+use prometheus::{
+    Histogram,
+    HistogramVec,
+    IntCounter,
+    IntCounterVec,
+    IntGauge,
+    IntGaugeVec,
+};
 use std::collections::BTreeMap;
 
 pub const KEY_ID_LABEL: &str = "key_id";

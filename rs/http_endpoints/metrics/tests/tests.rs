@@ -1,20 +1,39 @@
-use ic_config::metrics::{Config, Exporter};
+use ic_config::metrics::{
+    Config,
+    Exporter,
+};
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_metrics::registry::MetricsRegistry;
 use ic_test_utilities_logger::with_test_replica_logger;
 use prometheus::{
-    core::{Collector, Desc},
+    core::{
+        Collector,
+        Desc,
+    },
     proto::MetricFamily,
 };
-use reqwest::{Body, Client, Error, Method, Response, StatusCode};
+use reqwest::{
+    Body,
+    Client,
+    Error,
+    Method,
+    Response,
+    StatusCode,
+};
 use std::net::SocketAddr;
 use std::sync::{
-    atomic::{AtomicUsize, Ordering},
+    atomic::{
+        AtomicUsize,
+        Ordering,
+    },
     Arc,
 };
 use tokio::{
     net::TcpSocket,
-    sync::mpsc::{channel, Sender},
+    sync::mpsc::{
+        channel,
+        Sender,
+    },
 };
 
 // Get a free port on this host to which we can connect transport to.

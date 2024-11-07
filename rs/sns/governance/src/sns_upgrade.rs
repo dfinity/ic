@@ -1,6 +1,16 @@
-use crate::{pb::v1::governance::Version, proposal::render_version, types::Environment};
-use candid::{Decode, Encode};
-use ic_base_types::{CanisterId, PrincipalId};
+use crate::{
+    pb::v1::governance::Version,
+    proposal::render_version,
+    types::Environment,
+};
+use candid::{
+    Decode,
+    Encode,
+};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_nervous_system_clients::canister_status::CanisterStatusResultV2;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
 

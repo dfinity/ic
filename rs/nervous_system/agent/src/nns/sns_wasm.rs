@@ -3,10 +3,16 @@ use anyhow::anyhow;
 use ic_agent::Agent;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use ic_sns_wasm::pb::v1::{
-    GetWasmRequest, GetWasmResponse, ListDeployedSnsesRequest, ListUpgradeStepsRequest,
+    GetWasmRequest,
+    GetWasmResponse,
+    ListDeployedSnsesRequest,
+    ListUpgradeStepsRequest,
     ListUpgradeStepsResponse,
 };
-use std::path::{Path, PathBuf};
+use std::path::{
+    Path,
+    PathBuf,
+};
 use tempfile::tempdir;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;

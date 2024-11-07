@@ -1,9 +1,17 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{
+    anyhow,
+    Context,
+    Result,
+};
 use regex::Regex;
 use std::fmt;
 use std::fs;
 
-use crate::prometheus_metric::{LabelPair, MetricType, PrometheusMetric};
+use crate::prometheus_metric::{
+    LabelPair,
+    MetricType,
+    PrometheusMetric,
+};
 
 #[derive(Eq, PartialEq, Debug)]
 pub enum HardwareGen {

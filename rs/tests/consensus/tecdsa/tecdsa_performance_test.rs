@@ -45,10 +45,14 @@ use ic_consensus_system_test_utils::{
     subnet::enable_chain_key_signing_on_subnet,
 };
 use ic_consensus_threshold_sig_system_test_utils::{
-    run_chain_key_signature_test, ChainSignatureRequest,
+    run_chain_key_signature_test,
+    ChainSignatureRequest,
 };
 use ic_management_canister_types::MasterPublicKeyId;
-use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
+use ic_registry_subnet_features::{
+    ChainKeyConfig,
+    KeyConfig,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::canister_agent::HasCanisterAgentCapability;
 use ic_system_test_driver::canister_requests;
@@ -56,26 +60,53 @@ use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env_api::HasPublicApiUrl;
 use ic_system_test_driver::driver::{
     farm::HostFeature,
-    ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
-    prometheus_vm::{HasPrometheus, PrometheusVm},
-    simulate_network::{FixedNetworkSimulation, SimulateNetwork},
+    ic::{
+        AmountOfMemoryKiB,
+        ImageSizeGiB,
+        InternetComputer,
+        NrOfVCPUs,
+        Subnet,
+        VmResources,
+    },
+    prometheus_vm::{
+        HasPrometheus,
+        PrometheusVm,
+    },
+    simulate_network::{
+        FixedNetworkSimulation,
+        SimulateNetwork,
+    },
     test_env::TestEnv,
-    test_env_api::{HasTopologySnapshot, IcNodeContainer, NnsCustomizations},
+    test_env_api::{
+        HasTopologySnapshot,
+        IcNodeContainer,
+        NnsCustomizations,
+    },
 };
 use ic_system_test_driver::generic_workload_engine::engine::Engine;
 use ic_system_test_driver::generic_workload_engine::metrics::{
-    LoadTestMetricsProvider, RequestOutcome,
+    LoadTestMetricsProvider,
+    RequestOutcome,
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{
-    block_on, get_app_subnet_and_node, get_nns_node, MessageCanister,
+    block_on,
+    get_app_subnet_and_node,
+    get_nns_node,
+    MessageCanister,
 };
 use ic_types::Height;
-use slog::{error, info};
+use slog::{
+    error,
+    info,
+};
 use std::fs::create_dir_all;
 use std::io::prelude::*;
 use std::time::Duration;
-use tokio::runtime::{Builder, Runtime};
+use tokio::runtime::{
+    Builder,
+    Runtime,
+};
 
 // Environment parameters
 const NODES_COUNT: usize = 25;

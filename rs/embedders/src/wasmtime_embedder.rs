@@ -8,45 +8,102 @@ use std::{
     collections::HashMap,
     convert::TryFrom,
     mem::size_of,
-    sync::{atomic::Ordering, Arc, Mutex},
+    sync::{
+        atomic::Ordering,
+        Arc,
+        Mutex,
+    },
 };
 
-use ic_system_api::{ModificationTracking, SystemApiImpl};
+use ic_system_api::{
+    ModificationTracking,
+    SystemApiImpl,
+};
 use wasmtime::{
-    unix::StoreExt, Engine, Instance, InstancePre, Linker, Memory, Module, Mutability, Store,
-    StoreLimits, StoreLimitsBuilder, Val, ValType,
+    unix::StoreExt,
+    Engine,
+    Instance,
+    InstancePre,
+    Linker,
+    Memory,
+    Module,
+    Mutability,
+    Store,
+    StoreLimits,
+    StoreLimitsBuilder,
+    Val,
+    ValType,
 };
 
 pub use host_memory::WasmtimeMemoryCreator;
-use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
-use ic_interfaces::execution_environment::{
-    CanisterBacktrace, HypervisorError, HypervisorResult, InstanceStats, SystemApi, TrapCode,
+use ic_config::{
+    embedders::Config as EmbeddersConfig,
+    flag_status::FlagStatus,
 };
-use ic_logger::{debug, error, fatal, ReplicaLogger};
+use ic_interfaces::execution_environment::{
+    CanisterBacktrace,
+    HypervisorError,
+    HypervisorResult,
+    InstanceStats,
+    SystemApi,
+    TrapCode,
+};
+use ic_logger::{
+    debug,
+    error,
+    fatal,
+    ReplicaLogger,
+};
 use ic_replicated_state::{
-    canister_state::{execution_state, WASM_PAGE_SIZE_IN_BYTES},
-    EmbedderCache, Global, NumWasmPages, PageIndex, PageMap,
+    canister_state::{
+        execution_state,
+        WASM_PAGE_SIZE_IN_BYTES,
+    },
+    EmbedderCache,
+    Global,
+    NumWasmPages,
+    PageIndex,
+    PageMap,
 };
 use ic_sys::PAGE_SIZE;
 use ic_types::{
-    methods::{FuncRef, WasmMethod},
-    CanisterId, NumInstructions, NumOsPages, MAX_STABLE_MEMORY_IN_BYTES,
+    methods::{
+        FuncRef,
+        WasmMethod,
+    },
+    CanisterId,
+    NumInstructions,
+    NumOsPages,
+    MAX_STABLE_MEMORY_IN_BYTES,
 };
-use ic_wasm_types::{BinaryEncodedWasm, WasmEngineError};
-use memory_tracker::{DirtyPageTracking, PageBitmap, SigsegvMemoryTracker};
+use ic_wasm_types::{
+    BinaryEncodedWasm,
+    WasmEngineError,
+};
+use memory_tracker::{
+    DirtyPageTracking,
+    PageBitmap,
+    SigsegvMemoryTracker,
+};
 use signal_stack::WasmtimeSignalStack;
 
 use crate::wasm_utils::instrumentation::{
-    WasmMemoryType, ACCESSED_PAGES_COUNTER_GLOBAL_NAME, DIRTY_PAGES_COUNTER_GLOBAL_NAME,
+    WasmMemoryType,
+    ACCESSED_PAGES_COUNTER_GLOBAL_NAME,
+    DIRTY_PAGES_COUNTER_GLOBAL_NAME,
     INSTRUCTIONS_COUNTER_GLOBAL_NAME,
 };
 use crate::{
-    serialized_module::SerializedModuleBytes, wasm_utils::validation::wasmtime_validation_config,
+    serialized_module::SerializedModuleBytes,
+    wasm_utils::validation::wasmtime_validation_config,
 };
 
 use super::InstanceRunResult;
 
-use self::host_memory::{MemoryPageSize, MemoryStart};
+use self::host_memory::{
+    MemoryPageSize,
+    MemoryStart,
+};
 
 #[cfg(test)]
 mod wasmtime_embedder_tests;

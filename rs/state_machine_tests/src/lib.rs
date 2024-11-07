@@ -6,180 +6,399 @@ use ic_btc_consensus::BitcoinPayloadBuilder;
 use ic_config::{
     adapters::AdaptersConfig,
     bitcoin_payload_builder_config::Config as BitcoinPayloadBuilderConfig,
-    execution_environment::Config as HypervisorConfig, flag_status::FlagStatus,
-    state_manager::LsmtConfig, subnet_config::SubnetConfig,
+    execution_environment::Config as HypervisorConfig,
+    flag_status::FlagStatus,
+    state_manager::LsmtConfig,
+    subnet_config::SubnetConfig,
 };
 use ic_consensus::{
     consensus::payload_builder::PayloadBuilderImpl,
-    dkg::{make_registry_cup, make_registry_cup_from_cup_contents},
+    dkg::{
+        make_registry_cup,
+        make_registry_cup_from_cup_contents,
+    },
 };
 use ic_consensus_utils::crypto::SignVerify;
 use ic_crypto_test_utils_ni_dkg::{
-    dummy_initial_dkg_transcript_with_master_key, sign_message, SecretKeyBytes,
+    dummy_initial_dkg_transcript_with_master_key,
+    sign_message,
+    SecretKeyBytes,
 };
-use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path as LabeledTreePath};
+use ic_crypto_tree_hash::{
+    sparse_labeled_tree_from_paths,
+    Label,
+    Path as LabeledTreePath,
+};
 use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
 use ic_cycles_account_manager::CyclesAccountManager;
-pub use ic_error_types::{ErrorCode, UserError};
-use ic_execution_environment::{ExecutionServices, IngressHistoryReaderImpl};
-use ic_http_endpoints_public::{metrics::HttpHandlerMetrics, IngressWatcher, IngressWatcherHandle};
+pub use ic_error_types::{
+    ErrorCode,
+    UserError,
+};
+use ic_execution_environment::{
+    ExecutionServices,
+    IngressHistoryReaderImpl,
+};
+use ic_http_endpoints_public::{
+    metrics::HttpHandlerMetrics,
+    IngressWatcher,
+    IngressWatcherHandle,
+};
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl;
-use ic_ingress_manager::{IngressManager, RandomStateKind};
+use ic_ingress_manager::{
+    IngressManager,
+    RandomStateKind,
+};
 use ic_interfaces::{
-    batch_payload::{BatchPayloadBuilder, IntoMessages, PastPayload, ProposalContext},
-    canister_http::{CanisterHttpChangeAction, CanisterHttpPool},
-    certification::{Verifier, VerifierError},
-    consensus::{PayloadBuilder as ConsensusPayloadBuilder, PayloadValidationError},
+    batch_payload::{
+        BatchPayloadBuilder,
+        IntoMessages,
+        PastPayload,
+        ProposalContext,
+    },
+    canister_http::{
+        CanisterHttpChangeAction,
+        CanisterHttpPool,
+    },
+    certification::{
+        Verifier,
+        VerifierError,
+    },
+    consensus::{
+        PayloadBuilder as ConsensusPayloadBuilder,
+        PayloadValidationError,
+    },
     consensus_pool::ConsensusTime,
-    execution_environment::{IngressFilterService, IngressHistoryReader, QueryExecutionService},
+    execution_environment::{
+        IngressFilterService,
+        IngressHistoryReader,
+        QueryExecutionService,
+    },
     ingress_pool::{
-        IngressPool, IngressPoolObject, PoolSection, UnvalidatedIngressArtifact,
+        IngressPool,
+        IngressPoolObject,
+        PoolSection,
+        UnvalidatedIngressArtifact,
         ValidatedIngressArtifact,
     },
     p2p::consensus::MutablePool,
     validation::ValidationResult,
 };
-use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
+use ic_interfaces_certified_stream_store::{
+    CertifiedStreamStore,
+    EncodeStreamError,
+};
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::{CertificationScope, StateHashError, StateManager, StateReader};
-use ic_limits::{MAX_INGRESS_TTL, PERMITTED_DRIFT, SMALL_APP_SUBNET_MAX_SIZE};
-use ic_logger::{error, ReplicaLogger};
-use ic_management_canister_types::{
-    self as ic00, CanisterIdRecord, InstallCodeArgs, MasterPublicKeyId, Method, Payload,
+use ic_interfaces_state_manager::{
+    CertificationScope,
+    StateHashError,
+    StateManager,
+    StateReader,
+};
+use ic_limits::{
+    MAX_INGRESS_TTL,
+    PERMITTED_DRIFT,
+    SMALL_APP_SUBNET_MAX_SIZE,
+};
+use ic_logger::{
+    error,
+    ReplicaLogger,
 };
 use ic_management_canister_types::{
-    CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs,
-    CanisterSnapshotResponse, CanisterStatusResultV2, ClearChunkStoreArgs, EcdsaCurve, EcdsaKeyId,
-    InstallChunkedCodeArgs, LoadCanisterSnapshotArgs, SchnorrAlgorithm, SignWithECDSAReply,
-    SignWithSchnorrReply, TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs,
+    self as ic00,
+    CanisterIdRecord,
+    InstallCodeArgs,
+    MasterPublicKeyId,
+    Method,
+    Payload,
+};
+use ic_management_canister_types::{
+    CanisterHttpResponsePayload,
+    CanisterInstallMode,
+    CanisterSettingsArgs,
+    CanisterSnapshotResponse,
+    CanisterStatusResultV2,
+    ClearChunkStoreArgs,
+    EcdsaCurve,
+    EcdsaKeyId,
+    InstallChunkedCodeArgs,
+    LoadCanisterSnapshotArgs,
+    SchnorrAlgorithm,
+    SignWithECDSAReply,
+    SignWithSchnorrReply,
+    TakeCanisterSnapshotArgs,
+    UpdateSettingsArgs,
+    UploadChunkArgs,
     UploadChunkReply,
 };
 use ic_messaging::SyncMessageRouting;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::{
     registry::{
-        crypto::v1::{ChainKeySigningSubnetList, PublicKey as PublicKeyProto, X509PublicKeyCert},
-        node::v1::{ConnectionEndpoint, NodeRecord},
+        crypto::v1::{
+            ChainKeySigningSubnetList,
+            PublicKey as PublicKeyProto,
+            X509PublicKeyCert,
+        },
+        node::v1::{
+            ConnectionEndpoint,
+            NodeRecord,
+        },
         provisional_whitelist::v1::ProvisionalWhitelist as PbProvisionalWhitelist,
-        replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
+        replica_version::v1::{
+            BlessedReplicaVersions,
+            ReplicaVersionRecord,
+        },
         routing_table::v1::{
-            CanisterMigrations as PbCanisterMigrations, RoutingTable as PbRoutingTable,
+            CanisterMigrations as PbCanisterMigrations,
+            RoutingTable as PbRoutingTable,
         },
         subnet::v1::CatchUpPackageContents,
     },
     types::{
         v1 as pb,
-        v1::{PrincipalId as PrincipalIdIdProto, SubnetId as SubnetIdProto},
+        v1::{
+            PrincipalId as PrincipalIdIdProto,
+            SubnetId as SubnetIdProto,
+        },
     },
 };
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_client_helpers::{
     provisional_whitelist::ProvisionalWhitelistRegistry,
-    subnet::{SubnetListRegistry, SubnetRegistry},
+    subnet::{
+        SubnetListRegistry,
+        SubnetRegistry,
+    },
 };
 use ic_registry_keys::{
-    make_blessed_replica_versions_key, make_canister_migrations_record_key,
-    make_catch_up_package_contents_key, make_chain_key_signing_subnet_list_key,
-    make_crypto_node_key, make_crypto_tls_cert_key, make_node_record_key,
-    make_provisional_whitelist_record_key, make_replica_version_key, make_routing_table_record_key,
+    make_blessed_replica_versions_key,
+    make_canister_migrations_record_key,
+    make_catch_up_package_contents_key,
+    make_chain_key_signing_subnet_list_key,
+    make_crypto_node_key,
+    make_crypto_tls_cert_key,
+    make_node_record_key,
+    make_provisional_whitelist_record_key,
+    make_replica_version_key,
+    make_routing_table_record_key,
     ROOT_SUBNET_ID_KEY,
 };
-use ic_registry_proto_data_provider::{ProtoRegistryDataProvider, INITIAL_REGISTRY_VERSION};
+use ic_registry_proto_data_provider::{
+    ProtoRegistryDataProvider,
+    INITIAL_REGISTRY_VERSION,
+};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{
-    routing_table_insert_subnet, CanisterIdRange, CanisterIdRanges, RoutingTable,
+    routing_table_insert_subnet,
+    CanisterIdRange,
+    CanisterIdRanges,
+    RoutingTable,
 };
 use ic_registry_subnet_features::{
-    ChainKeyConfig, KeyConfig, SubnetFeatures, DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+    ChainKeyConfig,
+    KeyConfig,
+    SubnetFeatures,
+    DEFAULT_ECDSA_MAX_QUEUE_SIZE,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::{system_state::CyclesUseCase, NumWasmPages, WASM_PAGE_SIZE_IN_BYTES},
-    metadata_state::subnet_call_context_manager::{SignWithThresholdContext, ThresholdArguments},
+    canister_state::{
+        system_state::CyclesUseCase,
+        NumWasmPages,
+        WASM_PAGE_SIZE_IN_BYTES,
+    },
+    metadata_state::subnet_call_context_manager::{
+        SignWithThresholdContext,
+        ThresholdArguments,
+    },
     page_map::Buffer,
-    CheckpointLoadingMetrics, Memory, PageMap, ReplicatedState,
+    CheckpointLoadingMetrics,
+    Memory,
+    PageMap,
+    ReplicatedState,
 };
-use ic_state_layout::{CheckpointLayout, ReadOnly};
+use ic_state_layout::{
+    CheckpointLayout,
+    ReadOnly,
+};
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities::crypto::CryptoReturningOk;
 use ic_test_utilities_consensus::FakeConsensusPoolCache;
 use ic_test_utilities_metrics::{
-    fetch_counter_vec, fetch_histogram_stats, fetch_int_counter, fetch_int_gauge,
-    fetch_int_gauge_vec, Labels,
+    fetch_counter_vec,
+    fetch_histogram_stats,
+    fetch_int_counter,
+    fetch_int_gauge,
+    fetch_int_gauge_vec,
+    Labels,
 };
 use ic_test_utilities_registry::{
-    add_single_subnet_record, add_subnet_key_record, add_subnet_list_record, SubnetRecordBuilder,
+    add_single_subnet_record,
+    add_subnet_key_record,
+    add_subnet_list_record,
+    SubnetRecordBuilder,
 };
 use ic_test_utilities_time::FastForwardTimeSource;
 pub use ic_types::ingress::WasmResult;
 use ic_types::{
     artifact::IngressMessageId,
     batch::{
-        Batch, BatchMessages, BatchSummary, BlockmakerMetrics, ConsensusResponse,
-        QueryStatsPayload, SelfValidatingPayload, TotalQueryStats, ValidationContext, XNetPayload,
+        Batch,
+        BatchMessages,
+        BatchSummary,
+        BlockmakerMetrics,
+        ConsensusResponse,
+        QueryStatsPayload,
+        SelfValidatingPayload,
+        TotalQueryStats,
+        ValidationContext,
+        XNetPayload,
     },
-    canister_http::{CanisterHttpResponse, CanisterHttpResponseContent},
+    canister_http::{
+        CanisterHttpResponse,
+        CanisterHttpResponseContent,
+    },
     consensus::{
         block_maker::SubnetRecords,
-        certification::{Certification, CertificationContent},
+        certification::{
+            Certification,
+            CertificationContent,
+        },
         CatchUpPackage,
     },
     crypto::{
         canister_threshold_sig::MasterPublicKey,
-        threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet, NiDkgTranscript},
-        AlgorithmId, CombinedThresholdSig, CombinedThresholdSigOf, KeyPurpose, Signable, Signed,
+        threshold_sig::ni_dkg::{
+            NiDkgId,
+            NiDkgTag,
+            NiDkgTargetSubnet,
+            NiDkgTranscript,
+        },
+        AlgorithmId,
+        CombinedThresholdSig,
+        CombinedThresholdSigOf,
+        KeyPurpose,
+        Signable,
+        Signed,
     },
     malicious_flags::MaliciousFlags,
     messages::{
-        Blob, Certificate, CertificateDelegation, HttpCallContent, HttpCanisterUpdate,
-        HttpRequestEnvelope, Payload as MsgPayload, Query, QuerySource, RejectContext,
-        SignedIngress, EXPECTED_MESSAGE_ID_LENGTH,
+        Blob,
+        Certificate,
+        CertificateDelegation,
+        HttpCallContent,
+        HttpCanisterUpdate,
+        HttpRequestEnvelope,
+        Payload as MsgPayload,
+        Query,
+        QuerySource,
+        RejectContext,
+        SignedIngress,
+        EXPECTED_MESSAGE_ID_LENGTH,
     },
     signature::ThresholdSignature,
     time::GENESIS,
-    xnet::{CertifiedStreamSlice, StreamIndex},
-    CanisterLog, CountBytes, CryptoHashOfPartialState, Height, NodeId, Randomness, RegistryVersion,
+    xnet::{
+        CertifiedStreamSlice,
+        StreamIndex,
+    },
+    CanisterLog,
+    CountBytes,
+    CryptoHashOfPartialState,
+    Height,
+    NodeId,
+    Randomness,
+    RegistryVersion,
     ReplicaVersion,
 };
 use ic_types::{
     canister_http::{
-        CanisterHttpRequestContext, CanisterHttpRequestId, CanisterHttpResponseMetadata,
+        CanisterHttpRequestContext,
+        CanisterHttpRequestId,
+        CanisterHttpResponseMetadata,
     },
     crypto::threshold_sig::ThresholdSigPublicKey,
-    ingress::{IngressState, IngressStatus},
-    messages::{CallbackId, MessageId},
+    ingress::{
+        IngressState,
+        IngressStatus,
+    },
+    messages::{
+        CallbackId,
+        MessageId,
+    },
     time::Time,
-    CanisterId, CryptoHashOfState, Cycles, NumBytes, PrincipalId, SubnetId, UserId,
+    CanisterId,
+    CryptoHashOfState,
+    Cycles,
+    NumBytes,
+    PrincipalId,
+    SubnetId,
+    UserId,
 };
 use ic_xnet_payload_builder::{
-    certified_slice_pool::{certified_slice_count_bytes, CertifiedSliceError},
-    ExpectedIndices, RefillTaskHandle, XNetPayloadBuilderImpl, XNetPayloadBuilderMetrics,
+    certified_slice_pool::{
+        certified_slice_count_bytes,
+        CertifiedSliceError,
+    },
+    ExpectedIndices,
+    RefillTaskHandle,
+    XNetPayloadBuilderImpl,
+    XNetPayloadBuilderMetrics,
     XNetSlicePool,
 };
-use rcgen::{CertificateParams, KeyPair};
+use rcgen::{
+    CertificateParams,
+    KeyPair,
+};
 use serde::Deserialize;
 
 use ic_error_types::RejectCode;
 use maplit::btreemap;
-use rand::{rngs::StdRng, Rng, SeedableRng};
+use rand::{
+    rngs::StdRng,
+    Rng,
+    SeedableRng,
+};
 use serde::Serialize;
 use slog::Level;
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{
+        BTreeMap,
+        BTreeSet,
+    },
     convert::TryFrom,
     fmt,
-    io::{self, stderr},
+    io::{
+        self,
+        stderr,
+    },
     net::Ipv6Addr,
-    path::{Path, PathBuf},
+    path::{
+        Path,
+        PathBuf,
+    },
     str::FromStr,
     string::ToString,
-    sync::{atomic::AtomicU64, Arc, Mutex, RwLock},
-    time::{Duration, Instant, SystemTime},
+    sync::{
+        atomic::AtomicU64,
+        Arc,
+        Mutex,
+        RwLock,
+    },
+    time::{
+        Duration,
+        Instant,
+        SystemTime,
+    },
 };
 use tempfile::TempDir;
 use tokio::{
     runtime::Runtime,
-    sync::{mpsc, watch},
+    sync::{
+        mpsc,
+        watch,
+    },
 };
 use tower::ServiceExt;
 
@@ -1679,7 +1898,11 @@ impl StateMachine {
                     (public_key, private_key)
                 }
                 MasterPublicKeyId::Ecdsa(id) => {
-                    use ic_crypto_secp256k1::{DerivationIndex, DerivationPath, PrivateKey};
+                    use ic_crypto_secp256k1::{
+                        DerivationIndex,
+                        DerivationPath,
+                        PrivateKey,
+                    };
 
                     let path =
                         DerivationPath::new(vec![DerivationIndex(id.name.as_bytes().to_vec())]);
@@ -1700,7 +1923,11 @@ impl StateMachine {
                 }
                 MasterPublicKeyId::Schnorr(id) => match id.algorithm {
                     SchnorrAlgorithm::Bip340Secp256k1 => {
-                        use ic_crypto_secp256k1::{DerivationIndex, DerivationPath, PrivateKey};
+                        use ic_crypto_secp256k1::{
+                            DerivationIndex,
+                            DerivationPath,
+                            PrivateKey,
+                        };
 
                         let path =
                             DerivationPath::new(vec![DerivationIndex(id.name.as_bytes().to_vec())]);
@@ -1720,7 +1947,11 @@ impl StateMachine {
                         (public_key, private_key)
                     }
                     SchnorrAlgorithm::Ed25519 => {
-                        use ic_crypto_ed25519::{DerivationIndex, DerivationPath, PrivateKey};
+                        use ic_crypto_ed25519::{
+                            DerivationIndex,
+                            DerivationPath,
+                            PrivateKey,
+                        };
 
                         let path =
                             DerivationPath::new(vec![DerivationIndex(id.name.as_bytes().to_vec())]);

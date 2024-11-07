@@ -1,17 +1,34 @@
 use super::*;
 
-use std::{str::FromStr, time::Duration};
+use std::{
+    str::FromStr,
+    time::Duration,
+};
 
 use anyhow::Error;
-use ic_types::{NodeId, PrincipalId};
+use ic_types::{
+    NodeId,
+    PrincipalId,
+};
 use rustls::{
-    pki_types::{CertificateDer, ServerName, UnixTime},
-    CertificateError, Error as RustlsError,
+    pki_types::{
+        CertificateDer,
+        ServerName,
+        UnixTime,
+    },
+    CertificateError,
+    Error as RustlsError,
 };
 
 use crate::{
-    snapshot::{Snapshot, Snapshotter},
-    test_utils::{create_fake_registry_client, valid_tls_certificate_and_validation_time},
+    snapshot::{
+        Snapshot,
+        Snapshotter,
+    },
+    test_utils::{
+        create_fake_registry_client,
+        valid_tls_certificate_and_validation_time,
+    },
 };
 
 // CN = s52il-lowsg-eip4y-pt5lv-sbdpb-vg4gg-4iasu-egajp-yluji-znfz3-2qe

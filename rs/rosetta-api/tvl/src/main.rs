@@ -1,9 +1,21 @@
 use candid::candid_method;
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_cdk_macros::{init, post_upgrade, query};
+use ic_canisters_http_types::{
+    HttpRequest,
+    HttpResponse,
+    HttpResponseBuilder,
+};
+use ic_cdk_macros::{
+    init,
+    post_upgrade,
+    query,
+};
 use ic_tvl_canister::dashboard::build_dashboard;
 use ic_tvl_canister::metrics::encode_metrics;
-use ic_tvl_canister::types::{TvlArgs, TvlResult, TvlResultError};
+use ic_tvl_canister::types::{
+    TvlArgs,
+    TvlResult,
+    TvlResultError,
+};
 use ic_tvl_canister::TvlRequest;
 
 fn main() {}

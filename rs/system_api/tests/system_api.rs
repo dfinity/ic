@@ -1,12 +1,25 @@
-use ic_base_types::{NumBytes, NumSeconds, PrincipalIdBlobParseError};
+use ic_base_types::{
+    NumBytes,
+    NumSeconds,
+    PrincipalIdBlobParseError,
+};
 use ic_config::{
-    embedders::Config as EmbeddersConfig, flag_status::FlagStatus, subnet_config::SchedulerConfig,
+    embedders::Config as EmbeddersConfig,
+    flag_status::FlagStatus,
+    subnet_config::SchedulerConfig,
 };
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::{
-    CanisterOutOfCyclesError, ExecutionMode, HypervisorError, HypervisorResult,
-    PerformanceCounterType, StableMemoryApi, SubnetAvailableMemory, SystemApi, SystemApiCallId,
+    CanisterOutOfCyclesError,
+    ExecutionMode,
+    HypervisorError,
+    HypervisorResult,
+    PerformanceCounterType,
+    StableMemoryApi,
+    SubnetAvailableMemory,
+    SystemApi,
+    SystemApiCallId,
     TrapCode,
 };
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
@@ -14,25 +27,50 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::NumWasmPages;
 use ic_replicated_state::{
-    canister_state::system_state::OnLowWasmMemoryHookStatus, testing::CanisterQueuesTesting,
-    CallOrigin, Memory, NetworkTopology, SystemState,
+    canister_state::system_state::OnLowWasmMemoryHookStatus,
+    testing::CanisterQueuesTesting,
+    CallOrigin,
+    Memory,
+    NetworkTopology,
+    SystemState,
 };
 use ic_system_api::{
-    sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
+    sandbox_safe_system_state::SandboxSafeSystemState,
+    ApiType,
+    DefaultOutOfInstructionsHandler,
     SystemApiImpl,
 };
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_state::SystemStateBuilder;
 use ic_test_utilities_types::{
-    ids::{call_context_test_id, canister_test_id, subnet_test_id, user_test_id},
+    ids::{
+        call_context_test_id,
+        canister_test_id,
+        subnet_test_id,
+        user_test_id,
+    },
     messages::RequestBuilder,
 };
 use ic_types::{
-    messages::{CallbackId, RejectContext, RequestMetadata, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE},
-    methods::{Callback, WasmClosure},
+    messages::{
+        CallbackId,
+        RejectContext,
+        RequestMetadata,
+        MAX_RESPONSE_COUNT_BYTES,
+        NO_DEADLINE,
+    },
+    methods::{
+        Callback,
+        WasmClosure,
+    },
     time,
     time::UNIX_EPOCH,
-    CanisterTimer, CountBytes, Cycles, NumInstructions, PrincipalId, Time,
+    CanisterTimer,
+    CountBytes,
+    Cycles,
+    NumInstructions,
+    PrincipalId,
+    Time,
     MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE,
 };
 use maplit::btreemap;
@@ -40,7 +78,10 @@ use more_asserts::assert_le;
 use std::{
     collections::BTreeSet,
     convert::From,
-    panic::{catch_unwind, UnwindSafe},
+    panic::{
+        catch_unwind,
+        UnwindSafe,
+    },
     rc::Rc,
 };
 use strum::IntoEnumIterator;

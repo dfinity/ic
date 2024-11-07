@@ -1,7 +1,10 @@
 use num_traits::ops::saturating::SaturatingAdd;
 use std::time::Instant;
 
-use ic_types::{CanisterId, NumBytes};
+use ic_types::{
+    CanisterId,
+    NumBytes,
+};
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub(crate) struct EvictionCandidate {
@@ -49,12 +52,18 @@ pub(crate) fn evict(
 
 #[cfg(test)]
 mod tests {
-    use std::time::{Duration, Instant};
+    use std::time::{
+        Duration,
+        Instant,
+    };
 
     use ic_test_utilities_types::ids::canister_test_id;
     use ic_types::NumBytes;
 
-    use super::{evict, EvictionCandidate};
+    use super::{
+        evict,
+        EvictionCandidate,
+    };
 
     #[test]
     fn evict_empty() {

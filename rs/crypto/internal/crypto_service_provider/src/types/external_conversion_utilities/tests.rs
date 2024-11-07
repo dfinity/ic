@@ -1,7 +1,14 @@
 //! Tests for external and generic conversions
 use super::*;
-use ic_types::crypto::{CombinedMultiSig, CombinedThresholdSig, IndividualMultiSig};
-use ic_types::crypto::{CombinedThresholdSigOf, CryptoHashableTestDummy};
+use ic_types::crypto::{
+    CombinedMultiSig,
+    CombinedThresholdSig,
+    IndividualMultiSig,
+};
+use ic_types::crypto::{
+    CombinedThresholdSigOf,
+    CryptoHashableTestDummy,
+};
 
 #[test]
 fn should_obtain_threshold_sig_share_of_from_csp_signature() {

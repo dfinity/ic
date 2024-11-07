@@ -1,7 +1,14 @@
 use common::set_up_state_machine_with_nns;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
-use ic_nns_test_utils::{sns_wasm, sns_wasm::test_wasm};
-use ic_sns_wasm::pb::v1::{GetNextSnsVersionRequest, SnsCanisterType, SnsVersion};
+use ic_nns_test_utils::{
+    sns_wasm,
+    sns_wasm::test_wasm,
+};
+use ic_sns_wasm::pb::v1::{
+    GetNextSnsVersionRequest,
+    SnsCanisterType,
+    SnsVersion,
+};
 
 pub mod common;
 

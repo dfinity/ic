@@ -8,34 +8,73 @@ use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::test_utils::ComplaintCorrupter;
 use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_crypto_test_utils_canister_threshold_sigs::{
-    build_params_from_previous, copy_dealing_in_transcript,
+    build_params_from_previous,
+    copy_dealing_in_transcript,
     corrupt_dealings_and_generate_complaints_for_random_complainer,
     corrupt_random_dealing_and_generate_complaint,
     dummy_values::dummy_idkg_transcript_id_for_tests,
-    generate_ecdsa_presig_quadruple, generate_initial_dealings, generate_key_transcript,
+    generate_ecdsa_presig_quadruple,
+    generate_initial_dealings,
+    generate_key_transcript,
     generate_tschnorr_protocol_inputs,
-    node::{Node, Nodes},
-    node_id, random_dealer_id, random_dealer_id_excluding, random_node_id_excluding,
-    random_receiver_id, random_receiver_id_excluding, setup_masked_random_params,
-    setup_unmasked_random_params, swap_two_dealings_in_transcript,
-    CanisterThresholdSigTestEnvironment, IDkgParticipants, IntoBuilder,
+    node::{
+        Node,
+        Nodes,
+    },
+    node_id,
+    random_dealer_id,
+    random_dealer_id_excluding,
+    random_node_id_excluding,
+    random_receiver_id,
+    random_receiver_id_excluding,
+    setup_masked_random_params,
+    setup_unmasked_random_params,
+    swap_two_dealings_in_transcript,
+    CanisterThresholdSigTestEnvironment,
+    IDkgParticipants,
+    IntoBuilder,
 };
 use ic_crypto_test_utils_local_csp_vault::MockLocalCspVault;
-use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
+use ic_crypto_test_utils_reproducible_rng::{
+    reproducible_rng,
+    ReproducibleRng,
+};
 use ic_interfaces::crypto::IDkgProtocol;
-use ic_logger::{new_logger, replica_logger::no_op_logger};
+use ic_logger::{
+    new_logger,
+    replica_logger::no_op_logger,
+};
 use ic_types::crypto::canister_threshold_sig::error::{
-    IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgOpenTranscriptError,
-    IDkgVerifyComplaintError, IDkgVerifyDealingPublicError, IDkgVerifyInitialDealingsError,
-    IDkgVerifyOpeningError, IDkgVerifyTranscriptError,
+    IDkgCreateDealingError,
+    IDkgCreateTranscriptError,
+    IDkgOpenTranscriptError,
+    IDkgVerifyComplaintError,
+    IDkgVerifyDealingPublicError,
+    IDkgVerifyInitialDealingsError,
+    IDkgVerifyOpeningError,
+    IDkgVerifyTranscriptError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    IDkgDealers, IDkgReceivers, IDkgTranscript, IDkgTranscriptOperation, IDkgTranscriptParams,
-    InitialIDkgDealings, SignedIDkgDealing,
+    IDkgDealers,
+    IDkgReceivers,
+    IDkgTranscript,
+    IDkgTranscriptOperation,
+    IDkgTranscriptParams,
+    InitialIDkgDealings,
+    SignedIDkgDealing,
 };
-use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, ThresholdEcdsaSigInputs};
-use ic_types::crypto::{AlgorithmId, CryptoError};
-use ic_types::{NodeId, Randomness};
+use ic_types::crypto::canister_threshold_sig::{
+    ExtendedDerivationPath,
+    ThresholdEcdsaSigInputs,
+};
+use ic_types::crypto::{
+    AlgorithmId,
+    CryptoError,
+};
+use ic_types::{
+    NodeId,
+    Randomness,
+};
 use maplit::hashset;
 use rand::prelude::*;
 use std::collections::BTreeMap;
@@ -400,7 +439,8 @@ mod create_dealing {
 mod create_transcript {
     use super::*;
     use ic_crypto_test_utils_canister_threshold_sigs::{
-        setup_masked_random_params, CorruptBytesCollection,
+        setup_masked_random_params,
+        CorruptBytesCollection,
     };
 
     #[test]
@@ -762,7 +802,10 @@ mod create_transcript {
 
 mod load_transcript {
     use super::*;
-    use ic_crypto_test_utils_canister_threshold_sigs::{node::Node, setup_masked_random_params};
+    use ic_crypto_test_utils_canister_threshold_sigs::{
+        node::Node,
+        setup_masked_random_params,
+    };
 
     #[test]
     fn should_return_ok_from_load_transcript_if_not_a_receiver() {
@@ -837,7 +880,10 @@ mod load_transcript {
 mod verify_complaint {
     use super::*;
     use ic_crypto_test_utils_canister_threshold_sigs::{
-        setup_masked_random_params, to_corrupt_complaint, IDkgMode, IDkgModeTestContext,
+        setup_masked_random_params,
+        to_corrupt_complaint,
+        IDkgMode,
+        IDkgModeTestContext,
         IDkgTestContextForComplaint,
     };
     use strum::IntoEnumIterator;
@@ -1129,7 +1175,9 @@ mod verify_complaint {
 mod verify_transcript {
     use super::*;
     use ic_crypto_test_utils_canister_threshold_sigs::{
-        setup_masked_random_params, CorruptBytes, IntoBuilder,
+        setup_masked_random_params,
+        CorruptBytes,
+        IntoBuilder,
     };
 
     #[test]
@@ -2049,7 +2097,10 @@ mod load_transcript_with_openings {
     // dealings from the openings and successfully `sign_share` with threshold ECDSA.
     #[test]
     fn should_ecdsa_sign_share_when_loaded_with_openings() {
-        use ic_interfaces::crypto::{ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner};
+        use ic_interfaces::crypto::{
+            ThresholdEcdsaSigVerifier,
+            ThresholdEcdsaSigner,
+        };
         const MIN_NUM_NODES: usize = 2;
         let rng = &mut reproducible_rng();
         let subnet_size = rng.gen_range(MIN_NUM_NODES..6);
@@ -2141,7 +2192,10 @@ mod load_transcript_with_openings {
     // threshold Schnorr.
     #[test]
     fn should_schnorr_create_sig_share_when_loaded_with_openings() {
-        use ic_interfaces::crypto::{ThresholdSchnorrSigVerifier, ThresholdSchnorrSigner};
+        use ic_interfaces::crypto::{
+            ThresholdSchnorrSigVerifier,
+            ThresholdSchnorrSigner,
+        };
 
         const MIN_NUM_NODES: usize = 2;
         let rng = &mut reproducible_rng();
@@ -2443,7 +2497,10 @@ mod load_transcript_with_openings {
 
 mod verify_dealing_private {
     use super::*;
-    use ic_crypto_test_utils_canister_threshold_sigs::{setup_masked_random_params, IntoBuilder};
+    use ic_crypto_test_utils_canister_threshold_sigs::{
+        setup_masked_random_params,
+        IntoBuilder,
+    };
     use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
     use ic_crypto_test_utils_keys::public_keys::valid_idkg_dealing_encryption_public_key;
     use ic_interfaces_registry_mocks::MockRegistryClient;
@@ -3519,7 +3576,9 @@ mod verify_opening {
 mod reshare_key_transcript {
     use super::*;
     use ic_crypto_test_utils_canister_threshold_sigs::{
-        n_random_node_ids, random_transcript_id, IDkgParticipantsRandom,
+        n_random_node_ids,
+        random_transcript_id,
+        IDkgParticipantsRandom,
     };
     use std::collections::BTreeSet;
 

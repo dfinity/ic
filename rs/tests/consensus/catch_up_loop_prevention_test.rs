@@ -24,8 +24,14 @@ end::catalog[] */
 use ic_consensus_system_test_catch_up_test_common::test_catch_up_possible;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
-use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
+use ic_system_test_driver::driver::ic::{
+    InternetComputer,
+    Subnet,
+};
+use ic_system_test_driver::driver::prometheus_vm::{
+    HasPrometheus,
+    PrometheusVm,
+};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::systest;
 

@@ -1,21 +1,44 @@
 use anyhow::Result;
 use assert_matches::assert_matches;
-use candid::{Encode, Nat, Principal};
-use canister_test::{Canister, PrincipalId};
+use candid::{
+    Encode,
+    Nat,
+    Principal,
+};
+use canister_test::{
+    Canister,
+    PrincipalId,
+};
 use dfn_candid::CandidOne;
-use ic_crypto_tree_hash::{LookupStatus, MixedHashTree};
-use ic_icrc1_ledger::{ArchiveOptions, FeatureFlags, InitArgsBuilder, LedgerArgument, UpgradeArgs};
+use ic_crypto_tree_hash::{
+    LookupStatus,
+    MixedHashTree,
+};
+use ic_icrc1_ledger::{
+    ArchiveOptions,
+    FeatureFlags,
+    InitArgsBuilder,
+    LedgerArgument,
+    UpgradeArgs,
+};
 use ic_nns_test_utils::itest_helpers::install_rust_canister_from_path;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::test_env_api::get_dependency_path;
-use ic_system_test_driver::util::{agent_with_identity, random_ed25519_identity};
-use icrc_ledger_agent::{CallMode, Icrc1Agent};
+use ic_system_test_driver::util::{
+    agent_with_identity,
+    random_ed25519_identity,
+};
+use icrc_ledger_agent::{
+    CallMode,
+    Icrc1Agent,
+};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
 use icrc_ledger_types::icrc2::approve::ApproveArgs;
 use icrc_ledger_types::icrc2::transfer_from::TransferFromArgs;
 use icrc_ledger_types::{
-    icrc::generic_metadata_value::MetadataValue as Value, icrc3::blocks::GetBlocksRequest,
+    icrc::generic_metadata_value::MetadataValue as Value,
+    icrc3::blocks::GetBlocksRequest,
 };
 use on_wire::IntoWire;
 use std::env;
@@ -23,12 +46,23 @@ use std::env;
 use ic_system_test_driver::{
     driver::{
         group::SystemTestGroup,
-        ic::{InternetComputer, Subnet},
+        ic::{
+            InternetComputer,
+            Subnet,
+        },
         test_env::TestEnv,
-        test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
+        test_env_api::{
+            HasPublicApiUrl,
+            HasTopologySnapshot,
+            IcNodeContainer,
+        },
     },
     systest,
-    util::{assert_create_agent, block_on, runtime_from_url},
+    util::{
+        assert_create_agent,
+        block_on,
+        runtime_from_url,
+    },
 };
 
 use std::convert::TryFrom;

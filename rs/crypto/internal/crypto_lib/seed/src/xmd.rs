@@ -1,5 +1,11 @@
-use ic_crypto_sha2::{Sha256, Sha512};
-use serde::{Deserialize, Serialize};
+use ic_crypto_sha2::{
+    Sha256,
+    Sha512,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum XmdError {

@@ -1,4 +1,7 @@
-use crate::eth_rpc_error::{sanitize_send_raw_transaction_result, Parser};
+use crate::eth_rpc_error::{
+    sanitize_send_raw_transaction_result,
+    Parser,
+};
 
 #[test]
 fn should_sanitize_ok_response() {

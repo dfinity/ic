@@ -1,4 +1,7 @@
-use crate::visitor::{Control, Visitor};
+use crate::visitor::{
+    Control,
+    Visitor,
+};
 use ic_utils::rle::DebugBlob;
 use std::fmt;
 

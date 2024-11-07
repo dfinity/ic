@@ -1,7 +1,15 @@
 use crate::host::command_utilities::handle_command_output;
 use crate::protocol::Response;
-use rusb::{Context, Device, UsbContext};
-use std::io::{Error, ErrorKind, Write};
+use rusb::{
+    Context,
+    Device,
+    UsbContext,
+};
+use std::io::{
+    Error,
+    ErrorKind,
+    Write,
+};
 use tempfile::NamedTempFile;
 
 // nitrokey:

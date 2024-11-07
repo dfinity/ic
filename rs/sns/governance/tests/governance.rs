@@ -1,59 +1,135 @@
 use crate::fixtures::{
-    environment_fixture::CanisterCallRequest, neuron_id, GovernanceCanisterFixture,
-    GovernanceCanisterFixtureBuilder, NeuronBuilder, TargetLedger,
+    environment_fixture::CanisterCallRequest,
+    neuron_id,
+    GovernanceCanisterFixture,
+    GovernanceCanisterFixtureBuilder,
+    NeuronBuilder,
+    TargetLedger,
 };
 use assert_matches::assert_matches;
 use fixtures::DEFAULT_TEST_START_TIMESTAMP_SECONDS;
-use ic_base_types::{CanisterId, PrincipalId};
-use ic_nervous_system_common::{E8, ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
-use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
 };
-use ic_nervous_system_proto::pb::v1::{Percentage, Principals};
+use ic_nervous_system_common::{
+    E8,
+    ONE_DAY_SECONDS,
+    ONE_MONTH_SECONDS,
+};
+use ic_nervous_system_common_test_keys::{
+    TEST_NEURON_1_OWNER_PRINCIPAL,
+    TEST_NEURON_2_OWNER_PRINCIPAL,
+};
+use ic_nervous_system_proto::pb::v1::{
+    Percentage,
+    Principals,
+};
 use ic_sns_governance::{
     governance::{
-        MATURITY_DISBURSEMENT_DELAY_SECONDS, UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS,
+        MATURITY_DISBURSEMENT_DELAY_SECONDS,
+        UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS,
     },
     neuron::NeuronState,
     pb::{
         sns_root_types::{
-            set_dapp_controllers_response::FailedUpdate, RegisterDappCanistersResponse,
+            set_dapp_controllers_response::FailedUpdate,
+            RegisterDappCanistersResponse,
             SetDappControllersResponse,
         },
         v1::{
             claim_swap_neurons_request::{
-                neuron_recipe::{self, Participant},
-                NeuronRecipe, NeuronRecipes,
+                neuron_recipe::{
+                    self,
+                    Participant,
+                },
+                NeuronRecipe,
+                NeuronRecipes,
             },
-            claim_swap_neurons_response::{ClaimSwapNeuronsResult, ClaimedSwapNeurons, SwapNeuron},
-            governance::{Version, Versions},
+            claim_swap_neurons_response::{
+                ClaimSwapNeuronsResult,
+                ClaimedSwapNeurons,
+                SwapNeuron,
+            },
+            governance::{
+                Version,
+                Versions,
+            },
             governance_error::ErrorType,
             manage_neuron::{
-                self, claim_or_refresh, configure::Operation, AddNeuronPermissions, ClaimOrRefresh,
-                Configure, Disburse, DisburseMaturity, Follow, IncreaseDissolveDelay,
-                MergeMaturity, RegisterVote, RemoveNeuronPermissions, Split, StakeMaturity,
+                self,
+                claim_or_refresh,
+                configure::Operation,
+                AddNeuronPermissions,
+                ClaimOrRefresh,
+                Configure,
+                Disburse,
+                DisburseMaturity,
+                Follow,
+                IncreaseDissolveDelay,
+                MergeMaturity,
+                RegisterVote,
+                RemoveNeuronPermissions,
+                Split,
+                StakeMaturity,
             },
             manage_neuron_response::{
-                Command as CommandResponse, DisburseMaturityResponse, MergeMaturityResponse,
-                RegisterVoteResponse, StakeMaturityResponse,
+                Command as CommandResponse,
+                DisburseMaturityResponse,
+                MergeMaturityResponse,
+                RegisterVoteResponse,
+                StakeMaturityResponse,
             },
-            neuron::{self, DissolveState, Followees},
+            neuron::{
+                self,
+                DissolveState,
+                Followees,
+            },
             proposal::Action,
-            upgrade_journal_entry, Account as AccountProto, AddMaturityRequest, Ballot,
-            ClaimSwapNeuronsError, ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse,
-            ClaimedSwapNeuronStatus, DeregisterDappCanisters, Empty, GovernanceError,
-            ManageNeuronResponse, MintTokensRequest, MintTokensResponse, Motion,
-            NervousSystemParameters, Neuron, NeuronId, NeuronIds, NeuronPermission,
-            NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData, ProposalId,
-            RegisterDappCanisters, UpgradeJournalEntry, Vote, WaitForQuietState,
+            upgrade_journal_entry,
+            Account as AccountProto,
+            AddMaturityRequest,
+            Ballot,
+            ClaimSwapNeuronsError,
+            ClaimSwapNeuronsRequest,
+            ClaimSwapNeuronsResponse,
+            ClaimedSwapNeuronStatus,
+            DeregisterDappCanisters,
+            Empty,
+            GovernanceError,
+            ManageNeuronResponse,
+            MintTokensRequest,
+            MintTokensResponse,
+            Motion,
+            NervousSystemParameters,
+            Neuron,
+            NeuronId,
+            NeuronIds,
+            NeuronPermission,
+            NeuronPermissionList,
+            NeuronPermissionType,
+            Proposal,
+            ProposalData,
+            ProposalId,
+            RegisterDappCanisters,
+            UpgradeJournalEntry,
+            Vote,
+            WaitForQuietState,
         },
     },
-    sns_upgrade::{ListUpgradeStep, ListUpgradeStepsResponse, SnsVersion},
+    sns_upgrade::{
+        ListUpgradeStep,
+        ListUpgradeStepsResponse,
+        SnsVersion,
+    },
     types::native_action_ids,
 };
 use maplit::btreemap;
 use pretty_assertions::assert_eq;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{
+    BTreeMap,
+    HashSet,
+};
 use strum::IntoEnumIterator;
 
 pub mod fixtures;

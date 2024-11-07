@@ -1,38 +1,77 @@
 #![allow(clippy::disallowed_types)]
 
-use std::{sync::Arc, time::Instant};
+use std::{
+    sync::Arc,
+    time::Instant,
+};
 
 use anyhow::Error;
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use axum::{
-    extract::{Request, State},
+    extract::{
+        Request,
+        State,
+    },
     middleware::Next,
-    response::{IntoResponse, Response},
+    response::{
+        IntoResponse,
+        Response,
+    },
     Extension,
 };
 use http::header::CONTENT_TYPE;
-use ic_bn_lib::http::{body::CountingBody, http_version, ConnInfo};
-use ic_types::{messages::ReplicaHealthStatus, CanisterId, SubnetId};
-use prometheus::{
-    proto::MetricFamily, register_histogram_vec_with_registry,
-    register_int_counter_vec_with_registry, register_int_gauge_vec_with_registry,
-    register_int_gauge_with_registry, Encoder, HistogramOpts, HistogramVec, IntCounterVec,
-    IntGauge, IntGaugeVec, Registry, TextEncoder,
+use ic_bn_lib::http::{
+    body::CountingBody,
+    http_version,
+    ConnInfo,
 };
-use tikv_jemalloc_ctl::{epoch, stats};
+use ic_types::{
+    messages::ReplicaHealthStatus,
+    CanisterId,
+    SubnetId,
+};
+use prometheus::{
+    proto::MetricFamily,
+    register_histogram_vec_with_registry,
+    register_int_counter_vec_with_registry,
+    register_int_gauge_vec_with_registry,
+    register_int_gauge_with_registry,
+    Encoder,
+    HistogramOpts,
+    HistogramVec,
+    IntCounterVec,
+    IntGauge,
+    IntGaugeVec,
+    Registry,
+    TextEncoder,
+};
+use tikv_jemalloc_ctl::{
+    epoch,
+    stats,
+};
 use tokio::sync::RwLock;
 use tower_http::request_id::RequestId;
 use tracing::info;
 
 use crate::{
-    cache::{Cache, CacheStatus},
+    cache::{
+        Cache,
+        CacheStatus,
+    },
     core::Run,
     geoip,
     persist::RouteSubnet,
     retry::RetryResult,
-    routes::{ErrorCause, RequestContext, RequestType},
-    snapshot::{Node, RegistrySnapshot},
+    routes::{
+        ErrorCause,
+        RequestContext,
+        RequestType,
+    },
+    snapshot::{
+        Node,
+        RegistrySnapshot,
+    },
 };
 
 const KB: f64 = 1024.0;

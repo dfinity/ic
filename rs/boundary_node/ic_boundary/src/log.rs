@@ -1,7 +1,13 @@
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{
+    SystemTime,
+    UNIX_EPOCH,
+};
 
 use anyhow::Error;
-use serde::ser::{SerializeMap, Serializer as _};
+use serde::ser::{
+    SerializeMap,
+    Serializer as _,
+};
 use serde_json::Serializer;
 use std::os::unix::net::UnixDatagram;
 use tracing::Level;
@@ -9,7 +15,10 @@ use tracing_serde::AsSerde;
 use tracing_subscriber::{
     filter::LevelFilter,
     fmt::layer,
-    layer::{Layer, SubscriberExt},
+    layer::{
+        Layer,
+        SubscriberExt,
+    },
 };
 
 use crate::cli::Cli;

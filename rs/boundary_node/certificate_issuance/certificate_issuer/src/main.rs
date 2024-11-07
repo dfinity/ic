@@ -1,44 +1,104 @@
 use std::{
     fs::File,
-    net::{IpAddr, SocketAddr},
+    net::{
+        IpAddr,
+        SocketAddr,
+    },
     path::PathBuf,
     sync::{
-        atomic::{AtomicU64, Ordering},
+        atomic::{
+            AtomicU64,
+            Ordering,
+        },
         Arc,
     },
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    time::{
+        Duration,
+        Instant,
+        SystemTime,
+        UNIX_EPOCH,
+    },
 };
 
-use anyhow::{anyhow, Context, Error};
+use anyhow::{
+    anyhow,
+    Context,
+    Error,
+};
 use axum::{
     body::Body,
     extract::MatchedPath,
     handler::Handler,
-    http::{Request, Response, StatusCode, Uri},
-    middleware::{self, Next},
+    http::{
+        Request,
+        Response,
+        StatusCode,
+        Uri,
+    },
+    middleware::{
+        self,
+        Next,
+    },
     response::IntoResponse,
-    routing::{delete, get, post, put},
-    Extension, Router,
+    routing::{
+        delete,
+        get,
+        post,
+        put,
+    },
+    Extension,
+    Router,
 };
-use candid::{DecoderConfig, Principal};
-use chacha20poly1305::{KeyInit, XChaCha20Poly1305};
+use candid::{
+    DecoderConfig,
+    Principal,
+};
+use chacha20poly1305::{
+    KeyInit,
+    XChaCha20Poly1305,
+};
 use clap::Parser;
 use ic_agent::{
-    agent::http_transport::reqwest_transport::ReqwestTransport, identity::Secp256k1Identity, Agent,
+    agent::http_transport::reqwest_transport::ReqwestTransport,
+    identity::Secp256k1Identity,
+    Agent,
 };
-use instant_acme::{Account, AccountCredentials, NewAccount};
+use instant_acme::{
+    Account,
+    AccountCredentials,
+    NewAccount,
+};
 use opentelemetry::{
-    metrics::{Counter, Histogram, MeterProvider as _},
+    metrics::{
+        Counter,
+        Histogram,
+        MeterProvider as _,
+    },
     sdk::metrics::MeterProvider,
     KeyValue,
 };
 use opentelemetry_prometheus::exporter;
-use prometheus::{labels, Encoder as PrometheusEncoder, Registry, TextEncoder};
-use tokio::{net::TcpListener, sync::Semaphore, task, time::sleep};
+use prometheus::{
+    labels,
+    Encoder as PrometheusEncoder,
+    Registry,
+    TextEncoder,
+};
+use tokio::{
+    net::TcpListener,
+    sync::Semaphore,
+    task,
+    time::sleep,
+};
 use tower::ServiceBuilder;
 use tracing::info;
 use trust_dns_resolver::{
-    config::{NameServerConfigGroup, ResolverConfig, ResolverOpts, GOOGLE_IPS},
+    config::{
+        NameServerConfigGroup,
+        ResolverConfig,
+        ResolverOpts,
+        GOOGLE_IPS,
+    },
     TokioAsyncResolver,
 };
 
@@ -46,18 +106,46 @@ use crate::{
     acme::Acme,
     acme_idna::WithIDNA,
     certificate::{
-        CanisterCertGetter, CanisterExporter, CanisterUploader, Export, WithDecode, WithPagination,
-        WithRetries, WithVerify,
+        CanisterCertGetter,
+        CanisterExporter,
+        CanisterUploader,
+        Export,
+        WithDecode,
+        WithPagination,
+        WithRetries,
+        WithVerify,
     },
-    check::{Check, Checker},
+    check::{
+        Check,
+        Checker,
+    },
     cloudflare::Cloudflare,
     dns::Resolver,
-    encode::{Decoder, Encoder},
-    metrics::{MetricParams, WithMetrics},
-    registration::{Create, Get, Remove, State, Update, UpdateType},
+    encode::{
+        Decoder,
+        Encoder,
+    },
+    metrics::{
+        MetricParams,
+        WithMetrics,
+    },
+    registration::{
+        Create,
+        Get,
+        Remove,
+        State,
+        Update,
+        UpdateType,
+    },
     verification::CertificateVerifier,
     work::{
-        Dispense, DispenseError, Peek, PeekError, Process, Queue, WithDetectImportance,
+        Dispense,
+        DispenseError,
+        Peek,
+        PeekError,
+        Process,
+        Queue,
+        WithDetectImportance,
         WithDetectRenewal,
     },
 };

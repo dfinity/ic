@@ -1,20 +1,36 @@
 use std::{
     backtrace::Backtrace,
     sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc, Mutex, RwLock,
+        atomic::{
+            AtomicBool,
+            Ordering,
+        },
+        Arc,
+        Mutex,
+        RwLock,
     },
 };
 
-use axum::http::{Response, StatusCode};
+use axum::http::{
+    Response,
+    StatusCode,
+};
 use bytes::Bytes;
 use ic_artifact_downloader::FetchArtifact;
-use ic_interfaces::p2p::consensus::{ArtifactAssembler, BouncerValue};
+use ic_interfaces::p2p::consensus::{
+    ArtifactAssembler,
+    BouncerValue,
+};
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_p2p_test_utils::{
     consensus::U64Artifact,
-    mocks::{MockBouncerFactory, MockPeers, MockTransport, MockValidatedPoolReader},
+    mocks::{
+        MockBouncerFactory,
+        MockPeers,
+        MockTransport,
+        MockValidatedPoolReader,
+    },
 };
 use ic_protobuf::proxy::ProtoProxy;
 use ic_types::artifact::PbArtifact;

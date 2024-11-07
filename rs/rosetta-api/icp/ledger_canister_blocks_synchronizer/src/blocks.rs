@@ -1,33 +1,77 @@
 use crate::rosetta_block::RosettaBlock;
-use crate::{iso8601_to_timestamp, timestamp_to_iso8601};
+use crate::{
+    iso8601_to_timestamp,
+    timestamp_to_iso8601,
+};
 use ic_ledger_canister_core::ledger::LedgerTransaction;
-use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
+use ic_ledger_core::block::{
+    BlockIndex,
+    BlockType,
+    EncodedBlock,
+};
 use ic_ledger_core::tokens::CheckedAdd;
 use ic_ledger_hash_of::HashOf;
-use icp_ledger::{AccountIdentifier, Block, TimeStamp, Tokens, Transaction};
-use rusqlite::{named_params, params, CachedStatement, OptionalExtension, Row};
-use serde::{Deserialize, Serialize};
+use icp_ledger::{
+    AccountIdentifier,
+    Block,
+    TimeStamp,
+    Tokens,
+    Transaction,
+};
+use rusqlite::{
+    named_params,
+    params,
+    CachedStatement,
+    OptionalExtension,
+    Row,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::cell::RefCell;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{
+    BTreeMap,
+    HashMap,
+};
 use std::convert::TryInto;
 use std::path::Path;
 use std::sync::Mutex;
 use tracing::info;
 
 mod database_access {
-    use super::{sql_bytes_to_block, vec_into_array};
+    use super::{
+        sql_bytes_to_block,
+        vec_into_array,
+    };
     use crate::{
-        blocks::{BlockStoreError, HashedBlock},
+        blocks::{
+            BlockStoreError,
+            HashedBlock,
+        },
         timestamp_to_iso8601,
     };
     use ic_ledger_canister_core::ledger::LedgerTransaction;
     use ic_ledger_core::{
-        block::{BlockType, EncodedBlock},
+        block::{
+            BlockType,
+            EncodedBlock,
+        },
         Tokens,
     };
     use ic_ledger_hash_of::HashOf;
-    use icp_ledger::{AccountIdentifier, Block, Operation};
-    use rusqlite::{named_params, params, Connection, Params, Statement};
+    use icp_ledger::{
+        AccountIdentifier,
+        Block,
+        Operation,
+    };
+    use rusqlite::{
+        named_params,
+        params,
+        Connection,
+        Params,
+        Statement,
+    };
 
     pub fn get_blocks_by_custom_query<P>(
         connection: &Connection,
@@ -1621,7 +1665,15 @@ mod tests {
     use crate::rosetta_block::RosettaBlock;
     use candid::Principal;
     use ic_ledger_core::block::BlockType;
-    use icp_ledger::{AccountIdentifier, Block, Memo, Operation, TimeStamp, Tokens, Transaction};
+    use icp_ledger::{
+        AccountIdentifier,
+        Block,
+        Memo,
+        Operation,
+        TimeStamp,
+        Tokens,
+        Transaction,
+    };
 
     #[test]
     fn test_store_load_rosetta_block() {

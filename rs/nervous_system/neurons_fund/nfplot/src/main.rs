@@ -1,20 +1,44 @@
-use candid::{Decode, Encode, Principal};
-use colored::{ColoredString, Colorize};
+use candid::{
+    Decode,
+    Encode,
+    Principal,
+};
+use colored::{
+    ColoredString,
+    Colorize,
+};
 use ic_agent::Agent;
 use ic_neurons_fund::{
-    rescale_to_icp, rescale_to_icp_e8s, InvertibleFunction, MatchedParticipationFunction,
-    MatchingFunction, PolynomialNeuronsFundParticipation,
+    rescale_to_icp,
+    rescale_to_icp_e8s,
+    InvertibleFunction,
+    MatchedParticipationFunction,
+    MatchingFunction,
+    PolynomialNeuronsFundParticipation,
 };
-use ic_sns_governance::pb::v1::{GetMetadataRequest, GetMetadataResponse};
+use ic_sns_governance::pb::v1::{
+    GetMetadataRequest,
+    GetMetadataResponse,
+};
 use ic_sns_swap::pb::v1::{
-    GetDerivedStateRequest, GetDerivedStateResponse, GetInitRequest, GetInitResponse,
+    GetDerivedStateRequest,
+    GetDerivedStateResponse,
+    GetInitRequest,
+    GetInitResponse,
 };
 use rgb::RGB8;
 use rust_decimal::{
-    prelude::{FromPrimitive, ToPrimitive},
+    prelude::{
+        FromPrimitive,
+        ToPrimitive,
+    },
     Decimal,
 };
-use textplots::{Chart, ColorPlot, Shape};
+use textplots::{
+    Chart,
+    ColorPlot,
+    Shape,
+};
 
 use std::env;
 

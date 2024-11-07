@@ -8,7 +8,8 @@ use ic_nns_common::types::ProposalId;
 use ic_nns_governance_api::pb::v1::ProposalInfo;
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_nns_test_utils::itest_helpers::{
-    set_up_governance_canister, state_machine_test_on_nns_subnet,
+    set_up_governance_canister,
+    state_machine_test_on_nns_subnet,
 };
 use on_wire::bytes;
 

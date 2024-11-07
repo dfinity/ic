@@ -17,8 +17,14 @@
 //! trait implementations.
 use once_cell::sync::Lazy;
 use serde::{
-    de::{Deserialize, Deserializer},
-    ser::{Serialize, Serializer},
+    de::{
+        Deserialize,
+        Deserializer,
+    },
+    ser::{
+        Serialize,
+        Serializer,
+    },
 };
 
 /// A lazily initialized value of type `T` that is only initialized upon

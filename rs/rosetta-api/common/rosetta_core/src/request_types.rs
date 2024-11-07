@@ -1,6 +1,9 @@
 use crate::identifiers::*;
 use crate::objects::*;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 /// A MetadataRequest is utilized in any request where the only argument is
 /// optional metadata.

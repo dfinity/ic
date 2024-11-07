@@ -1,10 +1,29 @@
-use curve25519_dalek::{edwards::CompressedEdwardsY, traits::MultiscalarMul};
-use group::{ff::Field, Group, GroupEncoding};
+use curve25519_dalek::{
+    edwards::CompressedEdwardsY,
+    traits::MultiscalarMul,
+};
+use group::{
+    ff::Field,
+    Group,
+    GroupEncoding,
+};
 use hex_literal::hex;
 use ic_crypto_sha2::Sha512;
-use std::ops::{Add, Mul, Neg, Sub};
-use subtle::{Choice, ConditionallySelectable, ConstantTimeEq};
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use std::ops::{
+    Add,
+    Mul,
+    Neg,
+    Sub,
+};
+use subtle::{
+    Choice,
+    ConditionallySelectable,
+    ConstantTimeEq,
+};
+use zeroize::{
+    Zeroize,
+    ZeroizeOnDrop,
+};
 
 fe_derive::derive_field_element!(
     FieldElement,

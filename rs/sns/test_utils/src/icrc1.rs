@@ -5,7 +5,10 @@ use ic_canister_client_sender::Sender;
 use ic_ledger_core::block::BlockIndex;
 use icrc_ledger_types::icrc1::{
     account::Account,
-    transfer::{TransferArg, TransferError},
+    transfer::{
+        TransferArg,
+        TransferError,
+    },
 };
 use num_traits::ToPrimitive;
 

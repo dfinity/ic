@@ -1,7 +1,10 @@
 //! Canonical State [`Visitor`] that filters the nodes seen by a wrapped
 //! `Visitor` to those matchng a given pattern.
 
-use crate::visitor::{Control, Visitor};
+use crate::visitor::{
+    Control,
+    Visitor,
+};
 use std::collections::BTreeMap;
 
 /// Pattern defines a rule to filter a tree.

@@ -5,13 +5,26 @@ use ic_consensus_utils::registry_version_at_height;
 use ic_interfaces::{
     canister_http::CanisterHttpPool,
     consensus_pool::ConsensusPoolCache,
-    p2p::consensus::{Bouncer, BouncerFactory, BouncerValue},
+    p2p::consensus::{
+        Bouncer,
+        BouncerFactory,
+        BouncerValue,
+    },
 };
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{
+    warn,
+    ReplicaLogger,
+};
 use ic_replicated_state::ReplicatedState;
-use ic_types::{artifact::CanisterHttpResponseId, messages::CallbackId};
-use std::{collections::BTreeSet, sync::Arc};
+use ic_types::{
+    artifact::CanisterHttpResponseId,
+    messages::CallbackId,
+};
+use std::{
+    collections::BTreeSet,
+    sync::Arc,
+};
 
 // We are aiming for about 100 req/s for http outcalls. Assuming that the priority function gets
 // called about once every 3 seconds, we do not expect the number of requests to grow from one call

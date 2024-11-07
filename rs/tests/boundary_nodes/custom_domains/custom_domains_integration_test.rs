@@ -18,22 +18,44 @@ end::catalog[] */
 mod setup;
 
 use ic_system_test_driver::{
-    driver::{boundary_node::BoundaryNodeVm, group::SystemTestGroup, test_env::TestEnv},
-    retry_with_msg_async, systest,
+    driver::{
+        boundary_node::BoundaryNodeVm,
+        group::SystemTestGroup,
+        test_env::TestEnv,
+    },
+    retry_with_msg_async,
+    systest,
     util::block_on,
 };
 use setup::{
-    access_domain, create_bn_http_client, get_registration_status, get_service_errors,
-    remove_dns_records, remove_registration, setup, setup_asset_canister, setup_dns_records,
-    submit_registration_request, update_dns_records, update_registration, GetRequestState,
-    RegistrationRequestState, RemoveRequestState, UpdateRequestState, BOUNDARY_NODE_VM_ID,
+    access_domain,
+    create_bn_http_client,
+    get_registration_status,
+    get_service_errors,
+    remove_dns_records,
+    remove_registration,
+    setup,
+    setup_asset_canister,
+    setup_dns_records,
+    submit_registration_request,
+    update_dns_records,
+    update_registration,
+    GetRequestState,
+    RegistrationRequestState,
+    RemoveRequestState,
+    UpdateRequestState,
+    BOUNDARY_NODE_VM_ID,
 };
 
 use slog::info;
 
 use std::time::Duration;
 
-use anyhow::{bail, Error, Result};
+use anyhow::{
+    bail,
+    Error,
+    Result,
+};
 
 pub const READY_WAIT_TIMEOUT: Duration = Duration::from_secs(90);
 pub const RETRY_BACKOFF: Duration = Duration::from_secs(5);

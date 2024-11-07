@@ -1,20 +1,42 @@
 use crate::address::BitcoinAddress;
-use crate::logs::{P0, P1};
+use crate::logs::{
+    P0,
+    P1,
+};
 use crate::memo::Status;
 use crate::queries::WithdrawalFee;
 use crate::state::ReimbursementReason;
 use crate::tasks::schedule_after;
-use candid::{CandidType, Deserialize};
-use ic_btc_interface::{MillisatoshiPerByte, Network, OutPoint, Satoshi, Txid, Utxo};
+use candid::{
+    CandidType,
+    Deserialize,
+};
+use ic_btc_interface::{
+    MillisatoshiPerByte,
+    Network,
+    OutPoint,
+    Satoshi,
+    Txid,
+    Utxo,
+};
 use ic_canister_log::log;
 use ic_management_canister_types::DerivationPath;
 use icrc_ledger_types::icrc1::account::Account;
-use icrc_ledger_types::icrc1::transfer::{Memo, TransferError};
+use icrc_ledger_types::icrc1::transfer::{
+    Memo,
+    TransferError,
+};
 use num_traits::ToPrimitive;
-use scopeguard::{guard, ScopeGuard};
+use scopeguard::{
+    guard,
+    ScopeGuard,
+};
 use serde::Serialize;
 use serde_bytes::ByteBuf;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
 use std::time::Duration;
 
 pub mod address;
@@ -841,7 +863,10 @@ pub async fn sign_transaction(
     output_account: &BTreeMap<tx::OutPoint, Account>,
     unsigned_tx: tx::UnsignedTransaction,
 ) -> Result<tx::SignedTransaction, management::CallError> {
-    use crate::address::{derivation_path, derive_public_key};
+    use crate::address::{
+        derivation_path,
+        derive_public_key,
+    };
 
     let mut signed_inputs = Vec::with_capacity(unsigned_tx.inputs.len());
     let sighasher = tx::TxSigHasher::new(&unsigned_tx);
@@ -1175,7 +1200,10 @@ pub async fn distribute_kyt_fees() {
 }
 
 pub fn timer() {
-    use tasks::{pop_if_ready, TaskType};
+    use tasks::{
+        pop_if_ready,
+        TaskType,
+    };
 
     const INTERVAL_PROCESSING: Duration = Duration::from_secs(5);
 

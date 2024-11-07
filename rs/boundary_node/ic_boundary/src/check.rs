@@ -2,7 +2,10 @@ use std::{
     fmt,
     str::FromStr,
     sync::Arc,
-    time::{Duration, Instant},
+    time::{
+        Duration,
+        Instant,
+    },
 };
 
 use anyhow::Error;
@@ -10,23 +13,44 @@ use async_trait::async_trait;
 use bytes::Buf;
 use http::Method;
 use ic_bn_lib::http::Client;
-use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
+use ic_types::messages::{
+    HttpStatusResponse,
+    ReplicaHealthStatus,
+};
 use mockall::automock;
-use simple_moving_average::{SumTreeSMA, SMA};
+use simple_moving_average::{
+    SumTreeSMA,
+    SMA,
+};
 use tokio::{
     select,
-    sync::{mpsc, watch},
+    sync::{
+        mpsc,
+        watch,
+    },
 };
-use tokio_util::{sync::CancellationToken, task::TaskTracker};
-use tracing::{debug, warn};
+use tokio_util::{
+    sync::CancellationToken,
+    task::TaskTracker,
+};
+use tracing::{
+    debug,
+    warn,
+};
 use url::Url;
 
 use crate::{
     core::Run,
-    metrics::{MetricParamsCheck, WithMetricsCheck},
+    metrics::{
+        MetricParamsCheck,
+        WithMetricsCheck,
+    },
     persist::Persist,
     snapshot::RegistrySnapshot,
-    snapshot::{Node, Subnet},
+    snapshot::{
+        Node,
+        Subnet,
+    },
 };
 
 #[derive(Clone, PartialEq, Debug)]

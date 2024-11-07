@@ -1,61 +1,123 @@
 use candid::Encode;
-use canister_test::{Canister, Runtime};
-use ic_base_types::{subnet_id_into_protobuf, NodeId, PrincipalId, SubnetId};
+use canister_test::{
+    Canister,
+    Runtime,
+};
+use ic_base_types::{
+    subnet_id_into_protobuf,
+    NodeId,
+    PrincipalId,
+    SubnetId,
+};
 use ic_config::Config;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_interfaces_registry::RegistryClient;
 use ic_management_canister_types::{
-    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
+    EcdsaCurve,
+    EcdsaKeyId,
+    MasterPublicKeyId,
+    SchnorrAlgorithm,
+    SchnorrKeyId,
 };
 use ic_nns_test_utils::{
     itest_helpers::{
-        forward_call_via_universal_canister, local_test_on_nns_subnet_with_mutations,
-        set_up_registry_canister, set_up_universal_canister, try_call_via_universal_canister,
+        forward_call_via_universal_canister,
+        local_test_on_nns_subnet_with_mutations,
+        set_up_registry_canister,
+        set_up_universal_canister,
+        try_call_via_universal_canister,
     },
-    registry::{get_value_or_panic, prepare_registry},
+    registry::{
+        get_value_or_panic,
+        prepare_registry,
+    },
 };
 use ic_protobuf::registry::{
-    crypto::v1::{ChainKeySigningSubnetList, MasterPublicKeyId as MasterPublicKeyIdPb},
+    crypto::v1::{
+        ChainKeySigningSubnetList,
+        MasterPublicKeyId as MasterPublicKeyIdPb,
+    },
     subnet::v1::{
-        CatchUpPackageContents, ChainKeyConfig as ChainKeyConfigPb, EcdsaInitialization,
-        KeyConfig as KeyConfigPb, SubnetListRecord, SubnetRecord,
+        CatchUpPackageContents,
+        ChainKeyConfig as ChainKeyConfigPb,
+        EcdsaInitialization,
+        KeyConfig as KeyConfigPb,
+        SubnetListRecord,
+        SubnetRecord,
     },
 };
 use ic_registry_keys::{
-    make_catch_up_package_contents_key, make_chain_key_signing_subnet_list_key,
-    make_subnet_list_record_key, make_subnet_record_key,
+    make_catch_up_package_contents_key,
+    make_chain_key_signing_subnet_list_key,
+    make_subnet_list_record_key,
+    make_subnet_record_key,
 };
 use ic_registry_subnet_features::{
-    ChainKeyConfig, EcdsaConfig, KeyConfig as KeyConfigInternal, DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+    ChainKeyConfig,
+    EcdsaConfig,
+    KeyConfig as KeyConfigInternal,
+    DEFAULT_ECDSA_MAX_QUEUE_SIZE,
 };
-use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest, upsert};
-use ic_replica_tests::{canister_test_with_config_async, get_ic_config};
+use ic_registry_transport::{
+    insert,
+    pb::v1::RegistryAtomicMutateRequest,
+    upsert,
+};
+use ic_replica_tests::{
+    canister_test_with_config_async,
+    get_ic_config,
+};
 use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::{
     crypto::{
         canister_threshold_sig::idkg::{
-            IDkgDealing, IDkgReceivers, IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation,
-            IDkgTranscriptParams, IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin,
-            InitialIDkgDealings, SignedIDkgDealing,
+            IDkgDealing,
+            IDkgReceivers,
+            IDkgTranscript,
+            IDkgTranscriptId,
+            IDkgTranscriptOperation,
+            IDkgTranscriptParams,
+            IDkgTranscriptType,
+            IDkgUnmaskedTranscriptOrigin,
+            InitialIDkgDealings,
+            SignedIDkgDealing,
         },
-        AlgorithmId, BasicSig, BasicSigOf,
+        AlgorithmId,
+        BasicSig,
+        BasicSigOf,
     },
     signature::BasicSignature,
-    Height, RegistryVersion, ReplicaVersion,
+    Height,
+    RegistryVersion,
+    ReplicaVersion,
 };
 use prost::Message;
-use rand::{CryptoRng, Rng, RngCore};
+use rand::{
+    CryptoRng,
+    Rng,
+    RngCore,
+};
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder,
     mutations::{
-        do_create_subnet::{CreateSubnetPayload, EcdsaInitialConfig, EcdsaKeyRequest},
+        do_create_subnet::{
+            CreateSubnetPayload,
+            EcdsaInitialConfig,
+            EcdsaKeyRequest,
+        },
         do_recover_subnet::{
-            InitialChainKeyConfig, KeyConfig, KeyConfigRequest, RecoverSubnetPayload,
+            InitialChainKeyConfig,
+            KeyConfig,
+            KeyConfigRequest,
+            RecoverSubnetPayload,
         },
     },
 };
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{
+        BTreeMap,
+        BTreeSet,
+    },
     convert::TryFrom,
     str::FromStr,
 };
@@ -63,9 +125,14 @@ use std::{
 mod common;
 use crate::common::test_helpers::prepare_registry_with_nodes_and_valid_pks;
 use common::test_helpers::{
-    get_cup_contents, get_subnet_holding_chain_keys, get_subnet_holding_ecdsa_keys,
-    get_subnet_record, set_up_universal_canister_as_governance,
-    setup_registry_synced_with_fake_client, wait_for_chain_key_setup, wait_for_ecdsa_setup,
+    get_cup_contents,
+    get_subnet_holding_chain_keys,
+    get_subnet_holding_ecdsa_keys,
+    get_subnet_record,
+    set_up_universal_canister_as_governance,
+    setup_registry_synced_with_fake_client,
+    wait_for_chain_key_setup,
+    wait_for_ecdsa_setup,
 };
 use ic_nns_test_utils::registry::create_subnet_threshold_signing_pubkey_and_cup_mutations;
 

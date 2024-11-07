@@ -100,7 +100,11 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::context_logger::{ContextLogger, LogMetadata, Logger};
+    use crate::context_logger::{
+        ContextLogger,
+        LogMetadata,
+        Logger,
+    };
     use crate::*;
 
     /// A context type used for testing purposes

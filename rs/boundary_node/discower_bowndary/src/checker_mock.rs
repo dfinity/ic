@@ -1,10 +1,18 @@
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{
+    collections::HashMap,
+    sync::Arc,
+    time::Duration,
+};
 
 use arc_swap::ArcSwap;
 use async_trait::async_trait;
 
 use crate::{
-    check::{HealthCheck, HealthCheckError, HealthCheckResult},
+    check::{
+        HealthCheck,
+        HealthCheckError,
+        HealthCheckResult,
+    },
     node::Node,
     types::GlobalShared,
 };

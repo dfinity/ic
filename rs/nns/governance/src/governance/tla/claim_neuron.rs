@@ -1,7 +1,16 @@
-use tla_instrumentation::{Label, TlaConstantAssignment, ToTla, Update, VarAssignment};
+use tla_instrumentation::{
+    Label,
+    TlaConstantAssignment,
+    ToTla,
+    Update,
+    VarAssignment,
+};
 
 use super::common::default_account;
-use super::{extract_common_constants, post_process_trace};
+use super::{
+    extract_common_constants,
+    post_process_trace,
+};
 
 pub fn claim_neuron_desc() -> Update {
     const PID: &str = "Claim_Neuron";

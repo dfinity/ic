@@ -1,25 +1,50 @@
 use crate::{
-    are_set_visibility_proposals_enabled, decoder_config,
+    are_set_visibility_proposals_enabled,
+    decoder_config,
     governance::{
         merge_neurons::{
-            build_merge_neurons_response, calculate_merge_neurons_effect,
+            build_merge_neurons_response,
+            calculate_merge_neurons_effect,
             validate_merge_neurons_before_commit,
         },
-        split_neuron::{calculate_split_neuron_effect, SplitNeuronEffect},
+        split_neuron::{
+            calculate_split_neuron_effect,
+            SplitNeuronEffect,
+        },
     },
     heap_governance_data::{
-        reassemble_governance_proto, split_governance_proto, HeapGovernanceData, XdrConversionRate,
+        reassemble_governance_proto,
+        split_governance_proto,
+        HeapGovernanceData,
+        XdrConversionRate,
     },
     migrations::maybe_run_migrations,
-    neuron::{types::total_potential_voting_power, DissolveStateAndAge, Neuron, NeuronBuilder},
-    neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
-    neuron_store::{metrics::NeuronSubsetMetrics, NeuronMetrics, NeuronStore},
+    neuron::{
+        types::total_potential_voting_power,
+        DissolveStateAndAge,
+        Neuron,
+        NeuronBuilder,
+    },
+    neuron_data_validation::{
+        NeuronDataValidationSummary,
+        NeuronDataValidator,
+    },
+    neuron_store::{
+        metrics::NeuronSubsetMetrics,
+        NeuronMetrics,
+        NeuronStore,
+    },
     neurons_fund::{
-        NeuronsFund, NeuronsFundNeuronPortion, NeuronsFundSnapshot,
-        PolynomialNeuronsFundParticipation, SwapParticipationLimits,
+        NeuronsFund,
+        NeuronsFundNeuronPortion,
+        NeuronsFundSnapshot,
+        PolynomialNeuronsFundParticipation,
+        SwapParticipationLimits,
     },
     node_provider_rewards::{
-        latest_node_provider_rewards, list_node_provider_rewards, record_node_provider_rewards,
+        latest_node_provider_rewards,
+        list_node_provider_rewards,
+        record_node_provider_rewards,
         DateRangeFilter,
     },
     pb::v1::{
@@ -29,92 +54,196 @@ use crate::{
         get_neurons_fund_audit_info_response,
         governance::{
             governance_cached_metrics::NeuronSubsetMetrics as NeuronSubsetMetricsPb,
-            neuron_in_flight_command::{Command as InFlightCommand, SyncCommand},
-            GovernanceCachedMetrics, NeuronInFlightCommand,
+            neuron_in_flight_command::{
+                Command as InFlightCommand,
+                SyncCommand,
+            },
+            GovernanceCachedMetrics,
+            NeuronInFlightCommand,
         },
         governance_error::ErrorType,
         manage_neuron,
         manage_neuron::{
-            claim_or_refresh::{By, MemoAndController},
-            ClaimOrRefresh, Command, NeuronIdOrSubaccount,
+            claim_or_refresh::{
+                By,
+                MemoAndController,
+            },
+            ClaimOrRefresh,
+            Command,
+            NeuronIdOrSubaccount,
         },
         manage_neuron_response,
-        manage_neuron_response::{MergeMaturityResponse, StakeMaturityResponse},
+        manage_neuron_response::{
+            MergeMaturityResponse,
+            StakeMaturityResponse,
+        },
         neuron::Followees,
         neurons_fund_snapshot::NeuronsFundNeuronPortion as NeuronsFundNeuronPortionPb,
         proposal,
         proposal::Action,
-        reward_node_provider::{RewardMode, RewardToAccount},
-        settle_neurons_fund_participation_request, settle_neurons_fund_participation_response,
+        reward_node_provider::{
+            RewardMode,
+            RewardToAccount,
+        },
+        settle_neurons_fund_participation_request,
+        settle_neurons_fund_participation_response,
         settle_neurons_fund_participation_response::NeuronsFundNeuron as NeuronsFundNeuronPb,
-        swap_background_information, ArchivedMonthlyNodeProviderRewards, Ballot,
-        CreateServiceNervousSystem, ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest,
-        GetNeuronsFundAuditInfoResponse, Governance as GovernanceProto, GovernanceError,
-        InstallCode, KnownNeuron, ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse,
-        ListProposalInfo, ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse,
-        MonthlyNodeProviderRewards, Motion, NetworkEconomics, Neuron as NeuronProto, NeuronInfo,
-        NeuronState, NeuronsFundAuditInfo, NeuronsFundData,
+        swap_background_information,
+        ArchivedMonthlyNodeProviderRewards,
+        Ballot,
+        CreateServiceNervousSystem,
+        ExecuteNnsFunction,
+        GetNeuronsFundAuditInfoRequest,
+        GetNeuronsFundAuditInfoResponse,
+        Governance as GovernanceProto,
+        GovernanceError,
+        InstallCode,
+        KnownNeuron,
+        ListKnownNeuronsResponse,
+        ListNeurons,
+        ListNeuronsResponse,
+        ListProposalInfo,
+        ListProposalInfoResponse,
+        ManageNeuron,
+        ManageNeuronResponse,
+        MonthlyNodeProviderRewards,
+        Motion,
+        NetworkEconomics,
+        Neuron as NeuronProto,
+        NeuronInfo,
+        NeuronState,
+        NeuronsFundAuditInfo,
+        NeuronsFundData,
         NeuronsFundEconomics as NeuronsFundNetworkEconomicsPb,
         NeuronsFundParticipation as NeuronsFundParticipationPb,
-        NeuronsFundSnapshot as NeuronsFundSnapshotPb, NnsFunction, NodeProvider, Proposal,
-        ProposalData, ProposalInfo, ProposalRewardStatus, ProposalStatus, RestoreAgingSummary,
-        RewardEvent, RewardNodeProvider, RewardNodeProviders,
-        SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,
-        StopOrStartCanister, Tally, Topic, UpdateCanisterSettings, UpdateNodeProvider, Visibility,
-        Vote, WaitForQuietState, XdrConversionRate as XdrConversionRatePb,
+        NeuronsFundSnapshot as NeuronsFundSnapshotPb,
+        NnsFunction,
+        NodeProvider,
+        Proposal,
+        ProposalData,
+        ProposalInfo,
+        ProposalRewardStatus,
+        ProposalStatus,
+        RestoreAgingSummary,
+        RewardEvent,
+        RewardNodeProvider,
+        RewardNodeProviders,
+        SettleNeuronsFundParticipationRequest,
+        SettleNeuronsFundParticipationResponse,
+        StopOrStartCanister,
+        Tally,
+        Topic,
+        UpdateCanisterSettings,
+        UpdateNodeProvider,
+        Visibility,
+        Vote,
+        WaitForQuietState,
+        XdrConversionRate as XdrConversionRatePb,
     },
     proposals::call_canister::CallCanister,
 };
 use async_trait::async_trait;
-use candid::{Decode, Encode};
-use cycles_minting_canister::{IcpXdrConversionRate, IcpXdrConversionRateCertifiedResponse};
+use candid::{
+    Decode,
+    Encode,
+};
+use cycles_minting_canister::{
+    IcpXdrConversionRate,
+    IcpXdrConversionRateCertifiedResponse,
+};
 #[cfg(not(target_arch = "wasm32"))]
 use futures::FutureExt;
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_cdk::println;
 #[cfg(target_arch = "wasm32")]
 use ic_cdk::spawn;
 use ic_nervous_system_common::{
-    cmc::CMC, ledger, ledger::IcpLedger, NervousSystemError, ONE_DAY_SECONDS, ONE_MONTH_SECONDS,
+    cmc::CMC,
+    ledger,
+    ledger::IcpLedger,
+    NervousSystemError,
+    ONE_DAY_SECONDS,
+    ONE_MONTH_SECONDS,
     ONE_YEAR_SECONDS,
 };
 use ic_nervous_system_governance::maturity_modulation::apply_maturity_modulation;
-use ic_nervous_system_proto::pb::v1::{GlobalTimeOfDay, Principals};
+use ic_nervous_system_proto::pb::v1::{
+    GlobalTimeOfDay,
+    Principals,
+};
 use ic_nns_common::{
-    pb::v1::{NeuronId, ProposalId},
+    pb::v1::{
+        NeuronId,
+        ProposalId,
+    },
     types::UpdateIcpXdrConversionRatePayload,
 };
 use ic_nns_constants::{
-    CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID,
-    LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    CYCLES_MINTING_CANISTER_ID,
+    GENESIS_TOKEN_CANISTER_ID,
+    GOVERNANCE_CANISTER_ID,
+    LIFELINE_CANISTER_ID,
+    REGISTRY_CANISTER_ID,
+    ROOT_CANISTER_ID,
+    SNS_WASM_CANISTER_ID,
     SUBNET_RENTAL_CANISTER_ID,
 };
 use ic_nns_governance_api::{
-    pb::v1::CreateServiceNervousSystem as ApiCreateServiceNervousSystem, proposal_validation,
+    pb::v1::CreateServiceNervousSystem as ApiCreateServiceNervousSystem,
+    proposal_validation,
     subnet_rental::SubnetRentalRequest,
 };
 use ic_protobuf::registry::dc::v1::AddOrRemoveDataCentersProposalPayload;
 use ic_sns_init::pb::v1::SnsInitPayload;
-use ic_sns_swap::pb::v1::{self as sns_swap_pb, Lifecycle, NeuronsFundParticipationConstraints};
-use ic_sns_wasm::pb::v1::{
-    DeployNewSnsRequest, DeployNewSnsResponse, ListDeployedSnsesRequest, ListDeployedSnsesResponse,
+use ic_sns_swap::pb::v1::{
+    self as sns_swap_pb,
+    Lifecycle,
+    NeuronsFundParticipationConstraints,
 };
-use ic_stable_structures::{storable::Bound, Storable};
+use ic_sns_wasm::pb::v1::{
+    DeployNewSnsRequest,
+    DeployNewSnsResponse,
+    ListDeployedSnsesRequest,
+    ListDeployedSnsesResponse,
+};
+use ic_stable_structures::{
+    storable::Bound,
+    Storable,
+};
 use icp_ledger::{
-    AccountIdentifier, Subaccount, Tokens, DEFAULT_TRANSFER_FEE, TOKEN_SUBDIVIDABLE_BY,
+    AccountIdentifier,
+    Subaccount,
+    Tokens,
+    DEFAULT_TRANSFER_FEE,
+    TOKEN_SUBDIVIDABLE_BY,
 };
 use itertools::Itertools;
 use maplit::hashmap;
 use registry_canister::{
-    mutations::do_add_node_operator::AddNodeOperatorPayload, pb::v1::NodeProvidersMonthlyXdrRewards,
+    mutations::do_add_node_operator::AddNodeOperatorPayload,
+    pb::v1::NodeProvidersMonthlyXdrRewards,
 };
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use std::{
     borrow::Cow,
-    cmp::{max, Ordering},
-    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
-    convert::{TryFrom, TryInto},
+    cmp::{
+        max,
+        Ordering,
+    },
+    collections::{
+        BTreeMap,
+        BTreeSet,
+        HashMap,
+        HashSet,
+    },
+    convert::{
+        TryFrom,
+        TryInto,
+    },
     fmt,
     future::Future,
     ops::RangeInclusive,
@@ -134,8 +263,14 @@ pub mod tla_macros;
 pub mod tla;
 #[cfg(feature = "tla")]
 pub use tla::{
-    claim_neuron_desc, split_neuron_desc, tla_update_method, InstrumentationState, ToTla,
-    TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY, TLA_TRACES_MUTEX,
+    claim_neuron_desc,
+    split_neuron_desc,
+    tla_update_method,
+    InstrumentationState,
+    ToTla,
+    TLA_INSTRUMENTATION_STATE,
+    TLA_TRACES_LKEY,
+    TLA_TRACES_MUTEX,
 };
 
 // 70 KB (for executing NNS functions that are not canister upgrades)
@@ -1324,9 +1459,16 @@ impl ProposalInfo {
 
 #[cfg(test)]
 mod test_wait_for_quiet {
-    use crate::pb::v1::{ProposalData, Tally, WaitForQuietState};
+    use crate::pb::v1::{
+        ProposalData,
+        Tally,
+        WaitForQuietState,
+    };
     use ic_nns_common::pb::v1::ProposalId;
-    use proptest::prelude::{prop_assert, proptest};
+    use proptest::prelude::{
+        prop_assert,
+        proptest,
+    };
 
     proptest! {
         /// This test ensures that none of the asserts in

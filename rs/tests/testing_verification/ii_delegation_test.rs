@@ -8,14 +8,23 @@ use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::InternetComputer;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+    GetFirstHealthyNodeSnapshot,
+    HasPublicApiUrl,
+    HasTopologySnapshot,
+    IcNodeContainer,
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::delegations::*;
 use ic_system_test_driver::util::{
-    agent_with_identity, assert_canister_counter_with_retries, block_on, random_ed25519_identity,
+    agent_with_identity,
+    assert_canister_counter_with_retries,
+    block_on,
+    random_ed25519_identity,
 };
-use ic_types::messages::{Blob, HttpQueryResponse};
+use ic_types::messages::{
+    Blob,
+    HttpQueryResponse,
+};
 use ic_universal_canister::wasm;
 use slog::info;
 use std::env;

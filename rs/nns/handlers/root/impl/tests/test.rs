@@ -1,24 +1,35 @@
 use assert_matches::assert_matches;
 use candid::Encode;
 use dfn_candid::candid;
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_management_canister_types::CanisterInstallMode::Upgrade;
 use ic_nervous_system_clients::{
-    canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
+    canister_id_record::CanisterIdRecord,
+    canister_status::CanisterStatusResult,
 };
 use ic_nervous_system_proxied_canister_calls_tracker::ProxiedCanisterCallsTracker;
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_handler_root::{
-    encode_metrics, init::RootCanisterInitPayloadBuilder, PROXIED_CANISTER_CALLS_TRACKER,
+    encode_metrics,
+    init::RootCanisterInitPayloadBuilder,
+    PROXIED_CANISTER_CALLS_TRACKER,
 };
 use ic_nns_test_utils::itest_helpers::{
-    forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_root_canister,
+    forward_call_via_universal_canister,
+    local_test_on_nns_subnet,
+    set_up_root_canister,
     set_up_universal_canister,
 };
 use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
 use maplit::btreeset;
 use pretty_assertions::assert_eq;
-use std::{collections::BTreeSet, str::FromStr};
+use std::{
+    collections::BTreeSet,
+    str::FromStr,
+};
 
 /// Verifies that an anonymous user can get the status of any NNS canister
 /// through the root handler.

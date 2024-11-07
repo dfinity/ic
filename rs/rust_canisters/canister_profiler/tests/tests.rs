@@ -1,4 +1,7 @@
-use ic_canister_profiler::{measure_span, stats::SpanStats};
+use ic_canister_profiler::{
+    measure_span,
+    stats::SpanStats,
+};
 use std::time::Duration;
 
 #[test]

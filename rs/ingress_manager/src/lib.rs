@@ -12,34 +12,70 @@ mod proptests;
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_interfaces::{
-    consensus_pool::ConsensusTime, execution_environment::IngressHistoryReader,
-    ingress_pool::IngressPool, time_source::TimeSource,
+    consensus_pool::ConsensusTime,
+    execution_environment::IngressHistoryReader,
+    ingress_pool::IngressPool,
+    time_source::TimeSource,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{error, warn, ReplicaLogger};
-use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+use ic_logger::{
+    error,
+    warn,
+    ReplicaLogger,
+};
+use ic_metrics::{
+    buckets::decimal_buckets,
+    MetricsRegistry,
+};
 use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvider;
-use ic_registry_client_helpers::subnet::{IngressMessageSettings, SubnetRegistry};
+use ic_registry_client_helpers::subnet::{
+    IngressMessageSettings,
+    SubnetRegistry,
+};
 use ic_replicated_state::ReplicatedState;
-use ic_types::messages::{HttpRequest, HttpRequestContent, SignedIngressContent};
+use ic_types::messages::{
+    HttpRequest,
+    HttpRequestContent,
+    SignedIngressContent,
+};
 use ic_types::{
     artifact::IngressMessageId,
     consensus::BlockPayload,
     crypto::CryptoHashOf,
     malicious_flags::MaliciousFlags,
-    time::{Time, UNIX_EPOCH},
-    Height, RegistryVersion, SubnetId,
+    time::{
+        Time,
+        UNIX_EPOCH,
+    },
+    Height,
+    RegistryVersion,
+    SubnetId,
 };
 use ic_validator::{
-    CanisterIdSet, HttpRequestVerifier, HttpRequestVerifierImpl, RequestValidationError,
+    CanisterIdSet,
+    HttpRequestVerifier,
+    HttpRequestVerifierImpl,
+    RequestValidationError,
 };
-use prometheus::{Histogram, IntGauge};
-use std::collections::hash_map::{DefaultHasher, RandomState};
+use prometheus::{
+    Histogram,
+    IntGauge,
+};
+use std::collections::hash_map::{
+    DefaultHasher,
+    RandomState,
+};
 use std::hash::BuildHasher;
 use std::{
-    collections::{BTreeMap, HashSet},
-    sync::{Arc, RwLock},
+    collections::{
+        BTreeMap,
+        HashSet,
+    },
+    sync::{
+        Arc,
+        RwLock,
+    },
 };
 
 /// Cache of sets of message ids for past payloads. The index used here is a
@@ -269,11 +305,25 @@ pub(crate) mod tests {
     };
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::test_subnet_record;
-    use ic_test_utilities_state::{MockIngressHistory, ReplicatedStateBuilder};
+    use ic_test_utilities_state::{
+        MockIngressHistory,
+        ReplicatedStateBuilder,
+    };
     use ic_test_utilities_time::FastForwardTimeSource;
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
-    use ic_types::{ingress::IngressStatus, Height, RegistryVersion, SubnetId};
-    use std::{ops::DerefMut, sync::Arc};
+    use ic_test_utilities_types::ids::{
+        node_test_id,
+        subnet_test_id,
+    };
+    use ic_types::{
+        ingress::IngressStatus,
+        Height,
+        RegistryVersion,
+        SubnetId,
+    };
+    use std::{
+        ops::DerefMut,
+        sync::Arc,
+    };
 
     pub(crate) fn setup_registry(
         subnet_id: SubnetId,

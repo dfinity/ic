@@ -1,11 +1,20 @@
 use ic_crypto_internal_basic_sig_ed25519::types as ed25519_types;
-use ic_crypto_internal_csp::types::{CspPop, CspPublicKey, CspSecretKey, CspSignature};
+use ic_crypto_internal_csp::types::{
+    CspPop,
+    CspPublicKey,
+    CspSecretKey,
+    CspSignature,
+};
 use ic_crypto_internal_multi_sig_bls12381::types as multi_types;
 use ic_crypto_internal_test_vectors::unhex::*;
 use ic_protobuf::registry::crypto::v1::{
-    AlgorithmId as AlgorithmIdProto, PublicKey as PublicKeyProto,
+    AlgorithmId as AlgorithmIdProto,
+    PublicKey as PublicKeyProto,
 };
-use ic_types::crypto::{AlgorithmId, UserPublicKey};
+use ic_types::crypto::{
+    AlgorithmId,
+    UserPublicKey,
+};
 
 pub fn csp_pk_ed25519_from_hex(hex: &str) -> CspPublicKey {
     CspPublicKey::try_from(&UserPublicKey {

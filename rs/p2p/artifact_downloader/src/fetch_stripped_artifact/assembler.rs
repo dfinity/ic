@@ -1,33 +1,57 @@
 use std::{
-    sync::{Arc, RwLock},
+    sync::{
+        Arc,
+        RwLock,
+    },
     time::Duration,
 };
 use thiserror::Error;
 
 use ic_interfaces::p2p::consensus::{
-    Aborted, ArtifactAssembler, BouncerFactory, Peers, ValidatedPoolReader,
+    Aborted,
+    ArtifactAssembler,
+    BouncerFactory,
+    Peers,
+    ValidatedPoolReader,
 };
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{
+    warn,
+    ReplicaLogger,
+};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::types::v1 as pb;
 use ic_quic_transport::Transport;
 use ic_types::{
-    artifact::{ConsensusMessageId, IdentifiableArtifact, IngressMessageId},
+    artifact::{
+        ConsensusMessageId,
+        IdentifiableArtifact,
+        IngressMessageId,
+    },
     batch::IngressPayload,
-    consensus::{BlockProposal, ConsensusMessage},
+    consensus::{
+        BlockProposal,
+        ConsensusMessage,
+    },
     messages::SignedIngress,
-    CountBytes, NodeId,
+    CountBytes,
+    NodeId,
 };
 
 use crate::FetchArtifact;
 
 use super::{
     download::download_ingress,
-    metrics::{FetchStrippedConsensusArtifactMetrics, IngressMessageSource, IngressSenderMetrics},
+    metrics::{
+        FetchStrippedConsensusArtifactMetrics,
+        IngressMessageSource,
+        IngressSenderMetrics,
+    },
     stripper::Strippable,
     types::stripped::{
-        MaybeStrippedConsensusMessage, StrippedBlockProposal, StrippedConsensusMessageId,
+        MaybeStrippedConsensusMessage,
+        StrippedBlockProposal,
+        StrippedConsensusMessageId,
     },
 };
 
@@ -376,8 +400,10 @@ impl BlockProposalAssembler {
 #[cfg(test)]
 mod tests {
     use crate::fetch_stripped_artifact::test_utils::{
-        fake_block_proposal_with_ingresses, fake_ingress_message,
-        fake_ingress_message_with_arg_size, fake_stripped_block_proposal_with_ingresses,
+        fake_block_proposal_with_ingresses,
+        fake_ingress_message,
+        fake_ingress_message_with_arg_size,
+        fake_stripped_block_proposal_with_ingresses,
     };
 
     use super::*;

@@ -1,11 +1,23 @@
-use anyhow::{anyhow, Error};
+use anyhow::{
+    anyhow,
+    Error,
+};
 use candid::Principal;
-use certificate_orchestrator_interface::{Id, Name};
-use publicsuffix::{List, Psl};
+use certificate_orchestrator_interface::{
+    Id,
+    Name,
+};
+use publicsuffix::{
+    List,
+    Psl,
+};
 use std::collections::BTreeMap;
 
 use crate::{
-    registration::{Create, CreateError},
+    registration::{
+        Create,
+        CreateError,
+    },
     LocalRef,
 };
 
@@ -63,7 +75,10 @@ fn extract_apex_domain(name: &str, domain_list: &List) -> Result<String, Error> 
 
 #[cfg(test)]
 mod tests {
-    use crate::rate_limiter::{extract_apex_domain, List};
+    use crate::rate_limiter::{
+        extract_apex_domain,
+        List,
+    };
     use anyhow::Error;
 
     #[test]

@@ -4,16 +4,31 @@
 
 use canister_test::Wasm;
 use ic_canister_client::Sender;
-use ic_interfaces_registry::{RegistryDataProvider, ZERO_REGISTRY_VERSION};
+use ic_interfaces_registry::{
+    RegistryDataProvider,
+    ZERO_REGISTRY_VERSION,
+};
 use ic_nns_constants::NNS_CANISTER_WASMS;
-use ic_registry_local_store::{ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreReader};
+use ic_registry_local_store::{
+    ChangelogEntry,
+    KeyMutation,
+    LocalStoreImpl,
+    LocalStoreReader,
+};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_transport::{
     delete,
-    pb::v1::{registry_mutation, RegistryAtomicMutateRequest, RegistryMutation},
+    pb::v1::{
+        registry_mutation,
+        RegistryAtomicMutateRequest,
+        RegistryMutation,
+    },
     upsert,
 };
-use ic_sys::utility_command::{UtilityCommand, UtilityCommandError};
+use ic_sys::utility_command::{
+    UtilityCommand,
+    UtilityCommandError,
+};
 use std::path::Path;
 
 /// Reads mutations from a file in the format corresponding to what ic-prep
@@ -177,7 +192,10 @@ pub fn set_up_env_vars_for_all_canisters<P: AsRef<Path>>(wasm_dir: P) {
 mod test {
     use super::*;
     use ic_base_types::RegistryVersion;
-    use ic_registry_local_store::{Changelog, LocalStoreWriter};
+    use ic_registry_local_store::{
+        Changelog,
+        LocalStoreWriter,
+    };
     use tempfile::TempDir;
 
     /// In this test, a directory written by the `LocalStore::store` function is

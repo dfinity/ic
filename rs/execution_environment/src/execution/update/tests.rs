@@ -10,19 +10,34 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_replicated_state::testing::SystemStateTesting;
 use ic_replicated_state::{
-    canister_state::{NextExecution, WASM_PAGE_SIZE_IN_BYTES},
+    canister_state::{
+        NextExecution,
+        WASM_PAGE_SIZE_IN_BYTES,
+    },
     CallOrigin,
 };
 use ic_state_machine_tests::WasmResult;
 use ic_sys::PAGE_SIZE;
 use ic_types::ingress::IngressStatus;
-use ic_types::messages::{CallbackId, RequestMetadata};
-use ic_types::{Cycles, NumInstructions, NumOsPages};
-use ic_universal_canister::{call_args, wasm};
+use ic_types::messages::{
+    CallbackId,
+    RequestMetadata,
+};
+use ic_types::{
+    Cycles,
+    NumInstructions,
+    NumOsPages,
+};
+use ic_universal_canister::{
+    call_args,
+    wasm,
+};
 
 use ic_config::embedders::StableMemoryPageLimit;
 use ic_test_utilities_execution_environment::{
-    check_ingress_status, ExecutionTest, ExecutionTestBuilder,
+    check_ingress_status,
+    ExecutionTest,
+    ExecutionTestBuilder,
 };
 
 fn wat_writing_to_each_stable_memory_page(memory_amount: u64) -> String {

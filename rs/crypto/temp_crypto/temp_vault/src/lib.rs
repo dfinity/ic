@@ -1,7 +1,10 @@
 use ic_crypto_internal_csp::vault::api::CspVault;
 use ic_crypto_internal_csp::vault::local_csp_vault::ProdLocalCspVault;
 use ic_crypto_internal_csp::vault::remote_csp_vault::{
-    RemoteCspVault, RemoteCspVaultBuilder, TarpcCspVaultServerImpl, TarpcCspVaultServerImplBuilder,
+    RemoteCspVault,
+    RemoteCspVaultBuilder,
+    TarpcCspVaultServerImpl,
+    TarpcCspVaultServerImplBuilder,
 };
 use std::path::PathBuf;
 use std::sync::Arc;

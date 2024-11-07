@@ -1,27 +1,49 @@
 //! This defines the RPC service methods offered by the sandbox process
 //! (used by the controller) as well as the expected replies.
 
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::Arc,
+    time::Duration,
+};
 
 use crate::fdenum::EnumerateInnerFileDescriptors;
 use crate::protocol::structs;
-use ic_embedders::{CompilationResult, SerializedModule, SerializedModuleBytes};
+use ic_embedders::{
+    CompilationResult,
+    SerializedModule,
+    SerializedModuleBytes,
+};
 use ic_interfaces::execution_environment::HypervisorResult;
 use ic_replicated_state::{
     page_map::{
-        BaseFileSerialization, CheckpointSerialization, MappingSerialization,
-        OverlayFileSerialization, PageAllocatorSerialization, PageMapSerialization,
+        BaseFileSerialization,
+        CheckpointSerialization,
+        MappingSerialization,
+        OverlayFileSerialization,
+        PageAllocatorSerialization,
+        PageMapSerialization,
         StorageSerialization,
     },
-    Global, NumWasmPages,
+    Global,
+    NumWasmPages,
 };
 use ic_types::CanisterId;
 use ic_utils;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 use super::{
-    id::{ExecId, MemoryId, WasmId},
-    structs::{MemoryModifications, SandboxExecInput},
+    id::{
+        ExecId,
+        MemoryId,
+        WasmId,
+    },
+    structs::{
+        MemoryModifications,
+        SandboxExecInput,
+    },
 };
 
 /// Instruct sandbox process to terminate: Sandbox process should take
@@ -372,48 +394,109 @@ impl EnumerateInnerFileDescriptors for Reply {
 
 #[cfg(test)]
 mod tests {
-    use std::{sync::Arc, time::Duration};
+    use std::{
+        sync::Arc,
+        time::Duration,
+    };
 
     use ic_base_types::NumSeconds;
     use ic_config::{
-        embedders::Config as EmbeddersConfig, flag_status::FlagStatus,
+        embedders::Config as EmbeddersConfig,
+        flag_status::FlagStatus,
         subnet_config::CyclesAccountManagerConfig,
     };
-    use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
-    use ic_embedders::{wasm_utils, CompilationResult, SerializedModule, WasmtimeEmbedder};
-    use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
+    use ic_cycles_account_manager::{
+        CyclesAccountManager,
+        ResourceSaturation,
+    };
+    use ic_embedders::{
+        wasm_utils,
+        CompilationResult,
+        SerializedModule,
+        WasmtimeEmbedder,
+    };
+    use ic_interfaces::execution_environment::{
+        ExecutionMode,
+        SubnetAvailableMemory,
+    };
     use ic_logger::no_op_logger;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
-        Global, Memory, NetworkTopology, NumWasmPages, PageMap, SystemState,
+        Global,
+        Memory,
+        NetworkTopology,
+        NumWasmPages,
+        PageMap,
+        SystemState,
     };
     use ic_system_api::{
-        sandbox_safe_system_state::SandboxSafeSystemState, ExecutionParameters, InstructionLimits,
+        sandbox_safe_system_state::SandboxSafeSystemState,
+        ExecutionParameters,
+        InstructionLimits,
     };
     use ic_test_utilities_types::ids::canister_test_id;
     use ic_types::{
-        messages::{CallContextId, RequestMetadata},
-        methods::{FuncRef, WasmMethod},
-        ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions, SubnetId, Time,
+        messages::{
+            CallContextId,
+            RequestMetadata,
+        },
+        methods::{
+            FuncRef,
+            WasmMethod,
+        },
+        ComputeAllocation,
+        Cycles,
+        MemoryAllocation,
+        NumBytes,
+        NumInstructions,
+        SubnetId,
+        Time,
     };
     use ic_wasm_types::BinaryEncodedWasm;
 
     use crate::protocol::{
-        id::{ExecId, MemoryId, WasmId},
-        sbxsvc::{
-            AbortExecutionReply, AbortExecutionRequest, CloseMemoryReply, CloseMemoryRequest,
-            CloseWasmReply, CloseWasmRequest, CreateExecutionStateReply,
-            CreateExecutionStateRequest, CreateExecutionStateSerializedReply,
-            CreateExecutionStateSerializedRequest, CreateExecutionStateSerializedSuccessReply,
-            CreateExecutionStateSuccessReply, MemorySerialization, OpenMemoryReply,
-            OpenMemoryRequest, OpenWasmReply, OpenWasmRequest, OpenWasmSerializedReply,
-            OpenWasmSerializedRequest, ResumeExecutionReply, ResumeExecutionRequest,
-            StartExecutionReply, StartExecutionRequest, TerminateReply,
+        id::{
+            ExecId,
+            MemoryId,
+            WasmId,
         },
-        structs::{MemoryModifications, SandboxExecInput},
+        sbxsvc::{
+            AbortExecutionReply,
+            AbortExecutionRequest,
+            CloseMemoryReply,
+            CloseMemoryRequest,
+            CloseWasmReply,
+            CloseWasmRequest,
+            CreateExecutionStateReply,
+            CreateExecutionStateRequest,
+            CreateExecutionStateSerializedReply,
+            CreateExecutionStateSerializedRequest,
+            CreateExecutionStateSerializedSuccessReply,
+            CreateExecutionStateSuccessReply,
+            MemorySerialization,
+            OpenMemoryReply,
+            OpenMemoryRequest,
+            OpenWasmReply,
+            OpenWasmRequest,
+            OpenWasmSerializedReply,
+            OpenWasmSerializedRequest,
+            ResumeExecutionReply,
+            ResumeExecutionRequest,
+            StartExecutionReply,
+            StartExecutionRequest,
+            TerminateReply,
+        },
+        structs::{
+            MemoryModifications,
+            SandboxExecInput,
+        },
     };
 
-    use super::{Reply, Request, TerminateRequest};
+    use super::{
+        Reply,
+        Request,
+        TerminateRequest,
+    };
 
     const IS_WASM64_EXECUTION: bool = false;
 

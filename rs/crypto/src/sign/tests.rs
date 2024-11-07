@@ -1,5 +1,8 @@
 use super::*;
-use crate::common::test_utils::{CryptoRegistryKey, CryptoRegistryRecord};
+use crate::common::test_utils::{
+    CryptoRegistryKey,
+    CryptoRegistryRecord,
+};
 use ic_crypto_internal_basic_sig_ecdsa_secp256r1 as ecdsa_secp256r1;
 use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_sha2::Sha256;
@@ -10,11 +13,18 @@ use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_types::crypto::{AlgorithmId, KeyPurpose, DOMAIN_IC_REQUEST};
+use ic_types::crypto::{
+    AlgorithmId,
+    KeyPurpose,
+    DOMAIN_IC_REQUEST,
+};
 use ic_types::messages::MessageId;
 use ic_types::registry::RegistryClientError;
 use ic_types::RegistryVersion;
-use ic_types_test_utils::ids::{NODE_1, SUBNET_27};
+use ic_types_test_utils::ids::{
+    NODE_1,
+    SUBNET_27,
+};
 
 pub const KEY_ID_1: [u8; 32] = [0u8; 32];
 pub const KEY_ID_2: [u8; 32] = [1u8; 32];

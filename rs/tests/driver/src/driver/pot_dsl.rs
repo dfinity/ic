@@ -1,7 +1,13 @@
-use std::{fmt::Display, panic::UnwindSafe};
+use std::{
+    fmt::Display,
+    panic::UnwindSafe,
+};
 
 use crate::driver::test_env::TestEnv;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 pub trait PotSetupFn: FnOnce(TestEnv) + UnwindSafe + Send + Sync + 'static {}
 impl<T: FnOnce(TestEnv) + UnwindSafe + Send + Sync + 'static> PotSetupFn for T {}

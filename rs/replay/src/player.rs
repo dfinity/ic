@@ -1,17 +1,35 @@
 use crate::{
     backup,
-    backup::{cup_file_name, rename_file},
+    backup::{
+        cup_file_name,
+        rename_file,
+    },
     ingress::IngressWithPrinter,
-    validator::{InvalidArtifact, ReplayValidator},
+    validator::{
+        InvalidArtifact,
+        ReplayValidator,
+    },
 };
 use ic_artifact_pool::{
     certification_pool::CertificationPoolImpl,
-    consensus_pool::{ConsensusPoolImpl, UncachedConsensusPoolImpl},
+    consensus_pool::{
+        ConsensusPoolImpl,
+        UncachedConsensusPoolImpl,
+    },
 };
-use ic_config::{artifact_pool::ArtifactPoolConfig, subnet_config::SubnetConfig, Config};
-use ic_consensus::{certification::VerifierImpl, consensus::batch_delivery::deliver_batches};
+use ic_config::{
+    artifact_pool::ArtifactPoolConfig,
+    subnet_config::SubnetConfig,
+    Config,
+};
+use ic_consensus::{
+    certification::VerifierImpl,
+    consensus::batch_delivery::deliver_batches,
+};
 use ic_consensus_utils::{
-    crypto_hashable_to_seed, lookup_replica_version, membership::Membership,
+    crypto_hashable_to_seed,
+    lookup_replica_version,
+    membership::Membership,
     pool_reader::PoolReader,
 };
 use ic_crypto_for_verification_only::CryptoComponentForVerificationOnly;
@@ -19,59 +37,133 @@ use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::ExecutionServices;
 use ic_interfaces::{
     certification::CertificationPool,
-    execution_environment::{IngressHistoryReader, QueryExecutionError, QueryExecutionService},
-    messaging::{MessageRouting, MessageRoutingError},
+    execution_environment::{
+        IngressHistoryReader,
+        QueryExecutionError,
+        QueryExecutionService,
+    },
+    messaging::{
+        MessageRouting,
+        MessageRoutingError,
+    },
     time_source::SysTimeSource,
 };
-use ic_interfaces_registry::{RegistryClient, RegistryTransportRecord};
-use ic_interfaces_state_manager::{
-    PermanentStateHashError, StateHashError, StateManager, StateReader,
+use ic_interfaces_registry::{
+    RegistryClient,
+    RegistryTransportRecord,
 };
-use ic_logger::{new_replica_logger_from_config, ReplicaLogger};
+use ic_interfaces_state_manager::{
+    PermanentStateHashError,
+    StateHashError,
+    StateManager,
+    StateReader,
+};
+use ic_logger::{
+    new_replica_logger_from_config,
+    ReplicaLogger,
+};
 use ic_messaging::MessageRoutingImpl;
 use ic_metrics::MetricsRegistry;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_protobuf::{
-    registry::{replica_version::v1::BlessedReplicaVersions, subnet::v1::SubnetRecord},
+    registry::{
+        replica_version::v1::BlessedReplicaVersions,
+        subnet::v1::SubnetRecord,
+    },
     types::v1 as pb,
 };
 use ic_registry_client::client::RegistryClientImpl;
-use ic_registry_client_helpers::{deserialize_registry_value, subnet::SubnetRegistry};
-use ic_registry_keys::{make_blessed_replica_versions_key, make_subnet_record_key};
+use ic_registry_client_helpers::{
+    deserialize_registry_value,
+    subnet::SubnetRegistry,
+};
+use ic_registry_keys::{
+    make_blessed_replica_versions_key,
+    make_subnet_record_key,
+};
 use ic_registry_local_store::{
-    Changelog, ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreWriter,
+    Changelog,
+    ChangelogEntry,
+    KeyMutation,
+    LocalStoreImpl,
+    LocalStoreWriter,
 };
 use ic_registry_nns_data_provider::registry::registry_deltas_to_registry_transport_records;
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{
-    deserialize_get_changes_since_response, deserialize_get_latest_version_response,
-    deserialize_get_value_response, serialize_get_changes_since_request,
+    deserialize_get_changes_since_response,
+    deserialize_get_latest_version_response,
+    deserialize_get_value_response,
+    serialize_get_changes_since_request,
     serialize_get_value_request,
 };
 use ic_state_manager::StateManagerImpl;
 use ic_types::{
-    batch::{Batch, BatchMessages, BlockmakerMetrics},
+    batch::{
+        Batch,
+        BatchMessages,
+        BlockmakerMetrics,
+    },
     consensus::{
-        certification::{Certification, CertificationContent, CertificationShare},
-        CatchUpContentProtobufBytes, CatchUpPackage, HasHeight, HasVersion,
+        certification::{
+            Certification,
+            CertificationContent,
+            CertificationShare,
+        },
+        CatchUpContentProtobufBytes,
+        CatchUpPackage,
+        HasHeight,
+        HasVersion,
     },
     crypto::{
-        threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
-        CombinedThresholdSig, CombinedThresholdSigOf, Signed,
+        threshold_sig::ni_dkg::{
+            NiDkgId,
+            NiDkgTag,
+            NiDkgTargetSubnet,
+        },
+        CombinedThresholdSig,
+        CombinedThresholdSigOf,
+        Signed,
     },
-    ingress::{IngressState, IngressStatus, WasmResult},
+    ingress::{
+        IngressState,
+        IngressStatus,
+        WasmResult,
+    },
     malicious_flags::MaliciousFlags,
-    messages::{Query, QuerySource},
+    messages::{
+        Query,
+        QuerySource,
+    },
     signature::ThresholdSignature,
     time::current_time,
-    CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, PrincipalId, Randomness,
-    RegistryVersion, ReplicaVersion, SubnetId, Time, UserId,
+    CryptoHashOfPartialState,
+    CryptoHashOfState,
+    Height,
+    NodeId,
+    PrincipalId,
+    Randomness,
+    RegistryVersion,
+    ReplicaVersion,
+    SubnetId,
+    Time,
+    UserId,
 };
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use slog_async::AsyncGuard;
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
-    path::{Path, PathBuf},
+    collections::{
+        BTreeMap,
+        HashMap,
+        HashSet,
+    },
+    path::{
+        Path,
+        PathBuf,
+    },
     sync::Arc,
     time::Duration,
 };
@@ -1144,7 +1236,10 @@ impl Player {
         let purge_height = cache.catch_up_package().height();
         println!("Removing all states below height {:?}", purge_height);
         self.state_manager.remove_states_below(purge_height);
-        use ic_interfaces::{consensus_pool::ChangeAction, p2p::consensus::MutablePool};
+        use ic_interfaces::{
+            consensus_pool::ChangeAction,
+            p2p::consensus::MutablePool,
+        };
         pool.apply(ChangeAction::PurgeValidatedBelow(purge_height).into());
         Ok(params)
     }
@@ -1435,9 +1530,14 @@ mod tests {
     use ic_test_utilities_types::ids::node_test_id;
     use ic_types::{
         consensus::certification::{
-            CertificationContent, CertificationMessage, CertificationShare,
+            CertificationContent,
+            CertificationMessage,
+            CertificationShare,
         },
-        crypto::{CryptoHash, Signed},
+        crypto::{
+            CryptoHash,
+            Signed,
+        },
         signature::ThresholdSignatureShare,
     };
 

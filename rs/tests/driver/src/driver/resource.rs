@@ -3,31 +3,80 @@ use super::driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR;
 use crate::driver::farm::FarmResult;
 use crate::driver::farm::FileId;
 use crate::driver::farm::ImageLocation;
-use crate::driver::farm::ImageLocation::{IcOsImageViaUrl, ImageViaUrl};
-use crate::driver::farm::VMCreateResponse;
-use crate::driver::farm::{CreateVmRequest, HostFeature};
-use crate::driver::farm::{Farm, VmType};
-use crate::driver::ic::{AmountOfMemoryKiB, InternetComputer, Node, NrOfVCPUs};
-use crate::driver::ic::{ImageSizeGiB, VmAllocationStrategy, VmResources};
-use crate::driver::nested::NestedNode;
-use crate::driver::test_env::{TestEnv, TestEnvAttribute};
-use crate::driver::test_env_api::{
-    get_ic_os_img_sha256, get_ic_os_img_url, get_mainnet_ic_os_img_url,
-    get_malicious_ic_os_img_sha256, get_malicious_ic_os_img_url, HasIcDependencies,
+use crate::driver::farm::ImageLocation::{
+    IcOsImageViaUrl,
+    ImageViaUrl,
 };
-use crate::driver::test_setup::{GroupSetup, InfraProvider};
+use crate::driver::farm::VMCreateResponse;
+use crate::driver::farm::{
+    CreateVmRequest,
+    HostFeature,
+};
+use crate::driver::farm::{
+    Farm,
+    VmType,
+};
+use crate::driver::ic::{
+    AmountOfMemoryKiB,
+    InternetComputer,
+    Node,
+    NrOfVCPUs,
+};
+use crate::driver::ic::{
+    ImageSizeGiB,
+    VmAllocationStrategy,
+    VmResources,
+};
+use crate::driver::nested::NestedNode;
+use crate::driver::test_env::{
+    TestEnv,
+    TestEnvAttribute,
+};
+use crate::driver::test_env_api::{
+    get_ic_os_img_sha256,
+    get_ic_os_img_url,
+    get_mainnet_ic_os_img_url,
+    get_malicious_ic_os_img_sha256,
+    get_malicious_ic_os_img_url,
+    HasIcDependencies,
+};
+use crate::driver::test_setup::{
+    GroupSetup,
+    InfraProvider,
+};
 use crate::driver::universal_vm::UniversalVm;
 use crate::k8s::tnet::TNet;
 use crate::util::block_on;
-use anyhow::{self, bail};
+use anyhow::{
+    self,
+    bail,
+};
 use kube::ResourceExt;
-use serde::{Deserialize, Serialize};
-use slog::{info, warn};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use slog::{
+    info,
+    warn,
+};
 use std::collections::BTreeMap;
-use std::fs::{self, File};
-use std::io::{self, Write};
-use std::net::{Ipv4Addr, Ipv6Addr};
-use std::path::{Path, PathBuf};
+use std::fs::{
+    self,
+    File,
+};
+use std::io::{
+    self,
+    Write,
+};
+use std::net::{
+    Ipv4Addr,
+    Ipv6Addr,
+};
+use std::path::{
+    Path,
+    PathBuf,
+};
 use std::process::Command;
 use url::Url;
 use zstd::stream::write::Encoder;

@@ -1,18 +1,36 @@
 use std::time::Instant;
-use std::{fmt::Debug, sync::Arc, time::Duration};
+use std::{
+    fmt::Debug,
+    sync::Arc,
+    time::Duration,
+};
 
 use crate::messages::FetchedNodes;
 use crate::snapshot::Snapshot;
 use crate::{
-    check::HealthCheck, fetch::NodesFetcher, fetch_actor::NodesFetchActor,
-    health_manager_actor::HealthManagerActor, node::Node, types::GlobalShared,
+    check::HealthCheck,
+    fetch::NodesFetcher,
+    fetch_actor::NodesFetchActor,
+    health_manager_actor::HealthManagerActor,
+    node::Node,
+    types::GlobalShared,
 };
 use arc_swap::ArcSwap;
-use ic_agent::{agent::http_transport::route_provider::RouteProvider, AgentError};
+use ic_agent::{
+    agent::http_transport::route_provider::RouteProvider,
+    AgentError,
+};
 use tokio::sync::watch;
 use tokio::time::sleep;
-use tokio_util::{sync::CancellationToken, task::TaskTracker};
-use tracing::{error, info, warn};
+use tokio_util::{
+    sync::CancellationToken,
+    task::TaskTracker,
+};
+use tracing::{
+    error,
+    info,
+    warn,
+};
 use url::Url;
 
 const SERVICE_NAME: &str = "HealthCheckRouteProvider";
@@ -158,7 +176,10 @@ mod tests {
     use crate::fetcher_mock::NodesFetchMock;
     use crate::snapshot::IC0_SEED_DOMAIN;
     use crate::snapshot_health_based::HealthBasedSnapshot;
-    use crate::test_helpers::{assert_routed_domains, route_n_times};
+    use crate::test_helpers::{
+        assert_routed_domains,
+        route_n_times,
+    };
 
     static TRACING_INIT: Once = Once::new();
 

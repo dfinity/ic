@@ -2,13 +2,23 @@ use candid::Encode;
 use ic_base_types::SubnetId;
 use ic_nns_test_utils::{
     itest_helpers::{
-        local_test_on_nns_subnet, set_up_registry_canister, set_up_universal_canister,
+        local_test_on_nns_subnet,
+        set_up_registry_canister,
+        set_up_universal_canister,
         try_call_via_universal_canister,
     },
-    registry::{get_value_or_panic, prepare_registry_with_two_node_sets, routing_table_mutation},
+    registry::{
+        get_value_or_panic,
+        prepare_registry_with_two_node_sets,
+        routing_table_mutation,
+    },
 };
 use ic_protobuf::registry::routing_table::v1 as pb;
-use ic_registry_routing_table::{CanisterIdRange, CanisterMigrations, RoutingTable};
+use ic_registry_routing_table::{
+    CanisterIdRange,
+    CanisterMigrations,
+    RoutingTable,
+};
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::CanisterId;

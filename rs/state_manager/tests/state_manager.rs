@@ -1,88 +1,200 @@
 use assert_matches::assert_matches;
 use ic_base_types::SnapshotId;
 use ic_certification_version::{
-    CertificationVersion::{V11, V15},
+    CertificationVersion::{
+        V11,
+        V15,
+    },
     CURRENT_CERTIFICATION_VERSION,
 };
 use ic_config::{
     flag_status::FlagStatus,
-    state_manager::{lsmt_config_default, Config, LsmtConfig},
+    state_manager::{
+        lsmt_config_default,
+        Config,
+        LsmtConfig,
+    },
 };
 use ic_crypto_tree_hash::{
-    flatmap, sparse_labeled_tree_from_paths, Label, LabeledTree, LookupStatus, MixedHashTree,
+    flatmap,
+    sparse_labeled_tree_from_paths,
+    Label,
+    LabeledTree,
+    LookupStatus,
+    MixedHashTree,
     Path as LabelPath,
 };
 use ic_interfaces::certification::Verifier;
-use ic_interfaces::p2p::state_sync::{ChunkId, Chunkable, StateSyncArtifactId, StateSyncClient};
-use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
+use ic_interfaces::p2p::state_sync::{
+    ChunkId,
+    Chunkable,
+    StateSyncArtifactId,
+    StateSyncClient,
+};
+use ic_interfaces_certified_stream_store::{
+    CertifiedStreamStore,
+    EncodeStreamError,
+};
 use ic_interfaces_state_manager::*;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types::{
-    CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, InstallChunkedCodeArgs,
-    LoadCanisterSnapshotArgs, TakeCanisterSnapshotArgs, UploadChunkArgs,
+    CanisterChangeDetails,
+    CanisterChangeOrigin,
+    CanisterInstallModeV2,
+    InstallChunkedCodeArgs,
+    LoadCanisterSnapshotArgs,
+    TakeCanisterSnapshotArgs,
+    UploadChunkArgs,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_snapshots::CanisterSnapshot,
-    canister_state::{execution_state::WasmBinary, system_state::wasm_chunk_store::WasmChunkStore},
+    canister_state::{
+        execution_state::WasmBinary,
+        system_state::wasm_chunk_store::WasmChunkStore,
+    },
     metadata_state::ApiBoundaryNodeEntry,
-    page_map::{PageIndex, Shard, StorageLayout},
+    page_map::{
+        PageIndex,
+        Shard,
+        StorageLayout,
+    },
     testing::ReplicatedStateTesting,
-    ExecutionState, ExportedFunctions, Memory, NetworkTopology, NumWasmPages, PageMap,
-    ReplicatedState, Stream, SubnetTopology,
+    ExecutionState,
+    ExportedFunctions,
+    Memory,
+    NetworkTopology,
+    NumWasmPages,
+    PageMap,
+    ReplicatedState,
+    Stream,
+    SubnetTopology,
 };
-use ic_state_layout::{CheckpointLayout, ReadOnly, StateLayout, SYSTEM_METADATA_FILE, WASM_FILE};
-use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
-use ic_state_manager::manifest::{build_meta_manifest, manifest_from_path, validate_manifest};
+use ic_state_layout::{
+    CheckpointLayout,
+    ReadOnly,
+    StateLayout,
+    SYSTEM_METADATA_FILE,
+    WASM_FILE,
+};
+use ic_state_machine_tests::{
+    StateMachine,
+    StateMachineBuilder,
+};
+use ic_state_manager::manifest::{
+    build_meta_manifest,
+    manifest_from_path,
+    validate_manifest,
+};
 use ic_state_manager::{
     state_sync::{
         types::{
-            StateSyncMessage, DEFAULT_CHUNK_SIZE, FILE_GROUP_CHUNK_ID_OFFSET,
-            MANIFEST_CHUNK_ID_OFFSET, META_MANIFEST_CHUNK,
+            StateSyncMessage,
+            DEFAULT_CHUNK_SIZE,
+            FILE_GROUP_CHUNK_ID_OFFSET,
+            MANIFEST_CHUNK_ID_OFFSET,
+            META_MANIFEST_CHUNK,
         },
         StateSync,
     },
-    DirtyPageMap, PageMapType, StateManagerImpl, NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY,
+    DirtyPageMap,
+    PageMapType,
+    StateManagerImpl,
+    NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY,
 };
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities_consensus::fake::FakeVerifier;
-use ic_test_utilities_io::{make_mutable, make_readonly, write_all_at};
+use ic_test_utilities_io::{
+    make_mutable,
+    make_readonly,
+    write_all_at,
+};
 use ic_test_utilities_logger::with_test_replica_logger;
-use ic_test_utilities_metrics::{fetch_int_counter_vec, fetch_int_gauge, Labels};
-use ic_test_utilities_state::{arb_stream, arb_stream_slice, canister_ids};
+use ic_test_utilities_metrics::{
+    fetch_int_counter_vec,
+    fetch_int_gauge,
+    Labels,
+};
+use ic_test_utilities_state::{
+    arb_stream,
+    arb_stream_slice,
+    canister_ids,
+};
 use ic_test_utilities_tmpdir::tmpdir;
 use ic_test_utilities_types::{
-    ids::{canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id},
+    ids::{
+        canister_test_id,
+        message_test_id,
+        node_test_id,
+        subnet_test_id,
+        user_test_id,
+    },
     messages::RequestBuilder,
 };
 use ic_types::batch::{
-    BatchSummary, CanisterQueryStats, QueryStats, QueryStatsPayload, RawQueryStats, TotalQueryStats,
+    BatchSummary,
+    CanisterQueryStats,
+    QueryStats,
+    QueryStatsPayload,
+    RawQueryStats,
+    TotalQueryStats,
 };
 use ic_types::{
     crypto::CryptoHash,
-    ingress::{IngressState, IngressStatus, WasmResult},
+    ingress::{
+        IngressState,
+        IngressStatus,
+        WasmResult,
+    },
     messages::CallbackId,
-    time::{Time, UNIX_EPOCH},
-    xnet::{StreamIndex, StreamIndexedQueue},
-    CanisterId, CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, NumBytes, PrincipalId,
+    time::{
+        Time,
+        UNIX_EPOCH,
+    },
+    xnet::{
+        StreamIndex,
+        StreamIndexedQueue,
+    },
+    CanisterId,
+    CryptoHashOfPartialState,
+    CryptoHashOfState,
+    Height,
+    NodeId,
+    NumBytes,
+    PrincipalId,
 };
-use ic_types::{epoch_from_height, QueryStatsEpoch};
-use maplit::{btreemap, btreeset};
+use ic_types::{
+    epoch_from_height,
+    QueryStatsEpoch,
+};
+use maplit::{
+    btreemap,
+    btreeset,
+};
 use nix::sys::time::TimeValLike;
 use nix::sys::{
-    stat::{utimensat, UtimensatFlags},
+    stat::{
+        utimensat,
+        UtimensatFlags,
+    },
     time::TimeSpec,
 };
 use proptest::prelude::*;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
 use std::path::Path;
 use std::sync::Arc;
 use std::time::SystemTime;
 use std::{
     collections::HashSet,
-    convert::{TryFrom, TryInto},
+    convert::{
+        TryFrom,
+        TryInto,
+    },
 };
 
 pub mod common;
@@ -846,7 +958,10 @@ fn stable_memory_is_persisted() {
 
 #[test]
 fn missing_stable_memory_file_is_handled() {
-    use ic_state_layout::{CheckpointLayout, RwPolicy};
+    use ic_state_layout::{
+        CheckpointLayout,
+        RwPolicy,
+    };
     state_manager_restart_test(|state_manager, restart_fn| {
         let (_height, mut state) = state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
@@ -885,7 +1000,10 @@ fn missing_stable_memory_file_is_handled() {
 /// When the chunk store is first deployed, the replicated state won't have
 /// checkpoint files for the Wasm chunk store.
 fn missing_wasm_chunk_store_is_handled() {
-    use ic_state_layout::{CheckpointLayout, RwPolicy};
+    use ic_state_layout::{
+        CheckpointLayout,
+        RwPolicy,
+    };
     state_manager_restart_test(|state_manager, restart_fn| {
         let (_height, mut state) = state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
@@ -3381,7 +3499,10 @@ fn can_state_sync_based_on_old_checkpoint() {
 
 #[test]
 fn can_recover_from_corruption_on_state_sync() {
-    use ic_state_layout::{CheckpointLayout, RwPolicy};
+    use ic_state_layout::{
+        CheckpointLayout,
+        RwPolicy,
+    };
 
     let pages_per_chunk = DEFAULT_CHUNK_SIZE as u64 / PAGE_SIZE as u64;
     assert_eq!(DEFAULT_CHUNK_SIZE as usize % PAGE_SIZE, 0);
@@ -3594,8 +3715,14 @@ fn can_recover_from_corruption_on_state_sync() {
 
 #[test]
 fn do_not_crash_in_loop_due_to_corrupted_state_sync() {
-    use ic_state_layout::{CheckpointLayout, RwPolicy};
-    use std::panic::{self, AssertUnwindSafe};
+    use ic_state_layout::{
+        CheckpointLayout,
+        RwPolicy,
+    };
+    use std::panic::{
+        self,
+        AssertUnwindSafe,
+    };
 
     let populate_original_state = |state: &mut ReplicatedState| {
         insert_dummy_canister(state, canister_test_id(90));
@@ -4120,7 +4247,10 @@ fn can_get_dirty_pages() {
 
 #[test]
 fn can_reuse_chunk_hashes_when_computing_manifest() {
-    use ic_state_manager::manifest::{compute_manifest, validate_manifest};
+    use ic_state_manager::manifest::{
+        compute_manifest,
+        validate_manifest,
+    };
     use ic_state_manager::ManifestMetrics;
     use ic_types::state_sync::CURRENT_STATE_SYNC_VERSION;
 

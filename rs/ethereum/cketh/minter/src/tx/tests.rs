@@ -1,14 +1,27 @@
-use crate::tx::{GasFeeEstimate, TransactionPrice};
+use crate::tx::{
+    GasFeeEstimate,
+    TransactionPrice,
+};
 use proptest::strategy::Strategy;
 
 mod estimate_transaction_price {
     use crate::eth_rpc::FeeHistory;
-    use crate::numeric::{BlockNumber, WeiPerGas};
-    use crate::tx::{estimate_transaction_fee, GasFeeEstimate, TransactionFeeEstimationError};
+    use crate::numeric::{
+        BlockNumber,
+        WeiPerGas,
+    };
+    use crate::tx::{
+        estimate_transaction_fee,
+        GasFeeEstimate,
+        TransactionFeeEstimationError,
+    };
     use assert_matches::assert_matches;
     use proptest::collection::vec;
     use proptest::prelude::any;
-    use proptest::{prop_assert_eq, proptest};
+    use proptest::{
+        prop_assert_eq,
+        proptest,
+    };
     use std::cmp::max;
 
     proptest! {
@@ -83,9 +96,16 @@ mod estimate_transaction_price {
 
 mod resubmit_transaction_price {
     use crate::numeric::WeiPerGas;
-    use crate::tx::tests::{arb_gas_fee_estimate, arb_transaction_price};
+    use crate::tx::tests::{
+        arb_gas_fee_estimate,
+        arb_transaction_price,
+    };
     use crate::tx::GasFeeEstimate;
-    use proptest::{prop_assert, prop_assert_eq, proptest};
+    use proptest::{
+        prop_assert,
+        prop_assert_eq,
+        proptest,
+    };
 
     proptest! {
         #[test]
@@ -160,9 +180,17 @@ mod resubmit_transaction_price {
 
 #[test]
 fn should_cbor_encoding_be_stable() {
-    use crate::numeric::{GasAmount, TransactionNonce, Wei, WeiPerGas};
+    use crate::numeric::{
+        GasAmount,
+        TransactionNonce,
+        Wei,
+        WeiPerGas,
+    };
     use crate::tx::{
-        AccessList, Eip1559Signature, Eip1559TransactionRequest, SignedEip1559TransactionRequest,
+        AccessList,
+        Eip1559Signature,
+        Eip1559TransactionRequest,
+        SignedEip1559TransactionRequest,
     };
     use ethnum::u256;
     use ic_ethereum_types::Address;

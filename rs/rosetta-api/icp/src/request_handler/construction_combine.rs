@@ -1,15 +1,39 @@
-use crate::convert::{from_hex, make_read_state_from_update};
-use crate::errors::{ApiError, Details};
+use crate::convert::{
+    from_hex,
+    make_read_state_from_update,
+};
+use crate::errors::{
+    ApiError,
+    Details,
+};
 use crate::models::{
-    ConstructionCombineResponse, EnvelopePair, SignatureType, SignedTransaction,
+    ConstructionCombineResponse,
+    EnvelopePair,
+    SignatureType,
+    SignedTransaction,
     UnsignedTransaction,
 };
-use crate::request_handler::{make_sig_data, verify_network_id, RosettaRequestHandler};
-use crate::{convert, models};
-use ic_types::messages::{
-    Blob, HttpCallContent, HttpReadStateContent, HttpRequestEnvelope, MessageId,
+use crate::request_handler::{
+    make_sig_data,
+    verify_network_id,
+    RosettaRequestHandler,
 };
-use rosetta_core::models::{Ed25519KeyPair, RosettaSupportedKeyPair, Secp256k1KeyPair};
+use crate::{
+    convert,
+    models,
+};
+use ic_types::messages::{
+    Blob,
+    HttpCallContent,
+    HttpReadStateContent,
+    HttpRequestEnvelope,
+    MessageId,
+};
+use rosetta_core::models::{
+    Ed25519KeyPair,
+    RosettaSupportedKeyPair,
+    Secp256k1KeyPair,
+};
 use std::collections::HashMap;
 use std::str::FromStr;
 

@@ -3,8 +3,14 @@ use crate::tls::rustls::cert_resolver::StaticCertResolver;
 use assert_matches::assert_matches;
 use rustls::{
     pki_types::CertificateDer,
-    sign::{CertifiedKey, Signer, SigningKey},
-    Error as TLSError, SignatureAlgorithm, SignatureScheme,
+    sign::{
+        CertifiedKey,
+        Signer,
+        SigningKey,
+    },
+    Error as TLSError,
+    SignatureAlgorithm,
+    SignatureScheme,
 };
 use std::sync::Arc;
 
@@ -25,7 +31,10 @@ mod instantiation {
 
 mod client_side {
     use super::*;
-    use rustls::{client::ResolvesClientCert, SignatureScheme};
+    use rustls::{
+        client::ResolvesClientCert,
+        SignatureScheme,
+    };
 
     #[test]
     fn should_resolve_to_static_certified_key() {

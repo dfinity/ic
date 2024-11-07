@@ -3,7 +3,9 @@ use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::systest;
 use ic_tests::nns_tests::sns_deployment::{
-    setup_static_testnet, workload_static_testnet_fe_users, workload_static_testnet_get_account,
+    setup_static_testnet,
+    workload_static_testnet_fe_users,
+    workload_static_testnet_get_account,
     workload_static_testnet_sale_bot,
 };
 use slog::info;

@@ -1,11 +1,20 @@
 use candid::Principal;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::get_dependency_path;
-use slog::{info, Logger};
+use slog::{
+    info,
+    Logger,
+};
 use std::fs;
 use std::io::Write;
-use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::path::{
+    Path,
+    PathBuf,
+};
+use std::process::{
+    Command,
+    Output,
+};
 
 #[derive(Clone)]
 pub struct DfxCommandContext {

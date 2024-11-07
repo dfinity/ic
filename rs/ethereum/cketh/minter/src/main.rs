@@ -1,45 +1,103 @@
 use candid::Nat;
 use ic_canister_log::log;
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
-use ic_cketh_minter::address::{validate_address_as_destination, AddressValidationError};
+use ic_canisters_http_types::{
+    HttpRequest,
+    HttpResponse,
+    HttpResponseBuilder,
+};
+use ic_cdk_macros::{
+    init,
+    post_upgrade,
+    pre_upgrade,
+    query,
+    update,
+};
+use ic_cketh_minter::address::{
+    validate_address_as_destination,
+    AddressValidationError,
+};
 use ic_cketh_minter::deposit::scrape_logs;
 use ic_cketh_minter::endpoints::ckerc20::{
-    RetrieveErc20Request, WithdrawErc20Arg, WithdrawErc20Error,
+    RetrieveErc20Request,
+    WithdrawErc20Arg,
+    WithdrawErc20Error,
 };
 use ic_cketh_minter::endpoints::events::{
-    Event as CandidEvent, EventSource as CandidEventSource, GetEventsArg, GetEventsResult,
+    Event as CandidEvent,
+    EventSource as CandidEventSource,
+    GetEventsArg,
+    GetEventsResult,
 };
 use ic_cketh_minter::endpoints::{
-    AddCkErc20Token, Eip1559TransactionPrice, Eip1559TransactionPriceArg, Erc20Balance,
-    GasFeeEstimate, MinterInfo, RetrieveEthRequest, RetrieveEthStatus, WithdrawalArg,
-    WithdrawalDetail, WithdrawalError, WithdrawalSearchParameter,
+    AddCkErc20Token,
+    Eip1559TransactionPrice,
+    Eip1559TransactionPriceArg,
+    Erc20Balance,
+    GasFeeEstimate,
+    MinterInfo,
+    RetrieveEthRequest,
+    RetrieveEthStatus,
+    WithdrawalArg,
+    WithdrawalDetail,
+    WithdrawalError,
+    WithdrawalSearchParameter,
 };
 use ic_cketh_minter::erc20::CkTokenSymbol;
-use ic_cketh_minter::eth_logs::{EventSource, ReceivedErc20Event, ReceivedEthEvent};
+use ic_cketh_minter::eth_logs::{
+    EventSource,
+    ReceivedErc20Event,
+    ReceivedEthEvent,
+};
 use ic_cketh_minter::guard::retrieve_withdraw_guard;
-use ic_cketh_minter::ledger_client::{LedgerBurnError, LedgerClient};
+use ic_cketh_minter::ledger_client::{
+    LedgerBurnError,
+    LedgerClient,
+};
 use ic_cketh_minter::lifecycle::MinterArg;
 use ic_cketh_minter::logs::INFO;
 use ic_cketh_minter::memo::BurnMemo;
-use ic_cketh_minter::numeric::{Erc20Value, LedgerBurnIndex, Wei};
-use ic_cketh_minter::state::audit::{process_event, Event, EventType};
+use ic_cketh_minter::numeric::{
+    Erc20Value,
+    LedgerBurnIndex,
+    Wei,
+};
+use ic_cketh_minter::state::audit::{
+    process_event,
+    Event,
+    EventType,
+};
 use ic_cketh_minter::state::eth_logs_scraping::LogScrapingId;
 use ic_cketh_minter::state::transactions::{
-    Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed, ReimbursementIndex,
+    Erc20WithdrawalRequest,
+    EthWithdrawalRequest,
+    Reimbursed,
+    ReimbursementIndex,
     ReimbursementRequest,
 };
 use ic_cketh_minter::state::{
-    lazy_call_ecdsa_public_key, mutate_state, read_state, transactions, State, STATE,
+    lazy_call_ecdsa_public_key,
+    mutate_state,
+    read_state,
+    transactions,
+    State,
+    STATE,
 };
 use ic_cketh_minter::tx::lazy_refresh_gas_fee_estimate;
 use ic_cketh_minter::withdraw::{
-    process_reimbursement, process_retrieve_eth_requests, CKERC20_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
+    process_reimbursement,
+    process_retrieve_eth_requests,
+    CKERC20_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
     CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
 };
-use ic_cketh_minter::{endpoints, erc20};
 use ic_cketh_minter::{
-    state, storage, PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, PROCESS_REIMBURSEMENT,
+    endpoints,
+    erc20,
+};
+use ic_cketh_minter::{
+    state,
+    storage,
+    PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL,
+    PROCESS_REIMBURSEMENT,
     SCRAPING_ETH_LOGS_INTERVAL,
 };
 use ic_ethereum_types::Address;
@@ -568,9 +626,11 @@ async fn get_canister_status() -> ic_cdk::api::management_canister::main::Canist
 #[query]
 fn get_events(arg: GetEventsArg) -> GetEventsResult {
     use ic_cketh_minter::endpoints::events::{
-        AccessListItem, ReimbursementIndex as CandidReimbursementIndex,
+        AccessListItem,
+        ReimbursementIndex as CandidReimbursementIndex,
         TransactionReceipt as CandidTransactionReceipt,
-        TransactionStatus as CandidTransactionStatus, UnsignedTransaction,
+        TransactionStatus as CandidTransactionStatus,
+        UnsignedTransaction,
     };
     use ic_cketh_minter::eth_rpc_client::responses::TransactionReceipt;
     use ic_cketh_minter::tx::Eip1559TransactionRequest;
@@ -1018,7 +1078,11 @@ fn http_request(req: HttpRequest) -> HttpResponse {
             .with_body_and_content_length(dashboard.render().unwrap())
             .build()
     } else if req.path() == "/logs" {
-        use ic_cketh_minter::logs::{Log, Priority, Sort};
+        use ic_cketh_minter::logs::{
+            Log,
+            Priority,
+            Sort,
+        };
         use std::str::FromStr;
 
         let max_skip_timestamp = match req.raw_query_param("time") {

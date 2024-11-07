@@ -5,48 +5,133 @@
 /// body. This has to be canonicalized into a PocketIc Operation before we can
 /// deterministically update the PocketIc state machine.
 ///
-use super::state::{ApiState, OpOut, PocketIcError, StateLabel, UpdateReply};
-use crate::pocket_ic::{
-    AddCycles, AwaitIngressMessage, CallRequest, CallRequestVersion, CanisterReadStateRequest,
-    DashboardRequest, ExecuteIngressMessage, GetCanisterHttp, GetCyclesBalance, GetStableMemory,
-    GetSubnet, GetTime, GetTopology, MockCanisterHttp, PubKey, Query, QueryRequest,
-    SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage, SubnetReadStateRequest, Tick,
+use super::state::{
+    ApiState,
+    OpOut,
+    PocketIcError,
+    StateLabel,
+    UpdateReply,
 };
-use crate::{async_trait, pocket_ic::PocketIc, BlobStore, InstanceId, OpId, Operation};
+use crate::pocket_ic::{
+    AddCycles,
+    AwaitIngressMessage,
+    CallRequest,
+    CallRequestVersion,
+    CanisterReadStateRequest,
+    DashboardRequest,
+    ExecuteIngressMessage,
+    GetCanisterHttp,
+    GetCyclesBalance,
+    GetStableMemory,
+    GetSubnet,
+    GetTime,
+    GetTopology,
+    MockCanisterHttp,
+    PubKey,
+    Query,
+    QueryRequest,
+    SetStableMemory,
+    SetTime,
+    StatusRequest,
+    SubmitIngressMessage,
+    SubnetReadStateRequest,
+    Tick,
+};
+use crate::{
+    async_trait,
+    pocket_ic::PocketIc,
+    BlobStore,
+    InstanceId,
+    OpId,
+    Operation,
+};
 use aide::{
-    axum::routing::{delete, get, post, ApiMethodRouter},
+    axum::routing::{
+        delete,
+        get,
+        post,
+        ApiMethodRouter,
+    },
     axum::ApiRouter,
     NoApi,
 };
 
 use axum::{
-    body::{Body, Bytes},
-    extract::{self, Path, State},
-    http::{self, HeaderMap, HeaderName, StatusCode},
+    body::{
+        Body,
+        Bytes,
+    },
+    extract::{
+        self,
+        Path,
+        State,
+    },
+    http::{
+        self,
+        HeaderMap,
+        HeaderName,
+        StatusCode,
+    },
     middleware::Next,
-    response::{IntoResponse, Response},
+    response::{
+        IntoResponse,
+        Response,
+    },
     Json,
 };
 use axum_extra::headers;
 use axum_extra::headers::HeaderMapExt;
 use backoff::backoff::Backoff;
-use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
+use backoff::{
+    ExponentialBackoff,
+    ExponentialBackoffBuilder,
+};
 use hyper::header;
 use ic_http_endpoints_public::cors_layer;
-use ic_types::{CanisterId, SubnetId};
+use ic_types::{
+    CanisterId,
+    SubnetId,
+};
 use pocket_ic::common::rest::{
-    self, ApiResponse, AutoProgressConfig, ExtendedSubnetConfigSet, HttpGatewayConfig,
-    HttpGatewayDetails, InstanceConfig, MockCanisterHttpResponse, RawAddCycles, RawCanisterCall,
-    RawCanisterHttpRequest, RawCanisterId, RawCanisterResult, RawCycles, RawMessageId,
-    RawMockCanisterHttpResponse, RawSetStableMemory, RawStableMemory, RawSubmitIngressResult,
-    RawSubnetId, RawTime, RawWasmResult, Topology,
+    self,
+    ApiResponse,
+    AutoProgressConfig,
+    ExtendedSubnetConfigSet,
+    HttpGatewayConfig,
+    HttpGatewayDetails,
+    InstanceConfig,
+    MockCanisterHttpResponse,
+    RawAddCycles,
+    RawCanisterCall,
+    RawCanisterHttpRequest,
+    RawCanisterId,
+    RawCanisterResult,
+    RawCycles,
+    RawMessageId,
+    RawMockCanisterHttpResponse,
+    RawSetStableMemory,
+    RawStableMemory,
+    RawSubmitIngressResult,
+    RawSubnetId,
+    RawTime,
+    RawWasmResult,
+    Topology,
 };
 use pocket_ic::WasmResult;
 use serde::Serialize;
 use slog::Level;
 use std::str::FromStr;
-use std::{collections::BTreeMap, fs::File, sync::Arc, time::Duration};
-use tokio::{runtime::Runtime, sync::RwLock, time::Instant};
+use std::{
+    collections::BTreeMap,
+    fs::File,
+    sync::Arc,
+    time::Duration,
+};
+use tokio::{
+    runtime::Runtime,
+    sync::RwLock,
+    time::Instant,
+};
 use tower_http::limit::RequestBodyLimitLayer;
 use tracing::trace;
 

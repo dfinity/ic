@@ -1,5 +1,8 @@
 use dfn_candid::candid_one;
-use dfn_core::{over_async, println};
+use dfn_core::{
+    over_async,
+    println,
+};
 
 #[export_name = "canister_init"]
 fn canister_init() {

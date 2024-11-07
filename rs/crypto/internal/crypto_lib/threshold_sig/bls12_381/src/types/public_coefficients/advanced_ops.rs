@@ -3,7 +3,11 @@
 use super::super::ThresholdError;
 use super::*;
 use ic_crypto_internal_bls12_381_type::{
-    G1Projective, G2Projective, LagrangeCoefficients, NodeIndex, Scalar,
+    G1Projective,
+    G2Projective,
+    LagrangeCoefficients,
+    NodeIndex,
+    Scalar,
 };
 
 impl PublicCoefficients {

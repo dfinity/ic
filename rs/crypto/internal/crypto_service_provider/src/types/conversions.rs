@@ -1,7 +1,12 @@
 //! Type conversion utilities
 
 use super::{
-    CspPop, CspPublicKey, CspSecretKey, CspSignature, MultiBls12_381_Signature, SigConverter,
+    CspPop,
+    CspPublicKey,
+    CspSecretKey,
+    CspSignature,
+    MultiBls12_381_Signature,
+    SigConverter,
     ThresBls12_381_Signature,
 };
 use ic_crypto_internal_basic_sig_ecdsa_secp256k1::types as ecdsa_secp256k1_types;
@@ -11,7 +16,11 @@ use ic_crypto_internal_basic_sig_rsa_pkcs1 as rsa;
 use ic_crypto_internal_multi_sig_bls12381::types as multi_types;
 use ic_crypto_internal_threshold_sig_bls12381::types as threshold_types;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
-use ic_types::crypto::{AlgorithmId, CryptoError, UserPublicKey};
+use ic_types::crypto::{
+    AlgorithmId,
+    CryptoError,
+    UserPublicKey,
+};
 use std::convert::TryFrom;
 use std::fmt;
 

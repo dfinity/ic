@@ -4,7 +4,11 @@ pub use errors::*;
 use ic_base_types::NodeId;
 
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
-use ic_types::crypto::{CryptoError, CurrentNodePublicKeys, KeyPurpose};
+use ic_types::crypto::{
+    CryptoError,
+    CurrentNodePublicKeys,
+    KeyPurpose,
+};
 use ic_types::registry::RegistryClientError;
 use ic_types::RegistryVersion;
 

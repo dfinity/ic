@@ -1,7 +1,13 @@
 use candid::Nat;
 use minicbor::data::Tag;
-use minicbor::decode::{Decoder, Error};
-use minicbor::encode::{Encoder, Write};
+use minicbor::decode::{
+    Decoder,
+    Error,
+};
+use minicbor::encode::{
+    Encoder,
+    Write,
+};
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
 
@@ -40,7 +46,10 @@ pub fn encode<Ctx, W: Write>(
 
 pub mod option {
     use super::*;
-    use minicbor::{Decode, Encode};
+    use minicbor::{
+        Decode,
+        Encode,
+    };
 
     #[derive(Decode, Encode)]
     #[cbor(transparent)]

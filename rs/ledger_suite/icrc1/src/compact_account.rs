@@ -1,7 +1,13 @@
 use candid::Principal;
-use icrc_ledger_types::icrc1::account::{Account, Subaccount};
+use icrc_ledger_types::icrc1::account::{
+    Account,
+    Subaccount,
+};
 use serde::de::Error;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use serde_bytes::ByteBuf;
 
 /// A compact representation of an Account.

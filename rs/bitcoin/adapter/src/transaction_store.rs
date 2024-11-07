@@ -1,19 +1,32 @@
 use std::collections::HashSet;
 use std::net::SocketAddr;
-use std::{time::Duration, time::SystemTime};
+use std::{
+    time::Duration,
+    time::SystemTime,
+};
 
 use bitcoin::consensus::deserialize;
 use bitcoin::{
-    blockdata::transaction::Transaction, hash_types::Txid, network::message::NetworkMessage,
+    blockdata::transaction::Transaction,
+    hash_types::Txid,
+    network::message::NetworkMessage,
     network::message_blockdata::Inventory,
 };
 use hashlink::LinkedHashMap;
-use ic_logger::{debug, info, trace, ReplicaLogger};
+use ic_logger::{
+    debug,
+    info,
+    trace,
+    ReplicaLogger,
+};
 use ic_metrics::MetricsRegistry;
 
 use crate::metrics::TransactionMetrics;
 use crate::ProcessBitcoinNetworkMessageError;
-use crate::{Channel, Command};
+use crate::{
+    Channel,
+    Command,
+};
 
 /// How long should the transaction manager hold on to a transaction.
 const TX_CACHE_TIMEOUT_PERIOD_SECS: u64 = 10 * 60; // 10 minutes
@@ -203,7 +216,10 @@ mod test {
     use super::*;
     use crate::common::test_common::TestChannel;
     use bitcoin::{
-        blockdata::constants::genesis_block, consensus::serialize, Network, Transaction,
+        blockdata::constants::genesis_block,
+        consensus::serialize,
+        Network,
+        Transaction,
     };
     use ic_logger::replica_logger::no_op_logger;
     use std::str::FromStr;

@@ -4,7 +4,12 @@ use crate::registry_version_at_height;
 use ic_interfaces::batch_payload::PastPayload;
 use ic_interfaces::consensus_pool::*;
 use ic_types::{
-    consensus::catchup::*, consensus::*, crypto::CryptoHashOf, Height, RegistryVersion, Time,
+    consensus::catchup::*,
+    consensus::*,
+    crypto::CryptoHashOf,
+    Height,
+    RegistryVersion,
+    Time,
 };
 use std::cmp::Ordering;
 use std::time::Instant;
@@ -585,10 +590,20 @@ where
 #[cfg(test)]
 pub mod test {
     use super::*;
-    use ic_consensus_mocks::{dependencies, dependencies_with_subnet_params, Dependencies};
+    use ic_consensus_mocks::{
+        dependencies,
+        dependencies_with_subnet_params,
+        Dependencies,
+    };
     use ic_interfaces_registry::RegistryClient;
-    use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_registry::{
+        add_subnet_record,
+        SubnetRecordBuilder,
+    };
+    use ic_test_utilities_types::ids::{
+        node_test_id,
+        subnet_test_id,
+    };
 
     #[test]
     fn test_get_dkg_summary_block() {

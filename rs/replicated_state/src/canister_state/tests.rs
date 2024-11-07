@@ -7,7 +7,10 @@ use crate::canister_state::execution_state::CustomSectionType;
 use crate::canister_state::execution_state::WasmMetadata;
 use crate::canister_state::system_state::testing::SystemStateTesting;
 use crate::canister_state::system_state::{
-    CallContextManager, CanisterHistory, CanisterStatus, CyclesUseCase,
+    CallContextManager,
+    CanisterHistory,
+    CanisterStatus,
+    CyclesUseCase,
     MAX_CANISTER_HISTORY_CHANGES,
 };
 use crate::metadata_state::subnet_call_context_manager::InstallCodeCallId;
@@ -18,20 +21,45 @@ use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types::{
-    BoundedAllowedViewers, CanisterChange, CanisterChangeDetails, CanisterChangeOrigin,
-    CanisterLogRecord, LogVisibilityV2,
+    BoundedAllowedViewers,
+    CanisterChange,
+    CanisterChangeDetails,
+    CanisterChangeOrigin,
+    CanisterLogRecord,
+    LogVisibilityV2,
 };
 use ic_metrics::MetricsRegistry;
-use ic_test_utilities_types::ids::{canister_test_id, message_test_id, user_test_id};
-use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
-use ic_types::messages::{
-    CallContextId, CallbackId, CanisterCall, CanisterMessageOrTask, RequestMetadata,
-    StopCanisterCallId, StopCanisterContext, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE,
+use ic_test_utilities_types::ids::{
+    canister_test_id,
+    message_test_id,
+    user_test_id,
 };
-use ic_types::methods::{Callback, WasmClosure};
+use ic_test_utilities_types::messages::{
+    RequestBuilder,
+    ResponseBuilder,
+};
+use ic_types::messages::{
+    CallContextId,
+    CallbackId,
+    CanisterCall,
+    CanisterMessageOrTask,
+    RequestMetadata,
+    StopCanisterCallId,
+    StopCanisterContext,
+    MAX_RESPONSE_COUNT_BYTES,
+    NO_DEADLINE,
+};
+use ic_types::methods::{
+    Callback,
+    WasmClosure,
+};
 use ic_types::nominal_cycles::NominalCycles;
 use ic_types::time::CoarseTime;
-use ic_types::{CountBytes, Cycles, Time};
+use ic_types::{
+    CountBytes,
+    Cycles,
+    Time,
+};
 use ic_wasm_types::CanisterModule;
 use prometheus::IntCounter;
 use strum::IntoEnumIterator;

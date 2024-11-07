@@ -1,24 +1,54 @@
 use ic_protobuf::types::v1 as pb;
 use ic_test_utilities_consensus::{
-    fake::{Fake, FakeContentSigner},
+    fake::{
+        Fake,
+        FakeContentSigner,
+    },
     make_genesis,
 };
 use ic_types::{
-    artifact::{ConsensusMessageId, IngressMessageId},
-    batch::{BatchPayload, IngressPayload},
-    consensus::{
-        dkg::{Dealings, Summary},
-        Block, BlockPayload, BlockProposal, ConsensusMessage, ConsensusMessageHash, DataPayload,
-        Payload, Rank,
+    artifact::{
+        ConsensusMessageId,
+        IngressMessageId,
     },
-    crypto::{CryptoHash, CryptoHashOf},
-    messages::{Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, SignedIngress},
+    batch::{
+        BatchPayload,
+        IngressPayload,
+    },
+    consensus::{
+        dkg::{
+            Dealings,
+            Summary,
+        },
+        Block,
+        BlockPayload,
+        BlockProposal,
+        ConsensusMessage,
+        ConsensusMessageHash,
+        DataPayload,
+        Payload,
+        Rank,
+    },
+    crypto::{
+        CryptoHash,
+        CryptoHashOf,
+    },
+    messages::{
+        Blob,
+        HttpCallContent,
+        HttpCanisterUpdate,
+        HttpRequestEnvelope,
+        SignedIngress,
+    },
     time::expiry_time_from_now,
     Height,
 };
 use ic_types_test_utils::ids::node_test_id;
 
-use super::types::stripped::{StrippedBlockProposal, StrippedIngressPayload};
+use super::types::stripped::{
+    StrippedBlockProposal,
+    StrippedIngressPayload,
+};
 
 pub(crate) fn fake_ingress_message(method_name: &str) -> (SignedIngress, IngressMessageId) {
     fake_ingress_message_with_arg_size(method_name, 0)

@@ -1,7 +1,11 @@
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use ic_crypto_tree_hash::{FlatMap, LabeledTree};
+use ic_crypto_tree_hash::{
+    FlatMap,
+    LabeledTree,
+};
 use ic_crypto_tree_hash_test_utils::{
-    labeled_tree_without_leaf_or_empty_subtree, new_random_labeled_tree,
+    labeled_tree_without_leaf_or_empty_subtree,
+    new_random_labeled_tree,
     partial_trees_to_leaves_and_empty_subtrees,
 };
 

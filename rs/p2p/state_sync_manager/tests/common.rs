@@ -1,23 +1,49 @@
 use std::{
-    collections::{hash_map::DefaultHasher, BTreeMap, HashSet},
-    hash::{Hash, Hasher},
+    collections::{
+        hash_map::DefaultHasher,
+        BTreeMap,
+        HashSet,
+    },
+    hash::{
+        Hash,
+        Hasher,
+    },
     sync::{
-        atomic::{AtomicBool, AtomicUsize, Ordering},
-        Arc, Mutex, MutexGuard,
+        atomic::{
+            AtomicBool,
+            AtomicUsize,
+            Ordering,
+        },
+        Arc,
+        Mutex,
+        MutexGuard,
     },
     time::Duration,
 };
 
 use ic_interfaces::p2p::state_sync::{
-    AddChunkError, Chunk, ChunkId, Chunkable, StateSyncArtifactId, StateSyncClient,
+    AddChunkError,
+    Chunk,
+    ChunkId,
+    Chunkable,
+    StateSyncArtifactId,
+    StateSyncClient,
 };
 use ic_logger::ReplicaLogger;
 use ic_memory_transport::TransportRouter;
 use ic_metrics::MetricsRegistry;
-use ic_p2p_test_utils::mocks::{MockChunkable, MockStateSync};
+use ic_p2p_test_utils::mocks::{
+    MockChunkable,
+    MockStateSync,
+};
 use ic_quic_transport::Shutdown;
 use ic_state_manager::state_sync::types::StateSyncMessage;
-use ic_types::{crypto::CryptoHash, Height, NodeId, PrincipalId};
+use ic_types::{
+    crypto::CryptoHash,
+    Height,
+    NodeId,
+    PrincipalId,
+};
 use tokio::runtime::Handle;
 
 const META_MANIFEST_ID: u32 = u32::MAX - 1;

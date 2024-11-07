@@ -7,7 +7,11 @@ use crate::{
     adapters::AdaptersConfig,
     artifact_pool::ArtifactPoolTomlConfig,
     bitcoin_payload_builder_config::Config as BitcoinPayloadBuilderConfig,
-    config_parser::{ConfigError, ConfigSource, ConfigValidate},
+    config_parser::{
+        ConfigError,
+        ConfigSource,
+        ConfigValidate,
+    },
     crypto::CryptoConfig,
     execution_environment::Config as HypervisorConfig,
     firewall::BoundaryNodeConfig as BoundaryNodeFirewallConfig,
@@ -25,8 +29,14 @@ use crate::{
     transport::TransportConfig,
 };
 use ic_types::malicious_behaviour::MaliciousBehaviour;
-use serde::{Deserialize, Serialize};
-use std::{collections::HashSet, path::PathBuf};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use std::{
+    collections::HashSet,
+    path::PathBuf,
+};
 
 /// The config struct for the replica.  Just consists of `Config`s for
 /// the components.

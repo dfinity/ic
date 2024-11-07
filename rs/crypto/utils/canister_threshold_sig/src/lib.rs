@@ -1,7 +1,9 @@
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::DeriveThresholdPublicKeyError;
 use ic_types::crypto::canister_threshold_sig::error::CanisterThresholdGetPublicKeyError;
 use ic_types::crypto::canister_threshold_sig::{
-    ExtendedDerivationPath, MasterPublicKey, PublicKey,
+    ExtendedDerivationPath,
+    MasterPublicKey,
+    PublicKey,
 };
 
 /// Derives the threshold public key from the specified `master_public_key` for

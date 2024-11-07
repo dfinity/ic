@@ -1,6 +1,9 @@
 use bitcoin::Network;
 use ic_config::logger::Config as LoggerConfig;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 

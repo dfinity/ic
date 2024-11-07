@@ -1,4 +1,7 @@
-use crate::scheduler::{Task, TaskError};
+use crate::scheduler::{
+    Task,
+    TaskError,
+};
 use ic_metrics_encoder::MetricsEncoder;
 use std::cell::RefCell;
 use std::collections::BTreeMap;

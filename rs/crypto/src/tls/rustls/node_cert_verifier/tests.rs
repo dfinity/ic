@@ -3,16 +3,31 @@ use crate::tls::rustls::node_cert_verifier::NodeServerCertVerifier;
 use assert_matches::assert_matches;
 use ic_base_types::NodeId;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use ic_crypto_test_utils_tls::registry::{TlsRegistry, REG_V1};
-use ic_crypto_test_utils_tls::x509_certificates::{x509_public_key_cert, CertWithPrivateKey};
+use ic_crypto_test_utils_tls::registry::{
+    TlsRegistry,
+    REG_V1,
+};
+use ic_crypto_test_utils_tls::x509_certificates::{
+    x509_public_key_cert,
+    CertWithPrivateKey,
+};
 use ic_crypto_tls_interfaces::SomeOrAllNodes;
-use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3};
+use ic_types_test_utils::ids::{
+    NODE_1,
+    NODE_2,
+    NODE_3,
+};
 use maplit::btreeset;
 use rustls::{
     client::danger::ServerCertVerifier,
-    pki_types::{CertificateDer, ServerName, UnixTime},
+    pki_types::{
+        CertificateDer,
+        ServerName,
+        UnixTime,
+    },
     server::danger::ClientCertVerifier,
-    CertificateError, Error as TLSError,
+    CertificateError,
+    Error as TLSError,
 };
 use std::collections::BTreeSet;
 use std::time::Duration;

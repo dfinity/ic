@@ -1,6 +1,10 @@
 //! Ed25519 test vectors
 
-use crate::types::{CspPublicKey, CspSecretKey, CspSignature};
+use crate::types::{
+    CspPublicKey,
+    CspSecretKey,
+    CspSignature,
+};
 use ic_crypto_internal_test_vectors::ed25519::*;
 use ic_crypto_internal_test_vectors::unhex::hex_to_byte_vec;
 

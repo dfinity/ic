@@ -1,9 +1,15 @@
 use async_trait::async_trait;
 use candid::{
-    utils::{ArgumentDecoder, ArgumentEncoder},
+    utils::{
+        ArgumentDecoder,
+        ArgumentEncoder,
+    },
     Principal,
 };
-pub use icrc_ledger_client::{ICRC1Client, Runtime};
+pub use icrc_ledger_client::{
+    ICRC1Client,
+    Runtime,
+};
 
 /// ICRC1Client runtime that uses the ic-cdk.
 pub struct CdkRuntime;

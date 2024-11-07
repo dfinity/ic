@@ -1,11 +1,17 @@
 use super::queue::InputQueue;
 use super::CanisterQueues;
-use crate::{InputQueueType, InputSource};
+use crate::{
+    InputQueueType,
+    InputSource,
+};
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue;
 use ic_protobuf::types::v1 as pb_types;
 use ic_types::CanisterId;
-use std::collections::{BTreeSet, VecDeque};
+use std::collections::{
+    BTreeSet,
+    VecDeque,
+};
 use std::convert::TryFrom;
 
 #[cfg(test)]

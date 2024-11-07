@@ -1,41 +1,84 @@
-use super::{parse_principal_id, verify_principal_ids};
+use super::{
+    parse_principal_id,
+    verify_principal_ids,
+};
 use crate::{
-    common::{build_validator, into_cbor, validation_error_to_http_error, Cbor, WithTimeout},
-    HttpError, ReplicaHealthStatus,
+    common::{
+        build_validator,
+        into_cbor,
+        validation_error_to_http_error,
+        Cbor,
+        WithTimeout,
+    },
+    HttpError,
+    ReplicaHealthStatus,
 };
 
 use axum::{
     body::Body,
-    extract::{DefaultBodyLimit, State},
-    response::{IntoResponse, Response},
+    extract::{
+        DefaultBodyLimit,
+        State,
+    },
+    response::{
+        IntoResponse,
+        Response,
+    },
     Router,
 };
 use crossbeam::atomic::AtomicCell;
 use http::Request;
 use hyper::StatusCode;
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
-use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path, TooLongPathError};
+use ic_crypto_tree_hash::{
+    sparse_labeled_tree_from_paths,
+    Label,
+    Path,
+    TooLongPathError,
+};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
 use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvider;
-use ic_replicated_state::{canister_state::execution_state::CustomSectionType, ReplicatedState};
+use ic_replicated_state::{
+    canister_state::execution_state::CustomSectionType,
+    ReplicatedState,
+};
 use ic_types::{
     malicious_flags::MaliciousFlags,
     messages::{
-        Blob, Certificate, CertificateDelegation, HttpReadStateContent, HttpReadStateResponse,
-        HttpRequest, HttpRequestEnvelope, MessageId, ReadState, EXPECTED_MESSAGE_ID_LENGTH,
+        Blob,
+        Certificate,
+        CertificateDelegation,
+        HttpReadStateContent,
+        HttpReadStateResponse,
+        HttpRequest,
+        HttpRequestEnvelope,
+        MessageId,
+        ReadState,
+        EXPECTED_MESSAGE_ID_LENGTH,
     },
     time::current_time,
-    CanisterId, PrincipalId, UserId,
+    CanisterId,
+    PrincipalId,
+    UserId,
 };
-use ic_validator::{CanisterIdSet, HttpRequestVerifier};
+use ic_validator::{
+    CanisterIdSet,
+    HttpRequestVerifier,
+};
 use std::{
-    convert::{Infallible, TryFrom},
+    convert::{
+        Infallible,
+        TryFrom,
+    },
     sync::Arc,
 };
 use tokio::sync::OnceCell;
-use tower::{util::BoxCloneService, ServiceBuilder};
+use tower::{
+    util::BoxCloneService,
+    ServiceBuilder,
+};
 
 #[derive(Clone)]
 pub struct CanisterReadStateService {
@@ -376,18 +419,38 @@ fn can_read_canister_metadata(
 mod test {
     use super::*;
     use crate::{
-        common::test::{array, assert_cbor_ser_equal, bytes, int},
+        common::test::{
+            array,
+            assert_cbor_ser_equal,
+            bytes,
+            int,
+        },
         HttpError,
     };
     use hyper::StatusCode;
-    use ic_crypto_tree_hash::{Digest, Label, MixedHashTree, Path};
+    use ic_crypto_tree_hash::{
+        Digest,
+        Label,
+        MixedHashTree,
+        Path,
+    };
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
-        canister_snapshots::CanisterSnapshots, CanisterQueues, ReplicatedState, SystemMetadata,
+        canister_snapshots::CanisterSnapshots,
+        CanisterQueues,
+        ReplicatedState,
+        SystemMetadata,
     };
     use ic_test_utilities_state::insert_dummy_canister;
-    use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
-    use ic_types::{batch::RawQueryStats, time::UNIX_EPOCH};
+    use ic_test_utilities_types::ids::{
+        canister_test_id,
+        subnet_test_id,
+        user_test_id,
+    };
+    use ic_types::{
+        batch::RawQueryStats,
+        time::UNIX_EPOCH,
+    };
     use ic_validator::CanisterIdSet;
     use std::collections::BTreeMap;
 

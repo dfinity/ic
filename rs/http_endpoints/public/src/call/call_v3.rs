@@ -1,13 +1,22 @@
 //! Module that deals with requests to /api/v3/canister/.../call.
 
 use super::{
-    ingress_watcher::{IngressWatcherHandle, SubscriptionError},
-    IngressError, IngressValidator,
+    ingress_watcher::{
+        IngressWatcherHandle,
+        SubscriptionError,
+    },
+    IngressError,
+    IngressValidator,
 };
 use crate::{
-    common::{into_cbor, Cbor, WithTimeout},
+    common::{
+        into_cbor,
+        Cbor,
+        WithTimeout,
+    },
     metrics::{
-        HttpHandlerMetrics, CALL_V3_EARLY_RESPONSE_CERTIFICATION_TIMEOUT,
+        HttpHandlerMetrics,
+        CALL_V3_EARLY_RESPONSE_CERTIFICATION_TIMEOUT,
         CALL_V3_EARLY_RESPONSE_DUPLICATE_SUBSCRIPTION,
         CALL_V3_EARLY_RESPONSE_INGRESS_WATCHER_NOT_RUNNING,
         CALL_V3_EARLY_RESPONSE_MESSAGE_ALREADY_IN_CERTIFIED_STATE,
@@ -17,31 +26,57 @@ use crate::{
 };
 use axum::{
     body::Body,
-    extract::{DefaultBodyLimit, State},
-    response::{IntoResponse, Response},
+    extract::{
+        DefaultBodyLimit,
+        State,
+    },
+    response::{
+        IntoResponse,
+        Response,
+    },
     Router,
 };
 use http::Request;
 use hyper::StatusCode;
 use ic_crypto_tree_hash::{
-    sparse_labeled_tree_from_paths, Label, LookupStatus, MixedHashTree, Path,
+    sparse_labeled_tree_from_paths,
+    Label,
+    LookupStatus,
+    MixedHashTree,
+    Path,
 };
 use ic_error_types::UserError;
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{error, warn};
+use ic_logger::{
+    error,
+    warn,
+};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     consensus::certification::Certification,
     messages::{
-        Blob, Certificate, CertificateDelegation, HttpCallContent, HttpRequestEnvelope, MessageId,
+        Blob,
+        Certificate,
+        CertificateDelegation,
+        HttpCallContent,
+        HttpRequestEnvelope,
+        MessageId,
     },
     CanisterId,
 };
 use serde_cbor::Value as CBOR;
-use std::{collections::BTreeMap, convert::Infallible, sync::Arc, time::Duration};
+use std::{
+    collections::BTreeMap,
+    convert::Infallible,
+    sync::Arc,
+    time::Duration,
+};
 use tokio::sync::OnceCell;
 use tokio_util::time::FutureExt;
-use tower::{util::BoxCloneService, ServiceBuilder};
+use tower::{
+    util::BoxCloneService,
+    ServiceBuilder,
+};
 
 const LOG_EVERY_N_SECONDS: i32 = 10;
 

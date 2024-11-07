@@ -1,22 +1,58 @@
-use std::{collections::HashSet, time::Duration};
+use std::{
+    collections::HashSet,
+    time::Duration,
+};
 
 use crate::access_control::AccessLevelResolver;
-use crate::add_config::{AddsConfig, ConfigAdder};
+use crate::add_config::{
+    AddsConfig,
+    ConfigAdder,
+};
 use crate::confidentiality_formatting::ConfidentialityFormatterFactory;
-use crate::disclose::{DisclosesRules, RulesDiscloser};
-use crate::fetcher::{ConfigFetcher, EntityFetcher, RuleFetcher};
-use crate::metrics::{encode_metrics, serve_metrics};
+use crate::disclose::{
+    DisclosesRules,
+    RulesDiscloser,
+};
+use crate::fetcher::{
+    ConfigFetcher,
+    EntityFetcher,
+    RuleFetcher,
+};
+use crate::metrics::{
+    encode_metrics,
+    serve_metrics,
+};
 use crate::state::CanisterApi;
-use crate::state::{init_version_and_config, with_canister_state};
+use crate::state::{
+    init_version_and_config,
+    with_canister_state,
+};
 use crate::storage::API_BOUNDARY_NODE_PRINCIPALS;
 use candid::Principal;
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
+use ic_canisters_http_types::{
+    HttpRequest,
+    HttpResponse,
+    HttpResponseBuilder,
+};
 use ic_cdk::api::call::call;
-use ic_cdk_macros::{init, post_upgrade, query, update};
+use ic_cdk_macros::{
+    init,
+    post_upgrade,
+    query,
+    update,
+};
 use rate_limits_api::{
-    AddConfigResponse, ApiBoundaryNodeIdRecord, DiscloseRulesArg, DiscloseRulesResponse,
-    GetApiBoundaryNodeIdsRequest, GetConfigResponse, GetRuleByIdResponse, InitArg, InputConfig,
-    RuleId, Version,
+    AddConfigResponse,
+    ApiBoundaryNodeIdRecord,
+    DiscloseRulesArg,
+    DiscloseRulesResponse,
+    GetApiBoundaryNodeIdsRequest,
+    GetConfigResponse,
+    GetRuleByIdResponse,
+    InitArg,
+    InputConfig,
+    RuleId,
+    Version,
 };
 
 const REGISTRY_CANISTER_ID: &str = "rwlgt-iiaaa-aaaaa-aaaaa-cai";

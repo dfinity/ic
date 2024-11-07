@@ -621,7 +621,11 @@ fn expected_allowance_if_zero_no_approval() {
     );
 }
 
-use proptest::prelude::{any, prop_assert_eq, proptest};
+use proptest::prelude::{
+    any,
+    prop_assert_eq,
+    proptest,
+};
 use proptest::strategy::Strategy;
 
 #[test]

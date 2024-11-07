@@ -22,16 +22,26 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::systest;
 use ic_system_test_driver::{
-    driver::ic::{InternetComputer, Subnet},
+    driver::ic::{
+        InternetComputer,
+        Subnet,
+    },
     driver::{
         test_env::TestEnv,
         test_env_api::{
-            HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, NnsInstallationBuilder,
+            HasPublicApiUrl,
+            HasTopologySnapshot,
+            HasVm,
+            IcNodeContainer,
+            NnsInstallationBuilder,
         },
     },
     nns::remove_nodes_via_endpoint,
     util::{
-        assert_nodes_health_statuses, assert_subnet_can_make_progress, block_on, EndpointsStatus,
+        assert_nodes_health_statuses,
+        assert_subnet_can_make_progress,
+        block_on,
+        EndpointsStatus,
     },
 };
 use ic_types::Height;

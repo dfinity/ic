@@ -19,25 +19,49 @@ mod tls;
 
 use ic_crypto_internal_csp::vault::api::CspVault;
 pub use sign::{
-    get_master_public_key_from_transcript, retrieve_mega_public_key_from_registry,
+    get_master_public_key_from_transcript,
+    retrieve_mega_public_key_from_registry,
     MegaKeyFromRegistryError,
 };
 
 use crate::sign::ThresholdSigDataStoreImpl;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_csp::vault::vault_from_config;
-use ic_crypto_internal_csp::{CryptoServiceProvider, Csp};
+use ic_crypto_internal_csp::{
+    CryptoServiceProvider,
+    Csp,
+};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_utils_basic_sig::conversions::derive_node_id;
 use ic_interfaces::crypto::KeyManager;
-use ic_interfaces::time_source::{SysTimeSource, TimeSource};
+use ic_interfaces::time_source::{
+    SysTimeSource,
+    TimeSource,
+};
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{new_logger, ReplicaLogger};
+use ic_logger::{
+    new_logger,
+    ReplicaLogger,
+};
 use ic_metrics::MetricsRegistry;
-use ic_protobuf::registry::crypto::v1::{PublicKey as PublicKeyProto, X509PublicKeyCert};
-use ic_types::crypto::{CryptoError, CryptoResult, KeyPurpose};
-use ic_types::{NodeId, RegistryVersion};
-use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use ic_protobuf::registry::crypto::v1::{
+    PublicKey as PublicKeyProto,
+    X509PublicKeyCert,
+};
+use ic_types::crypto::{
+    CryptoError,
+    CryptoResult,
+    KeyPurpose,
+};
+use ic_types::{
+    NodeId,
+    RegistryVersion,
+};
+use parking_lot::{
+    RwLock,
+    RwLockReadGuard,
+    RwLockWriteGuard,
+};
 use std::fmt;
 use std::sync::Arc;
 

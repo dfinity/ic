@@ -1,12 +1,27 @@
 use crate::*;
-use core::fmt::{self, Debug};
+use core::fmt::{
+    self,
+    Debug,
+};
 use ic_crypto_secrets_containers::SecretArray;
 use paste::paste;
-use rand::{CryptoRng, RngCore};
-use serde::{Deserialize, Serialize};
-use std::convert::{TryFrom, TryInto};
+use rand::{
+    CryptoRng,
+    RngCore,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use std::convert::{
+    TryFrom,
+    TryInto,
+};
 use strum_macros::EnumIter;
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::{
+    Zeroize,
+    ZeroizeOnDrop,
+};
 
 #[cfg(test)]
 mod tests;

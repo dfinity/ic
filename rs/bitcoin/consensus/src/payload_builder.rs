@@ -10,32 +10,64 @@ mod proptests;
 use crate::metrics::BitcoinPayloadBuilderMetrics;
 use ic_btc_interface::Network;
 use ic_btc_replica_types::{
-    BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
+    BitcoinAdapterRequestWrapper,
+    BitcoinAdapterResponse,
+    BitcoinAdapterResponseWrapper,
     BitcoinReject,
 };
 use ic_config::bitcoin_payload_builder_config::Config;
 use ic_error_types::RejectCode;
 use ic_interfaces::{
-    batch_payload::{BatchPayloadBuilder, IntoMessages, PastPayload, ProposalContext},
-    consensus::{self, PayloadValidationError},
+    batch_payload::{
+        BatchPayloadBuilder,
+        IntoMessages,
+        PastPayload,
+        ProposalContext,
+    },
+    consensus::{
+        self,
+        PayloadValidationError,
+    },
     self_validating_payload::{
-        InvalidSelfValidatingPayloadReason, SelfValidatingPayloadBuilder,
+        InvalidSelfValidatingPayloadReason,
+        SelfValidatingPayloadBuilder,
         SelfValidatingPayloadValidationError,
     },
     validation::ValidationError,
 };
-use ic_interfaces_adapter_client::{Options, RpcAdapterClient};
+use ic_interfaces_adapter_client::{
+    Options,
+    RpcAdapterClient,
+};
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::{StateManagerError, StateReader};
-use ic_logger::{log, warn, ReplicaLogger};
+use ic_interfaces_state_manager::{
+    StateManagerError,
+    StateReader,
+};
+use ic_logger::{
+    log,
+    warn,
+    ReplicaLogger,
+};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    batch::{SelfValidatingPayload, ValidationContext, MAX_BITCOIN_PAYLOAD_IN_BYTES},
+    batch::{
+        SelfValidatingPayload,
+        ValidationContext,
+        MAX_BITCOIN_PAYLOAD_IN_BYTES,
+    },
     messages::CallbackId,
-    CountBytes, Height, NumBytes, SubnetId,
+    CountBytes,
+    Height,
+    NumBytes,
+    SubnetId,
 };
-use std::{collections::BTreeSet, sync::Arc, time::Instant};
+use std::{
+    collections::BTreeSet,
+    sync::Arc,
+    time::Instant,
+};
 use thiserror::Error;
 
 const ADAPTER_REQUEST_STATUS_FAILURE: &str = "failed";

@@ -1,5 +1,11 @@
-use crate::{errors::ApiError, ledger_client::OperationOutput};
-use ic_nns_governance_api::pb::v1::{manage_neuron_response::Command, ManageNeuronResponse};
+use crate::{
+    errors::ApiError,
+    ledger_client::OperationOutput,
+};
+use ic_nns_governance_api::pb::v1::{
+    manage_neuron_response::Command,
+    ManageNeuronResponse,
+};
 
 pub fn handle_remove_hotkey(
     bytes: Vec<u8>,

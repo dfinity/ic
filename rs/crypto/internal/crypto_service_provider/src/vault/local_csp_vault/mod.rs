@@ -20,19 +20,35 @@ use crate::secret_key_store::proto_store::ProtoSecretKeyStore;
 use crate::secret_key_store::SecretKeyStore;
 use crate::types::CspSecretKey;
 use crate::vault::api::ThresholdSchnorrCreateSigShareVaultError;
-use crate::{CspRwLock, KeyId};
+use crate::{
+    CspRwLock,
+    KeyId,
+};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
-    CombinedCommitment, CommitmentOpening,
+    CombinedCommitment,
+    CommitmentOpening,
 };
-use ic_interfaces::time_source::{SysTimeSource, TimeSource};
-use ic_logger::{new_logger, ReplicaLogger};
+use ic_interfaces::time_source::{
+    SysTimeSource,
+    TimeSource,
+};
+use ic_logger::{
+    new_logger,
+    ReplicaLogger,
+};
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_types::crypto::canister_threshold_sig::error::ThresholdEcdsaCreateSigShareError;
-use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
+use parking_lot::{
+    RwLockReadGuard,
+    RwLockWriteGuard,
+};
 use rand::rngs::OsRng;
-use rand::{CryptoRng, Rng};
+use rand::{
+    CryptoRng,
+    Rng,
+};
 use std::collections::HashSet;
 use std::path::Path;
 use std::sync::Arc;

@@ -1,35 +1,75 @@
-use crate::api::{CspCreateMEGaKeyError, CspThresholdSignError};
-use crate::key_id::{KeyId, KeyIdInstantiationError};
-use crate::types::{CspPop, CspPublicKey, CspSignature};
+use crate::api::{
+    CspCreateMEGaKeyError,
+    CspThresholdSignError,
+};
+use crate::key_id::{
+    KeyId,
+    KeyIdInstantiationError,
+};
+use crate::types::{
+    CspPop,
+    CspPublicKey,
+    CspSignature,
+};
 use crate::ExternalPublicKeys;
 use ic_crypto_internal_logmon::metrics::KeyCounts;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
-    CommitmentOpening, IDkgComplaintInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
+    CommitmentOpening,
+    IDkgComplaintInternal,
+    MEGaPublicKey,
+    ThresholdEcdsaSigShareInternal,
 };
 use ic_crypto_internal_types::encrypt::forward_secure::{
-    CspFsEncryptionPop, CspFsEncryptionPublicKey,
+    CspFsEncryptionPop,
+    CspFsEncryptionPublicKey,
 };
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
-    CspNiDkgDealing, CspNiDkgTranscript, Epoch,
+    CspNiDkgDealing,
+    CspNiDkgTranscript,
+    Epoch,
 };
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_interfaces::crypto::CurrentNodePublicKeysError;
-use ic_protobuf::registry::crypto::v1::{AlgorithmId as AlgorithmIdProto, PublicKey};
+use ic_protobuf::registry::crypto::v1::{
+    AlgorithmId as AlgorithmIdProto,
+    PublicKey,
+};
 use ic_types::crypto::canister_threshold_sig::error::{
-    IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
-    IDkgVerifyDealingPrivateError, ThresholdEcdsaCreateSigShareError,
+    IDkgLoadTranscriptError,
+    IDkgOpenTranscriptError,
+    IDkgRetainKeysError,
+    IDkgVerifyDealingPrivateError,
+    ThresholdEcdsaCreateSigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::{
-    idkg::{BatchSignedIDkgDealing, IDkgTranscriptOperation},
+    idkg::{
+        BatchSignedIDkgDealing,
+        IDkgTranscriptOperation,
+    },
     ExtendedDerivationPath,
 };
-use ic_types::crypto::{AlgorithmId, CryptoError, CurrentNodePublicKeys};
-use ic_types::{NodeId, NodeIndex, NumberOfNodes, Randomness};
-use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet};
+use ic_types::crypto::{
+    AlgorithmId,
+    CryptoError,
+    CurrentNodePublicKeys,
+};
+use ic_types::{
+    NodeId,
+    NodeIndex,
+    NumberOfNodes,
+    Randomness,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
 
 #[cfg(test)]
 mod tests;

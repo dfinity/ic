@@ -6,15 +6,28 @@
 //! Generic types such as those that appear here MUST not be used in the CSP
 //! API.
 
-use super::{CspSignature, MultiBls12_381_Signature, SigConverter, ThresBls12_381_Signature};
+use super::{
+    CspSignature,
+    MultiBls12_381_Signature,
+    SigConverter,
+    ThresBls12_381_Signature,
+};
 use ic_crypto_internal_basic_sig_ecdsa_secp256k1::types as secp256k1_types;
 use ic_crypto_internal_basic_sig_ecdsa_secp256r1::types as ecdsa_types;
 use ic_crypto_internal_basic_sig_ed25519::types as ed25519_types;
 use ic_crypto_internal_multi_sig_bls12381::types as multi_types;
 use ic_crypto_internal_threshold_sig_bls12381::types as threshold_types;
 use ic_types::crypto::{
-    AlgorithmId, BasicSigOf, CombinedMultiSigOf, CombinedThresholdSig, CombinedThresholdSigOf,
-    CryptoError, CryptoResult, IndividualMultiSigOf, ThresholdSigShare, ThresholdSigShareOf,
+    AlgorithmId,
+    BasicSigOf,
+    CombinedMultiSigOf,
+    CombinedThresholdSig,
+    CombinedThresholdSigOf,
+    CryptoError,
+    CryptoResult,
+    IndividualMultiSigOf,
+    ThresholdSigShare,
+    ThresholdSigShareOf,
 };
 
 use std::convert::TryFrom;

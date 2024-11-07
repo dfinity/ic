@@ -5,7 +5,10 @@ use bech32::Variant;
 use ic_btc_interface::Network;
 use ic_crypto_sha2::Sha256;
 use icrc_ledger_types::icrc1::account::Account;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use serde_bytes::ByteBuf;
 use std::fmt;
 
@@ -99,7 +102,11 @@ pub fn derivation_path(account: &Account) -> Vec<ByteBuf> {
 
 /// Returns a valid extended BIP-32 derivation path from an Account (Principal + subaccount)
 pub fn derive_public_key(ecdsa_public_key: &ECDSAPublicKey, account: &Account) -> ECDSAPublicKey {
-    use ic_crypto_secp256k1::{DerivationIndex, DerivationPath, PublicKey};
+    use ic_crypto_secp256k1::{
+        DerivationIndex,
+        DerivationPath,
+        PublicKey,
+    };
 
     let path = DerivationPath::new(
         derivation_path(account)
@@ -424,7 +431,11 @@ fn parse_bip173_address(
 
 #[cfg(test)]
 mod tests {
-    use super::{hrp, BitcoinAddress, ParseAddressError};
+    use super::{
+        hrp,
+        BitcoinAddress,
+        ParseAddressError,
+    };
     use bech32::u5;
     use ic_btc_interface::Network;
 

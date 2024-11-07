@@ -1,28 +1,66 @@
 //! Defines hash types.
 
 use crate::canister_http::{
-    CanisterHttpResponse, CanisterHttpResponseMetadata, CanisterHttpResponseShare,
+    CanisterHttpResponse,
+    CanisterHttpResponseMetadata,
+    CanisterHttpResponseShare,
 };
 use crate::consensus::{
     certification::{
-        Certification, CertificationContent, CertificationMessage, CertificationShare,
+        Certification,
+        CertificationContent,
+        CertificationMessage,
+        CertificationShare,
     },
     dkg as consensus_dkg,
-    idkg::{EcdsaSigShare, IDkgComplaintContent, IDkgMessage, IDkgOpeningContent, SchnorrSigShare},
-    Block, BlockMetadata, BlockPayload, CatchUpContent, CatchUpContentProtobufBytes,
-    CatchUpShareContent, ConsensusMessage, EquivocationProof, FinalizationContent, HashedBlock,
-    NotarizationContent, RandomBeaconContent, RandomTapeContent,
+    idkg::{
+        EcdsaSigShare,
+        IDkgComplaintContent,
+        IDkgMessage,
+        IDkgOpeningContent,
+        SchnorrSigShare,
+    },
+    Block,
+    BlockMetadata,
+    BlockPayload,
+    CatchUpContent,
+    CatchUpContentProtobufBytes,
+    CatchUpShareContent,
+    ConsensusMessage,
+    EquivocationProof,
+    FinalizationContent,
+    HashedBlock,
+    NotarizationContent,
+    RandomBeaconContent,
+    RandomTapeContent,
 };
 use crate::crypto::canister_threshold_sig::idkg::{
-    IDkgDealing, IDkgDealingSupport, IDkgTranscript, SignedIDkgDealing,
+    IDkgDealing,
+    IDkgDealingSupport,
+    IDkgTranscript,
+    SignedIDkgDealing,
 };
-use crate::crypto::{CryptoHash, CryptoHashOf, Signed};
-use crate::messages::{HttpCanisterUpdate, MessageId, SignedRequestBytes};
+use crate::crypto::{
+    CryptoHash,
+    CryptoHashOf,
+    Signed,
+};
+use crate::messages::{
+    HttpCanisterUpdate,
+    MessageId,
+    SignedRequestBytes,
+};
 use crate::signature::{
-    BasicSignature, MultiSignature, MultiSignatureShare, ThresholdSignature,
+    BasicSignature,
+    MultiSignature,
+    MultiSignatureShare,
+    ThresholdSignature,
     ThresholdSignatureShare,
 };
-use ic_crypto_sha2::{DomainSeparationContext, Sha256};
+use ic_crypto_sha2::{
+    DomainSeparationContext,
+    Sha256,
+};
 use std::hash::Hash;
 
 pub(crate) mod domain_separator;

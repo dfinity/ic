@@ -26,46 +26,85 @@ mod proptests;
 use crate::{
     bouncer_metrics::BouncerMetrics,
     consensus::{
-        block_maker::BlockMaker, catchup_package_maker::CatchUpPackageMaker,
-        dkg_key_manager::DkgKeyManager, finalizer::Finalizer, metrics::ConsensusMetrics,
-        notary::Notary, payload_builder::PayloadBuilderImpl, priority::new_bouncer, purger::Purger,
-        random_beacon_maker::RandomBeaconMaker, random_tape_maker::RandomTapeMaker,
-        share_aggregator::ShareAggregator, validator::Validator,
+        block_maker::BlockMaker,
+        catchup_package_maker::CatchUpPackageMaker,
+        dkg_key_manager::DkgKeyManager,
+        finalizer::Finalizer,
+        metrics::ConsensusMetrics,
+        notary::Notary,
+        payload_builder::PayloadBuilderImpl,
+        priority::new_bouncer,
+        purger::Purger,
+        random_beacon_maker::RandomBeaconMaker,
+        random_tape_maker::RandomTapeMaker,
+        share_aggregator::ShareAggregator,
+        validator::Validator,
     },
 };
 use ic_consensus_utils::{
-    crypto::ConsensusCrypto, get_notarization_delay_settings, membership::Membership,
-    pool_reader::PoolReader, RoundRobin,
+    crypto::ConsensusCrypto,
+    get_notarization_delay_settings,
+    membership::Membership,
+    pool_reader::PoolReader,
+    RoundRobin,
 };
 use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
     consensus_pool::{
-        ChangeAction, ConsensusPool, ConsensusPoolCache, Mutations, ValidatedConsensusArtifact,
+        ChangeAction,
+        ConsensusPool,
+        ConsensusPoolCache,
+        Mutations,
+        ValidatedConsensusArtifact,
     },
     dkg::DkgPool,
     idkg::IDkgPool,
     ingress_manager::IngressSelector,
-    messaging::{MessageRouting, XNetPayloadBuilder},
-    p2p::consensus::{Bouncer, BouncerFactory, PoolMutationsProducer},
+    messaging::{
+        MessageRouting,
+        XNetPayloadBuilder,
+    },
+    p2p::consensus::{
+        Bouncer,
+        BouncerFactory,
+        PoolMutationsProducer,
+    },
     self_validating_payload::SelfValidatingPayloadBuilder,
     time_source::TimeSource,
 };
-use ic_interfaces_registry::{RegistryClient, POLLING_PERIOD};
+use ic_interfaces_registry::{
+    RegistryClient,
+    POLLING_PERIOD,
+};
 use ic_interfaces_state_manager::StateManager;
-use ic_logger::{debug, error, info, trace, warn, ReplicaLogger};
+use ic_logger::{
+    debug,
+    error,
+    info,
+    trace,
+    warn,
+    ReplicaLogger,
+};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    artifact::ConsensusMessageId, consensus::ConsensusMessageHashable,
-    malicious_flags::MaliciousFlags, replica_config::ReplicaConfig,
-    replica_version::ReplicaVersion, Time,
+    artifact::ConsensusMessageId,
+    consensus::ConsensusMessageHashable,
+    malicious_flags::MaliciousFlags,
+    replica_config::ReplicaConfig,
+    replica_version::ReplicaVersion,
+    Time,
 };
 pub use metrics::ValidatorMetrics;
 use std::{
     cell::RefCell,
     collections::BTreeMap,
-    sync::{Arc, Mutex, RwLock},
+    sync::{
+        Arc,
+        Mutex,
+        RwLock,
+    },
     time::Duration,
 };
 use strum_macros::AsRefStr;
@@ -621,22 +660,34 @@ impl<Pool: ConsensusPool> BouncerFactory<ConsensusMessageId, Pool> for Consensus
 mod tests {
     use super::*;
     use ic_config::artifact_pool::ArtifactPoolConfig;
-    use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
+    use ic_consensus_mocks::{
+        dependencies_with_subnet_params,
+        Dependencies,
+    };
     use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_protobuf::registry::subnet::v1::SubnetRecord;
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities::{
-        ingress_selector::FakeIngressSelector, message_routing::FakeMessageRouting,
+        ingress_selector::FakeIngressSelector,
+        message_routing::FakeMessageRouting,
         self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
         xnet_payload_builder::FakeXNetPayloadBuilder,
     };
     use ic_test_utilities_consensus::batch::MockBatchPayloadBuilder;
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_time::FastForwardTimeSource;
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
-    use ic_types::{crypto::CryptoHash, CryptoHashOfState, Height, SubnetId};
+    use ic_test_utilities_types::ids::{
+        node_test_id,
+        subnet_test_id,
+    };
+    use ic_types::{
+        crypto::CryptoHash,
+        CryptoHashOfState,
+        Height,
+        SubnetId,
+    };
     use std::sync::Arc;
 
     fn set_up_consensus_with_subnet_record(

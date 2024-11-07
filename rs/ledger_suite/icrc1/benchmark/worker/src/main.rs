@@ -1,6 +1,13 @@
 use candid::candid_method;
-use ic_cdk_macros::{init, update};
-use ic_icrc1_benchmark_worker::{BatchArgs, BatchResult, InitArgs};
+use ic_cdk_macros::{
+    init,
+    update,
+};
+use ic_icrc1_benchmark_worker::{
+    BatchArgs,
+    BatchResult,
+    InitArgs,
+};
 
 fn main() {}
 

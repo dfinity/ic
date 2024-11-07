@@ -1,32 +1,73 @@
 use std::{
-    sync::{Arc, RwLock},
+    sync::{
+        Arc,
+        RwLock,
+    },
     time::Duration,
 };
 
 use axum::{
-    extract::{DefaultBodyLimit, State},
-    http::{Request, StatusCode},
+    extract::{
+        DefaultBodyLimit,
+        State,
+    },
+    http::{
+        Request,
+        StatusCode,
+    },
     routing::any,
     Router,
 };
-use backoff::{backoff::Backoff, ExponentialBackoffBuilder};
+use backoff::{
+    backoff::Backoff,
+    ExponentialBackoffBuilder,
+};
 use bytes::Bytes;
-use ic_interfaces::p2p::consensus::{Peers, ValidatedPoolReader};
-use ic_logger::{warn, ReplicaLogger};
-use ic_protobuf::{proxy::ProtoProxy, types::v1 as pb};
+use ic_interfaces::p2p::consensus::{
+    Peers,
+    ValidatedPoolReader,
+};
+use ic_logger::{
+    warn,
+    ReplicaLogger,
+};
+use ic_protobuf::{
+    proxy::ProtoProxy,
+    types::v1 as pb,
+};
 use ic_quic_transport::Transport;
 use ic_types::{
-    artifact::{ConsensusMessageId, IngressMessageId},
-    consensus::{BlockPayload, ConsensusMessage},
+    artifact::{
+        ConsensusMessageId,
+        IngressMessageId,
+    },
+    consensus::{
+        BlockPayload,
+        ConsensusMessage,
+    },
     messages::SignedIngress,
     NodeId,
 };
-use rand::{rngs::SmallRng, seq::IteratorRandom, SeedableRng};
-use tokio::time::{sleep_until, timeout_at, Instant};
+use rand::{
+    rngs::SmallRng,
+    seq::IteratorRandom,
+    SeedableRng,
+};
+use tokio::time::{
+    sleep_until,
+    timeout_at,
+    Instant,
+};
 
 use super::{
-    metrics::{FetchStrippedConsensusArtifactMetrics, IngressSenderMetrics},
-    types::rpc::{GetIngressMessageInBlockRequest, GetIngressMessageInBlockResponse},
+    metrics::{
+        FetchStrippedConsensusArtifactMetrics,
+        IngressSenderMetrics,
+    },
+    types::rpc::{
+        GetIngressMessageInBlockRequest,
+        GetIngressMessageInBlockResponse,
+    },
 };
 
 type ValidatedPoolReaderRef<T> = Arc<RwLock<dyn ValidatedPoolReader<T> + Send + Sync>>;
@@ -197,7 +238,8 @@ pub(crate) async fn download_ingress<P: Peers>(
 #[cfg(test)]
 mod tests {
     use crate::fetch_stripped_artifact::test_utils::{
-        fake_block_proposal_with_ingresses, fake_summary_block_proposal,
+        fake_block_proposal_with_ingresses,
+        fake_summary_block_proposal,
     };
 
     use super::*;
@@ -205,7 +247,11 @@ mod tests {
     use http_body_util::Full;
     use ic_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
-    use ic_p2p_test_utils::mocks::{MockPeers, MockTransport, MockValidatedPoolReader};
+    use ic_p2p_test_utils::mocks::{
+        MockPeers,
+        MockTransport,
+        MockValidatedPoolReader,
+    };
     use ic_test_utilities_types::messages::SignedIngressBuilder;
     use ic_types_test_utils::ids::NODE_1;
     use tower::ServiceExt;

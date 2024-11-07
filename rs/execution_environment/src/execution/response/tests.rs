@@ -1,5 +1,8 @@
 use assert_matches::assert_matches;
-use ic_base_types::{NumBytes, NumSeconds};
+use ic_base_types::{
+    NumBytes,
+    NumSeconds,
+};
 use ic_config::flag_status::FlagStatus;
 use ic_error_types::ErrorCode;
 use ic_error_types::UserError;
@@ -9,19 +12,40 @@ use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::testing::SystemStateTesting;
 use ic_replicated_state::NumWasmPages;
 use ic_test_utilities_execution_environment::{
-    check_ingress_status, ExecutionResponse, ExecutionTest, ExecutionTestBuilder,
+    check_ingress_status,
+    ExecutionResponse,
+    ExecutionTest,
+    ExecutionTestBuilder,
 };
 use ic_test_utilities_metrics::fetch_int_counter;
 use ic_test_utilities_types::messages::ResponseBuilder;
 use ic_types::messages::NO_DEADLINE;
 use ic_types::{
-    ingress::{IngressState, IngressStatus, WasmResult},
-    messages::{CallbackId, MessageId},
-    CanisterId, Cycles, Time,
+    ingress::{
+        IngressState,
+        IngressStatus,
+        WasmResult,
+    },
+    messages::{
+        CallbackId,
+        MessageId,
+    },
+    CanisterId,
+    Cycles,
+    Time,
 };
-use ic_types::{messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, NumInstructions};
-use ic_types::{ComputeAllocation, MemoryAllocation};
-use ic_universal_canister::{call_args, wasm};
+use ic_types::{
+    messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+    NumInstructions,
+};
+use ic_types::{
+    ComputeAllocation,
+    MemoryAllocation,
+};
+use ic_universal_canister::{
+    call_args,
+    wasm,
+};
 
 #[test]
 fn execute_response_when_stopping_status() {

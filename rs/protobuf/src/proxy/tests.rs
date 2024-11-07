@@ -1,4 +1,7 @@
-use crate::proxy::{ProtoProxy, ProxyDecodeError};
+use crate::proxy::{
+    ProtoProxy,
+    ProxyDecodeError,
+};
 use prost::Message;
 use std::convert::TryFrom;
 

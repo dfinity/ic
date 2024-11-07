@@ -2,7 +2,10 @@ use anyhow::anyhow;
 use anyhow::bail;
 use candid::CandidType;
 use candid::Nat;
-use candid::{Decode, Encode};
+use candid::{
+    Decode,
+    Encode,
+};
 use ic_icrc1::blocks::encoded_block_to_generic_block;
 use ic_ledger_core::block::EncodedBlock;
 use ic_ledger_core::tokens::TokensType;
@@ -10,13 +13,23 @@ use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use icrc_ledger_types::icrc3::blocks::GenericBlock;
 use icrc_ledger_types::{
     icrc::generic_value::Value,
-    icrc1::{account::Account, transfer::Memo},
+    icrc1::{
+        account::Account,
+        transfer::Memo,
+    },
 };
 use rosetta_core::identifiers::BlockIdentifier;
-use rusqlite::types::{FromSql, FromSqlError, FromSqlResult};
+use rusqlite::types::{
+    FromSql,
+    FromSqlError,
+    FromSqlResult,
+};
 use rusqlite::ToSql;
 use serde::ser::StdError;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use serde_bytes::ByteBuf;
 use std::collections::BTreeMap;
 
@@ -551,9 +564,13 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use candid::{Nat, Principal};
+    use candid::{
+        Nat,
+        Principal,
+    };
     use ic_icrc1::blocks::{
-        encoded_block_to_generic_block, generic_block_to_encoded_block,
+        encoded_block_to_generic_block,
+        generic_block_to_encoded_block,
         generic_transaction_from_generic_block,
     };
     use ic_icrc1_test_utils::blocks_strategy;
@@ -569,7 +586,12 @@ mod tests {
     use proptest::collection::vec;
     use proptest::prelude::any;
     use proptest::prop_assert_eq;
-    use proptest::{option, prop_oneof, proptest, strategy::Strategy};
+    use proptest::{
+        option,
+        prop_oneof,
+        proptest,
+        strategy::Strategy,
+    };
     use serde_bytes::ByteBuf;
     use std::collections::BTreeMap;
 

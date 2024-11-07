@@ -8,26 +8,56 @@ use ic_interfaces_state_manager::*;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{testing::ReplicatedStateTesting, Stream};
-use ic_state_manager::StateManagerImpl;
-use ic_test_utilities_consensus::fake::{Fake, FakeVerifier};
-use ic_test_utilities_metrics::{
-    fetch_gauge, fetch_histogram_stats, fetch_int_counter_vec, HistogramStats, MetricVec,
+use ic_replicated_state::{
+    testing::ReplicatedStateTesting,
+    Stream,
 };
-use ic_test_utilities_types::ids::{SUBNET_1, SUBNET_42};
+use ic_state_manager::StateManagerImpl;
+use ic_test_utilities_consensus::fake::{
+    Fake,
+    FakeVerifier,
+};
+use ic_test_utilities_metrics::{
+    fetch_gauge,
+    fetch_histogram_stats,
+    fetch_int_counter_vec,
+    HistogramStats,
+    MetricVec,
+};
+use ic_test_utilities_types::ids::{
+    SUBNET_1,
+    SUBNET_42,
+};
 use ic_types::{
-    consensus::certification::{Certification, CertificationContent},
+    consensus::certification::{
+        Certification,
+        CertificationContent,
+    },
     crypto::Signed,
     signature::ThresholdSignature,
-    xnet::{CertifiedStreamSlice, StreamIndex},
-    Height, SubnetId,
+    xnet::{
+        CertifiedStreamSlice,
+        StreamIndex,
+    },
+    Height,
+    SubnetId,
 };
 use ic_xnet_payload_builder::certified_slice_pool::{
-    UnpackedStreamSlice, METRIC_POOL_SIZE_BYTES, METRIC_TAKE_COUNT, METRIC_TAKE_GCED_MESSAGES,
-    METRIC_TAKE_MESSAGES, METRIC_TAKE_SIZE_BYTES,
+    UnpackedStreamSlice,
+    METRIC_POOL_SIZE_BYTES,
+    METRIC_TAKE_COUNT,
+    METRIC_TAKE_GCED_MESSAGES,
+    METRIC_TAKE_MESSAGES,
+    METRIC_TAKE_SIZE_BYTES,
 };
-use std::{convert::TryFrom, sync::Arc};
-use tempfile::{Builder, TempDir};
+use std::{
+    convert::TryFrom,
+    sync::Arc,
+};
+use tempfile::{
+    Builder,
+    TempDir,
+};
 
 pub const OWN_SUBNET: SubnetId = SUBNET_42;
 pub const REMOTE_SUBNET: SubnetId = SUBNET_1;

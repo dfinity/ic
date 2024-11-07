@@ -1,12 +1,26 @@
 use crate::*;
 use ic_types::NodeIndex;
-use rand::{CryptoRng, RngCore};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::convert::{TryFrom, TryInto};
+use rand::{
+    CryptoRng,
+    RngCore,
+};
+use serde::{
+    Deserialize,
+    Deserializer,
+    Serialize,
+    Serializer,
+};
+use std::convert::{
+    TryFrom,
+    TryInto,
+};
 use std::fmt;
 use std::sync::Arc;
 use subtle::Choice;
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::{
+    Zeroize,
+    ZeroizeOnDrop,
+};
 
 mod algos;
 mod ed25519;

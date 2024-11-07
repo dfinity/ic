@@ -5,10 +5,19 @@
 //! executed, has been executed, or was spawned cannot be execute again or be
 //! re-spawned. A spawned task can be cancelled.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{
+    AtomicBool,
+    Ordering,
+};
 
-use slog::{info, Logger};
-use tokio::{runtime::Handle as RtHandle, task::JoinHandle};
+use slog::{
+    info,
+    Logger,
+};
+use tokio::{
+    runtime::Handle as RtHandle,
+    task::JoinHandle,
+};
 
 use crate::driver::event::TaskId;
 

@@ -1,48 +1,93 @@
-use crate::itest_helpers::{populate_canister_ids, SnsTestsInitPayloadBuilder};
-use candid::{CandidType, Decode, Encode};
+use crate::itest_helpers::{
+    populate_canister_ids,
+    SnsTestsInitPayloadBuilder,
+};
+use candid::{
+    CandidType,
+    Decode,
+    Encode,
+};
 use canister_test::Project;
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_ledger_core::Tokens;
 use ic_management_canister_types::CanisterInstallMode;
 use ic_nervous_system_clients::{
-    canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResultV2,
+    canister_id_record::CanisterIdRecord,
+    canister_status::CanisterStatusResultV2,
 };
 use ic_nervous_system_common::ExplosiveTokens;
 use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
 use ic_nns_constants::{
-    LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID, ROOT_CANISTER_ID as NNS_ROOT_CANISTER_ID,
+    LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID,
+    ROOT_CANISTER_ID as NNS_ROOT_CANISTER_ID,
 };
 use ic_nns_test_utils::{
     sns_wasm::{
-        build_governance_sns_wasm, build_index_ng_sns_wasm, build_ledger_sns_wasm,
-        build_root_sns_wasm, build_swap_sns_wasm,
+        build_governance_sns_wasm,
+        build_index_ng_sns_wasm,
+        build_ledger_sns_wasm,
+        build_root_sns_wasm,
+        build_swap_sns_wasm,
     },
     state_test_helpers::set_controllers,
 };
 use ic_sns_governance::pb::v1::{
     governance::Version,
-    manage_neuron::{self, RegisterVote},
-    ListNeurons, ListNeuronsResponse, ManageNeuron, ManageNeuronResponse, NervousSystemParameters,
-    NeuronId, ProposalId, Vote,
+    manage_neuron::{
+        self,
+        RegisterVote,
+    },
+    ListNeurons,
+    ListNeuronsResponse,
+    ManageNeuron,
+    ManageNeuronResponse,
+    NervousSystemParameters,
+    NeuronId,
+    ProposalId,
+    Vote,
 };
 use ic_sns_init::SnsCanisterInitPayloads;
 use ic_sns_root::{
     pb::v1::{
-        RegisterDappCanisterRequest, RegisterDappCanisterResponse, RegisterDappCanistersRequest,
+        RegisterDappCanisterRequest,
+        RegisterDappCanisterResponse,
+        RegisterDappCanistersRequest,
         RegisterDappCanistersResponse,
     },
-    GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse,
+    GetSnsCanistersSummaryRequest,
+    GetSnsCanistersSummaryResponse,
 };
 use ic_sns_swap::pb::v1::{
-    self as swap_pb, ErrorRefundIcpResponse, FinalizeSwapResponse, GetBuyerStateResponse,
-    GetBuyersTotalResponse, GetLifecycleResponse, GetOpenTicketResponse, GetSaleParametersResponse,
-    ListCommunityFundParticipantsResponse, NewSaleTicketResponse, NotifyPaymentFailureResponse,
-    RefreshBuyerTokensRequest, RefreshBuyerTokensResponse, Ticket,
+    self as swap_pb,
+    ErrorRefundIcpResponse,
+    FinalizeSwapResponse,
+    GetBuyerStateResponse,
+    GetBuyersTotalResponse,
+    GetLifecycleResponse,
+    GetOpenTicketResponse,
+    GetSaleParametersResponse,
+    ListCommunityFundParticipantsResponse,
+    NewSaleTicketResponse,
+    NotifyPaymentFailureResponse,
+    RefreshBuyerTokensRequest,
+    RefreshBuyerTokensResponse,
+    Ticket,
 };
-use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
+use ic_state_machine_tests::{
+    StateMachine,
+    StateMachineBuilder,
+};
 use ic_types::ingress::WasmResult;
 use icp_ledger::{
-    AccountIdentifier, BlockIndex, Memo, TransferArgs, TransferError, DEFAULT_TRANSFER_FEE,
+    AccountIdentifier,
+    BlockIndex,
+    Memo,
+    TransferArgs,
+    TransferError,
+    DEFAULT_TRANSFER_FEE,
 };
 use icrc_ledger_types::icrc1::account::Account;
 

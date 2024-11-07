@@ -1,10 +1,18 @@
-use ic_types::crypto::{threshold_sig::IcRootOfTrust, AlgorithmId, CryptoError, CryptoResult};
+use ic_types::crypto::{
+    threshold_sig::IcRootOfTrust,
+    AlgorithmId,
+    CryptoError,
+    CryptoResult,
+};
 
 mod sign_utils;
 
 pub use sign_utils::{
-    ecdsa_p256_signature_from_der_bytes, ed25519_public_key_to_der, rsa_signature_from_bytes,
-    user_public_key_from_bytes, KeyBytesContentType,
+    ecdsa_p256_signature_from_der_bytes,
+    ed25519_public_key_to_der,
+    rsa_signature_from_bytes,
+    user_public_key_from_bytes,
+    KeyBytesContentType,
 };
 
 pub fn verify_basic_sig_by_public_key(

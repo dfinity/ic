@@ -1,13 +1,26 @@
 use nix::unistd::Pid;
 use std::os::unix::io::AsRawFd;
-use std::os::unix::prelude::{CommandExt, RawFd};
-use std::process::{Child, Command};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::os::unix::prelude::{
+    CommandExt,
+    RawFd,
+};
+use std::process::{
+    Child,
+    Command,
+};
+use std::sync::atomic::{
+    AtomicBool,
+    Ordering,
+};
 
 use crate::transport::SocketReaderConfig;
 use crate::{
-    protocol, protocol::ctlsvc, rpc, sandbox_client_stub::SandboxClientStub,
-    sandbox_service::SandboxService, transport,
+    protocol,
+    protocol::ctlsvc,
+    rpc,
+    sandbox_client_stub::SandboxClientStub,
+    sandbox_service::SandboxService,
+    transport,
 };
 
 use std::sync::Arc;

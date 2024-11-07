@@ -1,22 +1,40 @@
 use crate::invariants::common::{
-    get_node_records_from_snapshot, get_subnet_ids_from_snapshot, get_value_from_snapshot,
-    InvariantCheckError, RegistrySnapshot,
+    get_node_records_from_snapshot,
+    get_subnet_ids_from_snapshot,
+    get_value_from_snapshot,
+    InvariantCheckError,
+    RegistrySnapshot,
 };
 
 use std::{
     collections::BTreeSet,
     convert::TryFrom,
-    net::{Ipv4Addr, Ipv6Addr},
+    net::{
+        Ipv4Addr,
+        Ipv6Addr,
+    },
 };
 
-use ipnet::{Ipv4Net, Ipv6Net};
+use ipnet::{
+    Ipv4Net,
+    Ipv6Net,
+};
 
-use ic_base_types::{NodeId, PrincipalId, SubnetId};
+use ic_base_types::{
+    NodeId,
+    PrincipalId,
+    SubnetId,
+};
 use ic_protobuf::registry::firewall::v1::{
-    FirewallAction, FirewallRule, FirewallRuleDirection, FirewallRuleSet,
+    FirewallAction,
+    FirewallRule,
+    FirewallRuleDirection,
+    FirewallRuleSet,
 };
 use ic_registry_keys::{
-    get_firewall_rules_record_principal_id, make_firewall_rules_record_key, FirewallRulesScope,
+    get_firewall_rules_record_principal_id,
+    make_firewall_rules_record_key,
+    FirewallRulesScope,
 };
 
 const COMMENT_SIZE: usize = 255;
@@ -285,9 +303,14 @@ fn get_firewall_rules(snapshot: &RegistrySnapshot, record_key: String) -> Option
 mod tests {
     use super::*;
     use ic_protobuf::registry::{
-        firewall::v1::FirewallRuleDirection, node::v1::NodeRecord, subnet::v1::SubnetListRecord,
+        firewall::v1::FirewallRuleDirection,
+        node::v1::NodeRecord,
+        subnet::v1::SubnetListRecord,
     };
-    use ic_registry_keys::{make_node_record_key, make_subnet_list_record_key};
+    use ic_registry_keys::{
+        make_node_record_key,
+        make_subnet_list_record_key,
+    };
     use prost::Message;
 
     // helper function that returns a generic firewall rule for use in the tests.

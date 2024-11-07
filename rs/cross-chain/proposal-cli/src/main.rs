@@ -7,15 +7,31 @@ mod proposal;
 
 use crate::canister::TargetCanister;
 use crate::dashboard::DashboardClient;
-use crate::git::{GitCommitHash, GitRepository};
+use crate::git::{
+    GitCommitHash,
+    GitRepository,
+};
 use crate::ic_admin::ProposalFiles;
-use crate::proposal::{InstallProposalTemplate, ProposalTemplate, UpgradeProposalTemplate};
-use clap::{Parser, Subcommand};
+use crate::proposal::{
+    InstallProposalTemplate,
+    ProposalTemplate,
+    UpgradeProposalTemplate,
+};
+use clap::{
+    Parser,
+    Subcommand,
+};
 use ic_admin::IcAdminArgs;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
 use std::fs;
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::{
+    Path,
+    PathBuf,
+};
 
 /// A fictional versioning CLI
 #[derive(Debug, Parser)] // requires `derive` feature

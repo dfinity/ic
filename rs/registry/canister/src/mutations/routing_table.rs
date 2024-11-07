@@ -1,15 +1,32 @@
-use crate::{common::LOG_PREFIX, pb::v1::SubnetForCanister, registry::Registry};
+use crate::{
+    common::LOG_PREFIX,
+    pb::v1::SubnetForCanister,
+    registry::Registry,
+};
 
 use std::convert::TryFrom;
 
 use dfn_core::CanisterId;
-use ic_base_types::{PrincipalId, SubnetId};
-use ic_protobuf::registry::routing_table::v1 as pb;
-use ic_registry_keys::{make_canister_migrations_record_key, make_routing_table_record_key};
-use ic_registry_routing_table::{
-    routing_table_insert_subnet, CanisterIdRanges, CanisterMigrations, RoutingTable,
+use ic_base_types::{
+    PrincipalId,
+    SubnetId,
 };
-use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation, RegistryValue};
+use ic_protobuf::registry::routing_table::v1 as pb;
+use ic_registry_keys::{
+    make_canister_migrations_record_key,
+    make_routing_table_record_key,
+};
+use ic_registry_routing_table::{
+    routing_table_insert_subnet,
+    CanisterIdRanges,
+    CanisterMigrations,
+    RoutingTable,
+};
+use ic_registry_transport::pb::v1::{
+    registry_mutation,
+    RegistryMutation,
+    RegistryValue,
+};
 use prost::Message;
 
 #[derive(Eq, PartialEq, Debug)]

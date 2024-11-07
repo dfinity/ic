@@ -1,5 +1,8 @@
 use crate::CkEthSetup;
-use ic_cketh_minter::endpoints::events::{Event, EventPayload};
+use ic_cketh_minter::endpoints::events::{
+    Event,
+    EventPayload,
+};
 use std::collections::BTreeMap;
 
 pub struct MinterEventAssert<T> {

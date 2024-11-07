@@ -1,17 +1,28 @@
 use dfn_candid::candid;
 use ic_canister_client_sender::Sender;
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_KEYPAIR,
-    TEST_NEURON_2_OWNER_PRINCIPAL, TEST_NEURON_3_OWNER_PRINCIPAL,
+    TEST_NEURON_1_OWNER_KEYPAIR,
+    TEST_NEURON_1_OWNER_PRINCIPAL,
+    TEST_NEURON_2_OWNER_KEYPAIR,
+    TEST_NEURON_2_OWNER_PRINCIPAL,
+    TEST_NEURON_3_OWNER_PRINCIPAL,
 };
 use ic_nns_test_utils::{
-    itest_helpers::{local_test_on_nns_subnet, set_up_registry_canister},
-    registry::{get_value_or_panic, invariant_compliant_mutation_as_atomic_req},
+    itest_helpers::{
+        local_test_on_nns_subnet,
+        set_up_registry_canister,
+    },
+    registry::{
+        get_value_or_panic,
+        invariant_compliant_mutation_as_atomic_req,
+    },
 };
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_registry_keys::make_node_operator_record_key;
 use ic_registry_transport::pb::v1::{
-    registry_mutation, RegistryAtomicMutateRequest, RegistryMutation,
+    registry_mutation,
+    RegistryAtomicMutateRequest,
+    RegistryMutation,
 };
 use prost::Message;
 use registry_canister::{

@@ -1,5 +1,8 @@
 use crate::errors::ApiError;
-use crate::models::{Amount, Currency};
+use crate::models::{
+    Amount,
+    Currency,
+};
 use ic_ledger_core::tokens::DECIMAL_PLACES;
 use icp_ledger::Tokens;
 use num_bigint::BigInt;

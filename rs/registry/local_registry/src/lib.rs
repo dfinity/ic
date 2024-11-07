@@ -4,17 +4,33 @@
 //! simple function call. Control over when the synchronization happens is left
 //! to the user of `LocalRegistry`.
 
-use std::{net::IpAddr, path::Path, str::FromStr, sync::Arc, time::Duration};
+use std::{
+    net::IpAddr,
+    path::Path,
+    str::FromStr,
+    sync::Arc,
+    time::Duration,
+};
 
-use ic_interfaces_registry::{RegistryClient, RegistryClientResult, ZERO_REGISTRY_VERSION};
+use ic_interfaces_registry::{
+    RegistryClient,
+    RegistryClientResult,
+    ZERO_REGISTRY_VERSION,
+};
 use ic_protobuf::registry::node::v1::ConnectionEndpoint as PbConnectionEndpoint;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_local_store::{
-    Changelog, ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreWriter,
+    Changelog,
+    ChangelogEntry,
+    KeyMutation,
+    LocalStoreImpl,
+    LocalStoreWriter,
 };
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_types::{
-    crypto::threshold_sig::ThresholdSigPublicKey, registry::RegistryClientError, RegistryVersion,
+    crypto::threshold_sig::ThresholdSigPublicKey,
+    registry::RegistryClientError,
+    RegistryVersion,
     SubnetId,
 };
 use thiserror::Error;
@@ -23,7 +39,10 @@ use url::Url;
 
 use ic_registry_client_helpers::{
     crypto::CryptoRegistry,
-    subnet::{SubnetRegistry, SubnetTransportRegistry},
+    subnet::{
+        SubnetRegistry,
+        SubnetTransportRegistry,
+    },
 };
 
 pub struct LocalRegistry {

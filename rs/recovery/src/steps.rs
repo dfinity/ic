@@ -1,25 +1,71 @@
 use crate::{
     admin_helper::IcAdmin,
     command_helper::exec_cmd,
-    error::{RecoveryError, RecoveryResult},
-    file_sync_helper::{create_dir, read_dir, remove_dir, rsync, rsync_with_retries},
-    get_member_ips, get_node_heights_from_metrics,
+    error::{
+        RecoveryError,
+        RecoveryResult,
+    },
+    file_sync_helper::{
+        create_dir,
+        read_dir,
+        remove_dir,
+        rsync,
+        rsync_with_retries,
+    },
+    get_member_ips,
+    get_node_heights_from_metrics,
     registry_helper::RegistryHelper,
     replay_helper,
     ssh_helper::SshHelper,
-    util::{block_on, parse_hex_str},
-    Recovery, ADMIN, CHECKPOINTS, IC_CERTIFICATIONS_PATH, IC_CHECKPOINTS_PATH, IC_DATA_PATH,
-    IC_JSON5_PATH, IC_REGISTRY_LOCAL_STORE, IC_STATE, IC_STATE_EXCLUDES, NEW_IC_STATE, READONLY,
+    util::{
+        block_on,
+        parse_hex_str,
+    },
+    Recovery,
+    ADMIN,
+    CHECKPOINTS,
+    IC_CERTIFICATIONS_PATH,
+    IC_CHECKPOINTS_PATH,
+    IC_DATA_PATH,
+    IC_JSON5_PATH,
+    IC_REGISTRY_LOCAL_STORE,
+    IC_STATE,
+    IC_STATE_EXCLUDES,
+    NEW_IC_STATE,
+    READONLY,
 };
 use ic_artifact_pool::certification_pool::CertificationPoolImpl;
-use ic_base_types::{CanisterId, NodeId, PrincipalId};
+use ic_base_types::{
+    CanisterId,
+    NodeId,
+    PrincipalId,
+};
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_interfaces::certification::CertificationPool;
 use ic_metrics::MetricsRegistry;
-use ic_replay::cmd::{GetRecoveryCupCmd, SubCommand};
-use ic_types::{consensus::certification::CertificationMessage, Height, SubnetId};
-use slog::{debug, info, warn, Logger};
-use std::{collections::HashMap, net::IpAddr, path::PathBuf, process::Command, thread, time};
+use ic_replay::cmd::{
+    GetRecoveryCupCmd,
+    SubCommand,
+};
+use ic_types::{
+    consensus::certification::CertificationMessage,
+    Height,
+    SubnetId,
+};
+use slog::{
+    debug,
+    info,
+    warn,
+    Logger,
+};
+use std::{
+    collections::HashMap,
+    net::IpAddr,
+    path::PathBuf,
+    process::Command,
+    thread,
+    time,
+};
 
 /// Subnet recovery is composed of several steps. Each recovery step comprises a
 /// certain input state of which both its execution, and its description is
@@ -1036,12 +1082,25 @@ impl Step for UploadAndHostTarStep {
 
 #[cfg(test)]
 mod tests {
-    use ic_test_utilities_consensus::fake::{Fake, FakeSigner};
+    use ic_test_utilities_consensus::fake::{
+        Fake,
+        FakeSigner,
+    };
     use ic_test_utilities_types::ids::node_test_id;
     use ic_types::{
-        consensus::certification::{Certification, CertificationContent, CertificationShare},
-        crypto::{CryptoHash, Signed},
-        signature::{ThresholdSignature, ThresholdSignatureShare},
+        consensus::certification::{
+            Certification,
+            CertificationContent,
+            CertificationShare,
+        },
+        crypto::{
+            CryptoHash,
+            Signed,
+        },
+        signature::{
+            ThresholdSignature,
+            ThresholdSignatureShare,
+        },
     };
     use tempfile::TempDir;
 

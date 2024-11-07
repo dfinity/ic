@@ -3,33 +3,71 @@ mod benches;
 
 use candid::candid_method;
 use candid::types::number::Nat;
-use ic_canister_log::{declare_log_buffer, export};
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
+use ic_canister_log::{
+    declare_log_buffer,
+    export,
+};
+use ic_canisters_http_types::{
+    HttpRequest,
+    HttpResponse,
+    HttpResponseBuilder,
+};
 use ic_cdk::api::stable::StableReader;
 
 #[cfg(not(feature = "canbench-rs"))]
 use ic_cdk_macros::init;
-use ic_cdk_macros::{post_upgrade, pre_upgrade, query, update};
-use ic_icrc1::{
-    endpoints::{convert_transfer_error, StandardRecord},
-    Operation, Transaction,
+use ic_cdk_macros::{
+    post_upgrade,
+    pre_upgrade,
+    query,
+    update,
 };
-use ic_icrc1_ledger::{InitArgs, Ledger, LedgerArgument};
-use ic_icrc1_ledger::{LEDGER_VERSION, UPGRADES_MEMORY};
+use ic_icrc1::{
+    endpoints::{
+        convert_transfer_error,
+        StandardRecord,
+    },
+    Operation,
+    Transaction,
+};
+use ic_icrc1_ledger::{
+    InitArgs,
+    Ledger,
+    LedgerArgument,
+};
+use ic_icrc1_ledger::{
+    LEDGER_VERSION,
+    UPGRADES_MEMORY,
+};
 use ic_ledger_canister_core::ledger::{
-    apply_transaction, archive_blocks, LedgerAccess, LedgerContext, LedgerData,
+    apply_transaction,
+    archive_blocks,
+    LedgerAccess,
+    LedgerContext,
+    LedgerData,
     TransferError as CoreTransferError,
 };
 use ic_ledger_canister_core::runtime::total_memory_size_bytes;
 use ic_ledger_core::block::BlockIndex;
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::Zero;
-use ic_stable_structures::reader::{BufferedReader, Reader};
-use ic_stable_structures::writer::{BufferedWriter, Writer};
-use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
+use ic_stable_structures::reader::{
+    BufferedReader,
+    Reader,
+};
+use ic_stable_structures::writer::{
+    BufferedWriter,
+    Writer,
+};
+use icrc_ledger_types::icrc2::approve::{
+    ApproveArgs,
+    ApproveError,
+};
 use icrc_ledger_types::icrc21::{
-    errors::Icrc21Error, lib::build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints,
-    requests::ConsentMessageRequest, responses::ConsentInfo,
+    errors::Icrc21Error,
+    lib::build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints,
+    requests::ConsentMessageRequest,
+    responses::ConsentInfo,
 };
 use icrc_ledger_types::icrc3::blocks::DataCertificate;
 #[cfg(not(feature = "get-blocks-disabled"))]
@@ -39,28 +77,49 @@ use icrc_ledger_types::{
     icrc3::{
         archive::ArchiveInfo,
         blocks::GetBlocksRequest,
-        transactions::{GetTransactionsRequest, GetTransactionsResponse},
+        transactions::{
+            GetTransactionsRequest,
+            GetTransactionsResponse,
+        },
     },
 };
 use icrc_ledger_types::{
     icrc1::account::Account,
-    icrc2::allowance::{Allowance, AllowanceArgs},
+    icrc2::allowance::{
+        Allowance,
+        AllowanceArgs,
+    },
 };
 use icrc_ledger_types::{
     icrc1::transfer::Memo,
     icrc3::{
-        archive::{GetArchivesArgs, GetArchivesResult},
+        archive::{
+            GetArchivesArgs,
+            GetArchivesResult,
+        },
         blocks::GetBlocksResult,
     },
 };
 use icrc_ledger_types::{
-    icrc1::transfer::{TransferArg, TransferError},
-    icrc2::transfer_from::{TransferFromArgs, TransferFromError},
+    icrc1::transfer::{
+        TransferArg,
+        TransferError,
+    },
+    icrc2::transfer_from::{
+        TransferFromArgs,
+        TransferFromError,
+    },
 };
-use num_traits::{bounds::Bounded, ToPrimitive};
+use num_traits::{
+    bounds::Bounded,
+    ToPrimitive,
+};
 use serde_bytes::ByteBuf;
 use std::cell::RefCell;
-use std::io::{Read, Write};
+use std::io::{
+    Read,
+    Write,
+};
 
 const MAX_MESSAGE_SIZE: u64 = 1024 * 1024;
 
@@ -883,7 +942,10 @@ fn main() {}
 
 #[test]
 fn check_candid_interface() {
-    use candid_parser::utils::{service_equal, CandidSource};
+    use candid_parser::utils::{
+        service_equal,
+        CandidSource,
+    };
 
     let new_interface = __export_service();
     let manifest_dir = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());

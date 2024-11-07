@@ -3,52 +3,111 @@
 use walkdir::WalkDir;
 use crate::driver::constants;
 use crate::driver::{
-    farm::{Farm, HostFeature},
+    farm::{
+        Farm,
+        HostFeature,
+    },
     resource::AllocatedVm,
     task_scheduler::TaskScheduler,
-    test_env_api::{FarmBaseUrl, HasGroupSetup, HasIcDependencies},
+    test_env_api::{
+        FarmBaseUrl,
+        HasGroupSetup,
+        HasIcDependencies,
+    },
     universal_vm::UNIVERSAL_VMS_DIR,
     {
         action_graph::ActionGraph,
-        context::{GroupContext, ProcessContext},
-        dsl::{SubprocessFn, TestFunction},
+        context::{
+            GroupContext,
+            ProcessContext,
+        },
+        dsl::{
+            SubprocessFn,
+            TestFunction,
+        },
         event::TaskId,
-        plan::{EvalOrder, Plan},
+        plan::{
+            EvalOrder,
+            Plan,
+        },
         report::Outcome,
-        task::{DebugKeepaliveTask, EmptyTask},
+        task::{
+            DebugKeepaliveTask,
+            EmptyTask,
+        },
         task_scheduler::TaskTable,
     },
 };
 use crate::driver::{
     log_events,
-    pot_dsl::{PotSetupFn, SysTestFn},
-    test_env::{TestEnv, TestEnvAttribute},
-    test_setup::{GroupSetup, InfraProvider},
+    pot_dsl::{
+        PotSetupFn,
+        SysTestFn,
+    },
+    test_env::{
+        TestEnv,
+        TestEnvAttribute,
+    },
+    test_setup::{
+        GroupSetup,
+        InfraProvider,
+    },
 };
 use crate::k8s::tnet::TNet;
 use crate::util::block_on;
 
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::path::PathBuf;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{
+    bail,
+    Context,
+    Result,
+};
 use clap::Parser;
 use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+    io::{
+        AsyncBufReadExt,
+        AsyncWriteExt,
+        BufReader,
+    },
     net::TcpSocket,
-    runtime::{Builder, Handle, Runtime},
+    runtime::{
+        Builder,
+        Handle,
+        Runtime,
+    },
 };
 
 use crate::driver::{
-    constants::{GROUP_TTL, KEEPALIVE_INTERVAL},
+    constants::{
+        GROUP_TTL,
+        KEEPALIVE_INTERVAL,
+    },
     report::SystemTestGroupError,
     subprocess_task::SubprocessTask,
-    task::{SkipTestTask, Task},
+    task::{
+        SkipTestTask,
+        Task,
+    },
     timeout::TimeoutTask,
 };
-use slog::{debug, error, info, trace, warn, Logger};
+use slog::{
+    debug,
+    error,
+    info,
+    trace,
+    warn,
+    Logger,
+};
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{
+        BTreeMap,
+        HashMap,
+    },
     iter::once,
     net::Ipv6Addr,
     time::Duration,

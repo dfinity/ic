@@ -1,5 +1,13 @@
-use crate::acme::{Finalize, FinalizeError, Order, Ready};
-use anyhow::{Context, Error};
+use crate::acme::{
+    Finalize,
+    FinalizeError,
+    Order,
+    Ready,
+};
+use anyhow::{
+    Context,
+    Error,
+};
 use async_trait::async_trait;
 
 // Wrapper to convert names to A-label Internalized Domain Names
@@ -34,7 +42,14 @@ impl<T: Finalize> Finalize for WithIDNA<T> {
 
 #[cfg(test)]
 mod tests {
-    use crate::acme::{Finalize, MockFinalize, MockOrder, MockReady, Order, Ready};
+    use crate::acme::{
+        Finalize,
+        MockFinalize,
+        MockOrder,
+        MockReady,
+        Order,
+        Ready,
+    };
     use crate::acme_idna::WithIDNA;
     use mockall::predicate;
 

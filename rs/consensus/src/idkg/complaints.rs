@@ -1,27 +1,58 @@
 //! The complaint handling
 
-use crate::idkg::metrics::{timed_call, IDkgComplaintMetrics};
+use crate::idkg::metrics::{
+    timed_call,
+    IDkgComplaintMetrics,
+};
 use crate::idkg::utils::IDkgBlockReaderImpl;
 
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::RoundRobin;
 use ic_interfaces::consensus_pool::ConsensusBlockCache;
-use ic_interfaces::crypto::{ErrorReproducibility, IDkgProtocol};
-use ic_interfaces::idkg::{IDkgChangeAction, IDkgChangeSet, IDkgPool};
-use ic_logger::{debug, warn, ReplicaLogger};
+use ic_interfaces::crypto::{
+    ErrorReproducibility,
+    IDkgProtocol,
+};
+use ic_interfaces::idkg::{
+    IDkgChangeAction,
+    IDkgChangeSet,
+    IDkgPool,
+};
+use ic_logger::{
+    debug,
+    warn,
+    ReplicaLogger,
+};
 use ic_metrics::MetricsRegistry;
 use ic_types::artifact::IDkgMessageId;
 use ic_types::consensus::idkg::{
-    complaint_prefix, opening_prefix, IDkgBlockReader, IDkgComplaintContent, IDkgMessage,
-    IDkgOpeningContent, SignedIDkgComplaint, SignedIDkgOpening, TranscriptRef,
+    complaint_prefix,
+    opening_prefix,
+    IDkgBlockReader,
+    IDkgComplaintContent,
+    IDkgMessage,
+    IDkgOpeningContent,
+    SignedIDkgComplaint,
+    SignedIDkgOpening,
+    TranscriptRef,
 };
 use ic_types::crypto::canister_threshold_sig::error::IDkgLoadTranscriptError;
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    IDkgComplaint, IDkgOpening, IDkgTranscript, IDkgTranscriptId,
+    IDkgComplaint,
+    IDkgOpening,
+    IDkgTranscript,
+    IDkgTranscriptId,
 };
-use ic_types::{Height, NodeId, RegistryVersion};
+use ic_types::{
+    Height,
+    NodeId,
+    RegistryVersion,
+};
 use std::cell::RefCell;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
 use std::sync::Arc;
 
 use super::utils::update_purge_height;
@@ -980,11 +1011,22 @@ mod tests {
     use ic_consensus_utils::crypto::SignVerify;
     use ic_crypto_test_utils_canister_threshold_sigs::CanisterThresholdSigTestEnvironment;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-    use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
+    use ic_interfaces::p2p::consensus::{
+        MutablePool,
+        UnvalidatedArtifact,
+    };
     use ic_management_canister_types::MasterPublicKeyId;
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_test_utilities_types::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
-    use ic_types::consensus::idkg::{IDkgObject, TranscriptRef};
+    use ic_test_utilities_types::ids::{
+        NODE_1,
+        NODE_2,
+        NODE_3,
+        NODE_4,
+    };
+    use ic_types::consensus::idkg::{
+        IDkgObject,
+        TranscriptRef,
+    };
     use ic_types::crypto::AlgorithmId;
     use ic_types::time::UNIX_EPOCH;
     use ic_types::Height;

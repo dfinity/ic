@@ -1,6 +1,13 @@
-use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+use ic_metrics::{
+    buckets::decimal_buckets,
+    MetricsRegistry,
+};
 use ic_types::batch::QueryStats;
-use prometheus::{HistogramVec, IntCounter, IntGauge};
+use prometheus::{
+    HistogramVec,
+    IntCounter,
+    IntGauge,
+};
 
 pub(crate) const CRITICAL_ERROR_AGGREGATION_FAILURE: &str = "query_stats_aggregator_failure";
 

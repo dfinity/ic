@@ -1,7 +1,13 @@
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 use mac_address::mac_address::FormattedMacAddress;
-use serde::{Deserialize, Serialize};
-use std::net::{Ipv4Addr, Ipv6Addr};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use std::net::{
+    Ipv4Addr,
+    Ipv6Addr,
+};
 use std::path::PathBuf;
 use url::Url;
 

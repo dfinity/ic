@@ -1,5 +1,8 @@
 use ic_metrics::MetricsRegistry;
-use prometheus::{IntCounter, IntCounterVec};
+use prometheus::{
+    IntCounter,
+    IntCounterVec,
+};
 
 /// Labels for request errors
 pub(crate) const LABEL_BODY_RECEIVE_SIZE: &str = "body_receive_size";

@@ -32,15 +32,25 @@
 
 use anyhow::Result;
 use serde::Deserialize;
-use slog::{info, Logger};
+use slog::{
+    info,
+    Logger,
+};
 use std::collections::HashMap;
 use std::env;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{
+    Path,
+    PathBuf,
+};
 use std::process::Command;
 
 use ic_recovery::file_sync_helper::download_binary;
-use ic_system_test_driver::driver::{group::SystemTestGroup, test_env::TestEnv, test_env_api::*};
+use ic_system_test_driver::driver::{
+    group::SystemTestGroup,
+    test_env::TestEnv,
+    test_env_api::*,
+};
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::block_on;
 use ic_types::ReplicaVersion;

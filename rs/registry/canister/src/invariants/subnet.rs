@@ -1,16 +1,31 @@
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::{
+        BTreeMap,
+        HashSet,
+    },
     convert::TryFrom,
 };
 
 use crate::invariants::common::{
-    get_subnet_ids_from_snapshot, InvariantCheckError, RegistrySnapshot,
+    get_subnet_ids_from_snapshot,
+    InvariantCheckError,
+    RegistrySnapshot,
 };
 
-use ic_base_types::{NodeId, PrincipalId};
+use ic_base_types::{
+    NodeId,
+    PrincipalId,
+};
 use ic_nns_common::registry::MAX_NUM_SSH_KEYS;
-use ic_protobuf::registry::subnet::v1::{SubnetRecord, SubnetType};
-use ic_registry_keys::{make_node_record_key, make_subnet_record_key, SUBNET_RECORD_KEY_PREFIX};
+use ic_protobuf::registry::subnet::v1::{
+    SubnetRecord,
+    SubnetType,
+};
+use ic_registry_keys::{
+    make_node_record_key,
+    make_subnet_record_key,
+    SUBNET_RECORD_KEY_PREFIX,
+};
 use prost::Message;
 
 /// Subnet invariants hold iff:

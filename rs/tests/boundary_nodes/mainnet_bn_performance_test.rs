@@ -1,7 +1,17 @@
 use anyhow::Result;
-use ic_boundary_nodes_performance_test_common::{empty_setup, mainnet_query_calls_test};
-use ic_system_test_driver::{driver::group::SystemTestGroup, systest};
-use std::{env, net::Ipv6Addr, time::Duration};
+use ic_boundary_nodes_performance_test_common::{
+    empty_setup,
+    mainnet_query_calls_test,
+};
+use ic_system_test_driver::{
+    driver::group::SystemTestGroup,
+    systest,
+};
+use std::{
+    env,
+    net::Ipv6Addr,
+    time::Duration,
+};
 
 fn main() -> Result<()> {
     let ipv6 = env::var("BOUNDARY_NODE_IPV6").expect("environment variable is not provided");

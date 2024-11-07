@@ -22,13 +22,24 @@ end::catalog[] */
 
 use anyhow::Result;
 use ic_recovery::file_sync_helper::download_binary;
-use ic_system_test_driver::driver::{group::SystemTestGroup, test_env::TestEnv, test_env_api::*};
+use ic_system_test_driver::driver::{
+    group::SystemTestGroup,
+    test_env::TestEnv,
+    test_env_api::*,
+};
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::block_on;
 use ic_types::ReplicaVersion;
-use slog::{error, info, Logger};
+use slog::{
+    error,
+    info,
+    Logger,
+};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{
+    Path,
+    PathBuf,
+};
 use std::process::Command;
 
 const SANITY_CHECK_ARTIFACTS_COUNT: usize = 46;

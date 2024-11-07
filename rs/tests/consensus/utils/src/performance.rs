@@ -1,21 +1,39 @@
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::canister_agent::HasCanisterAgentCapability;
-use ic_system_test_driver::canister_api::{CallMode, GenericRequest};
+use ic_system_test_driver::canister_api::{
+    CallMode,
+    GenericRequest,
+};
 use ic_system_test_driver::canister_requests;
 use ic_system_test_driver::driver::test_env_api::IcNodeSnapshot;
 use ic_system_test_driver::driver::{
     test_env::TestEnv,
-    test_env_api::{HasTopologySnapshot, IcNodeContainer},
+    test_env_api::{
+        HasTopologySnapshot,
+        IcNodeContainer,
+    },
 };
 use ic_system_test_driver::generic_workload_engine;
 use ic_system_test_driver::generic_workload_engine::metrics::{
-    LoadTestMetrics, LoadTestMetricsProvider, RequestOutcome,
+    LoadTestMetrics,
+    LoadTestMetricsProvider,
+    RequestOutcome,
 };
-use ic_system_test_driver::util::{assert_canister_counter_with_retries, MetricsFetcher};
+use ic_system_test_driver::util::{
+    assert_canister_counter_with_retries,
+    MetricsFetcher,
+};
 
 use futures::future::join_all;
-use slog::{error, info, Logger};
-use std::time::{Duration, Instant};
+use slog::{
+    error,
+    info,
+    Logger,
+};
+use std::time::{
+    Duration,
+    Instant,
+};
 use tokio::runtime::Handle;
 
 const COUNTER_CANISTER_WAT: &str = "rs/tests/counter.wat";

@@ -1,12 +1,25 @@
 use ic_canonical_state_tree_hash::hash_tree::hash_lazy_tree;
 use ic_canonical_state_tree_hash_test_utils::{
-    as_lazy, assert_same_witness, build_witness_gen, crypto_hash_lazy_tree,
+    as_lazy,
+    assert_same_witness,
+    build_witness_gen,
+    crypto_hash_lazy_tree,
 };
-use ic_crypto_tree_hash::{flatmap, FlatMap, Label, LabeledTree};
+use ic_crypto_tree_hash::{
+    flatmap,
+    FlatMap,
+    Label,
+    LabeledTree,
+};
 use ic_crypto_tree_hash_test_utils::{
-    merge_path_into_labeled_tree, partial_trees_to_leaves_and_empty_subtrees,
+    merge_path_into_labeled_tree,
+    partial_trees_to_leaves_and_empty_subtrees,
 };
-use rand::{CryptoRng, Rng, SeedableRng};
+use rand::{
+    CryptoRng,
+    Rng,
+    SeedableRng,
+};
 use rand_chacha::ChaCha20Rng;
 use std::cmp::Ordering;
 

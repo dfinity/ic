@@ -5,10 +5,20 @@ mod transcript;
 
 pub mod types;
 
-pub use dealing::{create_dealing, verify_dealing, verify_resharing_dealing};
-pub use encryption::{create_forward_secure_key_pair, update_key_inplace_to_epoch, SecretKey};
+pub use dealing::{
+    create_dealing,
+    verify_dealing,
+    verify_resharing_dealing,
+};
+pub use encryption::{
+    create_forward_secure_key_pair,
+    update_key_inplace_to_epoch,
+    SecretKey,
+};
 pub use transcript::{
-    compute_threshold_signing_key, create_resharing_transcript, create_transcript,
+    compute_threshold_signing_key,
+    create_resharing_transcript,
+    create_transcript,
 };
 
 use ic_types::crypto::AlgorithmId;

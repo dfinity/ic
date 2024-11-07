@@ -1,9 +1,16 @@
 use criterion::*;
 use ic_crypto_internal_bls12_381_type::*;
-use ic_crypto_internal_threshold_sig_bls12381::{api::*, types::*};
+use ic_crypto_internal_threshold_sig_bls12381::{
+    api::*,
+    types::*,
+};
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use rand::{CryptoRng, Rng, RngCore};
+use rand::{
+    CryptoRng,
+    Rng,
+    RngCore,
+};
 
 const DOMAIN_HASH_MSG_TO_G1_BLS12381_SIG: &[u8; 43] =
     b"BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_";

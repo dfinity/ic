@@ -2,16 +2,31 @@
 //! This uses the core elliptic curve operations but expresses them in
 //! cryptographic terms.
 use crate::types::{
-    CombinedPublicKey, CombinedSignature, IndividualSignature, Pop, PublicKey, PublicKeyBytes,
+    CombinedPublicKey,
+    CombinedSignature,
+    IndividualSignature,
+    Pop,
+    PublicKey,
+    PublicKeyBytes,
     SecretKey,
 };
 
 use ic_crypto_internal_bls12_381_type::{
-    verify_bls_signature, G1Projective, G2Affine, G2Projective, Scalar,
+    verify_bls_signature,
+    G1Projective,
+    G2Affine,
+    G2Projective,
+    Scalar,
 };
 
-use ic_crypto_sha2::{Context, DomainSeparationContext};
-use rand::{CryptoRng, Rng};
+use ic_crypto_sha2::{
+    Context,
+    DomainSeparationContext,
+};
+use rand::{
+    CryptoRng,
+    Rng,
+};
 
 /// Domain separator for Hash-to-G1 to be used for signature generation in a
 /// scheme supporting proof of possession, as specified for the Proof of

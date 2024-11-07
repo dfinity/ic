@@ -1,41 +1,86 @@
 use async_trait::async_trait;
 use candid::candid_method;
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_canister_log::log;
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_cdk::{api::time, println};
-use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
+use ic_canisters_http_types::{
+    HttpRequest,
+    HttpResponse,
+    HttpResponseBuilder,
+};
+use ic_cdk::{
+    api::time,
+    println,
+};
+use ic_cdk_macros::{
+    init,
+    post_upgrade,
+    pre_upgrade,
+    query,
+    update,
+};
 use ic_cdk_timers::TimerId;
 use ic_nervous_system_clients::{
-    canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
+    canister_id_record::CanisterIdRecord,
+    canister_status::CanisterStatusResult,
     management_canister_client::ManagementCanisterClientImpl,
 };
 use ic_nervous_system_common::{
-    dfn_core_stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
-    serve_logs, serve_logs_v2, serve_metrics, NANO_SECONDS_PER_SECOND,
+    dfn_core_stable_mem_utils::{
+        BufferedStableMemReader,
+        BufferedStableMemWriter,
+    },
+    serve_logs,
+    serve_logs_v2,
+    serve_metrics,
+    NANO_SECONDS_PER_SECOND,
 };
 use ic_nervous_system_proto::pb::v1::{
-    GetTimersRequest, GetTimersResponse, ResetTimersRequest, ResetTimersResponse, Timers,
+    GetTimersRequest,
+    GetTimersResponse,
+    ResetTimersRequest,
+    ResetTimersResponse,
+    Timers,
 };
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
-use ic_nervous_system_runtime::{CdkRuntime, Runtime};
+use ic_nervous_system_runtime::{
+    CdkRuntime,
+    Runtime,
+};
 use ic_sns_root::{
-    logs::{ERROR, INFO},
+    logs::{
+        ERROR,
+        INFO,
+    },
     pb::v1::{
-        CanisterCallError, ListSnsCanistersRequest, ListSnsCanistersResponse,
-        ManageDappCanisterSettingsRequest, ManageDappCanisterSettingsResponse,
-        RegisterDappCanisterRequest, RegisterDappCanisterResponse, RegisterDappCanistersRequest,
-        RegisterDappCanistersResponse, SetDappControllersRequest, SetDappControllersResponse,
+        CanisterCallError,
+        ListSnsCanistersRequest,
+        ListSnsCanistersResponse,
+        ManageDappCanisterSettingsRequest,
+        ManageDappCanisterSettingsResponse,
+        RegisterDappCanisterRequest,
+        RegisterDappCanisterResponse,
+        RegisterDappCanistersRequest,
+        RegisterDappCanistersResponse,
+        SetDappControllersRequest,
+        SetDappControllersResponse,
         SnsRootCanister,
     },
     types::Environment,
-    GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse, LedgerCanisterClient,
+    GetSnsCanistersSummaryRequest,
+    GetSnsCanistersSummaryResponse,
+    LedgerCanisterClient,
 };
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 use prost::Message;
 use std::{
     cell::RefCell,
-    time::{Duration, SystemTime},
+    time::{
+        Duration,
+        SystemTime,
+    },
 };
 
 type CanisterRuntime = CdkRuntime;

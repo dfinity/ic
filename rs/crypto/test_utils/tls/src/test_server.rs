@@ -2,15 +2,29 @@ use crate::registry::REG_V1;
 use crate::temp_crypto_component_with_tls_keys;
 use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
-use ic_crypto_tls_interfaces::{AuthenticatedPeer, SomeOrAllNodes, TlsConfig};
+use ic_crypto_tls_interfaces::{
+    AuthenticatedPeer,
+    SomeOrAllNodes,
+    TlsConfig,
+};
 use ic_crypto_utils_tls::node_id_from_certificate_der;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_types::NodeId;
 use std::collections::BTreeSet;
 use std::sync::Arc;
-use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
-use tokio::net::{TcpListener, TcpStream};
+use tokio::io::{
+    AsyncBufReadExt,
+    AsyncRead,
+    AsyncReadExt,
+    AsyncWrite,
+    AsyncWriteExt,
+    BufReader,
+};
+use tokio::net::{
+    TcpListener,
+    TcpStream,
+};
 use tokio_rustls::TlsAcceptor;
 
 pub struct ServerBuilder {

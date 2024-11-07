@@ -3,10 +3,15 @@ use dfn_candid::candid;
 use dfn_core::api::PrincipalId;
 
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL;
-use ic_nns_test_utils::registry::{get_value, invariant_compliant_mutation_as_atomic_req};
+use ic_nns_test_utils::registry::{
+    get_value,
+    invariant_compliant_mutation_as_atomic_req,
+};
 use ic_nns_test_utils::{
     itest_helpers::{
-        forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
+        forward_call_via_universal_canister,
+        local_test_on_nns_subnet,
+        set_up_registry_canister,
         set_up_universal_canister,
     },
     registry::get_value_or_panic,
@@ -14,7 +19,10 @@ use ic_nns_test_utils::{
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_registry_keys::make_node_operator_record_key;
 use registry_canister::{
-    init::{RegistryCanisterInitPayload, RegistryCanisterInitPayloadBuilder},
+    init::{
+        RegistryCanisterInitPayload,
+        RegistryCanisterInitPayloadBuilder,
+    },
     mutations::do_add_node_operator::AddNodeOperatorPayload,
 };
 

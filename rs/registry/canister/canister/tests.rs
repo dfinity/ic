@@ -1,5 +1,8 @@
 use super::*;
-use candid_parser::utils::{service_equal, CandidSource};
+use candid_parser::utils::{
+    service_equal,
+    CandidSource,
+};
 
 /// This is NOT affected by
 ///

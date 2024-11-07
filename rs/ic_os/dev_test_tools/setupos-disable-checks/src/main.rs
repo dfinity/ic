@@ -1,13 +1,22 @@
 use std::fs::Permissions;
 use std::os::unix::fs::PermissionsExt;
-use std::path::{Path, PathBuf};
+use std::path::{
+    Path,
+    PathBuf,
+};
 
-use anyhow::{Context, Error};
+use anyhow::{
+    Context,
+    Error,
+};
 use clap::Parser;
 use tempfile::NamedTempFile;
 use tokio::fs;
 
-use partition_tools::{ext::ExtPartition, Partition};
+use partition_tools::{
+    ext::ExtPartition,
+    Partition,
+};
 
 const SERVICE_NAME: &str = "setupos-disable-checks";
 

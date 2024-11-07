@@ -1,11 +1,17 @@
 use super::*;
 
-use std::{str::FromStr, time::Duration};
+use std::{
+    str::FromStr,
+    time::Duration,
+};
 
 use anyhow::Error;
 
 use crate::{
-    snapshot::{Snapshot, Snapshotter},
+    snapshot::{
+        Snapshot,
+        Snapshotter,
+    },
     test_utils::create_fake_registry_client,
 };
 

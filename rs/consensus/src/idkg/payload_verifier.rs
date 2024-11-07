@@ -25,40 +25,77 @@ use super::payload_builder::IDkgPayloadError;
 use super::pre_signer::IDkgTranscriptBuilder;
 use super::signer::ThresholdSignatureBuilder;
 use super::utils::{
-    block_chain_cache, get_chain_key_config_if_enabled, BuildSignatureInputsError,
-    IDkgBlockReaderImpl, InvalidChainCacheError,
+    block_chain_cache,
+    get_chain_key_config_if_enabled,
+    BuildSignatureInputsError,
+    IDkgBlockReaderImpl,
+    InvalidChainCacheError,
 };
 use crate::idkg::metrics::timed_call;
-use crate::idkg::payload_builder::{create_data_payload_helper, create_summary_payload};
+use crate::idkg::payload_builder::{
+    create_data_payload_helper,
+    create_summary_payload,
+};
 use crate::idkg::utils::build_signature_inputs;
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::pool_reader::PoolReader;
-use ic_interfaces::crypto::{ThresholdEcdsaSigVerifier, ThresholdSchnorrSigVerifier};
-use ic_interfaces::validation::{ValidationError, ValidationResult};
+use ic_interfaces::crypto::{
+    ThresholdEcdsaSigVerifier,
+    ThresholdSchnorrSigVerifier,
+};
+use ic_interfaces::validation::{
+    ValidationError,
+    ValidationResult,
+};
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::{StateManager, StateManagerError};
-use ic_management_canister_types::{Payload, SignWithECDSAReply, SignWithSchnorrReply};
+use ic_interfaces_state_manager::{
+    StateManager,
+    StateManagerError,
+};
+use ic_management_canister_types::{
+    Payload,
+    SignWithECDSAReply,
+    SignWithSchnorrReply,
+};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithThresholdContext;
 use ic_replicated_state::ReplicatedState;
-use ic_types::consensus::idkg::common::{CombinedSignature, ThresholdSigInputsRef};
+use ic_types::consensus::idkg::common::{
+    CombinedSignature,
+    ThresholdSigInputsRef,
+};
 use ic_types::crypto::canister_threshold_sig::error::ThresholdSchnorrVerifyCombinedSigError;
 use ic_types::crypto::canister_threshold_sig::ThresholdSchnorrCombinedSignature;
 use ic_types::{
     batch::ValidationContext,
     consensus::{
-        idkg::{self, ecdsa, schnorr, IDkgBlockReader, TranscriptRef},
-        Block, BlockPayload, HasHeight,
+        idkg::{
+            self,
+            ecdsa,
+            schnorr,
+            IDkgBlockReader,
+            TranscriptRef,
+        },
+        Block,
+        BlockPayload,
+        HasHeight,
     },
     crypto::canister_threshold_sig::{
         error::{
-            IDkgVerifyInitialDealingsError, IDkgVerifyTranscriptError,
+            IDkgVerifyInitialDealingsError,
+            IDkgVerifyTranscriptError,
             ThresholdEcdsaVerifyCombinedSignatureError,
         },
-        idkg::{IDkgTranscript, IDkgTranscriptId, InitialIDkgDealings, SignedIDkgDealing},
+        idkg::{
+            IDkgTranscript,
+            IDkgTranscriptId,
+            InitialIDkgDealings,
+            SignedIDkgDealing,
+        },
         ThresholdEcdsaCombinedSignature,
     },
     registry::RegistryClientError,
-    Height, SubnetId,
+    Height,
+    SubnetId,
 };
 use prometheus::HistogramVec;
 use std::collections::BTreeMap;
@@ -605,11 +642,17 @@ mod test {
     use super::*;
     use crate::idkg::{
         payload_builder::{
-            resharing::{initiate_reshare_requests, update_completed_reshare_requests},
+            resharing::{
+                initiate_reshare_requests,
+                update_completed_reshare_requests,
+            },
             signatures::update_signature_agreements,
         },
         test_utils::*,
-        utils::{algorithm_for_key_id, get_context_request_id},
+        utils::{
+            algorithm_for_key_id,
+            get_context_request_id,
+        },
     };
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_dealings;
@@ -618,13 +661,18 @@ mod test {
     use ic_interfaces_state_manager::CertifiedStateSnapshot;
     use ic_logger::replica_logger::no_op_logger;
     use ic_management_canister_types::{
-        MasterPublicKeyId, Payload, SchnorrAlgorithm, SignWithECDSAReply,
+        MasterPublicKeyId,
+        Payload,
+        SchnorrAlgorithm,
+        SignWithECDSAReply,
     };
     use ic_test_utilities::crypto::CryptoReturningOk;
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
         consensus::idkg::{
-            common::PreSignatureRef, ecdsa::PreSignatureQuadrupleRef, CompletedSignature,
+            common::PreSignatureRef,
+            ecdsa::PreSignatureQuadrupleRef,
+            CompletedSignature,
         },
         crypto::AlgorithmId,
         messages::CallbackId,

@@ -1,18 +1,36 @@
-use std::{io::Write, ops::Range};
+use std::{
+    io::Write,
+    ops::Range,
+};
 
 use ic_logger::replica_logger::no_op_logger;
 use ic_replicated_state::{
-    page_map::{test_utils::base_only_storage_layout, TestPageAllocatorFileDescriptorImpl},
-    PageIndex, PageMap,
+    page_map::{
+        test_utils::base_only_storage_layout,
+        TestPageAllocatorFileDescriptorImpl,
+    },
+    PageIndex,
+    PageMap,
 };
-use ic_sys::{PageBytes, PAGE_SIZE};
+use ic_sys::{
+    PageBytes,
+    PAGE_SIZE,
+};
 use ic_types::Height;
 use libc::c_void;
-use nix::sys::mman::{mmap, MapFlags, ProtFlags};
+use nix::sys::mman::{
+    mmap,
+    MapFlags,
+    ProtFlags,
+};
 use std::sync::Arc;
 
 use crate::{
-    new_signal_handler_available, AccessKind, DirtyPageTracking, PageBitmap, SigsegvMemoryTracker,
+    new_signal_handler_available,
+    AccessKind,
+    DirtyPageTracking,
+    PageBitmap,
+    SigsegvMemoryTracker,
     MAX_PAGES_TO_MAP,
 };
 
@@ -743,7 +761,10 @@ mod random_ops {
         cell::RefCell,
         collections::BTreeSet,
         io,
-        mem::{self, MaybeUninit},
+        mem::{
+            self,
+            MaybeUninit,
+        },
         rc::Rc,
     };
 

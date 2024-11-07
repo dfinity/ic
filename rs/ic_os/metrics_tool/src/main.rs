@@ -2,10 +2,16 @@ use anyhow::Result;
 use clap::Parser;
 
 use std::fs::File;
-use std::io::{self, BufRead};
+use std::io::{
+    self,
+    BufRead,
+};
 use std::path::Path;
 
-use ic_metrics_tool::{Metric, MetricsWriter};
+use ic_metrics_tool::{
+    Metric,
+    MetricsWriter,
+};
 
 const INTERRUPT_FILTER: &str = "TLB shootdowns";
 const INTERRUPT_SOURCE: &str = "/proc/interrupts";

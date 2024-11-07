@@ -1,28 +1,46 @@
 use crate::deserialize_registry_value;
 use ic_interfaces_registry::{
-    RegistryClient, RegistryClientResult, RegistryClientVersionedResult, RegistryVersionedRecord,
+    RegistryClient,
+    RegistryClientResult,
+    RegistryClientVersionedResult,
+    RegistryVersionedRecord,
 };
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_protobuf::registry::{
     crypto::v1::X509PublicKeyCert,
-    subnet::v1::{CatchUpPackageContents, InitialNiDkgTranscriptRecord},
+    subnet::v1::{
+        CatchUpPackageContents,
+        InitialNiDkgTranscriptRecord,
+    },
 };
 use ic_registry_keys::make_crypto_node_key;
 use ic_registry_keys::{
-    make_catch_up_package_contents_key, make_crypto_threshold_signing_pubkey_key,
+    make_catch_up_package_contents_key,
+    make_crypto_threshold_signing_pubkey_key,
     make_crypto_tls_cert_key,
 };
 use ic_types::crypto::threshold_sig::{
     ni_dkg::{
-        config::{receivers::NiDkgReceivers, NiDkgThreshold},
-        NiDkgId, NiDkgTranscript,
+        config::{
+            receivers::NiDkgReceivers,
+            NiDkgThreshold,
+        },
+        NiDkgId,
+        NiDkgTranscript,
     },
     ThresholdSigPublicKey,
 };
 use ic_types::{
     crypto::KeyPurpose,
-    registry::{RegistryClientError, RegistryClientError::DecodeError},
-    NodeId, NumberOfNodes, PrincipalId, RegistryVersion, SubnetId,
+    registry::{
+        RegistryClientError,
+        RegistryClientError::DecodeError,
+    },
+    NodeId,
+    NumberOfNodes,
+    PrincipalId,
+    RegistryVersion,
+    SubnetId,
 };
 use std::collections::BTreeSet;
 use std::convert::TryFrom;
@@ -190,11 +208,17 @@ pub fn initial_ni_dkg_transcript_from_registry_record(
 }
 
 pub mod root_of_trust {
-    use crate::{crypto::CryptoRegistry, subnet::SubnetRegistry};
+    use crate::{
+        crypto::CryptoRegistry,
+        subnet::SubnetRegistry,
+    };
     use ic_base_types::RegistryVersion;
     use ic_interfaces_registry::RegistryClient;
     use ic_types::{
-        crypto::threshold_sig::{IcRootOfTrust, RootOfTrustProvider},
+        crypto::threshold_sig::{
+            IcRootOfTrust,
+            RootOfTrustProvider,
+        },
         registry::RegistryClientError,
     };
     use std::sync::Arc;

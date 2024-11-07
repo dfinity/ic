@@ -1,12 +1,18 @@
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::{
-    forward_secure::{PublicKeyWithPop, SecretKey},
+    forward_secure::{
+        PublicKeyWithPop,
+        SecretKey,
+    },
     Epoch,
 };
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::{
-    types::FsEncryptionSecretKey, *,
+    types::FsEncryptionSecretKey,
+    *,
 };
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
-    Dealing, FsEncryptionPop, FsEncryptionPublicKey,
+    Dealing,
+    FsEncryptionPop,
+    FsEncryptionPublicKey,
 };
 use ic_types::NumberOfNodes;
 use std::collections::BTreeMap;

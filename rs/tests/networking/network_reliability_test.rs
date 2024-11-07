@@ -21,30 +21,61 @@ use anyhow::Result;
 use ic_base_types::NodeId;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
-    canister_api::{CallMode, GenericRequest},
+    canister_api::{
+        CallMode,
+        GenericRequest,
+    },
     driver::{
         constants::DEVICE_NAME,
         group::SystemTestGroup,
-        ic::{AmountOfMemoryKiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
+        ic::{
+            AmountOfMemoryKiB,
+            InternetComputer,
+            NrOfVCPUs,
+            Subnet,
+            VmResources,
+        },
         test_env::TestEnv,
         test_env_api::{
-            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
-            NnsInstallationBuilder, SshSession,
+            HasPublicApiUrl,
+            HasTopologySnapshot,
+            IcNodeContainer,
+            IcNodeSnapshot,
+            NnsInstallationBuilder,
+            SshSession,
         },
     },
     systest,
     util::{
-        self, agent_observes_canister_module, assert_canister_counter_with_retries, block_on,
+        self,
+        agent_observes_canister_module,
+        assert_canister_counter_with_retries,
+        block_on,
         spawn_round_robin_workload_engine,
     },
 };
-use rand::distributions::{Distribution, Uniform};
+use rand::distributions::{
+    Distribution,
+    Uniform,
+};
 use rand_chacha::ChaCha8Rng;
-use slog::{debug, info, Logger};
+use slog::{
+    debug,
+    info,
+    Logger,
+};
 use std::cmp::max;
-use std::io::{self};
-use std::thread::{self, JoinHandle};
-use std::time::{Duration, Instant};
+use std::io::{
+    self,
+};
+use std::thread::{
+    self,
+    JoinHandle,
+};
+use std::time::{
+    Duration,
+    Instant,
+};
 
 const COUNTER_CANISTER_WAT: &str = "rs/tests/counter.wat";
 const CANISTER_METHOD: &str = "write";

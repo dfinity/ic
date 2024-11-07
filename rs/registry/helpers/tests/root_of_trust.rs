@@ -9,12 +9,16 @@ use ic_protobuf::types::v1::PrincipalId as PrincipalIdProto;
 use ic_protobuf::types::v1::SubnetId as SubnetIdProto;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_client_helpers::crypto::root_of_trust::{
-    RegistryRootOfTrustProvider, RegistryRootOfTrustProviderError,
+    RegistryRootOfTrustProvider,
+    RegistryRootOfTrustProviderError,
 };
 use ic_registry_keys::make_crypto_threshold_signing_pubkey_key;
 use ic_registry_keys::ROOT_SUBNET_ID_KEY;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_types::crypto::threshold_sig::{IcRootOfTrust, RootOfTrustProvider};
+use ic_types::crypto::threshold_sig::{
+    IcRootOfTrust,
+    RootOfTrustProvider,
+};
 use std::sync::Arc;
 
 const REGISTRY_VERSION_1: RegistryVersion = RegistryVersion::new(1);

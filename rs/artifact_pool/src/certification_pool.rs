@@ -1,16 +1,37 @@
 use crate::height_index::HeightIndex;
-use crate::metrics::{LABEL_POOL_TYPE, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED};
+use crate::metrics::{
+    LABEL_POOL_TYPE,
+    POOL_TYPE_UNVALIDATED,
+    POOL_TYPE_VALIDATED,
+};
 use crate::pool_common::HasLabel;
-use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
+use ic_config::artifact_pool::{
+    ArtifactPoolConfig,
+    PersistentPoolBackend,
+};
 use ic_interfaces::p2p::consensus::ArtifactWithOpt;
 use ic_interfaces::{
-    certification::{CertificationPool, ChangeAction, Mutations},
-    consensus_pool::{HeightIndexedPool, HeightRange},
+    certification::{
+        CertificationPool,
+        ChangeAction,
+        Mutations,
+    },
+    consensus_pool::{
+        HeightIndexedPool,
+        HeightRange,
+    },
     p2p::consensus::{
-        ArtifactTransmit, ArtifactTransmits, MutablePool, UnvalidatedArtifact, ValidatedPoolReader,
+        ArtifactTransmit,
+        ArtifactTransmits,
+        MutablePool,
+        UnvalidatedArtifact,
+        ValidatedPoolReader,
     },
 };
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{
+    warn,
+    ReplicaLogger,
+};
 use ic_metrics::MetricsRegistry;
 use ic_types::consensus::IsShare;
 use ic_types::crypto::crypto_hash;
@@ -18,13 +39,24 @@ use ic_types::NodeId;
 use ic_types::{
     artifact::CertificationMessageId,
     consensus::certification::{
-        Certification, CertificationMessage, CertificationMessageHash, CertificationShare,
+        Certification,
+        CertificationMessage,
+        CertificationMessageHash,
+        CertificationShare,
     },
     consensus::HasHeight,
     Height,
 };
-use prometheus::{labels, opts, IntCounter, IntGauge};
-use std::collections::{BTreeMap, HashSet};
+use prometheus::{
+    labels,
+    opts,
+    IntCounter,
+    IntGauge,
+};
+use std::collections::{
+    BTreeMap,
+    HashSet,
+};
 
 struct PerTypeMetrics {
     max_height: IntGauge,
@@ -505,20 +537,35 @@ mod tests {
     use super::*;
     use ic_interfaces::certification::CertificationPool;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_test_utilities_consensus::fake::{Fake, FakeSigner};
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_consensus::fake::{
+        Fake,
+        FakeSigner,
+    };
+    use ic_test_utilities_types::ids::{
+        node_test_id,
+        subnet_test_id,
+    };
     use ic_types::artifact::IdentifiableArtifact;
     use ic_types::time::UNIX_EPOCH;
     use ic_types::{
         consensus::certification::{
-            Certification, CertificationContent, CertificationMessage, CertificationShare,
+            Certification,
+            CertificationContent,
+            CertificationMessage,
+            CertificationShare,
         },
         crypto::{
-            threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
-            CryptoHash, Signed,
+            threshold_sig::ni_dkg::{
+                NiDkgId,
+                NiDkgTag,
+                NiDkgTargetSubnet,
+            },
+            CryptoHash,
+            Signed,
         },
         signature::*,
-        CryptoHashOfPartialState, Height,
+        CryptoHashOfPartialState,
+        Height,
     };
 
     fn gen_content() -> CertificationContent {

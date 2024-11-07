@@ -1,35 +1,96 @@
-use std::collections::{BTreeMap, BTreeSet};
-
-use crate::{routing::ResolveDestinationError, ApiType};
-use ic_base_types::{CanisterId, NumBytes, NumOsPages, NumSeconds, PrincipalId, SubnetId};
-use ic_cycles_account_manager::{
-    CyclesAccountManager, CyclesAccountManagerError, ResourceSaturation,
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
 };
-use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
-use ic_limits::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SIZE};
-use ic_logger::{info, ReplicaLogger};
+
+use crate::{
+    routing::ResolveDestinationError,
+    ApiType,
+};
+use ic_base_types::{
+    CanisterId,
+    NumBytes,
+    NumOsPages,
+    NumSeconds,
+    PrincipalId,
+    SubnetId,
+};
+use ic_cycles_account_manager::{
+    CyclesAccountManager,
+    CyclesAccountManagerError,
+    ResourceSaturation,
+};
+use ic_error_types::{
+    ErrorCode,
+    RejectCode,
+    UserError,
+};
+use ic_interfaces::execution_environment::{
+    HypervisorError,
+    HypervisorResult,
+};
+use ic_limits::{
+    LOG_CANISTER_OPERATION_CYCLES_THRESHOLD,
+    SMALL_APP_SUBNET_MAX_SIZE,
+};
+use ic_logger::{
+    info,
+    ReplicaLogger,
+};
 use ic_management_canister_types::{
-    CanisterStatusType, CreateCanisterArgs, InstallChunkedCodeArgs, InstallCodeArgsV2,
-    LoadCanisterSnapshotArgs, Method as Ic00Method, Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, UninstallCodeArgs, UpdateSettingsArgs, IC_00,
+    CanisterStatusType,
+    CreateCanisterArgs,
+    InstallChunkedCodeArgs,
+    InstallCodeArgsV2,
+    LoadCanisterSnapshotArgs,
+    Method as Ic00Method,
+    Payload,
+    ProvisionalCreateCanisterWithCyclesArgs,
+    UninstallCodeArgs,
+    UpdateSettingsArgs,
+    IC_00,
 };
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_replicated_state::canister_state::DEFAULT_QUEUE_CAPACITY;
-use ic_replicated_state::{CallOrigin, ExecutionTask, NetworkTopology, SystemState};
+use ic_replicated_state::{
+    CallOrigin,
+    ExecutionTask,
+    NetworkTopology,
+    SystemState,
+};
 use ic_types::{
-    messages::{CallContextId, CallbackId, RejectContext, Request, RequestMetadata, NO_DEADLINE},
+    messages::{
+        CallContextId,
+        CallbackId,
+        RejectContext,
+        Request,
+        RequestMetadata,
+        NO_DEADLINE,
+    },
     methods::Callback,
     time::CoarseTime,
-    CanisterLog, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, Time,
+    CanisterLog,
+    CanisterTimer,
+    ComputeAllocation,
+    Cycles,
+    MemoryAllocation,
+    NumInstructions,
+    Time,
 };
 use ic_wasm_types::WasmEngineError;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::str::FromStr;
 
-use crate::{cycles_balance_change::CyclesBalanceChange, routing, CERTIFIED_DATA_MAX_LENGTH};
+use crate::{
+    cycles_balance_change::CyclesBalanceChange,
+    routing,
+    CERTIFIED_DATA_MAX_LENGTH,
+};
 
 /// The information that canisters can see about their own status.
 #[derive(Copy, Clone, PartialEq, Debug, Deserialize, Serialize)]
@@ -1351,26 +1412,49 @@ pub struct RequestMetadataStats {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{BTreeMap, BTreeSet};
+    use std::collections::{
+        BTreeMap,
+        BTreeSet,
+    };
 
     use ic_base_types::NumSeconds;
-    use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig};
+    use ic_config::subnet_config::{
+        CyclesAccountManagerConfig,
+        SchedulerConfig,
+    };
     use ic_cycles_account_manager::CyclesAccountManager;
     use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
     use ic_registry_subnet_type::SubnetType;
-    use ic_replicated_state::{canister_state::system_state::CyclesUseCase, SystemState};
-    use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
+    use ic_replicated_state::{
+        canister_state::system_state::CyclesUseCase,
+        SystemState,
+    };
+    use ic_test_utilities_types::ids::{
+        canister_test_id,
+        subnet_test_id,
+        user_test_id,
+    };
     use ic_types::{
-        messages::{RequestMetadata, NO_DEADLINE},
+        messages::{
+            RequestMetadata,
+            NO_DEADLINE,
+        },
         time::CoarseTime,
-        CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
+        CanisterTimer,
+        ComputeAllocation,
+        Cycles,
+        MemoryAllocation,
+        NumBytes,
+        NumInstructions,
         Time,
     };
 
     use crate::{
         cycles_balance_change::CyclesBalanceChange,
         sandbox_safe_system_state::{
-            CanisterStatusView, SandboxSafeSystemState, SystemStateChanges,
+            CanisterStatusView,
+            SandboxSafeSystemState,
+            SystemStateChanges,
         },
     };
 

@@ -1,21 +1,43 @@
 #![allow(clippy::disallowed_types)]
 use std::ops::Range;
-use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
+use std::sync::atomic::{
+    AtomicBool,
+    Ordering::Relaxed,
+};
 use std::sync::Arc;
 
 use core::ops::Deref;
 use std::time::Instant;
 
-use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
+use ic_ledger_core::block::{
+    BlockIndex,
+    BlockType,
+    EncodedBlock,
+};
 use ic_ledger_hash_of::HashOf;
-use icp_ledger::{Block, TipOfChainRes};
+use icp_ledger::{
+    Block,
+    TipOfChainRes,
+};
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, trace, warn};
+use tracing::{
+    debug,
+    error,
+    info,
+    trace,
+    warn,
+};
 
 use crate::blocks::BlockStoreError;
-use crate::blocks::{Blocks, HashedBlock};
+use crate::blocks::{
+    Blocks,
+    HashedBlock,
+};
 use crate::blocks_access::BlocksAccess;
-use crate::certification::{verify_block_hash, VerificationInfo};
+use crate::certification::{
+    verify_block_hash,
+    VerificationInfo,
+};
 use crate::errors::Error;
 
 // If pruning is enabled, instead of pruning after each new block
@@ -427,13 +449,21 @@ mod test {
     use std::sync::Arc;
 
     use async_trait::async_trait;
-    use ic_ledger_core::block::{BlockType, EncodedBlock};
+    use ic_ledger_core::block::{
+        BlockType,
+        EncodedBlock,
+    };
     use ic_ledger_core::timestamp::TimeStamp;
     use ic_ledger_core::Tokens;
     use ic_ledger_hash_of::HashOf;
     use ic_types::PrincipalId;
     use icp_ledger::{
-        AccountIdentifier, Block, BlockIndex, Memo, TipOfChainRes, DEFAULT_TRANSFER_FEE,
+        AccountIdentifier,
+        Block,
+        BlockIndex,
+        Memo,
+        TipOfChainRes,
+        DEFAULT_TRANSFER_FEE,
     };
 
     use crate::blocks_access::BlocksAccess;

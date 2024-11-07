@@ -1,45 +1,104 @@
 use crate::common::EXPECTED_SNS_CREATION_FEE;
-use candid::{Decode, Encode, Nat};
+use candid::{
+    Decode,
+    Encode,
+    Nat,
+};
 use canister_test::Project;
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_icrc1_ledger::LedgerArgument;
-use ic_management_canister_types::{CanisterIdRecord, CanisterInstallMode};
-use ic_nervous_system_clients::canister_status::{CanisterStatusResultV2, CanisterStatusType};
-use ic_nervous_system_common::{ledger::compute_neuron_staking_subaccount, DEFAULT_TRANSFER_FEE};
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
+use ic_management_canister_types::{
+    CanisterIdRecord,
+    CanisterInstallMode,
+};
+use ic_nervous_system_clients::canister_status::{
+    CanisterStatusResultV2,
+    CanisterStatusType,
+};
+use ic_nervous_system_common::{
+    ledger::compute_neuron_staking_subaccount,
+    DEFAULT_TRANSFER_FEE,
+};
+use ic_nns_constants::{
+    GOVERNANCE_CANISTER_ID,
+    SNS_WASM_CANISTER_ID,
+};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    sns_wasm::{self, create_modified_sns_wasm, ensure_sns_wasm_gzipped},
+    sns_wasm::{
+        self,
+        create_modified_sns_wasm,
+        ensure_sns_wasm_gzipped,
+    },
     state_test_helpers,
-    state_test_helpers::{query, set_controllers, setup_nns_canisters, update, update_with_sender},
+    state_test_helpers::{
+        query,
+        set_controllers,
+        setup_nns_canisters,
+        update,
+        update_with_sender,
+    },
 };
 use ic_sns_governance::{
     pb::v1::{
         self as sns_governance_pb,
-        governance::{Mode, Version},
+        governance::{
+            Mode,
+            Version,
+        },
         proposal::Action,
-        GetRunningSnsVersionRequest, GetRunningSnsVersionResponse, Proposal,
-        ProposalDecisionStatus, UpgradeSnsToNextVersion,
+        GetRunningSnsVersionRequest,
+        GetRunningSnsVersionResponse,
+        Proposal,
+        ProposalDecisionStatus,
+        UpgradeSnsToNextVersion,
     },
     types::E8S_PER_TOKEN,
 };
 use ic_sns_init::pb::v1::{
-    sns_init_payload::InitialTokenDistribution, AirdropDistribution, DeveloperDistribution,
-    FractionalDeveloperVotingPower, NeuronDistribution, SnsInitPayload, SwapDistribution,
+    sns_init_payload::InitialTokenDistribution,
+    AirdropDistribution,
+    DeveloperDistribution,
+    FractionalDeveloperVotingPower,
+    NeuronDistribution,
+    SnsInitPayload,
+    SwapDistribution,
     TreasuryDistribution,
 };
-use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
-use ic_sns_wasm::pb::v1::{
-    GetNextSnsVersionRequest, InsertUpgradePathEntriesRequest, InsertUpgradePathEntriesResponse,
-    SnsCanisterIds, SnsCanisterType, SnsUpgrade, SnsWasm,
+use ic_sns_root::{
+    GetSnsCanistersSummaryRequest,
+    GetSnsCanistersSummaryResponse,
 };
-use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
+use ic_sns_wasm::pb::v1::{
+    GetNextSnsVersionRequest,
+    InsertUpgradePathEntriesRequest,
+    InsertUpgradePathEntriesResponse,
+    SnsCanisterIds,
+    SnsCanisterType,
+    SnsUpgrade,
+    SnsWasm,
+};
+use ic_state_machine_tests::{
+    StateMachine,
+    StateMachineBuilder,
+};
 use ic_types::Cycles;
 use icrc_ledger_types::icrc1::{
     account::Account,
-    transfer::{NumTokens, TransferArg, TransferError},
+    transfer::{
+        NumTokens,
+        TransferArg,
+        TransferError,
+    },
 };
-use std::{collections::BTreeMap, convert::TryInto, time::Duration};
+use std::{
+    collections::BTreeMap,
+    convert::TryInto,
+    time::Duration,
+};
 
 pub mod common;
 

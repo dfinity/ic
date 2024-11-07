@@ -1,30 +1,64 @@
 //! A pool of incoming `CertifiedStreamSlices` used by `XNetPayloadBuilderImpl`
 //! to build `XNetPayloads` without the need for I/O on the critical path.
 
-use crate::{max_message_index, ExpectedIndices};
+use crate::{
+    max_message_index,
+    ExpectedIndices,
+};
 use header::Header;
 use ic_canonical_state::LabelLike;
 use ic_crypto_tree_hash::{
-    first_sub_witness, flat_map::FlatMap, prune_witness, sub_witness, Label, LabeledTree,
-    TreeHashError, Witness,
+    first_sub_witness,
+    flat_map::FlatMap,
+    prune_witness,
+    sub_witness,
+    Label,
+    LabeledTree,
+    TreeHashError,
+    Witness,
 };
-use ic_interfaces_certified_stream_store::{CertifiedStreamStore, DecodeStreamError};
-use ic_logger::{info, ReplicaLogger};
+use ic_interfaces_certified_stream_store::{
+    CertifiedStreamStore,
+    DecodeStreamError,
+};
+use ic_logger::{
+    info,
+    ReplicaLogger,
+};
 use ic_metrics::{
-    buckets::{decimal_buckets, decimal_buckets_with_zero},
+    buckets::{
+        decimal_buckets,
+        decimal_buckets_with_zero,
+    },
     MetricsRegistry,
 };
 use ic_protobuf::messaging::xnet::v1;
-use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
+use ic_protobuf::proxy::{
+    ProtoProxy,
+    ProxyDecodeError,
+};
 use ic_types::{
     consensus::certification::Certification,
-    xnet::{CertifiedStreamSlice, StreamIndex},
-    CountBytes, RegistryVersion, SubnetId,
+    xnet::{
+        CertifiedStreamSlice,
+        StreamIndex,
+    },
+    CountBytes,
+    RegistryVersion,
+    SubnetId,
 };
 use messages::Messages;
-use prometheus::{Histogram, IntCounterVec, IntGauge};
+use prometheus::{
+    Histogram,
+    IntCounterVec,
+    IntGauge,
+};
 use std::collections::BTreeMap;
-use std::convert::{From, TryFrom, TryInto};
+use std::convert::{
+    From,
+    TryFrom,
+    TryInto,
+};
 use std::sync::Arc;
 
 const LABEL_STREAMS: &[u8] = b"streams";
@@ -117,9 +151,15 @@ use InvalidAppend::*;
 use InvalidSlice::*;
 
 mod header {
-    use super::{CertifiedSliceError, InvalidSlice};
+    use super::{
+        CertifiedSliceError,
+        InvalidSlice,
+    };
     use ic_canonical_state::encoding;
-    use ic_types::xnet::{StreamHeader, StreamIndex};
+    use ic_types::xnet::{
+        StreamHeader,
+        StreamIndex,
+    };
     use ic_types::CountBytes;
     use std::convert::TryFrom;
 

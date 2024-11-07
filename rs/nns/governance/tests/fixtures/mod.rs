@@ -4,45 +4,98 @@
 #![allow(unused_imports)]
 #![allow(dead_code)]
 use crate::fixtures::environment_fixture::{
-    CanisterCallReply, EnvironmentFixture, EnvironmentFixtureState,
+    CanisterCallReply,
+    EnvironmentFixture,
+    EnvironmentFixtureState,
 };
 use async_trait::async_trait;
 use candid::Encode;
 use comparable::Comparable;
 use futures::future::FutureExt;
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_crypto_sha2::Sha256;
-use ic_nervous_system_common::{cmc::CMC, ledger::IcpLedger, NervousSystemError};
+use ic_nervous_system_common::{
+    cmc::CMC,
+    ledger::IcpLedger,
+    NervousSystemError,
+};
 use ic_nns_common::{
-    pb::v1::{NeuronId, ProposalId},
+    pb::v1::{
+        NeuronId,
+        ProposalId,
+    },
     types::UpdateIcpXdrConversionRatePayload,
 };
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::{
     governance::{
-        governance_minting_account, neuron_subaccount, Environment, Governance,
-        HeapGrowthPotential, RngError,
+        governance_minting_account,
+        neuron_subaccount,
+        Environment,
+        Governance,
+        HeapGrowthPotential,
+        RngError,
     },
     governance_proto_builder::GovernanceProtoBuilder,
     pb::v1::{
         manage_neuron,
-        manage_neuron::{Command, Merge, MergeMaturity, NeuronIdOrSubaccount},
+        manage_neuron::{
+            Command,
+            Merge,
+            MergeMaturity,
+            NeuronIdOrSubaccount,
+        },
         manage_neuron_response,
         manage_neuron_response::MergeMaturityResponse,
         neuron,
         neuron::DissolveState,
-        proposal, ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError, ManageNeuron,
-        ManageNeuronResponse, Motion, NetworkEconomics, Neuron, NeuronType, NnsFunction, Proposal,
-        ProposalData, RewardEvent, Topic, Vote, XdrConversionRate as XdrConversionRatePb,
+        proposal,
+        ExecuteNnsFunction,
+        Governance as GovernanceProto,
+        GovernanceError,
+        ManageNeuron,
+        ManageNeuronResponse,
+        Motion,
+        NetworkEconomics,
+        Neuron,
+        NeuronType,
+        NnsFunction,
+        Proposal,
+        ProposalData,
+        RewardEvent,
+        Topic,
+        Vote,
+        XdrConversionRate as XdrConversionRatePb,
     },
 };
-use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
-use rand::{prelude::StdRng, RngCore, SeedableRng};
+use icp_ledger::{
+    AccountIdentifier,
+    Subaccount,
+    Tokens,
+};
+use rand::{
+    prelude::StdRng,
+    RngCore,
+    SeedableRng,
+};
 use rand_chacha::ChaCha20Rng;
 use std::{
-    collections::{BTreeMap, HashMap, VecDeque},
-    convert::{TryFrom, TryInto},
-    sync::{Arc, Mutex},
+    collections::{
+        BTreeMap,
+        HashMap,
+        VecDeque,
+    },
+    convert::{
+        TryFrom,
+        TryInto,
+    },
+    sync::{
+        Arc,
+        Mutex,
+    },
 };
 
 pub mod environment_fixture;

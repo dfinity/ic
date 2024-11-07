@@ -3,22 +3,40 @@ use ic_base_types::PrincipalId;
 use ic_crypto::get_master_public_key_from_transcript;
 use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_crypto_test_utils_canister_threshold_sigs::{
-    ecdsa::environment_with_sig_inputs, ecdsa_sig_share_from_each_receiver,
-    generate_ecdsa_presig_quadruple, generate_key_transcript,
-    random_crypto_component_not_in_receivers, random_node_id_excluding, random_receiver_id,
-    random_receiver_id_excluding, run_tecdsa_protocol, CanisterThresholdSigTestEnvironment,
-    IDkgParticipants, IntoBuilder,
+    ecdsa::environment_with_sig_inputs,
+    ecdsa_sig_share_from_each_receiver,
+    generate_ecdsa_presig_quadruple,
+    generate_key_transcript,
+    random_crypto_component_not_in_receivers,
+    random_node_id_excluding,
+    random_receiver_id,
+    random_receiver_id_excluding,
+    run_tecdsa_protocol,
+    CanisterThresholdSigTestEnvironment,
+    IDkgParticipants,
+    IntoBuilder,
 };
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_crypto_utils_canister_threshold_sig::derive_threshold_public_key;
-use ic_interfaces::crypto::{IDkgProtocol, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner};
+use ic_interfaces::crypto::{
+    IDkgProtocol,
+    ThresholdEcdsaSigVerifier,
+    ThresholdEcdsaSigner,
+};
 use ic_types::crypto::canister_threshold_sig::error::{
-    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaCreateSigShareError,
+    ThresholdEcdsaCombineSigSharesError,
+    ThresholdEcdsaCreateSigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscript;
-use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, ThresholdEcdsaSigInputs};
+use ic_types::crypto::canister_threshold_sig::{
+    ExtendedDerivationPath,
+    ThresholdEcdsaSigInputs,
+};
 use ic_types::crypto::AlgorithmId;
-use ic_types::{NodeId, Randomness};
+use ic_types::{
+    NodeId,
+    Randomness,
+};
 use maplit::hashset;
 use rand::prelude::*;
 use std::convert::TryFrom;
@@ -27,7 +45,10 @@ use std::sync::Arc;
 mod sign_share {
     use super::*;
     use proptest::array::uniform5;
-    use proptest::prelude::{any, Strategy};
+    use proptest::prelude::{
+        any,
+        Strategy,
+    };
     use rand_chacha::ChaCha20Rng;
     use std::collections::HashSet;
 
@@ -265,7 +286,12 @@ mod sign_share {
     #[test]
     fn should_be_able_to_sign_share_depending_on_which_transcript_is_retained() {
         use proptest::collection::vec;
-        use proptest::test_runner::{Config, RngAlgorithm, TestRng, TestRunner};
+        use proptest::test_runner::{
+            Config,
+            RngAlgorithm,
+            TestRng,
+            TestRunner,
+        };
         let rng = &mut reproducible_rng();
         let subnet_size = 4;
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);

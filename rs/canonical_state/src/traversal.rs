@@ -1,5 +1,8 @@
 use crate::lazy_tree_conversion::replicated_state_as_lazy_tree;
-use crate::visitor::{Control, Visitor};
+use crate::visitor::{
+    Control,
+    Visitor,
+};
 use ic_canonical_state_tree_hash::lazy_tree::LazyTree;
 use ic_replicated_state::ReplicatedState;
 
@@ -43,35 +46,73 @@ pub fn traverse<V: Visitor>(state: &ReplicatedState, mut v: V) -> V::Output {
 mod tests {
     use super::*;
     use crate::{
-        encoding::{encode_stream_header, types::SystemMetadata, CborProxyEncoder},
-        test_visitors::{NoopVisitor, TraceEntry as E, TracingVisitor},
+        encoding::{
+            encode_stream_header,
+            types::SystemMetadata,
+            CborProxyEncoder,
+        },
+        test_visitors::{
+            NoopVisitor,
+            TraceEntry as E,
+            TracingVisitor,
+        },
     };
-    use ic_base_types::{NumBytes, NumSeconds};
-    use ic_certification_version::{all_supported_versions, CertificationVersion::*};
-    use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
+    use ic_base_types::{
+        NumBytes,
+        NumSeconds,
+    };
+    use ic_certification_version::{
+        all_supported_versions,
+        CertificationVersion::*,
+    };
+    use ic_registry_routing_table::{
+        CanisterIdRange,
+        RoutingTable,
+    };
     use ic_registry_subnet_features::SubnetFeatures;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
         canister_state::{
-            execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
-            ExecutionState, ExportedFunctions, Global, NumWasmPages,
+            execution_state::{
+                CustomSection,
+                CustomSectionType,
+                WasmBinary,
+                WasmMetadata,
+            },
+            ExecutionState,
+            ExportedFunctions,
+            Global,
+            NumWasmPages,
         },
-        metadata_state::{ApiBoundaryNodeEntry, SubnetTopology},
+        metadata_state::{
+            ApiBoundaryNodeEntry,
+            SubnetTopology,
+        },
         page_map::PageMap,
         testing::ReplicatedStateTesting,
         Memory,
     };
     use ic_test_utilities_state::new_canister_state;
     use ic_test_utilities_types::ids::{
-        canister_test_id, node_test_id, subnet_test_id, user_test_id,
+        canister_test_id,
+        node_test_id,
+        subnet_test_id,
+        user_test_id,
     };
     use ic_types::{
-        xnet::{StreamFlags, StreamHeader},
-        CanisterId, Cycles,
+        xnet::{
+            StreamFlags,
+            StreamHeader,
+        },
+        CanisterId,
+        Cycles,
     };
     use ic_wasm_types::CanisterModule;
     use maplit::btreemap;
-    use std::collections::{BTreeSet, VecDeque};
+    use std::collections::{
+        BTreeSet,
+        VecDeque,
+    };
     use std::convert::TryFrom;
     use std::sync::Arc;
     use std::time::Duration;
@@ -341,7 +382,10 @@ mod tests {
     #[test]
     fn test_traverse_xnet_stream_header() {
         use ic_replicated_state::metadata_state::Stream;
-        use ic_types::xnet::{StreamIndex, StreamIndexedQueue};
+        use ic_types::xnet::{
+            StreamIndex,
+            StreamIndexedQueue,
+        };
 
         let header = StreamHeader::new(
             4.into(),
@@ -419,10 +463,24 @@ mod tests {
 
     #[test]
     fn test_traverse_ingress_history() {
-        use crate::subtree_visitor::{Pattern, SubtreeVisitor};
-        use ic_error_types::{ErrorCode, UserError};
-        use ic_test_utilities_types::ids::{message_test_id, subnet_test_id, user_test_id};
-        use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
+        use crate::subtree_visitor::{
+            Pattern,
+            SubtreeVisitor,
+        };
+        use ic_error_types::{
+            ErrorCode,
+            UserError,
+        };
+        use ic_test_utilities_types::ids::{
+            message_test_id,
+            subnet_test_id,
+            user_test_id,
+        };
+        use ic_types::ingress::{
+            IngressState,
+            IngressStatus,
+            WasmResult,
+        };
         use ic_types::time::UNIX_EPOCH;
 
         let user_id = user_test_id(1);

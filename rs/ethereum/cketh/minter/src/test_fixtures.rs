@@ -1,6 +1,9 @@
 use crate::lifecycle::init::InitArg;
 use crate::state::State;
-use candid::{Nat, Principal};
+use candid::{
+    Nat,
+    Principal,
+};
 
 pub fn expect_panic_with_message<F: FnOnce() -> R, R: std::fmt::Debug>(
     f: F,
@@ -48,21 +51,46 @@ pub fn valid_init_arg() -> InitArg {
 
 pub mod arb {
     use crate::checked_amount::CheckedAmountOf;
-    use crate::eth_rpc::{Block, Data, FeeHistory, FixedSizeData, Hash, LogEntry};
-    use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
+    use crate::eth_rpc::{
+        Block,
+        Data,
+        FeeHistory,
+        FixedSizeData,
+        Hash,
+        LogEntry,
+    };
+    use crate::eth_rpc_client::responses::{
+        TransactionReceipt,
+        TransactionStatus,
+    };
     use crate::numeric::BlockRangeInclusive;
     use evm_rpc_client::{
-        Hex, Hex20, Hex256, Hex32, HexByte, HttpOutcallError as EvmHttpOutcallError,
-        JsonRpcError as EvmJsonRpcError, Nat256, ProviderError as EvmProviderError,
-        RpcError as EvmRpcError, ValidationError as EvmValidationError,
+        Hex,
+        Hex20,
+        Hex256,
+        Hex32,
+        HexByte,
+        HttpOutcallError as EvmHttpOutcallError,
+        JsonRpcError as EvmJsonRpcError,
+        Nat256,
+        ProviderError as EvmProviderError,
+        RpcError as EvmRpcError,
+        ValidationError as EvmValidationError,
     };
     use ic_cdk::api::call::RejectionCode;
     use ic_ethereum_types::Address;
     use proptest::{
-        array::{uniform20, uniform32},
+        array::{
+            uniform20,
+            uniform32,
+        },
         collection::vec,
         option,
-        prelude::{any, Just, Strategy},
+        prelude::{
+            any,
+            Just,
+            Strategy,
+        },
         prop_oneof,
     };
 

@@ -1,7 +1,10 @@
 //! Tests for Local CSP vault
 
 use crate::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
-use crate::secret_key_store::test_utils::{make_key_id, make_secret_key};
+use crate::secret_key_store::test_utils::{
+    make_key_id,
+    make_secret_key,
+};
 use crate::secret_key_store::SecretKeyStore;
 use crate::vault::local_csp_vault::ProtoSecretKeyStore;
 use crate::LocalCspVault;

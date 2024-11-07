@@ -1,11 +1,23 @@
 use ic_crypto_sha2::Sha256;
-use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
+use ic_crypto_tree_hash::{
+    LabeledTree,
+    MixedHashTree,
+};
 use ic_interfaces_certified_stream_store::{
-    CertifiedStreamStore, DecodeStreamError, EncodeStreamError,
+    CertifiedStreamStore,
+    DecodeStreamError,
+    EncodeStreamError,
 };
 use ic_interfaces_state_manager::{
-    CertificationScope, CertifiedStateSnapshot, Labeled, PermanentStateHashError::*,
-    StateHashError, StateManager, StateManagerError, StateManagerResult, StateReader,
+    CertificationScope,
+    CertifiedStateSnapshot,
+    Labeled,
+    PermanentStateHashError::*,
+    StateHashError,
+    StateManager,
+    StateManagerError,
+    StateManagerResult,
+    StateReader,
     TransientStateHashError::*,
 };
 use ic_interfaces_state_manager_mocks::MockStateManager;
@@ -15,18 +27,49 @@ use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::{
     batch::BatchSummary,
     consensus::certification::Certification,
-    crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
-    crypto::{CryptoHash, CryptoHashOf},
-    messages::{Request, RequestOrResponse, Response},
-    xnet::{
-        CertifiedStreamSlice, RejectReason, RejectSignal, StreamFlags, StreamHeader, StreamIndex,
-        StreamIndexedQueue, StreamSlice,
+    crypto::threshold_sig::ni_dkg::{
+        NiDkgId,
+        NiDkgTag,
+        NiDkgTargetSubnet,
     },
-    CryptoHashOfPartialState, CryptoHashOfState, Height, RegistryVersion, SubnetId,
+    crypto::{
+        CryptoHash,
+        CryptoHashOf,
+    },
+    messages::{
+        Request,
+        RequestOrResponse,
+        Response,
+    },
+    xnet::{
+        CertifiedStreamSlice,
+        RejectReason,
+        RejectSignal,
+        StreamFlags,
+        StreamHeader,
+        StreamIndex,
+        StreamIndexedQueue,
+        StreamSlice,
+    },
+    CryptoHashOfPartialState,
+    CryptoHashOfState,
+    Height,
+    RegistryVersion,
+    SubnetId,
 };
-use serde::{Deserialize, Serialize};
-use std::collections::{BTreeSet, VecDeque};
-use std::sync::{Arc, Barrier, RwLock};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use std::collections::{
+    BTreeSet,
+    VecDeque,
+};
+use std::sync::{
+    Arc,
+    Barrier,
+    RwLock,
+};
 
 #[derive(Clone)]
 struct Snapshot {
@@ -603,7 +646,11 @@ pub fn encode_certified_stream_slice(
 ) -> CertifiedStreamSlice {
     use ic_types::{
         consensus::certification::CertificationContent,
-        crypto::{CombinedThresholdSig, CombinedThresholdSigOf, Signed},
+        crypto::{
+            CombinedThresholdSig,
+            CombinedThresholdSigOf,
+            Signed,
+        },
         signature::ThresholdSignature,
     };
 

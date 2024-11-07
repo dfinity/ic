@@ -1,12 +1,35 @@
-use bitcoincore_rpc::{bitcoin::Address, Auth, Client, RpcApi};
-use candid::{CandidType, Encode, Principal};
-use ic_btc_interface::{Config, Network};
+use bitcoincore_rpc::{
+    bitcoin::Address,
+    Auth,
+    Client,
+    RpcApi,
+};
+use candid::{
+    CandidType,
+    Encode,
+    Principal,
+};
+use ic_btc_interface::{
+    Config,
+    Network,
+};
 use ic_config::execution_environment::BITCOIN_TESTNET_CANISTER_ID;
 use ic_nns_constants::ROOT_CANISTER_ID;
-use pocket_ic::{update_candid, PocketIc, PocketIcBuilder};
-use std::fs::{create_dir, File};
+use pocket_ic::{
+    update_candid,
+    PocketIc,
+    PocketIcBuilder,
+};
+use std::fs::{
+    create_dir,
+    File,
+};
 use std::io::Write;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::{
+    IpAddr,
+    Ipv4Addr,
+    SocketAddr,
+};
 use std::process::Command;
 use std::str::FromStr;
 use std::time::SystemTime;

@@ -8,21 +8,37 @@
 //! We vary the pool size count between 15,000 and 105,000, with 10,000
 //! increments.
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{
+    criterion_group,
+    criterion_main,
+    Criterion,
+};
 use ic_artifact_pool::ingress_pool::IngressPoolImpl;
-use ic_ingress_manager::{IngressManager, RandomStateKind};
+use ic_ingress_manager::{
+    IngressManager,
+    RandomStateKind,
+};
 use ic_interfaces::{
     ingress_manager::IngressSelector,
-    ingress_pool::{ChangeAction, IngressPool, Mutations},
-    p2p::consensus::{MutablePool, UnvalidatedArtifact},
+    ingress_pool::{
+        ChangeAction,
+        IngressPool,
+        Mutations,
+    },
+    p2p::consensus::{
+        MutablePool,
+        UnvalidatedArtifact,
+    },
     time_source::TimeSource,
 };
 use ic_interfaces_mocks::consensus_pool::MockConsensusTime;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_limits::{
-    MAX_BLOCK_PAYLOAD_SIZE, MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET,
-    MAX_INGRESS_MESSAGES_PER_BLOCK, MAX_INGRESS_TTL,
+    MAX_BLOCK_PAYLOAD_SIZE,
+    MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET,
+    MAX_INGRESS_MESSAGES_PER_BLOCK,
+    MAX_INGRESS_TTL,
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
@@ -30,27 +46,51 @@ use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_keys::make_subnet_record_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities::{
-    artifact_pool_config::with_test_pool_config, crypto::temp_crypto_component_with_fake_registry,
+    artifact_pool_config::with_test_pool_config,
+    crypto::temp_crypto_component_with_fake_registry,
     cycles_account_manager::CyclesAccountManagerBuilder,
 };
 use ic_test_utilities_registry::test_subnet_record;
-use ic_test_utilities_state::{CanisterStateBuilder, MockIngressHistory, ReplicatedStateBuilder};
+use ic_test_utilities_state::{
+    CanisterStateBuilder,
+    MockIngressHistory,
+    ReplicatedStateBuilder,
+};
 use ic_test_utilities_time::FastForwardTimeSource;
 use ic_test_utilities_types::{
-    ids::{node_test_id, subnet_test_id},
+    ids::{
+        node_test_id,
+        subnet_test_id,
+    },
     messages::SignedIngressBuilder,
 };
 use ic_types::{
     artifact::IngressMessageId,
-    batch::{IngressPayload, ValidationContext},
+    batch::{
+        IngressPayload,
+        ValidationContext,
+    },
     ingress::IngressStatus,
     malicious_flags::MaliciousFlags,
-    CanisterId, Cycles, Height, NumBytes, PrincipalId, RegistryVersion, SubnetId, Time,
+    CanisterId,
+    Cycles,
+    Height,
+    NumBytes,
+    PrincipalId,
+    RegistryVersion,
+    SubnetId,
+    Time,
 };
-use pprof::criterion::{Output, PProfProfiler};
+use pprof::criterion::{
+    Output,
+    PProfProfiler,
+};
 use std::{
     collections::HashSet,
-    sync::{Arc, RwLock},
+    sync::{
+        Arc,
+        RwLock,
+    },
     time::Duration,
 };
 

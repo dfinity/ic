@@ -5,8 +5,15 @@ use crate::common::utils::test_identity;
 use crate::common::utils::wait_for_rosetta_to_sync_up_to_block;
 use ic_agent::identity::BasicIdentity;
 use ic_agent::Identity;
-use ic_icrc1_test_utils::{minter_identity, valid_transactions_strategy, DEFAULT_TRANSFER_FEE};
-use ic_icrc1_test_utils::{ArgWithCaller, LedgerEndpointArg};
+use ic_icrc1_test_utils::{
+    minter_identity,
+    valid_transactions_strategy,
+    DEFAULT_TRANSFER_FEE,
+};
+use ic_icrc1_test_utils::{
+    ArgWithCaller,
+    LedgerEndpointArg,
+};
 use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
 use proptest::strategy::Strategy;

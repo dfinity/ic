@@ -1,25 +1,60 @@
-use super::{get_btc_address::init_ecdsa_public_key, get_withdrawal_account::compute_subaccount};
+use super::{
+    get_btc_address::init_ecdsa_public_key,
+    get_withdrawal_account::compute_subaccount,
+};
 use crate::logs::P0;
 use crate::logs::P1;
 use crate::management::fetch_withdrawal_alerts;
-use crate::memo::{BurnMemo, Status};
-use crate::state::ReimbursementReason;
-use crate::tasks::{schedule_now, TaskType};
-use crate::{
-    address::{account_to_bitcoin_address, BitcoinAddress, ParseAddressError},
-    guard::{retrieve_btc_guard, GuardError},
-    state::{self, mutate_state, read_state, RetrieveBtcRequest},
+use crate::memo::{
+    BurnMemo,
+    Status,
 };
-use candid::{CandidType, Deserialize, Nat, Principal};
+use crate::state::ReimbursementReason;
+use crate::tasks::{
+    schedule_now,
+    TaskType,
+};
+use crate::{
+    address::{
+        account_to_bitcoin_address,
+        BitcoinAddress,
+        ParseAddressError,
+    },
+    guard::{
+        retrieve_btc_guard,
+        GuardError,
+    },
+    state::{
+        self,
+        mutate_state,
+        read_state,
+        RetrieveBtcRequest,
+    },
+};
+use candid::{
+    CandidType,
+    Deserialize,
+    Nat,
+    Principal,
+};
 use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_ckbtc_kyt::Error as KytError;
-use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
+use icrc_ledger_client_cdk::{
+    CdkRuntime,
+    ICRC1Client,
+};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::account::Subaccount;
 use icrc_ledger_types::icrc1::transfer::Memo;
-use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
-use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
+use icrc_ledger_types::icrc1::transfer::{
+    TransferArg,
+    TransferError,
+};
+use icrc_ledger_types::icrc2::transfer_from::{
+    TransferFromArgs,
+    TransferFromError,
+};
 use num_traits::cast::ToPrimitive;
 use std::cmp::max;
 

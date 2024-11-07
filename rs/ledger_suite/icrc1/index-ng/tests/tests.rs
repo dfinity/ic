@@ -1,34 +1,84 @@
 use crate::common::{
-    account, default_archive_options, index_ng_wasm, install_index_ng, install_ledger,
-    ledger_get_all_blocks, ledger_wasm, wait_until_sync_is_completed, ARCHIVE_TRIGGER_THRESHOLD,
-    FEE, MAX_BLOCKS_FROM_ARCHIVE,
+    account,
+    default_archive_options,
+    index_ng_wasm,
+    install_index_ng,
+    install_ledger,
+    ledger_get_all_blocks,
+    ledger_wasm,
+    wait_until_sync_is_completed,
+    ARCHIVE_TRIGGER_THRESHOLD,
+    FEE,
+    MAX_BLOCKS_FROM_ARCHIVE,
 };
-use candid::{Decode, Encode, Nat, Principal};
+use candid::{
+    Decode,
+    Encode,
+    Nat,
+    Principal,
+};
 use ic_agent::identity::Identity;
-use ic_base_types::{CanisterId, PrincipalId};
-use ic_icrc1_index_ng::{
-    FeeCollectorRanges, GetAccountTransactionsArgs, GetAccountTransactionsResponse,
-    GetAccountTransactionsResult, GetBlocksResponse, IndexArg, InitArg as IndexInitArg,
-    ListSubaccountsArgs, TransactionWithId, DEFAULT_MAX_BLOCKS_PER_RESPONSE,
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
 };
-use ic_icrc1_ledger::{ChangeFeeCollector, LedgerArgument, UpgradeArgs as LedgerUpgradeArgs};
+use ic_icrc1_index_ng::{
+    FeeCollectorRanges,
+    GetAccountTransactionsArgs,
+    GetAccountTransactionsResponse,
+    GetAccountTransactionsResult,
+    GetBlocksResponse,
+    IndexArg,
+    InitArg as IndexInitArg,
+    ListSubaccountsArgs,
+    TransactionWithId,
+    DEFAULT_MAX_BLOCKS_PER_RESPONSE,
+};
+use ic_icrc1_ledger::{
+    ChangeFeeCollector,
+    LedgerArgument,
+    UpgradeArgs as LedgerUpgradeArgs,
+};
 use ic_icrc1_test_utils::{
-    minter_identity, valid_transactions_strategy, ArgWithCaller, LedgerEndpointArg,
+    minter_identity,
+    valid_transactions_strategy,
+    ArgWithCaller,
+    LedgerEndpointArg,
 };
 use ic_rosetta_test_utils::test_http_request_decoding_quota;
 use ic_state_machine_tests::StateMachine;
-use icrc_ledger_types::icrc1::account::{Account, Subaccount};
-use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError};
-use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
+use icrc_ledger_types::icrc1::account::{
+    Account,
+    Subaccount,
+};
+use icrc_ledger_types::icrc1::transfer::{
+    BlockIndex,
+    TransferArg,
+    TransferError,
+};
+use icrc_ledger_types::icrc2::approve::{
+    ApproveArgs,
+    ApproveError,
+};
 use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
-use icrc_ledger_types::icrc3::transactions::{Mint, Transaction, Transfer};
+use icrc_ledger_types::icrc3::transactions::{
+    Mint,
+    Transaction,
+    Transfer,
+};
 use num_traits::cast::ToPrimitive;
-use proptest::test_runner::{Config as TestRunnerConfig, TestRunner};
+use proptest::test_runner::{
+    Config as TestRunnerConfig,
+    TestRunner,
+};
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use std::time::{
+    Duration,
+    SystemTime,
+};
 
 mod common;
 

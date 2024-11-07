@@ -3,17 +3,27 @@ use ic_crypto_test_utils_local_csp_vault::MockLocalCspVault;
 use proptest::collection::vec;
 use proptest::prelude::any;
 use proptest::result::maybe_err;
-use proptest::{prop_assert_eq, proptest};
+use proptest::{
+    prop_assert_eq,
+    proptest,
+};
 use std::sync::Arc;
 
 mod common;
 use common::proptest_config_for_delegation;
 use ic_crypto_internal_csp_proptest_utils::{
-    arb_csp_signature, arb_csp_tls_keygen_error, arb_csp_tls_sign_error, arb_key_id, arb_node_id,
+    arb_csp_signature,
+    arb_csp_tls_keygen_error,
+    arb_csp_tls_sign_error,
+    arb_key_id,
+    arb_node_id,
 };
 use ic_crypto_test_utils_keys::public_keys::valid_tls_certificate_and_validation_time;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
-use proptest::{prelude::Just, result::maybe_err_weighted};
+use proptest::{
+    prelude::Just,
+    result::maybe_err_weighted,
+};
 
 proptest! {
     #![proptest_config(proptest_config_for_delegation())]

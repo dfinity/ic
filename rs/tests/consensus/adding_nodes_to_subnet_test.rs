@@ -18,10 +18,16 @@ end::catalog[] */
 use anyhow::Result;
 use candid::Principal;
 use canister_test::Canister;
-use ic_base_types::{NodeId, SubnetId};
+use ic_base_types::{
+    NodeId,
+    SubnetId,
+};
 use ic_consensus_system_test_utils::rw_message::{
-    can_read_msg, can_read_msg_with_retries, cert_state_makes_progress_with_retries,
-    install_nns_and_check_progress, store_message,
+    can_read_msg,
+    can_read_msg_with_retries,
+    cert_state_makes_progress_with_retries,
+    install_nns_and_check_progress,
+    store_message,
 };
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance_api::pb::v1::NnsFunction;
@@ -30,17 +36,33 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
         group::SystemTestGroup,
-        ic::{InternetComputer, Subnet},
+        ic::{
+            InternetComputer,
+            Subnet,
+        },
         test_env::TestEnv,
-        test_env_api::{SubnetSnapshot, *},
+        test_env_api::{
+            SubnetSnapshot,
+            *,
+        },
     },
-    nns::{submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed},
+    nns::{
+        submit_external_proposal_with_test_id,
+        vote_execute_proposal_assert_executed,
+    },
     systest,
-    util::{block_on, runtime_from_url},
+    util::{
+        block_on,
+        runtime_from_url,
+    },
 };
 use ic_types::Height;
 use registry_canister::mutations::do_add_nodes_to_subnet::AddNodesToSubnetPayload;
-use slog::{info, warn, Logger};
+use slog::{
+    info,
+    warn,
+    Logger,
+};
 
 const DKG_INTERVAL: u64 = 9;
 const INITIAL_APP_NODES_COUNT: usize = 1;

@@ -1,6 +1,13 @@
-use std::{cell::RefCell, ops::Deref};
+use std::{
+    cell::RefCell,
+    ops::Deref,
+};
 
-use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap, StableVec};
+use ic_stable_structures::{
+    DefaultMemoryImpl,
+    StableBTreeMap,
+    StableVec,
+};
 
 // This canister uses conflicting stores in stable memory to avoid measuring
 // the overhead of the `MemoryManager`.  Only one structure can actually be

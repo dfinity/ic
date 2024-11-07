@@ -1,8 +1,19 @@
-use candid::{CandidType, Nat, Principal};
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use candid::{
+    CandidType,
+    Nat,
+    Principal,
+};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+    HashMap,
+};
 use std::{
     fmt,
-    fmt::{Display, Formatter},
+    fmt::{
+        Display,
+        Formatter,
+    },
 };
 
 #[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, CandidType)]

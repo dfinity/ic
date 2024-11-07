@@ -2,7 +2,8 @@ use std::time::Duration;
 
 use ic_consensus_system_test_utils::upgrade::bless_public_replica_version;
 use ic_system_test_driver::driver::test_env_api::{
-    GetFirstHealthyNodeSnapshot, HasTopologySnapshot,
+    GetFirstHealthyNodeSnapshot,
+    HasTopologySnapshot,
 };
 use slog::info;
 use tokio::runtime::Handle;

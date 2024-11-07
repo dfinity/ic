@@ -18,24 +18,44 @@
 //! become finalized.
 use crate::consensus::{
     batch_delivery::deliver_batches,
-    metrics::{BatchStats, BlockStats, FinalizerMetrics},
+    metrics::{
+        BatchStats,
+        BlockStats,
+        FinalizerMetrics,
+    },
 };
 use ic_consensus_utils::{
-    crypto::ConsensusCrypto, membership::Membership, pool_reader::PoolReader,
+    crypto::ConsensusCrypto,
+    membership::Membership,
+    pool_reader::PoolReader,
 };
 use ic_interfaces::{
     ingress_manager::IngressSelector,
-    messaging::{MessageRouting, MessageRoutingError},
+    messaging::{
+        MessageRouting,
+        MessageRoutingError,
+    },
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{debug, trace, ReplicaLogger};
+use ic_logger::{
+    debug,
+    trace,
+    ReplicaLogger,
+};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
-    consensus::{FinalizationContent, FinalizationShare, HashedBlock},
+    consensus::{
+        FinalizationContent,
+        FinalizationShare,
+        HashedBlock,
+    },
     replica_config::ReplicaConfig,
     Height,
 };
-use std::{cell::RefCell, sync::Arc};
+use std::{
+    cell::RefCell,
+    sync::Arc,
+};
 
 pub struct Finalizer {
     pub(crate) replica_config: ReplicaConfig,
@@ -235,28 +255,57 @@ mod tests {
     //! Finalizer unit tests
     use super::*;
     use crate::consensus::batch_delivery::generate_responses_to_setup_initial_dkg_calls;
-    use ic_consensus_mocks::{dependencies, dependencies_with_subnet_params, Dependencies};
+    use ic_consensus_mocks::{
+        dependencies,
+        dependencies_with_subnet_params,
+        Dependencies,
+    };
     use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests;
     use ic_logger::replica_logger::no_op_logger;
     use ic_management_canister_types::SetupInitialDKGResponse;
     use ic_metrics::MetricsRegistry;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
-        metadata_state::subnet_call_context_manager::SetupInitialDkgContext, SystemMetadata,
+        metadata_state::subnet_call_context_manager::SetupInitialDkgContext,
+        SystemMetadata,
     };
     use ic_test_utilities::{
-        ingress_selector::FakeIngressSelector, message_routing::FakeMessageRouting,
+        ingress_selector::FakeIngressSelector,
+        message_routing::FakeMessageRouting,
     };
     use ic_test_utilities_registry::SubnetRecordBuilder;
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::{
+        node_test_id,
+        subnet_test_id,
+    };
     use ic_types::{
-        consensus::{HasHeight, HashedBlock},
-        crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet},
-        messages::{CallbackId, Payload, Request, NO_DEADLINE},
-        CanisterId, Cycles, PrincipalId, RegistryVersion, SubnetId,
+        consensus::{
+            HasHeight,
+            HashedBlock,
+        },
+        crypto::threshold_sig::ni_dkg::{
+            NiDkgId,
+            NiDkgTag,
+            NiDkgTargetId,
+            NiDkgTargetSubnet,
+        },
+        messages::{
+            CallbackId,
+            Payload,
+            Request,
+            NO_DEADLINE,
+        },
+        CanisterId,
+        Cycles,
+        PrincipalId,
+        RegistryVersion,
+        SubnetId,
     };
     use std::{
-        collections::{BTreeMap, BTreeSet},
+        collections::{
+            BTreeMap,
+            BTreeSet,
+        },
         str::FromStr,
         sync::Arc,
     };

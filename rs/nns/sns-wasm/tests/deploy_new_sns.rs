@@ -1,26 +1,48 @@
 use crate::common::{
-    get_deployed_sns_by_proposal_id_unchecked, set_up_state_machine_with_nns,
+    get_deployed_sns_by_proposal_id_unchecked,
+    set_up_state_machine_with_nns,
     EXPECTED_SNS_CREATION_FEE,
 };
 use canister_test::Wasm;
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_nervous_system_clients::canister_status::CanisterStatusType::Running;
 use ic_nervous_system_common::ONE_TRILLION;
 use ic_nervous_system_proto::pb::v1::Canister as NervousSystemProtoCanister;
 use ic_nns_constants::{
-    GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    GOVERNANCE_CANISTER_ID,
+    ROOT_CANISTER_ID,
+    SNS_WASM_CANISTER_ID,
     SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET,
 };
 use ic_nns_test_utils::{
     sns_wasm,
-    state_test_helpers::{self, set_controllers, set_up_universal_canister, update_with_sender},
+    state_test_helpers::{
+        self,
+        set_controllers,
+        set_up_universal_canister,
+        update_with_sender,
+    },
 };
-use ic_sns_init::pb::v1::{DappCanisters, SnsInitPayload};
-use ic_sns_root::{CanisterSummary, GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
+use ic_sns_init::pb::v1::{
+    DappCanisters,
+    SnsInitPayload,
+};
+use ic_sns_root::{
+    CanisterSummary,
+    GetSnsCanistersSummaryRequest,
+    GetSnsCanistersSummaryResponse,
+};
 use ic_sns_wasm::{
     pb::v1::{
-        DappCanistersTransferResult, DeployNewSnsResponse, SnsCanisterIds, SnsCanisterType,
-        SnsWasm, SnsWasmError,
+        DappCanistersTransferResult,
+        DeployNewSnsResponse,
+        SnsCanisterIds,
+        SnsCanisterType,
+        SnsWasm,
+        SnsWasmError,
     },
     sns_wasm::SNS_CANISTER_COUNT_AT_INSTALL,
 };

@@ -20,63 +20,130 @@ pub mod neuron_response;
 pub mod pending_proposals_response;
 pub mod proposal_info_response;
 
-use candid::{Decode, Encode};
+use candid::{
+    Decode,
+    Encode,
+};
 use core::ops::Deref;
-use ic_agent::agent::{RejectCode, RejectResponse};
-use ic_nns_governance_api::pb::v1::{KnownNeuron, ListKnownNeuronsResponse, ProposalInfo};
+use ic_agent::agent::{
+    RejectCode,
+    RejectResponse,
+};
+use ic_nns_governance_api::pb::v1::{
+    KnownNeuron,
+    ListKnownNeuronsResponse,
+    ProposalInfo,
+};
 use std::{
     convert::TryFrom,
-    sync::{atomic::AtomicBool, Arc},
-    thread, time,
-    time::{Duration, Instant},
+    sync::{
+        atomic::AtomicBool,
+        Arc,
+    },
+    thread,
+    time,
+    time::{
+        Duration,
+        Instant,
+    },
 };
 use url::Url;
 
 use async_trait::async_trait;
-use reqwest::{Client, StatusCode};
-use tracing::{debug, error, warn};
+use reqwest::{
+    Client,
+    StatusCode,
+};
+use tracing::{
+    debug,
+    error,
+    warn,
+};
 
 use dfn_candid::CandidOne;
 use ic_ledger_canister_blocks_synchronizer::{
-    blocks::{Blocks, RosettaBlocksMode},
+    blocks::{
+        Blocks,
+        RosettaBlocksMode,
+    },
     canister_access::CanisterAccess,
     certification::VerificationInfo,
-    ledger_blocks_sync::{LedgerBlocksSynchronizer, LedgerBlocksSynchronizerMetrics},
+    ledger_blocks_sync::{
+        LedgerBlocksSynchronizer,
+        LedgerBlocksSynchronizerMetrics,
+    },
 };
 use ic_nns_governance_api::pb::v1::{
-    manage_neuron::NeuronIdOrSubaccount, GovernanceError, NeuronInfo,
+    manage_neuron::NeuronIdOrSubaccount,
+    GovernanceError,
+    NeuronInfo,
 };
 use ic_types::{
     crypto::threshold_sig::ThresholdSigPublicKey,
-    messages::{HttpCallContent, MessageId, SignedRequestBytes},
+    messages::{
+        HttpCallContent,
+        MessageId,
+        SignedRequestBytes,
+    },
     CanisterId,
 };
-use icp_ledger::{BlockIndex, Symbol, TransferFee, TransferFeeArgs, DEFAULT_TRANSFER_FEE};
-use on_wire::{FromWire, IntoWire};
+use icp_ledger::{
+    BlockIndex,
+    Symbol,
+    TransferFee,
+    TransferFeeArgs,
+    DEFAULT_TRANSFER_FEE,
+};
+use on_wire::{
+    FromWire,
+    IntoWire,
+};
 
 use crate::{
     convert,
-    errors::{ApiError, Details, ICError},
+    errors::{
+        ApiError,
+        Details,
+        ICError,
+    },
     ledger_client::{
         handle_add_hotkey::handle_add_hotkey,
         handle_change_auto_stake_maturity::handle_change_auto_stake_maturity,
-        handle_disburse::handle_disburse, handle_follow::handle_follow,
-        handle_merge_maturity::handle_merge_maturity, handle_neuron_info::handle_neuron_info,
-        handle_register_vote::handle_register_vote, handle_remove_hotkey::handle_remove_hotkey,
-        handle_send::handle_send, handle_set_dissolve_timestamp::handle_set_dissolve_timestamp,
-        handle_spawn::handle_spawn, handle_stake::handle_stake,
-        handle_stake_maturity::handle_stake_maturity, handle_start_dissolve::handle_start_dissolve,
-        handle_stop_dissolve::handle_stop_dissolve, neuron_response::NeuronResponse,
+        handle_disburse::handle_disburse,
+        handle_follow::handle_follow,
+        handle_merge_maturity::handle_merge_maturity,
+        handle_neuron_info::handle_neuron_info,
+        handle_register_vote::handle_register_vote,
+        handle_remove_hotkey::handle_remove_hotkey,
+        handle_send::handle_send,
+        handle_set_dissolve_timestamp::handle_set_dissolve_timestamp,
+        handle_spawn::handle_spawn,
+        handle_stake::handle_stake,
+        handle_stake_maturity::handle_stake_maturity,
+        handle_start_dissolve::handle_start_dissolve,
+        handle_stop_dissolve::handle_stop_dissolve,
+        neuron_response::NeuronResponse,
     },
-    models::{EnvelopePair, SignedTransaction},
-    request::{request_result::RequestResult, transaction_results::TransactionResults, Request},
-    request_types::{RequestType, Status},
+    models::{
+        EnvelopePair,
+        SignedTransaction,
+    },
+    request::{
+        request_result::RequestResult,
+        transaction_results::TransactionResults,
+        Request,
+    },
+    request_types::{
+        RequestType,
+        Status,
+    },
     transaction_id::TransactionIdentifier,
 };
 use rosetta_core::objects::ObjectMap;
 
 use self::{
-    handle_list_neurons::handle_list_neurons, list_neurons_response::ListNeuronsResponse,
+    handle_list_neurons::handle_list_neurons,
+    list_neurons_response::ListNeuronsResponse,
     proposal_info_response::ProposalInfoResponse,
 };
 

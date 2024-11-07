@@ -3,7 +3,10 @@
 use std::collections::HashMap;
 use std::fmt::Formatter;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{
+    Path,
+    PathBuf,
+};
 use std::process::Command;
 use uuid::Uuid;
 
@@ -225,7 +228,10 @@ pub fn check_tla_code_link(
 }
 
 fn sha256_hex(input: Vec<u8>) -> String {
-    use sha2::{Digest, Sha256};
+    use sha2::{
+        Digest,
+        Sha256,
+    };
     let mut hasher = Sha256::new();
     hasher.update(input);
     let result = hasher.finalize();

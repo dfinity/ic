@@ -1,6 +1,9 @@
 //! Type conversions for BLS12-381 multisignatures.
 use super::*;
-use ic_types::crypto::{AlgorithmId, CryptoError};
+use ic_types::crypto::{
+    AlgorithmId,
+    CryptoError,
+};
 use std::convert::TryFrom;
 
 pub mod protobuf;

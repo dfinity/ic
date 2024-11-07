@@ -1,27 +1,50 @@
-use candid::{CandidType, Deserialize};
-use dfn_core::api::{call, now, CanisterId};
-use ic_base_types::{NodeId, PrincipalId, SubnetId};
+use candid::{
+    CandidType,
+    Deserialize,
+};
+use dfn_core::api::{
+    call,
+    now,
+    CanisterId,
+};
+use ic_base_types::{
+    NodeId,
+    PrincipalId,
+    SubnetId,
+};
 use ic_management_canister_types::CanisterInstallMode;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::CanisterStatusResultFromManagementCanister,
 };
 use ic_nervous_system_root::{
-    change_canister::{change_canister, ChangeCanisterRequest},
+    change_canister::{
+        change_canister,
+        ChangeCanisterRequest,
+    },
     LOG_PREFIX,
 };
 use ic_nervous_system_runtime::DfnRuntime;
 use ic_nns_common::registry::get_value;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_protobuf::registry::{
-    node::v1::NodeRecord as NodeRecordPb, routing_table::v1::RoutingTable as RoutingTablePb,
+    node::v1::NodeRecord as NodeRecordPb,
+    routing_table::v1::RoutingTable as RoutingTablePb,
     subnet::v1::SubnetRecord as SubnetRecordPb,
 };
 use ic_registry_keys::{
-    make_node_record_key, make_routing_table_record_key, make_subnet_record_key,
+    make_node_record_key,
+    make_routing_table_record_key,
+    make_subnet_record_key,
 };
 use ic_registry_routing_table::RoutingTable;
-use std::{cell::RefCell, collections::BTreeMap, convert::TryFrom, str::FromStr, time::SystemTime};
+use std::{
+    cell::RefCell,
+    collections::BTreeMap,
+    convert::TryFrom,
+    str::FromStr,
+    time::SystemTime,
+};
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;

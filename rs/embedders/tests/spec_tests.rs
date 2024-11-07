@@ -1,14 +1,39 @@
-use std::{fmt::Write, fs, path::PathBuf};
+use std::{
+    fmt::Write,
+    fs,
+    path::PathBuf,
+};
 
 use ic_embedders::wasm_utils::validation::wasmtime_validation_config;
 use wasmtime::{
-    Config, Engine, Global, GlobalType, Instance, Linker, Memory, MemoryType, Mutability, Ref,
-    RefType, Store, Table, TableType, Val, ValType,
+    Config,
+    Engine,
+    Global,
+    GlobalType,
+    Instance,
+    Linker,
+    Memory,
+    MemoryType,
+    Mutability,
+    Ref,
+    RefType,
+    Store,
+    Table,
+    TableType,
+    Val,
+    ValType,
 };
 use wast::{
     parser::ParseBuffer,
-    token::{Id, Span},
-    QuoteWat, Wast, WastArg, WastDirective, Wat,
+    token::{
+        Id,
+        Span,
+    },
+    QuoteWat,
+    Wast,
+    WastArg,
+    WastDirective,
+    Wat,
 };
 
 /// Tests shouldn't be run on these files.
@@ -20,9 +45,19 @@ const FILES_TO_SKIP: &[&str] = &["names.wast"];
 mod convert {
     use wasmtime::Store;
     use wast::{
-        core::{AbstractHeapType, HeapType, NanPattern, V128Pattern, WastArgCore},
-        token::{F32, F64},
-        WastArg, WastRet,
+        core::{
+            AbstractHeapType,
+            HeapType,
+            NanPattern,
+            V128Pattern,
+            WastArgCore,
+        },
+        token::{
+            F32,
+            F64,
+        },
+        WastArg,
+        WastRet,
     };
 
     fn heap_type(heap_type: HeapType) -> wasmtime::Val {

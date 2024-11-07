@@ -1,12 +1,29 @@
 use crate::pb::v1::{
-    manage_neuron::Command, manage_neuron_response::Command as CommandResponse, proposal::Action,
-    ExecuteNnsFunction, InstallCode, InstallCodeRequest, MakeProposalRequest, ManageNeuron,
-    ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, NnsFunction, Proposal,
+    manage_neuron::Command,
+    manage_neuron_response::Command as CommandResponse,
+    proposal::Action,
+    ExecuteNnsFunction,
+    InstallCode,
+    InstallCodeRequest,
+    MakeProposalRequest,
+    ManageNeuron,
+    ManageNeuronCommandRequest,
+    ManageNeuronRequest,
+    ManageNeuronResponse,
+    NnsFunction,
+    Proposal,
     ProposalActionRequest,
 };
-use candid::{CandidType, Decode, Encode};
+use candid::{
+    CandidType,
+    Decode,
+    Encode,
+};
 use ic_crypto_sha2::Sha256;
-use ic_nns_common::types::{NeuronId, ProposalId};
+use ic_nns_common::types::{
+    NeuronId,
+    ProposalId,
+};
 
 /// Simplified the process of creating an ExternalUpdate proposal.
 pub fn create_external_update_proposal_candid<T: CandidType>(

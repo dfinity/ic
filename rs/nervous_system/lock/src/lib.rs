@@ -1,7 +1,11 @@
 //! This makes it easy to implement "fail if another async call is in progress".
 //!
 //! See tests.rs for an example of how to use this.
-use std::{cell::RefCell, fmt::Debug, thread::LocalKey};
+use std::{
+    cell::RefCell,
+    fmt::Debug,
+    thread::LocalKey,
+};
 
 /// If current_resource_flag is None (the happy case), this does a few things:
 ///

@@ -1,16 +1,33 @@
 use crate::{
-    consensus_pool::{MutablePoolSection, PoolSectionOp, PoolSectionOps},
-    height_index::{HeightIndex, Indexes, SelectIndex},
-    HasTimestamp, IntoInner,
+    consensus_pool::{
+        MutablePoolSection,
+        PoolSectionOp,
+        PoolSectionOps,
+    },
+    height_index::{
+        HeightIndex,
+        Indexes,
+        SelectIndex,
+    },
+    HasTimestamp,
+    IntoInner,
 };
 use ic_interfaces::consensus_pool::{
-    HeightIndexedPool, HeightRange, OnlyError, PoolSection, PurgeableArtifactType,
+    HeightIndexedPool,
+    HeightRange,
+    OnlyError,
+    PoolSection,
+    PurgeableArtifactType,
 };
 use ic_types::{
     artifact::ConsensusMessageId,
     consensus::*,
-    crypto::{CryptoHash, CryptoHashOf},
-    Height, Time,
+    crypto::{
+        CryptoHash,
+        CryptoHashOf,
+    },
+    Height,
+    Time,
 };
 use std::collections::BTreeMap;
 
@@ -307,7 +324,10 @@ pub mod test {
 
     use super::*;
     use ic_interfaces::consensus_pool::ValidatedArtifact;
-    use ic_test_utilities_consensus::{fake::*, make_genesis};
+    use ic_test_utilities_consensus::{
+        fake::*,
+        make_genesis,
+    };
 
     fn make_summary(genesis_height: Height) -> ic_types::consensus::dkg::Summary {
         let mut summary = ic_types::consensus::dkg::Summary::fake();

@@ -1,33 +1,72 @@
 #![allow(clippy::disallowed_types)]
 use async_trait::async_trait;
-use ic_ledger_canister_blocks_synchronizer::blocks::{Blocks, HashedBlock, RosettaBlocksMode};
+use ic_ledger_canister_blocks_synchronizer::blocks::{
+    Blocks,
+    HashedBlock,
+    RosettaBlocksMode,
+};
 use ic_ledger_canister_core::ledger::LedgerTransaction;
-use ic_ledger_core::{block::BlockType, timestamp::TimeStamp};
+use ic_ledger_core::{
+    block::BlockType,
+    timestamp::TimeStamp,
+};
 use ic_nns_governance_api::pb::v1::{
-    manage_neuron::NeuronIdOrSubaccount, KnownNeuron, ProposalInfo,
+    manage_neuron::NeuronIdOrSubaccount,
+    KnownNeuron,
+    ProposalInfo,
 };
 use ic_rosetta_api::{
-    convert::{from_arg, to_model_account_identifier},
+    convert::{
+        from_arg,
+        to_model_account_identifier,
+    },
     errors::ApiError,
     ledger_client::LedgerAccess,
-    models::{AccountBalanceRequest, EnvelopePair, PartialBlockIdentifier, SignedTransaction},
-    request::{request_result::RequestResult, transaction_results::TransactionResults, Request},
+    models::{
+        AccountBalanceRequest,
+        EnvelopePair,
+        PartialBlockIdentifier,
+        SignedTransaction,
+    },
+    request::{
+        request_result::RequestResult,
+        transaction_results::TransactionResults,
+        Request,
+    },
     request_handler::RosettaRequestHandler,
-    request_types::{RequestType, Status},
+    request_types::{
+        RequestType,
+        Status,
+    },
     DEFAULT_TOKEN_SYMBOL,
 };
 use ic_types::{
-    messages::{HttpCallContent, HttpCanisterUpdate},
-    CanisterId, PrincipalId,
+    messages::{
+        HttpCallContent,
+        HttpCanisterUpdate,
+    },
+    CanisterId,
+    PrincipalId,
 };
 use icp_ledger::{
-    self, AccountIdentifier, Block, Operation, SendArgs, Tokens, TransferFee, DEFAULT_TRANSFER_FEE,
+    self,
+    AccountIdentifier,
+    Block,
+    Operation,
+    SendArgs,
+    Tokens,
+    TransferFee,
+    DEFAULT_TRANSFER_FEE,
 };
 use std::{
     convert::TryFrom,
     ops::Deref,
     str::FromStr,
-    sync::{atomic::AtomicBool, Arc, Mutex},
+    sync::{
+        atomic::AtomicBool,
+        Arc,
+        Mutex,
+    },
 };
 use tokio::sync::RwLock;
 

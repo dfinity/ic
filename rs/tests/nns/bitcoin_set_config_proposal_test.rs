@@ -1,13 +1,25 @@
 use anyhow::Result;
-use candid::{Decode, Encode};
+use candid::{
+    Decode,
+    Encode,
+};
 use canister_test::Canister;
 use ic_agent::Agent;
-use ic_btc_interface::{Config as BitcoinConfig, Flag, Network, SetConfigRequest};
-use ic_config::execution_environment::{BITCOIN_MAINNET_CANISTER_ID, BITCOIN_TESTNET_CANISTER_ID};
+use ic_btc_interface::{
+    Config as BitcoinConfig,
+    Flag,
+    Network,
+    SetConfigRequest,
+};
+use ic_config::execution_environment::{
+    BITCOIN_MAINNET_CANISTER_ID,
+    BITCOIN_TESTNET_CANISTER_ID,
+};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance_api::bitcoin::BitcoinNetwork;
 use ic_nns_test_utils::governance::{
-    bitcoin_set_config_by_proposal, invalid_bitcoin_set_config_by_proposal,
+    bitcoin_set_config_by_proposal,
+    invalid_bitcoin_set_config_by_proposal,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
@@ -15,14 +27,27 @@ use ic_system_test_driver::systest;
 use ic_system_test_driver::{
     driver::{
         ic::InternetComputer,
-        test_env::{SshKeyGen, TestEnv},
+        test_env::{
+            SshKeyGen,
+            TestEnv,
+        },
         test_env_api::{
-            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
-            READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+            HasPublicApiUrl,
+            HasTopologySnapshot,
+            IcNodeContainer,
+            NnsInstallationBuilder,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
         },
     },
-    nns::{get_governance_canister, vote_execute_proposal_assert_failed},
-    util::{block_on, runtime_from_url},
+    nns::{
+        get_governance_canister,
+        vote_execute_proposal_assert_failed,
+    },
+    util::{
+        block_on,
+        runtime_from_url,
+    },
 };
 use ic_tests_ckbtc::install_bitcoin_canister_with_network;
 use slog::info;

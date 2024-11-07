@@ -30,17 +30,27 @@ pub mod protocol {
 pub mod fdenum;
 
 use protocol::{
-    ctllaunchersvc, ctlsvc, launchersvc, sbxsvc,
+    ctllaunchersvc,
+    ctlsvc,
+    launchersvc,
+    sbxsvc,
     transport::{
-        ControllerToLauncher, ControllerToSandbox, LauncherToController, Message,
-        SandboxToController, WireMessage,
+        ControllerToLauncher,
+        ControllerToSandbox,
+        LauncherToController,
+        Message,
+        SandboxToController,
+        WireMessage,
     },
 };
 
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_logger::new_replica_logger_from_config;
 use std::{
-    os::unix::{net::UnixStream, prelude::FromRawFd},
+    os::unix::{
+        net::UnixStream,
+        prelude::FromRawFd,
+    },
     sync::Arc,
 };
 use transport::SocketReaderConfig;

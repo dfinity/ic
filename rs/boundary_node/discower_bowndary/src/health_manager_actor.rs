@@ -1,16 +1,37 @@
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::Arc,
+    time::Duration,
+};
 
 use tokio::sync::mpsc;
-use tokio_util::{sync::CancellationToken, task::TaskTracker};
-use tracing::{debug, error, warn};
+use tokio_util::{
+    sync::CancellationToken,
+    task::TaskTracker,
+};
+use tracing::{
+    debug,
+    error,
+    warn,
+};
 
 use crate::{
     check::HealthCheck,
     check_actor::HealthCheckActor,
-    messages::{FetchedNodes, NodeHealthUpdate},
+    messages::{
+        FetchedNodes,
+        NodeHealthUpdate,
+    },
     node::Node,
-    snapshot::{NodesChanged, Snapshot},
-    types::{GlobalShared, ReceiverMpsc, ReceiverWatch, SenderMpsc},
+    snapshot::{
+        NodesChanged,
+        Snapshot,
+    },
+    types::{
+        GlobalShared,
+        ReceiverMpsc,
+        ReceiverWatch,
+        SenderMpsc,
+    },
 };
 
 const SERVICE_NAME: &str = "HealthManagerActor";

@@ -2,20 +2,38 @@
 use crate::canister_threshold::IDKG_MEGA_SCOPE;
 use crate::key_id::KeyId;
 use crate::secret_key_store::{
-    Scope, SecretKeyStore, SecretKeyStoreInsertionError, SecretKeyStoreWriteError,
+    Scope,
+    SecretKeyStore,
+    SecretKeyStoreInsertionError,
+    SecretKeyStoreWriteError,
 };
 use crate::types::CspSecretKey;
-use hex::{FromHex, ToHex};
+use hex::{
+    FromHex,
+    ToHex,
+};
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
-use ic_logger::{debug, info, replica_logger::no_op_logger, warn, ReplicaLogger};
+use ic_logger::{
+    debug,
+    info,
+    replica_logger::no_op_logger,
+    warn,
+    ReplicaLogger,
+};
 use parking_lot::RwLock;
 use prost::Message;
 use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::fs;
-use std::io::{ErrorKind, Write};
-use std::path::{Path, PathBuf};
+use std::io::{
+    ErrorKind,
+    Write,
+};
+use std::path::{
+    Path,
+    PathBuf,
+};
 use std::str::FromStr;
 use std::sync::Arc;
 use thiserror::Error;

@@ -1,19 +1,30 @@
 use std::collections::BTreeMap;
 
 use candid::Principal;
-use colored::{ColoredString, Colorize};
+use colored::{
+    ColoredString,
+    Colorize,
+};
 use ic_nervous_system_agent::{
     nns,
-    sns::{governance::GovernanceCanister, swap::SwapCanister},
+    sns::{
+        governance::GovernanceCanister,
+        swap::SwapCanister,
+    },
     CallCanisters,
 };
 use ic_nns_common::pb::v1::ProposalId;
 use ic_nns_governance_api::pb::v1::{
-    get_neurons_fund_audit_info_response, GovernanceError, NeuronsFundAuditInfo,
+    get_neurons_fund_audit_info_response,
+    GovernanceError,
+    NeuronsFundAuditInfo,
 };
 use ic_sns_swap::pb::v1::sns_neuron_recipe::Investor;
 use rgb::RGB8;
-use rust_decimal::{prelude::FromPrimitive, Decimal};
+use rust_decimal::{
+    prelude::FromPrimitive,
+    Decimal,
+};
 use thiserror::Error;
 
 #[derive(Debug, Error)]

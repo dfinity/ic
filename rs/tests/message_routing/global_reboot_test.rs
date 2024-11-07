@@ -26,27 +26,45 @@ Success::
 end::catalog[] */
 
 use anyhow::Result;
-use canister_test::{Canister, Runtime, Wasm};
+use canister_test::{
+    Canister,
+    Runtime,
+    Wasm,
+};
 use dfn_candid::candid;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::InternetComputer;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    get_dependency_path, HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer,
-    IcNodeSnapshot, SubnetSnapshot,
+    get_dependency_path,
+    HasPublicApiUrl,
+    HasTopologySnapshot,
+    HasVm,
+    IcNodeContainer,
+    IcNodeSnapshot,
+    SubnetSnapshot,
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{
-    assert_nodes_health_statuses, assert_subnet_can_make_progress, block_on, runtime_from_url,
+    assert_nodes_health_statuses,
+    assert_subnet_can_make_progress,
+    block_on,
+    runtime_from_url,
     EndpointsStatus,
 };
 use itertools::Itertools;
-use slog::{info, Logger};
+use slog::{
+    info,
+    Logger,
+};
 use std::env;
 use std::time::Duration;
 use tokio::time::sleep;
-use xnet_test::{CanisterId, Metrics};
+use xnet_test::{
+    CanisterId,
+    Metrics,
+};
 
 const SUBNETS_COUNT: usize = 2;
 const CANISTERS_PER_SUBNET: usize = 3;

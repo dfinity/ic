@@ -1,28 +1,53 @@
 use crate::hash::ic_hashtree_leaf_hash;
-use crate::{canister_state::WASM_PAGE_SIZE_IN_BYTES, num_bytes_try_from, NumWasmPages, PageMap};
+use crate::{
+    canister_state::WASM_PAGE_SIZE_IN_BYTES,
+    num_bytes_try_from,
+    NumWasmPages,
+    PageMap,
+};
 use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{
+        try_from_option_field,
+        ProxyDecodeError,
+    },
     state::canister_state_bits::v1 as pb,
 };
 use ic_sys::PAGE_SIZE;
 use ic_types::{
-    methods::{SystemMethod, WasmMethod},
-    CountBytes, ExecutionRound, NumBytes,
+    methods::{
+        SystemMethod,
+        WasmMethod,
+    },
+    CountBytes,
+    ExecutionRound,
+    NumBytes,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use ic_wasm_types::CanisterModule;
 use maplit::btreemap;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::collections::BTreeMap;
-use std::hash::{Hash, Hasher};
+use std::hash::{
+    Hash,
+    Hasher,
+};
 use std::mem::size_of_val;
 use std::{
     collections::BTreeSet,
-    convert::{From, TryFrom},
+    convert::{
+        From,
+        TryFrom,
+    },
     iter::FromIterator,
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc,
+        Mutex,
+    },
 };
 use strum_macros::EnumIter;
 

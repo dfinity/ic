@@ -1,10 +1,17 @@
 use assert_matches::assert_matches;
 use ic_crypto_internal_basic_sig_ed25519 as ed25519;
 use ic_crypto_internal_csp::key_id::KeyId;
-use ic_crypto_internal_csp::types::{CspPublicKey, CspSignature};
+use ic_crypto_internal_csp::types::{
+    CspPublicKey,
+    CspSignature,
+};
 use ic_crypto_internal_csp_proptest_utils::{
-    arb_algorithm_id, arb_csp_basic_signature_error, arb_csp_basic_signature_keygen_error,
-    arb_csp_public_key, arb_csp_signature, arb_key_id,
+    arb_algorithm_id,
+    arb_csp_basic_signature_error,
+    arb_csp_basic_signature_keygen_error,
+    arb_csp_public_key,
+    arb_csp_signature,
+    arb_key_id,
 };
 use ic_crypto_temp_crypto_vault::RemoteVaultEnvironment;
 use ic_crypto_test_utils_local_csp_vault::MockLocalCspVault;
@@ -12,11 +19,17 @@ use ic_types::crypto::AlgorithmId;
 use proptest::collection::vec;
 use proptest::prelude::any;
 use proptest::result::maybe_err;
-use proptest::{prop_assert_eq, proptest};
+use proptest::{
+    prop_assert_eq,
+    proptest,
+};
 use std::sync::Arc;
 
 mod common;
-use common::{local_vault_in_temp_dir, proptest_config_for_delegation};
+use common::{
+    local_vault_in_temp_dir,
+    proptest_config_for_delegation,
+};
 
 proptest! {
     #![proptest_config(proptest_config_for_delegation())]

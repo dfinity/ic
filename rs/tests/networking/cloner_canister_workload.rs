@@ -22,14 +22,32 @@ use candid::Encode;
 use cloner_canister_types::SpinupCanistersArgs;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
-    canister_agent::{CanisterAgent, HasCanisterAgentCapability},
+    canister_agent::{
+        CanisterAgent,
+        HasCanisterAgentCapability,
+    },
     driver::{
         farm::HostFeature,
         group::SystemTestGroup,
-        ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
-        prometheus_vm::{HasPrometheus, PrometheusVm},
+        ic::{
+            AmountOfMemoryKiB,
+            ImageSizeGiB,
+            InternetComputer,
+            NrOfVCPUs,
+            Subnet,
+            VmResources,
+        },
+        prometheus_vm::{
+            HasPrometheus,
+            PrometheusVm,
+        },
         test_env::TestEnv,
-        test_env_api::{load_wasm, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
+        test_env_api::{
+            load_wasm,
+            HasPublicApiUrl,
+            HasTopologySnapshot,
+            IcNodeContainer,
+        },
     },
     systest,
 };

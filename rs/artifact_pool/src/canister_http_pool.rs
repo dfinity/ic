@@ -1,21 +1,41 @@
 //! Canister Http Artifact Pool implementation.
 
 use crate::{
-    metrics::{POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED},
-    pool_common::{HasLabel, PoolSection},
+    metrics::{
+        POOL_TYPE_UNVALIDATED,
+        POOL_TYPE_VALIDATED,
+    },
+    pool_common::{
+        HasLabel,
+        PoolSection,
+    },
 };
 use ic_interfaces::{
-    canister_http::{CanisterHttpChangeAction, CanisterHttpChangeSet, CanisterHttpPool},
+    canister_http::{
+        CanisterHttpChangeAction,
+        CanisterHttpChangeSet,
+        CanisterHttpPool,
+    },
     p2p::consensus::{
-        ArtifactTransmit, ArtifactTransmits, ArtifactWithOpt, MutablePool, UnvalidatedArtifact,
+        ArtifactTransmit,
+        ArtifactTransmits,
+        ArtifactWithOpt,
+        MutablePool,
+        UnvalidatedArtifact,
         ValidatedPoolReader,
     },
 };
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{
+    warn,
+    ReplicaLogger,
+};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
     artifact::CanisterHttpResponseId,
-    canister_http::{CanisterHttpResponse, CanisterHttpResponseShare},
+    canister_http::{
+        CanisterHttpResponse,
+        CanisterHttpResponseShare,
+    },
     crypto::CryptoHashOf,
 };
 use prometheus::IntCounter;
@@ -179,12 +199,19 @@ mod tests {
     use ic_test_utilities_types::ids::node_test_id;
     use ic_types::{
         artifact::IdentifiableArtifact,
-        canister_http::{CanisterHttpResponseContent, CanisterHttpResponseMetadata},
-        crypto::{CryptoHash, Signed},
+        canister_http::{
+            CanisterHttpResponseContent,
+            CanisterHttpResponseMetadata,
+        },
+        crypto::{
+            CryptoHash,
+            Signed,
+        },
         messages::CallbackId,
         signature::BasicSignature,
         time::UNIX_EPOCH,
-        CanisterId, RegistryVersion,
+        CanisterId,
+        RegistryVersion,
     };
 
     use super::*;

@@ -1,16 +1,36 @@
-use candid::{define_function, CandidType, Principal};
+use candid::{
+    define_function,
+    CandidType,
+    Principal,
+};
 use ic_cdk::api::call::RejectionCode;
 use ic_cdk::api::instruction_counter;
 use ic_cdk::api::management_canister::ecdsa::{
-    ecdsa_public_key as ic_cdk_ecdsa_public_key, sign_with_ecdsa as ic_cdk_sign_with_ecdsa,
-    EcdsaCurve, EcdsaKeyId, EcdsaPublicKeyArgument, EcdsaPublicKeyResponse, SignWithEcdsaArgument,
+    ecdsa_public_key as ic_cdk_ecdsa_public_key,
+    sign_with_ecdsa as ic_cdk_sign_with_ecdsa,
+    EcdsaCurve,
+    EcdsaKeyId,
+    EcdsaPublicKeyArgument,
+    EcdsaPublicKeyResponse,
+    SignWithEcdsaArgument,
 };
 use ic_cdk::api::management_canister::http_request::{
-    http_request as canister_http_outcall, CanisterHttpRequestArgument, HttpMethod, HttpResponse,
-    TransformArgs, TransformContext, TransformFunc,
+    http_request as canister_http_outcall,
+    CanisterHttpRequestArgument,
+    HttpMethod,
+    HttpResponse,
+    TransformArgs,
+    TransformContext,
+    TransformFunc,
 };
-use ic_cdk::{query, update};
-use serde::{Deserialize, Serialize};
+use ic_cdk::{
+    query,
+    update,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use serde_bytes::ByteBuf;
 
 // HTTP gateway interface

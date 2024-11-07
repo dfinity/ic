@@ -1,9 +1,21 @@
-use bitcoin::{util::uint::Uint256, BlockHash, BlockHeader, Network};
+use bitcoin::{
+    util::uint::Uint256,
+    BlockHash,
+    BlockHeader,
+    Network,
+};
 
 use crate::{
     constants::{
-        checkpoints, last_checkpoint, latest_checkpoint_height, max_target, no_pow_retargeting,
-        pow_limit_bits, BLOCKS_IN_ONE_YEAR, DIFFICULTY_ADJUSTMENT_INTERVAL, TEN_MINUTES,
+        checkpoints,
+        last_checkpoint,
+        latest_checkpoint_height,
+        max_target,
+        no_pow_retargeting,
+        pow_limit_bits,
+        BLOCKS_IN_ONE_YEAR,
+        DIFFICULTY_ADJUSTMENT_INTERVAL,
+        TEN_MINUTES,
     },
     BlockHeight,
 };
@@ -312,16 +324,30 @@ fn compute_next_difficulty(
 #[cfg(test)]
 mod test {
 
-    use std::{collections::HashMap, path::PathBuf, str::FromStr};
+    use std::{
+        collections::HashMap,
+        path::PathBuf,
+        str::FromStr,
+    };
 
-    use bitcoin::{consensus::deserialize, hashes::hex::FromHex, TxMerkleNode};
+    use bitcoin::{
+        consensus::deserialize,
+        hashes::hex::FromHex,
+        TxMerkleNode,
+    };
     use csv::Reader;
 
     use super::*;
     use crate::constants::test::{
-        MAINNET_HEADER_11109, MAINNET_HEADER_11110, MAINNET_HEADER_11111, MAINNET_HEADER_586656,
-        MAINNET_HEADER_705600, MAINNET_HEADER_705601, MAINNET_HEADER_705602,
-        TESTNET_HEADER_2132555, TESTNET_HEADER_2132556,
+        MAINNET_HEADER_11109,
+        MAINNET_HEADER_11110,
+        MAINNET_HEADER_11111,
+        MAINNET_HEADER_586656,
+        MAINNET_HEADER_705600,
+        MAINNET_HEADER_705601,
+        MAINNET_HEADER_705602,
+        TESTNET_HEADER_2132555,
+        TESTNET_HEADER_2132556,
     };
 
     #[derive(Clone)]

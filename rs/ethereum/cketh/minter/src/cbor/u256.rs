@@ -1,7 +1,13 @@
 use ethnum::u256;
 use minicbor::data::Tag;
-use minicbor::decode::{Decoder, Error};
-use minicbor::encode::{Encoder, Write};
+use minicbor::decode::{
+    Decoder,
+    Error,
+};
+use minicbor::encode::{
+    Encoder,
+    Write,
+};
 
 const U32_MAX: u256 = u256::new(u32::MAX as u128);
 const U64_MAX: u256 = u256::new(u64::MAX as u128);

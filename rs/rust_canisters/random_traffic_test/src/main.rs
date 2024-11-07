@@ -1,14 +1,24 @@
-use candid::{Decode, Encode};
+use candid::{
+    Decode,
+    Encode,
+};
 use dfn_core::api;
 use ic_base_types::CanisterId;
 use rand::{
-    distributions::{Distribution, WeightedIndex},
+    distributions::{
+        Distribution,
+        WeightedIndex,
+    },
     rngs::StdRng,
     seq::SliceRandom,
-    Rng, SeedableRng,
+    Rng,
+    SeedableRng,
 };
 use random_traffic_test::*;
-use std::cell::{Cell, RefCell};
+use std::cell::{
+    Cell,
+    RefCell,
+};
 use std::ops::RangeInclusive;
 
 thread_local! {

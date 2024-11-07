@@ -1,13 +1,28 @@
-use super::{CanisterIdRange, CanisterIdRanges, CanisterMigrations, RoutingTable};
-use ic_base_types::{subnet_id_into_protobuf, subnet_id_try_from_protobuf, CanisterId};
+use super::{
+    CanisterIdRange,
+    CanisterIdRanges,
+    CanisterMigrations,
+    RoutingTable,
+};
+use ic_base_types::{
+    subnet_id_into_protobuf,
+    subnet_id_try_from_protobuf,
+    CanisterId,
+};
 use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{
+        try_from_option_field,
+        ProxyDecodeError,
+    },
     registry::routing_table::v1 as pb,
     types::v1 as pb_types,
 };
 use std::{
     collections::BTreeMap,
-    convert::{TryFrom, TryInto},
+    convert::{
+        TryFrom,
+        TryInto,
+    },
 };
 
 impl From<CanisterIdRange> for pb::CanisterIdRange {

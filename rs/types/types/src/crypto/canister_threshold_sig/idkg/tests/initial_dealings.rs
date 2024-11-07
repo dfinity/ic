@@ -1,16 +1,29 @@
 use crate::crypto::canister_threshold_sig::error::InitialIDkgDealingsValidationError;
 use crate::crypto::canister_threshold_sig::idkg::tests::test_utils::{
-    create_idkg_params, mock_masked_transcript_type, mock_transcript,
-    mock_unmasked_transcript_type, random_transcript_id,
+    create_idkg_params,
+    mock_masked_transcript_type,
+    mock_transcript,
+    mock_unmasked_transcript_type,
+    random_transcript_id,
 };
 use crate::crypto::canister_threshold_sig::idkg::{
-    IDkgDealing, IDkgTranscriptId, IDkgTranscriptOperation, InitialIDkgDealings, SignedIDkgDealing,
+    IDkgDealing,
+    IDkgTranscriptId,
+    IDkgTranscriptOperation,
+    InitialIDkgDealings,
+    SignedIDkgDealing,
 };
-use crate::crypto::{BasicSig, BasicSigOf};
+use crate::crypto::{
+    BasicSig,
+    BasicSigOf,
+};
 use crate::signature::BasicSignature;
 use crate::NodeId;
 use assert_matches::assert_matches;
-use ic_crypto_test_utils_canister_threshold_sigs::{ordered_node_id, set_of_nodes};
+use ic_crypto_test_utils_canister_threshold_sigs::{
+    ordered_node_id,
+    set_of_nodes,
+};
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use std::collections::BTreeSet;
 

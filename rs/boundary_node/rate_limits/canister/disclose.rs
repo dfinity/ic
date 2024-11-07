@@ -1,9 +1,17 @@
 use ic_cdk::api::time;
 
 use crate::{
-    access_control::{AccessLevel, ResolveAccessLevel},
+    access_control::{
+        AccessLevel,
+        ResolveAccessLevel,
+    },
     state::CanisterApi,
-    types::{DiscloseRulesArg, IncidentId, RuleId, Timestamp},
+    types::{
+        DiscloseRulesArg,
+        IncidentId,
+        RuleId,
+        Timestamp,
+    },
 };
 
 pub trait DisclosesRules {

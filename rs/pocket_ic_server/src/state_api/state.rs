@@ -3,56 +3,152 @@
 /// Axum handlers operate on a global state of type ApiState, whose
 /// interface guarantees consistency and determinism.
 use crate::pocket_ic::{
-    AdvanceTimeAndTick, ApiResponse, EffectivePrincipal, PocketIc, ProcessCanisterHttpInternal,
+    AdvanceTimeAndTick,
+    ApiResponse,
+    EffectivePrincipal,
+    PocketIc,
+    ProcessCanisterHttpInternal,
 };
-use crate::state_api::canister_id::{self, DomainResolver, ResolvesDomain};
+use crate::state_api::canister_id::{
+    self,
+    DomainResolver,
+    ResolvesDomain,
+};
 use crate::state_api::routes::verify_cbor_content_header;
-use crate::{InstanceId, OpId, Operation};
+use crate::{
+    InstanceId,
+    OpId,
+    Operation,
+};
 use axum::{
     body::Body,
-    extract::{DefaultBodyLimit, Path, Request as AxumRequest, State},
-    response::{IntoResponse, Response},
-    routing::{get, post},
+    extract::{
+        DefaultBodyLimit,
+        Path,
+        Request as AxumRequest,
+        State,
+    },
+    response::{
+        IntoResponse,
+        Response,
+    },
+    routing::{
+        get,
+        post,
+    },
     Router,
 };
 use axum_server::tls_rustls::RustlsConfig;
 use axum_server::Handle;
 use base64;
-use fqdn::{fqdn, FQDN};
+use fqdn::{
+    fqdn,
+    FQDN,
+};
 use futures::future::Shared;
 use http::{
     header::{
-        ACCEPT_RANGES, CACHE_CONTROL, CONTENT_LENGTH, CONTENT_RANGE, CONTENT_TYPE, COOKIE, DNT,
-        IF_MODIFIED_SINCE, IF_NONE_MATCH, RANGE, USER_AGENT,
+        ACCEPT_RANGES,
+        CACHE_CONTROL,
+        CONTENT_LENGTH,
+        CONTENT_RANGE,
+        CONTENT_TYPE,
+        COOKIE,
+        DNT,
+        IF_MODIFIED_SINCE,
+        IF_NONE_MATCH,
+        RANGE,
+        USER_AGENT,
     },
-    HeaderName, Method, StatusCode, Uri,
+    HeaderName,
+    Method,
+    StatusCode,
+    Uri,
 };
-use http_body_util::{BodyExt, Full, LengthLimitError, Limited};
-use hyper::body::{Bytes, Incoming};
-use hyper::{Request, Response as HyperResponse};
-use hyper_util::client::legacy::{connect::HttpConnector, Client};
+use http_body_util::{
+    BodyExt,
+    Full,
+    LengthLimitError,
+    Limited,
+};
+use hyper::body::{
+    Bytes,
+    Incoming,
+};
+use hyper::{
+    Request,
+    Response as HyperResponse,
+};
+use hyper_util::client::legacy::{
+    connect::HttpConnector,
+    Client,
+};
 use ic_http_endpoints_public::cors_layer;
-use ic_http_gateway::{CanisterRequest, HttpGatewayClient, HttpGatewayRequestArgs};
-use ic_types::{canister_http::CanisterHttpRequestId, CanisterId, SubnetId};
-use pocket_ic::common::rest::{
-    CanisterHttpRequest, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayDetails,
-    HttpGatewayInfo, Topology,
+use ic_http_gateway::{
+    CanisterRequest,
+    HttpGatewayClient,
+    HttpGatewayRequestArgs,
 };
-use pocket_ic::{ErrorCode, UserError, WasmResult};
-use serde::{Deserialize, Serialize};
+use ic_types::{
+    canister_http::CanisterHttpRequestId,
+    CanisterId,
+    SubnetId,
+};
+use pocket_ic::common::rest::{
+    CanisterHttpRequest,
+    HttpGatewayBackend,
+    HttpGatewayConfig,
+    HttpGatewayDetails,
+    HttpGatewayInfo,
+    Topology,
+};
+use pocket_ic::{
+    ErrorCode,
+    UserError,
+    WasmResult,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::{
-    collections::HashMap, fmt, path::PathBuf, str::FromStr, sync::atomic::AtomicU64, sync::Arc,
+    collections::HashMap,
+    fmt,
+    path::PathBuf,
+    str::FromStr,
+    sync::atomic::AtomicU64,
+    sync::Arc,
     time::Duration,
 };
 use tokio::{
     sync::mpsc::error::TryRecvError,
     sync::mpsc::Receiver,
-    sync::{mpsc, Mutex, RwLock},
-    task::{spawn, spawn_blocking, JoinHandle, JoinSet},
-    time::{self, sleep, Instant},
+    sync::{
+        mpsc,
+        Mutex,
+        RwLock,
+    },
+    task::{
+        spawn,
+        spawn_blocking,
+        JoinHandle,
+        JoinSet,
+    },
+    time::{
+        self,
+        sleep,
+        Instant,
+    },
 };
-use tower_http::cors::{Any, CorsLayer};
-use tracing::{debug, error, trace};
+use tower_http::cors::{
+    Any,
+    CorsLayer,
+};
+use tracing::{
+    debug,
+    error,
+    trace,
+};
 
 // The maximum wait time for a computation to finish synchronously.
 const DEFAULT_SYNC_WAIT_DURATION: Duration = Duration::from_secs(10);

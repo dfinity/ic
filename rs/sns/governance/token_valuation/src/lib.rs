@@ -1,13 +1,32 @@
 use async_trait::async_trait;
-use candid::{CandidType, Nat};
+use candid::{
+    CandidType,
+    Nat,
+};
 use cycles_minting_canister::IcpXdrConversionRateCertifiedResponse;
 use futures::join;
 use ic_base_types::CanisterId;
-use ic_nervous_system_common::{i2d, E8, UNITS_PER_PERMYRIAD};
-use ic_nervous_system_initial_supply::{initial_supply_e8s, InitialSupplyOptions};
-use ic_nervous_system_runtime::{CdkRuntime, Runtime};
-use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID};
-use ic_sns_swap_proto_library::pb::v1::{GetDerivedStateRequest, GetDerivedStateResponse};
+use ic_nervous_system_common::{
+    i2d,
+    E8,
+    UNITS_PER_PERMYRIAD,
+};
+use ic_nervous_system_initial_supply::{
+    initial_supply_e8s,
+    InitialSupplyOptions,
+};
+use ic_nervous_system_runtime::{
+    CdkRuntime,
+    Runtime,
+};
+use ic_nns_constants::{
+    CYCLES_MINTING_CANISTER_ID,
+    LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID,
+};
+use ic_sns_swap_proto_library::pb::v1::{
+    GetDerivedStateRequest,
+    GetDerivedStateResponse,
+};
 use icrc_ledger_types::icrc1::account::Account;
 use mockall::automock;
 use num_traits::cast::ToPrimitive;
@@ -15,7 +34,10 @@ use rust_decimal::Decimal;
 use std::{
     fmt::Debug,
     marker::PhantomData,
-    time::{Duration, SystemTime},
+    time::{
+        Duration,
+        SystemTime,
+    },
 };
 
 pub async fn try_get_icp_balance_valuation(account: Account) -> Result<Valuation, ValuationError> {

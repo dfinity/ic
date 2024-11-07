@@ -1,7 +1,14 @@
-use canister_test::{Cycles, PrincipalId, WasmResult};
+use canister_test::{
+    Cycles,
+    PrincipalId,
+    WasmResult,
+};
 use ic_interfaces::execution_environment::HypervisorResult;
 use ic_test_utilities_embedders::WasmtimeInstanceBuilder;
-use ic_types::methods::{FuncRef, WasmMethod};
+use ic_types::methods::{
+    FuncRef,
+    WasmMethod,
+};
 use ic_types::time::UNIX_EPOCH;
 
 fn wat_with_imports(wat: &str) -> String {

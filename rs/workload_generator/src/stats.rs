@@ -1,6 +1,16 @@
-use crate::{chart::Chart, collector::RequestInfo, content_length::ContentLength, ChartSize};
+use crate::{
+    chart::Chart,
+    collector::RequestInfo,
+    content_length::ContentLength,
+    ChartSize,
+};
 use std::time::Instant;
-use std::{cmp, collections::HashMap, fmt, time::Duration};
+use std::{
+    cmp,
+    collections::HashMap,
+    fmt,
+    time::Duration,
+};
 
 use serde::Serialize;
 

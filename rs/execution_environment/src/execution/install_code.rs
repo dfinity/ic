@@ -1,37 +1,79 @@
 // This module defines types and functions common between canister installation
 // and upgrades.
 
-use std::path::{Path, PathBuf};
+use std::path::{
+    Path,
+    PathBuf,
+};
 
-use ic_base_types::{CanisterId, NumBytes, PrincipalId};
+use ic_base_types::{
+    CanisterId,
+    NumBytes,
+    PrincipalId,
+};
 use ic_config::flag_status::FlagStatus;
 use ic_embedders::wasm_executor::CanisterStateChanges;
 use ic_interfaces::execution_environment::{
-    HypervisorError, HypervisorResult, SubnetAvailableMemoryError, WasmExecutionOutput,
+    HypervisorError,
+    HypervisorResult,
+    SubnetAvailableMemoryError,
+    WasmExecutionOutput,
 };
-use ic_logger::{error, fatal, info, warn};
+use ic_logger::{
+    error,
+    fatal,
+    info,
+    warn,
+};
 use ic_management_canister_types::{
-    CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2,
+    CanisterChangeDetails,
+    CanisterChangeOrigin,
+    CanisterInstallModeV2,
 };
 use ic_replicated_state::canister_state::system_state::ReservationError;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
-use ic_replicated_state::{num_bytes_try_from, CanisterState, ExecutionState};
-use ic_state_layout::{CanisterLayout, CheckpointLayout, ReadOnly};
+use ic_replicated_state::{
+    num_bytes_try_from,
+    CanisterState,
+    ExecutionState,
+};
+use ic_state_layout::{
+    CanisterLayout,
+    CheckpointLayout,
+    ReadOnly,
+};
 use ic_sys::PAGE_SIZE;
 use ic_system_api::ExecutionParameters;
 use ic_types::{
-    funds::Cycles, messages::CanisterCall, CanisterLog, CanisterTimer, ComputeAllocation, Height,
-    MemoryAllocation, NumInstructions, Time,
+    funds::Cycles,
+    messages::CanisterCall,
+    CanisterLog,
+    CanisterTimer,
+    ComputeAllocation,
+    Height,
+    MemoryAllocation,
+    NumInstructions,
+    Time,
 };
 use ic_wasm_types::WasmHash;
 
 use crate::{
     canister_manager::{
-        CanisterManagerError, CanisterMgrConfig, DtsInstallCodeResult, InstallCodeResult,
+        CanisterManagerError,
+        CanisterMgrConfig,
+        DtsInstallCodeResult,
+        InstallCodeResult,
     },
-    canister_settings::{validate_canister_settings, CanisterSettings},
-    execution_environment::{log_dirty_pages, RoundContext},
-    CompilationCostHandling, RoundLimits,
+    canister_settings::{
+        validate_canister_settings,
+        CanisterSettings,
+    },
+    execution_environment::{
+        log_dirty_pages,
+        RoundContext,
+    },
+    CompilationCostHandling,
+    RoundLimits,
 };
 use ic_cycles_account_manager::WasmExecutionMode;
 

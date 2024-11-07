@@ -1,39 +1,84 @@
 use crate::{
     canister_control::perform_execute_generic_nervous_system_function_validate_and_render_call,
     governance::{
-        bytes_to_subaccount, log_prefix, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER,
+        bytes_to_subaccount,
+        log_prefix,
+        NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER,
         TREASURY_SUBACCOUNT_NONCE,
     },
-    logs::{ERROR, INFO},
+    logs::{
+        ERROR,
+        INFO,
+    },
     pb::v1::{
-        governance::{SnsMetadata, Version},
+        governance::{
+            SnsMetadata,
+            Version,
+        },
         governance_error::ErrorType,
-        nervous_system_function::{FunctionType, GenericNervousSystemFunction},
+        nervous_system_function::{
+            FunctionType,
+            GenericNervousSystemFunction,
+        },
         proposal,
         proposal::Action,
         proposal_data::{
-            self, ActionAuxiliary as ActionAuxiliaryPb, MintSnsTokensActionAuxiliary,
+            self,
+            ActionAuxiliary as ActionAuxiliaryPb,
+            MintSnsTokensActionAuxiliary,
             TransferSnsTreasuryFundsActionAuxiliary,
         },
         transfer_sns_treasury_funds::TransferFrom,
-        DeregisterDappCanisters, ExecuteGenericNervousSystemFunction, Governance, GovernanceError,
-        LogVisibility, ManageDappCanisterSettings, ManageLedgerParameters, ManageSnsMetadata,
-        MintSnsTokens, Motion, NervousSystemFunction, NervousSystemParameters, Proposal,
-        ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus,
-        RegisterDappCanisters, Tally, TransferSnsTreasuryFunds, UpgradeSnsControlledCanister,
-        UpgradeSnsToNextVersion, Valuation as ValuationPb, Vote,
+        DeregisterDappCanisters,
+        ExecuteGenericNervousSystemFunction,
+        Governance,
+        GovernanceError,
+        LogVisibility,
+        ManageDappCanisterSettings,
+        ManageLedgerParameters,
+        ManageSnsMetadata,
+        MintSnsTokens,
+        Motion,
+        NervousSystemFunction,
+        NervousSystemParameters,
+        Proposal,
+        ProposalData,
+        ProposalDecisionStatus,
+        ProposalId,
+        ProposalRewardStatus,
+        RegisterDappCanisters,
+        Tally,
+        TransferSnsTreasuryFunds,
+        UpgradeSnsControlledCanister,
+        UpgradeSnsToNextVersion,
+        Valuation as ValuationPb,
+        Vote,
     },
-    sns_upgrade::{get_proposal_id_that_added_wasm, get_upgrade_params, UpgradeSnsParams},
+    sns_upgrade::{
+        get_proposal_id_that_added_wasm,
+        get_upgrade_params,
+        UpgradeSnsParams,
+    },
     types::Environment,
-    validate_chars_count, validate_len, validate_required_field,
+    validate_chars_count,
+    validate_len,
+    validate_required_field,
 };
 use candid::Principal;
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_canister_log::log;
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common::{
-    denominations_to_tokens, i2d, ledger::compute_distribution_subaccount_bytes, ledger_validation,
-    DEFAULT_TRANSFER_FEE, E8, ONE_DAY_SECONDS,
+    denominations_to_tokens,
+    i2d,
+    ledger::compute_distribution_subaccount_bytes,
+    ledger_validation,
+    DEFAULT_TRANSFER_FEE,
+    E8,
+    ONE_DAY_SECONDS,
 };
 use ic_nervous_system_proto::pb::v1::Percentage;
 use ic_protobuf::types::v1::CanisterInstallMode;
@@ -41,12 +86,18 @@ use ic_sns_governance_proposals_amount_total_limit::{
     // TODO(NNS1-2982): Uncomment. mint_sns_tokens_7_day_total_upper_bound_tokens,
     transfer_sns_treasury_funds_7_day_total_upper_bound_tokens,
 };
-use ic_sns_governance_token_valuation::{Token, Valuation};
+use ic_sns_governance_token_valuation::{
+    Token,
+    Valuation,
+};
 use icp_ledger::DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE;
 use icrc_ledger_types::icrc1::account::Account;
 use rust_decimal::Decimal;
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::{
+        BTreeMap,
+        HashSet,
+    },
     convert::TryFrom,
     fmt::Write,
 };
@@ -2449,29 +2500,55 @@ mod tests {
     use super::*;
     use crate::{
         pb::v1::{
-            governance::{self, Version},
-            Ballot, Empty, Governance as GovernanceProto, NeuronId, Proposal, ProposalId,
-            Subaccount, WaitForQuietState,
+            governance::{
+                self,
+                Version,
+            },
+            Ballot,
+            Empty,
+            Governance as GovernanceProto,
+            NeuronId,
+            Proposal,
+            ProposalId,
+            Subaccount,
+            WaitForQuietState,
         },
         sns_upgrade::{
-            CanisterSummary, GetNextSnsVersionRequest, GetNextSnsVersionResponse,
-            GetProposalIdThatAddedWasmRequest, GetProposalIdThatAddedWasmResponse,
-            GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse, SnsVersion,
+            CanisterSummary,
+            GetNextSnsVersionRequest,
+            GetNextSnsVersionResponse,
+            GetProposalIdThatAddedWasmRequest,
+            GetProposalIdThatAddedWasmResponse,
+            GetSnsCanistersSummaryRequest,
+            GetSnsCanistersSummaryResponse,
+            SnsVersion,
         },
-        tests::{assert_is_err, assert_is_ok},
+        tests::{
+            assert_is_err,
+            assert_is_ok,
+        },
         types::test_helpers::NativeEnvironment,
     };
     use candid::Encode;
     use futures::FutureExt;
-    use ic_base_types::{NumBytes, PrincipalId};
+    use ic_base_types::{
+        NumBytes,
+        PrincipalId,
+    };
     use ic_crypto_sha2::Sha256;
-    use ic_nervous_system_clients::canister_status::{CanisterStatusResultV2, CanisterStatusType};
+    use ic_nervous_system_clients::canister_status::{
+        CanisterStatusResultV2,
+        CanisterStatusType,
+    };
     use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
     use ic_nns_constants::SNS_WASM_CANISTER_ID;
     use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
     use ic_test_utilities_types::ids::canister_test_id;
     use lazy_static::lazy_static;
-    use maplit::{btreemap, hashset};
+    use maplit::{
+        btreemap,
+        hashset,
+    };
     use std::convert::TryFrom;
 
     pub const FORBIDDEN_CANISTER: CanisterId = CanisterId::ic_00();

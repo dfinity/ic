@@ -2,7 +2,10 @@ use assert_matches::assert_matches;
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::Rng;
-use std::convert::{TryFrom, TryInto};
+use std::convert::{
+    TryFrom,
+    TryInto,
+};
 
 use ic_crypto_internal_threshold_sig_canister_threshold_sig_test_utils::*;
 

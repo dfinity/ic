@@ -1,19 +1,40 @@
 use crate::args::ReplicaArgs;
 use clap::Parser;
-use ic_config::{crypto::CryptoConfig, Config, ConfigSource, SAMPLE_CONFIG};
+use ic_config::{
+    crypto::CryptoConfig,
+    Config,
+    ConfigSource,
+    SAMPLE_CONFIG,
+};
 use ic_crypto::CryptoComponent;
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{fatal, info, warn, ReplicaLogger};
+use ic_logger::{
+    fatal,
+    info,
+    warn,
+    ReplicaLogger,
+};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::types::v1 as pb;
 use ic_registry_client::client::RegistryClientImpl;
-use ic_registry_client_helpers::subnet::{SubnetListRegistry, SubnetRegistry};
+use ic_registry_client_helpers::subnet::{
+    SubnetListRegistry,
+    SubnetRegistry,
+};
 use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    consensus::catchup::CatchUpPackage, NodeId, RegistryVersion, ReplicaVersion, SubnetId,
+    consensus::catchup::CatchUpPackage,
+    NodeId,
+    RegistryVersion,
+    ReplicaVersion,
+    SubnetId,
 };
-use std::{env, path::PathBuf, sync::Arc};
+use std::{
+    env,
+    path::PathBuf,
+    sync::Arc,
+};
 
 /// Parse command-line args into `ReplicaArgs`
 pub fn parse_args() -> Result<ReplicaArgs, clap::Error> {

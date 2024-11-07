@@ -1,4 +1,7 @@
-use crate::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
+use crate::{
+    GetSnsCanistersSummaryRequest,
+    GetSnsCanistersSummaryResponse,
+};
 use ic_nervous_system_clients::Request;
 
 impl Request for GetSnsCanistersSummaryRequest {

@@ -1,21 +1,49 @@
-use candid::{decode_one, encode_one, CandidType, Decode, Deserialize, Encode, Principal};
+use candid::{
+    decode_one,
+    encode_one,
+    CandidType,
+    Decode,
+    Deserialize,
+    Encode,
+    Principal,
+};
 use pocket_ic::management_canister::{
-    CanisterId, CanisterIdRecord, CanisterSettings, EcdsaPublicKeyResult, HttpRequestResult,
-    ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, SchnorrPublicKeyArgsKeyId,
+    CanisterId,
+    CanisterIdRecord,
+    CanisterSettings,
+    EcdsaPublicKeyResult,
+    HttpRequestResult,
+    ProvisionalCreateCanisterWithCyclesArgs,
+    SchnorrAlgorithm,
+    SchnorrPublicKeyArgsKeyId,
     SchnorrPublicKeyResult,
 };
 use pocket_ic::{
     common::rest::{
-        BlobCompression, CanisterHttpReply, CanisterHttpResponse, MockCanisterHttpResponse,
-        RawEffectivePrincipal, SubnetKind,
+        BlobCompression,
+        CanisterHttpReply,
+        CanisterHttpResponse,
+        MockCanisterHttpResponse,
+        RawEffectivePrincipal,
+        SubnetKind,
     },
-    update_candid, DefaultEffectiveCanisterIdError, ErrorCode, PocketIc, PocketIcBuilder,
+    update_candid,
+    DefaultEffectiveCanisterIdError,
+    ErrorCode,
+    PocketIc,
+    PocketIcBuilder,
     WasmResult,
 };
 #[cfg(unix)]
 use reqwest::blocking::Client;
-use sha2::{Digest, Sha256};
-use std::{io::Read, time::SystemTime};
+use sha2::{
+    Digest,
+    Sha256,
+};
+use std::{
+    io::Read,
+    time::SystemTime,
+};
 
 // 2T cycles
 const INIT_CYCLES: u128 = 2_000_000_000_000;
@@ -921,13 +949,20 @@ fn test_schnorr() {
             match key_id.algorithm {
                 SchnorrAlgorithm::Bip340Secp256K1 => {
                     use k256::ecdsa::signature::hazmat::PrehashVerifier;
-                    use k256::schnorr::{Signature, VerifyingKey};
+                    use k256::schnorr::{
+                        Signature,
+                        VerifyingKey,
+                    };
                     let vk = VerifyingKey::from_bytes(&schnorr_public_key.public_key[1..]).unwrap();
                     let sig = Signature::try_from(schnorr_signature.as_slice()).unwrap();
                     vk.verify_prehash(message, &sig).unwrap();
                 }
                 SchnorrAlgorithm::Ed25519 => {
-                    use ed25519_dalek::{Signature, Verifier, VerifyingKey};
+                    use ed25519_dalek::{
+                        Signature,
+                        Verifier,
+                        VerifyingKey,
+                    };
                     let pk: [u8; 32] = schnorr_public_key.public_key.try_into().unwrap();
                     let vk = VerifyingKey::from_bytes(&pk).unwrap();
                     let signature = Signature::from_slice(&schnorr_signature).unwrap();

@@ -5,15 +5,23 @@ use crate::key_id::KeyId;
 use crate::public_key_store::temp_pubkey_store::TempPublicKeyStore;
 use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
 use crate::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
-use crate::types::{CspPublicKey, CspSecretKey, CspSignature};
+use crate::types::{
+    CspPublicKey,
+    CspSecretKey,
+    CspSignature,
+};
 use crate::vault::local_csp_vault::builder::LocalCspVaultBuilder;
-use crate::{LocalCspVault, SecretKeyStore};
+use crate::{
+    LocalCspVault,
+    SecretKeyStore,
+};
 use assert_matches::assert_matches;
 use ic_crypto_internal_multi_sig_bls12381::types as multi_types;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_test_vectors::ed25519::Ed25519TestVector::RFC8032_ED25519_SHA_ABC;
 use ic_crypto_internal_test_vectors::multi_bls12_381::{
-    TESTVEC_MULTI_BLS12_381_1_PK, TESTVEC_MULTI_BLS12_381_1_SIG,
+    TESTVEC_MULTI_BLS12_381_1_PK,
+    TESTVEC_MULTI_BLS12_381_1_SIG,
 };
 use ic_crypto_internal_test_vectors::test_data;
 use ic_crypto_secrets_containers::SecretArray;
@@ -325,7 +333,10 @@ mod verify_ed25519 {
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 
     use super::*;
-    use rand::{CryptoRng, Rng};
+    use rand::{
+        CryptoRng,
+        Rng,
+    };
 
     // Here we only test with a single test vector: an extensive test with the
     // entire test vector suite is done at the crypto lib level.

@@ -1,12 +1,22 @@
 use std::env;
-use std::path::{Path, PathBuf};
+use std::path::{
+    Path,
+    PathBuf,
+};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{
+    anyhow,
+    Context,
+    Result,
+};
 use clap::Parser;
 use tokio::process::Command;
 
 use partition_tools::{
-    ext::{ExtPartition, FileContexts},
+    ext::{
+        ExtPartition,
+        FileContexts,
+    },
     Partition,
 };
 

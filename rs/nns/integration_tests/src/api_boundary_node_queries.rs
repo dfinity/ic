@@ -1,11 +1,21 @@
-use candid::{Decode, Encode};
+use candid::{
+    Decode,
+    Encode,
+};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    state_test_helpers::{setup_nns_canisters, state_machine_builder_for_nns_tests, update},
+    state_test_helpers::{
+        setup_nns_canisters,
+        state_machine_builder_for_nns_tests,
+        update,
+    },
 };
 use ic_state_machine_tests::StateMachine;
-use registry_canister::pb::v1::{ApiBoundaryNodeIdRecord, GetApiBoundaryNodeIdsRequest};
+use registry_canister::pb::v1::{
+    ApiBoundaryNodeIdRecord,
+    GetApiBoundaryNodeIdsRequest,
+};
 
 fn setup_state_machine_with_nns_canisters() -> StateMachine {
     let state_machine = state_machine_builder_for_nns_tests().build();

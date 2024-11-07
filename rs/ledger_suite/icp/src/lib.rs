@@ -1,32 +1,61 @@
 use candid::CandidType;
 use dfn_protobuf::ProtoBuf;
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_crypto_sha2::Sha256;
 pub use ic_ledger_canister_core::archive::ArchiveOptions;
-use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction, TxApplyError};
+use ic_ledger_canister_core::ledger::{
+    LedgerContext,
+    LedgerTransaction,
+    TxApplyError,
+};
 use ic_ledger_core::{
-    approvals::{AllowanceTable, HeapAllowancesData},
+    approvals::{
+        AllowanceTable,
+        HeapAllowancesData,
+    },
     balances::Balances,
-    block::{BlockType, EncodedBlock, FeeCollector},
+    block::{
+        BlockType,
+        EncodedBlock,
+        FeeCollector,
+    },
     tokens::CheckedAdd,
 };
 use ic_ledger_hash_of::HashOf;
 use ic_ledger_hash_of::HASH_LENGTH;
 use icrc_ledger_types::icrc1::account::Account;
-use on_wire::{FromWire, IntoWire};
-use serde::{Deserialize, Serialize};
+use on_wire::{
+    FromWire,
+    IntoWire,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use serde_bytes::ByteBuf;
-use std::collections::{HashMap, HashSet};
+use std::collections::{
+    HashMap,
+    HashSet,
+};
 use std::convert::TryFrom;
 use std::fmt;
 use std::time::Duration;
-use std::{borrow::Cow, collections::BTreeMap};
+use std::{
+    borrow::Cow,
+    collections::BTreeMap,
+};
 use strum_macros::IntoStaticStr;
 
 pub use ic_ledger_core::{
     block::BlockIndex,
     timestamp::TimeStamp,
-    tokens::{Tokens, TOKEN_SUBDIVIDABLE_BY},
+    tokens::{
+        Tokens,
+        TOKEN_SUBDIVIDABLE_BY,
+    },
 };
 
 pub mod account_identifier;
@@ -34,8 +63,14 @@ pub mod account_identifier;
 #[path = "gen/ic_ledger.pb.v1.rs"]
 pub mod protobuf;
 mod validate_endpoints;
-pub use account_identifier::{AccountIdentifier, Subaccount};
-pub use validate_endpoints::{tokens_from_proto, tokens_into_proto};
+pub use account_identifier::{
+    AccountIdentifier,
+    Subaccount,
+};
+pub use validate_endpoints::{
+    tokens_from_proto,
+    tokens_into_proto,
+};
 
 /// Note that the Ledger can be deployed with a
 /// different transaction fee. Clients that want to use the Ledger should query
@@ -1245,7 +1280,13 @@ pub fn max_blocks_per_request(principal_id: &PrincipalId) -> usize {
 mod test {
     use std::str::FromStr;
 
-    use proptest::{arbitrary::any, prop_assert_eq, prop_oneof, proptest, strategy::Strategy};
+    use proptest::{
+        arbitrary::any,
+        prop_assert_eq,
+        prop_oneof,
+        proptest,
+        strategy::Strategy,
+    };
 
     use super::*;
 

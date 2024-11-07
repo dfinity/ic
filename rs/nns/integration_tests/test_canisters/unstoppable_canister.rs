@@ -19,7 +19,8 @@ fn canister_init() {
 
 async fn interrupt() {
     use ic_nervous_system_clients::{
-        canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
+        canister_id_record::CanisterIdRecord,
+        canister_status::CanisterStatusResult,
     };
 
     let _unused: Result<CanisterStatusResult, _> = dfn_core::api::call(

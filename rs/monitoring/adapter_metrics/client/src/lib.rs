@@ -3,11 +3,20 @@ use ic_adapter_metrics_service::ScrapeRequest;
 use ic_async_utils::ExecuteOnTokioRuntime;
 use prometheus::proto::MetricFamily;
 use protobuf::Message;
-use std::{fmt, path::PathBuf, time::Duration};
+use std::{
+    fmt,
+    path::PathBuf,
+    time::Duration,
+};
 use tokio::net::UnixStream;
 use tonic::{
-    transport::{Channel, Endpoint, Uri},
-    Request, Status,
+    transport::{
+        Channel,
+        Endpoint,
+        Uri,
+    },
+    Request,
+    Status,
 };
 use tower::service_fn;
 

@@ -1,14 +1,29 @@
-use super::{invalid_proposal_error, topic_to_manage_canister};
+use super::{
+    invalid_proposal_error,
+    topic_to_manage_canister,
+};
 use crate::{
-    pb::v1::{install_code::CanisterInstallMode, GovernanceError, InstallCode, Topic},
+    pb::v1::{
+        install_code::CanisterInstallMode,
+        GovernanceError,
+        InstallCode,
+        Topic,
+    },
     proposals::call_canister::CallCanister,
 };
 
-use candid::{CandidType, Deserialize, Encode};
+use candid::{
+    CandidType,
+    Deserialize,
+    Encode,
+};
 use ic_base_types::CanisterId;
 use ic_management_canister_types::CanisterInstallMode as RootCanisterInstallMode;
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
-use ic_nns_constants::{LIFELINE_CANISTER_ID, ROOT_CANISTER_ID};
+use ic_nns_constants::{
+    LIFELINE_CANISTER_ID,
+    ROOT_CANISTER_ID,
+};
 use serde::Serialize;
 
 // When calling lifeline's upgrade_root method, this is the request. Keep this in sync with
@@ -172,7 +187,10 @@ mod tests {
 
     use candid::Decode;
     use ic_base_types::CanisterId;
-    use ic_nns_constants::{REGISTRY_CANISTER_ID, SNS_WASM_CANISTER_ID};
+    use ic_nns_constants::{
+        REGISTRY_CANISTER_ID,
+        SNS_WASM_CANISTER_ID,
+    };
 
     #[test]
     fn test_invalid_install_code_proposal() {

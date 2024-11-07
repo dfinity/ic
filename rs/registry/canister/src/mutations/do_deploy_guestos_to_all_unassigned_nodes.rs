@@ -4,7 +4,10 @@ use crate::{
     registry::Registry,
 };
 
-use candid::{CandidType, Deserialize};
+use candid::{
+    CandidType,
+    Deserialize,
+};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use serde::Serialize;
@@ -40,10 +43,17 @@ pub struct DeployGuestosToAllUnassignedNodesPayload {
 #[cfg(test)]
 mod tests {
     use ic_protobuf::registry::replica_version::v1::{
-        BlessedReplicaVersions, ReplicaVersionRecord,
+        BlessedReplicaVersions,
+        ReplicaVersionRecord,
     };
-    use ic_registry_keys::{make_blessed_replica_versions_key, make_replica_version_key};
-    use ic_registry_transport::{insert, upsert};
+    use ic_registry_keys::{
+        make_blessed_replica_versions_key,
+        make_replica_version_key,
+    };
+    use ic_registry_transport::{
+        insert,
+        upsert,
+    };
     use prost::Message;
 
     use crate::{

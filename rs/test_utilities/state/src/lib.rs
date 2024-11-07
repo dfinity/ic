@@ -1,51 +1,122 @@
 use ic_base_types::NumSeconds;
 use ic_btc_replica_types::BitcoinAdapterRequestWrapper;
 use ic_management_canister_types::{
-    CanisterStatusType, EcdsaCurve, EcdsaKeyId, LogVisibilityV2, MasterPublicKeyId,
-    SchnorrAlgorithm, SchnorrKeyId,
+    CanisterStatusType,
+    EcdsaCurve,
+    EcdsaKeyId,
+    LogVisibilityV2,
+    MasterPublicKeyId,
+    SchnorrAlgorithm,
+    SchnorrKeyId,
 };
-use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
+use ic_registry_routing_table::{
+    CanisterIdRange,
+    RoutingTable,
+};
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::{
-        execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
-        system_state::{CyclesUseCase, OnLowWasmMemoryHookStatus, TaskQueue},
+        execution_state::{
+            CustomSection,
+            CustomSectionType,
+            WasmBinary,
+            WasmMetadata,
+        },
+        system_state::{
+            CyclesUseCase,
+            OnLowWasmMemoryHookStatus,
+            TaskQueue,
+        },
         testing::new_canister_output_queues_for_test,
     },
     metadata_state::{
         subnet_call_context_manager::{
-            BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext, SubnetCallContext,
+            BitcoinGetSuccessorsContext,
+            BitcoinSendTransactionInternalContext,
+            SubnetCallContext,
         },
-        Stream, SubnetMetrics,
+        Stream,
+        SubnetMetrics,
     },
     page_map::PageMap,
-    testing::{CanisterQueuesTesting, ReplicatedStateTesting, SystemStateTesting},
-    CallContext, CallOrigin, CanisterState, ExecutionState, ExportedFunctions, InputQueueType,
-    Memory, NumWasmPages, ReplicatedState, SchedulerState, SubnetTopology, SystemState,
+    testing::{
+        CanisterQueuesTesting,
+        ReplicatedStateTesting,
+        SystemStateTesting,
+    },
+    CallContext,
+    CallOrigin,
+    CanisterState,
+    ExecutionState,
+    ExportedFunctions,
+    InputQueueType,
+    Memory,
+    NumWasmPages,
+    ReplicatedState,
+    SchedulerState,
+    SubnetTopology,
+    SystemState,
 };
 use ic_test_utilities_types::{
     arbitrary,
-    ids::{canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id},
-    messages::{RequestBuilder, SignedIngressBuilder},
+    ids::{
+        canister_test_id,
+        message_test_id,
+        node_test_id,
+        subnet_test_id,
+        user_test_id,
+    },
+    messages::{
+        RequestBuilder,
+        SignedIngressBuilder,
+    },
 };
-use ic_types::methods::{Callback, WasmClosure};
-use ic_types::time::{CoarseTime, UNIX_EPOCH};
+use ic_types::methods::{
+    Callback,
+    WasmClosure,
+};
+use ic_types::time::{
+    CoarseTime,
+    UNIX_EPOCH,
+};
 use ic_types::{
     batch::RawQueryStats,
-    messages::{CallbackId, Ingress, Request, RequestMetadata, RequestOrResponse},
+    messages::{
+        CallbackId,
+        Ingress,
+        Request,
+        RequestMetadata,
+        RequestOrResponse,
+    },
     nominal_cycles::NominalCycles,
     xnet::{
-        RejectReason, RejectSignal, StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue,
+        RejectReason,
+        RejectSignal,
+        StreamFlags,
+        StreamHeader,
+        StreamIndex,
+        StreamIndexedQueue,
     },
-    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NodeId, NumBytes, PrincipalId,
-    SubnetId, Time,
+    CanisterId,
+    ComputeAllocation,
+    Cycles,
+    MemoryAllocation,
+    NodeId,
+    NumBytes,
+    PrincipalId,
+    SubnetId,
+    Time,
 };
 use ic_wasm_types::CanisterModule;
 use proptest::prelude::*;
 use std::convert::TryFrom;
 use std::{
-    collections::{BTreeMap, BTreeSet, VecDeque},
+    collections::{
+        BTreeMap,
+        BTreeSet,
+        VecDeque,
+    },
     sync::Arc,
 };
 use strum::IntoEnumIterator;

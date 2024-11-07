@@ -1,11 +1,21 @@
-use crate::{common::LOG_PREFIX, registry::Registry};
+use crate::{
+    common::LOG_PREFIX,
+    registry::Registry,
+};
 
 use std::convert::TryFrom;
 
-use candid::{CandidType, Deserialize};
+use candid::{
+    CandidType,
+    Deserialize,
+};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
-use ic_base_types::{NodeId, PrincipalId, SubnetId};
+use ic_base_types::{
+    NodeId,
+    PrincipalId,
+    SubnetId,
+};
 use ic_registry_keys::make_subnet_record_key;
 use ic_registry_transport::upsert;
 use prost::Message;

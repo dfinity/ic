@@ -1,18 +1,34 @@
 //! Threshold signatures with a simple dealing mechanism.
 
 use super::types::{
-    CombinedSignature, CombinedSignatureBytes, IndividualSignature, IndividualSignatureBytes,
-    Polynomial, PublicCoefficients, SecretKey, Signature,
+    CombinedSignature,
+    CombinedSignatureBytes,
+    IndividualSignature,
+    IndividualSignatureBytes,
+    Polynomial,
+    PublicCoefficients,
+    SecretKey,
+    Signature,
 };
 use crate::api::dkg_errors::InvalidArgumentError;
 
 use crate::types::PublicKey;
-use ic_crypto_internal_bls12_381_type::{verify_bls_signature, G1Projective, G2Affine, Scalar};
+use ic_crypto_internal_bls12_381_type::{
+    verify_bls_signature,
+    G1Projective,
+    G2Affine,
+    Scalar,
+};
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_types::{
-    crypto::{AlgorithmId, CryptoError, CryptoResult},
-    NodeIndex, NumberOfNodes,
+    crypto::{
+        AlgorithmId,
+        CryptoError,
+        CryptoResult,
+    },
+    NodeIndex,
+    NumberOfNodes,
 };
 
 /// Domain separator for Hash-to-G1 to be used for signature generation as

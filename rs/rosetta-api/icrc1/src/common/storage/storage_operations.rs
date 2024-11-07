@@ -1,16 +1,30 @@
 use crate::common::storage::types::RosettaBlock;
 use crate::common::utils::utils::create_progress_bar_if_needed;
 use crate::MetadataEntry;
-use anyhow::{bail, Context};
+use anyhow::{
+    bail,
+    Context,
+};
 use candid::Nat;
 use ic_ledger_core::tokens::Zero;
-use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
+use ic_ledger_core::tokens::{
+    CheckedAdd,
+    CheckedSub,
+};
 use icrc_ledger_types::icrc1::account::Account;
 use num_bigint::BigUint;
 use rusqlite::Connection;
-use rusqlite::{named_params, params, CachedStatement, Params};
+use rusqlite::{
+    named_params,
+    params,
+    CachedStatement,
+    Params,
+};
 use serde_bytes::ByteBuf;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{
+    BTreeMap,
+    HashMap,
+};
 use std::str::FromStr;
 
 pub fn store_metadata(

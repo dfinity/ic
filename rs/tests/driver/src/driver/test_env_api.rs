@@ -134,49 +134,105 @@
 use super::{
     config::NODES_INFO,
     driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR,
-    farm::{DnsRecord, PlaynetCertificate},
-    test_setup::{GroupSetup, InfraProvider},
+    farm::{
+        DnsRecord,
+        PlaynetCertificate,
+    },
+    test_setup::{
+        GroupSetup,
+        InfraProvider,
+    },
 };
 use crate::{
     driver::{
         boundary_node::BoundaryNodeVm,
-        constants::{self, kibana_link, GROUP_TTL, SSH_USERNAME},
-        farm::{Farm, GroupSpec},
+        constants::{
+            self,
+            kibana_link,
+            GROUP_TTL,
+            SSH_USERNAME,
+        },
+        farm::{
+            Farm,
+            GroupSpec,
+        },
         log_events,
-        test_env::{HasIcPrepDir, SshKeyGen, TestEnv, TestEnvAttribute},
+        test_env::{
+            HasIcPrepDir,
+            SshKeyGen,
+            TestEnv,
+            TestEnvAttribute,
+        },
     },
     k8s::{
         tnet::TNet,
-        virtualmachine::{destroy_vm, restart_vm, start_vm},
+        virtualmachine::{
+            destroy_vm,
+            restart_vm,
+            start_vm,
+        },
     },
-    retry_with_msg, retry_with_msg_async,
-    util::{block_on, create_agent},
+    retry_with_msg,
+    retry_with_msg_async,
+    util::{
+        block_on,
+        create_agent,
+    },
 };
-use anyhow::{anyhow, bail, Result};
+use anyhow::{
+    anyhow,
+    bail,
+    Result,
+};
 use async_trait::async_trait;
-use canister_test::{RemoteTestRuntime, Runtime};
-use ic_agent::{export::Principal, Agent, AgentError};
+use canister_test::{
+    RemoteTestRuntime,
+    Runtime,
+};
+use ic_agent::{
+    export::Principal,
+    Agent,
+    AgentError,
+};
 use ic_base_types::PrincipalId;
-use ic_canister_client::{Agent as InternalAgent, Sender};
-use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
+use ic_canister_client::{
+    Agent as InternalAgent,
+    Sender,
+};
+use ic_interfaces_registry::{
+    RegistryClient,
+    RegistryClientResult,
+};
 use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
 use ic_nns_constants::{
-    CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID,
+    CYCLES_MINTING_CANISTER_ID,
+    GOVERNANCE_CANISTER_ID,
+    LIFELINE_CANISTER_ID,
+    REGISTRY_CANISTER_ID,
 };
 use ic_nns_governance_api::pb::v1::Neuron;
 use ic_nns_init::read_initial_mutations_from_local_store_dir;
-use ic_nns_test_utils::{common::NnsInitPayloadsBuilder, itest_helpers::NnsCanisters};
+use ic_nns_test_utils::{
+    common::NnsInitPayloadsBuilder,
+    itest_helpers::NnsCanisters,
+};
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_protobuf::registry::{
     node::v1 as pb_node,
-    replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
+    replica_version::v1::{
+        BlessedReplicaVersions,
+        ReplicaVersionRecord,
+    },
     subnet::v1 as pb_subnet,
 };
 use ic_registry_client_helpers::{
     api_boundary_node::ApiBoundaryNodeRegistry,
     node::NodeRegistry,
     routing_table::RoutingTableRegistry,
-    subnet::{SubnetListRegistry, SubnetRegistry},
+    subnet::{
+        SubnetListRegistry,
+        SubnetRegistry,
+    },
 };
 use ic_registry_keys::REPLICA_VERSION_KEY_PREFIX;
 use ic_registry_local_registry::LocalRegistry;
@@ -184,32 +240,71 @@ use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     malicious_behaviour::MaliciousBehaviour,
-    messages::{HttpStatusResponse, ReplicaHealthStatus},
-    NodeId, RegistryVersion, ReplicaVersion, SubnetId,
+    messages::{
+        HttpStatusResponse,
+        ReplicaHealthStatus,
+    },
+    NodeId,
+    RegistryVersion,
+    ReplicaVersion,
+    SubnetId,
 };
 use ic_utils::interfaces::ManagementCanister;
-use icp_ledger::{AccountIdentifier, LedgerCanisterInitPayload, Tokens};
+use icp_ledger::{
+    AccountIdentifier,
+    LedgerCanisterInitPayload,
+    Tokens,
+};
 use itertools::Itertools;
 use prost::Message;
 use regex::Regex;
-use serde::{Deserialize, Serialize};
-use slog::{debug, error, info, warn, Logger};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use slog::{
+    debug,
+    error,
+    info,
+    warn,
+    Logger,
+};
 use ssh2::Session;
 use std::{
     cmp::max,
-    collections::{HashMap, HashSet},
+    collections::{
+        HashMap,
+        HashSet,
+    },
     convert::TryFrom,
     ffi::OsStr,
     fs,
     future::Future,
-    io::{Read, Write},
-    net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream},
-    path::{Path, PathBuf},
+    io::{
+        Read,
+        Write,
+    },
+    net::{
+        IpAddr,
+        Ipv4Addr,
+        SocketAddr,
+        TcpStream,
+    },
+    path::{
+        Path,
+        PathBuf,
+    },
     str::FromStr,
     sync::Arc,
-    time::{Duration, Instant},
+    time::{
+        Duration,
+        Instant,
+    },
 };
-use tokio::{runtime::Runtime as Rt, sync::Mutex as TokioMutex};
+use tokio::{
+    runtime::Runtime as Rt,
+    sync::Mutex as TokioMutex,
+};
 use url::Url;
 
 pub const READY_WAIT_TIMEOUT: Duration = Duration::from_secs(500);

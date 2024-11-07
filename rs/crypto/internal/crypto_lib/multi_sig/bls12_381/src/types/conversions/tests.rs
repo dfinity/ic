@@ -1,10 +1,21 @@
 //! Test multisignature type conversions
 use super::super::arbitrary;
 use super::{
-    CombinedSignature, CombinedSignatureBytes, IndividualSignature, IndividualSignatureBytes, Pop,
-    PopBytes, PublicKey, PublicKeyBytes, SecretKey, SecretKeyBytes,
+    CombinedSignature,
+    CombinedSignatureBytes,
+    IndividualSignature,
+    IndividualSignatureBytes,
+    Pop,
+    PopBytes,
+    PublicKey,
+    PublicKeyBytes,
+    SecretKey,
+    SecretKeyBytes,
 };
-use ic_crypto_internal_test_vectors::unhex::{hex_to_48_bytes, hex_to_96_bytes};
+use ic_crypto_internal_test_vectors::unhex::{
+    hex_to_48_bytes,
+    hex_to_96_bytes,
+};
 use ic_types::crypto::CryptoError;
 use proptest::prelude::*;
 use std::convert::TryFrom;

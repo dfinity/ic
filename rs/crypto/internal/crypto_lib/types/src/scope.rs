@@ -1,6 +1,14 @@
 //! Defines scopes for grouping keys.
-use serde::{Deserialize, Serialize};
-use strum_macros::{EnumDiscriminants, EnumIter, EnumString, IntoStaticStr};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use strum_macros::{
+    EnumDiscriminants,
+    EnumIter,
+    EnumString,
+    IntoStaticStr,
+};
 #[cfg(test)]
 mod tests;
 

@@ -1,6 +1,12 @@
-use anyhow::{Context, Error};
+use anyhow::{
+    Context,
+    Error,
+};
 use clap::Parser;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use serde_json::Value;
 use std::fs::File;
 use std::io::Write;

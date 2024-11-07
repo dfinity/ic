@@ -6,7 +6,10 @@ pub use keygen::*;
 
 mod errors;
 
-pub use sign::threshold_sig::ni_dkg::{LoadTranscriptResult, NiDkgAlgorithm};
+pub use sign::threshold_sig::ni_dkg::{
+    LoadTranscriptResult,
+    NiDkgAlgorithm,
+};
 
 mod sign;
 
@@ -24,13 +27,28 @@ use ic_crypto_interfaces_sig_verification::BasicSigVerifierByPublicKey;
 use ic_types::consensus::{
     certification::CertificationContent,
     dkg as consensus_dkg,
-    idkg::{IDkgComplaintContent, IDkgOpeningContent},
-    BlockMetadata, CatchUpContent, CatchUpContentProtobufBytes, FinalizationContent,
-    NotarizationContent, RandomBeaconContent, RandomTapeContent,
+    idkg::{
+        IDkgComplaintContent,
+        IDkgOpeningContent,
+    },
+    BlockMetadata,
+    CatchUpContent,
+    CatchUpContentProtobufBytes,
+    FinalizationContent,
+    NotarizationContent,
+    RandomBeaconContent,
+    RandomTapeContent,
 };
 use ic_types::{
-    crypto::canister_threshold_sig::idkg::{IDkgDealing, SignedIDkgDealing},
-    messages::{MessageId, QueryResponseHash, WebAuthnEnvelope},
+    crypto::canister_threshold_sig::idkg::{
+        IDkgDealing,
+        SignedIDkgDealing,
+    },
+    messages::{
+        MessageId,
+        QueryResponseHash,
+        WebAuthnEnvelope,
+    },
 };
 
 /// The functionality offered by the crypto component

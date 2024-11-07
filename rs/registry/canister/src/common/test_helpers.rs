@@ -2,9 +2,14 @@ use crate::mutations::do_create_subnet::CreateSubnetPayload;
 use crate::mutations::node_management::common::make_add_node_registry_mutations;
 use crate::mutations::node_management::do_add_node::connection_endpoint_from_string;
 use crate::registry::Registry;
-use ic_base_types::{NodeId, PrincipalId, SubnetId};
+use ic_base_types::{
+    NodeId,
+    PrincipalId,
+    SubnetId,
+};
 use ic_nns_test_utils::registry::{
-    create_subnet_threshold_signing_pubkey_and_cup_mutations, invariant_compliant_mutation,
+    create_subnet_threshold_signing_pubkey_and_cup_mutations,
+    invariant_compliant_mutation,
     new_node_keys_and_node_id,
 };
 use ic_protobuf::registry::crypto::v1::PublicKey;
@@ -15,7 +20,9 @@ use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_keys::make_subnet_list_record_key;
 use ic_registry_keys::make_subnet_record_key;
 use ic_registry_transport::pb::v1::{
-    registry_mutation::Type, RegistryAtomicMutateRequest, RegistryMutation,
+    registry_mutation::Type,
+    RegistryAtomicMutateRequest,
+    RegistryMutation,
 };
 use ic_registry_transport::upsert;
 use ic_types::ReplicaVersion;

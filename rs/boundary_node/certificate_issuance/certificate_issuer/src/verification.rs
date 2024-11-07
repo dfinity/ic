@@ -1,14 +1,37 @@
-use std::{sync::Arc, time::SystemTime};
-
-use anyhow::{anyhow, Context, Error};
-use async_trait::async_trait;
-use candid::{Encode, Principal};
-use certificate_orchestrator_interface::{LABEL_DOMAINS, LEFT_GUARD, RIGHT_GUARD};
-use ic_agent::{
-    hash_tree::{HashTree, HashTreeNode, LookupResult},
-    lookup_value, Agent, Certificate,
+use std::{
+    sync::Arc,
+    time::SystemTime,
 };
-use sha2::{Digest, Sha256};
+
+use anyhow::{
+    anyhow,
+    Context,
+    Error,
+};
+use async_trait::async_trait;
+use candid::{
+    Encode,
+    Principal,
+};
+use certificate_orchestrator_interface::{
+    LABEL_DOMAINS,
+    LEFT_GUARD,
+    RIGHT_GUARD,
+};
+use ic_agent::{
+    hash_tree::{
+        HashTree,
+        HashTreeNode,
+        LookupResult,
+    },
+    lookup_value,
+    Agent,
+    Certificate,
+};
+use sha2::{
+    Digest,
+    Sha256,
+};
 
 use crate::certificate::Package;
 

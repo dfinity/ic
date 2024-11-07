@@ -1,59 +1,132 @@
-use candid::{Encode, Principal};
-use canister_test::{ic00::EcdsaKeyId, Canister, Runtime};
+use candid::{
+    Encode,
+    Principal,
+};
+use canister_test::{
+    ic00::EcdsaKeyId,
+    Canister,
+    Runtime,
+};
 use dfn_candid::candid;
-use ic_base_types::{CanisterId, PrincipalId, SubnetId};
-use ic_btc_interface::{Config, Fees, Flag, Network};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+    SubnetId,
+};
+use ic_btc_interface::{
+    Config,
+    Fees,
+    Flag,
+    Network,
+};
 use ic_canister_client::Sender;
 use ic_ckbtc_kyt::{
-    InitArg as KytInitArg, KytMode, LifecycleArg, SetApiKeyArg, UpgradeArg as KytUpgradeArg,
+    InitArg as KytInitArg,
+    KytMode,
+    LifecycleArg,
+    SetApiKeyArg,
+    UpgradeArg as KytUpgradeArg,
 };
 use ic_ckbtc_minter::{
-    lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterArg, Mode},
+    lifecycle::init::{
+        InitArgs as CkbtcMinterInitArgs,
+        MinterArg,
+        Mode,
+    },
     CKBTC_LEDGER_MEMO_SIZE,
 };
 use ic_config::{
-    execution_environment::{BITCOIN_MAINNET_CANISTER_ID, BITCOIN_TESTNET_CANISTER_ID},
+    execution_environment::{
+        BITCOIN_MAINNET_CANISTER_ID,
+        BITCOIN_TESTNET_CANISTER_ID,
+    },
     subnet_config::ECDSA_SIGNATURE_FEE,
 };
 use ic_consensus_threshold_sig_system_test_utils::{
-    get_public_key_with_logger, get_signature_with_logger, make_key, verify_signature,
+    get_public_key_with_logger,
+    get_signature_with_logger,
+    make_key,
+    verify_signature,
 };
-use ic_icrc1_ledger::{InitArgsBuilder, LedgerArgument};
+use ic_icrc1_ledger::{
+    InitArgsBuilder,
+    LedgerArgument,
+};
 use ic_management_canister_types::{
-    CanisterIdRecord, MasterPublicKeyId, ProvisionalCreateCanisterWithCyclesArgs,
+    CanisterIdRecord,
+    MasterPublicKeyId,
+    ProvisionalCreateCanisterWithCyclesArgs,
 };
-use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
-use ic_nns_common::types::{NeuronId, ProposalId};
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
-use ic_nns_governance_api::pb::v1::{NnsFunction, ProposalStatus};
+use ic_nervous_system_common_test_keys::{
+    TEST_NEURON_1_ID,
+    TEST_NEURON_1_OWNER_KEYPAIR,
+};
+use ic_nns_common::types::{
+    NeuronId,
+    ProposalId,
+};
+use ic_nns_constants::{
+    GOVERNANCE_CANISTER_ID,
+    ROOT_CANISTER_ID,
+};
+use ic_nns_governance_api::pb::v1::{
+    NnsFunction,
+    ProposalStatus,
+};
 use ic_nns_test_utils::{
-    governance::submit_external_update_proposal, itest_helpers::install_rust_canister_from_path,
+    governance::submit_external_update_proposal,
+    itest_helpers::install_rust_canister_from_path,
 };
-use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
+use ic_registry_subnet_features::{
+    EcdsaConfig,
+    DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
-        ic::{InternetComputer, Subnet},
+        ic::{
+            InternetComputer,
+            Subnet,
+        },
         test_env::TestEnv,
         test_env_api::{
-            get_dependency_path, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-            IcNodeSnapshot, NnsInstallationBuilder, SubnetSnapshot,
+            get_dependency_path,
+            HasPublicApiUrl,
+            HasTopologySnapshot,
+            IcNodeContainer,
+            IcNodeSnapshot,
+            NnsInstallationBuilder,
+            SubnetSnapshot,
         },
-        universal_vm::{UniversalVm, UniversalVms},
+        universal_vm::{
+            UniversalVm,
+            UniversalVms,
+        },
     },
     nns::vote_and_execute_proposal,
-    util::{assert_create_agent, runtime_from_url, MessageCanister},
+    util::{
+        assert_create_agent,
+        runtime_from_url,
+        MessageCanister,
+    },
 };
 use ic_types::Height;
 use ic_types_test_utils::ids::subnet_test_id;
 use icp_ledger::ArchiveOptions;
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
-use slog::{debug, info, Logger};
+use slog::{
+    debug,
+    info,
+    Logger,
+};
 use std::{
     env,
     fs::File,
     io::Write,
-    net::{IpAddr, SocketAddr},
+    net::{
+        IpAddr,
+        SocketAddr,
+    },
     str::FromStr,
     time::Duration,
 };

@@ -1,36 +1,82 @@
 use dfn_candid::CandidOne;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_types::{
-    messages::{Blob, HttpCanisterUpdate, MessageId},
+    messages::{
+        Blob,
+        HttpCanisterUpdate,
+        MessageId,
+    },
     PrincipalId,
 };
-use icp_ledger::{Memo, Operation, SendArgs, Tokens};
+use icp_ledger::{
+    Memo,
+    Operation,
+    SendArgs,
+    Tokens,
+};
 use on_wire::IntoWire;
 use rand::Rng;
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{
+    collections::HashMap,
+    sync::Arc,
+    time::Duration,
+};
 
 use ic_nns_governance_api::pb::v1::{
-    manage_neuron::{self, configure, Command, NeuronIdOrSubaccount},
-    ClaimOrRefreshNeuronFromAccount, ManageNeuron,
+    manage_neuron::{
+        self,
+        configure,
+        Command,
+        NeuronIdOrSubaccount,
+    },
+    ClaimOrRefreshNeuronFromAccount,
+    ManageNeuron,
 };
 
 use crate::{
     convert,
-    convert::{make_read_state_from_update, to_arg, to_model_account_identifier},
+    convert::{
+        make_read_state_from_update,
+        to_arg,
+        to_model_account_identifier,
+    },
     errors::ApiError,
     ledger_client::LedgerAccess,
     models,
     models::{
-        AccountIdentifier, ConstructionPayloadsRequest, ConstructionPayloadsRequestMetadata,
-        ConstructionPayloadsResponse, PublicKey, SignatureType, SigningPayload,
+        AccountIdentifier,
+        ConstructionPayloadsRequest,
+        ConstructionPayloadsRequestMetadata,
+        ConstructionPayloadsResponse,
+        PublicKey,
+        SignatureType,
+        SigningPayload,
         UnsignedTransaction,
     },
     request::Request,
-    request_handler::{make_sig_data, verify_network_id, RosettaRequestHandler},
+    request_handler::{
+        make_sig_data,
+        verify_network_id,
+        RosettaRequestHandler,
+    },
     request_types::{
-        AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons, MergeMaturity,
-        NeuronInfo, PublicKeyOrPrincipal, RegisterVote, RemoveHotKey, RequestType,
-        SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve, StopDissolve,
+        AddHotKey,
+        ChangeAutoStakeMaturity,
+        Disburse,
+        Follow,
+        ListNeurons,
+        MergeMaturity,
+        NeuronInfo,
+        PublicKeyOrPrincipal,
+        RegisterVote,
+        RemoveHotKey,
+        RequestType,
+        SetDissolveTimestamp,
+        Spawn,
+        Stake,
+        StakeMaturity,
+        StartDissolve,
+        StopDissolve,
     },
 };
 use rosetta_core::convert::principal_id_from_public_key;

@@ -5,11 +5,30 @@
 
 //! A crate for creating and verifying Ed25519 signatures
 
-use curve25519_dalek::{edwards::CompressedEdwardsY, EdwardsPoint, Scalar};
-use ed25519_dalek::pkcs8::{DecodePrivateKey, DecodePublicKey, EncodePrivateKey, EncodePublicKey};
-use ed25519_dalek::{Digest, Sha512};
-use ed25519_dalek::{Signer, SigningKey, VerifyingKey};
-use rand::{CryptoRng, Rng};
+use curve25519_dalek::{
+    edwards::CompressedEdwardsY,
+    EdwardsPoint,
+    Scalar,
+};
+use ed25519_dalek::pkcs8::{
+    DecodePrivateKey,
+    DecodePublicKey,
+    EncodePrivateKey,
+    EncodePublicKey,
+};
+use ed25519_dalek::{
+    Digest,
+    Sha512,
+};
+use ed25519_dalek::{
+    Signer,
+    SigningKey,
+    VerifyingKey,
+};
+use rand::{
+    CryptoRng,
+    Rng,
+};
 use thiserror::Error;
 use zeroize::ZeroizeOnDrop;
 
@@ -718,7 +737,9 @@ impl PublicKey {
         }
 
         use curve25519_dalek::{
-            constants::ED25519_BASEPOINT_POINT, traits::IsIdentity, traits::VartimeMultiscalarMul,
+            constants::ED25519_BASEPOINT_POINT,
+            traits::IsIdentity,
+            traits::VartimeMultiscalarMul,
         };
         use std::iter::once;
 

@@ -6,7 +6,8 @@ use proptest::prelude::*;
 
 use crate::types::arbitrary::threshold_sig_public_key_bytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::{
-    PublicKeyBytes, ThresholdSigPublicKeyBytesConversionError,
+    PublicKeyBytes,
+    ThresholdSigPublicKeyBytesConversionError,
 };
 
 proptest! {

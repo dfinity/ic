@@ -1,23 +1,50 @@
 //! This tests the speed of loading blocks from persistence with varying payload
 //! sizes.
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{
+    criterion_group,
+    criterion_main,
+    Criterion,
+};
 use ic_artifact_pool::consensus_pool::ConsensusPoolImpl;
 use ic_interfaces::consensus_pool::{
-    ChangeAction, ConsensusPool, Mutations, ValidatedConsensusArtifact,
+    ChangeAction,
+    ConsensusPool,
+    Mutations,
+    ValidatedConsensusArtifact,
 };
 use ic_interfaces::p2p::consensus::MutablePool;
 use ic_interfaces::time_source::SysTimeSource;
 use ic_logger::replica_logger::no_op_logger;
-use ic_test_utilities_consensus::{fake::*, make_genesis};
+use ic_test_utilities_consensus::{
+    fake::*,
+    make_genesis,
+};
 use ic_test_utilities_types::{
-    ids::{node_test_id, subnet_test_id},
+    ids::{
+        node_test_id,
+        subnet_test_id,
+    },
     messages::SignedIngressBuilder,
 };
-use ic_types::consensus::{BlockPayload, DataPayload};
+use ic_types::consensus::{
+    BlockPayload,
+    DataPayload,
+};
 use ic_types::{
-    batch::{BatchPayload, IngressPayload},
-    consensus::{dkg, Block, BlockProposal, ConsensusMessageHashable, HasHeight, Payload, Rank},
+    batch::{
+        BatchPayload,
+        IngressPayload,
+    },
+    consensus::{
+        dkg,
+        Block,
+        BlockProposal,
+        ConsensusMessageHashable,
+        HasHeight,
+        Payload,
+        Rank,
+    },
     time::UNIX_EPOCH,
     Height,
 };

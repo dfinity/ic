@@ -2,14 +2,28 @@ use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
     boundary_node::BoundaryNode,
-    ic::{InternetComputer, Node, Subnet},
+    ic::{
+        InternetComputer,
+        Node,
+        Subnet,
+    },
     node_software_version::NodeSoftwareVersion,
-    prometheus_vm::{HasPrometheus, PrometheusVm},
+    prometheus_vm::{
+        HasPrometheus,
+        PrometheusVm,
+    },
     test_env::TestEnv,
-    test_env_api::{get_dependency_path, HasTopologySnapshot, NnsCustomizations},
+    test_env_api::{
+        get_dependency_path,
+        HasTopologySnapshot,
+        NnsCustomizations,
+    },
 };
 use serde::Deserialize;
-use slog::{info, Logger};
+use slog::{
+    info,
+    Logger,
+};
 use url::Url;
 
 pub mod defs;

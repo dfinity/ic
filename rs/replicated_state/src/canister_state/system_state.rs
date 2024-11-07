@@ -1,50 +1,107 @@
 mod call_context_manager;
 pub mod wasm_chunk_store;
 
-use self::wasm_chunk_store::{WasmChunkStore, WasmChunkStoreMetadata};
+use self::wasm_chunk_store::{
+    WasmChunkStore,
+    WasmChunkStoreMetadata,
+};
 pub use super::queues::memory_required_to_push_request;
-use super::queues::{can_push, CanisterInput};
+use super::queues::{
+    can_push,
+    CanisterInput,
+};
 pub use crate::canister_state::queues::CanisterOutputQueuesIterator;
 use crate::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use crate::page_map::PageAllocatorFileDescriptor;
 use crate::replicated_state::MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN;
 use crate::{
-    CanisterQueues, CanisterState, CheckpointLoadingMetrics, InputQueueType, PageMap, StateError,
+    CanisterQueues,
+    CanisterState,
+    CheckpointLoadingMetrics,
+    InputQueueType,
+    PageMap,
+    StateError,
 };
-pub use call_context_manager::{CallContext, CallContextAction, CallContextManager, CallOrigin};
+pub use call_context_manager::{
+    CallContext,
+    CallContextAction,
+    CallContextManager,
+    CallOrigin,
+};
 use ic_base_types::NumSeconds;
 use ic_config::flag_status::FlagStatus;
 use ic_error_types::RejectCode;
-use ic_interfaces::execution_environment::{ExecutionRoundType, HypervisorError};
-use ic_logger::{error, ReplicaLogger};
+use ic_interfaces::execution_environment::{
+    ExecutionRoundType,
+    HypervisorError,
+};
+use ic_logger::{
+    error,
+    ReplicaLogger,
+};
 use ic_management_canister_types::{
-    CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterStatusType,
+    CanisterChange,
+    CanisterChangeDetails,
+    CanisterChangeOrigin,
+    CanisterStatusType,
     LogVisibilityV2,
 };
-use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_protobuf::proxy::{
+    try_from_option_field,
+    ProxyDecodeError,
+};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{
-    CallContextId, CallbackId, CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask,
-    Ingress, Payload, RejectContext, Request, RequestMetadata, RequestOrResponse, Response,
-    StopCanisterContext, NO_DEADLINE,
+    CallContextId,
+    CallbackId,
+    CanisterCall,
+    CanisterMessage,
+    CanisterMessageOrTask,
+    CanisterTask,
+    Ingress,
+    Payload,
+    RejectContext,
+    Request,
+    RequestMetadata,
+    RequestOrResponse,
+    Response,
+    StopCanisterContext,
+    NO_DEADLINE,
 };
 use ic_types::methods::Callback;
 use ic_types::nominal_cycles::NominalCycles;
 use ic_types::time::CoarseTime;
 use ic_types::{
-    CanisterId, CanisterLog, CanisterTimer, Cycles, MemoryAllocation, NumBytes, NumInstructions,
-    PrincipalId, Time,
+    CanisterId,
+    CanisterLog,
+    CanisterTimer,
+    Cycles,
+    MemoryAllocation,
+    NumBytes,
+    NumInstructions,
+    PrincipalId,
+    Time,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use lazy_static::lazy_static;
 use maplit::btreeset;
 use prometheus::IntCounter;
-use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
-use std::convert::{TryFrom, TryInto};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+    VecDeque,
+};
+use std::convert::{
+    TryFrom,
+    TryInto,
+};
 use std::str::FromStr;
 use std::sync::Arc;
 use strum_macros::EnumIter;
@@ -907,7 +964,8 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
                 prepaid_execution_cycles,
             } => {
                 use pb::execution_task::{
-                    aborted_execution::Input as PbInput, CanisterTask as PbCanisterTask,
+                    aborted_execution::Input as PbInput,
+                    CanisterTask as PbCanisterTask,
                 };
                 let input = match input {
                     CanisterMessageOrTask::Message(CanisterMessage::Response(v)) => {
@@ -966,7 +1024,8 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
         let task = match task {
             pb::execution_task::Task::AbortedExecution(aborted) => {
                 use pb::execution_task::{
-                    aborted_execution::Input as PbInput, CanisterTask as PbCanisterTask,
+                    aborted_execution::Input as PbInput,
+                    CanisterTask as PbCanisterTask,
                 };
                 let input = aborted
                     .input
@@ -2605,14 +2664,22 @@ mod tests {
 
     use crate::{
         canister_state::system_state::OnLowWasmMemoryHookStatus,
-        metadata_state::subnet_call_context_manager::InstallCodeCallId, ExecutionTask,
+        metadata_state::subnet_call_context_manager::InstallCodeCallId,
+        ExecutionTask,
     };
 
-    use super::{PausedExecutionId, TaskQueue};
+    use super::{
+        PausedExecutionId,
+        TaskQueue,
+    };
 
     use ic_test_utilities_types::messages::IngressBuilder;
     use ic_types::{
-        messages::{CanisterCall, CanisterMessageOrTask, CanisterTask},
+        messages::{
+            CanisterCall,
+            CanisterMessageOrTask,
+            CanisterTask,
+        },
         Cycles,
     };
     #[test]

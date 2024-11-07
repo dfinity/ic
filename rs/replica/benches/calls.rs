@@ -1,4 +1,7 @@
-use canister_test::{local_test_e, Wasm};
+use canister_test::{
+    local_test_e,
+    Wasm,
+};
 use criterion::Criterion;
 
 const HELLO_WORLD: &str = r#"

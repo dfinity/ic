@@ -1,5 +1,8 @@
 use std::{
-    hash::{Hash, Hasher},
+    hash::{
+        Hash,
+        Hasher,
+    },
     str::FromStr,
     sync::Arc,
     time::Duration,
@@ -10,37 +13,80 @@ use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use axum::{
     body::Body,
-    extract::{MatchedPath, Path, Request, State},
+    extract::{
+        MatchedPath,
+        Path,
+        Request,
+        State,
+    },
     http::StatusCode,
     middleware::Next,
-    response::{IntoResponse, Response},
-    BoxError, Extension,
+    response::{
+        IntoResponse,
+        Response,
+    },
+    BoxError,
+    Extension,
 };
 use bytes::Bytes;
-use candid::{CandidType, Decode, Principal};
-use http::header::{HeaderValue, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS};
+use candid::{
+    CandidType,
+    Decode,
+    Principal,
+};
+use http::header::{
+    HeaderValue,
+    CONTENT_TYPE,
+    X_CONTENT_TYPE_OPTIONS,
+    X_FRAME_OPTIONS,
+};
 use ic_bn_lib::http::{
-    body::buffer_body, headers::*, proxy, Client as HttpClient, Error as IcBnError,
+    body::buffer_body,
+    headers::*,
+    proxy,
+    Client as HttpClient,
+    Error as IcBnError,
 };
 use ic_types::{
-    messages::{Blob, HttpStatusResponse, ReplicaHealthStatus},
-    CanisterId, PrincipalId, SubnetId,
+    messages::{
+        Blob,
+        HttpStatusResponse,
+        ReplicaHealthStatus,
+    },
+    CanisterId,
+    PrincipalId,
+    SubnetId,
 };
 
 use lazy_static::lazy_static;
 use regex::Regex;
-use serde::{Deserialize, Serialize};
-use strum::{Display, IntoStaticStr};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use strum::{
+    Display,
+    IntoStaticStr,
+};
 use tower_governor::errors::GovernorError;
 use url::Url;
 
 use crate::{
     cache::CacheStatus,
-    core::{decoder_config, MAX_REQUEST_BODY_SIZE},
+    core::{
+        decoder_config,
+        MAX_REQUEST_BODY_SIZE,
+    },
     http::error_infer,
-    persist::{RouteSubnet, Routes},
+    persist::{
+        RouteSubnet,
+        Routes,
+    },
     retry::RetryResult,
-    snapshot::{Node, RegistrySnapshot},
+    snapshot::{
+        Node,
+        RegistrySnapshot,
+    },
 };
 
 // TODO which one to use?

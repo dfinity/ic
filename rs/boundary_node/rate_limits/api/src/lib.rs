@@ -1,7 +1,10 @@
 use candid::CandidType;
 use candid::Principal;
 use schema_versions::v1::RateLimitRule;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 mod schema_versions;
 pub use schema_versions::v1;

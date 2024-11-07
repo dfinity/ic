@@ -1,6 +1,10 @@
 use super::*;
 use std::convert::TryFrom;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::{
+    IpAddr,
+    Ipv4Addr,
+    SocketAddr,
+};
 use std::str::FromStr;
 
 fn str_node_id(s: &str) -> NodeId {

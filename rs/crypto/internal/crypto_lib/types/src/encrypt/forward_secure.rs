@@ -3,7 +3,10 @@
 use crate::curves::bls12_381;
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::convert::TryFrom;
 use std::fmt;
 use strum_macros::IntoStaticStr;
@@ -144,9 +147,16 @@ impl fmt::Display for CspFsEncryptionPopFromPublicKeyProtoError {
 pub mod groth20_bls12_381 {
     //! The forward secure encryption keys used in Groth20.
 
-    use crate::curves::bls12_381::{FrBytes, G1Bytes, G2Bytes};
+    use crate::curves::bls12_381::{
+        FrBytes,
+        G1Bytes,
+        G2Bytes,
+    };
     use crate::NodeIndex;
-    use serde::{Deserialize, Serialize};
+    use serde::{
+        Deserialize,
+        Serialize,
+    };
     use std::convert::TryFrom;
 
     /// Forward secure encryption public key used in Groth20.

@@ -7,16 +7,31 @@ use crate::vault::api::CspVault;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
 use ic_crypto_internal_types::encrypt::forward_secure::CspFsEncryptionPublicKey;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
-    CspNiDkgDealing, CspNiDkgTranscript, Epoch,
+    CspNiDkgDealing,
+    CspNiDkgTranscript,
+    Epoch,
 };
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
 use ic_types::crypto::threshold_sig::ni_dkg::config::dealers::NiDkgDealers;
 use ic_types::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;
 use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgThreshold;
-use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet};
+use ic_types::crypto::threshold_sig::ni_dkg::{
+    NiDkgId,
+    NiDkgTag,
+    NiDkgTargetSubnet,
+};
 use ic_types::crypto::AlgorithmId;
-use ic_types::{Height, NodeId, NodeIndex, NumberOfNodes, SubnetId};
-use ic_types_test_utils::ids::{node_test_id, subnet_test_id};
+use ic_types::{
+    Height,
+    NodeId,
+    NodeIndex,
+    NumberOfNodes,
+    SubnetId,
+};
+use ic_types_test_utils::ids::{
+    node_test_id,
+    subnet_test_id,
+};
 use rand::seq::IteratorRandom;
 use rand::Rng;
 use rand_chacha::ChaCha20Rng;

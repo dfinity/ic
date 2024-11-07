@@ -1,17 +1,35 @@
 use itertools::Itertools;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
 use std::thread;
 
 use super::Governance;
-use crate::storage::{with_stable_neuron_indexes, with_stable_neuron_store};
+use crate::storage::{
+    with_stable_neuron_indexes,
+    with_stable_neuron_store,
+};
 
 pub use tla_instrumentation::{
-    Destination, GlobalState, InstrumentationState, Label, ResolvedStatePair,
-    TlaConstantAssignment, TlaValue, ToTla, Update, UpdateTrace, VarAssignment,
+    Destination,
+    GlobalState,
+    InstrumentationState,
+    Label,
+    ResolvedStatePair,
+    TlaConstantAssignment,
+    TlaValue,
+    ToTla,
+    Update,
+    UpdateTrace,
+    VarAssignment,
 };
 pub use tla_instrumentation_proc_macros::tla_update_method;
 
-pub use tla_instrumentation::checker::{check_tla_code_link, PredicateDescription};
+pub use tla_instrumentation::checker::{
+    check_tla_code_link,
+    PredicateDescription,
+};
 
 use std::path::PathBuf;
 
@@ -19,9 +37,20 @@ use icp_ledger::Subaccount;
 mod common;
 mod store;
 
-pub use common::{account_to_tla, opt_subaccount_to_tla, subaccount_to_tla};
-use common::{function_domain_union, governance_account_id};
-pub use store::{TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY, TLA_TRACES_MUTEX};
+pub use common::{
+    account_to_tla,
+    opt_subaccount_to_tla,
+    subaccount_to_tla,
+};
+use common::{
+    function_domain_union,
+    governance_account_id,
+};
+pub use store::{
+    TLA_INSTRUMENTATION_STATE,
+    TLA_TRACES_LKEY,
+    TLA_TRACES_MUTEX,
+};
 
 mod split_neuron;
 pub use split_neuron::split_neuron_desc;

@@ -1,6 +1,9 @@
 use std::{
     collections::HashMap,
-    net::{IpAddr, Ipv4Addr},
+    net::{
+        IpAddr,
+        Ipv4Addr,
+    },
     sync::Arc,
 };
 
@@ -10,8 +13,18 @@ use ic_registry_subnet_type::SubnetType;
 
 use super::*;
 use crate::{
-    persist::{Persister, Routes},
-    snapshot::{node_test_id, subnet_test_id, CanisterRange, Node, RegistrySnapshot, Subnet},
+    persist::{
+        Persister,
+        Routes,
+    },
+    snapshot::{
+        node_test_id,
+        subnet_test_id,
+        CanisterRange,
+        Node,
+        RegistrySnapshot,
+        Subnet,
+    },
     test_utils::valid_tls_certificate_and_validation_time,
 };
 

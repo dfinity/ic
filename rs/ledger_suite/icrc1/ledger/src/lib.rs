@@ -5,52 +5,107 @@ mod tests;
 
 use crate::cdk_runtime::CdkRuntime;
 use candid::{
-    types::number::{Int, Nat},
-    CandidType, Principal,
+    types::number::{
+        Int,
+        Nat,
+    },
+    CandidType,
+    Principal,
 };
 use ic_base_types::PrincipalId;
-use ic_canister_log::{log, Sink};
-use ic_crypto_tree_hash::{Label, MixedHashTree};
+use ic_canister_log::{
+    log,
+    Sink,
+};
+use ic_crypto_tree_hash::{
+    Label,
+    MixedHashTree,
+};
 use ic_icrc1::blocks::encoded_block_to_generic_block;
-use ic_icrc1::{Block, LedgerAllowances, LedgerBalances, Transaction};
+use ic_icrc1::{
+    Block,
+    LedgerAllowances,
+    LedgerBalances,
+    Transaction,
+};
 use ic_ledger_canister_core::archive::Archive;
 pub use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_canister_core::runtime::Runtime;
 use ic_ledger_canister_core::{
     archive::ArchiveCanisterWasm,
     blockchain::Blockchain,
-    ledger::{apply_transaction, block_locations, LedgerContext, LedgerData, TransactionInfo},
+    ledger::{
+        apply_transaction,
+        block_locations,
+        LedgerContext,
+        LedgerData,
+        TransactionInfo,
+    },
     range_utils,
 };
 use ic_ledger_core::{
-    approvals::{AllowanceTable, HeapAllowancesData},
+    approvals::{
+        AllowanceTable,
+        HeapAllowancesData,
+    },
     balances::Balances,
-    block::{BlockIndex, BlockType, EncodedBlock, FeeCollector},
+    block::{
+        BlockIndex,
+        BlockType,
+        EncodedBlock,
+        FeeCollector,
+    },
     timestamp::TimeStamp,
     tokens::TokensType,
 };
 use ic_ledger_hash_of::HashOf;
-use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
+use ic_stable_structures::memory_manager::{
+    MemoryId,
+    MemoryManager,
+    VirtualMemory,
+};
 use ic_stable_structures::DefaultMemoryImpl;
 use icrc_ledger_types::icrc3::transactions::Transaction as Tx;
-use icrc_ledger_types::icrc3::{blocks::GetBlocksResponse, transactions::GetTransactionsResponse};
+use icrc_ledger_types::icrc3::{
+    blocks::GetBlocksResponse,
+    transactions::GetTransactionsResponse,
+};
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value,
-    icrc3::archive::{ArchivedRange, QueryBlockArchiveFn, QueryTxArchiveFn},
+    icrc3::archive::{
+        ArchivedRange,
+        QueryBlockArchiveFn,
+        QueryTxArchiveFn,
+    },
 };
 use icrc_ledger_types::{
     icrc::generic_value::ICRC3Value,
     icrc1::account::Account,
     icrc3::{
-        archive::{GetArchivesArgs, GetArchivesResult, ICRC3ArchiveInfo, QueryArchiveFn},
-        blocks::{ArchivedBlocks, GetBlocksRequest, GetBlocksResult},
+        archive::{
+            GetArchivesArgs,
+            GetArchivesResult,
+            ICRC3ArchiveInfo,
+            QueryArchiveFn,
+        },
+        blocks::{
+            ArchivedBlocks,
+            GetBlocksRequest,
+            GetBlocksResult,
+        },
     },
 };
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use serde_bytes::ByteBuf;
 use std::borrow::Cow;
 use std::cell::RefCell;
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{
+    BTreeMap,
+    VecDeque,
+};
 use std::ops::DerefMut;
 use std::time::Duration;
 

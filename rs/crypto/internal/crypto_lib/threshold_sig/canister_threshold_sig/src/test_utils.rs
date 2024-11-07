@@ -1,4 +1,7 @@
-use crate::{zk::ProofOfDLogEquivalence, *};
+use crate::{
+    zk::ProofOfDLogEquivalence,
+    *,
+};
 use strum::EnumIter;
 
 /// Corrupts this dealing by modifying the ciphertext intended for

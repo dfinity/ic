@@ -1,7 +1,10 @@
 use std::{
     collections::BTreeMap,
     io::Write,
-    net::{Ipv6Addr, SocketAddr},
+    net::{
+        Ipv6Addr,
+        SocketAddr,
+    },
     path::PathBuf,
     str::FromStr,
     sync::Arc,
@@ -9,25 +12,48 @@ use std::{
 
 use axum::{
     body::Body,
-    extract::{Path, Request},
-    http::{HeaderMap, HeaderName, Method, StatusCode},
+    extract::{
+        Path,
+        Request,
+    },
+    http::{
+        HeaderMap,
+        HeaderName,
+        Method,
+        StatusCode,
+    },
     middleware::map_response,
-    response::{Html, IntoResponse, Redirect, Response},
-    routing::{get, post},
+    response::{
+        Html,
+        IntoResponse,
+        Redirect,
+        Response,
+    },
+    routing::{
+        get,
+        post,
+    },
     Router,
 };
 use clap::Parser;
 use hyper::body::Incoming;
 use hyper_util::{
-    rt::{TokioExecutor, TokioIo},
+    rt::{
+        TokioExecutor,
+        TokioIo,
+    },
     server::conn::auto::Builder,
 };
 use rustls::ServerConfig;
 use serde_json::json;
 use tokio::{
     net::TcpListener,
-    select, signal,
-    time::{sleep, Duration},
+    select,
+    signal,
+    time::{
+        sleep,
+        Duration,
+    },
 };
 use tokio_rustls::TlsAcceptor;
 use tower::Service;

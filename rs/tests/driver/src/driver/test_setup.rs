@@ -1,6 +1,9 @@
 use crate::driver::ic::VmResources;
 use crate::driver::test_env::TestEnvAttribute;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::time::Duration;
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]

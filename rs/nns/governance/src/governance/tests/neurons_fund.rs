@@ -1,7 +1,11 @@
 use super::*;
 use crate::{
     pb::v1::create_service_nervous_system::SwapParameters,
-    test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
+    test_utils::{
+        MockEnvironment,
+        StubCMC,
+        StubIcpLedger,
+    },
 };
 use assert_matches::assert_matches;
 use ic_nervous_system_common::E8;

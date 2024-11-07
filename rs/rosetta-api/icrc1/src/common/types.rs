@@ -1,5 +1,9 @@
 use anyhow::Context;
-use axum::{http::StatusCode, response::IntoResponse, Json};
+use axum::{
+    http::StatusCode,
+    response::IntoResponse,
+    Json,
+};
 use candid::Deserialize;
 use num_bigint::BigInt;
 use rosetta_core::identifiers::*;
@@ -8,7 +12,10 @@ use serde::Serialize;
 use serde_bytes::ByteBuf;
 use strum_macros::Display;
 use strum_macros::EnumIter;
-use strum_macros::{EnumString, VariantNames};
+use strum_macros::{
+    EnumString,
+    VariantNames,
+};
 
 // Generated from the [Rosetta API specification v1.4.13](https://github.com/coinbase/rosetta-specifications/blob/v1.4.13/api.json)
 // Documentation for the Rosetta API can be found at https://www.rosetta-api.org/docs/1.4.13/welcome.html

@@ -1,9 +1,20 @@
 // Stable memory for the TVL canister.
-use crate::{mutate_state, FiatCurrency};
-use candid::{CandidType, Deserialize};
+use crate::{
+    mutate_state,
+    FiatCurrency,
+};
+use candid::{
+    CandidType,
+    Deserialize,
+};
 use ic_stable_structures::{
-    memory_manager::{MemoryId, MemoryManager, VirtualMemory},
-    DefaultMemoryImpl, StableBTreeMap,
+    memory_manager::{
+        MemoryId,
+        MemoryManager,
+        VirtualMemory,
+    },
+    DefaultMemoryImpl,
+    StableBTreeMap,
 };
 use std::cell::RefCell;
 

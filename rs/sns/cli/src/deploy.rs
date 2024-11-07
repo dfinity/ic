@@ -1,21 +1,50 @@
 //! Contains the logic for deploying SNS canisters
 
 use std::{
-    fs::{create_dir_all, OpenOptions},
-    io::{BufWriter, Read, Seek, SeekFrom, Write},
-    path::{Path, PathBuf},
+    fs::{
+        create_dir_all,
+        OpenOptions,
+    },
+    io::{
+        BufWriter,
+        Read,
+        Seek,
+        SeekFrom,
+        Write,
+    },
+    path::{
+        Path,
+        PathBuf,
+    },
     str::FromStr,
 };
 
 use candid::Decode;
-use serde_json::{json, Value as JsonValue};
+use serde_json::{
+    json,
+    Value as JsonValue,
+};
 
-use crate::{call_dfx, call_dfx_or_panic, get_identity, hex_encode_candid, DeployTestflightArgs};
-use anyhow::{anyhow, Context, Result};
+use crate::{
+    call_dfx,
+    call_dfx_or_panic,
+    get_identity,
+    hex_encode_candid,
+    DeployTestflightArgs,
+};
+use anyhow::{
+    anyhow,
+    Context,
+    Result,
+};
 use ic_base_types::PrincipalId;
 use ic_nns_constants::ROOT_CANISTER_ID as NNS_ROOT_CANISTER_ID;
 use ic_sns_governance::pb::v1::ListNeuronsResponse;
-use ic_sns_init::{pb::v1::SnsInitPayload, SnsCanisterIds, SnsCanisterInitPayloads};
+use ic_sns_init::{
+    pb::v1::SnsInitPayload,
+    SnsCanisterIds,
+    SnsCanisterInitPayloads,
+};
 use ic_sns_root::pb::v1::ListSnsCanistersResponse;
 
 /// If SNS canisters have already been created, return their canister IDs, else create the

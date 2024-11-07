@@ -1,5 +1,11 @@
-use ic_nervous_system_proto_protobuf_generator::{generate_prost_files, ProtoPaths};
-use ic_test_utilities_compare_dirs::{compare, CompareError};
+use ic_nervous_system_proto_protobuf_generator::{
+    generate_prost_files,
+    ProtoPaths,
+};
+use ic_test_utilities_compare_dirs::{
+    compare,
+    CompareError,
+};
 use std::path::PathBuf;
 
 #[test]

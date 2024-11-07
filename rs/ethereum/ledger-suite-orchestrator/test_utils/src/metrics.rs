@@ -1,5 +1,8 @@
 use crate::assert_reply;
-use candid::{Decode, Encode};
+use candid::{
+    Decode,
+    Encode,
+};
 use ic_base_types::CanisterId;
 use ic_state_machine_tests::StateMachine;
 
@@ -10,7 +13,10 @@ pub struct MetricsAssert<T> {
 
 impl<T: AsRef<StateMachine>> MetricsAssert<T> {
     pub fn from_querying_metrics(setup: T, canister_id: CanisterId) -> Self {
-        use ic_canisters_http_types::{HttpRequest, HttpResponse};
+        use ic_canisters_http_types::{
+            HttpRequest,
+            HttpResponse,
+        };
         let request = HttpRequest {
             method: "GET".to_string(),
             url: "/metrics".to_string(),

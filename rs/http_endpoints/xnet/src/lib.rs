@@ -1,29 +1,68 @@
 #[cfg(test)]
 mod tests;
 
-use axum::{body::Body, extract::State, response::IntoResponse, routing::any};
-use hyper::{body::Incoming, Request, Response, StatusCode};
-use hyper_util::{rt::TokioIo, server::graceful::GracefulShutdown};
+use axum::{
+    body::Body,
+    extract::State,
+    response::IntoResponse,
+    routing::any,
+};
+use hyper::{
+    body::Incoming,
+    Request,
+    Response,
+    StatusCode,
+};
+use hyper_util::{
+    rt::TokioIo,
+    server::graceful::GracefulShutdown,
+};
 use ic_async_utils::start_tcp_listener;
 use ic_config::message_routing::Config;
 use ic_crypto_tls_interfaces::TlsConfig;
-use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
+use ic_interfaces_certified_stream_store::{
+    CertifiedStreamStore,
+    EncodeStreamError,
+};
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{info, warn, ReplicaLogger};
-use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+use ic_logger::{
+    info,
+    warn,
+    ReplicaLogger,
+};
+use ic_metrics::{
+    buckets::decimal_buckets,
+    MetricsRegistry,
+};
 use ic_protobuf::messaging::xnet::v1 as pb;
 use ic_protobuf::proxy::ProtoProxy;
-use ic_types::{xnet::StreamIndex, PrincipalId, SubnetId};
-use prometheus::{Histogram, HistogramVec, IntCounter};
+use ic_types::{
+    xnet::StreamIndex,
+    PrincipalId,
+    SubnetId,
+};
+use prometheus::{
+    Histogram,
+    HistogramVec,
+    IntCounter,
+};
 use serde::Serialize;
 use std::convert::Infallible;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::{
+    IpAddr,
+    Ipv4Addr,
+    SocketAddr,
+};
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::{
-    runtime, select,
-    sync::{Notify, Semaphore},
+    runtime,
+    select,
+    sync::{
+        Notify,
+        Semaphore,
+    },
 };
 use tower::Service;
 use url::Url;

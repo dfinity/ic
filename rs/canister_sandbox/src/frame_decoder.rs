@@ -1,4 +1,7 @@
-use bytes::{Buf, BytesMut};
+use bytes::{
+    Buf,
+    BytesMut,
+};
 use serde::de::DeserializeOwned;
 use std::marker::PhantomData;
 

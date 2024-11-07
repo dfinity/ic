@@ -2,12 +2,26 @@
 
 use crate::{
     encoding::{
-        encode_controllers, encode_message, encode_metadata, encode_stream_header,
-        encode_subnet_canister_ranges, encode_subnet_metrics,
+        encode_controllers,
+        encode_message,
+        encode_metadata,
+        encode_stream_header,
+        encode_subnet_canister_ranges,
+        encode_subnet_metrics,
     },
-    CertificationVersion, MAX_SUPPORTED_CERTIFICATION_VERSION, MIN_SUPPORTED_CERTIFICATION_VERSION,
+    CertificationVersion,
+    MAX_SUPPORTED_CERTIFICATION_VERSION,
+    MIN_SUPPORTED_CERTIFICATION_VERSION,
 };
-use ic_canonical_state_tree_hash::lazy_tree::{blob, fork, num, string, Lazy, LazyFork, LazyTree};
+use ic_canonical_state_tree_hash::lazy_tree::{
+    blob,
+    fork,
+    num,
+    string,
+    Lazy,
+    LazyFork,
+    LazyTree,
+};
 use ic_crypto_tree_hash::Label;
 use ic_error_types::ErrorCode;
 use ic_error_types::RejectCode;
@@ -15,20 +29,43 @@ use ic_registry_routing_table::RoutingTable;
 use ic_replicated_state::{
     canister_state::CanisterState,
     metadata_state::{
-        ApiBoundaryNodeEntry, IngressHistoryState, StreamMap, SubnetMetrics, SubnetTopology,
+        ApiBoundaryNodeEntry,
+        IngressHistoryState,
+        StreamMap,
+        SubnetMetrics,
+        SubnetTopology,
         SystemMetadata,
     },
     replicated_state::ReplicatedStateMessageRouting,
-    ExecutionState, ReplicatedState,
+    ExecutionState,
+    ReplicatedState,
 };
 use ic_types::{
-    ingress::{IngressState, IngressStatus, WasmResult},
-    messages::{MessageId, EXPECTED_MESSAGE_ID_LENGTH},
-    xnet::{StreamHeader, StreamIndex, StreamIndexedQueue},
-    CanisterId, NodeId, PrincipalId, SubnetId,
+    ingress::{
+        IngressState,
+        IngressStatus,
+        WasmResult,
+    },
+    messages::{
+        MessageId,
+        EXPECTED_MESSAGE_ID_LENGTH,
+    },
+    xnet::{
+        StreamHeader,
+        StreamIndex,
+        StreamIndexedQueue,
+    },
+    CanisterId,
+    NodeId,
+    PrincipalId,
+    SubnetId,
 };
 use std::collections::BTreeMap;
-use std::convert::{AsRef, TryFrom, TryInto};
+use std::convert::{
+    AsRef,
+    TryFrom,
+    TryInto,
+};
 use std::iter::once;
 use std::sync::Arc;
 use LazyTree::Blob;

@@ -4,14 +4,28 @@ use ic_agent::Agent;
 use ic_consensus_system_test_utils::node::await_node_certified_height;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
-    ic::{InternetComputer, Subnet},
+    ic::{
+        InternetComputer,
+        Subnet,
+    },
     test_env::TestEnv,
-    test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, SubnetSnapshot},
+    test_env_api::{
+        HasPublicApiUrl,
+        HasTopologySnapshot,
+        IcNodeContainer,
+        SubnetSnapshot,
+    },
 };
-use ic_types::{epoch_from_height, Height};
+use ic_types::{
+    epoch_from_height,
+    Height,
+};
 use ic_universal_canister::wasm;
 use itertools::Itertools;
-use slog::{info, Logger};
+use slog::{
+    info,
+    Logger,
+};
 use std::time::Duration;
 
 pub mod aggregation;

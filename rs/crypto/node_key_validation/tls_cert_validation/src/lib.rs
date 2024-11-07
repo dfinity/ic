@@ -5,13 +5,19 @@ use ic_crypto_internal_basic_sig_ed25519::types::PublicKeyBytes as BasicSigEd255
 use ic_crypto_internal_basic_sig_ed25519::types::SignatureBytes as BasicSigEd25519SignatureBytes;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_types::crypto::CryptoResult;
-use ic_types::{NodeId, Time};
+use ic_types::{
+    NodeId,
+    Time,
+};
 use serde::Deserialize;
 use serde::Serialize;
 use std::convert::TryFrom;
 use x509_parser::certificate::X509Certificate;
 use x509_parser::time::ASN1Time;
-use x509_parser::x509::{X509Name, X509Version};
+use x509_parser::x509::{
+    X509Name,
+    X509Version,
+};
 
 #[cfg(test)]
 mod tests;

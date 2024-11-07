@@ -1,8 +1,14 @@
 #![no_main]
-use arbitrary::{Arbitrary, Unstructured};
+use arbitrary::{
+    Arbitrary,
+    Unstructured,
+};
 use libfuzzer_sys::fuzz_target;
 
-use ic_crypto_internal_threshold_sig_canister_threshold_sig::{EccCurveType, EccPoint};
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
+    EccCurveType,
+    EccPoint,
+};
 
 // This fuzzer tries to find panics in hashing to ECC points. We ignore errors
 // returned by the function, as these do not lead to panics. You can run the fuzzer locally:

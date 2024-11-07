@@ -1,31 +1,68 @@
 //! This module is responsible for validating the wasm binaries that are
 //! installed on the Internet Computer.
 
-use super::{Complexity, WasmImportsDetails, WasmValidationDetails};
-
-use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
-use ic_replicated_state::canister_state::execution_state::{
-    CustomSection, CustomSectionType, WasmMetadata,
+use super::{
+    Complexity,
+    WasmImportsDetails,
+    WasmValidationDetails,
 };
-use ic_types::{NumBytes, NumInstructions, MAX_STABLE_MEMORY_IN_BYTES};
-use ic_wasm_transform::{Body, DataSegment, DataSegmentKind, Module};
-use ic_wasm_types::{BinaryEncodedWasm, WasmValidationError};
+
+use ic_config::{
+    embedders::Config as EmbeddersConfig,
+    flag_status::FlagStatus,
+};
+use ic_replicated_state::canister_state::execution_state::{
+    CustomSection,
+    CustomSectionType,
+    WasmMetadata,
+};
+use ic_types::{
+    NumBytes,
+    NumInstructions,
+    MAX_STABLE_MEMORY_IN_BYTES,
+};
+use ic_wasm_transform::{
+    Body,
+    DataSegment,
+    DataSegmentKind,
+    Module,
+};
+use ic_wasm_types::{
+    BinaryEncodedWasm,
+    WasmValidationError,
+};
 use std::{
     cmp,
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{
+        BTreeMap,
+        HashMap,
+        HashSet,
+    },
 };
 
 use crate::wasmtime_embedder::{
-    STABLE_BYTEMAP_MEMORY_NAME, STABLE_MEMORY_NAME, WASM_HEAP_MEMORY_NAME,
+    STABLE_BYTEMAP_MEMORY_NAME,
+    STABLE_MEMORY_NAME,
+    WASM_HEAP_MEMORY_NAME,
 };
 use crate::{
     wasm_utils::instrumentation::{
-        main_memory_type, WasmMemoryType, ACCESSED_PAGES_COUNTER_GLOBAL_NAME,
+        main_memory_type,
+        WasmMemoryType,
+        ACCESSED_PAGES_COUNTER_GLOBAL_NAME,
         DIRTY_PAGES_COUNTER_GLOBAL_NAME,
     },
-    MAX_WASM_STACK_SIZE, MIN_GUARD_REGION_SIZE,
+    MAX_WASM_STACK_SIZE,
+    MIN_GUARD_REGION_SIZE,
 };
-use wasmparser::{CompositeInnerType, ExternalKind, FuncType, Operator, TypeRef, ValType};
+use wasmparser::{
+    CompositeInnerType,
+    ExternalKind,
+    FuncType,
+    Operator,
+    TypeRef,
+    ValType,
+};
 
 const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
 

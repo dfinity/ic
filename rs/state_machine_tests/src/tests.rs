@@ -1,5 +1,15 @@
-use ic_crypto_secp256k1::{DerivationIndex, DerivationPath, PrivateKey, PublicKey};
-use proptest::{collection::vec as pvec, prelude::*, prop_assert, proptest};
+use ic_crypto_secp256k1::{
+    DerivationIndex,
+    DerivationPath,
+    PrivateKey,
+    PublicKey,
+};
+use proptest::{
+    collection::vec as pvec,
+    prelude::*,
+    prop_assert,
+    proptest,
+};
 
 proptest! {
     #[test]

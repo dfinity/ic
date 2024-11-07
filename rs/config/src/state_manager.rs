@@ -1,5 +1,8 @@
 use crate::flag_status::FlagStatus;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::path::PathBuf;
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]

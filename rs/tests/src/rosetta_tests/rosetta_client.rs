@@ -7,28 +7,67 @@ use ic_system_test_driver::driver::resource::AllocatedVm;
 use ic_rosetta_api::{
     ledger_client::pending_proposals_response::PendingProposalsResponse,
     models::{
-        AccountBalanceMetadata, AccountBalanceRequest, AccountBalanceResponse, AccountType,
-        BalanceAccountType, Block, BlockRequest, BlockResponse, CallRequest, CallResponse,
-        ConstructionCombineRequest, ConstructionCombineResponse, ConstructionDeriveRequest,
-        ConstructionDeriveRequestMetadata, ConstructionDeriveResponse, ConstructionHashRequest,
-        ConstructionHashResponse, ConstructionMetadataRequest, ConstructionMetadataRequestOptions,
-        ConstructionMetadataResponse, ConstructionParseRequest, ConstructionParseResponse,
-        ConstructionPayloadsRequest, ConstructionPayloadsRequestMetadata,
-        ConstructionPayloadsResponse, ConstructionPreprocessRequest,
-        ConstructionPreprocessResponse, ConstructionSubmitRequest, ConstructionSubmitResponse,
-        Error, NetworkRequest, NetworkStatusResponse, NeuronSubaccountComponents, Operation,
-        PartialBlockIdentifier, PublicKey, Signature, SignedTransaction,
+        AccountBalanceMetadata,
+        AccountBalanceRequest,
+        AccountBalanceResponse,
+        AccountType,
+        BalanceAccountType,
+        Block,
+        BlockRequest,
+        BlockResponse,
+        CallRequest,
+        CallResponse,
+        ConstructionCombineRequest,
+        ConstructionCombineResponse,
+        ConstructionDeriveRequest,
+        ConstructionDeriveRequestMetadata,
+        ConstructionDeriveResponse,
+        ConstructionHashRequest,
+        ConstructionHashResponse,
+        ConstructionMetadataRequest,
+        ConstructionMetadataRequestOptions,
+        ConstructionMetadataResponse,
+        ConstructionParseRequest,
+        ConstructionParseResponse,
+        ConstructionPayloadsRequest,
+        ConstructionPayloadsRequestMetadata,
+        ConstructionPayloadsResponse,
+        ConstructionPreprocessRequest,
+        ConstructionPreprocessResponse,
+        ConstructionSubmitRequest,
+        ConstructionSubmitResponse,
+        Error,
+        NetworkRequest,
+        NetworkStatusResponse,
+        NeuronSubaccountComponents,
+        Operation,
+        PartialBlockIdentifier,
+        PublicKey,
+        Signature,
+        SignedTransaction,
     },
     request_types::GetProposalInfo,
 };
 use icp_ledger::AccountIdentifier;
-use rand::{seq::SliceRandom, thread_rng};
-use reqwest::{Client as HttpClient, StatusCode as HttpStatusCode};
+use rand::{
+    seq::SliceRandom,
+    thread_rng,
+};
+use reqwest::{
+    Client as HttpClient,
+    StatusCode as HttpStatusCode,
+};
 use rosetta_core::{
-    identifiers::NetworkIdentifier, objects::ObjectMap, request_types::MetadataRequest,
+    identifiers::NetworkIdentifier,
+    objects::ObjectMap,
+    request_types::MetadataRequest,
     response_types::NetworkListResponse,
 };
-use slog::{debug, info, Logger};
+use slog::{
+    debug,
+    info,
+    Logger,
+};
 use std::time::Duration;
 use tokio::time::sleep;
 

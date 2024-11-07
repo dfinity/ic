@@ -1,6 +1,8 @@
 use super::NeuronStore;
 use crate::{
-    neuron_store::Neuron, pb::v1::NeuronState, pb::v1::Visibility,
+    neuron_store::Neuron,
+    pb::v1::NeuronState,
+    pb::v1::Visibility,
     storage::with_stable_neuron_store,
 };
 use ic_base_types::PrincipalId;

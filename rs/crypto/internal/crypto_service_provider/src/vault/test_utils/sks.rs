@@ -2,7 +2,10 @@ use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
 use crate::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
 use crate::secret_key_store::SecretKeyStoreInsertionError;
 use crate::types::CspSecretKey;
-use crate::{KeyId, SecretKeyStore};
+use crate::{
+    KeyId,
+    SecretKeyStore,
+};
 use ic_crypto_internal_tls::TlsEd25519SecretKeyDerBytes;
 
 pub fn secret_key_store_with_duplicated_key_id_error_on_insert(

@@ -6,7 +6,13 @@ use ic_crypto_internal_basic_sig_ecdsa_secp256r1 as ecdsa_secp256r1;
 use ic_crypto_internal_basic_sig_ed25519 as ed25519;
 use ic_crypto_internal_basic_sig_iccsa as iccsa;
 use ic_crypto_internal_basic_sig_rsa_pkcs1 as rsa;
-use ic_types::crypto::{AlgorithmId, BasicSig, CryptoError, CryptoResult, UserPublicKey};
+use ic_types::crypto::{
+    AlgorithmId,
+    BasicSig,
+    CryptoError,
+    CryptoResult,
+    UserPublicKey,
+};
 
 /// Indicates the content type of serialised key bytes passed for parsing.
 #[derive(Clone, Eq, PartialEq, Debug)]

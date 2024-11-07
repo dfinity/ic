@@ -42,15 +42,28 @@ use ic_system_test_driver::driver::boundary_node::BoundaryNodeVm;
 use ic_system_test_driver::driver::{
     boundary_node::BoundaryNode,
     group::SystemTestGroup,
-    ic::{InternetComputer, Subnet},
-    prometheus_vm::{HasPrometheus, PrometheusVm},
+    ic::{
+        InternetComputer,
+        Subnet,
+    },
+    prometheus_vm::{
+        HasPrometheus,
+        PrometheusVm,
+    },
     test_env::TestEnv,
-    test_env_api::{await_boundary_node_healthy, HasTopologySnapshot, IcNodeContainer},
+    test_env_api::{
+        await_boundary_node_healthy,
+        HasTopologySnapshot,
+        IcNodeContainer,
+    },
 };
 use ic_system_test_driver::sns_client::add_all_wasms_to_sns_wasm;
 use nns_dapp::{
-    install_ii_nns_dapp_and_subnet_rental, install_sns_aggregator, nns_dapp_customizations,
-    set_authorized_subnets, set_sns_subnet,
+    install_ii_nns_dapp_and_subnet_rental,
+    install_sns_aggregator,
+    nns_dapp_customizations,
+    set_authorized_subnets,
+    set_sns_subnet,
 };
 use slog::info;
 

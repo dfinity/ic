@@ -1,5 +1,8 @@
 //! Errors for non-interactive DKG.
-use crate::{NodeId, RegistryVersion};
+use crate::{
+    NodeId,
+    RegistryVersion,
+};
 use ic_crypto_internal_types::encrypt::forward_secure as ifs;
 use std::fmt;
 

@@ -1,8 +1,15 @@
 use crate::{
     governance::Governance,
     node_provider_rewards::DateRangeFilter,
-    pb::v1::{Governance as GovernanceProto, MonthlyNodeProviderRewards},
-    test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
+    pb::v1::{
+        Governance as GovernanceProto,
+        MonthlyNodeProviderRewards,
+    },
+    test_utils::{
+        MockEnvironment,
+        StubCMC,
+        StubIcpLedger,
+    },
 };
 
 #[test]

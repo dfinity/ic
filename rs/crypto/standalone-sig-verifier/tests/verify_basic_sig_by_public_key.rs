@@ -1,6 +1,10 @@
 use assert_matches::assert_matches;
 use ic_crypto_standalone_sig_verifier::verify_basic_sig_by_public_key;
-use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
+use ic_types::crypto::{
+    AlgorithmId,
+    CryptoError,
+    CryptoResult,
+};
 use strum::IntoEnumIterator;
 
 const SUPPORTED_ALGORITHM_IDS: [AlgorithmId; 4] = [
@@ -23,9 +27,15 @@ fn should_error_when_algorithm_unsupported() {
 mod ed25519 {
     use crate::assert_wrong_algorithm_used;
     use assert_matches::assert_matches;
-    use ic_crypto_internal_test_vectors::ed25519::{crypto_lib_testvec, Ed25519TestVector};
+    use ic_crypto_internal_test_vectors::ed25519::{
+        crypto_lib_testvec,
+        Ed25519TestVector,
+    };
     use ic_crypto_standalone_sig_verifier::verify_basic_sig_by_public_key;
-    use ic_types::crypto::{AlgorithmId, CryptoError};
+    use ic_types::crypto::{
+        AlgorithmId,
+        CryptoError,
+    };
     use strum::IntoEnumIterator;
 
     #[test]
@@ -57,7 +67,10 @@ mod ecdsa_secp_256r1 {
     use crate::assert_wrong_algorithm_used;
     use assert_matches::assert_matches;
     use ic_crypto_standalone_sig_verifier::verify_basic_sig_by_public_key;
-    use ic_types::crypto::{AlgorithmId, CryptoError};
+    use ic_types::crypto::{
+        AlgorithmId,
+        CryptoError,
+    };
     use strum::IntoEnumIterator;
 
     #[test]
@@ -96,7 +109,10 @@ mod ecdsa_secp_256k1 {
     use crate::assert_wrong_algorithm_used;
     use assert_matches::assert_matches;
     use ic_crypto_standalone_sig_verifier::verify_basic_sig_by_public_key;
-    use ic_types::crypto::{AlgorithmId, CryptoError};
+    use ic_types::crypto::{
+        AlgorithmId,
+        CryptoError,
+    };
     use strum::IntoEnumIterator;
 
     #[test]
@@ -137,7 +153,10 @@ mod rsa_sha_256 {
     use crate::assert_wrong_algorithm_used;
     use assert_matches::assert_matches;
     use ic_crypto_standalone_sig_verifier::verify_basic_sig_by_public_key;
-    use ic_types::crypto::{AlgorithmId, CryptoError};
+    use ic_types::crypto::{
+        AlgorithmId,
+        CryptoError,
+    };
     use strum::IntoEnumIterator;
 
     #[test]

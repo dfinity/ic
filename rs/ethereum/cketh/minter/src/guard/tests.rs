@@ -2,8 +2,16 @@ use crate::test_fixtures::initial_state;
 
 mod retrieve_eth_guard {
     use crate::guard::tests::init_state;
-    use crate::guard::{retrieve_withdraw_guard, GuardError, MAX_CONCURRENT, MAX_PENDING};
-    use crate::numeric::{LedgerBurnIndex, Wei};
+    use crate::guard::{
+        retrieve_withdraw_guard,
+        GuardError,
+        MAX_CONCURRENT,
+        MAX_PENDING,
+    };
+    use crate::numeric::{
+        LedgerBurnIndex,
+        Wei,
+    };
     use crate::state::mutate_state;
     use crate::state::transactions::EthWithdrawalRequest;
     use candid::Principal;
@@ -89,7 +97,10 @@ mod retrieve_eth_guard {
 
 mod timer_guard {
     use crate::guard::tests::init_state;
-    use crate::guard::{TimerGuard, TimerGuardError};
+    use crate::guard::{
+        TimerGuard,
+        TimerGuardError,
+    };
     use crate::state::TaskType;
     use strum::IntoEnumIterator;
 

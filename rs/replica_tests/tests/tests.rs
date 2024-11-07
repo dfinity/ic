@@ -1,17 +1,38 @@
 use assert_matches::assert_matches;
-use candid::{Decode, Encode};
+use candid::{
+    Decode,
+    Encode,
+};
 use ic_error_types::ErrorCode;
-use ic_management_canister_types::{self as ic00, EmptyBlob, Method, Payload};
+use ic_management_canister_types::{
+    self as ic00,
+    EmptyBlob,
+    Method,
+    Payload,
+};
 use ic_replica_tests as utils;
-use ic_replica_tests::{assert_reply, install_universal_canister};
-use ic_replicated_state::{PageIndex, PageMap};
+use ic_replica_tests::{
+    assert_reply,
+    install_universal_canister,
+};
+use ic_replicated_state::{
+    PageIndex,
+    PageMap,
+};
 use ic_state_machine_tests::StateMachine;
 use ic_sys::PAGE_SIZE;
-use ic_test_utilities::universal_canister::{call_args, wasm};
+use ic_test_utilities::universal_canister::{
+    call_args,
+    wasm,
+};
 use ic_test_utilities_types::ids::canister_test_id;
 use ic_types::{
-    ingress::WasmResult, messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, time::expiry_time_from_now,
-    CanisterId, NumBytes, RegistryVersion,
+    ingress::WasmResult,
+    messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+    time::expiry_time_from_now,
+    CanisterId,
+    NumBytes,
+    RegistryVersion,
 };
 use std::sync::Arc;
 

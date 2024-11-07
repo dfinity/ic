@@ -1,36 +1,85 @@
 use crate::cmd::{
-    AddAndBlessReplicaVersionCmd, AddRegistryContentCmd, WithLedgerAccountCmd, WithNeuronCmd,
+    AddAndBlessReplicaVersionCmd,
+    AddRegistryContentCmd,
+    WithLedgerAccountCmd,
+    WithNeuronCmd,
     WithTrustedNeuronsFollowingNeuronCmd,
 };
-use candid::{decode_one, Encode};
-use ic_canister_client::{prepare_update, Agent, Sender};
+use candid::{
+    decode_one,
+    Encode,
+};
+use ic_canister_client::{
+    prepare_update,
+    Agent,
+    Sender,
+};
 use ic_nervous_system_common::ledger;
 use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID};
+use ic_nns_constants::{
+    GOVERNANCE_CANISTER_ID,
+    LEDGER_CANISTER_ID,
+    REGISTRY_CANISTER_ID,
+};
 use ic_nns_governance_api::pb::v1::{
     manage_neuron::{
-        claim_or_refresh::{By, MemoAndController},
+        claim_or_refresh::{
+            By,
+            MemoAndController,
+        },
         configure::Operation,
-        ClaimOrRefresh, Command, Configure, Follow, IncreaseDissolveDelay, NeuronIdOrSubaccount,
+        ClaimOrRefresh,
+        Command,
+        Configure,
+        Follow,
+        IncreaseDissolveDelay,
+        NeuronIdOrSubaccount,
     },
-    manage_neuron_response, ManageNeuron, ManageNeuronResponse, Topic,
+    manage_neuron_response,
+    ManageNeuron,
+    ManageNeuronResponse,
+    Topic,
 };
 use ic_protobuf::registry::{
     replica_version::v1::ReplicaVersionRecord,
-    subnet::v1::{SubnetRecord, SubnetType},
+    subnet::v1::{
+        SubnetRecord,
+        SubnetType,
+    },
 };
 use ic_registry_client_helpers::subnet::get_node_ids_from_subnet_record;
 use ic_registry_keys::{
-    make_blessed_replica_versions_key, make_replica_version_key, make_subnet_record_key,
+    make_blessed_replica_versions_key,
+    make_replica_version_key,
+    make_subnet_record_key,
 };
 use ic_registry_transport::{
-    pb::v1::{registry_mutation, Precondition, RegistryMutation},
+    pb::v1::{
+        registry_mutation,
+        Precondition,
+        RegistryMutation,
+    },
     serialize_atomic_mutate_request,
 };
-use ic_types::{messages::SignedIngress, CanisterId, PrincipalId, SubnetId, Time};
-use icp_ledger::{AccountIdentifier, Memo, SendArgs, Tokens};
+use ic_types::{
+    messages::SignedIngress,
+    CanisterId,
+    PrincipalId,
+    SubnetId,
+    Time,
+};
+use icp_ledger::{
+    AccountIdentifier,
+    Memo,
+    SendArgs,
+    Tokens,
+};
 use prost::Message;
-use std::{convert::TryFrom, str::FromStr, time::Duration};
+use std::{
+    convert::TryFrom,
+    str::FromStr,
+    time::Duration,
+};
 
 pub struct IngressWithPrinter {
     pub ingress: SignedIngress,

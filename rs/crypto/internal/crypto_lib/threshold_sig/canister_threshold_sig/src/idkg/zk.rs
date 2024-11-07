@@ -1,8 +1,18 @@
 use crate::{
-    CanisterThresholdError, CanisterThresholdResult, DomainSep, EccCurveType, EccPoint, EccScalar,
-    IdkgProtocolAlgorithm, RandomOracle, Seed,
+    CanisterThresholdError,
+    CanisterThresholdResult,
+    DomainSep,
+    EccCurveType,
+    EccPoint,
+    EccScalar,
+    IdkgProtocolAlgorithm,
+    RandomOracle,
+    Seed,
 };
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 /// A ZK proof that a Simple and Pedersen commitment are committing
 /// to the same value.

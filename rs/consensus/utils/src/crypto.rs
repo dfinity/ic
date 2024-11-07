@@ -1,23 +1,46 @@
-use ic_interfaces::{crypto::*, validation::ValidationResult};
+use ic_interfaces::{
+    crypto::*,
+    validation::ValidationResult,
+};
 use ic_types::{
     canister_http::CanisterHttpResponseMetadata,
     consensus::{
         dkg,
         hashed::Hashed,
-        idkg::{IDkgComplaintContent, IDkgOpeningContent},
-        BlockMetadata, CatchUpContent, FinalizationContent, NotarizationContent,
-        RandomBeaconContent, RandomTapeContent,
+        idkg::{
+            IDkgComplaintContent,
+            IDkgOpeningContent,
+        },
+        BlockMetadata,
+        CatchUpContent,
+        FinalizationContent,
+        NotarizationContent,
+        RandomBeaconContent,
+        RandomTapeContent,
     },
     crypto::{
-        canister_threshold_sig::idkg::{IDkgDealing, SignedIDkgDealing},
+        canister_threshold_sig::idkg::{
+            IDkgDealing,
+            SignedIDkgDealing,
+        },
         threshold_sig::ni_dkg::NiDkgId,
-        CryptoError, CryptoHashOf, CryptoHashable, CryptoResult, Signable, Signed,
+        CryptoError,
+        CryptoHashOf,
+        CryptoHashable,
+        CryptoResult,
+        Signable,
+        Signed,
     },
     signature::{
-        BasicSignature, BasicSignatureBatch, MultiSignature, MultiSignatureShare,
-        ThresholdSignature, ThresholdSignatureShare,
+        BasicSignature,
+        BasicSignatureBatch,
+        MultiSignature,
+        MultiSignatureShare,
+        ThresholdSignature,
+        ThresholdSignatureShare,
     },
-    NodeId, RegistryVersion,
+    NodeId,
+    RegistryVersion,
 };
 use std::collections::BTreeMap;
 
@@ -500,7 +523,12 @@ mod tests {
     use super::*;
     use ic_test_utilities_types::ids::node_test_id;
     use ic_types::{
-        crypto::{CombinedMultiSig, CombinedMultiSigOf, IndividualMultiSig, IndividualMultiSigOf},
+        crypto::{
+            CombinedMultiSig,
+            CombinedMultiSigOf,
+            IndividualMultiSig,
+            IndividualMultiSigOf,
+        },
         messages::MessageId,
     };
 

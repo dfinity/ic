@@ -1,8 +1,14 @@
 use criterion::*;
-use ic_crypto_internal_bls12_381_type::{Gt, Scalar};
+use ic_crypto_internal_bls12_381_type::{
+    Gt,
+    Scalar,
+};
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::dlog_recovery::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use rand::{CryptoRng, Rng};
+use rand::{
+    CryptoRng,
+    Rng,
+};
 
 fn honest_dlog_instance<R: Rng + CryptoRng>(n: usize, rng: &mut R) -> (Vec<Scalar>, Vec<Gt>) {
     let mut scalars = Vec::with_capacity(n);

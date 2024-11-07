@@ -1,15 +1,35 @@
 use crate::state::{
-    Archive, ArchiveWasm, GitCommitHash, Index, IndexWasm, Ledger, LedgerWasm, Wasm,
+    Archive,
+    ArchiveWasm,
+    GitCommitHash,
+    Index,
+    IndexWasm,
+    Ledger,
+    LedgerWasm,
+    Wasm,
 };
 use crate::storage::test_fixtures::empty_wasm_store;
 use crate::storage::{
-    wasm_store_try_get, wasm_store_try_insert, StorableWasm, WasmStore, WasmStoreError,
+    wasm_store_try_get,
+    wasm_store_try_insert,
+    StorableWasm,
+    WasmStore,
+    WasmStoreError,
 };
 use proptest::arbitrary::any;
 use proptest::array::uniform20;
-use proptest::collection::{hash_set, vec};
-use proptest::prelude::{Strategy, TestCaseError};
-use proptest::{prop_assert_eq, proptest};
+use proptest::collection::{
+    hash_set,
+    vec,
+};
+use proptest::prelude::{
+    Strategy,
+    TestCaseError,
+};
+use proptest::{
+    prop_assert_eq,
+    proptest,
+};
 use std::collections::BTreeSet;
 use std::fmt::Debug;
 
@@ -86,15 +106,27 @@ proptest! {
 }
 
 mod validate_wasm_hashes {
-    use crate::state::{GitCommitHash, WasmHash};
-    use crate::storage::test_fixtures::{embedded_ledger_suite_version, empty_wasm_store};
+    use crate::state::{
+        GitCommitHash,
+        WasmHash,
+    };
+    use crate::storage::test_fixtures::{
+        embedded_ledger_suite_version,
+        empty_wasm_store,
+    };
     use crate::storage::{
-        record_icrc1_ledger_suite_wasms, validate_wasm_hashes, WasmHashError, WasmStore,
+        record_icrc1_ledger_suite_wasms,
+        validate_wasm_hashes,
+        WasmHashError,
+        WasmStore,
     };
     use assert_matches::assert_matches;
     use proptest::array::uniform32;
     use proptest::prelude::any;
-    use proptest::{prop_assert_eq, proptest};
+    use proptest::{
+        prop_assert_eq,
+        proptest,
+    };
 
     proptest! {
          #[test]

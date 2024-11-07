@@ -3,10 +3,17 @@
 //! References:
 //! * https://www.w3.org/TR/wasm-core-2/
 
-use crate::helper::{benchmark_with_confirmation, benchmark_with_loop_confirmation, first_or_all};
+use crate::helper::{
+    benchmark_with_confirmation,
+    benchmark_with_loop_confirmation,
+    first_or_all,
+};
 use execution_environment_bench::{
     common::Benchmark,
-    wat_builder::{dst_type, src_type},
+    wat_builder::{
+        dst_type,
+        src_type,
+    },
 };
 
 pub fn benchmarks() -> Vec<Benchmark> {

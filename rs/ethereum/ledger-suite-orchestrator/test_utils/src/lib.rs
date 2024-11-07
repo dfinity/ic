@@ -1,21 +1,55 @@
-use crate::flow::{AddErc20TokenFlow, ManagedCanistersAssert};
+use crate::flow::{
+    AddErc20TokenFlow,
+    ManagedCanistersAssert,
+};
 use crate::metrics::MetricsAssert;
 use assert_matches::assert_matches;
-use candid::{Decode, Encode, Nat, Principal};
-use ic_base_types::{CanisterId, PrincipalId};
+use candid::{
+    Decode,
+    Encode,
+    Nat,
+    Principal,
+};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_cdk::api::management_canister::main::CanisterStatusResponse;
 use ic_ledger_suite_orchestrator::candid::{
-    AddErc20Arg, CyclesManagement, Erc20Contract, InitArg, InstalledCanister, InstalledLedgerSuite,
-    LedgerInitArg, ManagedCanisterIds, OrchestratorArg, OrchestratorInfo, UpgradeArg,
+    AddErc20Arg,
+    CyclesManagement,
+    Erc20Contract,
+    InitArg,
+    InstalledCanister,
+    InstalledLedgerSuite,
+    LedgerInitArg,
+    ManagedCanisterIds,
+    OrchestratorArg,
+    OrchestratorInfo,
+    UpgradeArg,
 };
 use ic_ledger_suite_orchestrator::state::{
-    ArchiveWasm, IndexWasm, LedgerSuiteVersion, LedgerWasm, Wasm, WasmHash,
+    ArchiveWasm,
+    IndexWasm,
+    LedgerSuiteVersion,
+    LedgerWasm,
+    Wasm,
+    WasmHash,
 };
 use ic_management_canister_types::{
-    CanisterInstallMode, CanisterStatusResultV2, CanisterStatusType, InstallCodeArgs, Method,
+    CanisterInstallMode,
+    CanisterStatusResultV2,
+    CanisterStatusType,
+    InstallCodeArgs,
+    Method,
     Payload,
 };
-use ic_state_machine_tests::{StateMachine, StateMachineBuilder, UserError, WasmResult};
+use ic_state_machine_tests::{
+    StateMachine,
+    StateMachineBuilder,
+    UserError,
+    WasmResult,
+};
 use ic_test_utilities_load_wasm::load_wasm;
 use ic_types::Cycles;
 pub use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as LedgerMetadataValue;

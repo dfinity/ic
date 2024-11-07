@@ -1,10 +1,19 @@
-use self::pb::v1::{Init, Lifecycle, Swap};
+use self::pb::v1::{
+    Init,
+    Lifecycle,
+    Swap,
+};
 use super::*;
 use crate::pb::v1::{
-    BuyerState, NeuronBasketConstructionParameters, NeuronsFundParticipationConstraints,
+    BuyerState,
+    NeuronBasketConstructionParameters,
+    NeuronsFundParticipationConstraints,
     SnsNeuronRecipe,
 };
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_nervous_system_proto::pb::v1::Countries;
 use std::collections::BTreeMap;
 

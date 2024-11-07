@@ -1,26 +1,58 @@
 mod setup;
 
-use ic_interfaces::{execution_environment::IngressHistoryReader, messaging::MessageRouting};
+use ic_interfaces::{
+    execution_environment::IngressHistoryReader,
+    messaging::MessageRouting,
+};
 use ic_interfaces_state_manager::{
-    PermanentStateHashError::*, StateHashError, StateManager, StateReader,
+    PermanentStateHashError::*,
+    StateHashError,
+    StateManager,
+    StateReader,
     TransientStateHashError::*,
 };
 use ic_management_canister_types::{
-    CanisterIdRecord, CanisterInstallMode, InstallCodeArgs, Method as Ic00Method, Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, IC_00,
+    CanisterIdRecord,
+    CanisterInstallMode,
+    InstallCodeArgs,
+    Method as Ic00Method,
+    Payload,
+    ProvisionalCreateCanisterWithCyclesArgs,
+    IC_00,
 };
 use ic_messaging::MessageRoutingImpl;
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities_types::messages::SignedIngressBuilder;
 use ic_types::{
-    batch::{Batch, BatchMessages, BlockmakerMetrics},
-    ingress::{IngressState, IngressStatus, WasmResult},
-    messages::{MessageId, SignedIngress},
+    batch::{
+        Batch,
+        BatchMessages,
+        BlockmakerMetrics,
+    },
+    ingress::{
+        IngressState,
+        IngressStatus,
+        WasmResult,
+    },
+    messages::{
+        MessageId,
+        SignedIngress,
+    },
     time::UNIX_EPOCH,
-    CanisterId, CryptoHashOfState, Randomness, RegistryVersion, ReplicaVersion,
+    CanisterId,
+    CryptoHashOfState,
+    Randomness,
+    RegistryVersion,
+    ReplicaVersion,
 };
 use setup::setup;
-use std::{collections::BTreeMap, convert::TryFrom, sync::Arc, thread::sleep, time::Duration};
+use std::{
+    collections::BTreeMap,
+    convert::TryFrom,
+    sync::Arc,
+    thread::sleep,
+    time::Duration,
+};
 
 fn build_batch(message_routing: &dyn MessageRouting, msgs: Vec<SignedIngress>) -> Batch {
     Batch {

@@ -1,15 +1,28 @@
-use crate::api::{CspThresholdSignError, ThresholdSignatureCspClient};
+use crate::api::{
+    CspThresholdSignError,
+    ThresholdSignatureCspClient,
+};
 use crate::key_id::KeyId;
 use crate::public_key_store::PublicKeyStore;
-use crate::types::{CspPublicCoefficients, CspSignature, ThresBls12_381_Signature};
+use crate::types::{
+    CspPublicCoefficients,
+    CspSignature,
+    ThresBls12_381_Signature,
+};
 use crate::vault::api::CspVault;
 use crate::SecretKeyStore;
-use crate::{Csp, LocalCspVault};
+use crate::{
+    Csp,
+    LocalCspVault,
+};
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::test_utils::select_n;
 use ic_crypto_internal_threshold_sig_bls12381::types::public_coefficients::conversions::try_number_of_nodes_from_csp_pub_coeffs;
 use ic_types::crypto::AlgorithmId;
-use ic_types::{NodeIndex, NumberOfNodes};
+use ic_types::{
+    NodeIndex,
+    NumberOfNodes,
+};
 use rand::CryptoRng;
 use rand::Rng;
 use std::sync::Arc;

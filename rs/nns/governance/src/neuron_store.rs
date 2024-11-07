@@ -1,36 +1,68 @@
 use crate::{
     governance::{
-        Environment, TimeWarp, LOG_PREFIX, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
+        Environment,
+        TimeWarp,
+        LOG_PREFIX,
+        MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
     },
     neuron::types::Neuron,
     neurons_fund::neurons_fund_neuron::pick_most_important_hotkeys,
     pb::v1::{
-        governance::{followers_map::Followers, FollowersMap},
+        governance::{
+            followers_map::Followers,
+            FollowersMap,
+        },
         governance_error::ErrorType,
-        GovernanceError, Neuron as NeuronProto, NeuronState, Topic,
+        GovernanceError,
+        Neuron as NeuronProto,
+        NeuronState,
+        Topic,
     },
     storage::{
-        neuron_indexes::{CorruptedNeuronIndexes, NeuronIndex},
+        neuron_indexes::{
+            CorruptedNeuronIndexes,
+            NeuronIndex,
+        },
         neurons::NeuronSections,
-        with_stable_neuron_indexes, with_stable_neuron_indexes_mut, with_stable_neuron_store,
+        with_stable_neuron_indexes,
+        with_stable_neuron_indexes_mut,
+        with_stable_neuron_store,
         with_stable_neuron_store_mut,
     },
-    Clock, IcClock,
+    Clock,
+    IcClock,
 };
 use dyn_clone::DynClone;
 use ic_base_types::PrincipalId;
 use ic_cdk::println;
 use ic_nervous_system_governance::index::{
-    neuron_following::{HeapNeuronFollowingIndex, NeuronFollowingIndex},
+    neuron_following::{
+        HeapNeuronFollowingIndex,
+        NeuronFollowingIndex,
+    },
     neuron_principal::NeuronPrincipalIndex,
 };
 use ic_nns_common::pb::v1::NeuronId;
-use icp_ledger::{AccountIdentifier, Subaccount};
+use icp_ledger::{
+    AccountIdentifier,
+    Subaccount,
+};
 use std::{
     borrow::Cow,
-    collections::{BTreeMap, HashMap, HashSet},
-    fmt::{Debug, Display, Formatter},
-    ops::{Deref, RangeBounds},
+    collections::{
+        BTreeMap,
+        HashMap,
+        HashSet,
+    },
+    fmt::{
+        Debug,
+        Display,
+        Formatter,
+    },
+    ops::{
+        Deref,
+        RangeBounds,
+    },
 };
 
 pub mod metrics;

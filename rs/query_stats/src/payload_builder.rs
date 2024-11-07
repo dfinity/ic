@@ -1,24 +1,55 @@
 use crate::{
-    metrics::QueryStatsPayloadBuilderMetrics, state_machine::get_stats_for_node_id_and_epoch,
+    metrics::QueryStatsPayloadBuilderMetrics,
+    state_machine::get_stats_for_node_id_and_epoch,
 };
-use crossbeam_channel::{Receiver, TryRecvError};
+use crossbeam_channel::{
+    Receiver,
+    TryRecvError,
+};
 use ic_interfaces::{
-    batch_payload::{BatchPayloadBuilder, PastPayload, ProposalContext},
-    consensus::{self, PayloadValidationError},
-    query_stats::{InvalidQueryStatsPayloadReason, QueryStatsPayloadValidationFailure},
+    batch_payload::{
+        BatchPayloadBuilder,
+        PastPayload,
+        ProposalContext,
+    },
+    consensus::{
+        self,
+        PayloadValidationError,
+    },
+    query_stats::{
+        InvalidQueryStatsPayloadReason,
+        QueryStatsPayloadValidationFailure,
+    },
     validation::ValidationError,
 };
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{error, warn, ReplicaLogger};
+use ic_logger::{
+    error,
+    warn,
+    ReplicaLogger,
+};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    batch::{LocalQueryStats, QueryStats, QueryStatsPayload, ValidationContext},
-    epoch_from_height, CanisterId, Height, NodeId, NumBytes, QueryStatsEpoch,
+    batch::{
+        LocalQueryStats,
+        QueryStats,
+        QueryStatsPayload,
+        ValidationContext,
+    },
+    epoch_from_height,
+    CanisterId,
+    Height,
+    NodeId,
+    NumBytes,
+    QueryStatsEpoch,
 };
 use std::{
     collections::BTreeSet,
-    sync::{Arc, RwLock},
+    sync::{
+        Arc,
+        RwLock,
+    },
 };
 
 /// The parameters for the payload builder that are handed over by the execution
@@ -420,13 +451,26 @@ mod tests {
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities_state::ReplicatedStateBuilder;
     use ic_types::{
-        batch::{CanisterQueryStats, QueryStats, RawQueryStats},
-        crypto::{CryptoHash, CryptoHashOf},
+        batch::{
+            CanisterQueryStats,
+            QueryStats,
+            RawQueryStats,
+        },
+        crypto::{
+            CryptoHash,
+            CryptoHashOf,
+        },
         time::UNIX_EPOCH,
         RegistryVersion,
     };
-    use ic_types_test_utils::ids::{canister_test_id, node_test_id};
-    use std::{ops::Range, time::Duration};
+    use ic_types_test_utils::ids::{
+        canister_test_id,
+        node_test_id,
+    };
+    use std::{
+        ops::Range,
+        time::Duration,
+    };
 
     const MAX_PAYLOAD_SIZE: NumBytes = NumBytes::new(1024 * 1024);
 

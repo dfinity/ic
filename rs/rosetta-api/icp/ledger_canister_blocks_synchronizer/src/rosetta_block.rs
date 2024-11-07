@@ -1,8 +1,15 @@
 use std::collections::BTreeMap;
 
 use ic_crypto_sha2::Sha256;
-use icp_ledger::{BlockIndex, TimeStamp, Transaction};
-use serde::{Deserialize, Serialize};
+use icp_ledger::{
+    BlockIndex,
+    TimeStamp,
+    Transaction,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct RosettaBlock {

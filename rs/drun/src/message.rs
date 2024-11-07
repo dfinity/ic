@@ -3,18 +3,30 @@ use super::CanisterId;
 use hex::decode;
 use ic_execution_environment::execution::upgrade::ENHANCED_ORTHOGONAL_PERSISTENCE_SECTION;
 use ic_management_canister_types::{
-    self as ic00, CanisterInstallModeV2, CanisterUpgradeOptions, Payload, WasmMemoryPersistence,
+    self as ic00,
+    CanisterInstallModeV2,
+    CanisterUpgradeOptions,
+    Payload,
+    WasmMemoryPersistence,
 };
 use ic_types::{
-    messages::{Query, QuerySource, SignedIngress},
+    messages::{
+        Query,
+        QuerySource,
+        SignedIngress,
+    },
     time::expiry_time_from_now,
-    PrincipalId, UserId,
+    PrincipalId,
+    UserId,
 };
 
 use std::{
     fmt,
     fs::File,
-    io::{self, Read},
+    io::{
+        self,
+        Read,
+    },
     str::Chars,
     string::FromUtf8Error,
 };
@@ -220,7 +232,10 @@ fn parse_create(nonce: u64) -> Result<Message, String> {
 }
 
 fn contains_icp_private_custom_section(wasm_binary: &[u8], name: &str) -> Result<bool, String> {
-    use wasmparser::{Parser, Payload::CustomSection};
+    use wasmparser::{
+        Parser,
+        Payload::CustomSection,
+    };
 
     let icp_section_name = format!("icp:private {name}");
     let parser = Parser::new(0);
@@ -397,7 +412,10 @@ enum Radix {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_test_utilities_types::{ids::canister_test_id, messages::SignedIngressBuilder};
+    use ic_test_utilities_types::{
+        ids::canister_test_id,
+        messages::SignedIngressBuilder,
+    };
     use std::io::Cursor;
 
     const APP_CANISTER_URL: &str = "ryjl3-tyaaa-aaaaa-aaaba-cai";

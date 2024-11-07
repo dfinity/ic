@@ -1,28 +1,72 @@
 use crate::events::MinterEventAssert;
-use crate::mock::{JsonRpcMethod, MockJsonRpcProviders, MockJsonRpcProvidersBuilder};
+use crate::mock::{
+    JsonRpcMethod,
+    MockJsonRpcProviders,
+    MockJsonRpcProvidersBuilder,
+};
 use crate::response::{
-    block_response, empty_logs, encode_transaction, fee_history, send_raw_transaction_response,
-    transaction_count_response, transaction_receipt,
+    block_response,
+    empty_logs,
+    encode_transaction,
+    fee_history,
+    send_raw_transaction_response,
+    transaction_count_response,
+    transaction_receipt,
 };
 use crate::{
-    assert_reply, format_ethereum_address_to_eip_55, CkEthSetup, JsonRpcProvider,
-    DEFAULT_DEPOSIT_BLOCK_HASH, DEFAULT_DEPOSIT_BLOCK_NUMBER, DEFAULT_DEPOSIT_FROM_ADDRESS,
-    DEFAULT_DEPOSIT_LOG_INDEX, DEFAULT_DEPOSIT_TRANSACTION_HASH, DEFAULT_DEPOSIT_TRANSACTION_INDEX,
-    DEFAULT_PRINCIPAL_ID, DEFAULT_USER_SUBACCOUNT, EFFECTIVE_GAS_PRICE, EXPECTED_BALANCE, GAS_USED,
-    LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MAX_TICKS, MINTER_ADDRESS, RECEIVED_ETH_EVENT_TOPIC,
+    assert_reply,
+    format_ethereum_address_to_eip_55,
+    CkEthSetup,
+    JsonRpcProvider,
+    DEFAULT_DEPOSIT_BLOCK_HASH,
+    DEFAULT_DEPOSIT_BLOCK_NUMBER,
+    DEFAULT_DEPOSIT_FROM_ADDRESS,
+    DEFAULT_DEPOSIT_LOG_INDEX,
+    DEFAULT_DEPOSIT_TRANSACTION_HASH,
+    DEFAULT_DEPOSIT_TRANSACTION_INDEX,
+    DEFAULT_PRINCIPAL_ID,
+    DEFAULT_USER_SUBACCOUNT,
+    EFFECTIVE_GAS_PRICE,
+    EXPECTED_BALANCE,
+    GAS_USED,
+    LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL,
+    MAX_TICKS,
+    MINTER_ADDRESS,
+    RECEIVED_ETH_EVENT_TOPIC,
     RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC,
 };
-use candid::{Decode, Encode, Nat, Principal};
-use ethers_core::utils::{hex, rlp};
-use ic_base_types::{CanisterId, PrincipalId};
+use candid::{
+    Decode,
+    Encode,
+    Nat,
+    Principal,
+};
+use ethers_core::utils::{
+    hex,
+    rlp,
+};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_cketh_minter::endpoints::ckerc20::RetrieveErc20Request;
-use ic_cketh_minter::endpoints::events::{Event, EventPayload, EventSource};
+use ic_cketh_minter::endpoints::events::{
+    Event,
+    EventPayload,
+    EventSource,
+};
 use ic_cketh_minter::endpoints::{
-    EthTransaction, RetrieveEthRequest, RetrieveEthStatus, TxFinalizedStatus, WithdrawalError,
-    WithdrawalSearchParameter, WithdrawalStatus,
+    EthTransaction,
+    RetrieveEthRequest,
+    RetrieveEthStatus,
+    TxFinalizedStatus,
+    WithdrawalError,
+    WithdrawalSearchParameter,
+    WithdrawalStatus,
 };
 use ic_cketh_minter::{
-    PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, PROCESS_ETH_RETRIEVE_TRANSACTIONS_RETRY_INTERVAL,
+    PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL,
+    PROCESS_ETH_RETRIEVE_TRANSACTIONS_RETRY_INTERVAL,
     SCRAPING_ETH_LOGS_INTERVAL,
 };
 use ic_ethereum_types::Address;
@@ -30,7 +74,11 @@ use ic_state_machine_tests::StateMachine;
 use ic_types::messages::MessageId;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc2::approve::ApproveError;
-use icrc_ledger_types::icrc3::transactions::{Burn, Mint, Transaction as LedgerTransaction};
+use icrc_ledger_types::icrc3::transactions::{
+    Burn,
+    Mint,
+    Transaction as LedgerTransaction,
+};
 use num_traits::ToPrimitive;
 use serde_json::json;
 use std::convert::identity;
@@ -401,7 +449,10 @@ pub fn call_ledger_id_get_transaction<T: Into<Nat>>(
     ledger_id: CanisterId,
     ledger_index: T,
 ) -> LedgerTransaction {
-    use icrc_ledger_types::icrc3::transactions::{GetTransactionsRequest, GetTransactionsResponse};
+    use icrc_ledger_types::icrc3::transactions::{
+        GetTransactionsRequest,
+        GetTransactionsResponse,
+    };
 
     let request = GetTransactionsRequest {
         start: ledger_index.into(),

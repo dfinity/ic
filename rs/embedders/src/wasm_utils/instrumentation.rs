@@ -112,7 +112,11 @@
 
 use super::system_api_replacements::replacement_functions;
 use super::validation::API_VERSION_IC0;
-use super::{InstrumentationOutput, Segments, SystemApiFunc};
+use super::{
+    InstrumentationOutput,
+    Segments,
+    SystemApiFunc,
+};
 use ic_config::embedders::MeteringType;
 use ic_config::flag_status::FlagStatus;
 use ic_registry_subnet_type::SubnetType;
@@ -121,16 +125,37 @@ use ic_sys::PAGE_SIZE;
 use ic_types::methods::WasmMethod;
 use ic_types::NumBytes;
 use ic_types::NumInstructions;
-use ic_wasm_types::{BinaryEncodedWasm, WasmError, WasmInstrumentationError};
+use ic_wasm_types::{
+    BinaryEncodedWasm,
+    WasmError,
+    WasmInstrumentationError,
+};
 
 use crate::wasmtime_embedder::{
-    STABLE_BYTEMAP_MEMORY_NAME, STABLE_MEMORY_NAME, WASM_HEAP_BYTEMAP_MEMORY_NAME,
+    STABLE_BYTEMAP_MEMORY_NAME,
+    STABLE_MEMORY_NAME,
+    WASM_HEAP_BYTEMAP_MEMORY_NAME,
     WASM_HEAP_MEMORY_NAME,
 };
-use ic_wasm_transform::{self, Global, Module};
+use ic_wasm_transform::{
+    self,
+    Global,
+    Module,
+};
 use wasmparser::{
-    BlockType, CompositeInnerType, CompositeType, Export, ExternalKind, FuncType, GlobalType,
-    Import, MemoryType, Operator, SubType, TypeRef, ValType,
+    BlockType,
+    CompositeInnerType,
+    CompositeType,
+    Export,
+    ExternalKind,
+    FuncType,
+    GlobalType,
+    Import,
+    MemoryType,
+    Operator,
+    SubType,
+    TypeRef,
+    ValType,
 };
 
 use std::collections::BTreeMap;

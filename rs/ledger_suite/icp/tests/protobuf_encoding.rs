@@ -1,7 +1,18 @@
 use dfn_protobuf::ToProto;
 use ic_ledger_hash_of::HashOf;
-use icp_ledger::{AccountIdentifier, Block, Memo, Operation, TimeStamp, Tokens, Transaction};
-use proptest::array::{uniform28, uniform32};
+use icp_ledger::{
+    AccountIdentifier,
+    Block,
+    Memo,
+    Operation,
+    TimeStamp,
+    Tokens,
+    Transaction,
+};
+use proptest::array::{
+    uniform28,
+    uniform32,
+};
 use proptest::collection::vec as pvec;
 use proptest::prelude::*;
 use serde_bytes::ByteBuf;

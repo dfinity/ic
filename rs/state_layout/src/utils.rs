@@ -1,4 +1,7 @@
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{
+    warn,
+    ReplicaLogger,
+};
 use ic_sys::fs::copy_file_sparse;
 use std::io::Error;
 use std::path::Path;
@@ -10,7 +13,10 @@ use std::path::Path;
 /// regular file copy.
 pub fn do_copy(log: &ReplicaLogger, src: &Path, dst: &Path) -> std::io::Result<()> {
     use ic_sys::fs::FileCloneError;
-    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::atomic::{
+        AtomicBool,
+        Ordering,
+    };
 
     static ON_COW_FS: AtomicBool = AtomicBool::new(true);
     static SAME_FS: AtomicBool = AtomicBool::new(true);

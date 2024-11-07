@@ -1,5 +1,12 @@
-use crate::{BoundedVec, DataSize, Payload};
-use candid::{CandidType, Deserialize};
+use crate::{
+    BoundedVec,
+    DataSize,
+    Payload,
+};
+use candid::{
+    CandidType,
+    Deserialize,
+};
 use ic_base_types::PrincipalId;
 use serde::Serialize;
 

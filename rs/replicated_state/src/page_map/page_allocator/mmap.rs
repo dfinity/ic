@@ -1,23 +1,57 @@
 use crate::page_map::{
-    FileDescriptor, FileOffset, PageAllocatorFileDescriptor, TestPageAllocatorFileDescriptorImpl,
+    FileDescriptor,
+    FileOffset,
+    PageAllocatorFileDescriptor,
+    TestPageAllocatorFileDescriptorImpl,
 };
 
 use super::page_allocator_registry::PageAllocatorRegistry;
 use super::{
-    MmapPageSerialization, Page, PageAllocatorSerialization, PageDeltaSerialization,
-    PageValidation, ALLOCATED_PAGES,
+    MmapPageSerialization,
+    Page,
+    PageAllocatorSerialization,
+    PageDeltaSerialization,
+    PageValidation,
+    ALLOCATED_PAGES,
 };
-use cvt::{cvt, cvt_r};
-use ic_sys::{page_bytes_from_ptr, PageBytes, PageIndex, PAGE_SIZE};
+use cvt::{
+    cvt,
+    cvt_r,
+};
+use ic_sys::{
+    page_bytes_from_ptr,
+    PageBytes,
+    PageIndex,
+    PAGE_SIZE,
+};
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
-use libc::{c_void, close};
-use nix::sys::mman::{madvise, mmap, munmap, MapFlags, MmapAdvise, ProtFlags};
+use libc::{
+    c_void,
+    close,
+};
+use nix::sys::mman::{
+    madvise,
+    mmap,
+    munmap,
+    MapFlags,
+    MmapAdvise,
+    ProtFlags,
+};
 use rayon::prelude::*;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::os::raw::c_int;
 use std::os::unix::io::RawFd;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{
+    AtomicUsize,
+    Ordering,
+};
+use std::sync::{
+    Arc,
+    Mutex,
+};
 
 #[cfg(target_os = "linux")]
 use ic_sys::HUGE_PAGE_SIZE;

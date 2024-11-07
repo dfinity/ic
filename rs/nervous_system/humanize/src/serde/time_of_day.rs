@@ -1,6 +1,14 @@
-use crate::{format_time_of_day, parse_time_of_day};
+use crate::{
+    format_time_of_day,
+    parse_time_of_day,
+};
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
-use serde::{ser::Error, Deserialize, Deserializer, Serializer};
+use serde::{
+    ser::Error,
+    Deserialize,
+    Deserializer,
+    Serializer,
+};
 
 #[cfg(test)]
 mod time_of_day_tests;

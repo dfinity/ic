@@ -1,40 +1,114 @@
-use candid::{Decode, Encode};
-use ic_base_types::{NumBytes, NumSeconds};
-use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_management_canister_types::{
-    self as ic00, BitcoinGetUtxosArgs, BitcoinNetwork, BoundedHttpHeaders, CanisterChange,
-    CanisterHttpRequestArgs, CanisterIdRecord, CanisterStatusResultV2, CanisterStatusType,
-    DerivationPath, EcdsaKeyId, EmptyBlob, FetchCanisterLogsRequest, HttpMethod, LogVisibilityV2,
-    MasterPublicKeyId, Method, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
-    ProvisionalTopUpCanisterArgs, SchnorrAlgorithm, SchnorrKeyId, TakeCanisterSnapshotArgs,
-    TransformContext, TransformFunc, IC_00,
+use candid::{
+    Decode,
+    Encode,
 };
-use ic_registry_routing_table::{canister_id_into_u64, CanisterIdRange, RoutingTable};
+use ic_base_types::{
+    NumBytes,
+    NumSeconds,
+};
+use ic_error_types::{
+    ErrorCode,
+    RejectCode,
+    UserError,
+};
+use ic_management_canister_types::{
+    self as ic00,
+    BitcoinGetUtxosArgs,
+    BitcoinNetwork,
+    BoundedHttpHeaders,
+    CanisterChange,
+    CanisterHttpRequestArgs,
+    CanisterIdRecord,
+    CanisterStatusResultV2,
+    CanisterStatusType,
+    DerivationPath,
+    EcdsaKeyId,
+    EmptyBlob,
+    FetchCanisterLogsRequest,
+    HttpMethod,
+    LogVisibilityV2,
+    MasterPublicKeyId,
+    Method,
+    Payload as Ic00Payload,
+    ProvisionalCreateCanisterWithCyclesArgs,
+    ProvisionalTopUpCanisterArgs,
+    SchnorrAlgorithm,
+    SchnorrKeyId,
+    TakeCanisterSnapshotArgs,
+    TransformContext,
+    TransformFunc,
+    IC_00,
+};
+use ic_registry_routing_table::{
+    canister_id_into_u64,
+    CanisterIdRange,
+    RoutingTable,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::system_state::CyclesUseCase,
-    canister_state::{DEFAULT_QUEUE_CAPACITY, WASM_PAGE_SIZE_IN_BYTES},
-    testing::{CanisterQueuesTesting, SystemStateTesting},
-    CanisterStatus, ReplicatedState, SystemState,
+    canister_state::{
+        DEFAULT_QUEUE_CAPACITY,
+        WASM_PAGE_SIZE_IN_BYTES,
+    },
+    testing::{
+        CanisterQueuesTesting,
+        SystemStateTesting,
+    },
+    CanisterStatus,
+    ReplicatedState,
+    SystemState,
 };
 use ic_test_utilities::assert_utils::assert_balance_equals;
 use ic_test_utilities_execution_environment::{
-    assert_empty_reply, check_ingress_status, get_reply, ExecutionTest, ExecutionTestBuilder,
+    assert_empty_reply,
+    check_ingress_status,
+    get_reply,
+    ExecutionTest,
+    ExecutionTestBuilder,
 };
-use ic_test_utilities_metrics::{fetch_histogram_vec_count, fetch_int_counter, metric_vec};
+use ic_test_utilities_metrics::{
+    fetch_histogram_vec_count,
+    fetch_int_counter,
+    metric_vec,
+};
 use ic_types::{
-    canister_http::{CanisterHttpMethod, Transform},
-    ingress::{IngressState, IngressStatus, WasmResult},
+    canister_http::{
+        CanisterHttpMethod,
+        Transform,
+    },
+    ingress::{
+        IngressState,
+        IngressStatus,
+        WasmResult,
+    },
     messages::{
-        CallbackId, Payload, RejectContext, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES,
+        CallbackId,
+        Payload,
+        RejectContext,
+        RequestOrResponse,
+        Response,
+        MAX_RESPONSE_COUNT_BYTES,
         NO_DEADLINE,
     },
     nominal_cycles::NominalCycles,
     time::UNIX_EPOCH,
-    CanisterId, Cycles, PrincipalId, RegistryVersion,
+    CanisterId,
+    Cycles,
+    PrincipalId,
+    RegistryVersion,
 };
-use ic_types_test_utils::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id};
-use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use ic_types_test_utils::ids::{
+    canister_test_id,
+    node_test_id,
+    subnet_test_id,
+    user_test_id,
+};
+use ic_universal_canister::{
+    call_args,
+    wasm,
+    UNIVERSAL_CANISTER_WASM,
+};
 use maplit::btreemap;
 use std::mem::size_of;
 

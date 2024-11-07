@@ -24,20 +24,29 @@ use anyhow::Result;
 use candid::Principal;
 use core::ops::RangeInclusive;
 use ic_agent::identity::BasicIdentity;
-use ic_agent::{Agent, Identity};
+use ic_agent::{
+    Agent,
+    Identity,
+};
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::InternetComputer;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+    GetFirstHealthyNodeSnapshot,
+    HasPublicApiUrl,
+    HasTopologySnapshot,
+    IcNodeContainer,
     IcNodeSnapshot,
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::delegations::*;
 use ic_system_test_driver::util::{
-    agent_with_identity, block_on, random_ed25519_identity, MetricsFetcher,
+    agent_with_identity,
+    block_on,
+    random_ed25519_identity,
+    MetricsFetcher,
 };
 use ic_types::messages::Blob;
 use rand::Rng;

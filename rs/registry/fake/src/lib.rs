@@ -3,12 +3,25 @@
 //! background is not required.
 
 use ic_interfaces_registry::{
-    empty_zero_registry_record, RegistryClient, RegistryClientVersionedResult,
-    RegistryDataProvider, RegistryTransportRecord, ZERO_REGISTRY_VERSION,
+    empty_zero_registry_record,
+    RegistryClient,
+    RegistryClientVersionedResult,
+    RegistryDataProvider,
+    RegistryTransportRecord,
+    ZERO_REGISTRY_VERSION,
 };
-use ic_types::{registry::RegistryClientError, time::current_time, RegistryVersion, Time};
+use ic_types::{
+    registry::RegistryClientError,
+    time::current_time,
+    RegistryVersion,
+    Time,
+};
 use std::collections::BTreeMap;
-use std::sync::{Arc, RwLock, RwLockReadGuard};
+use std::sync::{
+    Arc,
+    RwLock,
+    RwLockReadGuard,
+};
 
 type CacheState = (
     RegistryVersion,

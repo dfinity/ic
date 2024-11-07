@@ -1,9 +1,15 @@
 use ic_embedders::wasm_executor::SliceExecutionOutput;
 use ic_interfaces::execution_environment::{
-    HypervisorError, HypervisorResult, OutOfInstructionsHandler,
+    HypervisorError,
+    HypervisorResult,
+    OutOfInstructionsHandler,
 };
 use ic_types::NumInstructions;
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{
+    Arc,
+    Condvar,
+    Mutex,
+};
 
 // The upper bound on the number of supported execution slices.
 //

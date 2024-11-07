@@ -1,29 +1,47 @@
 use super::*;
 use crate::sign::tests::{
-    dealing_encryption_pk_record_with, registry_with_records, REG_V1, REG_V2,
+    dealing_encryption_pk_record_with,
+    registry_with_records,
+    REG_V1,
+    REG_V2,
 };
 use crate::sign::threshold_sig::ni_dkg::test_utils::csp_fs_enc_pk;
 use crate::sign::threshold_sig::ni_dkg::test_utils::dealing_enc_pk_record;
 use crate::sign::threshold_sig::ni_dkg::test_utils::map_of;
 use crate::sign::threshold_sig::ni_dkg::test_utils::REGISTRY_FS_ENC_PK_SIZE;
 use crate::sign::threshold_sig::ni_dkg::test_utils::{
-    csp_dealing, dkg_config, minimal_dkg_config_data_without_resharing, transcript, DKG_ID,
-    RESHARING_TRANSCRIPT_DKG_ID, THRESHOLD,
+    csp_dealing,
+    dkg_config,
+    minimal_dkg_config_data_without_resharing,
+    transcript,
+    DKG_ID,
+    RESHARING_TRANSCRIPT_DKG_ID,
+    THRESHOLD,
 };
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::CspDkgCreateDealingError;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
-    CspFsEncryptionPublicKey, CspNiDkgDealing, Epoch,
+    CspFsEncryptionPublicKey,
+    CspNiDkgDealing,
+    Epoch,
 };
 use ic_crypto_test_utils::set_of;
 use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
 use ic_types::crypto::error::InvalidArgumentError;
 use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgConfigData;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::{
-    FsEncryptionPublicKeyNotInRegistryError, MalformedFsEncryptionPublicKeyError, NotADealerError,
+    FsEncryptionPublicKeyNotInRegistryError,
+    MalformedFsEncryptionPublicKeyError,
+    NotADealerError,
 };
 use ic_types::crypto::AlgorithmId;
 use ic_types::registry::RegistryClientError;
-use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, NODE_4, NODE_42};
+use ic_types_test_utils::ids::{
+    NODE_1,
+    NODE_2,
+    NODE_3,
+    NODE_4,
+    NODE_42,
+};
 
 const PK_VALUE_1: u8 = 42;
 const PK_VALUE_2: u8 = 43;
@@ -731,7 +749,8 @@ mod verify_dealing {
 mod verify_dealing_with_resharing_transcript {
     use super::*;
     use crate::sign::threshold_sig::ni_dkg::test_utils::{
-        csp_fs_enc_pk, minimal_dkg_config_data_with_resharing,
+        csp_fs_enc_pk,
+        minimal_dkg_config_data_with_resharing,
     };
     use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::CspDkgVerifyReshareDealingError;
 

@@ -2,7 +2,11 @@
 
 use ic_interfaces::{
     ingress_pool::IngressPoolThrottler,
-    p2p::consensus::{Bouncer, BouncerFactory, BouncerValue},
+    p2p::consensus::{
+        Bouncer,
+        BouncerFactory,
+        BouncerValue,
+    },
     time_source::TimeSource,
 };
 use ic_limits::MAX_INGRESS_TTL;

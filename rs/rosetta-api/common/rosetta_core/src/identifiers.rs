@@ -1,8 +1,20 @@
-use crate::objects::{Object, ObjectMap};
-use anyhow::{anyhow, Context};
+use crate::objects::{
+    Object,
+    ObjectMap,
+};
+use anyhow::{
+    anyhow,
+    Context,
+};
 use candid::Principal;
-use ic_types::{CanisterId, PrincipalId};
-use serde::{Deserialize, Serialize};
+use ic_types::{
+    CanisterId,
+    PrincipalId,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use serde_bytes::ByteBuf;
 use std::str::FromStr;
 

@@ -1,7 +1,15 @@
-use candid::{CandidType, Deserialize};
+use candid::{
+    CandidType,
+    Deserialize,
+};
 use ic_base_types::NodeId;
 use serde::Serialize;
-use std::{collections::HashSet, fmt, net::Ipv4Addr, str::FromStr};
+use std::{
+    collections::HashSet,
+    fmt,
+    net::Ipv4Addr,
+    str::FromStr,
+};
 use thiserror::Error;
 
 #[derive(Debug, Error)]

@@ -1,7 +1,13 @@
 use crate::errors::ApiError;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::convert::TryFrom;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{
+    SystemTime,
+    UNIX_EPOCH,
+};
 
 /// The timestamp of the block in milliseconds since the Unix Epoch. The
 /// timestamp is stored in milliseconds because some blockchains produce blocks

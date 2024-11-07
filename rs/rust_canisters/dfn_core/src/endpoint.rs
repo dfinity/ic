@@ -1,10 +1,25 @@
-use crate::api::{arg_data, reject, reply, spawn};
-use crate::{printer, setup};
+use crate::api::{
+    arg_data,
+    reject,
+    reply,
+    spawn,
+};
+use crate::{
+    printer,
+    setup,
+};
 use core::fmt::Debug;
 use core::future::Future;
-use on_wire::{FromWire, IntoWire, NewType};
+use on_wire::{
+    FromWire,
+    IntoWire,
+    NewType,
+};
 
-pub use on_wire::{bytes, from};
+pub use on_wire::{
+    bytes,
+    from,
+};
 
 /// Over allows you to create canister endpoints easily
 /// ```no_run
@@ -261,9 +276,16 @@ where
 pub mod reject_on_decode_error {
     use std::future::Future;
 
-    use on_wire::{FromWire, IntoWire, NewType};
+    use on_wire::{
+        FromWire,
+        IntoWire,
+        NewType,
+    };
 
-    use super::{over_async_bytes_may_reject, over_bytes_may_reject};
+    use super::{
+        over_async_bytes_may_reject,
+        over_bytes_may_reject,
+    };
 
     pub fn over<In, Out, F, Witness>(_: Witness, f: F)
     where

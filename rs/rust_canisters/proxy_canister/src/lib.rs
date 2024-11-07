@@ -5,7 +5,10 @@
 //! as a canister message to client if the call was successful and agreed by majority nodes,
 //! otherwise errors out.
 //!
-use candid::{CandidType, Deserialize};
+use candid::{
+    CandidType,
+    Deserialize,
+};
 use ic_management_canister_types::CanisterHttpRequestArgs;
 
 #[derive(Clone, Debug, CandidType, Deserialize)]

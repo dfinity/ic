@@ -1,14 +1,33 @@
 use candid::Principal;
 use ic_stable_structures::{
-    memory_manager::{MemoryId, MemoryManager, VirtualMemory},
+    memory_manager::{
+        MemoryId,
+        MemoryManager,
+        VirtualMemory,
+    },
     storable::Bound,
-    DefaultMemoryImpl, StableBTreeMap, Storable,
+    DefaultMemoryImpl,
+    StableBTreeMap,
+    Storable,
 };
 use rate_limits_api::SchemaVersion;
-use serde::{Deserialize, Serialize};
-use std::{borrow::Cow, cell::RefCell, collections::HashSet, thread::LocalKey};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use std::{
+    borrow::Cow,
+    cell::RefCell,
+    collections::HashSet,
+    thread::LocalKey,
+};
 
-use crate::types::{IncidentId, RuleId, Timestamp, Version};
+use crate::types::{
+    IncidentId,
+    RuleId,
+    Timestamp,
+    Version,
+};
 
 // Type aliases for stable memory
 type Memory = VirtualMemory<DefaultMemoryImpl>;

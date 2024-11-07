@@ -13,10 +13,27 @@
 // +--------------------+
 
 use libc::MAP_FAILED;
-use libc::{mmap, mprotect, munmap};
-use libc::{sigaltstack, SIGSTKSZ, SS_DISABLE};
-use libc::{sysconf, _SC_PAGESIZE};
-use libc::{MAP_ANON, MAP_PRIVATE, PROT_NONE, PROT_READ, PROT_WRITE};
+use libc::{
+    mmap,
+    mprotect,
+    munmap,
+};
+use libc::{
+    sigaltstack,
+    SIGSTKSZ,
+    SS_DISABLE,
+};
+use libc::{
+    sysconf,
+    _SC_PAGESIZE,
+};
+use libc::{
+    MAP_ANON,
+    MAP_PRIVATE,
+    PROT_NONE,
+    PROT_READ,
+    PROT_WRITE,
+};
 
 use std::io::Error;
 use std::mem::MaybeUninit;

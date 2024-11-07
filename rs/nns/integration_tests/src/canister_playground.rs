@@ -1,7 +1,9 @@
 use canister_test::Project;
 use ic_base_types::PrincipalId;
 use ic_nns_test_utils::state_test_helpers::{
-    create_canister, state_machine_builder_for_nns_tests, update_with_sender,
+    create_canister,
+    state_machine_builder_for_nns_tests,
+    update_with_sender,
 };
 use std::time::Duration;
 

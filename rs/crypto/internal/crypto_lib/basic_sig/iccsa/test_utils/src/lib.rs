@@ -1,12 +1,30 @@
-use ic_certification_test_utils::{hash_full_tree, CertificateBuilder, CertificateData};
+use ic_certification_test_utils::{
+    hash_full_tree,
+    CertificateBuilder,
+    CertificateData,
+};
 use ic_crypto_sha2::Sha256;
 use ic_crypto_tree_hash::{
-    flatmap, Digest, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree, MixedHashTree,
+    flatmap,
+    Digest,
+    HashTreeBuilder,
+    HashTreeBuilderImpl,
+    Label,
+    LabeledTree,
+    MixedHashTree,
     WitnessGenerator,
 };
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
-use ic_types::{CanisterId, PrincipalId, SubnetId};
-use rand::{CryptoRng, Rng, RngCore};
+use ic_types::{
+    CanisterId,
+    PrincipalId,
+    SubnetId,
+};
+use rand::{
+    CryptoRng,
+    Rng,
+    RngCore,
+};
 
 pub struct CanisterCertificate {
     pub root_pk: ThresholdSigPublicKey,

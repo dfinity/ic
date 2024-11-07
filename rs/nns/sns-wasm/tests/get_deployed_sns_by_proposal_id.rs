@@ -1,14 +1,27 @@
-use crate::common::{get_deployed_sns_by_proposal_id, get_deployed_sns_by_proposal_id_unchecked};
+use crate::common::{
+    get_deployed_sns_by_proposal_id,
+    get_deployed_sns_by_proposal_id_unchecked,
+};
 use common::set_up_state_machine_with_nns;
 use ic_nervous_system_common::ONE_TRILLION;
 use ic_nns_constants::{
-    GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID, SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET,
+    GOVERNANCE_CANISTER_ID,
+    SNS_WASM_CANISTER_ID,
+    SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET,
 };
-use ic_nns_test_utils::{sns_wasm, state_test_helpers};
-use ic_sns_init::pb::v1::{DappCanisters, SnsInitPayload};
+use ic_nns_test_utils::{
+    sns_wasm,
+    state_test_helpers,
+};
+use ic_sns_init::pb::v1::{
+    DappCanisters,
+    SnsInitPayload,
+};
 use ic_sns_wasm::pb::v1::{
     get_deployed_sns_by_proposal_id_response::GetDeployedSnsByProposalIdResult,
-    DappCanistersTransferResult, DeployNewSnsResponse, GetDeployedSnsByProposalIdResponse,
+    DappCanistersTransferResult,
+    DeployNewSnsResponse,
+    GetDeployedSnsByProposalIdResponse,
     SnsCanisterIds,
 };
 use ic_test_utilities_types::ids::canister_test_id;

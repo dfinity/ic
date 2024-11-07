@@ -1,8 +1,19 @@
-use crate::displayer::{DisplayProxy, DisplayerOf};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use crate::displayer::{
+    DisplayProxy,
+    DisplayerOf,
+};
+use serde::{
+    Deserialize,
+    Deserializer,
+    Serialize,
+    Serializer,
+};
 use std::cmp::Ordering;
 use std::fmt;
-use std::hash::{Hash, Hasher};
+use std::hash::{
+    Hash,
+    Hasher,
+};
 use std::marker::PhantomData;
 
 /// `Id<Entity, Repr>` provides a type-safe way to keep ids of

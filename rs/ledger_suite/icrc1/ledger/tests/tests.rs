@@ -1,34 +1,86 @@
-use candid::{CandidType, Decode, Encode, Nat};
+use candid::{
+    CandidType,
+    Decode,
+    Encode,
+    Nat,
+};
 use ic_agent::identity::Identity;
-use ic_base_types::{CanisterId, PrincipalId};
-use ic_icrc1::{Block, Operation, Transaction};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
+use ic_icrc1::{
+    Block,
+    Operation,
+    Transaction,
+};
 use ic_icrc1_ledger::{
-    ChangeFeeCollector, FeatureFlags, InitArgs, InitArgsBuilder as LedgerInitArgsBuilder,
+    ChangeFeeCollector,
+    FeatureFlags,
+    InitArgs,
+    InitArgsBuilder as LedgerInitArgsBuilder,
     LedgerArgument,
 };
 use ic_icrc1_test_utils::minter_identity;
 use ic_ledger_canister_core::archive::ArchiveOptions;
-use ic_ledger_core::block::{BlockIndex, BlockType};
-use ic_ledger_hash_of::{HashOf, HASH_LENGTH};
+use ic_ledger_core::block::{
+    BlockIndex,
+    BlockType,
+};
+use ic_ledger_hash_of::{
+    HashOf,
+    HASH_LENGTH,
+};
 use ic_ledger_suite_state_machine_tests::fee_collector::BlockRetrieval;
 use ic_ledger_suite_state_machine_tests::in_memory_ledger::verify_ledger_state;
 use ic_ledger_suite_state_machine_tests::{
-    get_allowance, send_approval, send_transfer_from, ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY,
-    BLOB_META_VALUE, DECIMAL_PLACES, FEE, INT_META_KEY, INT_META_VALUE, MINTER, NAT_META_KEY,
-    NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY, TEXT_META_VALUE, TOKEN_NAME,
+    get_allowance,
+    send_approval,
+    send_transfer_from,
+    ARCHIVE_TRIGGER_THRESHOLD,
+    BLOB_META_KEY,
+    BLOB_META_VALUE,
+    DECIMAL_PLACES,
+    FEE,
+    INT_META_KEY,
+    INT_META_VALUE,
+    MINTER,
+    NAT_META_KEY,
+    NAT_META_VALUE,
+    NUM_BLOCKS_TO_ARCHIVE,
+    TEXT_META_KEY,
+    TEXT_META_VALUE,
+    TOKEN_NAME,
     TOKEN_SYMBOL,
 };
 use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use icrc_ledger_types::icrc::generic_value::Value;
 use icrc_ledger_types::icrc1::account::Account;
-use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
+use icrc_ledger_types::icrc1::transfer::{
+    TransferArg,
+    TransferError,
+};
 use icrc_ledger_types::icrc2::allowance::Allowance;
-use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
-use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
-use icrc_ledger_types::icrc3::archive::{GetArchivesArgs, GetArchivesResult, QueryArchiveFn};
+use icrc_ledger_types::icrc2::approve::{
+    ApproveArgs,
+    ApproveError,
+};
+use icrc_ledger_types::icrc2::transfer_from::{
+    TransferFromArgs,
+    TransferFromError,
+};
+use icrc_ledger_types::icrc3::archive::{
+    GetArchivesArgs,
+    GetArchivesResult,
+    QueryArchiveFn,
+};
 use icrc_ledger_types::icrc3::blocks::{
-    ArchivedBlocks, BlockWithId, GetBlocksRequest, GetBlocksResponse, GetBlocksResult,
+    ArchivedBlocks,
+    BlockWithId,
+    GetBlocksRequest,
+    GetBlocksResponse,
+    GetBlocksResult,
 };
 use num_traits::ToPrimitive;
 use std::collections::BTreeMap;
@@ -467,7 +519,11 @@ fn icrc1_test_downgrade_from_incompatible_version() {
 }
 
 mod metrics {
-    use crate::{encode_init_args, encode_upgrade_args, ledger_wasm};
+    use crate::{
+        encode_init_args,
+        encode_upgrade_args,
+        ledger_wasm,
+    };
     use ic_ledger_suite_state_machine_tests::metrics::LedgerSuiteType;
 
     #[test]
@@ -1210,14 +1266,36 @@ fn test_icrc3_get_blocks_number_of_blocks_limit() {
 mod verify_written_blocks {
     use super::*;
     use ic_icrc1_ledger::FeatureFlags;
-    use ic_ledger_suite_state_machine_tests::{system_time_to_nanos, MINTER};
-    use ic_state_machine_tests::{StateMachine, WasmResult};
+    use ic_ledger_suite_state_machine_tests::{
+        system_time_to_nanos,
+        MINTER,
+    };
+    use ic_state_machine_tests::{
+        StateMachine,
+        WasmResult,
+    };
     use icrc_ledger_types::icrc1::account::Account;
-    use icrc_ledger_types::icrc1::transfer::{Memo, NumTokens, TransferArg};
-    use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
-    use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
+    use icrc_ledger_types::icrc1::transfer::{
+        Memo,
+        NumTokens,
+        TransferArg,
+    };
+    use icrc_ledger_types::icrc2::approve::{
+        ApproveArgs,
+        ApproveError,
+    };
+    use icrc_ledger_types::icrc2::transfer_from::{
+        TransferFromArgs,
+        TransferFromError,
+    };
     use icrc_ledger_types::icrc3::transactions::{
-        Approve, Burn, GetTransactionsRequest, GetTransactionsResponse, Mint, Transaction, Transfer,
+        Approve,
+        Burn,
+        GetTransactionsRequest,
+        GetTransactionsResponse,
+        Mint,
+        Transaction,
+        Transfer,
     };
     use num_traits::ToPrimitive;
     use serde_bytes::ByteBuf;

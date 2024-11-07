@@ -1,7 +1,13 @@
 #![no_main]
-use bitcoin::consensus::encode::{deserialize, serialize};
+use bitcoin::consensus::encode::{
+    deserialize,
+    serialize,
+};
 use bitcoin::Block;
-use libfuzzer_sys::{fuzz_target, Corpus};
+use libfuzzer_sys::{
+    fuzz_target,
+    Corpus,
+};
 
 fuzz_target!(|data: &[u8]| -> Corpus {
     match deserialize::<Block>(data) {

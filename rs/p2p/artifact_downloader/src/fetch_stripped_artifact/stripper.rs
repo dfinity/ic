@@ -1,10 +1,14 @@
 use ic_protobuf::types::v1 as pb;
 use ic_types::{
-    artifact::IdentifiableArtifact, batch::IngressPayload, consensus::ConsensusMessage,
+    artifact::IdentifiableArtifact,
+    batch::IngressPayload,
+    consensus::ConsensusMessage,
 };
 
 use super::types::stripped::{
-    MaybeStrippedConsensusMessage, StrippedBlockProposal, StrippedIngressPayload,
+    MaybeStrippedConsensusMessage,
+    StrippedBlockProposal,
+    StrippedIngressPayload,
 };
 
 /// Provides functionality for stripping objects of given information.

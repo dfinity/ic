@@ -1,7 +1,10 @@
 use super::*;
 use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
-use ic_nervous_system_common::{E8, WIDE_RANGE_OF_U64_VALUES};
+use ic_nervous_system_common::{
+    E8,
+    WIDE_RANGE_OF_U64_VALUES,
+};
 
 fn nid(id: u64) -> NeuronId {
     NeuronId { id }

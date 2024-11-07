@@ -1,4 +1,7 @@
-use candid::{CandidType, Deserialize};
+use candid::{
+    CandidType,
+    Deserialize,
+};
 use std::time::Duration;
 
 /// Id of a canister is an opaque blob.

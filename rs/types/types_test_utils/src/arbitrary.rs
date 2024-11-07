@@ -1,17 +1,45 @@
-use crate::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id};
+use crate::ids::{
+    canister_test_id,
+    node_test_id,
+    subnet_test_id,
+    user_test_id,
+};
 use ic_protobuf::types::v1::RejectCode as pbRejectCode;
 use ic_types::{
-    crypto::{AlgorithmId, KeyPurpose, UserPublicKey},
+    crypto::{
+        AlgorithmId,
+        KeyPurpose,
+        UserPublicKey,
+    },
     messages::{
-        CallbackId, Payload, RejectContext, Request, RequestMetadata, RequestOrResponse, Response,
+        CallbackId,
+        Payload,
+        RejectContext,
+        Request,
+        RequestMetadata,
+        RequestOrResponse,
+        Response,
         NO_DEADLINE,
     },
-    time::{CoarseTime, UNIX_EPOCH},
+    time::{
+        CoarseTime,
+        UNIX_EPOCH,
+    },
     xnet::StreamIndex,
-    CanisterId, Cycles, Height, NodeId, RegistryVersion, SubnetId, Time, UserId,
+    CanisterId,
+    Cycles,
+    Height,
+    NodeId,
+    RegistryVersion,
+    SubnetId,
+    Time,
+    UserId,
 };
 use proptest::prelude::*;
-use std::{convert::TryInto, time::Duration};
+use std::{
+    convert::TryInto,
+    time::Duration,
+};
 use strum::IntoEnumIterator;
 
 prop_compose! {

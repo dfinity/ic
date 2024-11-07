@@ -1,14 +1,23 @@
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::Arc,
+    time::Duration,
+};
 
 use tokio::time;
 use tokio_util::sync::CancellationToken;
-use tracing::{error, warn};
+use tracing::{
+    error,
+    warn,
+};
 
 use crate::{
     fetch::NodesFetcher,
     messages::FetchedNodes,
     snapshot::Snapshot,
-    types::{GlobalShared, SenderWatch},
+    types::{
+        GlobalShared,
+        SenderWatch,
+    },
 };
 
 const SERVICE_NAME: &str = "NodesFetchActor";

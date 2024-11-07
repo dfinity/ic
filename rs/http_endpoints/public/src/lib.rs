@@ -24,26 +24,49 @@ cfg_if::cfg_if! {
     }
 }
 
-pub use call::{call_v2, call_v3, IngressValidatorBuilder, IngressWatcher, IngressWatcherHandle};
+pub use call::{
+    call_v2,
+    call_v3,
+    IngressValidatorBuilder,
+    IngressWatcher,
+    IngressWatcherHandle,
+};
 pub use common::cors_layer;
 pub use query::QueryServiceBuilder;
-pub use read_state::canister::{CanisterReadStateService, CanisterReadStateServiceBuilder};
+pub use read_state::canister::{
+    CanisterReadStateService,
+    CanisterReadStateServiceBuilder,
+};
 pub use read_state::subnet::SubnetReadStateServiceBuilder;
 
 use crate::{
     catch_up_package::CatchUpPackageService,
     common::{
-        get_root_threshold_public_key, make_plaintext_response, map_box_error_to_response,
+        get_root_threshold_public_key,
+        make_plaintext_response,
+        map_box_error_to_response,
         MAX_REQUEST_RECEIVE_TIMEOUT,
     },
     dashboard::DashboardService,
     health_status_refresher::HealthStatusRefreshLayer,
     metrics::{
-        HttpHandlerMetrics, LABEL_HTTP_STATUS_CODE, LABEL_INSECURE, LABEL_IO_ERROR, LABEL_SECURE,
-        LABEL_TIMEOUT_ERROR, LABEL_TLS_ERROR, LABEL_UNKNOWN, REQUESTS_LABEL_NAMES, STATUS_ERROR,
+        HttpHandlerMetrics,
+        LABEL_HTTP_STATUS_CODE,
+        LABEL_INSECURE,
+        LABEL_IO_ERROR,
+        LABEL_SECURE,
+        LABEL_TIMEOUT_ERROR,
+        LABEL_TLS_ERROR,
+        LABEL_UNKNOWN,
+        REQUESTS_LABEL_NAMES,
+        STATUS_ERROR,
         STATUS_SUCCESS,
     },
-    pprof::{PprofFlamegraphService, PprofHomeService, PprofProfileService},
+    pprof::{
+        PprofFlamegraphService,
+        PprofHomeService,
+        PprofProfileService,
+    },
     status::StatusService,
     tracing_flamegraph::TracingFlamegraphService,
 };
@@ -51,36 +74,70 @@ use crate::{
 use axum::{
     body::Body,
     error_handling::HandleErrorLayer,
-    extract::{DefaultBodyLimit, MatchedPath, State},
+    extract::{
+        DefaultBodyLimit,
+        MatchedPath,
+        State,
+    },
     middleware::Next,
     response::Redirect,
     routing::get,
     Router,
 };
 use crossbeam::atomic::AtomicCell;
-use http_body_util::{BodyExt, Full, LengthLimitError};
-use hyper::{body::Incoming, Request, StatusCode};
-use hyper_util::rt::{TokioExecutor, TokioIo};
+use http_body_util::{
+    BodyExt,
+    Full,
+    LengthLimitError,
+};
+use hyper::{
+    body::Incoming,
+    Request,
+    StatusCode,
+};
+use hyper_util::rt::{
+    TokioExecutor,
+    TokioIo,
+};
 use ic_async_utils::start_tcp_listener;
 use ic_certification::validate_subnet_delegation_certificate;
 use ic_config::http_handler::Config;
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_crypto_tls_interfaces::TlsConfig;
-use ic_crypto_tree_hash::{lookup_path, LabeledTree, Path};
+use ic_crypto_tree_hash::{
+    lookup_path,
+    LabeledTree,
+    Path,
+};
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
     crypto::BasicSigner,
-    execution_environment::{IngressFilterService, QueryExecutionService},
+    execution_environment::{
+        IngressFilterService,
+        QueryExecutionService,
+    },
     ingress_pool::IngressPoolThrottler,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{debug, error, fatal, info, warn, ReplicaLogger};
-use ic_metrics::{histogram_vec_timer::HistogramVecTimer, MetricsRegistry};
+use ic_logger::{
+    debug,
+    error,
+    fatal,
+    info,
+    warn,
+    ReplicaLogger,
+};
+use ic_metrics::{
+    histogram_vec_timer::HistogramVecTimer,
+    MetricsRegistry,
+};
 use ic_pprof::PprofCollector;
 use ic_registry_client_helpers::{
-    crypto::CryptoRegistry, node::NodeRegistry, node_operator::ConnectionEndpoint,
+    crypto::CryptoRegistry,
+    node::NodeRegistry,
+    node_operator::ConnectionEndpoint,
     subnet::SubnetRegistry,
 };
 use ic_registry_subnet_type::SubnetType;
@@ -90,12 +147,22 @@ use ic_types::{
     artifact::UnvalidatedArtifactMutation,
     malicious_flags::MaliciousFlags,
     messages::{
-        Blob, Certificate, CertificateDelegation, HttpReadState, HttpReadStateContent,
-        HttpReadStateResponse, HttpRequestEnvelope, MessageId, QueryResponseHash,
-        ReplicaHealthStatus, SignedIngress,
+        Blob,
+        Certificate,
+        CertificateDelegation,
+        HttpReadState,
+        HttpReadStateContent,
+        HttpReadStateResponse,
+        HttpRequestEnvelope,
+        MessageId,
+        QueryResponseHash,
+        ReplicaHealthStatus,
+        SignedIngress,
     },
     time::expiry_time_from_now,
-    Height, NodeId, SubnetId,
+    Height,
+    NodeId,
+    SubnetId,
 };
 use rand::Rng;
 use std::{
@@ -103,23 +170,46 @@ use std::{
     io::Write,
     net::SocketAddr,
     path::PathBuf,
-    sync::{Arc, Mutex, RwLock},
+    sync::{
+        Arc,
+        Mutex,
+        RwLock,
+    },
     time::Duration,
 };
 use tempfile::NamedTempFile;
 use tokio::{
-    io::{AsyncRead, AsyncWrite},
+    io::{
+        AsyncRead,
+        AsyncWrite,
+    },
     net::TcpStream,
     sync::{
-        mpsc::{Receiver, UnboundedSender},
-        watch, OnceCell,
+        mpsc::{
+            Receiver,
+            UnboundedSender,
+        },
+        watch,
+        OnceCell,
     },
-    time::{sleep, timeout, Instant},
+    time::{
+        sleep,
+        timeout,
+        Instant,
+    },
 };
 use tokio_rustls::TlsConnector;
 use tokio_util::sync::CancellationToken;
-use tower::{limit::GlobalConcurrencyLimitLayer, BoxError, Service, ServiceBuilder};
-use tower_http::{limit::RequestBodyLimitLayer, trace::TraceLayer};
+use tower::{
+    limit::GlobalConcurrencyLimitLayer,
+    BoxError,
+    Service,
+    ServiceBuilder,
+};
+use tower_http::{
+    limit::RequestBodyLimitLayer,
+    trace::TraceLayer,
+};
 
 const CONTENT_TYPE_CBOR: &str = "application/cbor";
 
@@ -1091,23 +1181,37 @@ async fn get_random_node_from_nns_subnet(
 mod tests {
     use crate::read_state::subnet::SubnetReadStateService;
     use bytes::Bytes;
-    use futures_util::{future::select_all, stream::pending, FutureExt};
+    use futures_util::{
+        future::select_all,
+        stream::pending,
+        FutureExt,
+    };
     use http::{
         header::{
-            ACCESS_CONTROL_ALLOW_HEADERS, ACCESS_CONTROL_ALLOW_METHODS,
-            ACCESS_CONTROL_ALLOW_ORIGIN, CONTENT_TYPE,
+            ACCESS_CONTROL_ALLOW_HEADERS,
+            ACCESS_CONTROL_ALLOW_METHODS,
+            ACCESS_CONTROL_ALLOW_ORIGIN,
+            CONTENT_TYPE,
         },
-        HeaderName, HeaderValue, Method,
+        HeaderName,
+        HeaderValue,
+        Method,
     };
     use http_body_util::Empty;
     use ic_interfaces_mocks::consensus_pool::MockConsensusPoolCache;
     use ic_interfaces_state_manager_mocks::MockStateManager;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_types::{CanisterId, Height};
+    use ic_types::{
+        CanisterId,
+        Height,
+    };
     use std::convert::Infallible;
     use tower::ServiceExt;
 
-    use crate::{common::Cbor, query::QueryService};
+    use crate::{
+        common::Cbor,
+        query::QueryService,
+    };
 
     use super::*;
 

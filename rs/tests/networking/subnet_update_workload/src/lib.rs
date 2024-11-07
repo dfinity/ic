@@ -22,27 +22,53 @@ Runbook::
 end::catalog[] */
 
 use ic_system_test_driver::{
-    canister_api::{CallMode, GenericRequest},
+    canister_api::{
+        CallMode,
+        GenericRequest,
+    },
     driver::{
-        boundary_node::{BoundaryNode, BoundaryNodeVm},
-        ic::{ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
-        prometheus_vm::{HasPrometheus, PrometheusVm},
+        boundary_node::{
+            BoundaryNode,
+            BoundaryNodeVm,
+        },
+        ic::{
+            ImageSizeGiB,
+            InternetComputer,
+            NrOfVCPUs,
+            Subnet,
+            VmResources,
+        },
+        prometheus_vm::{
+            HasPrometheus,
+            PrometheusVm,
+        },
         test_env::TestEnv,
         test_env_api::{
-            HasPublicApiUrl, HasTopologySnapshot, HasVmName, IcNodeContainer,
-            NnsInstallationBuilder, RetrieveIpv4Addr, SubnetSnapshot, READY_WAIT_TIMEOUT,
+            HasPublicApiUrl,
+            HasTopologySnapshot,
+            HasVmName,
+            IcNodeContainer,
+            NnsInstallationBuilder,
+            RetrieveIpv4Addr,
+            SubnetSnapshot,
+            READY_WAIT_TIMEOUT,
             RETRY_BACKOFF,
         },
     },
     util::{
-        agent_observes_canister_module, assert_canister_counter_with_retries, block_on,
+        agent_observes_canister_module,
+        assert_canister_counter_with_retries,
+        block_on,
         spawn_round_robin_workload_engine,
     },
 };
 
 use std::time::Duration;
 
-use anyhow::{bail, Context};
+use anyhow::{
+    bail,
+    Context,
+};
 use ic_agent::Agent;
 use ic_interfaces_registry::RegistryValue;
 use ic_protobuf::registry::routing_table::v1::RoutingTable as PbRoutingTable;
@@ -50,7 +76,11 @@ use ic_registry_keys::make_routing_table_record_key;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
-use slog::{debug, info, Logger};
+use slog::{
+    debug,
+    info,
+    Logger,
+};
 
 const BOUNDARY_NODE_NAME: &str = "boundary-node-1";
 const COUNTER_CANISTER_WAT: &str = "rs/tests/counter.wat";

@@ -1,9 +1,15 @@
 use assert_matches::assert_matches;
 use ic_crypto_tree_hash::{
-    flatmap, Digest, Label, LabeledTree, MixedHashTree, MixedHashTreeConversionError,
+    flatmap,
+    Digest,
+    Label,
+    LabeledTree,
+    MixedHashTree,
+    MixedHashTreeConversionError,
 };
 use ic_crypto_tree_hash_test_utils::{
-    arbitrary::arbitrary_well_formed_mixed_hash_tree, MAX_HASH_TREE_DEPTH,
+    arbitrary::arbitrary_well_formed_mixed_hash_tree,
+    MAX_HASH_TREE_DEPTH,
 };
 use proptest::prelude::*;
 use std::convert::TryInto;

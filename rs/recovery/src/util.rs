@@ -1,11 +1,26 @@
 use crate::{
-    error::{RecoveryError, RecoveryResult},
+    error::{
+        RecoveryError,
+        RecoveryResult,
+    },
     file_sync_helper::write_bytes,
 };
 
-use ic_base_types::{NodeId, PrincipalId, SubnetId};
-use slog::{o, Drain, Logger};
-use std::{future::Future, path::Path, str::FromStr};
+use ic_base_types::{
+    NodeId,
+    PrincipalId,
+    SubnetId,
+};
+use slog::{
+    o,
+    Drain,
+    Logger,
+};
+use std::{
+    future::Future,
+    path::Path,
+    str::FromStr,
+};
 use tokio::runtime::Runtime;
 
 pub fn block_on<F: Future>(f: F) -> F::Output {

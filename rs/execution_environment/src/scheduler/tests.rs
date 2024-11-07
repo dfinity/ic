@@ -1,53 +1,127 @@
 use super::{
-    test_utilities::{ingress, instructions, SchedulerTest, SchedulerTestBuilder, TestInstallCode},
+    test_utilities::{
+        ingress,
+        instructions,
+        SchedulerTest,
+        SchedulerTestBuilder,
+        TestInstallCode,
+    },
     *,
 };
 #[cfg(test)]
-use crate::scheduler::test_utilities::{on_response, other_side};
+use crate::scheduler::test_utilities::{
+    on_response,
+    other_side,
+};
 use candid::Encode;
 use ic00::{
-    CanisterHttpRequestArgs, HttpMethod, SignWithECDSAArgs, TransformContext, TransformFunc,
+    CanisterHttpRequestArgs,
+    HttpMethod,
+    SignWithECDSAArgs,
+    TransformContext,
+    TransformFunc,
 };
 use ic_base_types::PrincipalId;
 use ic_config::{
     execution_environment::STOP_CANISTER_TIMEOUT_DURATION,
-    subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetConfig},
+    subnet_config::{
+        CyclesAccountManagerConfig,
+        SchedulerConfig,
+        SubnetConfig,
+    },
 };
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types::{
-    self as ic00, BoundedHttpHeaders, CanisterHttpResponsePayload, CanisterIdRecord,
-    CanisterStatusType, DerivationPath, EcdsaKeyId, EmptyBlob, Method, Payload as _, SchnorrKeyId,
-    SignWithSchnorrArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
+    self as ic00,
+    BoundedHttpHeaders,
+    CanisterHttpResponsePayload,
+    CanisterIdRecord,
+    CanisterStatusType,
+    DerivationPath,
+    EcdsaKeyId,
+    EmptyBlob,
+    Method,
+    Payload as _,
+    SchnorrKeyId,
+    SignWithSchnorrArgs,
+    TakeCanisterSnapshotArgs,
+    UninstallCodeArgs,
 };
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::system_state::{CyclesUseCase, PausedExecutionId};
-use ic_replicated_state::testing::{CanisterQueuesTesting, SystemStateTesting};
-use ic_state_machine_tests::{PayloadBuilder, StateMachineBuilder};
-use ic_test_utilities_metrics::{
-    fetch_counter, fetch_gauge, fetch_gauge_vec, fetch_histogram_stats, fetch_int_gauge,
-    fetch_int_gauge_vec, metric_vec, HistogramStats,
+use ic_replicated_state::canister_state::system_state::{
+    CyclesUseCase,
+    PausedExecutionId,
 };
-use ic_test_utilities_state::{get_running_canister, get_stopped_canister, get_stopping_canister};
+use ic_replicated_state::testing::{
+    CanisterQueuesTesting,
+    SystemStateTesting,
+};
+use ic_state_machine_tests::{
+    PayloadBuilder,
+    StateMachineBuilder,
+};
+use ic_test_utilities_metrics::{
+    fetch_counter,
+    fetch_gauge,
+    fetch_gauge_vec,
+    fetch_histogram_stats,
+    fetch_int_gauge,
+    fetch_int_gauge_vec,
+    metric_vec,
+    HistogramStats,
+};
+use ic_test_utilities_state::{
+    get_running_canister,
+    get_stopped_canister,
+    get_stopping_canister,
+};
 use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::{
     batch::ConsensusResponse,
     messages::{
-        CallbackId, CanisterMessageOrTask, CanisterTask, Payload, RejectContext,
-        StopCanisterCallId, StopCanisterContext, MAX_RESPONSE_COUNT_BYTES,
+        CallbackId,
+        CanisterMessageOrTask,
+        CanisterTask,
+        Payload,
+        RejectContext,
+        StopCanisterCallId,
+        StopCanisterContext,
+        MAX_RESPONSE_COUNT_BYTES,
     },
     methods::SystemMethod,
-    time::{expiry_time_from_now, UNIX_EPOCH},
-    ComputeAllocation, Cycles, Height, NumBytes,
+    time::{
+        expiry_time_from_now,
+        UNIX_EPOCH,
+    },
+    ComputeAllocation,
+    Cycles,
+    Height,
+    NumBytes,
 };
-use ic_types_test_utils::ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id};
-use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use ic_types_test_utils::ids::{
+    canister_test_id,
+    message_test_id,
+    subnet_test_id,
+    user_test_id,
+};
+use ic_universal_canister::{
+    call_args,
+    wasm,
+    UNIVERSAL_CANISTER_WASM,
+};
 use proptest::prelude::*;
 use std::collections::HashMap;
-use std::{cmp::min, ops::Range};
-use std::{convert::TryFrom, time::Duration};
+use std::{
+    cmp::min,
+    ops::Range,
+};
+use std::{
+    convert::TryFrom,
+    time::Duration,
+};
 
 const M: usize = 1_000_000;
 const B: usize = 1_000 * M;

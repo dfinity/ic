@@ -1,14 +1,26 @@
 use std::time::Duration;
 
-use anyhow::{anyhow, bail, Context, Error};
+use anyhow::{
+    anyhow,
+    bail,
+    Context,
+    Error,
+};
 use futures::future::join_all;
-use ic_agent::{export::Principal, Agent};
+use ic_agent::{
+    export::Principal,
+    Agent,
+};
 use ic_base_types::PrincipalId;
 use ic_system_test_driver::{
     driver::{
         test_env::TestEnv,
         test_env_api::{
-            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, TopologySnapshot,
+            HasPublicApiUrl,
+            HasTopologySnapshot,
+            IcNodeContainer,
+            IcNodeSnapshot,
+            TopologySnapshot,
         },
     },
     retry_with_msg_async,

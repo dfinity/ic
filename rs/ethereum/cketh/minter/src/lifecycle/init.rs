@@ -1,15 +1,31 @@
 use crate::endpoints::CandidBlockTag;
 use crate::eth_rpc::BlockTag;
 use crate::lifecycle::EthereumNetwork;
-use crate::numeric::{BlockNumber, TransactionNonce, Wei};
-use crate::state::eth_logs_scraping::{LogScrapingId, LogScrapings};
+use crate::numeric::{
+    BlockNumber,
+    TransactionNonce,
+    Wei,
+};
+use crate::state::eth_logs_scraping::{
+    LogScrapingId,
+    LogScrapings,
+};
 use crate::state::transactions::EthTransactions;
-use crate::state::{InvalidStateError, State};
+use crate::state::{
+    InvalidStateError,
+    State,
+};
 use candid::types::number::Nat;
 use candid::types::principal::Principal;
-use candid::{CandidType, Deserialize};
+use candid::{
+    CandidType,
+    Deserialize,
+};
 use ic_ethereum_types::Address;
-use minicbor::{Decode, Encode};
+use minicbor::{
+    Decode,
+    Encode,
+};
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Decode, Deserialize, Encode)]
 pub struct InitArg {

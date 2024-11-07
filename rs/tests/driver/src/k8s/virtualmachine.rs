@@ -1,12 +1,25 @@
 use crate::driver::resource::ImageType;
 use crate::k8s::config::*;
 use anyhow::Result;
-use backon::{ExponentialBuilder, Retryable};
+use backon::{
+    ExponentialBuilder,
+    Retryable,
+};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::OwnerReference;
-use kube::api::{DynamicObject, Patch, PatchParams};
-use kube::{Api, Client};
+use kube::api::{
+    DynamicObject,
+    Patch,
+    PatchParams,
+};
+use kube::{
+    Api,
+    Client,
+};
 use std::convert::AsRef;
-use std::net::{Ipv4Addr, Ipv6Addr};
+use std::net::{
+    Ipv4Addr,
+    Ipv6Addr,
+};
 use strum_macros::AsRefStr;
 use tracing::*;
 

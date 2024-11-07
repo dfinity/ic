@@ -3,8 +3,19 @@
 
 use crate::hasher::Hasher;
 use crate::{
-    Digest, FlatMap, HashTree, HashTreeBuilder, Label, LabeledTree, MixedHashTree, Path,
-    TreeHashError, Witness, WitnessGenerationError, WitnessGenerator, MAX_HASH_TREE_DEPTH,
+    Digest,
+    FlatMap,
+    HashTree,
+    HashTreeBuilder,
+    Label,
+    LabeledTree,
+    MixedHashTree,
+    Path,
+    TreeHashError,
+    Witness,
+    WitnessGenerationError,
+    WitnessGenerator,
+    MAX_HASH_TREE_DEPTH,
 };
 use std::collections::VecDeque;
 use std::fmt;

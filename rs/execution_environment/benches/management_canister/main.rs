@@ -6,7 +6,11 @@ mod install_code;
 mod update_settings;
 mod utils;
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{
+    criterion_group,
+    criterion_main,
+    Criterion,
+};
 
 fn all_benchmarks(c: &mut Criterion) {
     canister_snapshots::benchmark(c);

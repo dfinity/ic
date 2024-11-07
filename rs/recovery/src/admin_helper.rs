@@ -1,7 +1,14 @@
 use crate::NeuronArgs;
-use ic_base_types::{NodeId, RegistryVersion};
+use ic_base_types::{
+    NodeId,
+    RegistryVersion,
+};
 use ic_registry_subnet_features::ChainKeyConfig;
-use ic_types::{Height, ReplicaVersion, SubnetId};
+use ic_types::{
+    Height,
+    ReplicaVersion,
+    SubnetId,
+};
 use serde::Serialize;
 use url::Url;
 
@@ -9,7 +16,10 @@ use std::{
     fmt::Display,
     path::PathBuf,
     process::Command,
-    time::{SystemTime, UNIX_EPOCH},
+    time::{
+        SystemTime,
+        UNIX_EPOCH,
+    },
 };
 
 pub const SUMMARY_ARG: &str = "summary";
@@ -341,10 +351,17 @@ mod tests {
 
     use ic_base_types::PrincipalId;
     use ic_management_canister_types::{
-        EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
+        EcdsaCurve,
+        EcdsaKeyId,
+        MasterPublicKeyId,
+        SchnorrAlgorithm,
+        SchnorrKeyId,
     };
     use ic_registry_subnet_features::KeyConfig;
-    use std::{str::FromStr, time::Duration};
+    use std::{
+        str::FromStr,
+        time::Duration,
+    };
 
     const FAKE_IC_ADMIN_DIR: &str = "/fake/ic/admin/dir/";
     const FAKE_NNS_URL: &str = "https://fake_nns_url.com:8080";

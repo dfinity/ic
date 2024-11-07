@@ -1,6 +1,7 @@
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspNiDkgTranscript;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::{
-    CspNiDkgTranscriptThresholdSigPublicKeyBytesConversionError, PublicKeyBytes,
+    CspNiDkgTranscriptThresholdSigPublicKeyBytesConversionError,
+    PublicKeyBytes,
 };
 use ic_protobuf::registry::subnet::v1::InitialNiDkgTranscriptRecord;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;

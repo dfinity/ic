@@ -1,14 +1,25 @@
 use crate::LOG_PREFIX;
-use candid::{CandidType, Deserialize, Encode, Principal};
+use candid::{
+    CandidType,
+    Deserialize,
+    Encode,
+    Principal,
+};
 use dfn_core::api::CanisterId;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_crypto_sha2::Sha256;
-use ic_management_canister_types::{CanisterInstallMode, InstallCodeArgs, IC_00};
+use ic_management_canister_types::{
+    CanisterInstallMode,
+    InstallCodeArgs,
+    IC_00,
+};
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::{
-        canister_status, CanisterStatusResultFromManagementCanister, CanisterStatusType,
+        canister_status,
+        CanisterStatusResultFromManagementCanister,
+        CanisterStatusType,
     },
 };
 use ic_nervous_system_runtime::Runtime;

@@ -1,23 +1,48 @@
 use std::{
-    collections::{HashMap, VecDeque},
-    io::{self, ErrorKind, Read},
+    collections::{
+        HashMap,
+        VecDeque,
+    },
+    io::{
+        self,
+        ErrorKind,
+        Read,
+    },
     net::SocketAddr,
     sync::Arc,
 };
 
 use bitcoin::{
-    consensus::{deserialize_partial, encode, serialize},
+    consensus::{
+        deserialize_partial,
+        encode,
+        serialize,
+    },
     network::{
         constants::ServiceFlags,
-        message::{NetworkMessage, RawNetworkMessage},
-        message_blockdata::{GetHeadersMessage, Inventory},
+        message::{
+            NetworkMessage,
+            RawNetworkMessage,
+        },
+        message_blockdata::{
+            GetHeadersMessage,
+            Inventory,
+        },
         message_network::VersionMessage,
     },
-    Block, BlockHash, BlockHeader,
+    Block,
+    BlockHash,
+    BlockHeader,
 };
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    net::{TcpListener, TcpStream},
+    io::{
+        AsyncReadExt,
+        AsyncWriteExt,
+    },
+    net::{
+        TcpListener,
+        TcpStream,
+    },
 };
 
 const MINIMUM_PROTOCOL_VERSION: u32 = 70001;

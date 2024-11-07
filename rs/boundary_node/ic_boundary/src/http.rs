@@ -1,10 +1,18 @@
 use std::time::Instant;
 
 use async_trait::async_trait;
-use ic_bn_lib::http::{http_version, Client};
+use ic_bn_lib::http::{
+    http_version,
+    Client,
+};
 use rustls::Error as RustlsError;
 
-use crate::{core::error_source, dns::DnsError, metrics::WithMetrics, routes::ErrorCause};
+use crate::{
+    core::error_source,
+    dns::DnsError,
+    metrics::WithMetrics,
+    routes::ErrorCause,
+};
 
 #[async_trait]
 impl<T: Client> Client for WithMetrics<T> {

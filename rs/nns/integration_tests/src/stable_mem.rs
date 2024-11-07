@@ -2,7 +2,10 @@
 
 use canister_test::Canister;
 use dfn_candid::candid;
-use ic_nns_test_utils::itest_helpers::{install_rust_canister, state_machine_test_on_nns_subnet};
+use ic_nns_test_utils::itest_helpers::{
+    install_rust_canister,
+    state_machine_test_on_nns_subnet,
+};
 
 #[test]
 fn chunked_stable_mem_ser_deser_roundtrip() {

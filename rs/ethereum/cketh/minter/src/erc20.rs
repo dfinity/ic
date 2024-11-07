@@ -8,7 +8,10 @@ use crate::lifecycle::EthereumNetwork;
 use crate::state::State;
 use candid::Principal;
 use ic_ethereum_types::Address;
-use minicbor::{Decode, Encode};
+use minicbor::{
+    Decode,
+    Encode,
+};
 use num_traits::ToPrimitive;
 use std::fmt::Display;
 use std::str::FromStr;

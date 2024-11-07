@@ -1,13 +1,31 @@
 use crate::scenario::{
-    create_workers, install_code_on_canisters, transfer_cycles_to_canisters,
-    transfer_tokens_to_canisters, ICP_E8S,
+    create_workers,
+    install_code_on_canisters,
+    transfer_cycles_to_canisters,
+    transfer_tokens_to_canisters,
+    ICP_E8S,
 };
-use crate::{get_index_principal, get_worker_wasm, RunScenarioResult, Scenario, NANO};
-use candid::{Nat, Principal};
+use crate::{
+    get_index_principal,
+    get_worker_wasm,
+    RunScenarioResult,
+    Scenario,
+    NANO,
+};
+use candid::{
+    Nat,
+    Principal,
+};
 use ic_base_types::PrincipalId;
-use ic_icrc1_benchmark_worker::{BatchArgs, BatchResult};
+use ic_icrc1_benchmark_worker::{
+    BatchArgs,
+    BatchResult,
+};
 use ic_icrc1_index::{
-    GetAccountTransactionsArgs, GetTransactions, GetTransactionsErr, GetTransactionsResult,
+    GetAccountTransactionsArgs,
+    GetTransactions,
+    GetTransactionsErr,
+    GetTransactionsResult,
 };
 use icrc_ledger_types::icrc1::account::Account;
 

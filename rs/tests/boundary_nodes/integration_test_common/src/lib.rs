@@ -17,43 +17,86 @@ Success::
 end::catalog[] */
 
 use ic_boundary_nodes_system_test_utils::{
-    constants::{BOUNDARY_NODE_NAME, COUNTER_CANISTER_WAT},
+    constants::{
+        BOUNDARY_NODE_NAME,
+        COUNTER_CANISTER_WAT,
+    },
     helpers::{
-        create_canister, get_install_url, install_canisters, read_counters_on_counter_canisters,
+        create_canister,
+        get_install_url,
+        install_canisters,
+        read_counters_on_counter_canisters,
         set_counters_on_counter_canisters,
     },
 };
 use ic_system_test_driver::{
     driver::{
-        asset_canister::{DeployAssetCanister, UploadAssetRequest},
+        asset_canister::{
+            DeployAssetCanister,
+            UploadAssetRequest,
+        },
         boundary_node::BoundaryNodeVm,
         test_env::TestEnv,
         test_env_api::{
-            load_wasm, HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer,
-            RetrieveIpv4Addr, SshSession, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+            load_wasm,
+            HasPublicApiUrl,
+            HasTopologySnapshot,
+            HasVm,
+            IcNodeContainer,
+            RetrieveIpv4Addr,
+            SshSession,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
         },
     },
     retry_with_msg_async,
     util::{
-        agent_observes_canister_module, agent_using_call_v2_endpoint, assert_create_agent, block_on,
+        agent_observes_canister_module,
+        agent_using_call_v2_endpoint,
+        assert_create_agent,
+        block_on,
     },
 };
-use std::{env, iter, net::SocketAddrV6, time::Duration};
+use std::{
+    env,
+    iter,
+    net::SocketAddrV6,
+    time::Duration,
+};
 
-use anyhow::{anyhow, bail, Context, Error};
+use anyhow::{
+    anyhow,
+    bail,
+    Context,
+    Error,
+};
 use futures::stream::FuturesUnordered;
 use ic_agent::{
     agent::http_transport::{
         hyper_transport::hyper::StatusCode,
-        reqwest_transport::{reqwest, ReqwestTransport},
+        reqwest_transport::{
+            reqwest,
+            ReqwestTransport,
+        },
     },
     export::Principal,
     Agent,
 };
-use reqwest::{redirect::Policy, ClientBuilder, Method};
+use reqwest::{
+    redirect::Policy,
+    ClientBuilder,
+    Method,
+};
 use serde::Deserialize;
-use slog::{error, info, Logger};
-use tokio::{runtime::Runtime, time::sleep};
+use slog::{
+    error,
+    info,
+    Logger,
+};
+use tokio::{
+    runtime::Runtime,
+    time::sleep,
+};
 
 const CANISTER_RETRY_TIMEOUT: Duration = Duration::from_secs(30);
 const CANISTER_RETRY_BACKOFF: Duration = Duration::from_secs(2);

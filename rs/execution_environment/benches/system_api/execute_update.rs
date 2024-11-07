@@ -1,16 +1,30 @@
 ///
 /// Benchmark System API performance in `execute_update()`.
 ///
-use criterion::{criterion_group, criterion_main, Criterion};
-use execution_environment_bench::{common, wat::*};
+use criterion::{
+    criterion_group,
+    criterion_main,
+    Criterion,
+};
+use execution_environment_bench::{
+    common,
+    wat::*,
+};
 use ic_error_types::ErrorCode;
 use ic_execution_environment::{
-    as_num_instructions, as_round_instructions, ExecuteMessageResult, ExecutionEnvironment,
-    ExecutionResponse, RoundLimits,
+    as_num_instructions,
+    as_round_instructions,
+    ExecuteMessageResult,
+    ExecutionEnvironment,
+    ExecutionResponse,
+    RoundLimits,
 };
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_types::{
-    ingress::{IngressState, IngressStatus},
+    ingress::{
+        IngressState,
+        IngressStatus,
+    },
     messages::CanisterMessageOrTask,
 };
 

@@ -1,21 +1,49 @@
-use crate::common::storage::types::{IcrcOperation, RosettaBlock};
-use crate::common::types::{FeeMetadata, FeeSetter};
+use crate::common::storage::types::{
+    IcrcOperation,
+    RosettaBlock,
+};
+use crate::common::types::{
+    FeeMetadata,
+    FeeSetter,
+};
 use crate::{
     common::{
-        constants::{DEFAULT_BLOCKCHAIN, MIN_PROGRESS_BAR},
+        constants::{
+            DEFAULT_BLOCKCHAIN,
+            MIN_PROGRESS_BAR,
+        },
         storage::storage_client::StorageClient,
-        types::{ApproveMetadata, BlockMetadata, OperationType, TransactionMetadata},
+        types::{
+            ApproveMetadata,
+            BlockMetadata,
+            OperationType,
+            TransactionMetadata,
+        },
     },
     AppState,
 };
-use anyhow::{bail, Context};
+use anyhow::{
+    bail,
+    Context,
+};
 use candid::Nat;
-use indicatif::{ProgressBar, ProgressState, ProgressStyle};
+use indicatif::{
+    ProgressBar,
+    ProgressState,
+    ProgressStyle,
+};
 use num_bigint::BigInt;
 use rosetta_core::identifiers::*;
 use rosetta_core::{
-    identifiers::{BlockIdentifier, NetworkIdentifier, PartialBlockIdentifier},
-    objects::{Amount, Currency},
+    identifiers::{
+        BlockIdentifier,
+        NetworkIdentifier,
+        PartialBlockIdentifier,
+    },
+    objects::{
+        Amount,
+        Currency,
+    },
 };
 use serde_bytes::ByteBuf;
 use std::fmt::Write;
@@ -690,7 +718,10 @@ mod tests {
     use ic_icrc1_test_utils::blocks_strategy;
     use ic_icrc1_tokens_u256::U256;
     use ic_icrc1_tokens_u64::U64;
-    use ic_ledger_core::{block::BlockType, tokens::TokensType};
+    use ic_ledger_core::{
+        block::BlockType,
+        tokens::TokensType,
+    };
     use proptest::prelude::ProptestConfig;
     use proptest::proptest;
     use rosetta_core::identifiers::AccountIdentifier;

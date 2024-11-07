@@ -1,19 +1,35 @@
 #![no_main]
 use arbitrary::Arbitrary;
-use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
+use ic_stable_structures::memory_manager::{
+    MemoryId,
+    MemoryManager,
+    VirtualMemory,
+};
 use ic_stable_structures::Memory as OtherMemory;
-use ic_stable_structures::{DefaultMemoryImpl, StableMinHeap};
+use ic_stable_structures::{
+    DefaultMemoryImpl,
+    StableMinHeap,
+};
 use libfuzzer_sys::fuzz_target;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::cell::RefCell;
 use std::fs::File;
 use std::io::Write;
 use std::time::SystemTime;
-use tempfile::{tempdir, TempDir};
+use tempfile::{
+    tempdir,
+    TempDir,
+};
 
 mod data;
 // Unbouned is not supported for MinHeap
-use data::{BoundedFuzzStruct, MAX_VALUE_SIZE};
+use data::{
+    BoundedFuzzStruct,
+    MAX_VALUE_SIZE,
+};
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 

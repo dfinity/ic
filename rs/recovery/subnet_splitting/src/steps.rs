@@ -3,7 +3,11 @@ use crate::{
     layout::Layout,
     state_tool_helper::StateToolHelper,
     target_subnet::TargetSubnet,
-    utils::{find_expected_state_hash_for_subnet_id, get_batch_time_from_cup, get_state_hash},
+    utils::{
+        find_expected_state_hash_for_subnet_id,
+        get_batch_time_from_cup,
+        get_state_hash,
+    },
     validation::validate_artifacts,
 };
 
@@ -11,18 +15,27 @@ use ic_base_types::SubnetId;
 use ic_metrics::MetricsRegistry;
 use ic_recovery::{
     cli::consent_given,
-    error::{RecoveryError, RecoveryResult},
+    error::{
+        RecoveryError,
+        RecoveryResult,
+    },
     file_sync_helper::rsync,
     registry_helper::VersionedRecoveryResult,
     steps::Step,
     util::parse_hex_str,
-    Recovery, CUPS_DIR, IC_REGISTRY_LOCAL_STORE,
+    Recovery,
+    CUPS_DIR,
+    IC_REGISTRY_LOCAL_STORE,
 };
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_manager::split::resolve_ranges_and_split;
 use ic_types::Height;
-use slog::{error, info, Logger};
+use slog::{
+    error,
+    info,
+    Logger,
+};
 use url::Url;
 
 use std::net::IpAddr;

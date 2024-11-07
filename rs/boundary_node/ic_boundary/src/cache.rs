@@ -1,23 +1,49 @@
-use std::{fmt, sync::Arc, time::Duration};
+use std::{
+    fmt,
+    sync::Arc,
+    time::Duration,
+};
 
-use anyhow::{anyhow, Context, Error};
+use anyhow::{
+    anyhow,
+    Context,
+    Error,
+};
 use axum::{
     body::Body,
-    extract::{Request, State},
+    extract::{
+        Request,
+        State,
+    },
     http::StatusCode,
     middleware::Next,
-    response::{IntoResponse, Response},
+    response::{
+        IntoResponse,
+        Response,
+    },
     Extension,
 };
 use bytes::Bytes;
 use http::{
-    header::{HeaderMap, CACHE_CONTROL, CONTENT_LENGTH},
-    response, Version,
+    header::{
+        HeaderMap,
+        CACHE_CONTROL,
+        CONTENT_LENGTH,
+    },
+    response,
+    Version,
 };
 use ic_bn_lib::http::body::buffer_body;
-use moka::future::{Cache as MokaCache, CacheBuilder as MokaCacheBuilder};
+use moka::future::{
+    Cache as MokaCache,
+    CacheBuilder as MokaCacheBuilder,
+};
 
-use crate::routes::{ApiError, ErrorCause, RequestContext};
+use crate::routes::{
+    ApiError,
+    ErrorCause,
+    RequestContext,
+};
 
 // A list of possible Cache-Control directives that ask us not to cache the response
 const SKIP_CACHE_DIRECTIVES: &[&str] = &["no-store", "no-cache", "max-age=0"];

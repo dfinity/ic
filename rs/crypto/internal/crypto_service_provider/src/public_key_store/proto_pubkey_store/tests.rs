@@ -1,30 +1,47 @@
 use crate::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
 use crate::public_key_store::PublicKeyAddError;
-use crate::public_key_store::{PublicKeySetOnceError, PublicKeyStore};
+use crate::public_key_store::{
+    PublicKeySetOnceError,
+    PublicKeyStore,
+};
 use assert_matches::assert_matches;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_csp_test_utils::files::mk_temp_dir_with_permissions;
 use ic_crypto_node_key_generation::generate_node_keys_once;
 use ic_crypto_test_utils_keys::public_keys::{
-    valid_committee_signing_public_key, valid_dkg_dealing_encryption_public_key,
-    valid_idkg_dealing_encryption_public_key, valid_node_signing_public_key,
+    valid_committee_signing_public_key,
+    valid_dkg_dealing_encryption_public_key,
+    valid_idkg_dealing_encryption_public_key,
+    valid_node_signing_public_key,
     valid_tls_certificate_and_validation_time,
 };
 use ic_crypto_utils_basic_sig::conversions::derive_node_id;
 use ic_logger::replica_logger::no_op_logger;
 use ic_logger::ReplicaLogger;
 use ic_protobuf::crypto::v1::NodePublicKeys;
-use ic_protobuf::registry::crypto::v1::{PublicKey, X509PublicKeyCert};
+use ic_protobuf::registry::crypto::v1::{
+    PublicKey,
+    X509PublicKeyCert,
+};
 use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
 use ic_test_utilities_in_memory_logger::InMemoryReplicaLogger;
 use ic_types::crypto::AlgorithmId;
-use ic_types::{NodeId, PrincipalId};
+use ic_types::{
+    NodeId,
+    PrincipalId,
+};
 use slog::Level;
 use std::os::unix::fs::PermissionsExt;
-use std::path::{Path, PathBuf};
+use std::path::{
+    Path,
+    PathBuf,
+};
 use std::str::FromStr;
 use std::time::SystemTime;
-use std::{env, fs};
+use std::{
+    env,
+    fs,
+};
 use tempfile::TempDir;
 
 const PUBLIC_KEYS_FILE: &str = "public_keys.pb";

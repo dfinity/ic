@@ -7,7 +7,14 @@ use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_types::NodeId;
 use std::sync::Arc;
-use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
+use tokio::io::{
+    AsyncBufReadExt,
+    AsyncRead,
+    AsyncReadExt,
+    AsyncWrite,
+    AsyncWriteExt,
+    BufReader,
+};
 use tokio::net::TcpStream;
 use tokio_rustls::TlsConnector;
 

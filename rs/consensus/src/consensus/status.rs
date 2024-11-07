@@ -1,10 +1,20 @@
 use std::fmt::Display;
 
-use ic_consensus_utils::{lookup_replica_version, pool_reader::PoolReader};
+use ic_consensus_utils::{
+    lookup_replica_version,
+    pool_reader::PoolReader,
+};
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{
+    warn,
+    ReplicaLogger,
+};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
-use ic_types::{Height, ReplicaVersion, SubnetId};
+use ic_types::{
+    Height,
+    ReplicaVersion,
+    SubnetId,
+};
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum Status {
@@ -108,12 +118,21 @@ mod tests {
     use std::sync::Arc;
 
     use ic_config::artifact_pool::ArtifactPoolConfig;
-    use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
+    use ic_consensus_mocks::{
+        dependencies_with_subnet_params,
+        Dependencies,
+    };
     use ic_registry_client_fake::FakeRegistryClient;
-    use ic_test_artifact_pool::consensus_pool::{Round, TestConsensusPool};
+    use ic_test_artifact_pool::consensus_pool::{
+        Round,
+        TestConsensusPool,
+    };
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::SubnetRecordBuilder;
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::{
+        node_test_id,
+        subnet_test_id,
+    };
     use ic_types::ReplicaVersion;
 
     use super::*;

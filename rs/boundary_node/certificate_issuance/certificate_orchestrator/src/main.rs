@@ -1,45 +1,151 @@
-use std::{cell::RefCell, cmp::Reverse, collections::BTreeMap, thread::LocalKey, time::Duration};
+use std::{
+    cell::RefCell,
+    cmp::Reverse,
+    collections::BTreeMap,
+    thread::LocalKey,
+    time::Duration,
+};
 
-use candid::{candid_method, Principal};
+use candid::{
+    candid_method,
+    Principal,
+};
 use certificate_orchestrator_interface::{
-    BoundedString, CreateRegistrationError, CreateRegistrationResponse, DispenseTaskError,
-    DispenseTaskResponse, EncryptedPair, ExportCertificatesCertifiedResponse,
-    ExportCertificatesError, ExportCertificatesResponse, ExportPackage, GetCertificateError,
-    GetCertificateResponse, GetRegistrationError, GetRegistrationResponse, HeaderField,
-    HttpRequest, HttpResponse, Id, InitArg, ListAllowedPrincipalsError,
-    ListAllowedPrincipalsResponse, ModifyAllowedPrincipalError, ModifyAllowedPrincipalResponse,
-    Name, PeekTaskError, PeekTaskResponse, QueueTaskError, QueueTaskResponse, Registration,
-    RemoveRegistrationError, RemoveRegistrationResponse, State, UpdateRegistrationError,
-    UpdateRegistrationResponse, UpdateType, UploadCertificateError, UploadCertificateResponse,
+    BoundedString,
+    CreateRegistrationError,
+    CreateRegistrationResponse,
+    DispenseTaskError,
+    DispenseTaskResponse,
+    EncryptedPair,
+    ExportCertificatesCertifiedResponse,
+    ExportCertificatesError,
+    ExportCertificatesResponse,
+    ExportPackage,
+    GetCertificateError,
+    GetCertificateResponse,
+    GetRegistrationError,
+    GetRegistrationResponse,
+    HeaderField,
+    HttpRequest,
+    HttpResponse,
+    Id,
+    InitArg,
+    ListAllowedPrincipalsError,
+    ListAllowedPrincipalsResponse,
+    ModifyAllowedPrincipalError,
+    ModifyAllowedPrincipalResponse,
+    Name,
+    PeekTaskError,
+    PeekTaskResponse,
+    QueueTaskError,
+    QueueTaskResponse,
+    Registration,
+    RemoveRegistrationError,
+    RemoveRegistrationResponse,
+    State,
+    UpdateRegistrationError,
+    UpdateRegistrationResponse,
+    UpdateType,
+    UploadCertificateError,
+    UploadCertificateResponse,
 };
 use ic_cdk::{
-    api::{id, time},
-    caller, post_upgrade, pre_upgrade, trap,
+    api::{
+        id,
+        time,
+    },
+    caller,
+    post_upgrade,
+    pre_upgrade,
+    trap,
 };
-use ic_cdk_macros::{init, query, update};
+use ic_cdk_macros::{
+    init,
+    query,
+    update,
+};
 use ic_cdk_timers::set_timer_interval;
 use ic_stable_structures::{
-    memory_manager::{MemoryId, MemoryManager, VirtualMemory},
-    DefaultMemoryImpl, StableBTreeMap,
+    memory_manager::{
+        MemoryId,
+        MemoryManager,
+        VirtualMemory,
+    },
+    DefaultMemoryImpl,
+    StableBTreeMap,
 };
 use priority_queue::PriorityQueue;
-use prometheus::{CounterVec, Encoder, Gauge, GaugeVec, Opts, Registry, TextEncoder};
-use work::{Peek, PeekError};
+use prometheus::{
+    CounterVec,
+    Encoder,
+    Gauge,
+    GaugeVec,
+    Opts,
+    Registry,
+    TextEncoder,
+};
+use work::{
+    Peek,
+    PeekError,
+};
 
 use crate::{
-    acl::{Authorize, AuthorizeError, Authorizer, WithAuthorize},
-    certificate::{
-        CertGetter, Export, ExportError, Exporter, GetCert, GetCertError, Upload, UploadError,
-        UploadWithIcCertification, Uploader,
+    acl::{
+        Authorize,
+        AuthorizeError,
+        Authorizer,
+        WithAuthorize,
     },
-    ic_certification::{add_cert, init_cert_tree, set_root_hash},
-    id::{Generate, Generator},
+    certificate::{
+        CertGetter,
+        Export,
+        ExportError,
+        Exporter,
+        GetCert,
+        GetCertError,
+        Upload,
+        UploadError,
+        UploadWithIcCertification,
+        Uploader,
+    },
+    ic_certification::{
+        add_cert,
+        init_cert_tree,
+        set_root_hash,
+    },
+    id::{
+        Generate,
+        Generator,
+    },
     rate_limiter::WithRateLimit,
     registration::{
-        Create, CreateError, Creator, Expire, Expirer, Get, GetError, Getter, Remove, RemoveError,
-        Remover, Update, UpdateError, UpdateWithIcCertification, Updater,
+        Create,
+        CreateError,
+        Creator,
+        Expire,
+        Expirer,
+        Get,
+        GetError,
+        Getter,
+        Remove,
+        RemoveError,
+        Remover,
+        Update,
+        UpdateError,
+        UpdateWithIcCertification,
+        Updater,
     },
-    work::{Dispense, DispenseError, Dispenser, Peeker, Queue, QueueError, Queuer, Retrier, Retry},
+    work::{
+        Dispense,
+        DispenseError,
+        Dispenser,
+        Peeker,
+        Queue,
+        QueueError,
+        Queuer,
+        Retrier,
+        Retry,
+    },
 };
 
 mod acl;
@@ -934,7 +1040,10 @@ mod tests {
 
     #[test]
     fn check_candid_interface() {
-        use candid_parser::utils::{service_equal, CandidSource};
+        use candid_parser::utils::{
+            service_equal,
+            CandidSource,
+        };
 
         candid::export_service!();
         let new_interface = __export_service();

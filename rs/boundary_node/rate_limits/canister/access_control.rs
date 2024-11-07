@@ -1,7 +1,10 @@
 use candid::Principal;
 use mockall::automock;
 
-use crate::{state::CanisterApi, storage::API_BOUNDARY_NODE_PRINCIPALS};
+use crate::{
+    state::CanisterApi,
+    storage::API_BOUNDARY_NODE_PRINCIPALS,
+};
 
 #[automock]
 pub trait ResolveAccessLevel {

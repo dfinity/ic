@@ -1,7 +1,13 @@
-use anyhow::{anyhow, Result};
+use anyhow::{
+    anyhow,
+    Result,
+};
 use reqwest::Body;
 use std::path::Path;
-use tokio_util::codec::{BytesCodec, FramedRead};
+use tokio_util::codec::{
+    BytesCodec,
+    FramedRead,
+};
 use tracing::*;
 
 pub async fn upload_image<P: AsRef<Path>>(path: P, url: &str) -> Result<()> {

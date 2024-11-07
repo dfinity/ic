@@ -1,14 +1,30 @@
-use std::{convert::TryFrom, str::FromStr};
+use std::{
+    convert::TryFrom,
+    str::FromStr,
+};
 
-use crate::{convert, errors::ApiError, request_types::RequestType};
+use crate::{
+    convert,
+    errors::ApiError,
+    request_types::RequestType,
+};
 use ic_ledger_canister_core::ledger::LedgerTransaction;
 use ic_ledger_hash_of::HashOf;
 use ic_types::{
-    messages::{HttpCallContent, HttpRequestEnvelope},
+    messages::{
+        HttpCallContent,
+        HttpRequestEnvelope,
+    },
     PrincipalId,
 };
-use icp_ledger::{SendArgs, Transaction};
-use serde::{Deserialize, Serialize};
+use icp_ledger::{
+    SendArgs,
+    Transaction,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 pub const NEURON_MANAGEMENT_PSEUDO_HASH: &str =
     "0000000000000000000000000000000000000000000000000000000000000000";

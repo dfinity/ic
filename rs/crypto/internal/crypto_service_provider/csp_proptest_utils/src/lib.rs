@@ -116,7 +116,10 @@ mod common {
     use ic_types::RegistryVersion;
     use ic_types::SubnetId;
     use proptest::array::uniform24;
-    use proptest::prelude::{prop, Strategy};
+    use proptest::prelude::{
+        prop,
+        Strategy,
+    };
     use strum::IntoEnumIterator;
 
     pub(crate) const MAX_ALGORITHM_ID_INDEX: i32 = 19;
@@ -343,9 +346,15 @@ mod csp_secret_key_store_contains_error {
 pub mod registry_client_error {
     use super::*;
     use crate::common::arb_registry_version;
-    use ic_types::registry::{RegistryClientError, RegistryDataProviderError};
+    use ic_types::registry::{
+        RegistryClientError,
+        RegistryDataProviderError,
+    };
     use proptest::prelude::Just;
-    use proptest::prelude::{BoxedStrategy, Strategy};
+    use proptest::prelude::{
+        BoxedStrategy,
+        Strategy,
+    };
     use proptest::prop_oneof;
 
     proptest_strategy_for_enum!(RegistryClientError;
@@ -367,15 +376,27 @@ pub mod registry_client_error {
 
 mod crypto_error {
     use super::*;
-    use crate::common::{arb_key_purpose, arb_node_id, arb_registry_version, arb_subnet_id};
+    use crate::common::{
+        arb_key_purpose,
+        arb_node_id,
+        arb_registry_version,
+        arb_subnet_id,
+    };
     use crate::registry_client_error::arb_registry_client_error;
     use ic_types::crypto::threshold_sig::ni_dkg::{
-        NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
+        NiDkgId,
+        NiDkgTag,
+        NiDkgTargetId,
+        NiDkgTargetSubnet,
     };
     use ic_types::crypto::CryptoError;
     use ic_types::Height;
     use proptest::collection::btree_set;
-    use proptest::prelude::{BoxedStrategy, Just, Strategy};
+    use proptest::prelude::{
+        BoxedStrategy,
+        Just,
+        Strategy,
+    };
     use proptest::prop_oneof;
 
     proptest_strategy_for_enum!(CryptoError;
@@ -437,7 +458,8 @@ mod node_public_keys {
     use super::*;
     use ic_crypto_internal_csp::types::ExternalPublicKeys;
     use ic_protobuf::registry::crypto::v1::{
-        PublicKey as PublicKeyProto, X509PublicKeyCert as X509PublicKeyCertProto,
+        PublicKey as PublicKeyProto,
+        X509PublicKeyCert as X509PublicKeyCertProto,
     };
     use ic_types::crypto::CurrentNodePublicKeys;
 
@@ -506,10 +528,17 @@ mod node_public_keys {
 mod pks_and_sks_contains_errors {
     use super::*;
     use ic_crypto_internal_csp::vault::api::{
-        ExternalPublicKeyError, LocalPublicKeyError, NodeKeysError, NodeKeysErrors,
-        PksAndSksContainsErrors, SecretKeyError,
+        ExternalPublicKeyError,
+        LocalPublicKeyError,
+        NodeKeysError,
+        NodeKeysErrors,
+        PksAndSksContainsErrors,
+        SecretKeyError,
     };
-    use proptest::prelude::{Just, Strategy};
+    use proptest::prelude::{
+        Just,
+        Strategy,
+    };
     use proptest::prop_oneof;
 
     proptest_strategy_for_enum!(PksAndSksContainsErrors;

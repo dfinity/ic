@@ -1,25 +1,48 @@
 use crate::{
     catch_up_package_provider::CatchUpPackageProvider,
-    error::{OrchestratorError, OrchestratorResult},
+    error::{
+        OrchestratorError,
+        OrchestratorResult,
+    },
     metrics::OrchestratorMetrics,
     registry_helper::RegistryHelper,
 };
 use ic_config::firewall::{
-    BoundaryNodeConfig as BoundaryNodeFirewallConfig, ReplicaConfig as ReplicaFirewallConfig,
+    BoundaryNodeConfig as BoundaryNodeFirewallConfig,
+    ReplicaConfig as ReplicaFirewallConfig,
     FIREWALL_FILE_DEFAULT_PATH,
 };
-use ic_logger::{debug, info, warn, ReplicaLogger};
-use ic_protobuf::registry::firewall::v1::{FirewallAction, FirewallRule, FirewallRuleDirection};
+use ic_logger::{
+    debug,
+    info,
+    warn,
+    ReplicaLogger,
+};
+use ic_protobuf::registry::firewall::v1::{
+    FirewallAction,
+    FirewallRule,
+    FirewallRuleDirection,
+};
 use ic_registry_keys::FirewallRulesScope;
 use ic_sys::fs::write_string_using_tmp_file;
-use ic_types::{NodeId, RegistryVersion, SubnetId};
+use ic_types::{
+    NodeId,
+    RegistryVersion,
+    SubnetId,
+};
 use std::{
-    cmp::{max, min},
+    cmp::{
+        max,
+        min,
+    },
     collections::BTreeSet,
     convert::TryFrom,
     net::IpAddr,
     path::PathBuf,
-    sync::{Arc, RwLock},
+    sync::{
+        Arc,
+        RwLock,
+    },
 };
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -618,22 +641,40 @@ fn action_to_nftables_action(action: Option<FirewallAction>) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::{io::Write, path::Path};
+    use std::{
+        io::Write,
+        path::Path,
+    };
 
-    use ic_config::{ConfigOptional, ConfigSource};
+    use ic_config::{
+        ConfigOptional,
+        ConfigSource,
+    };
     use ic_logger::replica_logger::no_op_logger;
     use ic_protobuf::registry::{
-        api_boundary_node::v1::ApiBoundaryNodeRecord, firewall::v1::FirewallRuleSet,
+        api_boundary_node::v1::ApiBoundaryNodeRecord,
+        firewall::v1::FirewallRuleSet,
     };
     use ic_registry_client_fake::FakeRegistryClient;
-    use ic_registry_client_helpers::node_operator::{ConnectionEndpoint, NodeRecord};
+    use ic_registry_client_helpers::node_operator::{
+        ConnectionEndpoint,
+        NodeRecord,
+    };
     use ic_registry_keys::{
-        make_api_boundary_node_record_key, make_firewall_rules_record_key, make_node_record_key,
+        make_api_boundary_node_record_key,
+        make_firewall_rules_record_key,
+        make_node_record_key,
     };
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_test_utilities::crypto::CryptoReturningOk;
-    use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_registry::{
+        add_subnet_record,
+        SubnetRecordBuilder,
+    };
+    use ic_test_utilities_types::ids::{
+        node_test_id,
+        subnet_test_id,
+    };
 
     use super::*;
 

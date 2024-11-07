@@ -1,4 +1,7 @@
-use std::{os::unix::io::AsRawFd, process::Child};
+use std::{
+    os::unix::io::AsRawFd,
+    process::Child,
+};
 
 use ic_types::CanisterId;
 use std::sync::Arc;
@@ -10,12 +13,18 @@ use crate::{
     protocol::ctllaunchersvc,
     protocol::{
         self,
-        launchersvc::{LaunchSandboxReply, LaunchSandboxRequest},
+        launchersvc::{
+            LaunchSandboxReply,
+            LaunchSandboxRequest,
+        },
     },
     rpc,
     sandbox_client_stub::SandboxClientStub,
     sandbox_service::SandboxService,
-    transport::{self, SocketReaderConfig},
+    transport::{
+        self,
+        SocketReaderConfig,
+    },
 };
 
 pub fn spawn_launcher_process(

@@ -1,39 +1,105 @@
 use assert_matches::assert_matches;
 use bitcoin::util::psbt::serialize::Deserialize;
-use bitcoin::{Address as BtcAddress, Network as BtcNetwork};
-use candid::{Decode, Encode, Nat, Principal};
-use ic_base_types::{CanisterId, PrincipalId};
-use ic_bitcoin_canister_mock::{OutPoint, PushUtxoToAddress, Utxo};
-use ic_btc_interface::{Network, Txid};
-use ic_canisters_http_types::{HttpRequest, HttpResponse};
-use ic_ckbtc_kyt::{InitArg as KytInitArg, KytMode, LifecycleArg, SetApiKeyArg};
-use ic_ckbtc_minter::lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterArg};
+use bitcoin::{
+    Address as BtcAddress,
+    Network as BtcNetwork,
+};
+use candid::{
+    Decode,
+    Encode,
+    Nat,
+    Principal,
+};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
+use ic_bitcoin_canister_mock::{
+    OutPoint,
+    PushUtxoToAddress,
+    Utxo,
+};
+use ic_btc_interface::{
+    Network,
+    Txid,
+};
+use ic_canisters_http_types::{
+    HttpRequest,
+    HttpResponse,
+};
+use ic_ckbtc_kyt::{
+    InitArg as KytInitArg,
+    KytMode,
+    LifecycleArg,
+    SetApiKeyArg,
+};
+use ic_ckbtc_minter::lifecycle::init::{
+    InitArgs as CkbtcMinterInitArgs,
+    MinterArg,
+};
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
-use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest, WithdrawalFee};
+use ic_ckbtc_minter::queries::{
+    EstimateFeeArg,
+    RetrieveBtcStatusRequest,
+    WithdrawalFee,
+};
 use ic_ckbtc_minter::state::{
-    BtcRetrievalStatusV2, Mode, ReimburseDepositTask, ReimbursedDeposit,
-    ReimbursementReason::{CallFailed, TaintedDestination},
-    RetrieveBtcStatus, RetrieveBtcStatusV2,
+    BtcRetrievalStatusV2,
+    Mode,
+    ReimburseDepositTask,
+    ReimbursedDeposit,
+    ReimbursementReason::{
+        CallFailed,
+        TaintedDestination,
+    },
+    RetrieveBtcStatus,
+    RetrieveBtcStatusV2,
 };
 use ic_ckbtc_minter::updates::get_btc_address::GetBtcAddressArgs;
 use ic_ckbtc_minter::updates::retrieve_btc::{
-    RetrieveBtcArgs, RetrieveBtcError, RetrieveBtcOk, RetrieveBtcWithApprovalArgs,
+    RetrieveBtcArgs,
+    RetrieveBtcError,
+    RetrieveBtcOk,
+    RetrieveBtcWithApprovalArgs,
     RetrieveBtcWithApprovalError,
 };
 use ic_ckbtc_minter::updates::update_balance::{
-    PendingUtxo, UpdateBalanceArgs, UpdateBalanceError, UtxoStatus,
+    PendingUtxo,
+    UpdateBalanceArgs,
+    UpdateBalanceError,
+    UtxoStatus,
 };
 use ic_ckbtc_minter::{
-    Log, MinterInfo, CKBTC_LEDGER_MEMO_SIZE, MIN_RELAY_FEE_PER_VBYTE, MIN_RESUBMISSION_DELAY,
+    Log,
+    MinterInfo,
+    CKBTC_LEDGER_MEMO_SIZE,
+    MIN_RELAY_FEE_PER_VBYTE,
+    MIN_RESUBMISSION_DELAY,
 };
-use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
-use ic_state_machine_tests::{StateMachine, StateMachineBuilder, WasmResult};
+use ic_icrc1_ledger::{
+    InitArgsBuilder as LedgerInitArgsBuilder,
+    LedgerArgument,
+};
+use ic_state_machine_tests::{
+    StateMachine,
+    StateMachineBuilder,
+    WasmResult,
+};
 use ic_test_utilities_load_wasm::load_wasm;
 use ic_types::Cycles;
 use icrc_ledger_types::icrc1::account::Account;
-use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
-use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
-use icrc_ledger_types::icrc3::transactions::{GetTransactionsRequest, GetTransactionsResponse};
+use icrc_ledger_types::icrc1::transfer::{
+    TransferArg,
+    TransferError,
+};
+use icrc_ledger_types::icrc2::approve::{
+    ApproveArgs,
+    ApproveError,
+};
+use icrc_ledger_types::icrc3::transactions::{
+    GetTransactionsRequest,
+    GetTransactionsResponse,
+};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -1154,7 +1220,10 @@ impl CkBtcSetup {
     }
 
     pub fn print_minter_events(&self) {
-        use ic_ckbtc_minter::state::eventlog::{Event, GetEventsArg};
+        use ic_ckbtc_minter::state::eventlog::{
+            Event,
+            GetEventsArg,
+        };
         let events = Decode!(
             &assert_reply(
                 self.env
@@ -1745,7 +1814,10 @@ fn test_ledger_memo() {
     };
     let res = ckbtc.get_transactions(get_transaction_request);
     let memo = res.transactions[0].burn.clone().unwrap().memo.unwrap();
-    use ic_ckbtc_minter::memo::{BurnMemo, Status};
+    use ic_ckbtc_minter::memo::{
+        BurnMemo,
+        Status,
+    };
 
     let decoded_data = minicbor::decode::<BurnMemo>(&memo.0).expect("failed to decode memo");
     assert_eq!(

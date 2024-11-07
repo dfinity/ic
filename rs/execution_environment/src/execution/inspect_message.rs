@@ -1,16 +1,41 @@
 use crate::Hypervisor;
 use crate::{
-    execution_environment::{as_round_instructions, RoundLimits},
-    metrics::{CallTreeMetricsNoOp, IngressFilterMetrics},
+    execution_environment::{
+        as_round_instructions,
+        RoundLimits,
+    },
+    metrics::{
+        CallTreeMetricsNoOp,
+        IngressFilterMetrics,
+    },
 };
-use ic_error_types::{ErrorCode, UserError};
+use ic_error_types::{
+    ErrorCode,
+    UserError,
+};
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
-use ic_logger::{fatal, ReplicaLogger};
-use ic_replicated_state::{CanisterState, NetworkTopology};
-use ic_system_api::{ApiType, ExecutionParameters};
+use ic_logger::{
+    fatal,
+    ReplicaLogger,
+};
+use ic_replicated_state::{
+    CanisterState,
+    NetworkTopology,
+};
+use ic_system_api::{
+    ApiType,
+    ExecutionParameters,
+};
 use ic_types::messages::SignedIngressContent;
-use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
-use ic_types::{NumInstructions, Time};
+use ic_types::methods::{
+    FuncRef,
+    SystemMethod,
+    WasmMethod,
+};
+use ic_types::{
+    NumInstructions,
+    Time,
+};
 use prometheus::IntCounter;
 
 /// Executes the system method `canister_inspect_message`.

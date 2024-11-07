@@ -1,6 +1,12 @@
 use byteorder::ReadBytesExt;
 use std::cmp::Ordering;
-use std::io::{BufRead, BufReader, BufWriter, Read, Write};
+use std::io::{
+    BufRead,
+    BufReader,
+    BufWriter,
+    Read,
+    Write,
+};
 
 /// A helper to read information from stable memory and write to a writer, using
 /// a buffer. Expects the input to be length-prefix encoded.

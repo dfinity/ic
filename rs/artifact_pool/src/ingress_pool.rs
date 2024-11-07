@@ -2,26 +2,49 @@
 /// Logically it can be viewed as part of the artifact pool
 /// But we keep it separated for code readability
 use crate::{
-    metrics::{PoolMetrics, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED},
+    metrics::{
+        PoolMetrics,
+        POOL_TYPE_UNVALIDATED,
+        POOL_TYPE_VALIDATED,
+    },
     HasTimestamp,
 };
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_interfaces::{
     ingress_pool::{
-        ChangeAction, IngressPool, IngressPoolObject, IngressPoolThrottler, Mutations, PoolSection,
-        UnvalidatedIngressArtifact, ValidatedIngressArtifact,
+        ChangeAction,
+        IngressPool,
+        IngressPoolObject,
+        IngressPoolThrottler,
+        Mutations,
+        PoolSection,
+        UnvalidatedIngressArtifact,
+        ValidatedIngressArtifact,
     },
     p2p::consensus::{
-        ArtifactTransmit, ArtifactTransmits, ArtifactWithOpt, MutablePool, UnvalidatedArtifact,
+        ArtifactTransmit,
+        ArtifactTransmits,
+        ArtifactWithOpt,
+        MutablePool,
+        UnvalidatedArtifact,
         ValidatedPoolReader,
     },
 };
-use ic_logger::{debug, ReplicaLogger};
+use ic_logger::{
+    debug,
+    ReplicaLogger,
+};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
     artifact::IngressMessageId,
-    messages::{MessageId, SignedIngress, EXPECTED_MESSAGE_ID_LENGTH},
-    CountBytes, NodeId, Time,
+    messages::{
+        MessageId,
+        SignedIngress,
+        EXPECTED_MESSAGE_ID_LENGTH,
+    },
+    CountBytes,
+    NodeId,
+    Time,
 };
 use prometheus::IntCounter;
 use std::collections::BTreeMap;
@@ -363,8 +386,14 @@ mod tests {
     use ic_logger::no_op_logger;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_time::FastForwardTimeSource;
-    use ic_test_utilities_types::{ids::node_test_id, messages::SignedIngressBuilder};
-    use ic_types::{artifact::IdentifiableArtifact, time::UNIX_EPOCH};
+    use ic_test_utilities_types::{
+        ids::node_test_id,
+        messages::SignedIngressBuilder,
+    };
+    use ic_types::{
+        artifact::IdentifiableArtifact,
+        time::UNIX_EPOCH,
+    };
     use rand::Rng;
     use std::time::Duration;
 

@@ -2,9 +2,15 @@
 ///
 /// To keep the sensitive data from not getting cleaned due to unintended
 /// copies, the array is allocated on the heap as a `Box<u8>`.
-use core::fmt::{self, Debug};
+use core::fmt::{
+    self,
+    Debug,
+};
 use serde::de::Error;
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::{
+    Zeroize,
+    ZeroizeOnDrop,
+};
 
 /// Sensitive data held as an array of `u8`s.
 #[derive(Clone, Eq, PartialEq, Zeroize, ZeroizeOnDrop)]

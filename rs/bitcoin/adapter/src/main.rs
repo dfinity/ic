@@ -4,8 +4,14 @@ use ic_async_utils::abort_on_panic;
 use ic_async_utils::incoming_from_nth_systemd_socket;
 use ic_async_utils::shutdown_signal;
 use ic_btc_adapter::config::IncomingSource;
-use ic_btc_adapter::{cli::Cli, start_server};
-use ic_logger::{info, new_replica_logger_from_config};
+use ic_btc_adapter::{
+    cli::Cli,
+    start_server,
+};
+use ic_logger::{
+    info,
+    new_replica_logger_from_config,
+};
 use ic_metrics::MetricsRegistry;
 use serde_json::to_string_pretty;
 

@@ -6,23 +6,44 @@ use ic_ledger_core::block::BlockIndex;
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::Tokens;
 use ic_ledger_test_utils::pocket_ic_helpers::index::{
-    get_blocks, wait_until_sync_is_completed, LEDGER_INDEX_CANISTER_ID,
+    get_blocks,
+    wait_until_sync_is_completed,
+    LEDGER_INDEX_CANISTER_ID,
 };
 use ic_ledger_test_utils::pocket_ic_helpers::install_canister;
 use ic_ledger_test_utils::pocket_ic_helpers::ledger::{
-    account_balance, archives, query_blocks, query_encoded_blocks, transfer, LEDGER_CANISTER_ID,
+    account_balance,
+    archives,
+    query_blocks,
+    query_encoded_blocks,
+    transfer,
+    LEDGER_CANISTER_ID,
 };
 use ic_ledger_test_utils::{
-    build_ledger_archive_wasm, build_ledger_index_wasm, build_ledger_wasm,
-    build_mainnet_ledger_archive_wasm, build_mainnet_ledger_index_wasm, build_mainnet_ledger_wasm,
+    build_ledger_archive_wasm,
+    build_ledger_index_wasm,
+    build_ledger_wasm,
+    build_mainnet_ledger_archive_wasm,
+    build_mainnet_ledger_index_wasm,
+    build_mainnet_ledger_wasm,
 };
 use icp_ledger::CandidOperation::Mint;
 use icp_ledger::{
-    AccountIdentifier, CandidBlock, CandidTransaction, LedgerCanisterInitPayload,
-    LedgerCanisterUpgradePayload, Memo, Subaccount, TransferArgs, DEFAULT_TRANSFER_FEE,
+    AccountIdentifier,
+    CandidBlock,
+    CandidTransaction,
+    LedgerCanisterInitPayload,
+    LedgerCanisterUpgradePayload,
+    Memo,
+    Subaccount,
+    TransferArgs,
+    DEFAULT_TRANSFER_FEE,
 };
 use maplit::hashmap;
-use pocket_ic::{PocketIc, PocketIcBuilder};
+use pocket_ic::{
+    PocketIc,
+    PocketIcBuilder,
+};
 use std::time::Duration;
 
 const ARCHIVE_NUM_BLOCKS_TO_ARCHIVE: usize = 5;

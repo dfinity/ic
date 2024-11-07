@@ -1,20 +1,49 @@
 use crate::{
     admin_helper::RegistryParams,
-    cli::{print_height_info, read_optional, read_optional_node_ids, read_optional_version},
+    cli::{
+        print_height_info,
+        read_optional,
+        read_optional_node_ids,
+        read_optional_version,
+    },
     command_helper::pipe_all,
-    error::{GracefulExpect, RecoveryError},
+    error::{
+        GracefulExpect,
+        RecoveryError,
+    },
     recovery_iterator::RecoveryIterator,
     registry_helper::RegistryPollingStrategy,
-    NeuronArgs, Recovery, RecoveryArgs, RecoveryResult, Step, CUPS_DIR, IC_REGISTRY_LOCAL_STORE,
+    NeuronArgs,
+    Recovery,
+    RecoveryArgs,
+    RecoveryResult,
+    Step,
+    CUPS_DIR,
+    IC_REGISTRY_LOCAL_STORE,
 };
 use clap::Parser;
 use ic_base_types::SubnetId;
-use ic_types::{NodeId, ReplicaVersion};
-use serde::{Deserialize, Serialize};
+use ic_types::{
+    NodeId,
+    ReplicaVersion,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use slog::Logger;
-use std::{iter::Peekable, net::IpAddr, path::PathBuf, process::Command};
+use std::{
+    iter::Peekable,
+    net::IpAddr,
+    path::PathBuf,
+    process::Command,
+};
 use strum::IntoEnumIterator;
-use strum_macros::{EnumIter, EnumMessage, EnumString};
+use strum_macros::{
+    EnumIter,
+    EnumMessage,
+    EnumString,
+};
 use url::Url;
 
 /// Caller id that will be used to mutate the registry canister.

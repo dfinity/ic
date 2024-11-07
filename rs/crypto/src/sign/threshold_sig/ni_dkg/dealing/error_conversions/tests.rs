@@ -2,7 +2,10 @@ mod create_dealing_error_conversions {
     use assert_matches::assert_matches;
     use ic_crypto_internal_threshold_sig_bls12381::api::dkg_errors::MalformedSecretKeyError;
     use ic_crypto_internal_threshold_sig_bls12381::api::dkg_errors::{
-        InvalidArgumentError, KeyNotFoundError, MalformedPublicKeyError, SizeError,
+        InvalidArgumentError,
+        KeyNotFoundError,
+        MalformedPublicKeyError,
+        SizeError,
     };
     use ic_types::crypto::threshold_sig::ni_dkg::errors::create_dealing_error::DkgCreateDealingError;
     use ic_types::crypto::threshold_sig::ni_dkg::errors::MalformedFsEncryptionPublicKeyError;
@@ -125,7 +128,10 @@ mod create_dealing_error_conversions {
 mod verify_dealing_error_conversions {
     use ic_crypto_internal_threshold_sig_bls12381::api::dkg_errors::SizeError;
     use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::CspDkgVerifyReshareDealingError;
-    use ic_types::crypto::error::{InvalidArgumentError, MalformedPublicKeyError};
+    use ic_types::crypto::error::{
+        InvalidArgumentError,
+        MalformedPublicKeyError,
+    };
     use ic_types::crypto::threshold_sig::ni_dkg::errors::verify_dealing_error::DkgVerifyDealingError;
     use ic_types::crypto::threshold_sig::ni_dkg::errors::MalformedFsEncryptionPublicKeyError;
     use ic_types::crypto::AlgorithmId;

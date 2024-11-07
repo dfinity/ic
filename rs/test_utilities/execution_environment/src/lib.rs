@@ -1,7 +1,18 @@
-use ic_base_types::{NumBytes, NumSeconds, PrincipalId, SubnetId};
-use ic_config::embedders::{MeteringType, StableMemoryPageLimit};
+use ic_base_types::{
+    NumBytes,
+    NumSeconds,
+    PrincipalId,
+    SubnetId,
+};
+use ic_config::embedders::{
+    MeteringType,
+    StableMemoryPageLimit,
+};
 use ic_config::{
-    embedders::{Config as EmbeddersConfig, WASM_MAX_SIZE},
+    embedders::{
+        Config as EmbeddersConfig,
+        WASM_MAX_SIZE,
+    },
     execution_environment::Config,
     flag_status::FlagStatus,
     subnet_config::SchedulerConfig,
@@ -10,76 +21,173 @@ use ic_config::{
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_cycles_account_manager::WasmExecutionMode;
 use ic_embedders::{
-    wasm_utils::{compile, decoding::decode_wasm},
+    wasm_utils::{
+        compile,
+        decoding::decode_wasm,
+    },
     WasmtimeEmbedder,
 };
-use ic_error_types::{ErrorCode, RejectCode, UserError};
+use ic_error_types::{
+    ErrorCode,
+    RejectCode,
+    UserError,
+};
 pub use ic_execution_environment::ExecutionResponse;
 use ic_execution_environment::{
-    execute_canister, CompilationCostHandling, ExecuteMessageResult, ExecutionEnvironment,
-    Hypervisor, IngressFilterMetrics, IngressHistoryWriterImpl, InternalHttpQueryHandler,
-    RoundInstructions, RoundLimits,
+    execute_canister,
+    CompilationCostHandling,
+    ExecuteMessageResult,
+    ExecutionEnvironment,
+    Hypervisor,
+    IngressFilterMetrics,
+    IngressHistoryWriterImpl,
+    InternalHttpQueryHandler,
+    RoundInstructions,
+    RoundLimits,
 };
 use ic_interfaces::execution_environment::{
-    ChainKeySettings, ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings,
+    ChainKeySettings,
+    ExecutionMode,
+    IngressHistoryWriter,
+    RegistryExecutionSettings,
     SubnetAvailableMemory,
 };
 use ic_interfaces_state_manager::Labeled;
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
-use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
+use ic_logger::{
+    replica_logger::no_op_logger,
+    ReplicaLogger,
+};
 use ic_management_canister_types::{
-    CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgs,
-    CanisterSettingsArgsBuilder, CanisterStatusType, CanisterUpgradeOptions, EmptyBlob,
-    InstallCodeArgs, InstallCodeArgsV2, LogVisibilityV2, MasterPublicKeyId, Method, Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, UpdateSettingsArgs,
+    CanisterIdRecord,
+    CanisterInstallMode,
+    CanisterInstallModeV2,
+    CanisterSettingsArgs,
+    CanisterSettingsArgsBuilder,
+    CanisterStatusType,
+    CanisterUpgradeOptions,
+    EmptyBlob,
+    InstallCodeArgs,
+    InstallCodeArgsV2,
+    LogVisibilityV2,
+    MasterPublicKeyId,
+    Method,
+    Payload,
+    ProvisionalCreateCanisterWithCyclesArgs,
+    UpdateSettingsArgs,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{
-    CanisterIdRange, RoutingTable, WellFormedError, CANISTER_IDS_PER_SUBNET,
+    CanisterIdRange,
+    RoutingTable,
+    WellFormedError,
+    CANISTER_IDS_PER_SUBNET,
 };
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::{execution_state::SandboxMemory, NextExecution},
+    canister_state::{
+        execution_state::SandboxMemory,
+        NextExecution,
+    },
     page_map::{
-        test_utils::base_only_storage_layout, PageMap, TestPageAllocatorFileDescriptorImpl,
+        test_utils::base_only_storage_layout,
+        PageMap,
+        TestPageAllocatorFileDescriptorImpl,
         PAGE_SIZE,
     },
-    testing::{CanisterQueuesTesting, ReplicatedStateTesting},
-    CallContext, CanisterState, ExecutionState, ExecutionTask, InputQueueType, NetworkTopology,
-    PageIndex, ReplicatedState, SubnetTopology,
+    testing::{
+        CanisterQueuesTesting,
+        ReplicatedStateTesting,
+    },
+    CallContext,
+    CanisterState,
+    ExecutionState,
+    ExecutionTask,
+    InputQueueType,
+    NetworkTopology,
+    PageIndex,
+    ReplicatedState,
+    SubnetTopology,
 };
 use ic_system_api::InstructionLimits;
-use ic_test_utilities::{crypto::mock_random_number_generator, state_manager::FakeStateManager};
-use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder};
+use ic_test_utilities::{
+    crypto::mock_random_number_generator,
+    state_manager::FakeStateManager,
+};
+use ic_test_utilities_types::messages::{
+    IngressBuilder,
+    RequestBuilder,
+    SignedIngressBuilder,
+};
 use ic_types::ReplicaVersion;
 use ic_types::{
     batch::QueryStats,
-    crypto::{canister_threshold_sig::MasterPublicKey, AlgorithmId},
-    ingress::{IngressState, IngressStatus, WasmResult},
+    crypto::{
+        canister_threshold_sig::MasterPublicKey,
+        AlgorithmId,
+    },
+    ingress::{
+        IngressState,
+        IngressStatus,
+        WasmResult,
+    },
     messages::{
-        CallbackId, CanisterCall, CanisterMessage, CanisterTask, MessageId, Query, QuerySource,
-        RequestOrResponse, Response, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+        CallbackId,
+        CanisterCall,
+        CanisterMessage,
+        CanisterTask,
+        MessageId,
+        Query,
+        QuerySource,
+        RequestOrResponse,
+        Response,
+        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
     },
     time::UNIX_EPOCH,
-    CanisterId, Cycles, Height, NumInstructions, QueryStatsEpoch, Time, UserId,
+    CanisterId,
+    Cycles,
+    Height,
+    NumInstructions,
+    QueryStatsEpoch,
+    Time,
+    UserId,
 };
-use ic_types_test_utils::ids::{node_test_id, subnet_test_id, user_test_id};
+use ic_types_test_utils::ids::{
+    node_test_id,
+    subnet_test_id,
+    user_test_id,
+};
 use ic_universal_canister::UNIVERSAL_CANISTER_WASM;
 use ic_wasm_types::BinaryEncodedWasm;
-use maplit::{btreemap, btreeset};
+use maplit::{
+    btreemap,
+    btreeset,
+};
 use std::convert::TryFrom;
 use std::sync::Arc;
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap},
+    collections::{
+        BTreeMap,
+        BTreeSet,
+        HashMap,
+    },
     time::Duration,
 };
-use std::{os::unix::prelude::FileExt, str::FromStr};
+use std::{
+    os::unix::prelude::FileExt,
+    str::FromStr,
+};
 use tempfile::NamedTempFile;
 
 mod wat_canister;
-pub use wat_canister::{wat_canister, wat_fn, WatCanisterBuilder, WatFnCode};
+pub use wat_canister::{
+    wat_canister,
+    wat_fn,
+    WatCanisterBuilder,
+    WatFnCode,
+};
 
 const INITIAL_CANISTER_CYCLES: Cycles = Cycles::new(1_000_000_000_000);
 

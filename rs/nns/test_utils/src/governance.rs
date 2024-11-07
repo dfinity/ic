@@ -1,30 +1,67 @@
 //! Utilities to submit proposals to the governance canister and to upgrade it
 //! (in tests).
-use crate::itest_helpers::{NnsCanisters, UpgradeTestingScenario};
-use candid::{CandidType, Encode};
-use canister_test::{Canister, Wasm};
-use dfn_candid::{candid, candid_one};
+use crate::itest_helpers::{
+    NnsCanisters,
+    UpgradeTestingScenario,
+};
+use candid::{
+    CandidType,
+    Encode,
+};
+use canister_test::{
+    Canister,
+    Wasm,
+};
+use dfn_candid::{
+    candid,
+    candid_one,
+};
 use ic_btc_interface::SetConfigRequest;
 use ic_canister_client_sender::Sender;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
-    canister_status::{CanisterStatusResult, CanisterStatusType},
+    canister_status::{
+        CanisterStatusResult,
+        CanisterStatusType,
+    },
 };
-use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
-use ic_nns_common::types::{NeuronId, ProposalId};
+use ic_nervous_system_common_test_keys::{
+    TEST_NEURON_1_ID,
+    TEST_NEURON_1_OWNER_KEYPAIR,
+};
+use ic_nns_common::types::{
+    NeuronId,
+    ProposalId,
+};
 use ic_nns_governance_api::{
-    bitcoin::{BitcoinNetwork, BitcoinSetConfigProposal},
+    bitcoin::{
+        BitcoinNetwork,
+        BitcoinSetConfigProposal,
+    },
     pb::v1::{
-        add_or_remove_node_provider::Change, install_code::CanisterInstallMode,
-        manage_neuron::NeuronIdOrSubaccount, manage_neuron_response::Command as CommandResponse,
-        AddOrRemoveNodeProvider, ExecuteNnsFunction, GovernanceError, InstallCodeRequest,
-        ListNodeProvidersResponse, MakeProposalRequest, ManageNeuronCommandRequest,
-        ManageNeuronRequest, ManageNeuronResponse, NnsFunction, NodeProvider,
-        ProposalActionRequest, ProposalInfo, ProposalStatus,
+        add_or_remove_node_provider::Change,
+        install_code::CanisterInstallMode,
+        manage_neuron::NeuronIdOrSubaccount,
+        manage_neuron_response::Command as CommandResponse,
+        AddOrRemoveNodeProvider,
+        ExecuteNnsFunction,
+        GovernanceError,
+        InstallCodeRequest,
+        ListNodeProvidersResponse,
+        MakeProposalRequest,
+        ManageNeuronCommandRequest,
+        ManageNeuronRequest,
+        ManageNeuronResponse,
+        NnsFunction,
+        NodeProvider,
+        ProposalActionRequest,
+        ProposalInfo,
+        ProposalStatus,
     },
 };
 pub use ic_nns_handler_lifeline_interface::{
-    HardResetNnsRootToVersionPayload, UpgradeRootProposal,
+    HardResetNnsRootToVersionPayload,
+    UpgradeRootProposal,
 };
 use std::time::Duration;
 

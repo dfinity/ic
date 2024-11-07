@@ -6,9 +6,16 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_test_utilities_state::insert_dummy_canister;
 use ic_test_utilities_types::ids::{
-    canister_test_id, message_test_id, subnet_test_id, user_test_id,
+    canister_test_id,
+    message_test_id,
+    subnet_test_id,
+    user_test_id,
 };
-use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
+use ic_types::ingress::{
+    IngressState,
+    IngressStatus,
+    WasmResult,
+};
 use ic_types::time::UNIX_EPOCH;
 
 #[test]
@@ -151,7 +158,10 @@ fn reject_code_change_guard() {
 #[test]
 fn error_code_change_guard() {
     use ic_crypto_sha2::Sha256;
-    use ic_error_types::{ErrorCode, RejectCode};
+    use ic_error_types::{
+        ErrorCode,
+        RejectCode,
+    };
     use std::hash::Hash;
     use strum::IntoEnumIterator;
 

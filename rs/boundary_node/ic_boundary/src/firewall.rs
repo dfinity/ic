@@ -2,12 +2,21 @@
 
 use std::{
     fs,
-    io::{BufWriter, Write},
+    io::{
+        BufWriter,
+        Write,
+    },
     path::PathBuf,
-    process::{Command, Stdio},
+    process::{
+        Command,
+        Stdio,
+    },
 };
 
-use anyhow::{Context, Error};
+use anyhow::{
+    Context,
+    Error,
+};
 use ic_registry_subnet_type::SubnetType;
 
 use crate::snapshot::RegistrySnapshot;

@@ -1,14 +1,24 @@
 //! Types for the Groth20-BLS12-381 implementation of Non-interactive
 //! Distributed Key Generation.
 
-use ic_crypto_internal_types::curves::bls12_381::{G1Bytes, G2Bytes};
-use ic_crypto_internal_types::encrypt::forward_secure::groth20_bls12_381::{
-    FsEncryptionPop, FsEncryptionPublicKey,
+use ic_crypto_internal_types::curves::bls12_381::{
+    G1Bytes,
+    G2Bytes,
 };
-use serde::{Deserialize, Serialize};
+use ic_crypto_internal_types::encrypt::forward_secure::groth20_bls12_381::{
+    FsEncryptionPop,
+    FsEncryptionPublicKey,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 use std::fmt;
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::{
+    Zeroize,
+    ZeroizeOnDrop,
+};
 
 #[cfg(test)]
 pub mod arbitrary;

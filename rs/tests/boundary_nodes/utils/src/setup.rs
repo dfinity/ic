@@ -1,17 +1,35 @@
 use ic_system_test_driver::{
     driver::{
-        boundary_node::{BoundaryNode, BoundaryNodeVm},
-        ic::{InternetComputer, Subnet},
-        prometheus_vm::{HasPrometheus, PrometheusVm},
+        boundary_node::{
+            BoundaryNode,
+            BoundaryNodeVm,
+        },
+        ic::{
+            InternetComputer,
+            Subnet,
+        },
+        prometheus_vm::{
+            HasPrometheus,
+            PrometheusVm,
+        },
         test_env::TestEnv,
         test_env_api::{
-            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
-            RetrieveIpv4Addr, SshSession, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+            HasPublicApiUrl,
+            HasTopologySnapshot,
+            IcNodeContainer,
+            NnsInstallationBuilder,
+            RetrieveIpv4Addr,
+            SshSession,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
         },
     },
     util::block_on,
 };
-use std::{convert::TryFrom, str::FromStr};
+use std::{
+    convert::TryFrom,
+    str::FromStr,
+};
 
 use anyhow::Context;
 
@@ -23,7 +41,10 @@ use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 
-use slog::{debug, info};
+use slog::{
+    debug,
+    info,
+};
 
 use crate::helpers::BoundaryNodeHttpsConfig;
 

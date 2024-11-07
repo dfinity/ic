@@ -24,22 +24,44 @@ If the NNS canisters are not deployed, the subnets will stop making progress aft
 
 end::catalog[] */
 
-use canister_test::{Canister, Runtime};
+use canister_test::{
+    Canister,
+    Runtime,
+};
 use dfn_candid::candid;
 use futures::future::join_all;
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
-use ic_system_test_driver::driver::pot_dsl::{PotSetupFn, SysTestFn};
-use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
+use ic_system_test_driver::driver::ic::{
+    InternetComputer,
+    Subnet,
+};
+use ic_system_test_driver::driver::pot_dsl::{
+    PotSetupFn,
+    SysTestFn,
+};
+use ic_system_test_driver::driver::prometheus_vm::{
+    HasPrometheus,
+    PrometheusVm,
+};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
+    HasPublicApiUrl,
+    HasTopologySnapshot,
+    IcNodeContainer,
+    NnsInstallationBuilder,
 };
-use ic_system_test_driver::util::{block_on, runtime_from_url};
+use ic_system_test_driver::util::{
+    block_on,
+    runtime_from_url,
+};
 use slog::info;
 use std::fmt::Display;
 use std::time::Duration;
-use systest_message_routing_common::{install_canisters, parallel_async, start_all_canisters};
+use systest_message_routing_common::{
+    install_canisters,
+    parallel_async,
+    start_all_canisters,
+};
 use xnet_test::Metrics;
 
 // Constants for all xnet tests.

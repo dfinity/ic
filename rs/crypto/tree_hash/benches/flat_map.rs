@@ -1,7 +1,19 @@
-use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
+use criterion::{
+    criterion_group,
+    criterion_main,
+    BatchSize,
+    BenchmarkId,
+    Criterion,
+};
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use ic_crypto_tree_hash::{FlatMap, Label};
-use rand::{CryptoRng, Rng};
+use ic_crypto_tree_hash::{
+    FlatMap,
+    Label,
+};
+use rand::{
+    CryptoRng,
+    Rng,
+};
 
 const INPUT_SIZE: usize = 32;
 

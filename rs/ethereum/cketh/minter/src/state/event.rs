@@ -1,16 +1,37 @@
 use crate::erc20::CkErc20Token;
-use crate::eth_logs::{EventSource, ReceivedErc20Event, ReceivedEthEvent, ReceivedEvent};
+use crate::eth_logs::{
+    EventSource,
+    ReceivedErc20Event,
+    ReceivedEthEvent,
+    ReceivedEvent,
+};
 use crate::eth_rpc_client::responses::TransactionReceipt;
-use crate::lifecycle::{init::InitArg, upgrade::UpgradeArg};
-use crate::numeric::{BlockNumber, LedgerBurnIndex, LedgerMintIndex};
+use crate::lifecycle::{
+    init::InitArg,
+    upgrade::UpgradeArg,
+};
+use crate::numeric::{
+    BlockNumber,
+    LedgerBurnIndex,
+    LedgerMintIndex,
+};
 use crate::state::transactions::{
-    Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed, ReimbursementIndex,
+    Erc20WithdrawalRequest,
+    EthWithdrawalRequest,
+    Reimbursed,
+    ReimbursementIndex,
     ReimbursementRequest,
 };
-use crate::tx::{Eip1559TransactionRequest, SignedEip1559TransactionRequest};
+use crate::tx::{
+    Eip1559TransactionRequest,
+    SignedEip1559TransactionRequest,
+};
 use candid::Principal;
 use ic_ethereum_types::Address;
-use minicbor::{Decode, Encode};
+use minicbor::{
+    Decode,
+    Encode,
+};
 
 /// The event describing the ckETH minter state transition.
 #[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]

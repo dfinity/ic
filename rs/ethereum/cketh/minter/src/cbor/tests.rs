@@ -1,7 +1,16 @@
 use crate::checked_amount::CheckedAmountOf;
-use candid::{Nat, Principal};
-use ethnum::{u256, U256};
-use minicbor::{Decode, Encode};
+use candid::{
+    Nat,
+    Principal,
+};
+use ethnum::{
+    u256,
+    U256,
+};
+use minicbor::{
+    Decode,
+    Encode,
+};
 use phantom_newtype::Id;
 use proptest::collection::vec as pvec;
 use proptest::prelude::*;

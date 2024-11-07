@@ -1,47 +1,84 @@
 //! Module that deals with requests to /api/v2/canister/.../query
 
 use crate::{
-    common::{build_validator, validation_error_to_http_error, Cbor, WithTimeout},
+    common::{
+        build_validator,
+        validation_error_to_http_error,
+        Cbor,
+        WithTimeout,
+    },
     ReplicaHealthStatus,
 };
 
 use axum::{
     body::Body,
-    extract::{DefaultBodyLimit, State},
-    response::{IntoResponse, Response},
+    extract::{
+        DefaultBodyLimit,
+        State,
+    },
+    response::{
+        IntoResponse,
+        Response,
+    },
     Router,
 };
 use crossbeam::atomic::AtomicCell;
 use http::Request;
 use hyper::StatusCode;
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
-use ic_error_types::{ErrorCode, RejectCode};
+use ic_error_types::{
+    ErrorCode,
+    RejectCode,
+};
 use ic_interfaces::{
     crypto::BasicSigner,
-    execution_environment::{QueryExecutionError, QueryExecutionService},
+    execution_environment::{
+        QueryExecutionError,
+        QueryExecutionService,
+    },
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{error, ReplicaLogger};
+use ic_logger::{
+    error,
+    ReplicaLogger,
+};
 use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvider;
 use ic_types::{
     ingress::WasmResult,
     malicious_flags::MaliciousFlags,
     messages::{
-        Blob, CertificateDelegation, HasCanisterId, HttpQueryContent, HttpQueryResponse,
-        HttpQueryResponseReply, HttpRequest, HttpRequestEnvelope, HttpSignedQueryResponse,
-        NodeSignature, Query, QueryResponseHash,
+        Blob,
+        CertificateDelegation,
+        HasCanisterId,
+        HttpQueryContent,
+        HttpQueryResponse,
+        HttpQueryResponseReply,
+        HttpRequest,
+        HttpRequestEnvelope,
+        HttpSignedQueryResponse,
+        NodeSignature,
+        Query,
+        QueryResponseHash,
     },
     time::current_time,
-    CanisterId, NodeId,
+    CanisterId,
+    NodeId,
 };
 use ic_validator::HttpRequestVerifier;
 use std::sync::Arc;
 use std::{
-    convert::{Infallible, TryFrom},
+    convert::{
+        Infallible,
+        TryFrom,
+    },
     sync::Mutex,
 };
 use tokio::sync::OnceCell;
-use tower::{util::BoxCloneService, ServiceBuilder, ServiceExt};
+use tower::{
+    util::BoxCloneService,
+    ServiceBuilder,
+    ServiceExt,
+};
 
 #[derive(Clone)]
 pub struct QueryService {

@@ -1,54 +1,134 @@
-use candid::{candid_method, CandidType, Decode, Encode, Nat, Principal};
-use ic_canister_log::{export as export_logs, log};
-use ic_canister_profiler::{measure_span, SpanName, SpanStats};
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
+use candid::{
+    candid_method,
+    CandidType,
+    Decode,
+    Encode,
+    Nat,
+    Principal,
+};
+use ic_canister_log::{
+    export as export_logs,
+    log,
+};
+use ic_canister_profiler::{
+    measure_span,
+    SpanName,
+    SpanStats,
+};
+use ic_canisters_http_types::{
+    HttpRequest,
+    HttpResponse,
+    HttpResponseBuilder,
+};
 use ic_cdk::trap;
-use ic_cdk_macros::{init, post_upgrade, query};
+use ic_cdk_macros::{
+    init,
+    post_upgrade,
+    query,
+};
 use ic_cdk_timers::TimerId;
 use ic_crypto_sha2::Sha256;
-use ic_icrc1::blocks::{encoded_block_to_generic_block, generic_block_to_encoded_block};
+use ic_icrc1::blocks::{
+    encoded_block_to_generic_block,
+    generic_block_to_encoded_block,
+};
 use ic_icrc1::endpoints::StandardRecord;
-use ic_icrc1::{Block, Operation};
+use ic_icrc1::{
+    Block,
+    Operation,
+};
 use ic_icrc1_index_ng::{
-    FeeCollectorRanges, GetAccountTransactionsArgs, GetAccountTransactionsResponse,
-    GetAccountTransactionsResult, GetBlocksMethod, IndexArg, InitArg, ListSubaccountsArgs, Log,
-    LogEntry, Status, TransactionWithId, UpgradeArg, DEFAULT_MAX_BLOCKS_PER_RESPONSE,
+    FeeCollectorRanges,
+    GetAccountTransactionsArgs,
+    GetAccountTransactionsResponse,
+    GetAccountTransactionsResult,
+    GetBlocksMethod,
+    IndexArg,
+    InitArg,
+    ListSubaccountsArgs,
+    Log,
+    LogEntry,
+    Status,
+    TransactionWithId,
+    UpgradeArg,
+    DEFAULT_MAX_BLOCKS_PER_RESPONSE,
 };
 use ic_ledger_canister_core::runtime::total_memory_size_bytes;
-use ic_ledger_core::block::{BlockIndex as BlockIndex64, BlockType, EncodedBlock};
-use ic_ledger_core::tokens::{CheckedAdd, CheckedSub, Zero};
-use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
-use ic_stable_structures::storable::{Blob, Bound};
+use ic_ledger_core::block::{
+    BlockIndex as BlockIndex64,
+    BlockType,
+    EncodedBlock,
+};
+use ic_ledger_core::tokens::{
+    CheckedAdd,
+    CheckedSub,
+    Zero,
+};
+use ic_stable_structures::memory_manager::{
+    MemoryId,
+    VirtualMemory,
+};
+use ic_stable_structures::storable::{
+    Blob,
+    Bound,
+};
 use ic_stable_structures::{
-    memory_manager::MemoryManager, DefaultMemoryImpl, StableBTreeMap, StableCell, StableLog,
+    memory_manager::MemoryManager,
+    DefaultMemoryImpl,
+    StableBTreeMap,
+    StableCell,
+    StableLog,
     Storable,
 };
 use icrc_ledger_types::icrc::generic_value::Value;
-use icrc_ledger_types::icrc1::account::{Account, Subaccount};
-use icrc_ledger_types::icrc3::archive::{ArchivedRange, QueryBlockArchiveFn};
+use icrc_ledger_types::icrc1::account::{
+    Account,
+    Subaccount,
+};
+use icrc_ledger_types::icrc3::archive::{
+    ArchivedRange,
+    QueryBlockArchiveFn,
+};
 use icrc_ledger_types::icrc3::blocks::{
-    ArchivedBlocks, BlockRange, BlockWithId, GenericBlock, GetBlocksRequest, GetBlocksResponse,
+    ArchivedBlocks,
+    BlockRange,
+    BlockWithId,
+    GenericBlock,
+    GetBlocksRequest,
+    GetBlocksResponse,
     GetBlocksResult,
 };
 use icrc_ledger_types::icrc3::transactions::Transaction;
 use num_traits::ToPrimitive;
 use scopeguard::guard;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::cmp::Reverse;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{
+    BTreeMap,
+    HashMap,
+};
 use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::io::Read;
-use std::ops::Bound::{Excluded, Included};
+use std::ops::Bound::{
+    Excluded,
+    Included,
+};
 use std::ops::Range;
 use std::time::Duration;
 
 pub mod logs;
 
-use crate::logs::{P0, P1};
+use crate::logs::{
+    P0,
+    P1,
+};
 
 const STATE_MEMORY_ID: MemoryId = MemoryId::new(0);
 const BLOCK_LOG_INDEX_MEMORY_ID: MemoryId = MemoryId::new(1);
@@ -1186,7 +1266,10 @@ candid::export_service!();
 
 #[test]
 fn check_candid_interface() {
-    use candid_parser::utils::{service_equal, CandidSource};
+    use candid_parser::utils::{
+        service_equal,
+        CandidSource,
+    };
     use std::path::PathBuf;
 
     let new_interface = __export_service();

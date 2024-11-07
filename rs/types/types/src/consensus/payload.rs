@@ -1,13 +1,21 @@
 //! Defines consensus payload types.
 use crate::{
     batch::BatchPayload,
-    consensus::{dkg, hashed::Hashed, idkg, thunk::Thunk},
+    consensus::{
+        dkg,
+        hashed::Hashed,
+        idkg,
+        thunk::Thunk,
+    },
     crypto::CryptoHashOf,
     *,
 };
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::cmp::PartialOrd;
 use std::hash::Hash;
 use std::sync::Arc;

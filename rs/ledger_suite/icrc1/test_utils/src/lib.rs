@@ -1,17 +1,33 @@
-use candid::{Nat, Principal};
+use candid::{
+    Nat,
+    Principal,
+};
 use ic_agent::identity::BasicIdentity;
 use ic_agent::Identity;
-use ic_crypto_ed25519::{PrivateKey as Ed25519SecretKey, PrivateKeyFormat};
+use ic_crypto_ed25519::{
+    PrivateKey as Ed25519SecretKey,
+    PrivateKeyFormat,
+};
 use ic_crypto_secp256k1::PrivateKey as Secp256k1PrivateKey;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use ic_icrc1::{Block, Operation, Transaction};
+use ic_icrc1::{
+    Block,
+    Operation,
+    Transaction,
+};
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::tokens::TokensType;
 use ic_ledger_core::Tokens;
 use ic_ledger_hash_of::HashOf;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
-use icrc_ledger_types::icrc1::account::{Account, Subaccount};
-use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg};
+use icrc_ledger_types::icrc1::account::{
+    Account,
+    Subaccount,
+};
+use icrc_ledger_types::icrc1::transfer::{
+    Memo,
+    TransferArg,
+};
 use icrc_ledger_types::icrc2::approve::ApproveArgs;
 use num_traits::cast::ToPrimitive;
 use proptest::prelude::*;
@@ -20,7 +36,10 @@ use rand::Rng;
 use rand::RngCore;
 use rand::SeedableRng;
 use rosetta_core::models::Secp256k1KeyPair;
-use rosetta_core::models::{Ed25519KeyPair, RosettaSupportedKeyPair};
+use rosetta_core::models::{
+    Ed25519KeyPair,
+    RosettaSupportedKeyPair,
+};
 use rosetta_core::objects::Currency;
 use rosetta_core::objects::ObjectMap;
 use serde_bytes::ByteBuf;
@@ -30,7 +49,11 @@ use std::collections::HashSet;
 use std::fmt;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{
+    Duration,
+    SystemTime,
+    UNIX_EPOCH,
+};
 
 pub const E8: u64 = 100_000_000;
 pub const DEFAULT_TRANSFER_FEE: u64 = 10_000;
@@ -1138,11 +1161,17 @@ impl KeyPairGenerator<Arc<BasicIdentity>> for Arc<BasicIdentity> {
 #[cfg(test)]
 mod tests {
     use super::KeyPairGenerator;
-    use crate::{minter_identity, valid_transactions_strategy};
+    use crate::{
+        minter_identity,
+        valid_transactions_strategy,
+    };
     use ic_agent::identity::BasicIdentity;
     use ic_types::PrincipalId;
     use proptest::{
-        strategy::{Strategy, ValueTree},
+        strategy::{
+            Strategy,
+            ValueTree,
+        },
         test_runner::TestRunner,
     };
     use rand::RngCore;

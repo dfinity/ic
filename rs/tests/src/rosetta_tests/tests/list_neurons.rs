@@ -1,8 +1,12 @@
 use crate::rosetta_tests::{
     ledger_client::LedgerClient,
     lib::{
-        create_ledger_client, do_multiple_txn_external, make_user_ed25519, one_day_from_now_nanos,
-        to_public_key, NeuronDetails,
+        create_ledger_client,
+        do_multiple_txn_external,
+        make_user_ed25519,
+        one_day_from_now_nanos,
+        to_public_key,
+        NeuronDetails,
     },
     rosetta_client::RosettaApiClient,
     setup::setup,
@@ -13,16 +17,27 @@ use ic_ledger_core::Tokens;
 use ic_nns_governance_api::pb::v1::Neuron;
 use ic_rosetta_api::{
     convert::neuron_subaccount_bytes_from_public_key,
-    ledger_client::list_neurons_response::ListNeuronsResponse, request::Request,
+    ledger_client::list_neurons_response::ListNeuronsResponse,
+    request::Request,
     request_types::ListNeurons,
 };
-use ic_rosetta_test_utils::{EdKeypair, RequestInfo};
+use ic_rosetta_test_utils::{
+    EdKeypair,
+    RequestInfo,
+};
 use ic_system_test_driver::{
     driver::test_env::TestEnv,
-    util::{block_on, get_identity, IDENTITY_PEM},
+    util::{
+        block_on,
+        get_identity,
+        IDENTITY_PEM,
+    },
 };
 use rosetta_core::objects::ObjectMap;
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::HashMap,
+    sync::Arc,
+};
 
 const PORT: u32 = 8107;
 const VM_NAME: &str = "neuron-info";

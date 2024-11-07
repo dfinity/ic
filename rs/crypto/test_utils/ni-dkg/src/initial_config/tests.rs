@@ -1,9 +1,19 @@
 use super::*;
-use ic_crypto_internal_bls12_381_type::{verify_bls_signature, G1Affine, G2Affine};
-use ic_crypto_test_utils::{map_of, set_of};
+use ic_crypto_internal_bls12_381_type::{
+    verify_bls_signature,
+    G1Affine,
+    G2Affine,
+};
+use ic_crypto_test_utils::{
+    map_of,
+    set_of,
+};
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_interfaces_registry::RegistryClient;
-use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, InitialNiDkgTranscriptRecord};
+use ic_protobuf::registry::subnet::v1::{
+    CatchUpPackageContents,
+    InitialNiDkgTranscriptRecord,
+};
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_client_helpers::crypto::CryptoRegistry;
 use ic_registry_keys::make_catch_up_package_contents_key;
@@ -11,8 +21,17 @@ use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;
 use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgThreshold;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
-use ic_types::{Height, NumberOfNodes, RegistryVersion, SubnetId};
-use ic_types_test_utils::ids::{node_test_id, NODE_1, SUBNET_1};
+use ic_types::{
+    Height,
+    NumberOfNodes,
+    RegistryVersion,
+    SubnetId,
+};
+use ic_types_test_utils::ids::{
+    node_test_id,
+    NODE_1,
+    SUBNET_1,
+};
 use rand::Rng;
 use std::sync::Arc;
 
@@ -240,9 +259,15 @@ fn should_get_master_key_associated_with_transcript_public_key() {
 /// for tests whose aim is to detect changes in the serialization of the
 /// transcript.
 fn transcript_without_empty_or_default_data() -> NiDkgTranscript {
-    use ic_crypto_internal_types::curves::bls12_381::{G1Bytes, G2Bytes};
+    use ic_crypto_internal_types::curves::bls12_381::{
+        G1Bytes,
+        G2Bytes,
+    };
     use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
-        EncryptedShares, PublicCoefficientsBytes, Transcript, NUM_CHUNKS,
+        EncryptedShares,
+        PublicCoefficientsBytes,
+        Transcript,
+        NUM_CHUNKS,
     };
     use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspNiDkgTranscript;
 

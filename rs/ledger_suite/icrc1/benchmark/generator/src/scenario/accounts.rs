@@ -1,12 +1,24 @@
 use crate::scenario::{
-    create_workers, install_code_on_canisters, transfer_cycles_to_canisters,
-    transfer_tokens_to_canisters, verify_canister_upgrade, ICP_E8S,
+    create_workers,
+    install_code_on_canisters,
+    transfer_cycles_to_canisters,
+    transfer_tokens_to_canisters,
+    verify_canister_upgrade,
+    ICP_E8S,
 };
 use crate::{
-    get_index_principal, get_index_wasm, get_worker_wasm, RunScenarioResult, Scenario, NANO,
+    get_index_principal,
+    get_index_wasm,
+    get_worker_wasm,
+    RunScenarioResult,
+    Scenario,
+    NANO,
 };
 use candid::Nat;
-use ic_icrc1_benchmark_worker::{BatchArgs, BatchResult};
+use ic_icrc1_benchmark_worker::{
+    BatchArgs,
+    BatchResult,
+};
 
 /// The number of worker canisters used to generate traffic.
 const NB_WORKERS: u32 = 10;

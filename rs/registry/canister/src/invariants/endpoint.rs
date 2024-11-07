@@ -1,10 +1,16 @@
 use crate::invariants::common::{
-    get_node_records_from_snapshot, InvariantCheckError, RegistrySnapshot,
+    get_node_records_from_snapshot,
+    InvariantCheckError,
+    RegistrySnapshot,
 };
 
 use std::{
     convert::TryFrom,
-    net::{IpAddr, Ipv4Addr, Ipv6Addr},
+    net::{
+        IpAddr,
+        Ipv4Addr,
+        Ipv6Addr,
+    },
     str,
 };
 
@@ -304,7 +310,10 @@ fn mask_ipv6(addr: Ipv6Addr, mask: Ipv6Addr) -> Ipv6Addr {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_base_types::{NodeId, PrincipalId};
+    use ic_base_types::{
+        NodeId,
+        PrincipalId,
+    };
     use ic_protobuf::registry::node::v1::NodeRecord;
     use ic_registry_keys::make_node_record_key;
     use prost::Message;

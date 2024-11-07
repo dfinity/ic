@@ -187,16 +187,27 @@
 #![forbid(unsafe_code)]
 
 use ic_crypto_internal_seed::XmdError;
-use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterPublicKey};
+use ic_types::crypto::canister_threshold_sig::{
+    ExtendedDerivationPath,
+    MasterPublicKey,
+};
 use ic_types::crypto::AlgorithmId;
-use ic_types::{NumberOfNodes, Randomness};
-use serde::{Deserialize, Serialize};
+use ic_types::{
+    NumberOfNodes,
+    Randomness,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::collections::BTreeMap;
 use strum::EnumIter;
 
 pub use ic_crypto_internal_seed::Seed;
 use ic_types::crypto::canister_threshold_sig::error::{
-    IDkgLoadTranscriptError, IDkgVerifyComplaintError, IDkgVerifyDealingPrivateError,
+    IDkgLoadTranscriptError,
+    IDkgVerifyComplaintError,
+    IDkgVerifyDealingPrivateError,
     IDkgVerifyTranscriptError,
 };
 pub use ic_types::crypto::canister_threshold_sig::PublicKey;
@@ -309,15 +320,21 @@ pub use crate::utils::poly::*;
 pub use crate::utils::ro::*;
 
 pub use crate::signing::bip340::{
-    ThresholdBip340CombinedSignatureInternal, ThresholdBip340SignatureShareInternal,
+    ThresholdBip340CombinedSignatureInternal,
+    ThresholdBip340SignatureShareInternal,
 };
 pub use crate::signing::ecdsa::{
-    ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaSigShareInternal,
+    ThresholdEcdsaCombinedSigInternal,
+    ThresholdEcdsaSigShareInternal,
 };
 pub use crate::signing::eddsa::{
-    ThresholdEd25519CombinedSignatureInternal, ThresholdEd25519SignatureShareInternal,
+    ThresholdEd25519CombinedSignatureInternal,
+    ThresholdEd25519SignatureShareInternal,
 };
-pub use crate::signing::key_derivation::{DerivationIndex, DerivationPath};
+pub use crate::signing::key_derivation::{
+    DerivationIndex,
+    DerivationPath,
+};
 
 /// Create MEGa encryption keypair
 pub fn gen_keypair(curve_type: EccCurveType, seed: Seed) -> (MEGaPublicKey, MEGaPrivateKey) {

@@ -1,8 +1,18 @@
-use anyhow::{format_err, Context, Result};
+use anyhow::{
+    format_err,
+    Context,
+    Result,
+};
 use ic_sys::fs::write_string_using_tmp_file;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
-use std::path::{Path, PathBuf};
+use std::io::{
+    BufRead,
+    BufReader,
+};
+use std::path::{
+    Path,
+    PathBuf,
+};
 use std::time::Duration;
 
 pub use metrics::FsTrimMetrics;

@@ -24,44 +24,92 @@ Success::
 end::catalog[] */
 use ic_backup::{
     backup_helper::last_checkpoint,
-    config::{ColdStorage, Config, SubnetConfig},
+    config::{
+        ColdStorage,
+        Config,
+        SubnetConfig,
+    },
 };
 use ic_base_types::SubnetId;
 use ic_consensus_system_test_utils::upgrade::bless_replica_version;
 use ic_consensus_system_test_utils::{
     rw_message::install_nns_and_check_progress,
     ssh_access::{
-        generate_key_strings, get_updatesubnetpayload_with_keys, update_subnet_record,
-        wait_until_authentication_is_granted, AuthMean,
+        generate_key_strings,
+        get_updatesubnetpayload_with_keys,
+        update_subnet_record,
+        wait_until_authentication_is_granted,
+        AuthMean,
     },
     upgrade::{
-        assert_assigned_replica_version, bless_public_replica_version,
-        deploy_guestos_to_all_subnet_nodes, get_assigned_replica_version, UpdateImageType,
+        assert_assigned_replica_version,
+        bless_public_replica_version,
+        deploy_guestos_to_all_subnet_nodes,
+        get_assigned_replica_version,
+        UpdateImageType,
     },
 };
 use ic_consensus_threshold_sig_system_test_utils::{
-    get_master_public_key, make_key_ids_for_all_schemes, run_chain_key_signature_test,
+    get_master_public_key,
+    make_key_ids_for_all_schemes,
+    run_chain_key_signature_test,
 };
-use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
+use ic_registry_subnet_features::{
+    ChainKeyConfig,
+    KeyConfig,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
-        ic::{InternetComputer, Subnet},
-        test_env::{HasIcPrepDir, TestEnv},
+        ic::{
+            InternetComputer,
+            Subnet,
+        },
+        test_env::{
+            HasIcPrepDir,
+            TestEnv,
+        },
         test_env_api::*,
     },
-    util::{block_on, get_nns_node, MessageCanister, UniversalCanister},
+    util::{
+        block_on,
+        get_nns_node,
+        MessageCanister,
+        UniversalCanister,
+    },
 };
-use ic_types::{Height, ReplicaVersion};
-use slog::{debug, error, info, Logger};
+use ic_types::{
+    Height,
+    ReplicaVersion,
+};
+use slog::{
+    debug,
+    error,
+    info,
+    Logger,
+};
 use std::fs::File;
 use std::{
     ffi::OsStr,
-    fs::{self, OpenOptions},
-    io::{Read, Seek, SeekFrom, Write},
+    fs::{
+        self,
+        OpenOptions,
+    },
+    io::{
+        Read,
+        Seek,
+        SeekFrom,
+        Write,
+    },
     net::IpAddr,
-    path::{Path, PathBuf},
-    process::{Command, Stdio},
+    path::{
+        Path,
+        PathBuf,
+    },
+    process::{
+        Command,
+        Stdio,
+    },
 };
 
 const DKG_INTERVAL: u64 = 9;

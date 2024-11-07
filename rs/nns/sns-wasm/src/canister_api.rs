@@ -1,6 +1,12 @@
 use async_trait::async_trait;
-use ic_base_types::{PrincipalId, SubnetId};
-use ic_types::{CanisterId, Cycles};
+use ic_base_types::{
+    PrincipalId,
+    SubnetId,
+};
+use ic_types::{
+    CanisterId,
+    Cycles,
+};
 
 #[async_trait]
 pub trait CanisterApi {

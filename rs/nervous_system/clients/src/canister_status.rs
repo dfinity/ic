@@ -1,6 +1,13 @@
 use crate::canister_id_record::CanisterIdRecord;
-use candid::{CandidType, Deserialize};
-use ic_base_types::{CanisterId, NumBytes, PrincipalId};
+use candid::{
+    CandidType,
+    Deserialize,
+};
+use ic_base_types::{
+    CanisterId,
+    NumBytes,
+    PrincipalId,
+};
 use ic_management_canister_types::IC_00;
 use ic_nervous_system_runtime::Runtime;
 use num_traits::cast::ToPrimitive;
@@ -396,8 +403,11 @@ mod tests {
     use super::*;
 
     use crate::canister_status::{
-        CanisterStatusResult, CanisterStatusResultFromManagementCanister, CanisterStatusType,
-        DefiniteCanisterSettings, DefiniteCanisterSettingsFromManagementCanister,
+        CanisterStatusResult,
+        CanisterStatusResultFromManagementCanister,
+        CanisterStatusType,
+        DefiniteCanisterSettings,
+        DefiniteCanisterSettingsFromManagementCanister,
     };
     use ic_base_types::PrincipalId;
 

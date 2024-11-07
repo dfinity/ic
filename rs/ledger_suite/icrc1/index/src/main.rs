@@ -1,9 +1,22 @@
 use candid::candid_method;
 use ic_base_types::CanisterId;
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
+use ic_canisters_http_types::{
+    HttpRequest,
+    HttpResponse,
+    HttpResponseBuilder,
+};
+use ic_cdk_macros::{
+    init,
+    post_upgrade,
+    pre_upgrade,
+    query,
+    update,
+};
 use ic_icrc1_index::{
-    encode_metrics, GetAccountTransactionsArgs, GetTransactionsResult, InitArgs,
+    encode_metrics,
+    GetAccountTransactionsArgs,
+    GetTransactionsResult,
+    InitArgs,
     ListSubaccountsArgs,
 };
 use icrc_ledger_types::icrc1::account::Subaccount;
@@ -83,7 +96,10 @@ fn __get_candid_interface_tmp_hack() -> &'static str {
 
 #[test]
 fn check_candid_interface() {
-    use candid_parser::utils::{service_equal, CandidSource};
+    use candid_parser::utils::{
+        service_equal,
+        CandidSource,
+    };
     use std::path::PathBuf;
 
     candid::export_service!();

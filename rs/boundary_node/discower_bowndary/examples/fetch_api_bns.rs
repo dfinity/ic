@@ -1,6 +1,9 @@
 use std::env;
 
-use ic_agent::{export::Principal, Agent};
+use ic_agent::{
+    export::Principal,
+    Agent,
+};
 
 const MAINNET_ROOT_SUBNET_ID: &str =
     "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe";

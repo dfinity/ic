@@ -1,4 +1,8 @@
-use crate::map::{MultiKeyMap, OccupiedError, OccupiedKey};
+use crate::map::{
+    MultiKeyMap,
+    OccupiedError,
+    OccupiedKey,
+};
 use phantom_newtype::Id;
 
 #[test]

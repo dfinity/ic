@@ -1,10 +1,18 @@
 use crate::setup::get_subnet_type;
 use ic_artifact_pool::{
-    consensus_pool::ConsensusPoolImpl, ensure_persistent_pool_replica_version_compatibility,
+    consensus_pool::ConsensusPoolImpl,
+    ensure_persistent_pool_replica_version_compatibility,
 };
-use ic_btc_adapter_client::{setup_bitcoin_adapter_clients, BitcoinAdapterClients};
+use ic_btc_adapter_client::{
+    setup_bitcoin_adapter_clients,
+    BitcoinAdapterClients,
+};
 use ic_btc_consensus::BitcoinPayloadBuilder;
-use ic_config::{artifact_pool::ArtifactPoolConfig, subnet_config::SubnetConfig, Config};
+use ic_config::{
+    artifact_pool::ArtifactPoolConfig,
+    subnet_config::SubnetConfig,
+    Config,
+};
 use ic_consensus::certification::VerifierImpl;
 use ic_crypto::CryptoComponent;
 use ic_cycles_account_manager::CyclesAccountManager;
@@ -12,13 +20,17 @@ use ic_execution_environment::ExecutionServices;
 use ic_http_endpoints_xnet::XNetEndpoint;
 use ic_https_outcalls_adapter_client::setup_canister_http_client;
 use ic_interfaces::{
-    execution_environment::QueryExecutionService, p2p::artifact_manager::JoinGuard,
+    execution_environment::QueryExecutionService,
+    p2p::artifact_manager::JoinGuard,
     time_source::SysTimeSource,
 };
 use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{info, ReplicaLogger};
+use ic_logger::{
+    info,
+    ReplicaLogger,
+};
 use ic_messaging::MessageRoutingImpl;
 use ic_metrics::MetricsRegistry;
 use ic_pprof::Pprof;
@@ -26,19 +38,34 @@ use ic_protobuf::types::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replica_setup_ic_network::setup_consensus_and_p2p;
 use ic_replicated_state::ReplicatedState;
-use ic_state_manager::{state_sync::StateSync, StateManagerImpl};
+use ic_state_manager::{
+    state_sync::StateSync,
+    StateManagerImpl,
+};
 use ic_tracing::ReloadHandles;
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
-    consensus::{CatchUpPackage, HasHeight},
+    consensus::{
+        CatchUpPackage,
+        HasHeight,
+    },
     messages::SignedIngress,
-    Height, NodeId, SubnetId,
+    Height,
+    NodeId,
+    SubnetId,
 };
 use ic_xnet_payload_builder::XNetPayloadBuilderImpl;
-use std::sync::{Arc, RwLock};
+use std::sync::{
+    Arc,
+    RwLock,
+};
 use tokio::sync::{
-    mpsc::{channel, UnboundedSender},
-    watch, OnceCell,
+    mpsc::{
+        channel,
+        UnboundedSender,
+    },
+    watch,
+    OnceCell,
 };
 
 /// The buffer size for the channel that [`IngressHistoryWriterImpl`] uses to send

@@ -1,72 +1,175 @@
 use crate::idkg::complaints::{
-    IDkgComplaintHandlerImpl, IDkgTranscriptLoader, TranscriptLoadStatus,
+    IDkgComplaintHandlerImpl,
+    IDkgTranscriptLoader,
+    TranscriptLoadStatus,
 };
-use crate::idkg::pre_signer::{IDkgPreSignerImpl, IDkgTranscriptBuilder};
-use crate::idkg::signer::{ThresholdSignatureBuilder, ThresholdSignerImpl};
+use crate::idkg::pre_signer::{
+    IDkgPreSignerImpl,
+    IDkgTranscriptBuilder,
+};
+use crate::idkg::signer::{
+    ThresholdSignatureBuilder,
+    ThresholdSignerImpl,
+};
 use ic_artifact_pool::idkg_pool::IDkgPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
-use ic_consensus_mocks::{dependencies, Dependencies};
+use ic_consensus_mocks::{
+    dependencies,
+    Dependencies,
+};
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_dealing_for_tests;
 use ic_crypto_test_utils_canister_threshold_sigs::{
-    setup_masked_random_params, CanisterThresholdSigTestEnvironment, IDkgParticipants, IntoBuilder,
+    setup_masked_random_params,
+    CanisterThresholdSigTestEnvironment,
+    IDkgParticipants,
+    IntoBuilder,
 };
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
-use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
-use ic_interfaces::idkg::{IDkgChangeAction, IDkgPool};
-use ic_interfaces_state_manager::{CertifiedStateSnapshot, Labeled};
+use ic_crypto_tree_hash::{
+    LabeledTree,
+    MixedHashTree,
+};
+use ic_interfaces::idkg::{
+    IDkgChangeAction,
+    IDkgPool,
+};
+use ic_interfaces_state_manager::{
+    CertifiedStateSnapshot,
+    Labeled,
+};
 use ic_logger::ReplicaLogger;
-use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId};
+use ic_management_canister_types::{
+    EcdsaKeyId,
+    MasterPublicKeyId,
+    SchnorrAlgorithm,
+    SchnorrKeyId,
+};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::{
-    EcdsaArguments, IDkgDealingsContext, SchnorrArguments, SignWithThresholdContext,
+    EcdsaArguments,
+    IDkgDealingsContext,
+    SchnorrArguments,
+    SignWithThresholdContext,
     ThresholdArguments,
 };
 use ic_replicated_state::ReplicatedState;
 use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
 use ic_test_utilities::state_manager::RefMockStateManager;
-use ic_test_utilities_consensus::{fake::*, IDkgStatsNoOp};
+use ic_test_utilities_consensus::{
+    fake::*,
+    IDkgStatsNoOp,
+};
 use ic_test_utilities_state::ReplicatedStateBuilder;
-use ic_test_utilities_types::ids::{node_test_id, NODE_1, NODE_2};
+use ic_test_utilities_types::ids::{
+    node_test_id,
+    NODE_1,
+    NODE_2,
+};
 use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::artifact::IDkgMessageId;
 use ic_types::consensus::certification::Certification;
 use ic_types::consensus::idkg::{
     self,
-    common::{CombinedSignature, PreSignatureRef, ThresholdSigInputsRef},
-    ecdsa::{PreSignatureQuadrupleRef, ThresholdEcdsaSigInputsRef},
-    schnorr::{PreSignatureTranscriptRef, ThresholdSchnorrSigInputsRef},
-    EcdsaSigShare, IDkgArtifactId, IDkgBlockReader, IDkgComplaintContent, IDkgMessage,
-    IDkgOpeningContent, IDkgPayload, IDkgReshareRequest, IDkgTranscriptAttributes,
-    IDkgTranscriptOperationRef, IDkgTranscriptParamsRef, KeyTranscriptCreation, MaskedTranscript,
-    MasterKeyTranscript, PreSigId, RequestId, ReshareOfMaskedParams, SignedIDkgComplaint,
-    SignedIDkgOpening, TranscriptAttributes, TranscriptLookupError, TranscriptRef,
+    common::{
+        CombinedSignature,
+        PreSignatureRef,
+        ThresholdSigInputsRef,
+    },
+    ecdsa::{
+        PreSignatureQuadrupleRef,
+        ThresholdEcdsaSigInputsRef,
+    },
+    schnorr::{
+        PreSignatureTranscriptRef,
+        ThresholdSchnorrSigInputsRef,
+    },
+    EcdsaSigShare,
+    IDkgArtifactId,
+    IDkgBlockReader,
+    IDkgComplaintContent,
+    IDkgMessage,
+    IDkgOpeningContent,
+    IDkgPayload,
+    IDkgReshareRequest,
+    IDkgTranscriptAttributes,
+    IDkgTranscriptOperationRef,
+    IDkgTranscriptParamsRef,
+    KeyTranscriptCreation,
+    MaskedTranscript,
+    MasterKeyTranscript,
+    PreSigId,
+    RequestId,
+    ReshareOfMaskedParams,
+    SignedIDkgComplaint,
+    SignedIDkgOpening,
+    TranscriptAttributes,
+    TranscriptLookupError,
+    TranscriptRef,
     UnmaskedTranscript,
 };
-use ic_types::consensus::idkg::{HasMasterPublicKeyId, SchnorrSigShare};
+use ic_types::consensus::idkg::{
+    HasMasterPublicKeyId,
+    SchnorrSigShare,
+};
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    IDkgComplaint, IDkgDealing, IDkgDealingSupport, IDkgMaskedTranscriptOrigin, IDkgOpening,
-    IDkgReceivers, IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
-    IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin, SignedIDkgDealing,
+    IDkgComplaint,
+    IDkgDealing,
+    IDkgDealingSupport,
+    IDkgMaskedTranscriptOrigin,
+    IDkgOpening,
+    IDkgReceivers,
+    IDkgTranscript,
+    IDkgTranscriptId,
+    IDkgTranscriptOperation,
+    IDkgTranscriptParams,
+    IDkgTranscriptType,
+    IDkgUnmaskedTranscriptOrigin,
+    SignedIDkgDealing,
 };
 use ic_types::crypto::canister_threshold_sig::{
-    ExtendedDerivationPath, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
-    ThresholdSchnorrSigInputs, ThresholdSchnorrSigShare,
+    ExtendedDerivationPath,
+    ThresholdEcdsaSigInputs,
+    ThresholdEcdsaSigShare,
+    ThresholdSchnorrSigInputs,
+    ThresholdSchnorrSigShare,
 };
 use ic_types::crypto::AlgorithmId;
 use ic_types::messages::CallbackId;
 use ic_types::time::UNIX_EPOCH;
-use ic_types::{signature::*, time};
-use ic_types::{Height, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId};
-use rand::{CryptoRng, Rng};
-use std::collections::{BTreeMap, BTreeSet};
+use ic_types::{
+    signature::*,
+    time,
+};
+use ic_types::{
+    Height,
+    NodeId,
+    PrincipalId,
+    Randomness,
+    RegistryVersion,
+    SubnetId,
+};
+use rand::{
+    CryptoRng,
+    Rng,
+};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
 use std::convert::TryFrom;
 use std::str::FromStr;
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    Arc,
+    Mutex,
+};
 use strum::IntoEnumIterator;
 
-use super::utils::{algorithm_for_key_id, get_context_request_id};
+use super::utils::{
+    algorithm_for_key_id,
+    get_context_request_id,
+};
 
 pub(crate) fn dealings_context_from_reshare_request(
     request: idkg::IDkgReshareRequest,

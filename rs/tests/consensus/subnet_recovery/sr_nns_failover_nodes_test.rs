@@ -26,26 +26,45 @@ use canister_http::get_universal_vm_address;
 use ic_agent::Agent;
 use ic_consensus_system_test_utils::{
     rw_message::{
-        can_read_msg, cannot_store_msg, cert_state_makes_progress_with_retries,
-        install_nns_and_check_progress, store_message,
+        can_read_msg,
+        cannot_store_msg,
+        cert_state_makes_progress_with_retries,
+        install_nns_and_check_progress,
+        store_message,
     },
     set_sandbox_env_vars,
 };
 use ic_recovery::nns_recovery_failover_nodes::{
-    NNSRecoveryFailoverNodes, NNSRecoveryFailoverNodesArgs, StepType,
+    NNSRecoveryFailoverNodes,
+    NNSRecoveryFailoverNodesArgs,
+    StepType,
 };
-use ic_recovery::{get_node_metrics, RecoveryArgs};
+use ic_recovery::{
+    get_node_metrics,
+    RecoveryArgs,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::constants::SSH_USERNAME;
 use ic_system_test_driver::driver::driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR;
 use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
-use ic_system_test_driver::driver::universal_vm::{
-    insert_file_to_config, UniversalVm, UniversalVms,
+use ic_system_test_driver::driver::ic::{
+    InternetComputer,
+    Subnet,
 };
-use ic_system_test_driver::driver::{test_env::TestEnv, test_env_api::*};
+use ic_system_test_driver::driver::universal_vm::{
+    insert_file_to_config,
+    UniversalVm,
+    UniversalVms,
+};
+use ic_system_test_driver::driver::{
+    test_env::TestEnv,
+    test_env_api::*,
+};
 use ic_system_test_driver::systest;
-use ic_system_test_driver::util::{block_on, MessageCanister};
+use ic_system_test_driver::util::{
+    block_on,
+    MessageCanister,
+};
 use ic_types::Height;
 use slog::info;
 use std::fs;

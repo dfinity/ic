@@ -1,17 +1,27 @@
 //! This module defines the certification component, which is responsible for
 //! reaching consensus on parts of the replicated state produced by the upper
 //! layers by signing state hashes.
-use ic_consensus_utils::crypto::{Aggregate, SignVerify};
-use ic_interfaces::crypto::{Crypto, ThresholdSigner};
+use ic_consensus_utils::crypto::{
+    Aggregate,
+    SignVerify,
+};
+use ic_interfaces::crypto::{
+    Crypto,
+    ThresholdSigner,
+};
 use ic_types::{
-    consensus::certification::CertificationContent, crypto::threshold_sig::ni_dkg::NiDkgId,
+    consensus::certification::CertificationContent,
+    crypto::threshold_sig::ni_dkg::NiDkgId,
     signature::*,
 };
 
 mod certifier;
 mod verifier;
 
-pub use certifier::{CertifierBouncer, CertifierImpl};
+pub use certifier::{
+    CertifierBouncer,
+    CertifierImpl,
+};
 pub use verifier::VerifierImpl;
 
 /// A trait that encompasses all crypto signing/verification interface required

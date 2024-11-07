@@ -165,8 +165,17 @@ pub fn named_num<V: Visitor, Name: AsRef<[u8]>>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_visitors::{PathError, PathVisitor, TraceEntry, TracingVisitor, Value};
-    use TraceEntry::{EndSubtree, StartSubtree};
+    use crate::test_visitors::{
+        PathError,
+        PathVisitor,
+        TraceEntry,
+        TracingVisitor,
+        Value,
+    };
+    use TraceEntry::{
+        EndSubtree,
+        StartSubtree,
+    };
 
     fn enter<Name: AsRef<[u8]>>(name: Name) -> TraceEntry {
         TraceEntry::EnterEdge(name.as_ref().to_vec())

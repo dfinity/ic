@@ -1,12 +1,26 @@
 use std::time::Duration;
 
-use anyhow::{anyhow, Context, Error};
+use anyhow::{
+    anyhow,
+    Context,
+    Error,
+};
 use async_trait::async_trait;
 use instant_acme::{
-    Account, Authorization, Challenge, ChallengeType, Identifier, NewOrder, OrderStatus,
+    Account,
+    Authorization,
+    Challenge,
+    ChallengeType,
+    Identifier,
+    NewOrder,
+    OrderStatus,
 };
 use mockall::automock;
-use rcgen::{CertificateParams, DistinguishedName, KeyPair};
+use rcgen::{
+    CertificateParams,
+    DistinguishedName,
+    KeyPair,
+};
 use tokio::time::sleep;
 use zeroize::Zeroize;
 

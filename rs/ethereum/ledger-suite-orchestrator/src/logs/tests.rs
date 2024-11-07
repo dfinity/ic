@@ -1,5 +1,13 @@
-use crate::logs::{Log, LogEntry, Priority, Sort};
-use proptest::{prop_assert, proptest};
+use crate::logs::{
+    Log,
+    LogEntry,
+    Priority,
+    Sort,
+};
+use proptest::{
+    prop_assert,
+    proptest,
+};
 
 fn info_log_entry_with_timestamp(timestamp: u64) -> LogEntry {
     LogEntry {

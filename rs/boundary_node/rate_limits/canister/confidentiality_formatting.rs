@@ -2,8 +2,14 @@ use mockall::automock;
 use std::marker::PhantomData;
 
 use crate::{
-    access_control::{AccessLevel, ResolveAccessLevel},
-    types::{OutputConfig, OutputRuleMetadata},
+    access_control::{
+        AccessLevel,
+        ResolveAccessLevel,
+    },
+    types::{
+        OutputConfig,
+        OutputRuleMetadata,
+    },
 };
 
 /// Trait for formatting confidential data based on access levels

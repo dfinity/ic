@@ -1,8 +1,21 @@
 use crate::logs::P0;
-use crate::state::eventlog::{replay, Event};
-use crate::state::{replace_state, Mode};
-use crate::storage::{count_events, events, record_event};
-use candid::{CandidType, Deserialize};
+use crate::state::eventlog::{
+    replay,
+    Event,
+};
+use crate::state::{
+    replace_state,
+    Mode,
+};
+use crate::storage::{
+    count_events,
+    events,
+    record_event,
+};
+use candid::{
+    CandidType,
+    Deserialize,
+};
 use ic_base_types::CanisterId;
 use ic_canister_log::log;
 use serde::Serialize;

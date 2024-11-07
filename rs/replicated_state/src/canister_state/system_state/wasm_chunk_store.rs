@@ -1,12 +1,28 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::{
+    collections::BTreeMap,
+    sync::Arc,
+};
 
-use ic_protobuf::{proxy::ProxyDecodeError, state::canister_state_bits::v1 as pb};
-use ic_sys::{PageBytes, PageIndex, PAGE_SIZE};
-use ic_types::{NumBytes, NumOsPages};
+use ic_protobuf::{
+    proxy::ProxyDecodeError,
+    state::canister_state_bits::v1 as pb,
+};
+use ic_sys::{
+    PageBytes,
+    PageIndex,
+    PAGE_SIZE,
+};
+use ic_types::{
+    NumBytes,
+    NumOsPages,
+};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 
-use crate::{page_map::PageAllocatorFileDescriptor, PageMap};
+use crate::{
+    page_map::PageAllocatorFileDescriptor,
+    PageMap,
+};
 
 const PAGES_PER_CHUNK: u64 = 256;
 const CHUNK_SIZE: u64 = PAGES_PER_CHUNK * (PAGE_SIZE as u64);

@@ -1,5 +1,8 @@
 use ic_base_types::PrincipalId;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 #[derive(Copy, Clone, Debug, Deserialize, Serialize)]
 pub struct IndexCanister {

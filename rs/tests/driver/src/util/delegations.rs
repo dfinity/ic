@@ -1,21 +1,53 @@
-use crate::util::{expiry_time, sign_query, sign_update};
+use crate::util::{
+    expiry_time,
+    sign_query,
+    sign_update,
+};
 
-use candid::{CandidType, Deserialize, Principal};
+use candid::{
+    CandidType,
+    Deserialize,
+    Principal,
+};
 use canister_test::PrincipalId;
-use ic_agent::identity::{BasicIdentity, Identity};
-use ic_agent::{agent::EnvelopeContent, Agent};
+use ic_agent::identity::{
+    BasicIdentity,
+    Identity,
+};
+use ic_agent::{
+    agent::EnvelopeContent,
+    Agent,
+};
 use ic_crypto_tree_hash::Path;
 use ic_types::messages::{
-    Blob, Certificate, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpQueryResponse,
-    HttpReadState, HttpReadStateContent, HttpReadStateResponse, HttpRequestEnvelope, HttpUserQuery,
+    Blob,
+    Certificate,
+    HttpCallContent,
+    HttpCanisterUpdate,
+    HttpQueryContent,
+    HttpQueryResponse,
+    HttpReadState,
+    HttpReadStateContent,
+    HttpReadStateResponse,
+    HttpRequestEnvelope,
+    HttpUserQuery,
     MessageId,
 };
 use ic_types::Time;
-use ic_universal_canister::{wasm, UNIVERSAL_CANISTER_WASM};
+use ic_universal_canister::{
+    wasm,
+    UNIVERSAL_CANISTER_WASM,
+};
 use ic_utils::interfaces::ManagementCanister;
-use reqwest::{Client, Response};
+use reqwest::{
+    Client,
+    Response,
+};
 use serde_bytes::ByteBuf;
-use std::time::{Duration, Instant};
+use std::time::{
+    Duration,
+    Instant,
+};
 
 pub const COUNTER_CANISTER_WAT: &str = "rs/tests/counter.wat";
 pub const UPDATE_POLLING_TIMEOUT: Duration = Duration::from_secs(10);

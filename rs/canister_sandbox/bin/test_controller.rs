@@ -1,10 +1,18 @@
 use ic_canister_sandbox_backend_lib::{
     controller_service::ControllerService,
     process,
-    protocol::{ctlsvc, id::WasmId, logging::LogRequest, sbxsvc},
+    protocol::{
+        ctlsvc,
+        id::WasmId,
+        logging::LogRequest,
+        sbxsvc,
+    },
     rpc,
 };
-use std::sync::{atomic::AtomicBool, Arc};
+use std::sync::{
+    atomic::AtomicBool,
+    Arc,
+};
 
 struct DummyControllerService {}
 

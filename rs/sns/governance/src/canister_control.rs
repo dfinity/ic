@@ -1,19 +1,33 @@
 use crate::{
     governance::log_prefix,
-    logs::{ERROR, INFO},
+    logs::{
+        ERROR,
+        INFO,
+    },
     pb::v1::{
-        governance_error::ErrorType, ExecuteGenericNervousSystemFunction, GovernanceError,
+        governance_error::ErrorType,
+        ExecuteGenericNervousSystemFunction,
+        GovernanceError,
         NervousSystemFunction,
     },
     proposal::ValidGenericNervousSystemFunction,
     types::Environment,
 };
-use candid::{Decode, Encode};
-use ic_base_types::{CanisterId, PrincipalId};
+use candid::{
+    Decode,
+    Encode,
+};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_canister_log::log;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
-    canister_status::{CanisterStatusResultFromManagementCanister, CanisterStatusType},
+    canister_status::{
+        CanisterStatusResultFromManagementCanister,
+        CanisterStatusType,
+    },
 };
 use std::convert::TryFrom;
 

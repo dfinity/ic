@@ -1,9 +1,18 @@
 //! Module dealing with the lifecycle methods of the ckETH Minter.
 use crate::lifecycle::init::InitArg;
 use crate::lifecycle::upgrade::UpgradeArg;
-use candid::{CandidType, Deserialize};
-use minicbor::{Decode, Encode};
-use std::fmt::{Display, Formatter};
+use candid::{
+    CandidType,
+    Deserialize,
+};
+use minicbor::{
+    Decode,
+    Encode,
+};
+use std::fmt::{
+    Display,
+    Formatter,
+};
 
 #[cfg(test)]
 mod tests;

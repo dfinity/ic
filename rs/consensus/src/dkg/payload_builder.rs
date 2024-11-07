@@ -1,36 +1,79 @@
 use super::{
-    utils, MAX_REMOTE_DKGS_PER_INTERVAL, MAX_REMOTE_DKG_ATTEMPTS,
-    REMOTE_DKG_REPEATED_FAILURE_ERROR, TAGS,
+    utils,
+    MAX_REMOTE_DKGS_PER_INTERVAL,
+    MAX_REMOTE_DKG_ATTEMPTS,
+    REMOTE_DKG_REPEATED_FAILURE_ERROR,
+    TAGS,
 };
-use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
-use ic_interfaces::{crypto::ErrorReproducibility, dkg::DkgPool};
+use ic_consensus_utils::{
+    crypto::ConsensusCrypto,
+    pool_reader::PoolReader,
+};
+use ic_interfaces::{
+    crypto::ErrorReproducibility,
+    dkg::DkgPool,
+};
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::{StateManager, StateManagerError};
-use ic_logger::{error, warn, ReplicaLogger};
+use ic_interfaces_state_manager::{
+    StateManager,
+    StateManagerError,
+};
+use ic_logger::{
+    error,
+    warn,
+    ReplicaLogger,
+};
 use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
 use ic_registry_client_helpers::{
-    crypto::{initial_ni_dkg_transcript_from_registry_record, DkgTranscripts},
+    crypto::{
+        initial_ni_dkg_transcript_from_registry_record,
+        DkgTranscripts,
+    },
     subnet::SubnetRegistry,
 };
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::ValidationContext,
-    consensus::{dkg, dkg::Summary, get_faults_tolerated, Block},
+    consensus::{
+        dkg,
+        dkg::Summary,
+        get_faults_tolerated,
+        Block,
+    },
     crypto::{
         threshold_sig::ni_dkg::{
-            config::{errors::NiDkgConfigValidationError, NiDkgConfig, NiDkgConfigData},
+            config::{
+                errors::NiDkgConfigValidationError,
+                NiDkgConfig,
+                NiDkgConfigData,
+            },
             errors::create_transcript_error::DkgCreateTranscriptError,
-            NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet, NiDkgTranscript,
+            NiDkgDealing,
+            NiDkgId,
+            NiDkgTag,
+            NiDkgTargetId,
+            NiDkgTargetSubnet,
+            NiDkgTranscript,
         },
         CryptoError,
     },
     messages::CallbackId,
     registry::RegistryClientError,
-    Height, NodeId, NumberOfNodes, RegistryVersion, SubnetId,
+    Height,
+    NodeId,
+    NumberOfNodes,
+    RegistryVersion,
+    SubnetId,
 };
 use std::{
-    collections::{BTreeMap, BTreeSet},
-    sync::{Arc, RwLock},
+    collections::{
+        BTreeMap,
+        BTreeSet,
+    },
+    sync::{
+        Arc,
+        RwLock,
+    },
     time::Duration,
 };
 
@@ -793,18 +836,29 @@ pub fn make_genesis_summary(
 
 #[cfg(test)]
 mod tests {
-    use super::{super::test_utils::complement_state_manager_with_remote_dkg_requests, *};
+    use super::{
+        super::test_utils::complement_state_manager_with_remote_dkg_requests,
+        *,
+    };
     use ic_consensus_mocks::{
-        dependencies_with_subnet_params, dependencies_with_subnet_records_with_raw_state_manager,
+        dependencies_with_subnet_params,
+        dependencies_with_subnet_records_with_raw_state_manager,
         Dependencies,
     };
     use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::SubnetRecordBuilder;
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::{
+        node_test_id,
+        subnet_test_id,
+    };
     use ic_types::{
-        crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+        crypto::threshold_sig::ni_dkg::{
+            NiDkgId,
+            NiDkgTag,
+            NiDkgTargetSubnet,
+        },
         time::UNIX_EPOCH,
         RegistryVersion,
     };

@@ -1,4 +1,7 @@
-use candid::{CandidType, Deserialize};
+use candid::{
+    CandidType,
+    Deserialize,
+};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_base_types::NodeId;
@@ -7,9 +10,15 @@ use ic_registry_transport::update;
 use prost::Message;
 use serde::Serialize;
 
-use crate::{common::LOG_PREFIX, registry::Registry};
+use crate::{
+    common::LOG_PREFIX,
+    registry::Registry,
+};
 
-use super::common::{check_api_boundary_nodes_exist, check_replica_version_is_blessed};
+use super::common::{
+    check_api_boundary_nodes_exist,
+    check_replica_version_is_blessed,
+};
 
 /// Deprecated; please use `DeployGuestosToSomeApiBoundaryNodes` instead.
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
@@ -80,21 +89,34 @@ impl Registry {
 mod tests {
     use std::str::FromStr;
 
-    use ic_base_types::{NodeId, PrincipalId};
+    use ic_base_types::{
+        NodeId,
+        PrincipalId,
+    };
     use ic_protobuf::registry::{
         api_boundary_node::v1::ApiBoundaryNodeRecord,
-        replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
+        replica_version::v1::{
+            BlessedReplicaVersions,
+            ReplicaVersionRecord,
+        },
     };
     use ic_registry_keys::{
-        make_api_boundary_node_record_key, make_blessed_replica_versions_key,
+        make_api_boundary_node_record_key,
+        make_blessed_replica_versions_key,
         make_replica_version_key,
     };
-    use ic_registry_transport::{insert, upsert};
+    use ic_registry_transport::{
+        insert,
+        upsert,
+    };
     use ic_types::ReplicaVersion;
     use prost::Message;
 
     use crate::{
-        common::test_helpers::{invariant_compliant_registry, prepare_registry_with_nodes},
+        common::test_helpers::{
+            invariant_compliant_registry,
+            prepare_registry_with_nodes,
+        },
         mutations::common::test::TEST_NODE_ID,
     };
 

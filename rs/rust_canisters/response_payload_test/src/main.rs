@@ -1,5 +1,8 @@
 //! This module contains a canister used for testing responses with variable payload size
-use candid::{CandidType, Deserialize};
+use candid::{
+    CandidType,
+    Deserialize,
+};
 use ic_cdk_macros::query;
 use serde::Serialize;
 

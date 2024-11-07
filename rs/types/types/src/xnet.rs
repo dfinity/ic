@@ -1,11 +1,17 @@
 //! Types used by the Xnet component.
 use crate::ProxyDecodeError;
-use crate::{consensus::certification::Certification, messages::RequestOrResponse};
+use crate::{
+    consensus::certification::Certification,
+    messages::RequestOrResponse,
+};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::state::queues::v1 as pb_queues;
 use phantom_newtype::AmountOf;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::collections::VecDeque;
 use strum_macros::EnumIter;
 
@@ -380,7 +386,12 @@ pub struct CertifiedStreamSlice {
 }
 
 pub mod testing {
-    use super::{StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue};
+    use super::{
+        StreamFlags,
+        StreamHeader,
+        StreamIndex,
+        StreamIndexedQueue,
+    };
     use crate::messages::RequestOrResponse;
 
     /// Provides test-only methods for `StreamHeader`.

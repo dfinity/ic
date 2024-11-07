@@ -1,9 +1,17 @@
 use ic_replicated_state::metadata_state::subnet_call_context_manager::{
-    SetupInitialDkgContext, SubnetCallContext,
+    SetupInitialDkgContext,
+    SubnetCallContext,
 };
 use ic_test_utilities::state_manager::RefMockStateManager;
-use ic_test_utilities_types::{ids::node_test_id, messages::RequestBuilder};
-use ic_types::{crypto::threshold_sig::ni_dkg::NiDkgTargetId, Height, RegistryVersion};
+use ic_test_utilities_types::{
+    ids::node_test_id,
+    messages::RequestBuilder,
+};
+use ic_types::{
+    crypto::threshold_sig::ni_dkg::NiDkgTargetId,
+    Height,
+    RegistryVersion,
+};
 use std::sync::Arc;
 
 pub(super) fn complement_state_manager_with_remote_dkg_requests(

@@ -1,31 +1,63 @@
 use std::{
-    sync::{Arc, RwLock},
+    sync::{
+        Arc,
+        RwLock,
+    },
     time::Duration,
 };
 
 use axum::{
-    extract::{DefaultBodyLimit, State},
-    http::{Request, StatusCode},
+    extract::{
+        DefaultBodyLimit,
+        State,
+    },
+    http::{
+        Request,
+        StatusCode,
+    },
     routing::any,
     Router,
 };
-use backoff::{backoff::Backoff, ExponentialBackoffBuilder};
+use backoff::{
+    backoff::Backoff,
+    ExponentialBackoffBuilder,
+};
 use bytes::Bytes;
 use ic_base_types::NodeId;
 use ic_interfaces::p2p::consensus::{
-    Aborted, ArtifactAssembler, Bouncer, BouncerFactory, BouncerValue, Peers, ValidatedPoolReader,
+    Aborted,
+    ArtifactAssembler,
+    Bouncer,
+    BouncerFactory,
+    BouncerValue,
+    Peers,
+    ValidatedPoolReader,
 };
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{
+    warn,
+    ReplicaLogger,
+};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::proxy::ProtoProxy;
 use ic_quic_transport::Transport;
-use ic_types::artifact::{IdentifiableArtifact, PbArtifact};
-use rand::{rngs::SmallRng, seq::IteratorRandom, SeedableRng};
+use ic_types::artifact::{
+    IdentifiableArtifact,
+    PbArtifact,
+};
+use rand::{
+    rngs::SmallRng,
+    seq::IteratorRandom,
+    SeedableRng,
+};
 use tokio::{
     runtime::Handle,
     sync::watch,
     task::JoinHandle,
-    time::{sleep_until, timeout_at, Instant},
+    time::{
+        sleep_until,
+        timeout_at,
+        Instant,
+    },
 };
 use tracing::instrument;
 

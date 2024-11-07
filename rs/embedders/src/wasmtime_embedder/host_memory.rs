@@ -3,8 +3,12 @@ use std::io::Error;
 use std::ops::Deref;
 use std::ptr;
 use std::sync::{
-    atomic::{AtomicUsize, Ordering},
-    Arc, Mutex,
+    atomic::{
+        AtomicUsize,
+        Ordering,
+    },
+    Arc,
+    Mutex,
 };
 
 use anyhow::bail;
@@ -12,9 +16,19 @@ use ic_sys::PAGE_SIZE;
 use ic_types::MAX_STABLE_MEMORY_IN_BYTES;
 use libc::c_void;
 use libc::MAP_FAILED;
-use libc::{mmap, munmap};
-use libc::{MAP_ANON, MAP_PRIVATE, PROT_NONE};
-use wasmtime::{LinearMemory, MemoryType};
+use libc::{
+    mmap,
+    munmap,
+};
+use libc::{
+    MAP_ANON,
+    MAP_PRIVATE,
+    PROT_NONE,
+};
+use wasmtime::{
+    LinearMemory,
+    MemoryType,
+};
 use wasmtime_environ::WASM32_MAX_SIZE;
 
 use crate::MIN_GUARD_REGION_SIZE;

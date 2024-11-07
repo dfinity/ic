@@ -1,7 +1,13 @@
 use colored::*;
 use core::future::Future;
 use tester::{
-    assert_test_result, test_main, DynTestFn, ShouldPanic, StaticTestName, TestDesc, TestDescAndFn,
+    assert_test_result,
+    test_main,
+    DynTestFn,
+    ShouldPanic,
+    StaticTestName,
+    TestDesc,
+    TestDescAndFn,
     TestType,
 };
 

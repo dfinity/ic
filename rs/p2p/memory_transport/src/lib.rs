@@ -37,22 +37,35 @@ use anyhow::anyhow;
 use async_trait::async_trait;
 use axum::{
     body::Body,
-    http::{Request, Response},
+    http::{
+        Request,
+        Response,
+    },
     Router,
 };
 use bytes::Bytes;
-use ic_quic_transport::{ConnId, Transport};
+use ic_quic_transport::{
+    ConnId,
+    Transport,
+};
 use ic_types::NodeId;
 use std::{
     collections::HashMap,
-    sync::{Arc, RwLock},
+    sync::{
+        Arc,
+        RwLock,
+    },
     time::Duration,
 };
 use tokio::{
     select,
     sync::{
-        mpsc::{unbounded_channel, UnboundedSender},
-        oneshot, Semaphore,
+        mpsc::{
+            unbounded_channel,
+            UnboundedSender,
+        },
+        oneshot,
+        Semaphore,
     },
 };
 use tower::ServiceExt;

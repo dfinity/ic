@@ -1,4 +1,7 @@
-use std::path::{Path, PathBuf};
+use std::path::{
+    Path,
+    PathBuf,
+};
 
 fn write(root: &Path, name: &str, wat: &str) {
     std::fs::write(

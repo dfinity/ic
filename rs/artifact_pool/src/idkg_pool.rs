@@ -8,32 +8,63 @@
 //!    one for every type of IDkgMessage (dealing, dealing support, etc)
 
 use crate::{
-    metrics::{IDkgPoolMetrics, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED},
+    metrics::{
+        IDkgPoolMetrics,
+        POOL_TYPE_UNVALIDATED,
+        POOL_TYPE_VALIDATED,
+    },
     IntoInner,
 };
-use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
+use ic_config::artifact_pool::{
+    ArtifactPoolConfig,
+    PersistentPoolBackend,
+};
 use ic_interfaces::p2p::consensus::{
-    ArtifactTransmit, ArtifactTransmits, ArtifactWithOpt, MutablePool, UnvalidatedArtifact,
+    ArtifactTransmit,
+    ArtifactTransmits,
+    ArtifactWithOpt,
+    MutablePool,
+    UnvalidatedArtifact,
     ValidatedPoolReader,
 };
 use ic_interfaces::{
     idkg::{
-        IDkgChangeAction, IDkgChangeSet, IDkgPool, IDkgPoolSection, IDkgPoolSectionOp,
-        IDkgPoolSectionOps, MutableIDkgPoolSection,
+        IDkgChangeAction,
+        IDkgChangeSet,
+        IDkgPool,
+        IDkgPoolSection,
+        IDkgPoolSectionOp,
+        IDkgPoolSectionOps,
+        MutableIDkgPoolSection,
     },
     time_source::TimeSource,
 };
-use ic_logger::{info, warn, ReplicaLogger};
+use ic_logger::{
+    info,
+    warn,
+    ReplicaLogger,
+};
 use ic_metrics::MetricsRegistry;
 use ic_types::artifact::IDkgMessageId;
 use ic_types::consensus::{
     idkg::{
-        EcdsaSigShare, IDkgArtifactId, IDkgMessage, IDkgMessageType, IDkgPrefixOf, IDkgStats,
-        SchnorrSigShare, SigShare, SignedIDkgComplaint, SignedIDkgOpening,
+        EcdsaSigShare,
+        IDkgArtifactId,
+        IDkgMessage,
+        IDkgMessageType,
+        IDkgPrefixOf,
+        IDkgStats,
+        SchnorrSigShare,
+        SigShare,
+        SignedIDkgComplaint,
+        SignedIDkgOpening,
     },
     CatchUpPackage,
 };
-use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing};
+use ic_types::crypto::canister_threshold_sig::idkg::{
+    IDkgDealingSupport,
+    SignedIDkgDealing,
+};
 use prometheus::IntCounter;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
@@ -493,16 +524,36 @@ mod tests {
     use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_dealing_for_tests;
     use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_transcript_id_for_tests;
     use ic_metrics::MetricsRegistry;
-    use ic_test_utilities_consensus::{fake::*, IDkgStatsNoOp};
+    use ic_test_utilities_consensus::{
+        fake::*,
+        IDkgStatsNoOp,
+    };
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_test_utilities_types::ids::{NODE_1, NODE_2, NODE_3, NODE_4, NODE_5, NODE_6};
+    use ic_test_utilities_types::ids::{
+        NODE_1,
+        NODE_2,
+        NODE_3,
+        NODE_4,
+        NODE_5,
+        NODE_6,
+    };
     use ic_types::artifact::IdentifiableArtifact;
     use ic_types::consensus::idkg::IDkgComplaintContent;
-    use ic_types::consensus::idkg::{dealing_support_prefix, IDkgObject};
+    use ic_types::consensus::idkg::{
+        dealing_support_prefix,
+        IDkgObject,
+    };
     use ic_types::crypto::canister_threshold_sig::idkg::IDkgComplaint;
     use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
-    use ic_types::crypto::{CryptoHash, CryptoHashOf};
-    use ic_types::{signature::BasicSignature, time::UNIX_EPOCH, NodeId};
+    use ic_types::crypto::{
+        CryptoHash,
+        CryptoHashOf,
+    };
+    use ic_types::{
+        signature::BasicSignature,
+        time::UNIX_EPOCH,
+        NodeId,
+    };
     use std::collections::BTreeSet;
 
     fn create_idkg_pool(config: ArtifactPoolConfig, log: ReplicaLogger) -> IDkgPoolImpl {

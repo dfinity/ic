@@ -4,10 +4,20 @@
 // the warnings (the code is defined in another module).
 #![allow(clippy::unit_arg)]
 
-use ic_crypto_internal_bls12_381_type::{G1Projective, G2Projective, Scalar};
+use ic_crypto_internal_bls12_381_type::{
+    G1Projective,
+    G2Projective,
+    Scalar,
+};
 use ic_crypto_secrets_containers::SecretArray;
-use serde::{Deserialize, Serialize};
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use zeroize::{
+    Zeroize,
+    ZeroizeOnDrop,
+};
 
 // A polynomial is a vector of (usually secret) field elements
 pub(crate) use ic_crypto_internal_bls12_381_type::Polynomial;

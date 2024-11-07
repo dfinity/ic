@@ -1,33 +1,87 @@
-use candid::{Decode, Encode};
-use ic_canisters_http_types::{HttpRequest, HttpResponse};
+use candid::{
+    Decode,
+    Encode,
+};
+use ic_canisters_http_types::{
+    HttpRequest,
+    HttpResponse,
+};
 use ic_icrc1_test_utils::KeyPairGenerator;
 use ic_rosetta_api::convert::{
-    from_hex, from_model_account_identifier, operations_to_requests, to_hex,
+    from_hex,
+    from_model_account_identifier,
+    operations_to_requests,
+    to_hex,
     to_model_account_identifier,
 };
-use ic_rosetta_api::models::amount::{signed_amount, tokens_to_amount};
+use ic_rosetta_api::models::amount::{
+    signed_amount,
+    tokens_to_amount,
+};
 use ic_rosetta_api::models::operation::OperationType;
 use ic_rosetta_api::models::{
-    ConstructionCombineResponse, ConstructionParseResponse, ConstructionPayloadsRequestMetadata,
-    ConstructionPayloadsResponse, CurveType, PublicKey, Signature, SignatureType,
+    ConstructionCombineResponse,
+    ConstructionParseResponse,
+    ConstructionPayloadsRequestMetadata,
+    ConstructionPayloadsResponse,
+    CurveType,
+    PublicKey,
+    Signature,
+    SignatureType,
     SignedTransaction,
 };
-use ic_rosetta_api::models::{ConstructionSubmitResponse, Error as RosettaError};
+use ic_rosetta_api::models::{
+    ConstructionSubmitResponse,
+    Error as RosettaError,
+};
 use ic_rosetta_api::request::request_result::RequestResult;
 use ic_rosetta_api::request::transaction_operation_results::TransactionOperationResults;
 use ic_rosetta_api::request::transaction_results::TransactionResults;
 use ic_rosetta_api::request::Request;
 use ic_rosetta_api::request_types::{
-    AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons, MergeMaturity, NeuronInfo,
-    RegisterVote, RemoveHotKey, SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve,
+    AddHotKey,
+    ChangeAutoStakeMaturity,
+    Disburse,
+    Follow,
+    ListNeurons,
+    MergeMaturity,
+    NeuronInfo,
+    RegisterVote,
+    RemoveHotKey,
+    SetDissolveTimestamp,
+    Spawn,
+    Stake,
+    StakeMaturity,
+    StartDissolve,
     StopDissolve,
 };
 use ic_rosetta_api::transaction_id::TransactionIdentifier;
-use ic_rosetta_api::{convert, errors, errors::ApiError, DEFAULT_TOKEN_SYMBOL};
-use ic_state_machine_tests::{StateMachine, WasmResult};
-use ic_types::{messages::Blob, time, CanisterId, PrincipalId};
-use icp_ledger::{AccountIdentifier, BlockIndex, Operation, Tokens};
-use rand::{seq::SliceRandom, thread_rng};
+use ic_rosetta_api::{
+    convert,
+    errors,
+    errors::ApiError,
+    DEFAULT_TOKEN_SYMBOL,
+};
+use ic_state_machine_tests::{
+    StateMachine,
+    WasmResult,
+};
+use ic_types::{
+    messages::Blob,
+    time,
+    CanisterId,
+    PrincipalId,
+};
+use icp_ledger::{
+    AccountIdentifier,
+    BlockIndex,
+    Operation,
+    Tokens,
+};
+use rand::{
+    seq::SliceRandom,
+    thread_rng,
+};
 use rosetta_api_serv::RosettaApiHandle;
 use rosetta_core::convert::principal_id_from_public_key;
 pub use rosetta_core::models::Ed25519KeyPair as EdKeypair;
@@ -35,7 +89,10 @@ use rosetta_core::models::RosettaSupportedKeyPair;
 use rosetta_core::models::Secp256k1KeyPair;
 use serde_bytes::ByteBuf;
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::{
+    Path,
+    PathBuf,
+};
 use std::str::FromStr;
 use std::sync::Arc;
 

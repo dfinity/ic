@@ -8,13 +8,22 @@
 use std::{
     collections::BTreeMap,
     convert::TryInto,
-    fs::{self, File},
+    fs::{
+        self,
+        File,
+    },
     io,
-    path::{Path, PathBuf},
+    path::{
+        Path,
+        PathBuf,
+    },
     str::FromStr,
 };
 
-use anyhow::{anyhow, Result};
+use anyhow::{
+    anyhow,
+    Result,
+};
 
 use prost::Message;
 use serde_json::Value;
@@ -24,47 +33,85 @@ use x509_cert::der; // re-export of der crate
 use x509_cert::spki; // re-export of spki crate
 
 use ic_interfaces_registry::{
-    RegistryDataProvider, RegistryTransportRecord, ZERO_REGISTRY_VERSION,
+    RegistryDataProvider,
+    RegistryTransportRecord,
+    ZERO_REGISTRY_VERSION,
 };
 use ic_protobuf::registry::firewall::v1::{
-    FirewallAction, FirewallRule, FirewallRuleDirection, FirewallRuleSet,
+    FirewallAction,
+    FirewallRule,
+    FirewallRuleDirection,
+    FirewallRuleSet,
 };
 use ic_protobuf::registry::{
     api_boundary_node::v1::ApiBoundaryNodeRecord,
     node_operator::v1::NodeOperatorRecord,
     provisional_whitelist::v1::ProvisionalWhitelist as PbProvisionalWhitelist,
-    replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
+    replica_version::v1::{
+        BlessedReplicaVersions,
+        ReplicaVersionRecord,
+    },
     routing_table::v1::RoutingTable as PbRoutingTable,
     subnet::v1::SubnetListRecord,
     unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
 };
-use ic_protobuf::types::v1::{PrincipalId as PrincipalIdProto, SubnetId as SubnetIdProto};
+use ic_protobuf::types::v1::{
+    PrincipalId as PrincipalIdProto,
+    SubnetId as SubnetIdProto,
+};
 use ic_registry_client::client::RegistryDataProviderError;
 use ic_registry_keys::{
-    make_api_boundary_node_record_key, make_blessed_replica_versions_key,
-    make_firewall_rules_record_key, make_node_operator_record_key,
-    make_provisional_whitelist_record_key, make_replica_version_key, make_routing_table_record_key,
-    make_subnet_list_record_key, make_unassigned_nodes_config_record_key, FirewallRulesScope,
+    make_api_boundary_node_record_key,
+    make_blessed_replica_versions_key,
+    make_firewall_rules_record_key,
+    make_node_operator_record_key,
+    make_provisional_whitelist_record_key,
+    make_replica_version_key,
+    make_routing_table_record_key,
+    make_subnet_list_record_key,
+    make_unassigned_nodes_config_record_key,
+    FirewallRulesScope,
     ROOT_SUBNET_ID_KEY,
 };
-use ic_registry_local_store::{Changelog, KeyMutation, LocalStoreImpl, LocalStoreWriter};
+use ic_registry_local_store::{
+    Changelog,
+    KeyMutation,
+    LocalStoreImpl,
+    LocalStoreWriter,
+};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{
-    routing_table_insert_subnet, CanisterIdRange, RoutingTable, WellFormedError,
+    routing_table_insert_subnet,
+    CanisterIdRange,
+    RoutingTable,
+    WellFormedError,
     CANISTER_IDS_PER_SUBNET,
 };
 use ic_registry_transport::insert;
 use ic_registry_transport::pb::v1::RegistryMutation;
 use ic_types::{
-    CanisterId, PrincipalId, PrincipalIdParseError, RegistryVersion, ReplicaVersion, SubnetId,
+    CanisterId,
+    PrincipalId,
+    PrincipalIdParseError,
+    RegistryVersion,
+    ReplicaVersion,
+    SubnetId,
 };
 
-use crate::subnet_configuration::{SubnetConfig, SubnetIndex};
+use crate::subnet_configuration::{
+    SubnetConfig,
+    SubnetIndex,
+};
 use crate::util::write_registry_entry;
 use crate::{
     initialized_subnet::InitializedSubnet,
-    node::{InitializeNodeError, InitializedNode, NodeConfiguration, NodeIndex},
+    node::{
+        InitializeNodeError,
+        InitializedNode,
+        NodeConfiguration,
+        NodeIndex,
+    },
     subnet_configuration::InitializeSubnetError,
 };
 

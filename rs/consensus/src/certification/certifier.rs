@@ -1,36 +1,75 @@
 use crate::{
     bouncer_metrics::BouncerMetrics,
-    certification::{CertificationCrypto, VerifierImpl},
+    certification::{
+        CertificationCrypto,
+        VerifierImpl,
+    },
     consensus::MINIMUM_CHAIN_LENGTH,
 };
 use ic_consensus_utils::{
-    active_high_threshold_nidkg_id, aggregate, membership::Membership, registry_version_at_height,
+    active_high_threshold_nidkg_id,
+    aggregate,
+    membership::Membership,
+    registry_version_at_height,
 };
 use ic_interfaces::{
-    certification::{CertificationPool, ChangeAction, Mutations, Verifier, VerifierError},
+    certification::{
+        CertificationPool,
+        ChangeAction,
+        Mutations,
+        Verifier,
+        VerifierError,
+    },
     consensus_pool::ConsensusPoolCache,
-    p2p::consensus::{Bouncer, BouncerFactory, BouncerValue, PoolMutationsProducer},
+    p2p::consensus::{
+        Bouncer,
+        BouncerFactory,
+        BouncerValue,
+        PoolMutationsProducer,
+    },
     validation::ValidationError,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
-use ic_logger::{debug, error, trace, ReplicaLogger};
-use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+use ic_logger::{
+    debug,
+    error,
+    trace,
+    ReplicaLogger,
+};
+use ic_metrics::{
+    buckets::decimal_buckets,
+    MetricsRegistry,
+};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     artifact::CertificationMessageId,
     consensus::{
         certification::{
-            Certification, CertificationContent, CertificationMessage, CertificationShare,
+            Certification,
+            CertificationContent,
+            CertificationMessage,
+            CertificationShare,
         },
-        Committee, HasCommittee, HasHeight,
+        Committee,
+        HasCommittee,
+        HasHeight,
     },
     crypto::Signed,
     replica_config::ReplicaConfig,
-    CryptoHashOfPartialState, Height,
+    CryptoHashOfPartialState,
+    Height,
 };
-use prometheus::{Histogram, IntCounter, IntGauge};
-use std::{cell::RefCell, sync::Arc, time::Instant};
+use prometheus::{
+    Histogram,
+    IntCounter,
+    IntGauge,
+};
+use std::{
+    cell::RefCell,
+    sync::Arc,
+    time::Instant,
+};
 use tokio::sync::watch;
 
 struct CertifierMetrics {
@@ -595,27 +634,45 @@ impl CertifierImpl {
 mod tests {
     use super::*;
     use ic_artifact_pool::certification_pool::CertificationPoolImpl;
-    use ic_consensus_mocks::{dependencies, Dependencies};
+    use ic_consensus_mocks::{
+        dependencies,
+        Dependencies,
+    };
     use ic_interfaces::{
         certification::CertificationPool,
-        p2p::consensus::{MutablePool, UnvalidatedArtifact},
+        p2p::consensus::{
+            MutablePool,
+            UnvalidatedArtifact,
+        },
     };
     use ic_test_utilities_consensus::fake::*;
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::{
+        node_test_id,
+        subnet_test_id,
+    };
     use ic_types::{
         artifact::CertificationMessageId,
         consensus::certification::{
-            Certification, CertificationContent, CertificationMessage, CertificationMessageHash,
+            Certification,
+            CertificationContent,
+            CertificationMessage,
+            CertificationMessageHash,
             CertificationShare,
         },
         crypto::{
-            threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
-            CryptoHash, CryptoHashOf,
+            threshold_sig::ni_dkg::{
+                NiDkgId,
+                NiDkgTag,
+                NiDkgTargetSubnet,
+            },
+            CryptoHash,
+            CryptoHashOf,
         },
         signature::*,
         time::UNIX_EPOCH,
-        CryptoHashOfPartialState, Height,
+        CryptoHashOfPartialState,
+        Height,
     };
 
     fn to_unvalidated(message: CertificationMessage) -> UnvalidatedArtifact<CertificationMessage> {

@@ -1,5 +1,8 @@
 use super::test_fixtures::*;
-use crate::{all_supported_versions, encoding::*};
+use crate::{
+    all_supported_versions,
+    encoding::*,
+};
 
 #[test]
 fn roundtrip_encoding_stream_header() {

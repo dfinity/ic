@@ -1,13 +1,23 @@
-use ic_config::embedders::{Config as EmbeddersConfig, MeteringType};
+use ic_config::embedders::{
+    Config as EmbeddersConfig,
+    MeteringType,
+};
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_embedders::wasm_utils;
 use ic_embedders::{
-    wasm_utils::{validate_and_instrument_for_testing, validation::RESERVED_SYMBOLS, Segments},
+    wasm_utils::{
+        validate_and_instrument_for_testing,
+        validation::RESERVED_SYMBOLS,
+        Segments,
+    },
     WasmtimeEmbedder,
 };
 use ic_logger::replica_logger::no_op_logger;
-use ic_sys::{PageIndex, PAGE_SIZE};
+use ic_sys::{
+    PageIndex,
+    PAGE_SIZE,
+};
 use ic_wasm_transform::Module;
 use ic_wasm_types::BinaryEncodedWasm;
 use insta::assert_snapshot;
@@ -15,14 +25,21 @@ use pretty_assertions::assert_eq;
 
 use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
 use ic_embedders::wasm_utils::instrumentation::WasmMemoryType;
-use ic_embedders::wasmtime_embedder::{system_api_complexity, WasmtimeInstance};
+use ic_embedders::wasmtime_embedder::{
+    system_api_complexity,
+    WasmtimeInstance,
+};
 use ic_interfaces::execution_environment::HypervisorError;
 use ic_interfaces::execution_environment::SystemApi;
 use ic_replicated_state::Global;
 use ic_test_utilities_embedders::WasmtimeInstanceBuilder;
 use ic_types::{
-    methods::{FuncRef, WasmMethod},
-    NumBytes, NumInstructions,
+    methods::{
+        FuncRef,
+        WasmMethod,
+    },
+    NumBytes,
+    NumInstructions,
 };
 
 /// Assert what the output of wasm instrumentation should be using the [`insta`]

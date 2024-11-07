@@ -1,23 +1,42 @@
 use axum::{
     body::Body,
     error_handling::HandleErrorLayer,
-    extract::{Request, State},
+    extract::{
+        Request,
+        State,
+    },
     http::StatusCode,
-    response::{IntoResponse, Response},
+    response::{
+        IntoResponse,
+        Response,
+    },
     routing::get,
 };
 use ic_async_utils::start_tcp_listener;
-use ic_config::metrics::{Config, Exporter};
+use ic_config::metrics::{
+    Config,
+    Exporter,
+};
 use ic_metrics::registry::MetricsRegistry;
-use prometheus::{Encoder, IntCounterVec, TextEncoder};
-use slog::{error, trace};
+use prometheus::{
+    Encoder,
+    IntCounterVec,
+    TextEncoder,
+};
+use slog::{
+    error,
+    trace,
+};
 use std::net::SocketAddr;
 use std::string::String;
 use std::time::Duration;
 use thiserror::Error;
 use tower::{
-    limit::concurrency::GlobalConcurrencyLimitLayer, load_shed::error::Overloaded,
-    timeout::error::Elapsed, BoxError, ServiceBuilder,
+    limit::concurrency::GlobalConcurrencyLimitLayer,
+    load_shed::error::Overloaded,
+    timeout::error::Elapsed,
+    BoxError,
+    ServiceBuilder,
 };
 
 const LOG_INTERVAL_SECS: u64 = 30;

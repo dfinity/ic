@@ -1,12 +1,17 @@
 use std::{
     collections::HashMap,
-    net::{Ipv4Addr, Ipv6Addr},
+    net::{
+        Ipv4Addr,
+        Ipv6Addr,
+    },
 };
 
 use ic_base_types::NodeId;
 
 use super::common::{
-    get_api_boundary_node_ids_from_snapshot, get_node_record_from_snapshot, InvariantCheckError,
+    get_api_boundary_node_ids_from_snapshot,
+    get_node_record_from_snapshot,
+    InvariantCheckError,
     RegistrySnapshot,
 };
 
@@ -84,12 +89,22 @@ pub(crate) fn check_api_boundary_node_invariants(
 
 #[cfg(test)]
 mod tests {
-    use ic_base_types::{NodeId, PrincipalId};
+    use ic_base_types::{
+        NodeId,
+        PrincipalId,
+    };
     use ic_protobuf::registry::{
         api_boundary_node::v1::ApiBoundaryNodeRecord,
-        node::v1::{ConnectionEndpoint, IPv4InterfaceConfig, NodeRecord},
+        node::v1::{
+            ConnectionEndpoint,
+            IPv4InterfaceConfig,
+            NodeRecord,
+        },
     };
-    use ic_registry_keys::{make_api_boundary_node_record_key, make_node_record_key};
+    use ic_registry_keys::{
+        make_api_boundary_node_record_key,
+        make_node_record_key,
+    };
     use prost::Message;
 
     use crate::invariants::common::RegistrySnapshot;

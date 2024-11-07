@@ -5,7 +5,11 @@ use crate::common::utils::test_identity;
 use crate::common::utils::wait_for_rosetta_to_sync_up_to_block;
 use ic_agent::identity::BasicIdentity;
 use ic_agent::Identity;
-use ic_icrc1_test_utils::{minter_identity, valid_transactions_strategy, DEFAULT_TRANSFER_FEE};
+use ic_icrc1_test_utils::{
+    minter_identity,
+    valid_transactions_strategy,
+    DEFAULT_TRANSFER_FEE,
+};
 use ic_ledger_canister_core::ledger::LedgerTransaction;
 use ic_ledger_core::block::BlockType;
 use ic_rosetta_api::convert::to_hash;

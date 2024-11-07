@@ -1,6 +1,9 @@
 use ic_types::{
     consensus::*,
-    crypto::{CryptoHash, CryptoHashOf},
+    crypto::{
+        CryptoHash,
+        CryptoHashOf,
+    },
     Height,
 };
 use std::collections::BTreeMap;

@@ -2,44 +2,83 @@ use assert_matches::assert_matches;
 use candid::Encode;
 use canister_test::Runtime;
 use common::test_helpers::{
-    get_added_subnet, get_cup_contents, get_subnet_list_record, prepare_registry_with_nodes,
-    set_up_universal_canister_as_governance, setup_registry_synced_with_fake_client,
-    wait_for_chain_key_setup, wait_for_ecdsa_setup,
+    get_added_subnet,
+    get_cup_contents,
+    get_subnet_list_record,
+    prepare_registry_with_nodes,
+    set_up_universal_canister_as_governance,
+    setup_registry_synced_with_fake_client,
+    wait_for_chain_key_setup,
+    wait_for_ecdsa_setup,
 };
 use dfn_candid::candid;
-use ic_base_types::{PrincipalId, SubnetId};
+use ic_base_types::{
+    PrincipalId,
+    SubnetId,
+};
 use ic_config::Config;
 use ic_interfaces_registry::RegistryClient;
 use ic_management_canister_types::{
-    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
+    EcdsaCurve,
+    EcdsaKeyId,
+    MasterPublicKeyId,
+    SchnorrAlgorithm,
+    SchnorrKeyId,
 };
 use ic_nns_test_utils::itest_helpers::try_call_via_universal_canister;
 use ic_nns_test_utils::{
     itest_helpers::{
-        forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
+        forward_call_via_universal_canister,
+        local_test_on_nns_subnet,
+        set_up_registry_canister,
         set_up_universal_canister,
     },
-    registry::{invariant_compliant_mutation_as_atomic_req, INITIAL_MUTATION_ID},
+    registry::{
+        invariant_compliant_mutation_as_atomic_req,
+        INITIAL_MUTATION_ID,
+    },
 };
 use ic_protobuf::registry::crypto::v1::MasterPublicKeyId as MasterPublicKeyIdPb;
 use ic_protobuf::registry::subnet::v1::{
-    ChainKeyConfig as ChainKeyConfigPb, KeyConfig as KeyConfigPb,
-    SubnetListRecord as SubnetListRecordPb, SubnetRecord as SubnetRecordPb,
+    ChainKeyConfig as ChainKeyConfigPb,
+    KeyConfig as KeyConfigPb,
+    SubnetListRecord as SubnetListRecordPb,
+    SubnetRecord as SubnetRecordPb,
 };
-use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
+use ic_registry_keys::{
+    make_subnet_list_record_key,
+    make_subnet_record_key,
+};
 use ic_registry_subnet_features::{
-    ChainKeyConfig, KeyConfig as KeyConfigInternal, DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+    ChainKeyConfig,
+    KeyConfig as KeyConfigInternal,
+    DEFAULT_ECDSA_MAX_QUEUE_SIZE,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_registry_transport::{pb::v1::RegistryAtomicMutateRequest, upsert};
-use ic_replica_tests::{canister_test_with_config_async, get_ic_config};
-use ic_types::{NodeId, ReplicaVersion};
+use ic_registry_transport::{
+    pb::v1::RegistryAtomicMutateRequest,
+    upsert,
+};
+use ic_replica_tests::{
+    canister_test_with_config_async,
+    get_ic_config,
+};
+use ic_types::{
+    NodeId,
+    ReplicaVersion,
+};
 use prost::Message;
-use registry_canister::mutations::do_create_subnet::{EcdsaInitialConfig, EcdsaKeyRequest};
+use registry_canister::mutations::do_create_subnet::{
+    EcdsaInitialConfig,
+    EcdsaKeyRequest,
+};
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder,
     mutations::do_create_subnet::{
-        CreateSubnetPayload, InitialChainKeyConfig, KeyConfig, KeyConfigRequest,
+        CreateSubnetPayload,
+        InitialChainKeyConfig,
+        KeyConfig,
+        KeyConfigRequest,
     },
 };
 use std::convert::TryFrom;

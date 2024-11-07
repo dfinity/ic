@@ -48,7 +48,10 @@ fn deserialize_json_reply() {
 }
 
 mod eth_get_logs {
-    use crate::numeric::{BlockNumber, LogIndex};
+    use crate::numeric::{
+        BlockNumber,
+        LogIndex,
+    };
     use ic_ethereum_types::Address;
     use std::str::FromStr;
 
@@ -116,9 +119,17 @@ fn address_from_pubkey() {
 }
 
 mod rlp_encoding {
-    use crate::numeric::{GasAmount, TransactionNonce, Wei, WeiPerGas};
+    use crate::numeric::{
+        GasAmount,
+        TransactionNonce,
+        Wei,
+        WeiPerGas,
+    };
     use crate::tx::{
-        AccessList, Eip1559Signature, Eip1559TransactionRequest, SignedEip1559TransactionRequest,
+        AccessList,
+        Eip1559Signature,
+        Eip1559TransactionRequest,
+        SignedEip1559TransactionRequest,
     };
     use ethnum::u256;
     use ic_ethereum_types::Address;
@@ -129,12 +140,18 @@ mod rlp_encoding {
 
     #[test]
     fn test_rlp_encoding() {
-        use crate::tx::{AccessList, Eip1559TransactionRequest};
+        use crate::tx::{
+            AccessList,
+            Eip1559TransactionRequest,
+        };
         use ethers_core::abi::ethereum_types::H160;
         use ethers_core::types::transaction::eip1559::Eip1559TransactionRequest as EthersCoreEip1559TransactionRequest;
         use ethers_core::types::transaction::eip2930::AccessList as EthersCoreAccessList;
         use ethers_core::types::Signature as EthersCoreSignature;
-        use ethers_core::types::{Bytes, U256};
+        use ethers_core::types::{
+            Bytes,
+            U256,
+        };
         use ethnum::u256;
 
         let address_bytes: [u8; 20] = [
@@ -252,8 +269,18 @@ mod rlp_encoding {
 }
 
 mod eth_get_block_by_number {
-    use crate::eth_rpc::{into_nat, Block, BlockSpec, BlockTag, GetBlockByNumberParams, Quantity};
-    use crate::numeric::{BlockNumber, Wei};
+    use crate::eth_rpc::{
+        into_nat,
+        Block,
+        BlockSpec,
+        BlockTag,
+        GetBlockByNumberParams,
+        Quantity,
+    };
+    use crate::numeric::{
+        BlockNumber,
+        Wei,
+    };
 
     #[test]
     fn should_serialize_get_block_by_number_params_as_tuple() {
@@ -605,8 +632,17 @@ mod eth_get_block_by_number {
 }
 
 mod eth_fee_history {
-    use crate::eth_rpc::{BlockSpec, BlockTag, FeeHistory, FeeHistoryParams, Quantity};
-    use crate::numeric::{BlockNumber, WeiPerGas};
+    use crate::eth_rpc::{
+        BlockSpec,
+        BlockTag,
+        FeeHistory,
+        FeeHistoryParams,
+        Quantity,
+    };
+    use crate::numeric::{
+        BlockNumber,
+        WeiPerGas,
+    };
 
     #[test]
     fn should_serialize_fee_history_params_as_tuple() {

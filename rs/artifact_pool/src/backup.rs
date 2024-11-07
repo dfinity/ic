@@ -16,31 +16,61 @@
 
 use ic_config::artifact_pool::BACKUP_GROUP_SIZE;
 use ic_interfaces::{
-    consensus_pool::{ConsensusPool, HeightRange},
+    consensus_pool::{
+        ConsensusPool,
+        HeightRange,
+    },
     time_source::TimeSource,
 };
-use ic_logger::{error, info, warn, ReplicaLogger};
+use ic_logger::{
+    error,
+    info,
+    warn,
+    ReplicaLogger,
+};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::types::v1 as pb;
 use ic_types::{
     consensus::{
-        BlockProposal, ConsensusMessage, Finalization, HasHeight, Notarization, RandomBeacon,
+        BlockProposal,
+        ConsensusMessage,
+        Finalization,
+        HasHeight,
+        Notarization,
+        RandomBeacon,
         RandomTape,
     },
-    time::{Time, UNIX_EPOCH},
+    time::{
+        Time,
+        UNIX_EPOCH,
+    },
     Height,
 };
 use prometheus::IntCounter;
 use prost::Message;
 use std::{
     fs,
-    io::{self, Write},
-    path::{Path, PathBuf},
-    sync::{
-        mpsc::{sync_channel, Receiver, SyncSender},
-        Arc, RwLock,
+    io::{
+        self,
+        Write,
     },
-    thread::{self, JoinHandle},
+    path::{
+        Path,
+        PathBuf,
+    },
+    sync::{
+        mpsc::{
+            sync_channel,
+            Receiver,
+            SyncSender,
+        },
+        Arc,
+        RwLock,
+    },
+    thread::{
+        self,
+        JoinHandle,
+    },
     time::Duration,
 };
 
@@ -638,7 +668,10 @@ mod tests {
     use ic_types::{
         batch::*,
         consensus::*,
-        crypto::{CryptoHash, CryptoHashOf},
+        crypto::{
+            CryptoHash,
+            CryptoHashOf,
+        },
         RegistryVersion,
     };
     use std::convert::TryFrom;

@@ -8,7 +8,10 @@ use hex;
 use reqwest::Response;
 use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -354,8 +357,14 @@ pub enum BlobCompression {
 // This enables serializing Vec<u8> to a compact base64 representation.
 #[allow(deprecated)]
 pub mod base64 {
-    use serde::{Deserialize, Serialize};
-    use serde::{Deserializer, Serializer};
+    use serde::{
+        Deserialize,
+        Serialize,
+    };
+    use serde::{
+        Deserializer,
+        Serializer,
+    };
 
     pub fn serialize<S: Serializer>(v: &Vec<u8>, s: S) -> Result<S::Ok, S::Error> {
         let base64 = base64::encode(v);

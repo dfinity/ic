@@ -1,107 +1,247 @@
-use crate::state_api::state::{HasStateLabel, OpOut, PocketIcError, StateLabel};
-use crate::{async_trait, copy_dir, BlobStore, OpId, Operation};
+use crate::state_api::state::{
+    HasStateLabel,
+    OpOut,
+    PocketIcError,
+    StateLabel,
+};
+use crate::{
+    async_trait,
+    copy_dir,
+    BlobStore,
+    OpId,
+    Operation,
+};
 use askama::Template;
 use axum::{
     extract::State,
-    response::{Html, IntoResponse, Response as AxumResponse},
+    response::{
+        Html,
+        IntoResponse,
+        Response as AxumResponse,
+    },
 };
 use bitcoin::Network;
-use candid::{Decode, Principal};
+use candid::{
+    Decode,
+    Principal,
+};
 use futures::future::BoxFuture;
 use futures::FutureExt;
 use hyper::body::Bytes;
-use hyper::header::{HeaderValue, CONTENT_TYPE};
-use hyper::{Method, StatusCode};
-use ic_boundary::{status, Health, RootKey};
-use ic_btc_adapter::config::{Config as BitcoinAdapterConfig, IncomingSource as BtcIncomingSource};
+use hyper::header::{
+    HeaderValue,
+    CONTENT_TYPE,
+};
+use hyper::{
+    Method,
+    StatusCode,
+};
+use ic_boundary::{
+    status,
+    Health,
+    RootKey,
+};
+use ic_btc_adapter::config::{
+    Config as BitcoinAdapterConfig,
+    IncomingSource as BtcIncomingSource,
+};
 use ic_btc_adapter::start_server as start_btc_server;
 use ic_config::adapters::AdaptersConfig;
 use ic_config::execution_environment::MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT;
 use ic_config::{
-    execution_environment, flag_status::FlagStatus, http_handler, logger::Config as LoggerConfig,
+    execution_environment,
+    flag_status::FlagStatus,
+    http_handler,
+    logger::Config as LoggerConfig,
     subnet_config::SubnetConfig,
 };
 use ic_crypto_sha2::Sha256;
 use ic_error_types::RejectCode;
 use ic_http_endpoints_public::{
-    call_v2, call_v3, metrics::HttpHandlerMetrics, CanisterReadStateServiceBuilder,
-    IngressValidatorBuilder, QueryServiceBuilder, SubnetReadStateServiceBuilder,
+    call_v2,
+    call_v3,
+    metrics::HttpHandlerMetrics,
+    CanisterReadStateServiceBuilder,
+    IngressValidatorBuilder,
+    QueryServiceBuilder,
+    SubnetReadStateServiceBuilder,
 };
 use ic_https_outcalls_adapter::{
-    start_server as start_canister_http_server, Config as HttpsOutcallsConfig,
+    start_server as start_canister_http_server,
+    Config as HttpsOutcallsConfig,
     IncomingSource as CanisterHttpIncomingSource,
 };
-use ic_https_outcalls_adapter_client::{setup_canister_http_client, CanisterHttpAdapterClientImpl};
+use ic_https_outcalls_adapter_client::{
+    setup_canister_http_client,
+    CanisterHttpAdapterClientImpl,
+};
 use ic_https_outcalls_service::https_outcalls_service_server::HttpsOutcallsService;
 use ic_https_outcalls_service::https_outcalls_service_server::HttpsOutcallsServiceServer;
 use ic_https_outcalls_service::HttpsOutcallRequest;
 use ic_https_outcalls_service::HttpsOutcallResponse;
-use ic_interfaces::{crypto::BasicSigner, ingress_pool::IngressPoolThrottler};
+use ic_interfaces::{
+    crypto::BasicSigner,
+    ingress_pool::IngressPoolThrottler,
+};
 use ic_interfaces_adapter_client::NonBlockingChannel;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
 use ic_management_canister_types::{
-    CanisterIdRecord, EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, Method as Ic00Method,
-    ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, SchnorrKeyId,
+    CanisterIdRecord,
+    EcdsaCurve,
+    EcdsaKeyId,
+    MasterPublicKeyId,
+    Method as Ic00Method,
+    ProvisionalCreateCanisterWithCyclesArgs,
+    SchnorrAlgorithm,
+    SchnorrKeyId,
 };
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::routing_table::v1::RoutingTable as PbRoutingTable;
 use ic_registry_keys::make_routing_table_record_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
+use ic_registry_routing_table::{
+    CanisterIdRange,
+    RoutingTable,
+    CANISTER_IDS_PER_SUBNET,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
-    finalize_registry, StateMachine, StateMachineBuilder, StateMachineConfig, StateMachineStateDir,
-    SubmitIngressError, Subnets,
+    finalize_registry,
+    StateMachine,
+    StateMachineBuilder,
+    StateMachineConfig,
+    StateMachineStateDir,
+    SubmitIngressError,
+    Subnets,
 };
 use ic_test_utilities_registry::add_subnet_list_record;
-use ic_types::ingress::{IngressState, IngressStatus};
+use ic_types::ingress::{
+    IngressState,
+    IngressStatus,
+};
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
     canister_http::{
-        CanisterHttpReject, CanisterHttpRequest as AdapterCanisterHttpRequest,
-        CanisterHttpRequestId, CanisterHttpResponse as AdapterCanisterHttpResponse,
+        CanisterHttpReject,
+        CanisterHttpRequest as AdapterCanisterHttpRequest,
+        CanisterHttpRequestId,
+        CanisterHttpResponse as AdapterCanisterHttpResponse,
         CanisterHttpResponseContent,
     },
-    crypto::{BasicSig, BasicSigOf, CryptoResult, Signable},
+    crypto::{
+        BasicSig,
+        BasicSigOf,
+        CryptoResult,
+        Signable,
+    },
     messages::{
-        CertificateDelegation, HttpCallContent, HttpRequestEnvelope, MessageId as OtherMessageId,
-        QueryResponseHash, ReplicaHealthStatus, SignedIngress,
+        CertificateDelegation,
+        HttpCallContent,
+        HttpRequestEnvelope,
+        MessageId as OtherMessageId,
+        QueryResponseHash,
+        ReplicaHealthStatus,
+        SignedIngress,
     },
     time::GENESIS,
-    CanisterId, Height, NodeId, NumInstructions, PrincipalId, RegistryVersion, SubnetId,
+    CanisterId,
+    Height,
+    NodeId,
+    NumInstructions,
+    PrincipalId,
+    RegistryVersion,
+    SubnetId,
 };
-use ic_types::{NumBytes, Time};
+use ic_types::{
+    NumBytes,
+    Time,
+};
 use ic_validator_ingress_message::StandaloneIngressSigVerifier;
 use itertools::Itertools;
 use pocket_ic::common::rest::{
-    self, BinaryBlob, BlobCompression, CanisterHttpHeader, CanisterHttpMethod, CanisterHttpRequest,
-    CanisterHttpResponse, DtsFlag, ExtendedSubnetConfigSet, MockCanisterHttpResponse, RawAddCycles,
-    RawCanisterCall, RawCanisterId, RawEffectivePrincipal, RawMessageId, RawSetStableMemory,
-    SubnetInstructionConfig, SubnetKind, SubnetSpec, Topology,
+    self,
+    BinaryBlob,
+    BlobCompression,
+    CanisterHttpHeader,
+    CanisterHttpMethod,
+    CanisterHttpRequest,
+    CanisterHttpResponse,
+    DtsFlag,
+    ExtendedSubnetConfigSet,
+    MockCanisterHttpResponse,
+    RawAddCycles,
+    RawCanisterCall,
+    RawCanisterId,
+    RawEffectivePrincipal,
+    RawMessageId,
+    RawSetStableMemory,
+    SubnetInstructionConfig,
+    SubnetKind,
+    SubnetSpec,
+    Topology,
 };
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use slog::Level;
 use std::hash::Hash;
 use std::str::FromStr;
 use std::{
     cmp::max,
-    collections::{BTreeMap, BTreeSet},
-    fs::{remove_file, File},
-    io::{BufReader, Write},
+    collections::{
+        BTreeMap,
+        BTreeSet,
+    },
+    fs::{
+        remove_file,
+        File,
+    },
+    io::{
+        BufReader,
+        Write,
+    },
     net::SocketAddr,
     path::PathBuf,
-    sync::{Arc, Mutex, RwLock},
-    time::{Duration, SystemTime},
+    sync::{
+        Arc,
+        Mutex,
+        RwLock,
+    },
+    time::{
+        Duration,
+        SystemTime,
+    },
 };
-use tempfile::{NamedTempFile, TempDir};
+use tempfile::{
+    NamedTempFile,
+    TempDir,
+};
 use tokio::sync::OnceCell;
 use tokio::task::JoinHandle;
-use tokio::{runtime::Runtime, sync::mpsc};
-use tonic::transport::{Channel, Server};
-use tonic::transport::{Endpoint, Uri};
-use tonic::{Code, Request, Response, Status};
-use tower::{service_fn, util::ServiceExt};
+use tokio::{
+    runtime::Runtime,
+    sync::mpsc,
+};
+use tonic::transport::{
+    Channel,
+    Server,
+};
+use tonic::transport::{
+    Endpoint,
+    Uri,
+};
+use tonic::{
+    Code,
+    Request,
+    Response,
+    Status,
+};
+use tower::{
+    service_fn,
+    util::ServiceExt,
+};
 
 // See build.rs
 include!(concat!(env!("OUT_DIR"), "/dashboard.rs"));

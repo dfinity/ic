@@ -1,6 +1,9 @@
 use crate::pb::v1::ArchivedMonthlyNodeProviderRewards;
 use ic_crypto_sha2::Sha256;
-use ic_stable_structures::{storable::Bound, Storable};
+use ic_stable_structures::{
+    storable::Bound,
+    Storable,
+};
 use prost::Message;
 use std::borrow::Cow;
 

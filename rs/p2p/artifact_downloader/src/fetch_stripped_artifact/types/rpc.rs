@@ -1,11 +1,20 @@
 use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{
+        try_from_option_field,
+        ProxyDecodeError,
+    },
     types::v1 as pb,
 };
 use ic_types::{
-    artifact::{ConsensusMessageId, IngressMessageId},
+    artifact::{
+        ConsensusMessageId,
+        IngressMessageId,
+    },
     consensus::ConsensusMessageHash,
-    messages::{SignedIngress, SignedRequestBytes},
+    messages::{
+        SignedIngress,
+        SignedRequestBytes,
+    },
 };
 
 use bytes::Bytes;
@@ -84,7 +93,10 @@ impl From<GetIngressMessageInBlockResponse> for pb::GetIngressMessageInBlockResp
 #[cfg(test)]
 mod tests {
     use ic_types::{
-        crypto::{CryptoHash, CryptoHashOf},
+        crypto::{
+            CryptoHash,
+            CryptoHashOf,
+        },
         time::UNIX_EPOCH,
         Height,
     };

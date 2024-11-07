@@ -1,15 +1,26 @@
-use std::{net::IpAddr, sync::Arc};
+use std::{
+    net::IpAddr,
+    sync::Arc,
+};
 
 use anyhow::anyhow;
 use axum::Router;
 use candid::Principal;
 use http::request::Request;
 use ic_bn_lib::http::ConnInfo;
-use serde::{Deserialize, Serialize};
-use std::{convert::TryFrom, time::Duration};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use std::{
+    convert::TryFrom,
+    time::Duration,
+};
 use tower::ServiceBuilder;
 use tower_governor::{
-    errors::GovernorError, governor::GovernorConfigBuilder, key_extractor::KeyExtractor,
+    errors::GovernorError,
+    governor::GovernorConfigBuilder,
+    key_extractor::KeyExtractor,
     GovernorLayer,
 };
 

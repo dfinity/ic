@@ -1,14 +1,24 @@
-use std::{net::IpAddr, path::PathBuf, sync::Arc};
+use std::{
+    net::IpAddr,
+    path::PathBuf,
+    sync::Arc,
+};
 
 use anyhow::Error;
 use axum::{
-    extract::{Request, State},
+    extract::{
+        Request,
+        State,
+    },
     middleware::Next,
     response::IntoResponse,
 };
 use bytes::Bytes;
 use http::HeaderValue;
-use ic_bn_lib::http::headers::{X_IC_COUNTRY_CODE, X_REAL_IP};
+use ic_bn_lib::http::headers::{
+    X_IC_COUNTRY_CODE,
+    X_REAL_IP,
+};
 use maxminddb::geoip2;
 
 use crate::routes::ApiError;

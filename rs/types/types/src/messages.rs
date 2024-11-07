@@ -9,42 +9,108 @@ mod read_state;
 mod webauthn;
 
 pub use self::http::{
-    Authentication, Certificate, CertificateDelegation, Delegation, HasCanisterId, HttpCallContent,
-    HttpCanisterUpdate, HttpQueryContent, HttpQueryResponse, HttpQueryResponseReply, HttpReadState,
-    HttpReadStateContent, HttpReadStateResponse, HttpReply, HttpRequest, HttpRequestContent,
-    HttpRequestEnvelope, HttpRequestError, HttpSignedQueryResponse, HttpStatusResponse,
-    HttpUserQuery, NodeSignature, QueryResponseHash, RawHttpRequestVal, ReplicaHealthStatus,
+    Authentication,
+    Certificate,
+    CertificateDelegation,
+    Delegation,
+    HasCanisterId,
+    HttpCallContent,
+    HttpCanisterUpdate,
+    HttpQueryContent,
+    HttpQueryResponse,
+    HttpQueryResponseReply,
+    HttpReadState,
+    HttpReadStateContent,
+    HttpReadStateResponse,
+    HttpReply,
+    HttpRequest,
+    HttpRequestContent,
+    HttpRequestEnvelope,
+    HttpRequestError,
+    HttpSignedQueryResponse,
+    HttpStatusResponse,
+    HttpUserQuery,
+    NodeSignature,
+    QueryResponseHash,
+    RawHttpRequestVal,
+    ReplicaHealthStatus,
     SignedDelegation,
 };
 pub use crate::methods::SystemMethod;
 use crate::time::CoarseTime;
-use crate::{user_id_into_protobuf, user_id_try_from_protobuf, Cycles, Funds, NumBytes, UserId};
+use crate::{
+    user_id_into_protobuf,
+    user_id_try_from_protobuf,
+    Cycles,
+    Funds,
+    NumBytes,
+    UserId,
+};
 pub use blob::Blob;
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types::CanisterChangeOrigin;
-use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_protobuf::proxy::{
+    try_from_option_field,
+    ProxyDecodeError,
+};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_protobuf::types::v1 as pb_types;
 pub use ingress_messages::{
-    extract_effective_canister_id, is_subnet_id, Ingress, ParseIngressError, SignedIngress,
+    extract_effective_canister_id,
+    is_subnet_id,
+    Ingress,
+    ParseIngressError,
+    SignedIngress,
     SignedIngressContent,
 };
 pub use inter_canister::{
-    CallContextId, CallbackId, Payload, RejectContext, Request, RequestMetadata, RequestOrResponse,
-    Response, MAX_REJECT_MESSAGE_LEN_BYTES, NO_DEADLINE,
+    CallContextId,
+    CallbackId,
+    Payload,
+    RejectContext,
+    Request,
+    RequestMetadata,
+    RequestOrResponse,
+    Response,
+    MAX_REJECT_MESSAGE_LEN_BYTES,
+    NO_DEADLINE,
 };
-pub use message_id::{MessageId, MessageIdError, EXPECTED_MESSAGE_ID_LENGTH};
+pub use message_id::{
+    MessageId,
+    MessageIdError,
+    EXPECTED_MESSAGE_ID_LENGTH,
+};
 use phantom_newtype::Id;
-pub use query::{Query, QuerySource};
+pub use query::{
+    Query,
+    QuerySource,
+};
 pub use read_state::ReadState;
-use serde::{Deserialize, Serialize};
-use std::fmt::{self, Debug, Display, Formatter};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use std::fmt::{
+    self,
+    Debug,
+    Display,
+    Formatter,
+};
 use std::mem::size_of;
-use std::{convert::TryFrom, sync::Arc};
+use std::{
+    convert::TryFrom,
+    sync::Arc,
+};
 use strum_macros::EnumIter;
-pub use webauthn::{WebAuthnEnvelope, WebAuthnSignature};
+pub use webauthn::{
+    WebAuthnEnvelope,
+    WebAuthnSignature,
+};
 
 /// Same as [MAX_INTER_CANISTER_PAYLOAD_IN_BYTES], but of a primitive type
 /// that can be used for computation in const context.
@@ -552,12 +618,18 @@ impl CanisterCallOrTask {
 mod tests {
     use super::*;
     use crate::exhaustive::ExhaustiveSet;
-    use crate::{time::expiry_time_from_now, Time};
+    use crate::{
+        time::expiry_time_from_now,
+        Time,
+    };
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use maplit::btreemap;
     use serde_cbor::Value;
-    use std::{convert::TryFrom, io::Cursor};
+    use std::{
+        convert::TryFrom,
+        io::Cursor,
+    };
     use strum::IntoEnumIterator;
 
     fn debug_blob(v: Vec<u8>) -> String {

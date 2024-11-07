@@ -1,10 +1,23 @@
 use std::{
-    collections::{BTreeMap, HashMap},
-    fmt::{Display, Formatter, Result},
-    time::{Duration, SystemTime},
+    collections::{
+        BTreeMap,
+        HashMap,
+    },
+    fmt::{
+        Display,
+        Formatter,
+        Result,
+    },
+    time::{
+        Duration,
+        SystemTime,
+    },
 };
 
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 use crate::driver::event::TaskId;
 

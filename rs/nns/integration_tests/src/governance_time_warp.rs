@@ -3,22 +3,32 @@
 use dfn_candid::candid_one;
 use ic_canister_client_sender::Sender;
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL,
+    TEST_NEURON_1_OWNER_KEYPAIR,
+    TEST_NEURON_1_OWNER_PRINCIPAL,
 };
 use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
 use ic_nns_governance_api::{
     pb::v1::{
         governance_error::ErrorType,
-        manage_neuron::{Disburse, NeuronIdOrSubaccount},
+        manage_neuron::{
+            Disburse,
+            NeuronIdOrSubaccount,
+        },
         manage_neuron_response,
         neuron::DissolveState,
-        ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, Neuron,
+        ManageNeuronCommandRequest,
+        ManageNeuronRequest,
+        ManageNeuronResponse,
+        Neuron,
     },
     test_api::TimeWarp,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{
+        state_machine_test_on_nns_subnet,
+        NnsCanisters,
+    },
 };
 use icp_ledger::AccountIdentifier;
 

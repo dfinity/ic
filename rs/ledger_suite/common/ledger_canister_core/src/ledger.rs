@@ -1,18 +1,49 @@
-use crate::{archive::ArchiveCanisterWasm, blockchain::Blockchain, range_utils, runtime::Runtime};
+use crate::{
+    archive::ArchiveCanisterWasm,
+    blockchain::Blockchain,
+    range_utils,
+    runtime::Runtime,
+};
 use ic_base_types::CanisterId;
-use ic_canister_log::{log, Sink};
+use ic_canister_log::{
+    log,
+    Sink,
+};
 use ic_ledger_core::approvals::{
-    AllowanceTable, AllowancesData, ApproveError, InsufficientAllowance,
+    AllowanceTable,
+    AllowancesData,
+    ApproveError,
+    InsufficientAllowance,
 };
 use ic_ledger_core::tokens::Zero;
-use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, VecDeque};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use std::collections::{
+    BTreeMap,
+    VecDeque,
+};
 use std::ops::Range;
 use std::time::Duration;
 
-use crate::archive::{ArchivingGuardError, FailedToArchiveBlocks, LedgerArchivingGuard};
-use ic_ledger_core::balances::{BalanceError, Balances, BalancesStore, InspectableBalancesStore};
-use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock, FeeCollector};
+use crate::archive::{
+    ArchivingGuardError,
+    FailedToArchiveBlocks,
+    LedgerArchivingGuard,
+};
+use ic_ledger_core::balances::{
+    BalanceError,
+    Balances,
+    BalancesStore,
+    InspectableBalancesStore,
+};
+use ic_ledger_core::block::{
+    BlockIndex,
+    BlockType,
+    EncodedBlock,
+    FeeCollector,
+};
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::TokensType;
 use ic_ledger_hash_of::HashOf;
@@ -512,7 +543,10 @@ where
 /// NOTE: only one archiving task can run at each point in time.
 /// If archiving is already in process, this function returns immediately.
 pub async fn archive_blocks<LA: LedgerAccess>(sink: impl Sink + Clone, max_message_size: u64) {
-    use crate::archive::{send_blocks_to_archive, ArchivingGuardError};
+    use crate::archive::{
+        send_blocks_to_archive,
+        ArchivingGuardError,
+    };
 
     let archive_arc = LA::with_ledger(|ledger| ledger.blockchain().archive.clone());
 

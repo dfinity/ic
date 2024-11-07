@@ -1,14 +1,26 @@
 use candid::Nat;
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_nervous_system_runtime::Runtime;
 use icrc_ledger_types::icrc3::{
-    archive::{ArchivedRange, QueryArchiveFn},
+    archive::{
+        ArchivedRange,
+        QueryArchiveFn,
+    },
     transactions::{
-        GetTransactionsRequest, GetTransactionsResponse, Transaction, TransactionRange,
+        GetTransactionsRequest,
+        GetTransactionsResponse,
+        Transaction,
+        TransactionRange,
     },
 };
 use num_bigint::BigUint;
-use std::ops::{AddAssign, SubAssign};
+use std::ops::{
+    AddAssign,
+    SubAssign,
+};
 
 pub async fn initial_supply_e8s<MyRuntime: Runtime>(
     ledger_canister_id: CanisterId,

@@ -1,12 +1,24 @@
 use crate::endpoints::CandidBlockTag;
 use crate::logs::INFO;
-use crate::state::audit::{process_event, replay_events, EventType};
+use crate::state::audit::{
+    process_event,
+    replay_events,
+    EventType,
+};
 use crate::state::mutate_state;
 use crate::state::STATE;
 use crate::storage::total_event_count;
-use candid::{CandidType, Deserialize, Nat, Principal};
+use candid::{
+    CandidType,
+    Deserialize,
+    Nat,
+    Principal,
+};
 use ic_canister_log::log;
-use minicbor::{Decode, Encode};
+use minicbor::{
+    Decode,
+    Encode,
+};
 
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Decode, Deserialize, Encode)]
 pub struct UpgradeArg {

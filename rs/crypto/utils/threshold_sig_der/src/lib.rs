@@ -1,4 +1,7 @@
-use simple_asn1::{oid, ASN1Block};
+use simple_asn1::{
+    oid,
+    ASN1Block,
+};
 
 /// Byte size of the public key, which is a G2 element.
 pub const PUBLIC_KEY_SIZE: usize = 96;
@@ -29,7 +32,10 @@ pub fn public_key_to_der(key: &[u8]) -> Result<Vec<u8>, String> {
 pub fn public_key_from_der(bytes: &[u8]) -> Result<[u8; PUBLIC_KEY_SIZE], String> {
     use simple_asn1::{
         from_der,
-        ASN1Block::{BitString, Sequence},
+        ASN1Block::{
+            BitString,
+            Sequence,
+        },
     };
 
     let unexpected_struct_err = |s: &ASN1Block| {

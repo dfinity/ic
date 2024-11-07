@@ -1,5 +1,8 @@
 //! Interfaces for saving and retrieving public keys
-use ic_protobuf::registry::crypto::v1::{PublicKey as PublicKeyProto, X509PublicKeyCert};
+use ic_protobuf::registry::crypto::v1::{
+    PublicKey as PublicKeyProto,
+    X509PublicKeyCert,
+};
 use ic_types::Time;
 
 pub mod proto_pubkey_store;

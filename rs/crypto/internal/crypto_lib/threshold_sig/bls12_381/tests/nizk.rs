@@ -5,14 +5,27 @@ use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg as dkg;
 use dkg::forward_secure::CHUNK_SIZE;
 use dkg::nizk_chunking::*;
 use dkg::nizk_sharing::{
-    prove_sharing, verify_sharing, ProofSharing, SharingInstance, SharingWitness,
+    prove_sharing,
+    verify_sharing,
+    ProofSharing,
+    SharingInstance,
+    SharingWitness,
     ZkProofSharingError,
 };
 use dkg::random_oracles::UniqueHash;
-use ic_crypto_internal_bls12_381_type::{G1Affine, G1Projective, G2Affine, Scalar};
+use ic_crypto_internal_bls12_381_type::{
+    G1Affine,
+    G1Projective,
+    G2Affine,
+    Scalar,
+};
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::forward_secure::G1Bytes;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use rand::{CryptoRng, RngCore, SeedableRng};
+use rand::{
+    CryptoRng,
+    RngCore,
+    SeedableRng,
+};
 use rand_chacha::ChaCha20Rng;
 
 fn setup_sharing_instance_and_witness<R: RngCore + CryptoRng>(

@@ -1,16 +1,33 @@
 use crate::pb_internal::v1::PrincipalId as PrincipalIdProto;
 #[cfg(feature = "fuzzing_code")]
-use arbitrary::{Arbitrary, Result as ArbitraryResult, Unstructured};
-use candid::types::principal::{Principal, PrincipalError};
-use candid::types::{Type, TypeId, TypeInner};
+use arbitrary::{
+    Arbitrary,
+    Result as ArbitraryResult,
+    Unstructured,
+};
+use candid::types::principal::{
+    Principal,
+    PrincipalError,
+};
+use candid::types::{
+    Type,
+    TypeId,
+    TypeInner,
+};
 use ic_crypto_sha2::Sha224;
 use ic_protobuf::types::v1 as pb;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::{
     convert::TryFrom,
     error::Error,
     fmt,
-    hash::{Hash, Hasher},
+    hash::{
+        Hash,
+        Hasher,
+    },
 };
 use strum_macros::EnumIter;
 
@@ -669,7 +686,10 @@ mod tests {
     #[test]
     fn hashes_correctly() {
         use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
+        use std::hash::{
+            Hash,
+            Hasher,
+        };
 
         fn calculate_hash<T: Hash>(t: &T) -> u64 {
             let mut s = DefaultHasher::new();

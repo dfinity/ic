@@ -1,6 +1,10 @@
 use ic_crypto_sha2::Sha256;
 use ic_test_utilities_types::ids::canister_test_id;
-use ic_types::{crypto::Signable, messages::Delegation, time::UNIX_EPOCH};
+use ic_types::{
+    crypto::Signable,
+    messages::Delegation,
+    time::UNIX_EPOCH,
+};
 
 // NOTE: Ideally, this test should be in the types crate where `Delegation` is
 // defined, but the test is here to avoid circular dependencies between the

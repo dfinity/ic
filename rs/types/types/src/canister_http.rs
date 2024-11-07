@@ -42,26 +42,59 @@
 //! the timestamp of a request plus the timeout interval. This condition is verifiable by the other nodes in the network.
 //! Once a timeout has made it into a finalized block, the request is answered with an error message.
 use crate::{
-    artifact::{CanisterHttpResponseId, IdentifiableArtifact, PbArtifact},
-    crypto::{CryptoHashOf, Signed},
-    messages::{CallbackId, RejectContext, Request},
+    artifact::{
+        CanisterHttpResponseId,
+        IdentifiableArtifact,
+        PbArtifact,
+    },
+    crypto::{
+        CryptoHashOf,
+        Signed,
+    },
+    messages::{
+        CallbackId,
+        RejectContext,
+        Request,
+    },
     signature::*,
-    CanisterId, CountBytes, RegistryVersion, Time,
+    CanisterId,
+    CountBytes,
+    RegistryVersion,
+    Time,
 };
-use ic_base_types::{NumBytes, PrincipalId};
-use ic_error_types::{ErrorCode, RejectCode, UserError};
+use ic_base_types::{
+    NumBytes,
+    PrincipalId,
+};
+use ic_error_types::{
+    ErrorCode,
+    RejectCode,
+    UserError,
+};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types::{
-    CanisterHttpRequestArgs, HttpHeader, HttpMethod, TransformContext,
+    CanisterHttpRequestArgs,
+    HttpHeader,
+    HttpMethod,
+    TransformContext,
 };
 use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{
+        try_from_option_field,
+        ProxyDecodeError,
+    },
     state::system_metadata::v1 as pb_metadata,
 };
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::{
-    convert::{TryFrom, TryInto},
+    convert::{
+        TryFrom,
+        TryInto,
+    },
     mem::size_of,
     time::Duration,
 };
@@ -644,7 +677,11 @@ impl CountBytes for CanisterHttpResponseProof {
 
 #[cfg(test)]
 mod tests {
-    use crate::{messages::NO_DEADLINE, time::UNIX_EPOCH, Cycles};
+    use crate::{
+        messages::NO_DEADLINE,
+        time::UNIX_EPOCH,
+        Cycles,
+    };
 
     use super::*;
 

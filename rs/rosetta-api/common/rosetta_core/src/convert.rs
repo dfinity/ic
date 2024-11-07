@@ -1,6 +1,16 @@
-use crate::models::{Ed25519KeyPair, RosettaSupportedKeyPair, Secp256k1KeyPair};
-use crate::objects::{CurveType, PublicKey};
-use anyhow::{self, bail};
+use crate::models::{
+    Ed25519KeyPair,
+    RosettaSupportedKeyPair,
+    Secp256k1KeyPair,
+};
+use crate::objects::{
+    CurveType,
+    PublicKey,
+};
+use anyhow::{
+    self,
+    bail,
+};
 use ic_types::PrincipalId;
 
 pub fn principal_id_from_public_key(pk: &PublicKey) -> anyhow::Result<PrincipalId> {

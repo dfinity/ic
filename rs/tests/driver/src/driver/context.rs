@@ -1,15 +1,26 @@
 #![allow(dead_code)]
 
 use crate::driver::test_env::TestEnv;
-use anyhow::{bail, Context, Result};
+use anyhow::{
+    bail,
+    Context,
+    Result,
+};
 use slog::Logger;
 use std::{
     fs,
-    path::{Path, PathBuf},
+    path::{
+        Path,
+        PathBuf,
+    },
     time::SystemTime,
 };
 
-use crate::driver::{constants, event::TaskId, subprocess_ipc::LogSender};
+use crate::driver::{
+    constants,
+    event::TaskId,
+    subprocess_ipc::LogSender,
+};
 
 use slog::debug;
 

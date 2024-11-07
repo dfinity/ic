@@ -1,8 +1,19 @@
 use std::{
     fmt::Write as FmtWrite,
-    fs::{self, File},
-    io::{self, Write},
-    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
+    fs::{
+        self,
+        File,
+    },
+    io::{
+        self,
+        Write,
+    },
+    net::{
+        IpAddr,
+        Ipv4Addr,
+        Ipv6Addr,
+        SocketAddr,
+    },
     path::PathBuf,
     process::Command,
 };
@@ -11,35 +22,83 @@ use crate::{
     driver::{
         driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR,
         farm::{
-            AttachImageSpec, Certificate, CreateVmRequest, DnsRecord, DnsRecordType, Farm,
-            HostFeature, ImageLocation, VMCreateResponse, VmType,
+            AttachImageSpec,
+            Certificate,
+            CreateVmRequest,
+            DnsRecord,
+            DnsRecordType,
+            Farm,
+            HostFeature,
+            ImageLocation,
+            VMCreateResponse,
+            VmType,
         },
-        ic::{AmountOfMemoryKiB, NrOfVCPUs, VmAllocationStrategy, VmResources},
+        ic::{
+            AmountOfMemoryKiB,
+            NrOfVCPUs,
+            VmAllocationStrategy,
+            VmResources,
+        },
         log_events,
-        resource::{DiskImage, ImageType},
-        test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
-        test_env_api::{
-            get_boundary_node_img_sha256, get_boundary_node_img_url, get_dependency_path,
-            get_elasticsearch_hosts, get_ssh_session_from_env, AcquirePlaynetCertificate,
-            CreatePlaynetDnsRecords, HasIcDependencies, HasPublicApiUrl, HasTestEnv,
-            HasTopologySnapshot, HasVmName, IcNodeContainer, RetrieveIpv4Addr, SshSession,
-            RETRY_BACKOFF, SSH_RETRY_TIMEOUT,
+        resource::{
+            DiskImage,
+            ImageType,
         },
-        test_setup::{GroupSetup, InfraProvider},
+        test_env::{
+            HasIcPrepDir,
+            TestEnv,
+            TestEnvAttribute,
+        },
+        test_env_api::{
+            get_boundary_node_img_sha256,
+            get_boundary_node_img_url,
+            get_dependency_path,
+            get_elasticsearch_hosts,
+            get_ssh_session_from_env,
+            AcquirePlaynetCertificate,
+            CreatePlaynetDnsRecords,
+            HasIcDependencies,
+            HasPublicApiUrl,
+            HasTestEnv,
+            HasTopologySnapshot,
+            HasVmName,
+            IcNodeContainer,
+            RetrieveIpv4Addr,
+            SshSession,
+            RETRY_BACKOFF,
+            SSH_RETRY_TIMEOUT,
+        },
+        test_setup::{
+            GroupSetup,
+            InfraProvider,
+        },
     },
     k8s::datavolume::DataVolumeContentType,
     k8s::images::upload_image,
     k8s::tnet::TNet,
     retry_with_msg,
-    util::{block_on, create_agent, create_agent_mapping},
+    util::{
+        block_on,
+        create_agent,
+        create_agent_mapping,
+    },
 };
 
-use anyhow::{bail, Result};
+use anyhow::{
+    bail,
+    Result,
+};
 use async_trait::async_trait;
-use ic_agent::{Agent, AgentError};
+use ic_agent::{
+    Agent,
+    AgentError,
+};
 use kube::ResourceExt;
 use reqwest::Url;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use slog::info;
 use ssh2::Session;
 use zstd::stream::write::Encoder;

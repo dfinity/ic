@@ -1,18 +1,29 @@
 use super::*;
 use ic_types::consensus::RandomBeaconContent;
 use ic_types::crypto::{
-    CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashDomain, CryptoHashOf,
+    CombinedThresholdSig,
+    CombinedThresholdSigOf,
+    CryptoHash,
+    CryptoHashDomain,
+    CryptoHashOf,
     Signed,
 };
 use ic_types::signature::ThresholdSignature;
 use ic_types::{
-    crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+    crypto::threshold_sig::ni_dkg::{
+        NiDkgId,
+        NiDkgTag,
+        NiDkgTargetSubnet,
+    },
     Height,
 };
 use ic_types_test_utils::ids::subnet_test_id;
 use std::collections::BTreeSet;
 use std::hash::Hash;
-use strum::{EnumCount, IntoEnumIterator};
+use strum::{
+    EnumCount,
+    IntoEnumIterator,
+};
 
 #[test]
 fn should_use_unique_separator_byte_per_randomness_purpose() {

@@ -1,8 +1,15 @@
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use icp_ledger::{AccountIdentifier, Subaccount};
+use icp_ledger::{
+    AccountIdentifier,
+    Subaccount,
+};
 
 use std::collections::BTreeSet;
-pub use tla_instrumentation::{ResolvedStatePair, TlaValue, ToTla};
+pub use tla_instrumentation::{
+    ResolvedStatePair,
+    TlaValue,
+    ToTla,
+};
 
 pub(super) fn default_account() -> TlaValue {
     "".to_tla_value()

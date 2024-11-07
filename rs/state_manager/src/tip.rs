@@ -1,45 +1,98 @@
 use crate::{
-    compute_bundled_manifest, release_lock_and_persist_metadata,
+    compute_bundled_manifest,
+    release_lock_and_persist_metadata,
     state_sync::types::{
-        FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET, MAX_SUPPORTED_STATE_SYNC_VERSION,
+        FILE_GROUP_CHUNK_ID_OFFSET,
+        MANIFEST_CHUNK_ID_OFFSET,
+        MAX_SUPPORTED_STATE_SYNC_VERSION,
     },
-    CheckpointError, PageMapType, SharedState, StateManagerMetrics,
-    CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS, NUMBER_OF_CHECKPOINT_THREADS,
+    CheckpointError,
+    PageMapType,
+    SharedState,
+    StateManagerMetrics,
+    CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS,
+    NUMBER_OF_CHECKPOINT_THREADS,
 };
-use crossbeam_channel::{unbounded, Sender};
+use crossbeam_channel::{
+    unbounded,
+    Sender,
+};
 use ic_base_types::subnet_id_into_protobuf;
 use ic_config::flag_status::FlagStatus;
 use ic_config::state_manager::LsmtConfig;
-use ic_logger::{error, fatal, info, ReplicaLogger};
+use ic_logger::{
+    error,
+    fatal,
+    info,
+    ReplicaLogger,
+};
 use ic_protobuf::state::{
     stats::v1::Stats,
-    system_metadata::v1::{SplitFrom, SystemMetadata},
+    system_metadata::v1::{
+        SplitFrom,
+        SystemMetadata,
+    },
 };
 use ic_replicated_state::{
-    canister_snapshots::{CanisterSnapshot, SnapshotOperation},
-    page_map::{MergeCandidate, StorageMetrics, StorageResult, MAX_NUMBER_OF_FILES},
+    canister_snapshots::{
+        CanisterSnapshot,
+        SnapshotOperation,
+    },
+    page_map::{
+        MergeCandidate,
+        StorageMetrics,
+        StorageResult,
+        MAX_NUMBER_OF_FILES,
+    },
 };
 use ic_replicated_state::{
-    page_map::{StorageLayout, PAGE_SIZE},
-    CanisterState, NumWasmPages, PageMap, ReplicatedState,
+    page_map::{
+        StorageLayout,
+        PAGE_SIZE,
+    },
+    CanisterState,
+    NumWasmPages,
+    PageMap,
+    ReplicatedState,
 };
 use ic_state_layout::{
-    error::LayoutError, CanisterSnapshotBits, CanisterStateBits, CheckpointLayout,
-    ExecutionStateBits, FilePermissions, PageMapLayout, ReadOnly, RwPolicy, StateLayout,
-    TipHandler, WasmFile,
+    error::LayoutError,
+    CanisterSnapshotBits,
+    CanisterStateBits,
+    CheckpointLayout,
+    ExecutionStateBits,
+    FilePermissions,
+    PageMapLayout,
+    ReadOnly,
+    RwPolicy,
+    StateLayout,
+    TipHandler,
+    WasmFile,
 };
 use ic_sys::fs::defrag_file_partially;
-use ic_types::{malicious_flags::MaliciousFlags, CanisterId, Height, SnapshotId};
+use ic_types::{
+    malicious_flags::MaliciousFlags,
+    CanisterId,
+    Height,
+    SnapshotId,
+};
 use ic_utils::thread::parallel_map;
 use ic_utils_thread::JoinOnDrop;
 use prometheus::HistogramTimer;
 use rand::prelude::SliceRandom;
-use rand::{seq::IteratorRandom, Rng, SeedableRng};
+use rand::{
+    seq::IteratorRandom,
+    Rng,
+    SeedableRng,
+};
 use rand_chacha::ChaChaRng;
 use std::collections::BTreeSet;
 use std::os::unix::prelude::MetadataExt;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    Arc,
+    Mutex,
+};
 use std::time::Instant;
 
 const DEFRAG_SIZE: u64 = 1 << 29; // 500 MB

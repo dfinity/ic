@@ -2,11 +2,18 @@ use crate::sign::canister_threshold_sig::idkg::retain_active_keys::oldest_public
 use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
 use ic_base_types::SubnetId;
-use ic_base_types::{NodeId, RegistryVersion};
+use ic_base_types::{
+    NodeId,
+    RegistryVersion,
+};
 use ic_crypto_internal_csp::keygen::utils::idkg_dealing_encryption_pk_to_proto;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::MEGaPublicKey;
-use ic_crypto_internal_threshold_sig_canister_threshold_sig::{EccCurveType, EccPoint, EccScalar};
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
+    EccCurveType,
+    EccPoint,
+    EccScalar,
+};
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_registry_mocks::MockRegistryClient;
@@ -19,16 +26,24 @@ use ic_types::crypto::canister_threshold_sig::error::IDkgRetainKeysError;
 use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscript;
 use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    IDkgMaskedTranscriptOrigin, IDkgReceivers, IDkgTranscriptType,
+    IDkgMaskedTranscriptOrigin,
+    IDkgReceivers,
+    IDkgTranscriptType,
 };
 use ic_types::crypto::AlgorithmId;
 use ic_types::crypto::KeyPurpose;
 use ic_types::registry::RegistryClientError;
 use ic_types::Height;
-use rand::{CryptoRng, Rng};
+use rand::{
+    CryptoRng,
+    Rng,
+};
 use std::collections::BTreeMap;
 use std::collections::HashMap;
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{
+    BTreeSet,
+    HashSet,
+};
 use std::sync::Arc;
 
 mod retain_keys_for_transcripts {

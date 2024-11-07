@@ -1,18 +1,35 @@
 #![no_main]
 use arbitrary::Arbitrary;
-use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
+use ic_stable_structures::memory_manager::{
+    MemoryId,
+    MemoryManager,
+    VirtualMemory,
+};
 use ic_stable_structures::Memory as OtherMemory;
-use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
+use ic_stable_structures::{
+    DefaultMemoryImpl,
+    StableBTreeMap,
+};
 use libfuzzer_sys::fuzz_target;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::cell::RefCell;
 use std::fs::File;
 use std::io::Write;
 use std::time::SystemTime;
-use tempfile::{tempdir, TempDir};
+use tempfile::{
+    tempdir,
+    TempDir,
+};
 
 mod data;
-use data::{BoundedFuzzStruct, UnboundedFuzzStruct, MAX_VALUE_SIZE};
+use data::{
+    BoundedFuzzStruct,
+    UnboundedFuzzStruct,
+    MAX_VALUE_SIZE,
+};
 
 const KEY_SIZE: usize = 4;
 type Memory = VirtualMemory<DefaultMemoryImpl>;

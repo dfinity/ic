@@ -3,17 +3,28 @@ use std::time::Duration;
 use anyhow::Result;
 
 use ic_consensus_system_test_upgrade_common::{
-    bless_branch_version, get_chain_key_canister_and_public_key, upgrade,
+    bless_branch_version,
+    get_chain_key_canister_and_public_key,
+    upgrade,
 };
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_consensus_threshold_sig_system_test_utils::make_key_ids_for_all_schemes;
-use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
+use ic_registry_subnet_features::{
+    ChainKeyConfig,
+    KeyConfig,
+    DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::ic::{
+    InternetComputer,
+    Subnet,
+};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot,
+    GetFirstHealthyNodeSnapshot,
+    HasPublicApiUrl,
+    HasTopologySnapshot,
 };
 use ic_system_test_driver::systest;
 use ic_types::Height;

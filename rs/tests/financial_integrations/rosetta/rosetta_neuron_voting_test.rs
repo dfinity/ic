@@ -4,7 +4,10 @@ use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::systest;
 use ic_tests::rosetta_tests;
-use rosetta_tests::setup::{ROSETTA_TESTS_OVERALL_TIMEOUT, ROSETTA_TESTS_PER_TEST_TIMEOUT};
+use rosetta_tests::setup::{
+    ROSETTA_TESTS_OVERALL_TIMEOUT,
+    ROSETTA_TESTS_PER_TEST_TIMEOUT,
+};
 use rosetta_tests::tests;
 
 fn main() -> Result<()> {

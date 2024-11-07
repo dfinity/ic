@@ -1,4 +1,7 @@
-use icp_ledger::{Block, BlockIndex};
+use icp_ledger::{
+    Block,
+    BlockIndex,
+};
 
 use crate::blocks::BlockStoreError;
 

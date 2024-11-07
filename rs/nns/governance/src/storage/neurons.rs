@@ -1,24 +1,43 @@
 use crate::{
-    neuron::{DecomposedNeuron, Neuron},
+    neuron::{
+        DecomposedNeuron,
+        Neuron,
+    },
     neuron_store::NeuronStoreError,
     pb::v1::{
-        neuron::Followees, AbridgedNeuron, BallotInfo, KnownNeuronData, NeuronStakeTransfer, Topic,
+        neuron::Followees,
+        AbridgedNeuron,
+        BallotInfo,
+        KnownNeuronData,
+        NeuronStakeTransfer,
+        Topic,
     },
     storage::validate_stable_btree_map,
 };
 use candid::Principal;
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::NeuronId;
-use ic_stable_structures::{storable::Bound, StableBTreeMap, Storable};
+use ic_stable_structures::{
+    storable::Bound,
+    StableBTreeMap,
+    Storable,
+};
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use maplit::hashmap;
 use prost::Message;
 use std::{
     borrow::Cow,
-    collections::{BTreeMap as HeapBTreeMap, BTreeSet as HeapBTreeSet, HashMap},
+    collections::{
+        BTreeMap as HeapBTreeMap,
+        BTreeSet as HeapBTreeSet,
+        HashMap,
+    },
     iter::Peekable,
-    ops::{Bound as RangeBound, RangeBounds},
+    ops::{
+        Bound as RangeBound,
+        RangeBounds,
+    },
 };
 
 // Because many arguments are needed to construct a StableNeuronStore, there is

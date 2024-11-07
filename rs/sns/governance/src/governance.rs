@@ -1,100 +1,200 @@
 use crate::{
     canister_control::{
-        get_canister_id, perform_execute_generic_nervous_system_function_call,
+        get_canister_id,
+        perform_execute_generic_nervous_system_function_call,
         upgrade_canister_directly,
     },
-    logs::{ERROR, INFO},
+    logs::{
+        ERROR,
+        INFO,
+    },
     neuron::{
-        NeuronState, RemovePermissionsStatus, DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
+        NeuronState,
+        RemovePermissionsStatus,
+        DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
         MAX_LIST_NEURONS_RESULTS,
     },
     pb::{
         sns_root_types::{
-            ManageDappCanisterSettingsRequest, ManageDappCanisterSettingsResponse,
-            RegisterDappCanistersRequest, RegisterDappCanistersResponse, SetDappControllersRequest,
+            ManageDappCanisterSettingsRequest,
+            ManageDappCanisterSettingsResponse,
+            RegisterDappCanistersRequest,
+            RegisterDappCanistersResponse,
+            SetDappControllersRequest,
             SetDappControllersResponse,
         },
         v1::{
             claim_swap_neurons_response::SwapNeuron,
-            get_neuron_response, get_proposal_response,
+            get_neuron_response,
+            get_proposal_response,
             governance::{
                 self,
-                neuron_in_flight_command::{self, Command as InFlightCommand},
-                CachedUpgradeSteps, MaturityModulation, NeuronInFlightCommand, SnsMetadata,
-                UpgradeInProgress, Version, Versions,
+                neuron_in_flight_command::{
+                    self,
+                    Command as InFlightCommand,
+                },
+                CachedUpgradeSteps,
+                MaturityModulation,
+                NeuronInFlightCommand,
+                SnsMetadata,
+                UpgradeInProgress,
+                Version,
+                Versions,
             },
             governance_error::ErrorType,
             manage_neuron::{
                 self,
-                claim_or_refresh::{By, MemoAndController},
-                AddNeuronPermissions, ClaimOrRefresh, DisburseMaturity, FinalizeDisburseMaturity,
+                claim_or_refresh::{
+                    By,
+                    MemoAndController,
+                },
+                AddNeuronPermissions,
+                ClaimOrRefresh,
+                DisburseMaturity,
+                FinalizeDisburseMaturity,
                 RemoveNeuronPermissions,
             },
             manage_neuron_response::{
-                DisburseMaturityResponse, MergeMaturityResponse, StakeMaturityResponse,
+                DisburseMaturityResponse,
+                MergeMaturityResponse,
+                StakeMaturityResponse,
             },
-            neuron::{DissolveState, Followees},
+            neuron::{
+                DissolveState,
+                Followees,
+            },
             proposal::Action,
             proposal_data::ActionAuxiliary as ActionAuxiliaryPb,
             transfer_sns_treasury_funds::TransferFrom,
-            upgrade_journal_entry, Account as AccountProto, AddMaturityRequest,
-            AddMaturityResponse, AdvanceTargetVersionRequest, AdvanceTargetVersionResponse, Ballot,
-            ClaimSwapNeuronsError, ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse,
-            ClaimedSwapNeuronStatus, DefaultFollowees, DeregisterDappCanisters,
-            DisburseMaturityInProgress, Empty, ExecuteGenericNervousSystemFunction,
-            FailStuckUpgradeInProgressRequest, FailStuckUpgradeInProgressResponse,
-            GetMaturityModulationRequest, GetMaturityModulationResponse, GetMetadataRequest,
-            GetMetadataResponse, GetMode, GetModeResponse, GetNeuron, GetNeuronResponse,
-            GetProposal, GetProposalResponse, GetSnsInitializationParametersRequest,
-            GetSnsInitializationParametersResponse, GetUpgradeJournalResponse,
-            Governance as GovernanceProto, GovernanceError, ListNervousSystemFunctionsResponse,
-            ListNeurons, ListNeuronsResponse, ListProposals, ListProposalsResponse,
-            ManageDappCanisterSettings, ManageLedgerParameters, ManageNeuron, ManageNeuronResponse,
-            ManageSnsMetadata, MintSnsTokens, MintTokensRequest, MintTokensResponse,
-            NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId, NeuronPermission,
-            NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
-            ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RegisterDappCanisters,
-            RewardEvent, Tally, TransferSnsTreasuryFunds, UpgradeJournal, UpgradeJournalEntry,
-            UpgradeSnsControlledCanister, Vote, WaitForQuietState,
+            upgrade_journal_entry,
+            Account as AccountProto,
+            AddMaturityRequest,
+            AddMaturityResponse,
+            AdvanceTargetVersionRequest,
+            AdvanceTargetVersionResponse,
+            Ballot,
+            ClaimSwapNeuronsError,
+            ClaimSwapNeuronsRequest,
+            ClaimSwapNeuronsResponse,
+            ClaimedSwapNeuronStatus,
+            DefaultFollowees,
+            DeregisterDappCanisters,
+            DisburseMaturityInProgress,
+            Empty,
+            ExecuteGenericNervousSystemFunction,
+            FailStuckUpgradeInProgressRequest,
+            FailStuckUpgradeInProgressResponse,
+            GetMaturityModulationRequest,
+            GetMaturityModulationResponse,
+            GetMetadataRequest,
+            GetMetadataResponse,
+            GetMode,
+            GetModeResponse,
+            GetNeuron,
+            GetNeuronResponse,
+            GetProposal,
+            GetProposalResponse,
+            GetSnsInitializationParametersRequest,
+            GetSnsInitializationParametersResponse,
+            GetUpgradeJournalResponse,
+            Governance as GovernanceProto,
+            GovernanceError,
+            ListNervousSystemFunctionsResponse,
+            ListNeurons,
+            ListNeuronsResponse,
+            ListProposals,
+            ListProposalsResponse,
+            ManageDappCanisterSettings,
+            ManageLedgerParameters,
+            ManageNeuron,
+            ManageNeuronResponse,
+            ManageSnsMetadata,
+            MintSnsTokens,
+            MintTokensRequest,
+            MintTokensResponse,
+            NervousSystemFunction,
+            NervousSystemParameters,
+            Neuron,
+            NeuronId,
+            NeuronPermission,
+            NeuronPermissionList,
+            NeuronPermissionType,
+            Proposal,
+            ProposalData,
+            ProposalDecisionStatus,
+            ProposalId,
+            ProposalRewardStatus,
+            RegisterDappCanisters,
+            RewardEvent,
+            Tally,
+            TransferSnsTreasuryFunds,
+            UpgradeJournal,
+            UpgradeJournalEntry,
+            UpgradeSnsControlledCanister,
+            Vote,
+            WaitForQuietState,
         },
     },
     proposal::{
         get_action_auxiliary,
         transfer_sns_treasury_funds_amount_is_small_enough_at_execution_time_or_err,
-        validate_and_render_proposal, ValidGenericNervousSystemFunction, MAX_LIST_PROPOSAL_RESULTS,
+        validate_and_render_proposal,
+        ValidGenericNervousSystemFunction,
+        MAX_LIST_PROPOSAL_RESULTS,
         MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
     },
     sns_upgrade::{
-        get_all_sns_canisters, get_running_version, get_upgrade_params, get_wasm, SnsCanisterType,
+        get_all_sns_canisters,
+        get_running_version,
+        get_upgrade_params,
+        get_wasm,
+        SnsCanisterType,
         UpgradeSnsParams,
     },
     types::{
-        function_id_to_proposal_criticality, is_registered_function_id, Environment,
-        HeapGrowthPotential, LedgerUpdateLock,
+        function_id_to_proposal_criticality,
+        is_registered_function_id,
+        Environment,
+        HeapGrowthPotential,
+        LedgerUpdateLock,
     },
 };
-use candid::{Decode, Encode};
+use candid::{
+    Decode,
+    Encode,
+};
 #[cfg(not(target_arch = "wasm32"))]
 use futures::FutureExt;
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_canister_log::log;
 use ic_canister_profiler::SpanStats;
 #[cfg(target_arch = "wasm32")]
 use ic_cdk::spawn;
 use ic_ledger_core::Tokens;
 use ic_management_canister_types::{
-    CanisterChangeDetails, CanisterInfoRequest, CanisterInfoResponse, CanisterInstallMode,
+    CanisterChangeDetails,
+    CanisterInfoRequest,
+    CanisterInfoResponse,
+    CanisterInstallMode,
 };
 use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
 use ic_nervous_system_collections_union_multi_map::UnionMultiMap;
 use ic_nervous_system_common::{
     cmc::CMC,
     i2d,
-    ledger::{self, compute_distribution_subaccount_bytes},
-    NervousSystemError, ONE_DAY_SECONDS,
+    ledger::{
+        self,
+        compute_distribution_subaccount_bytes,
+    },
+    NervousSystemError,
+    ONE_DAY_SECONDS,
 };
 use ic_nervous_system_governance::maturity_modulation::{
-    apply_maturity_modulation, MIN_MATURITY_MODULATION_PERMYRIAD,
+    apply_maturity_modulation,
+    MIN_MATURITY_MODULATION_PERMYRIAD,
 };
 use ic_nervous_system_lock::acquire;
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
@@ -103,7 +203,10 @@ use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
 use ic_sns_governance_proposal_criticality::ProposalCriticality;
 use ic_sns_governance_token_valuation::Valuation;
 use icp_ledger::DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE;
-use icrc_ledger_types::icrc1::account::{Account, Subaccount};
+use icrc_ledger_types::icrc1::account::{
+    Account,
+    Subaccount,
+};
 use lazy_static::lazy_static;
 use maplit::hashset;
 use rust_decimal::Decimal;
@@ -112,13 +215,23 @@ use std::{
     cell::RefCell,
     cmp::Ordering,
     collections::{
-        btree_map::{BTreeMap, Entry},
+        btree_map::{
+            BTreeMap,
+            Entry,
+        },
         btree_set::BTreeSet,
-        HashMap, HashSet,
+        HashMap,
+        HashSet,
     },
-    convert::{TryFrom, TryInto},
+    convert::{
+        TryFrom,
+        TryInto,
+    },
     future::Future,
-    ops::Bound::{Excluded, Unbounded},
+    ops::Bound::{
+        Excluded,
+        Unbounded,
+    },
     str::FromStr,
     string::ToString,
     thread::LocalKey,
@@ -2827,7 +2940,10 @@ impl Governance {
         })?
         .wasm;
 
-        use ic_icrc1_ledger::{LedgerArgument, UpgradeArgs};
+        use ic_icrc1_ledger::{
+            LedgerArgument,
+            UpgradeArgs,
+        };
         let ledger_upgrade_arg = candid::encode_one(Some(LedgerArgument::Upgrade(Some(
             UpgradeArgs::from(manage_ledger_parameters.clone()),
         ))))
@@ -4357,7 +4473,10 @@ impl Governance {
         neuron_id: &NeuronId,
         command: &manage_neuron::Command,
     ) -> Result<(), GovernanceError> {
-        use manage_neuron::{configure::Operation::*, Command::*};
+        use manage_neuron::{
+            configure::Operation::*,
+            Command::*,
+        };
 
         // If this is a "claim" call, the neuron doesn't exist yet, so we return (because no checks
         // can be made). A "refresh" call can be made on a vesting neuron, so in this case also
@@ -5846,47 +5965,92 @@ mod tests {
         pb::v1::{
             governance::SnsMetadata,
             manage_neuron_response,
-            nervous_system_function::{FunctionType, GenericNervousSystemFunction},
-            neuron, Account as AccountProto, Motion, NeuronPermissionType, ProposalData,
-            ProposalId, Tally, UpgradeSnsControlledCanister, UpgradeSnsToNextVersion,
-            VotingRewardsParameters, WaitForQuietState,
+            nervous_system_function::{
+                FunctionType,
+                GenericNervousSystemFunction,
+            },
+            neuron,
+            Account as AccountProto,
+            Motion,
+            NeuronPermissionType,
+            ProposalData,
+            ProposalId,
+            Tally,
+            UpgradeSnsControlledCanister,
+            UpgradeSnsToNextVersion,
+            VotingRewardsParameters,
+            WaitForQuietState,
         },
         reward,
         sns_upgrade::{
-            CanisterSummary, GetNextSnsVersionRequest, GetNextSnsVersionResponse,
-            GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse, GetWasmRequest,
-            GetWasmResponse, SnsCanisterType, SnsVersion, SnsWasm,
+            CanisterSummary,
+            GetNextSnsVersionRequest,
+            GetNextSnsVersionResponse,
+            GetSnsCanistersSummaryRequest,
+            GetSnsCanistersSummaryResponse,
+            GetWasmRequest,
+            GetWasmResponse,
+            SnsCanisterType,
+            SnsVersion,
+            SnsWasm,
         },
         types::test_helpers::NativeEnvironment,
     };
     use assert_matches::assert_matches;
     use async_trait::async_trait;
     use candid::Principal;
-    use futures::{join, FutureExt};
+    use futures::{
+        join,
+        FutureExt,
+    };
     use ic_canister_client_sender::Sender;
     use ic_nervous_system_clients::{
         canister_id_record::CanisterIdRecord,
         canister_status::{
-            CanisterStatusResultFromManagementCanister, CanisterStatusResultV2, CanisterStatusType,
+            CanisterStatusResultFromManagementCanister,
+            CanisterStatusResultV2,
+            CanisterStatusType,
         },
     };
     use ic_nervous_system_common::{
-        assert_is_err, assert_is_ok, cmc::FakeCmc, ledger::compute_neuron_staking_subaccount_bytes,
-        E8, ONE_DAY_SECONDS, START_OF_2022_TIMESTAMP_SECONDS,
+        assert_is_err,
+        assert_is_ok,
+        cmc::FakeCmc,
+        ledger::compute_neuron_staking_subaccount_bytes,
+        E8,
+        ONE_DAY_SECONDS,
+        START_OF_2022_TIMESTAMP_SECONDS,
     };
     use ic_nervous_system_common_test_keys::{
-        TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL, TEST_USER1_KEYPAIR,
+        TEST_NEURON_1_OWNER_PRINCIPAL,
+        TEST_NEURON_2_OWNER_PRINCIPAL,
+        TEST_USER1_KEYPAIR,
     };
     use ic_nns_constants::SNS_WASM_CANISTER_ID;
-    use ic_sns_governance_token_valuation::{Token, ValuationFactors};
+    use ic_sns_governance_token_valuation::{
+        Token,
+        ValuationFactors,
+    };
     use ic_sns_test_utils::itest_helpers::UserInfo;
     use ic_test_utilities_types::ids::canister_test_id;
-    use maplit::{btreemap, btreeset};
+    use maplit::{
+        btreemap,
+        btreeset,
+    };
     use pretty_assertions::assert_eq;
-    use proptest::prelude::{prop_assert, proptest};
+    use proptest::prelude::{
+        prop_assert,
+        proptest,
+    };
     use std::{
-        sync::{Arc, Mutex},
-        time::{Duration, SystemTime},
+        sync::{
+            Arc,
+            Mutex,
+        },
+        time::{
+            Duration,
+            SystemTime,
+        },
     };
 
     mod fail_stuck_upgrade_in_progress_tests;

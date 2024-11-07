@@ -1,38 +1,78 @@
-use crate::api::{CspCreateMEGaKeyError, CspThresholdSignError};
-use crate::types::{CspPop, CspPublicKey, CspSignature};
+use crate::api::{
+    CspCreateMEGaKeyError,
+    CspThresholdSignError,
+};
+use crate::types::{
+    CspPop,
+    CspPublicKey,
+    CspSignature,
+};
 use crate::vault::api::{
-    CspBasicSignatureError, CspBasicSignatureKeygenError, CspMultiSignatureError,
-    CspMultiSignatureKeygenError, CspPublicKeyStoreError, CspSecretKeyStoreContainsError,
-    CspTlsKeygenError, CspTlsSignError, IDkgCreateDealingVaultError, IDkgDealingInternalBytes,
-    IDkgTranscriptInternalBytes, PksAndSksContainsErrors, ThresholdSchnorrCreateSigShareVaultError,
-    ThresholdSchnorrSigShareBytes, ValidatePksAndSksError,
+    CspBasicSignatureError,
+    CspBasicSignatureKeygenError,
+    CspMultiSignatureError,
+    CspMultiSignatureKeygenError,
+    CspPublicKeyStoreError,
+    CspSecretKeyStoreContainsError,
+    CspTlsKeygenError,
+    CspTlsSignError,
+    IDkgCreateDealingVaultError,
+    IDkgDealingInternalBytes,
+    IDkgTranscriptInternalBytes,
+    PksAndSksContainsErrors,
+    ThresholdSchnorrCreateSigShareVaultError,
+    ThresholdSchnorrSigShareBytes,
+    ValidatePksAndSksError,
 };
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
-    CommitmentOpening, IDkgComplaintInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
+    CommitmentOpening,
+    IDkgComplaintInternal,
+    MEGaPublicKey,
+    ThresholdEcdsaSigShareInternal,
 };
 use ic_crypto_internal_types::encrypt::forward_secure::{
-    CspFsEncryptionPop, CspFsEncryptionPublicKey,
+    CspFsEncryptionPop,
+    CspFsEncryptionPublicKey,
 };
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
-    CspNiDkgDealing, CspNiDkgTranscript, Epoch,
+    CspNiDkgDealing,
+    CspNiDkgTranscript,
+    Epoch,
 };
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_logger::ReplicaLogger;
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_types::crypto::canister_threshold_sig::error::{
-    IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
-    IDkgVerifyDealingPrivateError, ThresholdEcdsaCreateSigShareError,
+    IDkgLoadTranscriptError,
+    IDkgOpenTranscriptError,
+    IDkgRetainKeysError,
+    IDkgVerifyDealingPrivateError,
+    ThresholdEcdsaCreateSigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::{
-    idkg::{BatchSignedIDkgDealing, IDkgTranscriptOperation},
+    idkg::{
+        BatchSignedIDkgDealing,
+        IDkgTranscriptOperation,
+    },
     ExtendedDerivationPath,
 };
-use ic_types::crypto::{AlgorithmId, CurrentNodePublicKeys};
-use ic_types::{NodeId, NodeIndex, NumberOfNodes, Randomness};
+use ic_types::crypto::{
+    AlgorithmId,
+    CurrentNodePublicKeys,
+};
+use ic_types::{
+    NodeId,
+    NodeIndex,
+    NumberOfNodes,
+    Randomness,
+};
 use serde_bytes::ByteBuf;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{
+    BTreeMap,
+    BTreeSet,
+};
 use std::path::Path;
 use tokio::net::UnixListener;
 
@@ -48,8 +88,14 @@ use crate::ExternalPublicKeys;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use std::sync::Arc;
-pub use tarpc_csp_vault_client::{RemoteCspVault, RemoteCspVaultBuilder};
-pub use tarpc_csp_vault_server::{TarpcCspVaultServerImpl, TarpcCspVaultServerImplBuilder};
+pub use tarpc_csp_vault_client::{
+    RemoteCspVault,
+    RemoteCspVaultBuilder,
+};
+pub use tarpc_csp_vault_server::{
+    TarpcCspVaultServerImpl,
+    TarpcCspVaultServerImplBuilder,
+};
 use tokio_util::codec::length_delimited::Builder;
 use tokio_util::codec::LengthDelimitedCodec;
 

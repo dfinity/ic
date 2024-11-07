@@ -1,5 +1,9 @@
 use crate::candid::UpgradeArgs;
-use crate::git::{CompressedWasmHash, GitCommitHash, ReleaseNotes};
+use crate::git::{
+    CompressedWasmHash,
+    GitCommitHash,
+    ReleaseNotes,
+};
 use crate::TargetCanister;
 use askama::Template;
 use candid::Principal;

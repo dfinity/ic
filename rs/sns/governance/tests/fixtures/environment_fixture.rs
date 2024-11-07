@@ -1,14 +1,31 @@
 use async_trait::async_trait;
-use candid::{CandidType, Decode, Encode, Error};
+use candid::{
+    CandidType,
+    Decode,
+    Encode,
+    Error,
+};
 use ic_base_types::CanisterId;
 use ic_nervous_system_clients::update_settings::CanisterSettings;
 use ic_sns_governance::{
-    pb::sns_root_types::{RegisterDappCanistersRequest, SetDappControllersRequest},
+    pb::sns_root_types::{
+        RegisterDappCanistersRequest,
+        SetDappControllersRequest,
+    },
     sns_upgrade::ListUpgradeStepsRequest,
-    types::{Environment, HeapGrowthPotential},
+    types::{
+        Environment,
+        HeapGrowthPotential,
+    },
 };
-use rand::{rngs::StdRng, RngCore};
-use std::sync::{Arc, Mutex};
+use rand::{
+    rngs::StdRng,
+    RngCore,
+};
+use std::sync::{
+    Arc,
+    Mutex,
+};
 
 type CanisterCallResult = Result<Vec<u8>, (Option<i32>, String)>;
 

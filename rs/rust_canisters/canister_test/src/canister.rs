@@ -1,26 +1,58 @@
 use backoff::backoff::Backoff;
 use core::future::Future;
-use dfn_candid::{candid, candid_multi_arity};
-use ic_canister_client::{Agent, Sender};
+use dfn_candid::{
+    candid,
+    candid_multi_arity,
+};
+use ic_canister_client::{
+    Agent,
+    Sender,
+};
 use ic_config::Config;
 use ic_management_canister_types::CanisterStatusType::Stopped;
 pub use ic_management_canister_types::{
-    self as ic00, CanisterIdRecord, CanisterInstallMode, CanisterStatusResult, InstallCodeArgs,
-    ProvisionalCreateCanisterWithCyclesArgs, IC_00,
+    self as ic00,
+    CanisterIdRecord,
+    CanisterInstallMode,
+    CanisterStatusResult,
+    InstallCodeArgs,
+    ProvisionalCreateCanisterWithCyclesArgs,
+    IC_00,
 };
 use ic_registry_transport::pb::v1::RegistryMutation;
-pub use ic_types::{ingress::WasmResult, CanisterId, Cycles, PrincipalId};
-use on_wire::{FromWire, IntoWire, NewType};
+pub use ic_types::{
+    ingress::WasmResult,
+    CanisterId,
+    Cycles,
+    PrincipalId,
+};
+use on_wire::{
+    FromWire,
+    IntoWire,
+    NewType,
+};
 
 use ic_management_canister_types::{
-    CanisterSettingsArgsBuilder, CanisterStatusResultV2, UpdateSettingsArgs,
+    CanisterSettingsArgsBuilder,
+    CanisterStatusResultV2,
+    UpdateSettingsArgs,
 };
-use ic_replica_tests::{canister_test_async, LocalTestRuntime};
-pub use ic_replica_tests::{canister_test_with_config_async, get_ic_config};
+use ic_replica_tests::{
+    canister_test_async,
+    LocalTestRuntime,
+};
+pub use ic_replica_tests::{
+    canister_test_with_config_async,
+    get_ic_config,
+};
 use ic_state_machine_tests::StateMachine;
 use std::{
-    convert::{AsRef, TryFrom},
-    env, fmt,
+    convert::{
+        AsRef,
+        TryFrom,
+    },
+    env,
+    fmt,
     fs::File,
     io::Read,
     path::Path,

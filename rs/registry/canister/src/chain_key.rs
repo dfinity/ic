@@ -2,10 +2,14 @@ use candid::CandidType;
 use ic_base_types::PrincipalId;
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_protobuf::registry::subnet::v1::{
-    ChainKeyConfig as ChainKeyConfigPb, KeyConfig as KeyConfigPb,
+    ChainKeyConfig as ChainKeyConfigPb,
+    KeyConfig as KeyConfigPb,
 };
 use ic_registry_subnet_features::KeyConfig as KeyConfigInternal;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
 pub(crate) struct InitialChainKeyConfigInternal {

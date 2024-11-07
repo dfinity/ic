@@ -2,7 +2,10 @@ use super::super::api as tsig;
 use super::super::crypto;
 use super::super::test_utils::select_n;
 use super::super::types::{
-    CombinedSignatureBytes, IndividualSignature, IndividualSignatureBytes, SecretKeyBytes,
+    CombinedSignatureBytes,
+    IndividualSignature,
+    IndividualSignatureBytes,
+    SecretKeyBytes,
 };
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::bls12_381::PublicCoefficientsBytes;

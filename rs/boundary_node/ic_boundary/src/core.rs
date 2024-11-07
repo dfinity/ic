@@ -1,19 +1,32 @@
 #![allow(clippy::disallowed_types)]
 use std::{
     error::Error as StdError,
-    net::{Ipv6Addr, SocketAddr},
+    net::{
+        Ipv6Addr,
+        SocketAddr,
+    },
     sync::Arc,
-    time::{Duration, Instant},
+    time::{
+        Duration,
+        Instant,
+    },
 };
 
-use anyhow::{anyhow, Context, Error};
+use anyhow::{
+    anyhow,
+    Context,
+    Error,
+};
 use arc_swap::ArcSwapOption;
 use async_scoped::TokioScope;
 use async_trait::async_trait;
 use axum::{
     middleware,
     response::IntoResponse,
-    routing::method_routing::{get, post},
+    routing::method_routing::{
+        get,
+        post,
+    },
     Router,
 };
 use axum_extra::middleware::option_layer;
@@ -22,44 +35,110 @@ use futures::TryFutureExt;
 use ic_bn_lib::http;
 use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
 use ic_registry_client::client::RegistryClientImpl;
-use ic_registry_local_store::{LocalStoreImpl, LocalStoreReader};
+use ic_registry_local_store::{
+    LocalStoreImpl,
+    LocalStoreReader,
+};
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
-use little_loadshedder::{LoadShedLayer, LoadShedResponse};
-use nix::unistd::{getpgid, setpgid, Pid};
+use little_loadshedder::{
+    LoadShedLayer,
+    LoadShedResponse,
+};
+use nix::unistd::{
+    getpgid,
+    setpgid,
+    Pid,
+};
 use prometheus::Registry;
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
-use tower::{limit::ConcurrencyLimitLayer, util::MapResponseLayer, ServiceBuilder};
-use tower_http::{compression::CompressionLayer, request_id::MakeRequestUuid, ServiceBuilderExt};
-use tracing::{debug, error, warn};
+use tower::{
+    limit::ConcurrencyLimitLayer,
+    util::MapResponseLayer,
+    ServiceBuilder,
+};
+use tower_http::{
+    compression::CompressionLayer,
+    request_id::MakeRequestUuid,
+    ServiceBuilderExt,
+};
+use tracing::{
+    debug,
+    error,
+    warn,
+};
 
 use crate::{
     bouncer,
-    cache::{cache_middleware, Cache},
-    check::{Checker, Runner as CheckRunner},
+    cache::{
+        cache_middleware,
+        Cache,
+    },
+    check::{
+        Checker,
+        Runner as CheckRunner,
+    },
     cli::Cli,
     dns::DnsResolver,
-    firewall::{FirewallGenerator, SystemdReloader},
+    firewall::{
+        FirewallGenerator,
+        SystemdReloader,
+    },
     geoip,
     metrics::{
-        self, HttpMetricParams, HttpMetricParamsStatus, MetricParams, MetricParamsCheck,
-        MetricParamsPersist, MetricParamsSnapshot, MetricsCache, MetricsRunner, WithMetrics,
-        WithMetricsCheck, WithMetricsPersist, WithMetricsSnapshot, HTTP_DURATION_BUCKETS,
+        self,
+        HttpMetricParams,
+        HttpMetricParamsStatus,
+        MetricParams,
+        MetricParamsCheck,
+        MetricParamsPersist,
+        MetricParamsSnapshot,
+        MetricsCache,
+        MetricsRunner,
+        WithMetrics,
+        WithMetricsCheck,
+        WithMetricsPersist,
+        WithMetricsSnapshot,
+        HTTP_DURATION_BUCKETS,
     },
-    persist::{Persist, Persister, Routes},
-    rate_limiting::{generic, RateLimit},
-    retry::{retry_request, RetryParams},
-    routes::{self, ErrorCause, Health, Lookup, Proxy, ProxyRouter, RootKey},
+    persist::{
+        Persist,
+        Persister,
+        Routes,
+    },
+    rate_limiting::{
+        generic,
+        RateLimit,
+    },
+    retry::{
+        retry_request,
+        RetryParams,
+    },
+    routes::{
+        self,
+        ErrorCause,
+        Health,
+        Lookup,
+        Proxy,
+        ProxyRouter,
+        RootKey,
+    },
     snapshot::{
-        generate_stub_snapshot, generate_stub_subnet, RegistrySnapshot, SnapshotPersister,
+        generate_stub_snapshot,
+        generate_stub_subnet,
+        RegistrySnapshot,
+        SnapshotPersister,
         Snapshotter,
     },
     tls_verify::TlsVerifier,
 };
 
 #[cfg(feature = "tls")]
-use {crate::cli, rustls::server::ResolvesServerCert};
+use {
+    crate::cli,
+    rustls::server::ResolvesServerCert,
+};
 
 pub const SERVICE_NAME: &str = "ic_boundary";
 pub const AUTHOR_NAME: &str = "Boundary Node Team <boundary-nodes@dfinity.org>";

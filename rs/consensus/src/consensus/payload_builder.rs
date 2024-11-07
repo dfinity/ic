@@ -2,28 +2,55 @@
 
 use crate::consensus::{
     metrics::{
-        PayloadBuilderMetrics, CRITICAL_ERROR_PAYLOAD_TOO_LARGE, CRITICAL_ERROR_SUBNET_RECORD_ISSUE,
+        PayloadBuilderMetrics,
+        CRITICAL_ERROR_PAYLOAD_TOO_LARGE,
+        CRITICAL_ERROR_SUBNET_RECORD_ISSUE,
     },
     payload::BatchPayloadSectionBuilder,
 };
 use ic_consensus_utils::get_subnet_record;
 use ic_interfaces::{
-    batch_payload::{BatchPayloadBuilder, ProposalContext},
-    consensus::{InvalidPayloadReason, PayloadBuilder, PayloadValidationError},
+    batch_payload::{
+        BatchPayloadBuilder,
+        ProposalContext,
+    },
+    consensus::{
+        InvalidPayloadReason,
+        PayloadBuilder,
+        PayloadValidationError,
+    },
     ingress_manager::IngressSelector,
     messaging::XNetPayloadBuilder,
     self_validating_payload::SelfValidatingPayloadBuilder,
-    validation::{ValidationError, ValidationResult},
+    validation::{
+        ValidationError,
+        ValidationResult,
+    },
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{error, warn, ReplicaLogger};
+use ic_logger::{
+    error,
+    warn,
+    ReplicaLogger,
+};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_types::{
-    batch::{BatchPayload, ValidationContext, MAX_BITCOIN_PAYLOAD_IN_BYTES},
-    consensus::{block_maker::SubnetRecords, Payload},
+    batch::{
+        BatchPayload,
+        ValidationContext,
+        MAX_BITCOIN_PAYLOAD_IN_BYTES,
+    },
+    consensus::{
+        block_maker::SubnetRecords,
+        Payload,
+    },
     messages::MAX_XNET_PAYLOAD_IN_BYTES,
-    Height, NodeId, NumBytes, SubnetId, Time,
+    Height,
+    NodeId,
+    NumBytes,
+    SubnetId,
+    Time,
 };
 use std::sync::Arc;
 
@@ -214,9 +241,14 @@ impl PayloadBuilderImpl {
 pub(crate) mod test {
     use super::*;
     use ic_btc_replica_types::{
-        BitcoinAdapterResponse, BitcoinAdapterResponseWrapper, GetSuccessorsResponseComplete,
+        BitcoinAdapterResponse,
+        BitcoinAdapterResponseWrapper,
+        GetSuccessorsResponseComplete,
     };
-    use ic_consensus_mocks::{dependencies, Dependencies};
+    use ic_consensus_mocks::{
+        dependencies,
+        Dependencies,
+    };
     use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::{
@@ -224,21 +256,34 @@ pub(crate) mod test {
         self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
         xnet_payload_builder::FakeXNetPayloadBuilder,
     };
-    use ic_test_utilities_consensus::{batch::MockBatchPayloadBuilder, fake::Fake};
+    use ic_test_utilities_consensus::{
+        batch::MockBatchPayloadBuilder,
+        fake::Fake,
+    };
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::{
-        ids::{node_test_id, subnet_test_id},
+        ids::{
+            node_test_id,
+            subnet_test_id,
+        },
         messages::SignedIngressBuilder,
     };
     use ic_types::{
         canister_http::CanisterHttpResponseWithConsensus,
-        consensus::certification::{Certification, CertificationContent},
-        crypto::{CryptoHash, Signed},
+        consensus::certification::{
+            Certification,
+            CertificationContent,
+        },
+        crypto::{
+            CryptoHash,
+            Signed,
+        },
         messages::SignedIngress,
         signature::ThresholdSignature,
         time::UNIX_EPOCH,
         xnet::CertifiedStreamSlice,
-        CryptoHashOfPartialState, RegistryVersion,
+        CryptoHashOfPartialState,
+        RegistryVersion,
     };
     use std::collections::BTreeMap;
 

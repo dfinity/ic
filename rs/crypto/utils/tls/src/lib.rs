@@ -9,7 +9,10 @@
 
 use std::str::FromStr;
 
-use ic_base_types::{NodeId, PrincipalId};
+use ic_base_types::{
+    NodeId,
+    PrincipalId,
+};
 use thiserror::Error;
 use x509_parser::certificate::X509Certificate;
 

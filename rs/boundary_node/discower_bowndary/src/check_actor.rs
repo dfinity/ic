@@ -1,10 +1,21 @@
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::Arc,
+    time::Duration,
+};
 
 use tokio::time;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error};
+use tracing::{
+    debug,
+    error,
+};
 
-use crate::{check::HealthCheck, messages::NodeHealthUpdate, node::Node, types::SenderMpsc};
+use crate::{
+    check::HealthCheck,
+    messages::NodeHealthUpdate,
+    node::Node,
+    types::SenderMpsc,
+};
 
 const SERVICE_NAME: &str = "HealthCheckActor";
 

@@ -2,7 +2,8 @@ use crate::CallCanisters;
 use ic_nns_common::pb::v1::ProposalId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance_api::pb::v1::{
-    GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
+    GetNeuronsFundAuditInfoRequest,
+    GetNeuronsFundAuditInfoResponse,
 };
 
 pub async fn get_neurons_fund_audit_info<C: CallCanisters>(

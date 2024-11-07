@@ -2,9 +2,17 @@
 mod framework;
 
 use crate::framework::ConsensusDriver;
-use ic_artifact_pool::{consensus_pool, dkg_pool, idkg_pool};
+use ic_artifact_pool::{
+    consensus_pool,
+    dkg_pool,
+    idkg_pool,
+};
 use ic_consensus::consensus::dkg_key_manager::DkgKeyManager;
-use ic_consensus::{certification::CertifierImpl, dkg, idkg};
+use ic_consensus::{
+    certification::CertifierImpl,
+    dkg,
+    idkg,
+};
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
 use ic_interfaces_state_manager::Labeled;
@@ -13,25 +21,42 @@ use ic_limits::INITIAL_NOTARY_DELAY;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_test_utilities::{
-    crypto::CryptoReturningOk, ingress_selector::FakeIngressSelector,
+    crypto::CryptoReturningOk,
+    ingress_selector::FakeIngressSelector,
     message_routing::FakeMessageRouting,
     self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
     xnet_payload_builder::FakeXNetPayloadBuilder,
 };
 use ic_test_utilities_consensus::batch::MockBatchPayloadBuilder;
-use ic_test_utilities_consensus::{make_genesis, IDkgStatsNoOp};
-use ic_test_utilities_registry::{setup_registry, SubnetRecordBuilder};
+use ic_test_utilities_consensus::{
+    make_genesis,
+    IDkgStatsNoOp,
+};
+use ic_test_utilities_registry::{
+    setup_registry,
+    SubnetRecordBuilder,
+};
 use ic_test_utilities_state::get_initial_state;
 use ic_test_utilities_time::FastForwardTimeSource;
 use ic_test_utilities_types::{
-    ids::{node_test_id, subnet_test_id},
+    ids::{
+        node_test_id,
+        subnet_test_id,
+    },
     messages::SignedIngressBuilder,
 };
 use ic_types::{
-    crypto::CryptoHash, malicious_flags::MaliciousFlags, replica_config::ReplicaConfig,
-    CryptoHashOfState, Height,
+    crypto::CryptoHash,
+    malicious_flags::MaliciousFlags,
+    replica_config::ReplicaConfig,
+    CryptoHashOfState,
+    Height,
 };
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{
+    Arc,
+    Mutex,
+    RwLock,
+};
 use std::time::Duration;
 use tokio::sync::watch;
 

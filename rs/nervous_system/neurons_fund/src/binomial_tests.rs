@@ -1,7 +1,13 @@
-use rust_decimal::{Decimal, RoundingStrategy};
+use rust_decimal::{
+    Decimal,
+    RoundingStrategy,
+};
 use rust_decimal_macros::dec;
 
-use super::{Atom, BinomialFormulaMember};
+use super::{
+    Atom,
+    BinomialFormulaMember,
+};
 
 fn rescale(x: Decimal) -> Decimal {
     x.round_dp_with_strategy(8, RoundingStrategy::MidpointNearestEven)

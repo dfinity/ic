@@ -1,8 +1,21 @@
-use ic_btc_replica_types::{GetSuccessorsRequestInitial, SendTransactionRequest};
-use ic_logger::{info, ReplicaLogger};
-use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId, SchnorrKeyId};
+use ic_btc_replica_types::{
+    GetSuccessorsRequestInitial,
+    SendTransactionRequest,
+};
+use ic_logger::{
+    info,
+    ReplicaLogger,
+};
+use ic_management_canister_types::{
+    EcdsaKeyId,
+    MasterPublicKeyId,
+    SchnorrKeyId,
+};
 use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{
+        try_from_option_field,
+        ProxyDecodeError,
+    },
     registry::crypto::v1 as pb_crypto,
     state::queues::v1 as pb_queues,
     state::system_metadata::v1 as pb_metadata,
@@ -10,15 +23,36 @@ use ic_protobuf::{
 use ic_types::{
     canister_http::CanisterHttpRequestContext,
     consensus::idkg::PreSigId,
-    crypto::threshold_sig::ni_dkg::{id::ni_dkg_target_id, NiDkgTargetId},
-    messages::{CallbackId, CanisterCall, Request, StopCanisterCallId},
-    node_id_into_protobuf, node_id_try_from_option, CanisterId, ExecutionRound, Height, NodeId,
-    RegistryVersion, Time,
+    crypto::threshold_sig::ni_dkg::{
+        id::ni_dkg_target_id,
+        NiDkgTargetId,
+    },
+    messages::{
+        CallbackId,
+        CanisterCall,
+        Request,
+        StopCanisterCallId,
+    },
+    node_id_into_protobuf,
+    node_id_try_from_option,
+    CanisterId,
+    ExecutionRound,
+    Height,
+    NodeId,
+    RegistryVersion,
+    Time,
 };
 use phantom_newtype::Id;
 use std::{
-    collections::{BTreeMap, BTreeSet, VecDeque},
-    convert::{From, TryFrom},
+    collections::{
+        BTreeMap,
+        BTreeSet,
+        VecDeque,
+    },
+    convert::{
+        From,
+        TryFrom,
+    },
     sync::Arc,
 };
 

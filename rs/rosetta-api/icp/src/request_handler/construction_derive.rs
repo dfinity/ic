@@ -1,9 +1,18 @@
-use crate::convert::{account_from_public_key, neuron_account_from_public_key};
+use crate::convert::{
+    account_from_public_key,
+    neuron_account_from_public_key,
+};
 use crate::errors::ApiError;
 use crate::models::{
-    self, AccountType, ConstructionDeriveRequestMetadata, ConstructionDeriveResponse,
+    self,
+    AccountType,
+    ConstructionDeriveRequestMetadata,
+    ConstructionDeriveResponse,
 };
-use crate::request_handler::{verify_network_id, RosettaRequestHandler};
+use crate::request_handler::{
+    verify_network_id,
+    RosettaRequestHandler,
+};
 
 impl RosettaRequestHandler {
     /// Derive an AccountIdentifier from a PublicKey.

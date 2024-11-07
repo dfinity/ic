@@ -1,22 +1,43 @@
 use crate::metrics::HttpHandlerMetrics;
 use ic_async_utils::JoinMap;
-use ic_logger::{info, ReplicaLogger};
-use ic_types::{messages::MessageId, Height};
+use ic_logger::{
+    info,
+    ReplicaLogger,
+};
+use ic_types::{
+    messages::MessageId,
+    Height,
+};
 use std::{
     cmp::max,
-    collections::{btree_map, hash_map::Entry, BTreeMap, HashMap, HashSet},
+    collections::{
+        btree_map,
+        hash_map::Entry,
+        BTreeMap,
+        HashMap,
+        HashSet,
+    },
     sync::Arc,
 };
 use tokio::{
     runtime::Handle,
     select,
     sync::{
-        mpsc::{channel, Receiver, Sender},
-        oneshot, watch, Notify,
+        mpsc::{
+            channel,
+            Receiver,
+            Sender,
+        },
+        oneshot,
+        watch,
+        Notify,
     },
     task::JoinHandle,
 };
-use tokio_util::sync::{CancellationToken, DropGuard};
+use tokio_util::sync::{
+    CancellationToken,
+    DropGuard,
+};
 
 const INGRESS_WATCHER_CHANNEL_SIZE: usize = 1000;
 
@@ -415,7 +436,10 @@ mod tests {
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_types::messages::EXPECTED_MESSAGE_ID_LENGTH;
-    use rstest::{fixture, rstest};
+    use rstest::{
+        fixture,
+        rstest,
+    };
 
     #[fixture]
     fn ingress_watcher() -> IngressWatcher {

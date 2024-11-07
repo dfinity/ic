@@ -1,13 +1,22 @@
 use std::{
     collections::HashMap,
     fmt,
-    net::{IpAddr, SocketAddr},
+    net::{
+        IpAddr,
+        SocketAddr,
+    },
     str::FromStr,
     sync::Arc,
-    time::{Duration, Instant},
+    time::{
+        Duration,
+        Instant,
+    },
 };
 
-use anyhow::{Context, Error};
+use anyhow::{
+    Context,
+    Error,
+};
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use candid::Principal;
@@ -16,19 +25,42 @@ use ic_registry_client_helpers::{
     crypto::CryptoRegistry,
     node::NodeRegistry,
     routing_table::RoutingTableRegistry,
-    subnet::{SubnetListRegistry, SubnetRegistry},
+    subnet::{
+        SubnetListRegistry,
+        SubnetRegistry,
+    },
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
+use ic_types::{
+    NodeId,
+    PrincipalId,
+    RegistryVersion,
+    SubnetId,
+};
 use tokio::sync::watch;
-use tracing::{debug, warn};
-use url::{ParseError, Url};
-use x509_parser::{certificate::X509Certificate, prelude::FromDer};
+use tracing::{
+    debug,
+    warn,
+};
+use url::{
+    ParseError,
+    Url,
+};
+use x509_parser::{
+    certificate::X509Certificate,
+    prelude::FromDer,
+};
 
 use crate::{
     core::Run,
-    firewall::{FirewallGenerator, SystemdReloader},
-    metrics::{MetricParamsSnapshot, WithMetricsSnapshot},
+    firewall::{
+        FirewallGenerator,
+        SystemdReloader,
+    },
+    metrics::{
+        MetricParamsSnapshot,
+        WithMetricsSnapshot,
+    },
     routes::RequestType,
 };
 

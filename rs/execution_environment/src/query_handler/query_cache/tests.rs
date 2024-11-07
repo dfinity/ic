@@ -1,26 +1,48 @@
-use super::{QueryCache, QueryCacheMetrics};
+use super::{
+    QueryCache,
+    QueryCacheMetrics,
+};
 use crate::{
     metrics,
-    query_handler::query_cache::{EntryEnv, EntryKey, EntryValue},
+    query_handler::query_cache::{
+        EntryEnv,
+        EntryKey,
+        EntryValue,
+    },
     InternalHttpQueryHandler,
 };
 use ic_base_types::CanisterId;
 use ic_error_types::ErrorCode;
-use ic_interfaces::execution_environment::{SystemApiCallCounters, SystemApiCallId};
+use ic_interfaces::execution_environment::{
+    SystemApiCallCounters,
+    SystemApiCallId,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_test_utilities::universal_canister::wasm;
-use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
+use ic_test_utilities_execution_environment::{
+    ExecutionTest,
+    ExecutionTestBuilder,
+};
 use ic_test_utilities_types::ids::user_test_id;
 use ic_types::{
     batch::QueryStats,
     ingress::WasmResult,
-    messages::{CanisterTask, Query, QuerySource},
-    time, CountBytes,
+    messages::{
+        CanisterTask,
+        Query,
+        QuerySource,
+    },
+    time,
+    CountBytes,
 };
 use ic_types_test_utils::ids::subnet_test_id;
 use ic_universal_canister::call_args;
-use std::{collections::BTreeMap, sync::Arc, time::Duration};
+use std::{
+    collections::BTreeMap,
+    sync::Arc,
+    time::Duration,
+};
 
 const MAX_EXPIRY_TIME: Duration = Duration::from_secs(10);
 const MORE_THAN_MAX_EXPIRY_TIME: Duration = Duration::from_secs(11);

@@ -1,6 +1,9 @@
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use rand::{CryptoRng, Rng};
+use rand::{
+    CryptoRng,
+    Rng,
+};
 use std::collections::BTreeMap;
 
 use ic_crypto_internal_threshold_sig_canister_threshold_sig_test_utils::*;

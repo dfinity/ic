@@ -1,6 +1,9 @@
 use crate::*;
 use ic_types::Randomness;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 /*
 Implements BIP340 Schnorr signatures over the secp256k1 curve

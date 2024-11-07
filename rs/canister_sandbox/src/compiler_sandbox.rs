@@ -1,13 +1,38 @@
-use serde::{Deserialize, Serialize};
-use std::os::unix::{net::UnixStream, prelude::FromRawFd};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use std::os::unix::{
+    net::UnixStream,
+    prelude::FromRawFd,
+};
 use std::sync::Arc;
 
 use crate::launcher_service::LauncherService;
-use crate::protocol::transport::{Message, WireMessage};
-use crate::{rpc, transport, transport::UnixStreamMuxWriter};
-use ic_embedders::{wasm_utils, CompilationResult, SerializedModule, WasmtimeEmbedder};
-use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
-use ic_logger::{error, trace, ReplicaLogger};
+use crate::protocol::transport::{
+    Message,
+    WireMessage,
+};
+use crate::{
+    rpc,
+    transport,
+    transport::UnixStreamMuxWriter,
+};
+use ic_embedders::{
+    wasm_utils,
+    CompilationResult,
+    SerializedModule,
+    WasmtimeEmbedder,
+};
+use ic_interfaces::execution_environment::{
+    HypervisorError,
+    HypervisorResult,
+};
+use ic_logger::{
+    error,
+    trace,
+    ReplicaLogger,
+};
 use ic_wasm_types::WasmEngineError;
 
 // A helper used for actual compilation in the compiler sandbox

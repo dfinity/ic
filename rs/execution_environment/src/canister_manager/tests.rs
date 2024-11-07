@@ -1,86 +1,212 @@
 use crate::{
     as_num_instructions,
     canister_manager::{
-        uninstall_canister, AddCanisterChangeToHistory, CanisterManager, CanisterManagerError,
-        CanisterMgrConfig, InstallCodeContext, StopCanisterResult, WasmSource,
+        uninstall_canister,
+        AddCanisterChangeToHistory,
+        CanisterManager,
+        CanisterManagerError,
+        CanisterMgrConfig,
+        InstallCodeContext,
+        StopCanisterResult,
+        WasmSource,
     },
-    canister_settings::{CanisterSettings, CanisterSettingsBuilder},
-    execution_environment::{as_round_instructions, RoundCounters},
+    canister_settings::{
+        CanisterSettings,
+        CanisterSettingsBuilder,
+    },
+    execution_environment::{
+        as_round_instructions,
+        RoundCounters,
+    },
     hypervisor::Hypervisor,
-    types::{IngressResponse, Response},
-    IngressHistoryWriterImpl, RoundLimits,
+    types::{
+        IngressResponse,
+        Response,
+    },
+    IngressHistoryWriterImpl,
+    RoundLimits,
 };
 use assert_matches::assert_matches;
 use candid::Decode;
-use ic_base_types::{NumSeconds, PrincipalId};
+use ic_base_types::{
+    NumSeconds,
+    PrincipalId,
+};
 use ic_config::{
-    execution_environment::{Config, DEFAULT_WASM_MEMORY_LIMIT},
+    execution_environment::{
+        Config,
+        DEFAULT_WASM_MEMORY_LIMIT,
+    },
     flag_status::FlagStatus,
     subnet_config::SchedulerConfig,
 };
-use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
+use ic_cycles_account_manager::{
+    CyclesAccountManager,
+    ResourceSaturation,
+};
 use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
 use ic_embedders::wasm_utils::instrumentation::WasmMemoryType;
-use ic_error_types::{ErrorCode, UserError};
-use ic_interfaces::execution_environment::{ExecutionMode, HypervisorError, SubnetAvailableMemory};
+use ic_error_types::{
+    ErrorCode,
+    UserError,
+};
+use ic_interfaces::execution_environment::{
+    ExecutionMode,
+    HypervisorError,
+    SubnetAvailableMemory,
+};
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types::{
-    CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
-    CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgsBuilder,
-    CanisterStatusResultV2, CanisterStatusType, CanisterUpgradeOptions, ChunkHash,
-    ClearChunkStoreArgs, CreateCanisterArgs, EmptyBlob, InstallCodeArgsV2, Method, Payload,
-    StoredChunksArgs, StoredChunksReply, UpdateSettingsArgs, UploadChunkArgs, UploadChunkReply,
+    CanisterChange,
+    CanisterChangeDetails,
+    CanisterChangeOrigin,
+    CanisterIdRecord,
+    CanisterInstallMode,
+    CanisterInstallModeV2,
+    CanisterSettingsArgsBuilder,
+    CanisterStatusResultV2,
+    CanisterStatusType,
+    CanisterUpgradeOptions,
+    ChunkHash,
+    ClearChunkStoreArgs,
+    CreateCanisterArgs,
+    EmptyBlob,
+    InstallCodeArgsV2,
+    Method,
+    Payload,
+    StoredChunksArgs,
+    StoredChunksReply,
+    UpdateSettingsArgs,
+    UploadChunkArgs,
+    UploadChunkReply,
     WasmMemoryPersistence,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
-use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
+use ic_registry_routing_table::{
+    CanisterIdRange,
+    RoutingTable,
+    CANISTER_IDS_PER_SUBNET,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::system_state::{wasm_chunk_store, CyclesUseCase},
+    canister_state::system_state::{
+        wasm_chunk_store,
+        CyclesUseCase,
+    },
     metadata_state::subnet_call_context_manager::InstallCodeCallId,
-    page_map::{self, TestPageAllocatorFileDescriptorImpl},
+    page_map::{
+        self,
+        TestPageAllocatorFileDescriptorImpl,
+    },
     testing::CanisterQueuesTesting,
     testing::SystemStateTesting,
-    CallContextManager, CallOrigin, CanisterState, CanisterStatus, NumWasmPages, PageMap,
-    ReplicatedState, SystemState,
+    CallContextManager,
+    CallOrigin,
+    CanisterState,
+    CanisterStatus,
+    NumWasmPages,
+    PageMap,
+    ReplicatedState,
+    SystemState,
 };
-use ic_state_machine_tests::{StateMachineBuilder, StateMachineConfig};
-use ic_system_api::{ExecutionParameters, InstructionLimits};
+use ic_state_machine_tests::{
+    StateMachineBuilder,
+    StateMachineConfig,
+};
+use ic_system_api::{
+    ExecutionParameters,
+    InstructionLimits,
+};
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
     state_manager::FakeStateManager,
-    universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM},
+    universal_canister::{
+        call_args,
+        wasm,
+        UNIVERSAL_CANISTER_WASM,
+    },
 };
 use ic_test_utilities_execution_environment::{
-    assert_delta, cycles_reserved_for_app_and_verified_app_subnets, get_reply,
-    get_routing_table_with_specified_ids_allocation_range, wasm_compilation_cost,
-    wat_compilation_cost, ExecutionTest, ExecutionTestBuilder,
+    assert_delta,
+    cycles_reserved_for_app_and_verified_app_subnets,
+    get_reply,
+    get_routing_table_with_specified_ids_allocation_range,
+    wasm_compilation_cost,
+    wat_compilation_cost,
+    ExecutionTest,
+    ExecutionTestBuilder,
 };
 use ic_test_utilities_state::{
-    get_running_canister, get_running_canister_with_args, get_stopped_canister,
-    get_stopped_canister_with_controller, get_stopping_canister,
-    get_stopping_canister_with_controller, CallContextBuilder, CanisterStateBuilder,
+    get_running_canister,
+    get_running_canister_with_args,
+    get_stopped_canister,
+    get_stopped_canister_with_controller,
+    get_stopping_canister,
+    get_stopping_canister_with_controller,
+    CallContextBuilder,
+    CanisterStateBuilder,
     ReplicatedStateBuilder,
 };
 use ic_test_utilities_types::{
-    ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id},
-    messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder},
+    ids::{
+        canister_test_id,
+        message_test_id,
+        subnet_test_id,
+        user_test_id,
+    },
+    messages::{
+        IngressBuilder,
+        RequestBuilder,
+        SignedIngressBuilder,
+    },
 };
 use ic_types::{
-    ingress::{IngressState, IngressStatus, WasmResult},
-    messages::{CallbackId, CanisterCall, StopCanisterCallId, StopCanisterContext, NO_DEADLINE},
+    ingress::{
+        IngressState,
+        IngressStatus,
+        WasmResult,
+    },
+    messages::{
+        CallbackId,
+        CanisterCall,
+        StopCanisterCallId,
+        StopCanisterContext,
+        NO_DEADLINE,
+    },
     nominal_cycles::NominalCycles,
     time::UNIX_EPOCH,
-    CanisterId, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
-    NumInstructions, SubnetId, Time, UserId,
+    CanisterId,
+    CanisterTimer,
+    ComputeAllocation,
+    Cycles,
+    MemoryAllocation,
+    NumBytes,
+    NumInstructions,
+    SubnetId,
+    Time,
+    UserId,
 };
-use ic_wasm_types::{CanisterModule, WasmValidationError};
+use ic_wasm_types::{
+    CanisterModule,
+    WasmValidationError,
+};
 use lazy_static::lazy_static;
-use maplit::{btreemap, btreeset};
-use more_asserts::{assert_ge, assert_lt};
-use std::{collections::BTreeSet, convert::TryFrom, mem::size_of, sync::Arc};
+use maplit::{
+    btreemap,
+    btreeset,
+};
+use more_asserts::{
+    assert_ge,
+    assert_lt,
+};
+use std::{
+    collections::BTreeSet,
+    convert::TryFrom,
+    mem::size_of,
+    sync::Arc,
+};
 
 use super::InstallCodeResult;
 use prometheus::IntCounter;

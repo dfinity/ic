@@ -1,4 +1,7 @@
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{
+    warn,
+    ReplicaLogger,
+};
 use ic_protobuf::registry::node::v1::ConnectionEndpoint;
 use std::net::IpAddr;
 use std::str::FromStr;

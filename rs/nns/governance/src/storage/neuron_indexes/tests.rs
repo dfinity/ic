@@ -1,15 +1,25 @@
 use super::*;
 use crate::{
-    neuron::{DissolveStateAndAge, NeuronBuilder},
-    pb::v1::{neuron::Followees, KnownNeuronData},
+    neuron::{
+        DissolveStateAndAge,
+        NeuronBuilder,
+    },
+    pb::v1::{
+        neuron::Followees,
+        KnownNeuronData,
+    },
 };
 use assert_matches::assert_matches;
 use ic_nervous_system_governance::index::{
-    neuron_following::NeuronFollowingIndex, neuron_principal::NeuronPrincipalIndex,
+    neuron_following::NeuronFollowingIndex,
+    neuron_principal::NeuronPrincipalIndex,
 };
 use ic_nns_common::pb::v1::NeuronId;
 use icp_ledger::Subaccount;
-use maplit::{hashmap, hashset};
+use maplit::{
+    hashmap,
+    hashset,
+};
 
 #[test]
 fn add_remove_neuron() {

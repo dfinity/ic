@@ -7,21 +7,44 @@ use crate::driver::{
     context::GroupContext,
     dsl::SubprocessFn,
     event::TaskId,
-    process::{KillFn, Process},
-    subprocess_ipc::{log_panic_event, LogReceiver, ReportOrFailure},
-    task::{Task, TaskHandle},
+    process::{
+        KillFn,
+        Process,
+    },
+    subprocess_ipc::{
+        log_panic_event,
+        LogReceiver,
+        ReportOrFailure,
+    },
+    task::{
+        Task,
+        TaskHandle,
+    },
     task_scheduler::TaskResult,
 };
-use slog::{debug, error, info, Logger};
+use slog::{
+    debug,
+    error,
+    info,
+    Logger,
+};
 use std::{
     panic::catch_unwind,
     process::Command,
     sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc, Mutex,
+        atomic::{
+            AtomicBool,
+            Ordering,
+        },
+        Arc,
+        Mutex,
     },
 };
-use tokio::{runtime::Handle as RtHandle, task::JoinHandle, time::timeout};
+use tokio::{
+    runtime::Handle as RtHandle,
+    task::JoinHandle,
+    time::timeout,
+};
 
 use super::task::TaskResultCallback;
 

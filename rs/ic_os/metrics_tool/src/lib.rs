@@ -1,6 +1,9 @@
 // TODO: refactor/merge this with fstrim_tool and guestos_tool metrics functionality
 use std::fs::File;
-use std::io::{self, Write};
+use std::io::{
+    self,
+    Write,
+};
 use std::path::Path;
 
 // TODO: everything is floating point for now

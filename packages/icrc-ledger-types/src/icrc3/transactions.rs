@@ -1,16 +1,26 @@
-use candid::{CandidType, Deserialize, Nat};
+use candid::{
+    CandidType,
+    Deserialize,
+    Nat,
+};
 use serde::Serialize;
 
 use crate::{
     icrc::generic_value::Value,
     icrc1::{
         account::Account,
-        transfer::{BlockIndex, Memo},
+        transfer::{
+            BlockIndex,
+            Memo,
+        },
     },
 };
 
 use super::{
-    archive::{ArchivedRange, QueryTxArchiveFn},
+    archive::{
+        ArchivedRange,
+        QueryTxArchiveFn,
+    },
     blocks::GetBlocksRequest,
 };
 

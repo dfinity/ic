@@ -1,13 +1,27 @@
 //! Cycles struct to be used for metrics collection.
 use crate::Cycles;
-use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
-use serde::{Deserialize, Serialize};
+use ic_protobuf::{
+    proxy::ProxyDecodeError,
+    types::v1 as pb,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::{
     fmt,
-    ops::{Add, AddAssign, Sub, SubAssign},
+    ops::{
+        Add,
+        AddAssign,
+        Sub,
+        SubAssign,
+    },
 };
 
-use std::convert::{From, TryFrom};
+use std::convert::{
+    From,
+    TryFrom,
+};
 
 /// Struct to handle cycles that we want to track in metrics.
 /// They are maintained as a simple u128. We implement our own arithmetic

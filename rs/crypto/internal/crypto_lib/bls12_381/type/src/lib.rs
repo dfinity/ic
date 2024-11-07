@@ -22,7 +22,10 @@
 mod interpolation;
 mod poly;
 
-pub use interpolation::{InterpolationError, LagrangeCoefficients};
+pub use interpolation::{
+    InterpolationError,
+    LagrangeCoefficients,
+};
 pub use poly::Polynomial;
 
 /// The index of a node.
@@ -31,14 +34,30 @@ pub type NodeIndex = u32;
 #[cfg(test)]
 mod tests;
 
-use ic_bls12_381::hash_to_curve::{ExpandMsgXmd, HashToCurve};
+use ic_bls12_381::hash_to_curve::{
+    ExpandMsgXmd,
+    HashToCurve,
+};
 use itertools::multiunzip;
-use pairing::group::{ff::Field, Group};
+use pairing::group::{
+    ff::Field,
+    Group,
+};
 use paste::paste;
-use rand::{CryptoRng, Rng, RngCore};
+use rand::{
+    CryptoRng,
+    Rng,
+    RngCore,
+};
 use std::sync::Arc;
-use std::{collections::HashMap, fmt};
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use std::{
+    collections::HashMap,
+    fmt,
+};
+use zeroize::{
+    Zeroize,
+    ZeroizeOnDrop,
+};
 
 macro_rules! ctoption_ok_or {
     ($val:expr, $err:expr) => {
@@ -554,7 +573,11 @@ impl Scalar {
     /// If self == other returns 0
     /// If self > other returns 1
     pub fn ct_compare(&self, other: &Self) -> i8 {
-        use subtle::{ConditionallySelectable, ConstantTimeEq, ConstantTimeLess};
+        use subtle::{
+            ConditionallySelectable,
+            ConstantTimeEq,
+            ConstantTimeLess,
+        };
 
         const IS_LT: u8 = 0xff; // -1i8 as u8
         const IS_EQ: u8 = 0;
@@ -1953,7 +1976,10 @@ impl Gt {
     ///
     /// If index is out of range, returns the identity element
     pub(crate) fn ct_select(from: &[Self], index: usize) -> Self {
-        use subtle::{ConditionallySelectable, ConstantTimeEq};
+        use subtle::{
+            ConditionallySelectable,
+            ConstantTimeEq,
+        };
         let mut val = ic_bls12_381::Gt::identity();
 
         for v in 0..from.len() {

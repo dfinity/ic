@@ -1,18 +1,41 @@
-use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
+use ic_config::{
+    execution_environment::Config as HypervisorConfig,
+    subnet_config::SubnetConfig,
+};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
+use ic_registry_routing_table::{
+    CanisterIdRange,
+    RoutingTable,
+    CANISTER_IDS_PER_SUBNET,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
-    finalize_registry, StateMachine, StateMachineBuilder, StateMachineConfig, Subnets,
+    finalize_registry,
+    StateMachine,
+    StateMachineBuilder,
+    StateMachineConfig,
+    Subnets,
 };
 use ic_test_utilities_types::ids::user_test_id;
 use ic_types::{
-    ingress::{IngressStatus, WasmResult},
-    CanisterId, Cycles, SubnetId,
+    ingress::{
+        IngressStatus,
+        WasmResult,
+    },
+    CanisterId,
+    Cycles,
+    SubnetId,
 };
-use ic_universal_canister::{wasm, CallArgs, UNIVERSAL_CANISTER_WASM};
+use ic_universal_canister::{
+    wasm,
+    CallArgs,
+    UNIVERSAL_CANISTER_WASM,
+};
 use std::collections::BTreeMap;
-use std::sync::{Arc, RwLock};
+use std::sync::{
+    Arc,
+    RwLock,
+};
 
 const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
 

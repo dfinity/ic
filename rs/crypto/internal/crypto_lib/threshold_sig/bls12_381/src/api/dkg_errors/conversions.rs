@@ -1,10 +1,13 @@
 //! Convert DKG error types to and from other error types.
 use ic_types::crypto::threshold_sig::ni_dkg::errors::{
-    create_transcript_error::DkgCreateTranscriptError, MalformedFsEncryptionPublicKeyError,
+    create_transcript_error::DkgCreateTranscriptError,
+    MalformedFsEncryptionPublicKeyError,
 };
 
 use crate::api::ni_dkg_errors::{
-    CspDkgCreateReshareTranscriptError, CspDkgCreateTranscriptError, CspDkgLoadPrivateKeyError,
+    CspDkgCreateReshareTranscriptError,
+    CspDkgCreateTranscriptError,
+    CspDkgLoadPrivateKeyError,
     InvalidArgumentError,
 };
 use ic_types::crypto::threshold_sig::ni_dkg::errors::load_transcript_error::DkgLoadTranscriptError;

@@ -2,12 +2,21 @@ mod ecdsa_sign_share {
     use crate::key_id::KeyId;
     use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
     use crate::types::CspSecretKey;
-    use crate::vault::api::{IDkgTranscriptInternalBytes, ThresholdEcdsaSignerCspVault};
+    use crate::vault::api::{
+        IDkgTranscriptInternalBytes,
+        ThresholdEcdsaSignerCspVault,
+    };
     use crate::LocalCspVault;
     use assert_matches::assert_matches;
     use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
-        CombinedCommitment, CommitmentOpeningBytes, EccCurveType, EccPoint, EccScalarBytes,
-        IDkgTranscriptInternal, PolynomialCommitment, SimpleCommitment,
+        CombinedCommitment,
+        CommitmentOpeningBytes,
+        EccCurveType,
+        EccPoint,
+        EccScalarBytes,
+        IDkgTranscriptInternal,
+        PolynomialCommitment,
+        SimpleCommitment,
         ThresholdEcdsaSigShareInternal,
     };
     use ic_types::crypto::canister_threshold_sig::error::ThresholdEcdsaCreateSigShareError;

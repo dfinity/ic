@@ -1,6 +1,10 @@
 use std::str::FromStr;
 
-use anyhow::{anyhow, Error, Result};
+use anyhow::{
+    anyhow,
+    Error,
+    Result,
+};
 
 #[non_exhaustive]
 pub enum NodeType {

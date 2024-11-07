@@ -1,4 +1,8 @@
-use crate::candid::{encode_upgrade_args, format_types, parse_constructor_args};
+use crate::candid::{
+    encode_upgrade_args,
+    format_types,
+    parse_constructor_args,
+};
 use crate::canister::TargetCanister;
 use assert_matches::assert_matches;
 use std::env;

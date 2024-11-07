@@ -1,5 +1,8 @@
 use super::super::*;
-use crate::{NodeId, PrincipalId};
+use crate::{
+    NodeId,
+    PrincipalId,
+};
 use assert_matches::assert_matches;
 
 const NODE_1: u64 = 1;

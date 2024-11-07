@@ -1,13 +1,27 @@
 use candid::Encode;
-use canister_test::{CanisterId, CanisterInstallMode, Cycles, InstallCodeArgs};
-use criterion::{Criterion, Throughput};
-use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
+use canister_test::{
+    CanisterId,
+    CanisterInstallMode,
+    Cycles,
+    InstallCodeArgs,
+};
+use criterion::{
+    Criterion,
+    Throughput,
+};
+use ic_test_utilities_execution_environment::{
+    ExecutionTest,
+    ExecutionTestBuilder,
+};
 use ic_types::ingress::WasmResult;
 use ic_types::NumBytes;
 use ic_wasm_transform::Module;
 use std::{
     cell::RefCell,
-    time::{Duration, Instant},
+    time::{
+        Duration,
+        Instant,
+    },
 };
 
 #[derive(Copy, Clone)]

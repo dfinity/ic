@@ -2,10 +2,17 @@ use ic_cdk::api::call::call_with_payment128;
 use ic_cdk::api::call::CallResult;
 use ic_cdk::api::management_canister::http_request::HttpResponse;
 use ic_cdk::api::management_canister::http_request::{
-    CanisterHttpRequestArgument, HttpHeader, HttpMethod, TransformContext,
+    CanisterHttpRequestArgument,
+    HttpHeader,
+    HttpMethod,
+    TransformContext,
 };
 use num_traits::ToPrimitive;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{
+    de::DeserializeOwned,
+    Deserialize,
+    Serialize,
+};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::fmt;

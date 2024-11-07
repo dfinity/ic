@@ -1,15 +1,20 @@
 /// SSH Key Utilities
 use ic_system_test_driver::{
     nns::{
-        get_governance_canister, submit_external_proposal_with_test_id,
-        vote_execute_proposal_assert_executed, vote_execute_proposal_assert_failed,
+        get_governance_canister,
+        submit_external_proposal_with_test_id,
+        vote_execute_proposal_assert_executed,
+        vote_execute_proposal_assert_failed,
     },
     util::runtime_from_url,
 };
 
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_nns_governance_api::pb::v1::NnsFunction;
-use ic_types::{time::current_time, SubnetId};
+use ic_types::{
+    time::current_time,
+    SubnetId,
+};
 use openssh_keys::PublicKey;
 use registry_canister::mutations::{
     do_update_ssh_readonly_access_for_all_unassigned_nodes::UpdateSshReadOnlyAccessForAllUnassignedNodesPayload,
@@ -18,8 +23,14 @@ use registry_canister::mutations::{
 use reqwest::Url;
 use ssh2::Session;
 use std::{
-    io::{Read, Write},
-    net::{IpAddr, TcpStream},
+    io::{
+        Read,
+        Write,
+    },
+    net::{
+        IpAddr,
+        TcpStream,
+    },
     time::Duration,
 };
 

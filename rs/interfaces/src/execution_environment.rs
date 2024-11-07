@@ -1,26 +1,59 @@
 //! The execution environment public interface.
 mod errors;
 
-pub use errors::{CanisterBacktrace, CanisterOutOfCyclesError, HypervisorError, TrapCode};
+pub use errors::{
+    CanisterBacktrace,
+    CanisterOutOfCyclesError,
+    HypervisorError,
+    TrapCode,
+};
 use ic_base_types::NumBytes;
 use ic_error_types::UserError;
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
-use ic_sys::{PageBytes, PageIndex};
+use ic_sys::{
+    PageBytes,
+    PageIndex,
+};
 use ic_types::{
     consensus::idkg::PreSigId,
     crypto::canister_threshold_sig::MasterPublicKey,
-    ingress::{IngressStatus, WasmResult},
-    messages::{CertificateDelegation, MessageId, Query, SignedIngressContent},
-    CanisterLog, Cycles, ExecutionRound, Height, NumInstructions, NumOsPages, Randomness,
-    ReplicaVersion, Time,
+    ingress::{
+        IngressStatus,
+        WasmResult,
+    },
+    messages::{
+        CertificateDelegation,
+        MessageId,
+        Query,
+        SignedIngressContent,
+    },
+    CanisterLog,
+    Cycles,
+    ExecutionRound,
+    Height,
+    NumInstructions,
+    NumOsPages,
+    Randomness,
+    ReplicaVersion,
+    Time,
 };
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::{
-    collections::{BTreeMap, BTreeSet},
-    convert::{Infallible, TryFrom},
-    fmt, ops,
+    collections::{
+        BTreeMap,
+        BTreeSet,
+    },
+    convert::{
+        Infallible,
+        TryFrom,
+    },
+    fmt,
+    ops,
 };
 use strum_macros::EnumIter;
 use thiserror::Error;

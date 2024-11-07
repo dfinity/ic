@@ -4,12 +4,21 @@ mod cycles;
 
 pub use cycles::Cycles;
 use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{
+        try_from_option_field,
+        ProxyDecodeError,
+    },
     state::queues::v1::Cycles as PbCycles,
     state::queues::v1::Funds as PbFunds,
 };
-use serde::{Deserialize, Serialize};
-use std::convert::{From, TryFrom};
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use std::convert::{
+    From,
+    TryFrom,
+};
 
 /// A struct to hold various types of funds.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]

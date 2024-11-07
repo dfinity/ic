@@ -5,17 +5,34 @@ use crate::driver::test_env_api::get_ssh_session_from_env;
 use crate::driver::test_env_api::*;
 use crate::retry_with_msg;
 use crate::util::create_agent;
-use ic_agent::{Agent, AgentError};
+use ic_agent::{
+    Agent,
+    AgentError,
+};
 
 use std::fs;
 use std::net::SocketAddr;
-use std::net::{IpAddr, Ipv6Addr};
+use std::net::{
+    IpAddr,
+    Ipv6Addr,
+};
 use std::path::PathBuf;
 
-use anyhow::{bail, Result};
+use anyhow::{
+    bail,
+    Result,
+};
 use async_trait::async_trait;
-use deterministic_ips::{calculate_deterministic_mac, Deployment, HwAddr, IpVariant};
-use serde::{Deserialize, Serialize};
+use deterministic_ips::{
+    calculate_deterministic_mac,
+    Deployment,
+    HwAddr,
+    IpVariant,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use slog::info;
 use ssh2::Session;
 use url::Url;

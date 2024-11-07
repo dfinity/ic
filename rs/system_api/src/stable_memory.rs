@@ -1,10 +1,19 @@
 use std::convert::TryInto;
 
 use ic_interfaces::execution_environment::{
-    HypervisorError, HypervisorResult,
-    TrapCode::{HeapOutOfBounds, StableMemoryOutOfBounds, StableMemoryTooBigFor32Bit},
+    HypervisorError,
+    HypervisorResult,
+    TrapCode::{
+        HeapOutOfBounds,
+        StableMemoryOutOfBounds,
+        StableMemoryTooBigFor32Bit,
+    },
 };
-use ic_replicated_state::{canister_state::WASM_PAGE_SIZE_IN_BYTES, page_map, NumWasmPages};
+use ic_replicated_state::{
+    canister_state::WASM_PAGE_SIZE_IN_BYTES,
+    page_map,
+    NumWasmPages,
+};
 use ic_types::NumOsPages;
 
 const MAX_32_BIT_STABLE_MEMORY_IN_PAGES: usize = 64 * 1024; // 4GiB

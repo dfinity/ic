@@ -2,30 +2,72 @@
 // See https://internetcomputer.org/docs/interface-spec/index.html#rule-message-execution
 
 use crate::execution::common::{
-    action_to_response, apply_canister_state_changes, finish_call_with_error,
-    ingress_status_with_processing_state, update_round_limits, validate_message,
+    action_to_response,
+    apply_canister_state_changes,
+    finish_call_with_error,
+    ingress_status_with_processing_state,
+    update_round_limits,
+    validate_message,
 };
 use crate::execution_environment::{
-    log_dirty_pages, ExecuteMessageResult, PausedExecution, RoundContext, RoundLimits,
+    log_dirty_pages,
+    ExecuteMessageResult,
+    PausedExecution,
+    RoundContext,
+    RoundLimits,
 };
 use crate::metrics::CallTreeMetrics;
 use ic_base_types::CanisterId;
 use ic_config::flag_status::FlagStatus;
-use ic_embedders::wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult};
-use ic_error_types::{ErrorCode, UserError};
+use ic_embedders::wasm_executor::{
+    CanisterStateChanges,
+    PausedWasmExecution,
+    WasmExecutionResult,
+};
+use ic_error_types::{
+    ErrorCode,
+    UserError,
+};
 use ic_interfaces::execution_environment::{
-    CanisterOutOfCyclesError, HypervisorError, WasmExecutionOutput,
+    CanisterOutOfCyclesError,
+    HypervisorError,
+    WasmExecutionOutput,
 };
-use ic_logger::{info, ReplicaLogger};
+use ic_logger::{
+    info,
+    ReplicaLogger,
+};
 use ic_management_canister_types::IC_00;
-use ic_replicated_state::{num_bytes_try_from, CallOrigin, CanisterState};
-use ic_system_api::{ApiType, ExecutionParameters};
-use ic_types::messages::{
-    CallContextId, CanisterCall, CanisterCallOrTask, CanisterMessage, CanisterMessageOrTask,
-    CanisterTask, RequestMetadata,
+use ic_replicated_state::{
+    num_bytes_try_from,
+    CallOrigin,
+    CanisterState,
 };
-use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
-use ic_types::{CanisterTimer, Cycles, NumBytes, NumInstructions, Time};
+use ic_system_api::{
+    ApiType,
+    ExecutionParameters,
+};
+use ic_types::messages::{
+    CallContextId,
+    CanisterCall,
+    CanisterCallOrTask,
+    CanisterMessage,
+    CanisterMessageOrTask,
+    CanisterTask,
+    RequestMetadata,
+};
+use ic_types::methods::{
+    FuncRef,
+    SystemMethod,
+    WasmMethod,
+};
+use ic_types::{
+    CanisterTimer,
+    Cycles,
+    NumBytes,
+    NumInstructions,
+    Time,
+};
 use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
 
 #[cfg(test)]

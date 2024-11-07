@@ -1,8 +1,19 @@
-use candid::{Decode, Encode, Nat, Principal};
-use ic_base_types::{CanisterId, PrincipalId};
+use candid::{
+    Decode,
+    Encode,
+    Nat,
+    Principal,
+};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_icp_index::{
-    GetAccountIdentifierTransactionsArgs, GetAccountIdentifierTransactionsResponse,
-    GetAccountIdentifierTransactionsResult, SettledTransaction, SettledTransactionWithId,
+    GetAccountIdentifierTransactionsArgs,
+    GetAccountIdentifierTransactionsResponse,
+    GetAccountIdentifierTransactionsResult,
+    SettledTransaction,
+    SettledTransactionWithId,
 };
 use ic_icrc1_index_ng::GetAccountTransactionsArgs;
 use ic_ledger_canister_core::archive::ArchiveOptions;
@@ -10,26 +21,51 @@ use ic_ledger_core::block::BlockType;
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::Tokens;
 use ic_ledger_test_utils::state_machine_helpers::index::{
-    wait_until_sync_is_completed, SYNC_STEP_SECONDS,
+    wait_until_sync_is_completed,
+    SYNC_STEP_SECONDS,
 };
-use ic_ledger_test_utils::state_machine_helpers::ledger::{icp_get_blocks, icp_query_blocks};
+use ic_ledger_test_utils::state_machine_helpers::ledger::{
+    icp_get_blocks,
+    icp_query_blocks,
+};
 use ic_rosetta_test_utils::test_http_request_decoding_quota;
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::{
-    AccountIdentifier, Transaction, MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST,
+    AccountIdentifier,
+    Transaction,
+    MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST,
     MAX_BLOCKS_PER_REQUEST,
 };
-use icp_ledger::{FeatureFlags, LedgerCanisterInitPayload, Memo, Operation};
+use icp_ledger::{
+    FeatureFlags,
+    LedgerCanisterInitPayload,
+    Memo,
+    Operation,
+};
 use icrc_ledger_types::icrc1::account::Account;
-use icrc_ledger_types::icrc1::transfer::{BlockIndex, NumTokens, TransferArg, TransferError};
-use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
-use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
+use icrc_ledger_types::icrc1::transfer::{
+    BlockIndex,
+    NumTokens,
+    TransferArg,
+    TransferError,
+};
+use icrc_ledger_types::icrc2::approve::{
+    ApproveArgs,
+    ApproveError,
+};
+use icrc_ledger_types::icrc2::transfer_from::{
+    TransferFromArgs,
+    TransferFromError,
+};
 use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
 use num_traits::cast::ToPrimitive;
 use serde_bytes::ByteBuf;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::time::{Duration, SystemTime};
+use std::time::{
+    Duration,
+    SystemTime,
+};
 
 const FEE: u64 = 10_000;
 const ARCHIVE_TRIGGER_THRESHOLD: u64 = 10;

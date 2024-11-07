@@ -1,18 +1,37 @@
 use std::collections::HashMap;
 use std::convert::Infallible;
 use std::{
-    collections::{HashSet, VecDeque},
-    sync::{Arc, Mutex},
+    collections::{
+        HashSet,
+        VecDeque,
+    },
+    sync::{
+        Arc,
+        Mutex,
+    },
 };
 
 use ic_interfaces::p2p::consensus::{
-    ArtifactTransmit, ArtifactTransmits, ArtifactWithOpt, BouncerFactory, BouncerValue,
-    MutablePool, PoolMutationsProducer, UnvalidatedArtifact, ValidatedPoolReader,
+    ArtifactTransmit,
+    ArtifactTransmits,
+    ArtifactWithOpt,
+    BouncerFactory,
+    BouncerValue,
+    MutablePool,
+    PoolMutationsProducer,
+    UnvalidatedArtifact,
+    ValidatedPoolReader,
 };
 use ic_logger::ReplicaLogger;
-use ic_types::artifact::{IdentifiableArtifact, PbArtifact};
+use ic_types::artifact::{
+    IdentifiableArtifact,
+    PbArtifact,
+};
 use ic_types::NodeId;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct U64Artifact(Vec<u8>);

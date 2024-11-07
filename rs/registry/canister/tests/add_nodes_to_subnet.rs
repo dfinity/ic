@@ -3,13 +3,25 @@ use dfn_candid::candid;
 
 use ic_nns_test_utils::{
     itest_helpers::{
-        forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
+        forward_call_via_universal_canister,
+        local_test_on_nns_subnet,
+        set_up_registry_canister,
         set_up_universal_canister,
     },
-    registry::{get_value_or_panic, prepare_registry, prepare_registry_with_two_node_sets},
+    registry::{
+        get_value_or_panic,
+        prepare_registry,
+        prepare_registry_with_two_node_sets,
+    },
 };
-use ic_protobuf::registry::subnet::v1::{SubnetListRecord, SubnetRecord};
-use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
+use ic_protobuf::registry::subnet::v1::{
+    SubnetListRecord,
+    SubnetRecord,
+};
+use ic_registry_keys::{
+    make_subnet_list_record_key,
+    make_subnet_record_key,
+};
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder,
     mutations::do_add_nodes_to_subnet::AddNodesToSubnetPayload,

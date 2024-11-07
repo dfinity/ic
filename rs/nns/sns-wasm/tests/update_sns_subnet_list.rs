@@ -4,8 +4,15 @@ use common::set_up_state_machine_with_nns;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    sns_wasm::{get_sns_subnet_ids, update_sns_subnet_list, update_sns_subnet_list_via_proposal},
-    state_test_helpers::{self, create_canister},
+    sns_wasm::{
+        get_sns_subnet_ids,
+        update_sns_subnet_list,
+        update_sns_subnet_list_via_proposal,
+    },
+    state_test_helpers::{
+        self,
+        create_canister,
+    },
 };
 use ic_sns_wasm::pb::v1::UpdateSnsSubnetListRequest;
 use ic_state_machine_tests::StateMachine;

@@ -15,7 +15,12 @@
 //!   fraction of the total ICP supply.
 
 use crate::pb::v1::RewardEvent;
-use std::ops::{Add, Div, Mul, Sub};
+use std::ops::{
+    Add,
+    Div,
+    Mul,
+    Sub,
+};
 
 // ---- NON-BOILERPLATE CODE STARTS HERE ----------------------------------
 // Because this module has very little "real" code and a lot of boilerplate

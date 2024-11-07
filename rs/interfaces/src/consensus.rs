@@ -2,26 +2,50 @@
 use crate::{
     batch_payload::ProposalContext,
     canister_http::{
-        CanisterHttpPayloadValidationError, CanisterHttpPayloadValidationFailure,
+        CanisterHttpPayloadValidationError,
+        CanisterHttpPayloadValidationFailure,
         InvalidCanisterHttpPayloadReason,
     },
     ingress_manager::{
-        IngressPayloadValidationError, IngressPayloadValidationFailure, InvalidIngressPayloadReason,
+        IngressPayloadValidationError,
+        IngressPayloadValidationFailure,
+        InvalidIngressPayloadReason,
     },
-    messaging::{InvalidXNetPayload, XNetPayloadValidationError, XNetPayloadValidationFailure},
-    query_stats::{InvalidQueryStatsPayloadReason, QueryStatsPayloadValidationFailure},
+    messaging::{
+        InvalidXNetPayload,
+        XNetPayloadValidationError,
+        XNetPayloadValidationFailure,
+    },
+    query_stats::{
+        InvalidQueryStatsPayloadReason,
+        QueryStatsPayloadValidationFailure,
+    },
     self_validating_payload::{
-        InvalidSelfValidatingPayloadReason, SelfValidatingPayloadValidationError,
+        InvalidSelfValidatingPayloadReason,
+        SelfValidatingPayloadValidationError,
         SelfValidatingPayloadValidationFailure,
     },
-    validation::{ValidationError, ValidationResult},
+    validation::{
+        ValidationError,
+        ValidationResult,
+    },
 };
-use ic_base_types::{NumBytes, SubnetId};
+use ic_base_types::{
+    NumBytes,
+    SubnetId,
+};
 use ic_types::{
-    batch::{BatchPayload, ValidationContext},
-    consensus::{block_maker::SubnetRecords, Payload},
+    batch::{
+        BatchPayload,
+        ValidationContext,
+    },
+    consensus::{
+        block_maker::SubnetRecords,
+        Payload,
+    },
     registry::RegistryClientError,
-    Height, Time,
+    Height,
+    Time,
 };
 
 /// The [`PayloadBuilder`] is responsible for creating and validating payload that

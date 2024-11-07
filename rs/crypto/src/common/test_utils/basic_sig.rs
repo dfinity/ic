@@ -2,7 +2,10 @@
 //! stability/consistency tests only. They do not represent official or
 //! standardized test vectors.
 use super::*;
-use ic_crypto_internal_csp_test_utils::types::{csp_pk_ed25519_from_hex, csp_sk_ed25519_from_hex};
+use ic_crypto_internal_csp_test_utils::types::{
+    csp_pk_ed25519_from_hex,
+    csp_sk_ed25519_from_hex,
+};
 use ic_crypto_internal_test_vectors::ed25519 as ed25519_test_vectors;
 use ic_crypto_internal_test_vectors::unhex::hex_to_byte_vec;
 

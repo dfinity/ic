@@ -2,18 +2,33 @@ use anyhow::Result;
 use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
-    boundary_node::{BoundaryNode, BoundaryNodeVm},
+    boundary_node::{
+        BoundaryNode,
+        BoundaryNodeVm,
+    },
     group::SystemTestGroup,
-    ic::{InternetComputer, Subnet},
+    ic::{
+        InternetComputer,
+        Subnet,
+    },
     test_env::TestEnv,
-    test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, RetrieveIpv4Addr},
+    test_env_api::{
+        HasPublicApiUrl,
+        HasTopologySnapshot,
+        IcNodeContainer,
+        RetrieveIpv4Addr,
+    },
 };
 use ic_system_test_driver::systest;
 use nns_dapp::nns_dapp_customizations;
 use sdk_system_tests::{
     asset::get_asset_as_string,
     config::configure_local_network,
-    dfx::{BackendType, DfxCommandContext, FrontendType},
+    dfx::{
+        BackendType,
+        DfxCommandContext,
+        FrontendType,
+    },
     project,
 };
 use slog::info;

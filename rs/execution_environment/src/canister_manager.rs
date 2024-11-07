@@ -1,70 +1,154 @@
 use crate::as_round_instructions;
-use crate::canister_settings::{validate_canister_settings, ValidatedCanisterSettings};
-use crate::execution::install_code::{validate_controller, OriginalContext};
-use crate::execution::{install::execute_install, upgrade::execute_upgrade};
+use crate::canister_settings::{
+    validate_canister_settings,
+    ValidatedCanisterSettings,
+};
+use crate::execution::install_code::{
+    validate_controller,
+    OriginalContext,
+};
+use crate::execution::{
+    install::execute_install,
+    upgrade::execute_upgrade,
+};
 use crate::execution_environment::{
-    CompilationCostHandling, RoundContext, RoundCounters, RoundLimits,
+    CompilationCostHandling,
+    RoundContext,
+    RoundCounters,
+    RoundLimits,
 };
 use crate::{
     canister_settings::CanisterSettings,
     hypervisor::Hypervisor,
-    types::{IngressResponse, Response},
+    types::{
+        IngressResponse,
+        Response,
+    },
     util::GOVERNANCE_CANISTER_ID,
 };
 use ic_base_types::NumSeconds;
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::{
-    execution_environment::MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER, flag_status::FlagStatus,
+    execution_environment::MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
+    flag_status::FlagStatus,
 };
 use ic_cycles_account_manager::WasmExecutionMode;
-use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
-use ic_embedders::wasm_utils::decoding::decode_wasm;
-use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_interfaces::execution_environment::{
-    CanisterOutOfCyclesError, HypervisorError, IngressHistoryWriter, SubnetAvailableMemory,
+use ic_cycles_account_manager::{
+    CyclesAccountManager,
+    ResourceSaturation,
 };
-use ic_logger::{error, fatal, info, ReplicaLogger};
+use ic_embedders::wasm_utils::decoding::decode_wasm;
+use ic_error_types::{
+    ErrorCode,
+    RejectCode,
+    UserError,
+};
+use ic_interfaces::execution_environment::{
+    CanisterOutOfCyclesError,
+    HypervisorError,
+    IngressHistoryWriter,
+    SubnetAvailableMemory,
+};
+use ic_logger::{
+    error,
+    fatal,
+    info,
+    ReplicaLogger,
+};
 use ic_management_canister_types::{
-    CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterSnapshotResponse,
-    CanisterStatusResultV2, CanisterStatusType, ChunkHash, InstallChunkedCodeArgs,
-    InstallCodeArgsV2, Method as Ic00Method, StoredChunksReply, UploadChunkReply,
+    CanisterChangeDetails,
+    CanisterChangeOrigin,
+    CanisterInstallModeV2,
+    CanisterSnapshotResponse,
+    CanisterStatusResultV2,
+    CanisterStatusType,
+    ChunkHash,
+    InstallChunkedCodeArgs,
+    InstallCodeArgsV2,
+    Method as Ic00Method,
+    StoredChunksReply,
+    UploadChunkReply,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_snapshots::{CanisterSnapshot, CanisterSnapshotError},
+    canister_snapshots::{
+        CanisterSnapshot,
+        CanisterSnapshotError,
+    },
     canister_state::{
         execution_state::Memory,
         system_state::{
-            wasm_chunk_store::{self, WasmChunkStore},
-            CyclesUseCase, ReservationError,
+            wasm_chunk_store::{
+                self,
+                WasmChunkStore,
+            },
+            CyclesUseCase,
+            ReservationError,
         },
         NextExecution,
     },
     metadata_state::subnet_call_context_manager::InstallCodeCallId,
     page_map::PageAllocatorFileDescriptor,
-    CallOrigin, CanisterState, NetworkTopology, ReplicatedState, SchedulerState, SystemState,
+    CallOrigin,
+    CanisterState,
+    NetworkTopology,
+    ReplicatedState,
+    SchedulerState,
+    SystemState,
 };
 use ic_system_api::ExecutionParameters;
 use ic_types::{
-    ingress::{IngressState, IngressStatus},
+    ingress::{
+        IngressState,
+        IngressStatus,
+    },
     messages::{
-        CanisterCall, MessageId, Payload, RejectContext, Response as CanisterResponse,
-        SignedIngressContent, StopCanisterContext,
+        CanisterCall,
+        MessageId,
+        Payload,
+        RejectContext,
+        Response as CanisterResponse,
+        SignedIngressContent,
+        StopCanisterContext,
     },
     nominal_cycles::NominalCycles,
-    CanisterId, CanisterTimer, ComputeAllocation, Cycles, InvalidComputeAllocationError,
-    InvalidMemoryAllocationError, MemoryAllocation, NumBytes, NumInstructions, PrincipalId,
-    SnapshotId, SubnetId, Time,
+    CanisterId,
+    CanisterTimer,
+    ComputeAllocation,
+    Cycles,
+    InvalidComputeAllocationError,
+    InvalidMemoryAllocationError,
+    MemoryAllocation,
+    NumBytes,
+    NumInstructions,
+    PrincipalId,
+    SnapshotId,
+    SubnetId,
+    Time,
 };
 use ic_wasm_transform::Module;
-use ic_wasm_types::{doc_ref, AsErrorHelp, CanisterModule, ErrorHelp, WasmHash};
+use ic_wasm_types::{
+    doc_ref,
+    AsErrorHelp,
+    CanisterModule,
+    ErrorHelp,
+    WasmHash,
+};
 use num_traits::cast::ToPrimitive;
 use num_traits::SaturatingAdd;
 use prometheus::IntCounter;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::path::PathBuf;
-use std::{collections::BTreeSet, convert::TryFrom, str::FromStr, sync::Arc};
+use std::{
+    collections::BTreeSet,
+    convert::TryFrom,
+    str::FromStr,
+    sync::Arc,
+};
 
 #[derive(Eq, PartialEq, Debug)]
 pub(crate) struct InstallCodeResult {

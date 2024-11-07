@@ -1,17 +1,38 @@
 use async_trait::async_trait;
-use dfn_candid::{candid_one, CandidOne};
-use dfn_core::{over_async, over_init, println};
-use ic_base_types::{CanisterId, PrincipalId};
+use dfn_candid::{
+    candid_one,
+    CandidOne,
+};
+use dfn_core::{
+    over_async,
+    over_init,
+    println,
+};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_nervous_system_clients::management_canister_client::ManagementCanisterClientImpl;
 use ic_nervous_system_common::NANO_SECONDS_PER_SECOND;
-use ic_nervous_system_runtime::{CdkRuntime, Runtime};
+use ic_nervous_system_runtime::{
+    CdkRuntime,
+    Runtime,
+};
 use ic_sns_root::{
-    pb::v1::{CanisterCallError, SnsRootCanister},
+    pb::v1::{
+        CanisterCallError,
+        SnsRootCanister,
+    },
     types::Environment,
-    ArchiveInfo, GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse,
+    ArchiveInfo,
+    GetSnsCanistersSummaryRequest,
+    GetSnsCanistersSummaryResponse,
     LedgerCanisterClient,
 };
-use std::{cell::RefCell, time::Duration};
+use std::{
+    cell::RefCell,
+    time::Duration,
+};
 
 type CanisterRuntime = CdkRuntime;
 
@@ -98,7 +119,8 @@ async fn get_sns_canisters_summary_impl(
 
 async fn interrupt() {
     use ic_nervous_system_clients::{
-        canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
+        canister_id_record::CanisterIdRecord,
+        canister_status::CanisterStatusResult,
     };
 
     let _unused: Result<CanisterStatusResult, _> = dfn_core::api::call(

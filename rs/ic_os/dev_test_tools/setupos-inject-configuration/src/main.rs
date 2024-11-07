@@ -1,19 +1,39 @@
 use std::os::unix::fs::PermissionsExt;
 use std::{
     assert,
-    fs::{self, File, Permissions},
+    fs::{
+        self,
+        File,
+        Permissions,
+    },
     io::Write,
-    net::{Ipv4Addr, Ipv6Addr},
-    path::{Path, PathBuf},
+    net::{
+        Ipv4Addr,
+        Ipv6Addr,
+    },
+    path::{
+        Path,
+        PathBuf,
+    },
 };
 
-use anyhow::{Context, Error};
-use clap::{Args, Parser};
+use anyhow::{
+    Context,
+    Error,
+};
+use clap::{
+    Args,
+    Parser,
+};
 use tempfile::NamedTempFile;
 use url::Url;
 
 use config::deployment_json::DeploymentSettings;
-use partition_tools::{ext::ExtPartition, fat::FatPartition, Partition};
+use partition_tools::{
+    ext::ExtPartition,
+    fat::FatPartition,
+    Partition,
+};
 
 const SERVICE_NAME: &str = "setupos-inject-configuration";
 

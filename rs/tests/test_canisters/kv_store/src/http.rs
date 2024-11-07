@@ -1,11 +1,18 @@
 use std::io::Write;
 
 use candid::{
-    types::{Serializer, Type},
-    CandidType, Func,
+    types::{
+        Serializer,
+        Type,
+    },
+    CandidType,
+    Func,
 };
 use flate2::{
-    write::{DeflateEncoder, GzEncoder},
+    write::{
+        DeflateEncoder,
+        GzEncoder,
+    },
     Compression,
 };
 use serde::Deserialize;

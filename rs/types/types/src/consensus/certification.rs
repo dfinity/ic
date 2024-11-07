@@ -1,21 +1,42 @@
 //! Defines types used for certification.
 
 use crate::{
-    artifact::{CertificationMessageId, IdentifiableArtifact, PbArtifact},
+    artifact::{
+        CertificationMessageId,
+        IdentifiableArtifact,
+        PbArtifact,
+    },
     consensus::{
-        Committee, CountBytes, HasCommittee, HasHeight, IsShare, ThresholdSignature,
+        Committee,
+        CountBytes,
+        HasCommittee,
+        HasHeight,
+        IsShare,
+        ThresholdSignature,
         ThresholdSignatureShare,
     },
-    crypto::{CryptoHash, CryptoHashOf, Signed, SignedBytesWithoutDomainSeparator},
-    CryptoHashOfPartialState, Height,
+    crypto::{
+        CryptoHash,
+        CryptoHashOf,
+        Signed,
+        SignedBytesWithoutDomainSeparator,
+    },
+    CryptoHashOfPartialState,
+    Height,
 };
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::{
     proxy::ProxyDecodeError,
-    types::v1::{self as pb, certification_message::Msg},
+    types::v1::{
+        self as pb,
+        certification_message::Msg,
+    },
 };
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::convert::TryFrom;
 
 /// CertificationMessage captures the different types of messages sent around

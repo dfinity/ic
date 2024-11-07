@@ -1,28 +1,65 @@
 use crate::{
-    ingress::WasmResult, time::CoarseTime, CanisterId, CountBytes, Cycles, Funds, NumBytes, Time,
+    ingress::WasmResult,
+    time::CoarseTime,
+    CanisterId,
+    CountBytes,
+    Cycles,
+    Funds,
+    NumBytes,
+    Time,
 };
-use ic_error_types::{RejectCode, UserError};
+use ic_error_types::{
+    RejectCode,
+    UserError,
+};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types::{
-    CanisterIdRecord, CanisterInfoRequest, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs,
-    InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
-    Method, Payload as _, ProvisionalTopUpCanisterArgs, StoredChunksArgs, TakeCanisterSnapshotArgs,
-    UpdateSettingsArgs, UploadChunkArgs,
+    CanisterIdRecord,
+    CanisterInfoRequest,
+    ClearChunkStoreArgs,
+    DeleteCanisterSnapshotArgs,
+    InstallChunkedCodeArgs,
+    InstallCodeArgsV2,
+    ListCanisterSnapshotArgs,
+    LoadCanisterSnapshotArgs,
+    Method,
+    Payload as _,
+    ProvisionalTopUpCanisterArgs,
+    StoredChunksArgs,
+    TakeCanisterSnapshotArgs,
+    UpdateSettingsArgs,
+    UploadChunkArgs,
 };
 use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{
+        try_from_option_field,
+        ProxyDecodeError,
+    },
     state::queues::v1 as pb_queues,
     types::v1 as pb_types,
 };
-use ic_utils::{byte_slice_fmt::truncate_and_format, str::StrEllipsize};
+use ic_utils::{
+    byte_slice_fmt::truncate_and_format,
+    str::StrEllipsize,
+};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use phantom_newtype::Id;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::{
-    convert::{From, TryFrom, TryInto},
-    hash::{Hash, Hasher},
+    convert::{
+        From,
+        TryFrom,
+        TryInto,
+    },
+    hash::{
+        Hash,
+        Hasher,
+    },
     mem::size_of,
     str::FromStr,
     sync::Arc,

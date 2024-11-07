@@ -3,17 +3,37 @@ pub mod test_fixtures;
 #[cfg(test)]
 mod tests;
 
-use crate::scheduler::{Task, TaskExecution};
+use crate::scheduler::{
+    Task,
+    TaskExecution,
+};
 use crate::state::{
-    Archive, ArchiveWasm, GitCommitHash, Index, IndexWasm, Ledger, LedgerSuiteVersion, LedgerWasm,
-    Wasm, WasmHash, ARCHIVE_NODE_BYTECODE, INDEX_BYTECODE, LEDGER_BYTECODE,
+    Archive,
+    ArchiveWasm,
+    GitCommitHash,
+    Index,
+    IndexWasm,
+    Ledger,
+    LedgerSuiteVersion,
+    LedgerWasm,
+    Wasm,
+    WasmHash,
+    ARCHIVE_NODE_BYTECODE,
+    INDEX_BYTECODE,
+    LEDGER_BYTECODE,
 };
 use crate::storage::memory::{
-    deadline_by_task_memory, task_queue_memory, wasm_store_memory, StableMemory,
+    deadline_by_task_memory,
+    task_queue_memory,
+    wasm_store_memory,
+    StableMemory,
 };
 use candid::Deserialize;
 use ic_stable_structures::storable::Bound;
-use ic_stable_structures::{BTreeMap, Storable};
+use ic_stable_structures::{
+    BTreeMap,
+    Storable,
+};
 use serde::Serialize;
 use std::borrow::Cow;
 use std::cell::RefCell;
@@ -34,7 +54,11 @@ thread_local! {
 }
 
 pub(crate) mod memory {
-    use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
+    use ic_stable_structures::memory_manager::{
+        MemoryId,
+        MemoryManager,
+        VirtualMemory,
+    };
     use ic_stable_structures::DefaultMemoryImpl;
     use std::cell::RefCell;
 

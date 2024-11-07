@@ -1,6 +1,11 @@
 use crate::scheduler::Erc20Token;
 use crate::state::{
-    Canisters, CanistersMetadata, IndexCanister, LedgerCanister, ManagedCanisterStatus, TokenId,
+    Canisters,
+    CanistersMetadata,
+    IndexCanister,
+    LedgerCanister,
+    ManagedCanisterStatus,
+    TokenId,
     TokenSymbol,
 };
 

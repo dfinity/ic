@@ -1,34 +1,75 @@
 use crate::{
-    gtc_helpers::GenesisTokenCanisterInitPayloadBuilder, registry::invariant_compliant_mutation,
+    gtc_helpers::GenesisTokenCanisterInitPayloadBuilder,
+    registry::invariant_compliant_mutation,
 };
-use canister_test::{Project, Wasm};
+use canister_test::{
+    Project,
+    Wasm,
+};
 use core::{
-    option::Option::{None, Some},
+    option::Option::{
+        None,
+        Some,
+    },
     time::Duration,
 };
 use cycles_minting_canister::CyclesCanisterInitPayload;
-use ic_base_types::{CanisterId, PrincipalId, SubnetId};
-use ic_nns_common::init::{LifelineCanisterInitPayload, LifelineCanisterInitPayloadBuilder};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+    SubnetId,
+};
+use ic_nns_common::init::{
+    LifelineCanisterInitPayload,
+    LifelineCanisterInitPayloadBuilder,
+};
 use ic_nns_constants::{
-    ALL_NNS_CANISTER_IDS, CYCLES_LEDGER_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID,
+    ALL_NNS_CANISTER_IDS,
+    CYCLES_LEDGER_CANISTER_ID,
+    GOVERNANCE_CANISTER_ID,
+    LEDGER_CANISTER_ID,
     ROOT_CANISTER_ID,
 };
-use ic_nns_governance_api::pb::v1::{Governance, NetworkEconomics, Neuron};
+use ic_nns_governance_api::pb::v1::{
+    Governance,
+    NetworkEconomics,
+    Neuron,
+};
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_nns_gtc::pb::v1::Gtc;
-use ic_nns_gtc_accounts::{ECT_ACCOUNTS, SEED_ROUND_ACCOUNTS};
-use ic_nns_handler_root::init::{RootCanisterInitPayload, RootCanisterInitPayloadBuilder};
+use ic_nns_gtc_accounts::{
+    ECT_ACCOUNTS,
+    SEED_ROUND_ACCOUNTS,
+};
+use ic_nns_handler_root::init::{
+    RootCanisterInitPayload,
+    RootCanisterInitPayloadBuilder,
+};
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
-use ic_sns_wasm::init::{SnsWasmCanisterInitPayload, SnsWasmCanisterInitPayloadBuilder};
+use ic_sns_wasm::init::{
+    SnsWasmCanisterInitPayload,
+    SnsWasmCanisterInitPayloadBuilder,
+};
 use ic_utils::byte_slice_fmt::truncate_and_format;
 use icp_ledger::{
     self as ledger,
-    account_identifier::{AccountIdentifier, Subaccount},
-    LedgerCanisterInitPayload, Tokens, DEFAULT_TRANSFER_FEE,
+    account_identifier::{
+        AccountIdentifier,
+        Subaccount,
+    },
+    LedgerCanisterInitPayload,
+    Tokens,
+    DEFAULT_TRANSFER_FEE,
 };
 use lifeline::LIFELINE_CANISTER_WASM;
-use registry_canister::init::{RegistryCanisterInitPayload, RegistryCanisterInitPayloadBuilder};
-use std::{convert::TryInto, path::Path};
+use registry_canister::init::{
+    RegistryCanisterInitPayload,
+    RegistryCanisterInitPayloadBuilder,
+};
+use std::{
+    convert::TryInto,
+    path::Path,
+};
 
 /// Payloads for all the canisters that exist at genesis.
 #[derive(Clone, Debug)]

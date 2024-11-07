@@ -2,9 +2,14 @@ use crate::IngressManager;
 use ic_interfaces::{
     ingress_pool::{
         ChangeAction::{
-            MoveToValidated, PurgeBelowExpiry, RemoveFromUnvalidated, RemoveFromValidated,
+            MoveToValidated,
+            PurgeBelowExpiry,
+            RemoveFromUnvalidated,
+            RemoveFromValidated,
         },
-        IngressPool, IngressPoolObject, Mutations,
+        IngressPool,
+        IngressPoolObject,
+        Mutations,
     },
     p2p::consensus::PoolMutationsProducer,
 };
@@ -12,8 +17,12 @@ use ic_limits::MAX_INGRESS_TTL;
 use ic_logger::debug;
 use ic_registry_client_helpers::subnet::IngressMessageSettings;
 use ic_types::{
-    artifact::IngressMessageId, ingress::IngressStatus, messages::MessageId, CountBytes,
-    RegistryVersion, Time,
+    artifact::IngressMessageId,
+    ingress::IngressStatus,
+    messages::MessageId,
+    CountBytes,
+    RegistryVersion,
+    Time,
 };
 use ic_validator::RequestValidationError;
 
@@ -195,10 +204,16 @@ impl IngressManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tests::{access_ingress_pool, setup_with_params};
+    use crate::tests::{
+        access_ingress_pool,
+        setup_with_params,
+    };
     use ic_interfaces::{
         ingress_pool::ChangeAction,
-        p2p::consensus::{MutablePool, UnvalidatedArtifact},
+        p2p::consensus::{
+            MutablePool,
+            UnvalidatedArtifact,
+        },
         time_source::TimeSource,
     };
     use ic_interfaces_mocks::consensus_pool::MockConsensusTime;
@@ -207,16 +222,26 @@ mod tests {
     use ic_test_utilities_state::MockIngressHistory;
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::{
-        ids::{canister_test_id, node_test_id, user_test_id},
+        ids::{
+            canister_test_id,
+            node_test_id,
+            user_test_id,
+        },
         messages::SignedIngressBuilder,
     };
     use ic_types::time::UNIX_EPOCH;
     use ic_types::{
-        ingress::{IngressState, IngressStatus},
+        ingress::{
+            IngressState,
+            IngressStatus,
+        },
         messages::SignedIngress,
     };
     use std::time::Duration;
-    use std::{collections::HashSet, sync::Arc};
+    use std::{
+        collections::HashSet,
+        sync::Arc,
+    };
 
     #[tokio::test]
     async fn test_ingress_on_state_change_valid() {

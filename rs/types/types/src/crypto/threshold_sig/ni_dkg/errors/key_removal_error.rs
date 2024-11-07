@@ -1,8 +1,12 @@
 //! Errors related to key removal.
-use crate::crypto::error::{InternalError, KeyNotFoundError};
+use crate::crypto::error::{
+    InternalError,
+    KeyNotFoundError,
+};
 use crate::crypto::threshold_sig::ni_dkg::errors::transcripts_to_retain_validation_error::TranscriptsToRetainValidationError;
 use crate::crypto::threshold_sig::ni_dkg::errors::{
-    FsEncryptionPublicKeyNotInRegistryError, MalformedFsEncryptionPublicKeyError,
+    FsEncryptionPublicKeyNotInRegistryError,
+    MalformedFsEncryptionPublicKeyError,
 };
 use crate::registry::RegistryClientError;
 use std::fmt;

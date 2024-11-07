@@ -1,6 +1,9 @@
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::IDkgTranscriptInternal;
 use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscript;
-use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptType::{Masked, Unmasked};
+use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptType::{
+    Masked,
+    Unmasked,
+};
 use ic_types::crypto::canister_threshold_sig::MasterPublicKey;
 
 pub mod ecdsa;
@@ -11,7 +14,10 @@ pub(crate) mod test_utils;
 #[cfg(test)]
 mod tests;
 
-pub use idkg::{retrieve_mega_public_key_from_registry, MegaKeyFromRegistryError};
+pub use idkg::{
+    retrieve_mega_public_key_from_registry,
+    MegaKeyFromRegistryError,
+};
 
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub enum MasterPublicKeyExtractionError {

@@ -1,19 +1,49 @@
 #[cfg(test)]
 mod tests;
 
-use crate::eth_rpc::{BlockSpec, BlockTag, FeeHistory, FeeHistoryParams, Hash, Quantity};
-use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
-use crate::eth_rpc_client::{EthRpcClient, MultiCallError};
+use crate::eth_rpc::{
+    BlockSpec,
+    BlockTag,
+    FeeHistory,
+    FeeHistoryParams,
+    Hash,
+    Quantity,
+};
+use crate::eth_rpc_client::responses::{
+    TransactionReceipt,
+    TransactionStatus,
+};
+use crate::eth_rpc_client::{
+    EthRpcClient,
+    MultiCallError,
+};
 use crate::guard::TimerGuard;
-use crate::logs::{DEBUG, INFO};
-use crate::numeric::{BlockNumber, GasAmount, TransactionNonce, Wei, WeiPerGas};
-use crate::state::{lazy_call_ecdsa_public_key, mutate_state, read_state, TaskType};
+use crate::logs::{
+    DEBUG,
+    INFO,
+};
+use crate::numeric::{
+    BlockNumber,
+    GasAmount,
+    TransactionNonce,
+    Wei,
+    WeiPerGas,
+};
+use crate::state::{
+    lazy_call_ecdsa_public_key,
+    mutate_state,
+    read_state,
+    TaskType,
+};
 use ethnum::u256;
 use ic_canister_log::log;
 use ic_crypto_secp256k1::RecoveryId;
 use ic_ethereum_types::Address;
 use ic_management_canister_types::DerivationPath;
-use minicbor::{Decode, Encode};
+use minicbor::{
+    Decode,
+    Encode,
+};
 use rlp::RlpStream;
 
 const EIP1559_TX_ID: u8 = 2;

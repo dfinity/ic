@@ -2,7 +2,10 @@
 //! specific to Message Routing.
 use hyper::Uri;
 use hyper_rustls::MaybeHttpsStream;
-use hyper_util::{client::legacy::connect::HttpConnector, rt::TokioIo};
+use hyper_util::{
+    client::legacy::connect::HttpConnector,
+    rt::TokioIo,
+};
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_xnet_uri::XNetAuthority;
 use std::{
@@ -10,10 +13,16 @@ use std::{
     future::Future,
     pin::Pin,
     sync::Arc,
-    task::{Context, Poll},
+    task::{
+        Context,
+        Poll,
+    },
 };
 use tokio::net::TcpStream;
-use tower::{BoxError, Service};
+use tower::{
+    BoxError,
+    Service,
+};
 
 /// The type of the connection that should be used. This enum is mostly useful
 /// for testing to avoid setting up the registry and keystore for TLS.

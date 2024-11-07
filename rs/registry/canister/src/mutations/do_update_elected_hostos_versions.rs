@@ -1,11 +1,20 @@
-use crate::{common::LOG_PREFIX, registry::Registry};
+use crate::{
+    common::LOG_PREFIX,
+    registry::Registry,
+};
 
-use candid::{CandidType, Deserialize};
+use candid::{
+    CandidType,
+    Deserialize,
+};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_protobuf::registry::hostos_version::v1::HostosVersionRecord;
 use ic_registry_keys::make_hostos_version_key;
-use ic_registry_transport::{delete, insert};
+use ic_registry_transport::{
+    delete,
+    insert,
+};
 use prost::Message;
 use serde::Serialize;
 

@@ -1,20 +1,45 @@
 use criterion::measurement::Measurement;
-use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion};
+use criterion::{
+    criterion_group,
+    criterion_main,
+    BenchmarkGroup,
+    Criterion,
+};
 
 use ic_crypto_interfaces_sig_verification::BasicSigVerifierByPublicKey;
-use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent, TempCryptoComponentGeneric};
+use ic_crypto_temp_crypto::{
+    NodeKeysToGenerate,
+    TempCryptoComponent,
+    TempCryptoComponentGeneric,
+};
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use ic_interfaces::crypto::{BasicSigVerifier, BasicSigner, KeyManager};
+use ic_interfaces::crypto::{
+    BasicSigVerifier,
+    BasicSigner,
+    KeyManager,
+};
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::crypto::{
-    AlgorithmId, BasicSig, BasicSigOf, KeyPurpose, SignableMock, UserPublicKey, DOMAIN_IC_REQUEST,
+    AlgorithmId,
+    BasicSig,
+    BasicSigOf,
+    KeyPurpose,
+    SignableMock,
+    UserPublicKey,
+    DOMAIN_IC_REQUEST,
 };
-use ic_types::{NodeId, RegistryVersion};
-use ic_types_test_utils::ids::{NODE_1, NODE_2};
+use ic_types::{
+    NodeId,
+    RegistryVersion,
+};
+use ic_types_test_utils::ids::{
+    NODE_1,
+    NODE_2,
+};
 
 use rand::prelude::*;
 use rand_chacha::ChaCha20Rng;
@@ -293,7 +318,10 @@ fn generate_rsa_key_and_sig<R: Rng + CryptoRng>(
     use ic_crypto_internal_basic_sig_rsa_pkcs1 as basic_sig_rsa;
     use ic_crypto_sha2::Sha256;
     use rsa::traits::PublicKeyParts;
-    use rsa::{Pkcs1v15Sign, RsaPrivateKey};
+    use rsa::{
+        Pkcs1v15Sign,
+        RsaPrivateKey,
+    };
 
     let bitlength = 2048; // minimum allowed
 

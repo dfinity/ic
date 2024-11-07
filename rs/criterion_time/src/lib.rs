@@ -5,7 +5,11 @@
 //! See https://bheisler.github.io/criterion.rs/book/user_guide/custom_measurements.html
 //! for more details on how to extend Criterion.rs.
 
-use criterion::measurement::{Measurement, ValueFormatter, WallTime};
+use criterion::measurement::{
+    Measurement,
+    ValueFormatter,
+    WallTime,
+};
 use std::mem::MaybeUninit;
 use std::time::Duration;
 

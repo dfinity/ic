@@ -1,10 +1,22 @@
 use crate::*;
-use core::fmt::{self, Debug};
+use core::fmt::{
+    self,
+    Debug,
+};
 use ic_types::crypto::canister_threshold_sig::idkg::IDkgOpening;
-use rand::{CryptoRng, RngCore};
-use serde::{Deserialize, Serialize};
+use rand::{
+    CryptoRng,
+    RngCore,
+};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::convert::TryFrom;
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::{
+    Zeroize,
+    ZeroizeOnDrop,
+};
 
 /// A Polynomial whose coefficients are scalars in an elliptic curve group
 ///

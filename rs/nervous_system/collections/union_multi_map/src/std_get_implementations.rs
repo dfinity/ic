@@ -3,7 +3,10 @@
 use super::*;
 use std::{
     cmp::Eq,
-    collections::{BTreeMap, HashMap},
+    collections::{
+        BTreeMap,
+        HashMap,
+    },
     hash::Hash,
 };
 

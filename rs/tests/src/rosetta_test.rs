@@ -16,37 +16,71 @@ end::catalog[] */
 
 use ic_rosetta_test_utils::make_user_ecdsa_secp256k1;
 use icp_ledger::{
-    protobuf::TipOfChainRequest, tokens_from_proto, AccountBalanceArgs, AccountIdentifier,
-    ArchiveOptions, BlockIndex, Certification, LedgerCanisterInitPayload, TipOfChainRes, Tokens,
+    protobuf::TipOfChainRequest,
+    tokens_from_proto,
+    AccountBalanceArgs,
+    AccountIdentifier,
+    ArchiveOptions,
+    BlockIndex,
+    Certification,
+    LedgerCanisterInitPayload,
+    TipOfChainRes,
+    Tokens,
     DEFAULT_TRANSFER_FEE,
 };
 
-use canister_test::{Canister, RemoteTestRuntime, Runtime};
+use canister_test::{
+    Canister,
+    RemoteTestRuntime,
+    Runtime,
+};
 use dfn_protobuf::protobuf;
 use ic_canister_client::Sender;
 use ic_ledger_canister_blocks_synchronizer_test_utils::sample_data::acc_id;
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID};
-use ic_nns_governance_api::pb::v1::{Governance, NetworkEconomics};
-use ic_nns_test_utils::itest_helpers::{set_up_governance_canister, set_up_ledger_canister};
+use ic_nns_constants::{
+    GOVERNANCE_CANISTER_ID,
+    LEDGER_CANISTER_ID,
+    REGISTRY_CANISTER_ID,
+};
+use ic_nns_governance_api::pb::v1::{
+    Governance,
+    NetworkEconomics,
+};
+use ic_nns_test_utils::itest_helpers::{
+    set_up_governance_canister,
+    set_up_ledger_canister,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_rosetta_test_utils::{
-    assert_ic_error, make_user_ed25519, rosetta_api_serv::RosettaApiHandle, send_icpts,
+    assert_ic_error,
+    make_user_ed25519,
+    rosetta_api_serv::RosettaApiHandle,
+    send_icpts,
 };
 use ic_system_test_driver::{
     driver::{
         ic::InternetComputer,
         test_env::TestEnv,
         test_env_api::{
-            get_dependency_path, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+            get_dependency_path,
+            HasPublicApiUrl,
+            HasTopologySnapshot,
+            IcNodeContainer,
         },
     },
     util::block_on,
 };
-use ic_types::{messages::Blob, CanisterId};
+use ic_types::{
+    messages::Blob,
+    CanisterId,
+};
 use lazy_static::lazy_static;
 use slog::info;
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{
+        BTreeMap,
+        HashMap,
+    },
     path::PathBuf,
     sync::Arc,
 };

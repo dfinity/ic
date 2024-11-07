@@ -8,7 +8,11 @@
 /// several runs of those tests leads to different keys.
 pub mod public_keys {
     use crate::hex_decode;
-    use ic_protobuf::registry::crypto::v1::{AlgorithmId, PublicKey, X509PublicKeyCert};
+    use ic_protobuf::registry::crypto::v1::{
+        AlgorithmId,
+        PublicKey,
+        X509PublicKeyCert,
+    };
     use ic_types::time::Time;
 
     //Node signing public key with node ID

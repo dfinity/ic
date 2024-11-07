@@ -1,18 +1,37 @@
 use async_trait::async_trait;
 use candid::candid_method;
-use dfn_candid::{candid_one, CandidOne};
-use dfn_core::{
-    api::{caller, Funds},
-    over, over_async, over_init,
+use dfn_candid::{
+    candid_one,
+    CandidOne,
 };
-use ic_base_types::{PrincipalId, SubnetId};
+use dfn_core::{
+    api::{
+        caller,
+        Funds,
+    },
+    over,
+    over_async,
+    over_init,
+};
+use ic_base_types::{
+    PrincipalId,
+    SubnetId,
+};
 use ic_management_canister_types::{
-    CanisterInstallMode::Install, CanisterSettingsArgsBuilder, CreateCanisterArgs, InstallCodeArgs,
-    Method, UpdateSettingsArgs,
+    CanisterInstallMode::Install,
+    CanisterSettingsArgsBuilder,
+    CreateCanisterArgs,
+    InstallCodeArgs,
+    Method,
+    UpdateSettingsArgs,
 };
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
-    canister_status::{canister_status, CanisterStatusResultV2, CanisterStatusType},
+    canister_status::{
+        canister_status,
+        CanisterStatusResultV2,
+        CanisterStatusType,
+    },
 };
 use ic_nervous_system_runtime::DfnRuntime;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -22,22 +41,48 @@ use ic_sns_wasm::{
     canister_stable_memory::CanisterStableMemory,
     init::SnsWasmCanisterInitPayload,
     pb::v1::{
-        update_allowed_principals_response::UpdateAllowedPrincipalsResult, AddWasmRequest,
-        AddWasmResponse, DeployNewSnsRequest, DeployNewSnsResponse, GetAllowedPrincipalsRequest,
-        GetAllowedPrincipalsResponse, GetDeployedSnsByProposalIdRequest,
-        GetDeployedSnsByProposalIdResponse, GetNextSnsVersionRequest, GetNextSnsVersionResponse,
-        GetProposalIdThatAddedWasmRequest, GetProposalIdThatAddedWasmResponse,
-        GetSnsSubnetIdsRequest, GetSnsSubnetIdsResponse, GetWasmMetadataRequest,
-        GetWasmMetadataResponse, GetWasmRequest, GetWasmResponse, InsertUpgradePathEntriesRequest,
-        InsertUpgradePathEntriesResponse, ListDeployedSnsesRequest, ListDeployedSnsesResponse,
-        ListUpgradeStepsRequest, ListUpgradeStepsResponse, SnsWasmError,
-        UpdateAllowedPrincipalsRequest, UpdateAllowedPrincipalsResponse,
-        UpdateSnsSubnetListRequest, UpdateSnsSubnetListResponse,
+        update_allowed_principals_response::UpdateAllowedPrincipalsResult,
+        AddWasmRequest,
+        AddWasmResponse,
+        DeployNewSnsRequest,
+        DeployNewSnsResponse,
+        GetAllowedPrincipalsRequest,
+        GetAllowedPrincipalsResponse,
+        GetDeployedSnsByProposalIdRequest,
+        GetDeployedSnsByProposalIdResponse,
+        GetNextSnsVersionRequest,
+        GetNextSnsVersionResponse,
+        GetProposalIdThatAddedWasmRequest,
+        GetProposalIdThatAddedWasmResponse,
+        GetSnsSubnetIdsRequest,
+        GetSnsSubnetIdsResponse,
+        GetWasmMetadataRequest,
+        GetWasmMetadataResponse,
+        GetWasmRequest,
+        GetWasmResponse,
+        InsertUpgradePathEntriesRequest,
+        InsertUpgradePathEntriesResponse,
+        ListDeployedSnsesRequest,
+        ListDeployedSnsesResponse,
+        ListUpgradeStepsRequest,
+        ListUpgradeStepsResponse,
+        SnsWasmError,
+        UpdateAllowedPrincipalsRequest,
+        UpdateAllowedPrincipalsResponse,
+        UpdateSnsSubnetListRequest,
+        UpdateSnsSubnetListResponse,
     },
     sns_wasm::SnsWasmCanister,
 };
-use ic_types::{CanisterId, Cycles};
-use std::{cell::RefCell, collections::HashMap, convert::TryInto};
+use ic_types::{
+    CanisterId,
+    Cycles,
+};
+use std::{
+    cell::RefCell,
+    collections::HashMap,
+    convert::TryInto,
+};
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;

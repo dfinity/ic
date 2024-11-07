@@ -5,7 +5,10 @@ use anyhow::Result;
 use crate::systemd::generate_systemd_config_files;
 use info::NetworkInfo;
 use ipv6::generate_ipv6_address;
-use mac_address::mac_address::{FormattedMacAddress, UnformattedMacAddress};
+use mac_address::mac_address::{
+    FormattedMacAddress,
+    UnformattedMacAddress,
+};
 
 pub mod info;
 pub mod interfaces;

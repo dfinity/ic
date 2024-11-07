@@ -1,4 +1,7 @@
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::path::PathBuf;
 
 /// We assume pre-agreed values when interacting with the USB HSM. The purpose

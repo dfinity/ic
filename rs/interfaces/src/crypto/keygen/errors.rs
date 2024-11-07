@@ -1,6 +1,9 @@
 use crate::crypto::keygen::IDkgDealingEncryptionKeyRotationError;
 use ic_types::crypto::CryptoError;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::fmt;
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]

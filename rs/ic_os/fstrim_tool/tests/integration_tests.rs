@@ -1,7 +1,10 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::{
+    BufRead,
+    BufReader,
+};
 use std::path::PathBuf;
 use tempfile::tempdir;
 

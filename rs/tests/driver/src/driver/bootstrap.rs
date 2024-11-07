@@ -1,31 +1,70 @@
 use crate::driver::{
     config::NODES_INFO,
     driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR,
-    farm::{AttachImageSpec, Farm, FarmResult, FileId},
-    ic::{InternetComputer, Node},
-    nested::{NestedNode, NestedVms, NESTED_CONFIGURED_IMAGE_PATH},
+    farm::{
+        AttachImageSpec,
+        Farm,
+        FarmResult,
+        FileId,
+    },
+    ic::{
+        InternetComputer,
+        Node,
+    },
+    nested::{
+        NestedNode,
+        NestedVms,
+        NESTED_CONFIGURED_IMAGE_PATH,
+    },
     node_software_version::NodeSoftwareVersion,
     port_allocator::AddrType,
     resource::AllocatedVm,
-    test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
+    test_env::{
+        HasIcPrepDir,
+        TestEnv,
+        TestEnvAttribute,
+    },
     test_env_api::{
-        get_dependency_path, get_elasticsearch_hosts, get_ic_os_update_img_sha256,
-        get_ic_os_update_img_url, get_mainnet_ic_os_update_img_url,
-        get_malicious_ic_os_update_img_sha256, get_malicious_ic_os_update_img_url,
-        read_dependency_from_env_to_string, read_dependency_to_string, HasIcDependencies,
-        HasTopologySnapshot, IcNodeContainer, InitialReplicaVersion, NodesInfo,
+        get_dependency_path,
+        get_elasticsearch_hosts,
+        get_ic_os_update_img_sha256,
+        get_ic_os_update_img_url,
+        get_mainnet_ic_os_update_img_url,
+        get_malicious_ic_os_update_img_sha256,
+        get_malicious_ic_os_update_img_url,
+        read_dependency_from_env_to_string,
+        read_dependency_to_string,
+        HasIcDependencies,
+        HasTopologySnapshot,
+        IcNodeContainer,
+        InitialReplicaVersion,
+        NodesInfo,
     },
     test_setup::InfraProvider,
 };
 use crate::k8s::datavolume::DataVolumeContentType;
 use crate::k8s::images::*;
-use crate::k8s::tnet::{TNet, TNode};
+use crate::k8s::tnet::{
+    TNet,
+    TNode,
+};
 use crate::util::block_on;
-use anyhow::{bail, Result};
+use anyhow::{
+    bail,
+    Result,
+};
 use ic_base_types::NodeId;
 use ic_prep_lib::{
-    internet_computer::{IcConfig, InitializedIc, TopologyConfig},
-    node::{InitializedNode, NodeConfiguration, NodeIndex},
+    internet_computer::{
+        IcConfig,
+        InitializedIc,
+        TopologyConfig,
+    },
+    node::{
+        InitializedNode,
+        NodeConfiguration,
+        NodeIndex,
+    },
     subnet_configuration::SubnetConfig,
 };
 use ic_registry_canister_api::IPv4Config;
@@ -33,17 +72,27 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 use ic_types::ReplicaVersion;
-use slog::{info, warn, Logger};
+use slog::{
+    info,
+    warn,
+    Logger,
+};
 use std::{
     collections::BTreeMap,
     convert::Into,
     fs::File,
     io,
     io::Write,
-    net::{IpAddr, SocketAddr},
+    net::{
+        IpAddr,
+        SocketAddr,
+    },
     path::PathBuf,
     process::Command,
-    thread::{self, JoinHandle},
+    thread::{
+        self,
+        JoinHandle,
+    },
 };
 use url::Url;
 use zstd::stream::write::Encoder;

@@ -1,7 +1,10 @@
 use super::acquire;
 
 use futures::join;
-use std::{cell::RefCell, time::Duration};
+use std::{
+    cell::RefCell,
+    time::Duration,
+};
 use tokio::time::sleep;
 
 // Example of how to use acquire.

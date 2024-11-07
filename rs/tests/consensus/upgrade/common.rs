@@ -15,22 +15,35 @@ end::catalog[] */
 use candid::Principal;
 use ic_agent::Agent;
 use ic_consensus_system_test_utils::rw_message::{
-    can_read_msg, cert_state_makes_progress_with_retries, store_message,
+    can_read_msg,
+    cert_state_makes_progress_with_retries,
+    store_message,
 };
 use ic_consensus_system_test_utils::subnet::enable_chain_key_signing_on_subnet;
 use ic_consensus_system_test_utils::upgrade::{
-    assert_assigned_replica_version, bless_replica_version, deploy_guestos_to_all_subnet_nodes,
+    assert_assigned_replica_version,
+    bless_replica_version,
+    deploy_guestos_to_all_subnet_nodes,
     UpdateImageType,
 };
 use ic_consensus_threshold_sig_system_test_utils::run_chain_key_signature_test;
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
-    driver::{test_env::TestEnv, test_env_api::*},
-    util::{block_on, MessageCanister},
+    driver::{
+        test_env::TestEnv,
+        test_env_api::*,
+    },
+    util::{
+        block_on,
+        MessageCanister,
+    },
 };
 use ic_types::SubnetId;
-use slog::{info, Logger};
+use slog::{
+    info,
+    Logger,
+};
 use std::collections::BTreeMap;
 use std::time::Duration;
 

@@ -1,10 +1,16 @@
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{
+    CanisterId,
+    PrincipalId,
+};
 use ic_nervous_system_proxied_canister_calls_tracker::ProxiedCanisterCallsTracker;
 use maplit::btreemap;
 use std::{
     cell::RefCell,
     collections::BTreeMap,
-    time::{Duration, SystemTime},
+    time::{
+        Duration,
+        SystemTime,
+    },
 };
 use tokio::task::JoinSet;
 
