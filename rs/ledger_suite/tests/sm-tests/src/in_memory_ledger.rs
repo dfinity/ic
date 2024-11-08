@@ -614,7 +614,7 @@ where
             LedgerEndpointArg::TransferArg(transfer_arg) => {
                 let owner = arg.caller.sender().unwrap();
                 let from = &AccountId::from(Account {
-                    owner: owner,
+                    owner,
                     subaccount: transfer_arg.from_subaccount,
                 });
                 let to = &AccountId::from(transfer_arg.to);
