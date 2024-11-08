@@ -1,6 +1,6 @@
 //! The module implements the RPC abstraction over an established QUIC connection.
 //!
-use anyhow::{anyhow, Context};
+use anyhow::Context;
 use bytes::Bytes;
 use http::{Method, Request, Response, Version};
 use ic_protobuf::transport::v1 as pb;
@@ -133,16 +133,10 @@ async fn read_response(mut recv_stream: RecvStream) -> Result<Response<Bytes>, a
     let response_proto = pb::HttpResponse::decode(raw_msg.as_slice())
         .with_context(|| "Failed to decode response header.")?;
 
-    let status: u16 = match response_proto.status_code.try_into() {
-        Ok(status) => status,
-        Err(e) => {
-            return Err(anyhow!(
-                "Received invalid status code {} {}",
-                response_proto.status_code,
-                e
-            ))
-        }
-    };
+    let status: u16 = response_proto
+        .status_code
+        .try_into()
+        .with_context(|| "Received invalid status code.")?;
 
     let mut response = Response::builder().status(status).version(Version::HTTP_3);
     for h in response_proto.headers {
@@ -193,8 +187,7 @@ async fn write_request(
     send_stream
         .write_all(&request_bytes)
         .await
-        .with_context(|| "Failed to write request to stream.")?;
-    Ok(())
+        .with_context(|| "Failed to write request to stream.")
 }
 
 // tests
