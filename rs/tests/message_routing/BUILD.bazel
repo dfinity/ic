@@ -60,7 +60,7 @@ system_test(
 
 system_test_nns(
     name = "rejoin_test",
-    env = {
+    env = UNIVERSAL_CANISTER_ENV | {
         "STATESYNC_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/statesync_test:statesync_test_canister)",
     },
     tags = [
@@ -68,7 +68,11 @@ system_test_nns(
         "system_test_hourly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + STATESYNC_TEST_CANISTER_RUNTIME_DEPS,
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        GRAFANA_RUNTIME_DEPS +
+        STATESYNC_TEST_CANISTER_RUNTIME_DEPS +
+        UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
