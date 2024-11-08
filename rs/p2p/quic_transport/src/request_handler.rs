@@ -178,7 +178,7 @@ async fn read_request(mut recv_stream: RecvStream) -> Result<Request<Body>, anyh
         .with_context(|| "Failed to decode http request.")?;
 
     let pb_http_method = pb::HttpMethod::try_from(request_proto.method)
-        .with_context(|| "Received invalid http method.")?;
+        .with_context(|| "Failed to decode http method.")?;
     let http_method = match pb_http_method {
         pb::HttpMethod::Get => Some(Method::GET),
         pb::HttpMethod::Post => Some(Method::POST),
