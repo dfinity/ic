@@ -5651,7 +5651,6 @@ impl Governance {
 
                 let followees =
                     self.with_neuron_by_neuron_id_or_subaccount(&managed_id, |managed_neuron| {
-                        println!("managed_neuron: {:#?}", managed_neuron);
                         managed_neuron
                             .followees
                             .get(&(Topic::NeuronManagement as i32))

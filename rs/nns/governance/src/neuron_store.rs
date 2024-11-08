@@ -736,12 +736,14 @@ impl NeuronStore {
         callback: impl for<'b> FnOnce(Box<dyn Iterator<Item = Neuron> + 'b>) -> R,
     ) -> R {
         if self.use_stable_memory_for_all_neurons {
+            // Note, during migration, we still need heap_neurons, so we chain them onto the iterator
             with_stable_neuron_store(|stable_store| {
                 let now = self.now();
                 let iter = Box::new(
                     stable_store
                         .range_neurons(..)
-                        .filter(|n| !n.is_inactive(now)),
+                        .filter(|n| !n.is_inactive(now))
+                        .chain(self.heap_neurons.values().cloned()),
                 ) as Box<dyn Iterator<Item = Neuron>>;
                 callback(iter)
             })
