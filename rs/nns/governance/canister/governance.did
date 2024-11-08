@@ -872,6 +872,18 @@ type ProposalData = record {
   wait_for_quiet_state : opt WaitForQuietState;
   executed_timestamp_seconds : nat64;
   original_total_community_fund_maturity_e8s_equivalent : opt nat64;
+
+  // This is the baseline that determines the amount of voting rewards (in the
+  // form of additional maturity) that voting neurons receive.
+  //
+  // For example, suppose neuron N has 42 voting power in ballot B for this
+  // proposl. The amount of voting power in B is determined by the neuron's
+  // deciding voting power when the proposal was created. If this field has 99,
+  // then, neuron N receives 42 / 99 of the rewards purse for this proposal.
+  //
+  // Note that this is NOT used to determine whether the proposal is adopted or
+  // rejected.
+  total_potential_voting_power : opt nat64;
 };
 
 type ProposalInfo = record {
@@ -892,6 +904,7 @@ type ProposalInfo = record {
   proposal : opt Proposal;
   proposer : opt NeuronId;
   executed_timestamp_seconds : nat64;
+  total_potential_voting_power : opt nat64;
 };
 
 type RegisterVote = record {
