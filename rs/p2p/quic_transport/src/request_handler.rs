@@ -13,12 +13,9 @@
 use std::time::Duration;
 
 use anyhow::{anyhow, Context};
-use axum::{
-    body::Body,
-    http::{Method, Request, Response, Version},
-    Router,
-};
+use axum::{body::Body, Router};
 use bytes::Bytes;
+use http::{Method, Request, Response, Version};
 use ic_base_types::NodeId;
 use ic_logger::{info, ReplicaLogger};
 use ic_protobuf::transport::v1 as pb;
