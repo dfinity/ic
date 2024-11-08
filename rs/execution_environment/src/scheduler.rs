@@ -2413,19 +2413,16 @@ impl CanisterIngressQueueLatencies {
     /// Records the ingress queue latency of a message iff it is transitioning from
     /// `Received` to some other state (i.e. when popped from the ingress queue).
     fn on_ingress_status_changed(&mut self, old_status: Arc<IngressStatus>) {
-        match &*old_status {
-            IngressStatus::Known {
-                receiver,
-                user_id: _,
-                time,
-                state: IngressState::Received,
-            } => {
-                let (latency, count) = self.latencies.entry(*receiver).or_default();
-                *latency += self.time.saturating_duration_since(*time).as_secs_f64();
-                *count += 1;
-            }
-
-            _ => {}
+        if let IngressStatus::Known {
+            receiver,
+            user_id: _,
+            time,
+            state: IngressState::Received,
+        } = &*old_status
+        {
+            let (latency, count) = self.latencies.entry(*receiver).or_default();
+            *latency += self.time.saturating_duration_since(*time).as_secs_f64();
+            *count += 1;
         }
     }
 }
