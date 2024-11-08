@@ -447,7 +447,12 @@ async fn withdraw_erc20(
         subaccount: from_ckerc20_subaccount,
     };
     let now = ic_cdk::api::time();
-    log!(INFO, "[withdraw_erc20]: burning {:?} ckETH", erc20_tx_fee);
+    log!(
+        INFO,
+        "[withdraw_erc20]: burning {:?} ckETH from account {}",
+        erc20_tx_fee,
+        cketh_account
+    );
     match cketh_ledger
         .burn_from(
             cketh_account,
@@ -463,9 +468,10 @@ async fn withdraw_erc20(
         Ok(cketh_ledger_burn_index) => {
             log!(
                 INFO,
-                "[withdraw_erc20]: burning {} {}",
+                "[withdraw_erc20]: burning {} {} from account {}",
                 ckerc20_withdrawal_amount,
-                ckerc20_token.ckerc20_token_symbol
+                ckerc20_token.ckerc20_token_symbol,
+                ckerc20_account
             );
             match LedgerClient::ckerc20_ledger(&ckerc20_token)
                 .burn_from(

@@ -327,11 +327,19 @@ impl CkErc20Setup {
             from_cketh_subaccount: None,
             from_ckerc20_subaccount: None,
         };
+        self.call_minter_withdraw_erc20_with(from, arg)
+    }
+
+    pub fn call_minter_withdraw_erc20_with(
+        self,
+        from: Principal,
+        withdraw_erc20_arg: WithdrawErc20Arg,
+    ) -> RefreshGasFeeEstimate {
         let message_id = self.env.send_ingress(
             PrincipalId::from(from),
             self.cketh.minter_id,
             "withdraw_erc20",
-            Encode!(&arg).expect("failed to encode withdraw args"),
+            Encode!(&withdraw_erc20_arg).expect("failed to encode withdraw args"),
         );
         RefreshGasFeeEstimate {
             setup: self,
