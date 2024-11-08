@@ -1140,6 +1140,7 @@ mod cast_vote_and_cascade_follow {
         neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
         neuron_store::NeuronStore,
         pb::v1::{neuron::Followees, Ballot, Topic, Vote},
+        voting::cast_vote_and_cascade_follow,
     };
     use ic_base_types::PrincipalId;
     use ic_nns_common::pb::v1::{NeuronId, ProposalId};
@@ -1232,7 +1233,7 @@ mod cast_vote_and_cascade_follow {
 
         let mut neuron_store = NeuronStore::new(heap_neurons);
 
-        Governance::cast_vote_and_cascade_follow(
+        cast_vote_and_cascade_follow(
             &ProposalId { id: 1 },
             &mut ballots,
             &NeuronId { id: 1 },
@@ -1301,7 +1302,7 @@ mod cast_vote_and_cascade_follow {
 
         let mut neuron_store = NeuronStore::new(neurons);
 
-        Governance::cast_vote_and_cascade_follow(
+        cast_vote_and_cascade_follow(
             &ProposalId { id: 1 },
             &mut ballots,
             &NeuronId { id: 1 },
