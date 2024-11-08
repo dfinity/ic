@@ -1918,7 +1918,7 @@ dependencies = [
  "ic-http-certification",
  "ic-response-verification",
  "ic-utils 0.37.0",
- "idna 1.0.2",
+ "idna 1.0.3",
  "instant-acme",
  "leb128",
  "mockall 0.13.0",
@@ -10794,6 +10794,7 @@ dependencies = [
  "bytes",
  "criterion",
  "futures",
+ "http 1.1.0",
  "ic-async-utils",
  "ic-base-types",
  "ic-crypto-tls-interfaces",
@@ -14100,24 +14101,23 @@ dependencies = [
 
 [[package]]
 name = "idna"
-version = "0.5.0"
+version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "634d9b1461af396cad843f47fdba5597a4f9e6ddd4bfb6ff5d85028c25cb12f6"
+checksum = "686f825264d630750a544639377bae737628043f20d38bbc029e8f29ea968a7e"
 dependencies = [
- "unicode-bidi",
- "unicode-normalization",
+ "idna_adapter",
+ "smallvec",
+ "utf8_iter",
 ]
 
 [[package]]
-name = "idna"
-version = "1.0.2"
+name = "idna_adapter"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bd69211b9b519e98303c015e21a007e293db403b6c85b9b124e133d25e242cdd"
+checksum = "daca1df1c957320b2cf139ac61e7bd64fed304c5040df000a745aa1de3b4ef71"
 dependencies = [
  "icu_normalizer",
  "icu_properties",
- "smallvec",
- "utf8_iter",
 ]
 
 [[package]]
@@ -16312,7 +16312,7 @@ dependencies = [
  "ic-test-utilities-time",
  "ic-test-utilities-types",
  "ic-types",
- "idna 1.0.2",
+ "idna 1.0.3",
  "indoc",
  "mockall 0.13.0",
  "nix 0.24.3",
@@ -17848,7 +17848,6 @@ name = "rate_limits"
 version = "0.9.0"
 dependencies = [
  "anyhow",
- "bincode",
  "candid",
  "getrandom",
  "hex",
@@ -17863,8 +17862,8 @@ dependencies = [
  "rate-limit-canister-integration-tests",
  "rate-limits-api",
  "serde",
+ "serde_cbor",
  "serde_json",
- "sha2 0.10.8",
  "thiserror",
  "uuid",
 ]
@@ -18086,7 +18085,7 @@ dependencies = [
  "ic-test-utilities-types",
  "ic-types",
  "ic-types-test-utils",
- "idna 1.0.2",
+ "idna 1.0.3",
  "ipnet",
  "itertools 0.12.1",
  "lazy_static",
@@ -20625,9 +20624,9 @@ dependencies = [
 
 [[package]]
 name = "tokio"
-version = "1.41.0"
+version = "1.41.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "145f3413504347a2be84393cc8a7d2fb4d863b375909ea59f2158261aa258bbb"
+checksum = "22cfb5bee7a6a52939ca9224d6ac897bb669134078daa8735560897f69de4d33"
 dependencies = [
  "backtrace",
  "bytes",
@@ -21383,12 +21382,12 @@ dependencies = [
 
 [[package]]
 name = "url"
-version = "2.5.2"
+version = "2.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22784dbdf76fdde8af1aeda5622b546b422b6fc585325248a2bf9f5e41e94d6c"
+checksum = "8d157f1b96d14500ffdc1f10ba712e780825526c03d9a49b4d0324b0d9113ada"
 dependencies = [
  "form_urlencoded",
- "idna 0.5.0",
+ "idna 1.0.3",
  "percent-encoding",
  "serde",
 ]
