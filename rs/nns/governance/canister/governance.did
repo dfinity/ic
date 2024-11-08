@@ -505,10 +505,21 @@ type ManageNeuronRequest = record {
   id : opt NeuronId;
   command : opt ManageNeuronCommandRequest;
   neuron_id_or_subaccount : opt NeuronIdOrSubaccount;
+
+  // Controls how the resulting_neuron field in the response is populated.
+  // Possible values here and how the response will be populated:
+  //
+  //     * null - Not populated.
+  //     * 1 - NeuronInfo
+  //     * 2 - NueronInfo, but "big" fields are cleared. To wit,
+  //         * recent_ballots
+  //         * known_neuron_data
+  resulting_neuron_info : opt int32;
 };
 
 type ManageNeuronResponse = record {
   command : opt Command_1;
+  resulting_neuron_info : opt NeuronInfo;
 };
 
 type Merge = record {
