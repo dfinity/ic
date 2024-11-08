@@ -84,7 +84,8 @@ fn test_wasmtime_system_api() {
             canister_memory_limit,
             wasm_memory_limit: None,
             memory_allocation: MemoryAllocation::default(),
-            canister_guaranteed_callback_quota: HypervisorConfig::default().canister_guaranteed_callback_quota
+            canister_guaranteed_callback_quota: HypervisorConfig::default()
+                .canister_guaranteed_callback_quota
                 as u64,
             compute_allocation: ComputeAllocation::default(),
             subnet_type: SubnetType::Application,

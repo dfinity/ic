@@ -101,7 +101,9 @@ fn test_api_for_update(
             canister_memory_limit,
             wasm_memory_limit: None,
             memory_allocation: MemoryAllocation::default(),
-            canister_guaranteed_callback_quota: HypervisorConfig::default().canister_guaranteed_callback_quota as u64,
+            canister_guaranteed_callback_quota: HypervisorConfig::default()
+                .canister_guaranteed_callback_quota
+                as u64,
             compute_allocation: ComputeAllocation::default(),
             subnet_type: SubnetType::Application,
             execution_mode: ExecutionMode::Replicated,
