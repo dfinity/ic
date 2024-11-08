@@ -15,6 +15,7 @@ use crate::{
     types::{InputConfig, RuleId, Version},
 };
 
+pub const INIT_SCHEMA_VERSION: Version = 1;
 pub const INIT_VERSION: Version = 1;
 
 pub trait AddsConfig {
