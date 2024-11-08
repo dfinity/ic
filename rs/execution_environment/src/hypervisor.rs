@@ -207,7 +207,7 @@ pub struct Hypervisor {
     deterministic_time_slicing: FlagStatus,
     cost_to_compile_wasm_instruction: NumInstructions,
     dirty_page_overhead: NumInstructions,
-    canister_callback_quota: usize,
+    canister_guaranteed_callback_quota: usize,
 }
 
 impl Hypervisor {
@@ -317,7 +317,7 @@ impl Hypervisor {
                 .embedders_config
                 .cost_to_compile_wasm_instruction,
             dirty_page_overhead,
-            canister_callback_quota: config.canister_callback_quota,
+            canister_guaranteed_callback_quota: config.canister_guaranteed_callback_quota,
         }
     }
 
@@ -332,7 +332,7 @@ impl Hypervisor {
         deterministic_time_slicing: FlagStatus,
         cost_to_compile_wasm_instruction: NumInstructions,
         dirty_page_overhead: NumInstructions,
-        canister_callback_quota: usize,
+        canister_guaranteed_callback_quota: usize,
     ) -> Self {
         Self {
             wasm_executor,
@@ -345,7 +345,7 @@ impl Hypervisor {
             deterministic_time_slicing,
             cost_to_compile_wasm_instruction,
             dirty_page_overhead,
-            canister_callback_quota,
+            canister_guaranteed_callback_quota,
         }
     }
 
@@ -443,13 +443,13 @@ impl Hypervisor {
         }
         let caller = api_type.caller();
         let subnet_available_callbacks = round_limits.subnet_available_callbacks.max(0) as u64;
-        let canister_available_callbacks =
-            system_state
-                .call_context_manager()
-                .map_or(self.canister_callback_quota, |ccm| {
-                    self.canister_callback_quota
-                        .saturating_sub(ccm.callbacks().len())
-                }) as u64;
+        let canister_available_callbacks = system_state.call_context_manager().map_or(
+            self.canister_guaranteed_callback_quota,
+            |ccm| {
+                self.canister_guaranteed_callback_quota
+                    .saturating_sub(ccm.callbacks().len())
+            },
+        ) as u64;
         // Maximum between remaining canister quota and available subnet shared pool.
         let available_callbacks = subnet_available_callbacks.max(canister_available_callbacks);
         let static_system_state = SandboxSafeSystemState::new(

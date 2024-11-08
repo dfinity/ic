@@ -473,7 +473,7 @@ impl ExecutionEnvironment {
     /// Time complexity: `O(|canisters|)`.
     pub fn subnet_available_callbacks(&self, state: &ReplicatedState) -> i64 {
         self.config
-            .subnet_callback_soft_cap
+            .subnet_callback_soft_limit
             .saturating_sub(state.callback_count()) as i64
     }
 
@@ -1744,7 +1744,7 @@ impl ExecutionEnvironment {
             canister_memory_limit: canister.memory_limit(self.config.max_canister_memory_size),
             wasm_memory_limit: canister.wasm_memory_limit(),
             memory_allocation: canister.memory_allocation(),
-            canister_callback_quota: self.config.canister_callback_quota as u64,
+            canister_guaranteed_callback_quota: self.config.canister_guaranteed_callback_quota as u64,
             compute_allocation: canister.compute_allocation(),
             subnet_type: self.own_subnet_type,
             execution_mode,

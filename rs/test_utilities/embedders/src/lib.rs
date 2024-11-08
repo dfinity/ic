@@ -128,8 +128,8 @@ impl WasmtimeInstanceBuilder {
         }
         .dirty_page_overhead;
         let subnet_available_callbacks =
-            HypervisorConfig::default().subnet_callback_soft_cap as u64;
-        let canister_callback_quota = HypervisorConfig::default().canister_callback_quota as u64;
+            HypervisorConfig::default().subnet_callback_soft_limit as u64;
+        let canister_callback_quota = HypervisorConfig::default().canister_guaranteed_callback_quota as u64;
 
         let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
             &system_state,
@@ -159,7 +159,7 @@ impl WasmtimeInstanceBuilder {
                 canister_memory_limit: self.canister_memory_limit,
                 wasm_memory_limit: None,
                 memory_allocation: MemoryAllocation::default(),
-                canister_callback_quota,
+                canister_guaranteed_callback_quota: canister_callback_quota,
                 compute_allocation: ComputeAllocation::default(),
                 subnet_type: self.subnet_type,
                 execution_mode: ExecutionMode::Replicated,

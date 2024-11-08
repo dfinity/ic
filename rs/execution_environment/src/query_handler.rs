@@ -249,7 +249,7 @@ impl InternalHttpQueryHandler {
         // query is fine as we do not persist state modifications.
         let subnet_available_memory = subnet_memory_capacity(&self.config);
         // XXX Should we allow more than the canister's quota of downstream calls?
-        let subnet_available_callbacks = self.config.subnet_callback_soft_cap as i64;
+        let subnet_available_callbacks = self.config.subnet_callback_soft_limit as i64;
         let max_canister_memory_size = self.config.max_canister_memory_size;
 
         let mut context = query_context::QueryContext::new(
@@ -263,7 +263,7 @@ impl InternalHttpQueryHandler {
             data_certificate,
             subnet_available_memory,
             subnet_available_callbacks,
-            self.config.canister_callback_quota as u64,
+            self.config.canister_guaranteed_callback_quota as u64,
             max_canister_memory_size,
             self.max_instructions_per_query,
             self.config.max_query_call_graph_depth,

@@ -78,7 +78,7 @@ fn test_api_for_update(
         }
         .dirty_page_overhead,
         ComputeAllocation::default(),
-        HypervisorConfig::default().subnet_callback_soft_cap as u64,
+        HypervisorConfig::default().subnet_callback_soft_limit as u64,
         RequestMetadata::new(0, UNIX_EPOCH),
         Some(caller),
         api_type.call_context_id(),
@@ -101,7 +101,7 @@ fn test_api_for_update(
             canister_memory_limit,
             wasm_memory_limit: None,
             memory_allocation: MemoryAllocation::default(),
-            canister_callback_quota: HypervisorConfig::default().canister_callback_quota as u64,
+            canister_guaranteed_callback_quota: HypervisorConfig::default().canister_guaranteed_callback_quota as u64,
             compute_allocation: ComputeAllocation::default(),
             subnet_type: SubnetType::Application,
             execution_mode: ExecutionMode::Replicated,

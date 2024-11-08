@@ -1168,8 +1168,8 @@ fn test_subnet_callback_soft_cap_impl(
     expected_message_executions: u64,
 ) {
     let mut test = SchedulerTestBuilder::new()
-        .with_subnet_callback_soft_cap(subnet_callback_soft_cap)
-        .with_canister_callback_quota(canister_callback_quota)
+        .with_subnet_callback_soft_limit(subnet_callback_soft_cap)
+        .with_canister_guaranteed_callback_quota(canister_callback_quota)
         .build();
 
     for _ in 0..2 {

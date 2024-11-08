@@ -1926,7 +1926,7 @@ impl ExecutionTestBuilder {
     }
 
     pub fn with_canister_callback_quota(mut self, canister_callback_quota: usize) -> Self {
-        self.execution_config.canister_callback_quota = canister_callback_quota;
+        self.execution_config.canister_guaranteed_callback_quota = canister_callback_quota;
         self
     }
 
@@ -2341,7 +2341,7 @@ impl ExecutionTestBuilder {
                     .subnet_wasm_custom_sections_memory_capacity
                     .get() as i64,
             ),
-            subnet_available_callbacks: self.execution_config.subnet_callback_soft_cap as i64,
+            subnet_available_callbacks: self.execution_config.subnet_callback_soft_limit as i64,
             time: self.time,
             dirty_heap_page_overhead,
             instruction_limits: InstructionLimits::new(

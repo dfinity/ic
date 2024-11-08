@@ -184,7 +184,7 @@ mod tests {
             canister_memory_limit: NumBytes::new(4 << 30),
             wasm_memory_limit: None,
             memory_allocation: MemoryAllocation::default(),
-            canister_callback_quota: 50,
+            canister_guaranteed_callback_quota: 50,
             compute_allocation: ComputeAllocation::default(),
             subnet_type: SubnetType::Application,
             execution_mode: ExecutionMode::Replicated,
