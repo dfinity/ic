@@ -592,6 +592,8 @@ impl CardinalityAndRangeValidator for KnownNeuronIndexValidator {
         let cardinality_stable_neurons = with_stable_neuron_store(|stable_neuron_store| {
             stable_neuron_store.lens().known_neuron_data
         });
+        // NOTE - this will not be completely correct during the migration of active
+        // heap neurons to stable storage, but it will self-correct after the migration is finished.
         let cardinality_primary = if is_active_neurons_in_stable_memory_enabled() {
             cardinality_stable_neurons
         } else {
