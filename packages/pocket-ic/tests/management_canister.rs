@@ -2,7 +2,9 @@ use ic_cdk::{query, update};
 use pocket_ic::management_canister::*;
 
 #[update]
-fn create_canister(_: CreateCanisterArgs) -> CanisterIdRecord { unreachable!() }
+fn create_canister(_: CreateCanisterArgs) -> CanisterIdRecord {
+    unreachable!()
+}
 
 #[update]
 fn update_settings(_: UpdateSettingsArgs) {
@@ -55,7 +57,9 @@ fn canister_status(_: CanisterIdRecord) -> CanisterStatusResult {
 }
 
 #[update]
-fn canister_info(_: CanisterInfoArgs) -> CanisterInfoResult { unreachable!() }
+fn canister_info(_: CanisterInfoArgs) -> CanisterInfoResult {
+    unreachable!()
+}
 
 #[update]
 fn delete_canister(_: CanisterIdRecord) {
@@ -68,7 +72,9 @@ fn deposit_cycles(_: CanisterIdRecord) {
 }
 
 #[update]
-fn raw_rand() -> RawRandResult { unreachable!() }
+fn raw_rand() -> RawRandResult {
+    unreachable!()
+}
 
 #[update]
 fn http_request(_: HttpRequestArgs) -> HttpRequestResult {
@@ -96,22 +102,36 @@ fn sign_with_schnorr(_: SignWithSchnorrArgs) -> SignWithSchnorrResult {
 }
 
 #[update]
-fn bitcoin_get_balance(_: BitcoinGetBalanceArgs) -> BitcoinGetBalanceResult { unreachable!() }
+fn bitcoin_get_balance(_: BitcoinGetBalanceArgs) -> BitcoinGetBalanceResult {
+    unreachable!()
+}
 
 #[update]
-fn bitcoin_get_utxos(_: BitcoinGetUtxosArgs) -> BitcoinGetUtxosResult { unreachable!() }
+fn bitcoin_get_utxos(_: BitcoinGetUtxosArgs) -> BitcoinGetUtxosResult {
+    unreachable!()
+}
 
 #[update]
-fn bitcoin_send_transaction(_: BitcoinSendTransactionArgs) { unreachable!() }
+fn bitcoin_send_transaction(_: BitcoinSendTransactionArgs) {
+    unreachable!()
+}
 
 #[update]
-fn bitcoin_get_current_fee_percentiles(_: BitcoinGetCurrentFeePercentilesArgs) -> BitcoinGetCurrentFeePercentilesResult { unreachable!() }
+fn bitcoin_get_current_fee_percentiles(
+    _: BitcoinGetCurrentFeePercentilesArgs,
+) -> BitcoinGetCurrentFeePercentilesResult {
+    unreachable!()
+}
 
 #[update]
-fn bitcoin_get_block_headers(_: BitcoinGetBlockHeadersArgs) -> BitcoinGetBlockHeadersResult { unreachable!() }
+fn bitcoin_get_block_headers(_: BitcoinGetBlockHeadersArgs) -> BitcoinGetBlockHeadersResult {
+    unreachable!()
+}
 
 #[update]
-fn node_metrics_history(_: NodeMetricsHistoryArgs) -> NodeMetricsHistoryResult { unreachable!() }
+fn node_metrics_history(_: NodeMetricsHistoryArgs) -> NodeMetricsHistoryResult {
+    unreachable!()
+}
 
 #[update]
 fn provisional_create_canister_with_cycles(
@@ -157,7 +177,9 @@ mod test {
 
     #[test]
     fn candid_equality_test() {
-        let declared_interface = CandidSource::Text(include_str!("ic0.did"));
+        let declared_interface_str =
+            std::fs::read_to_string(std::env::var_os("IC_DID").unwrap()).unwrap();
+        let declared_interface = CandidSource::Text(&declared_interface_str);
 
         candid::export_service!();
         let implemented_interface_str = __export_service();
