@@ -443,7 +443,7 @@ service ic : {
     // bitcoin_get_block_headers : (bitcoin_get_block_headers_args) -> (bitcoin_get_block_headers_result);
 
     // metrics interface
-    // node_metrics_history : (node_metrics_history_args) -> (node_metrics_history_result);
+    node_metrics_history : (node_metrics_history_args) -> (node_metrics_history_result);
 
     // provisional interfaces for the pre-ledger world
     provisional_create_canister_with_cycles : (provisional_create_canister_with_cycles_args) -> (provisional_create_canister_with_cycles_result);

@@ -437,3 +437,30 @@ pub struct SignWithSchnorrArgs {
 pub struct SignWithSchnorrResult {
     pub signature: Vec<u8>,
 }
+
+// raw randomness
+
+pub type RawRandResult = Vec<u8>;
+
+// node metrics
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
+pub struct NodeMetricsHistoryArgs {
+  pub start_at_timestamp_nanos: u64,
+  pub subnet_id: Principal,
+}
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
+pub struct NodeMetrics {
+  pub num_block_failures_total: u64,
+  pub node_id: Principal,
+  pub num_blocks_proposed_total: u64,
+}
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
+pub struct NodeMetricsHistoryResultItem {
+  pub timestamp_nanos: u64,
+  pub node_metrics: Vec<NodeMetrics>,
+}
+
+pub type NodeMetricsHistoryResult = Vec<NodeMetricsHistoryResultItem>;

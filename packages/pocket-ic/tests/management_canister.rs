@@ -68,7 +68,7 @@ fn deposit_cycles(_: CanisterIdRecord) {
 }
 
 #[update]
-fn raw_rand() -> Vec<u8> { unreachable!() }
+fn raw_rand() -> RawRandResult { unreachable!() }
 
 #[update]
 fn http_request(_: HttpRequestArgs) -> HttpRequestResult {
@@ -110,10 +110,10 @@ fn bitcoin_get_current_fee_percentiles(_: BtcoinGetCurrentFeePercentilesArgs) ->
 
 #[update]
 fn bitcoin_get_block_headers(_: BitcoinGetBlockHeadersArgs) -> BitcoinGetBlockHeadersResult { unreachable!() }
+*/
 
 #[update]
 fn node_metrics_history(_: NodeMetricsHistoryArgs) -> NodeMetricsHistoryResult { unreachable!() }
-*/
 
 #[update]
 fn provisional_create_canister_with_cycles(
