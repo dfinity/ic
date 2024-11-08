@@ -110,7 +110,7 @@ impl IDkgPreSignerImpl {
                             transcript_params,
                         );
                     }
-                    self.crypto_create_dealing(idkg_pool, transcript_loader, &transcript_params)
+                    self.crypto_create_dealing(idkg_pool, transcript_loader, transcript_params)
                 })
             })
             .collect()
@@ -311,7 +311,7 @@ impl IDkgPreSignerImpl {
                                 signed_dealing,
                             );
                         }
-                        self.crypto_create_dealing_support(&id, &transcript_params, &signed_dealing)
+                        self.crypto_create_dealing_support(id, transcript_params, signed_dealing)
                     })
             })
             .collect()

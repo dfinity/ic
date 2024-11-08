@@ -592,7 +592,7 @@ fn validate_combined_signature(
     block_reader: &dyn IDkgBlockReader,
     id: CallbackId,
     context: &SignWithThresholdContext,
-    data: &Vec<u8>,
+    data: &[u8],
 ) -> Result<(CallbackId, CombinedSignature), IDkgValidationError> {
     use InvalidIDkgPayloadReason::*;
     let (_, input_ref) = build_signature_inputs(id, context, block_reader)
