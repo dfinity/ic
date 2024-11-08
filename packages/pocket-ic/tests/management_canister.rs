@@ -95,22 +95,20 @@ fn sign_with_schnorr(_: SignWithSchnorrArgs) -> SignWithSchnorrResult {
     unreachable!()
 }
 
-/*
 #[update]
 fn bitcoin_get_balance(_: BitcoinGetBalanceArgs) -> BitcoinGetBalanceResult { unreachable!() }
 
 #[update]
-fn bitcoin_get_utxos(_: BtcoinGetUtxosArgs) -> BitcoinGetUtxosResult { unreachable!() }
+fn bitcoin_get_utxos(_: BitcoinGetUtxosArgs) -> BitcoinGetUtxosResult { unreachable!() }
 
 #[update]
-fn bitcoin_send_transaction(_: BtcoinSendTransactionArgs) { unreachable!() }
+fn bitcoin_send_transaction(_: BitcoinSendTransactionArgs) { unreachable!() }
 
 #[update]
-fn bitcoin_get_current_fee_percentiles(_: BtcoinGetCurrentFeePercentilesArgs) -> BitcoinGetCurrentFeePercentilesResult { unreachable!() }
+fn bitcoin_get_current_fee_percentiles(_: BitcoinGetCurrentFeePercentilesArgs) -> BitcoinGetCurrentFeePercentilesResult { unreachable!() }
 
 #[update]
 fn bitcoin_get_block_headers(_: BitcoinGetBlockHeadersArgs) -> BitcoinGetBlockHeadersResult { unreachable!() }
-*/
 
 #[update]
 fn node_metrics_history(_: NodeMetricsHistoryArgs) -> NodeMetricsHistoryResult { unreachable!() }

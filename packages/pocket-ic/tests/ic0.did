@@ -436,11 +436,11 @@ service ic : {
     sign_with_schnorr : (sign_with_schnorr_args) -> (sign_with_schnorr_result);
 
     // bitcoin interface
-    // bitcoin_get_balance : (bitcoin_get_balance_args) -> (bitcoin_get_balance_result);
-    // bitcoin_get_utxos : (bitcoin_get_utxos_args) -> (bitcoin_get_utxos_result);
-    // bitcoin_send_transaction : (bitcoin_send_transaction_args) -> ();
-    // bitcoin_get_current_fee_percentiles : (bitcoin_get_current_fee_percentiles_args) -> (bitcoin_get_current_fee_percentiles_result);
-    // bitcoin_get_block_headers : (bitcoin_get_block_headers_args) -> (bitcoin_get_block_headers_result);
+    bitcoin_get_balance : (bitcoin_get_balance_args) -> (bitcoin_get_balance_result);
+    bitcoin_get_utxos : (bitcoin_get_utxos_args) -> (bitcoin_get_utxos_result);
+    bitcoin_send_transaction : (bitcoin_send_transaction_args) -> ();
+    bitcoin_get_current_fee_percentiles : (bitcoin_get_current_fee_percentiles_args) -> (bitcoin_get_current_fee_percentiles_result);
+    bitcoin_get_block_headers : (bitcoin_get_block_headers_args) -> (bitcoin_get_block_headers_result);
 
     // metrics interface
     node_metrics_history : (node_metrics_history_args) -> (node_metrics_history_result);
