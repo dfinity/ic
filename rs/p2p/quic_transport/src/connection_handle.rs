@@ -47,16 +47,18 @@ pub struct ConnectionHandle {
 }
 
 impl ConnectionHandle {
-    /// Performs an RPC operation on the already established connection.
+
+    /// Executes an RPC operation over an already-established connection.
     ///
-    /// Since the QUIC transport layer continuously monitors connection health and automatically reconnects as needed,
-    /// all errors returned by this method can be safely treated as transient (retryable).
-    /// Therefore, we return an anyhow::Error for error handling.
+    /// This method leverages the QUIC transport layer, which continuously monitors the connection’s health
+    /// and automatically attempts reconnection as necessary. As a result, any errors returned by this method
+    /// should be considered transient (retryable). 
     ///
-    /// In a P2P architecture where we have a designated dialer and receiver, connections should be solely managed by the transport layer.
-    /// This is in contrast to most client-server architectures where connections can be managed by the caller.
+    /// In this P2P architecture, where there is a designated dialer and receiver, connection management
+    /// is delegated solely to the transport layer. This differs from typical client-server architectures,
+    /// where connections can be managed directly by the caller.
     ///
-    /// The method is cancel safe.
+    /// Note: This method is cancel-safe.
     pub async fn rpc(&self, request: Request<Bytes>) -> Result<Response<Bytes>, anyhow::Error> {
         let _timer = self
             .metrics
