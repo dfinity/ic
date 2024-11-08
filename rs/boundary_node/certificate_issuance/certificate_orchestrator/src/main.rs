@@ -847,7 +847,7 @@ fn dispense_task() -> DispenseTaskResponse {
 
 #[update(name = "removeTask")]
 #[candid_method(update, rename = "removeTask")]
-fn remove_task(id: String) -> RemoveTaskResponse {
+fn remove_task(id: Id) -> RemoveTaskResponse {
     match TASK_REMOVER.with(|v| v.borrow().remove(&id)) {
         Ok(()) => RemoveTaskResponse::Ok,
         Err(err) => RemoveTaskResponse::Err(match err {
