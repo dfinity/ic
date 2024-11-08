@@ -80,102 +80,6 @@ pub struct CanisterStatusResult {
     pub reserved_cycles: candid::Nat,
 }
 
-// canister info
-
-#[derive(CandidType, Deserialize, Debug, Clone)]
-pub struct CanisterInfoArgs {
-  pub canister_id: CanisterId,
-  pub num_requested_changes: Option<u64>,
-}
-
-#[derive(CandidType, Deserialize, Debug, Clone)]
-pub enum ChangeOrigin {
-  #[serde(rename="from_user")]
-  FromUser {
-    user_id: Principal,
-  },
-  #[serde(rename="from_canister")]
-  FromCanister {
-    canister_version: Option<u64>,
-    canister_id: Principal,
-  },
-}
-
-#[derive(CandidType, Deserialize, Debug, Clone)]
-pub enum ChangeDetailsCodeDeploymentMode {
-  #[serde(rename="reinstall")]
-  Reinstall,
-  #[serde(rename="upgrade")]
-  Upgrade,
-  #[serde(rename="install")]
-  Install,
-}
-
-#[derive(CandidType, Deserialize, Debug, Clone)]
-pub enum ChangeDetails {
-  #[serde(rename="creation")]
-  Creation {
-    controllers: Vec<Principal>,
-  },
-  #[serde(rename="code_deployment")]
-  CodeDeployment {
-    mode: ChangeDetailsCodeDeploymentMode,
-    module_hash: Vec<u8>,
-  },
-  #[serde(rename="load_snapshot")]
-  LoadSnapshot {
-    canister_version: u64,
-    taken_at_timestamp: u64,
-    snapshot_id: SnapshotId,
-  },
-  #[serde(rename="controllers_change")]
-  ControllersChange {
-    controllers: Vec<Principal>,
-  },
-  #[serde(rename="code_uninstall")]
-  CodeUninstall,
-}
-
-#[derive(CandidType, Deserialize, Debug, Clone)]
-pub struct Change {
-  pub timestamp_nanos: u64,
-  pub canister_version: u64,
-  pub origin: ChangeOrigin,
-  pub details: ChangeDetails,
-}
-
-#[derive(CandidType, Deserialize, Debug, Clone)]
-pub struct CanisterInfoResult {
-  pub controllers: Vec<Principal>,
-  pub module_hash: Option<Vec<u8>>,
-  pub recent_changes: Vec<Change>,
-  pub total_num_changes: u64,
-}
-
-// canister creation
-
-#[derive(CandidType, Deserialize, Debug, Clone)]
-pub struct CreateCanisterArgs {
-    pub settings: Option<CanisterSettings>,
-    pub sender_canister_version: Option<u64>,
-}
-
-// provisional API
-
-#[derive(CandidType, Deserialize, Debug, Clone)]
-pub struct ProvisionalCreateCanisterWithCyclesArgs {
-    pub settings: Option<CanisterSettings>,
-    pub specified_id: Option<CanisterId>,
-    pub amount: Option<candid::Nat>,
-    pub sender_canister_version: Option<u64>,
-}
-
-#[derive(CandidType, Deserialize, Debug, Clone)]
-pub struct ProvisionalTopUpCanisterArgs {
-    pub canister_id: Principal,
-    pub amount: candid::Nat,
-}
-
 // canister code installation
 
 #[derive(CandidType, Deserialize, Debug, Clone)]
@@ -294,6 +198,132 @@ pub struct CanisterLogRecord {
 pub struct FetchCanisterLogsResult {
     pub canister_log_records: Vec<CanisterLogRecord>,
 }
+
+// provisional API
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
+pub struct ProvisionalCreateCanisterWithCyclesArgs {
+    pub settings: Option<CanisterSettings>,
+    pub specified_id: Option<CanisterId>,
+    pub amount: Option<candid::Nat>,
+    pub sender_canister_version: Option<u64>,
+}
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
+pub struct ProvisionalTopUpCanisterArgs {
+    pub canister_id: Principal,
+    pub amount: candid::Nat,
+}
+
+// The following types can only be used in inter-canister calls, i.e.,
+// these types CANNOT be used in ingress messages to the management canister.
+
+// canister creation
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
+pub struct CreateCanisterArgs {
+    pub settings: Option<CanisterSettings>,
+    pub sender_canister_version: Option<u64>,
+}
+
+// canister info
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
+pub struct CanisterInfoArgs {
+  pub canister_id: CanisterId,
+  pub num_requested_changes: Option<u64>,
+}
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
+pub enum ChangeOrigin {
+  #[serde(rename="from_user")]
+  FromUser {
+    user_id: Principal,
+  },
+  #[serde(rename="from_canister")]
+  FromCanister {
+    canister_version: Option<u64>,
+    canister_id: Principal,
+  },
+}
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
+pub enum ChangeDetailsCodeDeploymentMode {
+  #[serde(rename="reinstall")]
+  Reinstall,
+  #[serde(rename="upgrade")]
+  Upgrade,
+  #[serde(rename="install")]
+  Install,
+}
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
+pub enum ChangeDetails {
+  #[serde(rename="creation")]
+  Creation {
+    controllers: Vec<Principal>,
+  },
+  #[serde(rename="code_deployment")]
+  CodeDeployment {
+    mode: ChangeDetailsCodeDeploymentMode,
+    module_hash: Vec<u8>,
+  },
+  #[serde(rename="load_snapshot")]
+  LoadSnapshot {
+    canister_version: u64,
+    taken_at_timestamp: u64,
+    snapshot_id: SnapshotId,
+  },
+  #[serde(rename="controllers_change")]
+  ControllersChange {
+    controllers: Vec<Principal>,
+  },
+  #[serde(rename="code_uninstall")]
+  CodeUninstall,
+}
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
+pub struct Change {
+  pub timestamp_nanos: u64,
+  pub canister_version: u64,
+  pub origin: ChangeOrigin,
+  pub details: ChangeDetails,
+}
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
+pub struct CanisterInfoResult {
+  pub controllers: Vec<Principal>,
+  pub module_hash: Option<Vec<u8>>,
+  pub recent_changes: Vec<Change>,
+  pub total_num_changes: u64,
+}
+
+// raw randomness
+
+pub type RawRandResult = Vec<u8>;
+
+// node metrics
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
+pub struct NodeMetricsHistoryArgs {
+  pub start_at_timestamp_nanos: u64,
+  pub subnet_id: Principal,
+}
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
+pub struct NodeMetrics {
+  pub num_block_failures_total: u64,
+  pub node_id: Principal,
+  pub num_blocks_proposed_total: u64,
+}
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
+pub struct NodeMetricsHistoryResultItem {
+  pub timestamp_nanos: u64,
+  pub node_metrics: Vec<NodeMetrics>,
+}
+
+pub type NodeMetricsHistoryResult = Vec<NodeMetricsHistoryResultItem>;
 
 // canister http
 
@@ -437,30 +467,3 @@ pub struct SignWithSchnorrArgs {
 pub struct SignWithSchnorrResult {
     pub signature: Vec<u8>,
 }
-
-// raw randomness
-
-pub type RawRandResult = Vec<u8>;
-
-// node metrics
-
-#[derive(CandidType, Deserialize, Debug, Clone)]
-pub struct NodeMetricsHistoryArgs {
-  pub start_at_timestamp_nanos: u64,
-  pub subnet_id: Principal,
-}
-
-#[derive(CandidType, Deserialize, Debug, Clone)]
-pub struct NodeMetrics {
-  pub num_block_failures_total: u64,
-  pub node_id: Principal,
-  pub num_blocks_proposed_total: u64,
-}
-
-#[derive(CandidType, Deserialize, Debug, Clone)]
-pub struct NodeMetricsHistoryResultItem {
-  pub timestamp_nanos: u64,
-  pub node_metrics: Vec<NodeMetrics>,
-}
-
-pub type NodeMetricsHistoryResult = Vec<NodeMetricsHistoryResultItem>;
