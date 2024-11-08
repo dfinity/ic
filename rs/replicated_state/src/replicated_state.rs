@@ -543,18 +543,20 @@ impl ReplicatedState {
     /// by transitioning `Completed` and `Failed` statuses to `Done` from
     /// oldest to newest in case inserting `status` pushes the memory
     /// consumption over the bound.
+    ///
+    /// Returns the previous status associated with `message_id`.
     pub fn set_ingress_status(
         &mut self,
         message_id: MessageId,
         status: IngressStatus,
         ingress_memory_capacity: NumBytes,
-    ) {
+    ) -> Arc<IngressStatus> {
         self.metadata.ingress_history.insert(
             message_id,
             status,
             self.time(),
             ingress_memory_capacity,
-        );
+        )
     }
 
     /// Prunes ingress history statuses with a pruning time older than
