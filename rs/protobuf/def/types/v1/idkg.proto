@@ -2,7 +2,6 @@ syntax = "proto3";
 
 package types.v1;
 
-import "registry/crypto/v1/crypto.proto";
 import "registry/subnet/v1/subnet.proto";
 import "state/queues/v1/queues.proto";
 import "types/v1/signature.proto";
