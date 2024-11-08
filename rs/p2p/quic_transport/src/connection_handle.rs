@@ -51,7 +51,7 @@ impl ConnectionHandle {
     ///
     /// This method leverages the QUIC transport layer, which continuously monitors the connection’s health
     /// and automatically attempts reconnection as necessary. As a result, any errors returned by this method
-    /// should be considered transient (retryable). 
+    /// should be considered transient (retryable).
     ///
     /// In this P2P architecture, where there is a designated dialer and receiver, connection management
     /// is delegated solely to the transport layer. This differs from typical client-server architectures,
