@@ -84,7 +84,7 @@ system_test_nns(
 
 system_test_nns(
     name = "rejoin_test_large_state",
-    env = {
+    env = UNIVERSAL_CANISTER_ENV | {
         "STATESYNC_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/statesync_test:statesync_test_canister)",
     },
     extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
@@ -94,7 +94,11 @@ system_test_nns(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + STATESYNC_TEST_CANISTER_RUNTIME_DEPS,
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        GRAFANA_RUNTIME_DEPS +
+        STATESYNC_TEST_CANISTER_RUNTIME_DEPS +
+        UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
@@ -106,7 +110,7 @@ system_test_nns(
 
 system_test_nns(
     name = "state_sync_malicious_chunk_test",
-    env = {
+    env = UNIVERSAL_CANISTER_ENV | {
         "STATESYNC_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/statesync_test:statesync_test_canister)",
     },
     extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
@@ -117,7 +121,9 @@ system_test_nns(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
-    runtime_deps = ["//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh"] + GRAFANA_RUNTIME_DEPS + STATESYNC_TEST_CANISTER_RUNTIME_DEPS,
+    runtime_deps = GRAFANA_RUNTIME_DEPS + STATESYNC_TEST_CANISTER_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS + [
+        "//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh",
+    ],
     deps = [
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
