@@ -790,14 +790,6 @@ cc_library(
     urls = ["https://github.com/miracl/core/archive/ec77b2817a0e360b1893affe4cfa44d19391efc7.tar.gz"],
 )
 
-# interface spec v0.22
-http_file(
-    name = "interface_spec",
-    downloaded_file_path = "ic.did",
-    sha256 = "bf3987bd483cf710ff0c54134350ca188c29ff0fdd38567aa4df5e74131543e4",
-    url = "https://raw.githubusercontent.com/dfinity/interface-spec/a82220c1156f5e3e80ea65be6a4f69b766cbe6d1/spec/_attachments/ic.did",
-)
-
 http_archive(
     name = "bitcoin_core",
     build_file_content = """
@@ -836,7 +828,16 @@ http_file(
     url = "https://github.com/nmattia/rustix/commit/330bcc07796f4b8e6443987fbb1b9be79c446bd2.diff",
 )
 
-# Management canister candid interface
+# Management canister candid interface (release v0.22 used in fuzzers)
+
+http_file(
+    name = "interface_spec",
+    downloaded_file_path = "ic.did",
+    sha256 = "bf3987bd483cf710ff0c54134350ca188c29ff0fdd38567aa4df5e74131543e4",
+    url = "https://raw.githubusercontent.com/dfinity/interface-spec/a82220c1156f5e3e80ea65be6a4f69b766cbe6d1/spec/_attachments/ic.did",
+)
+
+# Management canister candid interface (recent master commit used in PocketIC tests)
 
 http_file(
     name = "management_canister_did",
