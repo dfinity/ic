@@ -539,6 +539,26 @@ impl RosettaClient {
         }])
     }
 
+    pub fn build_list_neurons_operations(
+        signer_principal: Principal,
+    ) -> anyhow::Result<Vec<Operation>> {
+        Ok(vec![Operation {
+            operation_identifier: OperationIdentifier {
+                index: 0,
+                network_index: None,
+            },
+            related_operations: None,
+            type_: "LIST_NEURONS".to_string(),
+            status: None,
+            account: Some(rosetta_core::identifiers::AccountIdentifier::from(
+                AccountIdentifier::new(PrincipalId(signer_principal), None),
+            )),
+            amount: None,
+            coin_change: None,
+            metadata: None,
+        }])
+    }
+
     pub async fn network_list(&self) -> anyhow::Result<NetworkListResponse> {
         self.call_endpoint("/network/list", &MetadataRequest { metadata: None })
             .await
@@ -1267,6 +1287,27 @@ impl RosettaClient {
             signer_keypair,
             network_identifier,
             spawn_neuron_operations,
+            None,
+            None,
+        )
+        .await
+    }
+
+    pub async fn list_neurons<T>(
+        &self,
+        network_identifier: NetworkIdentifier,
+        signer_keypair: &T,
+    ) -> anyhow::Result<ConstructionSubmitResponse>
+    where
+        T: RosettaSupportedKeyPair,
+    {
+        let list_neurons_operations = RosettaClient::build_list_neurons_operations(
+            signer_keypair.generate_principal_id()?.0,
+        )?;
+        self.make_submit_and_wait_for_transaction(
+            signer_keypair,
+            network_identifier,
+            list_neurons_operations,
             None,
             None,
         )
