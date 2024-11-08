@@ -872,20 +872,12 @@ impl NeuronStore {
             );
         };
 
-        if self.use_stable_memory_for_all_neurons {
-            with_stable_neuron_store(|stable_store| {
-                // Not including unneeded sections gives us greater than 20x instructions improvement
-                for neuron in stable_store.range_neurons_sections(.., NeuronSections::default()) {
-                    process_neuron(neuron);
-                }
-            })
-        } else {
-            self.with_active_neurons_iter(|iter| {
-                for neuron in iter {
-                    process_neuron(neuron);
-                }
-            });
-        }
+        // Active neurons iterator already makes distinctions between stable and heap neurons.
+        self.with_active_neurons_iter(|iter| {
+            for neuron in iter {
+                process_neuron(neuron);
+            }
+        });
 
         (ballots, deciding_voting_power, potential_voting_power)
     }
