@@ -1,5 +1,5 @@
 {
-  "checksum": "80f4762a2f8fe99bbbf2a4741de304e024aa81ac195a1164df382c19ce84922e",
+  "checksum": "123e349a001784db2969ace36d1d5f4d485beace1df69267ea4f80a17b7c35a3",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -201,11 +201,11 @@
               "target": "bytes"
             },
             {
-              "id": "futures-core 0.3.30",
+              "id": "futures-core 0.3.31",
               "target": "futures_core"
             },
             {
-              "id": "futures-sink 0.3.30",
+              "id": "futures-sink 0.3.31",
               "target": "futures_sink"
             },
             {
@@ -217,7 +217,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             },
             {
@@ -333,7 +333,7 @@
               "target": "flate2"
             },
             {
-              "id": "futures-core 0.3.30",
+              "id": "futures-core 0.3.31",
               "target": "futures_core"
             },
             {
@@ -389,7 +389,7 @@
               "target": "smallvec"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             },
             {
@@ -597,11 +597,11 @@
         "deps": {
           "common": [
             {
-              "id": "futures-core 0.3.30",
+              "id": "futures-core 0.3.31",
               "target": "futures_core"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             }
           ],
@@ -676,11 +676,11 @@
               "target": "actix_utils"
             },
             {
-              "id": "futures-core 0.3.30",
+              "id": "futures-core 0.3.31",
               "target": "futures_core"
             },
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             },
             {
@@ -696,7 +696,7 @@
               "target": "socket2"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             },
             {
@@ -748,7 +748,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures-core 0.3.30",
+              "id": "futures-core 0.3.31",
               "target": "futures_core"
             },
             {
@@ -929,11 +929,11 @@
               "target": "encoding_rs"
             },
             {
-              "id": "futures-core 0.3.30",
+              "id": "futures-core 0.3.31",
               "target": "futures_core"
             },
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             },
             {
@@ -997,7 +997,7 @@
               "target": "time"
             },
             {
-              "id": "url 2.5.2",
+              "id": "url 2.5.3",
               "target": "url"
             }
           ],
@@ -3281,7 +3281,7 @@
               "target": "event_listener_strategy"
             },
             {
-              "id": "futures-core 0.3.30",
+              "id": "futures-core 0.3.31",
               "target": "futures_core"
             },
             {
@@ -3354,7 +3354,7 @@
               "target": "flate2"
             },
             {
-              "id": "futures-core 0.3.30",
+              "id": "futures-core 0.3.31",
               "target": "futures_core"
             },
             {
@@ -3366,7 +3366,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             },
             {
@@ -3427,7 +3427,7 @@
               "target": "anyhow"
             },
             {
-              "id": "futures 0.3.30",
+              "id": "futures 0.3.31",
               "target": "futures"
             },
             {
@@ -3499,7 +3499,7 @@
               "target": "concurrent_queue"
             },
             {
-              "id": "futures-io 0.3.30",
+              "id": "futures-io 0.3.31",
               "target": "futures_io"
             },
             {
@@ -3760,7 +3760,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures 0.3.30",
+              "id": "futures 0.3.31",
               "target": "futures"
             },
             {
@@ -3768,7 +3768,7 @@
               "target": "pin_project"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             }
           ],
@@ -3820,7 +3820,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             }
           ],
@@ -3868,7 +3868,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures-core 0.3.30",
+              "id": "futures-core 0.3.31",
               "target": "futures_core"
             },
             {
@@ -4100,7 +4100,7 @@
               "target": "async_net"
             },
             {
-              "id": "futures 0.3.30",
+              "id": "futures 0.3.31",
               "target": "futures"
             },
             {
@@ -4447,7 +4447,7 @@
               "target": "bytes"
             },
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             },
             {
@@ -4515,7 +4515,7 @@
               "target": "sync_wrapper"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             },
             {
@@ -4605,7 +4605,7 @@
               "target": "bytes"
             },
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             },
             {
@@ -4720,7 +4720,7 @@
               "target": "bytes"
             },
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             },
             {
@@ -4874,7 +4874,7 @@
               "target": "axum"
             },
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             },
             {
@@ -4976,7 +4976,7 @@
               "target": "bytes"
             },
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             },
             {
@@ -5012,7 +5012,7 @@
               "target": "rustls_pemfile"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             },
             {
@@ -5082,7 +5082,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures-core 0.3.30",
+              "id": "futures-core 0.3.31",
               "target": "futures_core"
             },
             {
@@ -5102,7 +5102,7 @@
               "target": "rand"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio",
               "alias": "tokio_1"
             }
@@ -5155,7 +5155,7 @@
               "target": "fastrand"
             },
             {
-              "id": "futures-core 0.3.30",
+              "id": "futures-core 0.3.31",
               "target": "futures_core"
             },
             {
@@ -5163,7 +5163,7 @@
               "target": "pin_project"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             }
           ],
@@ -7785,7 +7785,7 @@
               "target": "async_task"
             },
             {
-              "id": "futures-io 0.3.30",
+              "id": "futures-io 0.3.31",
               "target": "futures_io"
             },
             {
@@ -12589,11 +12589,11 @@
               "target": "thiserror"
             },
             {
-              "id": "url 2.5.2",
+              "id": "url 2.5.3",
               "target": "url"
             },
             {
-              "id": "uuid 1.10.0",
+              "id": "uuid 1.11.0",
               "target": "uuid"
             }
           ],
@@ -14652,7 +14652,7 @@
               "target": "criterion_plot"
             },
             {
-              "id": "futures 0.3.30",
+              "id": "futures 0.3.31",
               "target": "futures"
             },
             {
@@ -14700,7 +14700,7 @@
               "target": "tinytemplate"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             },
             {
@@ -17215,7 +17215,7 @@
         "deps": {
           "common": [
             {
-              "id": "uuid 1.10.0",
+              "id": "uuid 1.11.0",
               "target": "uuid"
             }
           ],
@@ -18267,11 +18267,11 @@
               "target": "fs_extra"
             },
             {
-              "id": "futures 0.3.30",
+              "id": "futures 0.3.31",
               "target": "futures"
             },
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             },
             {
@@ -18459,7 +18459,7 @@
               "target": "icrc1_test_suite"
             },
             {
-              "id": "idna 1.0.2",
+              "id": "idna 1.0.3",
               "target": "idna"
             },
             {
@@ -18857,7 +18857,7 @@
               "target": "rustc_hash"
             },
             {
-              "id": "rustls 0.23.15",
+              "id": "rustls 0.23.16",
               "target": "rustls"
             },
             {
@@ -19045,7 +19045,7 @@
               "target": "time"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             },
             {
@@ -19141,15 +19141,15 @@
               "target": "trust_dns_resolver"
             },
             {
-              "id": "turmoil 0.6.3",
+              "id": "turmoil 0.6.4",
               "target": "turmoil"
             },
             {
-              "id": "url 2.5.2",
+              "id": "url 2.5.3",
               "target": "url"
             },
             {
-              "id": "uuid 1.10.0",
+              "id": "uuid 1.11.0",
               "target": "uuid"
             },
             {
@@ -22578,7 +22578,7 @@
               "target": "thiserror"
             },
             {
-              "id": "url 2.5.2",
+              "id": "url 2.5.3",
               "target": "url"
             }
           ],
@@ -23968,14 +23968,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "futures 0.3.30": {
+    "futures 0.3.31": {
       "name": "futures",
-      "version": "0.3.30",
+      "version": "0.3.31",
       "package_url": "https://github.com/rust-lang/futures-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/futures/0.3.30/download",
-          "sha256": "645c6916888f6cb6350d2550b80fb63e734897a8498abe35cfb732b6487804b0"
+          "url": "https://static.crates.io/crates/futures/0.3.31/download",
+          "sha256": "65bc07b1a8bc7c85c5f2e110c476c7389b4554ba72af57d8445ea63a576b0876"
         }
       },
       "targets": [
@@ -24011,38 +24011,38 @@
         "deps": {
           "common": [
             {
-              "id": "futures-channel 0.3.30",
+              "id": "futures-channel 0.3.31",
               "target": "futures_channel"
             },
             {
-              "id": "futures-core 0.3.30",
+              "id": "futures-core 0.3.31",
               "target": "futures_core"
             },
             {
-              "id": "futures-executor 0.3.30",
+              "id": "futures-executor 0.3.31",
               "target": "futures_executor"
             },
             {
-              "id": "futures-io 0.3.30",
+              "id": "futures-io 0.3.31",
               "target": "futures_io"
             },
             {
-              "id": "futures-sink 0.3.30",
+              "id": "futures-sink 0.3.31",
               "target": "futures_sink"
             },
             {
-              "id": "futures-task 0.3.30",
+              "id": "futures-task 0.3.31",
               "target": "futures_task"
             },
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.30"
+        "version": "0.3.31"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -24051,14 +24051,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "futures-channel 0.3.30": {
+    "futures-channel 0.3.31": {
       "name": "futures-channel",
-      "version": "0.3.30",
+      "version": "0.3.31",
       "package_url": "https://github.com/rust-lang/futures-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/futures-channel/0.3.30/download",
-          "sha256": "eac8f7d7865dcb88bd4373ab671c8cf4508703796caa2b1985a9ca867b3fcb78"
+          "url": "https://static.crates.io/crates/futures-channel/0.3.31/download",
+          "sha256": "2dff15bf788c671c1934e366d07e30c1814a8ef514e1af724a602e8a2fbe1b10"
         }
       },
       "targets": [
@@ -24093,18 +24093,18 @@
         "deps": {
           "common": [
             {
-              "id": "futures-core 0.3.30",
+              "id": "futures-core 0.3.31",
               "target": "futures_core"
             },
             {
-              "id": "futures-sink 0.3.30",
+              "id": "futures-sink 0.3.31",
               "target": "futures_sink"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.30"
+        "version": "0.3.31"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -24113,14 +24113,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "futures-core 0.3.30": {
+    "futures-core 0.3.31": {
       "name": "futures-core",
-      "version": "0.3.30",
+      "version": "0.3.31",
       "package_url": "https://github.com/rust-lang/futures-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/futures-core/0.3.30/download",
-          "sha256": "dfc6580bb841c5a68e9ef15c77ccc837b40a7504914d52e47b8b0e9bbda25a1d"
+          "url": "https://static.crates.io/crates/futures-core/0.3.31/download",
+          "sha256": "05f29059c0c2090612e8d742178b0580d2dc940c837851ad723096f87af6663e"
         }
       },
       "targets": [
@@ -24151,7 +24151,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.30"
+        "version": "0.3.31"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -24160,14 +24160,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "futures-executor 0.3.30": {
+    "futures-executor 0.3.31": {
       "name": "futures-executor",
-      "version": "0.3.30",
+      "version": "0.3.31",
       "package_url": "https://github.com/rust-lang/futures-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/futures-executor/0.3.30/download",
-          "sha256": "a576fc72ae164fca6b9db127eaa9a9dda0d61316034f33a0a0d4eda41f02b01d"
+          "url": "https://static.crates.io/crates/futures-executor/0.3.31/download",
+          "sha256": "1e28d1d997f585e54aebc3f97d39e72338912123a67330d723fdbb564d646c9f"
         }
       },
       "targets": [
@@ -24199,22 +24199,22 @@
         "deps": {
           "common": [
             {
-              "id": "futures-core 0.3.30",
+              "id": "futures-core 0.3.31",
               "target": "futures_core"
             },
             {
-              "id": "futures-task 0.3.30",
+              "id": "futures-task 0.3.31",
               "target": "futures_task"
             },
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.30"
+        "version": "0.3.31"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -24223,14 +24223,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "futures-io 0.3.30": {
+    "futures-io 0.3.31": {
       "name": "futures-io",
-      "version": "0.3.30",
+      "version": "0.3.31",
       "package_url": "https://github.com/rust-lang/futures-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/futures-io/0.3.30/download",
-          "sha256": "a44623e20b9681a318efdd71c299b6b222ed6f231972bfe2f224ebad6311f0c1"
+          "url": "https://static.crates.io/crates/futures-io/0.3.31/download",
+          "sha256": "9e5c1b78ca4aae1ac06c48a526a655760685149f0d465d21f37abfe57ce075c6"
         }
       },
       "targets": [
@@ -24260,7 +24260,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.30"
+        "version": "0.3.31"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -24319,11 +24319,11 @@
               "target": "fastrand"
             },
             {
-              "id": "futures-core 0.3.30",
+              "id": "futures-core 0.3.31",
               "target": "futures_core"
             },
             {
-              "id": "futures-io 0.3.30",
+              "id": "futures-io 0.3.31",
               "target": "futures_io"
             },
             {
@@ -24355,14 +24355,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "futures-macro 0.3.30": {
+    "futures-macro 0.3.31": {
       "name": "futures-macro",
-      "version": "0.3.30",
+      "version": "0.3.31",
       "package_url": "https://github.com/rust-lang/futures-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/futures-macro/0.3.30/download",
-          "sha256": "87750cf4b7a4c0625b1529e4c543c2182106e4dedc60a2a6455e00d212c489ac"
+          "url": "https://static.crates.io/crates/futures-macro/0.3.31/download",
+          "sha256": "162ee34ebcb7c64a8abebc059ce0fee27c2262618d7b60ed8faf72fef13c3650"
         }
       },
       "targets": [
@@ -24402,7 +24402,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.30"
+        "version": "0.3.31"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -24450,11 +24450,11 @@
         "deps": {
           "common": [
             {
-              "id": "futures-io 0.3.30",
+              "id": "futures-io 0.3.31",
               "target": "futures_io"
             },
             {
-              "id": "rustls 0.23.15",
+              "id": "rustls 0.23.16",
               "target": "rustls"
             },
             {
@@ -24475,14 +24475,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "futures-sink 0.3.30": {
+    "futures-sink 0.3.31": {
       "name": "futures-sink",
-      "version": "0.3.30",
+      "version": "0.3.31",
       "package_url": "https://github.com/rust-lang/futures-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/futures-sink/0.3.30/download",
-          "sha256": "9fb8e00e87438d937621c1c6269e53f536c14d3fbd6a042bb24879e57d474fb5"
+          "url": "https://static.crates.io/crates/futures-sink/0.3.31/download",
+          "sha256": "e575fab7d1e0dcb8d0c7bcf9a63ee213816ab51902e6d244a95819acacf1d4f7"
         }
       },
       "targets": [
@@ -24513,7 +24513,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.30"
+        "version": "0.3.31"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -24522,14 +24522,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "futures-task 0.3.30": {
+    "futures-task 0.3.31": {
       "name": "futures-task",
-      "version": "0.3.30",
+      "version": "0.3.31",
       "package_url": "https://github.com/rust-lang/futures-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/futures-task/0.3.30/download",
-          "sha256": "38d84fa142264698cdce1a9f9172cf383a0c82de1bddcf3092901442c4097004"
+          "url": "https://static.crates.io/crates/futures-task/0.3.31/download",
+          "sha256": "f90f7dce0722e95104fcb095585910c0977252f286e354b5e3bd38902cd99988"
         }
       },
       "targets": [
@@ -24559,7 +24559,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.30"
+        "version": "0.3.31"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -24607,14 +24607,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "futures-util 0.3.30": {
+    "futures-util 0.3.31": {
       "name": "futures-util",
-      "version": "0.3.30",
+      "version": "0.3.31",
       "package_url": "https://github.com/rust-lang/futures-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/futures-util/0.3.30/download",
-          "sha256": "3d6401deb83407ab3da39eba7e33987a73c3df0c82b4bb5813ee871c19c41d48"
+          "url": "https://static.crates.io/crates/futures-util/0.3.31/download",
+          "sha256": "9fa08315bb612088cc391249efdc3bc77536f16c91f6cf495e6fbe85b20a4a81"
         }
       },
       "targets": [
@@ -24658,23 +24658,23 @@
         "deps": {
           "common": [
             {
-              "id": "futures-channel 0.3.30",
+              "id": "futures-channel 0.3.31",
               "target": "futures_channel"
             },
             {
-              "id": "futures-core 0.3.30",
+              "id": "futures-core 0.3.31",
               "target": "futures_core"
             },
             {
-              "id": "futures-io 0.3.30",
+              "id": "futures-io 0.3.31",
               "target": "futures_io"
             },
             {
-              "id": "futures-sink 0.3.30",
+              "id": "futures-sink 0.3.31",
               "target": "futures_sink"
             },
             {
-              "id": "futures-task 0.3.30",
+              "id": "futures-task 0.3.31",
               "target": "futures_task"
             },
             {
@@ -24700,13 +24700,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "futures-macro 0.3.30",
+              "id": "futures-macro 0.3.31",
               "target": "futures_macro"
             }
           ],
           "selects": {}
         },
-        "version": "0.3.30"
+        "version": "0.3.31"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -25421,7 +25421,7 @@
               "target": "dashmap"
             },
             {
-              "id": "futures 0.3.30",
+              "id": "futures 0.3.31",
               "target": "futures"
             },
             {
@@ -25573,15 +25573,15 @@
               "target": "fnv"
             },
             {
-              "id": "futures-core 0.3.30",
+              "id": "futures-core 0.3.31",
               "target": "futures_core"
             },
             {
-              "id": "futures-sink 0.3.30",
+              "id": "futures-sink 0.3.31",
               "target": "futures_sink"
             },
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             },
             {
@@ -25597,7 +25597,7 @@
               "target": "slab"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             },
             {
@@ -25660,15 +25660,15 @@
               "target": "fnv"
             },
             {
-              "id": "futures-core 0.3.30",
+              "id": "futures-core 0.3.31",
               "target": "futures_core"
             },
             {
-              "id": "futures-sink 0.3.30",
+              "id": "futures-sink 0.3.31",
               "target": "futures_sink"
             },
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             },
             {
@@ -25684,7 +25684,7 @@
               "target": "slab"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             },
             {
@@ -26776,15 +26776,15 @@
               "target": "data_encoding"
             },
             {
-              "id": "futures-channel 0.3.30",
+              "id": "futures-channel 0.3.31",
               "target": "futures_channel"
             },
             {
-              "id": "futures-io 0.3.30",
+              "id": "futures-io 0.3.31",
               "target": "futures_io"
             },
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             },
             {
@@ -26832,7 +26832,7 @@
               "target": "tinyvec"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             },
             {
@@ -26844,7 +26844,7 @@
               "target": "tracing"
             },
             {
-              "id": "url 2.5.2",
+              "id": "url 2.5.3",
               "target": "url"
             },
             {
@@ -26933,7 +26933,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             },
             {
@@ -26973,7 +26973,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             },
             {
@@ -27652,7 +27652,7 @@
               "target": "bytes"
             },
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             },
             {
@@ -27984,15 +27984,15 @@
               "target": "bytes"
             },
             {
-              "id": "futures-channel 0.3.30",
+              "id": "futures-channel 0.3.31",
               "target": "futures_channel"
             },
             {
-              "id": "futures-core 0.3.30",
+              "id": "futures-core 0.3.31",
               "target": "futures_core"
             },
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             },
             {
@@ -28028,7 +28028,7 @@
               "target": "socket2"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             },
             {
@@ -28102,11 +28102,11 @@
               "target": "bytes"
             },
             {
-              "id": "futures-channel 0.3.30",
+              "id": "futures-channel 0.3.31",
               "target": "futures_channel"
             },
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             },
             {
@@ -28142,7 +28142,7 @@
               "target": "smallvec"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             },
             {
@@ -28197,7 +28197,7 @@
               "target": "bytes"
             },
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             },
             {
@@ -28221,7 +28221,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             },
             {
@@ -28286,7 +28286,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             },
             {
@@ -28310,7 +28310,7 @@
               "target": "rustls_native_certs"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             },
             {
@@ -28505,7 +28505,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             },
             {
@@ -28525,7 +28525,7 @@
               "target": "log"
             },
             {
-              "id": "rustls 0.23.15",
+              "id": "rustls 0.23.16",
               "target": "rustls"
             },
             {
@@ -28538,7 +28538,7 @@
               "alias": "pki_types"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             },
             {
@@ -28808,7 +28808,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             },
             {
@@ -28872,7 +28872,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             },
             {
@@ -28944,11 +28944,11 @@
               "target": "bytes"
             },
             {
-              "id": "futures-channel 0.3.30",
+              "id": "futures-channel 0.3.31",
               "target": "futures_channel"
             },
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             },
             {
@@ -28972,7 +28972,7 @@
               "target": "socket2"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             },
             {
@@ -29218,7 +29218,7 @@
               "target": "ed25519_consensus"
             },
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             },
             {
@@ -29318,7 +29318,7 @@
               "target": "time"
             },
             {
-              "id": "url 2.5.2",
+              "id": "url 2.5.3",
               "target": "url"
             }
           ],
@@ -29593,7 +29593,7 @@
                 "target": "webpki"
               },
               {
-                "id": "tokio 1.40.0",
+                "id": "tokio 1.41.1",
                 "target": "tokio"
               }
             ],
@@ -30131,11 +30131,11 @@
               "target": "fqdn"
             },
             {
-              "id": "futures 0.3.30",
+              "id": "futures 0.3.31",
               "target": "futures"
             },
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             },
             {
@@ -30195,7 +30195,7 @@
               "target": "reqwest"
             },
             {
-              "id": "rustls 0.23.15",
+              "id": "rustls 0.23.16",
               "target": "rustls"
             },
             {
@@ -30227,7 +30227,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             },
             {
@@ -30251,11 +30251,11 @@
               "target": "tracing"
             },
             {
-              "id": "url 2.5.2",
+              "id": "url 2.5.3",
               "target": "url"
             },
             {
-              "id": "uuid 1.10.0",
+              "id": "uuid 1.11.0",
               "target": "uuid"
             },
             {
@@ -31231,7 +31231,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures 0.3.30",
+              "id": "futures 0.3.31",
               "target": "futures"
             },
             {
@@ -31589,7 +31589,7 @@
               "target": "candid"
             },
             {
-              "id": "futures 0.3.30",
+              "id": "futures 0.3.31",
               "target": "futures"
             },
             {
@@ -32111,7 +32111,7 @@
               "target": "candid"
             },
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             },
             {
@@ -32151,7 +32151,7 @@
               "target": "time"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             }
           ],
@@ -32876,7 +32876,7 @@
               "target": "candid"
             },
             {
-              "id": "futures 0.3.30",
+              "id": "futures 0.3.31",
               "target": "futures"
             },
             {
@@ -33781,74 +33781,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "idna 0.5.0": {
+    "idna 1.0.3": {
       "name": "idna",
-      "version": "0.5.0",
+      "version": "1.0.3",
       "package_url": "https://github.com/servo/rust-url/",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/idna/0.5.0/download",
-          "sha256": "634d9b1461af396cad843f47fdba5597a4f9e6ddd4bfb6ff5d85028c25cb12f6"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "idna",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "idna",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "alloc",
-            "default",
-            "std"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "unicode-bidi 0.3.13",
-              "target": "unicode_bidi"
-            },
-            {
-              "id": "unicode-normalization 0.1.22",
-              "target": "unicode_normalization"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.5.0"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
-    "idna 1.0.2": {
-      "name": "idna",
-      "version": "1.0.2",
-      "package_url": "https://github.com/servo/rust-url/",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/idna/1.0.2/download",
-          "sha256": "bd69211b9b519e98303c015e21a007e293db403b6c85b9b124e133d25e242cdd"
+          "url": "https://static.crates.io/crates/idna/1.0.3/download",
+          "sha256": "686f825264d630750a544639377bae737628043f20d38bbc029e8f29ea968a7e"
         }
       },
       "targets": [
@@ -33882,12 +33822,8 @@
         "deps": {
           "common": [
             {
-              "id": "icu_normalizer 1.5.0",
-              "target": "icu_normalizer"
-            },
-            {
-              "id": "icu_properties 1.5.1",
-              "target": "icu_properties"
+              "id": "idna_adapter 1.2.0",
+              "target": "idna_adapter"
             },
             {
               "id": "smallvec 1.13.2",
@@ -33901,9 +33837,67 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.0.2"
+        "version": "1.0.3"
       },
       "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "idna_adapter 1.2.0": {
+      "name": "idna_adapter",
+      "version": "1.2.0",
+      "package_url": "https://github.com/hsivonen/idna_adapter",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/idna_adapter/1.2.0/download",
+          "sha256": "daca1df1c957320b2cf139ac61e7bd64fed304c5040df000a745aa1de3b4ef71"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "idna_adapter",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "idna_adapter",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "compiled_data"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "icu_normalizer 1.5.0",
+              "target": "icu_normalizer"
+            },
+            {
+              "id": "icu_properties 1.5.1",
+              "target": "icu_properties"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "1.2.0"
+      },
+      "license": "Apache-2.0 OR MIT",
       "license_ids": [
         "Apache-2.0",
         "MIT"
@@ -36282,7 +36276,7 @@
               "target": "either"
             },
             {
-              "id": "futures 0.3.30",
+              "id": "futures 0.3.31",
               "target": "futures"
             },
             {
@@ -36334,7 +36328,7 @@
               "target": "pem"
             },
             {
-              "id": "rustls 0.23.15",
+              "id": "rustls 0.23.16",
               "target": "rustls"
             },
             {
@@ -36362,7 +36356,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             },
             {
@@ -38527,7 +38521,7 @@
         "deps": {
           "common": [
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             },
             {
@@ -38758,15 +38752,15 @@
         "deps": {
           "common": [
             {
-              "id": "futures-core 0.3.30",
+              "id": "futures-core 0.3.31",
               "target": "futures_core"
             },
             {
-              "id": "futures-sink 0.3.30",
+              "id": "futures-sink 0.3.31",
               "target": "futures_sink"
             },
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             },
             {
@@ -40385,7 +40379,7 @@
               "target": "exitcode"
             },
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             },
             {
@@ -40477,7 +40471,7 @@
               "target": "simple_logger"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             },
             {
@@ -40493,7 +40487,7 @@
               "target": "tower_http"
             },
             {
-              "id": "url 2.5.2",
+              "id": "url 2.5.3",
               "target": "url"
             }
           ],
@@ -41500,7 +41494,7 @@
               "target": "colored"
             },
             {
-              "id": "futures 0.3.30",
+              "id": "futures 0.3.31",
               "target": "futures"
             },
             {
@@ -41532,7 +41526,7 @@
               "target": "similar"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             }
           ],
@@ -41625,7 +41619,7 @@
               "target": "event_listener"
             },
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             },
             {
@@ -41661,7 +41655,7 @@
               "target": "triomphe"
             },
             {
-              "id": "uuid 1.10.0",
+              "id": "uuid 1.11.0",
               "target": "uuid"
             }
           ],
@@ -41804,7 +41798,7 @@
               "target": "encoding_rs"
             },
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             },
             {
@@ -44523,11 +44517,11 @@
         "deps": {
           "common": [
             {
-              "id": "futures-core 0.3.30",
+              "id": "futures-core 0.3.31",
               "target": "futures_core"
             },
             {
-              "id": "futures-sink 0.3.30",
+              "id": "futures-sink 0.3.31",
               "target": "futures_sink"
             },
             {
@@ -44611,11 +44605,11 @@
         "deps": {
           "common": [
             {
-              "id": "futures-core 0.3.30",
+              "id": "futures-core 0.3.31",
               "target": "futures_core"
             },
             {
-              "id": "futures-sink 0.3.30",
+              "id": "futures-sink 0.3.31",
               "target": "futures_sink"
             },
             {
@@ -44695,7 +44689,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures-core 0.3.30",
+              "id": "futures-core 0.3.31",
               "target": "futures_core"
             },
             {
@@ -44723,7 +44717,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             },
             {
@@ -45041,11 +45035,11 @@
         "deps": {
           "common": [
             {
-              "id": "futures-channel 0.3.30",
+              "id": "futures-channel 0.3.31",
               "target": "futures_channel"
             },
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             },
             {
@@ -45124,11 +45118,11 @@
         "deps": {
           "common": [
             {
-              "id": "futures-channel 0.3.30",
+              "id": "futures-channel 0.3.31",
               "target": "futures_channel"
             },
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             },
             {
@@ -45217,15 +45211,15 @@
               "target": "crossbeam_channel"
             },
             {
-              "id": "futures-channel 0.3.30",
+              "id": "futures-channel 0.3.31",
               "target": "futures_channel"
             },
             {
-              "id": "futures-executor 0.3.30",
+              "id": "futures-executor 0.3.31",
               "target": "futures_executor"
             },
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             },
             {
@@ -45318,15 +45312,15 @@
               "target": "crossbeam_channel"
             },
             {
-              "id": "futures-channel 0.3.30",
+              "id": "futures-channel 0.3.31",
               "target": "futures_channel"
             },
             {
-              "id": "futures-executor 0.3.30",
+              "id": "futures-executor 0.3.31",
               "target": "futures_executor"
             },
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             },
             {
@@ -45430,15 +45424,15 @@
               "target": "crossbeam_channel"
             },
             {
-              "id": "futures-channel 0.3.30",
+              "id": "futures-channel 0.3.31",
               "target": "futures_channel"
             },
             {
-              "id": "futures-executor 0.3.30",
+              "id": "futures-executor 0.3.31",
               "target": "futures_executor"
             },
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             },
             {
@@ -45470,7 +45464,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             },
             {
@@ -45547,15 +45541,15 @@
         "deps": {
           "common": [
             {
-              "id": "futures-channel 0.3.30",
+              "id": "futures-channel 0.3.31",
               "target": "futures_channel"
             },
             {
-              "id": "futures-executor 0.3.30",
+              "id": "futures-executor 0.3.31",
               "target": "futures_executor"
             },
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             },
             {
@@ -45587,7 +45581,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             },
             {
@@ -48112,7 +48106,7 @@
               "target": "fastrand"
             },
             {
-              "id": "futures-io 0.3.30",
+              "id": "futures-io 0.3.31",
               "target": "futures_io"
             }
           ],
@@ -48529,7 +48523,7 @@
               "target": "slog"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             },
             {
@@ -52240,7 +52234,7 @@
               "target": "rustc_hash"
             },
             {
-              "id": "rustls 0.23.15",
+              "id": "rustls 0.23.16",
               "target": "rustls"
             },
             {
@@ -52252,7 +52246,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             },
             {
@@ -52328,7 +52322,7 @@
               "target": "rustc_hash"
             },
             {
-              "id": "rustls 0.23.15",
+              "id": "rustls 0.23.16",
               "target": "rustls"
             },
             {
@@ -55025,11 +55019,11 @@
               "target": "bytes"
             },
             {
-              "id": "futures-core 0.3.30",
+              "id": "futures-core 0.3.31",
               "target": "futures_core"
             },
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             },
             {
@@ -55057,7 +55051,7 @@
               "target": "tower_service"
             },
             {
-              "id": "url 2.5.2",
+              "id": "url 2.5.3",
               "target": "url"
             }
           ],
@@ -55464,7 +55458,7 @@
                 "target": "pin_project_lite"
               },
               {
-                "id": "tokio 1.40.0",
+                "id": "tokio 1.41.1",
                 "target": "tokio"
               }
             ],
@@ -56169,11 +56163,11 @@
               "target": "bytes"
             },
             {
-              "id": "futures-core 0.3.30",
+              "id": "futures-core 0.3.31",
               "target": "futures_core"
             },
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             },
             {
@@ -56205,14 +56199,14 @@
               "target": "tower_service"
             },
             {
-              "id": "url 2.5.2",
+              "id": "url 2.5.3",
               "target": "url"
             }
           ],
           "selects": {
             "aarch64-apple-darwin": [
               {
-                "id": "futures-channel 0.3.30",
+                "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
               {
@@ -56228,7 +56222,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.15",
+                "id": "rustls 0.23.16",
                 "target": "rustls"
               },
               {
@@ -56262,7 +56256,7 @@
             ],
             "aarch64-apple-ios": [
               {
-                "id": "futures-channel 0.3.30",
+                "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
               {
@@ -56278,7 +56272,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.15",
+                "id": "rustls 0.23.16",
                 "target": "rustls"
               },
               {
@@ -56312,7 +56306,7 @@
             ],
             "aarch64-apple-ios-sim": [
               {
-                "id": "futures-channel 0.3.30",
+                "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
               {
@@ -56328,7 +56322,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.15",
+                "id": "rustls 0.23.16",
                 "target": "rustls"
               },
               {
@@ -56362,7 +56356,7 @@
             ],
             "aarch64-fuchsia": [
               {
-                "id": "futures-channel 0.3.30",
+                "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
               {
@@ -56378,7 +56372,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.15",
+                "id": "rustls 0.23.16",
                 "target": "rustls"
               },
               {
@@ -56412,7 +56406,7 @@
             ],
             "aarch64-linux-android": [
               {
-                "id": "futures-channel 0.3.30",
+                "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
               {
@@ -56428,7 +56422,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.15",
+                "id": "rustls 0.23.16",
                 "target": "rustls"
               },
               {
@@ -56462,7 +56456,7 @@
             ],
             "aarch64-pc-windows-msvc": [
               {
-                "id": "futures-channel 0.3.30",
+                "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
               {
@@ -56478,7 +56472,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.15",
+                "id": "rustls 0.23.16",
                 "target": "rustls"
               },
               {
@@ -56512,7 +56506,7 @@
             ],
             "aarch64-unknown-linux-gnu": [
               {
-                "id": "futures-channel 0.3.30",
+                "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
               {
@@ -56528,7 +56522,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.15",
+                "id": "rustls 0.23.16",
                 "target": "rustls"
               },
               {
@@ -56562,7 +56556,7 @@
             ],
             "aarch64-unknown-nixos-gnu": [
               {
-                "id": "futures-channel 0.3.30",
+                "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
               {
@@ -56578,7 +56572,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.15",
+                "id": "rustls 0.23.16",
                 "target": "rustls"
               },
               {
@@ -56612,7 +56606,7 @@
             ],
             "aarch64-unknown-nto-qnx710": [
               {
-                "id": "futures-channel 0.3.30",
+                "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
               {
@@ -56628,7 +56622,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.15",
+                "id": "rustls 0.23.16",
                 "target": "rustls"
               },
               {
@@ -56662,7 +56656,7 @@
             ],
             "arm-unknown-linux-gnueabi": [
               {
-                "id": "futures-channel 0.3.30",
+                "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
               {
@@ -56678,7 +56672,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.15",
+                "id": "rustls 0.23.16",
                 "target": "rustls"
               },
               {
@@ -56712,7 +56706,7 @@
             ],
             "armv7-linux-androideabi": [
               {
-                "id": "futures-channel 0.3.30",
+                "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
               {
@@ -56728,7 +56722,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.15",
+                "id": "rustls 0.23.16",
                 "target": "rustls"
               },
               {
@@ -56762,7 +56756,7 @@
             ],
             "armv7-unknown-linux-gnueabi": [
               {
-                "id": "futures-channel 0.3.30",
+                "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
               {
@@ -56778,7 +56772,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.15",
+                "id": "rustls 0.23.16",
                 "target": "rustls"
               },
               {
@@ -56852,7 +56846,7 @@
                 "target": "pin_project_lite"
               },
               {
-                "id": "tokio 1.40.0",
+                "id": "tokio 1.41.1",
                 "target": "tokio"
               }
             ],
@@ -56882,7 +56876,7 @@
             ],
             "i686-apple-darwin": [
               {
-                "id": "futures-channel 0.3.30",
+                "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
               {
@@ -56898,7 +56892,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.15",
+                "id": "rustls 0.23.16",
                 "target": "rustls"
               },
               {
@@ -56932,7 +56926,7 @@
             ],
             "i686-linux-android": [
               {
-                "id": "futures-channel 0.3.30",
+                "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
               {
@@ -56948,7 +56942,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.15",
+                "id": "rustls 0.23.16",
                 "target": "rustls"
               },
               {
@@ -56982,7 +56976,7 @@
             ],
             "i686-pc-windows-msvc": [
               {
-                "id": "futures-channel 0.3.30",
+                "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
               {
@@ -56998,7 +56992,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.15",
+                "id": "rustls 0.23.16",
                 "target": "rustls"
               },
               {
@@ -57032,7 +57026,7 @@
             ],
             "i686-unknown-freebsd": [
               {
-                "id": "futures-channel 0.3.30",
+                "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
               {
@@ -57048,7 +57042,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.15",
+                "id": "rustls 0.23.16",
                 "target": "rustls"
               },
               {
@@ -57082,7 +57076,7 @@
             ],
             "i686-unknown-linux-gnu": [
               {
-                "id": "futures-channel 0.3.30",
+                "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
               {
@@ -57098,7 +57092,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.15",
+                "id": "rustls 0.23.16",
                 "target": "rustls"
               },
               {
@@ -57132,7 +57126,7 @@
             ],
             "powerpc-unknown-linux-gnu": [
               {
-                "id": "futures-channel 0.3.30",
+                "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
               {
@@ -57148,7 +57142,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.15",
+                "id": "rustls 0.23.16",
                 "target": "rustls"
               },
               {
@@ -57182,7 +57176,7 @@
             ],
             "riscv32imc-unknown-none-elf": [
               {
-                "id": "futures-channel 0.3.30",
+                "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
               {
@@ -57198,7 +57192,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.15",
+                "id": "rustls 0.23.16",
                 "target": "rustls"
               },
               {
@@ -57232,7 +57226,7 @@
             ],
             "riscv64gc-unknown-none-elf": [
               {
-                "id": "futures-channel 0.3.30",
+                "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
               {
@@ -57248,7 +57242,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.15",
+                "id": "rustls 0.23.16",
                 "target": "rustls"
               },
               {
@@ -57282,7 +57276,7 @@
             ],
             "s390x-unknown-linux-gnu": [
               {
-                "id": "futures-channel 0.3.30",
+                "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
               {
@@ -57298,7 +57292,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.15",
+                "id": "rustls 0.23.16",
                 "target": "rustls"
               },
               {
@@ -57332,7 +57326,7 @@
             ],
             "thumbv7em-none-eabi": [
               {
-                "id": "futures-channel 0.3.30",
+                "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
               {
@@ -57348,7 +57342,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.15",
+                "id": "rustls 0.23.16",
                 "target": "rustls"
               },
               {
@@ -57382,7 +57376,7 @@
             ],
             "thumbv8m.main-none-eabi": [
               {
-                "id": "futures-channel 0.3.30",
+                "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
               {
@@ -57398,7 +57392,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.15",
+                "id": "rustls 0.23.16",
                 "target": "rustls"
               },
               {
@@ -57444,7 +57438,7 @@
             ],
             "x86_64-apple-darwin": [
               {
-                "id": "futures-channel 0.3.30",
+                "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
               {
@@ -57460,7 +57454,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.15",
+                "id": "rustls 0.23.16",
                 "target": "rustls"
               },
               {
@@ -57494,7 +57488,7 @@
             ],
             "x86_64-apple-ios": [
               {
-                "id": "futures-channel 0.3.30",
+                "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
               {
@@ -57510,7 +57504,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.15",
+                "id": "rustls 0.23.16",
                 "target": "rustls"
               },
               {
@@ -57544,7 +57538,7 @@
             ],
             "x86_64-fuchsia": [
               {
-                "id": "futures-channel 0.3.30",
+                "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
               {
@@ -57560,7 +57554,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.15",
+                "id": "rustls 0.23.16",
                 "target": "rustls"
               },
               {
@@ -57594,7 +57588,7 @@
             ],
             "x86_64-linux-android": [
               {
-                "id": "futures-channel 0.3.30",
+                "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
               {
@@ -57610,7 +57604,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.15",
+                "id": "rustls 0.23.16",
                 "target": "rustls"
               },
               {
@@ -57644,7 +57638,7 @@
             ],
             "x86_64-pc-windows-msvc": [
               {
-                "id": "futures-channel 0.3.30",
+                "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
               {
@@ -57660,7 +57654,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.15",
+                "id": "rustls 0.23.16",
                 "target": "rustls"
               },
               {
@@ -57694,7 +57688,7 @@
             ],
             "x86_64-unknown-freebsd": [
               {
-                "id": "futures-channel 0.3.30",
+                "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
               {
@@ -57710,7 +57704,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.15",
+                "id": "rustls 0.23.16",
                 "target": "rustls"
               },
               {
@@ -57744,7 +57738,7 @@
             ],
             "x86_64-unknown-linux-gnu": [
               {
-                "id": "futures-channel 0.3.30",
+                "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
               {
@@ -57760,7 +57754,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.15",
+                "id": "rustls 0.23.16",
                 "target": "rustls"
               },
               {
@@ -57794,7 +57788,7 @@
             ],
             "x86_64-unknown-nixos-gnu": [
               {
-                "id": "futures-channel 0.3.30",
+                "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
               {
@@ -57810,7 +57804,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.15",
+                "id": "rustls 0.23.16",
                 "target": "rustls"
               },
               {
@@ -57844,7 +57838,7 @@
             ],
             "x86_64-unknown-none": [
               {
-                "id": "futures-channel 0.3.30",
+                "id": "futures-channel 0.3.31",
                 "target": "futures_channel"
               },
               {
@@ -57860,7 +57854,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "rustls 0.23.15",
+                "id": "rustls 0.23.16",
                 "target": "rustls"
               },
               {
@@ -59007,7 +59001,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures 0.3.30",
+              "id": "futures 0.3.31",
               "target": "futures"
             },
             {
@@ -60646,14 +60640,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "rustls 0.23.15": {
+    "rustls 0.23.16": {
       "name": "rustls",
-      "version": "0.23.15",
+      "version": "0.23.16",
       "package_url": "https://github.com/rustls/rustls",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rustls/0.23.15/download",
-          "sha256": "5fbb44d7acc4e873d613422379f69f237a1b141928c02f6bc6ccfddddc2d7993"
+          "url": "https://static.crates.io/crates/rustls/0.23.16/download",
+          "sha256": "eee87ff5d9b36712a58574e12e9f0ea80f915a5b0ac518d322b24a465617925e"
         }
       },
       "targets": [
@@ -60721,7 +60715,7 @@
               "target": "ring"
             },
             {
-              "id": "rustls 0.23.15",
+              "id": "rustls 0.23.16",
               "target": "build_script_build"
             },
             {
@@ -60745,7 +60739,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.23.15"
+        "version": "0.23.16"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -60831,7 +60825,7 @@
               "target": "chrono"
             },
             {
-              "id": "futures 0.3.30",
+              "id": "futures 0.3.31",
               "target": "futures"
             },
             {
@@ -64952,7 +64946,7 @@
               "target": "sha2"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             }
           ],
@@ -67829,7 +67823,7 @@
               "target": "rand"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             }
           ],
@@ -67972,7 +67966,7 @@
               "target": "stable_deref_trait"
             },
             {
-              "id": "uuid 1.10.0",
+              "id": "uuid 1.11.0",
               "target": "uuid"
             }
           ],
@@ -68438,7 +68432,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures-core 0.3.30",
+              "id": "futures-core 0.3.31",
               "target": "futures_core"
             }
           ],
@@ -69097,7 +69091,7 @@
               "target": "fnv"
             },
             {
-              "id": "futures 0.3.30",
+              "id": "futures 0.3.31",
               "target": "futures"
             },
             {
@@ -69129,7 +69123,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             },
             {
@@ -71246,14 +71240,14 @@
       ],
       "license_file": null
     },
-    "tokio 1.40.0": {
+    "tokio 1.41.1": {
       "name": "tokio",
-      "version": "1.40.0",
+      "version": "1.41.1",
       "package_url": "https://github.com/tokio-rs/tokio",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tokio/1.40.0/download",
-          "sha256": "e2b070231665d27ad9ec9b8df639893f46727666c6767db40317fbe920a5d998"
+          "url": "https://static.crates.io/crates/tokio/1.41.1/download",
+          "sha256": "22cfb5bee7a6a52939ca9224d6ac897bb669134078daa8735560897f69de4d33"
         }
       },
       "targets": [
@@ -71745,7 +71739,7 @@
           ],
           "selects": {}
         },
-        "version": "1.40.0"
+        "version": "1.41.1"
       },
       "license": "MIT",
       "license_ids": [
@@ -71789,7 +71783,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             }
           ],
@@ -71900,7 +71894,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             },
             {
@@ -71908,7 +71902,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             },
             {
@@ -71972,7 +71966,7 @@
               "target": "rustls"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             }
           ],
@@ -72038,7 +72032,7 @@
               "alias": "pki_types"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             }
           ],
@@ -72094,7 +72088,7 @@
         "deps": {
           "common": [
             {
-              "id": "rustls 0.23.15",
+              "id": "rustls 0.23.16",
               "target": "rustls"
             },
             {
@@ -72103,7 +72097,7 @@
               "alias": "pki_types"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             }
           ],
@@ -72171,11 +72165,11 @@
               "target": "bytes"
             },
             {
-              "id": "futures-core 0.3.30",
+              "id": "futures-core 0.3.31",
               "target": "futures_core"
             },
             {
-              "id": "futures-sink 0.3.30",
+              "id": "futures-sink 0.3.31",
               "target": "futures_sink"
             },
             {
@@ -72255,7 +72249,7 @@
               "target": "either"
             },
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             },
             {
@@ -72263,7 +72257,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             }
           ],
@@ -72318,7 +72312,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures-core 0.3.30",
+              "id": "futures-core 0.3.31",
               "target": "futures_core"
             },
             {
@@ -72326,7 +72320,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             }
           ],
@@ -72381,11 +72375,11 @@
               "target": "bytes"
             },
             {
-              "id": "futures-core 0.3.30",
+              "id": "futures-core 0.3.31",
               "target": "futures_core"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             },
             {
@@ -72445,7 +72439,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             },
             {
@@ -72453,7 +72447,7 @@
               "target": "log"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             },
             {
@@ -72526,19 +72520,19 @@
               "target": "bytes"
             },
             {
-              "id": "futures-core 0.3.30",
+              "id": "futures-core 0.3.31",
               "target": "futures_core"
             },
             {
-              "id": "futures-io 0.3.30",
+              "id": "futures-io 0.3.31",
               "target": "futures_io"
             },
             {
-              "id": "futures-sink 0.3.30",
+              "id": "futures-sink 0.3.31",
               "target": "futures_sink"
             },
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             },
             {
@@ -72550,7 +72544,7 @@
               "target": "slab"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             }
           ],
@@ -72888,7 +72882,7 @@
               "target": "socket2"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             },
             {
@@ -73068,11 +73062,11 @@
         "deps": {
           "common": [
             {
-              "id": "futures-core 0.3.30",
+              "id": "futures-core 0.3.31",
               "target": "futures_core"
             },
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             },
             {
@@ -73096,7 +73090,7 @@
               "target": "slab"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             },
             {
@@ -73193,11 +73187,11 @@
         "deps": {
           "common": [
             {
-              "id": "futures-core 0.3.30",
+              "id": "futures-core 0.3.31",
               "target": "futures_core"
             },
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             },
             {
@@ -73221,7 +73215,7 @@
               "target": "sync_wrapper"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             },
             {
@@ -73331,7 +73325,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             },
             {
@@ -73425,7 +73419,7 @@
               "target": "bytes"
             },
             {
-              "id": "futures-core 0.3.30",
+              "id": "futures-core 0.3.31",
               "target": "futures_core"
             },
             {
@@ -73445,7 +73439,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             },
             {
@@ -73469,7 +73463,7 @@
               "target": "tracing"
             },
             {
-              "id": "uuid 1.10.0",
+              "id": "uuid 1.11.0",
               "target": "uuid"
             }
           ],
@@ -73651,7 +73645,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             },
             {
@@ -73659,7 +73653,7 @@
               "target": "pin_project"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             },
             {
@@ -74668,15 +74662,15 @@
               "target": "data_encoding"
             },
             {
-              "id": "futures-channel 0.3.30",
+              "id": "futures-channel 0.3.31",
               "target": "futures_channel"
             },
             {
-              "id": "futures-io 0.3.30",
+              "id": "futures-io 0.3.31",
               "target": "futures_io"
             },
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             },
             {
@@ -74708,7 +74702,7 @@
               "target": "tinyvec"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             },
             {
@@ -74716,7 +74710,7 @@
               "target": "tracing"
             },
             {
-              "id": "url 2.5.2",
+              "id": "url 2.5.3",
               "target": "url"
             }
           ],
@@ -74792,7 +74786,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             },
             {
@@ -74820,7 +74814,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             },
             {
@@ -74980,7 +74974,7 @@
               "target": "thiserror"
             },
             {
-              "id": "url 2.5.2",
+              "id": "url 2.5.3",
               "target": "url"
             },
             {
@@ -75000,14 +74994,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "turmoil 0.6.3": {
+    "turmoil 0.6.4": {
       "name": "turmoil",
-      "version": "0.6.3",
+      "version": "0.6.4",
       "package_url": "https://github.com/tokio-rs/turmoil",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/turmoil/0.6.3/download",
-          "sha256": "e4d81bafd9a29aea436db2b3d5bec441ed3b777ac627059dd3ea65bea638126a"
+          "url": "https://static.crates.io/crates/turmoil/0.6.4/download",
+          "sha256": "9b20f35a8264406dd5afac69a541665e860e52fec3dcec4091a0e2a3ce7f2b75"
         }
       },
       "targets": [
@@ -75042,7 +75036,7 @@
               "target": "bytes"
             },
             {
-              "id": "futures 0.3.30",
+              "id": "futures 0.3.31",
               "target": "futures"
             },
             {
@@ -75062,7 +75056,7 @@
               "target": "scoped_tls"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             },
             {
@@ -75089,7 +75083,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.6.3"
+        "version": "0.6.4"
       },
       "license": "MIT",
       "license_ids": [
@@ -75986,14 +75980,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "url 2.5.2": {
+    "url 2.5.3": {
       "name": "url",
-      "version": "2.5.2",
+      "version": "2.5.3",
       "package_url": "https://github.com/servo/rust-url",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/url/2.5.2/download",
-          "sha256": "22784dbdf76fdde8af1aeda5622b546b422b6fc585325248a2bf9f5e41e94d6c"
+          "url": "https://static.crates.io/crates/url/2.5.3/download",
+          "sha256": "8d157f1b96d14500ffdc1f10ba712e780825526c03d9a49b4d0324b0d9113ada"
         }
       },
       "targets": [
@@ -76018,7 +76012,8 @@
         "crate_features": {
           "common": [
             "default",
-            "serde"
+            "serde",
+            "std"
           ],
           "selects": {}
         },
@@ -76029,7 +76024,7 @@
               "target": "form_urlencoded"
             },
             {
-              "id": "idna 0.5.0",
+              "id": "idna 1.0.3",
               "target": "idna"
             },
             {
@@ -76044,7 +76039,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "2.5.2"
+        "version": "2.5.3"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -76291,14 +76286,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "uuid 1.10.0": {
+    "uuid 1.11.0": {
       "name": "uuid",
-      "version": "1.10.0",
+      "version": "1.11.0",
       "package_url": "https://github.com/uuid-rs/uuid",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/uuid/1.10.0/download",
-          "sha256": "81dfa00651efa65069b0b6b651f4aaa31ba9e3c3ce0137aaad053604ee7e0314"
+          "url": "https://static.crates.io/crates/uuid/1.11.0/download",
+          "sha256": "f8c5f0a0af699448548ad1a2fbf920fb4bee257eae39953ba95cb84891a0446a"
         }
       },
       "targets": [
@@ -76345,7 +76340,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.10.0"
+        "version": "1.11.0"
       },
       "license": "Apache-2.0 OR MIT",
       "license_ids": [
@@ -76931,11 +76926,11 @@
               "target": "bytes"
             },
             {
-              "id": "futures-channel 0.3.30",
+              "id": "futures-channel 0.3.31",
               "target": "futures_channel"
             },
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             },
             {
@@ -76995,7 +76990,7 @@
               "target": "serde_urlencoded"
             },
             {
-              "id": "tokio 1.40.0",
+              "id": "tokio 1.41.1",
               "target": "tokio"
             },
             {
@@ -77779,7 +77774,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures-util 0.3.30",
+              "id": "futures-util 0.3.31",
               "target": "futures_util"
             },
             {
@@ -85345,8 +85340,8 @@
     "form_urlencoded 1.2.1",
     "fqdn 0.3.11",
     "fs_extra 1.3.0",
-    "futures 0.3.30",
-    "futures-util 0.3.30",
+    "futures 0.3.31",
+    "futures-util 0.3.31",
     "get_if_addrs 0.5.3",
     "getrandom 0.2.10",
     "group 0.13.0",
@@ -85394,7 +85389,7 @@
     "ic_principal 0.1.1",
     "icrc1-test-env 0.1.1",
     "icrc1-test-suite 0.1.1",
-    "idna 1.0.2",
+    "idna 1.0.3",
     "indexmap 2.2.6",
     "indicatif 0.17.5",
     "indoc 1.0.9",
@@ -85498,7 +85493,7 @@
     "rust_decimal_macros 1.36.0",
     "rustc-demangle 0.1.23",
     "rustc-hash 1.1.0",
-    "rustls 0.23.15",
+    "rustls 0.23.16",
     "rustls-pemfile 2.1.2",
     "rustversion 1.0.14",
     "rusty-fork 0.3.0",
@@ -85548,7 +85543,7 @@
     "tikv-jemalloc-ctl 0.5.4",
     "tikv-jemallocator 0.5.4",
     "time 0.3.36",
-    "tokio 1.40.0",
+    "tokio 1.41.1",
     "tokio-io-timeout 1.2.0",
     "tokio-metrics 0.3.1",
     "tokio-rustls 0.26.0",
@@ -85572,9 +85567,9 @@
     "tracing-slog 0.2.0",
     "tracing-subscriber 0.3.18",
     "trust-dns-resolver 0.22.0",
-    "turmoil 0.6.3",
-    "url 2.5.2",
-    "uuid 1.10.0",
+    "turmoil 0.6.4",
+    "url 2.5.3",
+    "uuid 1.11.0",
     "vsock 0.4.0",
     "walkdir 2.3.3",
     "warp 0.3.7",
