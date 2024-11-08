@@ -380,12 +380,6 @@ fn build_tagged_transcripts_map(
                 .ok_or_else(|| ProxyDecodeError::MissingField("TaggedNiDkgTranscript::transcript"))
                 .and_then(|t| {
                     Ok((
-                        /////////////////////////////////////////////////
-                        // TODO: ideally we extend existing tests where build_tagged_transcripts_map
-                        // is used (e.g., tests for `impl TryFrom<pb::Summary> for Summary`) to test
-                        // this new behavior, but I cannot find such tests: are there no such tests
-                        // currently, or am I overlooking them?
-                        /////////////////////////////////////////////////
                         match tagged_transcript.tag {
                             1 => Ok(NiDkgTag::LowThreshold),
                             2 => Ok(NiDkgTag::HighThreshold),
