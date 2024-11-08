@@ -186,6 +186,17 @@ type DispenseTaskResponse = variant {
     Err: DispenseTaskError;
 };
 
+type RemoveTaskError = variant {
+    NotFound;
+    Unauthorized;
+    UnexpectedError: text;
+};
+
+type RemoveTaskResponse = variant {
+    Ok: Id;
+    Err: RemoveTaskError;
+};
+
 type ModifyAllowedPrincipalError = variant {
     Unauthorized;
     UnexpectedError: text;
@@ -239,6 +250,7 @@ service: (InitArg) -> {
     // Tasks
     queueTask: (Id, Timestamp) -> (QueueTaskResponse);
     dispenseTask: () -> (DispenseTaskResponse);
+    removeTask: (Id) -> (RemoveTaskResponse);
     peekTask: () -> (PeekTaskResponse) query;
     listTasks: () -> (ListTasksResponse) query;
 

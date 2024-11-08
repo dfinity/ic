@@ -384,6 +384,19 @@ pub enum DispenseTaskResponse {
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
+pub enum RemoveTaskError {
+    NotFound,
+    Unauthorized,
+    UnexpectedError(String),
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub enum RemoveTaskResponse {
+    Ok,
+    Err(RemoveTaskError),
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub enum ListTasksError {
     Unauthorized,
     UnexpectedError(String),

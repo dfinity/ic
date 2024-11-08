@@ -344,6 +344,75 @@ impl<T: Dispense> Dispense for WithMetrics<T> {
 }
 
 #[derive(Debug, thiserror::Error)]
+pub enum RemoveError {
+    #[error("Not found")]
+    NotFound,
+    #[error("Unauthorized")]
+    Unauthorized,
+    #[error(transparent)]
+    UnexpectedError(#[from] anyhow::Error),
+}
+
+pub trait Remove {
+    fn remove(&self, id: &str) -> Result<(), RemoveError>;
+}
+
+pub struct TaskRemover {
+    tasks: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
+}
+
+impl TaskRemover {
+    pub fn new(tasks: LocalRef<PriorityQueue<Id, Reverse<u64>>>) -> Self {
+        Self { tasks }
+    }
+}
+
+impl Remove for TaskRemover {
+    fn remove(&self, id: &str) -> Result<(), RemoveError> {
+        self.tasks.with(|ts| match ts.borrow_mut().remove(id) {
+            Some(_) => Ok(()),
+            None => Err(RemoveError::NotFound),
+        })
+    }
+}
+
+impl<T: Remove, A: Authorize> Remove for WithAuthorize<T, A> {
+    fn remove(&self, id: &str) -> Result<(), RemoveError> {
+        if let Err(err) = self.1.authorize(&caller()) {
+            return Err(match err {
+                AuthorizeError::Unauthorized => RemoveError::Unauthorized,
+                AuthorizeError::UnexpectedError(err) => RemoveError::UnexpectedError(err),
+            });
+        };
+
+        self.0.remove(id)
+    }
+}
+
+impl<T: Remove> Remove for WithMetrics<T> {
+    fn remove(&self, id: &str) -> Result<(), RemoveError> {
+        let out = self.0.remove(id);
+
+        self.1.with(|c| {
+            c.borrow()
+                .with(&labels! {
+                    "status" => match &out {
+                        Ok(_) => "ok",
+                        Err(err) => match err {
+                            RemoveError::NotFound => "not-found",
+                            RemoveError::Unauthorized => "unauthorized",
+                            RemoveError::UnexpectedError(_) => "fail",
+                        },
+                    },
+                })
+                .inc()
+        });
+
+        out
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
 pub enum RetryError {
     #[error(transparent)]
     UnexpectedError(#[from] anyhow::Error),

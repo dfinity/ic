@@ -10,8 +10,9 @@ use certificate_orchestrator_interface::{
     ListAllowedPrincipalsResponse, ListRegistrationsError, ListRegistrationsResponse,
     ListTasksError, ListTasksResponse, ModifyAllowedPrincipalError, ModifyAllowedPrincipalResponse,
     Name, PeekTaskError, PeekTaskResponse, QueueTaskError, QueueTaskResponse, Registration,
-    RemoveRegistrationError, RemoveRegistrationResponse, State, UpdateRegistrationError,
-    UpdateRegistrationResponse, UpdateType, UploadCertificateError, UploadCertificateResponse,
+    RemoveRegistrationError, RemoveRegistrationResponse, RemoveTaskError, RemoveTaskResponse,
+    State, UpdateRegistrationError, UpdateRegistrationResponse, UpdateType, UploadCertificateError,
+    UploadCertificateResponse,
 };
 use ic_cdk::{
     api::{id, time},
@@ -25,7 +26,7 @@ use ic_stable_structures::{
 };
 use priority_queue::PriorityQueue;
 use prometheus::{CounterVec, Encoder, Gauge, GaugeVec, Opts, Registry, TextEncoder};
-use work::{Peek, PeekError};
+use work::{Peek, PeekError, TaskRemover};
 
 use crate::{
     acl::{Authorize, AuthorizeError, Authorizer, WithAuthorize},
@@ -149,6 +150,13 @@ thread_local! {
         ), &["status"]).unwrap()
     });
 
+    static COUNTER_REMOVE_TASK_TOTAL: RefCell<CounterVec> = RefCell::new({
+        CounterVec::new(Opts::new(
+            format!("{SERVICE_NAME}_remove_task_total"), // name
+            "number of times remove_task was called", // help
+        ), &["status"]).unwrap()
+    });
+
     static GAUGE_REGISTRATIONS_TOTAL: RefCell<GaugeVec> = RefCell::new({
         GaugeVec::new(Opts::new(
             format!("{SERVICE_NAME}_registrations_total"), // name
@@ -211,6 +219,11 @@ thread_local! {
         });
 
         COUNTER_DISPENSE_TASK_TOTAL.with(|c| {
+            let c = Box::new(c.borrow().to_owned());
+            r.register(c).unwrap();
+        });
+
+        COUNTER_REMOVE_TASK_TOTAL.with(|c| {
             let c = Box::new(c.borrow().to_owned());
             r.register(c).unwrap();
         });
@@ -393,7 +406,7 @@ thread_local! {
         Box::new(d)
     });
 
-    static TASKS_LISTER: RefCell<Box<dyn work::List>> = RefCell::new({
+    static TASK_LISTER: RefCell<Box<dyn work::List>> = RefCell::new({
         let v = work::Lister::new(&TASKS, &REGISTRATIONS);
         let v = WithAuthorize(v, &ROOT_AUTHORIZER);
         Box::new(v)
@@ -404,6 +417,13 @@ thread_local! {
         let d = WithAuthorize(d, &MAIN_AUTHORIZER);
         let d = WithMetrics(d, &COUNTER_DISPENSE_TASK_TOTAL);
         Box::new(d)
+    });
+
+    static TASK_REMOVER: RefCell<Box<dyn work::Remove>> = RefCell::new({
+        let v = TaskRemover::new(&TASKS);
+        let v = WithAuthorize(v, &ROOT_AUTHORIZER);
+        let v = WithMetrics(v, &COUNTER_REMOVE_TASK_TOTAL);
+        Box::new(v)
     });
 }
 
@@ -825,10 +845,25 @@ fn dispense_task() -> DispenseTaskResponse {
     }
 }
 
+#[update(name = "removeTask")]
+#[candid_method(update, rename = "removeTask")]
+fn remove_task(id: String) -> RemoveTaskResponse {
+    match TASK_REMOVER.with(|v| v.borrow().remove(&id)) {
+        Ok(()) => RemoveTaskResponse::Ok,
+        Err(err) => RemoveTaskResponse::Err(match err {
+            work::RemoveError::NotFound => RemoveTaskError::NotFound,
+            work::RemoveError::Unauthorized => RemoveTaskError::Unauthorized,
+            work::RemoveError::UnexpectedError(err) => {
+                RemoveTaskError::UnexpectedError(err.to_string())
+            }
+        }),
+    }
+}
+
 #[query(name = "listTasks")]
 #[candid_method(query, rename = "listTasks")]
 fn list_tasks() -> ListTasksResponse {
-    match TASKS_LISTER.with(|v| v.borrow().list()) {
+    match TASK_LISTER.with(|v| v.borrow().list()) {
         Ok(ts) => ListTasksResponse::Ok(ts),
         Err(err) => ListTasksResponse::Err(match err {
             work::ListError::Unauthorized => ListTasksError::Unauthorized,
