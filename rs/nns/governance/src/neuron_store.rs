@@ -735,13 +735,21 @@ impl NeuronStore {
         &self,
         callback: impl for<'b> FnOnce(Box<dyn Iterator<Item = Neuron> + 'b>) -> R,
     ) -> R {
+        self.with_active_neurons_iter_sections(callback, NeuronSections::all())
+    }
+
+    fn with_active_neurons_iter_sections<R>(
+        &self,
+        callback: impl for<'b> FnOnce(Box<dyn Iterator<Item = Neuron> + 'b>) -> R,
+        sections: NeuronSections,
+    ) -> R {
         if self.use_stable_memory_for_all_neurons {
             // Note, during migration, we still need heap_neurons, so we chain them onto the iterator
             with_stable_neuron_store(|stable_store| {
                 let now = self.now();
                 let iter = Box::new(
                     stable_store
-                        .range_neurons(..)
+                        .range_neurons_sections(.., sections)
                         .filter(|n| !n.is_inactive(now))
                         .chain(self.heap_neurons.values().cloned()),
                 ) as Box<dyn Iterator<Item = Neuron>>;
@@ -871,11 +879,14 @@ impl NeuronStore {
         };
 
         // Active neurons iterator already makes distinctions between stable and heap neurons.
-        self.with_active_neurons_iter(|iter| {
-            for neuron in iter {
-                process_neuron(neuron);
-            }
-        });
+        self.with_active_neurons_iter_sections(
+            |iter| {
+                for neuron in iter {
+                    process_neuron(neuron);
+                }
+            },
+            NeuronSections::default(),
+        );
 
         (ballots, deciding_voting_power, potential_voting_power)
     }
