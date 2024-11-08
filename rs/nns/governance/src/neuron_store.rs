@@ -794,11 +794,7 @@ impl NeuronStore {
     }
 
     fn is_active_neurons_fund_neuron(neuron: &Neuron, now: u64) -> bool {
-        !neuron.is_inactive(now)
-            && neuron
-                .joined_community_fund_timestamp_seconds
-                .unwrap_or_default()
-                > 0
+        !neuron.is_inactive(now) && neuron.is_a_neurons_fund_member()
     }
 
     /// List all neuron ids that are in the Neurons' Fund.
