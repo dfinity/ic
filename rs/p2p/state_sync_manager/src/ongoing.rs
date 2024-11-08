@@ -423,7 +423,6 @@ mod tests {
             t.expect_rpc().returning(|_, _| {
                 Ok(Response::builder()
                     .status(StatusCode::OK)
-                    .extension(NODE_2)
                     .body(compress_empty_bytes())
                     .unwrap())
             });
@@ -463,7 +462,6 @@ mod tests {
             t.expect_rpc().returning(|_, _| {
                 Ok(Response::builder()
                     .status(StatusCode::OK)
-                    .extension(NODE_2)
                     .body(compress_empty_bytes())
                     .unwrap())
             });
