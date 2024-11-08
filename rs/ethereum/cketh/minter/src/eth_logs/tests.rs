@@ -256,6 +256,7 @@ mod scraping {
         use crate::eth_rpc::{FixedSizeData, Topic};
         use crate::lifecycle::EthereumNetwork;
         use crate::numeric::BlockNumber;
+        use crate::state::eth_logs_scraping::LogScrapingId;
         use crate::test_fixtures::initial_state;
         use hex_literal::hex;
         use ic_ethereum_types::Address;
@@ -276,12 +277,16 @@ mod scraping {
             let state = {
                 let mut state = initial_state();
                 state
-                    .deposit_with_subaccount_log_scraping
-                    .set_contract_address(CONTRACT_ADDRESS)
+                    .log_scrapings
+                    .set_contract_address(
+                        LogScrapingId::EthOrErc20DepositWithSubaccount,
+                        CONTRACT_ADDRESS,
+                    )
                     .unwrap();
-                state
-                    .deposit_with_subaccount_log_scraping
-                    .set_last_scraped_block_number(last_scraped_block_number);
+                state.log_scrapings.set_last_scraped_block_number(
+                    LogScrapingId::EthOrErc20DepositWithSubaccount,
+                    last_scraped_block_number,
+                );
                 state
             };
 

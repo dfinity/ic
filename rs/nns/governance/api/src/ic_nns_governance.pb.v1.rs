@@ -1535,6 +1535,13 @@ pub struct ProposalData {
     /// `cf_participants` and use only this field for managing the Neurons' Fund swap participation.
     #[prost(message, optional, tag = "21")]
     pub neurons_fund_data: Option<NeuronsFundData>,
+    /// This is the amount of voting power that would be available if all neurons
+    /// kept themselves "refreshed". This is used as the baseline for voting
+    /// rewards. That is, the amount of maturity that a neuron receives is the
+    /// amount of voting power that it exercised (so called "deciding" voting
+    /// power) in proportion to this.
+    #[prost(uint64, optional, tag = "22")]
+    pub total_potential_voting_power: ::core::option::Option<u64>,
 }
 /// This structure contains data for settling the Neurons' Fund participation in an SNS token swap.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
@@ -1929,6 +1936,8 @@ pub struct ProposalInfo {
     pub deadline_timestamp_seconds: Option<u64>,
     #[prost(message, optional, tag = "20")]
     pub derived_proposal_information: Option<DerivedProposalInformation>,
+    #[prost(uint64, optional, tag = "21")]
+    pub total_potential_voting_power: ::core::option::Option<u64>,
 }
 /// Network economics contains the parameters for several operations related
 /// to the economy of the network. When submitting a NetworkEconomics proposal
