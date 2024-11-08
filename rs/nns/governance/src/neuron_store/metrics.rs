@@ -184,23 +184,40 @@ impl NeuronStore {
         now_seconds: u64,
         minimum_stake_e8s: u64,
     ) -> NeuronMetrics {
-        if self.use_stable_memory_for_all_neurons {
-            self.compute_neuron_metrics_all_stable(now_seconds, minimum_stake_e8s)
+        let mut metrics = if self.use_stable_memory_for_all_neurons {
+            NeuronMetrics {
+                ..Default::default()
+            }
         } else {
-            self.compute_neuron_metrics_current(now_seconds, minimum_stake_e8s)
+            // If we are not using stable memory for all neurons, we still assume
+            // these base level metrics
+            NeuronMetrics {
+                garbage_collectable_neurons_count: with_stable_neuron_store(
+                    |stable_neuron_store| stable_neuron_store.len() as u64,
+                ),
+                neurons_fund_total_active_neurons: self.list_active_neurons_fund_neurons().len()
+                    as u64,
+                ..Default::default()
+            }
+        };
+
+        if self.use_stable_memory_for_all_neurons {
+            self.compute_neuron_metrics_all_stable(&mut metrics, now_seconds, minimum_stake_e8s);
         }
+        // During migration, some neurons may be in the heap, so we need to compute
+        // metrics for them as well.
+        self.compute_neuron_metrics_current(&mut metrics, now_seconds, minimum_stake_e8s);
+
+        metrics
     }
 
     pub(crate) fn compute_neuron_metrics_all_stable(
         &self,
+        metrics: &mut NeuronMetrics,
         now_seconds: u64,
         minimum_stake_e8s: u64,
-    ) -> NeuronMetrics {
+    ) {
         with_stable_neuron_store(|stable_neuron_store| {
-            let mut metrics = NeuronMetrics {
-                ..Default::default()
-            };
-
             let neuron_sections = NeuronSections {
                 hot_keys: false,
                 recent_ballots: false,
@@ -365,24 +382,15 @@ impl NeuronStore {
             metrics.total_locked_e8s = metrics
                 .total_staked_e8s
                 .saturating_sub(metrics.dissolved_neurons_e8s);
-
-            metrics
         })
     }
 
     pub(crate) fn compute_neuron_metrics_current(
         &self,
+        metrics: &mut NeuronMetrics,
         now_seconds: u64,
         minimum_stake_e8s: u64,
-    ) -> NeuronMetrics {
-        let mut metrics = NeuronMetrics {
-            garbage_collectable_neurons_count: with_stable_neuron_store(|stable_neuron_store| {
-                stable_neuron_store.len() as u64
-            }),
-            neurons_fund_total_active_neurons: self.list_active_neurons_fund_neurons().len() as u64,
-            ..Default::default()
-        };
-
+    ) {
         for neuron in self.heap_neurons.values() {
             metrics.increment_non_self_authenticating_controller_neuron_subset_metrics(
                 now_seconds,
@@ -532,8 +540,6 @@ impl NeuronStore {
         metrics.total_locked_e8s = metrics
             .total_staked_e8s
             .saturating_sub(metrics.dissolved_neurons_e8s);
-
-        metrics
     }
 }
 
