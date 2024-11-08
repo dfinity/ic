@@ -7,9 +7,9 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_test_utils::minter_identity;
 use ic_ledger_core::block::BlockIndex;
 use ic_ledger_core::{block::BlockType, Tokens};
-use ic_ledger_suite_state_machine_tests::{
+use ic_ledger_suite_state_machine_tests::{AllowanceProvider,
     balance_of, default_approve_args, default_transfer_from_args, expect_icrc2_disabled,
-    get_allowance, send_approval, send_transfer_from, setup, supported_standards, total_supply,
+    send_approval, send_transfer_from, setup, supported_standards, total_supply,
     transfer, FEE, MINTER,
 };
 use ic_state_machine_tests::{ErrorCode, StateMachine, UserError};
@@ -1306,11 +1306,11 @@ fn test_upgrade_serialization_fixed_tx() {
         )
         .unwrap();
 
-        let allowance = get_allowance(&env, canister_id, p1.0, p2.0);
+        let allowance = Account::get_allowance(&env, canister_id, p1.0, p2.0);
         assert_eq!(allowance.allowance.0.to_u64().unwrap(), 120_000);
         assert_eq!(allowance.expires_at, None);
 
-        let allowance = get_allowance(&env, canister_id, p1.0, p3.0);
+        let allowance = Account::get_allowance(&env, canister_id, p1.0, p3.0);
         assert_eq!(allowance.allowance.0.to_u64().unwrap(), 130_000);
         assert_eq!(allowance.expires_at, Some(expiration));
 
@@ -1465,12 +1465,12 @@ fn test_feature_flags() {
     let block_index =
         send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
     assert_eq!(block_index, 1);
-    let allowance = get_allowance(&env, canister_id, from.0, spender.0);
+    let allowance = Account::get_allowance(&env, canister_id, from.0, spender.0);
     assert_eq!(allowance.allowance.0.to_u64().unwrap(), 150_000);
     let block_index = send_transfer_from(&env, canister_id, spender.0, &transfer_from_args)
         .expect("transfer_from failed");
     assert_eq!(block_index, 2);
-    let allowance = get_allowance(&env, canister_id, from.0, spender.0);
+    let allowance = Account::get_allowance(&env, canister_id, from.0, spender.0);
     assert_eq!(allowance.allowance.0.to_u64().unwrap(), 130_000);
     assert_eq!(balance_of(&env, canister_id, from.0), 70_000);
     assert_eq!(balance_of(&env, canister_id, to.0), 10_000);
