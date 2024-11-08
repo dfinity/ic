@@ -80,6 +80,14 @@ pub struct CanisterStatusResult {
     pub reserved_cycles: candid::Nat,
 }
 
+// canister creation
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
+pub struct CreateCanisterArgs {
+    pub settings: Option<CanisterSettings>,
+    pub sender_canister_version: Option<u64>,
+}
+
 // provisional API
 
 #[derive(CandidType, Deserialize, Debug, Clone)]

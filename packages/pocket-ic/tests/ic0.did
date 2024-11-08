@@ -410,7 +410,7 @@ type fetch_canister_logs_result = record {
 };
 
 service ic : {
-    // create_canister : (create_canister_args) -> (create_canister_result);
+    create_canister : (create_canister_args) -> (create_canister_result);
     update_settings : (update_settings_args) -> ();
     upload_chunk : (upload_chunk_args) -> (upload_chunk_result);
     clear_chunk_store : (clear_chunk_store_args) -> ();

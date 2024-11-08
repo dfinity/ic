@@ -1,10 +1,8 @@
 use ic_cdk::{query, update};
 use pocket_ic::management_canister::*;
 
-/*
 #[update]
 fn create_canister(_: CreateCanisterArgs) -> CanisterIdRecord { unreachable!() }
-*/
 
 #[update]
 fn update_settings(_: UpdateSettingsArgs) {
