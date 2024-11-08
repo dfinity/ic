@@ -107,6 +107,18 @@ type ClaimOrRefreshResponse = record {
   refreshed_neuron_id : opt NeuronId;
 };
 
+type RefreshVotingPower = record {
+  // Intentionally left blank.
+};
+
+type RefreshVotingPowerResponse = record {
+  // Intentionally left blank.
+  //
+  // We could add information such as the value in the neuron's
+  // voting_power_refreshed_timestamp_second's field, but let's keep things
+  // minimal until we discover there is a "real need". YAGNI.
+};
+
 type Command = variant {
   Spawn : Spawn;
   Split : Split;
@@ -120,6 +132,7 @@ type Command = variant {
   StakeMaturity : StakeMaturity;
   MergeMaturity : MergeMaturity;
   Disburse : Disburse;
+  RefreshVotingPower : RefreshVotingPower;
 };
 
 type Command_1 = variant {
@@ -136,6 +149,7 @@ type Command_1 = variant {
   StakeMaturity : StakeMaturityResponse;
   MergeMaturity : MergeMaturityResponse;
   Disburse : DisburseResponse;
+  RefreshVotingPower : RefreshVotingPowerResponse;
 };
 
 type Command_2 = variant {
