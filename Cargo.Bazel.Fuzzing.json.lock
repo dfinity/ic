@@ -1,9 +1,5 @@
 {
-<<<<<<< HEAD
-  "checksum": "f4a769c164bbe563f913e85d3d722c3b37b7c67042fa4401c02c1c2e718e7c11",
-=======
-  "checksum": "775d8ca395cdeaa7395617336d62b7b70032dc5510f0b8239a9f3f1e44d70174",
->>>>>>> origin/master
+  "checksum": "16385042ddf0e9ec71f69fbc59aea567f9110ae8ddae1408b6d7f04e0b985e86",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -1642,7 +1638,7 @@
               "target": "http"
             },
             {
-              "id": "indexmap 2.6.0",
+              "id": "indexmap 2.2.6",
               "target": "indexmap"
             },
             {
@@ -8021,7 +8017,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.87",
               "target": "syn"
             }
           ],
@@ -18639,7 +18635,7 @@
               "target": "idna"
             },
             {
-              "id": "indexmap 2.6.0",
+              "id": "indexmap 2.2.6",
               "target": "indexmap"
             },
             {
@@ -25466,7 +25462,7 @@
         "deps": {
           "common": [
             {
-              "id": "indexmap 2.6.0",
+              "id": "indexmap 2.2.6",
               "target": "indexmap"
             }
           ],
@@ -25742,7 +25738,7 @@
               "target": "http"
             },
             {
-              "id": "indexmap 2.6.0",
+              "id": "indexmap 2.2.6",
               "target": "indexmap"
             },
             {
@@ -25829,7 +25825,7 @@
               "target": "http"
             },
             {
-              "id": "indexmap 2.6.0",
+              "id": "indexmap 2.2.6",
               "target": "indexmap"
             },
             {
@@ -26003,45 +25999,6 @@
         },
         "edition": "2021",
         "version": "0.14.5"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
-    "hashbrown 0.15.1": {
-      "name": "hashbrown",
-      "version": "0.15.1",
-      "package_url": "https://github.com/rust-lang/hashbrown",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/hashbrown/0.15.1/download",
-          "sha256": "3a9bfc1af68b1726ea47d3d5109de126281def866b33970e10fbab11b5dafab3"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "hashbrown",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "hashbrown",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "edition": "2021",
-        "version": "0.15.1"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -34490,14 +34447,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "indexmap 2.6.0": {
+    "indexmap 2.2.6": {
       "name": "indexmap",
-      "version": "2.6.0",
+      "version": "2.2.6",
       "package_url": "https://github.com/indexmap-rs/indexmap",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/indexmap/2.6.0/download",
-          "sha256": "707907fe3c25f5424cce2cb7e1cbcafee6bdbe735ca90ef77c29e84591e5b9da"
+          "url": "https://static.crates.io/crates/indexmap/2.2.6/download",
+          "sha256": "168fb715dda47215e360912c096649d23d58bf392ac62f73919e831745e40f26"
         }
       },
       "targets": [
@@ -34534,7 +34491,7 @@
               "target": "equivalent"
             },
             {
-              "id": "hashbrown 0.15.1",
+              "id": "hashbrown 0.14.5",
               "target": "hashbrown"
             },
             {
@@ -34545,7 +34502,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "2.6.0"
+        "version": "2.2.6"
       },
       "license": "Apache-2.0 OR MIT",
       "license_ids": [
@@ -34737,7 +34694,7 @@
               "target": "env_logger"
             },
             {
-              "id": "indexmap 2.6.0",
+              "id": "indexmap 2.2.6",
               "target": "indexmap"
             },
             {
@@ -44033,7 +43990,7 @@
               "target": "hashbrown"
             },
             {
-              "id": "indexmap 2.6.0",
+              "id": "indexmap 2.2.6",
               "target": "indexmap"
             },
             {
@@ -44761,7 +44718,7 @@
               "target": "futures_sink"
             },
             {
-              "id": "indexmap 2.6.0",
+              "id": "indexmap 2.2.6",
               "target": "indexmap"
             },
             {
@@ -47566,7 +47523,7 @@
               "target": "fixedbitset"
             },
             {
-              "id": "indexmap 2.6.0",
+              "id": "indexmap 2.2.6",
               "target": "indexmap"
             }
           ],
@@ -50146,54 +50103,6 @@
           "common": [
             {
               "id": "toml_edit 0.22.20",
-              "target": "toml_edit"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "3.2.0"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
-    "proc-macro-crate 3.2.0": {
-      "name": "proc-macro-crate",
-      "version": "3.2.0",
-      "package_url": "https://github.com/bkchr/proc-macro-crate",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/proc-macro-crate/3.2.0/download",
-          "sha256": "8ecf48c7ca261d60b74ab1a7b20da18bede46776b2e55535cb958eb595c5fa7b"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "proc_macro_crate",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "proc_macro_crate",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "toml_edit 0.22.22",
               "target": "toml_edit"
             }
           ],
@@ -62197,7 +62106,7 @@
               "target": "dyn_clone"
             },
             {
-              "id": "indexmap 2.6.0",
+              "id": "indexmap 2.2.6",
               "target": "indexmap",
               "alias": "indexmap2"
             },
@@ -64844,7 +64753,7 @@
         "deps": {
           "common": [
             {
-              "id": "indexmap 2.6.0",
+              "id": "indexmap 2.2.6",
               "target": "indexmap"
             },
             {
@@ -72941,7 +72850,7 @@
         "deps": {
           "common": [
             {
-              "id": "indexmap 2.6.0",
+              "id": "indexmap 2.2.6",
               "target": "indexmap"
             },
             {
@@ -72965,16 +72874,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-<<<<<<< HEAD
-    "toml_edit 0.22.22": {
-      "name": "toml_edit",
-      "version": "0.22.22",
-      "package_url": "https://github.com/toml-rs/toml",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/toml_edit/0.22.22/download",
-          "sha256": "4ae48d6208a266e853d946088ed816055e556cc6028c5e8e2b84d9fa5dd7c7f5"
-=======
     "toml_edit 0.22.20": {
       "name": "toml_edit",
       "version": "0.22.20",
@@ -72983,7 +72882,6 @@
         "Http": {
           "url": "https://static.crates.io/crates/toml_edit/0.22.20/download",
           "sha256": "583c44c02ad26b0c3f3066fe629275e50627026c51ac2e595cca4c230ce1ce1d"
->>>>>>> origin/master
         }
       },
       "targets": [
@@ -73016,11 +72914,7 @@
         "deps": {
           "common": [
             {
-<<<<<<< HEAD
-              "id": "indexmap 2.6.0",
-=======
               "id": "indexmap 2.2.6",
->>>>>>> origin/master
               "target": "indexmap"
             },
             {
@@ -73035,11 +72929,7 @@
           "selects": {}
         },
         "edition": "2021",
-<<<<<<< HEAD
-        "version": "0.22.22"
-=======
         "version": "0.22.20"
->>>>>>> origin/master
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -73469,7 +73359,7 @@
               "target": "hdrhistogram"
             },
             {
-              "id": "indexmap 2.6.0",
+              "id": "indexmap 2.2.6",
               "target": "indexmap"
             },
             {
@@ -77985,7 +77875,7 @@
               "target": "flagset"
             },
             {
-              "id": "indexmap 2.6.0",
+              "id": "indexmap 2.2.6",
               "target": "indexmap"
             },
             {
@@ -78112,7 +78002,7 @@
               "target": "bitflags"
             },
             {
-              "id": "indexmap 2.6.0",
+              "id": "indexmap 2.2.6",
               "target": "indexmap"
             },
             {
@@ -78184,7 +78074,7 @@
               "target": "hashbrown"
             },
             {
-              "id": "indexmap 2.6.0",
+              "id": "indexmap 2.2.6",
               "target": "indexmap"
             },
             {
@@ -78261,7 +78151,7 @@
               "target": "hashbrown"
             },
             {
-              "id": "indexmap 2.6.0",
+              "id": "indexmap 2.2.6",
               "target": "indexmap"
             },
             {
@@ -78338,7 +78228,7 @@
               "target": "hashbrown"
             },
             {
-              "id": "indexmap 2.6.0",
+              "id": "indexmap 2.2.6",
               "target": "indexmap"
             },
             {
@@ -78548,7 +78438,7 @@
               "target": "hashbrown"
             },
             {
-              "id": "indexmap 2.6.0",
+              "id": "indexmap 2.2.6",
               "target": "indexmap"
             },
             {
@@ -79272,7 +79162,7 @@
               "target": "gimli"
             },
             {
-              "id": "indexmap 2.6.0",
+              "id": "indexmap 2.2.6",
               "target": "indexmap"
             },
             {
@@ -79529,7 +79419,7 @@
               "target": "heck"
             },
             {
-              "id": "indexmap 2.6.0",
+              "id": "indexmap 2.2.6",
               "target": "indexmap"
             },
             {
@@ -82961,7 +82851,7 @@
               "target": "id_arena"
             },
             {
-              "id": "indexmap 2.6.0",
+              "id": "indexmap 2.2.6",
               "target": "indexmap"
             },
             {
@@ -85626,7 +85516,7 @@
     "icrc1-test-env 0.1.1",
     "icrc1-test-suite 0.1.1",
     "idna 1.0.3",
-    "indexmap 2.6.0",
+    "indexmap 2.2.6",
     "indicatif 0.17.7",
     "indoc 1.0.9",
     "inferno 0.11.19",
