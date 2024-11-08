@@ -364,7 +364,7 @@ mod tests {
     use ic_p2p_test_utils::mocks::{MockChunkable, MockTransport};
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_types::{crypto::CryptoHash, Height};
-    use ic_types_test_utils::ids::{NODE_1, NODE_2};
+    use ic_types_test_utils::ids::NODE_1;
     use prost::Message;
     use tokio::runtime::Runtime;
 
