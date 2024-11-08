@@ -48,15 +48,14 @@ use ic_types::{
     messages::{HttpCallContent, HttpQueryContent},
     CanisterId, Cycles, PrincipalId,
 };
-use ic_universal_canister::{
-    call_args, wasm as universal_canister_argument_builder, UNIVERSAL_CANISTER_WASM,
-};
+use ic_universal_canister::{call_args, wasm as universal_canister_argument_builder};
 use ic_utils::{call::AsyncCall, interfaces::ManagementCanister};
 use icp_ledger::{
     tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Memo, SendArgs, Subaccount, Tokens,
     DEFAULT_TRANSFER_FEE,
 };
 use itertools::Itertools;
+use lazy_static::lazy_static;
 use on_wire::FromWire;
 use slog::{debug, info, Logger};
 use std::{
@@ -113,6 +112,25 @@ pub fn runtime_from_url(url: Url, effective_canister_id: PrincipalId) -> Runtime
         agent,
         effective_canister_id,
     })
+}
+
+// Note that we can't use the UNIVERSAL_CANISTER_WASM from rs/universal_canister/lib/src/lib.rs
+// since in system-tests paths to runtime dependencies need to be get via get_dependency_path(path).
+lazy_static! {
+    /// The WASM of the Universal Canister.
+    pub static ref UNIVERSAL_CANISTER_WASM: &'static [u8] = {
+        let vec = get_universal_canister_wasm();
+        Box::leak(vec.into_boxed_slice())
+    };
+}
+
+fn get_universal_canister_wasm() -> Vec<u8> {
+    let uc_wasm_path = get_dependency_path(
+        std::env::var("UNIVERSAL_CANISTER_WASM_PATH")
+            .expect("UNIVERSAL_CANISTER_WASM_PATH not set"),
+    );
+    std::fs::read(&uc_wasm_path)
+        .unwrap_or_else(|e| panic!("Could not read WASM from {:?}: {e:?}", uc_wasm_path))
 }
 
 /// Provides an abstraction to the universal canister.
