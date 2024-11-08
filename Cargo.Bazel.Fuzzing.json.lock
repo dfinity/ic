@@ -1,5 +1,5 @@
 {
-  "checksum": "b4519fd87e4e5908de8f41fc9a35b21315b4ffdb9da355670a5b5dcf2c07d0f2",
+  "checksum": "775d8ca395cdeaa7395617336d62b7b70032dc5510f0b8239a9f3f1e44d70174",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -7892,14 +7892,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "borsh 0.10.3": {
+    "borsh 1.5.2": {
       "name": "borsh",
-      "version": "0.10.3",
+      "version": "1.5.2",
       "package_url": "https://github.com/near/borsh-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/borsh/0.10.3/download",
-          "sha256": "4114279215a005bc675e386011e594e1d9b800918cea18fcadadcce864a2046b"
+          "url": "https://static.crates.io/crates/borsh/1.5.2/download",
+          "sha256": "f5327f6c99920069d1fe374aa743be1af0031dea9f250852cdf1ae6a0861ee24"
         }
       },
       "targets": [
@@ -7907,6 +7907,18 @@
           "Library": {
             "crate_name": "borsh",
             "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
             "srcs": {
               "allow_empty": true,
               "include": [
@@ -7924,23 +7936,31 @@
         "deps": {
           "common": [
             {
-              "id": "hashbrown 0.13.2",
-              "target": "hashbrown"
+              "id": "borsh 1.5.2",
+              "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "proc_macro_deps": {
+        "version": "1.5.2"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
           "common": [
             {
-              "id": "borsh-derive 0.10.3",
-              "target": "borsh_derive"
+              "id": "cfg_aliases 0.2.1",
+              "target": "cfg_aliases"
             }
           ],
           "selects": {}
-        },
-        "version": "0.10.3"
+        }
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -7949,14 +7969,14 @@
       ],
       "license_file": null
     },
-    "borsh-derive 0.10.3": {
+    "borsh-derive 1.5.2": {
       "name": "borsh-derive",
-      "version": "0.10.3",
-      "package_url": "https://github.com/nearprotocol/borsh",
+      "version": "1.5.2",
+      "package_url": "https://github.com/near/borsh-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/borsh-derive/0.10.3/download",
-          "sha256": "0754613691538d51f329cce9af41d7b7ca150bc973056f1156611489475f54f7"
+          "url": "https://static.crates.io/crates/borsh-derive/1.5.2/download",
+          "sha256": "10aedd8f1a81a8aafbfde924b0e3061cd6fedd6f6bbcfc6a76e6fd426d7bfe26"
         }
       },
       "targets": [
@@ -7981,15 +8001,11 @@
         "deps": {
           "common": [
             {
-              "id": "borsh-derive-internal 0.10.3",
-              "target": "borsh_derive_internal"
+              "id": "once_cell 1.19.0",
+              "target": "once_cell"
             },
             {
-              "id": "borsh-schema-derive-internal 0.10.3",
-              "target": "borsh_schema_derive_internal"
-            },
-            {
-              "id": "proc-macro-crate 0.1.5",
+              "id": "proc-macro-crate 3.2.0",
               "target": "proc_macro_crate"
             },
             {
@@ -7997,124 +8013,18 @@
               "target": "proc_macro2"
             },
             {
-              "id": "syn 1.0.109",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.10.3"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": null
-    },
-    "borsh-derive-internal 0.10.3": {
-      "name": "borsh-derive-internal",
-      "version": "0.10.3",
-      "package_url": "https://github.com/nearprotocol/borsh",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/borsh-derive-internal/0.10.3/download",
-          "sha256": "afb438156919598d2c7bad7e1c0adf3d26ed3840dbc010db1a882a65583ca2fb"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "borsh_derive_internal",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "borsh_derive_internal",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "proc-macro2 1.0.89",
-              "target": "proc_macro2"
-            },
-            {
               "id": "quote 1.0.37",
               "target": "quote"
             },
             {
-              "id": "syn 1.0.109",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.10.3"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": null
-    },
-    "borsh-schema-derive-internal 0.10.3": {
-      "name": "borsh-schema-derive-internal",
-      "version": "0.10.3",
-      "package_url": "https://github.com/nearprotocol/borsh",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/borsh-schema-derive-internal/0.10.3/download",
-          "sha256": "634205cc43f74a1b9046ef87c4540ebda95696ec0f315024860cad7c5b0f5ccd"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "borsh_schema_derive_internal",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "borsh_schema_derive_internal",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "proc-macro2 1.0.89",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.37",
-              "target": "quote"
-            },
-            {
-              "id": "syn 1.0.109",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.10.3"
+        "version": "1.5.2"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -19107,7 +19017,7 @@
               "target": "rusqlite"
             },
             {
-              "id": "rust_decimal 1.32.0",
+              "id": "rust_decimal 1.36.0",
               "target": "rust_decimal"
             },
             {
@@ -19537,7 +19447,7 @@
               "target": "proptest_derive"
             },
             {
-              "id": "rust_decimal_macros 1.32.0",
+              "id": "rust_decimal_macros 1.36.0",
               "target": "rust_decimal_macros"
             },
             {
@@ -26022,45 +25932,6 @@
         },
         "edition": "2021",
         "version": "0.12.3"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
-    "hashbrown 0.13.2": {
-      "name": "hashbrown",
-      "version": "0.13.2",
-      "package_url": "https://github.com/rust-lang/hashbrown",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/hashbrown/0.13.2/download",
-          "sha256": "43a3c133739dddd0d2990f9a4bdf8eb4b21ef50e4851ca85ab661199821d510e"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "hashbrown",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "hashbrown",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "edition": "2021",
-        "version": "0.13.2"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -50153,54 +50024,6 @@
       ],
       "license_file": null
     },
-    "proc-macro-crate 0.1.5": {
-      "name": "proc-macro-crate",
-      "version": "0.1.5",
-      "package_url": "https://github.com/bkchr/proc-macro-crate",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/proc-macro-crate/0.1.5/download",
-          "sha256": "1d6ea3c4595b96363c13943497db34af4460fb474a95c43f4446ad341b8c9785"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "proc_macro_crate",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "proc_macro_crate",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "toml 0.5.11",
-              "target": "toml"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.1.5"
-      },
-      "license": "Apache-2.0/MIT",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "proc-macro-crate 1.3.1": {
       "name": "proc-macro-crate",
       "version": "1.3.1",
@@ -50245,6 +50068,54 @@
         },
         "edition": "2021",
         "version": "1.3.1"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "proc-macro-crate 3.2.0": {
+      "name": "proc-macro-crate",
+      "version": "3.2.0",
+      "package_url": "https://github.com/bkchr/proc-macro-crate",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/proc-macro-crate/3.2.0/download",
+          "sha256": "8ecf48c7ca261d60b74ab1a7b20da18bede46776b2e55535cb958eb595c5fa7b"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "proc_macro_crate",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "proc_macro_crate",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "toml_edit 0.22.20",
+              "target": "toml_edit"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "3.2.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -59592,14 +59463,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "rust_decimal 1.32.0": {
+    "rust_decimal 1.36.0": {
       "name": "rust_decimal",
-      "version": "1.32.0",
+      "version": "1.36.0",
       "package_url": "https://github.com/paupino/rust-decimal",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rust_decimal/1.32.0/download",
-          "sha256": "a4c4216490d5a413bc6d10fa4742bd7d4955941d062c0ef873141d6b0e7b30fd"
+          "url": "https://static.crates.io/crates/rust_decimal/1.36.0/download",
+          "sha256": "b082d80e3e3cc52b2ed634388d436fe1f4de6af5786cc2de9ba9737527bdf555"
         }
       },
       "targets": [
@@ -59652,7 +59523,7 @@
               "target": "num_traits"
             },
             {
-              "id": "rust_decimal 1.32.0",
+              "id": "rust_decimal 1.36.0",
               "target": "build_script_build"
             },
             {
@@ -59663,7 +59534,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.32.0"
+        "version": "1.36.0"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -59679,14 +59550,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "rust_decimal_macros 1.32.0": {
+    "rust_decimal_macros 1.36.0": {
       "name": "rust_decimal_macros",
-      "version": "1.32.0",
+      "version": "1.36.0",
       "package_url": "https://github.com/paupino/rust-decimal",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rust_decimal_macros/1.32.0/download",
-          "sha256": "86444b802de0b10ac5e563b5ddb43b541b9705de4e01a50e82194d2b183c1835"
+          "url": "https://static.crates.io/crates/rust_decimal_macros/1.36.0/download",
+          "sha256": "da991f231869f34268415a49724c6578e740ad697ba0999199d6f22b3949332c"
         }
       },
       "targets": [
@@ -59721,14 +59592,14 @@
               "target": "quote"
             },
             {
-              "id": "rust_decimal 1.32.0",
+              "id": "rust_decimal 1.36.0",
               "target": "rust_decimal"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.32.0"
+        "version": "1.36.0"
       },
       "license": "MIT",
       "license_ids": [
@@ -72902,14 +72773,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "toml_datetime 0.6.3": {
+    "toml_datetime 0.6.8": {
       "name": "toml_datetime",
-      "version": "0.6.3",
+      "version": "0.6.8",
       "package_url": "https://github.com/toml-rs/toml",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/toml_datetime/0.6.3/download",
-          "sha256": "7cda73e2f1397b1262d6dfdcef8aafae14d1de7748d66822d3bfeeb6d03e5e4b"
+          "url": "https://static.crates.io/crates/toml_datetime/0.6.8/download",
+          "sha256": "0dd7358ecb8fc2f8d014bf86f6f638ce72ba252a2c3a2572f2a795f1d23efb41"
         }
       },
       "targets": [
@@ -72932,7 +72803,7 @@
           "**"
         ],
         "edition": "2021",
-        "version": "0.6.3"
+        "version": "0.6.8"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -72983,7 +72854,7 @@
               "target": "indexmap"
             },
             {
-              "id": "toml_datetime 0.6.3",
+              "id": "toml_datetime 0.6.8",
               "target": "toml_datetime"
             },
             {
@@ -72995,6 +72866,70 @@
         },
         "edition": "2021",
         "version": "0.19.15"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "toml_edit 0.22.20": {
+      "name": "toml_edit",
+      "version": "0.22.20",
+      "package_url": "https://github.com/toml-rs/toml",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/toml_edit/0.22.20/download",
+          "sha256": "583c44c02ad26b0c3f3066fe629275e50627026c51ac2e595cca4c230ce1ce1d"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "toml_edit",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "toml_edit",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "display",
+            "parse"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "indexmap 2.2.6",
+              "target": "indexmap"
+            },
+            {
+              "id": "toml_datetime 0.6.8",
+              "target": "toml_datetime"
+            },
+            {
+              "id": "winnow 0.6.20",
+              "target": "winnow"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.22.20"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -82769,6 +82704,52 @@
       ],
       "license_file": "LICENSE-MIT"
     },
+    "winnow 0.6.20": {
+      "name": "winnow",
+      "version": "0.6.20",
+      "package_url": "https://github.com/winnow-rs/winnow",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/winnow/0.6.20/download",
+          "sha256": "36c1fec1a2bb5866f07c25f68c26e565c4c200aebb96d7e55710c19d3e8ac49b"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "winnow",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "winnow",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc",
+            "default",
+            "std"
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.6.20"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE-MIT"
+    },
     "winreg 0.50.0": {
       "name": "winreg",
       "version": "0.50.0",
@@ -85633,8 +85614,8 @@
     "rstest 0.19.0",
     "rusb 0.9.3",
     "rusqlite 0.28.0",
-    "rust_decimal 1.32.0",
-    "rust_decimal_macros 1.32.0",
+    "rust_decimal 1.36.0",
+    "rust_decimal_macros 1.36.0",
     "rustc-demangle 0.1.23",
     "rustc-hash 1.1.0",
     "rustls 0.23.15",
