@@ -497,7 +497,7 @@ pub(crate) fn get_pre_signature_ids_to_deliver(
 
     let mut pre_sig_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>> = BTreeMap::new();
     for key_id in idkg.key_transcripts.keys() {
-        pre_sig_ids.insert(key_id.clone(), BTreeSet::default());
+        pre_sig_ids.insert(key_id.clone().into(), BTreeSet::default());
     }
 
     for (pre_sig_id, pre_signature) in &idkg.available_pre_signatures {
@@ -568,7 +568,7 @@ pub(crate) fn get_idkg_subnet_public_keys(
         };
 
         if let Some(public_key) = ecdsa_subnet_public_key {
-            public_keys.insert(key_id.clone(), public_key);
+            public_keys.insert(key_id.clone().into(), public_key);
         }
     }
 

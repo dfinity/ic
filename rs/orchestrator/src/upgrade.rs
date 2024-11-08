@@ -771,7 +771,7 @@ fn get_master_public_keys(
 
         match get_master_public_key_from_transcript(transcript) {
             Ok(public_key) => {
-                public_keys.insert(key_id.clone(), public_key);
+                public_keys.insert(key_id.clone().into(), public_key);
             }
             Err(err) => {
                 warn!(

@@ -164,7 +164,7 @@ pub struct IDkgPayload {
     pub xnet_reshare_agreements: BTreeMap<IDkgReshareRequest, CompletedReshareRequest>,
 
     /// State of the key transcripts.
-    pub key_transcripts: BTreeMap<MasterPublicKeyId, MasterKeyTranscript>,
+    pub key_transcripts: BTreeMap<IDkgMasterPublicKeyId, MasterKeyTranscript>,
 }
 
 impl IDkgPayload {
@@ -177,7 +177,7 @@ impl IDkgPayload {
         Self {
             key_transcripts: key_transcripts
                 .into_iter()
-                .map(|key_transcript| (key_transcript.key_id(), key_transcript))
+                .map(|key_transcript| (key_transcript.key_id().try_into().unwrap(), key_transcript))
                 .collect(),
             uid_generator: IDkgUIDGenerator::new(subnet_id, height),
             signature_agreements: BTreeMap::new(),
@@ -1798,7 +1798,7 @@ impl TryFrom<&pb::IDkgPayload> for IDkgPayload {
         for key_transcript_proto in &payload.key_transcripts {
             let key_transcript = MasterKeyTranscript::try_from(key_transcript_proto)?;
 
-            key_transcripts.insert(key_transcript.key_id(), key_transcript);
+            key_transcripts.insert(key_transcript.key_id().try_into().unwrap(), key_transcript);
         }
 
         let mut signature_agreements = BTreeMap::new();

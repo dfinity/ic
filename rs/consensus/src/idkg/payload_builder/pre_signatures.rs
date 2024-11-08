@@ -319,17 +319,13 @@ pub(super) fn make_new_pre_signatures_if_needed(
             continue;
         };
 
-        let Some(key_id) = IDkgMasterPublicKeyId::try_from(key_id.clone()).ok() else {
-            continue;
-        };
-
         let matched_pre_signature = matched_pre_signatures_per_key_id
-            .get(&key_id)
+            .get(key_id)
             .copied()
             .unwrap_or_default();
 
         let unassigned_pre_signatures = idkg_payload
-            .iter_pre_signature_ids(&key_id)
+            .iter_pre_signature_ids(key_id)
             .count()
             .saturating_sub(matched_pre_signature);
 
@@ -338,7 +334,7 @@ pub(super) fn make_new_pre_signatures_if_needed(
             &node_ids,
             key_transcript.registry_version(),
             chain_key_config,
-            &key_id,
+            key_id,
             &mut idkg_payload.uid_generator,
             unassigned_pre_signatures,
         );

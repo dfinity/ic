@@ -280,7 +280,7 @@ fn create_summary_payload_helper(
         #[allow(clippy::map_entry)]
         if !idkg_summary.key_transcripts.contains_key(key_id) {
             idkg_summary.key_transcripts.insert(
-                key_id.clone().into(),
+                key_id.clone(),
                 MasterKeyTranscript::new(key_id.clone(), idkg::KeyTranscriptCreation::Begin),
             );
         }
@@ -294,12 +294,15 @@ fn create_summary_payload_helper(
     // We do purge the pre-signatures in creation, though.
     idkg_summary
         .pre_signatures_in_creation
-        .retain(|_, pre_sig| !new_key_transcripts.contains(&pre_sig.key_id()));
+        .retain(|_, pre_sig| {
+            !new_key_transcripts
+                .contains(&IDkgMasterPublicKeyId::try_from(pre_sig.key_id()).unwrap())
+        });
     // This will clear the current ongoing reshares, and the execution requests will be restarted
     // with the new key and different transcript IDs.
     idkg_summary
         .ongoing_xnet_reshares
-        .retain(|request, _| !new_key_transcripts.contains(request.master_key_id.inner()));
+        .retain(|request, _| !new_key_transcripts.contains(&request.master_key_id));
 
     idkg_summary.uid_generator.update_height(height)?;
     update_summary_refs(height, &mut idkg_summary, block_reader)?;
