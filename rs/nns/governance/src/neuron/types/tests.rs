@@ -670,3 +670,82 @@ fn test_adjust_voting_power_disabled() {
         );
     }
 }
+
+#[test]
+fn test_total_potential_voting_power() {
+    let _restore_on_drop = temporarily_enable_voting_power_adjustment();
+    const CREATED_TIMESTAMP_SECONDS: u64 = 1729791574;
+
+    fn new_neuron(i: u64) -> Neuron {
+        let controller = PrincipalId::new_user_test_id(i);
+        let d = i / 10_u64.pow(i.ilog10());
+
+        NeuronBuilder::new(
+            NeuronId { id: i },
+            Subaccount::try_from([d as u8; 32].as_slice()).unwrap(),
+            controller,
+            DissolveStateAndAge::NotDissolving {
+                dissolve_delay_seconds: 12 * ONE_MONTH_SECONDS,
+                aging_since_timestamp_seconds: CREATED_TIMESTAMP_SECONDS + 42,
+            },
+            CREATED_TIMESTAMP_SECONDS,
+        )
+        .with_cached_neuron_stake_e8s(i * E8)
+        .build()
+    }
+
+    let neurons = vec![new_neuron(10), new_neuron(200), new_neuron(3_000)];
+
+    let now_seconds = CREATED_TIMESTAMP_SECONDS + 999;
+    let expected = neurons
+        .iter()
+        .map(|neuron| neuron.potential_voting_power(now_seconds))
+        .sum();
+    assert_eq!(
+        total_potential_voting_power(
+            neurons.iter(),
+            now_seconds,
+            &Action::Motion(Default::default()),
+            7,
+        ),
+        Ok(expected),
+    );
+
+    // Similar to previous; this time though, Action::ManageNeuron, the weird
+    // special case.
+    assert_eq!(
+        total_potential_voting_power(
+            neurons.iter(),
+            now_seconds,
+            &Action::ManageNeuron(Default::default()),
+            7,
+        ),
+        Ok(7),
+    );
+
+    // Not affected by refresh.
+    let now_seconds = CREATED_TIMESTAMP_SECONDS + 20 * ONE_YEAR_SECONDS;
+    let expected = neurons
+        .iter()
+        .map(|neuron| neuron.potential_voting_power(now_seconds))
+        .sum();
+    assert_eq!(
+        total_potential_voting_power(
+            neurons.iter(),
+            now_seconds,
+            &Action::Motion(Default::default()),
+            7,
+        ),
+        Ok(expected),
+    );
+    let total_deciding_voting_power: u64 = neurons
+        .iter()
+        .map(|neuron| neuron.deciding_voting_power(now_seconds))
+        .sum();
+    assert!(
+        total_deciding_voting_power < expected,
+        "{} vs. {}",
+        total_deciding_voting_power,
+        expected,
+    );
+}

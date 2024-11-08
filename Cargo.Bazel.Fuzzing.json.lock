@@ -1,5 +1,5 @@
 {
-  "checksum": "228a96f14e8a494d5f2f70172f3fc877cd932e39e5f37f02c0858e0dddd7d2f3",
+  "checksum": "b4519fd87e4e5908de8f41fc9a35b21315b4ffdb9da355670a5b5dcf2c07d0f2",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -5984,7 +5984,6 @@
             "-Coverflow_checks",
             "-Copt-level=3",
             "-Clink-dead-code",
-            "-Cinstrument-coverage",
             "-Cdebug-assertions",
             "-Ccodegen-units=1",
             "-Zextra-const-ub-checks",
@@ -6677,7 +6676,6 @@
             "-Coverflow_checks",
             "-Copt-level=3",
             "-Clink-dead-code",
-            "-Cinstrument-coverage",
             "-Cdebug-assertions",
             "-Ccodegen-units=1",
             "-Zextra-const-ub-checks",
@@ -6795,7 +6793,6 @@
             "-Coverflow_checks",
             "-Copt-level=3",
             "-Clink-dead-code",
-            "-Cinstrument-coverage",
             "-Cdebug-assertions",
             "-Ccodegen-units=1",
             "-Zextra-const-ub-checks",
@@ -6926,7 +6923,6 @@
             "-Coverflow_checks",
             "-Copt-level=3",
             "-Clink-dead-code",
-            "-Cinstrument-coverage",
             "-Cdebug-assertions",
             "-Ccodegen-units=1",
             "-Zextra-const-ub-checks",
@@ -10291,7 +10287,6 @@
             "-Coverflow_checks",
             "-Copt-level=3",
             "-Clink-dead-code",
-            "-Cinstrument-coverage",
             "-Cdebug-assertions",
             "-Ccodegen-units=1",
             "-Zextra-const-ub-checks",
@@ -19266,10 +19261,6 @@
             {
               "id": "syn 1.0.109",
               "target": "syn"
-            },
-            {
-              "id": "sync_wrapper 1.0.1",
-              "target": "sync_wrapper"
             },
             {
               "id": "tar 0.4.39",
@@ -32214,7 +32205,6 @@
             "-Coverflow_checks",
             "-Copt-level=3",
             "-Clink-dead-code",
-            "-Cinstrument-coverage",
             "-Cdebug-assertions",
             "-Ccodegen-units=1",
             "-Zextra-const-ub-checks",
@@ -78836,7 +78826,6 @@
             "-Coverflow_checks",
             "-Copt-level=3",
             "-Clink-dead-code",
-            "-Cinstrument-coverage",
             "-Cdebug-assertions",
             "-Ccodegen-units=1",
             "-Zextra-const-ub-checks",
@@ -85686,7 +85675,6 @@
     "stubborn-io 0.3.2",
     "subtle 2.6.1",
     "syn 1.0.109",
-    "sync_wrapper 1.0.1",
     "tar 0.4.39",
     "tarpc 0.34.0",
     "tempfile 3.12.0",
