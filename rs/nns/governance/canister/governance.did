@@ -566,6 +566,30 @@ type NetworkEconomics = record {
   minimum_icp_xdr_rate : nat64;
   maximum_node_provider_rewards_e8s : nat64;
   neurons_fund_economics : opt NeuronsFundEconomics;
+
+  voting_power_economics : opt VotingPowerEconomics;
+};
+
+type VotingPowerEconomics = record {
+  // If a neuron has not "refreshed" its voting power after this amount of time,
+  // its deciding voting power starts decreasing linearly. See also
+  // clear_following_after_seconds.
+  //
+  // For explanation of what "refresh" means in this context, see
+  // https://dashboard.internetcomputer.org/proposal/132411
+  //
+  // Initially, set to 0.5 years. (The nominal length of a year is 365.25 days).
+  start_reducing_voting_power_after_seconds : opt nat64;
+
+  // After a neuron has experienced voting power reduction for this amount of
+  // time, a couple of things happen:
+  //
+  //     1. Deciding voting power reaches 0.
+  //
+  //     2. Its following on topics other than NeuronManagement are cleared.
+  //
+  // Initially, set to 1/12 years.
+  clear_following_after_seconds : opt nat64;
 };
 
 type Neuron = record {
