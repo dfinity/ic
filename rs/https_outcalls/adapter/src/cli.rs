@@ -318,6 +318,7 @@ pub mod test {
                 ..Default::default()
             },
             socks_proxy: "socks5://notaproxy.com:1080".to_string(),
+            ..Default::default()
         };
         assert_eq!(config, expected_config);
     }

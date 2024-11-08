@@ -5,6 +5,7 @@ use crate::metrics::{
 };
 use crate::Config;
 use core::convert::TryFrom;
+use std::sync::Arc;
 use http::{header::USER_AGENT, HeaderName, HeaderValue, Uri};
 use http_body_util::{BodyExt, Full};
 use hyper::{
@@ -24,8 +25,18 @@ use ic_https_outcalls_service::{
 use ic_logger::{debug, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use std::str::FromStr;
+use std::sync::RwLock;
 use std::time::Duration;
 use tonic::{Request, Response, Status};
+
+use ic_registry_local_store::LocalStoreImpl;
+use ic_registry_client::client::RegistryClientImpl;
+use ic_registry_client::client::RegistryClient;
+
+use ic_registry_client_helpers::api_boundary_node::ApiBoundaryNodeRegistry;
+use ic_registry_client_helpers::node::NodeRegistry;
+
+use once_cell::sync::OnceCell;
 
 /// Hyper only supports a maximum of 32768 headers https://docs.rs/hyper/1.5.0/hyper/header/index.html
 /// and it panics if we try to allocate more headers. And since hyper sometimes grows the map by doubling the entries
@@ -43,39 +54,87 @@ const MAX_HEADER_LIST_SIZE: u32 = 52 * 1024;
 
 type OutboundRequestBody = Full<Bytes>;
 
+use std::sync::atomic::{AtomicUsize, Ordering};
+
 /// Implements HttpsOutcallsService
 // TODO: consider making this private
 pub struct CanisterHttp {
     client: Client<HttpsConnector<HttpConnector>, OutboundRequestBody>,
-    socks_client: Client<HttpsConnector<SocksConnector<HttpConnector>>, OutboundRequestBody>,
+    socks_clients: Arc<RwLock<Vec<Arc<Client<HttpsConnector<SocksConnector<HttpConnector>>, OutboundRequestBody>>>>>,
+    socks_client_index: AtomicUsize,
     logger: ReplicaLogger,
     metrics: AdapterMetrics,
+    registry_client: OnceCell<Arc<RegistryClientImpl>>,
+    config: Config,
 }
 
 impl CanisterHttp {
-    pub fn new(config: Config, logger: ReplicaLogger, metrics: &MetricsRegistry) -> Self {
-        // Socks client setup
+
+    fn registry_client(&self) -> &Arc<RegistryClientImpl> {
+        self.registry_client.get_or_init(|| {
+            let local_store_dir = self.config.registry_client_local_store.clone();
+            let data_provider = Arc::new(LocalStoreImpl::new(local_store_dir));
+            let registry_client = Arc::new(RegistryClientImpl::new(data_provider, None));
+            registry_client.fetch_and_start_polling();
+            registry_client
+        })
+    }
+
+    fn update_socks_clients(&self) {
+        let registry_client = self.registry_client();
+        //TODO(mihailjianu): this should handle errors.
+        //TODO(mihailjianu): save the version in a variable.
+        let ids = registry_client.get_api_boundary_node_ids(registry_client.get_latest_version()).unwrap();
+
+        let ips = ids.iter().map(|id| {
+            let record = registry_client.get_node_record(*id, registry_client.get_latest_version()).unwrap();
+            record.unwrap().xnet.unwrap().ip_addr
+        }).collect::<Vec<String>>();
+        let mut new_socks_clients = Vec::new();
+
+        for ip in ips {
+            // check if creating a new connector every time is fine.
+            let mut http_connector = HttpConnector::new();
+            http_connector.enforce_http(false);
+            http_connector.set_connect_timeout(Some(Duration::from_secs(self.config.http_connect_timeout_secs)));
+
+            let socks_proxy_port = 1080;
+            let proxy_addr = format!("socks5://{}:{}", ip, socks_proxy_port)
+                .parse()
+                .expect("Failed to parse socks url.");
+            let proxy_connector = SocksConnector {
+                proxy_addr,
+                auth: None,
+                connector: http_connector.clone(),
+            };
+            let proxied_https_connector = HttpsConnectorBuilder::new()
+                .with_native_roots()
+                .expect("Failed to set native roots")
+                .https_only()
+                .enable_all_versions()
+                .wrap_connector(proxy_connector);
+
+                let client = Client::builder(TokioExecutor::new())
+                .build::<_, Full<Bytes>>(proxied_https_connector);
+    
+            new_socks_clients.push(Arc::new(client));
+        }
+        {
+            let mut clients = self.socks_clients.write().unwrap();
+            *clients = new_socks_clients;
+        }
+    }
+
+    pub fn new(config: Config, logger: ReplicaLogger, metrics: &MetricsRegistry) -> Arc<Self> {
+        //TODO(mihailjianu): add tests for this
+        //TODO(mihailjianu): check system tests for the socks proxy
+        
+        let socks_clients = Arc::new(RwLock::new(Vec::new()));  
+
         let mut http_connector = HttpConnector::new();
         http_connector.enforce_http(false);
         http_connector
             .set_connect_timeout(Some(Duration::from_secs(config.http_connect_timeout_secs)));
-        // The proxy connnector requires a the URL scheme to be specified. I.e socks5://
-        // Config validity check ensures that url includes scheme, host and port.
-        // Therefore the parse 'Uri' will be in the correct format. I.e socks5://somehost.com:1080
-        let proxy_connector = SocksConnector {
-            proxy_addr: config
-                .socks_proxy
-                .parse()
-                .expect("Failed to parse socks url."),
-            auth: None,
-            connector: http_connector.clone(),
-        };
-        let proxied_https_connector = HttpsConnectorBuilder::new()
-            .with_native_roots()
-            .expect("Failed to set native roots")
-            .https_only()
-            .enable_all_versions()
-            .wrap_connector(proxy_connector);
 
         // Https client setup.
         let builder = HttpsConnectorBuilder::new()
@@ -89,25 +148,37 @@ impl CanisterHttp {
         let builder = builder.enable_all_versions();
         let direct_https_connector = builder.wrap_connector(http_connector);
 
-        let socks_client =
-            Client::builder(TokioExecutor::new()).build::<_, Full<Bytes>>(proxied_https_connector);
         let client = Client::builder(TokioExecutor::new())
             .http2_max_header_list_size(MAX_HEADER_LIST_SIZE)
             .build::<_, Full<Bytes>>(direct_https_connector);
 
-        Self {
+        let canister_http = Arc::new(Self {
             client,
-            socks_client,
+            socks_clients,
+            socks_client_index: AtomicUsize::new(0),
             logger,
             metrics: AdapterMetrics::new(metrics),
-        }
+            registry_client: OnceCell::new(),
+            config,
+        });
+
+        let canister_http_clone = Arc::clone(&canister_http);
+        tokio::spawn(async move {
+            loop {
+                // TODO: put this in a config
+                tokio::time::sleep(Duration::from_secs(300)).await;
+                canister_http_clone.update_socks_clients();
+            }
+        });
+
+        return canister_http;
     }
 }
 
 #[tonic::async_trait]
 impl HttpsOutcallsService for CanisterHttp {
     async fn https_outcall(
-        &self,
+        &self, 
         request: Request<HttpsOutcallRequest>,
     ) -> Result<Response<HttpsOutcallResponse>, Status> {
         self.metrics.requests.inc();
@@ -198,9 +269,41 @@ impl HttpsOutcallsService for CanisterHttp {
                 // fail fast because our interface does not have an ipv4 assigned.
                 Err(direct_err) => {
                     self.metrics.requests_socks.inc();
-                    self.socks_client.request(http_req_clone).await.map_err(|e| {
-                        format!("Request failed direct connect {direct_err} and connect through socks {e}")
-                    })
+                    let socks_client = {
+                        // Acquire the read lock
+                        let socks_clients = self.socks_clients.read().unwrap();
+                    
+                        if socks_clients.is_empty() {
+                            self.update_socks_clients();
+                            if socks_clients.is_empty() {
+                                return Err(Status::new(
+                                    tonic::Code::Unavailable,
+                                    format!(
+                                        "Request failed with direct connect error `{}` and no SOCKS proxies available",
+                                        direct_err
+                                    ),
+                                ));
+                            }
+                        }
+                    
+                        // Create a reference to the inner Vec to avoid moving socks_clients
+                        let clients_vec = &*socks_clients;
+                        let len = clients_vec.len();
+                        let index = self.socks_client_index.fetch_add(1, Ordering::Relaxed) % len;
+                        let socks_client = Arc::clone(&clients_vec[index]);
+                    
+                        // `socks_clients` goes out of scope here, releasing the lock
+                        socks_client
+                    };
+            
+                    // Now use `socks_client` without holding the lock
+                    match socks_client.request(http_req_clone).await {
+                        Ok(resp) => Ok(resp),
+                        Err(e) => Err(format!(
+                            "Request failed with direct connect error `{}` and SOCKS proxy error `{}`",
+                            direct_err, e
+                        )),
+                    }
                 }
                 Ok(resp)=> Ok(resp),
             }
