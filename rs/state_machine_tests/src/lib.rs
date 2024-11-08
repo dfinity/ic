@@ -2120,7 +2120,7 @@ impl StateMachine {
     fn build_sign_with_ecdsa_reply(
         &self,
         context: &SignWithThresholdContext,
-    ) -> Result<SignWithECDSAReply, RejectContext> {
+    ) -> Result<SignWithECDSAReply, UserError> {
         assert!(context.is_ecdsa());
 
         if let Some(SignatureSecretKey::EcdsaSecp256k1(k)) =
@@ -2136,8 +2136,8 @@ impl StateMachine {
                 .to_vec();
             Ok(SignWithECDSAReply { signature })
         } else {
-            Err(RejectContext::new(
-                RejectCode::CanisterError,
+            Err(UserError::new(
+                ErrorCode::CanisterRejectedMessage,
                 format!(
                     "Subnet {} does not hold threshold key {}.",
                     self.subnet_id,
@@ -2150,7 +2150,7 @@ impl StateMachine {
     fn build_sign_with_schnorr_reply(
         &self,
         context: &SignWithThresholdContext,
-    ) -> Result<SignWithSchnorrReply, RejectContext> {
+    ) -> Result<SignWithSchnorrReply, UserError> {
         assert!(context.is_schnorr());
 
         let signature = match self.idkg_subnet_secret_keys.get(&context.key_id()) {
@@ -2174,8 +2174,8 @@ impl StateMachine {
                 dk.sign_message(&context.schnorr_args().message).to_vec()
             }
             _ => {
-                return Err(RejectContext::new(
-                    RejectCode::CanisterError,
+                return Err(UserError::new(
+                    ErrorCode::CanisterRejectedMessage,
                     format!(
                         "Subnet {} does not hold threshold key {}.",
                         self.subnet_id,
@@ -2203,10 +2203,10 @@ impl StateMachine {
                             MsgPayload::Data(response.encode()),
                         ));
                     }
-                    Err(reject_context) => {
+                    Err(user_error) => {
                         payload.consensus_responses.push(ConsensusResponse::new(
                             *id,
-                            MsgPayload::Reject(reject_context),
+                            MsgPayload::Reject(RejectContext::from(user_error)),
                         ));
                     }
                 }
@@ -2219,10 +2219,10 @@ impl StateMachine {
                             MsgPayload::Data(response.encode()),
                         ));
                     }
-                    Err(reject_context) => {
+                    Err(user_error) => {
                         payload.consensus_responses.push(ConsensusResponse::new(
                             *id,
-                            MsgPayload::Reject(reject_context),
+                            MsgPayload::Reject(RejectContext::from(user_error)),
                         ));
                     }
                 }
