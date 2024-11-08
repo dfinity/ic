@@ -424,7 +424,7 @@ service ic : {
     canister_info : (canister_info_args) -> (canister_info_result);
     delete_canister : (delete_canister_args) -> ();
     deposit_cycles : (deposit_cycles_args) -> ();
-    // raw_rand : () -> (raw_rand_result);
+    raw_rand : () -> (raw_rand_result);
     http_request : (http_request_args) -> (http_request_result);
 
     // Threshold ECDSA signature

@@ -67,10 +67,8 @@ fn deposit_cycles(_: CanisterIdRecord) {
     unreachable!()
 }
 
-/*
 #[update]
-fn raw_rand() -> RawRandResult { unreachable!() }
-*/
+fn raw_rand() -> Vec<u8> { unreachable!() }
 
 #[update]
 fn http_request(_: HttpRequestArgs) -> HttpRequestResult {
