@@ -487,7 +487,7 @@ where
                     spender,
                     amount,
                     fee,
-                } => self.process_transfer(from, to, spender, amount, &fee),
+                } => self.process_transfer(from, to, spender, amount, fee),
                 Operation::Burn {
                     from,
                     spender,
@@ -506,7 +506,7 @@ where
                     amount,
                     expected_allowance,
                     expires_at,
-                    &fee,
+                    fee,
                     TimeStamp::from_nanos_since_unix_epoch(block.timestamp),
                 ),
             }
@@ -528,12 +528,12 @@ impl BlockConsumer<icp_ledger::Block>
                     amount,
                     fee,
                     spender,
-                } => self.process_transfer(from, to, &spender, amount, &Some(*fee)),
+                } => self.process_transfer(from, to, spender, amount, &Some(*fee)),
                 icp_ledger::Operation::Burn {
                     from,
                     amount,
                     spender,
-                } => self.process_burn(from, &spender, amount, 0),
+                } => self.process_burn(from, spender, amount, 0),
                 icp_ledger::Operation::Approve {
                     from,
                     spender,
@@ -599,7 +599,7 @@ where
                     subaccount: approve_arg.from_subaccount,
                 });
                 self.process_approve(
-                    &from,
+                    from,
                     &AccountId::from(approve_arg.spender),
                     &Tokens::try_from(approve_arg.amount.clone()).unwrap(),
                     &approve_arg
@@ -614,23 +614,23 @@ where
             LedgerEndpointArg::TransferArg(transfer_arg) => {
                 let owner = arg.caller.sender().unwrap();
                 let from = &AccountId::from(Account {
-                    owner: owner.clone(),
+                    owner: owner,
                     subaccount: transfer_arg.from_subaccount,
                 });
                 let to = &AccountId::from(transfer_arg.to);
                 if owner == minter_principal {
-                    self.process_mint(&to, &Tokens::try_from(transfer_arg.amount.clone()).unwrap());
+                    self.process_mint(to, &Tokens::try_from(transfer_arg.amount.clone()).unwrap());
                 } else if transfer_arg.to.owner == minter_principal {
                     self.process_burn(
-                        &from,
+                        from,
                         &None,
                         &Tokens::try_from(transfer_arg.amount.clone()).unwrap(),
                         0,
                     );
                 } else {
                     self.process_transfer(
-                        &from,
-                        &to,
+                        from,
+                        to,
                         &None,
                         &Tokens::try_from(transfer_arg.amount.clone()).unwrap(),
                         &fee,

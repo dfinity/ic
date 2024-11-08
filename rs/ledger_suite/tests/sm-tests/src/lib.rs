@@ -680,8 +680,8 @@ impl AllowanceProvider for AccountIdentifier {
         spender: impl Into<AccountIdentifier>,
     ) -> Allowance {
         let arg = IcpAllowanceArgs {
-            account: account.into().into(),
-            spender: spender.into().into(),
+            account: account.into(),
+            spender: spender.into(),
         };
         Decode!(
             &env.query(ledger, "allowance", Encode!(&arg).unwrap())
