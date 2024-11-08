@@ -2062,6 +2062,7 @@ mod tests {
                     args: ThresholdArguments::Schnorr(SchnorrArguments {
                         key_id: fake_schnorr_key_id(schnorr_algorithm(algorithm)),
                         message: Arc::new(message.clone()),
+                        taproot_tree_root: None,
                     }),
                     pseudo_random_id: [1; 32],
                     derivation_path: vec![],

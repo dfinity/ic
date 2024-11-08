@@ -3591,6 +3591,7 @@ fn threshold_signature_agreements_metric_is_updated() {
         message: vec![1; 128],
         derivation_path: DerivationPath::new(Vec::new()),
         key_id: schnorr_key_id,
+        taproot_tree_root: None,
     })
     .unwrap();
 

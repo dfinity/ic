@@ -77,6 +77,7 @@ message EcdsaArguments {
 message SchnorrArguments {
   registry.crypto.v1.SchnorrKeyId key_id = 1;
   bytes message = 2;
+  optional bytes taproot_tree_root = 3;
 }
 
 message ThresholdArguments {

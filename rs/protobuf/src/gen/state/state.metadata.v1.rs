@@ -99,6 +99,8 @@ pub struct SchnorrArguments {
     pub key_id: ::core::option::Option<super::super::super::registry::crypto::v1::SchnorrKeyId>,
     #[prost(bytes = "vec", tag = "2")]
     pub message: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", optional, tag = "3")]
+    pub taproot_tree_root: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ThresholdArguments {
