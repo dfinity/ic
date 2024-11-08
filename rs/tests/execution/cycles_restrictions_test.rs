@@ -51,7 +51,7 @@ pub fn controller_and_controllee_on_different_subnets(env: TestEnv) {
             ) -> Result<Vec<u8>, AgentError> {
                 cr.update(
                     wasm().call(
-                        management::install_code(target, UNIVERSAL_CANISTER_WASM)
+                        management::install_code(target, *UNIVERSAL_CANISTER_WASM)
                             .with_mode(management::InstallMode::Reinstall),
                     ),
                 )

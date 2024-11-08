@@ -138,7 +138,7 @@ pub fn total_compute_allocation_cannot_be_exceeded(env: TestEnv) {
 
             let res = universal_canister
                 .update(wasm().call(
-                    management::install_code(created_canister, UNIVERSAL_CANISTER_WASM).on_reply(
+                    management::install_code(created_canister, *UNIVERSAL_CANISTER_WASM).on_reply(
                         wasm().inter_update(
                             created_canister,
                             call_args().other_side(wasm().reply_data(reply_data)),

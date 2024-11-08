@@ -13,7 +13,11 @@ use universal_canister::Ops;
 
 lazy_static! {
     /// The WASM of the Universal Canister.
-    pub static ref UNIVERSAL_CANISTER_WASM: Vec<u8> = get_universal_canister_wasm();
+    pub static ref UNIVERSAL_CANISTER_WASM: &'static [u8] = {
+        let vec = get_universal_canister_wasm();
+        Box::leak(vec.into_boxed_slice())
+    };
+    pub static ref UNIVERSAL_CANISTER_WASM_SHA256: [u8; 32] = get_universal_canister_wasm_sha256();
 }
 
 pub fn get_universal_canister_wasm() -> Vec<u8> {
@@ -24,7 +28,7 @@ pub fn get_universal_canister_wasm() -> Vec<u8> {
 }
 
 pub fn get_universal_canister_wasm_sha256() -> [u8; 32] {
-    ic_crypto_sha2::Sha256::hash(&UNIVERSAL_CANISTER_WASM)
+    ic_crypto_sha2::Sha256::hash(*UNIVERSAL_CANISTER_WASM)
 }
 
 /// A succinct shortcut for creating a `PayloadBuilder`, which is used to encode

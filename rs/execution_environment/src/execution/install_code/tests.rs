@@ -1426,7 +1426,7 @@ fn install_chunked_works_from_whitelist() {
     let canister_id = test.create_canister(CYCLES);
 
     // Upload two chunks that make up the universal canister.
-    let uc_wasm = &*UNIVERSAL_CANISTER_WASM;
+    let uc_wasm = &UNIVERSAL_CANISTER_WASM;
     let wasm_module_hash = ic_crypto_sha2::Sha256::hash(uc_wasm).to_vec();
     let chunk1 = &uc_wasm[..uc_wasm.len() / 2];
     let chunk2 = &uc_wasm[uc_wasm.len() / 2..];
@@ -1487,7 +1487,7 @@ fn install_chunked_defaults_to_using_target_as_store() {
     let canister_id = test.create_canister(CYCLES);
 
     // Upload universal canister.
-    let uc_wasm = &*UNIVERSAL_CANISTER_WASM;
+    let uc_wasm = &UNIVERSAL_CANISTER_WASM;
     let wasm_module_hash = ic_crypto_sha2::Sha256::hash(uc_wasm).to_vec();
     let hash = UploadChunkReply::decode(&get_reply(
         test.subnet_message(
@@ -1535,7 +1535,7 @@ fn install_chunked_recorded_in_history() {
     let canister_id = test.create_canister(CYCLES);
 
     // Upload universal canister.
-    let uc_wasm = &*UNIVERSAL_CANISTER_WASM;
+    let uc_wasm = &UNIVERSAL_CANISTER_WASM;
     let wasm_module_hash = ic_crypto_sha2::Sha256::hash(uc_wasm).to_vec();
     let hash = UploadChunkReply::decode(&get_reply(
         test.subnet_message(
@@ -1786,7 +1786,7 @@ fn install_chunked_fails_when_store_canister_not_found() {
     // Store canister doesn't actually exist.
     let store_canister = canister_test_id(0);
 
-    let hash = ic_crypto_sha2::Sha256::hash(&*UNIVERSAL_CANISTER_WASM).to_vec();
+    let hash = ic_crypto_sha2::Sha256::hash(&UNIVERSAL_CANISTER_WASM).to_vec();
 
     // Install the universal canister
     let error = test

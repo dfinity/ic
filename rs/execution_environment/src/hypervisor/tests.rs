@@ -5036,7 +5036,7 @@ fn can_use_more_instructions_during_install_code() {
         .with_instruction_limit(1_000_000)
         .with_cost_to_compile_wasm_instruction(0)
         .with_install_code_instruction_limit(
-            1_000_000 + wasm_compilation_cost(&*UNIVERSAL_CANISTER_WASM).get(),
+            1_000_000 + wasm_compilation_cost(&UNIVERSAL_CANISTER_WASM).get(),
         )
         .build();
     let canister_id = test.universal_canister().unwrap();

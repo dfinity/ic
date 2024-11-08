@@ -251,7 +251,7 @@ impl<'a> UniversalCanister<'a> {
             .0;
 
         // Install the universal canister.
-        mgr.install_code(&canister_id, UNIVERSAL_CANISTER_WASM)
+        mgr.install_code(&canister_id, *UNIVERSAL_CANISTER_WASM)
             .with_raw_arg(payload.clone())
             .call_and_wait()
             .await
@@ -278,7 +278,7 @@ impl<'a> UniversalCanister<'a> {
             .0;
 
         // Install the universal canister.
-        mgr.install_code(&canister_id, UNIVERSAL_CANISTER_WASM)
+        mgr.install_code(&canister_id, *UNIVERSAL_CANISTER_WASM)
             .with_raw_arg(payload.clone())
             .call_and_wait()
             .await
@@ -306,7 +306,7 @@ impl<'a> UniversalCanister<'a> {
             .0;
 
         // Install the universal canister.
-        mgr.install_code(&canister_id, UNIVERSAL_CANISTER_WASM)
+        mgr.install_code(&canister_id, *UNIVERSAL_CANISTER_WASM)
             .with_raw_arg(payload.clone())
             .call_and_wait()
             .await
