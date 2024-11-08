@@ -300,7 +300,7 @@ impl ConnectionManager {
                 },
                 Some(conn_res) = self.outbound_connecting.join_next() => {
                     match conn_res {
-                        Ok((conn_out, peer_id)) => self.handle_connecting_result(conn_out, Some(peer_id)),
+                        Ok((conn_out, _peer_id)) => self.handle_connecting_result(conn_out),
                         Err(err) => {
                             // Cancelling tasks is ok. Panicking tasks are not.
                             if err.is_panic() {
@@ -311,7 +311,7 @@ impl ConnectionManager {
                 },
                 Some(conn_res) = self.inbound_connecting.join_next() => {
                     match conn_res {
-                        Ok(conn_out) => self.handle_connecting_result(conn_out, None),
+                        Ok(conn_out) => self.handle_connecting_result(conn_out),
                         Err(err) => {
                             // Cancelling tasks is ok. Panicking tasks are not.
                             if err.is_panic() {
@@ -504,7 +504,6 @@ impl ConnectionManager {
     fn handle_connecting_result(
         &mut self,
         conn_res: Result<ConnectionWithPeerId, ConnectionEstablishError>,
-        peer_id: Option<NodeId>,
     ) {
         match conn_res {
             Ok(ConnectionWithPeerId {
@@ -524,7 +523,7 @@ impl ConnectionManager {
                 let conn_id = self.conn_id_counter;
 
                 let connection_handle =
-                    ConnectionHandle::new(peer_id, connection, self.metrics.clone(), conn_id);
+                    ConnectionHandle::new(connection, self.metrics.clone(), conn_id);
                 let req_handler_connection_handle = connection_handle.clone();
 
                 // dropping the old connection will result in closing it
@@ -548,7 +547,7 @@ impl ConnectionManager {
                     peer_id,
                     run_stream_acceptor(
                         self.log.clone(),
-                        req_handler_connection_handle.peer_id,
+                        peer_id,
                         req_handler_connection_handle.conn_id(),
                         req_handler_connection_handle.connection,
                         self.metrics.clone(),
@@ -563,7 +562,7 @@ impl ConnectionManager {
                     .with_label_values(&[CONNECTION_RESULT_FAILED_LABEL])
                     .inc();
                 // The peer is only present in connections that this node initiated. This node should therefore retry connecting to the peer.
-                if let Some(peer_id) = peer_id {
+                if let ConnectionEstablishError::ConnectError { peer_id, .. } = err {
                     self.connect_queue.insert(peer_id, CONNECT_RETRY_BACKOFF);
                 }
                 info!(self.log, "Failed to connect {}", err);
