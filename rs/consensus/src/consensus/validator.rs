@@ -1936,17 +1936,16 @@ pub mod test {
     use ic_types::{
         batch::{BatchPayload, IngressPayload},
         consensus::{
-            dkg,
-            idkg::{IDkgMasterPublicKeyId, PreSigId},
-            BlockPayload, CatchUpPackageShare, DataPayload, EquivocationProof, Finalization,
-            FinalizationShare, HashedBlock, HashedRandomBeacon, NotarizationShare, Payload,
-            RandomBeaconContent, RandomTapeContent, SummaryPayload,
+            dkg, idkg::PreSigId, BlockPayload, CatchUpPackageShare, DataPayload, EquivocationProof,
+            Finalization, FinalizationShare, HashedBlock, HashedRandomBeacon, NotarizationShare,
+            Payload, RandomBeaconContent, RandomTapeContent, SummaryPayload,
         },
         crypto::{BasicSig, BasicSigOf, CombinedMultiSig, CombinedMultiSigOf, CryptoHash},
         replica_config::ReplicaConfig,
         signature::ThresholdSignature,
         CryptoHashOfState, ReplicaVersion, Time,
     };
+    use idkg::test_utils::request_id;
     use std::sync::{Arc, RwLock};
 
     pub fn assert_block_valid(results: &[ChangeAction], block: &BlockProposal) {
@@ -2151,23 +2150,36 @@ pub mod test {
                 .expect_get_state_hash_at()
                 .return_const(Ok(state_hash.clone()));
 
-            let key_id: IDkgMasterPublicKeyId = fake_ecdsa_idkg_master_public_key_id();
+            let height = Height::from(0);
+            let key_id = fake_ecdsa_idkg_master_public_key_id();
             // Create three quadruple Ids and contexts, quadruple "2" will remain unmatched.
             let pre_sig_id1 = PreSigId(1);
             let pre_sig_id2 = PreSigId(2);
             let pre_sig_id3 = PreSigId(3);
 
             let contexts = vec![
-                fake_signature_request_context_with_pre_sig(1, key_id.clone(), Some(pre_sig_id1)),
-                fake_signature_request_context_with_pre_sig(2, key_id.clone(), None),
-                fake_signature_request_context_with_pre_sig(3, key_id.clone(), Some(pre_sig_id3)),
+                fake_signature_request_context_with_pre_sig(
+                    request_id(1, height),
+                    key_id.clone(),
+                    Some(pre_sig_id1),
+                ),
+                fake_signature_request_context_with_pre_sig(
+                    request_id(2, height),
+                    key_id.clone(),
+                    None,
+                ),
+                fake_signature_request_context_with_pre_sig(
+                    request_id(3, height),
+                    key_id.clone(),
+                    Some(pre_sig_id3),
+                ),
             ];
 
             state_manager
                 .get_mut()
                 .expect_get_state_at()
                 .return_const(Ok(fake_state_with_signature_requests(
-                    Height::from(0),
+                    height,
                     contexts.clone(),
                 )
                 .get_labeled_state()));
