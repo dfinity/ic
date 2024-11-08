@@ -10,8 +10,13 @@ use ic_cketh_minter::endpoints::{
 use ic_cketh_minter::memo::MintMemo;
 use ic_cketh_minter::numeric::BlockNumber;
 use ic_cketh_minter::{MINT_RETRY_DELAY, SCRAPING_ETH_LOGS_INTERVAL};
-use ic_cketh_test_utils::ckerc20::{CkErc20Setup, DepositCkErc20Params, Erc20Token, ONE_USDC};
-use ic_cketh_test_utils::flow::DepositParams;
+use ic_cketh_test_utils::ckerc20::{
+    CkErc20Setup, DepositCkErc20, DepositCkErc20Params, DepositCkErc20WithSubaccountParams,
+    Erc20Token, ONE_USDC,
+};
+use ic_cketh_test_utils::flow::{
+    DepositCkEthParams, DepositCkEthWithSubaccountParams, DepositParams,
+};
 use ic_cketh_test_utils::mock::{JsonRpcMethod, MockJsonRpcProviders};
 use ic_cketh_test_utils::response::{
     block_response, empty_logs, multi_logs_for_single_transaction,
@@ -20,8 +25,9 @@ use ic_cketh_test_utils::{
     format_ethereum_address_to_eip_55, CkEthSetup, CKETH_MINIMUM_WITHDRAWAL_AMOUNT,
     DEFAULT_DEPOSIT_BLOCK_NUMBER, DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_DEPOSIT_LOG_INDEX,
     DEFAULT_DEPOSIT_TRANSACTION_HASH, DEFAULT_ERC20_DEPOSIT_LOG_INDEX,
-    DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH, EFFECTIVE_GAS_PRICE, ERC20_HELPER_CONTRACT_ADDRESS,
-    ETH_HELPER_CONTRACT_ADDRESS, GAS_USED, LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MINTER_ADDRESS,
+    DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH, DEFAULT_USER_SUBACCOUNT, EFFECTIVE_GAS_PRICE,
+    ERC20_HELPER_CONTRACT_ADDRESS, ETH_HELPER_CONTRACT_ADDRESS, GAS_USED,
+    LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MINTER_ADDRESS,
 };
 use ic_ethereum_types::Address;
 use ic_ledger_suite_orchestrator_test_utils::flow::call_ledger_icrc1_total_supply;
@@ -1256,69 +1262,147 @@ mod withdraw_erc20 {
 fn should_deposit_ckerc20() {
     let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
     let ckusdc = ckerc20.find_ckerc20_token("ckUSDC");
-    let caller: Principal = ckerc20.caller();
+    test_deposit_ckerc20(ckerc20, DepositCkErc20Params::new(ONE_USDC, ckusdc));
 
-    ckerc20
-        .deposit_ckerc20(ONE_USDC, ckusdc.clone(), caller)
-        .expect_mint()
-        .call_ckerc20_ledger_get_transaction(ckusdc.ledger_canister_id, 0_u8)
-        .expect_mint(Mint {
-            amount: Nat::from(ONE_USDC),
-            to: Account {
+    let ckerc20 = CkErc20Setup::default()
+        .add_supported_erc20_tokens()
+        .add_support_for_subaccount();
+    let ckusdc = ckerc20.find_ckerc20_token("ckUSDC");
+    let caller = ckerc20.caller();
+    test_deposit_ckerc20(
+        ckerc20,
+        DepositCkErc20WithSubaccountParams::new(
+            ONE_USDC,
+            ckusdc,
+            Account {
                 owner: caller,
-                subaccount: None,
+                subaccount: Some(DEFAULT_USER_SUBACCOUNT),
             },
-            memo: Some(Memo::from(MintMemo::Convert {
-                from_address: DEFAULT_DEPOSIT_FROM_ADDRESS.parse().unwrap(),
-                tx_hash: DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH.parse().unwrap(),
-                log_index: DEFAULT_ERC20_DEPOSIT_LOG_INDEX.into(),
-            })),
-            created_at_time: None,
-        });
+        ),
+    );
+
+    fn test_deposit_ckerc20<T: Into<DepositCkErc20>>(ckerc20: CkErc20Setup, params: T) {
+        let params = params.into();
+
+        ckerc20
+            .deposit(params.clone())
+            .expect_mint()
+            .call_ckerc20_ledger_get_transaction(params.token().ledger_canister_id, 0_u8)
+            .expect_mint(Mint {
+                amount: Nat::from(params.ckerc20_amount()),
+                to: params.recipient(),
+                memo: Some(Memo::from(MintMemo::Convert {
+                    from_address: params.from_address().clone(),
+                    tx_hash: params.transaction_data().transaction_hash.parse().unwrap(),
+                    log_index: params.transaction_data().log_index.into(),
+                })),
+                created_at_time: None,
+            });
+    }
 }
 
 #[test]
 fn should_deposit_cketh_and_ckerc20() {
     let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
     let ckusdc = ckerc20.find_ckerc20_token("ckUSDC");
-    let caller = ckerc20.caller();
+    test_deposit_cketh_and_ckerc20(
+        ckerc20,
+        DepositCkErc20Params {
+            cketh_deposit: Some(DepositParams::from(DepositCkEthParams {
+                amount: CKETH_MINIMUM_WITHDRAWAL_AMOUNT,
+                ..Default::default()
+            })),
+            ..DepositCkErc20Params::new(ONE_USDC, ckusdc)
+        },
+    );
 
-    ckerc20
-        .deposit_cketh_and_ckerc20(
-            CKETH_MINIMUM_WITHDRAWAL_AMOUNT,
-            ONE_USDC,
-            ckusdc.clone(),
-            caller,
-        )
-        .expect_mint()
-        .call_cketh_ledger_get_transaction(0_u8)
-        .expect_mint(Mint {
-            amount: CKETH_MINIMUM_WITHDRAWAL_AMOUNT.into(),
-            to: Account {
-                owner: caller,
-                subaccount: None,
-            },
-            memo: Some(Memo::from(MintMemo::Convert {
-                from_address: DEFAULT_DEPOSIT_FROM_ADDRESS.parse().unwrap(),
-                tx_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.parse().unwrap(),
-                log_index: DEFAULT_DEPOSIT_LOG_INDEX.into(),
+    let ckerc20 = CkErc20Setup::default()
+        .add_supported_erc20_tokens()
+        .add_support_for_subaccount();
+    let ckusdc = ckerc20.find_ckerc20_token("ckUSDC");
+    let caller = ckerc20.caller();
+    let ckusdc_subaccount = Some([43; 32]);
+    test_deposit_cketh_and_ckerc20(
+        ckerc20,
+        DepositCkErc20WithSubaccountParams {
+            cketh_deposit: Some(DepositParams::from(DepositCkEthParams {
+                recipient: caller,
+                ..Default::default()
             })),
-            created_at_time: None,
-        })
-        .call_ckerc20_ledger_get_transaction(ckusdc.ledger_canister_id, 0_u8)
-        .expect_mint(Mint {
-            amount: ONE_USDC.into(),
-            to: Account {
-                owner: caller,
-                subaccount: None,
-            },
-            memo: Some(Memo::from(MintMemo::Convert {
-                from_address: DEFAULT_DEPOSIT_FROM_ADDRESS.parse().unwrap(),
-                tx_hash: DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH.parse().unwrap(),
-                log_index: DEFAULT_ERC20_DEPOSIT_LOG_INDEX.into(),
+            ..DepositCkErc20WithSubaccountParams::new(
+                ONE_USDC,
+                ckusdc.clone(),
+                Account {
+                    owner: caller,
+                    subaccount: ckusdc_subaccount,
+                },
+            )
+        },
+    );
+
+    let ckerc20 = CkErc20Setup::default()
+        .add_supported_erc20_tokens()
+        .add_support_for_subaccount();
+    let ckusdc = ckerc20.find_ckerc20_token("ckUSDC");
+    let caller = ckerc20.caller();
+    let cketh_subaccount = Some(DEFAULT_USER_SUBACCOUNT);
+    let ckusdc_subaccount = Some([43; 32]);
+    assert_ne!(cketh_subaccount, ckusdc_subaccount);
+    test_deposit_cketh_and_ckerc20(
+        ckerc20,
+        DepositCkErc20WithSubaccountParams {
+            cketh_deposit: Some(DepositParams::from(DepositCkEthWithSubaccountParams {
+                recipient: caller,
+                recipient_subaccount: cketh_subaccount,
+                ..Default::default()
             })),
-            created_at_time: None,
-        });
+            ..DepositCkErc20WithSubaccountParams::new(
+                ONE_USDC,
+                ckusdc.clone(),
+                Account {
+                    owner: caller,
+                    subaccount: ckusdc_subaccount,
+                },
+            )
+        },
+    );
+
+    fn test_deposit_cketh_and_ckerc20<T: Into<DepositCkErc20>>(ckerc20: CkErc20Setup, params: T) {
+        let params = params.into();
+        let cketh_params = params
+            .cketh_deposit()
+            .expect("missing ckETH deposit params");
+
+        ckerc20
+            .deposit(params.clone())
+            .expect_mint()
+            .call_cketh_ledger_get_transaction(0_u8)
+            .expect_mint(Mint {
+                amount: Nat::from(cketh_params.amount()),
+                to: cketh_params.recipient(),
+                memo: Some(Memo::from(MintMemo::Convert {
+                    from_address: cketh_params.from_address().clone(),
+                    tx_hash: cketh_params
+                        .transaction_data()
+                        .transaction_hash
+                        .parse()
+                        .unwrap(),
+                    log_index: cketh_params.transaction_data().log_index.into(),
+                })),
+                created_at_time: None,
+            })
+            .call_ckerc20_ledger_get_transaction(params.token().ledger_canister_id, 0_u8)
+            .expect_mint(Mint {
+                amount: Nat::from(params.ckerc20_amount()),
+                to: params.recipient(),
+                memo: Some(Memo::from(MintMemo::Convert {
+                    from_address: params.from_address().clone(),
+                    tx_hash: params.transaction_data().transaction_hash.parse().unwrap(),
+                    log_index: params.transaction_data().log_index.into(),
+                })),
+                created_at_time: None,
+            });
+    }
 }
 
 #[test]
