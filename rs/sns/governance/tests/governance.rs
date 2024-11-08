@@ -5,6 +5,7 @@ use crate::fixtures::{
 use assert_matches::assert_matches;
 use fixtures::DEFAULT_TEST_START_TIMESTAMP_SECONDS;
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_nervous_system_common::binary_search;
 use ic_nervous_system_common::{E8, ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
@@ -26,6 +27,7 @@ use ic_sns_governance::{
                 NeuronRecipe, NeuronRecipes,
             },
             claim_swap_neurons_response::{ClaimSwapNeuronsResult, ClaimedSwapNeurons, SwapNeuron},
+            get_proposal_response,
             governance::{Version, Versions},
             governance_error::ErrorType,
             manage_neuron::{
@@ -41,8 +43,8 @@ use ic_sns_governance::{
             proposal::Action,
             upgrade_journal_entry, Account as AccountProto, AddMaturityRequest, Ballot,
             ClaimSwapNeuronsError, ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse,
-            ClaimedSwapNeuronStatus, DeregisterDappCanisters, Empty, GovernanceError,
-            ManageNeuronResponse, MintTokensRequest, MintTokensResponse, Motion,
+            ClaimedSwapNeuronStatus, DeregisterDappCanisters, Empty, GetProposalResponse,
+            GovernanceError, ManageNeuronResponse, MintTokensRequest, MintTokensResponse, Motion,
             NervousSystemParameters, Neuron, NeuronId, NeuronIds, NeuronPermission,
             NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData, ProposalId,
             RegisterDappCanisters, UpgradeJournalEntry, Vote, WaitForQuietState,
@@ -3213,4 +3215,39 @@ fn test_deregister_dapp_has_higher_voting_thresholds() {
         proposal_data.minimum_yes_proportion_of_total.unwrap(),
         Percentage::from_basis_points(2000)
     );
+}
+
+// This test will prevent us from making a change that reduces the number of ballots a proposal can have before it can't
+// be sent over the wire.
+#[test]
+fn find_max_number_of_ballots_under_2mb() {
+    let max_bytes = 2 * 1024 * 1024;
+    let (most_number_of_ballots_allowed, least_number_of_ballots_disallowed) = binary_search::search(
+        |&i| {
+            let response = GetProposalResponse {
+                result: Some(get_proposal_response::Result::Proposal(ProposalData {
+                    ballots: (0..i)
+                        .map(|j| {
+                            (
+                                j.to_string(),
+                                Ballot {
+                                    vote: Vote::Yes as i32,
+                                    voting_power: 1000,
+                                    cast_timestamp_seconds: 1000,
+                                },
+                            )
+                        })
+                        .collect(),
+                    ..Default::default()
+                })),
+            };
+            let serialized_response = candid::encode_one(&response).unwrap();
+            serialized_response.len() > max_bytes
+        },
+        0,
+        100000,
+    );
+
+    assert_eq!(most_number_of_ballots_allowed, Some(81044));
+    assert_eq!(least_number_of_ballots_disallowed, Some(81045));
 }
