@@ -251,14 +251,14 @@ fn encode_metrics(w: &mut MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
         "Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
     )?;
     w.encode_gauge(
-        "archive_node_stable_memory_bytes",
+        "stable_memory_bytes",
         (stable_memory_size_in_pages() * 64 * 1024) as f64,
         "Size of the stable memory allocated by this canister measured in bytes.",
     )?;
     w.encode_gauge(
-        "archive_node_total_memory_bytes",
+        "heap_memory_bytes",
         total_memory_size_bytes() as f64,
-        "Total amount of memory (heap, stable memory, etc) that has been allocated by this canister.",
+        "Size of the heap memory allocated by this canister measured in bytes.",
     )?;
     w.encode_gauge(
         "archive_node_last_upgrade_time_seconds",

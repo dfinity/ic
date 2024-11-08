@@ -1365,14 +1365,14 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         "Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
     )?;
     w.encode_gauge(
-        "ledger_stable_memory_bytes",
+        "stable_memory_bytes",
         (dfn_core::api::stable_memory_size_in_pages() * 64 * 1024) as f64,
-        "Size of the stable memory allocated by this canister.",
+        "Size of the stable memory allocated by this canister measured in bytes.",
     )?;
     w.encode_gauge(
-        "ledger_total_memory_bytes",
+        "heap_memory_bytes",
         total_memory_size_bytes() as f64,
-        "Total amount of memory (heap, stable memory, etc) that has been allocated by this canister.",
+        "Size of the stable memory allocated by this canister measured in bytes.",
     )?;
     w.encode_gauge(
         "ledger_transactions_by_hash_cache_entries",

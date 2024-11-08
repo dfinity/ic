@@ -536,14 +536,14 @@ pub fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> st
         "Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
     )?;
     w.encode_gauge(
-        "index_stable_memory_bytes",
+        "stable_memory_bytes",
         (ic_cdk::api::stable::stable_size() * 64 * 1024) as f64,
-        "Size of the stable memory allocated by this canister.",
+        "Size of the stable memory allocated by this canister measured in bytes.",
     )?;
     w.encode_gauge(
-        "index_total_memory_bytes",
+        "heap_memory_bytes",
         total_memory_size_bytes() as f64,
-        "Total amount of memory (heap, stable memory, etc) that has been allocated by this canister.",
+        "Size of the heap memory allocated by this canister measured in bytes.",
     )?;
 
     let cycle_balance = ic_cdk::api::canister_balance128() as f64;
