@@ -13135,9 +13135,9 @@ name = "ic-universal-canister"
 version = "0.9.0"
 dependencies = [
  "candid",
- "hex-literal",
  "ic-crypto-sha2",
  "ic-types",
+ "lazy_static",
  "serde",
  "universal-canister",
 ]
