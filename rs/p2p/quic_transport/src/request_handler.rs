@@ -12,7 +12,7 @@
 //!
 use std::time::Duration;
 
-use anyhow::{anyhow, Context};
+use anyhow::Context;
 use axum::{body::Body, Router};
 use bytes::Bytes;
 use http::{Method, Request, Response, Version};
@@ -126,8 +126,8 @@ async fn handle_bi_stream(
     let stopped = bi_tx.stopped();
     let response = tokio::select! {
         response = svc => response.expect("Infallible"),
-        _ = stopped => {
-            return Err(anyhow!("stopped"));
+        stopped_res = stopped => {
+            return stopped_res.map(|_| ()).with_context(|| "stopped.");
         }
     };
 

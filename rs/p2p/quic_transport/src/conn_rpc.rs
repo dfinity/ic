@@ -96,6 +96,7 @@ pub async fn rpc(
     })?;
 
     send_stream.finish().inspect_err(|_| {
+        // This should be infallible error. There is a bug in the code if this happens.
         conn_handle
             .metrics
             .connection_handle_errors_total
