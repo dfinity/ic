@@ -24,7 +24,7 @@ pub fn get_universal_canister_wasm() -> Vec<u8> {
 }
 
 pub fn get_universal_canister_wasm_sha256() -> [u8; 32] {
-    ic_crypto_sha2::Sha256::hash(&*UNIVERSAL_CANISTER_WASM)
+    ic_crypto_sha2::Sha256::hash(&UNIVERSAL_CANISTER_WASM)
 }
 
 /// A succinct shortcut for creating a `PayloadBuilder`, which is used to encode

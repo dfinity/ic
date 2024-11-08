@@ -134,9 +134,13 @@ rust_ic_test_suite(
     srcs = glob(["tests/*.rs"]),
     aliases = ALIASES,
     compile_data = glob(["tests/test-data/**"]),
-    data = DATA + ["//rs/rust_canisters/backtrace_canister:backtrace-canister"],
+    data = DATA + [
+        "//rs/rust_canisters/backtrace_canister:backtrace-canister",
+        "//rs/universal_canister/impl:universal_canister.wasm.gz",
+    ],
     env = dict(ENV.items() + [
         ("BACKTRACE_CANISTER_WASM_PATH", "$(rootpath //rs/rust_canisters/backtrace_canister:backtrace-canister)"),
+        ("UNIVERSAL_CANISTER_WASM_PATH", "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)"),
     ]),
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [

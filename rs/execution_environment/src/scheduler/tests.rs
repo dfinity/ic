@@ -43,7 +43,6 @@ use ic_types::{
     ComputeAllocation, Cycles, Height, NumBytes,
 };
 use ic_types_test_utils::ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id};
-use ic_universal_canister::{call_args, wasm};
 use proptest::prelude::*;
 use std::collections::HashMap;
 use std::{cmp::min, ops::Range};
@@ -2820,7 +2819,7 @@ fn stopping_canisters_are_not_stopped_if_not_ready() {
 
 #[test]
 fn canister_is_stopped_if_timeout_occurs_and_ready_to_stop() {
-    use ic_universal_canister::UNIVERSAL_CANISTER_WASM;
+    use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 
     let test = StateMachineBuilder::new().build();
 
