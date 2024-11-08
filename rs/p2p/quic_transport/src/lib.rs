@@ -195,11 +195,7 @@ impl Transport for QuicTransport {
             .get(peer_id)
             .ok_or(anyhow!("Currently not connected to this peer"))?
             .clone();
-        peer.rpc(request).await.map(|mut response| {
-            // Propagate PeerId from this request to upper layers.
-            response.extensions_mut().insert(peer_id.clone());
-            response
-        })
+        peer.rpc(request).await
     }
 
     fn peers(&self) -> Vec<(NodeId, ConnId)> {
