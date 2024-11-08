@@ -9,8 +9,6 @@ use rate_limits_api::{
     GetRuleByIdResponse, IncidentId, InputConfig, InputRule, RuleId, Version,
 };
 
-// Set this principal ID
-const RATE_LIMIT_CANISTER_ID: &str = "5avuk-aaaaa-aaaab-qacyq-cai";
 const IC_DOMAIN: &str = "https://ic0.app";
 
 use k256::elliptic_curve::SecretKey;
@@ -24,14 +22,17 @@ gc2Q0JiGrqKks1AVi+8wzmZ+2PQXXA==
 
 #[tokio::main]
 async fn main() {
+    let args: Vec<String> = std::env::args().collect();
+
+    let canister_id = Principal::from_text(args[1].clone())
+        .expect("failed to parse canister_id from the command-line argument");
+
     let agent_full_access = create_agent(Secp256k1Identity::from_private_key(
         SecretKey::from_sec1_pem(TEST_PRIVATE_KEY).unwrap(),
     ))
     .await;
 
     let agent_restricted_read = create_agent(AnonymousIdentity {}).await;
-
-    let canister_id = Principal::from_text(RATE_LIMIT_CANISTER_ID).unwrap();
 
     println!("Call 1. Add a new config (version = 2) containing some rules (FullAccess level of the caller is required)");
     add_config_1(&agent_full_access, canister_id).await;
