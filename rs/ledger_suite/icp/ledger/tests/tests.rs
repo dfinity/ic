@@ -9,7 +9,7 @@ use ic_ledger_core::block::BlockIndex;
 use ic_ledger_core::{block::BlockType, Tokens};
 use ic_ledger_suite_state_machine_tests::{
     balance_of, default_approve_args, default_transfer_from_args, expect_icrc2_disabled,
-    send_approval, send_transfer_from, setup, supported_standards, total_supply, transfer, 
+    send_approval, send_transfer_from, setup, supported_standards, total_supply, transfer,
     AllowanceProvider, FEE, MINTER,
 };
 use ic_state_machine_tests::{ErrorCode, StateMachine, UserError};
