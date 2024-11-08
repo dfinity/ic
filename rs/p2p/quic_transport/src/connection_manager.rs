@@ -523,12 +523,14 @@ impl ConnectionManager {
                 self.conn_id_counter.inc_assign();
                 let conn_id = self.conn_id_counter;
 
-                let connection_handle =
-                    ConnectionHandle::new(connection, self.metrics.clone(), conn_id);
-                let req_handler_connection_handle = connection_handle.clone();
+                let connection_handle = ConnectionHandle {
+                    connection,
+                    metrics: self.metrics.clone(),
+                    conn_id,
+                };
 
                 // dropping the old connection will result in closing it
-                if let Some(old_conn) = peer_map_mut.insert(peer_id, connection_handle) {
+                if let Some(old_conn) = peer_map_mut.insert(peer_id, connection_handle.clone()) {
                     old_conn
                         .connection
                         .close(VarInt::from_u32(0), b"using newer connection");
@@ -549,9 +551,7 @@ impl ConnectionManager {
                     run_stream_acceptor(
                         self.log.clone(),
                         peer_id,
-                        req_handler_connection_handle.conn_id(),
-                        req_handler_connection_handle.connection,
-                        self.metrics.clone(),
+                        connection_handle,
                         self.router.clone(),
                     ),
                     &self.rt,
