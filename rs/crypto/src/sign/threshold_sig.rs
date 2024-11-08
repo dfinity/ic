@@ -22,9 +22,8 @@ mod tests;
 pub struct ThresholdSignerInternal {}
 
 impl ThresholdSignerInternal {
-    ////////////////////////////////////////
+    // TODO(CRP-2639): Adapt ThresholdSignError so that clippy exception is no longer needed
     #[allow(clippy::result_large_err)]
-    ////////////////////////////////////////
     pub fn sign_threshold<C: ThresholdSignatureCspClient, H: Signable>(
         lockable_threshold_sig_data_store: &LockableThresholdSigDataStore,
         threshold_sig_csp_client: &C,
@@ -73,9 +72,8 @@ fn sig_data_not_found_error(dkg_id: NiDkgId) -> ThresholdSigDataNotFoundError {
     ThresholdSigDataNotFoundError::ThresholdSigDataNotFound { dkg_id }
 }
 
-////////////////////////////////////////
+// TODO(CRP-2639): Adapt ThresholdSignError so that clippy exception is no longer needed
 #[allow(clippy::result_large_err)]
-////////////////////////////////////////
 fn threshold_sig_share_or_panic<H: Signable>(
     csp_signature: CspSignature,
 ) -> Result<ThresholdSigShareOf<H>, ThresholdSignError> {

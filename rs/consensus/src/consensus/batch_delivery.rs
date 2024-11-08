@@ -328,9 +328,9 @@ pub fn generate_responses_to_setup_initial_dkg_calls(
                     transcript_results.high_threshold = value;
                 }
                 NiDkgTag::HighThresholdForKey(master_public_key_id) => {
-                    ///////////////////////////////////////////////////////////////////////////////////////////////////
+                    /////////////////////////////////////
                     // TODO(CON-1416): Generalize this function to support both SetupInitialDKG and vetKD key resharing
-                    ///////////////////////////////////////////////////////////////////////////////////////////////////
+                    /////////////////////////////////////
                     error!(
                         log,
                         "Implementation error: NiDkgTag::HighThresholdForKey({master_public_key_id}) used in SetupInitialDKG for callback ID {callback_id}",
