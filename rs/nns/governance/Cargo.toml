@@ -80,8 +80,8 @@ on_wire = { path = "../../rust_canisters/on_wire" }
 pretty_assertions = { workspace = true }
 prometheus-parse = { workspace = true }
 prost = { workspace = true }
-rust_decimal = { version = "1.25" }
-rust_decimal_macros = "1.25"
+rust_decimal = "1.36.0"
+rust_decimal_macros = "1.36.0"
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_json = { workspace = true }
