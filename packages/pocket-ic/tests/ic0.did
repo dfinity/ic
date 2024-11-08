@@ -421,7 +421,7 @@ service ic : {
     start_canister : (start_canister_args) -> ();
     stop_canister : (stop_canister_args) -> ();
     canister_status : (canister_status_args) -> (canister_status_result);
-    // canister_info : (canister_info_args) -> (canister_info_result);
+    canister_info : (canister_info_args) -> (canister_info_result);
     delete_canister : (delete_canister_args) -> ();
     deposit_cycles : (deposit_cycles_args) -> ();
     // raw_rand : () -> (raw_rand_result);

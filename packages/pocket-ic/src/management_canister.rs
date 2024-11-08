@@ -80,6 +80,78 @@ pub struct CanisterStatusResult {
     pub reserved_cycles: candid::Nat,
 }
 
+// canister info
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
+pub struct CanisterInfoArgs {
+  pub canister_id: CanisterId,
+  pub num_requested_changes: Option<u64>,
+}
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
+pub enum ChangeOrigin {
+  #[serde(rename="from_user")]
+  FromUser {
+    user_id: Principal,
+  },
+  #[serde(rename="from_canister")]
+  FromCanister {
+    canister_version: Option<u64>,
+    canister_id: Principal,
+  },
+}
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
+pub enum ChangeDetailsCodeDeploymentMode {
+  #[serde(rename="reinstall")]
+  Reinstall,
+  #[serde(rename="upgrade")]
+  Upgrade,
+  #[serde(rename="install")]
+  Install,
+}
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
+pub enum ChangeDetails {
+  #[serde(rename="creation")]
+  Creation {
+    controllers: Vec<Principal>,
+  },
+  #[serde(rename="code_deployment")]
+  CodeDeployment {
+    mode: ChangeDetailsCodeDeploymentMode,
+    module_hash: Vec<u8>,
+  },
+  #[serde(rename="load_snapshot")]
+  LoadSnapshot {
+    canister_version: u64,
+    taken_at_timestamp: u64,
+    snapshot_id: SnapshotId,
+  },
+  #[serde(rename="controllers_change")]
+  ControllersChange {
+    controllers: Vec<Principal>,
+  },
+  #[serde(rename="code_uninstall")]
+  CodeUninstall,
+}
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
+pub struct Change {
+  pub timestamp_nanos: u64,
+  pub canister_version: u64,
+  pub origin: ChangeOrigin,
+  pub details: ChangeDetails,
+}
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
+pub struct CanisterInfoResult {
+  pub controllers: Vec<Principal>,
+  pub module_hash: Option<Vec<u8>>,
+  pub recent_changes: Vec<Change>,
+  pub total_num_changes: u64,
+}
+
 // canister creation
 
 #[derive(CandidType, Deserialize, Debug, Clone)]

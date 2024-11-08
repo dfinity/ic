@@ -54,10 +54,8 @@ fn canister_status(_: CanisterIdRecord) -> CanisterStatusResult {
     unreachable!()
 }
 
-/*
 #[update]
 fn canister_info(_: CanisterInfoArgs) -> CanisterInfoResult { unreachable!() }
-*/
 
 #[update]
 fn delete_canister(_: CanisterIdRecord) {
