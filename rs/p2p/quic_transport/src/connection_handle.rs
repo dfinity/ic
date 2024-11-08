@@ -57,7 +57,7 @@ impl ConnectionHandle {
     /// is delegated solely to the transport layer. This differs from typical client-server architectures,
     /// where connections can be managed directly by the caller.
     ///
-    /// Note: This method is cancel-safe.
+    /// Note: This method provides the same cancellation safety guarantees as the `quinn::Connection` methods.
     pub async fn rpc(&self, request: Request<Bytes>) -> Result<Response<Bytes>, anyhow::Error> {
         let _timer = self
             .metrics
