@@ -1,10 +1,5 @@
-//! Quic Transport connection handle.
+//! The module implements the RPC abstraction over an established QUIC connection.
 //!
-//! Contains a wrapper, called `ConnectionHandle`, around quinn's Connection.
-//! The `ConnectionHandle` implements `rpc` and `push` methods for the given
-//! connection.
-//!
-
 use anyhow::{anyhow, Context};
 use bytes::Bytes;
 use http::{Method, Request, Response, Version};
@@ -64,6 +59,11 @@ impl ConnectionHandle {
         self.conn_id
     }
 
+    /// Performs an RPC operation on the already established connection.
+    ///
+    /// Since the QUIC transport layer continuously monitors connection health and automatically reconnects as needed,
+    /// all errors returned by this method can be safely treated as transient (retryable).
+    /// Therefore, we return an anyhow::Error for error handling.
     pub async fn rpc(&self, request: Request<Bytes>) -> Result<Response<Bytes>, anyhow::Error> {
         let _timer = self
             .metrics
