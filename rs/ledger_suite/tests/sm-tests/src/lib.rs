@@ -2490,42 +2490,44 @@ pub fn icrc1_test_upgrade_serialization_fixed_tx<T>(
         balances.insert(account, Nat::from(balance_of(&env, canister_id, *account)));
     }
 
-    let test_upgrade = |ledger_wasm: Vec<u8>, balances: BTreeMap<&Account, Nat>| {
-        env.upgrade_canister(
-            canister_id,
-            ledger_wasm,
-            Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
-        )
-        .unwrap();
+    let test_upgrade =
+        |ledger_wasm: Vec<u8>, balances: BTreeMap<&Account, Nat>, min_migration_steps: u64| {
+            env.upgrade_canister(
+                canister_id,
+                ledger_wasm,
+                Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
+            )
+            .unwrap();
 
-        wait_ledger_ready(&env, canister_id, 10);
+            wait_ledger_ready(&env, canister_id, 10);
 
-        let stable_upgrade_migration_steps =
-            parse_metric(&env, canister_id, "ledger_stable_upgrade_migration_steps");
-        assert!(stable_upgrade_migration_steps > 1);
+            let stable_upgrade_migration_steps =
+                parse_metric(&env, canister_id, "ledger_stable_upgrade_migration_steps");
+            assert!(stable_upgrade_migration_steps >= min_migration_steps);
 
-        let mut allowances = vec![];
-        for i in 0..accounts.len() {
-            for j in i + 1..accounts.len() {
-                let allowance = get_allowance(&env, canister_id, accounts[i], accounts[j]);
-                assert_eq!(allowance.allowance, Nat::from(APPROVE_AMOUNT));
-                allowances.push(allowance);
-                let allowance = get_allowance(&env, canister_id, accounts[j], accounts[i]);
-                assert_eq!(allowance.allowance, Nat::from(APPROVE_AMOUNT));
-                allowances.push(allowance);
+            let mut allowances = vec![];
+            for i in 0..accounts.len() {
+                for j in i + 1..accounts.len() {
+                    let allowance = get_allowance(&env, canister_id, accounts[i], accounts[j]);
+                    assert_eq!(allowance.allowance, Nat::from(APPROVE_AMOUNT));
+                    allowances.push(allowance);
+                    let allowance = get_allowance(&env, canister_id, accounts[j], accounts[i]);
+                    assert_eq!(allowance.allowance, Nat::from(APPROVE_AMOUNT));
+                    allowances.push(allowance);
+                }
             }
-        }
-        assert_eq!(expected_allowances, allowances);
+            assert_eq!(expected_allowances, allowances);
 
-        for account in &all_accounts {
-            assert_eq!(balance_of(&env, canister_id, *account), balances[account]);
-        }
-    };
+            for account in &all_accounts {
+                assert_eq!(balance_of(&env, canister_id, *account), balances[account]);
+            }
+        };
 
     // Test if the old serialized approvals and balances are correctly deserialized
     test_upgrade(
         ledger_wasm_current_lowinstructionlimits.clone(),
         balances.clone(),
+        2,
     );
 
     // Add some more approvals
@@ -2545,7 +2547,7 @@ pub fn icrc1_test_upgrade_serialization_fixed_tx<T>(
     }
 
     // Test the new wasm serialization
-    test_upgrade(ledger_wasm_current_lowinstructionlimits, balances);
+    test_upgrade(ledger_wasm_current_lowinstructionlimits, balances, 1);
 
     // See if the additional approvals are there
     for a1 in &accounts {
