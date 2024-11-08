@@ -136,7 +136,7 @@ async fn read_response(mut recv_stream: RecvStream) -> Result<Response<Bytes>, a
     let status: u16 = response_proto
         .status_code
         .try_into()
-        .with_context(|| "Received invalid status code.")?;
+        .with_context(|| "Failed to decode status code.")?;
 
     let mut response = Response::builder().status(status).version(Version::HTTP_3);
     for h in response_proto.headers {
