@@ -15,6 +15,8 @@ pub enum LogVisibility {
     Controllers,
     #[serde(rename = "public")]
     Public,
+    #[serde(rename = "allowed_viewers")]
+    AllowedViewers(Vec<Principal>),
 }
 
 #[derive(CandidType, Deserialize, Debug, Clone)]
@@ -26,7 +28,6 @@ pub struct DefiniteCanisterSettings {
     pub wasm_memory_limit: candid::Nat,
     pub memory_allocation: candid::Nat,
     pub compute_allocation: candid::Nat,
-    pub wasm_memory_threshold: candid::Nat,
 }
 
 #[derive(CandidType, Deserialize, Debug, Clone, Default)]
@@ -79,13 +80,7 @@ pub struct CanisterStatusResult {
     pub reserved_cycles: candid::Nat,
 }
 
-// canister creation
-
-#[derive(CandidType, Deserialize, Debug, Clone)]
-pub struct CreateCanisterArgs {
-    pub settings: Option<CanisterSettings>,
-    pub sender_canister_version: Option<u64>,
-}
+// provisional API
 
 #[derive(CandidType, Deserialize, Debug, Clone)]
 pub struct ProvisionalCreateCanisterWithCyclesArgs {
@@ -93,6 +88,12 @@ pub struct ProvisionalCreateCanisterWithCyclesArgs {
     pub specified_id: Option<CanisterId>,
     pub amount: Option<candid::Nat>,
     pub sender_canister_version: Option<u64>,
+}
+
+#[derive(CandidType, Deserialize, Debug, Clone)]
+pub struct ProvisionalTopUpCanisterArgs {
+    pub canister_id: Principal,
+    pub amount: candid::Nat,
 }
 
 // canister code installation
