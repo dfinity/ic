@@ -266,6 +266,7 @@ system_test(
 
 system_test(
     name = "request_auth_malicious_replica_test",
+    env = UNIVERSAL_CANISTER_ENV,
     flaky = True,
     malicious = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -275,7 +276,9 @@ system_test(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev = True,
     uses_guestos_dev_test = True,
-    runtime_deps = ["//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh"],
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS + [
+        "//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh",
+    ],
     deps = [
         # Keep sorted.
         "//rs/crypto/test_utils/reproducible_rng",
@@ -297,6 +300,7 @@ system_test(
 
 system_test(
     name = "safety_test",
+    env = UNIVERSAL_CANISTER_ENV,
     flaky = True,
     malicious = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -306,7 +310,9 @@ system_test(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev = True,
     uses_guestos_dev_test = True,
-    runtime_deps = ["//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh"],
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS + [
+        "//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh",
+    ],
     deps = [
         # Keep sorted.
         ":liveness_test_common",
