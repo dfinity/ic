@@ -1059,7 +1059,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 features = ["sha2"],
             ),
             "rstest": crate.spec(
-                version = "^0.22.0",
+                version = "^0.19.0",
             ),
             "rusb": crate.spec(
                 version = "0.9",
