@@ -5,14 +5,14 @@ use bytes::Bytes;
 use http::{Method, Request, Response, Version};
 use ic_protobuf::transport::v1 as pb;
 use prost::Message;
-use quinn::{Connection, RecvStream, SendStream, VarInt};
+use quinn::{RecvStream, SendStream, VarInt};
 
 use crate::{
     metrics::{
-        QuicTransportMetrics, ERROR_TYPE_FINISH, ERROR_TYPE_OPEN, ERROR_TYPE_READ,
-        ERROR_TYPE_STOPPED, ERROR_TYPE_WRITE, REQUEST_TYPE_PUSH, REQUEST_TYPE_RPC,
+        ERROR_TYPE_FINISH, ERROR_TYPE_OPEN, ERROR_TYPE_READ, ERROR_TYPE_STOPPED, ERROR_TYPE_WRITE,
+        REQUEST_TYPE_PUSH, REQUEST_TYPE_RPC,
     },
-    ConnId, MessagePriority, MAX_MESSAGE_SIZE_BYTES,
+    ConnectionHandle, MessagePriority, MAX_MESSAGE_SIZE_BYTES,
 };
 
 /// QUIC error code for stream cancellation. See
@@ -39,89 +39,88 @@ impl Drop for SendStreamDropGuard {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct ConnectionHandle {
-    pub connection: Connection,
-    pub metrics: QuicTransportMetrics,
-    pub conn_id: ConnId,
-}
+/// Executes an RPC operation over an already-established connection.
+///
+/// This method leverages the QUIC transport layer, which continuously monitors the connection’s health
+/// and automatically attempts reconnection as necessary. As a result, any errors returned by this method
+/// should be considered transient (retryable).
+///
+/// In this P2P architecture, where there is a designated dialer and receiver, connection management
+/// is delegated solely to the transport layer. This differs from typical client-server architectures,
+/// where connections can be managed directly by the caller.
+///
+/// Note: This method provides the same cancellation safety guarantees as the `quinn::Connection` methods.
+pub async fn rpc(
+    conn_handle: ConnectionHandle,
+    request: Request<Bytes>,
+) -> Result<Response<Bytes>, anyhow::Error> {
+    let _timer = conn_handle
+        .metrics
+        .connection_handle_duration_seconds
+        .with_label_values(&[request.uri().path()])
+        .start_timer();
 
-impl ConnectionHandle {
-    /// Executes an RPC operation over an already-established connection.
-    ///
-    /// This method leverages the QUIC transport layer, which continuously monitors the connection’s health
-    /// and automatically attempts reconnection as necessary. As a result, any errors returned by this method
-    /// should be considered transient (retryable).
-    ///
-    /// In this P2P architecture, where there is a designated dialer and receiver, connection management
-    /// is delegated solely to the transport layer. This differs from typical client-server architectures,
-    /// where connections can be managed directly by the caller.
-    ///
-    /// Note: This method provides the same cancellation safety guarantees as the `quinn::Connection` methods.
-    pub async fn rpc(&self, request: Request<Bytes>) -> Result<Response<Bytes>, anyhow::Error> {
-        let _timer = self
+    let bytes_sent_counter = conn_handle
+        .metrics
+        .connection_handle_bytes_sent_total
+        .with_label_values(&[request.uri().path()]);
+    let bytes_received_counter = conn_handle
+        .metrics
+        .connection_handle_bytes_received_total
+        .with_label_values(&[request.uri().path()]);
+
+    let (send_stream, recv_stream) = conn_handle.connection.open_bi().await.inspect_err(|_| {
+        conn_handle
             .metrics
-            .connection_handle_duration_seconds
-            .with_label_values(&[request.uri().path()])
-            .start_timer();
+            .connection_handle_errors_total
+            .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_OPEN]);
+    })?;
 
-        let bytes_sent_counter = self
+    let mut send_stream_guard = SendStreamDropGuard::new(send_stream);
+    let send_stream = &mut send_stream_guard.send_stream;
+
+    let priority = request
+        .extensions()
+        .get::<MessagePriority>()
+        .copied()
+        .unwrap_or_default();
+    let _ = send_stream.set_priority(priority.into());
+
+    bytes_sent_counter.inc_by(request.body().len() as u64);
+    write_request(send_stream, request).await.inspect_err(|_| {
+        conn_handle
             .metrics
-            .connection_handle_bytes_sent_total
-            .with_label_values(&[request.uri().path()]);
-        let bytes_received_counter = self
+            .connection_handle_errors_total
+            .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_WRITE])
+            .inc();
+    })?;
+
+    send_stream.finish().inspect_err(|_| {
+        conn_handle
             .metrics
-            .connection_handle_bytes_received_total
-            .with_label_values(&[request.uri().path()]);
+            .connection_handle_errors_total
+            .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_FINISH])
+            .inc();
+    })?;
 
-        let (send_stream, recv_stream) = self.connection.open_bi().await.inspect_err(|_| {
-            self.metrics
-                .connection_handle_errors_total
-                .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_OPEN]);
-        })?;
+    send_stream.stopped().await.inspect_err(|_| {
+        conn_handle
+            .metrics
+            .connection_handle_errors_total
+            .with_label_values(&[REQUEST_TYPE_PUSH, ERROR_TYPE_STOPPED])
+            .inc();
+    })?;
 
-        let mut send_stream_guard = SendStreamDropGuard::new(send_stream);
-        let send_stream = &mut send_stream_guard.send_stream;
+    let response = read_response(recv_stream).await.inspect_err(|_| {
+        conn_handle
+            .metrics
+            .connection_handle_errors_total
+            .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_READ])
+            .inc();
+    })?;
 
-        let priority = request
-            .extensions()
-            .get::<MessagePriority>()
-            .copied()
-            .unwrap_or_default();
-        let _ = send_stream.set_priority(priority.into());
-
-        bytes_sent_counter.inc_by(request.body().len() as u64);
-        write_request(send_stream, request).await.inspect_err(|_| {
-            self.metrics
-                .connection_handle_errors_total
-                .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_WRITE])
-                .inc();
-        })?;
-
-        send_stream.finish().inspect_err(|_| {
-            self.metrics
-                .connection_handle_errors_total
-                .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_FINISH])
-                .inc();
-        })?;
-
-        send_stream.stopped().await.inspect_err(|_| {
-            self.metrics
-                .connection_handle_errors_total
-                .with_label_values(&[REQUEST_TYPE_PUSH, ERROR_TYPE_STOPPED])
-                .inc();
-        })?;
-
-        let response = read_response(recv_stream).await.inspect_err(|_| {
-            self.metrics
-                .connection_handle_errors_total
-                .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_READ])
-                .inc();
-        })?;
-
-        bytes_received_counter.inc_by(response.body().len() as u64);
-        Ok(response)
-    }
+    bytes_received_counter.inc_by(response.body().len() as u64);
+    Ok(response)
 }
 
 async fn read_response(mut recv_stream: RecvStream) -> Result<Response<Bytes>, anyhow::Error> {
@@ -190,7 +189,6 @@ async fn write_request(
         .with_context(|| "Failed to write request to stream.")
 }
 
-// tests
 #[cfg(test)]
 mod tests {
     use assert_matches::assert_matches;
@@ -210,7 +208,7 @@ mod tests {
     use tokio::sync::Barrier;
     use turmoil::Builder;
 
-    use crate::connection_handle::SendStreamDropGuard;
+    use super::SendStreamDropGuard;
 
     const MAX_READ_SIZE: usize = 10_000;
 

@@ -25,12 +25,11 @@ use tower::ServiceExt;
 use tracing::instrument;
 
 use crate::{
-    connection_handle::ConnectionHandle,
     metrics::{
         QuicTransportMetrics, ERROR_TYPE_ACCEPT, ERROR_TYPE_APP, ERROR_TYPE_FINISH,
         ERROR_TYPE_READ, ERROR_TYPE_STOPPED, ERROR_TYPE_WRITE, STREAM_TYPE_BIDI,
     },
-    ConnId, MAX_MESSAGE_SIZE_BYTES,
+    ConnId, ConnectionHandle, MAX_MESSAGE_SIZE_BYTES,
 };
 
 const QUIC_METRIC_SCRAPE_INTERVAL: Duration = Duration::from_secs(5);
