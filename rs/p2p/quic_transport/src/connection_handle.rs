@@ -42,39 +42,33 @@ impl Drop for SendStreamDropGuard {
 #[derive(Clone, Debug)]
 pub struct ConnectionHandle {
     pub connection: Connection,
-    metrics: QuicTransportMetrics,
-    conn_id: ConnId,
+    pub metrics: QuicTransportMetrics,
+    pub conn_id: ConnId,
 }
 
 impl ConnectionHandle {
-    pub fn new(connection: Connection, metrics: QuicTransportMetrics, conn_id: ConnId) -> Self {
-        Self {
-            connection,
-            metrics,
-            conn_id,
-        }
-    }
-
-    pub fn conn_id(&self) -> ConnId {
-        self.conn_id
-    }
-
     /// Performs an RPC operation on the already established connection.
     ///
     /// Since the QUIC transport layer continuously monitors connection health and automatically reconnects as needed,
     /// all errors returned by this method can be safely treated as transient (retryable).
     /// Therefore, we return an anyhow::Error for error handling.
+    ///
+    /// In a P2P architecture where we have a designated dialer and receiver, connections should be solely managed by the transport layer.
+    /// This is in contrast to most client-server architectures where connections can be managed by the caller.
+    ///
+    /// The method is cancel safe.
     pub async fn rpc(&self, request: Request<Bytes>) -> Result<Response<Bytes>, anyhow::Error> {
         let _timer = self
             .metrics
             .connection_handle_duration_seconds
             .with_label_values(&[request.uri().path()])
             .start_timer();
-        self.metrics
+
+        let bytes_sent_counter = self
+            .metrics
             .connection_handle_bytes_sent_total
-            .with_label_values(&[request.uri().path()])
-            .inc_by(request.body().len() as u64);
-        let in_counter = self
+            .with_label_values(&[request.uri().path()]);
+        let bytes_received_counter = self
             .metrics
             .connection_handle_bytes_received_total
             .with_label_values(&[request.uri().path()]);
@@ -95,6 +89,7 @@ impl ConnectionHandle {
             .unwrap_or_default();
         let _ = send_stream.set_priority(priority.into());
 
+        bytes_sent_counter.inc_by(request.body().len() as u64);
         write_request(send_stream, request).await.inspect_err(|_| {
             self.metrics
                 .connection_handle_errors_total
@@ -123,7 +118,7 @@ impl ConnectionHandle {
                 .inc();
         })?;
 
-        in_counter.inc_by(response.body().len() as u64);
+        bytes_received_counter.inc_by(response.body().len() as u64);
         Ok(response)
     }
 }

@@ -13,21 +13,19 @@
 use std::time::Duration;
 
 use anyhow::{anyhow, Context};
-use axum::{
-    body::Body,
-    http::{Method, Request, Response, Version},
-    Router,
-};
+use axum::{body::Body, Router};
 use bytes::Bytes;
+use http::{Method, Request, Response, Version};
 use ic_base_types::NodeId;
 use ic_logger::{info, ReplicaLogger};
 use ic_protobuf::transport::v1 as pb;
 use prost::Message;
-use quinn::{Connection, RecvStream, SendStream};
+use quinn::{RecvStream, SendStream};
 use tower::ServiceExt;
 use tracing::instrument;
 
 use crate::{
+    connection_handle::ConnectionHandle,
     metrics::{
         QuicTransportMetrics, ERROR_TYPE_ACCEPT, ERROR_TYPE_APP, ERROR_TYPE_FINISH,
         ERROR_TYPE_READ, ERROR_TYPE_STOPPED, ERROR_TYPE_WRITE, STREAM_TYPE_BIDI,
@@ -37,12 +35,10 @@ use crate::{
 
 const QUIC_METRIC_SCRAPE_INTERVAL: Duration = Duration::from_secs(5);
 
-pub(crate) async fn run_stream_acceptor(
+pub async fn run_stream_acceptor(
     log: ReplicaLogger,
     peer_id: NodeId,
-    conn_id: ConnId,
-    connection: Connection,
-    metrics: QuicTransportMetrics,
+    conn_handle: ConnectionHandle,
     router: Router,
 ) {
     let mut inflight_requests = tokio::task::JoinSet::new();
@@ -55,18 +51,18 @@ pub(crate) async fn run_stream_acceptor(
     loop {
         tokio::select! {
              _ = quic_metrics_scrape.tick() => {
-                metrics.collect_quic_connection_stats(&connection, &peer_id);
+                conn_handle.metrics.collect_quic_connection_stats(&conn_handle.connection, &peer_id);
             }
-            bi = connection.accept_bi() => {
+            bi = conn_handle.connection.accept_bi() => {
                 match bi {
                     Ok((bi_tx, bi_rx)) => {
                         inflight_requests.spawn(
-                            metrics.request_task_monitor.instrument(
+                            conn_handle.metrics.request_task_monitor.instrument(
                                 handle_bi_stream(
                                     log.clone(),
                                     peer_id,
-                                    conn_id,
-                                    metrics.clone(),
+                                    conn_handle.conn_id,
+                                    conn_handle.metrics.clone(),
                                     router.clone(),
                                     bi_tx,
                                     bi_rx
@@ -76,7 +72,7 @@ pub(crate) async fn run_stream_acceptor(
                     }
                     Err(e) => {
                         info!(log, "Error accepting bi stream {}", e.to_string());
-                        metrics
+                        conn_handle.metrics
                             .request_handle_errors_total
                             .with_label_values(&[
                                 STREAM_TYPE_BIDI,
@@ -87,8 +83,8 @@ pub(crate) async fn run_stream_acceptor(
                     }
                 }
             },
-            _ = connection.accept_uni() => {},
-            _ = connection.read_datagram() => {},
+            _ = conn_handle.connection.accept_uni() => {},
+            _ = conn_handle.connection.read_datagram() => {},
             Some(completed_request) = inflight_requests.join_next() => {
                 if let Err(err) = completed_request {
                     // Cancelling tasks is ok. Panicking tasks are not.

@@ -523,8 +523,11 @@ impl ConnectionManager {
                 self.conn_id_counter.inc_assign();
                 let conn_id = self.conn_id_counter;
 
-                let connection_handle =
-                    ConnectionHandle::new(connection, self.metrics.clone(), conn_id);
+                let connection_handle = ConnectionHandle {
+                    connection,
+                    metrics: self.metrics.clone(),
+                    conn_id,
+                };
                 let req_handler_connection_handle = connection_handle.clone();
 
                 // dropping the old connection will result in closing it
@@ -549,9 +552,7 @@ impl ConnectionManager {
                     run_stream_acceptor(
                         self.log.clone(),
                         peer_id,
-                        req_handler_connection_handle.conn_id(),
-                        req_handler_connection_handle.connection,
-                        self.metrics.clone(),
+                        req_handler_connection_handle,
                         self.router.clone(),
                     ),
                     &self.rt,
