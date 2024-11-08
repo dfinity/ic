@@ -7,6 +7,7 @@ use crate::eth_rpc_client::{EthRpcClient, MultiCallError};
 use crate::guard::TimerGuard;
 use crate::logs::{DEBUG, INFO};
 use crate::numeric::{BlockNumber, BlockRangeInclusive, LedgerMintIndex};
+use crate::state::eth_logs_scraping::LogScrapingId;
 use crate::state::{
     audit::process_event, event::EventType, mutate_state, read_state, State, TaskType,
 };
@@ -65,7 +66,7 @@ async fn mint() {
         let block_index = match client
             .transfer(TransferArg {
                 from_subaccount: None,
-                to: (event.principal()).into(),
+                to: event.beneficiary(),
                 fee: None,
                 created_at_time: None,
                 memo: Some((&event).into()),
@@ -114,7 +115,7 @@ async fn mint() {
             INFO,
             "Minted {} {token_symbol} to {} in block {block_index}",
             event.value(),
-            event.principal()
+            event.beneficiary()
         );
         // minting succeeded, defuse guard
         ScopeGuard::into_inner(prevent_double_minting_guard);
@@ -181,7 +182,7 @@ where
             log!(
                 DEBUG,
                 "[scrape_contract_logs]: skipping scraping {} logs: not active",
-                S::display_id()
+                S::ID
             );
             return;
         }
@@ -196,7 +197,7 @@ where
     log!(
         DEBUG,
         "[scrape_contract_logs]: Scraping {} logs in block range {block_range}",
-        S::display_id()
+        S::ID
     );
     let rpc_client = read_state(EthRpcClient::from_state);
     for block_range in block_range.into_chunks(max_block_spread) {
@@ -213,7 +214,7 @@ where
                 log!(
                     INFO,
                     "[scrape_contract_logs]: Failed to scrape {} logs in range {block_range}: {e:?}",
-                    S::display_id()
+                    S::ID
                 );
                 return;
             }
@@ -251,15 +252,11 @@ where
 
         match result {
             Ok((events, errors)) => {
-                register_deposit_events(S::display_id(), events, errors);
+                register_deposit_events(S::ID, events, errors);
                 mutate_state(|s| S::update_last_scraped_block_number(s, to_block));
             }
             Err(e) => {
-                log!(
-                    INFO,
-                    "Failed to get {} logs in range {range}: {e:?}",
-                    S::display_id()
-                );
+                log!(INFO, "Failed to get {} logs in range {range}: {e:?}", S::ID);
                 if e.has_http_outcall_error_matching(HttpOutcallError::is_response_too_large) {
                     if from_block == to_block {
                         mutate_state(|s| {
@@ -290,11 +287,7 @@ where
                         );
                     }
                 } else {
-                    log!(
-                        INFO,
-                        "Failed to get {} logs in range {range}: {e:?}",
-                        S::display_id()
-                    );
+                    log!(INFO, "Failed to get {} logs in range {range}: {e:?}", S::ID);
                     return Err(e);
                 }
             }
@@ -304,21 +297,21 @@ where
 }
 
 pub fn register_deposit_events(
-    scraping_display_name: &str,
+    scraping_id: LogScrapingId,
     transaction_events: Vec<ReceivedEvent>,
     errors: Vec<ReceivedEventError>,
 ) {
     for event in transaction_events {
         log!(
             INFO,
-            "Received event {event:?}; will mint {} {scraping_display_name} to {}",
+            "Received event {event:?}; will mint {} {scraping_id} to {}",
             event.value(),
-            event.principal()
+            event.beneficiary()
         );
         if crate::blocklist::is_blocked(&event.from_address()) {
             log!(
                 INFO,
-                "Received event from a blocked address: {} for {} {scraping_display_name}",
+                "Received event from a blocked address: {} for {} {scraping_id}",
                 event.from_address(),
                 event.value(),
             );

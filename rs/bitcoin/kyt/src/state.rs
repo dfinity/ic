@@ -1,6 +1,6 @@
 use crate::{
     providers::{parse_authorization_header_from_url, Provider},
-    types::{BtcNetwork, KytMode},
+    BtcNetwork, KytMode,
 };
 use bitcoin::{Address, Transaction};
 use ic_btc_interface::Txid;
@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, VecDeque};
+use std::fmt;
 
 #[cfg(test)]
 mod tests;
@@ -28,6 +29,22 @@ pub enum HttpGetTxError {
         code: RejectionCode,
         message: String,
     },
+}
+
+impl fmt::Display for HttpGetTxError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use HttpGetTxError::*;
+        match self {
+            TxEncoding(s) => write!(f, "TxEncoding: {}", s),
+            TxidMismatch { expected, decoded } => write!(
+                f,
+                "TxidMismatch: expected {} but decoded {}",
+                expected, decoded
+            ),
+            ResponseTooLarge => write!(f, "ResponseTooLarge"),
+            Rejected { code, message } => write!(f, "Rejected: code {:?}, {}", code, message),
+        }
+    }
 }
 
 /// We store in state the `FetchStatus` for every `Txid` we fetch.

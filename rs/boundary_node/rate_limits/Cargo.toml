@@ -26,6 +26,9 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 uuid = { workspace = true, features = ['serde', 'v4'] }
 
+[dev-dependencies]
+rate-limit-canister-integration-tests = { path = "./integration_tests" }
+
 [lib]
 crate-type = ["cdylib"]
 path = "canister/lib.rs"

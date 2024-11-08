@@ -12,7 +12,7 @@ use crate::storage::API_BOUNDARY_NODE_PRINCIPALS;
 use candid::Principal;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::call::call;
-use ic_cdk_macros::{init, query, update};
+use ic_cdk_macros::{init, post_upgrade, query, update};
 use rate_limits_api::{
     AddConfigResponse, ApiBoundaryNodeIdRecord, DiscloseRulesArg, DiscloseRulesResponse,
     GetApiBoundaryNodeIdsRequest, GetConfigResponse, GetRuleByIdResponse, InitArg, InputConfig,
@@ -22,7 +22,6 @@ use rate_limits_api::{
 const REGISTRY_CANISTER_ID: &str = "rwlgt-iiaaa-aaaaa-aaaaa-cai";
 const REGISTRY_CANISTER_METHOD: &str = "get_api_boundary_node_ids";
 
-// TODO: implement proper canister lifecycle: upgrade, post_upgrade, ...
 #[init]
 fn init(init_arg: InitArg) {
     ic_cdk::println!("Starting canister init");
@@ -32,11 +31,26 @@ fn init(init_arg: InitArg) {
             state.set_authorized_principal(principal);
         });
     }
-    // Initialize an empty config corresponding to version=1
-    init_version_and_config(1);
+    with_canister_state(|state| {
+        if state.get_version().is_none() {
+            ic_cdk::println!("Initializing rate-limit config");
+            let current_time = ic_cdk::api::time();
+            init_version_and_config(current_time, state);
+        } else {
+            ic_cdk::println!("Rate-limit config is already initialized");
+        }
+    });
     // Spawn periodic job of fetching latest API boundary node topology
     // API boundary nodes are authorized readers of all config rules (including not yet disclosed ones)
     periodically_poll_api_boundary_nodes(init_arg.registry_polling_period_secs);
+    ic_cdk::println!("Finished canister init");
+}
+
+#[post_upgrade]
+fn post_upgrade(init_arg: InitArg) {
+    ic_cdk::println!("Starting canister post-upgrade");
+    init(init_arg);
+    ic_cdk::println!("Finished canister post-upgrade");
 }
 
 #[query]

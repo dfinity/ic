@@ -1,7 +1,3 @@
-use crate::{
-    storage::StorableIncidentMetadata,
-    types::{self, IncidentId, InputConfigError, Timestamp},
-};
 use anyhow::Context;
 use getrandom::getrandom;
 use std::collections::{HashMap, HashSet};
@@ -11,11 +7,14 @@ use uuid::Uuid;
 use crate::{
     access_control::{AccessLevel, ResolveAccessLevel},
     state::CanisterApi,
-    storage::{StorableConfig, StorableRuleMetadata},
-    types::{InputConfig, RuleId, Version},
+    storage::{StorableConfig, StorableIncidentMetadata, StorableRuleMetadata},
+    types::{
+        self, IncidentId, InputConfig, InputConfigError, RuleId, SchemaVersion, Timestamp, Version,
+    },
 };
 
 pub const INIT_VERSION: Version = 1;
+pub const INIT_SCHEMA_VERSION: SchemaVersion = 1;
 
 pub trait AddsConfig {
     fn add_config(

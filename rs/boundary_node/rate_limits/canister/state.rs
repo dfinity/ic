@@ -1,15 +1,14 @@
 use candid::Principal;
-use ic_cdk::api::time;
 use mockall::automock;
 
 use crate::{
-    add_config::INIT_VERSION,
+    add_config::{INIT_SCHEMA_VERSION, INIT_VERSION},
     storage::{
         LocalRef, StableMap, StorableConfig, StorableIncidentId, StorableIncidentMetadata,
         StorablePrincipal, StorableRuleId, StorableRuleMetadata, StorableVersion,
         AUTHORIZED_PRINCIPAL, CONFIGS, INCIDENTS, RULES,
     },
-    types::{IncidentId, InputConfig, InputRule, RuleId, Version},
+    types::{IncidentId, InputConfig, InputRule, RuleId, Timestamp, Version},
 };
 
 #[automock]
@@ -131,18 +130,17 @@ impl CanisterApi for CanisterState {
     }
 }
 
-pub fn init_version_and_config(version: Version) {
-    with_canister_state(|state| {
-        let config = StorableConfig {
-            schema_version: 1,
-            active_since: time(),
-            rule_ids: vec![],
-        };
-        assert!(
-            state.upsert_config(INIT_VERSION, config).is_none(),
-            "Config for version={version} already exists, failed to add"
-        );
-    })
+pub fn init_version_and_config(time: Timestamp, canister_api: impl CanisterApi) {
+    // Initialize config with an empty vector of rules
+    let config = StorableConfig {
+        schema_version: INIT_SCHEMA_VERSION,
+        active_since: time,
+        rule_ids: vec![],
+    };
+    assert!(
+        canister_api.upsert_config(INIT_VERSION, config).is_none(),
+        "Config for version={INIT_VERSION} already exists!"
+    );
 }
 
 pub fn with_canister_state<R>(f: impl FnOnce(CanisterState) -> R) -> R {

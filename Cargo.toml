@@ -27,6 +27,8 @@ members = [
     "rs/bitcoin/replica_types",
     "rs/bitcoin/validation",
     "rs/boundary_node/canary_proxy",
+    "rs/boundary_node/anonymization/backend",
+    "rs/boundary_node/anonymization/client",
     "rs/boundary_node/certificate_issuance/certificate_issuer",
     "rs/boundary_node/certificate_issuance/certificate_orchestrator",
     "rs/boundary_node/discower_bowndary",
@@ -689,7 +691,6 @@ strum = { version = "0.26.3", features = ["derive"] }
 strum_macros = "0.26.4"
 subtle = "2.6.1"
 syn = { version = "1.0.109", features = ["fold", "full"] }
-sync_wrapper = "1.0.1"
 tar = "0.4.39"
 tempfile = "3.12.0"
 thiserror = "1.0.62"

@@ -591,21 +591,22 @@ impl PocketIngressPool {
     }
 }
 
+pub trait Subnets: Send + Sync {
+    fn insert(&self, state_machine: Arc<StateMachine>);
+    fn get(&self, subnet_id: SubnetId) -> Option<Arc<StateMachine>>;
+}
+
 /// Struct mocking the pool of XNet messages required for
 /// instantiating `XNetPayloadBuilderImpl` in `StateMachine`.
 struct PocketXNetSlicePoolImpl {
-    /// Association of subnet IDs to their corresponding `StateMachine`s
-    /// from which the XNet messages are fetched.
-    subnets: Arc<RwLock<BTreeMap<SubnetId, Arc<StateMachine>>>>,
+    /// Pool of `StateMachine`s from which the XNet messages are fetched.
+    subnets: Arc<dyn Subnets>,
     /// Subnet ID of the `StateMachine` containing the pool.
     own_subnet_id: SubnetId,
 }
 
 impl PocketXNetSlicePoolImpl {
-    fn new(
-        subnets: Arc<RwLock<BTreeMap<SubnetId, Arc<StateMachine>>>>,
-        own_subnet_id: SubnetId,
-    ) -> Self {
+    fn new(subnets: Arc<dyn Subnets>, own_subnet_id: SubnetId) -> Self {
         Self {
             subnets,
             own_subnet_id,
@@ -623,8 +624,7 @@ impl XNetSlicePool for PocketXNetSlicePoolImpl {
         msg_limit: Option<usize>,
         byte_limit: Option<usize>,
     ) -> Result<Option<(CertifiedStreamSlice, usize)>, CertifiedSliceError> {
-        let subnets = self.subnets.read().unwrap();
-        let sm = subnets.get(&subnet_id).unwrap();
+        let sm = self.subnets.get(subnet_id).unwrap();
         let msg_begin = begin.map(|idx| idx.message_index);
         // We set `witness_begin` equal to `msg_begin` since all states are certified.
         let certified_stream = sm.generate_certified_stream_slice(
@@ -827,20 +827,21 @@ pub struct StateMachine {
     pub metrics_registry: MetricsRegistry,
     ingress_history_reader: Box<dyn IngressHistoryReader>,
     pub query_handler: Arc<Mutex<QueryExecutionService>>,
-    runtime: Arc<Runtime>,
+    pub runtime: Arc<Runtime>,
     // The atomicity is required for internal mutability and sending across threads.
     checkpoint_interval_length: AtomicU64,
     nonce: AtomicU64,
-    // the time used to derive the time of the next round:
+    // the time used to derive the time of the next round that is:
     //  - equal to `time` + 1ns if `time` = `time_of_last_round`;
     //  - equal to `time`       otherwise.
     time: AtomicU64,
     // the time of the last round
     // (equal to `time` when this `StateMachine` is initialized)
-    time_of_last_round: RwLock<SystemTime>,
+    time_of_last_round: RwLock<Time>,
     idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     idkg_subnet_secret_keys: BTreeMap<MasterPublicKeyId, SignatureSecretKey>,
     pub replica_logger: ReplicaLogger,
+    pub log_level: Option<Level>,
     pub nodes: Vec<StateMachineNode>,
     pub batch_summary: Option<BatchSummary>,
     time_source: Arc<FastForwardTimeSource>,
@@ -1209,19 +1210,15 @@ impl StateMachineBuilder {
 
     /// Build a `StateMachine` and register it for multi-subnet testing
     /// in the provided association of subnet IDs and `StateMachine`s.
-    pub fn build_with_subnets(
-        self,
-        subnets: Arc<RwLock<BTreeMap<SubnetId, Arc<StateMachine>>>>,
-    ) -> Arc<StateMachine> {
+    pub fn build_with_subnets(self, subnets: Arc<dyn Subnets>) -> Arc<StateMachine> {
         let bitcoin_testnet_uds_path = self.bitcoin_testnet_uds_path.clone();
 
         // Build a `StateMachine` for the subnet with `self.subnet_id`.
         let sm = Arc::new(self.build_internal());
         let subnet_id = sm.get_subnet_id();
 
-        // Register this new `StateMachine` in the *shared* association
-        // of subnet IDs and their corresponding `StateMachine`s.
-        subnets.write().unwrap().insert(subnet_id, sm.clone());
+        // Register this new `StateMachine` in the *shared* pool of `StateMachine`s.
+        subnets.insert(sm.clone());
 
         // Create a dummny refill task handle to be used in `XNetPayloadBuilderImpl`.
         // It is fine that we do not pop any messages from the (bounded) channel
@@ -1296,7 +1293,8 @@ impl Default for StateMachineBuilder {
 }
 
 impl StateMachine {
-    /// Provides the time increment for a single round of execution.
+    /// Provides the implicit time increment for a single round of execution
+    /// if time does not advance between consecutive rounds.
     pub const EXECUTE_ROUND_TIME_INCREMENT: Duration = Duration::from_nanos(1);
 
     // TODO: cleanup, replace external calls with `StateMachineBuilder`.
@@ -1818,10 +1816,11 @@ impl StateMachine {
             checkpoint_interval_length: checkpoint_interval_length.into(),
             nonce: AtomicU64::new(nonce),
             time: AtomicU64::new(time.as_nanos_since_unix_epoch()),
-            time_of_last_round: RwLock::new(time.into()),
+            time_of_last_round: RwLock::new(time),
             idkg_subnet_public_keys,
             idkg_subnet_secret_keys,
             replica_logger: replica_logger.clone(),
+            log_level,
             nodes,
             batch_summary: None,
             time_source,
@@ -2298,6 +2297,13 @@ impl StateMachine {
         let requires_full_state_hash =
             batch_number.get() % checkpoint_interval_length_plus_one == 0;
 
+        let current_time = self.get_time();
+        let time_of_next_round = if current_time == *self.time_of_last_round.read().unwrap() {
+            current_time + Self::EXECUTE_ROUND_TIME_INCREMENT
+        } else {
+            current_time
+        };
+
         let batch = Batch {
             batch_number,
             batch_summary,
@@ -2315,7 +2321,7 @@ impl StateMachine {
             idkg_subnet_public_keys: self.idkg_subnet_public_keys.clone(),
             idkg_pre_signature_ids: BTreeMap::new(),
             registry_version: self.registry_client.get_latest_version(),
-            time: self.get_time_of_next_round(),
+            time: time_of_next_round,
             consensus_responses: payload.consensus_responses,
             blockmaker_metrics: BlockmakerMetrics::new_for_test(),
             replica_version: ReplicaVersion::default(),
@@ -2336,8 +2342,7 @@ impl StateMachine {
 
         self.check_critical_errors();
 
-        let time_of_next_round = self.time_of_next_round();
-        self.set_time(time_of_next_round);
+        self.set_time(time_of_next_round.into());
         *self.time_of_last_round.write().unwrap() = time_of_next_round;
 
         batch_number
@@ -2425,36 +2430,18 @@ impl StateMachine {
     }
 
     /// Returns the current state machine time.
+    /// The time of a round executed by this state machine equals its current time
+    /// if its current time increased since the last round.
+    /// Otherwise, the current time is implicitly increased by `StateMachine::EXECUTE_ROUND_TIME_INCREMENT` (1ns)
+    /// before executing the next round.
     pub fn time(&self) -> SystemTime {
         SystemTime::UNIX_EPOCH + Duration::from_nanos(self.time.load(Ordering::Relaxed))
-    }
-
-    /// Returns the state machine time at the beginning of next round
-    /// under the assumption that time won't be advanced before that
-    /// round is finalized.
-    pub fn time_of_next_round(&self) -> SystemTime {
-        let time = self.time();
-        if time == *self.time_of_last_round.read().unwrap() {
-            time + Self::EXECUTE_ROUND_TIME_INCREMENT
-        } else {
-            time
-        }
     }
 
     /// Returns the current state machine time.
     pub fn get_time(&self) -> Time {
         Time::from_nanos_since_unix_epoch(
             self.time()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos() as u64,
-        )
-    }
-
-    /// Returns the state machine time at the beginning of next round.
-    pub fn get_time_of_next_round(&self) -> Time {
-        Time::from_nanos_since_unix_epoch(
-            self.time_of_next_round()
                 .duration_since(SystemTime::UNIX_EPOCH)
                 .unwrap()
                 .as_nanos() as u64,
@@ -3785,7 +3772,6 @@ impl PayloadBuilder {
         .unwrap();
 
         self.ingress_messages.push(msg);
-        self.expiry_time += StateMachine::EXECUTE_ROUND_TIME_INCREMENT;
         self.nonce = self.nonce.map(|n| n + 1);
         self
     }
