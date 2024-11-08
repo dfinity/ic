@@ -1,6 +1,7 @@
 mod execution_tests {
     use std::path::PathBuf;
 
+    use ic_cycles_account_manager::WasmExecutionMode;
     use ic_error_types::ErrorCode;
     use ic_replicated_state::{
         canister_state::execution_state::{WasmBinary, WasmMetadata},
@@ -260,9 +261,11 @@ mod execution_tests {
         assert_eq!(
             test.canister_state(canister_id2).system_state.balance(),
             initial_balance
-                - test
-                    .cycles_account_manager()
-                    .execution_cost(wat_compilation_cost(WAT_EMPTY), test.subnet_size())
+                - test.cycles_account_manager().execution_cost(
+                    wat_compilation_cost(WAT_EMPTY),
+                    test.subnet_size(),
+                    WasmExecutionMode::Wasm32 // Does not matter if it is Wasm64 or Wasm32 for this test.
+                )
         );
     }
 

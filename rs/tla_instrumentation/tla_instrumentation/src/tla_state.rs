@@ -1,18 +1,22 @@
 use crate::tla_value::{TlaValue, ToTla};
+use crate::SourceLocation;
 use candid::CandidType;
-use serde::Deserialize;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt,
     fmt::{Display, Formatter},
 };
 
-#[derive(Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord, CandidType, Deserialize)]
+#[derive(Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord, CandidType)]
 pub struct VarAssignment(pub BTreeMap<String, TlaValue>);
 
 impl VarAssignment {
     pub fn new() -> Self {
         Self(BTreeMap::new())
+    }
+
+    pub fn size(&self) -> u64 {
+        self.0.len() as u64 + self.0.values().map(|x| x.size()).sum::<u64>()
     }
 
     pub fn update(&mut self, locals: Vec<(String, TlaValue)>) {
@@ -62,6 +66,10 @@ pub struct GlobalState(pub VarAssignment);
 impl GlobalState {
     pub fn new() -> Self {
         Self(VarAssignment::new())
+    }
+
+    pub fn size(&self) -> u64 {
+        self.0.size()
     }
 
     pub fn merge(&self, other: GlobalState) -> GlobalState {
@@ -144,6 +152,7 @@ pub struct StartState {
     pub global: GlobalState,
     pub local: LocalState,
     pub responses: Vec<ResponseBuffer>,
+    pub source_location: SourceLocation,
 }
 
 #[derive(Debug)]
@@ -151,6 +160,7 @@ pub struct EndState {
     pub global: GlobalState,
     pub local: LocalState,
     pub requests: Vec<RequestBuffer>,
+    pub source_location: SourceLocation,
 }
 
 #[derive(Debug)]
@@ -164,6 +174,8 @@ pub struct StatePair {
 pub struct ResolvedStatePair {
     pub start: GlobalState,
     pub end: GlobalState,
+    pub start_source_location: SourceLocation,
+    pub end_source_location: SourceLocation,
 }
 
 fn resolve_local_variable(name: &str, value: &TlaValue, process_id: &str) -> VarAssignment {
@@ -272,6 +284,8 @@ impl ResolvedStatePair {
                     .merge(resolved_requests)
                     .merge(end_pc),
             ),
+            start_source_location: unresolved.start.source_location,
+            end_source_location: unresolved.end.source_location,
         }
     }
 }

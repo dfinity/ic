@@ -24,6 +24,7 @@ use ic_cketh_minter::logs::INFO;
 use ic_cketh_minter::memo::BurnMemo;
 use ic_cketh_minter::numeric::{Erc20Value, LedgerBurnIndex, Wei};
 use ic_cketh_minter::state::audit::{process_event, Event, EventType};
+use ic_cketh_minter::state::eth_logs_scraping::LogScrapingId;
 use ic_cketh_minter::state::transactions::{
     Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed, ReimbursementIndex,
     ReimbursementRequest,
@@ -104,12 +105,21 @@ fn init(arg: MinterArg) {
 
 fn emit_preupgrade_events() {
     read_state(|s| {
-        storage::record_event(EventType::SyncedToBlock {
-            block_number: s.last_scraped_block_number,
-        });
-        storage::record_event(EventType::SyncedErc20ToBlock {
-            block_number: s.last_erc20_scraped_block_number,
-        });
+        for (id, scraping_state) in s.log_scrapings.iter() {
+            let block_number = scraping_state.last_scraped_block_number();
+            let event = match id {
+                LogScrapingId::EthDepositWithoutSubaccount => {
+                    EventType::SyncedToBlock { block_number }
+                }
+                LogScrapingId::Erc20DepositWithoutSubaccount => {
+                    EventType::SyncedErc20ToBlock { block_number }
+                }
+                LogScrapingId::EthOrErc20DepositWithSubaccount => {
+                    EventType::SyncedDepositWithSubaccountToBlock { block_number }
+                }
+            };
+            storage::record_event(event);
+        }
     });
 }
 
@@ -138,9 +148,13 @@ async fn minter_address() -> String {
 
 #[query]
 async fn smart_contract_address() -> String {
-    read_state(|s| s.eth_helper_contract_address)
-        .map(|a| a.to_string())
-        .unwrap_or("N/A".to_string())
+    read_state(|s| {
+        s.log_scrapings
+            .contract_address(LogScrapingId::EthDepositWithoutSubaccount)
+            .cloned()
+    })
+    .map(|a| a.to_string())
+    .unwrap_or("N/A".to_string())
 }
 
 /// Estimate price of EIP-1559 transaction based on the
@@ -205,11 +219,18 @@ async fn get_minter_info() -> MinterInfo {
             (None, None)
         };
 
+        let eth_helper_contract_address = s
+            .log_scrapings
+            .contract_address(LogScrapingId::EthDepositWithoutSubaccount)
+            .map(|a| a.to_string());
         MinterInfo {
             minter_address: s.minter_address().map(|a| a.to_string()),
-            smart_contract_address: s.eth_helper_contract_address.map(|a| a.to_string()),
-            eth_helper_contract_address: s.eth_helper_contract_address.map(|a| a.to_string()),
-            erc20_helper_contract_address: s.erc20_helper_contract_address.map(|a| a.to_string()),
+            smart_contract_address: eth_helper_contract_address.clone(),
+            eth_helper_contract_address,
+            erc20_helper_contract_address: s
+                .log_scrapings
+                .contract_address(LogScrapingId::Erc20DepositWithoutSubaccount)
+                .map(|a| a.to_string()),
             supported_ckerc20_tokens,
             minimum_withdrawal_amount: Some(s.cketh_minimum_withdrawal_amount.into()),
             ethereum_block_height: Some(s.ethereum_block_height.into()),
@@ -223,8 +244,21 @@ async fn get_minter_info() -> MinterInfo {
                 },
             ),
             erc20_balances,
-            last_eth_scraped_block_number: Some(s.last_scraped_block_number.into()),
-            last_erc20_scraped_block_number: Some(s.last_erc20_scraped_block_number.into()),
+            last_eth_scraped_block_number: Some(
+                s.log_scrapings
+                    .last_scraped_block_number(LogScrapingId::EthDepositWithoutSubaccount)
+                    .into(),
+            ),
+            last_erc20_scraped_block_number: Some(
+                s.log_scrapings
+                    .last_scraped_block_number(LogScrapingId::Erc20DepositWithoutSubaccount)
+                    .into(),
+            ),
+            last_deposit_with_subaccount_scraped_block_number: Some(
+                s.log_scrapings
+                    .last_scraped_block_number(LogScrapingId::EthOrErc20DepositWithSubaccount)
+                    .into(),
+            ),
             cketh_ledger_id: Some(s.cketh_ledger_id),
             evm_rpc_id: s.evm_rpc_id,
         }
@@ -677,6 +711,11 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                 EventType::SyncedErc20ToBlock { block_number } => EP::SyncedErc20ToBlock {
                     block_number: block_number.into(),
                 },
+                EventType::SyncedDepositWithSubaccountToBlock { block_number } => {
+                    EP::SyncedDepositWithSubaccountToBlock {
+                        block_number: block_number.into(),
+                    }
+                }
                 EventType::AcceptedEthWithdrawalRequest(EthWithdrawalRequest {
                     withdrawal_amount,
                     destination,
@@ -836,18 +875,30 @@ fn http_request(req: HttpRequest) -> HttpResponse {
     if req.path() == "/metrics" {
         let mut writer = MetricsEncoder::new(vec![], ic_cdk::api::time() as i64 / 1_000_000);
 
+        fn last_processed_block_metric_name(id: &LogScrapingId) -> &'static str {
+            match *id {
+                LogScrapingId::EthDepositWithoutSubaccount => "cketh_minter_last_processed_block",
+                LogScrapingId::Erc20DepositWithoutSubaccount => {
+                    "ckerc20_minter_last_processed_block"
+                }
+                LogScrapingId::EthOrErc20DepositWithSubaccount => {
+                    "subaccount_minter_last_processed_block"
+                }
+            }
+        }
+
         fn encode_metrics(w: &mut MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
             const WASM_PAGE_SIZE_IN_BYTES: f64 = 65536.0;
 
             read_state(|s| {
                 w.encode_gauge(
-                    "cketh_minter_stable_memory_bytes",
+                    "stable_memory_bytes",
                     ic_cdk::api::stable::stable_size() as f64 * WASM_PAGE_SIZE_IN_BYTES,
                     "Size of the stable memory allocated by this canister.",
                 )?;
 
                 w.encode_gauge(
-                    "cketh_minter_heap_memory_bytes",
+                    "heap_memory_bytes",
                     heap_memory_size_bytes() as f64,
                     "Size of the heap memory allocated by this canister.",
                 )?;
@@ -866,17 +917,16 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "The last Ethereum block the ckETH minter observed.",
                 )?;
 
-                w.encode_gauge(
-                    "cketh_minter_last_processed_block",
-                    s.last_scraped_block_number.as_f64(),
-                    "The last Ethereum block the ckETH minter checked for ckETH deposits.",
-                )?;
-
-                w.encode_gauge(
-                    "ckerc20_minter_last_processed_block",
-                    s.last_erc20_scraped_block_number.as_f64(),
-                    "The last Ethereum block the ckETH minter checked for ckERC20 deposits.",
-                )?;
+                for (id, scraping_state) in s.log_scrapings.iter() {
+                    w.encode_gauge(
+                        last_processed_block_metric_name(id),
+                        scraping_state.last_scraped_block_number().as_f64(),
+                        &format!(
+                            "The last Ethereum block the ckETH minter checked for {} deposits.",
+                            id
+                        ),
+                    )?;
+                }
 
                 w.encode_counter(
                     "cketh_minter_skipped_blocks",

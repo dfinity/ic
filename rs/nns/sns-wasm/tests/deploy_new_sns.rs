@@ -26,6 +26,8 @@ use ic_sns_wasm::{
 };
 use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
 use ic_test_utilities_types::ids::canister_test_id;
+use maplit::btreeset;
+use std::collections::BTreeSet;
 
 pub mod common;
 
@@ -128,9 +130,15 @@ fn test_canisters_are_created_and_installed() {
     let swap_canister_summary = get_sns_canisters_summary_response.swap_canister_summary();
     assert_eq!(swap_canister_summary.canister_id(), swap_canister_id);
     assert_eq!(swap_canister_summary.status().status(), Running);
+    // https://internetcomputer.org/docs/current/references/ic-interface-spec#ic-canister_info:
+    // The order of controllers stored in the canister history may vary depending on the implementation.
     assert_eq!(
-        swap_canister_summary.status().controllers(),
-        vec![ROOT_CANISTER_ID.get()]
+        swap_canister_summary
+            .status()
+            .controllers()
+            .into_iter()
+            .collect::<BTreeSet<_>>(),
+        btreeset! { root_canister_id, ROOT_CANISTER_ID.get() }
     );
     assert_eq!(
         swap_canister_summary.status().module_hash().unwrap(),
@@ -196,6 +204,14 @@ fn test_deploy_cleanup_on_wasm_install_failure() {
     let ledger = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 3);
     let swap = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 4);
     let index = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 5);
+    let error_message = response.error.clone().unwrap().message;
+    let expected_error = "Error installing Governance WASM: Failed to install WASM on canister \
+        qsgjb-riaaa-aaaaa-aaaga-cai: error code 5: Error from Canister qsgjb-riaaa-aaaaa-aaaga-cai: \
+        Canister called `ic0.trap` with message: did not find blob on stack";
+    assert!(
+        error_message.contains(expected_error),
+        "Response error \"{error_message}\" does not contain expected error \"{expected_error}\""
+    );
 
     assert_eq!(
         response,
@@ -211,13 +227,7 @@ fn test_deploy_cleanup_on_wasm_install_failure() {
             // Because of the invalid WASM above (i.e. universal canister) which does not understand
             // the governance init payload, this fails.
             error: Some(SnsWasmError {
-                message: "Error installing Governance WASM: Failed to install WASM on canister \
-                qsgjb-riaaa-aaaaa-aaaga-cai: error code 5: Error from Canister qsgjb-riaaa-aaaaa-aaaga-cai: \
-                Canister called `ic0.trap` with message: did not find blob on stack.\n\
-                Consider gracefully handling failures from this canister or altering the canister to \
-                handle exceptions. See documentation: \
-                http://internetcomputer.org/docs/current/references/execution-errors#trapped-explicitly"
-                    .to_string()
+                message: error_message,
             }),
             dapp_canisters_transfer_result: Some(DappCanistersTransferResult {
                 restored_dapp_canisters: vec![],
@@ -235,10 +245,12 @@ fn test_deploy_cleanup_on_wasm_install_failure() {
         );
     }
 
-    // 5_000_000_000_000 cycles are burned creating the canisters before the failure
+    // 15_000_000_000_000 cycles are burned creating the canisters before the failure
+    let initial_canister_creation_cycles = 3 * ONE_TRILLION as u128;
     assert_eq!(
         machine.cycle_balance(SNS_WASM_CANISTER_ID),
-        EXPECTED_SNS_CREATION_FEE - SNS_CANISTER_COUNT_AT_INSTALL as u128 * (ONE_TRILLION as u128)
+        EXPECTED_SNS_CREATION_FEE
+            - SNS_CANISTER_COUNT_AT_INSTALL as u128 * initial_canister_creation_cycles,
     );
 }
 

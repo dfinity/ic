@@ -31,6 +31,7 @@ use ic_sns_wasm::pb::v1::SnsCanisterType;
 /// Note: FI canisters are considered fully tested elsewhere, and have stable APIs.
 
 /// Deployment tests
+
 #[tokio::test]
 async fn test_deployment_all_upgrades() {
     test_sns_deployment(
@@ -81,6 +82,15 @@ async fn test_deployment_swap_upgrade() {
 }
 
 /// Upgrade Tests
+
+// TODO[NNS1-3433]: Enable this test after the SNS Governance canister published to SNS-W on mainnet
+// TODO[NNS1-3433]: starts upgrading its Swap.
+#[ignore]
+#[tokio::test]
+async fn test_upgrade_swap() {
+    test_sns_upgrade(vec![SnsCanisterType::Swap]).await;
+}
+
 #[tokio::test]
 async fn test_upgrade_sns_gov_root() {
     test_sns_upgrade(vec![SnsCanisterType::Root, SnsCanisterType::Governance]).await;

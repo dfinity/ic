@@ -1,0 +1,35 @@
+[package]
+name = "rate_limits"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+bincode = { workspace = true }
+candid = { workspace = true }
+getrandom = { version = "0.2", features = ["custom"] }
+hex = { workspace = true }
+ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
+ic-cdk = { workspace = true }
+ic-cdk-macros = { workspace = true }
+ic-cdk-timers = { workspace = true }
+ic-metrics-encoder = "1"
+ic-stable-structures = { workspace = true }
+mockall = { workspace = true }
+rand_chacha = { workspace = true }
+rate-limits-api = { path = "./api" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true, features = ['serde', 'v4'] }
+
+[dev-dependencies]
+rate-limit-canister-integration-tests = { path = "./integration_tests" }
+
+[lib]
+crate-type = ["cdylib"]
+path = "canister/lib.rs"

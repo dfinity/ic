@@ -3,8 +3,7 @@
 /// Axum handlers operate on a global state of type ApiState, whose
 /// interface guarantees consistency and determinism.
 use crate::pocket_ic::{
-    AdvanceTimeAndTick, ApiResponse, EffectivePrincipal, GetCanisterHttp, MockCanisterHttp,
-    PocketIc,
+    AdvanceTimeAndTick, ApiResponse, EffectivePrincipal, PocketIc, ProcessCanisterHttpInternal,
 };
 use crate::state_api::canister_id::{self, DomainResolver, ResolvesDomain};
 use crate::state_api::routes::verify_cbor_content_header;
@@ -34,25 +33,17 @@ use hyper::{Request, Response as HyperResponse};
 use hyper_util::client::legacy::{connect::HttpConnector, Client};
 use ic_http_endpoints_public::cors_layer;
 use ic_http_gateway::{CanisterRequest, HttpGatewayClient, HttpGatewayRequestArgs};
-use ic_https_outcalls_adapter::CanisterHttp;
-use ic_https_outcalls_adapter_client::grpc_status_code_to_reject;
-use ic_https_outcalls_service::{
-    https_outcalls_service_server::HttpsOutcallsService, HttpHeader, HttpMethod,
-    HttpsOutcallRequest, HttpsOutcallResponse,
-};
-use ic_state_machine_tests::RejectCode;
-use ic_types::{
-    canister_http::{CanisterHttpRequestId, MAX_CANISTER_HTTP_RESPONSE_BYTES},
-    CanisterId, PrincipalId, SubnetId,
-};
+use ic_types::{canister_http::CanisterHttpRequestId, CanisterId, SubnetId};
 use pocket_ic::common::rest::{
-    CanisterHttpHeader, CanisterHttpMethod, CanisterHttpReject, CanisterHttpReply,
-    CanisterHttpRequest, CanisterHttpResponse, HttpGatewayBackend, HttpGatewayConfig,
-    HttpGatewayDetails, HttpGatewayInfo, MockCanisterHttpResponse, Topology,
+    CanisterHttpRequest, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayDetails,
+    HttpGatewayInfo, Topology,
 };
 use pocket_ic::{ErrorCode, UserError, WasmResult};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fmt, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
+use std::{
+    collections::HashMap, fmt, path::PathBuf, str::FromStr, sync::atomic::AtomicU64, sync::Arc,
+    time::Duration,
+};
 use tokio::{
     sync::mpsc::error::TryRecvError,
     sync::mpsc::Receiver,
@@ -60,7 +51,6 @@ use tokio::{
     task::{spawn, spawn_blocking, JoinHandle, JoinSet},
     time::{self, sleep, Instant},
 };
-use tonic::Request as TonicRequest;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::{debug, error, trace};
 
@@ -74,11 +64,25 @@ const MIN_OPERATION_DELAY: Duration = Duration::from_millis(100);
 // The minimum delay between consecutive attempts to read the graph in auto progress mode.
 const READ_GRAPH_DELAY: Duration = Duration::from_millis(100);
 
-pub const STATE_LABEL_HASH_SIZE: usize = 32;
+pub const STATE_LABEL_HASH_SIZE: usize = 16;
 
 /// Uniquely identifies a state.
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Default, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Default)]
 pub struct StateLabel(pub [u8; STATE_LABEL_HASH_SIZE]);
+
+impl StateLabel {
+    pub fn new(seed: u64) -> Self {
+        let mut seq_no: u128 = seed.into();
+        seq_no <<= 64;
+        Self(seq_no.to_le_bytes())
+    }
+
+    pub fn bump(&mut self) {
+        let mut seq_no: u128 = u128::from_le_bytes(self.0);
+        seq_no += 1;
+        self.0 = seq_no.to_le_bytes();
+    }
+}
 
 // The only error condition is if the vector has the wrong size.
 pub struct InvalidSize;
@@ -116,18 +120,12 @@ struct Instance {
     state: InstanceState,
 }
 
-impl std::fmt::Debug for Instance {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "{:?}", self.state)?;
-        Ok(())
-    }
-}
-
 /// The state of the PocketIC API.
 pub struct ApiState {
     // impl note: If locks are acquired on both fields, acquire first on `instances` and then on `graph`.
     instances: Arc<RwLock<Vec<Mutex<Instance>>>>,
     graph: Arc<RwLock<HashMap<StateLabel, Computations>>>,
+    seed: AtomicU64,
     sync_wait_time: Duration,
     // PocketIC server port
     port: Option<u16>,
@@ -194,6 +192,7 @@ impl PocketIcApiStateBuilder {
         Arc::new(ApiState {
             instances,
             graph,
+            seed: AtomicU64::new(0),
             sync_wait_time,
             port: self.port,
             http_gateways: Arc::new(RwLock::new(Vec::new())),
@@ -236,22 +235,6 @@ impl From<Result<ic_state_machine_tests::WasmResult, ic_state_machine_tests::Use
             match r {
                 Ok(ic_state_machine_tests::WasmResult::Reply(wasm)) => Ok(WasmResult::Reply(wasm)),
                 Ok(ic_state_machine_tests::WasmResult::Reject(s)) => Ok(WasmResult::Reject(s)),
-                Err(user_err) => Err(UserError {
-                    code: ErrorCode::try_from(user_err.code() as u64).unwrap(),
-                    description: user_err.description().to_string(),
-                }),
-            }
-        };
-        OpOut::CanisterResult(res)
-    }
-}
-
-// TODO: Remove this Into: It's only used in the InstallCanisterAsController Operation, which also should be removed.
-impl From<Result<(), ic_state_machine_tests::UserError>> for OpOut {
-    fn from(r: Result<(), ic_state_machine_tests::UserError>) -> Self {
-        let res = {
-            match r {
-                Ok(_) => Ok(WasmResult::Reply(vec![])),
                 Err(user_err) => Err(UserError {
                     code: ErrorCode::try_from(user_err.code() as u64).unwrap(),
                     description: user_err.description().to_string(),
@@ -711,14 +694,23 @@ impl ApiState {
         Self::read_result(self.graph.clone(), state_label, op_id)
     }
 
-    pub async fn add_instance(&self, instance: PocketIc) -> InstanceId {
+    pub async fn add_instance<F>(&self, f: F) -> (InstanceId, Topology)
+    where
+        F: FnOnce(u64) -> PocketIc + std::marker::Send + 'static,
+    {
+        let seed = self.seed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        // create the instance using `spawn_blocking` before acquiring a lock
+        let instance = tokio::task::spawn_blocking(move || f(seed))
+            .await
+            .expect("Failed to create PocketIC instance");
+        let topology = instance.topology();
         let mut instances = self.instances.write().await;
         let instance_id = instances.len();
         instances.push(Mutex::new(Instance {
             progress_thread: None,
             state: InstanceState::Available(instance),
         }));
-        instance_id
+        (instance_id, topology)
     }
 
     pub async fn delete_instance(&self, instance_id: InstanceId) {
@@ -726,9 +718,9 @@ impl ApiState {
         loop {
             let instances = self.instances.read().await;
             let mut instance = instances[instance_id].lock().await;
-            match std::mem::replace(&mut instance.state, InstanceState::Deleted) {
-                InstanceState::Available(pocket_ic) => {
-                    std::mem::drop(pocket_ic);
+            match &instance.state {
+                InstanceState::Available(_) => {
+                    let _ = std::mem::replace(&mut instance.state, InstanceState::Deleted);
                     break;
                 }
                 InstanceState::Deleted => {
@@ -1071,133 +1063,6 @@ impl ApiState {
         }
     }
 
-    async fn make_http_request(
-        canister_http_request: CanisterHttpRequest,
-        canister_http_adapter: &CanisterHttp,
-    ) -> Result<CanisterHttpReply, (RejectCode, String)> {
-        let canister_http_request = HttpsOutcallRequest {
-            url: canister_http_request.url,
-            method: match canister_http_request.http_method {
-                CanisterHttpMethod::GET => HttpMethod::Get.into(),
-                CanisterHttpMethod::POST => HttpMethod::Post.into(),
-                CanisterHttpMethod::HEAD => HttpMethod::Head.into(),
-            },
-            max_response_size_bytes: canister_http_request
-                .max_response_bytes
-                .unwrap_or(MAX_CANISTER_HTTP_RESPONSE_BYTES),
-            headers: canister_http_request
-                .headers
-                .into_iter()
-                .map(|h| HttpHeader {
-                    name: h.name,
-                    value: h.value,
-                })
-                .collect(),
-            body: canister_http_request.body,
-            socks_proxy_allowed: false,
-        };
-        let request = TonicRequest::new(canister_http_request);
-        canister_http_adapter
-            .https_outcall(request)
-            .await
-            .map(|adapter_response| {
-                let HttpsOutcallResponse {
-                    status,
-                    headers,
-                    content: body,
-                } = adapter_response.into_inner();
-                CanisterHttpReply {
-                    status: status.try_into().unwrap(),
-                    headers: headers
-                        .into_iter()
-                        .map(|HttpHeader { name, value }| CanisterHttpHeader { name, value })
-                        .collect(),
-                    body,
-                }
-            })
-            .map_err(|grpc_status| {
-                (
-                    grpc_status_code_to_reject(grpc_status.code()),
-                    grpc_status.message().to_string(),
-                )
-            })
-    }
-
-    async fn process_canister_http_requests(
-        instances: Arc<RwLock<Vec<Mutex<Instance>>>>,
-        graph: Arc<RwLock<HashMap<StateLabel, Computations>>>,
-        instance_id: InstanceId,
-        rx: &mut Receiver<()>,
-    ) -> Option<()> {
-        let get_canister_http_op = GetCanisterHttp;
-        let canister_http_requests = match Self::execute_operation(
-            instances.clone(),
-            graph.clone(),
-            instance_id,
-            get_canister_http_op,
-            rx,
-        )
-        .await?
-        {
-            OpOut::CanisterHttp(canister_http) => canister_http,
-            out => panic!("Unexpected OpOut: {:?}", out),
-        };
-        let mut mock_canister_http_responses = vec![];
-        for canister_http_request in canister_http_requests {
-            let subnet_id = canister_http_request.subnet_id;
-            let request_id = canister_http_request.request_id;
-            let response = loop {
-                let instances = instances.read().await;
-                let instance = instances[instance_id].lock().await;
-                if let InstanceState::Available(pocket_ic) = &instance.state {
-                    let canister_http_adapters = pocket_ic.canister_http_adapters();
-                    let canister_http_adapters = canister_http_adapters.lock().await;
-                    let canister_http_adapter = canister_http_adapters
-                        .get(&SubnetId::from(PrincipalId::from(subnet_id)))
-                        .unwrap();
-                    break match Self::make_http_request(
-                        canister_http_request,
-                        canister_http_adapter,
-                    )
-                    .await
-                    {
-                        Ok(reply) => CanisterHttpResponse::CanisterHttpReply(reply),
-                        Err((reject_code, e)) => {
-                            CanisterHttpResponse::CanisterHttpReject(CanisterHttpReject {
-                                reject_code: reject_code as u64,
-                                message: e,
-                            })
-                        }
-                    };
-                }
-                drop(instance);
-                drop(instances);
-                tokio::time::sleep(Duration::from_millis(10)).await;
-            };
-            let mock_canister_http_response = MockCanisterHttpResponse {
-                subnet_id,
-                request_id,
-                response,
-                additional_responses: vec![],
-            };
-            mock_canister_http_responses.push(mock_canister_http_response);
-        }
-        for mock_canister_http_response in mock_canister_http_responses {
-            let mock_canister_http_op = MockCanisterHttp {
-                mock_canister_http_response,
-            };
-            Self::execute_operation(
-                instances.clone(),
-                graph.clone(),
-                instance_id,
-                mock_canister_http_op,
-                rx,
-            )
-            .await?;
-        }
-        Some(())
-    }
-
     pub async fn auto_progress(
         &self,
         instance_id: InstanceId,
@@ -1211,6 +1076,7 @@ impl ApiState {
         if instance.progress_thread.is_none() {
             let (tx, mut rx) = mpsc::channel::<()>(1);
             let handle = spawn(async move {
+                debug!("Starting auto progress for instance {}.", instance_id);
                 let mut now = Instant::now();
                 loop {
                     let start = Instant::now();
@@ -1226,18 +1092,20 @@ impl ApiState {
                     .await
                     .is_none()
                     {
-                        return;
+                        break;
                     }
-                    if Self::process_canister_http_requests(
+                    let op = ProcessCanisterHttpInternal;
+                    if Self::execute_operation(
                         instances_clone.clone(),
                         graph.clone(),
                         instance_id,
+                        op,
                         &mut rx,
                     )
                     .await
                     .is_none()
                     {
-                        return;
+                        break;
                     }
                     let duration = start.elapsed();
                     sleep(std::cmp::max(
@@ -1246,9 +1114,10 @@ impl ApiState {
                     ))
                     .await;
                     if received_stop_signal(&mut rx) {
-                        return;
+                        break;
                     }
                 }
+                debug!("Stopping auto progress for instance {}.", instance_id);
             });
             instance.progress_thread = Some(ProgressThread { handle, sender: tx });
             Ok(())
@@ -1407,6 +1276,7 @@ impl ApiState {
                                 op_id.0,
                             );
                             let result = op.compute(&mut pocket_ic);
+                            pocket_ic.bump_state_label();
                             let new_state_label = pocket_ic.get_state_label();
                             // add result to graph, but grab instance lock first!
                             let instances = instances.blocking_read();
@@ -1424,8 +1294,7 @@ impl ApiState {
                                 instance.state = InstanceState::Available(pocket_ic);
                             }
                             trace!("bg_task::end instance_id={} op_id={}", instance_id, op_id.0);
-                            // also return old_state_label so we can prune graph if we return quickly
-                            (result, old_state_label)
+                            result
                         }
                     };
 
@@ -1458,7 +1327,7 @@ impl ApiState {
         // note: this assumes that cancelling the JoinHandle does not stop the execution of the
         // background task. This only works because the background thread, in this case, is a
         // kernel thread.
-        if let Ok(Ok((op_out, _old_state_label))) = time::timeout(sync_wait_time, bg_handle).await {
+        if let Ok(Ok(op_out)) = time::timeout(sync_wait_time, bg_handle).await {
             trace!(
                 "update_with_timeout::synchronous instance_id={} op_id={}",
                 instance_id,
@@ -1473,36 +1342,5 @@ impl ApiState {
             op_id,
         );
         Ok(busy_outcome)
-    }
-}
-
-impl std::fmt::Debug for InstanceState {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Busy { state_label, op_id } => {
-                write!(f, "Busy {{ {state_label:?}, {op_id:?} }}")?
-            }
-            Self::Available(pic) => write!(f, "Available({:?})", pic.get_state_label())?,
-            Self::Deleted => write!(f, "Deleted")?,
-        }
-        Ok(())
-    }
-}
-
-impl std::fmt::Debug for ApiState {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let instances = self.instances.blocking_read();
-        let graph = self.graph.blocking_read();
-
-        writeln!(f, "Instances:")?;
-        for (idx, instance) in instances.iter().enumerate() {
-            writeln!(f, "  [{idx}] {instance:?}")?;
-        }
-
-        writeln!(f, "Graph:")?;
-        for (k, v) in graph.iter() {
-            writeln!(f, "  {k:?} => {v:?}")?;
-        }
-        Ok(())
     }
 }

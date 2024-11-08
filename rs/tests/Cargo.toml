@@ -138,7 +138,7 @@ registry-canister = { path = "../registry/canister" }
 reqwest = { workspace = true }
 rosetta-core = { path = "../rosetta-api/common/rosetta_core" }
 rsa = { workspace = true }
-rust_decimal = "1.25"
+rust_decimal = "1.36.0"
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
@@ -184,60 +184,12 @@ name = "ic-systest-rosetta"
 path = "financial_integrations/rosetta/rosetta_test.rs"
 
 [[bin]]
-name = "ic-systest-rosetta-derive-test"
-path = "financial_integrations/rosetta/rosetta_derive_test.rs"
-
-[[bin]]
-name = "ic-systest-rosetta-make-transactions-test"
-path = "financial_integrations/rosetta/rosetta_make_transactions_test.rs"
-
-[[bin]]
-name = "ic-systest-rosetta-network-test"
-path = "financial_integrations/rosetta/rosetta_network_test.rs"
-
-[[bin]]
-name = "ic-systest-rosetta-neuron-disburse-test"
-path = "financial_integrations/rosetta/rosetta_neuron_disburse_test.rs"
-
-[[bin]]
-name = "ic-systest-rosetta-neuron-dissolve-test"
-path = "financial_integrations/rosetta/rosetta_neuron_dissolve_test.rs"
-
-[[bin]]
 name = "ic-systest-rosetta-neuron-follow-test"
 path = "financial_integrations/rosetta/rosetta_neuron_follow_test.rs"
 
 [[bin]]
-name = "ic-systest-rosetta-neuron-hotkey-test"
-path = "financial_integrations/rosetta/rosetta_neuron_hotkey_test.rs"
-
-[[bin]]
-name = "ic-systest-rosetta-neuron-info-test"
-path = "financial_integrations/rosetta/rosetta_neuron_info_test.rs"
-
-[[bin]]
-name = "ic-systest-rosetta-neuron-maturity-test"
-path = "financial_integrations/rosetta/rosetta_neuron_maturity_test.rs"
-
-[[bin]]
-name = "ic-systest-rosetta-neuron-spawn-test"
-path = "financial_integrations/rosetta/rosetta_neuron_spawn_test.rs"
-
-[[bin]]
-name = "ic-systest-rosetta-neuron-staking-test"
-path = "financial_integrations/rosetta/rosetta_neuron_staking_test.rs"
-
-[[bin]]
-name = "ic-systest-icrc1-agent-test"
-path = "financial_integrations/icrc1_agent_test.rs"
-
-[[bin]]
 name = "test-driver-e2e-scenarios"
 path = "testing_verification/test_driver_e2e_scenarios.rs"
-
-[[bin]]
-name = "ic-systest-bn-update-workload-test"
-path = "boundary_nodes/bn_update_workload_test.rs"
 
 [[bin]]
 name = "ic-systest-mainnet"
@@ -250,22 +202,6 @@ path = "testing_verification/replicable_mock_test.rs"
 [[bin]]
 name = "ic-systest-remote-replicable-mock-test"
 path = "testing_verification/remote_replicable_mock_test.rs"
-
-[[bin]]
-name = "ic-systest-network-reliability"
-path = "networking/network_reliability_test.rs"
-
-[[bin]]
-name = "ic-systest-network-large"
-path = "networking/network_large_test.rs"
-
-[[bin]]
-name = "ic-systest-query-workload-long-test"
-path = "networking/query_workload_long_test.rs"
-
-[[bin]]
-name = "ic-systest-update-workload-large-payload"
-path = "networking/update_workload_large_payload.rs"
 
 [[bin]]
 name = "ic-xc-ledger-suite-orchestrator"

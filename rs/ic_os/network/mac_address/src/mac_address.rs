@@ -125,19 +125,19 @@ pub fn generate_mac_address(
 /// Retrieves the MAC address from the IPMI LAN interface
 pub fn get_ipmi_mac() -> Result<FormattedMacAddress> {
     let output = Command::new("ipmitool").arg("lan").arg("print").output()?;
-
-    // A bug in our version of ipmitool causes it to exit with an error
-    // status, but we have enough output to work with anyway.
-    // https://github.com/ipmitool/ipmitool/issues/388
-    if !output.status.success() {
-        eprintln!(
-            "Error running ipmitool: {}",
-            std::str::from_utf8(&output.stderr)?
-        );
-    }
     let ipmitool_output = String::from_utf8(output.stdout)?;
 
-    get_mac_address_from_ipmitool_output(&ipmitool_output)
+    get_mac_address_from_ipmitool_output(&ipmitool_output).with_context(|| {
+        // A bug in our version of ipmitool causes it to exit with an error
+        // status, but we have enough output to work with anyway. If
+        // get_mac_address_from_ipmitool_output still fails, log the invocation details.
+        // https://github.com/ipmitool/ipmitool/issues/388
+        let stderr = std::str::from_utf8(&output.stderr).unwrap_or("[INVALID UTF8]");
+        format!(
+            "ipmitool status: {}, ipmitool stdout: {}\nipmitool stderr: {}",
+            output.status, ipmitool_output, stderr
+        )
+    })
 }
 
 #[cfg(test)]

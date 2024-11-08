@@ -11,7 +11,7 @@ use crate::{
         reassemble_governance_proto, split_governance_proto, HeapGovernanceData, XdrConversionRate,
     },
     migrations::maybe_run_migrations,
-    neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
+    neuron::{types::total_potential_voting_power, DissolveStateAndAge, Neuron, NeuronBuilder},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{metrics::NeuronSubsetMetrics, NeuronMetrics, NeuronStore},
     neurons_fund::{
@@ -135,7 +135,7 @@ pub mod tla;
 #[cfg(feature = "tla")]
 pub use tla::{
     claim_neuron_desc, split_neuron_desc, tla_update_method, InstrumentationState, ToTla,
-    TLA_INSTRUMENTATION_STATE, TLA_TRACES,
+    TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY, TLA_TRACES_MUTEX,
 };
 
 // 70 KB (for executing NNS functions that are not canister upgrades)
@@ -3441,6 +3441,17 @@ impl Governance {
             MAX_DISSOLVE_DELAY_SECONDS,
         );
 
+        let dissolve_state_and_age = if dissolve_delay_seconds > 0 {
+            DissolveStateAndAge::NotDissolving {
+                dissolve_delay_seconds,
+                aging_since_timestamp_seconds: created_timestamp_seconds,
+            }
+        } else {
+            DissolveStateAndAge::DissolvingOrDissolved {
+                when_dissolved_timestamp_seconds: created_timestamp_seconds,
+            }
+        };
+
         // Before we do the transfer, we need to save the neuron in the map
         // otherwise a trap after the transfer is successful but before this
         // method finishes would cause the funds to be lost.
@@ -3451,10 +3462,7 @@ impl Governance {
             child_nid,
             to_subaccount,
             child_controller,
-            DissolveStateAndAge::NotDissolving {
-                dissolve_delay_seconds,
-                aging_since_timestamp_seconds: created_timestamp_seconds,
-            },
+            dissolve_state_and_age,
             created_timestamp_seconds,
         )
         .with_followees(self.heap_data.default_followees.clone())
@@ -3838,6 +3846,7 @@ impl Governance {
                 data.get_deadline_timestamp_seconds(voting_period_seconds),
             ),
             derived_proposal_information: data.derived_proposal_information.clone(),
+            total_potential_voting_power: data.total_potential_voting_power,
         }
     }
 
@@ -4205,15 +4214,24 @@ impl Governance {
                     reward_to_neuron.dissolve_delay_seconds,
                     MAX_DISSOLVE_DELAY_SECONDS,
                 );
+
+                let dissolve_state_and_age = if dissolve_delay_seconds > 0 {
+                    DissolveStateAndAge::NotDissolving {
+                        dissolve_delay_seconds,
+                        aging_since_timestamp_seconds: now,
+                    }
+                } else {
+                    DissolveStateAndAge::DissolvingOrDissolved {
+                        when_dissolved_timestamp_seconds: now,
+                    }
+                };
+
                 // Transfer successful.
                 let neuron = NeuronBuilder::new(
                     nid,
                     to_subaccount,
                     *np_principal,
-                    DissolveStateAndAge::NotDissolving {
-                        dissolve_delay_seconds,
-                        aging_since_timestamp_seconds: now,
-                    },
+                    dissolve_state_and_age,
                     now,
                 )
                 .with_followees(self.heap_data.default_followees.clone())
@@ -5504,6 +5522,13 @@ impl Governance {
             ));
         }
 
+        let total_potential_voting_power = Some(total_potential_voting_power(
+            self.neuron_store.voting_eligible_neurons(now_seconds),
+            now_seconds,
+            &action,
+            ballots.len(),
+        )?);
+
         // In some cases we want to customize some aspects of the proposal
         let proposal = if let Action::ManageNeuron(ref manage_neuron) = action {
             // We want to customize the title for manage neuron proposals, to
@@ -5542,7 +5567,6 @@ impl Governance {
         let proposal_num = self.next_proposal_id();
         let proposal_id = ProposalId { id: proposal_num };
 
-        // Create the proposal.
         let wait_for_quiet_state = if wait_for_quiet_enabled {
             Some(WaitForQuietState {
                 current_deadline_timestamp_seconds: now_seconds
@@ -5551,6 +5575,8 @@ impl Governance {
         } else {
             None
         };
+
+        // Create the proposal.
         let mut proposal_data = ProposalData {
             id: Some(proposal_id),
             proposer: Some(*proposer_id),
@@ -5559,6 +5585,7 @@ impl Governance {
             proposal_timestamp_seconds: now_seconds,
             ballots,
             wait_for_quiet_state,
+            total_potential_voting_power,
             ..Default::default()
         };
 
@@ -5583,6 +5610,8 @@ impl Governance {
         );
         // Finally, add this proposal as an open proposal.
         self.insert_proposal(proposal_num, proposal_data);
+
+        self.refresh_voting_power(proposer_id);
 
         Ok(proposal_id)
     }
@@ -5652,7 +5681,7 @@ impl Governance {
                 // No neuron in the stable storage should have maturity.
 
                 for neuron in self.neuron_store.voting_eligible_neurons(now_seconds) {
-                    let voting_power = neuron.voting_power(now_seconds);
+                    let voting_power = neuron.deciding_voting_power(now_seconds);
 
                     total_power += voting_power as u128;
 
@@ -5786,7 +5815,7 @@ impl Governance {
                                     neuron_store.get_followers_by_followee_and_topic(*k, topic),
                                 );
                                 // Default following doesn't apply to governance or SNS
-                                // decentralization sale proposals.
+                                // decentralization swap proposals.
                                 if ![Topic::Governance, Topic::SnsAndCommunityFund].contains(&topic)
                                 {
                                     // Insert followers from 'Unspecified' (default followers)
@@ -5966,7 +5995,25 @@ impl Governance {
 
         self.process_proposal(proposal_id.id);
 
+        self.refresh_voting_power(neuron_id);
+
         Ok(())
+    }
+
+    fn refresh_voting_power(&mut self, neuron_id: &NeuronId) {
+        let now_seconds = self.env.now();
+
+        let result = self.with_neuron_mut(neuron_id, |neuron| {
+            neuron.refresh_voting_power(now_seconds);
+        });
+
+        if let Err(err) = result {
+            println!(
+                "{}WARNING: Tried to refresh the voting power of neuron {}, \
+                 but was unable to find it: {}",
+                LOG_PREFIX, neuron_id.id, err,
+            );
+        }
     }
 
     /// Add or remove followees for this neuron for a specified topic.
@@ -6031,17 +6078,20 @@ impl Governance {
             )
         })?;
 
+        let now_seconds = self.env.now();
         self.with_neuron_mut(id, |neuron| {
             if follow_request.followees.is_empty() {
-                neuron.followees.remove(&(topic as i32))
+                neuron.followees.remove(&(topic as i32));
             } else {
                 neuron.followees.insert(
                     topic as i32,
                     Followees {
                         followees: follow_request.followees.clone(),
                     },
-                )
+                );
             }
+
+            neuron.refresh_voting_power(now_seconds);
         })?;
 
         Ok(())

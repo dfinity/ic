@@ -1,14 +1,8 @@
-//! Quic Transport connection handle.
+//! The module implements the RPC abstraction over an established QUIC connection.
 //!
-//! Contains a wrapper, called `ConnectionHandle`, around quinn's Connection.
-//! The `ConnectionHandle` implements `rpc` and `push` methods for the given
-//! connection.
-//!
-
 use anyhow::{anyhow, Context};
-use axum::http::{Method, Request, Response, Version};
 use bytes::Bytes;
-use ic_base_types::NodeId;
+use http::{Method, Request, Response, Version};
 use ic_protobuf::transport::v1 as pb;
 use prost::Message;
 use quinn::{Connection, RecvStream, SendStream, VarInt};
@@ -46,36 +40,31 @@ impl Drop for SendStreamDropGuard {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct ConnectionHandle {
-    pub peer_id: NodeId,
+pub struct ConnectionHandle {
     pub connection: Connection,
-    pub metrics: QuicTransportMetrics,
+    metrics: QuicTransportMetrics,
     conn_id: ConnId,
 }
 
 impl ConnectionHandle {
-    pub(crate) fn new(
-        peer_id: NodeId,
-        connection: Connection,
-        metrics: QuicTransportMetrics,
-        conn_id: ConnId,
-    ) -> Self {
+    pub fn new(connection: Connection, metrics: QuicTransportMetrics, conn_id: ConnId) -> Self {
         Self {
-            peer_id,
             connection,
             metrics,
             conn_id,
         }
     }
 
-    pub(crate) fn conn_id(&self) -> ConnId {
+    pub fn conn_id(&self) -> ConnId {
         self.conn_id
     }
 
-    pub(crate) async fn rpc(
-        &self,
-        request: Request<Bytes>,
-    ) -> Result<Response<Bytes>, anyhow::Error> {
+    /// Performs an RPC operation on the already established connection.
+    ///
+    /// Since the QUIC transport layer continuously monitors connection health and automatically reconnects as needed,
+    /// all errors returned by this method can be safely treated as transient (retryable).
+    /// Therefore, we return an anyhow::Error for error handling.
+    pub async fn rpc(&self, request: Request<Bytes>) -> Result<Response<Bytes>, anyhow::Error> {
         let _timer = self
             .metrics
             .connection_handle_duration_seconds
@@ -127,15 +116,13 @@ impl ConnectionHandle {
                 .inc();
         })?;
 
-        let mut response = read_response(recv_stream).await.inspect_err(|_| {
+        let response = read_response(recv_stream).await.inspect_err(|_| {
             self.metrics
                 .connection_handle_errors_total
                 .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_READ])
                 .inc();
         })?;
 
-        // Propagate PeerId from this request to upper layers.
-        response.extensions_mut().insert(self.peer_id);
         in_counter.inc_by(response.body().len() as u64);
         Ok(response)
     }

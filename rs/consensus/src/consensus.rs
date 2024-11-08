@@ -353,7 +353,7 @@ impl ConsensusImpl {
     /// Checks, whether DKG transcripts for this replica are available
     fn dkgs_available(&self, pool_reader: &PoolReader) -> bool {
         // Get last summary
-        let summary_block = pool_reader.get_highest_summary_block();
+        let summary_block = pool_reader.get_highest_finalized_summary_block();
         let block_payload = summary_block.payload.as_ref().as_summary();
 
         // Get transcripts from summary
@@ -613,7 +613,7 @@ impl<Pool: ConsensusPool> BouncerFactory<ConsensusMessageId, Pool> for Consensus
     }
 
     fn refresh_period(&self) -> Duration {
-        Duration::from_secs(3)
+        Duration::from_secs(1)
     }
 }
 
