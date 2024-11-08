@@ -593,6 +593,46 @@ type Neuron = record {
   // Per NNS policy, this is opt. Nevertheless, it will never be null (unless we
   // later deprecate this feature).
   voting_power_refreshed_timestamp_seconds : opt nat64;
+
+  // The amount of "sway" this neuron has when voting on proposals.
+  //
+  // If a neuron regularly refreshes its voting power, this value is the same as
+  // potential_voting_power.
+  //
+  // However, if a neuron has not refreshed in more than six months, this will
+  // be less than potential voting power.
+  //
+  // As a further secondary consequence, the neuron receives less voting rewards
+  // (when it votes indirectly via following).
+  //
+  // For details, see https://dashboard.internetcomputer.org/proposal/132411.
+  //
+  // Per NNS policy, this is opt. Nevertheless, it will never be null (unless we
+  // later deprecate this feature).
+  deciding_voting_power : opt nat64;
+
+  // The amount of "sway" this neuron has when voting on proposals, assuming
+  // that it has refreshed recently enough.
+  //
+  // Unlike deciding_voting_power, this does NOT take refreshing into account.
+  // Rather, this only takes three factors into account:
+  //
+  //     1. (Net) staked amount - This is the "base" of a neuron's voting power.
+  //        This primarily consists of the balance in the neuron's NNS
+  //        Governance subaccount, but also includes (unburned) fees, and staked
+  //        maturity.
+  //
+  //     2. Age - Neurons with more age have more voting power (all else being
+  //        equal).
+  //
+  //     3. Dissolve delay - Neurons with longer dissolve delay have more voting
+  //        power (all else being equal). Neurons with a dissolve delay of less
+  //        than six months are not eligible to vote. Therefore, such neurons
+  //        are considered to have 0 voting power.
+  //
+  // Per NNS policy, this is opt. Nevertheless, it will never be null (unless we
+  // later deprecate this feature).
+  potential_voting_power : opt nat64;
 };
 
 type NeuronBasketConstructionParameters = record {
@@ -631,6 +671,7 @@ type NeuronInFlightCommand = record {
   timestamp : nat64;
 };
 
+// In general, this is a subset of Neuron.
 type NeuronInfo = record {
   dissolve_delay_seconds : nat64;
   recent_ballots : vec BallotInfo;
@@ -642,9 +683,14 @@ type NeuronInfo = record {
   retrieved_at_timestamp_seconds : nat64;
   visibility : opt int32;
   known_neuron_data : opt KnownNeuronData;
+
+  // Deprecated. Use either deciding_voting_power or potential_voting_power instead.
   voting_power : nat64;
+
   age_seconds : nat64;
   voting_power_refreshed_timestamp_seconds : opt nat64;
+  deciding_voting_power : opt nat64;
+  potential_voting_power : opt nat64;
 };
 
 type NeuronStakeTransfer = record {
