@@ -398,23 +398,6 @@ fn build_tagged_transcripts_map(
                                                 .to_string(),
                                         )
                                     })?;
-                                ////////////////////////////////////////////////////////
-                                // TODO: Consensus team to decide if we should rather
-                                // not extend the TaggedNiDkgTranscript with a key ID and
-                                // instead use the key ID from the tagged_transcript's
-                                // transcripts's NIDkgId as follows:
-                                // let mpkid_proto = tagged_transcript
-                                //     .transcript
-                                //     .as_ref()
-                                //     .ok_or_else(|| ProxyDecodeError::Other("TODO".to_string()))?
-                                //     .dkg_id
-                                //     .as_ref()
-                                //     .ok_or_else(|| ProxyDecodeError::Other("TODO".to_string()))?
-                                //     .key_id
-                                //     .as_ref()
-                                //     .ok_or_else(|| ProxyDecodeError::Other("TODO".to_string()))?;
-                                ////////////////////////////////////////////////////////
-
                                 let mpkid = MasterPublicKeyId::try_from(mpkid_proto.clone())
                                     .map_err(|e| {
                                         ProxyDecodeError::Other(format!(
