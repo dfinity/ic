@@ -47,7 +47,6 @@ pub struct ConnectionHandle {
 }
 
 impl ConnectionHandle {
-
     /// Executes an RPC operation over an already-established connection.
     ///
     /// This method leverages the QUIC transport layer, which continuously monitors the connection’s health
