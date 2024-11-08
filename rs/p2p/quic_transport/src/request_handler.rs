@@ -238,6 +238,5 @@ async fn write_response(
     send_stream
         .write_all(&response_bytes)
         .await
-        .with_context(|| "Failed to write request to stream.")?;
-    Ok(())
+        .with_context(|| "Failed to write request to stream.")
 }
