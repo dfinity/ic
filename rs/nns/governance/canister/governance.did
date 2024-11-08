@@ -577,6 +577,22 @@ type Neuron = record {
   transfer : opt NeuronStakeTransfer;
   known_neuron_data : opt KnownNeuronData;
   spawn_at_timestamp_seconds : opt nat64;
+
+  // When a neuron is first created, this is set to create_timestamp_seconds.
+  //
+  // This is part of the "periodic confirmation" feature, which was proposed and
+  // (overwhelmingly) adopted in NNS motion proposal 132411:
+  // https://dashboard.internetcomputer.org/proposal/132411
+  //
+  // This gets updated to the current time when the user performs related
+  // actions, as described in the aforementioned proposal.
+  //
+  // For neurons created prior to this feature, this field will be set to
+  // 2024-09-01T00:00:00 UTC.
+  //
+  // Per NNS policy, this is opt. Nevertheless, it will never be null (unless we
+  // later deprecate this feature).
+  voting_power_refreshed_timestamp_seconds : opt nat64;
 };
 
 type NeuronBasketConstructionParameters = record {
@@ -628,6 +644,7 @@ type NeuronInfo = record {
   known_neuron_data : opt KnownNeuronData;
   voting_power : nat64;
   age_seconds : nat64;
+  voting_power_refreshed_timestamp_seconds : opt nat64;
 };
 
 type NeuronStakeTransfer = record {
