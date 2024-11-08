@@ -184,7 +184,7 @@ async fn write_request(
             Method::CONNECT => pb::HttpMethod::Connect.into(),
             Method::PATCH => pb::HttpMethod::Patch.into(),
             Method::TRACE => pb::HttpMethod::Trace.into(),
-            _ => return Err(anyhow!("invalid method")),
+            _ => pb::HttpMethod::Unspecified.into(),
         },
         body: body.into(),
     };

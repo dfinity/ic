@@ -12,7 +12,7 @@
 //!
 use std::time::Duration;
 
-use anyhow::{anyhow, Context};
+use anyhow::Context;
 use axum::{body::Body, Router};
 use bytes::Bytes;
 use http::{Method, Request, Response, Version};
@@ -177,33 +177,34 @@ async fn read_request(mut recv_stream: RecvStream) -> Result<Request<Body>, anyh
     let request_proto = pb::HttpRequest::decode(raw_msg.as_slice())
         .with_context(|| "Failed to decode http request.")?;
 
-    let mut request = Request::builder()
-        .method(match pb::HttpMethod::try_from(request_proto.method) {
-            Ok(pb::HttpMethod::Get) => Method::GET,
-            Ok(pb::HttpMethod::Post) => Method::POST,
-            Ok(pb::HttpMethod::Put) => Method::PUT,
-            Ok(pb::HttpMethod::Delete) => Method::DELETE,
-            Ok(pb::HttpMethod::Head) => Method::HEAD,
-            Ok(pb::HttpMethod::Options) => Method::OPTIONS,
-            Ok(pb::HttpMethod::Connect) => Method::CONNECT,
-            Ok(pb::HttpMethod::Patch) => Method::PATCH,
-            Ok(pb::HttpMethod::Trace) => Method::TRACE,
-            Ok(pb::HttpMethod::Unspecified) => {
-                return Err(anyhow!("received http method unspecified."));
-            }
-            Err(e) => {
-                return Err(anyhow!("received invalid method {}", e));
-            }
-        })
+    let pb_http_method = pb::HttpMethod::try_from(request_proto.method)
+        .with_context(|| "Received invalid http method.")?;
+    let http_method = match pb_http_method {
+        pb::HttpMethod::Get => Some(Method::GET),
+        pb::HttpMethod::Post => Some(Method::POST),
+        pb::HttpMethod::Put => Some(Method::PUT),
+        pb::HttpMethod::Delete => Some(Method::DELETE),
+        pb::HttpMethod::Head => Some(Method::HEAD),
+        pb::HttpMethod::Options => Some(Method::OPTIONS),
+        pb::HttpMethod::Connect => Some(Method::CONNECT),
+        pb::HttpMethod::Patch => Some(Method::PATCH),
+        pb::HttpMethod::Trace => Some(Method::TRACE),
+        pb::HttpMethod::Unspecified => None,
+    };
+    let mut request_builder = Request::builder();
+    if let Some(http_method) = http_method {
+        request_builder = request_builder.method(http_method);
+    }
+    request_builder = request_builder
         .version(Version::HTTP_3)
         .uri(request_proto.uri);
     for h in request_proto.headers {
         let pb::HttpHeader { key, value } = h;
-        request = request.header(key, value);
+        request_builder = request_builder.header(key, value);
     }
     // This consumes the body without requiring allocation or cloning the whole content.
     let body_bytes = Bytes::from(request_proto.body);
-    request
+    request_builder
         .body(Body::from(body_bytes))
         .with_context(|| "Failed to build request.")
 }
