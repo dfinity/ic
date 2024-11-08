@@ -11,7 +11,7 @@ use crate::{
         reassemble_governance_proto, split_governance_proto, HeapGovernanceData, XdrConversionRate,
     },
     migrations::maybe_run_migrations,
-    neuron::{types::total_potential_voting_power, DissolveStateAndAge, Neuron, NeuronBuilder},
+    neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{metrics::NeuronSubsetMetrics, NeuronMetrics, NeuronStore},
     neurons_fund::{
@@ -127,6 +127,9 @@ mod split_neuron;
 pub mod test_data;
 #[cfg(test)]
 mod tests;
+
+#[cfg(feature = "canbench-rs")]
+mod benches;
 
 #[macro_use]
 pub mod tla_macros;
@@ -1907,8 +1910,8 @@ impl Governance {
         )
     }
 
-    pub fn clone_proto(&self) -> GovernanceProto {
-        let neurons = self.neuron_store.clone_neurons();
+    pub fn __get_state_for_test(&self) -> GovernanceProto {
+        let neurons = self.neuron_store.__get_neurons_for_tests();
         let heap_topic_followee_index = self.neuron_store.clone_topic_followee_index();
         let heap_governance_proto = self.heap_data.clone();
         let rng_seed = self.env.get_rng_seed();
@@ -5510,7 +5513,8 @@ impl Governance {
             }
         }
 
-        let ballots = self.compute_ballots_for_new_proposal(&action, proposer_id, now_seconds)?;
+        let (ballots, total_potential_voting_power) =
+            self.compute_ballots_for_new_proposal(&action, proposer_id, now_seconds)?;
 
         if ballots.is_empty() {
             // Cannot make a proposal with no eligible voters.  This
@@ -5521,13 +5525,6 @@ impl Governance {
                 "No eligible voters.",
             ));
         }
-
-        let total_potential_voting_power = Some(total_potential_voting_power(
-            self.neuron_store.voting_eligible_neurons(now_seconds),
-            now_seconds,
-            &action,
-            ballots.len(),
-        )?);
 
         // In some cases we want to customize some aspects of the proposal
         let proposal = if let Action::ManageNeuron(ref manage_neuron) = action {
@@ -5585,7 +5582,7 @@ impl Governance {
             proposal_timestamp_seconds: now_seconds,
             ballots,
             wait_for_quiet_state,
-            total_potential_voting_power,
+            total_potential_voting_power: Some(total_potential_voting_power),
             ..Default::default()
         };
 
@@ -5617,13 +5614,29 @@ impl Governance {
     }
 
     /// Computes what ballots a new proposal should have, based on the action.
+    /// Also returns Potential Voting Power.
+    ///
+    /// # Potential Voting Power vs. Deciding Voting Power
+    ///
+    /// If all neurons keep themselves refreshed, then deciding voting power =
+    /// potential voting power. Whereas, if a neuron has not refreshed recently
+    /// enough, the amount of voting power it can exercise is less than its
+    /// potential.
+    ///
+    /// # Weird Special Case: ManageNeuron
+    ///
+    /// Voting power is weird in the case of ManageNeuron
+    /// proposals. In that case, only the followees of the targetted neuron can
+    /// vote, and they all get 1 voting power, regardless of refresh. Also,
+    /// these proposals have no rewards. Therefore, in the case of ManageNeuron,
+    /// this returns ballots_len.
     fn compute_ballots_for_new_proposal(
         &mut self,
         action: &Action,
         proposer_id: &NeuronId,
         now_seconds: u64,
-    ) -> Result<HashMap<u64, Ballot>, GovernanceError> {
-        Ok(match *action {
+    ) -> Result<(HashMap<u64, Ballot>, u64 /*potential_voting_power*/), GovernanceError> {
+        let (ballots, potential_voting_power) = match *action {
             // A neuron can be managed only by its followees on the
             // 'manage neuron' topic.
             Action::ManageNeuron(ref manage_neuron) => {
@@ -5669,32 +5682,20 @@ impl Governance {
                         )
                     })
                     .collect();
-                ballots
+                // Conversion is safe because usize is u32, and in far future perhaps u64
+                let potential_voting_power = ballots.len() as u64;
+                (ballots, potential_voting_power)
             }
             // For normal proposals, every neuron with a
             // dissolve delay over six months is allowed to
             // vote, with a voting power determined at the
             // time of the proposal (i.e., now).
             _ => {
-                let mut ballots = HashMap::<u64, Ballot>::new();
-                let mut total_power: u128 = 0;
-                // No neuron in the stable storage should have maturity.
+                let (ballots, total_deciding_power, potential_voting_power) = self
+                    .neuron_store
+                    .create_ballots_for_standard_proposal(now_seconds);
 
-                for neuron in self.neuron_store.voting_eligible_neurons(now_seconds) {
-                    let voting_power = neuron.deciding_voting_power(now_seconds);
-
-                    total_power += voting_power as u128;
-
-                    ballots.insert(
-                        neuron.id().id,
-                        Ballot {
-                            vote: Vote::Unspecified as i32,
-                            voting_power,
-                        },
-                    );
-                }
-
-                if total_power >= (u64::MAX as u128) {
+                if total_deciding_power >= (u64::MAX as u128) {
                     // The way the neurons are configured, the total voting
                     // power on this proposal would overflow a u64!
                     return Err(GovernanceError::new_with_message(
@@ -5702,9 +5703,20 @@ impl Governance {
                         "Voting power overflow.",
                     ));
                 }
-                ballots
+                if potential_voting_power >= (u64::MAX as u128) {
+                    // The way the neurons are configured, the potential voting
+                    // power on this proposal would overflow a u64!
+                    return Err(GovernanceError::new_with_message(
+                        ErrorType::PreconditionFailed,
+                        "Potential voting power overflow.",
+                    ));
+                }
+
+                (ballots, potential_voting_power as u64)
             }
-        })
+        };
+
+        Ok((ballots, potential_voting_power))
     }
 
     /// Calculate the reject_cost_e8s of a proposal. This value is set in `ProposalData` and
@@ -5752,7 +5764,7 @@ impl Governance {
     /// to followees).
     /// Cascading only occurs for proposal topics that support following (i.e.,
     /// all topics except Topic::NeuronManagement).
-    fn cast_vote_and_cascade_follow(
+    pub(crate) fn cast_vote_and_cascade_follow(
         proposal_id: &ProposalId,
         ballots: &mut HashMap<u64, Ballot>,
         voting_neuron_id: &NeuronId,
