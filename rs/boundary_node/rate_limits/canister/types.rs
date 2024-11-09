@@ -1,10 +1,19 @@
+use std::fmt;
+
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use thiserror::Error;
+use uuid::Uuid;
 
 pub type Version = u64;
 pub type Timestamp = u64;
 pub type SchemaVersion = u64;
-pub type RuleId = String;
-pub type IncidentId = String;
+
+#[derive(Debug, Clone, Copy, PartialEq, Hash, Eq, Serialize, Deserialize)]
+pub struct RuleId(pub Uuid);
+
+#[derive(Debug, Clone, Copy, PartialEq, Hash, Eq, Serialize, Deserialize)]
+pub struct IncidentId(pub Uuid);
 
 pub enum DiscloseRulesArg {
     RuleIds(Vec<RuleId>),
@@ -59,33 +68,52 @@ pub struct OutputRule {
     pub disclosed_at: Option<Timestamp>,
 }
 
-impl From<rate_limits_api::InputRule> for InputRule {
-    fn from(value: rate_limits_api::InputRule) -> Self {
-        InputRule {
-            incident_id: value.incident_id,
-            description: value.description,
-            rule_raw: value.rule_raw,
-        }
-    }
-}
-
 impl From<OutputRule> for rate_limits_api::OutputRule {
     fn from(value: OutputRule) -> Self {
         rate_limits_api::OutputRule {
             description: value.description,
-            id: value.id,
-            incident_id: value.incident_id,
+            id: value.id.to_string(),
+            incident_id: value.incident_id.to_string(),
             rule_raw: value.rule_raw,
         }
     }
 }
 
-impl From<rate_limits_api::InputConfig> for InputConfig {
-    fn from(value: rate_limits_api::InputConfig) -> Self {
-        InputConfig {
-            schema_version: value.schema_version,
-            rules: value.rules.into_iter().map(|r| r.into()).collect(),
+#[derive(Debug, Error, Clone)]
+pub enum InputConfigError {
+    #[error("Invalid JSON encoding of rule_raw for rule at index = {0}")]
+    InvalidRuleJsonEncoding(usize),
+    #[error("Invalid UUID format of incident_id for rule at index = {0}")]
+    InvalidUuidFormatForIncident(usize),
+}
+
+impl TryFrom<rate_limits_api::InputConfig> for InputConfig {
+    type Error = InputConfigError;
+
+    fn try_from(value: rate_limits_api::InputConfig) -> Result<Self, Self::Error> {
+        let mut rules = Vec::with_capacity(value.rules.len());
+
+        for (idx, rule) in value.rules.into_iter().enumerate() {
+            // Validate that rule_raw blob encodes a valid JSON object
+            serde_json::from_slice::<Value>(rule.rule_raw.as_slice())
+                .map_err(|_| InputConfigError::InvalidRuleJsonEncoding(idx))?;
+
+            let rule = InputRule {
+                incident_id: IncidentId::try_from(rule.incident_id)
+                    .map_err(|_| InputConfigError::InvalidUuidFormatForIncident(idx))?,
+                rule_raw: rule.rule_raw,
+                description: rule.description,
+            };
+
+            rules.push(rule);
         }
+
+        let config = InputConfig {
+            schema_version: value.schema_version,
+            rules,
+        };
+
+        Ok(config)
     }
 }
 
@@ -122,8 +150,8 @@ pub struct OutputRuleMetadata {
 impl From<OutputRuleMetadata> for rate_limits_api::OutputRuleMetadata {
     fn from(value: OutputRuleMetadata) -> Self {
         rate_limits_api::OutputRuleMetadata {
-            id: value.id,
-            incident_id: value.incident_id,
+            id: value.id.0.to_string(),
+            incident_id: value.incident_id.0.to_string(),
             rule_raw: value.rule_raw,
             description: value.description,
             disclosed_at: value.disclosed_at,
@@ -133,15 +161,65 @@ impl From<OutputRuleMetadata> for rate_limits_api::OutputRuleMetadata {
     }
 }
 
-impl From<rate_limits_api::DiscloseRulesArg> for DiscloseRulesArg {
-    fn from(value: rate_limits_api::DiscloseRulesArg) -> Self {
+#[derive(Debug, Error, Clone)]
+pub enum DiscloseRulesArgError {
+    #[error("Invalid UUID at index = {0}")]
+    InvalidUuidFormat(usize),
+}
+
+impl TryFrom<rate_limits_api::DiscloseRulesArg> for DiscloseRulesArg {
+    type Error = DiscloseRulesArgError;
+
+    fn try_from(value: rate_limits_api::DiscloseRulesArg) -> Result<DiscloseRulesArg, Self::Error> {
         match value {
             rate_limits_api::DiscloseRulesArg::RuleIds(rule_ids) => {
-                DiscloseRulesArg::RuleIds(rule_ids)
+                let mut rules = Vec::with_capacity(rule_ids.len());
+                for (idx, rule_id) in rule_ids.into_iter().enumerate() {
+                    let uuid = RuleId::try_from(rule_id)
+                        .map_err(|_| DiscloseRulesArgError::InvalidUuidFormat(idx))?;
+                    rules.push(uuid);
+                }
+                Ok(DiscloseRulesArg::RuleIds(rules))
             }
             rate_limits_api::DiscloseRulesArg::IncidentIds(incident_ids) => {
-                DiscloseRulesArg::IncidentIds(incident_ids)
+                let mut incidents = Vec::with_capacity(incident_ids.len());
+                for (idx, incident_id) in incident_ids.into_iter().enumerate() {
+                    let uuid = IncidentId::try_from(incident_id)
+                        .map_err(|_| DiscloseRulesArgError::InvalidUuidFormat(idx))?;
+                    incidents.push(uuid);
+                }
+                Ok(DiscloseRulesArg::IncidentIds(incidents))
             }
         }
+    }
+}
+
+impl TryFrom<rate_limits_api::RuleId> for RuleId {
+    type Error = uuid::Error;
+
+    fn try_from(value: rate_limits_api::RuleId) -> Result<Self, Self::Error> {
+        let uuid = Uuid::parse_str(&value)?;
+        Ok(Self(uuid))
+    }
+}
+
+impl TryFrom<rate_limits_api::IncidentId> for IncidentId {
+    type Error = uuid::Error;
+
+    fn try_from(value: rate_limits_api::IncidentId) -> Result<Self, Self::Error> {
+        let uuid = Uuid::parse_str(&value)?;
+        Ok(Self(uuid))
+    }
+}
+
+impl fmt::Display for RuleId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl fmt::Display for IncidentId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
     }
 }

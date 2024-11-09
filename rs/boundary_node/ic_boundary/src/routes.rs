@@ -201,7 +201,7 @@ impl ErrorClientFacing {
         match self {
             Self::BodyTimedOut => "Reading the request body timed out due to data arriving too slowly.".to_string(),
             Self::CanisterNotFound => "The specified canister does not exist.".to_string(),
-            Self::LoadShed => "Reading the request body timed out due to data arriving too slowly.".to_string(),
+            Self::LoadShed => "Temporarily unable to handle the request due to high load. Please try again later.".to_string(),
             Self::MalformedRequest(x) => x.clone(),
             Self::NoHealthyNodes => "There are currently no healthy replica nodes available to handle the request. This may be due to an ongoing upgrade of the replica software in the subnet. Please try again later.".to_string(),
             Self::Other => "Internal Server Error".to_string(),
