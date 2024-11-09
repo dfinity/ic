@@ -250,4 +250,98 @@ async fn test_get_upgrade_journal() {
         &expected_upgrade_journal_entries,
     )
     .await;
+
+    // Check that the target version is set to the new version.
+    {
+        let sns_pb::GetUpgradeJournalResponse { target_version, .. } =
+            sns::governance::get_upgrade_journal(&pocket_ic, sns.governance.canister_id).await;
+
+        assert_eq!(target_version, Some(new_sns_version_2.clone()));
+    }
+
+    await_with_timeout(
+        &pocket_ic,
+        UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS,
+        |pocket_ic| async {
+            sns::governance::get_upgrade_journal(pocket_ic, sns.governance.canister_id)
+                .await
+                .deployed_version
+        },
+        &Some(new_sns_version_2.clone()),
+    )
+    .await
+    .unwrap();
+
+    // Check that the deployed version is now set to the new version.
+    {
+        let sns_pb::GetUpgradeJournalResponse {
+            deployed_version, ..
+        } = sns::governance::get_upgrade_journal(&pocket_ic, sns.governance.canister_id).await;
+
+        assert_eq!(deployed_version, Some(new_sns_version_2.clone()));
+    }
+
+    // Check that the upgrade journal contains the correct entries.
+    {
+        expected_upgrade_journal_entries.push(
+            sns_pb::upgrade_journal_entry::Event::UpgradeStarted(
+                sns_pb::upgrade_journal_entry::UpgradeStarted {
+                    current_version: Some(initial_sns_version.clone()),
+                    expected_version: Some(new_sns_version_1.clone()),
+                    reason: Some(
+                        sns_pb::upgrade_journal_entry::upgrade_started::Reason::BehindTargetVersion(
+                            sns_pb::Empty {},
+                        ),
+                    ),
+                },
+            ),
+        );
+
+        expected_upgrade_journal_entries.push(
+            sns_pb::upgrade_journal_entry::Event::UpgradeOutcome(
+                sns_pb::upgrade_journal_entry::UpgradeOutcome {
+                    status: Some(
+                        sns_pb::upgrade_journal_entry::upgrade_outcome::Status::Success(
+                            sns_pb::Empty {},
+                        ),
+                    ),
+                    human_readable: None,
+                },
+            ),
+        );
+
+        expected_upgrade_journal_entries.push(
+            sns_pb::upgrade_journal_entry::Event::UpgradeStarted(
+                sns_pb::upgrade_journal_entry::UpgradeStarted {
+                    current_version: Some(new_sns_version_1.clone()),
+                    expected_version: Some(new_sns_version_2.clone()),
+                    reason: Some(
+                        sns_pb::upgrade_journal_entry::upgrade_started::Reason::BehindTargetVersion(
+                            sns_pb::Empty {},
+                        ),
+                    ),
+                },
+            ),
+        );
+
+        expected_upgrade_journal_entries.push(
+            sns_pb::upgrade_journal_entry::Event::UpgradeOutcome(
+                sns_pb::upgrade_journal_entry::UpgradeOutcome {
+                    status: Some(
+                        sns_pb::upgrade_journal_entry::upgrade_outcome::Status::Success(
+                            sns_pb::Empty {},
+                        ),
+                    ),
+                    human_readable: None,
+                },
+            ),
+        );
+
+        assert_upgrade_journal(
+            &pocket_ic,
+            sns.governance,
+            &expected_upgrade_journal_entries,
+        )
+        .await;
+    }
 }

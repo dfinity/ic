@@ -1900,8 +1900,8 @@ pub mod governance {
         #[prost(uint64, tag = "3")]
         pub checking_upgrade_lock: u64,
         /// The proposal that initiated this upgrade
-        #[prost(uint64, tag = "4")]
-        pub proposal_id: u64,
+        #[prost(uint64, optional, tag = "4")]
+        pub proposal_id: ::core::option::Option<u64>,
     }
     #[derive(
         candid::CandidType,
@@ -3600,6 +3600,8 @@ pub struct GetUpgradeJournalResponse {
     /// feature, it reflect the version of the SNS that the community has decided to upgrade to.
     #[prost(message, optional, tag = "3")]
     pub target_version: ::core::option::Option<governance::Version>,
+    #[prost(message, optional, tag = "5")]
+    pub deployed_version: ::core::option::Option<governance::Version>,
     #[prost(message, optional, tag = "4")]
     pub upgrade_journal: ::core::option::Option<UpgradeJournal>,
 }
