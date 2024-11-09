@@ -131,6 +131,27 @@ pub fn setup(env: TestEnv) {
     check_nodes_health(&env);
     //install_nns_canisters_at_ids(&env);
 
+    for subnet in env.topology_snapshot().subnets() {
+        for node in subnet.nodes() {
+            match node.subnet_id() {
+                Some(subnet_id) => {
+                    let canister_ranges = node.get_subnet_canister_ranges();
+                    info!(&env.logger(), "=== ABC ===");
+                    info!(&env.logger(), "Node node.ic_name: {:?}", node.ic_name);
+                    info!(&env.logger(), "Node node.node_id: {:?}", node.node_id);
+                    info!(&env.logger(), "subnet_id: {:?}", subnet_id);
+                    info!(&env.logger(), "Canister ranges: {:?}", canister_ranges);
+                }
+                None => {
+                    info!(&env.logger(), "=== ABC ===");
+                    info!(&env.logger(), "Node node.ic_name: {:?}", node.ic_name);
+                    info!(&env.logger(), "Node node.node_id: {:?}", node.node_id);
+                    info!(&env.logger(), "subnet_id: None");
+                }
+            }
+        }
+    }
+
     install_nns_with_customizations_and_check_progress(
         env.topology_snapshot(),
         NnsCustomizations::default(),
