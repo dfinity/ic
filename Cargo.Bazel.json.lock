@@ -1,5 +1,5 @@
 {
-  "checksum": "80f4762a2f8fe99bbbf2a4741de304e024aa81ac195a1164df382c19ce84922e",
+  "checksum": "ae961338f1b205cababb2a8d36e79184f40160eb1fc0a8b069c97f8901dd587a",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -70267,7 +70267,8 @@
         "crate_features": {
           "common": [
             "background_threads_runtime_support",
-            "default"
+            "default",
+            "profiling"
           ],
           "selects": {}
         },
@@ -70285,20 +70286,19 @@
           "selects": {}
         },
         "edition": "2018",
+        "rustc_flags": {
+          "common": [
+            "-C",
+            "opt-level=3"
+          ],
+          "selects": {}
+        },
         "version": "0.5.4+5.3.0-patched"
       },
       "build_script_attrs": {
         "compile_data_glob": [
           "**"
         ],
-        "data": {
-          "common": [],
-          "selects": {
-            "x86_64-unknown-linux-gnu": [
-              "@jemalloc//:libjemalloc"
-            ]
-          }
-        },
         "data_glob": [
           "**"
         ],
@@ -70310,14 +70310,6 @@
             }
           ],
           "selects": {}
-        },
-        "build_script_env": {
-          "common": {},
-          "selects": {
-            "x86_64-unknown-linux-gnu": {
-              "JEMALLOC_OVERRIDE": "$(location @jemalloc//:libjemalloc)"
-            }
-          }
         },
         "links": "jemalloc"
       },
@@ -70360,7 +70352,8 @@
         "crate_features": {
           "common": [
             "background_threads_runtime_support",
-            "default"
+            "default",
+            "profiling"
           ],
           "selects": {}
         },
