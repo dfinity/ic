@@ -163,21 +163,21 @@ fn check_nodes_health(env: &TestEnv) {
     info!(&env.logger(), "All nodes are ready, IC setup succeeded.");
 }
 
-pub fn install_nns_canisters_at_ids(env: &TestEnv) {
-    info!(
-        &env.logger(),
-        "Installing NNS canisters on the root subnet ..."
-    );
-    let nns_node = env
-        .topology_snapshot()
-        .root_subnet()
-        .nodes()
-        .next()
-        .expect("there is no NNS node");
-    NnsInstallationBuilder::new()
-        .with_customizations(NnsCustomizations::default())
-        .at_ids()
-        .install(&nns_node, env)
-        .expect("NNS canisters not installed");
-    info!(&env.logger(), "NNS canisters installed");
-}
+// pub fn install_nns_canisters_at_ids(env: &TestEnv) {
+//     info!(
+//         &env.logger(),
+//         "Installing NNS canisters on the root subnet ..."
+//     );
+//     let nns_node = env
+//         .topology_snapshot()
+//         .root_subnet()
+//         .nodes()
+//         .next()
+//         .expect("there is no NNS node");
+//     NnsInstallationBuilder::new()
+//         .with_customizations(NnsCustomizations::default())
+//         .at_ids()
+//         .install(&nns_node, env)
+//         .expect("NNS canisters not installed");
+//     info!(&env.logger(), "NNS canisters installed");
+// }
