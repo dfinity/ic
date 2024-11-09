@@ -75,18 +75,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             patches = ["@rustix-patch//file:downloaded"],
         )],
         "tikv-jemalloc-sys": [crate.annotation(
-            # Avoid building jemalloc from rust (in part bc it creates builder-specific config files)
-            build_script_data = crate.select([], {
-                "x86_64-unknown-linux-gnu": [
-                    "@jemalloc//:libjemalloc",
-                ],
-            }),
-            build_script_env = crate.select(
-                {},
-                {
-                    "x86_64-unknown-linux-gnu": {"JEMALLOC_OVERRIDE": "$(location @jemalloc//:libjemalloc)"},
-                },
-            ),
+            rustc_flags = [
+                "-C",
+                "opt-level=3",
+            ],
         )],
         "cranelift-isle": [crate.annotation(
             # Patch for determinism issues
@@ -1268,6 +1260,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "tikv-jemallocator": crate.spec(
                 version = "^0.5",
+                features = [
+                    "profiling",
+                ],
             ),
             "time": crate.spec(
                 version = "^0.3.36",
