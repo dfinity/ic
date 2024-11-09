@@ -129,12 +129,12 @@ pub fn setup(env: TestEnv) {
         .expect("Failed to setup IC under test");
 
     check_nodes_health(&env);
-    install_nns_canisters_at_ids(&env);
+    //install_nns_canisters_at_ids(&env);
 
-    // install_nns_with_customizations_and_check_progress(
-    //     env.topology_snapshot(),
-    //     NnsCustomizations::default(),
-    // );
+    install_nns_with_customizations_and_check_progress(
+        env.topology_snapshot(),
+        NnsCustomizations::default(),
+    );
 
     BoundaryNode::new(String::from(BOUNDARY_NODE_NAME))
         .allocate_vm(&env)
