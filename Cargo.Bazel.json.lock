@@ -1,5 +1,5 @@
 {
-  "checksum": "123e349a001784db2969ace36d1d5f4d485beace1df69267ea4f80a17b7c35a3",
+  "checksum": "3ae1d8f974c70715eb6c96b5461fb094433a0ac382617ef84fa0efbfb2a8feef",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -7934,7 +7934,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.87",
               "target": "syn"
             }
           ],
@@ -86371,7 +86371,7 @@
     "rustc-demangle 0.1.23",
     "rustc-hash 1.1.0",
     "rustls 0.23.16",
-    "rustls-pemfile 2.1.2",
+    "rustls-pemfile 2.2.0",
     "rustversion 1.0.14",
     "rusty-fork 0.3.0",
     "schemars 0.8.16",

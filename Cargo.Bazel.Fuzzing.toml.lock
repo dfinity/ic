@@ -1358,7 +1358,7 @@ dependencies = [
  "proc-macro-crate 3.2.0",
  "proc-macro2",
  "quote",
- "syn 2.0.66",
+ "syn 2.0.87",
 ]
 
 [[package]]
@@ -3192,7 +3192,7 @@ dependencies = [
  "rustc-demangle",
  "rustc-hash 1.1.0",
  "rustls 0.23.16",
- "rustls-pemfile 2.1.2",
+ "rustls-pemfile 2.2.0",
  "rustversion",
  "rusty-fork",
  "schemars",
@@ -4934,7 +4934,7 @@ dependencies = [
  "prost-types 0.13.3",
  "rand 0.8.5",
  "rcgen",
- "reqwest 0.12.8",
+ "reqwest 0.12.9",
  "rustls 0.23.16",
  "rustls-acme",
  "rustls-pemfile 2.2.0",
@@ -6081,7 +6081,7 @@ dependencies = [
  "kube-core",
  "pem 3.0.4",
  "rustls 0.23.16",
- "rustls-pemfile 2.1.2",
+ "rustls-pemfile 2.2.0",
  "secrecy",
  "serde",
  "serde_json",
