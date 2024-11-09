@@ -1,10 +1,193 @@
 use crate::{
     governance::Governance,
-    neuron_store::NeuronStore,
-    pb::v1::{Ballot, Topic, Vote},
+    neuron_store::{NeuronStore, NeuronStoreError},
+    pb::v1::{Ballot, Topic, Topic::NeuronManagement, Vote},
 };
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
+use maplit::{btreemap, hashmap};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
+
+struct VotingStateMachine {
+    // The proposal ID that is being voted on.
+    proposal_id: ProposalId,
+    // The topic of the proposal.
+    topic: Topic,
+    // votes to cast
+    votes_to_cast: BTreeMap<NeuronId, Vote>,
+    // Votes that have been cast before checking followees
+    votes_cast_before_followees_checked: BTreeMap<NeuronId, Vote>,
+    // followers to process
+    followers_to_check: BTreeSet<NeuronId>,
+    // votes that need to be recorded in each neuron's recent_ballots
+    recent_neuron_ballots_to_record: BTreeMap<NeuronId, Vote>,
+    // votes cast
+    votes_fully_cast: BTreeMap<NeuronId, Vote>,
+}
+
+impl VotingStateMachine {
+    fn try_new(
+        proposal_id: ProposalId,
+        topic: Topic,
+        neuron_id: NeuronId,
+        vote: Vote,
+    ) -> Result<Self, String> {
+        if topic == Topic::Unspecified {
+            return Err("Topic must be specified".to_string());
+        }
+
+        let votes_to_cast = btreemap! { neuron_id => vote };
+
+        Ok(Self {
+            proposal_id,
+            topic,
+            votes_to_cast,
+            votes_cast_before_followees_checked: BTreeMap::new(),
+            followers_to_check: BTreeSet::new(),
+            recent_neuron_ballots_to_record: BTreeMap::new(),
+            votes_fully_cast: BTreeMap::new(),
+        })
+    }
+
+    fn is_done(&self) -> bool {
+        self.votes_to_cast.is_empty()
+            && self.followers_to_check.is_empty()
+            && self.recent_neuron_ballots_to_record.is_empty()
+    }
+
+    fn add_followers_to_check(
+        &mut self,
+        neuron_store: &NeuronStore,
+        voting_neuron: NeuronId,
+        topic: Topic,
+    ) {
+        self.followers_to_check
+            .extend(neuron_store.get_followers_by_followee_and_topic(voting_neuron, topic));
+        if ![Topic::Governance, Topic::SnsAndCommunityFund].contains(&topic) {
+            // Insert followers from 'Unspecified' (default followers)
+            self.followers_to_check.extend(
+                neuron_store.get_followers_by_followee_and_topic(voting_neuron, Topic::Unspecified),
+            );
+        }
+    }
+
+    fn cast_vote(&mut self, ballots: &mut HashMap<u64, Ballot>, neuron_id: NeuronId, vote: Vote) {
+        if let Some(ballot) = ballots.get_mut(&neuron_id.id) {
+            if ballot.vote == Vote::Unspecified as i32 {
+                ballot.vote = vote as i32;
+                // record the votes that have been cast, to log
+                self.votes_cast_before_followees_checked
+                    .insert(neuron_id, vote);
+                // votes to be recorded
+                self.recent_neuron_ballots_to_record.insert(neuron_id, vote);
+            }
+        }
+    }
+
+    fn continue_processing(
+        &mut self,
+        neuron_store: &mut NeuronStore,
+        ballots: &mut HashMap<u64, Ballot>,
+    ) {
+        if !self.votes_to_cast.is_empty() {
+            while let Some((neuron_id, vote)) = self.votes_to_cast.pop_first() {
+                if neuron_store.contains(neuron_id) {
+                    self.cast_vote(ballots, neuron_id, vote);
+                } else {
+                    // This is a bad inconsistency, but there is
+                    // nothing that can be done about it at this
+                    // place.  We somehow have followers recorded that don't exist.
+                    eprintln!("error in cast_vote_and_cascade_follow when gathering induction votes: neuron {} not found", neuron_id.id);
+                }
+            }
+        }
+
+        if !self.votes_cast_before_followees_checked.is_empty() {
+            while let Some((neuron_id, vote)) = self.votes_cast_before_followees_checked.pop_first()
+            {
+                if self.topic != NeuronManagement {
+                    self.add_followers_to_check(neuron_store, neuron_id, self.topic);
+                }
+                self.votes_fully_cast.insert(neuron_id, vote);
+            }
+        }
+
+        retain_neurons_with_castable_ballots(&mut self.followers_to_check, ballots);
+
+        if !self.followers_to_check.is_empty() {
+            while let Some(follower) = self.followers_to_check.pop_first() {
+                let vote = match neuron_store
+                    .neuron_would_follow_ballots(follower, self.topic, ballots)
+                {
+                    Ok(vote) => vote,
+                    Err(e) => {
+                        // This is a bad inconsistency, but there is
+                        // nothing that can be done about it at this
+                        // place.  We somehow have followers recorded that don't exist.
+                        eprintln!("error in cast_vote_and_cascade_follow when gathering induction votes: {:?}", e);
+                        Vote::Unspecified
+                    }
+                };
+                if vote != Vote::Unspecified {
+                    self.votes_to_cast.insert(follower, vote);
+                }
+            }
+        }
+
+        if !self.recent_neuron_ballots_to_record.is_empty() {
+            while let Some((neuron_id, vote)) = self.recent_neuron_ballots_to_record.pop_first() {
+                match neuron_store.with_neuron_mut(&neuron_id, |neuron| {
+                    neuron.register_recent_ballot(self.topic, &self.proposal_id, vote)
+                }) {
+                    Ok(_) => {}
+                    Err(e) => {
+                        // This is a bad inconsistency, but there is
+                        // nothing that can be done about it at this
+                        // place.  We somehow have followers recorded that don't exist.
+                        eprintln!("error in cast_vote_and_cascade_follow when gathering induction votes: {:?}", e);
+                    }
+                };
+            }
+        }
+    }
+}
+
+// Retain only neurons that have a ballot that can still be cast.  This excludes
+// neurons with no ballots or ballots that have already been cast.
+fn retain_neurons_with_castable_ballots(
+    followers: &mut BTreeSet<NeuronId>,
+    ballots: &HashMap<u64, Ballot>,
+) {
+    followers.retain(|f| {
+        ballots
+            .get(&f.id)
+            // Only retain neurons with unspecified ballots
+            .map(|b| b.vote == Vote::Unspecified as i32)
+            // Neurons without ballots are also dropped
+            .unwrap_or_default()
+    });
+}
+
+pub(crate) fn cast_vote_and_cascade_follow(
+    proposal_id: &ProposalId,
+    ballots: &mut HashMap<u64, Ballot>,
+    voting_neuron_id: &NeuronId,
+    vote_of_neuron: Vote,
+    topic: Topic,
+    neuron_store: &mut NeuronStore,
+) {
+    let mut state_machine =
+        match VotingStateMachine::try_new(*proposal_id, topic, *voting_neuron_id, vote_of_neuron) {
+            Ok(sm) => sm,
+            Err(e) => {
+                // TODO - make this whole function return possible errors?
+                panic!("error in cast_vote_and_cascade_follow: {:?}", e);
+            }
+        };
+
+    while !state_machine.is_done() {
+        state_machine.continue_processing(neuron_store, ballots);
+    }
+}
 
 /// Register `voting_neuron_id` voting according to
 /// `vote_of_neuron` (which must be `yes` or `no`) in 'ballots' and
@@ -14,7 +197,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 /// to followees).
 /// Cascading only occurs for proposal topics that support following (i.e.,
 /// all topics except Topic::NeuronManagement).
-pub(crate) fn cast_vote_and_cascade_follow(
+pub(crate) fn old_cast_vote_and_cascade_follow(
     proposal_id: &ProposalId,
     ballots: &mut HashMap<u64, Ballot>,
     voting_neuron_id: &NeuronId,
