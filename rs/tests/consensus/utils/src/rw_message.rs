@@ -310,34 +310,33 @@ pub fn install_nns_with_customizations_and_check_progress(
         .expect("NNS canisters not installed");
     info!(logger, "NNS canisters are installed.");
 
-    // Skip application subnet checks, because all canister_ids ranges used by the NNS.
-    // for subnet in topology
-    //     .subnets()
-    //     .filter(|subnet| subnet.subnet_id != topology.root_subnet_id())
-    // {
-    //     if !subnet.raw_subnet_record().is_halted {
-    //         info!(
-    //             logger,
-    //             "Checking if all the nodes are participating in the subnet {}", subnet.subnet_id
-    //         );
-    //         for node in subnet.nodes() {
-    //             cert_state_makes_progress_with_retries(
-    //                 &node.get_public_url(),
-    //                 node.effective_canister_id(),
-    //                 &logger,
-    //                 /*timeout=*/ secs(600),
-    //                 /*backoff=*/ secs(2),
-    //             );
-    //         }
-    //     } else {
-    //         info!(
-    //             logger,
-    //             "Subnet {} is halted. \
-    //             Not checking if all the nodes are participating in the subnet",
-    //             subnet.subnet_id,
-    //         );
-    //     }
-    // }
+    for subnet in topology
+        .subnets()
+        .filter(|subnet| subnet.subnet_id != topology.root_subnet_id())
+    {
+        if !subnet.raw_subnet_record().is_halted {
+            info!(
+                logger,
+                "Checking if all the nodes are participating in the subnet {}", subnet.subnet_id
+            );
+            for node in subnet.nodes() {
+                cert_state_makes_progress_with_retries(
+                    &node.get_public_url(),
+                    node.effective_canister_id(),
+                    &logger,
+                    /*timeout=*/ secs(600),
+                    /*backoff=*/ secs(2),
+                );
+            }
+        } else {
+            info!(
+                logger,
+                "Subnet {} is halted. \
+                Not checking if all the nodes are participating in the subnet",
+                subnet.subnet_id,
+            );
+        }
+    }
 }
 
 pub fn install_nns_and_check_progress(topology: TopologySnapshot) {
