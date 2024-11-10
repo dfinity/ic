@@ -6,10 +6,11 @@ use crate::{
     storage::{
         LocalRef, StableMap, StorableConfig, StorableIncidentId, StorableIncidentMetadata,
         StorablePrincipal, StorableRuleId, StorableRuleMetadata, StorableVersion,
-        AUTHORIZED_PRINCIPAL, CONFIGS, INCIDENTS, RULES,
+        API_BOUNDARY_NODE_PRINCIPALS, AUTHORIZED_PRINCIPAL, CONFIGS, INCIDENTS, RULES,
     },
     types::{IncidentId, InputConfig, InputRule, RuleId, Timestamp, Version},
 };
+use std::collections::HashSet;
 
 #[automock]
 pub trait CanisterApi {
@@ -31,6 +32,11 @@ pub trait CanisterApi {
         incident_id: IncidentId,
         rule_ids: StorableIncidentMetadata,
     ) -> Option<StorableIncidentMetadata>;
+    fn is_api_boundary_node_principal(&self, principal: &Principal) -> bool;
+    fn set_api_boundary_nodes_principals(&self, principals: Vec<Principal>);
+    fn incidents_count(&self) -> u64;
+    fn active_rules_count(&self) -> u64;
+    fn configs_count(&self) -> u64;
 }
 
 #[derive(Clone)]
@@ -39,6 +45,7 @@ pub struct CanisterState {
     rules: LocalRef<StableMap<StorableRuleId, StorableRuleMetadata>>,
     incidents: LocalRef<StableMap<StorableIncidentId, StorableIncidentMetadata>>,
     authorized_principal: LocalRef<StableMap<(), StorablePrincipal>>,
+    api_boundary_node_principals: LocalRef<HashSet<Principal>>,
 }
 
 impl CanisterState {
@@ -48,6 +55,7 @@ impl CanisterState {
             rules: &RULES,
             incidents: &INCIDENTS,
             authorized_principal: &AUTHORIZED_PRINCIPAL,
+            api_boundary_node_principals: &API_BOUNDARY_NODE_PRINCIPALS,
         }
     }
 }
@@ -61,6 +69,11 @@ impl CanisterApi for CanisterState {
     fn set_authorized_principal(&self, principal: Principal) {
         self.authorized_principal
             .with(|cell| cell.borrow_mut().insert((), principal));
+    }
+
+    fn is_api_boundary_node_principal(&self, principal: &Principal) -> bool {
+        self.api_boundary_node_principals
+            .with(|cell| cell.borrow().contains(principal))
     }
 
     fn get_version(&self) -> Option<StorableVersion> {
@@ -127,6 +140,28 @@ impl CanisterApi for CanisterState {
             cell.borrow_mut()
                 .insert(StorableIncidentId(incident_id.0), rule_ids)
         })
+    }
+
+    fn set_api_boundary_nodes_principals(&self, principals: Vec<Principal>) {
+        API_BOUNDARY_NODE_PRINCIPALS
+            .with(|cell| *cell.borrow_mut() = HashSet::from_iter(principals));
+    }
+
+    fn incidents_count(&self) -> u64 {
+        self.incidents.with(|cell| cell.borrow().len())
+    }
+
+    fn active_rules_count(&self) -> u64 {
+        self.configs.with(|cell| {
+            let configs = cell.borrow();
+            configs
+                .last_key_value()
+                .map_or(0, |(_, value)| value.rule_ids.len() as u64)
+        })
+    }
+
+    fn configs_count(&self) -> u64 {
+        self.configs.with(|cell| cell.borrow().len())
     }
 }
 

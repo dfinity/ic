@@ -1,7 +1,12 @@
 use candid::Principal;
 use mockall::automock;
 
-use crate::{state::CanisterApi, storage::API_BOUNDARY_NODE_PRINCIPALS};
+use crate::{
+    add_config::{AddConfigError, AddsConfig},
+    disclose::{DiscloseRulesError, DisclosesRules},
+    state::CanisterApi,
+    types::Timestamp,
+};
 
 #[automock]
 pub trait ResolveAccessLevel {
@@ -38,15 +43,58 @@ impl<R: CanisterApi> ResolveAccessLevel for AccessLevelResolver<R> {
             }
         }
 
-        let has_full_read_access = API_BOUNDARY_NODE_PRINCIPALS.with(|cell| {
-            let full_read_principals = cell.borrow();
-            full_read_principals.contains(&self.caller_id)
-        });
+        let has_full_read_access = self
+            .canister_api
+            .is_api_boundary_node_principal(&self.caller_id);
 
         if has_full_read_access {
             return AccessLevel::FullRead;
         }
 
         AccessLevel::RestrictedRead
+    }
+}
+
+pub struct WithAuthorization<T, R> {
+    inner: T,
+    access_resolver: R,
+}
+
+impl<T, R> WithAuthorization<T, R> {
+    pub fn new(inner: T, access_resolver: R) -> Self {
+        Self {
+            inner,
+            access_resolver,
+        }
+    }
+}
+
+impl<T: AddsConfig, R: ResolveAccessLevel> AddsConfig for WithAuthorization<T, R> {
+    fn add_config(
+        &self,
+        input_config: rate_limits_api::InputConfig,
+        time: Timestamp,
+    ) -> Result<(), AddConfigError> {
+        // Only privileged users can perform this operation
+        if self.access_resolver.get_access_level() != AccessLevel::FullAccess {
+            return Err(AddConfigError::Unauthorized);
+        }
+        // Perform the inner call only if authorized.
+        self.inner.add_config(input_config, time)
+    }
+}
+
+impl<T: DisclosesRules, R: ResolveAccessLevel> DisclosesRules for WithAuthorization<T, R> {
+    fn disclose_rules(
+        &self,
+        arg: rate_limits_api::DiscloseRulesArg,
+        current_time: Timestamp,
+    ) -> Result<(), DiscloseRulesError> {
+        // Only privileged users can perform this operation
+        if self.access_resolver.get_access_level() != AccessLevel::FullAccess {
+            return Err(DiscloseRulesError::Unauthorized);
+        }
+        // Perform the inner call only if authorized.
+        self.inner.disclose_rules(arg, current_time)
     }
 }
