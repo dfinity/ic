@@ -76,7 +76,8 @@ const ORCHESTRATOR_PROMETHEUS_TARGET: &str = "orchestrator.json";
 const NODE_EXPORTER_PROMETHEUS_TARGET: &str = "node_exporter.json";
 const LEDGER_CANISTER_PROMETHEUS_TARGET: &str = "ledger_canister.json";
 const BITCOIN_TESTNET_CANISTER_PROMETHEUS_TARGET: &str = "bitcoin_testnet_canister.json";
-const WATCHDOG_TESTNET_CANISTER_PROMETHEUS_TARGET: &str = "watchdog_testnet_canister.json";
+const BITCOIN_WATCHDOG_TESTNET_CANISTER_PROMETHEUS_TARGET: &str =
+    "bitcoin_watchdog_testnet_canister.json";
 const BN_PROMETHEUS_TARGET: &str = "boundary_nodes.json";
 const BN_EXPORTER_PROMETHEUS_TARGET: &str = "boundary_nodes_exporter.json";
 const IC_BOUNDARY_PROMETHEUS_TARGET: &str = "ic_boundary.json";
@@ -320,7 +321,7 @@ impl HasPrometheus for TestEnv {
         if farm_url_for_ledger_canister.is_some() {
             target_json_files.push(LEDGER_CANISTER_PROMETHEUS_TARGET);
             target_json_files.push(BITCOIN_TESTNET_CANISTER_PROMETHEUS_TARGET);
-            target_json_files.push(WATCHDOG_TESTNET_CANISTER_PROMETHEUS_TARGET);
+            target_json_files.push(BITCOIN_WATCHDOG_TESTNET_CANISTER_PROMETHEUS_TARGET);
         }
         for file in &target_json_files {
             let from = prometheus_config_dir.join(file);
@@ -425,8 +426,9 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
         Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(LEDGER_CANISTER_PROMETHEUS_TARGET);
     let bitcoin_testnet_canister_scraping_target_path =
         Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(BITCOIN_TESTNET_CANISTER_PROMETHEUS_TARGET);
-    let watchdog_testnet_canister_scraping_target_path = Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR)
-        .join(WATCHDOG_TESTNET_CANISTER_PROMETHEUS_TARGET);
+    let bitcoin_watchdog_testnet_canister_scraping_target_path =
+        Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR)
+            .join(BITCOIN_WATCHDOG_TESTNET_CANISTER_PROMETHEUS_TARGET);
     let scrape_interval_str: String = format!("{}s", scrape_interval.as_secs());
     let prometheus_config = json!({
         "global": {"scrape_interval": scrape_interval_str},
@@ -470,13 +472,13 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
                 "file_sd_configs": [{"files": [bitcoin_testnet_canister_scraping_target_path]}],
             },
             {
-                "job_name": "watchdog-testnet-canister",
+                "job_name": "bitcoin-watchdog-testnet-canister",
                 "honor_timestamps": true,
                 "metrics_path": "/metrics",
                 "scheme": "https",
                 "follow_redirects": true,
                 "enable_http2": true,
-                "file_sd_configs": [{"files": [watchdog_testnet_canister_scraping_target_path]}],
+                "file_sd_configs": [{"files": [bitcoin_watchdog_testnet_canister_scraping_target_path]}],
             },
         ],
     });
@@ -629,13 +631,15 @@ fn sync_prometheus_config_dir(
             &bitcoin_testnet_canister_p8s_static_config,
         )?;
         // Watchdog testnet canister
-        let watchdog_testnet_canister_p8s_static_config = vec![PrometheusStaticConfig {
+        let bitcoin_watchdog_testnet_canister_p8s_static_config = vec![PrometheusStaticConfig {
             targets: vec![format!("gjqfs-iaaaa-aaaan-aaada-cai.raw.{}", farm_url)],
             labels: hashmap! {"ic".to_string() => group_name.clone()},
         }];
         serde_json::to_writer(
-            &File::create(prometheus_config_dir.join(WATCHDOG_TESTNET_CANISTER_PROMETHEUS_TARGET))?,
-            &watchdog_testnet_canister_p8s_static_config,
+            &File::create(
+                prometheus_config_dir.join(BITCOIN_WATCHDOG_TESTNET_CANISTER_PROMETHEUS_TARGET),
+            )?,
+            &bitcoin_watchdog_testnet_canister_p8s_static_config,
         )?;
     }
     for (name, p8s_static_configs) in &[

@@ -108,9 +108,6 @@ impl TopologyConfig {
         &self,
     ) -> Result<RoutingTable, WellFormedError> {
         let calculate_ranges = |specified_ids_range_start: u64, specified_ids_range_end: u64| {
-            //     let specified_ids_range_start: u64 = 0;
-            // let specified_ids_range_end: u64 = u64::MAX / 2;
-
             let specified_ids_range = CanisterIdRange {
                 start: CanisterId::from(specified_ids_range_start),
                 end: CanisterId::from(specified_ids_range_end),
