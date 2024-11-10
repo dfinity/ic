@@ -305,6 +305,7 @@ pub fn install_nns_with_customizations_and_check_progress(
     let nns_node = topology.root_subnet().nodes().next().unwrap();
     NnsInstallationBuilder::new()
         .with_customizations(customizations)
+        .at_ids()
         .install(&nns_node, &topology.test_env())
         .expect("NNS canisters not installed");
     info!(logger, "NNS canisters are installed.");

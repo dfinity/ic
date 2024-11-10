@@ -39,12 +39,23 @@ use anyhow::Result;
 use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
-    boundary_node::BoundaryNode,
+    boundary_node::{BoundaryNode, BoundaryNodeVm},
     group::SystemTestGroup,
     ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
-    test_env_api::{await_boundary_node_healthy, HasTopologySnapshot, NnsCustomizations},
+    test_env_api::{
+        await_boundary_node_healthy, get_dependency_path, HasPublicApiUrl, HasTopologySnapshot,
+        IcNodeContainer, IcNodeSnapshot, NnsCustomizations, NnsInstallationBuilder, SubnetSnapshot,
+    },
+    universal_vm::{UniversalVm, UniversalVms},
+};
+
+use slog::{debug, info, Logger};
+use std::{
+    fs::File,
+    io::Write,
+    net::{IpAddr, SocketAddr},
 };
 
 const BOUNDARY_NODE_NAME: &str = "boundary-node-1";
@@ -56,24 +67,32 @@ fn main() -> Result<()> {
     Ok(())
 }
 
+const UNIVERSAL_VM_NAME: &str = "btc-node";
+
 pub fn setup(env: TestEnv) {
     PrometheusVm::default()
         .start(&env)
         .expect("Failed to start prometheus VM");
+
     InternetComputer::new()
         .with_default_vm_resources(VmResources {
             vcpus: Some(NrOfVCPUs::new(64)),
             memory_kibibytes: Some(AmountOfMemoryKiB::new(480 << 20)),
             boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(2_000)),
         })
+        .use_specified_ids_allocation_range()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
         .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
         .setup_and_start(&env)
         .expect("Failed to setup IC under test");
+
+    check_nodes_health(&env);
+
     install_nns_with_customizations_and_check_progress(
         env.topology_snapshot(),
         NnsCustomizations::default(),
     );
+
     BoundaryNode::new(String::from(BOUNDARY_NODE_NAME))
         .allocate_vm(&env)
         .expect("Allocation of BoundaryNode failed.")
@@ -81,6 +100,32 @@ pub fn setup(env: TestEnv) {
         .use_real_certs_and_dns()
         .start(&env)
         .expect("failed to setup BoundaryNode VM");
-    env.sync_with_prometheus();
-    await_boundary_node_healthy(&env, BOUNDARY_NODE_NAME);
+
+    let boundary_node = env
+        .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
+        .unwrap()
+        .get_snapshot()
+        .unwrap();
+    let farm_url = boundary_node.get_playnet().unwrap();
+    env.sync_with_prometheus_by_name("", Some(farm_url));
+
+    info!(&env.logger(), "Checking boundary node readines ...");
+    //await_boundary_node_healthy(&env, BOUNDARY_NODE_NAME);
+    boundary_node
+        .await_status_is_healthy()
+        .expect("BN did not come up!");
+    info!(&env.logger(), "Boundary node is ready.");
+}
+
+fn check_nodes_health(env: &TestEnv) {
+    info!(
+        &env.logger(),
+        "Checking readiness of all nodes after the IC setup ..."
+    );
+    env.topology_snapshot().subnets().for_each(|subnet| {
+        subnet
+            .nodes()
+            .for_each(|node| node.await_status_is_healthy().unwrap())
+    });
+    info!(&env.logger(), "All nodes are ready, IC setup succeeded.");
 }

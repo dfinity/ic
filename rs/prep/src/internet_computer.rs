@@ -107,29 +107,43 @@ impl TopologyConfig {
     fn get_routing_table_with_specified_ids_allocation_range(
         &self,
     ) -> Result<RoutingTable, WellFormedError> {
-        let specified_ids_range_start: u64 = 0;
-        let specified_ids_range_end: u64 = u64::MAX / 2;
+        let calculate_ranges = |specified_ids_range_start: u64, specified_ids_range_end: u64| {
+            let specified_ids_range = CanisterIdRange {
+                start: CanisterId::from(specified_ids_range_start),
+                end: CanisterId::from(specified_ids_range_end),
+            };
 
-        let specified_ids_range = CanisterIdRange {
-            start: CanisterId::from(specified_ids_range_start),
-            end: CanisterId::from(specified_ids_range_end),
+            let subnets_allocation_range_start =
+                ((specified_ids_range_end / CANISTER_IDS_PER_SUBNET) + 2) * CANISTER_IDS_PER_SUBNET;
+            let subnets_allocation_range_end =
+                subnets_allocation_range_start + CANISTER_IDS_PER_SUBNET - 1;
+
+            let subnets_allocation_range = CanisterIdRange {
+                start: CanisterId::from(subnets_allocation_range_start),
+                end: CanisterId::from(subnets_allocation_range_end),
+            };
+            (specified_ids_range, subnets_allocation_range)
         };
 
-        let subnets_allocation_range_start =
-            ((specified_ids_range_end / CANISTER_IDS_PER_SUBNET) + 2) * CANISTER_IDS_PER_SUBNET;
-        let subnets_allocation_range_end =
-            subnets_allocation_range_start + CANISTER_IDS_PER_SUBNET - 1;
-
-        let subnets_allocation_range = CanisterIdRange {
-            start: CanisterId::from(subnets_allocation_range_start),
-            end: CanisterId::from(subnets_allocation_range_end),
-        };
+        let (specified_ids_range, subnets_allocation_range) = calculate_ranges(0, u64::MAX / 2);
 
         let mut routing_table = RoutingTable::default();
+
+        // System subnet is always the first subnet.
         let subnet_index = self.subnets.keys().next().unwrap();
         let subnet_id = self.subnet_ids[subnet_index];
         routing_table.insert(specified_ids_range, subnet_id)?;
         routing_table.insert(subnets_allocation_range, subnet_id)?;
+
+        // Add application subnet if it exists.
+        if let Some(subnet_index) = self.subnets.keys().nth(1) {
+            let offset = u64::MAX / 2 + 1;
+            let (specified_ids_range, subnets_allocation_range) =
+                calculate_ranges(offset, offset + CANISTER_IDS_PER_SUBNET);
+            let subnet_id = self.subnet_ids[subnet_index];
+            routing_table.insert(subnets_allocation_range, subnet_id)?;
+        }
+
         Ok(routing_table)
     }
 
