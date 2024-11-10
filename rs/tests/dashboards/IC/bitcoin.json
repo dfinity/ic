@@ -2476,12 +2476,11 @@
       },
       {
         "auto": true,
-        "auto_count": 50,
+        "auto_count": 200,
         "auto_min": "20s",
         "current": {
-          "selected": false,
-          "text": "20s",
-          "value": "20s"
+          "text": "$__auto",
+          "value": "$__auto_interval_heatmap_period"
         },
         "hide": 2,
         "label": "Heatmap aggregation period",
@@ -2489,11 +2488,6 @@
         "options": [
           {
             "selected": false,
-            "text": "auto",
-            "value": "$__auto_interval_heatmap_period"
-          },
-          {
-            "selected": true,
             "text": "20s",
             "value": "20s"
           },
