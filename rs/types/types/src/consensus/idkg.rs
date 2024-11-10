@@ -935,7 +935,7 @@ pub fn ecdsa_sig_share_prefix(
     sig_share_node_id.hash(&mut hasher);
 
     IDkgPrefixOf::new(IDkgPrefix::new(
-        request_id.pre_signature_id.id(),
+        request_id.callback_id.get(),
         hasher.finish(),
     ))
 }
@@ -949,7 +949,7 @@ pub fn schnorr_sig_share_prefix(
     sig_share_node_id.hash(&mut hasher);
 
     IDkgPrefixOf::new(IDkgPrefix::new(
-        request_id.pre_signature_id.id(),
+        request_id.callback_id.get(),
         hasher.finish(),
     ))
 }
@@ -1274,7 +1274,7 @@ impl From<&EcdsaSigShare> for pb::EcdsaSigShare {
     fn from(value: &EcdsaSigShare) -> Self {
         Self {
             signer_id: Some(node_id_into_protobuf(value.signer_id)),
-            request_id: Some(pb::RequestId::from(value.request_id.clone())),
+            request_id: Some(pb::RequestId::from(value.request_id)),
             sig_share_raw: value.share.sig_share_raw.clone(),
         }
     }
@@ -1323,7 +1323,7 @@ impl From<&SchnorrSigShare> for pb::SchnorrSigShare {
     fn from(value: &SchnorrSigShare) -> Self {
         Self {
             signer_id: Some(node_id_into_protobuf(value.signer_id)),
-            request_id: Some(pb::RequestId::from(value.request_id.clone())),
+            request_id: Some(pb::RequestId::from(value.request_id)),
             sig_share_raw: value.share.sig_share_raw.clone(),
         }
     }
@@ -1380,8 +1380,8 @@ impl SigShare {
 
     pub fn request_id(&self) -> RequestId {
         match self {
-            SigShare::Ecdsa(share) => share.request_id.clone(),
-            SigShare::Schnorr(share) => share.request_id.clone(),
+            SigShare::Ecdsa(share) => share.request_id,
+            SigShare::Schnorr(share) => share.request_id,
         }
     }
 

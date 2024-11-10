@@ -122,7 +122,7 @@ pub enum Method {
 fn candid_error_to_user_error(err: candid::Error) -> UserError {
     UserError::new(
         ErrorCode::InvalidManagementPayload,
-        format!("Error decoding candid: {:?}", err),
+        format!("Error decoding candid: {:#}", err),
     )
 }
 

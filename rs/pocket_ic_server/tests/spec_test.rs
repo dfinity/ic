@@ -196,7 +196,7 @@ fn setup_and_run_ic_ref_test(
         peer_subnet_config,
         excluded_tests,
         included_tests,
-        64,
+        32,
     );
 }
 

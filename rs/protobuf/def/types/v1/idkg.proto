@@ -2,7 +2,6 @@ syntax = "proto3";
 
 package types.v1;
 
-import "registry/crypto/v1/crypto.proto";
 import "registry/subnet/v1/subnet.proto";
 import "state/queues/v1/queues.proto";
 import "types/v1/signature.proto";
@@ -60,11 +59,10 @@ message XnetReshareAgreement {
 }
 
 message RequestId {
-  reserved 4;
+  reserved 1, 2, 4;
   reserved "key_id";
-  bytes pseudo_random_id = 1;
-  uint64 pre_signature_id = 2;
   uint64 height = 3;
+  uint64 callback_id = 5;
 }
 
 message TranscriptRef {

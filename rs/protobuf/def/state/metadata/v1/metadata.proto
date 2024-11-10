@@ -3,7 +3,6 @@ package state.metadata.v1;
 
 import "bitcoin/v1/bitcoin.proto";
 import "google/protobuf/wrappers.proto";
-import "registry/crypto/v1/crypto.proto";
 import "registry/routing_table/v1/routing_table.proto";
 import "registry/subnet/v1/subnet.proto";
 import "state/canister_state_bits/v1/canister_state_bits.proto";
