@@ -119,7 +119,7 @@
             "uid": "000000001"
           },
           "editorMode": "code",
-          "expr": "max(main_chain_height{job=\"bitcoin-$network-canister\"})",
+          "expr": "max(main_chain_height{ic=\"$ic\",job=\"bitcoin-$network-canister\"})",
           "range": true,
           "refId": "A"
         }
@@ -213,7 +213,7 @@
             "uid": "000000001"
           },
           "editorMode": "code",
-          "expr": "max(main_chain_height{job=\"bitcoin-$network-canister\"}) - max(stable_height{job=\"bitcoin-$network-canister\"})",
+          "expr": "max(main_chain_height{ic=\"$ic\",job=\"bitcoin-$network-canister\"}) - max(stable_height{ic=\"$ic\",job=\"bitcoin-$network-canister\"})",
           "legendFormat": "main_chain_height - stable_height",
           "range": true,
           "refId": "A"
@@ -306,7 +306,7 @@
             "uid": "000000001"
           },
           "editorMode": "code",
-          "expr": "utxos_length{job=\"bitcoin-$network-canister\"}",
+          "expr": "utxos_length{ic=\"$ic\",job=\"bitcoin-$network-canister\"}",
           "legendFormat": "{{job}}",
           "range": true,
           "refId": "A"
@@ -400,7 +400,7 @@
             "uid": "000000001"
           },
           "editorMode": "code",
-          "expr": "address_utxos_length{job=\"bitcoin-$network-canister\"}",
+          "expr": "address_utxos_length{ic=\"$ic\",job=\"bitcoin-$network-canister\"}",
           "legendFormat": "{{job}}",
           "range": true,
           "refId": "A"
@@ -479,7 +479,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "max(unstable_blocks_total{job=\"bitcoin-$network-canister\"})"
+              "options": "max(unstable_blocks_total{ic=\"$ic\",job=\"bitcoin-$network-canister\"})"
             },
             "properties": [
               {
@@ -491,7 +491,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "max(unstable_blocks_depth{job=\"bitcoin-$network-canister\"})"
+              "options": "max(unstable_blocks_depth{ic=\"$ic\",job=\"bitcoin-$network-canister\"})"
             },
             "properties": [
               {
@@ -529,7 +529,7 @@
             "uid": "000000001"
           },
           "editorMode": "code",
-          "expr": "max(unstable_blocks_total{job=\"bitcoin-$network-canister\"})",
+          "expr": "max(unstable_blocks_total{ic=\"$ic\",job=\"bitcoin-$network-canister\"})",
           "hide": false,
           "range": true,
           "refId": "A"
@@ -540,7 +540,7 @@
             "uid": "000000001"
           },
           "editorMode": "code",
-          "expr": "max(unstable_blocks_depth{job=\"bitcoin-$network-canister\"})",
+          "expr": "max(unstable_blocks_depth{ic=\"$ic\",job=\"bitcoin-$network-canister\"})",
           "hide": false,
           "legendFormat": "__auto",
           "range": true,
@@ -632,7 +632,7 @@
             "uid": "000000001"
           },
           "editorMode": "code",
-          "expr": "max(unstable_blocks_difficulty_based_depth{job=\"bitcoin-$network-canister\"}) - max(normalized_stability_threshold{job=\"bitcoin-$network-canister\"})",
+          "expr": "max(unstable_blocks_difficulty_based_depth{ic=\"$ic\",job=\"bitcoin-$network-canister\"}) - max(normalized_stability_threshold{ic=\"$ic\",job=\"bitcoin-$network-canister\"})",
           "range": true,
           "refId": "A"
         },
@@ -705,7 +705,7 @@
             "uid": "000000001"
           },
           "editorMode": "code",
-          "expr": "max(anchor_difficulty{job=\"bitcoin-$network-canister\"})",
+          "expr": "max(anchor_difficulty{ic=\"$ic\",job=\"bitcoin-$network-canister\"})",
           "range": true,
           "refId": "A"
         }
@@ -766,7 +766,7 @@
             "uid": "000000001"
           },
           "editorMode": "code",
-          "expr": "max(unstable_blocks_num_tips{job=\"bitcoin-$network-canister\"})",
+          "expr": "max(unstable_blocks_num_tips{ic=\"$ic\",job=\"bitcoin-$network-canister\"})",
           "range": true,
           "refId": "A"
         }
@@ -909,7 +909,7 @@
               },
               "editorMode": "code",
               "exemplar": false,
-              "expr": "sum (\n    0.99 * api_access_target{job=\"bitcoin-watchdog-$network-canister\", flag=\"enabled\"},\n    0.5 * api_access_target{job=\"bitcoin-watchdog-$network-canister\", flag=\"disabled\"},\n    0.01 * api_access_target{job=\"bitcoin-watchdog-$network-canister\", flag=\"undefined\"},\n)",
+              "expr": "sum (\n    0.99 * api_access_target{ic=\"$ic\",job=\"bitcoin-watchdog-$network-canister\", flag=\"enabled\"},\n    0.5 * api_access_target{ic=\"$ic\",job=\"bitcoin-watchdog-$network-canister\", flag=\"disabled\"},\n    0.01 * api_access_target{ic=\"$ic\",job=\"bitcoin-watchdog-$network-canister\", flag=\"undefined\"},\n)",
               "instant": false,
               "legendFormat": "target {{flag}}",
               "range": true,
@@ -921,7 +921,7 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "sum (\n    0.99 * api_access{job=\"bitcoin-$network-canister\", flag=\"enabled\"},\n    0.5 * api_access{job=\"bitcoin-$network-canister\", flag=\"disabled\"},\n    0.01 * api_access{job=\"bitcoin-$network-canister\", flag=\"undefined\"},\n)",
+              "expr": "sum (\n    0.99 * api_access{ic=\"$ic\",job=\"bitcoin-$network-canister\", flag=\"enabled\"},\n    0.5 * api_access{ic=\"$ic\",job=\"bitcoin-$network-canister\", flag=\"disabled\"},\n    0.01 * api_access{ic=\"$ic\",job=\"bitcoin-$network-canister\", flag=\"undefined\"},\n)",
               "hide": false,
               "legendFormat": "actual {{flag}}",
               "range": true,
@@ -1014,7 +1014,7 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "height_target{job=\"bitcoin-watchdog-$network-canister\"} > 0",
+              "expr": "height_target{ic=\"$ic\",job=\"bitcoin-watchdog-$network-canister\"} > 0",
               "legendFormat": "height_target",
               "range": true,
               "refId": "height_target"
@@ -1025,7 +1025,7 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "bitcoin_canister_height{job=\"bitcoin-watchdog-$network-canister\"} > 0",
+              "expr": "bitcoin_canister_height{ic=\"$ic\",job=\"bitcoin-watchdog-$network-canister\"} > 0",
               "hide": false,
               "legendFormat": "bitcoin_canister_height",
               "range": true,
@@ -1118,7 +1118,7 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "((height_diff{job=\"bitcoin-watchdog-$network-canister\"} +8181818181)>0) -8181818181",
+              "expr": "((height_diff{ic=\"$ic\",job=\"bitcoin-watchdog-$network-canister\"} +8181818181)>0) -8181818181",
               "legendFormat": "height_diff",
               "range": true,
               "refId": "height_diff"
@@ -1129,7 +1129,7 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "blocks_behind_threshold{job=\"bitcoin-watchdog-$network-canister\"}",
+              "expr": "blocks_behind_threshold{ic=\"$ic\",job=\"bitcoin-watchdog-$network-canister\"}",
               "hide": false,
               "legendFormat": "{{__name__}}",
               "range": true,
@@ -1141,7 +1141,7 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "blocks_ahead_threshold{job=\"bitcoin-watchdog-$network-canister\"}",
+              "expr": "blocks_ahead_threshold{ic=\"$ic\",job=\"bitcoin-watchdog-$network-canister\"}",
               "hide": false,
               "legendFormat": "{{__name__}}",
               "range": true,
@@ -1259,7 +1259,7 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "height_status{job=\"bitcoin-watchdog-$network-canister\"}",
+              "expr": "height_status{ic=\"$ic\",job=\"bitcoin-watchdog-$network-canister\"}",
               "legendFormat": "{{code}}",
               "range": true,
               "refId": "height_status"
@@ -1351,7 +1351,7 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "explorer_height{job=\"bitcoin-watchdog-$network-canister\"} > 0",
+              "expr": "explorer_height{ic=\"$ic\",job=\"bitcoin-watchdog-$network-canister\"} > 0",
               "legendFormat": "{{explorer}}",
               "range": true,
               "refId": "explorer_height"
@@ -1443,7 +1443,7 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "available_explorers{job=\"bitcoin-watchdog-$network-canister\"}",
+              "expr": "available_explorers{ic=\"$ic\",job=\"bitcoin-watchdog-$network-canister\"}",
               "legendFormat": "{{__name__}}",
               "range": true,
               "refId": "available_explorers"
@@ -1454,7 +1454,7 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "min_explorers{job=\"bitcoin-watchdog-$network-canister\"}",
+              "expr": "min_explorers{ic=\"$ic\",job=\"bitcoin-watchdog-$network-canister\"}",
               "hide": false,
               "legendFormat": "{{__name__}}",
               "range": true,
@@ -1567,7 +1567,7 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "round(\n  sum by (le) (\n    avg by(le) (\n      increase(ins_get_utxos_total_bucket{job=\"bitcoin-$network-canister\"}[$heatmap_period])\n    )\n  )\n)",
+              "expr": "round(\n  sum by (le) (\n    avg by(le) (\n      increase(ins_get_utxos_total_bucket{ic=\"$ic\",job=\"bitcoin-$network-canister\"}[$heatmap_period])\n    )\n  )\n)",
               "format": "heatmap",
               "interval": "$heatmap_period",
               "legendFormat": "{{le}}",
@@ -1681,7 +1681,7 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "round(\n  sum by (le) (\n    avg by(le) (\n      increase(ins_get_balance_total_bucket{job=\"bitcoin-$network-canister\"}[$heatmap_period])\n    )\n  )\n)",
+              "expr": "round(\n  sum by (le) (\n    avg by(le) (\n      increase(ins_get_balance_total_bucket{ic=\"$ic\",job=\"bitcoin-$network-canister\"}[$heatmap_period])\n    )\n  )\n)",
               "format": "heatmap",
               "interval": "$heatmap_period",
               "legendFormat": "{{le}}",
@@ -1796,7 +1796,7 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "round(\n  sum by (le) (\n    avg by(le) (\n      increase(ins_get_current_fee_percentiles_total_bucket{job=\"bitcoin-$network-canister\"}[$heatmap_period])\n    )\n  )\n)",
+              "expr": "round(\n  sum by (le) (\n    avg by(le) (\n      increase(ins_get_current_fee_percentiles_total_bucket{ic=\"$ic\",job=\"bitcoin-$network-canister\"}[$heatmap_period])\n    )\n  )\n)",
               "format": "heatmap",
               "interval": "$heatmap_period",
               "legendFormat": "{{le}}",
@@ -1904,7 +1904,7 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "rate(send_transaction_count{job=\"bitcoin-$network-canister\"}[$__rate_interval])",
+              "expr": "rate(send_transaction_count{ic=\"$ic\",job=\"bitcoin-$network-canister\"}[$__rate_interval])",
               "legendFormat": "send_transaction",
               "range": true,
               "refId": "A"
@@ -2010,7 +2010,7 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "heap_size_in_bytes{job=\"bitcoin-$network-canister\"}",
+              "expr": "heap_size_in_bytes{ic=\"$ic\",job=\"bitcoin-$network-canister\"}",
               "range": true,
               "refId": "A"
             }
@@ -2101,7 +2101,7 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "stable_memory_size_in_bytes{job=\"bitcoin-$network-canister\"}",
+              "expr": "stable_memory_size_in_bytes{ic=\"$ic\",job=\"bitcoin-$network-canister\"}",
               "range": true,
               "refId": "A"
             }
@@ -2213,7 +2213,7 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "round(\n  sum by (le) (\n    avg by(le) (\n      increase(ins_block_insertion_bucket{job=\"bitcoin-$network-canister\"}[$heatmap_period])\n    )\n  )\n)",
+              "expr": "round(\n  sum by (le) (\n    avg by(le) (\n      increase(ins_block_insertion_bucket{ic=\"$ic\",job=\"bitcoin-$network-canister\"}[$heatmap_period])\n    )\n  )\n)",
               "format": "heatmap",
               "interval": "$heatmap_period",
               "legendFormat": "{{le}}",
@@ -2321,7 +2321,7 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "block_ingestion_stats{job=\"bitcoin-$network-canister\"} / 1000000000",
+              "expr": "block_ingestion_stats{ic=\"$ic\",job=\"bitcoin-$network-canister\"} / 1000000000",
               "legendFormat": "{{instruction_count}}",
               "range": true,
               "refId": "A"
@@ -2413,7 +2413,7 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "rate(num_get_successors_rejects{job=\"bitcoin-$network-canister\"}[$__rate_interval])",
+              "expr": "rate(num_get_successors_rejects{ic=\"$ic\",job=\"bitcoin-$network-canister\"}[$__rate_interval])",
               "legendFormat": "get_successor rejects",
               "range": true,
               "refId": "A"
@@ -2424,7 +2424,7 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "rate(num_block_deserialize_errors{job=\"bitcoin-$network-canister\"}[$__rate_interval])",
+              "expr": "rate(num_block_deserialize_errors{ic=\"$ic\",job=\"bitcoin-$network-canister\"}[$__rate_interval])",
               "hide": false,
               "legendFormat": "block_deserialize errors",
               "range": true,
@@ -2436,7 +2436,7 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "rate(num_insert_block_errors{job=\"bitcoin-$network-canister\"}[$__rate_interval])",
+              "expr": "rate(num_insert_block_errors{ic=\"$ic\",job=\"bitcoin-$network-canister\"}[$__rate_interval])",
               "hide": false,
               "legendFormat": "insert_block errors",
               "range": true,
@@ -2477,7 +2477,7 @@
       {
         "auto": true,
         "auto_count": 200,
-        "auto_min": "20s",
+        "auto_min": "30s",
         "current": {
           "text": "$__auto",
           "value": "$__auto_interval_heatmap_period"
@@ -2486,11 +2486,6 @@
         "label": "Heatmap aggregation period",
         "name": "heatmap_period",
         "options": [
-          {
-            "selected": false,
-            "text": "20s",
-            "value": "20s"
-          },
           {
             "selected": false,
             "text": "30s",
@@ -2547,7 +2542,7 @@
             "value": "1d"
           }
         ],
-        "query": "20s,30s,1m,2m,5m,10m,30m,1h,3h,6h,12h,1d",
+        "query": "30s,1m,2m,5m,10m,30m,1h,3h,6h,12h,1d",
         "refresh": 2,
         "skipUrlSync": false,
         "type": "interval"
