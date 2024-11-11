@@ -145,7 +145,7 @@ pub struct HttpError {
 #[derive(Clone)]
 struct HttpHandler {
     call_router: Router,
-    call_v3_router: Router<Arc<Mutex<bool>>>,
+    call_v3_router: Router,
     query_router: Router,
     catchup_router: Router,
     dashboard_router: Router,

@@ -139,7 +139,7 @@ pub(crate) fn new_router(
     ingress_message_certificate_timeout_seconds: u64,
     delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-) -> Router<Arc<Mutex<bool>>> {
+) -> Router {
     let is_malicious = Arc::new(Mutex::new(false));
     let call_service = SynchronousCallHandlerState {
         delegation_from_nns,
@@ -151,29 +151,33 @@ pub(crate) fn new_router(
         is_malicious: is_malicious.clone(),
     };
 
-    Router::new()
+    let router = Router::new()
         .route_service(
             route(),
             axum::routing::post(call_sync_v3)
                 .with_state(call_service)
                 .layer(ServiceBuilder::new().layer(DefaultBodyLimit::disable())),
         )
-        .route(
+        .route_service(
             "/malicious",
             axum::routing::post(|State(is_malicious): State<Arc<Mutex<bool>>>| async move {
                 *is_malicious.lock().unwrap() = true;
                 (StatusCode::OK, "Malicious flag set").into_response()
-            }),
+            })
+            .with_state(is_malicious.clone())
+            .layer(ServiceBuilder::new().layer(DefaultBodyLimit::disable())),
         )
-        .with_state(is_malicious.clone())
-        .route(
+        .route_service(
             "/honest",
             axum::routing::post(|State(is_malicious): State<Arc<Mutex<bool>>>| async move {
                 *is_malicious.lock().unwrap() = false;
                 (StatusCode::OK, "Malicious flag unset").into_response()
-            }),
-        )
-        .with_state(is_malicious)
+            })
+            .with_state(is_malicious)
+            .layer(ServiceBuilder::new().layer(DefaultBodyLimit::disable())),
+        );
+
+    router
 }
 
 pub fn new_service(
