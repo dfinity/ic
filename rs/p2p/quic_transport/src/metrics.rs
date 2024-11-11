@@ -16,14 +16,19 @@ const REQUEST_TYPE_LABEL: &str = "request";
 pub(crate) const CONNECTION_RESULT_SUCCESS_LABEL: &str = "success";
 pub(crate) const CONNECTION_RESULT_FAILED_LABEL: &str = "failed";
 pub(crate) const ERROR_TYPE_ACCEPT: &str = "accept";
-pub(crate) const ERROR_TYPE_OPEN: &str = "open";
 pub(crate) const ERROR_TYPE_APP: &str = "app";
 pub(crate) const ERROR_TYPE_FINISH: &str = "finish";
 pub(crate) const ERROR_TYPE_STOPPED: &str = "stopped";
 pub(crate) const ERROR_TYPE_READ: &str = "read";
+pub(crate) const INFALIBBLE: &str = "infallible";
 pub(crate) const ERROR_TYPE_WRITE: &str = "write";
+pub(crate) const ERROR_CLOSED_STREAM: &str = "closed_stream";
+pub(crate) const ERROR_RESET_STREAM: &str = "reset_stream";
+pub(crate) const ERROR_STOPPED_STREAM: &str = "stopped_stream";
+pub(crate) const ERROR_APP_CLOSED_CONN: &str = "app_closed_conn";
+pub(crate) const ERROR_INTERNALLY_CLOSED_CONN: &str = "internally_closed_conn";
+pub(crate) const ERROR_LOCALLY_CLOSED_CONN: &str = "locally_closed_conn";
 pub(crate) const STREAM_TYPE_BIDI: &str = "bidi";
-pub(crate) const REQUEST_TYPE_PUSH: &str = "push";
 pub(crate) const REQUEST_TYPE_RPC: &str = "rpc";
 
 #[derive(Clone, Debug)]
