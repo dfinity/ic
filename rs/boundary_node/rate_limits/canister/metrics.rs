@@ -16,7 +16,7 @@ thread_local! {
         format!("{SERVICE_NAME}_stable_memory_bytes"),
         "Size of the stable memory allocated by this canister in bytes.").unwrap());
 
-    static CANISTER_CALLS_COUNTER: RefCell<CounterVec> = RefCell::new(CounterVec::new(Opts::new(
+    static CANISTER_API_CALLS_COUNTER: RefCell<CounterVec> = RefCell::new(CounterVec::new(Opts::new(
         format!("{SERVICE_NAME}_canister_api_calls"),
         "Number of calls to the canister methods with the status and message (in case of error)",
     ), &["method", "status", "message"]).unwrap());
@@ -57,7 +57,7 @@ thread_local! {
             registry.register(cell).unwrap();
         });
 
-        CANISTER_CALLS_COUNTER.with(|cell| {
+        CANISTER_API_CALLS_COUNTER.with(|cell| {
             let cell = Box::new(cell.borrow().clone());
             registry.register(cell).unwrap();
         });
@@ -205,7 +205,7 @@ impl<T: DisclosesRules> DisclosesRules for WithMetrics<T> {
 }
 
 fn update_canister_call_metrics(method_name: &str, status: &str, message: &str) {
-    CANISTER_CALLS_COUNTER.with(|cell| {
+    CANISTER_API_CALLS_COUNTER.with(|cell| {
         let metric = cell.borrow_mut();
         metric
             .with_label_values(&[method_name, status, message])

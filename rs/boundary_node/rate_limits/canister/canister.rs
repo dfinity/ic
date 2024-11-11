@@ -9,8 +9,7 @@ use crate::metrics::{
     export_metrics_as_http_response, with_metrics_registry, WithMetrics,
     LAST_CANISTER_UPGRADE_GAUGE, LAST_SUCCESSFUL_REGISTRY_POLL_GAUGE,
 };
-use crate::state::CanisterApi;
-use crate::state::{init_version_and_config, with_canister_state};
+use crate::state::{init_version_and_config, with_canister_state, CanisterApi};
 use candid::Principal;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::call::call;
@@ -21,8 +20,7 @@ use rate_limits_api::{
     GetApiBoundaryNodeIdsRequest, GetConfigResponse, GetRuleByIdResponse, InitArg, InputConfig,
     RuleId, Version,
 };
-use std::sync::Arc;
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 const REGISTRY_CANISTER_METHOD: &str = "get_api_boundary_node_ids";
 
