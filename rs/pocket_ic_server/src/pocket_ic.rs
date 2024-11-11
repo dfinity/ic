@@ -1242,18 +1242,15 @@ impl Operation for ProcessCanisterHttpInternal {
                     }
                     Ok(response) => {
                         canister_http.pending.remove(&response.id);
-                        let canister_id = sm
-                            .canister_http_request_contexts()
-                            .get(&response.id)
-                            .unwrap()
-                            .request
-                            .sender;
-                        sm.mock_canister_http_response(
-                            response.id.get(),
-                            response.timeout,
-                            canister_id,
-                            vec![response.content; sm.nodes.len()],
-                        );
+                        if let Some(context) = sm.canister_http_request_contexts().get(&response.id)
+                        {
+                            sm.mock_canister_http_response(
+                                response.id.get(),
+                                response.timeout,
+                                context.request.sender,
+                                vec![response.content; sm.nodes.len()],
+                            );
+                        }
                     }
                 }
             }
@@ -1331,6 +1328,23 @@ fn process_mock_canister_https_response(
     pic: &PocketIc,
     mock_canister_http_response: &MockCanisterHttpResponse,
 ) -> OpOut {
+    let response_to_reject_code = |response: &CanisterHttpResponse| match response {
+        CanisterHttpResponse::CanisterHttpReply(_) => None,
+        CanisterHttpResponse::CanisterHttpReject(reject) => Some(reject.reject_code),
+    };
+    let mut reject_codes: Vec<_> = mock_canister_http_response
+        .additional_responses
+        .iter()
+        .filter_map(response_to_reject_code)
+        .collect();
+    if let Some(reject_code) = response_to_reject_code(&mock_canister_http_response.response) {
+        reject_codes.push(reject_code)
+    }
+    for reject_code in reject_codes {
+        if RejectCode::try_from(reject_code).is_err() {
+            return OpOut::Error(PocketIcError::InvalidRejectCode(reject_code));
+        }
+    }
     let subnet_id =
         ic_types::SubnetId::new(ic_types::PrincipalId(mock_canister_http_response.subnet_id));
     let Some(subnet) = pic.get_subnet_with_id(subnet_id) else {
@@ -2294,11 +2308,20 @@ fn decompress(data: Vec<u8>, compression: BlobCompression) -> Option<Vec<u8>> {
 
 impl Operation for SetStableMemory {
     fn compute(&self, pocket_ic: &mut PocketIc) -> OpOut {
-        pocket_ic
-            .try_route_canister(self.canister_id)
-            .unwrap()
-            .set_stable_memory(self.canister_id, &self.data);
-        OpOut::NoOutput
+        let subnet = pocket_ic.try_route_canister(self.canister_id);
+        match subnet {
+            Some(subnet) => {
+                if !subnet.canister_exists(self.canister_id) {
+                    OpOut::Error(PocketIcError::CanisterNotFound(self.canister_id))
+                } else if !subnet.canister_not_empty(self.canister_id) {
+                    OpOut::Error(PocketIcError::CanisterIsEmpty(self.canister_id))
+                } else {
+                    subnet.set_stable_memory(self.canister_id, &self.data);
+                    OpOut::NoOutput
+                }
+            }
+            None => OpOut::Error(PocketIcError::CanisterNotFound(self.canister_id)),
+        }
     }
 
     fn id(&self) -> OpId {
@@ -2320,12 +2343,19 @@ pub struct GetStableMemory {
 
 impl Operation for GetStableMemory {
     fn compute(&self, pocket_ic: &mut PocketIc) -> OpOut {
-        OpOut::StableMemBytes(
-            pocket_ic
-                .try_route_canister(self.canister_id)
-                .unwrap()
-                .stable_memory(self.canister_id),
-        )
+        let subnet = pocket_ic.try_route_canister(self.canister_id);
+        match subnet {
+            Some(subnet) => {
+                if !subnet.canister_exists(self.canister_id) {
+                    OpOut::Error(PocketIcError::CanisterNotFound(self.canister_id))
+                } else if !subnet.canister_not_empty(self.canister_id) {
+                    OpOut::Error(PocketIcError::CanisterIsEmpty(self.canister_id))
+                } else {
+                    OpOut::StableMemBytes(subnet.stable_memory(self.canister_id))
+                }
+            }
+            None => OpOut::Error(PocketIcError::CanisterNotFound(self.canister_id)),
+        }
     }
 
     fn id(&self) -> OpId {
@@ -2364,11 +2394,17 @@ pub struct GetCyclesBalance {
 
 impl Operation for GetCyclesBalance {
     fn compute(&self, pic: &mut PocketIc) -> OpOut {
-        let result = pic
-            .try_route_canister(self.canister_id)
-            .unwrap()
-            .cycle_balance(self.canister_id);
-        OpOut::Cycles(result)
+        let subnet = pic.try_route_canister(self.canister_id);
+        match subnet {
+            Some(subnet) => {
+                if !subnet.canister_exists(self.canister_id) {
+                    OpOut::Error(PocketIcError::CanisterNotFound(self.canister_id))
+                } else {
+                    OpOut::Cycles(subnet.cycle_balance(self.canister_id))
+                }
+            }
+            None => OpOut::Error(PocketIcError::CanisterNotFound(self.canister_id)),
+        }
     }
 
     fn id(&self) -> OpId {
@@ -2434,11 +2470,17 @@ impl TryFrom<RawAddCycles> for AddCycles {
 
 impl Operation for AddCycles {
     fn compute(&self, pic: &mut PocketIc) -> OpOut {
-        let result = pic
-            .try_route_canister(self.canister_id)
-            .unwrap()
-            .add_cycles(self.canister_id, self.amount);
-        OpOut::Cycles(result)
+        let subnet = pic.try_route_canister(self.canister_id);
+        match subnet {
+            Some(subnet) => {
+                if !subnet.canister_exists(self.canister_id) {
+                    OpOut::Error(PocketIcError::CanisterNotFound(self.canister_id))
+                } else {
+                    OpOut::Cycles(subnet.add_cycles(self.canister_id, self.amount))
+                }
+            }
+            None => OpOut::Error(PocketIcError::CanisterNotFound(self.canister_id)),
+        }
     }
 
     fn id(&self) -> OpId {
@@ -2659,7 +2701,9 @@ fn route_call(
                     )
                     .map_err(|e| format!("Error decoding candid: {:?}", e))?;
                     if let Some(specified_id) = payload.specified_id {
-                        EffectivePrincipal::CanisterId(specified_id.try_into().unwrap())
+                        EffectivePrincipal::CanisterId(CanisterId::unchecked_from_principal(
+                            specified_id,
+                        ))
                     } else {
                         // We can't derive an effective principal and thus a canister will be created
                         // on a random subnet.

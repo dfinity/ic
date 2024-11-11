@@ -222,11 +222,13 @@ pub enum OpOut {
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 pub enum PocketIcError {
     CanisterNotFound(CanisterId),
+    CanisterIsEmpty(CanisterId),
     BadIngressMessage(String),
     SubnetNotFound(candid::Principal),
     RequestRoutingError(String),
     InvalidCanisterHttpRequestId((SubnetId, CanisterHttpRequestId)),
     InvalidMockCanisterHttpResponses((usize, usize)),
+    InvalidRejectCode(u64),
 }
 
 impl From<Result<ic_state_machine_tests::WasmResult, ic_state_machine_tests::UserError>> for OpOut {
@@ -265,6 +267,9 @@ impl std::fmt::Debug for OpOut {
             OpOut::Error(PocketIcError::CanisterNotFound(cid)) => {
                 write!(f, "CanisterNotFound({})", cid)
             }
+            OpOut::Error(PocketIcError::CanisterIsEmpty(cid)) => {
+                write!(f, "CanisterIsEmpty({})", cid)
+            }
             OpOut::Error(PocketIcError::BadIngressMessage(msg)) => {
                 write!(f, "BadIngressMessage({})", msg)
             }
@@ -290,6 +295,9 @@ impl std::fmt::Debug for OpOut {
                     "InvalidMockCanisterHttpResponses(actual={},expected={})",
                     actual, expected
                 )
+            }
+            OpOut::Error(PocketIcError::InvalidRejectCode(code)) => {
+                write!(f, "InvalidRejectCode({})", code)
             }
             OpOut::Bytes(bytes) => write!(f, "Bytes({})", base64::encode(bytes)),
             OpOut::StableMemBytes(bytes) => write!(f, "StableMemory({})", base64::encode(bytes)),
