@@ -145,8 +145,13 @@ if [ "$(id -u)" = "1000" ]; then
     fi
 
     if findmnt /hoststorage >/dev/null; then
-        # use host's storage for cargo target (shared with VSCode's devcontainer, see .devcontainer/devcontainer.json)
+        # use host's storage for cargo target
+        # * shared with VSCode's devcontainer, see .devcontainer/devcontainer.json
         # this configuration improves performance of rust-analyzer
+        if [ ! -d /hoststorage/cache/cargo ]; then
+            sudo mkdir -p /hoststorage/cache/cargo
+            sudo chown -R 1000:1000 /hoststorage/cache/cargo
+        fi
         PODMAN_RUN_ARGS+=(
             --mount type=bind,source="/hoststorage/cache/cargo",target="/ic/target"
         )
