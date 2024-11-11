@@ -942,16 +942,20 @@ type ProposalData = record {
   executed_timestamp_seconds : nat64;
   original_total_community_fund_maturity_e8s_equivalent : opt nat64;
 
+  // The total of potential voting power of neurons when this proposal was
+  // created.
+  //
   // This is the baseline that determines the amount of voting rewards (in the
   // form of additional maturity) that voting neurons receive.
   //
   // For example, suppose neuron N has 42 voting power in ballot B for this
-  // proposl. The amount of voting power in B is determined by the neuron's
+  // proposal. The amount of voting power in B is determined by the neuron's
   // deciding voting power when the proposal was created. If this field has 99,
   // then, neuron N receives 42 / 99 of the rewards purse for this proposal.
   //
   // Note that this is NOT used to determine whether the proposal is adopted or
-  // rejected.
+  // rejected. Instead, the total subfield in the latest_tally field is used as
+  // the baseline when deciding proposals.
   total_potential_voting_power : opt nat64;
 };
 
