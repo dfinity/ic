@@ -36,7 +36,7 @@
 
 use anyhow::Result;
 
-use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
+use ic_consensus_system_test_utils::rw_message::cert_state_makes_progress_with_retries;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
     boundary_node::BoundaryNode,
@@ -44,9 +44,13 @@ use ic_system_test_driver::driver::{
     ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
-    test_env_api::{await_boundary_node_healthy, HasTopologySnapshot, NnsCustomizations},
+    test_env_api::{
+        await_boundary_node_healthy, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+        NnsInstallationBuilder,
+    },
 };
-use slog::{info, Logger};
+use slog::info;
+use std::time::Duration;
 
 const BOUNDARY_NODE_NAME: &str = "boundary-node-1";
 
@@ -99,8 +103,8 @@ fn check_nodes_health(env: &TestEnv) {
 }
 
 pub fn install_nns_canisters_at_ids(env: &TestEnv) {
-    let nns_node = env
-        .topology_snapshot()
+    let topology = env.topology_snapshot();
+    let nns_node = topology
         .root_subnet()
         .nodes()
         .next()
@@ -117,21 +121,21 @@ pub fn install_nns_canisters_at_ids(env: &TestEnv) {
     {
         if !subnet.raw_subnet_record().is_halted {
             info!(
-                logger,
+                env.logger(),
                 "Checking if all the nodes are participating in the subnet {}", subnet.subnet_id
             );
             for node in subnet.nodes() {
                 cert_state_makes_progress_with_retries(
                     &node.get_public_url(),
                     node.effective_canister_id(),
-                    &logger,
-                    /*timeout=*/ secs(600),
-                    /*backoff=*/ secs(2),
+                    &env.logger(),
+                    /*timeout=*/ Duration::from_secs(600),
+                    /*backoff=*/ Duration::from_secs(2),
                 );
             }
         } else {
             info!(
-                logger,
+                env.logger(),
                 "Subnet {} is halted. Not checking if all the nodes are participating in the subnet",
                 subnet.subnet_id,
             );
