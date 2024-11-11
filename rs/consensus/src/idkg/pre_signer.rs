@@ -208,7 +208,6 @@ impl IDkgPreSignerImpl {
                             );
                             return Some((key, id, action));
                         };
-                        
                         self.crypto_verify_dealing(id.clone(), &transcript_params, signed_dealing)
                             .map(|action| (key, id, action))
                     })
