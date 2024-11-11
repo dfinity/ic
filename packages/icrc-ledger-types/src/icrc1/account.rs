@@ -9,7 +9,6 @@ use candid::{types::principal::PrincipalError, CandidType, Deserialize, Principa
 use ic_stable_structures::{storable::Bound, Storable};
 use serde::Serialize;
 use std::borrow::Cow;
-use std::io::{Cursor, Read};
 
 pub type Subaccount = [u8; 32];
 
@@ -170,46 +169,45 @@ impl FromStr for Account {
     }
 }
 
-const MAX_SERIALIZATION_LEN: u32 = 62;
+const MAX_SERIALIZATION_LEN: u32 = 63;
 
 impl Storable for Account {
     fn to_bytes(&self) -> Cow<[u8]> {
-        let mut buffer: Vec<u8> = vec![];
-        let mut buffer0: Vec<u8> = vec![];
+        let mut buffer: Vec<u8> = vec![0];
 
+        // Owner principal
+        buffer.extend(self.owner.as_slice());
+        buffer[0] = (buffer.len() - 1) as u8;
+
+        // Subaccount
         if let Some(subaccount) = self.subaccount {
-            buffer0.extend(subaccount.as_slice());
+            buffer.extend(32u8.to_le_bytes());
+            buffer.extend(subaccount.as_slice());
+        } else {
+            buffer.extend(0u8.to_le_bytes());
         }
-        buffer0.extend(self.owner.as_slice());
-        buffer.extend((buffer0.len() as u8).to_le_bytes());
-        buffer.append(&mut buffer0);
 
         Cow::Owned(buffer)
     }
 
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        let mut cursor = Cursor::new(bytes);
+        let mut index = 0usize;
+        let len_owner = bytes[index] as usize;
+        index += 1;
+        let owner = Principal::from_slice(&bytes[index..index + len_owner]);
+        index += len_owner;
 
-        let mut len_bytes = [0u8; 1];
-        cursor
-            .read_exact(&mut len_bytes)
-            .expect("Unable to read the len of the account");
-        let mut len = u8::from_le_bytes(len_bytes);
-        let subaccount = if len >= 32 {
-            let mut subaccount_bytes = [0u8; 32];
-            cursor
-                .read_exact(&mut subaccount_bytes)
-                .expect("Unable to read the bytes of the account's subaccount");
-            len -= 32;
+        // Subaccount
+        let len_subaccount = bytes[index] as usize;
+        index += 1;
+        let subaccount = if len_subaccount > 0 {
+            let subaccount_bytes: [u8; 32] =
+                bytes[index..index + len_subaccount].try_into().unwrap();
             Some(subaccount_bytes)
         } else {
             None
         };
-        let mut owner_bytes = vec![0; len as usize];
-        cursor
-            .read_exact(&mut owner_bytes)
-            .expect("Unable to read the bytes of the account's owners");
-        let owner = Principal::from_slice(&owner_bytes);
+
         Account { owner, subaccount }
     }
 
@@ -395,7 +393,7 @@ mod tests {
         let serialized_len = account.to_bytes().len();
         assert_eq!(
             serialized_len,
-            1 + DEFAULT_SUBACCOUNT.len() + Principal::MAX_LENGTH_IN_BYTES
+            1 + DEFAULT_SUBACCOUNT.len() + 1 + Principal::MAX_LENGTH_IN_BYTES
         );
         assert_eq!(serialized_len as u32, MAX_SERIALIZATION_LEN);
     }
