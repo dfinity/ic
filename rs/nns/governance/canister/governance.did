@@ -676,16 +676,14 @@ type Neuron = record {
   // Per NNS policy, this is opt. Nevertheless, it will never be null.
   deciding_voting_power : opt nat64;
 
-  // The amount of "sway" this neuron has when voting on proposals, assuming
-  // that it has refreshed recently enough.
+  // The amount of "sway" this neuron can have if it refreshes its voting power
+  // frequently enough.
   //
   // Unlike deciding_voting_power, this does NOT take refreshing into account.
   // Rather, this only takes three factors into account:
   //
   //     1. (Net) staked amount - This is the "base" of a neuron's voting power.
-  //        This primarily consists of the balance in the neuron's NNS
-  //        Governance subaccount, but also includes (unburned) fees, and staked
-  //        maturity.
+  //        This primarily consists of the neuron's ICP balance.
   //
   //     2. Age - Neurons with more age have more voting power (all else being
   //        equal).
@@ -695,8 +693,7 @@ type Neuron = record {
   //        than six months are not eligible to vote. Therefore, such neurons
   //        are considered to have 0 voting power.
   //
-  // Per NNS policy, this is opt. Nevertheless, it will never be null (unless we
-  // later deprecate this feature).
+  // Per NNS policy, this is opt. Nevertheless, it will never be null.
   potential_voting_power : opt nat64;
 };
 
