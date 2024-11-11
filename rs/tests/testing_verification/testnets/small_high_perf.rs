@@ -46,6 +46,7 @@ use ic_system_test_driver::driver::{
     test_env::TestEnv,
     test_env_api::{await_boundary_node_healthy, HasTopologySnapshot, NnsCustomizations},
 };
+use slog::{info, Logger};
 
 const BOUNDARY_NODE_NAME: &str = "boundary-node-1";
 
@@ -80,7 +81,7 @@ pub fn setup(env: TestEnv) {
         .use_real_certs_and_dns()
         .start(&env)
         .expect("failed to setup BoundaryNode VM");
-    env.sync_with_prometheus();
+    env.sync_with_prometheus(BOUNDARY_NODE_NAME);
     await_boundary_node_healthy(&env, BOUNDARY_NODE_NAME);
 }
 
@@ -131,8 +132,7 @@ pub fn install_nns_canisters_at_ids(env: &TestEnv) {
         } else {
             info!(
                 logger,
-                "Subnet {} is halted. \
-            Not checking if all the nodes are participating in the subnet",
+                "Subnet {} is halted. Not checking if all the nodes are participating in the subnet",
                 subnet.subnet_id,
             );
         }

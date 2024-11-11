@@ -119,7 +119,7 @@ pub fn setup(env: TestEnv, config: IcConfig) {
         })
     }
 
-    env.sync_with_prometheus();
+    env.sync_with_prometheus("");
 }
 
 fn write_file_and_update_env_variable(env: &TestEnv, pairs: Vec<(&str, String, &str)>) {

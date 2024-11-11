@@ -260,7 +260,7 @@ fi
 pub trait HasPrometheus {
     /// Retrieves a topology snapshot, converts it into p8s scraping target
     /// JSON files and scps them to the prometheus VM.
-    fn sync_with_prometheus(&self);
+    fn sync_with_prometheus(&self, boundary_node_name: &str);
 
     /// Retrieves a topology snapshot by name, converts it into p8s scraping target
     /// JSON files and scps them to the prometheus VM. If `farm_url` is specified, add a
@@ -277,8 +277,14 @@ pub trait HasPrometheus {
 }
 
 impl HasPrometheus for TestEnv {
-    fn sync_with_prometheus(&self) {
-        self.sync_with_prometheus_by_name("", None)
+    fn sync_with_prometheus(&self, boundary_node_name: &str) {
+        let boundary_node = env
+            .get_deployed_boundary_node(boundary_node_name)
+            .unwrap()
+            .get_snapshot()
+            .unwrap();
+        let farm_url = boundary_node.get_playnet();
+        self.sync_with_prometheus_by_name("", Some(farm_url))
     }
 
     fn sync_with_prometheus_by_name(&self, name: &str, mut farm_url_for_canisters: Option<String>) {

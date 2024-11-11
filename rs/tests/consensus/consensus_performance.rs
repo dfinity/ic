@@ -111,7 +111,7 @@ fn setup(env: TestEnv) {
         env.topology_snapshot(),
         NnsCustomizations::default(),
     );
-    env.sync_with_prometheus();
+    env.sync_with_prometheus("");
 
     let topology_snapshot = env.topology_snapshot();
     let (app_subnet, _) = get_app_subnet_and_node(&topology_snapshot);

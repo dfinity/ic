@@ -154,7 +154,7 @@ fn setup(env: TestEnv, config: Config) {
             .for_each(|node| node.await_status_is_healthy().unwrap())
     });
     if config.with_prometheus {
-        env.sync_with_prometheus();
+        env.sync_with_prometheus("");
     }
 }
 
