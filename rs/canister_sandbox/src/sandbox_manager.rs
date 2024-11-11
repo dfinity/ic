@@ -13,6 +13,8 @@
 //! towards the controller are found in this module.
 use std::collections::HashMap;
 use std::convert::TryFrom;
+use std::fs::File;
+use std::os::fd::{FromRawFd, RawFd};
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -26,11 +28,11 @@ use crate::protocol::structs::{
 };
 use crate::{controller_service::ControllerService, protocol};
 use ic_config::embedders::Config as EmbeddersConfig;
-use ic_embedders::OnDiskSerializedModule;
 use ic_embedders::{
     wasm_executor::WasmStateChanges,
     wasm_utils::{compile, decoding::decode_wasm, Segments},
-    CompilationResult, SerializedModule, SerializedModuleBytes, WasmtimeEmbedder,
+    CompilationResult, InitialStateData, OnDiskSerializedModule, SerializedModule,
+    SerializedModuleBytes, WasmtimeEmbedder,
 };
 use ic_interfaces::execution_environment::{
     ExecutionMode, HypervisorError, HypervisorResult, WasmExecutionOutput,
@@ -363,7 +365,7 @@ impl SandboxManager {
         let deserialization_timer = Instant::now();
         let instance_pre = self
             .embedder
-            .read_file_and_pre_instantiate(File::from_raw_fd(erialized_module_file));
+            .read_file_and_pre_instantiate(serialized_module_file);
         let cache = Arc::new(EmbedderCache::new(instance_pre.clone()));
         let deserialization_time = deserialization_timer.elapsed();
         guard.caches.insert(wasm_id, Arc::clone(&cache));
@@ -564,9 +566,11 @@ impl SandboxManager {
         let timer = Instant::now();
         let (embedder_cache, deserialization_time) =
             self.open_wasm_via_file(wasm_id, serialized_module.bytes)?;
-        let initial_state_data =
-            bincode::deserialize_from(File::from_raw_fd(serialized_module.initial_state_data))
-                .unwrap();
+        // TODO: safety
+        let initial_state_data: InitialStateData = bincode::deserialize_from(unsafe {
+            File::from_raw_fd(serialized_module.initial_state_data)
+        })
+        .unwrap();
         let (wasm_memory_modifications, exported_globals) = self
             .create_initial_memory_and_globals(
                 &embedder_cache,

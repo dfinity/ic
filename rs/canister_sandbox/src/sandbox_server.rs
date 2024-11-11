@@ -57,7 +57,7 @@ impl SandboxService for SandboxServer {
     ) -> rpc::Call<OpenWasmSerializedReply> {
         let result = self
             .manager
-            .open_wasm_via_file(req.wasm_id, &req.serialized_module)
+            .open_wasm_via_file(req.wasm_id, req.serialized_module)
             .map(|_| ());
         rpc::Call::new_resolved(Ok(OpenWasmSerializedReply(result)))
     }

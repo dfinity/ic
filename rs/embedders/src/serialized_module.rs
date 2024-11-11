@@ -187,6 +187,7 @@ impl OnDiskSerializedModule {
     }
 
     pub(crate) fn into_serialized_module(&self) -> SerializedModule {
+        // TODO map files, don't read to end because the fds are shared.
         let mut bytes_file = unsafe { File::from_raw_fd(self.bytes) };
         let mut bytes = vec![];
         bytes_file.read_to_end(&mut bytes).unwrap();

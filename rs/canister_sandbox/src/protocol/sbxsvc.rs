@@ -1,11 +1,13 @@
 //! This defines the RPC service methods offered by the sandbox process
 //! (used by the controller) as well as the expected replies.
 
-use std::{sync::Arc, time::Duration};
+use std::{os::fd::RawFd, sync::Arc, time::Duration};
 
 use crate::fdenum::EnumerateInnerFileDescriptors;
 use crate::protocol::structs;
-use ic_embedders::{CompilationResult, SerializedModule, SerializedModuleBytes};
+use ic_embedders::{
+    CompilationResult, OnDiskSerializedModule, SerializedModule, SerializedModuleBytes,
+};
 use ic_interfaces::execution_environment::HypervisorResult;
 use ic_replicated_state::{
     page_map::{
@@ -91,7 +93,7 @@ pub struct OpenWasmViaFileRequest {
 
 impl EnumerateInnerFileDescriptors for OpenWasmViaFileRequest {
     fn enumerate_fds<'a>(&'a mut self, fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {
-        fds.push(self.serialized_module);
+        fds.push(&mut self.serialized_module);
     }
 }
 
@@ -342,8 +344,8 @@ pub struct CreateExecutionStateViaFileRequest {
 
 impl EnumerateInnerFileDescriptors for CreateExecutionStateViaFileRequest {
     fn enumerate_fds<'a>(&'a mut self, fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {
-        fds.push(serialized_module.bytes);
-        fds.push(serialized_module.initial_state_data);
+        fds.push(&mut self.serialized_module.bytes);
+        fds.push(&mut self.serialized_module.initial_state_data);
         self.wasm_page_map.enumerate_fds(fds);
         self.stable_memory_page_map.enumerate_fds(fds);
     }
@@ -375,7 +377,7 @@ impl EnumerateInnerFileDescriptors for Request {
             Request::CreateExecutionState(request) => request.enumerate_fds(fds),
             Request::CreateExecutionStateSerialized(request) => request.enumerate_fds(fds),
             Request::OpenWasmViaFile(request) => request.enumerate_fds(fds),
-            Request::CreateExecetionStateViaFile(request) => request.enumerate_fds(fds),
+            Request::CreateExecutionStateViaFile(request) => request.enumerate_fds(fds),
             Request::Terminate(_)
             | Request::OpenWasm(_)
             | Request::OpenWasmSerialized(_)
