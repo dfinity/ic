@@ -746,7 +746,14 @@ type NeuronInfo = record {
   visibility : opt int32;
   known_neuron_data : opt KnownNeuronData;
 
-  // Deprecated. Use either deciding_voting_power or potential_voting_power instead.
+  // Deprecated. Use either deciding_voting_power or potential_voting_power
+  // instead. Has the same value as deciding_voting_power.
+  //
+  // Previously, if a neuron had < 6 months dissolve delay (making it ineligible
+  // to vote), this would not get zeroed out. That was pretty confusing. At the
+  // same time this field became deprecated, it started being set to 0 when the
+  // neuron became ineligible to vote, due to inheriting the behavior of
+  // deciding_voting_power (which is derived from potential_voting_power).
   voting_power : nat64;
 
   age_seconds : nat64;
