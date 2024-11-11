@@ -45,16 +45,16 @@ impl Drop for SendStreamDropGuard {
 
 #[derive(Clone, Debug)]
 pub struct ConnectionHandle {
-    connection: Connection,
+    conn: Connection,
     metrics: QuicTransportMetrics,
     conn_id: ConnId,
 }
 
 impl ConnectionHandle {
-    pub fn new(connection: Connection, metrics: QuicTransportMetrics) -> Self {
+    pub fn new(conn: Connection, metrics: QuicTransportMetrics) -> Self {
         let conn_id = CONN_ID_SEQ.fetch_add(1, Ordering::SeqCst);
         Self {
-            connection,
+            conn,
             conn_id: conn_id.into(),
             metrics,
         }
@@ -65,7 +65,7 @@ impl ConnectionHandle {
     }
 
     pub fn conn(&self) -> &Connection {
-        &self.connection
+        &self.conn
     }
     /// Executes an RPC operation over an already-established connection.
     ///
@@ -94,7 +94,7 @@ impl ConnectionHandle {
             .connection_handle_bytes_received_total
             .with_label_values(&[request.uri().path()]);
 
-        let (send_stream, recv_stream) = self.connection.open_bi().await.inspect_err(|_| {
+        let (send_stream, recv_stream) = self.conn.open_bi().await.inspect_err(|_| {
             self.metrics
                 .connection_handle_errors_total
                 .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_OPEN]);
