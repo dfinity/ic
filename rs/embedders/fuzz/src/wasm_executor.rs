@@ -27,7 +27,6 @@ use ic_test_utilities_embedders::DEFAULT_NUM_INSTRUCTIONS;
 use ic_test_utilities_state::SystemStateBuilder;
 use ic_test_utilities_types::ids::user_test_id;
 use ic_types::{
-    messages::RequestMetadata,
     methods::{FuncRef, WasmMethod},
     time::UNIX_EPOCH,
     ComputeAllocation, MemoryAllocation, NumBytes,
@@ -97,7 +96,7 @@ fn setup_wasm_execution_input(func_ref: FuncRef) -> WasmExecutionInput {
         &network_topology,
         dirty_page_overhead,
         ComputeAllocation::default(),
-        RequestMetadata::new(0, UNIX_EPOCH),
+        Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
     );

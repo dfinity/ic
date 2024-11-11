@@ -29,7 +29,7 @@ use ic_test_utilities_state::canister_from_exec_state;
 use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
 use ic_test_utilities_types::messages::IngressBuilder;
 use ic_types::{
-    messages::{CallbackId, CanisterMessage, Payload, RejectContext, RequestMetadata, NO_DEADLINE},
+    messages::{CallbackId, CanisterMessage, Payload, RejectContext, NO_DEADLINE},
     methods::{Callback, WasmClosure},
     time::UNIX_EPOCH,
     Cycles, MemoryAllocation, NumBytes, NumInstructions, Time,
@@ -123,7 +123,7 @@ where
             call_origin.clone(),
             Cycles::new(10),
             UNIX_EPOCH,
-            RequestMetadata::new(0, UNIX_EPOCH),
+            Default::default(),
         )
         .unwrap();
     let callback = Callback::new(

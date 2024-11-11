@@ -22,7 +22,7 @@ use ic_test_utilities_types::ids::{
     call_context_test_id, canister_test_id, subnet_test_id, user_test_id,
 };
 use ic_types::{
-    messages::{CallContextId, CallbackId, RejectContext, RequestMetadata, NO_DEADLINE},
+    messages::{CallContextId, CallbackId, RejectContext, NO_DEADLINE},
     methods::SystemMethod,
     time::UNIX_EPOCH,
     ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, PrincipalId, Time,
@@ -188,7 +188,7 @@ pub fn get_system_api(
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         execution_parameters(execution_mode.clone()).compute_allocation,
-        RequestMetadata::new(0, UNIX_EPOCH),
+        Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
     );
@@ -222,7 +222,7 @@ pub fn get_system_state() -> SystemState {
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5), NO_DEADLINE),
             Cycles::new(50),
             Time::from_nanos_since_unix_epoch(0),
-            RequestMetadata::new(0, UNIX_EPOCH),
+            Default::default(),
         )
         .unwrap();
     system_state

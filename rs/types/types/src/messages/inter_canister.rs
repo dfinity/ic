@@ -1,5 +1,7 @@
 use crate::{
-    ingress::WasmResult, time::CoarseTime, CanisterId, CountBytes, Cycles, Funds, NumBytes, Time,
+    ingress::WasmResult,
+    time::{CoarseTime, UNIX_EPOCH},
+    CanisterId, CountBytes, Cycles, Funds, NumBytes, Time,
 };
 use ic_error_types::{RejectCode, UserError};
 #[cfg(test)]
@@ -61,6 +63,12 @@ pub struct RequestMetadata {
     call_tree_start_time: Time,
 }
 
+impl Default for RequestMetadata {
+    fn default() -> Self {
+        Self::new(0, UNIX_EPOCH)
+    }
+}
+
 impl RequestMetadata {
     pub fn new(call_tree_depth: u64, call_tree_start_time: Time) -> Self {
         Self {
@@ -101,7 +109,7 @@ pub struct Request {
     #[serde(with = "serde_bytes")]
     #[validate_eq(Ignore)]
     pub method_payload: Vec<u8>,
-    pub metadata: Option<RequestMetadata>,
+    pub metadata: RequestMetadata,
     /// If non-zero, this is a best-effort call.
     pub deadline: CoarseTime,
 }
@@ -622,7 +630,7 @@ impl From<&Request> for pb_queues::Request {
             method_name: req.method_name.clone(),
             method_payload: req.method_payload.clone(),
             cycles_payment: Some((req.payment).into()),
-            metadata: req.metadata.as_ref().map(From::from),
+            metadata: Some((&req.metadata).into()),
             deadline_seconds: req.deadline.as_secs_since_unix_epoch(),
         }
     }
@@ -632,9 +640,9 @@ impl From<pb_queues::RequestMetadata> for RequestMetadata {
     fn from(metadata: pb_queues::RequestMetadata) -> Self {
         Self {
             call_tree_depth: metadata.call_tree_depth.unwrap_or(0),
-            call_tree_start_time: Time::from_nanos_since_unix_epoch(
-                metadata.call_tree_start_time_nanos.unwrap_or(0),
-            ),
+            call_tree_start_time: metadata
+                .call_tree_start_time_nanos
+                .map_or(UNIX_EPOCH, Time::from_nanos_since_unix_epoch),
         }
     }
 }
@@ -658,7 +666,7 @@ impl TryFrom<pb_queues::Request> for Request {
             payment,
             method_name: req.method_name,
             method_payload: req.method_payload,
-            metadata: req.metadata.map(From::from),
+            metadata: req.metadata.map_or_else(Default::default, From::from),
             deadline: CoarseTime::from_secs_since_unix_epoch(req.deadline_seconds),
         })
     }

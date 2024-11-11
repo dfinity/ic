@@ -21,7 +21,7 @@ impl Default for RequestBuilder {
                 payment: Cycles::zero(),
                 method_name: name.to_string(),
                 method_payload: Vec::new(),
-                metadata: None,
+                metadata: Default::default(),
                 deadline: NO_DEADLINE,
             },
         }
@@ -72,7 +72,7 @@ impl RequestBuilder {
     }
 
     /// Sets the `metadata` field.
-    pub fn metadata(mut self, metadata: Option<RequestMetadata>) -> Self {
+    pub fn metadata(mut self, metadata: RequestMetadata) -> Self {
         self.request.metadata = metadata;
         self
     }

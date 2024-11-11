@@ -25,8 +25,8 @@ use ic_metrics::MetricsRegistry;
 use ic_test_utilities_types::ids::{canister_test_id, message_test_id, user_test_id};
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_types::messages::{
-    CallContextId, CallbackId, CanisterCall, CanisterMessageOrTask, RequestMetadata,
-    StopCanisterCallId, StopCanisterContext, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE,
+    CallContextId, CallbackId, CanisterCall, CanisterMessageOrTask, StopCanisterCallId,
+    StopCanisterContext, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE,
 };
 use ic_types::methods::{Callback, WasmClosure};
 use ic_types::nominal_cycles::NominalCycles;
@@ -105,7 +105,7 @@ impl CanisterStateFixture {
                 CallOrigin::CanisterUpdate(CANISTER_ID, CallbackId::from(1), NO_DEADLINE),
                 Cycles::zero(),
                 Time::from_nanos_since_unix_epoch(0),
-                RequestMetadata::new(0, UNIX_EPOCH),
+                Default::default(),
             )
             .unwrap();
         self.canister_state
@@ -1225,7 +1225,7 @@ fn reverts_stopping_status_after_split() {
         false,
         Cycles::from(0u128),
         Time::from_nanos_since_unix_epoch(0),
-        RequestMetadata::new(0, UNIX_EPOCH),
+        Default::default(),
     ));
     canister_state
         .system_state

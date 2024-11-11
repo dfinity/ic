@@ -18,10 +18,7 @@ use ic_system_api::{
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_state::SystemStateBuilder;
 use ic_test_utilities_types::ids::{canister_test_id, user_test_id};
-use ic_types::{
-    messages::RequestMetadata, time::UNIX_EPOCH, ComputeAllocation, MemoryAllocation,
-    NumInstructions,
-};
+use ic_types::{time::UNIX_EPOCH, ComputeAllocation, MemoryAllocation, NumInstructions};
 use ic_wasm_types::BinaryEncodedWasm;
 
 pub const DEFAULT_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(5_000_000_000);
@@ -133,7 +130,7 @@ impl WasmtimeInstanceBuilder {
             &self.network_topology,
             dirty_page_overhead,
             ComputeAllocation::default(),
-            RequestMetadata::new(0, UNIX_EPOCH),
+            Default::default(),
             self.api_type.caller(),
             self.api_type.call_context_id(),
         );

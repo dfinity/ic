@@ -19,8 +19,7 @@ use ic_system_api::{
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_types::ids::canister_test_id;
 use ic_types::{
-    messages::RequestMetadata, time::UNIX_EPOCH, ComputeAllocation, Cycles, MemoryAllocation,
-    NumBytes, NumInstructions,
+    time::UNIX_EPOCH, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
 };
 use ic_wasm_types::BinaryEncodedWasm;
 
@@ -59,7 +58,7 @@ fn test_wasmtime_system_api() {
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
-        RequestMetadata::new(0, UNIX_EPOCH),
+        Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
     );

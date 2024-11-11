@@ -17,7 +17,6 @@ use ic_test_utilities_state::SystemStateBuilder;
 use ic_test_utilities_types::ids::{call_context_test_id, user_test_id};
 use ic_types::MemoryAllocation;
 use ic_types::{
-    messages::RequestMetadata,
     methods::{FuncRef, WasmMethod},
     time::UNIX_EPOCH,
     ComputeAllocation, Cycles, NumBytes, NumInstructions, PrincipalId,
@@ -77,7 +76,7 @@ fn test_api_for_update(
         }
         .dirty_page_overhead,
         ComputeAllocation::default(),
-        RequestMetadata::new(0, UNIX_EPOCH),
+        Default::default(),
         Some(caller),
         api_type.call_context_id(),
     );

@@ -3230,7 +3230,7 @@ fn time_out_messages_pushes_correct_reject_responses() {
                     payment: Cycles::from(7_u64),
                     method_name: "No-Op".to_string(),
                     method_payload: vec![],
-                    metadata: None,
+                    metadata: Default::default(),
                     deadline,
                 }),
                 time,

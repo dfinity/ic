@@ -15,7 +15,7 @@ fn call_context_origin() {
         CallOrigin::CanisterUpdate(id, cb_id, NO_DEADLINE),
         Cycles::new(10),
         Time::from_nanos_since_unix_epoch(0),
-        RequestMetadata::new(0, UNIX_EPOCH),
+        Default::default(),
     );
     assert_eq!(
         ccm.call_contexts().get(&cc_id).unwrap().call_origin,
@@ -34,20 +34,20 @@ fn call_context_handling() {
         CallOrigin::CanisterUpdate(canister_test_id(123), CallbackId::from(1), NO_DEADLINE),
         Cycles::zero(),
         Time::from_nanos_since_unix_epoch(0),
-        RequestMetadata::new(0, UNIX_EPOCH),
+        Default::default(),
     );
     let call_context_id2 = call_context_manager.new_call_context(
         CallOrigin::CanisterUpdate(canister_test_id(123), CallbackId::from(2), NO_DEADLINE),
         Cycles::zero(),
         Time::from_nanos_since_unix_epoch(0),
-        RequestMetadata::new(0, UNIX_EPOCH),
+        Default::default(),
     );
 
     let call_context_id3 = call_context_manager.new_call_context(
         CallOrigin::CanisterUpdate(canister_test_id(123), CallbackId::from(3), NO_DEADLINE),
         Cycles::zero(),
         Time::from_nanos_since_unix_epoch(0),
-        RequestMetadata::new(0, UNIX_EPOCH),
+        Default::default(),
     );
 
     // Call context 3 was not responded and does not have outstanding calls,
@@ -242,7 +242,7 @@ fn withdraw_cycles_fails_when_not_enough_available_cycles() {
         CallOrigin::CanisterUpdate(id, cb_id, NO_DEADLINE),
         Cycles::new(30),
         Time::from_nanos_since_unix_epoch(0),
-        RequestMetadata::new(0, UNIX_EPOCH),
+        Default::default(),
     );
 
     assert_eq!(
@@ -260,7 +260,7 @@ fn withdraw_cycles_succeeds_when_enough_available_cycles() {
         CallOrigin::CanisterUpdate(id, cb_id, NO_DEADLINE),
         Cycles::new(30),
         Time::from_nanos_since_unix_epoch(0),
-        RequestMetadata::new(0, UNIX_EPOCH),
+        Default::default(),
     );
 
     let cc = ccm.withdraw_cycles(cc_id, Cycles::new(25)).unwrap().clone();
@@ -275,7 +275,7 @@ fn test_call_context_instructions_executed_is_updated() {
         CallOrigin::CanisterUpdate(canister_test_id(123), CallbackId::from(1), NO_DEADLINE),
         Cycles::zero(),
         Time::from_nanos_since_unix_epoch(0),
-        RequestMetadata::new(0, UNIX_EPOCH),
+        Default::default(),
     );
     // Register a callback, so the call context is not deleted in `on_canister_result()` later.
     let _callback_id = call_context_manager.register_callback(Callback::new(
@@ -337,7 +337,7 @@ fn call_context_roundtrip_encoding() {
         false,
         Cycles::zero(),
         UNIX_EPOCH,
-        RequestMetadata::new(0, UNIX_EPOCH),
+        Default::default(),
     );
     let maximal_call_context = CallContext::new(
         CallOrigin::Ingress(user_test_id(1), message_test_id(2)),
@@ -734,7 +734,7 @@ fn roundtrip_encode() {
         CallOrigin::CanisterUpdate(other, CallbackId::new(13), NO_DEADLINE),
         Cycles::new(30),
         Time::from_nanos_since_unix_epoch(0),
-        RequestMetadata::new(0, UNIX_EPOCH),
+        Default::default(),
     );
 
     // Register two best-effort and one guaranteed response callbacks.

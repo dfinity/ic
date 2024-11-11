@@ -33,7 +33,7 @@ use ic_types::methods::{Callback, WasmClosure};
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::{
     batch::RawQueryStats,
-    messages::{CallbackId, Ingress, Request, RequestMetadata, RequestOrResponse},
+    messages::{CallbackId, Ingress, Request, RequestOrResponse},
     nominal_cycles::NominalCycles,
     xnet::{
         RejectReason, RejectSignal, StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue,
@@ -521,7 +521,7 @@ impl CallContextBuilder {
             false,
             Cycles::zero(),
             self.time,
-            RequestMetadata::new(0, UNIX_EPOCH),
+            Default::default(),
         )
     }
 }
@@ -807,7 +807,7 @@ pub fn register_callback(
             CallOrigin::SystemTask,
             Cycles::zero(),
             Time::from_nanos_since_unix_epoch(0),
-            RequestMetadata::new(0, UNIX_EPOCH),
+            Default::default(),
         )
         .unwrap();
 

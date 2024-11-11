@@ -347,7 +347,7 @@ impl SystemStateChanges {
             metadata: self
                 .requests
                 .first()
-                .and_then(|request| request.metadata.clone()),
+                .map_or_else(Default::default(), |request| request.metadata.clone()),
             count: self.requests.len() as u64,
         };
 
@@ -1345,7 +1345,7 @@ impl SandboxSafeSystemState {
 ///
 /// This is used for call tree metrics.
 pub struct RequestMetadataStats {
-    pub metadata: Option<RequestMetadata>,
+    pub metadata: RequestMetadata,
     pub count: u64,
 }
 
