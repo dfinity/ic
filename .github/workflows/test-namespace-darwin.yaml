@@ -28,6 +28,26 @@ jobs:
           nsc bazel cache setup --bazelrc=/tmp/bazel-cache.bazelrc
       - uses: actions/checkout@v4
 
+      - name: Build replica
+        run: |
+          bazel \
+            --noworkspace_rc \
+            --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \
+            build \
+            --config=ci --config=macos_ci \
+            //rs/replica
+
+      - name: Copy replica
+        run: |
+          cp ./bazel-bin/rs/replica/replica replica
+
+      - name: Upload replica
+        uses: actions/upload-artifact@v4
+        with:
+          name: replica
+          path: |
+            ./replica
+
       # Build and test, excluding 'upload' jobs that are not required on macOS (used in reproducibility tests)
       - name: Test
         run: |
