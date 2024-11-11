@@ -203,7 +203,7 @@ impl Transport for QuicTransport {
             .read()
             .unwrap()
             .iter()
-            .map(|(n, c)| (*n, c.conn_id()))
+            .map(|(n, c)| (*n, c.conn_id))
             .collect()
     }
 }
