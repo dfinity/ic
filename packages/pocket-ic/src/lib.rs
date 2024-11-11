@@ -34,14 +34,13 @@
 //! ```
 //! For more information, see the [README](https://crates.io/crates/pocket-ic).
 //!
-pub use crate::management_canister::CanisterSettings;
 use crate::{
     common::rest::{
         BlobCompression, BlobId, CanisterHttpRequest, DtsFlag, ExtendedSubnetConfigSet,
         HttpsConfig, InstanceId, MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId,
         SubnetId, SubnetKind, SubnetSpec, Topology,
     },
-    management_canister::{CanisterId, CanisterStatusResult},
+    management_canister::{CanisterId, CanisterLogRecord, CanisterSettings, CanisterStatusResult},
     nonblocking::PocketIc as PocketIcAsync,
 };
 use candid::{
@@ -662,6 +661,20 @@ impl PocketIc {
         runtime.block_on(async {
             self.pocket_ic
                 .query_call(canister_id, sender, method, payload)
+                .await
+        })
+    }
+
+    /// Fetch canister logs via a query call to the management canister.
+    pub fn fetch_canister_logs(
+        &self,
+        canister_id: CanisterId,
+        sender: Principal,
+    ) -> Result<Vec<CanisterLogRecord>, CallError> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .fetch_canister_logs(canister_id, sender)
                 .await
         })
     }

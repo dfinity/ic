@@ -1595,3 +1595,48 @@ fn test_get_default_effective_canister_id_invalid_url() {
         err => panic!("Unexpected error: {}", err),
     };
 }
+
+#[test]
+fn canister_logs() {
+    let pic = PocketIc::new();
+
+    // We deploy the test canister.
+    let canister = pic.create_canister();
+    pic.add_cycles(canister, INIT_CYCLES);
+    pic.install_canister(canister, test_canister_wasm(), vec![], None);
+
+    let logs = pic
+        .fetch_canister_logs(canister, Principal::anonymous())
+        .unwrap();
+    assert!(logs.is_empty());
+
+    let log_msg_works = "Logging works!";
+    pic.update_call(
+        canister,
+        Principal::anonymous(),
+        "canister_log",
+        encode_one(log_msg_works).unwrap(),
+    )
+    .unwrap();
+    let log_msg_multiple = "Multiple logs are stored!";
+    pic.update_call(
+        canister,
+        Principal::anonymous(),
+        "canister_log",
+        encode_one(log_msg_multiple).unwrap(),
+    )
+    .unwrap();
+
+    let logs = pic
+        .fetch_canister_logs(canister, Principal::anonymous())
+        .unwrap();
+    assert_eq!(logs.len(), 2);
+    assert_eq!(
+        String::from_utf8(logs[0].content.clone()).unwrap(),
+        log_msg_works
+    );
+    assert_eq!(
+        String::from_utf8(logs[1].content.clone()).unwrap(),
+        log_msg_multiple
+    );
+}
