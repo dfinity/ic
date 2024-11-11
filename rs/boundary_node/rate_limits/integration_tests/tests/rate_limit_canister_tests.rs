@@ -31,6 +31,7 @@ async fn main() {
     let response: GetConfigResponse = canister_call(
         &pocket_ic,
         "get_config",
+        "query",
         canister_id,
         Principal::anonymous(),
         input_version,
@@ -52,6 +53,7 @@ async fn main() {
     let response: AddConfigResponse = canister_call(
         &pocket_ic,
         "add_config",
+        "update",
         canister_id,
         Principal::anonymous(),
         input_config.clone(),
@@ -60,12 +62,13 @@ async fn main() {
 
     let err_msg = response.unwrap_err();
 
-    assert!(err_msg.contains("inspect_message_failed: unauthorized caller"));
+    assert!(err_msg.contains("message_inspection_failed: unauthorized caller"));
 
     // Try add config using authorized principal as sender, assert success
     let response: AddConfigResponse = canister_call(
         &pocket_ic,
         "add_config",
+        "update",
         canister_id,
         authorized_principal,
         input_config,
@@ -81,6 +84,7 @@ async fn main() {
     let response: GetConfigResponse = canister_call(
         &pocket_ic,
         "get_config",
+        "query",
         canister_id,
         Principal::anonymous(),
         input_version,

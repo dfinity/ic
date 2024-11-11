@@ -22,7 +22,8 @@ use rate_limits_api::{
 const REGISTRY_CANISTER_ID: &str = "rwlgt-iiaaa-aaaaa-aaaaa-cai";
 const REGISTRY_CANISTER_METHOD: &str = "get_api_boundary_node_ids";
 
-const CANISTER_UPDATE_METHODS: [&str; 2] = ["add_config", "disclose_rules"];
+const UPDATE_METHODS: [&str; 2] = ["add_config", "disclose_rules"];
+const REPLICATED_QUERY_METHOD: &str = "get_config";
 
 #[inspect_message]
 fn inspect_message() {
@@ -30,26 +31,29 @@ fn inspect_message() {
     let caller_id: Principal = ic_cdk::api::caller();
     let called_method = ic_cdk::api::call::method_name();
 
-    // If the called method is not an update method, accept the message.
-    if !CANISTER_UPDATE_METHODS.contains(&called_method.as_str()) {
-        ic_cdk::api::call::accept_message();
+    let (has_full_access, has_full_read_access) = with_canister_state(|state| {
+        let authorized_principal = state.get_authorized_principal();
+        (
+            Some(caller_id) == authorized_principal,
+            state.is_api_boundary_node_principal(&caller_id),
+        )
+    });
+
+    if called_method == REPLICATED_QUERY_METHOD {
+        if has_full_access || has_full_read_access {
+            ic_cdk::api::call::accept_message();
+        }
+    } else if UPDATE_METHODS.contains(&called_method.as_str()) {
+        if has_full_access {
+            ic_cdk::api::call::accept_message();
+        } else {
+            ic_cdk::api::trap("message_inspection_failed: unauthorized caller");
+        }
     } else {
-        // For the update methods:
-        // - Check if the canister's authorized principal is set
-        // - Check caller_id matches the authorized principal
-        with_canister_state(|state| {
-            if let Some(authorized_principal) = state.get_authorized_principal() {
-                if caller_id == authorized_principal {
-                    ic_cdk::api::call::accept_message();
-                } else {
-                    ic_cdk::api::trap("inspect_message_failed: unauthorized caller");
-                }
-            } else {
-                ic_cdk::api::trap(
-                    "inspect_message_failed: authorized principal for canister is not set",
-                );
-            }
-        });
+        // All others calls are rejected
+        ic_cdk::api::trap(
+            "message_inspection_failed: method call is prohibited in the current context",
+        );
     }
 }
 
