@@ -525,12 +525,11 @@ impl ReplicatedState {
         &self.metadata
     }
 
-    pub fn get_ingress_status(&self, message_id: &MessageId) -> IngressStatus {
+    pub fn get_ingress_status(&self, message_id: &MessageId) -> &IngressStatus {
         self.metadata
             .ingress_history
             .get(message_id)
-            .cloned()
-            .unwrap_or(IngressStatus::Unknown)
+            .unwrap_or(&IngressStatus::Unknown)
     }
 
     pub fn get_ingress_history(&self) -> &IngressHistoryState {

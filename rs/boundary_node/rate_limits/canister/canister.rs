@@ -63,7 +63,7 @@ fn get_config(version: Option<Version>) -> GetConfigResponse {
         let fetcher = ConfigFetcher::new(state, formatter);
         fetcher.fetch(version)
     })?;
-    Ok(response.into())
+    Ok(response)
 }
 
 #[query]
@@ -76,7 +76,7 @@ fn get_rule_by_id(rule_id: RuleId) -> GetRuleByIdResponse {
         let fetcher = RuleFetcher::new(state, formatter);
         fetcher.fetch(rule_id)
     })?;
-    Ok(response.into())
+    Ok(response)
 }
 
 #[update]
@@ -86,7 +86,7 @@ fn add_config(config: InputConfig) -> AddConfigResponse {
     with_canister_state(|state| {
         let access_resolver = AccessLevelResolver::new(caller_id, state.clone());
         let config_adder = ConfigAdder::new(state, access_resolver);
-        config_adder.add_config(config.into(), current_time)
+        config_adder.add_config(config, current_time)
     })?;
     Ok(())
 }
@@ -94,10 +94,11 @@ fn add_config(config: InputConfig) -> AddConfigResponse {
 #[update]
 fn disclose_rules(args: DiscloseRulesArg) -> DiscloseRulesResponse {
     let caller_id = ic_cdk::api::caller();
+    let current_time = ic_cdk::api::time();
     with_canister_state(|state| {
         let access_resolver = AccessLevelResolver::new(caller_id, state.clone());
         let discloser = RulesDiscloser::new(state, access_resolver);
-        discloser.disclose_rules(args.into())
+        discloser.disclose_rules(args, current_time)
     })?;
     Ok(())
 }

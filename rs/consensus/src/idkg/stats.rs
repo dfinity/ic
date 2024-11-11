@@ -270,7 +270,7 @@ impl IDkgStats for IDkgStatsImpl {
 
             state
                 .signature_stats
-                .entry(request_id.clone())
+                .entry(*request_id)
                 .or_insert(SignatureStats {
                     start_time: Instant::now(),
                     sig_share_validation_duration: Vec::new(),
@@ -282,7 +282,7 @@ impl IDkgStats for IDkgStatsImpl {
         let mut to_remove = HashSet::new();
         for (request_id, signature_stats) in &state.signature_stats {
             if !active_requests.contains(request_id) {
-                to_remove.insert(request_id.clone());
+                to_remove.insert(*request_id);
                 self.on_signature_done(signature_stats);
             }
         }

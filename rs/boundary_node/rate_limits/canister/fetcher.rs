@@ -1,7 +1,7 @@
 use crate::{
     confidentiality_formatting::ConfidentialityFormatting,
     state::CanisterApi,
-    types::{ConfigResponse, OutputConfig, OutputRule, OutputRuleMetadata, RuleId, Version},
+    types::{OutputConfig, OutputRule, OutputRuleMetadata, RuleId, Version},
 };
 
 pub trait EntityFetcher {
@@ -52,8 +52,10 @@ pub enum FetchConfigError {
 
 #[derive(Debug, thiserror::Error)]
 pub enum FetchRuleError {
-    #[error("Rule with id={0} not found")]
-    NotFound(RuleId),
+    #[error("Rule with id = {0} not found")]
+    NotFound(String),
+    #[error("The provided id = {0} is not a valid UUID")]
+    InvalidUuidFormat(String),
     #[error(transparent)]
     UnexpectedError(#[from] anyhow::Error),
 }
@@ -62,16 +64,19 @@ impl<R: CanisterApi, F: ConfidentialityFormatting<Input = OutputConfig>> EntityF
     for ConfigFetcher<R, F>
 {
     type Input = Option<Version>;
-    type Output = ConfigResponse;
+    type Output = rate_limits_api::ConfigResponse;
     type Error = FetchConfigError;
 
-    fn fetch(&self, version: Option<Version>) -> Result<ConfigResponse, FetchConfigError> {
+    fn fetch(
+        &self,
+        version: Option<Version>,
+    ) -> Result<rate_limits_api::ConfigResponse, FetchConfigError> {
         let current_version = self
             .canister_api
             .get_version()
             .ok_or_else(|| FetchConfigError::NoExistingVersions)?;
 
-        let version = version.unwrap_or(current_version.0);
+        let version = version.unwrap_or(current_version);
 
         let stored_config = self
             .canister_api
@@ -86,7 +91,7 @@ impl<R: CanisterApi, F: ConfidentialityFormatting<Input = OutputConfig>> EntityF
             })?;
 
             let output_rule = OutputRule {
-                id: rule_id.clone(),
+                id: *rule_id,
                 incident_id: rule.incident_id,
                 rule_raw: Some(rule.rule_raw),
                 description: Some(rule.description),
@@ -103,10 +108,10 @@ impl<R: CanisterApi, F: ConfidentialityFormatting<Input = OutputConfig>> EntityF
 
         let formatted_config = self.formatter.format(&config);
 
-        let config = ConfigResponse {
+        let config = rate_limits_api::ConfigResponse {
             version,
             active_since: stored_config.active_since,
-            config: formatted_config,
+            config: formatted_config.into(),
         };
 
         Ok(config)
@@ -116,18 +121,24 @@ impl<R: CanisterApi, F: ConfidentialityFormatting<Input = OutputConfig>> EntityF
 impl<R: CanisterApi, F: ConfidentialityFormatting<Input = OutputRuleMetadata>> EntityFetcher
     for RuleFetcher<R, F>
 {
-    type Input = RuleId;
-    type Output = OutputRuleMetadata;
+    type Input = rate_limits_api::RuleId;
+    type Output = rate_limits_api::OutputRuleMetadata;
     type Error = FetchRuleError;
 
-    fn fetch(&self, rule_id: RuleId) -> Result<OutputRuleMetadata, FetchRuleError> {
+    fn fetch(
+        &self,
+        rule_id: rate_limits_api::RuleId,
+    ) -> Result<rate_limits_api::OutputRuleMetadata, FetchRuleError> {
+        let rule_id = RuleId::try_from(rule_id.clone())
+            .map_err(|_| FetchRuleError::InvalidUuidFormat(rule_id))?;
+
         let stored_metadata = self
             .canister_api
             .get_rule(&rule_id)
-            .ok_or_else(|| FetchRuleError::NotFound(rule_id.clone()))?;
+            .ok_or_else(|| FetchRuleError::NotFound(rule_id.0.to_string()))?;
 
         let rule_metadata = OutputRuleMetadata {
-            id: rule_id.clone(),
+            id: rule_id,
             incident_id: stored_metadata.incident_id,
             rule_raw: Some(stored_metadata.rule_raw),
             description: Some(stored_metadata.description),
@@ -138,7 +149,7 @@ impl<R: CanisterApi, F: ConfidentialityFormatting<Input = OutputRuleMetadata>> E
 
         let formatted_rule = self.formatter.format(&rule_metadata);
 
-        Ok(formatted_rule)
+        Ok(formatted_rule.into())
     }
 }
 
@@ -158,7 +169,7 @@ impl From<FetchRuleError> for String {
 mod tests {
     use crate::confidentiality_formatting::MockConfidentialityFormatting;
     use crate::state::MockCanisterApi;
-    use crate::storage::{StorableConfig, StorableVersion};
+    use crate::storage::StorableConfig;
 
     use super::*;
 
@@ -172,9 +183,7 @@ mod tests {
         });
 
         let mut mock_canister_api = MockCanisterApi::new();
-        mock_canister_api
-            .expect_get_version()
-            .returning(|| Some(StorableVersion(1)));
+        mock_canister_api.expect_get_version().returning(|| Some(1));
         mock_canister_api.expect_get_config().returning(|_| {
             Some(StorableConfig {
                 schema_version: 1,

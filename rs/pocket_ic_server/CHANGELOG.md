@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   of the endpoint `/instances/` to create a new PocketIC instance.
 - New endpoint `/instances/<instance_id>/_/topology` returning the topology of the PocketIC instance.
 - New CLI option `--log-levels` to specify the log levels for PocketIC server logs (defaults to `pocket_ic_server=info,tower_http=info,axum::rejection=trace`).
+- New endpoint `/instances/<instance_id/read/get_controllers` to get the controllers of a canister.
 
 ### Fixed
 - Renamed `dfx_test_key1` tECDSA and tSchnorr keys to `dfx_test_key`.

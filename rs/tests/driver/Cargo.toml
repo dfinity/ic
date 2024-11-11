@@ -124,7 +124,7 @@ reqwest = { workspace = true }
 ring = { version = "0.17.7", features = ["std"] }
 rosetta-core = { path = "../../rosetta-api/common/rosetta_core" }
 rsa = { workspace = true }
-rust_decimal = "1.25"
+rust_decimal = "1.36.0"
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
