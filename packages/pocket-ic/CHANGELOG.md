@@ -23,7 +23,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Functions `PocketIc::from_config`, `PocketIc::from_config_and_max_request_time`, and `PocketIc::from_config_and_server_url`.
   Use the `PocketIcBuilder` instead.
 - The enumeration `DtsFlag` and its associated builder patterns: DTS is always enabled in PocketIC.
-- The reexport `pocket_ic::CanisterSettings`: use `pocket_ic::management_canister::CanisterSettings` instead.
 
 ### Changed
 - The type `Topology` becomes a struct with two fields: `subnet_configs` contains an association of subnet ids to their configurations
