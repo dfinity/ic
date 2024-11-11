@@ -5,7 +5,6 @@ use std::{
     io::Write,
     os::{fd::FromRawFd, unix::prelude::FileExt},
     path::{Path, PathBuf},
-    sync::Arc,
 };
 
 use crate::page_map::{
