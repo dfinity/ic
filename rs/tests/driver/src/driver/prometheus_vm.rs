@@ -263,9 +263,9 @@ pub trait HasPrometheus {
     fn sync_with_prometheus(&self, boundary_node_name: &str);
 
     /// Retrieves a topology snapshot by name, converts it into p8s scraping target
-    /// JSON files and scps them to the prometheus VM. If `farm_url` is specified, add a
+    /// JSON files and scps them to the prometheus VM. If `playnet_url` is specified, add a
     /// scraping target for NNS canisters (currently only the ICP ledger) to the prometheus VM.
-    fn sync_with_prometheus_by_name(&self, name: &str, farm_url: Option<String>);
+    fn sync_with_prometheus_by_name(&self, name: &str, playnet_url: Option<String>);
 
     /// Downloads prometheus' data directory to the test artifacts
     /// such that we can run a local p8s on that later.
@@ -283,13 +283,13 @@ impl HasPrometheus for TestEnv {
             .unwrap()
             .get_snapshot()
             .unwrap();
-        let farm_url = boundary_node.get_playnet();
-        self.sync_with_prometheus_by_name("", farm_url)
+        let playnet_url = boundary_node.get_playnet();
+        self.sync_with_prometheus_by_name("", playnet_url)
     }
 
-    fn sync_with_prometheus_by_name(&self, name: &str, mut farm_url_for_canisters: Option<String>) {
+    fn sync_with_prometheus_by_name(&self, name: &str, mut playnet_url: Option<String>) {
         if InfraProvider::read_attribute(self) == InfraProvider::K8s {
-            farm_url_for_canisters = None;
+            playnet_url = None;
         }
 
         let vm_name = PROMETHEUS_VM_NAME.to_string();
@@ -300,7 +300,7 @@ impl HasPrometheus for TestEnv {
             prometheus_config_dir.clone(),
             group_name.clone(),
             self.topology_snapshot_by_name(name),
-            &farm_url_for_canisters,
+            &playnet_url,
         )
         .expect("Failed to synchronize prometheus config with the latest IC topology!");
         sync_prometheus_config_dir_with_boundary_nodes(
@@ -323,7 +323,7 @@ impl HasPrometheus for TestEnv {
             BN_EXPORTER_PROMETHEUS_TARGET,
             IC_BOUNDARY_PROMETHEUS_TARGET,
         ];
-        if farm_url_for_canisters.is_some() {
+        if playnet_url.is_some() {
             target_json_files.push(LEDGER_CANISTER_PROMETHEUS_TARGET);
             target_json_files.push(BITCOIN_MAINNET_CANISTER_PROMETHEUS_TARGET);
             target_json_files.push(BITCOIN_TESTNET_CANISTER_PROMETHEUS_TARGET);
@@ -571,7 +571,7 @@ fn sync_prometheus_config_dir(
     prometheus_config_dir: PathBuf,
     group_name: String,
     topology_snapshot: TopologySnapshot,
-    farm_url_for_canisters: &Option<String>,
+    playnet_url: &Option<String>,
 ) -> Result<()> {
     let mut replica_p8s_static_configs: Vec<PrometheusStaticConfig> = Vec::new();
     let mut ic_boundary_p8s_static_configs: Vec<PrometheusStaticConfig> = Vec::new();
@@ -642,12 +642,12 @@ fn sync_prometheus_config_dir(
         });
     }
 
-    if let Some(farm_url) = farm_url_for_canisters {
+    if let Some(playnet_url) = playnet_url {
         // ICP ledger canister
         serde_json::to_writer(
             &File::create(prometheus_config_dir.join(LEDGER_CANISTER_PROMETHEUS_TARGET))?,
             &vec![PrometheusStaticConfig {
-                targets: vec![format!("ryjl3-tyaaa-aaaaa-aaaba-cai.raw.{}", farm_url)],
+                targets: vec![format!("ryjl3-tyaaa-aaaaa-aaaba-cai.raw.{}", playnet_url)],
                 labels: hashmap! {"ic".to_string() => group_name.clone(), "token".to_string() => "icp".to_string()},
             }],
         )?;
@@ -673,7 +673,7 @@ fn sync_prometheus_config_dir(
             serde_json::to_writer(
                 &File::create(prometheus_config_dir.join(prometheus_target))?,
                 &vec![PrometheusStaticConfig {
-                    targets: vec![format!("{canister_id}.raw.{farm_url}")],
+                    targets: vec![format!("{canister_id}.raw.{playnet_url}")],
                     labels: hashmap! {"ic".to_string() => group_name.clone()},
                 }],
             )?;
