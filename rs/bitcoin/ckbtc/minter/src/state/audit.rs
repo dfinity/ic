@@ -125,22 +125,11 @@ pub fn distributed_kyt_fee(
     state.distribute_kyt_fee(kyt_provider, amount)
 }
 
-pub fn retrieve_btc_kyt_failed(
-    owner: Principal,
-    address: String,
-    amount: u64,
-    kyt_provider: Principal,
-) {
-    // uuid and block_index are no longer relevant for the new KYT canister
-    let uuid = "".to_string();
-    let block_index = 0;
-    record_event(&Event::RetrieveBtcKytFailed {
+pub fn retrieve_btc_ofac_failed(owner: Principal, address: String, amount: u64) {
+    record_event(&Event::RetrieveBtcOfacFailed {
         owner,
         address,
         amount,
-        kyt_provider,
-        uuid,
-        block_index,
     });
 }
 

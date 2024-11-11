@@ -209,12 +209,7 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
                 crate::tx::DisplayAmount(args.amount),
                 args.address,
             );
-            state::audit::retrieve_btc_kyt_failed(
-                caller,
-                args.address,
-                args.amount,
-                new_kyt_principal,
-            );
+            state::audit::retrieve_btc_ofac_failed(caller, args.address, args.amount);
             return Err(RetrieveBtcError::GenericError {
                 error_message: "Destination address is tainted".to_string(),
                 error_code: ErrorCode::TaintedAddress as u64,
@@ -230,7 +225,6 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
     let block_index =
         burn_ckbtcs(caller, args.amount, crate::memo::encode(&burn_memo).into()).await?;
     let request = RetrieveBtcRequest {
-        // NB. We charge the KYT fee from the retrieve amount.
         amount: args.amount,
         address: parsed_address,
         block_index,
@@ -357,7 +351,6 @@ pub async fn retrieve_btc_with_approval(
             }
 
             let request = RetrieveBtcRequest {
-                // NB. We charge the KYT fee from the retrieve amount.
                 amount: args.amount,
                 address: parsed_address,
                 block_index,

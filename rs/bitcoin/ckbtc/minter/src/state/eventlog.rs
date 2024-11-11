@@ -151,10 +151,20 @@ pub enum Event {
         /// Unique identifier for the failed check.
         uuid: String,
         /// The KYT provider responsible for the failed check.
-        /// In case of the new KYT mechanism, this is the new KYT canister id.
         kyt_provider: Principal,
         /// The block index where the failed check occurred.
         block_index: u64,
+    },
+
+    /// Indicates that the KYT check for the specified address failed.
+    #[serde(rename = "retrieve_btc_ofac_failed")]
+    RetrieveBtcOfacFailed {
+        /// The owner of the address.
+        owner: Principal,
+        /// The address that failed the KYT check.
+        address: String,
+        /// The amount associated with the failed KYT check.
+        amount: u64,
     },
 
     /// Indicates a reimbursement.
@@ -335,15 +345,9 @@ pub fn replay(mut events: impl Iterator<Item = Event>) -> Result<CkBtcMinterStat
                 }
             }
             Event::RetrieveBtcKytFailed { kyt_provider, .. } => {
-                // Only charge kyt fee for failed RetrieveBtcRequest when the provider is not the new KYT canister
-                if state
-                    .new_kyt_principal
-                    .map(|canister_id| !kyt_provider.eq(&canister_id.into()))
-                    .unwrap_or(true)
-                {
-                    *state.owed_kyt_amount.entry(kyt_provider).or_insert(0) += state.kyt_fee;
-                }
+                *state.owed_kyt_amount.entry(kyt_provider).or_insert(0) += state.kyt_fee;
             }
+            Event::RetrieveBtcOfacFailed { .. } => {}
             Event::ScheduleDepositReimbursement {
                 account,
                 amount,
