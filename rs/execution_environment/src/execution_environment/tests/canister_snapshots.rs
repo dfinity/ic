@@ -1,7 +1,6 @@
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use ic_base_types::NumBytes;
-use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SubnetConfig;
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_cycles_account_manager::WasmExecutionMode;
@@ -29,7 +28,7 @@ use ic_types::{
     time::UNIX_EPOCH,
     CanisterId, Cycles, NumInstructions, SnapshotId,
 };
-use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use ic_universal_canister::{wasm, UNIVERSAL_CANISTER_WASM};
 use more_asserts::assert_gt;
 use serde_bytes::ByteBuf;
 use std::borrow::Borrow;
@@ -78,7 +77,6 @@ fn snapshot_request_rejected_because_decode_args_fail() {
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet)
         .with_manual_execution()
-        .with_snapshots(FlagStatus::Enabled)
         .with_caller(own_subnet, caller_canister)
         .build();
 
@@ -103,71 +101,12 @@ fn snapshot_request_rejected_because_decode_args_fail() {
 }
 
 #[test]
-fn take_canister_snapshot_request_rejected_because_feature_is_disabled() {
-    let own_subnet = subnet_test_id(1);
-    let caller_canister = canister_test_id(1);
-    let mut test = ExecutionTestBuilder::new()
-        .with_own_subnet_id(own_subnet)
-        .with_manual_execution()
-        .with_caller(own_subnet, caller_canister)
-        .with_snapshots(FlagStatus::Disabled)
-        .build();
-
-    // Inject a take_canister_snapshot request.
-    test.inject_call_to_ic00(
-        Method::TakeCanisterSnapshot,
-        Encode!().unwrap(),
-        Cycles::new(1_000_000_000),
-    );
-
-    test.execute_subnet_message();
-
-    let (receiver, response) = &get_output_messages(test.state_mut()).pop().unwrap();
-    assert_matches!(response, RequestOrResponse::Response(_));
-    if let RequestOrResponse::Response(res) = response {
-        assert_eq!(res.originator, *receiver);
-        assert_eq!(
-            res.response_payload,
-            Payload::Reject(RejectContext::new(
-                RejectCode::CanisterError,
-                "This API is not enabled on this subnet"
-            ))
-        );
-    }
-}
-
-#[test]
-fn take_snapshot_ingress_rejected_because_feature_is_disabled() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_snapshots(FlagStatus::Disabled)
-        .build();
-    let uni = test.universal_canister().unwrap();
-    let canister_id = canister_test_id(4);
-    let method = Method::TakeCanisterSnapshot;
-    let args = TakeCanisterSnapshotArgs::new(canister_id, None);
-
-    let call = wasm()
-        .call_simple(
-            ic00::IC_00,
-            method,
-            call_args()
-                .other_side(args.encode())
-                .on_reject(wasm().reject_message().reject()),
-        )
-        .build();
-    let result = test.ingress(uni, "update", call).unwrap();
-    let expected_result = WasmResult::Reject("This API is not enabled on this subnet".to_string());
-    assert_eq!(result, expected_result);
-}
-
-#[test]
 fn take_canister_snapshot_fails_canister_not_found() {
     let own_subnet = subnet_test_id(1);
     let caller_canister = canister_test_id(1);
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet)
         .with_manual_execution()
-        .with_snapshots(FlagStatus::Enabled)
         .with_caller(own_subnet, caller_canister)
         .build();
 
@@ -205,7 +144,6 @@ fn take_canister_snapshot_fails_invalid_controller() {
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet)
         .with_manual_execution()
-        .with_snapshots(FlagStatus::Enabled)
         .with_caller(own_subnet, caller_canister)
         .build();
 
@@ -255,7 +193,6 @@ fn take_canister_snapshot_fails_invalid_replace_snapshot_id() {
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet)
         .with_manual_execution()
-        .with_snapshots(FlagStatus::Enabled)
         .with_caller(own_subnet, caller_canister)
         .build();
 
@@ -304,7 +241,6 @@ fn take_canister_snapshot_fails_canister_does_not_own_replace_snapshot() {
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet)
         .with_manual_execution()
-        .with_snapshots(FlagStatus::Enabled)
         .with_caller(own_subnet, caller_canister)
         .build();
 
@@ -350,7 +286,6 @@ fn canister_request_take_canister_snapshot_creates_new_snapshots() {
     let caller_canister = canister_test_id(1);
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet)
-        .with_snapshots(FlagStatus::Enabled)
         .with_caller(own_subnet, caller_canister)
         .build();
 
@@ -452,7 +387,6 @@ fn take_canister_snapshot_fails_when_limit_is_reached() {
     let caller_canister = canister_test_id(1);
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet)
-        .with_snapshots(FlagStatus::Enabled)
         .with_caller(own_subnet, caller_canister)
         .build();
 
@@ -553,7 +487,6 @@ fn canister_request_take_canister_cycles_reserved_for_app_and_verified_app_subne
 
         let mut test = ExecutionTestBuilder::new()
             .with_subnet_type(subnet_type)
-            .with_snapshots(FlagStatus::Enabled)
             .with_heap_delta_rate_limit(NumBytes::new(1_000_000_000))
             .with_subnet_execution_memory(CAPACITY as i64)
             .with_subnet_memory_reservation(0)
@@ -616,7 +549,6 @@ fn canister_snapshot_reserves_cycles_difference() {
 
         let mut test = ExecutionTestBuilder::new()
             .with_subnet_type(subnet_type)
-            .with_snapshots(FlagStatus::Enabled)
             .with_heap_delta_rate_limit(NumBytes::new(1_000_000_000))
             .with_subnet_execution_memory(CAPACITY as i64)
             .with_subnet_memory_reservation(0)
@@ -711,7 +643,6 @@ fn take_canister_snapshot_fails_subnet_memory_exceeded() {
     const NUM_PAGES: u64 = 2_400;
 
     let mut test = ExecutionTestBuilder::new()
-        .with_snapshots(FlagStatus::Enabled)
         .with_heap_delta_rate_limit(NumBytes::new(1_000_000_000))
         .with_subnet_execution_memory(CAPACITY as i64)
         .with_subnet_memory_reservation(0)
@@ -753,7 +684,6 @@ fn take_canister_snapshot_works_when_enough_subnet_memory_after_replacing_old_sn
     const THRESHOLD: u64 = CAPACITY / 2;
 
     let mut test = ExecutionTestBuilder::new()
-        .with_snapshots(FlagStatus::Enabled)
         .with_heap_delta_rate_limit(NumBytes::new(1_000_000_000))
         .with_subnet_execution_memory(CAPACITY as i64)
         .with_subnet_memory_reservation(0)
@@ -825,7 +755,6 @@ fn take_canister_snapshot_does_not_reduce_subnet_available_memory_when_failing_t
     const THRESHOLD: u64 = CAPACITY / 2;
 
     let mut test = ExecutionTestBuilder::new()
-        .with_snapshots(FlagStatus::Enabled)
         .with_heap_delta_rate_limit(NumBytes::new(1_000_000_000))
         .with_subnet_execution_memory(CAPACITY as i64)
         .with_subnet_memory_reservation(0)
@@ -867,7 +796,6 @@ fn take_canister_snapshot_increases_heap_delta() {
     const NUM_PAGES: u64 = 7_500;
 
     let mut test = ExecutionTestBuilder::new()
-        .with_snapshots(FlagStatus::Enabled)
         .with_subnet_execution_memory(CAPACITY as i64)
         .with_subnet_memory_reservation(0)
         .with_subnet_memory_threshold(THRESHOLD as i64)
@@ -903,7 +831,6 @@ fn take_canister_snapshot_fails_when_heap_delta_rate_limited() {
     const NUM_PAGES: u64 = 2_400;
 
     let mut test = ExecutionTestBuilder::new()
-        .with_snapshots(FlagStatus::Enabled)
         .with_heap_delta_rate_limit(NumBytes::new(80_000))
         .with_subnet_execution_memory(CAPACITY as i64)
         .with_subnet_memory_reservation(0)
@@ -967,7 +894,6 @@ fn take_canister_snapshot_fails_when_canister_would_be_frozen() {
     const NUM_PAGES: u64 = 2_400;
 
     let mut test = ExecutionTestBuilder::new()
-        .with_snapshots(FlagStatus::Enabled)
         .with_heap_delta_rate_limit(NumBytes::new(1_000_000))
         .with_subnet_execution_memory(CAPACITY as i64)
         .with_subnet_memory_reservation(0)
@@ -1047,7 +973,6 @@ fn delete_canister_snapshot_fails_canister_not_found() {
     let caller_canister = canister_test_id(1);
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet)
-        .with_snapshots(FlagStatus::Enabled)
         .with_caller(own_subnet, caller_canister)
         .build();
 
@@ -1070,7 +995,6 @@ fn delete_canister_snapshot_fails_snapshot_not_found() {
     let caller_canister = canister_test_id(1);
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet)
-        .with_snapshots(FlagStatus::Enabled)
         .with_caller(own_subnet, caller_canister)
         .build();
 
@@ -1103,7 +1027,6 @@ fn delete_canister_snapshot_fails_snapshot_does_not_belong_to_canister() {
     let caller_canister = canister_test_id(1);
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet)
-        .with_snapshots(FlagStatus::Enabled)
         .with_caller(own_subnet, caller_canister)
         .build();
 
@@ -1158,7 +1081,6 @@ fn delete_canister_snapshot_succeeds() {
         .with_subnet_execution_memory(CAPACITY as i64)
         .with_subnet_memory_reservation(0)
         .with_subnet_memory_threshold(THRESHOLD as i64)
-        .with_snapshots(FlagStatus::Enabled)
         .with_caller(own_subnet, caller_canister)
         .build();
 
@@ -1220,7 +1142,6 @@ fn list_canister_snapshot_fails_canister_not_found() {
     let caller_canister = canister_test_id(1);
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet)
-        .with_snapshots(FlagStatus::Enabled)
         .with_caller(own_subnet, caller_canister)
         .build();
 
@@ -1241,7 +1162,6 @@ fn list_canister_snapshot_fails_invalid_controller() {
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet)
         .with_manual_execution()
-        .with_snapshots(FlagStatus::Enabled)
         .with_caller(own_subnet, caller_canister)
         .build();
 
@@ -1292,7 +1212,6 @@ fn list_canister_snapshot_succeeds() {
     let caller_canister = canister_test_id(1);
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet)
-        .with_snapshots(FlagStatus::Enabled)
         .with_caller(own_subnet, caller_canister)
         .build();
 
@@ -1341,7 +1260,6 @@ fn load_canister_snapshot_fails_canister_not_found() {
     let caller_canister = canister_test_id(1);
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet)
-        .with_snapshots(FlagStatus::Enabled)
         .with_caller(own_subnet, caller_canister)
         .build();
 
@@ -1364,7 +1282,6 @@ fn load_canister_snapshot_fails_invalid_controller() {
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet)
         .with_manual_execution()
-        .with_snapshots(FlagStatus::Enabled)
         .with_caller(own_subnet, caller_canister)
         .build();
 
@@ -1418,7 +1335,6 @@ fn load_canister_snapshot_fails_snapshot_not_found() {
     let caller_canister = canister_test_id(1);
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet)
-        .with_snapshots(FlagStatus::Enabled)
         .with_caller(own_subnet, caller_canister)
         .build();
 
@@ -1451,7 +1367,6 @@ fn load_canister_snapshot_fails_snapshot_does_not_belong_to_canister() {
     let caller_canister = canister_test_id(1);
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet)
-        .with_snapshots(FlagStatus::Enabled)
         .with_caller(own_subnet, caller_canister)
         .build();
 
@@ -1502,7 +1417,6 @@ fn load_canister_snapshot_fails_when_heap_delta_rate_limited() {
     const NUM_PAGES: u64 = 2_400;
 
     let mut test = ExecutionTestBuilder::new()
-        .with_snapshots(FlagStatus::Enabled)
         .with_heap_delta_rate_limit(NumBytes::new(150_000))
         .with_subnet_execution_memory(CAPACITY as i64)
         .with_subnet_memory_reservation(0)
@@ -1577,7 +1491,6 @@ fn load_canister_snapshot_succeeds() {
     let caller_canister = canister_test_id(1);
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet)
-        .with_snapshots(FlagStatus::Enabled)
         .with_caller(own_subnet, caller_canister)
         .build();
 
@@ -1705,7 +1618,6 @@ fn snapshot_is_deleted_with_canister_delete() {
     let caller_canister = canister_test_id(1);
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet)
-        .with_snapshots(FlagStatus::Enabled)
         .with_caller(own_subnet, caller_canister)
         .build();
 
@@ -1750,7 +1662,6 @@ fn take_canister_snapshot_charges_canister_cycles() {
 
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet)
-        .with_snapshots(FlagStatus::Enabled)
         .with_caller(own_subnet, caller_canister)
         .build();
 
@@ -1805,7 +1716,6 @@ fn load_canister_snapshot_charges_canister_cycles() {
 
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet)
-        .with_snapshots(FlagStatus::Enabled)
         .with_caller(own_subnet, caller_canister)
         .build();
 
@@ -1885,9 +1795,7 @@ fn snapshot_must_include_globals() {
       )"#;
     let wasm = wat::parse_str(wat).unwrap();
 
-    let mut test = ExecutionTestBuilder::new()
-        .with_snapshots(FlagStatus::Enabled)
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
 
     // Create canister.
     let canister_id = test.canister_from_binary(wasm).unwrap();

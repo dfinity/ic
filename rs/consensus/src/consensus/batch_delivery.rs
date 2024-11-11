@@ -10,7 +10,7 @@ use crate::{
     idkg::utils::{get_idkg_subnet_public_keys, get_pre_signature_ids_to_deliver},
 };
 use ic_consensus_utils::{
-    crypto_hashable_to_seed, get_block_hash_string, membership::Membership, pool_reader::PoolReader,
+    crypto_hashable_to_seed, membership::Membership, pool_reader::PoolReader,
 };
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl;
 use ic_interfaces::{
@@ -92,13 +92,14 @@ pub fn deliver_batches(
             break;
         };
         let replica_version = block.version().clone();
+        let block_stats = BlockStats::from(&block);
         debug!(
             every_n_seconds => 5,
             log,
             "Finalized height";
             consensus => ConsensusLogEntry {
                 height: Some(height.get()),
-                hash: Some(get_block_hash_string(&block)),
+                hash: Some(block_stats.block_hash.clone()),
                 replica_version: Some(String::from(&replica_version))
             }
         );
@@ -148,7 +149,6 @@ pub fn deliver_batches(
             }
         };
 
-        let block_stats = BlockStats::from(&block);
         let mut batch_stats = BatchStats::new(height);
 
         // Compute consensus' responses to subnet calls.

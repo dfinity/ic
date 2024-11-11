@@ -370,6 +370,7 @@ allow unconfined_domain_type ic_canister_sandbox_t : process *;
 require { type syslogd_t; }
 allow syslogd_t ic_canister_sandbox_t : dir { getattr open read search };
 allow syslogd_t ic_canister_sandbox_t : file { open read getattr ioctl};
+allow syslogd_t ic_canister_sandbox_t : lnk_file { open read getattr ioctl};
 allow syslogd_t ic_canister_sandbox_t : process { getattr };
 
 # Allow interacting with our own executable.
