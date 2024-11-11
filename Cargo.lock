@@ -16905,6 +16905,7 @@ dependencies = [
  "ed25519-dalek",
  "flate2",
  "hex",
+ "ic-cdk 0.16.0",
  "ic-certification 2.6.0",
  "ic-error-types",
  "ic-transport-types",
