@@ -284,7 +284,7 @@ impl HasPrometheus for TestEnv {
             .get_snapshot()
             .unwrap();
         let farm_url = boundary_node.get_playnet();
-        self.sync_with_prometheus_by_name("", Some(farm_url))
+        self.sync_with_prometheus_by_name("", farm_url)
     }
 
     fn sync_with_prometheus_by_name(&self, name: &str, mut farm_url_for_canisters: Option<String>) {
