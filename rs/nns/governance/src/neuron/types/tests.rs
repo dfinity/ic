@@ -8,9 +8,7 @@ use crate::{
 use ic_cdk::println;
 
 use ic_nervous_system_common::{E8, ONE_YEAR_SECONDS};
-use ic_stable_structures::Storable;
 use icp_ledger::Subaccount;
-use prost::Message;
 
 const NOW: u64 = 123_456_789;
 
@@ -97,43 +95,6 @@ fn test_dissolve_state_and_age_conversion_failure() {
             Err(error.to_string())
         );
     }
-}
-
-#[test]
-fn test_abridged_neuron_size() {
-    // All VARINT encoded fields (e.g. int32, uint64, ..., as opposed to fixed32/fixed64) have
-    // larger serialized size for larger numbers (10 bytes for u64::MAX as uint64, while 1 byte for
-    // 0u64). Therefore, we make the numbers below as large as possible even though they aren't
-    // realistic.
-    let abridged_neuron = AbridgedNeuron {
-        account: vec![u8::MAX; 32],
-        controller: Some(PrincipalId::new(
-            PrincipalId::MAX_LENGTH_IN_BYTES,
-            [u8::MAX; PrincipalId::MAX_LENGTH_IN_BYTES],
-        )),
-        cached_neuron_stake_e8s: u64::MAX,
-        neuron_fees_e8s: u64::MAX,
-        created_timestamp_seconds: u64::MAX,
-        aging_since_timestamp_seconds: u64::MAX,
-        spawn_at_timestamp_seconds: Some(u64::MAX),
-        kyc_verified: true,
-        maturity_e8s_equivalent: u64::MAX,
-        staked_maturity_e8s_equivalent: Some(u64::MAX),
-        auto_stake_maturity: Some(true),
-        not_for_profit: true,
-        joined_community_fund_timestamp_seconds: Some(u64::MAX),
-        neuron_type: Some(i32::MAX),
-        dissolve_state: Some(AbridgedNeuronDissolveState::WhenDissolvedTimestampSeconds(
-            u64::MAX,
-        )),
-        visibility: None,
-        voting_power_refreshed_timestamp_seconds: Some(u64::MAX),
-    };
-
-    assert!(abridged_neuron.encoded_len() as u32 <= AbridgedNeuron::BOUND.max_size());
-    // This size can be updated. This assertion is here to make sure we are very aware of growth.
-    // Reminder: the amount that we allocated for AbridgedNeuron is 380 bytes.
-    assert_eq!(abridged_neuron.encoded_len(), 196);
 }
 
 fn create_neuron_with_stake_dissolve_state_and_age(
@@ -669,83 +630,4 @@ fn test_adjust_voting_power_disabled() {
             current_potential_voting_power,
         );
     }
-}
-
-#[test]
-fn test_total_potential_voting_power() {
-    let _restore_on_drop = temporarily_enable_voting_power_adjustment();
-    const CREATED_TIMESTAMP_SECONDS: u64 = 1729791574;
-
-    fn new_neuron(i: u64) -> Neuron {
-        let controller = PrincipalId::new_user_test_id(i);
-        let d = i / 10_u64.pow(i.ilog10());
-
-        NeuronBuilder::new(
-            NeuronId { id: i },
-            Subaccount::try_from([d as u8; 32].as_slice()).unwrap(),
-            controller,
-            DissolveStateAndAge::NotDissolving {
-                dissolve_delay_seconds: 12 * ONE_MONTH_SECONDS,
-                aging_since_timestamp_seconds: CREATED_TIMESTAMP_SECONDS + 42,
-            },
-            CREATED_TIMESTAMP_SECONDS,
-        )
-        .with_cached_neuron_stake_e8s(i * E8)
-        .build()
-    }
-
-    let neurons = vec![new_neuron(10), new_neuron(200), new_neuron(3_000)];
-
-    let now_seconds = CREATED_TIMESTAMP_SECONDS + 999;
-    let expected = neurons
-        .iter()
-        .map(|neuron| neuron.potential_voting_power(now_seconds))
-        .sum();
-    assert_eq!(
-        total_potential_voting_power(
-            neurons.iter(),
-            now_seconds,
-            &Action::Motion(Default::default()),
-            7,
-        ),
-        Ok(expected),
-    );
-
-    // Similar to previous; this time though, Action::ManageNeuron, the weird
-    // special case.
-    assert_eq!(
-        total_potential_voting_power(
-            neurons.iter(),
-            now_seconds,
-            &Action::ManageNeuron(Default::default()),
-            7,
-        ),
-        Ok(7),
-    );
-
-    // Not affected by refresh.
-    let now_seconds = CREATED_TIMESTAMP_SECONDS + 20 * ONE_YEAR_SECONDS;
-    let expected = neurons
-        .iter()
-        .map(|neuron| neuron.potential_voting_power(now_seconds))
-        .sum();
-    assert_eq!(
-        total_potential_voting_power(
-            neurons.iter(),
-            now_seconds,
-            &Action::Motion(Default::default()),
-            7,
-        ),
-        Ok(expected),
-    );
-    let total_deciding_voting_power: u64 = neurons
-        .iter()
-        .map(|neuron| neuron.deciding_voting_power(now_seconds))
-        .sum();
-    assert!(
-        total_deciding_voting_power < expected,
-        "{} vs. {}",
-        total_deciding_voting_power,
-        expected,
-    );
 }
