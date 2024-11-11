@@ -29,7 +29,7 @@ use std::{
 
 // Test parameters
 const RPS: usize = 10;
-const PAYLOAD_SIZE_BYTES: usize = 1024;
+const PAYLOAD_SIZE_BYTES: usize = 1024 * 1024;
 const WORKLOAD_RUNTIME: Duration = Duration::from_secs(30 * 60);
 const NNS_SUBNET_MAX_SIZE: usize = 1;
 const APP_SUBNET_MAX_SIZE: usize = 13;
