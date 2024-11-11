@@ -84,14 +84,11 @@ impl IDkgPreSignerImpl {
 
         let inputs = block_reader
             .requested_transcripts()
-            .flat_map(|transcript_params_ref| {
-                self.resolve_ref(transcript_params_ref, block_reader, "send_dealings")
-            })
-            .filter(|transcript_params| {
-                transcript_params.dealers().contains(self.node_id)
+            .filter(|transcript_params_ref| {
+                transcript_params_ref.dealers.contains(&self.node_id)
                     && !self.has_dealer_issued_dealing(
                         idkg_pool,
-                        &transcript_params.transcript_id(),
+                        &transcript_params_ref.transcript_id,
                         &self.node_id,
                     )
             })
@@ -100,18 +97,25 @@ impl IDkgPreSignerImpl {
         inputs
             .par_chunks(MAX_PARALLELISM)
             .flat_map_iter(|chunk| {
-                chunk.iter().flat_map(|transcript_params| {
-                    if target_subnet_xnet_transcripts.contains(&transcript_params.transcript_id()) {
-                        self.metrics
-                            .pre_sign_errors_inc("create_dealing_for_xnet_transcript");
-                        warn!(
-                            self.log,
-                            "Dealing creation: dealing for target xnet dealing: {:?}",
-                            transcript_params,
-                        );
-                    }
-                    self.crypto_create_dealing(idkg_pool, transcript_loader, transcript_params)
-                })
+                chunk
+                    .iter()
+                    .flat_map(|transcript_params_ref| {
+                        self.resolve_ref(transcript_params_ref, block_reader, "send_dealings")
+                    })
+                    .flat_map(|transcript_params| {
+                        if target_subnet_xnet_transcripts
+                            .contains(&transcript_params.transcript_id())
+                        {
+                            self.metrics
+                                .pre_sign_errors_inc("create_dealing_for_xnet_transcript");
+                            warn!(
+                                self.log,
+                                "Dealing creation: dealing for target xnet dealing: {:?}",
+                                transcript_params,
+                            );
+                        }
+                        self.crypto_create_dealing(idkg_pool, transcript_loader, &transcript_params)
+                    })
             })
             .collect()
     }
@@ -151,22 +155,9 @@ impl IDkgPreSignerImpl {
                 &dealing.transcript_id,
             ) {
                 Action::Process(transcript_params_ref) => {
-                    let Some(transcript_params) =
-                        self.resolve_ref(transcript_params_ref, block_reader, "validate_dealings")
-                    else {
-                        ret.push(IDkgChangeAction::HandleInvalid(
-                                id,
-                                format!(
-                                    "validate_dealings(): failed to translate transcript_params_ref: {}",
-                                    signed_dealing
-                                ),
-                            ));
-                        continue;
-                    };
-
-                    if !transcript_params
-                        .dealers()
-                        .contains(signed_dealing.dealer_id())
+                    if !transcript_params_ref
+                        .dealers
+                        .contains(&signed_dealing.dealer_id())
                     {
                         // The node is not in the dealer list for this transcript
                         self.metrics.pre_sign_errors_inc("unexpected_dealing");
@@ -186,7 +177,7 @@ impl IDkgPreSignerImpl {
                             format!("Duplicate dealing: {}", signed_dealing),
                         ))
                     } else {
-                        inputs.push((id, transcript_params, signed_dealing));
+                        inputs.push((id, transcript_params_ref, signed_dealing));
                     }
                 }
                 Action::Drop => ret.push(IDkgChangeAction::RemoveUnvalidated(id)),
@@ -200,11 +191,24 @@ impl IDkgPreSignerImpl {
             .flat_map_iter(|chunk| {
                 chunk
                     .into_iter()
-                    .flat_map(|(id, transcript_params, signed_dealing)| {
+                    .flat_map(|(id, transcript_params_ref, signed_dealing)| {
                         let key = (
                             signed_dealing.idkg_dealing().transcript_id,
                             signed_dealing.dealer_id(),
                         );
+                        let Some(transcript_params) =
+                            self.resolve_ref(transcript_params_ref, block_reader, "validate_dealings")
+                        else {
+                            let action = IDkgChangeAction::HandleInvalid(
+                                id.clone(),
+                                format!(
+                                    "validate_dealings(): failed to translate transcript_params_ref: {}",
+                                    signed_dealing
+                                ),
+                            );
+                            return Some((key, id, action));
+                        };
+                        
                         self.crypto_verify_dealing(id.clone(), &transcript_params, signed_dealing)
                             .map(|action| (key, id, action))
                     })
@@ -277,12 +281,10 @@ impl IDkgPreSignerImpl {
                 if let Some(transcript_params_ref) =
                     transcript_param_map.get(&dealing.transcript_id)
                 {
-                    self.resolve_ref(transcript_params_ref, block_reader, "send_dealing_support")
-                        .and_then(|transcript_params| {
-                            transcript_params
-                                .receiver_index(self.node_id)
-                                .map(|_| (id, transcript_params, signed_dealing))
-                        })
+                    transcript_params_ref
+                        .receivers
+                        .contains(&self.node_id)
+                        .then_some((id, transcript_params_ref, signed_dealing))
                 } else {
                     self.metrics
                         .pre_sign_errors_inc("create_support_missing_transcript_params");
@@ -300,6 +302,14 @@ impl IDkgPreSignerImpl {
             .flat_map_iter(|chunk| {
                 chunk
                     .iter()
+                    .flat_map(|(id, transcript_params_ref, signed_dealing)| {
+                        self.resolve_ref(
+                            transcript_params_ref,
+                            block_reader,
+                            "send_dealing_support",
+                        )
+                        .map(|params| (id, params, signed_dealing))
+                    })
                     .flat_map(|(id, transcript_params, signed_dealing)| {
                         let dealing = signed_dealing.idkg_dealing();
                         if source_subnet_xnet_transcripts.contains(&dealing.transcript_id) {
@@ -311,7 +321,7 @@ impl IDkgPreSignerImpl {
                                 signed_dealing,
                             );
                         }
-                        self.crypto_create_dealing_support(id, transcript_params, signed_dealing)
+                        self.crypto_create_dealing_support(id, &transcript_params, signed_dealing)
                     })
             })
             .collect()
@@ -381,21 +391,9 @@ impl IDkgPreSignerImpl {
                 &support.transcript_id,
             ) {
                 Action::Process(transcript_params_ref) => {
-                    let Some(transcript_params) = self.resolve_ref(
-                        transcript_params_ref,
-                        block_reader,
-                        "validate_dealing_support",
-                    ) else {
-                        ret.push(IDkgChangeAction::HandleInvalid(
-                            id,
-                            format!("Failed to translate transcript_params_ref: {}", support),
-                        ));
-                        continue;
-                    };
-
-                    if !transcript_params
-                        .receivers()
-                        .contains(support.sig_share.signer)
+                    if !transcript_params_ref
+                        .receivers
+                        .contains(&support.sig_share.signer)
                     {
                         // The node is not in the receiver list for this transcript,
                         // support share is not expected from it
@@ -437,11 +435,11 @@ impl IDkgPreSignerImpl {
                                 ),
                             ))
                         } else {
-                            inputs.push((id, support, signed_dealing, transcript_params));
+                            inputs.push((id, support, signed_dealing, transcript_params_ref));
                         }
                     } else {
                         // If the dealer_id in the share is invalid, drop it.
-                        if !transcript_params.dealers().contains(support.dealer_id) {
+                        if !transcript_params_ref.dealers.contains(&support.dealer_id) {
                             self.metrics
                                 .pre_sign_errors_inc("missing_hash_invalid_dealer");
                             ret.push(IDkgChangeAction::RemoveUnvalidated(id));
@@ -487,14 +485,24 @@ impl IDkgPreSignerImpl {
             .into_par_iter()
             .chunks(MAX_PARALLELISM)
             .flat_map_iter(|chunk| {
-                chunk
-                    .into_iter()
-                    .flat_map(|(id, support, signed_dealing, transcript_params)| {
+                chunk.into_iter().flat_map(
+                    |(id, support, signed_dealing, transcript_params_ref)| {
                         let key = (
                             support.transcript_id,
                             support.dealer_id,
                             support.sig_share.signer,
                         );
+                        let Some(transcript_params) = self.resolve_ref(
+                            transcript_params_ref,
+                            block_reader,
+                            "validate_dealing_support",
+                        ) else {
+                            let action = IDkgChangeAction::HandleInvalid(
+                                id.clone(),
+                                format!("Failed to translate transcript_params_ref: {}", support),
+                            );
+                            return Some((key, id, action));
+                        };
                         self.crypto_verify_dealing_support(
                             id.clone(),
                             &transcript_params,
@@ -503,7 +511,8 @@ impl IDkgPreSignerImpl {
                             idkg_pool.stats(),
                         )
                         .map(|action| (key, id, action))
-                    })
+                    },
+                )
             })
             .collect();
 
@@ -2282,7 +2291,6 @@ mod tests {
         // A dealing for a transcript that is requested by finalized block,
         // but we don't have the dealing yet(share deferred)
         let (_, support) = create_support(id_3, NODE_2, NODE_3);
-        let msg_id_3 = support.message_id();
         artifacts.push(UnvalidatedArtifact {
             message: IDkgMessage::DealingSupport(support),
             peer_id: NODE_3,
@@ -2351,10 +2359,9 @@ mod tests {
 
                 let block_reader = block_reader.clone().with_fail_to_resolve();
                 let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
-                assert_eq!(change_set.len(), 4);
+                assert_eq!(change_set.len(), 3);
                 assert!(is_handle_invalid(&change_set, &msg_id_2));
                 assert!(is_handle_invalid(&change_set, &msg_id_2_dupl));
-                assert!(is_handle_invalid(&change_set, &msg_id_3));
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id_4));
             })
         });
