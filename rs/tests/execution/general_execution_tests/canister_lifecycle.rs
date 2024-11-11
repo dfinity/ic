@@ -895,7 +895,7 @@ pub fn canister_can_manage_other_canister_batched(env: TestEnv) {
             let arbitrary_bytes = b";ioapusdvzn,x";
             let res = canister_a
                 .update(wasm().call(
-                    management::install_code(canister_b, &UNIVERSAL_CANISTER_WASM).on_reply(
+                    management::install_code(canister_b, &*UNIVERSAL_CANISTER_WASM).on_reply(
                         wasm().inter_update(
                             canister_b,
                             call_args().other_side(wasm().reply_data(arbitrary_bytes)),
