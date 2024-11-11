@@ -1,5 +1,5 @@
 use candid::{Encode, Principal};
-use pocket_ic::{common::rest::DtsFlag, PocketIc, PocketIcBuilder, UserError, WasmResult};
+use pocket_ic::{PocketIc, PocketIcBuilder, UserError, WasmResult};
 use std::time::Duration;
 
 // 200T cycles
@@ -39,7 +39,10 @@ fn execute_many_instructions(
         Encode!(&instructions).unwrap(),
     );
     let t1 = pic.get_time();
+    // testing for the exact number n of rounds could lead to flakiness
+    // so we test for [n, n + 1] instead
     assert!(t1 >= t0 + Duration::from_nanos(dts_rounds));
+    assert!(t1 <= t0 + Duration::from_nanos(dts_rounds + 1));
 
     if system_subnet {
         let cycles = pic.cycle_balance(can_id);
@@ -56,7 +59,7 @@ fn test_benchmarking_app_subnet() {
         .build();
 
     let instructions = 42_000_000_000_u64;
-    let dts_rounds = 1; // DTS is disabled on benchmarking subnets
+    let dts_rounds = 1; // DTS slice limit is very high on benchmarking subnets
     execute_many_instructions(&pic, instructions, dts_rounds, false).unwrap();
 }
 
@@ -67,59 +70,27 @@ fn test_benchmarking_system_subnet() {
         .build();
 
     let instructions = 42_000_000_000_u64;
-    let dts_rounds = 1; // DTS is disabled on benchmarking subnets
+    let dts_rounds = 1; // DTS slice limit is very high on benchmarking subnets
     execute_many_instructions(&pic, instructions, dts_rounds, true).unwrap();
 }
 
-fn test_dts(dts_flag: DtsFlag) {
-    let pic = PocketIcBuilder::new()
-        .with_application_subnet()
-        .with_dts_flag(dts_flag)
-        .build();
+#[test]
+fn test_dts() {
+    let pic = PocketIcBuilder::new().with_application_subnet().build();
 
-    let instructions = 4_000_000_000_u64;
-    let dts_rounds = if let DtsFlag::Enabled = dts_flag {
-        instructions / 2_000_000_000
-    } else {
-        1
-    };
+    let instructions = 8_000_000_000_u64;
+    let dts_rounds = instructions / 2_000_000_000;
     execute_many_instructions(&pic, instructions, dts_rounds, false).unwrap();
 }
 
 #[test]
-fn test_dts_enabled() {
-    test_dts(DtsFlag::Enabled);
-}
-
-#[test]
-fn test_dts_disabled() {
-    test_dts(DtsFlag::Disabled);
-}
-
-fn instruction_limit_exceeded(dts_flag: DtsFlag) {
-    let pic = PocketIcBuilder::new()
-        .with_application_subnet()
-        .with_dts_flag(dts_flag)
-        .build();
+fn instruction_limit_exceeded() {
+    let pic = PocketIcBuilder::new().with_application_subnet().build();
 
     let instructions = 42_000_000_000_u64;
-    let dts_rounds = if let DtsFlag::Enabled = dts_flag {
-        20 // instruction limit exceeded after 20 rounds
-    } else {
-        1
-    };
+    let dts_rounds = 20; // instruction limit exceeded after 20 rounds
     let res = execute_many_instructions(&pic, instructions, dts_rounds, false).unwrap_err();
     assert!(res.description.contains(
         "Canister exceeded the limit of 40000000000 instructions for single message execution."
     ));
-}
-
-#[test]
-fn test_instruction_limit_exceeded_dts_enabled() {
-    instruction_limit_exceeded(DtsFlag::Enabled);
-}
-
-#[test]
-fn test_instruction_limit_exceeded_dts_disabled() {
-    instruction_limit_exceeded(DtsFlag::Disabled);
 }

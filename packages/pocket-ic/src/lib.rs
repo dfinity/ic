@@ -37,9 +37,9 @@
 pub use crate::management_canister::CanisterSettings;
 use crate::{
     common::rest::{
-        BlobCompression, BlobId, CanisterHttpRequest, DtsFlag, ExtendedSubnetConfigSet,
-        HttpsConfig, InstanceId, MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId,
-        SubnetId, SubnetKind, SubnetSpec, Topology,
+        BlobCompression, BlobId, CanisterHttpRequest, ExtendedSubnetConfigSet, HttpsConfig,
+        InstanceId, MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId, SubnetId,
+        SubnetKind, SubnetSpec, Topology,
     },
     management_canister::{CanisterId, CanisterStatusResult, Snapshot},
     nonblocking::PocketIc as PocketIcAsync,
@@ -326,12 +326,6 @@ impl PocketIcBuilder {
         self.config = Some(config);
         self
     }
-
-    pub fn with_dts_flag(mut self, dts_flag: DtsFlag) -> Self {
-        let config = self.config.unwrap_or_default().with_dts_flag(dts_flag);
-        self.config = Some(config);
-        self
-    }
 }
 
 /// Main entry point for interacting with PocketIC.
@@ -571,6 +565,14 @@ impl PocketIc {
     pub fn advance_time(&self, duration: Duration) {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.advance_time(duration).await })
+    }
+
+    /// Get the controllers of a canister.
+    /// Panics if the canister does not exist.
+    #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string()))]
+    pub fn get_controllers(&self, canister_id: CanisterId) -> Vec<Principal> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.get_controllers(canister_id).await })
     }
 
     /// Get the current cycles balance of a canister.

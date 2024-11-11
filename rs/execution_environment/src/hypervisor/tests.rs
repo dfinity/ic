@@ -5036,7 +5036,7 @@ fn can_use_more_instructions_during_install_code() {
         .with_instruction_limit(1_000_000)
         .with_cost_to_compile_wasm_instruction(0)
         .with_install_code_instruction_limit(
-            1_000_000 + wasm_compilation_cost(UNIVERSAL_CANISTER_WASM).get(),
+            1_000_000 + wasm_compilation_cost(&UNIVERSAL_CANISTER_WASM).get(),
         )
         .build();
     let canister_id = test.universal_canister().unwrap();
@@ -6626,7 +6626,7 @@ fn stable_memory_grow_reserves_cycles() {
             .build();
 
         let canister_id = test
-            .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+            .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
             .unwrap();
 
         test.update_freezing_threshold(canister_id, NumSeconds::new(0))
@@ -7050,7 +7050,7 @@ fn stable_memory_grow_respects_reserved_cycles_limit() {
         .build();
 
     let canister_id = test
-        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
 
     test.update_freezing_threshold(canister_id, NumSeconds::new(0))
@@ -7095,7 +7095,7 @@ fn stable_memory_grow_does_not_reserve_cycles_on_out_of_memory() {
         .build();
 
     let canister_id = test
-        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
     test.update_freezing_threshold(canister_id, NumSeconds::new(0))
         .unwrap();
