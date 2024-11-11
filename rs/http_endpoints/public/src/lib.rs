@@ -301,8 +301,9 @@ pub fn start_server(
     tracing_handle: ReloadHandles,
     certified_height_watcher: watch::Receiver<Height>,
     completed_execution_messages_rx: Receiver<(MessageId, Height)>,
-    enable_synchronous_call_handler_for_v3_endpoint: bool,
+    mut enable_synchronous_call_handler_for_v3_endpoint: bool,
 ) {
+    enable_synchronous_call_handler_for_v3_endpoint = true;
     let listen_addr = config.listen_addr;
     info!(log, "Starting HTTP server...");
 

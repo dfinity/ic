@@ -38,7 +38,12 @@ use ic_types::{
     CanisterId,
 };
 use serde_cbor::Value as CBOR;
-use std::{collections::BTreeMap, convert::Infallible, sync::Arc, time::Duration};
+use std::{
+    collections::BTreeMap,
+    convert::Infallible,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 use tokio::sync::OnceCell;
 use tokio_util::time::FutureExt;
 use tower::{util::BoxCloneService, ServiceBuilder};
@@ -65,6 +70,7 @@ struct SynchronousCallHandlerState {
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ingress_message_certificate_timeout_seconds: u64,
     call_handler: IngressValidator,
+    is_malicious: Arc<Mutex<bool>>,
 }
 
 impl IntoResponse for CallV3Response {
@@ -134,6 +140,8 @@ pub(crate) fn new_router(
     delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
 ) -> Router {
+    let is_malicious = Arc::new(Mutex::new(false));
+
     let call_service = SynchronousCallHandlerState {
         delegation_from_nns,
         ingress_watcher_handle,
@@ -141,14 +149,36 @@ pub(crate) fn new_router(
         ingress_message_certificate_timeout_seconds,
         call_handler,
         state_reader,
+        is_malicious: is_malicious.clone(),
     };
 
-    Router::new().route_service(
-        route(),
-        axum::routing::post(call_sync_v3)
-            .with_state(call_service)
+    let router = Router::new()
+        .route_service(
+            route(),
+            axum::routing::post(call_sync_v3)
+                .with_state(call_service)
+                .layer(ServiceBuilder::new().layer(DefaultBodyLimit::disable())),
+        )
+        .route_service(
+            "/malicious",
+            axum::routing::post(|State(is_malicious): State<Arc<Mutex<bool>>>| async move {
+                *is_malicious.lock().unwrap() = true;
+                (StatusCode::OK, "Malicious flag set").into_response()
+            })
+            .with_state(is_malicious.clone())
             .layer(ServiceBuilder::new().layer(DefaultBodyLimit::disable())),
-    )
+        )
+        .route_service(
+            "/honest",
+            axum::routing::post(|State(is_malicious): State<Arc<Mutex<bool>>>| async move {
+                *is_malicious.lock().unwrap() = false;
+                (StatusCode::OK, "Malicious flag unset").into_response()
+            })
+            .with_state(is_malicious)
+            .layer(ServiceBuilder::new().layer(DefaultBodyLimit::disable())),
+        );
+
+    router
 }
 
 pub fn new_service(
@@ -180,6 +210,7 @@ async fn call_sync_v3(
         ingress_message_certificate_timeout_seconds,
         state_reader,
         delegation_from_nns,
+        is_malicious,
     }): State<SynchronousCallHandlerState>,
     WithTimeout(Cbor(request)): WithTimeout<Cbor<HttpRequestEnvelope<HttpCallContent>>>,
 ) -> CallV3Response {
@@ -311,11 +342,18 @@ async fn call_sync_v3(
     let delegation_from_nns = delegation_from_nns.get().cloned();
     let signature = certification.signed.signature.signature.get().0;
 
-    CallV3Response::Certificate(Certificate {
-        tree,
-        signature: Blob(signature),
-        delegation: delegation_from_nns,
-    })
+    if *is_malicious.lock().unwrap() {
+        CallV3Response::HttpError(HttpError {
+            status: StatusCode::INTERNAL_SERVER_ERROR,
+            message: "Internal server error".to_string(),
+        })
+    } else {
+        CallV3Response::Certificate(Certificate {
+            tree,
+            signature: Blob(signature),
+            delegation: delegation_from_nns,
+        })
+    }
 }
 
 enum ParsedMessageStatus {
