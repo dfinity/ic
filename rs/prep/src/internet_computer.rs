@@ -132,13 +132,13 @@ impl TopologyConfig {
         let mut start = 0;
         let mut end = u64::MAX / 2;
 
-        for (index, &subnet_index) in self.subnets.keys().enumerate() {
+        for (i, &subnet_index) in self.subnets.keys().enumerate() {
             let subnet_id = self.subnet_ids[&subnet_index];
             let (canisters_range, subnet_range) = calculate_ranges(start, end);
 
             // Insert both ranges for the first subnet, only specified range for others.
             routing_table.insert(canisters_range, subnet_id)?;
-            if index == 0 {
+            if i == 0 {
                 routing_table.insert(subnet_range, subnet_id)?;
             }
 
