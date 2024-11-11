@@ -41,7 +41,9 @@ use crate::{
         InstanceId, MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId, SubnetId,
         SubnetKind, SubnetSpec, Topology,
     },
-    management_canister::{CanisterId, CanisterInstallMode, CanisterStatusResult, Snapshot},
+    management_canister::{
+        CanisterId, CanisterInstallMode, CanisterLogRecord, CanisterStatusResult, Snapshot,
+    },
     nonblocking::PocketIc as PocketIcAsync,
 };
 use candid::{
@@ -664,6 +666,20 @@ impl PocketIc {
         runtime.block_on(async {
             self.pocket_ic
                 .query_call(canister_id, sender, method, payload)
+                .await
+        })
+    }
+
+    /// Fetch canister logs via a query call to the management canister.
+    pub fn fetch_canister_logs(
+        &self,
+        canister_id: CanisterId,
+        sender: Principal,
+    ) -> Result<Vec<CanisterLogRecord>, CallError> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .fetch_canister_logs(canister_id, sender)
                 .await
         })
     }
