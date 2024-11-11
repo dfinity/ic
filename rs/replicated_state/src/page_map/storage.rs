@@ -166,11 +166,11 @@ pub fn verify(storage_layout: &dyn StorageLayout) -> Result<(), PersistenceError
     Ok(())
 }
 
-/// Lazy loaded representation of StorageImpl (see above).
+/// Lazy loaded representation of `StorageImpl` (see above).
 /// The `storage_layout` points to the files on disk, which are loaded at the first access.
 /// The loaded `StorageImpl` is never modified or unloaded till `drop`, meaning we don't read
 /// `storage_layout` ever again.
-/// If `storage_layout` is None during load we construct `StorageLayout` with the default
+/// If `storage_layout` is `None` during load we construct `StorageLayout` with the default
 /// constructor.
 #[derive(Clone, Default)]
 pub(crate) struct Storage {
@@ -199,7 +199,7 @@ impl Storage {
         self.storage_impl.get().is_some()
     }
 
-    /// Create Storage.
+    /// Create `Storage`.
     pub fn lazy_load(
         storage_layout: Box<dyn StorageLayout + Send + Sync>,
     ) -> Result<Self, PersistenceError> {
