@@ -212,7 +212,7 @@ async fn mitm_service(
     Ok((headers, bytes.into()))
 }
 
-/// Compiles the universal canister, builds it's initial payload and installs it
+/// Compiles the universal canister, builds its initial payload and installs it
 pub async fn set_up_universal_canister(runtime: &'_ Runtime) -> Canister<'_> {
     let mut canister = runtime
         .create_canister_max_cycles_with_retries()
