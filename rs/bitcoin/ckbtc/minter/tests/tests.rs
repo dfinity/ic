@@ -1329,7 +1329,7 @@ fn test_transaction_finalization() {
 }
 
 #[test]
-fn test_min_retrieval_amount_mainnet() {
+fn test_min_retrieval_amount_default() {
     let ckbtc = CkBtcSetup::new();
 
     ckbtc.refresh_fee_percentiles();
@@ -1359,7 +1359,7 @@ fn test_min_retrieval_amount_mainnet() {
 }
 
 #[test]
-fn test_min_retrieval_amount_testnet() {
+fn test_min_retrieval_amount_custom() {
     let min_amount = 12_345;
     let ckbtc = CkBtcSetup::new_with(Network::Testnet, min_amount);
 
@@ -1391,6 +1391,28 @@ fn test_min_retrieval_amount_testnet() {
     // When fee becomes 0 again, it goes back to the initial setting
     ckbtc.set_fee_percentiles(&vec![0; 100]);
     ckbtc.refresh_fee_percentiles();
+    let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
+    assert_eq!(retrieve_btc_min_amount, min_amount);
+
+    // Test changing min_retrieve_fee when upgrade
+    let min_amount = 123_456;
+    let upgrade_args = UpgradeArgs {
+        retrieve_btc_min_amount: Some(min_amount),
+        min_confirmations: None,
+        max_time_in_queue_nanos: None,
+        mode: None,
+        kyt_principal: None,
+        kyt_fee: None,
+    };
+    let minter_arg = MinterArg::Upgrade(Some(upgrade_args));
+    assert!(ckbtc
+        .env
+        .upgrade_canister(
+            ckbtc.minter_id,
+            minter_wasm(),
+            Encode!(&minter_arg).unwrap()
+        )
+        .is_ok());
     let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
     assert_eq!(retrieve_btc_min_amount, min_amount);
 }
