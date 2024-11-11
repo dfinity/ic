@@ -627,20 +627,31 @@ type Neuron = record {
   known_neuron_data : opt KnownNeuronData;
   spawn_at_timestamp_seconds : opt nat64;
 
+  // The last time voting power was "refreshed".
+  //
+  // This gets updated to the current time when the user performs one of the
+  // following:
+  //
+  //     1. voting directly (not via following)
+  //     2. set following
+  //     3. refresh voting power
+  //
+  // (All of these actions are performed via the manage_neuron method.)
+  //
   // When a neuron is first created, this is set to create_timestamp_seconds.
-  //
-  // This is part of the "periodic confirmation" feature, which was proposed and
-  // (overwhelmingly) adopted in NNS motion proposal 132411:
-  // https://dashboard.internetcomputer.org/proposal/132411
-  //
-  // This gets updated to the current time when the user performs related
-  // actions, as described in the aforementioned proposal.
   //
   // For neurons created prior to this feature, this field will be set to
   // 2024-09-01T00:00:00 UTC.
   //
-  // Per NNS policy, this is opt. Nevertheless, it will never be null (unless we
-  // later deprecate this feature).
+  // When a neuron has not refreshed for a long time a couple of things happen:
+  //
+  //   1. Deciding voting power becomes less than potential voting power.
+  //   2. Following on most topics is cleared.
+  //
+  // The exact behavior is described here:
+  // https://dashboard.internetcomputer.org/proposal/132411
+  //
+  // Per NNS policy, this is opt. Nevertheless, it will never be null.
   voting_power_refreshed_timestamp_seconds : opt nat64;
 
   // The amount of "sway" this neuron has when voting on proposals.
