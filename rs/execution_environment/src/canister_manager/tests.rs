@@ -2685,7 +2685,7 @@ fn installing_a_canister_with_not_enough_memory_allocation_fails() {
         );
         assert_eq!(
             res.0,
-            MAX_NUM_INSTRUCTIONS - wasm_compilation_cost(*UNIVERSAL_CANISTER_WASM)
+            MAX_NUM_INSTRUCTIONS - wasm_compilation_cost(&UNIVERSAL_CANISTER_WASM)
         );
         assert_matches!(
             res.1,

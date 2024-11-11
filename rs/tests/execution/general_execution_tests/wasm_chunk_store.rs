@@ -42,7 +42,7 @@ pub fn install_large_wasm(env: TestEnv) {
                 .0;
 
             // Upload universal canister in two chunks.
-            let data = *UNIVERSAL_CANISTER_WASM;
+            let data = &*UNIVERSAL_CANISTER_WASM;
             let data_hash = ic_crypto_sha2::Sha256::hash(data);
             let chunk1 = &data[..200];
             let chunk1_hash = ic_crypto_sha2::Sha256::hash(chunk1);
@@ -157,7 +157,7 @@ pub fn install_large_wasm_with_other_store(env: TestEnv) {
                 .0;
 
             // Upload universal canister in one chunk.
-            let data = *UNIVERSAL_CANISTER_WASM;
+            let data = &*UNIVERSAL_CANISTER_WASM;
             let data_hash = ic_crypto_sha2::Sha256::hash(data);
 
             let hash = controller_canister
@@ -256,7 +256,7 @@ pub fn install_large_wasm_with_other_store_fails_cross_subnet(env: TestEnv) {
                 .0;
 
             // Upload universal canister in one chunk.
-            let data = *UNIVERSAL_CANISTER_WASM;
+            let data = &*UNIVERSAL_CANISTER_WASM;
             let data_hash = ic_crypto_sha2::Sha256::hash(data);
 
             let hash = controller_canister

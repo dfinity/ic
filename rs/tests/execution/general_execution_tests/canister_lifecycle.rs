@@ -618,7 +618,7 @@ pub fn managing_a_canister_with_wrong_controller_fails(env: TestEnv) {
                 "Asserting that Reinstalling code on the canister fails."
             );
             assert_http_submit_fails(
-                mgr.install_code(&wallet_canister.canister_id(), *UNIVERSAL_CANISTER_WASM)
+                mgr.install_code(&wallet_canister.canister_id(), &UNIVERSAL_CANISTER_WASM)
                     .with_mode(InstallMode::Reinstall)
                     .call()
                     .await,
@@ -628,7 +628,7 @@ pub fn managing_a_canister_with_wrong_controller_fails(env: TestEnv) {
             // Upgrading it doesn't work either.
             info!(logger, "Asserting that upgrading the canister fails.");
             assert_http_submit_fails(
-                mgr.install_code(&wallet_canister.canister_id(), *UNIVERSAL_CANISTER_WASM)
+                mgr.install_code(&wallet_canister.canister_id(), &UNIVERSAL_CANISTER_WASM)
                     .with_mode(InstallMode::Upgrade(Some(CanisterUpgradeOptions {
                         skip_pre_upgrade: Some(false),
                         wasm_memory_persistence: None,
@@ -749,7 +749,7 @@ pub fn canister_large_wasm_small_memory_allocation(env: TestEnv) {
                 .0;
             // Install a large wasm with a small memory allocation, it should fail.
             let res = mgr
-                .install_code(&canister_id, *UNIVERSAL_CANISTER_WASM)
+                .install_code(&canister_id, &UNIVERSAL_CANISTER_WASM)
                 .call_and_wait()
                 .await;
             assert_reject(res, RejectCode::CanisterReject);
@@ -845,7 +845,7 @@ pub fn canister_can_manage_other_canister(env: TestEnv) {
             canister_a
                 .update(wasm().call(management::install_code(
                     canister_b,
-                    *UNIVERSAL_CANISTER_WASM,
+                    &*UNIVERSAL_CANISTER_WASM,
                 )))
                 .await
                 .unwrap();
@@ -895,7 +895,7 @@ pub fn canister_can_manage_other_canister_batched(env: TestEnv) {
             let arbitrary_bytes = b";ioapusdvzn,x";
             let res = canister_a
                 .update(wasm().call(
-                    management::install_code(canister_b, *UNIVERSAL_CANISTER_WASM).on_reply(
+                    management::install_code(canister_b, &UNIVERSAL_CANISTER_WASM).on_reply(
                         wasm().inter_update(
                             canister_b,
                             call_args().other_side(wasm().reply_data(arbitrary_bytes)),
@@ -929,7 +929,7 @@ pub fn canisters_with_low_balance_are_deallocated(env: TestEnv) {
 
             // Install the universal canister.
             // NOTE: this call succeeds because `install_code` is free.
-            mgr.install_code(&canister_id, *UNIVERSAL_CANISTER_WASM)
+            mgr.install_code(&canister_id, &UNIVERSAL_CANISTER_WASM)
                 .with_raw_arg(wasm().noop().build())
                 .call_and_wait()
                 .await

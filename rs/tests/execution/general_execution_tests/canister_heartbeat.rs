@@ -298,7 +298,7 @@ pub fn canister_heartbeat_can_stop(env: TestEnv) {
             std::thread::sleep(std::time::Duration::from_secs(10));
             eprintln!("installing canister");
             // Install the universal canister.
-            mgr.install_code(&canister_c, *UNIVERSAL_CANISTER_WASM)
+            mgr.install_code(&canister_c, &UNIVERSAL_CANISTER_WASM)
                 .with_raw_arg(vec![])
                 .call_and_wait()
                 .await
