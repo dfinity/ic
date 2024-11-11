@@ -116,17 +116,17 @@ impl TopologyConfig {
                 end: CanisterId::from(end),
             };
 
-            let subnet_allocation_range_start =
+            let subnets_allocation_range_start =
                 ((end / CANISTER_IDS_PER_SUBNET) + 2) * CANISTER_IDS_PER_SUBNET;
-            let subnet_allocation_range_end =
-                subnet_allocation_range_start + CANISTER_IDS_PER_SUBNET - 1;
+            let subnets_allocation_range_end =
+                subnets_allocation_range_start + CANISTER_IDS_PER_SUBNET - 1;
 
-            let subnet_allocation_range_range = CanisterIdRange {
-                start: CanisterId::from(subnet_allocation_range_start),
-                end: CanisterId::from(subnet_allocation_range_end),
+            let subnets_allocation_range_range = CanisterIdRange {
+                start: CanisterId::from(subnets_allocation_range_start),
+                end: CanisterId::from(subnets_allocation_range_end),
             };
 
-            (specified_ids_range, subnet_allocation_range_range)
+            (specified_ids_range, subnets_allocation_range_range)
         };
 
         // Set initial range values.
@@ -135,12 +135,13 @@ impl TopologyConfig {
 
         for (i, &subnet_index) in self.subnets.keys().enumerate() {
             let subnet_id = self.subnet_ids[&subnet_index];
-            let (specified_ids_range, subnet_allocation_range_range) = calculate_ranges(start, end);
+            let (specified_ids_range, subnets_allocation_range_range) =
+                calculate_ranges(start, end);
 
             // Insert both ranges for the first subnet, only specified range for others.
             routing_table.insert(specified_ids_range, subnet_id)?;
             if i == 0 {
-                routing_table.insert(subnet_allocation_range_range, subnet_id)?;
+                routing_table.insert(subnets_allocation_range_range, subnet_id)?;
             }
 
             // Adjust start and end for the next subnet.
