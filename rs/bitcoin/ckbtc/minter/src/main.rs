@@ -96,7 +96,7 @@ async fn refresh_fee_percentiles() {
     // 1. `estimiate_fee_per_vbyte` could potentially change the state.
     // 2. `estimiate_fee_per_vbyte` is also called from timer
     //    `TaskType::ProcessLogic` and `TaskType::RefreshFeePercentiles`.
-    let _guard = match crate::guard::TimerLogicGuard::new() {
+    let _guard = match ic_ckbtc_minter::guard::TimerLogicGuard::new() {
         Some(guard) => guard,
         None => return,
     };
