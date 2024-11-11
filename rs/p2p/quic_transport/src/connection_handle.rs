@@ -21,7 +21,7 @@ use crate::{
 /// https://datatracker.ietf.org/doc/html/draft-ietf-quic-transport-03#section-12.3.
 const QUIC_STREAM_CANCELLED: VarInt = VarInt::from_u32(6);
 
-static CONN_ID_SEQ: AtomicU64 = AtomicU64::new(0);
+static CONN_ID_SEQ: AtomicU64 = AtomicU64::new(1);
 
 /// Drop guard to send a [`SendStream::reset`] frame on drop. QUINN sends a [`SendStream::finish`] frame by default when dropping a [`SendStream`],
 /// which can lead to the peer receiving the stream thinking a complete message was sent. This guard is used to send a reset frame instead, to signal
