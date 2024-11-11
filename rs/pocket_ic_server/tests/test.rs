@@ -689,6 +689,28 @@ fn send_signal_to_pic(pic: PocketIc, mut child: Child, shutdown_signal: Option<S
     }
 }
 
+fn kill_gateway_with_signal(shutdown_signal: Signal) {
+    let (server_url, child) = start_server_helper(None, None, false, false);
+    let mut pic = PocketIcBuilder::new()
+        .with_server_url(server_url)
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+    let _ = pic.make_live(None);
+
+    send_signal_to_pic(pic, child, Some(shutdown_signal));
+}
+
+#[test]
+fn kill_gateway_with_sigint() {
+    kill_gateway_with_signal(Signal::SIGINT);
+}
+
+#[test]
+fn kill_gateway_with_sigterm() {
+    kill_gateway_with_signal(Signal::SIGTERM);
+}
+
 fn canister_state_dir(shutdown_signal: Option<Signal>) {
     const INIT_CYCLES: u128 = 2_000_000_000_000;
 
@@ -1383,6 +1405,16 @@ fn auto_progress() {
     pic.auto_progress();
 
     loop {
+        let mut bytes = [0; 1000];
+        let _ = out.stdout.as_mut().unwrap().read(&mut bytes).unwrap();
+        let stdout = String::from_utf8(bytes.to_vec()).unwrap();
+        assert!(!stdout.contains("Stopping auto progress for instance 0."));
+        if stdout.contains("Starting auto progress for instance 0.") {
+            break;
+        }
+    }
+
+    loop {
         let t = pic.get_time();
         if t > t0 {
             break;
@@ -1390,18 +1422,15 @@ fn auto_progress() {
         std::thread::sleep(Duration::from_millis(10));
     }
 
-    // Since the time increased by now, we know that the log should have been recorded.
-    let mut bytes = [0; 1000];
-    let _ = out.stdout.as_mut().unwrap().read(&mut bytes).unwrap();
-    let stdout = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(stdout.contains("Starting auto progress for instance 0."));
-    assert!(!stdout.contains("Stopping auto progress for instance 0."));
-
     // Stopping auto progress on the IC => a corresponding log should be made.
     pic.stop_progress();
 
-    let mut bytes = [0; 1000];
-    let _ = out.stdout.as_mut().unwrap().read(&mut bytes).unwrap();
-    let stdout = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(stdout.contains("Stopping auto progress for instance 0."));
+    loop {
+        let mut bytes = [0; 1000];
+        let _ = out.stdout.as_mut().unwrap().read(&mut bytes).unwrap();
+        let stdout = String::from_utf8(bytes.to_vec()).unwrap();
+        if stdout.contains("Stopping auto progress for instance 0.") {
+            break;
+        }
+    }
 }

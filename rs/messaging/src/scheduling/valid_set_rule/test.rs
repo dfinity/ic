@@ -352,7 +352,7 @@ fn update_history_if_induction_failed() {
         // ReplicatedState.
         valid_set_rule.induct_message(&mut state, msg.clone(), SMALL_APP_SUBNET_MAX_SIZE);
         assert!(state.canister_state(&canister_id).is_none());
-        assert_eq!(state.get_ingress_status(&msg.id()), status_clone);
+        assert_eq!(state.get_ingress_status(&msg.id()), &status_clone);
         assert_inducted_ingress_messages_eq(
             metric_vec(&[(&[(LABEL_STATUS, LABEL_VALUE_CANISTER_NOT_FOUND)], 1)]),
             &metrics_registry,

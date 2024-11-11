@@ -53,7 +53,7 @@ async fn test_deploy_fresh_sns() {
             "My Test Dapp",
             dapp_canister_id,
             vec![],
-            Wasm::from_bytes(UNIVERSAL_CANISTER_WASM),
+            Wasm::from_bytes(UNIVERSAL_CANISTER_WASM.to_vec()),
             None,
         )
         .await;
@@ -149,7 +149,7 @@ async fn test_upgrade_existing_sns() {
                 "My Test Dapp",
                 dapp_canister_id,
                 vec![],
-                Wasm::from_bytes(UNIVERSAL_CANISTER_WASM),
+                Wasm::from_bytes(UNIVERSAL_CANISTER_WASM.to_vec()),
                 None,
             )
             .await;

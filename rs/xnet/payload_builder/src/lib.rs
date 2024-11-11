@@ -846,7 +846,6 @@ impl XNetPayloadBuilderImpl {
                 ) {
                     Ok(Some(slice)) => slice,
                     Ok(None) => continue,
-                    // TODO(MR-6): Record failed pool take.
                     Err(_) => continue,
                 };
                 debug_assert!(slice_bytes <= bytes_left);
@@ -854,7 +853,6 @@ impl XNetPayloadBuilderImpl {
                 // Filter out invalid slices.
                 let validation_result =
                     self.validate_slice(subnet_id, &slice, &begin, validation_context, &state);
-                // TODO(MR-6): Record valid/invalid slice.
                 if let SliceValidationResult::Valid { byte_size, .. } = validation_result {
                     if byte_size != slice_bytes || byte_size > bytes_left {
                         let message = format!(

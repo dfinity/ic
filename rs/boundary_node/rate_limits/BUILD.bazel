@@ -8,7 +8,6 @@ DEPENDENCIES = [
     "//rs/boundary_node/rate_limits/api:rate_limits_api",
     "//rs/rust_canisters/http_types",
     "@crate_index//:anyhow",
-    "@crate_index//:bincode",
     "@crate_index//:candid",
     "@crate_index//:getrandom",
     "@crate_index//:hex",
@@ -19,8 +18,8 @@ DEPENDENCIES = [
     "@crate_index//:mockall",
     "@crate_index//:rand_chacha",
     "@crate_index//:serde",
+    "@crate_index//:serde_cbor",
     "@crate_index//:serde_json",
-    "@crate_index//:sha2",
     "@crate_index//:thiserror",
     "@crate_index//:uuid",
 ]
