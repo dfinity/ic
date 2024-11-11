@@ -374,6 +374,11 @@ type Event = variant {
         uuid : text;
         block_index : nat64;
     };
+    retrieve_btc_ofac_failed : record {
+        address : text;
+        amount : nat64;
+        owner : principal;
+    };
     schedule_deposit_reimbursement : record {
         account : Account;
         burn_block_index : nat64;
