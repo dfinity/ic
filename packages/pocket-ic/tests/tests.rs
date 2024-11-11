@@ -1595,3 +1595,35 @@ fn test_get_default_effective_canister_id_invalid_url() {
         err => panic!("Unexpected error: {}", err),
     };
 }
+
+#[test]
+fn get_controllers() {
+    let pic = PocketIc::new();
+
+    let canister_id = pic.create_canister();
+
+    let controllers = pic.get_controllers(canister_id);
+    assert_eq!(controllers, vec![Principal::anonymous()]);
+
+    let user_id = Principal::from_slice(&[u8::MAX; 29]);
+    pic.set_controllers(canister_id, None, vec![Principal::anonymous(), user_id])
+        .unwrap();
+
+    let controllers = pic.get_controllers(canister_id);
+    assert_eq!(controllers.len(), 2);
+    assert!(controllers.contains(&Principal::anonymous()));
+    assert!(controllers.contains(&user_id));
+}
+
+#[test]
+#[should_panic(expected = "CanisterNotFound(CanisterId")]
+fn get_controllers_of_nonexisting_canister() {
+    let pic = PocketIc::new();
+
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, 100_000_000_000_000);
+    pic.stop_canister(canister_id, None).unwrap();
+    pic.delete_canister(canister_id, None).unwrap();
+
+    let _ = pic.get_controllers(canister_id);
+}
