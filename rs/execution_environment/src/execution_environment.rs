@@ -1371,6 +1371,9 @@ impl ExecutionEnvironment {
             }
 
             Ok(Ic00Method::NodeMetricsHistory) => match &msg {
+                CanisterCall::Ingress(_) => {
+                    self.reject_unexpected_ingress(Ic00Method::NodeMetricsHistory)
+                }
                 CanisterCall::Request(_) => {
                     let res = NodeMetricsHistoryArgs::decode(payload)
                         .and_then(|args| self.node_metrics_history(&state, args));
@@ -1378,9 +1381,6 @@ impl ExecutionEnvironment {
                         response: res,
                         refund: msg.take_cycles(),
                     }
-                }
-                CanisterCall::Ingress(_) => {
-                    self.reject_unexpected_ingress(Ic00Method::NodeMetricsHistory)
                 }
             },
 

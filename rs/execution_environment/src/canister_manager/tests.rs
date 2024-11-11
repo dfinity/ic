@@ -30,8 +30,9 @@ use ic_management_canister_types::{
     CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgsBuilder,
     CanisterStatusResultV2, CanisterStatusType, CanisterUpgradeOptions, ChunkHash,
     ClearChunkStoreArgs, CreateCanisterArgs, EmptyBlob, InstallCodeArgsV2, Method,
-    NodeMetricsHistoryArgs, Payload, StoredChunksArgs, StoredChunksReply, UpdateSettingsArgs,
-    UploadChunkArgs, UploadChunkReply, WasmMemoryPersistence,
+    NodeMetricsHistoryArgs, NodeMetricsHistoryResponse, Payload, StoredChunksArgs,
+    StoredChunksReply, UpdateSettingsArgs, UploadChunkArgs, UploadChunkReply,
+    WasmMemoryPersistence,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -7951,6 +7952,35 @@ fn check_install_code_in_wasm64_mode_is_charged_correctly() {
 }
 
 #[test]
+fn node_metrics_history_canister_call_succeeds() {
+    let own_subnet_id = subnet_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet_id)
+        .build();
+    let uni_canister = test
+        .universal_canister_with_cycles(Cycles::new(1_000_000_000_000))
+        .unwrap();
+    let payload = NodeMetricsHistoryArgs {
+        subnet_id: own_subnet_id.get(),
+        start_at_timestamp_nanos: 0,
+    }
+    .encode();
+    let uc_call = wasm()
+        .call_simple(
+            CanisterId::ic_00(),
+            Method::NodeMetricsHistory,
+            call_args().other_side(payload),
+        )
+        .build();
+    let result = test.ingress(uni_canister, "update", uc_call).unwrap();
+    let bytes = match result {
+        WasmResult::Reply(bytes) => bytes,
+        WasmResult::Reject(err_msg) => panic!("Unexpected reject, expected reply: {}", err_msg),
+    };
+    let _res = Decode!(&bytes, Vec<NodeMetricsHistoryResponse>).unwrap();
+}
+
+#[test]
 fn node_metrics_history_ingress_fails() {
     let own_subnet_id = subnet_test_id(1);
     let mut test = ExecutionTestBuilder::new()
@@ -7961,11 +7991,10 @@ fn node_metrics_history_ingress_fails() {
         start_at_timestamp_nanos: 0,
     }
     .encode();
-    match test
-        .subnet_message(Method::NodeMetricsHistory, payload)
-        .unwrap()
-    {
-        WasmResult::Reply(bytes) => println!("{:02x?}", bytes), //panic!("Unexpected reply, expected reject"),
-        WasmResult::Reject(err_msg) => println!("{}", err_msg),
-    };
+    test.subnet_message(Method::NodeMetricsHistory, payload)
+        .unwrap_err()
+        .assert_contains(
+            ErrorCode::CanisterContractViolation,
+            "cannot be called by a user",
+        );
 }
