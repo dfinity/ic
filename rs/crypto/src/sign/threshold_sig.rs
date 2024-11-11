@@ -26,7 +26,7 @@ impl ThresholdSignerInternal {
         lockable_threshold_sig_data_store: &LockableThresholdSigDataStore,
         threshold_sig_csp_client: &C,
         message: &H,
-        dkg_id: NiDkgId,
+        dkg_id: &NiDkgId,
     ) -> Result<ThresholdSigShareOf<H>, ThresholdSignError> {
         let pub_coeffs = pub_coeffs_from_store(dkg_id, lockable_threshold_sig_data_store)?;
         let csp_signature = threshold_sig_csp_client
@@ -35,7 +35,7 @@ impl ThresholdSignerInternal {
                 message.as_signed_bytes(),
                 pub_coeffs,
             )
-            .map_err(|error| map_threshold_sign_error_or_panic(error, dkg_id))?;
+            .map_err(|error| map_threshold_sign_error_or_panic(error, dkg_id.clone()))?;
         threshold_sig_share_or_panic(csp_signature)
     }
 }
@@ -43,25 +43,27 @@ impl ThresholdSignerInternal {
 // Use this if only the pub coeffs are needed from the store. If also indices
 // are required, use transcript_data_from_store instead.
 fn pub_coeffs_from_store(
-    dkg_id: NiDkgId,
+    dkg_id: &NiDkgId,
     lockable_threshold_sig_data_store: &LockableThresholdSigDataStore,
 ) -> Result<CspPublicCoefficients, ThresholdSigDataNotFoundError> {
     let maybe_coeffs = lockable_threshold_sig_data_store
         .read()
         .transcript_data(dkg_id)
         .map(|data| data.public_coefficients().clone());
-    maybe_coeffs.ok_or(ThresholdSigDataNotFoundError::ThresholdSigDataNotFound { dkg_id })
+    maybe_coeffs.ok_or(ThresholdSigDataNotFoundError::ThresholdSigDataNotFound {
+        dkg_id: dkg_id.clone(),
+    })
 }
 
 fn transcript_data_from_store(
-    dkg_id: NiDkgId,
+    dkg_id: &NiDkgId,
     lockable_threshold_sig_data_store: &LockableThresholdSigDataStore,
 ) -> Result<TranscriptData, ThresholdSigDataNotFoundError> {
     let maybe_transcript_data = lockable_threshold_sig_data_store
         .read()
         .transcript_data(dkg_id)
         .cloned();
-    maybe_transcript_data.ok_or_else(|| sig_data_not_found_error(dkg_id))
+    maybe_transcript_data.ok_or_else(|| sig_data_not_found_error(dkg_id.clone()))
 }
 
 fn sig_data_not_found_error(dkg_id: NiDkgId) -> ThresholdSigDataNotFoundError {
@@ -138,7 +140,7 @@ impl ThresholdSigVerifierInternal {
         threshold_sig_csp_client: &C,
         signature: &ThresholdSigShareOf<H>,
         message: &H,
-        dkg_id: NiDkgId,
+        dkg_id: &NiDkgId,
         signer: NodeId,
     ) -> CryptoResult<()> {
         let csp_signature = CspSignature::try_from(signature)?;
@@ -189,7 +191,7 @@ impl ThresholdSigVerifierInternal {
 fn lazily_calculated_public_key_from_store<C: ThresholdSignatureCspClient>(
     lockable_threshold_sig_data_store: &LockableThresholdSigDataStore,
     threshold_sig_csp_client: &C,
-    dkg_id: NiDkgId,
+    dkg_id: &NiDkgId,
     node_id: NodeId,
 ) -> CryptoResult<CspThresholdSigPublicKey> {
     match public_key_from_store(lockable_threshold_sig_data_store, dkg_id, node_id) {
@@ -205,7 +207,7 @@ fn lazily_calculated_public_key_from_store<C: ThresholdSignatureCspClient>(
 
 fn public_key_from_store(
     lockable_threshold_sig_data_store: &LockableThresholdSigDataStore,
-    dkg_id: NiDkgId,
+    dkg_id: &NiDkgId,
     node_id: NodeId,
 ) -> Option<CspThresholdSigPublicKey> {
     lockable_threshold_sig_data_store
@@ -217,7 +219,7 @@ fn public_key_from_store(
 fn calculate_and_store_public_key_or_panic<C: ThresholdSignatureCspClient>(
     lockable_threshold_sig_data_store: &LockableThresholdSigDataStore,
     threshold_sig_csp_client: &C,
-    dkg_id: NiDkgId,
+    dkg_id: &NiDkgId,
     node_id: NodeId,
 ) -> CryptoResult<CspThresholdSigPublicKey> {
     let transcript_data = transcript_data_from_store(dkg_id, lockable_threshold_sig_data_store)?;
@@ -244,7 +246,7 @@ fn calculate_and_store_public_key_or_panic<C: ThresholdSignatureCspClient>(
 
 fn coeffs_and_index(
     transcript_data: TranscriptData,
-    dkg_id: NiDkgId,
+    dkg_id: &NiDkgId,
     node_id: NodeId,
 ) -> CryptoResult<(CspPublicCoefficients, NodeIndex)> {
     let public_coeffs = transcript_data.public_coefficients().clone();
@@ -279,7 +281,7 @@ impl ThresholdSigVerifierInternal {
         lockable_threshold_sig_data_store: &LockableThresholdSigDataStore,
         threshold_sig_csp_client: &C,
         shares: BTreeMap<NodeId, ThresholdSigShareOf<H>>,
-        dkg_id: NiDkgId,
+        dkg_id: &NiDkgId,
     ) -> CryptoResult<CombinedThresholdSigOf<H>> {
         error_if_shares_empty(&shares)?;
         let transcript_data =
@@ -299,7 +301,7 @@ impl ThresholdSigVerifierInternal {
 fn shares_to_vector<H: Signable>(
     transcript_data: &TranscriptData,
     shares: BTreeMap<NodeId, ThresholdSigShareOf<H>>,
-    dkg_id: NiDkgId,
+    dkg_id: &NiDkgId,
 ) -> CryptoResult<Vec<Option<CspSignature>>> {
     let max_node_index = maximum_node_index(transcript_data, &shares, dkg_id)?;
     let array_size = <usize>::try_from(max_node_index).expect("usize overflow") + 1;
@@ -318,7 +320,7 @@ fn shares_to_vector<H: Signable>(
 fn maximum_node_index<H: Signable>(
     transcript_data: &TranscriptData,
     shares: &BTreeMap<NodeId, ThresholdSigShareOf<H>>,
-    dkg_id: NiDkgId,
+    dkg_id: &NiDkgId,
 ) -> CryptoResult<NodeIndex> {
     shares.iter().try_fold(0, |cur_max, (node_id, _share)| {
         index_for_node_id(transcript_data, *node_id, dkg_id).map(|index| cmp::max(cur_max, index))
@@ -339,7 +341,7 @@ fn error_if_shares_empty<H: Signable>(
 fn index_for_node_id(
     transcript_data: &TranscriptData,
     node_id: NodeId,
-    dkg_id: NiDkgId,
+    dkg_id: &NiDkgId,
 ) -> CryptoResult<NodeIndex> {
     transcript_data
         .index(node_id)
@@ -373,7 +375,7 @@ fn map_csp_combine_sigs_error(error: CryptoError) -> CryptoError {
     }
 }
 
-fn node_id_missing_error(node_id: NodeId, dkg_id: NiDkgId) -> CryptoError {
+fn node_id_missing_error(node_id: NodeId, dkg_id: &NiDkgId) -> CryptoError {
     CryptoError::InvalidArgument {
         message: format!(
             "There is no node index for dkg id \"{:?}\" and node id \"{}\" in the transcript data.",
@@ -388,7 +390,7 @@ impl ThresholdSigVerifierInternal {
         threshold_sig_csp_client: &C,
         signature: &CombinedThresholdSigOf<H>,
         message: &H,
-        dkg_id: NiDkgId,
+        dkg_id: &NiDkgId,
     ) -> CryptoResult<()> {
         let pub_coeffs = pub_coeffs_from_store(dkg_id, lockable_threshold_sig_data_store)?;
         let csp_signature = CspSignature::try_from(signature)?;
