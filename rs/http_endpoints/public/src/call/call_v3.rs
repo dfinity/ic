@@ -70,7 +70,7 @@ struct SynchronousCallHandlerState {
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ingress_message_certificate_timeout_seconds: u64,
     call_handler: IngressValidator,
-    flip_flop: Arc<Mutex<bool>>,
+    is_malicious: Arc<Mutex<bool>>,
 }
 
 impl IntoResponse for CallV3Response {
@@ -139,7 +139,8 @@ pub(crate) fn new_router(
     ingress_message_certificate_timeout_seconds: u64,
     delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-) -> Router {
+) -> Router<Arc<Mutex<bool>>> {
+    let is_malicious = Arc::new(Mutex::new(false));
     let call_service = SynchronousCallHandlerState {
         delegation_from_nns,
         ingress_watcher_handle,
@@ -147,15 +148,32 @@ pub(crate) fn new_router(
         ingress_message_certificate_timeout_seconds,
         call_handler,
         state_reader,
-        flip_flop: Arc::new(Mutex::new(true)),
+        is_malicious: is_malicious.clone(),
     };
 
-    Router::new().route_service(
-        route(),
-        axum::routing::post(call_sync_v3)
-            .with_state(call_service)
-            .layer(ServiceBuilder::new().layer(DefaultBodyLimit::disable())),
-    )
+    Router::new()
+        .route_service(
+            route(),
+            axum::routing::post(call_sync_v3)
+                .with_state(call_service)
+                .layer(ServiceBuilder::new().layer(DefaultBodyLimit::disable())),
+        )
+        .route(
+            "/malicious",
+            axum::routing::post(|State(is_malicious): State<Arc<Mutex<bool>>>| async move {
+                *is_malicious.lock().unwrap() = true;
+                (StatusCode::OK, "Malicious flag set").into_response()
+            }),
+        )
+        .with_state(is_malicious.clone())
+        .route(
+            "/honest",
+            axum::routing::post(|State(is_malicious): State<Arc<Mutex<bool>>>| async move {
+                *is_malicious.lock().unwrap() = false;
+                (StatusCode::OK, "Malicious flag unset").into_response()
+            }),
+        )
+        .with_state(is_malicious)
 }
 
 pub fn new_service(
@@ -187,15 +205,11 @@ async fn call_sync_v3(
         ingress_message_certificate_timeout_seconds,
         state_reader,
         delegation_from_nns,
-        flip_flop,
+        is_malicious,
     }): State<SynchronousCallHandlerState>,
     WithTimeout(Cbor(request)): WithTimeout<Cbor<HttpRequestEnvelope<HttpCallContent>>>,
 ) -> CallV3Response {
-    let mut flip_flop = flip_flop.lock().unwrap();
-    let is_malicious = *flip_flop;
-    *flip_flop = !*flip_flop;
-    drop(flip_flop);
-
+    let is_malicious = *is_malicious.lock().unwrap();
     let log = call_handler.log.clone();
 
     let ingress_submitter = match call_handler
