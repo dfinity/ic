@@ -41,7 +41,7 @@ use crate::{
         InstanceId, MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId, SubnetId,
         SubnetKind, SubnetSpec, Topology,
     },
-    management_canister::{CanisterId, CanisterStatusResult},
+    management_canister::{CanisterId, CanisterStatusResult, Snapshot},
     nonblocking::PocketIc as PocketIcAsync,
 };
 use candid::{
@@ -799,6 +799,69 @@ impl PocketIc {
     ) -> Result<(), CallError> {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.uninstall_canister(canister_id, sender).await })
+    }
+
+    /// Take canister snapshot.
+    #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub fn take_canister_snapshot(
+        &self,
+        canister_id: CanisterId,
+        sender: Option<Principal>,
+        replace_snapshot: Option<Vec<u8>>,
+    ) -> Result<Snapshot, CallError> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .take_canister_snapshot(canister_id, sender, replace_snapshot)
+                .await
+        })
+    }
+
+    /// Load canister snapshot.
+    #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub fn load_canister_snapshot(
+        &self,
+        canister_id: CanisterId,
+        sender: Option<Principal>,
+        snapshot_id: Vec<u8>,
+    ) -> Result<(), CallError> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .load_canister_snapshot(canister_id, sender, snapshot_id)
+                .await
+        })
+    }
+
+    /// List canister snapshots.
+    #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub fn list_canister_snapshots(
+        &self,
+        canister_id: CanisterId,
+        sender: Option<Principal>,
+    ) -> Result<Vec<Snapshot>, CallError> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .list_canister_snapshots(canister_id, sender)
+                .await
+        })
+    }
+
+    /// Delete canister snapshot.
+    #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub fn delete_canister_snapshot(
+        &self,
+        canister_id: CanisterId,
+        sender: Option<Principal>,
+        snapshot_id: Vec<u8>,
+    ) -> Result<(), CallError> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .delete_canister_snapshot(canister_id, sender, snapshot_id)
+                .await
+        })
     }
 
     /// Update canister settings.

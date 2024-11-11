@@ -10,8 +10,9 @@ use crate::common::rest::{
 use crate::management_canister::{
     CanisterId, CanisterIdRecord, CanisterInstallMode, CanisterInstallModeUpgradeInner,
     CanisterInstallModeUpgradeInnerWasmMemoryPersistenceInner, CanisterSettings,
-    CanisterStatusResult, ChunkHash, InstallChunkedCodeArgs, InstallCodeArgs,
-    ProvisionalCreateCanisterWithCyclesArgs, UpdateSettingsArgs, UploadChunkArgs,
+    CanisterStatusResult, ChunkHash, DeleteCanisterSnapshotArgs, InstallChunkedCodeArgs,
+    InstallCodeArgs, LoadCanisterSnapshotArgs, ProvisionalCreateCanisterWithCyclesArgs, Snapshot,
+    TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs,
 };
 pub use crate::DefaultEffectiveCanisterIdError;
 use crate::{CallError, PocketIcBuilder, UserError, WasmResult};
@@ -890,6 +891,93 @@ impl PocketIc {
             sender.unwrap_or(Principal::anonymous()),
             "uninstall_code",
             (CanisterIdRecord { canister_id },),
+        )
+        .await
+    }
+
+    /// Take canister snapshot.
+    #[instrument(skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub async fn take_canister_snapshot(
+        &self,
+        canister_id: CanisterId,
+        sender: Option<Principal>,
+        replace_snapshot: Option<Vec<u8>>,
+    ) -> Result<Snapshot, CallError> {
+        call_candid_as::<_, (Snapshot,)>(
+            self,
+            Principal::management_canister(),
+            RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
+            sender.unwrap_or(Principal::anonymous()),
+            "take_canister_snapshot",
+            (TakeCanisterSnapshotArgs {
+                canister_id,
+                replace_snapshot,
+            },),
+        )
+        .await
+        .map(|responses| responses.0)
+    }
+
+    /// Load canister snapshot.
+    #[instrument(skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub async fn load_canister_snapshot(
+        &self,
+        canister_id: CanisterId,
+        sender: Option<Principal>,
+        snapshot_id: Vec<u8>,
+    ) -> Result<(), CallError> {
+        call_candid_as(
+            self,
+            Principal::management_canister(),
+            RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
+            sender.unwrap_or(Principal::anonymous()),
+            "load_canister_snapshot",
+            (LoadCanisterSnapshotArgs {
+                canister_id,
+                snapshot_id,
+                sender_canister_version: None,
+            },),
+        )
+        .await
+    }
+
+    /// List canister snapshots.
+    #[instrument(skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub async fn list_canister_snapshots(
+        &self,
+        canister_id: CanisterId,
+        sender: Option<Principal>,
+    ) -> Result<Vec<Snapshot>, CallError> {
+        call_candid_as::<_, (Vec<Snapshot>,)>(
+            self,
+            Principal::management_canister(),
+            RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
+            sender.unwrap_or(Principal::anonymous()),
+            "list_canister_snapshots",
+            (CanisterIdRecord { canister_id },),
+        )
+        .await
+        .map(|responses| responses.0)
+    }
+
+    /// Delete canister snapshot.
+    #[instrument(skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub async fn delete_canister_snapshot(
+        &self,
+        canister_id: CanisterId,
+        sender: Option<Principal>,
+        snapshot_id: Vec<u8>,
+    ) -> Result<(), CallError> {
+        call_candid_as(
+            self,
+            Principal::management_canister(),
+            RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
+            sender.unwrap_or(Principal::anonymous()),
+            "delete_canister_snapshot",
+            (DeleteCanisterSnapshotArgs {
+                canister_id,
+                snapshot_id,
+            },),
         )
         .await
     }

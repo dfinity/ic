@@ -1627,3 +1627,75 @@ fn get_controllers_of_nonexisting_canister() {
 
     let _ = pic.get_controllers(canister_id);
 }
+
+#[test]
+fn test_canister_snapshots() {
+    let pic = PocketIc::new();
+
+    // We deploy the counter canister.
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
+    pic.install_canister(canister_id, counter_wasm(), vec![], None);
+
+    // We bump the counter to make the counter different from its initial value.
+    let reply = call_counter_can(&pic, canister_id, "write");
+    assert_eq!(reply, WasmResult::Reply(1_u32.to_le_bytes().to_vec()));
+    let reply = call_counter_can(&pic, canister_id, "read");
+    assert_eq!(reply, WasmResult::Reply(1_u32.to_le_bytes().to_vec()));
+
+    // We haven't taken any snapshot so far and thus listing snapshots yields an empty result.
+    let snapshots = pic.list_canister_snapshots(canister_id, None).unwrap();
+    assert!(snapshots.is_empty());
+
+    // We take a snapshot (it is recommended to only take a snapshot of a stopped canister).
+    pic.stop_canister(canister_id, None).unwrap();
+    let first_snapshot = pic.take_canister_snapshot(canister_id, None, None).unwrap();
+    pic.start_canister(canister_id, None).unwrap();
+
+    // Listing the snapshots now should yield the snapshot we just took.
+    let snapshots = pic.list_canister_snapshots(canister_id, None).unwrap();
+    assert_eq!(snapshots.len(), 1);
+    assert_eq!(snapshots[0].id, first_snapshot.id);
+    assert_eq!(snapshots[0].total_size, first_snapshot.total_size);
+    assert_eq!(
+        snapshots[0].taken_at_timestamp,
+        first_snapshot.taken_at_timestamp
+    );
+
+    // We bump the counter once more to test loading snapshots in a subsequent step.
+    let reply = call_counter_can(&pic, canister_id, "write");
+    assert_eq!(reply, WasmResult::Reply(2_u32.to_le_bytes().to_vec()));
+    let reply = call_counter_can(&pic, canister_id, "read");
+    assert_eq!(reply, WasmResult::Reply(2_u32.to_le_bytes().to_vec()));
+
+    // We load the snapshot (it is recommended to only load a snapshot on a stopped canister).
+    pic.stop_canister(canister_id, None).unwrap();
+    pic.load_canister_snapshot(canister_id, None, first_snapshot.id.clone())
+        .unwrap();
+    pic.start_canister(canister_id, None).unwrap();
+
+    // We verify that the snapshot was successfully loaded.
+    let reply = call_counter_can(&pic, canister_id, "read");
+    assert_eq!(reply, WasmResult::Reply(1_u32.to_le_bytes().to_vec()));
+
+    // We bump the counter again.
+    let reply = call_counter_can(&pic, canister_id, "write");
+    assert_eq!(reply, WasmResult::Reply(2_u32.to_le_bytes().to_vec()));
+    let reply = call_counter_can(&pic, canister_id, "read");
+    assert_eq!(reply, WasmResult::Reply(2_u32.to_le_bytes().to_vec()));
+
+    // We take one more snapshot: since we already have an active snapshot,
+    // taking another snapshot fails unless we specify the active snapshot to be replaced.
+    pic.stop_canister(canister_id, None).unwrap();
+    pic.take_canister_snapshot(canister_id, None, None)
+        .unwrap_err();
+    let second_snapshot = pic
+        .take_canister_snapshot(canister_id, None, Some(first_snapshot.id))
+        .unwrap();
+    pic.start_canister(canister_id, None).unwrap();
+
+    // Finally, we delete the current snapshot which allows us to take a snapshot without specifying any snapshot to be replaced.
+    pic.delete_canister_snapshot(canister_id, None, second_snapshot.id)
+        .unwrap();
+    pic.take_canister_snapshot(canister_id, None, None).unwrap();
+}
