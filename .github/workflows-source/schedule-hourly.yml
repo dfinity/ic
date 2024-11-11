@@ -32,12 +32,6 @@ anchors:
   checkout: &checkout
     name: Checkout
     uses: actions/checkout@v4
-  before-script: &before-script
-    name: Before script
-    id: before-script
-    shell: bash
-    run: |
-      [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
   docker-login: &docker-login
     name: Login to Dockerhub
     shell: bash
@@ -66,7 +60,6 @@ jobs:
     <<: *dind-large-setup
     steps:
       - <<: *checkout
-      - <<: *before-script
       - <<: *docker-login
       - name: Run Bazel Build All No Cache
         uses:  ./.github/actions/bazel-test-all/
@@ -86,7 +79,6 @@ jobs:
       labels: dind-large
     steps:
       - <<: *checkout
-      - <<: *before-script
       - <<: *docker-login
       - name: Run Bazel System Test Hourly
         id: bazel-test-all

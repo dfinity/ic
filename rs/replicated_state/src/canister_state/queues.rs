@@ -1267,12 +1267,13 @@ impl CanisterQueues {
         self.queue_stats.output_queues_reserved_slots
     }
 
-    /// Returns the memory usage of all best-effort messages.
+    /// Returns the memory usage of all best-effort messages (zero iff there are
+    /// zero pooled best-effort messages).
     ///
     /// Does not account for callback references for expired callbacks or dropped
     /// responses, as these are constant size per callback and thus can be included
     /// in the cost of a callback.
-    pub fn best_effort_memory_usage(&self) -> usize {
+    pub fn best_effort_message_memory_usage(&self) -> usize {
         self.message_stats().best_effort_message_bytes
     }
 
@@ -1398,6 +1399,8 @@ impl CanisterQueues {
     /// Updates the stats for the dropped message and (where applicable) the
     /// generated response. `own_canister_id` and `local_canisters` are required
     /// to determine the correct input queue schedule to update (if applicable).
+    ///
+    /// Time complexity: `O(log(n))`.
     pub fn shed_largest_message(
         &mut self,
         own_canister_id: &CanisterId,

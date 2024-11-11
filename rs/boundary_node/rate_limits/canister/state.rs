@@ -1,16 +1,14 @@
 use candid::Principal;
-use ic_cdk::api::time;
 use mockall::automock;
-use rate_limits_api::IncidentId;
 
 use crate::{
-    add_config::INIT_VERSION,
+    add_config::{INIT_SCHEMA_VERSION, INIT_VERSION},
     storage::{
         LocalRef, StableMap, StorableConfig, StorableIncidentId, StorableIncidentMetadata,
         StorablePrincipal, StorableRuleId, StorableRuleMetadata, StorableVersion,
         AUTHORIZED_PRINCIPAL, CONFIGS, INCIDENTS, RULES,
     },
-    types::{InputConfig, InputRule, RuleId, Version},
+    types::{IncidentId, InputConfig, InputRule, RuleId, Timestamp, Version},
 };
 
 #[automock]
@@ -22,11 +20,17 @@ pub trait CanisterApi {
     fn get_config(&self, version: Version) -> Option<StorableConfig>;
     fn get_rule(&self, rule_id: &RuleId) -> Option<StorableRuleMetadata>;
     fn get_incident(&self, incident_id: &IncidentId) -> Option<StorableIncidentMetadata>;
-    fn add_config(&self, version: Version, config: StorableConfig) -> bool;
-    fn add_rule(&self, rule_id: RuleId, rule: StorableRuleMetadata) -> bool;
-    fn add_incident(&self, incident_id: IncidentId, rule_ids: StorableIncidentMetadata) -> bool;
-    fn update_rule(&self, rule_id: RuleId, rule: StorableRuleMetadata) -> bool;
-    fn update_incident(&self, incident_id: IncidentId, rule_ids: StorableIncidentMetadata) -> bool;
+    fn upsert_config(&self, version: Version, config: StorableConfig) -> Option<StorableConfig>;
+    fn upsert_rule(
+        &self,
+        rule_id: RuleId,
+        rule: StorableRuleMetadata,
+    ) -> Option<StorableRuleMetadata>;
+    fn upsert_incident(
+        &self,
+        incident_id: IncidentId,
+        rule_ids: StorableIncidentMetadata,
+    ) -> Option<StorableIncidentMetadata>;
 }
 
 #[derive(Clone)]
@@ -56,7 +60,7 @@ impl CanisterApi for CanisterState {
 
     fn set_authorized_principal(&self, principal: Principal) {
         self.authorized_principal
-            .with(|cell| cell.borrow_mut().insert((), StorablePrincipal(principal)));
+            .with(|cell| cell.borrow_mut().insert((), principal));
     }
 
     fn get_version(&self) -> Option<StorableVersion> {
@@ -67,8 +71,7 @@ impl CanisterApi for CanisterState {
     }
 
     fn get_config(&self, version: Version) -> Option<StorableConfig> {
-        self.configs
-            .with(|cell| cell.borrow().get(&StorableVersion(version)))
+        self.configs.with(|cell| cell.borrow().get(&version))
     }
 
     fn get_full_config(&self, version: Version) -> Option<InputConfig> {
@@ -93,92 +96,51 @@ impl CanisterApi for CanisterState {
 
     fn get_rule(&self, rule_id: &RuleId) -> Option<StorableRuleMetadata> {
         self.rules
-            .with(|cell| cell.borrow().get(&StorableRuleId(rule_id.clone())))
+            .with(|cell| cell.borrow().get(&StorableRuleId(rule_id.0)))
     }
 
     fn get_incident(&self, incident_id: &IncidentId) -> Option<StorableIncidentMetadata> {
         self.incidents
-            .with(|cell| cell.borrow().get(&StorableIncidentId(incident_id.clone())))
+            .with(|cell| cell.borrow().get(&StorableIncidentId(incident_id.0)))
     }
 
-    fn add_config(&self, version: Version, config: StorableConfig) -> bool {
-        self.get_config(version).map_or_else(
-            || {
-                self.configs.with(|cell| {
-                    let mut configs = cell.borrow_mut();
-                    configs.insert(StorableVersion(version), config);
-                });
-                true // Successfully inserted
-            },
-            |_| false, // Already exists, return false
-        )
+    fn upsert_config(&self, version: Version, config: StorableConfig) -> Option<StorableConfig> {
+        self.configs
+            .with(|cell| cell.borrow_mut().insert(version, config))
     }
 
-    fn add_rule(&self, rule_id: RuleId, rule: StorableRuleMetadata) -> bool {
-        self.get_rule(&rule_id).map_or_else(
-            || {
-                self.rules.with(|cell| {
-                    let mut rules = cell.borrow_mut();
-                    rules.insert(StorableRuleId(rule_id), rule);
-                });
-                true // Successfully inserted
-            },
-            |_| false, // Already exists, return false
-        )
+    fn upsert_rule(
+        &self,
+        rule_id: RuleId,
+        rule: StorableRuleMetadata,
+    ) -> Option<StorableRuleMetadata> {
+        self.rules
+            .with(|cell| cell.borrow_mut().insert(StorableRuleId(rule_id.0), rule))
     }
 
-    fn add_incident(&self, incident_id: IncidentId, rule_ids: StorableIncidentMetadata) -> bool {
-        self.get_incident(&incident_id).map_or_else(
-            || {
-                self.incidents.with(|cell| {
-                    let mut incidents = cell.borrow_mut();
-                    incidents.insert(StorableIncidentId(incident_id), rule_ids);
-                });
-                true // Successfully inserted
-            },
-            |_| false, // Already exists, return false
-        )
-    }
-
-    fn update_rule(&self, rule_id: RuleId, rule: StorableRuleMetadata) -> bool {
-        self.get_rule(&rule_id).map_or_else(
-            || false, // Rule doesn't exist, return false
-            |_| {
-                self.rules.with(|cell| {
-                    let mut rules = cell.borrow_mut();
-                    rules.insert(StorableRuleId(rule_id), rule);
-                });
-                true // Successfully updated
-            },
-        )
-    }
-
-    fn update_incident(&self, incident_id: IncidentId, incident: StorableIncidentMetadata) -> bool {
-        self.get_incident(&incident_id).map_or_else(
-            || false, // Incident doesn't exist, return false
-            |_| {
-                self.incidents.with(|cell| {
-                    let mut incidents = cell.borrow_mut();
-                    incidents.insert(StorableIncidentId(incident_id), incident);
-                });
-                true // Successfully updated
-            },
-        )
+    fn upsert_incident(
+        &self,
+        incident_id: IncidentId,
+        rule_ids: StorableIncidentMetadata,
+    ) -> Option<StorableIncidentMetadata> {
+        self.incidents.with(|cell| {
+            cell.borrow_mut()
+                .insert(StorableIncidentId(incident_id.0), rule_ids)
+        })
     }
 }
 
-pub fn init_version_and_config(version: Version) {
-    with_canister_state(|state| {
-        let config = StorableConfig {
-            schema_version: 1,
-            active_since: time(),
-            rule_ids: vec![],
-        };
-        assert!(
-            state.add_config(INIT_VERSION, config),
-            "Config for version={version} already exists!"
-        );
-    })
+pub fn init_version_and_config(time: Timestamp, canister_api: impl CanisterApi) {
+    // Initialize config with an empty vector of rules
+    let config = StorableConfig {
+        schema_version: INIT_SCHEMA_VERSION,
+        active_since: time,
+        rule_ids: vec![],
+    };
+    assert!(
+        canister_api.upsert_config(INIT_VERSION, config).is_none(),
+        "Config for version={INIT_VERSION} already exists!"
+    );
 }
 
 pub fn with_canister_state<R>(f: impl FnOnce(CanisterState) -> R) -> R {

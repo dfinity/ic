@@ -470,7 +470,7 @@ impl ExecutionTest {
     }
 
     pub fn ingress_status(&self, message_id: &MessageId) -> IngressStatus {
-        self.state().get_ingress_status(message_id)
+        self.state().get_ingress_status(message_id).clone()
     }
 
     pub fn ingress_state(&self, message_id: &MessageId) -> IngressState {
@@ -2074,11 +2074,6 @@ impl ExecutionTestBuilder {
             .embedders_config
             .feature_flags
             .wasm_native_stable_memory = FlagStatus::Disabled;
-        self
-    }
-
-    pub fn with_snapshots(mut self, status: FlagStatus) -> Self {
-        self.execution_config.canister_snapshots = status;
         self
     }
 

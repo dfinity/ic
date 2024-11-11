@@ -3,7 +3,6 @@ use candid::Encode;
 use ic_base_types::PrincipalId;
 use ic_config::{
     execution_environment::{Config as HypervisorConfig, DEFAULT_WASM_MEMORY_LIMIT},
-    flag_status::FlagStatus,
     subnet_config::{CyclesAccountManagerConfig, SubnetConfig},
 };
 use ic_management_canister_types::{
@@ -14,11 +13,12 @@ use ic_management_canister_types::{
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::NumWasmPages;
 use ic_state_machine_tests::{
-    ErrorCode, IngressState, IngressStatus, MessageId, StateMachine, StateMachineBuilder,
-    StateMachineConfig, UserError,
+    ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig, UserError,
 };
 use ic_system_api::MAX_CALL_TIMEOUT_SECONDS;
 use ic_test_utilities_metrics::{fetch_gauge, fetch_int_counter};
+use ic_types::ingress::{IngressState, IngressStatus};
+use ic_types::messages::MessageId;
 use ic_types::{ingress::WasmResult, messages::NO_DEADLINE, CanisterId, Cycles, NumBytes, Time};
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use more_asserts::{assert_gt, assert_le, assert_lt};
@@ -728,7 +728,6 @@ fn take_canister_snapshot_request_fails_when_subnet_capacity_reached() {
         HypervisorConfig {
             subnet_memory_capacity: NumBytes::from(100 * MIB),
             subnet_memory_reservation: NumBytes::from(0),
-            canister_snapshots: FlagStatus::Enabled,
             ..Default::default()
         },
     ));
@@ -795,7 +794,6 @@ fn canister_snapshot_metrics_are_observed() {
         HypervisorConfig {
             subnet_memory_capacity: NumBytes::from(100 * MIB),
             subnet_memory_reservation: NumBytes::from(0),
-            canister_snapshots: FlagStatus::Enabled,
             ..Default::default()
         },
     ));
@@ -849,6 +847,45 @@ fn canister_snapshot_metrics_are_observed() {
 
     let gauge = fetch_gauge(env.metrics_registry(), "scheduler_num_canister_snapshots").unwrap();
     assert_eq!(gauge, 1.0);
+}
+
+#[test]
+fn canister_snapshot_metrics_are_consistent_after_canister_deletion() {
+    let env = StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    let canister_id = create_universal_canister_with_cycles(
+        &env,
+        Some(CanisterSettingsArgsBuilder::new().build()),
+        INITIAL_CYCLES_BALANCE,
+    );
+
+    env.take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None))
+        .unwrap();
+
+    let count = fetch_gauge(env.metrics_registry(), "scheduler_num_canister_snapshots").unwrap();
+    assert_eq!(count, 1.0);
+    let memory_usage = fetch_gauge(
+        env.metrics_registry(),
+        "scheduler_canister_snapshots_memory_usage_bytes",
+    )
+    .unwrap();
+    assert_gt!(memory_usage, 0.0);
+
+    env.stop_canister(canister_id)
+        .expect("Error stopping canister.");
+    env.delete_canister(canister_id)
+        .expect("Error deleting canister.");
+
+    let count = fetch_gauge(env.metrics_registry(), "scheduler_num_canister_snapshots").unwrap();
+    assert_eq!(count, 0.0);
+    let memory_usage = fetch_gauge(
+        env.metrics_registry(),
+        "scheduler_canister_snapshots_memory_usage_bytes",
+    )
+    .unwrap();
+    assert_eq!(memory_usage, 0.0);
 }
 
 fn assert_replied(result: Result<WasmResult, UserError>) {

@@ -12,7 +12,6 @@ async-trait = { workspace = true }
 axum = { workspace = true }
 clap = { workspace = true }
 http = { workspace = true }
-ic-async-utils = { path = "../../async_utils" }
 itertools = { workspace = true }
 reqwest = { workspace = true }
 thiserror = { workspace = true }

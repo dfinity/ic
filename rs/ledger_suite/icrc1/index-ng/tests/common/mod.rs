@@ -92,7 +92,7 @@ pub fn install_ledger(
         ledger_wasm(),
         Encode!(&LedgerArgument::Init(builder.build())).unwrap(),
         None,
-        ic_state_machine_tests::Cycles::new(STARTING_CYCLES_PER_CANISTER),
+        ic_types::Cycles::new(STARTING_CYCLES_PER_CANISTER),
     )
     .unwrap()
 }
@@ -104,7 +104,7 @@ pub fn install_index_ng(env: &StateMachine, init_arg: IndexInitArg) -> CanisterI
         index_ng_wasm(),
         Encode!(&args).unwrap(),
         None,
-        ic_state_machine_tests::Cycles::new(STARTING_CYCLES_PER_CANISTER),
+        ic_types::Cycles::new(STARTING_CYCLES_PER_CANISTER),
     )
     .unwrap()
 }
@@ -386,7 +386,7 @@ fn icrc3_get_blocks(
         .expect("Failed to decode GetBlocksResult")
 }
 
-fn status(env: &StateMachine, index_id: CanisterId) -> Status {
+pub fn status(env: &StateMachine, index_id: CanisterId) -> Status {
     let res = env
         .query(index_id, "status", Encode!(&()).unwrap())
         .expect("Failed to send status")

@@ -31,8 +31,8 @@ use ic_management_canister_types::{
     CanisterStatusResultV2, CanisterStatusType, CanisterUpgradeOptions, ChunkHash,
     ClearChunkStoreArgs, CreateCanisterArgs, EmptyBlob, InstallCodeArgsV2, Method,
     NodeMetricsHistoryArgs, NodeMetricsHistoryResponse, Payload, StoredChunksArgs,
-    StoredChunksReply, UpdateSettingsArgs, UploadChunkArgs, UploadChunkReply,
-    WasmMemoryPersistence,
+    StoredChunksReply, SubnetInfoArgs, SubnetInfoResponse, UpdateSettingsArgs, UploadChunkArgs,
+    UploadChunkReply, WasmMemoryPersistence,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -7949,6 +7949,56 @@ fn check_install_code_in_wasm64_mode_is_charged_correctly() {
 
     assert_lt!(balance64, balance32);
     assert_lt!(execution_cost32, execution_cost64);
+}
+
+#[test]
+fn subnet_info_canister_call_succeeds() {
+    let own_subnet_id = subnet_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet_id)
+        .build();
+    let uni_canister = test
+        .universal_canister_with_cycles(Cycles::new(1_000_000_000_000))
+        .unwrap();
+    let payload = SubnetInfoArgs {
+        subnet_id: own_subnet_id.get(),
+    }
+    .encode();
+    let uc_call = wasm()
+        .call_simple(
+            CanisterId::ic_00(),
+            Method::SubnetInfo,
+            call_args().other_side(payload),
+        )
+        .build();
+    let result = test.ingress(uni_canister, "update", uc_call).unwrap();
+    let bytes = match result {
+        WasmResult::Reply(bytes) => bytes,
+        WasmResult::Reject(err_msg) => panic!("Unexpected reject, expected reply: {}", err_msg),
+    };
+    let SubnetInfoResponse { replica_version } = Decode!(&bytes, SubnetInfoResponse).unwrap();
+    assert_eq!(
+        replica_version,
+        ic_types::ReplicaVersion::default().to_string()
+    );
+}
+
+#[test]
+fn subnet_info_ingress_fails() {
+    let own_subnet_id = subnet_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet_id)
+        .build();
+    let payload = SubnetInfoArgs {
+        subnet_id: own_subnet_id.get(),
+    }
+    .encode();
+    test.subnet_message(Method::SubnetInfo, payload)
+        .unwrap_err()
+        .assert_contains(
+            ErrorCode::CanisterContractViolation,
+            "cannot be called by a user",
+        );
 }
 
 #[test]

@@ -76,6 +76,7 @@ pub struct MinterInfo {
     pub erc20_balances: Option<Vec<Erc20Balance>>,
     pub last_eth_scraped_block_number: Option<Nat>,
     pub last_erc20_scraped_block_number: Option<Nat>,
+    pub last_deposit_with_subaccount_scraped_block_number: Option<Nat>,
     pub cketh_ledger_id: Option<Principal>,
     pub evm_rpc_id: Option<Principal>,
 }
@@ -391,6 +392,9 @@ pub mod events {
             block_number: Nat,
         },
         SyncedErc20ToBlock {
+            block_number: Nat,
+        },
+        SyncedDepositWithSubaccountToBlock {
             block_number: Nat,
         },
         AcceptedEthWithdrawalRequest {

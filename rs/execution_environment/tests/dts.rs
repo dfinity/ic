@@ -2,6 +2,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use assert_matches::assert_matches;
 use candid::Encode;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_config::{
     embedders::{Config as EmbeddersConfig, MeteringType},
     execution_environment::Config as HypervisorConfig,
@@ -9,19 +10,18 @@ use ic_config::{
     subnet_config::{SchedulerConfig, SubnetConfig},
 };
 use ic_management_canister_types::{
-    CanisterIdRecord, CanisterInfoRequest, CanisterInstallModeV2, CanisterSettingsArgsBuilder,
-    DeleteCanisterSnapshotArgs, EmptyBlob, InstallCodeArgs, ListCanisterSnapshotArgs, Method,
-    Payload, StoredChunksArgs, UninstallCodeArgs, IC_00,
+    CanisterIdRecord, CanisterInfoRequest, CanisterInstallMode, CanisterInstallModeV2,
+    CanisterSettingsArgsBuilder, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, EmptyBlob,
+    InstallChunkedCodeArgs, InstallCodeArgs, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
+    Method, Payload, StoredChunksArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
+    UpdateSettingsArgs, UploadChunkArgs, IC_00,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::{execution_state::NextScheduledMethod, NextExecution};
-use ic_state_machine_tests::{
-    CanisterId, CanisterInstallMode, ClearChunkStoreArgs, CryptoHashOfState, ErrorCode,
-    IngressState, IngressStatus, InstallChunkedCodeArgs, LoadCanisterSnapshotArgs, MessageId,
-    PrincipalId, StateMachine, StateMachineConfig, TakeCanisterSnapshotArgs, UpdateSettingsArgs,
-    UploadChunkArgs,
-};
-use ic_types::{ingress::WasmResult, Cycles, NumInstructions};
+use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineConfig};
+use ic_types::ingress::{IngressState, IngressStatus};
+use ic_types::messages::MessageId;
+use ic_types::{ingress::WasmResult, CryptoHashOfState, Cycles, NumInstructions};
 use ic_universal_canister::{call_args, wasm, CallArgs, UNIVERSAL_CANISTER_WASM};
 use more_asserts::assert_ge;
 use strum::IntoEnumIterator;
@@ -187,7 +187,6 @@ fn dts_env(
             message_instruction_limit,
             slice_instruction_limit,
         ))))
-        .with_canister_snapshots(true)
         .with_subnet_type(SubnetType::Application)
         .build()
 }
@@ -1165,6 +1164,7 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
             | Method::BitcoinSendTransactionInternal
             | Method::BitcoinGetSuccessors
             | Method::NodeMetricsHistory
+            | Method::SubnetInfo
             | Method::ProvisionalCreateCanisterWithCycles
             | Method::ProvisionalTopUpCanister => {}
             // Unsupported methods accepting just one argument.
@@ -1746,7 +1746,9 @@ fn dts_ingress_status_of_update_is_correct() {
         .install_canister_with_cycles(binary, vec![], None, INITIAL_CYCLES_BALANCE)
         .unwrap();
 
-    let original_time = env.time_of_next_round();
+    // advance time so that time does not grow implicitly when executing a round
+    env.advance_time(Duration::from_secs(1));
+    let original_time = env.time();
     let update = env.send_ingress(user_id, canister, "update", vec![]);
 
     env.tick();
@@ -1816,7 +1818,9 @@ fn dts_ingress_status_of_install_is_correct() {
         .install_canister_with_cycles(binary.clone(), vec![], None, INITIAL_CYCLES_BALANCE)
         .unwrap();
 
-    let original_time = env.time_of_next_round();
+    // advance time so that time does not grow implicitly when executing a round
+    env.advance_time(Duration::from_secs(1));
+    let original_time = env.time();
 
     let install = {
         let args = InstallCodeArgs::new(
@@ -1897,7 +1901,9 @@ fn dts_ingress_status_of_upgrade_is_correct() {
         .install_canister_with_cycles(binary.clone(), vec![], None, INITIAL_CYCLES_BALANCE)
         .unwrap();
 
-    let original_time = env.time_of_next_round();
+    // advance time so that time does not grow implicitly when executing a round
+    env.advance_time(Duration::from_secs(1));
+    let original_time = env.time();
 
     let install = {
         let args = InstallCodeArgs::new(
@@ -1997,7 +2003,9 @@ fn dts_ingress_status_of_update_with_call_is_correct() {
         .inter_update(b_id, call_args().other_side(b))
         .build();
 
-    let original_time = env.time_of_next_round();
+    // advance time so that time does not grow implicitly when executing a round
+    env.advance_time(Duration::from_secs(1));
+    let original_time = env.time();
     let update = env.send_ingress(user_id, a_id, "update", a);
 
     env.tick();
