@@ -1,8 +1,8 @@
 use candid::{decode_one, encode_one, CandidType, Decode, Deserialize, Encode, Principal};
 use pocket_ic::management_canister::{
-    CanisterId, CanisterIdRecord, CanisterSettings, EcdsaPublicKeyResult, HttpRequestResult,
-    ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, SchnorrPublicKeyArgsKeyId,
-    SchnorrPublicKeyResult,
+    CanisterId, CanisterIdRecord, CanisterInstallMode, CanisterSettings, EcdsaPublicKeyResult,
+    HttpRequestResult, ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm,
+    SchnorrPublicKeyArgsKeyId, SchnorrPublicKeyResult,
 };
 use pocket_ic::{
     common::rest::{
@@ -1608,27 +1608,52 @@ fn test_wasm_chunk_store() {
     let stored_chunks = pic.stored_chunks(canister_id, None).unwrap();
     assert!(stored_chunks.is_empty());
 
+    // Chunk the test canister into two chunks.
+    let mut first_chunk = test_canister_wasm();
+    let second_chunk = first_chunk.split_off(first_chunk.len() / 2);
+    assert!(!first_chunk.is_empty());
+    assert!(!second_chunk.is_empty());
+
     // We upload a bogus chunk to the WASM chunk store and confirm that the returned hash
     // matches the actual hash of the chunk.
-    let chunk = vec![1, 2, 3, 4];
-    let chunk_hash = pic.upload_chunk(canister_id, None, chunk.clone()).unwrap();
+    let first_chunk_hash = pic
+        .upload_chunk(canister_id, None, first_chunk.clone())
+        .unwrap();
     let mut hasher = Sha256::new();
-    hasher.update(chunk.clone());
-    assert_eq!(chunk_hash, hasher.finalize().to_vec());
+    hasher.update(first_chunk.clone());
+    assert_eq!(first_chunk_hash, hasher.finalize().to_vec());
 
     // We upload the same chunk once more and get the same hash back.
-    let same_chunk_hash = pic.upload_chunk(canister_id, None, chunk.clone()).unwrap();
-    assert_eq!(chunk_hash, same_chunk_hash);
+    let same_chunk_hash = pic
+        .upload_chunk(canister_id, None, first_chunk.clone())
+        .unwrap();
+    assert_eq!(first_chunk_hash, same_chunk_hash);
 
     // We upload a different chunk.
-    let other_chunk = vec![5, 6, 7, 8];
-    let other_chunk_hash = pic.upload_chunk(canister_id, None, other_chunk).unwrap();
+    let second_chunk_hash = pic.upload_chunk(canister_id, None, second_chunk).unwrap();
 
     // Now the two chunks should be stored in the WASM chunk store.
     let stored_chunks = pic.stored_chunks(canister_id, None).unwrap();
     assert_eq!(stored_chunks.len(), 2);
-    assert!(stored_chunks.contains(&chunk_hash));
-    assert!(stored_chunks.contains(&other_chunk_hash));
+    assert!(stored_chunks.contains(&first_chunk_hash));
+    assert!(stored_chunks.contains(&second_chunk_hash));
+
+    // We create a new canister and install it from chunks.
+    let test_canister = pic.create_canister();
+    pic.add_cycles(test_canister, INIT_CYCLES);
+    let mut hasher = Sha256::new();
+    hasher.update(test_canister_wasm());
+    let test_canister_wasm_hash = hasher.finalize().to_vec();
+    pic.install_chunked_canister(
+        test_canister,
+        None,
+        CanisterInstallMode::Install,
+        canister_id,
+        vec![first_chunk_hash, second_chunk_hash],
+        test_canister_wasm_hash,
+        Encode!(&()).unwrap(),
+    )
+    .unwrap();
 
     // We clear the WASM chunk store.
     pic.clear_chunk_store(canister_id, None).unwrap();

@@ -41,7 +41,7 @@ use crate::{
         HttpsConfig, InstanceId, MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId,
         SubnetId, SubnetKind, SubnetSpec, Topology,
     },
-    management_canister::{CanisterId, CanisterStatusResult},
+    management_canister::{CanisterId, CanisterInstallMode, CanisterStatusResult},
     nonblocking::PocketIc as PocketIcAsync,
 };
 use candid::{
@@ -774,6 +774,34 @@ impl PocketIc {
     ) -> Result<(), CallError> {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.clear_chunk_store(canister_id, sender).await })
+    }
+
+    /// Install a WASM module assembled from chunks on an existing canister.
+    #[instrument(skip(self, mode, chunk_hashes_list, wasm_module_hash, arg), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string(), store_canister_id = %store_canister_id.to_string(), arg_len = %arg.len()))]
+    pub fn install_chunked_canister(
+        &self,
+        canister_id: CanisterId,
+        sender: Option<Principal>,
+        mode: CanisterInstallMode,
+        store_canister_id: CanisterId,
+        chunk_hashes_list: Vec<Vec<u8>>,
+        wasm_module_hash: Vec<u8>,
+        arg: Vec<u8>,
+    ) -> Result<(), CallError> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .install_chunked_canister(
+                    canister_id,
+                    sender,
+                    mode,
+                    store_canister_id,
+                    chunk_hashes_list,
+                    wasm_module_hash,
+                    arg,
+                )
+                .await
+        })
     }
 
     /// Install a WASM module on an existing canister.

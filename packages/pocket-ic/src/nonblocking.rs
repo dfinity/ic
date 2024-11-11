@@ -772,6 +772,40 @@ impl PocketIc {
         .await
     }
 
+    /// Install a WASM module assembled from chunks on an existing canister.
+    #[instrument(skip(self, mode, chunk_hashes_list, wasm_module_hash, arg), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string(), store_canister_id = %store_canister_id.to_string(), arg_len = %arg.len()))]
+    pub async fn install_chunked_canister(
+        &self,
+        canister_id: CanisterId,
+        sender: Option<Principal>,
+        mode: CanisterInstallMode,
+        store_canister_id: CanisterId,
+        chunk_hashes_list: Vec<Vec<u8>>,
+        wasm_module_hash: Vec<u8>,
+        arg: Vec<u8>,
+    ) -> Result<(), CallError> {
+        call_candid_as(
+            self,
+            Principal::management_canister(),
+            RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
+            sender.unwrap_or(Principal::anonymous()),
+            "install_chunked_code",
+            (InstallChunkedCodeArgs {
+                mode,
+                target_canister: canister_id,
+                store_canister: Some(store_canister_id),
+                chunk_hashes_list: chunk_hashes_list
+                    .into_iter()
+                    .map(|hash| ChunkHash { hash })
+                    .collect(),
+                wasm_module_hash,
+                arg,
+                sender_canister_version: None,
+            },),
+        )
+        .await
+    }
+
     async fn install_canister_helper(
         &self,
         mode: CanisterInstallMode,
@@ -805,26 +839,19 @@ impl PocketIc {
                     .upload_chunk(canister_id, sender, chunk.to_vec())
                     .await
                     .unwrap();
-                hashes.push(ChunkHash { hash });
+                hashes.push(hash);
             }
             let mut hasher = Sha256::new();
             hasher.update(wasm_module);
             let wasm_module_hash = hasher.finalize().to_vec();
-            call_candid_as::<_, ()>(
-                self,
-                Principal::management_canister(),
-                RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
-                sender.unwrap_or(Principal::anonymous()),
-                "install_chunked_code",
-                (InstallChunkedCodeArgs {
-                    mode,
-                    target_canister: canister_id,
-                    store_canister: None,
-                    chunk_hashes_list: hashes,
-                    wasm_module_hash,
-                    arg,
-                    sender_canister_version: None,
-                },),
+            self.install_chunked_canister(
+                canister_id,
+                sender,
+                mode,
+                canister_id,
+                hashes,
+                wasm_module_hash,
+                arg,
             )
             .await
         }
