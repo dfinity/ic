@@ -41,12 +41,12 @@ rust_library(
         "//rs/types/types",
         "//rs/types/wasm_types",
         "@crate_index//:arbitrary",
-        "@crate_index//:lazy_static",
         "@crate_index//:libfuzzer-sys",
         "@crate_index//:tokio",
         "@crate_index//:wasm-encoder",
         "@crate_index//:wasm-smith",
         "@crate_index//:wasmparser",
+        "@crate_index//:wat",
     ],
 )
 
