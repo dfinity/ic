@@ -504,6 +504,7 @@ pub(crate) struct HandlerState {
     backend_client: Client<HttpConnector, Body>,
     resolver: DomainResolver,
     replica_url: String,
+    is_malicious: Arc<std::sync::Mutex<bool>>,
 }
 
 impl HandlerState {
@@ -518,6 +519,7 @@ impl HandlerState {
             backend_client,
             resolver,
             replica_url,
+            is_malicious: Arc::new(std::sync::Mutex::new(false)),
         }
     }
 
@@ -549,6 +551,13 @@ async fn handler(
     referer_query_param_canister_id: Option<canister_id::RefererHeaderQueryParam>,
     mut request: AxumRequest,
 ) -> Result<impl IntoResponse, ErrorCause> {
+    // check if path contains "malicious"
+    if request.uri().path().contains("malicious") {
+        *state.is_malicious.lock().unwrap() = true;
+    } else if request.uri().path().contains("honest") {
+        *state.is_malicious.lock().unwrap() = false;
+    }
+
     // Resolve the domain
     let lookup =
         extract_authority(&request).and_then(|authority| state.resolver.resolve(&authority));
@@ -615,7 +624,13 @@ async fn handler(
         // Convert it into Axum response
         let response = resp.canister_response.into_response();
 
-        Ok(HandlerResponse::ResponseBody(response))
+        if *state.is_malicious.lock().unwrap() {
+            Ok(HandlerResponse::ResponseBody(
+                StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+            ))
+        } else {
+            Ok(HandlerResponse::ResponseBody(response))
+        }
     }
 }
 
