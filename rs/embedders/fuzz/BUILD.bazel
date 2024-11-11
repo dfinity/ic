@@ -59,29 +59,19 @@ rust_binary(
     name = "ws2wasm",
     testonly = True,
     srcs = [
-        "src/ic_wasm.rs",
-        "src/imports.rs",
         "src/ws2wasm.rs",
     ],
     proc_macro_deps = [],
     version = "0.1.0",
-    deps = [
+    deps = [":wasm_fuzzers"] + [
         # Keep sorted.
         "//rs/config",
         "//rs/embedders",
         "//rs/monitoring/logger",
         "//rs/replicated_state",
-        "//rs/test_utilities",
-        "//rs/types/types",
-        "//rs/types/wasm_types",
         "@crate_index//:arbitrary",
         "@crate_index//:clap",
-        "@crate_index//:libflate",
-        "@crate_index//:wasm-encoder",
-        "@crate_index//:wasm-smith",
-        "@crate_index//:wasmparser",
         "@crate_index//:wasmprinter",
-        "@crate_index//:wat",
     ],
 )
 
