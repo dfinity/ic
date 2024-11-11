@@ -689,6 +689,28 @@ fn send_signal_to_pic(pic: PocketIc, mut child: Child, shutdown_signal: Option<S
     }
 }
 
+fn kill_gateway_with_signal(shutdown_signal: Signal) {
+    let (server_url, child) = start_server_helper(None, None, false, false);
+    let mut pic = PocketIcBuilder::new()
+        .with_server_url(server_url)
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+    let _ = pic.make_live(None);
+
+    send_signal_to_pic(pic, child, Some(shutdown_signal));
+}
+
+#[test]
+fn kill_gateway_with_sigint() {
+    kill_gateway_with_signal(Signal::SIGINT);
+}
+
+#[test]
+fn kill_gateway_with_sigterm() {
+    kill_gateway_with_signal(Signal::SIGTERM);
+}
+
 fn canister_state_dir(shutdown_signal: Option<Signal>) {
     const INIT_CYCLES: u128 = 2_000_000_000_000;
 

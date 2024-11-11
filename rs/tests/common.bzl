@@ -344,3 +344,11 @@ IC_MAINNET_NNS_RECOVERY_RUNTIME_DEPS = GUESTOS_RUNTIME_DEPS + \
     "@candid//:didc",
     "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister",
 ]
+
+UNIVERSAL_CANISTER_RUNTIME_DEPS = [
+    "//rs/universal_canister/impl:universal_canister.wasm.gz",
+]
+
+UNIVERSAL_CANISTER_ENV = {
+    "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
+}
