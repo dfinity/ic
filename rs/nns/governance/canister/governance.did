@@ -648,6 +648,8 @@ type Neuron = record {
   //   1. Deciding voting power becomes less than potential voting power.
   //   2. Following on most topics is cleared.
   //
+  // See also VotingPowerEconomics.
+  //
   // The exact behavior is described here:
   // https://dashboard.internetcomputer.org/proposal/132411
   //
