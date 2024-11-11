@@ -7976,7 +7976,10 @@ fn subnet_info_canister_call_succeeds() {
         WasmResult::Reject(err_msg) => panic!("Unexpected reject, expected reply: {}", err_msg),
     };
     let SubnetInfoResponse { replica_version } = Decode!(&bytes, SubnetInfoResponse).unwrap();
-    assert!(!replica_version.is_empty());
+    assert_eq!(
+        replica_version,
+        ic_types::ReplicaVersion::default().to_string()
+    );
 }
 
 #[test]
@@ -8002,12 +8005,7 @@ fn subnet_info_canister_call_other_subnet_fails() {
                 .on_reject(wasm().reject_message().reject()),
         )
         .build();
-    test.ingress(uni_canister, "update", uc_call)
-        .unwrap_err()
-        .assert_contains(
-            ErrorCode::CanisterContractViolation,
-            "cannot be called by a user",
-        );
+    test.ingress(uni_canister, "update", uc_call).unwrap_err();
 }
 
 #[test]

@@ -1380,9 +1380,7 @@ impl ExecutionEnvironment {
             }
 
             Ok(Ic00Method::SubnetInfo) => match &msg {
-                CanisterCall::Ingress(_) => {
-                    self.reject_unexpected_ingress(Ic00Method::CreateCanister)
-                }
+                CanisterCall::Ingress(_) => self.reject_unexpected_ingress(Ic00Method::SubnetInfo),
                 CanisterCall::Request(_) => {
                     let res = SubnetInfoArgs::decode(payload)
                         .and_then(|args| self.subnet_info(replica_version, args));
