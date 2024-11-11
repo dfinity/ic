@@ -56,12 +56,11 @@ use thiserror::Error;
 use tokio::{runtime::Handle, select, task::JoinSet};
 use tokio_util::{sync::CancellationToken, time::DelayQueue};
 
-use crate::{
-    connection_handle::ConnectionHandle,
-    metrics::{CONNECTION_RESULT_FAILED_LABEL, CONNECTION_RESULT_SUCCESS_LABEL},
-    ConnId, Shutdown, SubnetTopology,
-};
 use crate::{metrics::QuicTransportMetrics, request_handler::run_stream_acceptor};
+use crate::{
+    metrics::{CONNECTION_RESULT_FAILED_LABEL, CONNECTION_RESULT_SUCCESS_LABEL},
+    ConnId, ConnectionHandle, Shutdown, SubnetTopology,
+};
 
 /// The value of 25MB is chosen from experiments and the BDP product shown below to support
 /// around 2Gb/s.

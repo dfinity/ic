@@ -49,16 +49,16 @@ use ic_interfaces_registry::RegistryClient;
 use ic_logger::{info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use phantom_newtype::AmountOf;
-use quinn::AsyncUdpSocket;
+use quinn::{AsyncUdpSocket, Connection};
 use tokio::sync::watch;
 use tokio::task::{JoinError, JoinHandle};
 use tokio_util::{sync::CancellationToken, task::task_tracker::TaskTracker};
 use tracing::instrument;
 
-use crate::connection_handle::ConnectionHandle;
 use crate::connection_manager::start_connection_manager;
+use crate::metrics::QuicTransportMetrics;
 
-mod connection_handle;
+mod conn_rpc;
 mod connection_manager;
 mod metrics;
 mod request_handler;
@@ -111,6 +111,13 @@ impl Shutdown {
             join_handle,
         }
     }
+}
+
+#[derive(Clone, Debug)]
+pub struct ConnectionHandle {
+    pub connection: Connection,
+    pub metrics: QuicTransportMetrics,
+    pub conn_id: ConnId,
 }
 
 #[derive(Clone)]
@@ -188,14 +195,14 @@ impl Transport for QuicTransport {
         peer_id: &NodeId,
         request: Request<Bytes>,
     ) -> Result<Response<Bytes>, anyhow::Error> {
-        let peer = self
+        let peer_conn = self
             .conn_handles
             .read()
             .unwrap()
             .get(peer_id)
             .ok_or(anyhow!("Currently not connected to this peer"))?
             .clone();
-        peer.rpc(request).await
+        conn_rpc::rpc(peer_conn, request).await
     }
 
     fn peers(&self) -> Vec<(NodeId, ConnId)> {
