@@ -56,10 +56,11 @@ async fn main() {
         Principal::anonymous(),
         input_config.clone(),
     )
-    .await
-    .unwrap();
+    .await;
 
-    assert!(response.unwrap_err().contains("Unauthorized"));
+    let err_msg = response.unwrap_err();
+
+    assert!(err_msg.contains("inspect_message_failed: unauthorized caller"));
 
     // Try add config using authorized principal as sender, assert success
     let response: AddConfigResponse = canister_call(

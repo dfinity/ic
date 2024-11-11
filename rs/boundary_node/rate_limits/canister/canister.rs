@@ -12,7 +12,7 @@ use crate::storage::API_BOUNDARY_NODE_PRINCIPALS;
 use candid::Principal;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::call::call;
-use ic_cdk_macros::{init, post_upgrade, query, update};
+use ic_cdk_macros::{init, inspect_message, post_upgrade, query, update};
 use rate_limits_api::{
     AddConfigResponse, ApiBoundaryNodeIdRecord, DiscloseRulesArg, DiscloseRulesResponse,
     GetApiBoundaryNodeIdsRequest, GetConfigResponse, GetRuleByIdResponse, InitArg, InputConfig,
@@ -21,6 +21,37 @@ use rate_limits_api::{
 
 const REGISTRY_CANISTER_ID: &str = "rwlgt-iiaaa-aaaaa-aaaaa-cai";
 const REGISTRY_CANISTER_METHOD: &str = "get_api_boundary_node_ids";
+
+const CANISTER_UPDATE_METHODS: [&str; 2] = ["add_config", "disclose_rules"];
+
+#[inspect_message]
+fn inspect_message() {
+    // In order for this hook to succeed, accept_message() must be invoked.
+    let caller_id: Principal = ic_cdk::api::caller();
+    let called_method = ic_cdk::api::call::method_name();
+
+    // If the called method is not an update method, accept the message.
+    if !CANISTER_UPDATE_METHODS.contains(&called_method.as_str()) {
+        ic_cdk::api::call::accept_message();
+    } else {
+        // For the update methods:
+        // - Check if the canister's authorized principal is set
+        // - Check the caller_id matches authorized principal
+        with_canister_state(|state| {
+            if let Some(authorized_principal) = state.get_authorized_principal() {
+                if caller_id == authorized_principal {
+                    ic_cdk::api::call::accept_message();
+                } else {
+                    ic_cdk::api::trap("inspect_message_failed: unauthorized caller");
+                }
+            } else {
+                ic_cdk::api::trap(
+                    "inspect_message_failed: authorized principal for canister is not set",
+                );
+            }
+        });
+    }
+}
 
 #[init]
 fn init(init_arg: InitArg) {
