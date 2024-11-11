@@ -567,6 +567,14 @@ impl PocketIc {
         runtime.block_on(async { self.pocket_ic.advance_time(duration).await })
     }
 
+    /// Get the controllers of a canister.
+    /// Panics if the canister does not exist.
+    #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string()))]
+    pub fn get_controllers(&self, canister_id: CanisterId) -> Vec<Principal> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.get_controllers(canister_id).await })
+    }
+
     /// Get the current cycles balance of a canister.
     #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string()))]
     pub fn cycle_balance(&self, canister_id: CanisterId) -> u128 {
