@@ -12,6 +12,7 @@ mod request_impls;
 pub mod reward;
 pub mod sns_upgrade;
 pub mod types;
+pub(crate) mod upgrading;
 
 mod treasury;
 
