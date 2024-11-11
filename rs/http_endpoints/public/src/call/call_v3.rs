@@ -348,10 +348,10 @@ async fn call_sync_v3(
     let signature = certification.signed.signature.signature.get().0;
 
     if is_malicious {
-        return CallV3Response::HttpError(HttpError {
+        CallV3Response::HttpError(HttpError {
             status: StatusCode::INTERNAL_SERVER_ERROR,
             message: "Internal server error".to_string(),
-        });
+        })
     } else {
         CallV3Response::Certificate(Certificate {
             tree,
