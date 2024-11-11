@@ -1,8 +1,8 @@
 use candid::{decode_one, encode_one, CandidType, Decode, Deserialize, Encode, Principal};
 use pocket_ic::management_canister::{
-    CanisterId, CanisterIdRecord, CanisterSettings, EcdsaPublicKeyResult, HttpRequestResult,
-    ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, SchnorrPublicKeyArgsKeyId,
-    SchnorrPublicKeyResult,
+    CanisterId, CanisterIdRecord, CanisterInstallMode, CanisterSettings, EcdsaPublicKeyResult,
+    HttpRequestResult, ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm,
+    SchnorrPublicKeyArgsKeyId, SchnorrPublicKeyResult,
 };
 use pocket_ic::{
     common::rest::{
@@ -1626,4 +1626,143 @@ fn get_controllers_of_nonexisting_canister() {
     pic.delete_canister(canister_id, None).unwrap();
 
     let _ = pic.get_controllers(canister_id);
+}
+
+#[test]
+fn test_canister_snapshots() {
+    let pic = PocketIc::new();
+
+    // We deploy the counter canister.
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
+    pic.install_canister(canister_id, counter_wasm(), vec![], None);
+
+    // We bump the counter to make the counter different from its initial value.
+    let reply = call_counter_can(&pic, canister_id, "write");
+    assert_eq!(reply, WasmResult::Reply(1_u32.to_le_bytes().to_vec()));
+    let reply = call_counter_can(&pic, canister_id, "read");
+    assert_eq!(reply, WasmResult::Reply(1_u32.to_le_bytes().to_vec()));
+
+    // We haven't taken any snapshot so far and thus listing snapshots yields an empty result.
+    let snapshots = pic.list_canister_snapshots(canister_id, None).unwrap();
+    assert!(snapshots.is_empty());
+
+    // We take a snapshot (it is recommended to only take a snapshot of a stopped canister).
+    pic.stop_canister(canister_id, None).unwrap();
+    let first_snapshot = pic.take_canister_snapshot(canister_id, None, None).unwrap();
+    pic.start_canister(canister_id, None).unwrap();
+
+    // Listing the snapshots now should yield the snapshot we just took.
+    let snapshots = pic.list_canister_snapshots(canister_id, None).unwrap();
+    assert_eq!(snapshots.len(), 1);
+    assert_eq!(snapshots[0].id, first_snapshot.id);
+    assert_eq!(snapshots[0].total_size, first_snapshot.total_size);
+    assert_eq!(
+        snapshots[0].taken_at_timestamp,
+        first_snapshot.taken_at_timestamp
+    );
+
+    // We bump the counter once more to test loading snapshots in a subsequent step.
+    let reply = call_counter_can(&pic, canister_id, "write");
+    assert_eq!(reply, WasmResult::Reply(2_u32.to_le_bytes().to_vec()));
+    let reply = call_counter_can(&pic, canister_id, "read");
+    assert_eq!(reply, WasmResult::Reply(2_u32.to_le_bytes().to_vec()));
+
+    // We load the snapshot (it is recommended to only load a snapshot on a stopped canister).
+    pic.stop_canister(canister_id, None).unwrap();
+    pic.load_canister_snapshot(canister_id, None, first_snapshot.id.clone())
+        .unwrap();
+    pic.start_canister(canister_id, None).unwrap();
+
+    // We verify that the snapshot was successfully loaded.
+    let reply = call_counter_can(&pic, canister_id, "read");
+    assert_eq!(reply, WasmResult::Reply(1_u32.to_le_bytes().to_vec()));
+
+    // We bump the counter again.
+    let reply = call_counter_can(&pic, canister_id, "write");
+    assert_eq!(reply, WasmResult::Reply(2_u32.to_le_bytes().to_vec()));
+    let reply = call_counter_can(&pic, canister_id, "read");
+    assert_eq!(reply, WasmResult::Reply(2_u32.to_le_bytes().to_vec()));
+
+    // We take one more snapshot: since we already have an active snapshot,
+    // taking another snapshot fails unless we specify the active snapshot to be replaced.
+    pic.stop_canister(canister_id, None).unwrap();
+    pic.take_canister_snapshot(canister_id, None, None)
+        .unwrap_err();
+    let second_snapshot = pic
+        .take_canister_snapshot(canister_id, None, Some(first_snapshot.id))
+        .unwrap();
+    pic.start_canister(canister_id, None).unwrap();
+
+    // Finally, we delete the current snapshot which allows us to take a snapshot without specifying any snapshot to be replaced.
+    pic.delete_canister_snapshot(canister_id, None, second_snapshot.id)
+        .unwrap();
+    pic.take_canister_snapshot(canister_id, None, None).unwrap();
+}
+
+#[test]
+fn test_wasm_chunk_store() {
+    let pic = PocketIc::new();
+
+    // We create an empty canister and top it up with cycles (WASM chunk store operations cost cycles).
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
+
+    // There should be no chunks in the WASM chunk store yet.
+    let stored_chunks = pic.stored_chunks(canister_id, None).unwrap();
+    assert!(stored_chunks.is_empty());
+
+    // Chunk the test canister into two chunks.
+    let mut first_chunk = test_canister_wasm();
+    let second_chunk = first_chunk.split_off(first_chunk.len() / 2);
+    assert!(!first_chunk.is_empty());
+    assert!(!second_chunk.is_empty());
+
+    // We upload a bogus chunk to the WASM chunk store and confirm that the returned hash
+    // matches the actual hash of the chunk.
+    let first_chunk_hash = pic
+        .upload_chunk(canister_id, None, first_chunk.clone())
+        .unwrap();
+    let mut hasher = Sha256::new();
+    hasher.update(first_chunk.clone());
+    assert_eq!(first_chunk_hash, hasher.finalize().to_vec());
+
+    // We upload the same chunk once more and get the same hash back.
+    let same_chunk_hash = pic
+        .upload_chunk(canister_id, None, first_chunk.clone())
+        .unwrap();
+    assert_eq!(first_chunk_hash, same_chunk_hash);
+
+    // We upload a different chunk.
+    let second_chunk_hash = pic.upload_chunk(canister_id, None, second_chunk).unwrap();
+
+    // Now the two chunks should be stored in the WASM chunk store.
+    let stored_chunks = pic.stored_chunks(canister_id, None).unwrap();
+    assert_eq!(stored_chunks.len(), 2);
+    assert!(stored_chunks.contains(&first_chunk_hash));
+    assert!(stored_chunks.contains(&second_chunk_hash));
+
+    // We create a new canister and install it from chunks.
+    let test_canister = pic.create_canister();
+    pic.add_cycles(test_canister, INIT_CYCLES);
+    let mut hasher = Sha256::new();
+    hasher.update(test_canister_wasm());
+    let test_canister_wasm_hash = hasher.finalize().to_vec();
+    pic.install_chunked_canister(
+        test_canister,
+        None,
+        CanisterInstallMode::Install,
+        canister_id,
+        vec![first_chunk_hash, second_chunk_hash],
+        test_canister_wasm_hash,
+        Encode!(&()).unwrap(),
+    )
+    .unwrap();
+
+    // We clear the WASM chunk store.
+    pic.clear_chunk_store(canister_id, None).unwrap();
+
+    // There should be no more chunks in the WASM chunk store.
+    let stored_chunks = pic.stored_chunks(canister_id, None).unwrap();
+    assert!(stored_chunks.is_empty());
 }
