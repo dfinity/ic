@@ -1,5 +1,7 @@
 //! The module implements the RPC abstraction over an established QUIC connection.
 //!
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use anyhow::Context;
 use bytes::Bytes;
 use http::{Method, Request, Response, Version};
@@ -18,6 +20,8 @@ use crate::{
 /// QUIC error code for stream cancellation. See
 /// https://datatracker.ietf.org/doc/html/draft-ietf-quic-transport-03#section-12.3.
 const QUIC_STREAM_CANCELLED: VarInt = VarInt::from_u32(6);
+
+static CONN_ID_SEQ: AtomicU64 = AtomicU64::new(0);
 
 /// Drop guard to send a [`SendStream::reset`] frame on drop. QUINN sends a [`SendStream::finish`] frame by default when dropping a [`SendStream`],
 /// which can lead to the peer receiving the stream thinking a complete message was sent. This guard is used to send a reset frame instead, to signal
@@ -41,12 +45,28 @@ impl Drop for SendStreamDropGuard {
 
 #[derive(Clone, Debug)]
 pub struct ConnectionHandle {
-    pub connection: Connection,
-    pub metrics: QuicTransportMetrics,
-    pub conn_id: ConnId,
+    connection: Connection,
+    metrics: QuicTransportMetrics,
+    conn_id: ConnId,
 }
 
 impl ConnectionHandle {
+    pub fn new(connection: Connection, metrics: QuicTransportMetrics) -> Self {
+        let conn_id = CONN_ID_SEQ.fetch_add(1, Ordering::SeqCst);
+        Self {
+            connection,
+            conn_id: conn_id.into(),
+            metrics,
+        }
+    }
+
+    pub fn conn_id(&self) -> ConnId {
+        self.conn_id
+    }
+
+    pub fn conn(&self) -> &Connection {
+        &self.connection
+    }
     /// Executes an RPC operation over an already-established connection.
     ///
     /// This method leverages the QUIC transport layer, which continuously monitors the connection’s health
@@ -190,7 +210,6 @@ async fn write_request(
         .with_context(|| "Failed to write request to stream.")
 }
 
-// tests
 #[cfg(test)]
 mod tests {
     use assert_matches::assert_matches;
