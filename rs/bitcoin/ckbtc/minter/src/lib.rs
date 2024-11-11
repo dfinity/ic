@@ -1198,6 +1198,10 @@ pub fn timer() {
         }
         TaskType::RefreshFeePercentiles => {
             ic_cdk::spawn(async {
+                let _guard = match crate::guard::TimerLogicGuard::new() {
+                    Some(guard) => guard,
+                    None => return,
+                };
                 const FEE_ESTIMATE_DELAY: Duration = Duration::from_secs(60 * 60);
                 let _ = estimate_fee_per_vbyte().await;
                 schedule_after(FEE_ESTIMATE_DELAY, TaskType::RefreshFeePercentiles);

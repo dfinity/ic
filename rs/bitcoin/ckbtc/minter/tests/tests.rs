@@ -1398,11 +1398,7 @@ fn test_min_retrieval_amount_custom() {
     let min_amount = 123_456;
     let upgrade_args = UpgradeArgs {
         retrieve_btc_min_amount: Some(min_amount),
-        min_confirmations: None,
-        max_time_in_queue_nanos: None,
-        mode: None,
-        kyt_principal: None,
-        kyt_fee: None,
+        ..Default::default()
     };
     let minter_arg = MinterArg::Upgrade(Some(upgrade_args));
     assert!(ckbtc
