@@ -9,8 +9,6 @@ use rate_limits_api::{
     GetRuleByIdResponse, IncidentId, InputConfig, InputRule, RuleId, Version,
 };
 
-// Set this principal ID
-const RATE_LIMIT_CANISTER_ID: &str = "2uurk-ziaaa-aaaab-qacla-cai";
 const IC_DOMAIN: &str = "https://ic0.app";
 
 use k256::elliptic_curve::SecretKey;
@@ -24,14 +22,17 @@ gc2Q0JiGrqKks1AVi+8wzmZ+2PQXXA==
 
 #[tokio::main]
 async fn main() {
+    let args: Vec<String> = std::env::args().collect();
+
+    let canister_id = Principal::from_text(args[1].clone())
+        .expect("failed to parse canister_id from the command-line argument");
+
     let agent_full_access = create_agent(Secp256k1Identity::from_private_key(
         SecretKey::from_sec1_pem(TEST_PRIVATE_KEY).unwrap(),
     ))
     .await;
 
     let agent_restricted_read = create_agent(AnonymousIdentity {}).await;
-
-    let canister_id = Principal::from_text(RATE_LIMIT_CANISTER_ID).unwrap();
 
     println!("Call 1. Add a new config (version = 2) containing some rules (FullAccess level of the caller is required)");
     add_config_1(&agent_full_access, canister_id).await;
@@ -47,7 +48,7 @@ async fn main() {
     read_rule(&agent_restricted_read, &rule_ids[2], canister_id).await;
 
     println!("Call 5. Disclose rules (two rules in this case) linked to a single incident");
-    let incident_id = "incident_id_1".to_string();
+    let incident_id = "b97730ac-4879-47f2-9fea-daf20b8d4b64".to_string();
     disclose_incident(&agent_full_access, incident_id, canister_id).await;
 
     println!("Call 6. Read config by non-privileged user again. Now rules related to the disclosed incident are fully visible");
@@ -113,26 +114,27 @@ async fn add_config_1(agent: &Agent, canister_id: Principal) {
         schema_version: 1,
         rules: vec![
             InputRule {
-                incident_id: "incident_id_1".to_string(),
+                incident_id: "b97730ac-4879-47f2-9fea-daf20b8d4b64".to_string(),
                 rule_raw: rule_1.to_bytes_json().unwrap(),
                 description:
                     "Some vulnerability #1 discovered, temporarily rate-limiting the canister calls"
                         .to_string(),
             },
             InputRule {
-                incident_id: "incident_id_2".to_string(),
+                incident_id: "f63c821c-9320-476a-bc89-94cb99d04639".to_string(),
                 rule_raw: rule_2.to_bytes_json().unwrap(),
                 description: "Some vulnerability #2 discovered".to_string(),
             },
+            // incident_id for this rule is identical to rule[0]
             InputRule {
-                incident_id: "incident_id_1".to_string(),
+                incident_id: "b97730ac-4879-47f2-9fea-daf20b8d4b64".to_string(),
                 rule_raw: rule_3.to_bytes_json().unwrap(),
                 description:
                     "Some vulnerability #1 discovered, temporarily rate-limiting the canister calls"
                         .to_string(),
             },
             InputRule {
-                incident_id: "incident_id_3".to_string(),
+                incident_id: "389bbff8-bffa-4430-bb70-8ce1ea399c07".to_string(),
                 rule_raw: rule_4.to_bytes_json().unwrap(),
                 description: "Some vulnerability #3 discovered".to_string(),
             },
@@ -191,26 +193,26 @@ async fn add_config_2(agent: &Agent, canister_id: Principal) {
         schema_version: 1,
         rules: vec![
             InputRule {
-                incident_id: "incident_id_1".to_string(),
+                incident_id: "b97730ac-4879-47f2-9fea-daf20b8d4b64".to_string(),
                 rule_raw: rule_1.to_bytes_json().unwrap(),
                 description:
                     "Some vulnerability #1 discovered, temporarily rate-limiting the canister calls"
                         .to_string(),
             },
             InputRule {
-                incident_id: "incident_id_2".to_string(),
+                incident_id: "f63c821c-9320-476a-bc89-94cb99d04639".to_string(),
                 rule_raw: rule_2.to_bytes_json().unwrap(),
                 description: "Some vulnerability #2 discovered".to_string(),
             },
             // Only this rule is different from config 1, it also has another incident_id and description
             // It means that the old rule is removed (not mutated) and this new rule is applied instead.
             InputRule {
-                incident_id: "incident_id_4".to_string(),
+                incident_id: "ebe7dbb1-63c9-420e-980d-eb0f8c20a9fb".to_string(),
                 rule_raw: rule_3.to_bytes_json().unwrap(),
                 description: "Some vulnerability #4 discovered".to_string(),
             },
             InputRule {
-                incident_id: "incident_id_3".to_string(),
+                incident_id: "389bbff8-bffa-4430-bb70-8ce1ea399c07".to_string(),
                 rule_raw: rule_4.to_bytes_json().unwrap(),
                 description: "Some vulnerability #3 discovered".to_string(),
             },

@@ -35,6 +35,7 @@ use ic_nns_governance::{
         ManageNeuronResponse, Motion, NetworkEconomics, Neuron, NeuronType, NnsFunction, Proposal,
         ProposalData, RewardEvent, Topic, Vote, XdrConversionRate as XdrConversionRatePb,
     },
+    storage::reset_stable_memory,
 };
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
 use rand::{prelude::StdRng, RngCore, SeedableRng};
@@ -734,7 +735,7 @@ impl NNS {
             .ledger
             .accounts
             .clone();
-        let governance_proto = self.governance.clone_proto();
+        let governance_proto = self.governance.__get_state_for_test();
         NNSState {
             now: self.now(),
             accounts,
@@ -1037,6 +1038,8 @@ impl NNSBuilder {
     }
 
     pub fn create(self) -> NNS {
+        reset_stable_memory();
+
         let fixture = NNSFixture::new(NNSFixtureState {
             ledger: self.ledger_builder.create(),
             environment: self.environment_builder.create(),
