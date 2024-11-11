@@ -100,7 +100,7 @@ fn observe_read_error(err: &ReadError, op: &str, metrics: &QuicTransportMetrics)
             .connection_handle_errors_total
             .with_label_values(&[op, ERROR_RESET_STREAM])
             .inc(),
-        ReadError::ConnectionLost(conn_err) => observe_conn_error(&conn_err, op, metrics),
+        ReadError::ConnectionLost(conn_err) => observe_conn_error(conn_err, op, metrics),
         // If any of the following errors occur it means that we have a bug in the protocol implementation or
         // there is malicious peer on the other side.
         ReadError::IllegalOrderedRead | ReadError::ClosedStream | ReadError::ZeroRttRejected => {
