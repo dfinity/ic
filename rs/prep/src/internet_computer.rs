@@ -110,14 +110,14 @@ impl TopologyConfig {
         let mut routing_table = RoutingTable::default();
 
         // Calculates specified and subnet allocation ranges based on given start and end.
-        let calculate_ranges = |start: u64, end: u64| {
+        let calculate_ranges = |specified_ids_range_start: u64, specified_ids_range_end: u64| {
             let specified_ids_range = CanisterIdRange {
-                start: CanisterId::from(start),
-                end: CanisterId::from(end),
+                start: CanisterId::from(specified_ids_range_start),
+                end: CanisterId::from(specified_ids_range_end),
             };
 
             let subnets_allocation_range_start =
-                ((end / CANISTER_IDS_PER_SUBNET) + 2) * CANISTER_IDS_PER_SUBNET;
+                ((specified_ids_range_end / CANISTER_IDS_PER_SUBNET) + 2) * CANISTER_IDS_PER_SUBNET;
             let subnets_allocation_range_end =
                 subnets_allocation_range_start + CANISTER_IDS_PER_SUBNET - 1;
 
