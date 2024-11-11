@@ -92,6 +92,14 @@ async fn distribute_kyt_fee() {
 #[cfg(feature = "self_check")]
 #[update]
 async fn refresh_fee_percentiles() {
+    // Use `TimerLogicGuard` here because:
+    // 1. `estimiate_fee_per_vbyte` could potentially change the state.
+    // 2. `estimiate_fee_per_vbyte` is also called from timer
+    //    `TaskType::ProcessLogic` and `TaskType::RefreshFeePercentiles`.
+    let _guard = match crate::guard::TimerLogicGuard::new() {
+        Some(guard) => guard,
+        None => return,
+    };
     let _ = ic_ckbtc_minter::estimate_fee_per_vbyte().await;
 }
 
