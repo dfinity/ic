@@ -38,7 +38,12 @@ use ic_types::{
     CanisterId,
 };
 use serde_cbor::Value as CBOR;
-use std::{collections::BTreeMap, convert::Infallible, sync::Arc, time::Duration};
+use std::{
+    collections::BTreeMap,
+    convert::Infallible,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 use tokio::sync::OnceCell;
 use tokio_util::time::FutureExt;
 use tower::{util::BoxCloneService, ServiceBuilder};
@@ -65,6 +70,7 @@ struct SynchronousCallHandlerState {
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ingress_message_certificate_timeout_seconds: u64,
     call_handler: IngressValidator,
+    flip_flop: Arc<Mutex<bool>>,
 }
 
 impl IntoResponse for CallV3Response {
@@ -141,6 +147,7 @@ pub(crate) fn new_router(
         ingress_message_certificate_timeout_seconds,
         call_handler,
         state_reader,
+        flip_flop: Arc::new(Mutex::new(true)),
     };
 
     Router::new().route_service(
@@ -180,9 +187,15 @@ async fn call_sync_v3(
         ingress_message_certificate_timeout_seconds,
         state_reader,
         delegation_from_nns,
+        flip_flop,
     }): State<SynchronousCallHandlerState>,
     WithTimeout(Cbor(request)): WithTimeout<Cbor<HttpRequestEnvelope<HttpCallContent>>>,
 ) -> CallV3Response {
+    let mut flip_flop = flip_flop.lock().unwrap();
+    let is_malicious = *flip_flop;
+    *flip_flop = !*flip_flop;
+    drop(flip_flop);
+
     let log = call_handler.log.clone();
 
     let ingress_submitter = match call_handler
@@ -316,11 +329,18 @@ async fn call_sync_v3(
     let delegation_from_nns = delegation_from_nns.get().cloned();
     let signature = certification.signed.signature.signature.get().0;
 
-    CallV3Response::Certificate(Certificate {
-        tree,
-        signature: Blob(signature),
-        delegation: delegation_from_nns,
-    })
+    if is_malicious {
+        return CallV3Response::HttpError(HttpError {
+            status: StatusCode::INTERNAL_SERVER_ERROR,
+            message: "Internal server error".to_string(),
+        });
+    } else {
+        CallV3Response::Certificate(Certificate {
+            tree,
+            signature: Blob(signature),
+            delegation: delegation_from_nns,
+        })
+    }
 }
 
 enum ParsedMessageStatus {
