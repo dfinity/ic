@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+use crate::exes::mcopy;
 use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
 use tokio::process::Command;
@@ -17,6 +18,7 @@ impl Partition for FatPartition {
     /// Open a fat3 partition for writing, via mtools. There is nothing to do
     /// here, as mtools works in place.
     async fn open(image: PathBuf, index: Option<usize>) -> Result<Self> {
+        let _ = mcopy().context("mcopy is needed to open FAT partitions")?;
         Ok(FatPartition {
             index,
             original: image,
@@ -31,10 +33,11 @@ impl Partition for FatPartition {
 
     /// Copy a file into place
     async fn write_file(&mut self, input: &Path, output: &Path) -> Result<()> {
+        let mcopy = mcopy().context("mcopy is needed to write files")?;
         let out = if let Some(index) = self.index {
             let offset = partition::check_offset(&self.original, index).await?;
 
-            Command::new("mcopy")
+            Command::new(mcopy)
                 .args([
                     "-o",
                     "-i",
@@ -46,7 +49,7 @@ impl Partition for FatPartition {
                 .await
                 .context("failed to run mcopy")?
         } else {
-            Command::new("mcopy")
+            Command::new(mcopy)
                 .args([
                     "-o",
                     "-i",
@@ -68,10 +71,11 @@ impl Partition for FatPartition {
 
     /// Read a file from a given partition
     async fn read_file(&mut self, input: &Path) -> Result<String> {
+        let mcopy = mcopy().context("mcopy is needed to write files")?;
         let out = if let Some(index) = self.index {
             let offset = partition::check_offset(&self.original, index).await?;
 
-            Command::new("mcopy")
+            Command::new(mcopy)
                 .args([
                     "-o",
                     "-i",
@@ -83,7 +87,7 @@ impl Partition for FatPartition {
                 .await
                 .context("failed to run mcopy")?
         } else {
-            Command::new("mcopy")
+            Command::new(mcopy)
                 .args([
                     "-o",
                     "-i",
