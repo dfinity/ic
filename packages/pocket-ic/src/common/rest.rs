@@ -242,6 +242,28 @@ pub struct RawCycles {
 }
 
 #[derive(Clone, Serialize, Eq, PartialEq, Ord, PartialOrd, Deserialize, Debug, JsonSchema)]
+pub struct RawPrincipalId {
+    // raw bytes of the principal
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
+    pub principal_id: Vec<u8>,
+}
+
+impl From<Principal> for RawPrincipalId {
+    fn from(principal: Principal) -> Self {
+        Self {
+            principal_id: principal.as_slice().to_vec(),
+        }
+    }
+}
+
+impl From<RawPrincipalId> for Principal {
+    fn from(raw_principal_id: RawPrincipalId) -> Self {
+        Principal::from_slice(&raw_principal_id.principal_id)
+    }
+}
+
+#[derive(Clone, Serialize, Eq, PartialEq, Ord, PartialOrd, Deserialize, Debug, JsonSchema)]
 pub struct RawCanisterId {
     // raw bytes of the principal
     #[serde(deserialize_with = "base64::deserialize")]
@@ -487,7 +509,6 @@ pub struct ExtendedSubnetConfigSet {
 pub struct SubnetSpec {
     state_config: SubnetStateConfig,
     instruction_config: SubnetInstructionConfig,
-    dts_flag: DtsFlag,
 }
 
 impl SubnetSpec {
@@ -496,27 +517,13 @@ impl SubnetSpec {
         self
     }
 
-    /// DTS is disabled on benchmarking subnet by default
-    /// since running update calls with very high instruction counts and DTS enabled
-    /// is very slow.
-    /// You can enable DTS by using `.with_dts_flag(DtsConfig::Enabled)`.
     pub fn with_benchmarking_instruction_config(mut self) -> SubnetSpec {
         self.instruction_config = SubnetInstructionConfig::Benchmarking;
-        self.dts_flag = DtsFlag::Disabled;
-        self
-    }
-
-    pub fn with_dts_flag(mut self, dts_flag: DtsFlag) -> SubnetSpec {
-        self.dts_flag = dts_flag;
         self
     }
 
     pub fn get_state_path(&self) -> Option<PathBuf> {
         self.state_config.get_path()
-    }
-
-    pub fn get_dts_flag(&self) -> DtsFlag {
-        self.dts_flag
     }
 
     pub fn get_subnet_id(&self) -> Option<RawSubnetId> {
@@ -545,7 +552,6 @@ impl Default for SubnetSpec {
         Self {
             state_config: SubnetStateConfig::New,
             instruction_config: SubnetInstructionConfig::Production,
-            dts_flag: DtsFlag::Enabled,
         }
     }
 }
@@ -559,13 +565,6 @@ pub enum SubnetInstructionConfig {
     Production,
     /// Use very high instruction limits useful for asymptotic canister benchmarking.
     Benchmarking,
-}
-
-/// Specifies whether DTS should be disabled on this subnet.
-#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub enum DtsFlag {
-    Enabled,
-    Disabled,
 }
 
 /// Specifies whether the subnet should be created from scratch or loaded
@@ -609,7 +608,6 @@ impl ExtendedSubnetConfigSet {
         Option<PathBuf>,
         Option<RawSubnetId>,
         SubnetInstructionConfig,
-        DtsFlag,
     )> {
         use SubnetKind::*;
         vec![
@@ -628,7 +626,6 @@ impl ExtendedSubnetConfigSet {
                 spec.get_state_path(),
                 spec.get_subnet_id(),
                 spec.get_instruction_config(),
-                spec.get_dts_flag(),
             )
         })
         .collect()
@@ -647,32 +644,6 @@ impl ExtendedSubnetConfigSet {
             return Ok(());
         }
         Err("ExtendedSubnetConfigSet must contain at least one subnet".to_owned())
-    }
-
-    pub fn with_dts_flag(mut self, dts_flag: DtsFlag) -> ExtendedSubnetConfigSet {
-        self.nns = self.nns.map(|nns| nns.with_dts_flag(dts_flag));
-        self.sns = self.sns.map(|sns| sns.with_dts_flag(dts_flag));
-        self.ii = self.ii.map(|ii| ii.with_dts_flag(dts_flag));
-        self.fiduciary = self
-            .fiduciary
-            .map(|fiduciary| fiduciary.with_dts_flag(dts_flag));
-        self.bitcoin = self.bitcoin.map(|bitcoin| bitcoin.with_dts_flag(dts_flag));
-        self.system = self
-            .system
-            .into_iter()
-            .map(|conf| conf.with_dts_flag(dts_flag))
-            .collect();
-        self.application = self
-            .application
-            .into_iter()
-            .map(|conf| conf.with_dts_flag(dts_flag))
-            .collect();
-        self.verified_application = self
-            .verified_application
-            .into_iter()
-            .map(|conf| conf.with_dts_flag(dts_flag))
-            .collect();
-        self
     }
 }
 

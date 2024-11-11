@@ -65,12 +65,14 @@ MACRO_DEV_DEPENDENCIES = []
 DEV_DATA = [
     # Keep sorted.
     ":replica_tests",
+    "//rs/universal_canister/impl:universal_canister.wasm.gz",
 ]
 
 ALIASES = {}
 
 DEV_ENV = {
     # Keep sorted.
+    "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
 }
 
 rust_library(
