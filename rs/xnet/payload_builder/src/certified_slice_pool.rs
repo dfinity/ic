@@ -1272,9 +1272,7 @@ impl CertifiedSlicePool {
                     Ok(None) => None,
 
                     // Invalid slice, drop it.
-                    Err(_) => {
-                        None
-                    }
+                    Err(_) => None,
                 }
             }
         }
