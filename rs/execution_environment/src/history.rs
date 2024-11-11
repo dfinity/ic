@@ -85,6 +85,7 @@ pub struct IngressHistoryWriterImpl {
     received_time: RwLock<HashMap<MessageId, TransitionStartTime>>,
     message_state_transition_received_duration_seconds: Histogram,
     message_state_transition_processing_duration_seconds: Histogram,
+    message_state_transition_received_to_processing_duration_seconds: Histogram,
     message_state_transition_completed_ic_duration_seconds: Histogram,
     message_state_transition_completed_wall_clock_duration_seconds: Histogram,
     message_state_transition_failed_ic_duration_seconds: HistogramVec,
@@ -114,6 +115,12 @@ impl IngressHistoryWriterImpl {
             message_state_transition_processing_duration_seconds: metrics_registry.histogram(
                 "message_state_transition_processing_duration_seconds",
                 "Time taken by messages to get from block maker to execution",
+                // 10ms, 20ms, 50ms, ..., 100s, 200s, 500s
+                decimal_buckets(-2,2),
+            ),
+            message_state_transition_received_to_processing_duration_seconds: metrics_registry.histogram(
+                "message_state_transition_received_to_processing_duration_seconds",
+                "Time spent by messages between induction and execution",
                 // 10ms, 20ms, 50ms, ..., 100s, 200s, 500s
                 decimal_buckets(-2,2),
             ),
@@ -178,15 +185,19 @@ impl IngressHistoryWriter for IngressHistoryWriterImpl {
         use IngressState::*;
         use IngressStatus::*;
 
-        // Computes the time elapsed between the message's block time (which should be a
-        // close approximation of the wall time when the message was included into a
-        // block) and the current wall time.
-        let seconds_since_block_made = |message_id| {
+        // Computes the duration elapsed since the time when a message was included into
+        // a block (approximated by block time); and since its induction.
+        let message_latencies_seconds = |message_id| {
             let received_time = self.received_time.read().unwrap();
             received_time.get(message_id).map(|timer| {
-                system_time_now()
-                    .saturating_duration_since(timer.ic_time)
-                    .as_secs_f64()
+                (
+                    system_time_now()
+                        .saturating_duration_since(timer.ic_time)
+                        .as_secs_f64(),
+                    Instant::now()
+                        .saturating_duration_since(timer.system_time)
+                        .as_secs_f64(),
+                )
             })
         };
         // Latency instrumentation.
@@ -198,9 +209,10 @@ impl IngressHistoryWriter for IngressHistoryWriterImpl {
                     state: Received, ..
                 },
             ) => {
-                if let Some(seconds) = seconds_since_block_made(&message_id) {
+                if let Some((seconds_since_block_made, _)) = message_latencies_seconds(&message_id)
+                {
                     self.message_state_transition_received_duration_seconds
-                        .observe(seconds);
+                        .observe(seconds_since_block_made);
                 }
             }
 
@@ -211,9 +223,13 @@ impl IngressHistoryWriter for IngressHistoryWriterImpl {
                 },
                 Known { state, .. },
             ) if state != &Received => {
-                if let Some(seconds) = seconds_since_block_made(&message_id) {
+                if let Some((seconds_since_block_made, seconds_since_induction)) =
+                    message_latencies_seconds(&message_id)
+                {
                     self.message_state_transition_processing_duration_seconds
-                        .observe(seconds);
+                        .observe(seconds_since_block_made);
+                    self.message_state_transition_received_to_processing_duration_seconds
+                        .observe(seconds_since_induction);
                 }
             }
             _ => {}
