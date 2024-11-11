@@ -3,7 +3,6 @@ syntax = "proto3";
 package ic_sns_root.pb.v1;
 
 import "ic_base_types/pb/v1/types.proto";
-import "ic_nervous_system/pb/v1/nervous_system.proto";
 
 // All essential state of an SNS root canister.
 //
@@ -47,9 +46,6 @@ message SnsRootCanister {
   reserved 9;
   reserved "latest_ledger_archive_poll_timestamp_seconds";
   reserved 6;
-
-  // Information about the timers that perform periodic tasks of this Root canister.
-  optional ic_nervous_system.pb.v1.Timers timers = 10;
 }
 
 message RegisterDappCanisterRequest {

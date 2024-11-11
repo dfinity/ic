@@ -20,7 +20,6 @@
 //!   - serves metrics at localhost:18080 instead of dumping them at stdout
 
 use anyhow::Result;
-use clap::builder::PossibleValuesParser;
 use clap::Parser;
 use ic_config::{
     adapters::AdaptersConfig,
@@ -100,7 +99,6 @@ fn main() -> Result<()> {
                 public_api,
                 node_operator_principal_id: None,
                 secret_key_store: None,
-                domain: None,
             },
         );
 
@@ -218,11 +216,11 @@ struct CliArgs {
     /// expected that a config will be found for '--bin replica'. In other
     /// words, it is expected that the starter is invoked from the rs/
     /// directory.
-    #[clap(long = "replica-path")]
+    #[clap(long = "replica-path", parse(from_os_str))]
     replica_path: Option<PathBuf>,
 
     /// Version of the replica binary.
-    #[clap(long)]
+    #[clap(long, parse(try_from_str = ReplicaVersion::try_from))]
     replica_version: Option<ReplicaVersion>,
 
     /// Path to the cargo binary. Not optional because there is a default value.
@@ -244,7 +242,7 @@ struct CliArgs {
     /// Path to the directory containing all state for this replica. (default: a
     /// temp directory that will be deleted immediately when the replica
     /// stops).
-    #[clap(long = "state-dir")]
+    #[clap(long = "state-dir", parse(from_os_str))]
     state_dir: Option<PathBuf>,
 
     /// The http port of the public API.
@@ -268,7 +266,7 @@ struct CliArgs {
     /// at start time.
     ///
     /// This argument is incompatible with --http-port.
-    #[clap(long = "http-port-file")]
+    #[clap(long = "http-port-file", parse(from_os_str))]
     http_port_file: Option<PathBuf>,
 
     /// Arg to control whitelist for creating funds which is either set to "*"
@@ -278,7 +276,7 @@ struct CliArgs {
 
     /// Run replica and ic-starter with the provided log level. Default is Warning
     #[clap(long = "log-level",
-                value_parser = PossibleValuesParser::new(["critical", "error", "warning", "info", "debug", "trace"]),
+                possible_values = &["critical", "error", "warning", "info", "debug", "trace"],
                 ignore_case = true)]
     log_level: Option<String>,
 
@@ -310,12 +308,12 @@ struct CliArgs {
 
     /// The backend DB used by Consensus, can be rocksdb or lmdb.
     #[clap(long = "consensus-pool-backend",
-                value_parser = PossibleValuesParser::new(["lmdb", "rocksdb"]))]
+                possible_values = &["lmdb", "rocksdb"])]
     consensus_pool_backend: Option<String>,
 
     /// Subnet features
     #[clap(long = "subnet-features",
-        value_parser = PossibleValuesParser::new([
+        possible_values = &[
             "canister_sandboxing",
             "http_requests",
             "bitcoin_testnet",
@@ -327,8 +325,8 @@ struct CliArgs {
             "bitcoin_regtest",
             "bitcoin_regtest_syncing",
             "bitcoin_regtest_paused",
-        ]),
-        num_args(1..))]
+        ],
+        multiple_values(true))]
     subnet_features: Vec<String>,
 
     /// Enable ecdsa signature by assigning the given key id a freshly generated key.
@@ -342,7 +340,7 @@ struct CliArgs {
 
     /// Subnet type
     #[clap(long = "subnet-type",
-                value_parser = PossibleValuesParser::new(["application", "verified_application", "system"]))]
+                possible_values = &["application", "verified_application", "system"])]
     subnet_type: Option<String>,
 
     /// Unix Domain Socket for Bitcoin testnet

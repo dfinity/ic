@@ -561,7 +561,7 @@ fn get_subnet_id(registry: &dyn RegistryClient, cup: &CatchUpPackage) -> Result<
     // Note that although sometimes CUPs have no signatures (e.g. genesis and
     // recovery CUPs) they always have the signer id (the DKG id), which is taken
     // from the high-threshold transcript when we build a genesis/recovery CUP.
-    let dkg_id = &cup.signature.signer;
+    let dkg_id = cup.signature.signer;
     // If the DKG key material was signed by the subnet itself — use it, if not, get
     // the subnet id from the registry.
     match dkg_id.target_subnet {

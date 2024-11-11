@@ -45,9 +45,6 @@ pub struct SnsRootCanister {
     /// controllers beyond SNS root are allowed when registering a dapp.
     #[prost(bool, tag = "8")]
     pub testflight: bool,
-    /// Information about the timers that perform periodic tasks of this Root canister.
-    #[prost(message, optional, tag = "10")]
-    pub timers: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Timers>,
 }
 #[derive(
     candid::CandidType,

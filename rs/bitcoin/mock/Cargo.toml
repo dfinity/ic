@@ -25,5 +25,4 @@ ic-base-types = { path = "../../types/base_types" }
 ic-config = { path = "../../config" }
 ic-state-machine-tests = { path = "../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../test_utilities/load_wasm" }
-ic-types = { path = "../../types/types" }
 ic-universal-canister = { path = "../../universal_canister/lib" }

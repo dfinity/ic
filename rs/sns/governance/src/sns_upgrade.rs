@@ -653,7 +653,7 @@ pub struct ListUpgradeStepsRequest {
 pub struct ListUpgradeStepsResponse {
     pub steps: ::prost::alloc::vec::Vec<ListUpgradeStep>,
 }
-#[derive(candid::CandidType, candid::Deserialize, Debug, Clone)]
+#[derive(candid::CandidType, candid::Deserialize, Debug)]
 pub struct ListUpgradeStep {
     pub version: ::core::option::Option<SnsVersion>,
 }

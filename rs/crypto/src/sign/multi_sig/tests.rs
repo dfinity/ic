@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used)]
+
 use super::*;
 use crate::sign::tests::*;
 use assert_matches::assert_matches;

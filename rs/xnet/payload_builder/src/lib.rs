@@ -17,38 +17,45 @@ use async_trait::async_trait;
 use http_body_util::BodyExt;
 use hyper::{Request, StatusCode, Uri};
 use hyper_util::client::legacy::Client;
-use hyper_util::rt::{TokioExecutor, TokioTimer};
 use ic_crypto_tls_interfaces::TlsConfig;
-use ic_interfaces::messaging::{
-    InvalidXNetPayload, XNetPayloadBuilder, XNetPayloadValidationError,
-    XNetPayloadValidationFailure,
+use ic_interfaces::{
+    messaging::{
+        InvalidXNetPayload, XNetPayloadBuilder, XNetPayloadValidationError,
+        XNetPayloadValidationFailure,
+    },
+    validation::ValidationError,
 };
-use ic_interfaces::validation::ValidationError;
 use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateManager, StateManagerError};
 use ic_limits::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
 use ic_logger::{error, info, log, warn, ReplicaLogger};
-use ic_metrics::buckets::{decimal_buckets, decimal_buckets_with_zero};
-use ic_metrics::MetricsRegistry;
+use ic_metrics::{
+    buckets::{decimal_buckets, decimal_buckets_with_zero},
+    MetricsRegistry,
+};
 use ic_protobuf::messaging::xnet::v1 as pb;
 use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
 use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetListRegistry};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{replicated_state::ReplicatedStateMessageRouting, ReplicatedState};
-use ic_types::batch::{ValidationContext, XNetPayload};
-use ic_types::registry::RegistryClientError;
-use ic_types::xnet::{CertifiedStreamSlice, RejectSignal, StreamIndex};
-use ic_types::{Height, NodeId, NumBytes, RegistryVersion, SubnetId};
+use ic_types::{
+    batch::{ValidationContext, XNetPayload},
+    registry::RegistryClientError,
+    xnet::{CertifiedStreamSlice, RejectSignal, StreamIndex},
+    Height, NodeId, NumBytes, RegistryVersion, SubnetId,
+};
 use ic_xnet_hyper::TlsConnector;
 use ic_xnet_uri::XNetAuthority;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
 pub use proximity::{GenRangeFn, ProximityMap};
 use rand::{rngs::StdRng, thread_rng, Rng};
-use std::collections::{BTreeMap, VecDeque};
-use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::{
+    collections::{BTreeMap, VecDeque},
+    net::SocketAddr,
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
+};
 use thiserror::Error;
 use tokio::{runtime, sync::mpsc};
 
@@ -223,10 +230,6 @@ impl XNetPayloadBuilderMetrics {
             .observe(since.elapsed().as_secs_f64());
     }
 }
-
-// TODO(MR-636): Consider making this an argument to allow for testing without generating so many
-// messages; or else at least unify this constant and `MAX_STREAM_MESSAGES` in the stream builder.
-pub const MAX_STREAM_MESSAGES: usize = 10_000;
 
 /// Implementation of `XNetPayloadBuilder` that uses a `StateManager`,
 /// `RegistryClient` and `XNetClient` to build and validate `XNetPayloads`.
@@ -530,8 +533,6 @@ impl XNetPayloadBuilderImpl {
         }
 
         if !reject_signals.is_empty() {
-            // TODO(MR-635): Change this check to use the same mechanism used for capping
-            // the number of signals in streams instead.
             // Given the minimum message size (zero-length sender and receiver, no cycles,
             // no payload) of 17 bytes; plus 16 bytes for `LabelTree` encoding plus label;
             // and 16+6 bytes for a `Witness::Known` and a `Witness::Fork` node; we have
@@ -710,22 +711,6 @@ impl XNetPayloadBuilderImpl {
                         subnet_id
                     ));
                 }
-            }
-
-            // Ensure the signal limit is respected.
-            let max_message_index = max_message_index(slice.header().begin());
-            if messages.end() > max_message_index {
-                warn!(
-                    self.log,
-                    "Stream from {}: slice end ({}) exceeds max index ({})",
-                    subnet_id,
-                    messages.end(),
-                    max_message_index
-                );
-                return SliceValidationResult::Invalid(format!(
-                    "Stream from {}: inducting slice would produce too many signals",
-                    subnet_id
-                ));
             }
         }
 
@@ -923,16 +908,6 @@ pub fn get_msg_limit(subnet_id: SubnetId, state: &ReplicatedState) -> Option<usi
                 .map(|len| SYSTEM_SUBNET_STREAM_MSG_LIMIT.saturating_sub(len))
         }
     }
-}
-
-/// The stream index up to which messages can be inducted while limiting the
-/// number of signals in the reverse stream to `MAX_STREAM_MESSAGES`.
-///
-/// `stream_begin` is the `begin` in the `StreamHeader` contained in the (same) stream slice.
-///  It reflects the status on the remote subnet as far as we know at present. Up to this index
-///  signals can be gc'ed in the reverse stream.
-pub fn max_message_index(stream_begin: StreamIndex) -> StreamIndex {
-    stream_begin + (MAX_STREAM_MESSAGES as u64).into()
 }
 
 /// Resolves a stream index and byte limit to an `EndpointLocator`, consisting
@@ -1572,9 +1547,8 @@ impl XNetClientImpl {
 
         // TODO(MR-28) Make timeout configurable.
         let http_client: Client<TlsConnector, Request<XNetRequestBody>> =
-            Client::builder(TokioExecutor::new())
+            Client::builder(hyper_util::rt::TokioExecutor::new())
                 .http2_only(true)
-                .pool_timer(TokioTimer::new())
                 .pool_idle_timeout(Some(Duration::from_secs(600)))
                 .pool_max_idle_per_host(1)
                 .build(https);

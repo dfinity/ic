@@ -160,7 +160,7 @@ impl Step for MergeCertificationPoolsStep {
             "Moving certifications of all nodes to new pool."
         );
         pools.iter().for_each(|(ip, p)| {
-            p.validated.certifications().get_all().for_each(|c| {
+            p.persistent_pool.certifications().get_all().for_each(|c| {
                 if let Some(cert) = new_pool.certification_at_height(c.height) {
                     if cert != c {
                         warn!(
@@ -176,13 +176,13 @@ impl Step for MergeCertificationPoolsStep {
                         "Height {}: inserting certification from node {ip}", c.height
                     );
                     new_pool
-                        .validated
+                        .persistent_pool
                         .insert(CertificationMessage::Certification(c))
                 }
             })
         });
 
-        let max_full_cert = new_pool.validated.certifications().get_highest().ok();
+        let max_full_cert = new_pool.persistent_pool.certifications().get_highest().ok();
 
         if let Some(cert) = max_full_cert.as_ref() {
             info!(
@@ -196,12 +196,17 @@ impl Step for MergeCertificationPoolsStep {
         // Analyze and move shares
         let max_cert_share = pools
             .values()
-            .flat_map(|p| p.validated.certification_shares().get_highest_iter().next())
+            .flat_map(|p| {
+                p.persistent_pool
+                    .certification_shares()
+                    .get_highest_iter()
+                    .next()
+            })
             .max_by_key(|c| c.height);
 
         let min_share_height = pools
             .values()
-            .flat_map(|p| p.validated.certification_shares().height_range())
+            .flat_map(|p| p.persistent_pool.certification_shares().height_range())
             .map(|range| range.min.get())
             .min();
 
@@ -242,7 +247,7 @@ impl Step for MergeCertificationPoolsStep {
                     "Inserting share from node {ip}: {:?}", s.signed
                 );
                 new_pool
-                    .validated
+                    .persistent_pool
                     .insert(CertificationMessage::CertificationShare(s))
             });
         }
@@ -1116,25 +1121,25 @@ mod tests {
         // only one of them should be kept after the merge.
         let cert1 = make_certification(1, vec![1, 2, 3]);
         let cert1_2 = make_certification(1, vec![4, 5, 6]);
-        pool1.validated.insert(cert1);
-        pool2.validated.insert(cert1_2);
+        pool1.persistent_pool.insert(cert1);
+        pool2.persistent_pool.insert(cert1_2);
 
         // Add the same certification for height 2 to both pools,
         // it should only exists in the merged pool once.
         let cert2 = make_certification(2, vec![1, 2, 3]);
-        pool1.validated.insert(cert2.clone());
-        pool2.validated.insert(cert2);
+        pool1.persistent_pool.insert(cert2.clone());
+        pool2.persistent_pool.insert(cert2);
 
         // Add two more certifications for heights 3 and 4, one to each pool.
         let cert3 = make_certification(3, vec![1, 2, 3]);
         let cert4 = make_certification(4, vec![1, 2, 3]);
-        pool1.validated.insert(cert4);
-        pool2.validated.insert(cert3);
+        pool1.persistent_pool.insert(cert4);
+        pool2.persistent_pool.insert(cert3);
 
         // Add a share at height 3 to one pool. It should not be added to the
         // merged pool as it is lower than the highest full certification (4).
         let share3 = make_share(3, vec![1], 1);
-        pool1.validated.insert(share3);
+        pool1.persistent_pool.insert(share3);
 
         step.exec().expect("Failed to execute step.");
 
@@ -1146,15 +1151,19 @@ mod tests {
         );
 
         assert_eq!(
-            new_pool.validated.certifications().get_all().count(),
+            new_pool.persistent_pool.certifications().get_all().count(),
             4 // One for each height 1-4
         );
         assert_eq!(
-            new_pool.validated.certification_shares().get_all().count(),
+            new_pool
+                .persistent_pool
+                .certification_shares()
+                .get_all()
+                .count(),
             0
         );
         let range = new_pool
-            .validated
+            .persistent_pool
             .certifications()
             .height_range()
             .expect("no height range");
@@ -1184,14 +1193,14 @@ mod tests {
         let share6 = make_share(6, vec![6], 1);
         let share6_2 = make_share(6, vec![6, 2], 2);
 
-        pool1.validated.insert(cert4);
-        pool1.validated.insert(share3);
-        pool1.validated.insert(share4);
-        pool1.validated.insert(share5.clone());
-        pool1.validated.insert(share6_2);
+        pool1.persistent_pool.insert(cert4);
+        pool1.persistent_pool.insert(share3);
+        pool1.persistent_pool.insert(share4);
+        pool1.persistent_pool.insert(share5.clone());
+        pool1.persistent_pool.insert(share6_2);
 
-        pool2.validated.insert(share5);
-        pool2.validated.insert(share6);
+        pool2.persistent_pool.insert(share5);
+        pool2.persistent_pool.insert(share6);
 
         step.exec().expect("Failed to execute step.");
 
@@ -1203,11 +1212,15 @@ mod tests {
         );
 
         assert_eq!(
-            new_pool.validated.certification_shares().get_all().count(),
+            new_pool
+                .persistent_pool
+                .certification_shares()
+                .get_all()
+                .count(),
             3 // share5, share6, share6_2
         );
         let range = new_pool
-            .validated
+            .persistent_pool
             .certification_shares()
             .height_range()
             .expect("no height range");

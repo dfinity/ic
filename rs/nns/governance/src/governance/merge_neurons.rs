@@ -3,10 +3,9 @@ use crate::{
     neuron::{combine_aged_stakes, DissolveStateAndAge, Neuron},
     neuron_store::NeuronStore,
     pb::v1::{
-        governance_error::ErrorType,
-        manage_neuron::{Merge, NeuronIdOrSubaccount},
-        manage_neuron_response::MergeResponse,
-        GovernanceError, Neuron as NeuronProto, NeuronState, ProposalData, ProposalStatus,
+        governance_error::ErrorType, manage_neuron::Merge, manage_neuron::NeuronIdOrSubaccount,
+        manage_neuron_response::MergeResponse, GovernanceError, Neuron as NeuronProto, NeuronState,
+        ProposalData, ProposalStatus,
     },
 };
 use ic_base_types::PrincipalId;
@@ -1483,7 +1482,8 @@ mod tests {
         );
     }
 
-    use proptest::{prelude::*, proptest};
+    use proptest::prelude::*;
+    use proptest::proptest;
 
     // In cached stake, maturity and staked maturity are all large enough we might get overflows. We
     // choose a large enough value to be comprehensive but not too large to cause overflows.
@@ -1507,7 +1507,6 @@ mod tests {
             target_aging_since_timestamp_seconds in 0..=NOW_SECONDS,
             transaction_fees_e8s in 0..u64::MAX,
         ) {
-            reset_stable_memory();
             let mut neuron_store = NeuronStore::new(BTreeMap::new());
 
             let source_neuron = create_model_neuron_builder(1)

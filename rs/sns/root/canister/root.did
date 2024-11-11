@@ -144,17 +144,6 @@ type SnsRootCanister = record {
   index_canister_id : opt principal;
   swap_canister_id : opt principal;
   ledger_canister_id : opt principal;
-  timers : opt Timers;
-};
-
-type Timers = record {
-  requires_periodic_tasks : opt bool;
-  last_reset_timestamp_seconds : opt nat64;
-  last_spawned_timestamp_seconds : opt nat64;
-};
-
-type GetTimersResponse = record {
-  timers : opt Timers;
 };
 
 service : (SnsRootCanister) -> {
@@ -173,6 +162,4 @@ service : (SnsRootCanister) -> {
   set_dapp_controllers : (SetDappControllersRequest) -> (
       SetDappControllersResponse,
     );
-  reset_timers : (record {}) -> (record {});
-  get_timers : (record {}) -> (GetTimersResponse) query;
 }

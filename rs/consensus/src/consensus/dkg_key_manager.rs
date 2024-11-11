@@ -312,14 +312,14 @@ impl DkgKeyManager {
                 .current_transcripts()
                 .iter()
                 .filter(|(_, t)| !self.pending_transcript_loads.contains_key(&t.dkg_id))
-                .map(|(_, t)| (current_interval_start, t.dkg_id.clone()));
+                .map(|(_, t)| (current_interval_start, t.dkg_id));
 
             // For next transcripts, we take the start of the next interval as a deadline.
             let next_transcripts_with_load_deadlines = summary
                 .next_transcripts()
                 .iter()
                 .filter(|(_, t)| !self.pending_transcript_loads.contains_key(&t.dkg_id))
-                .map(|(_, t)| (next_interval_start, t.dkg_id.clone()));
+                .map(|(_, t)| (next_interval_start, t.dkg_id));
 
             current_transcripts_with_load_deadlines
                 .chain(next_transcripts_with_load_deadlines)
@@ -333,8 +333,7 @@ impl DkgKeyManager {
             let logger = self.logger.clone();
             let summary = summary.clone();
             let (tx, rx) = sync_channel(0);
-            self.pending_transcript_loads
-                .insert(dkg_id.clone(), (deadline, rx));
+            self.pending_transcript_loads.insert(dkg_id, (deadline, rx));
 
             std::thread::spawn(move || {
                 let transcript = summary
@@ -597,7 +596,7 @@ mod tests {
                     .current_transcripts()
                     .values()
                     .chain(dkg_summary.next_transcripts().values())
-                    .map(|t| t.dkg_id.clone())
+                    .map(|t| t.dkg_id)
                     .collect::<HashSet<_>>();
                 // We expect the genesis summary to contain exactly 2 current transcripts.
                 assert_eq!(summary_0_transcripts.len(), 2);
@@ -630,7 +629,7 @@ mod tests {
                     .current_transcripts()
                     .values()
                     .chain(dkg_summary.next_transcripts().values())
-                    .map(|t| t.dkg_id.clone())
+                    .map(|t| t.dkg_id)
                     .collect::<HashSet<_>>();
                 // For the 3rd summary we expect 2 current and 2 next transcripts.
                 assert_eq!(summary_2_transcripts.len(), 4);
@@ -660,7 +659,7 @@ mod tests {
                     .current_transcripts()
                     .values()
                     .chain(dkg_summary.next_transcripts().values())
-                    .map(|t| t.dkg_id.clone())
+                    .map(|t| t.dkg_id)
                     .collect::<HashSet<_>>();
                 // For the 3rd summary we expect 2 current and 2 next transcripts.
                 assert_eq!(summary_3_transcripts.len(), 4);

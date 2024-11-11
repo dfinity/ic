@@ -264,7 +264,7 @@ impl FromParent for Block {
                 BlockPayload::Data(DataPayload {
                     batch: BatchPayload::default(),
                     dealings: Dealings::new_empty(dkg_start),
-                    idkg: parent.payload.as_ref().as_idkg().cloned(),
+                    idkg: None,
                 }),
             ),
             parent.height.increment(),

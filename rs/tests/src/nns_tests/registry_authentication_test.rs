@@ -20,6 +20,7 @@ use axum::{
     extract::{Request, State},
     routing::any,
 };
+use ic_async_utils::axum::BodyDataStream;
 use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_from_der;
 use ic_nns_test_utils::itest_helpers::{
     forward_call_via_universal_canister, set_up_universal_canister,
@@ -187,7 +188,7 @@ async fn mitm_service(
 
     let (parts, body) = req.into_parts();
     *request.headers_mut() = parts.headers;
-    *request.body_mut() = Some(reqwest::Body::wrap_stream(body.into_data_stream()));
+    *request.body_mut() = Some(reqwest::Body::wrap_stream(BodyDataStream::new(body)));
 
     let response = client
         .execute(request)

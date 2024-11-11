@@ -1354,7 +1354,7 @@ mod tests {
 
                 for height in 1..=4 {
                     cert_pool
-                        .validated
+                        .persistent_pool
                         .insert(CertificationMessage::Certification(Certification {
                             height: Height::from(height),
                             signed: Signed {

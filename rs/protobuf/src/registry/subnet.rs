@@ -2,10 +2,10 @@
 #[path = "../gen/registry/registry.subnet.v1.rs"]
 pub mod v1;
 
+use crate::registry::crypto::v1::{master_public_key_id, MasterPublicKeyId as MasterPublicKeyIdPb};
 use crate::registry::subnet::v1::{
     ChainKeyConfig as ChainKeyConfigPb, EcdsaConfig as EcdsaConfigPb, KeyConfig as KeyConfigPb,
 };
-use crate::types::v1::{master_public_key_id, MasterPublicKeyId as MasterPublicKeyIdPb};
 
 /// This code is part of the data migration from `EcdsaConfig` to `ChainKeyConfig`.
 ///

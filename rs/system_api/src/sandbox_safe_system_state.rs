@@ -578,7 +578,6 @@ pub struct SandboxSafeSystemState {
     controllers: BTreeSet<PrincipalId>,
     pub(super) request_metadata: RequestMetadata,
     caller: Option<PrincipalId>,
-    pub is_wasm64_execution: bool,
 }
 
 impl SandboxSafeSystemState {
@@ -611,7 +610,6 @@ impl SandboxSafeSystemState {
         request_metadata: RequestMetadata,
         caller: Option<PrincipalId>,
         next_canister_log_record_idx: u64,
-        is_wasm64_execution: bool,
     ) -> Self {
         Self {
             canister_id,
@@ -645,32 +643,7 @@ impl SandboxSafeSystemState {
             controllers,
             request_metadata,
             caller,
-            is_wasm64_execution,
         }
-    }
-
-    pub fn new_for_testing(
-        system_state: &SystemState,
-        cycles_account_manager: CyclesAccountManager,
-        network_topology: &NetworkTopology,
-        dirty_page_overhead: NumInstructions,
-        compute_allocation: ComputeAllocation,
-        request_metadata: RequestMetadata,
-        caller: Option<PrincipalId>,
-        call_context_id: Option<CallContextId>,
-    ) -> Self {
-        Self::new(
-            system_state,
-            cycles_account_manager,
-            network_topology,
-            dirty_page_overhead,
-            compute_allocation,
-            request_metadata,
-            caller,
-            call_context_id,
-            // We can assume a Wasm32 environment in tests for now.
-            false,
-        )
     }
 
     pub fn new(
@@ -682,7 +655,6 @@ impl SandboxSafeSystemState {
         request_metadata: RequestMetadata,
         caller: Option<PrincipalId>,
         call_context_id: Option<CallContextId>,
-        is_wasm64_execution: bool,
     ) -> Self {
         let call_context = call_context_id.and_then(|call_context_id| {
             system_state
@@ -755,7 +727,6 @@ impl SandboxSafeSystemState {
             request_metadata,
             caller,
             system_state.canister_log.next_idx(),
-            is_wasm64_execution,
         )
     }
 
@@ -950,7 +921,7 @@ impl SandboxSafeSystemState {
 
     pub fn prepayment_for_response_execution(&self) -> Cycles {
         self.cycles_account_manager
-            .prepayment_for_response_execution(self.subnet_size, self.is_wasm64_execution.into())
+            .prepayment_for_response_execution(self.subnet_size)
     }
 
     pub fn prepayment_for_response_transmission(&self) -> Cycles {
@@ -1468,8 +1439,6 @@ mod tests {
             RequestMetadata::new(0, Time::from_nanos_since_unix_epoch(0)),
             None,
             0,
-            // Wasm32 execution environment. Sufficient in testing.
-            false,
         );
         sandbox_state.msg_deadline()
     }
@@ -1517,8 +1486,6 @@ mod tests {
             RequestMetadata::new(0, Time::from_nanos_since_unix_epoch(0)),
             None,
             0,
-            // Wasm32 execution environment. Sufficient in testing.
-            false,
         )
     }
 

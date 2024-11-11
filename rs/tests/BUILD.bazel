@@ -4,16 +4,22 @@ load("@bazel_skylib//rules:run_binary.bzl", "run_binary")
 load("@rules_distroless//apt:defs.bzl", "dpkg_status")
 load("@rules_distroless//distroless:defs.bzl", "passwd")
 load("@rules_oci//oci:defs.bzl", "oci_image")
-load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//bazel:defs.bzl", "symlink_dir", "symlink_dir_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:defs.bzl", "symlink_dir", "symlink_dir_test", "symlink_dirs")
 load("//rs/tests:common.bzl", "DEPENDENCIES", "MACRO_DEPENDENCIES")
 load(":system_tests.bzl", "oci_tar", "uvm_config_image")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
 exports_files([
-    "counter.wat",
+    "src/memory_safety.wasm",
+    "src/message.wasm",
+    "src/counter.wat",
 ])
+
+ALIASES = {
+    "//rs/utils": "utils",
+}
 
 bool_flag(
     name = "k8s",
@@ -24,8 +30,11 @@ rust_library(
     name = "tests",
     testonly = True,
     srcs = glob(["src/**/*.rs"]),
+    aliases = ALIASES,
     compile_data = [
         "//ic-os/components:ic/ic.json5.template",
+        "src/memory_safety.wasm",
+        "src/counter.wat",
         "src/ledger_tests/transaction_ledger_correctness.wasm",
     ],
     crate_name = "ic_tests",
@@ -183,9 +192,6 @@ dpkg_status(
         "%s:control" % package
         for package in PACKAGES_NOBLE
     ],
-    target_compatible_with = [
-        "@platforms//os:linux",
-    ],
 )
 
 passwd(
@@ -238,6 +244,15 @@ uvm_config_image(
     tags = ["manual"],  # this target will be built if required as a dependency of another target
 )
 
+rust_test(
+    name = "tests_test",
+    aliases = ALIASES,
+    crate = ":tests",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    deps = DEPENDENCIES,
+)
+
 exports_files([
     "create-universal-vm-config-image.sh",
 ])
@@ -286,13 +301,32 @@ oci_tar(
 )
 
 exports_files([
-    "jaeger_activate.sh",
+    "src/btc_integration/bitcoin.conf",
+    "src/btc_integration/btc_activate.sh",
+])
+
+uvm_config_image(
+    name = "btc_uvm_config_image",
+    srcs = [
+        ":bitcoind.tar",
+        ":src/btc_integration/bitcoin.conf",
+        ":src/btc_integration/btc_activate.sh",
+    ],
+    remap_paths = {
+        "btc_activate.sh": "activate",
+    },
+    tags = ["manual"],  # this target will be built if required as a dependency of another target
+)
+
+exports_files([
+    "src/jaeger/jaeger_activate.sh",
 ])
 
 uvm_config_image(
     name = "jaeger_uvm_config_image",
     srcs = [
-        ":jaeger_activate.sh",
+        # ":src/btc_integration/bitcoin.conf",
+        ":src/jaeger/jaeger_activate.sh",
         ":jaeger_image",
     ],
     remap_paths = {
@@ -365,8 +399,70 @@ run_binary(
     tool = "//rs/tests/testing_verification/wabt-tests:generator",
 )
 
+symlink_dirs(
+    name = "ic-hs",
+    target_compatible_with = ["@platforms//os:linux"],
+    targets = {
+        "//hs/spec_compliance:ic-ref-test": "bin",
+        "//rs/universal_canister/impl:universal_canister.wasm.gz": "test-data",
+        "//rs/tests:wabt-tests": "test-data",
+    },
+    visibility = [
+        "//rs:system-tests-pkg",
+        "//rs/pocket_ic_server:__pkg__",
+    ],
+)
+
 oci_tar(
     name = "jaeger.tar",
     image = "@jaeger",
     repo_tags = ["jaegertracing/all-in-one:1.58"],
+)
+
+oci_tar(
+    name = "bitcoind.tar",
+    image = "@bitcoind",
+    repo_tags = ["bitcoind:pinned"],
+)
+
+oci_tar(
+    name = "coredns.tar",
+    image = "@coredns",
+    repo_tags = ["coredns:latest"],
+)
+
+oci_tar(
+    name = "pebble.tar",
+    image = "@pebble",
+    repo_tags = ["pebble:latest"],
+)
+
+oci_tar(
+    name = "python3.tar",
+    image = "@python3",
+    repo_tags = ["python3:latest"],
+)
+
+oci_tar(
+    name = "openssl.tar",
+    image = "@alpine_openssl",
+    repo_tags = ["openssl:latest"],
+)
+
+uvm_config_image(
+    name = "custom_domains_uvm_config_image",
+    srcs = [
+        # Docker images
+        ":coredns_tar",
+        ":openssl_tar",
+        ":pebble_tar",
+        ":python3_tar",
+
+        # Assets
+        ":src/custom_domains_integration/activate.sh",
+        ":src/custom_domains_integration/pebble_cache.py",
+        ":src/custom_domains_integration/cloudflare_api.py",
+    ],
+    remap_paths = {"activate.sh": "activate"},
+    tags = ["manual"],  # this target will be built if required as a dependency of another target
 )

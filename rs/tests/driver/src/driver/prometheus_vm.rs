@@ -21,8 +21,8 @@ use crate::driver::{
     resource::{DiskImage, ImageType},
     test_env::TestEnv,
     test_env_api::{
-        get_dependency_path, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
-        RetrieveIpv4Addr, SshSession, TopologySnapshot,
+        get_dependency_path, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, SshSession,
+        TopologySnapshot,
     },
     test_setup::{GroupSetup, InfraProvider},
     universal_vm::{UniversalVm, UniversalVms},
@@ -77,7 +77,6 @@ const NODE_EXPORTER_PROMETHEUS_TARGET: &str = "node_exporter.json";
 const LEDGER_CANISTER_PROMETHEUS_TARGET: &str = "ledger_canister.json";
 const BN_PROMETHEUS_TARGET: &str = "boundary_nodes.json";
 const BN_EXPORTER_PROMETHEUS_TARGET: &str = "boundary_nodes_exporter.json";
-const IC_BOUNDARY_PROMETHEUS_TARGET: &str = "ic_boundary.json";
 
 pub struct PrometheusVm {
     universal_vm: UniversalVm,
@@ -104,8 +103,7 @@ impl PrometheusVm {
                     vcpus: Some(NrOfVCPUs::new(2)),
                     memory_kibibytes: Some(AmountOfMemoryKiB::new(16780000)), // 16GiB
                     boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(100)),
-                })
-                .enable_ipv4(),
+                }),
             scrape_interval: Duration::from_secs(10),
         }
     }
@@ -132,18 +130,18 @@ impl PrometheusVm {
         self
     }
 
-    pub fn disable_ipv4(mut self) -> Self {
-        self.universal_vm.has_ipv4 = false;
+    pub fn enable_ipv4(mut self) -> Self {
+        self.universal_vm.has_ipv4 = true;
         self
     }
 
     pub fn start(&self, env: &TestEnv) -> Result<()> {
         // Create a config directory containing the prometheus.yml configuration file.
-        let vm_name = &self.universal_vm.name;
+        let vm_name = String::from(PROMETHEUS_VM_NAME);
         let log = env.logger();
         let config_dir = env
             .single_activate_script_config_dir(
-                vm_name,
+                &vm_name,
                 &format!(
                     r#"#!/bin/sh
 mkdir -p -m 755 {PROMETHEUS_SCRAPING_TARGETS_DIR}
@@ -181,7 +179,7 @@ fi
         let (prometheus_fqdn, grafana_fqdn) = match InfraProvider::read_attribute(env) {
             InfraProvider::Farm => {
                 // Log the Prometheus URL so users can browse to it while the test is running.
-                let deployed_prometheus_vm = env.get_deployed_universal_vm(vm_name).unwrap();
+                let deployed_prometheus_vm = env.get_deployed_universal_vm(&vm_name).unwrap();
                 let prometheus_vm = deployed_prometheus_vm.get_vm().unwrap();
                 let ipv6 = prometheus_vm.ipv6.to_string();
                 let suffix = env.create_dns_records(vec![
@@ -196,21 +194,6 @@ fi
                         records: vec![ipv6],
                     },
                 ]);
-                if self.universal_vm.has_ipv4 {
-                    let ipv4 = deployed_prometheus_vm.block_on_ipv4()?.to_string();
-                    env.create_dns_records(vec![
-                        DnsRecord {
-                            name: PROMETHEUS_DOMAIN_NAME.to_string(),
-                            record_type: DnsRecordType::A,
-                            records: vec![ipv4.clone()],
-                        },
-                        DnsRecord {
-                            name: GRAFANA_DOMAIN_NAME.to_string(),
-                            record_type: DnsRecordType::A,
-                            records: vec![ipv4],
-                        },
-                    ]);
-                }
                 (
                     format!("{PROMETHEUS_DOMAIN_NAME}.{suffix}"),
                     format!("{GRAFANA_DOMAIN_NAME}.{suffix}"),
@@ -313,7 +296,6 @@ impl HasPrometheus for TestEnv {
             NODE_EXPORTER_PROMETHEUS_TARGET,
             BN_PROMETHEUS_TARGET,
             BN_EXPORTER_PROMETHEUS_TARGET,
-            IC_BOUNDARY_PROMETHEUS_TARGET,
         ];
         if farm_url_for_ledger_canister.is_some() {
             target_json_files.push(LEDGER_CANISTER_PROMETHEUS_TARGET);
@@ -409,8 +391,6 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
         Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(BN_PROMETHEUS_TARGET);
     let boundary_nodes_exporter_scraping_targets_path =
         Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(BN_EXPORTER_PROMETHEUS_TARGET);
-    let ic_boundary_scraping_targets_path =
-        Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(IC_BOUNDARY_PROMETHEUS_TARGET);
     let replica_scraping_targets_path =
         Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(REPLICA_PROMETHEUS_TARGET);
     let orchestrator_scraping_targets_path =
@@ -430,10 +410,6 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
             {
                 "job_name": "boundary_nodes_exporter",
                 "file_sd_configs": [{"files": [boundary_nodes_exporter_scraping_targets_path]}],
-            },
-            {
-                "job_name": "ic_boundary",
-                "file_sd_configs": [{"files": [ic_boundary_scraping_targets_path]}],
             },
             {"job_name": "replica", "file_sd_configs": [{"files": [replica_scraping_targets_path]}]},
             {"job_name": "orchestrator", "file_sd_configs": [{"files": [orchestrator_scraping_targets_path]}]},
@@ -516,7 +492,6 @@ fn sync_prometheus_config_dir(
     farm_url_for_ledger_canister: &Option<String>,
 ) -> Result<()> {
     let mut replica_p8s_static_configs: Vec<PrometheusStaticConfig> = Vec::new();
-    let mut ic_boundary_p8s_static_configs: Vec<PrometheusStaticConfig> = Vec::new();
     let mut orchestrator_p8s_static_configs: Vec<PrometheusStaticConfig> = Vec::new();
     let mut node_exporter_p8s_static_configs: Vec<PrometheusStaticConfig> = Vec::new();
     for subnet in topology_snapshot.subnets() {
@@ -560,30 +535,6 @@ fn sync_prometheus_config_dir(
             labels,
         });
     }
-
-    for node in topology_snapshot.api_boundary_nodes() {
-        let labels: HashMap<String, String> = [
-            ("ic".to_string(), group_name.clone()),
-            ("ic_node".to_string(), node.node_id.to_string()),
-            ("ic_api_bn".to_string(), "1".to_string()),
-        ]
-        .iter()
-        .cloned()
-        .collect();
-        orchestrator_p8s_static_configs.push(PrometheusStaticConfig {
-            targets: vec![scraping_target_url(&node, ORCHESTRATOR_METRICS_PORT)],
-            labels: labels.clone(),
-        });
-        ic_boundary_p8s_static_configs.push(PrometheusStaticConfig {
-            targets: vec![scraping_target_url(&node, IC_BOUNDARY_METRICS_PORT)],
-            labels: labels.clone(),
-        });
-        node_exporter_p8s_static_configs.push(PrometheusStaticConfig {
-            targets: vec![scraping_target_url(&node, NODE_EXPORTER_METRICS_PORT)],
-            labels,
-        });
-    }
-
     if let Some(farm_url) = farm_url_for_ledger_canister {
         let ledger_canister_p8s_static_config = vec![PrometheusStaticConfig {
             targets: vec![format!("ryjl3-tyaaa-aaaaa-aaaba-cai.raw.{}", farm_url)],
@@ -596,10 +547,6 @@ fn sync_prometheus_config_dir(
     }
     for (name, p8s_static_configs) in &[
         (REPLICA_PROMETHEUS_TARGET, replica_p8s_static_configs),
-        (
-            IC_BOUNDARY_PROMETHEUS_TARGET,
-            ic_boundary_p8s_static_configs,
-        ),
         (
             ORCHESTRATOR_PROMETHEUS_TARGET,
             orchestrator_p8s_static_configs,

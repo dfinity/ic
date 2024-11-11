@@ -603,12 +603,12 @@ mod ecdsa_signing_subnet_lists {
     use ic_base_types::{subnet_id_into_protobuf, SubnetId};
     use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId};
     use ic_protobuf::registry::crypto::v1::ChainKeySigningSubnetList;
+    use ic_protobuf::registry::crypto::v1::{
+        self as pb, master_public_key_id, MasterPublicKeyId as MasterPublicKeyIdPb,
+    };
     use ic_protobuf::registry::subnet::v1::{
         ChainKeyConfig as ChainKeyConfigPb, KeyConfig as KeyConfigPb,
         SubnetRecord as SubnetRecordPb,
-    };
-    use ic_protobuf::types::v1::{
-        self as pb, master_public_key_id, MasterPublicKeyId as MasterPublicKeyIdPb,
     };
     use ic_registry_keys::CHAIN_KEY_SIGNING_SUBNET_LIST_KEY_PREFIX;
     use ic_registry_subnet_features::KeyConfig;

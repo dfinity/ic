@@ -1,4 +1,5 @@
 //! Tests of Basic Signature operations in the CSP vault.
+#![allow(clippy::unwrap_used)]
 use crate::imported_test_utils::ed25519::csp_testvec;
 use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
 use crate::public_key_store::PublicKeySetOnceError;

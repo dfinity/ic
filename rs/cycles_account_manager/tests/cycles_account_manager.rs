@@ -1,6 +1,5 @@
 use ic_base_types::NumSeconds;
 use ic_config::subnet_config::CyclesAccountManagerConfig;
-use ic_cycles_account_manager::WasmExecutionMode;
 use ic_cycles_account_manager::{IngressInductionCost, ResourceSaturation};
 use ic_interfaces::execution_environment::CanisterOutOfCyclesError;
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
@@ -24,8 +23,6 @@ use ic_types::{
 };
 use prometheus::IntCounter;
 use std::{convert::TryFrom, time::Duration};
-
-const WASM_EXECUTION_MODE: WasmExecutionMode = WasmExecutionMode::Wasm32;
 
 #[test]
 fn test_can_charge_application_subnets() {
@@ -265,7 +262,6 @@ fn verify_no_cycles_charged_for_message_execution_on_system_subnets() {
             NumInstructions::from(1_000_000),
             subnet_size,
             false,
-            WASM_EXECUTION_MODE,
         )
         .unwrap();
     assert_eq!(system_state.balance(), initial_balance);
@@ -278,7 +274,6 @@ fn verify_no_cycles_charged_for_message_execution_on_system_subnets() {
         cycles,
         &no_op_counter,
         subnet_size,
-        WASM_EXECUTION_MODE,
         &no_op_logger(),
     );
     assert_eq!(system_state.balance(), initial_balance);
@@ -705,7 +700,6 @@ fn withdraw_execution_cycles_consumes_cycles() {
             NumInstructions::from(1_000_000),
             SMALL_APP_SUBNET_MAX_SIZE,
             false,
-            WASM_EXECUTION_MODE,
         )
         .unwrap();
     let consumed_cycles_after = system_state.canister_metrics.consumed_cycles;

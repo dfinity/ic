@@ -172,7 +172,6 @@ mod tests {
     use std::sync::{Arc, Condvar, Mutex};
 
     const INSTRUCTION_LIMIT: u64 = 100_000;
-    const IS_WASM64_EXECUTION: bool = false;
 
     fn execution_parameters() -> ExecutionParameters {
         ExecutionParameters {
@@ -229,7 +228,6 @@ mod tests {
             RequestMetadata::new(0, Time::from_nanos_since_unix_epoch(0)),
             caller,
             0,
-            IS_WASM64_EXECUTION,
         )
     }
 

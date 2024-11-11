@@ -3,6 +3,7 @@ use crate::{
     registry_helper::RegistryHelper, ssh_access_manager::SshAccessParameters,
     upgrade::ReplicaProcess,
 };
+use async_trait::async_trait;
 pub use ic_dashboard::Dashboard;
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_types::{
@@ -11,8 +12,9 @@ use ic_types::{
 };
 use std::{
     process::Command,
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, Mutex},
 };
+use tokio::sync::RwLock;
 
 const ORCHESTRATOR_DASHBOARD_PORT: u16 = 7070;
 
@@ -31,12 +33,13 @@ pub(crate) struct OrchestratorDashboard {
     logger: ReplicaLogger,
 }
 
+#[async_trait]
 impl Dashboard for OrchestratorDashboard {
     fn port() -> u16 {
         ORCHESTRATOR_DASHBOARD_PORT
     }
 
-    fn build_response(&self) -> String {
+    async fn build_response(&self) -> String {
         format!(
             "node id: {}\n\
              DC id: {}\n\
@@ -56,18 +59,18 @@ impl Dashboard for OrchestratorDashboard {
             self.node_id,
             self.registry.dc_id().unwrap_or_default(),
             self.registry.get_latest_version().get(),
-            self.get_subnet_id(),
+            self.get_subnet_id().await,
             self.get_pid(),
             self.replica_version,
             self.hostos_version
                 .as_ref()
                 .map(|v| v.to_string())
                 .unwrap_or_else(|| "None".to_string()),
-            self.get_scheduled_upgrade(),
+            self.get_scheduled_upgrade().await,
             self.get_local_cup_info(),
-            *self.last_applied_firewall_version.read().unwrap(),
-            *self.last_applied_ipv4_config_version.read().unwrap(),
-            self.display_last_applied_ssh_parameters(),
+            *self.last_applied_firewall_version.read().await,
+            *self.last_applied_ipv4_config_version.read().await,
+            self.display_last_applied_ssh_parameters().await,
             self.get_authorized_keys("readonly"),
             self.get_authorized_keys("backup"),
             self.get_authorized_keys("admin"),
@@ -116,8 +119,8 @@ impl OrchestratorDashboard {
         })
     }
 
-    fn display_last_applied_ssh_parameters(&self) -> String {
-        let parameters = self.last_applied_ssh_parameters.read().unwrap();
+    async fn display_last_applied_ssh_parameters(&self) -> String {
+        let parameters = self.last_applied_ssh_parameters.read().await;
         let subnet = match parameters.subnet_id {
             Some(id) => id.to_string(),
             None => "Unassigned".to_string(),
@@ -136,15 +139,15 @@ impl OrchestratorDashboard {
         }
     }
 
-    fn get_subnet_id(&self) -> String {
-        match *self.subnet_id.read().unwrap() {
+    async fn get_subnet_id(&self) -> String {
+        match *self.subnet_id.read().await {
             Some(id) => id.to_string(),
             None => "None".to_string(),
         }
     }
 
-    fn get_scheduled_upgrade(&self) -> String {
-        let subnet_id = match *self.subnet_id.read().unwrap() {
+    async fn get_scheduled_upgrade(&self) -> String {
+        let subnet_id = match *self.subnet_id.read().await {
             Some(id) => id,
             None => return "None".to_string(),
         };

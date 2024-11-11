@@ -57,12 +57,6 @@ pub fn execute_update(
                     .caller()
                     .map(|caller| canister.controllers().contains(&caller))
                     .unwrap_or_default();
-
-                let is_wasm64_execution = canister
-                    .execution_state
-                    .as_ref()
-                    .map_or(false, |es| es.is_wasm64);
-
                 let prepaid_execution_cycles =
                     match round.cycles_account_manager.prepay_execution_cycles(
                         &mut canister.system_state,
@@ -72,7 +66,6 @@ pub fn execute_update(
                         execution_parameters.instruction_limits.message(),
                         subnet_size,
                         reveal_top_up,
-                        is_wasm64_execution.into(),
                     ) {
                         Ok(cycles) => cycles,
                         Err(err) => {
@@ -247,11 +240,6 @@ fn finish_err(
         round.counters.charging_from_balance_error,
     );
 
-    let is_wasm64_execution = canister
-        .execution_state
-        .as_ref()
-        .map_or(false, |es| es.is_wasm64);
-
     let instruction_limit = original.execution_parameters.instruction_limits.message();
     round.cycles_account_manager.refund_unused_execution_cycles(
         &mut canister.system_state,
@@ -260,7 +248,6 @@ fn finish_err(
         original.prepaid_execution_cycles,
         round.counters.execution_refund_error,
         original.subnet_size,
-        is_wasm64_execution.into(),
         round.log,
     );
     let instructions_used = instruction_limit - instructions_left;
@@ -503,13 +490,6 @@ impl UpdateHelper {
             round.log,
             round.counters.ingress_with_cycles_error,
         );
-
-        let is_wasm64_execution = self
-            .canister
-            .execution_state
-            .as_ref()
-            .map_or(false, |es| es.is_wasm64);
-
         round.cycles_account_manager.refund_unused_execution_cycles(
             &mut self.canister.system_state,
             output.num_instructions_left,
@@ -517,7 +497,6 @@ impl UpdateHelper {
             original.prepaid_execution_cycles,
             round.counters.execution_refund_error,
             original.subnet_size,
-            is_wasm64_execution.into(),
             round.log,
         );
 

@@ -1,4 +1,5 @@
 use canister_test::Project;
+use dfn_candid::candid_one;
 use ic_base_types::CanisterId;
 use ic_management_canister_types::{CanisterInstallMode, CanisterStatusType};
 use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
@@ -252,6 +253,7 @@ fn test_lifeline_canister_restarts_root_on_stop_canister_timeout() {
         &state_machine,
         CanisterId::ic_00(),
         "uninstall_code",
+        candid_one,
         CanisterIdRecord::from(ROOT_CANISTER_ID),
         LIFELINE_CANISTER_ID.get(),
     )

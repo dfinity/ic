@@ -1323,7 +1323,7 @@ fn growing_wasm_memory_updates_subnet_available_memory() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let api_type = ApiTypeBuilder::build_update_api();
     let execution_mode = api_type.execution_mode();
-    let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
+    let sandbox_safe_system_state = SandboxSafeSystemState::new(
         &system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
@@ -1400,7 +1400,7 @@ fn helper_test_on_low_wasm_memory(
     execution_parameters.memory_allocation = system_state.memory_allocation;
     execution_parameters.wasm_memory_limit = system_state.wasm_memory_limit;
 
-    let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
+    let sandbox_safe_system_state = SandboxSafeSystemState::new(
         &system_state,
         CyclesAccountManagerBuilder::new().build(),
         &NetworkTopology::default(),
@@ -1620,7 +1620,7 @@ fn push_output_request_respects_memory_limits() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let api_type = ApiTypeBuilder::build_update_api();
     let execution_mode = api_type.execution_mode();
-    let mut sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
+    let mut sandbox_safe_system_state = SandboxSafeSystemState::new(
         &system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
@@ -1733,7 +1733,7 @@ fn push_output_request_oversized_request_memory_limits() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let api_type = ApiTypeBuilder::build_update_api();
     let execution_mode = api_type.execution_mode();
-    let mut sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
+    let mut sandbox_safe_system_state = SandboxSafeSystemState::new(
         &system_state,
         cycles_account_manager,
         &NetworkTopology::default(),

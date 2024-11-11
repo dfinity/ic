@@ -18,7 +18,7 @@ use slog::{error, info, Logger};
 use std::time::{Duration, Instant};
 use tokio::runtime::Handle;
 
-const COUNTER_CANISTER_WAT: &str = "rs/tests/counter.wat";
+const COUNTER_CANISTER_WAT: &str = "rs/tests/src/counter.wat";
 const MAX_RETRIES: u32 = 10;
 const RETRY_WAIT: Duration = Duration::from_secs(10);
 const SUCCESS_THRESHOLD: f64 = 0.33; // If more than 33% of the expected calls are successful the test passes

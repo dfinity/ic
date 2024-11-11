@@ -5,7 +5,7 @@ use crate::ExternalPublicKeys;
 use ic_crypto_internal_logmon::metrics::KeyCounts;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
-use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
+use ic_crypto_internal_threshold_sig_ecdsa::{
     CommitmentOpening, IDkgComplaintInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
 };
 use ic_crypto_internal_types::encrypt::forward_secure::{
@@ -902,7 +902,6 @@ pub trait ThresholdSchnorrSignerCspVault {
         &self,
         derivation_path: ExtendedDerivationPath,
         message: Vec<u8>,
-        taproot_tree_root: Option<Vec<u8>>,
         nonce: Randomness,
         key_raw: IDkgTranscriptInternalBytes,
         presignature_transcript_raw: IDkgTranscriptInternalBytes,

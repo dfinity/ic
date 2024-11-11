@@ -33,7 +33,7 @@ use ic_metrics::MetricsRegistry;
 use ic_types::{
     consensus::{FinalizationContent, FinalizationShare, HashedBlock},
     replica_config::ReplicaConfig,
-    Height,
+    Height, ReplicaVersion,
 };
 use std::{cell::RefCell, sync::Arc};
 
@@ -98,6 +98,7 @@ impl Finalizer {
             pool,
             &*self.registry_client,
             self.replica_config.subnet_id,
+            ReplicaVersion::default(),
             &self.log,
             None,
             Some(&|result, block_stats, batch_stats| {
@@ -492,7 +493,7 @@ mod tests {
         .collect::<BTreeMap<_, _>>();
 
         // Build some transcipts with matching ids and tags
-        let transcripts_for_remote_subnets = vec![
+        let transcripts_for_new_subnets = vec![
             (
                 NiDkgId {
                     start_block_height: Height::from(0),
@@ -519,7 +520,7 @@ mod tests {
 
         // Run the
         let result = generate_responses_to_setup_initial_dkg_calls(
-            &transcripts_for_remote_subnets[..],
+            &transcripts_for_new_subnets[..],
             &no_op_logger(),
         );
         assert_eq!(result.len(), 1);

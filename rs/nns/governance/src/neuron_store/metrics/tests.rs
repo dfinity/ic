@@ -460,8 +460,8 @@ fn test_compute_neuron_metrics_non_self_authenticating() {
     .with_maturity_e8s_equivalent(988_862_650)
     .build();
 
-    let voting_power_1 = neuron_1.potential_voting_power(now_seconds);
-    let voting_power_3 = neuron_3.potential_voting_power(now_seconds);
+    let voting_power_1 = neuron_1.voting_power(now_seconds);
+    let voting_power_3 = neuron_3.voting_power(now_seconds);
     assert_eq!(voting_power_1, (2.250 * (100.0 + 101.0)) as u64);
     assert_eq!(
         voting_power_3,
@@ -598,8 +598,8 @@ fn test_compute_neuron_metrics_public_neurons() {
     }))
     .build();
 
-    let voting_power_1 = neuron_1.potential_voting_power(now_seconds);
-    let voting_power_3 = neuron_3.potential_voting_power(now_seconds);
+    let voting_power_1 = neuron_1.voting_power(now_seconds);
+    let voting_power_3 = neuron_3.voting_power(now_seconds);
     assert_eq!(voting_power_1, (2.250 * (100.0 + 101.0)) as u64);
     assert_eq!(
         voting_power_3,

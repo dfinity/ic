@@ -15,10 +15,11 @@ on:
   workflow_call:
 
 # runs for the same workflow are cancelled on PRs but not on master
-# explanation: on push to master head_ref is not set, so we want it to fall back to run_id so it is not cancelled
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
+
+permissions: read-all
 
 env:
   CI_COMMIT_SHA: ${{ github.sha }}
@@ -26,7 +27,6 @@ env:
   CI_JOB_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
   CI_PIPELINE_SOURCE: ${{ github.event_name }}
   CI_PROJECT_DIR: ${{ github.workspace }}
-  CI_EVENT_NAME: ${{ github.event_name }}
   BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
   CI_RUN_ID: ${{ github.run_id }}
   RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
@@ -34,7 +34,7 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:80e976b63af2b1b352c8c5959cb6c6b02aaa56a4efa327569d8c85c9c81a2cec
+    image: ghcr.io/dfinity/ic-build@sha256:2c6fc0aa92ada647e42790cbdac3199b27a1407d9e90ff6e5a97a69acac24041
   dind-large-setup: &dind-large-setup
     runs-on:
       labels: dind-large
@@ -51,6 +51,12 @@ anchors:
     container:
       <<: *image
     timeout-minutes: 30
+  before-script: &before-script
+    name: Before script
+    id: before-script
+    shell: bash
+    run: |
+      [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
   docker-login: &docker-login
     name: Login to Dockerhub
     shell: bash
@@ -67,7 +73,7 @@ anchors:
     name: Set up Python
     uses: actions/setup-python@v5
     with:
-      python-version: '3.12'
+      python-version: '3.10'
   bazel-upload: &bazel-upload
     name: Upload bazel-targets
     uses: actions/upload-artifact@v4
@@ -101,56 +107,27 @@ jobs:
       labels: dind-large
     steps:
       - <<: *checkout
+      - <<: *before-script
       - <<: *docker-login
       - name: Set BAZEL_EXTRA_ARGS
         shell: bash
         run: |
           set -xeuo pipefail
-          # Determine which tests to skip and append 'long_test' for pull requests, merge groups or push on dev-gh-*
-          EXCLUDED_TEST_TAGS=(
-              system_test_hourly
-              system_test_nightly
-              system_test_nightly_nns
-              system_test_staging
-              system_test_hotfix
-              system_test_benchmark
-              fuzz_test
-              fi_tests_nightly
-              nns_tests_nightly
-          )
-          if [[ "$CI_EVENT_NAME" =~ ^(pull_request|merge_group)$ ]]; then
-              if [[ "$CI_EVENT_NAME" == "merge_group" || "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
-                  EXCLUDED_TEST_TAGS+=(long_test)
-              fi
-          elif [[ "$CI_EVENT_NAME" == "push" ]] && [[ "$BRANCH_NAME" =~ ^dev-gh-.* ]]; then
-              EXCLUDED_TEST_TAGS+=(long_test)
-          fi
-          # Export excluded tags as environment variable for ci/bazel-scripts/diff.sh
-          echo "EXCLUDED_TEST_TAGS=${EXCLUDED_TEST_TAGS[*]}" >> $GITHUB_ENV
-          # Prepend tags with '-' and join them with commas for Bazel
-          TEST_TAG_FILTERS=$(IFS=,; echo "${EXCLUDED_TEST_TAGS[*]/#/-}")
-          # Determine BAZEL_EXTRA_ARGS based on event type or branch name
-          BAZEL_EXTRA_ARGS="--test_tag_filters=$TEST_TAG_FILTERS"
           if [[ "${{ github.event_name }}" == 'merge_group' ]]; then
-              BAZEL_EXTRA_ARGS+=" --test_timeout_filters=short,moderate --flaky_test_attempts=3"
+            echo "BAZEL_EXTRA_ARGS=--test_timeout_filters=short,moderate --flaky_test_attempts=3" >> $GITHUB_ENV
           elif [[ $BRANCH_NAME =~ ^hotfix-.* ]]; then
-              BAZEL_EXTRA_ARGS+=" --test_timeout_filters=short,moderate"
+            echo "BAZEL_EXTRA_ARGS=--test_timeout_filters=short,moderate" >> $GITHUB_ENV
           else
-              BAZEL_EXTRA_ARGS+=" --keep_going"
+            echo "BAZEL_EXTRA_ARGS=--keep_going" >> $GITHUB_ENV
           fi
-          # Export BAZEL_EXTRA_ARGS to environment
-          echo "BAZEL_EXTRA_ARGS=$BAZEL_EXTRA_ARGS" >> $GITHUB_ENV
-        env:
-          RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
       - name: Run Bazel Test All
         id: bazel-test-all
-        uses: ./.github/actions/bazel-test-all/
+        uses:  ./.github/actions/bazel-test-all/
         env:
           AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
           # Only run ci/bazel-scripts/diff.sh on PRs that are not labeled with "CI_ALL_BAZEL_TARGETS".
-          OVERRIDE_DIDC_CHECK: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}
-          CI_OVERRIDE_BUF_BREAKING: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_BUF_BREAKING') }}
           RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
+          OVERRIDE_DIDC_CHECK: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}
         with:
           BAZEL_COMMAND: "test"
           BAZEL_TARGETS: "//..."
@@ -164,9 +141,9 @@ jobs:
   bazel-build-all-config-check:
     <<: *dind-large-setup
     name: Bazel Build All Config Check
-    if: ${{ contains(github.event.pull_request.labels.*.name, 'CI_BUILD_CHECK') }}
     steps:
       - <<: *checkout
+      - <<: *before-script
       - <<: *docker-login
       - name: Run bazel build --config=check //rs/...
         id: bazel-build-config-check
@@ -179,7 +156,7 @@ jobs:
 
   bazel-test-macos-intel:
     name: Bazel Test macOS Intel
-    timeout-minutes: 130
+    timeout-minutes: 120
     runs-on:
       labels: macOS
     # Run on protected branches, but only on public repo
@@ -215,6 +192,7 @@ jobs:
     <<: *dind-large-setup
     steps:
       - <<: *checkout
+      - <<: *before-script
       - name: Run Bazel Build Fuzzers
         id: bazel-build-fuzzers
         uses:  ./.github/actions/bazel-test-all/
@@ -230,6 +208,7 @@ jobs:
     <<: *dind-large-setup
     steps:
       - <<: *checkout
+      - <<: *before-script
       - name: Run Bazel Build Fuzzers AFL
         id: bazel-build-fuzzers-afl
         uses:  ./.github/actions/bazel-test-all/
@@ -265,20 +244,16 @@ jobs:
   build-ic:
     name: Build IC
     <<: *dind-large-setup
-    # keep options from dind-large-setup but run on dind-small-setup
-    runs-on:
-      group: ch1
-      labels: dind-small
     if: ${{ github.event_name != 'merge_group' }}
     steps:
       - <<: *checkout
+      - <<: *before-script
       - <<: *docker-login
       - name: Run Build IC
         id: build-ic
         shell: bash
         run: |
           set -eExuo pipefail
-          [ -n "${NODE_NAME:-}" ] && echo "Run on node: $NODE_NAME" >>$GITHUB_STEP_SUMMARY
           REPO_NAME="${GITHUB_REPOSITORY##*/}"
           rm -rf "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}"
           mkdir -p "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}/artifacts"
@@ -288,10 +263,10 @@ jobs:
           rm -rf "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}"
         env:
           BAZEL_COMMAND: "build"
+          RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
       - name: Upload build-ic.tar
         uses: actions/upload-artifact@v4
         with:
@@ -354,9 +329,7 @@ jobs:
 
   cargo-clippy-linux:
     name: Cargo Clippy Linux
-    <<: *dind-small-setup
-    runs-on:
-      group: ch1
+    <<: *dind-large-setup
     steps:
       - <<: *checkout
       - name: Filter Rust Files [*.{rs,toml,lock}]
@@ -387,9 +360,7 @@ jobs:
 
   cargo-build-release-linux:
     name: Cargo Build Release Linux
-    <<: *dind-small-setup
-    runs-on:
-      group: ch1
+    <<: *dind-large-setup
     steps:
       - <<: *checkout
       - name: Filter Rust Files [*.{rs,toml,lock}]

@@ -17,26 +17,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and a `bitcoind` process is listening at an address and port specified in an additional argument
   of the endpoint `/instances/` to create a new PocketIC instance.
 - New endpoint `/instances/<instance_id>/_/topology` returning the topology of the PocketIC instance.
-- New CLI option `--log-levels` to specify the log levels for PocketIC server logs (defaults to `pocket_ic_server=info,tower_http=info,axum::rejection=trace`).
 
 ### Fixed
 - Renamed `dfx_test_key1` tECDSA and tSchnorr keys to `dfx_test_key`.
+- Canisters created via `provisional_create_canister_with_cycles` with the management canister ID as the effective canister ID
+  are created on an arbitrary subnet.
 
 ### Changed
 - The PocketIC HTTP gateway routes requests whose paths start with `/_/` and for which no canister ID can be found
   directly to the PocketIC instance/replica (this only used to apply to requests for `/_/dashboard` independently
   of whether a canister ID could be found).
-- Subnet ids can be specified in `SubnetSpec`s for all subnet kinds.
-
-### Removed
-- The CLI option `--pid`: use the CLI option `--port-file` instead.
 
 
 
 ## 6.0.0 - 2024-09-12
 
 ### Added
-- New CLI option `--ip-addr` to specify the IP address at which the PocketIC server should listen (defaults to `127.0.0.1`).
+- New CLI option `--ip_addr` to specify the IP address at which the PocketIC server should listen (defaults to `127.0.0.1`).
 - New argument `ip_addr` of the endpoint `/http_gateway` to specify the IP address at which the HTTP gateway should listen (defaults to `127.0.0.1`).
 - New GET endpoint `/http_gateway` listing all HTTP gateways and their details.
 - Support for query statistics in the management canister.

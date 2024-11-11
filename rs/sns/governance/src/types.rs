@@ -26,14 +26,14 @@ use crate::{
             nervous_system_function::FunctionType,
             neuron::Followees,
             proposal::Action,
-            upgrade_journal_entry, ClaimSwapNeuronsError, ClaimSwapNeuronsResponse,
-            ClaimedSwapNeuronStatus, DefaultFollowees, DeregisterDappCanisters, Empty,
-            ExecuteGenericNervousSystemFunction, GovernanceError, ManageDappCanisterSettings,
-            ManageLedgerParameters, ManageNeuronResponse, ManageSnsMetadata, MintSnsTokens, Motion,
-            NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId, NeuronIds,
-            NeuronPermission, NeuronPermissionList, NeuronPermissionType, ProposalId,
-            RegisterDappCanisters, RewardEvent, TransferSnsTreasuryFunds,
-            UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote, VotingRewardsParameters,
+            ClaimSwapNeuronsError, ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus,
+            DefaultFollowees, DeregisterDappCanisters, Empty, ExecuteGenericNervousSystemFunction,
+            GovernanceError, ManageDappCanisterSettings, ManageLedgerParameters,
+            ManageNeuronResponse, ManageSnsMetadata, MintSnsTokens, Motion, NervousSystemFunction,
+            NervousSystemParameters, Neuron, NeuronId, NeuronIds, NeuronPermission,
+            NeuronPermissionList, NeuronPermissionType, ProposalId, RegisterDappCanisters,
+            RewardEvent, TransferSnsTreasuryFunds, UpgradeSnsControlledCanister,
+            UpgradeSnsToNextVersion, Vote, VotingRewardsParameters,
         },
     },
     proposal::ValidGenericNervousSystemFunction,
@@ -2014,13 +2014,6 @@ pub struct LedgerUpdateLock {
 impl Drop for LedgerUpdateLock {
     /// Drops the lock on the neuron.
     fn drop(&mut self) {
-        // In the case of a panic, the state of the ledger account representing the neuron's stake
-        // may be inconsistent with the internal state of governance.  In that case,
-        // we want to prevent further operations with that neuron until the issue can be
-        // investigated and resolved, which will require code changes.
-        if ic_cdk::api::call::is_recovering_from_trap() {
-            return;
-        }
         // It's always ok to dereference the governance when a LedgerUpdateLock
         // goes out of scope. Indeed, in the scope of any Governance method,
         // &self always remains alive. The 'mut' is not an issue, because
@@ -2558,11 +2551,7 @@ pub mod test_helpers {
         /// Map of expected calls to a result, where key is hash of arguments (See `compute_call_canister_key`).
         #[allow(clippy::type_complexity)]
         pub canister_calls_map: HashMap<
-            (
-                ic_base_types::CanisterId,
-                std::string::String,
-                std::vec::Vec<u8>,
-            ),
+            (dfn_core::CanisterId, std::string::String, std::vec::Vec<u8>),
             CanisterCallResult,
         >,
 
@@ -2749,24 +2738,6 @@ pub mod test_helpers {
         }
     }
 }
-
-impl From<upgrade_journal_entry::UpgradeStepsRefreshed> for upgrade_journal_entry::Event {
-    fn from(event: upgrade_journal_entry::UpgradeStepsRefreshed) -> Self {
-        upgrade_journal_entry::Event::UpgradeStepsRefreshed(event)
-    }
-}
-impl From<upgrade_journal_entry::UpgradeStarted> for upgrade_journal_entry::Event {
-    fn from(event: upgrade_journal_entry::UpgradeStarted) -> Self {
-        upgrade_journal_entry::Event::UpgradeStarted(event)
-    }
-}
-impl From<upgrade_journal_entry::UpgradeOutcome> for upgrade_journal_entry::Event {
-    fn from(event: upgrade_journal_entry::UpgradeOutcome) -> Self {
-        upgrade_journal_entry::Event::UpgradeOutcome(event)
-    }
-}
-// Note, we do not implement From<upgrade_journal_entry::TargetVersionSet> for upgrade_journal_entry::Event
-// because it is ambiguous which event variant to convert it to (TargetVersionSet vs TargetVersionReset).
 
 #[cfg(test)]
 pub(crate) mod tests {

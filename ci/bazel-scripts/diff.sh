@@ -44,10 +44,7 @@ if grep -qE ".*\.hs" <<<"$DIFF_FILES"; then
 fi
 
 if grep -qE ".*\.proto" <<<"$DIFF_FILES"; then
-    files+=(
-        //pre-commit:protobuf-format-check
-        //pre-commit:buf-breaking
-    )
+    files+=(//pre-commit:protobuf-format-check)
 fi
 
 if [ ${#files[@]} -eq 0 ]; then
@@ -58,12 +55,7 @@ fi
 if [ "${BAZEL_COMMAND:-}" == "build" ]; then
     TARGETS=$(bazel query "rdeps(//..., set(${files[*]}))")
 elif [ "${BAZEL_COMMAND:-}" == "test" ]; then
-    EXCLUDED_TAGS=(manual $EXCLUDED_TEST_TAGS)
-    EXCLUDED_TAGS=$(
-        IFS='|'
-        echo "${EXCLUDED_TAGS[*]}"
-    )
-    TARGETS=$(bazel query "kind(test, rdeps(//..., set(${files[*]}))) except attr('tags', '$EXCLUDED_TAGS', //...)")
+    TARGETS=$(bazel query "kind(test, rdeps(//..., set(${files[*]}))) except attr('tags', 'manual|system_test_hourly|system_test_nightly|system_test_staging|system_test_hotfix|system_test_nightly_nns', //...)")
 else
     echo "Unknown BAZEL_COMMAND: ${BAZEL_COMMAND:-}" >&2
     exit 1

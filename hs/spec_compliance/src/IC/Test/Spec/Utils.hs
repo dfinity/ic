@@ -205,16 +205,14 @@ ic00viaWithCyclesRefund amount = ic00viaWithCyclesSubnetImpl (relayReplyRefund a
 -- The unprimed variant expect a reply.
 
 install' :: (HasCallStack, HasAgentConfig) => Blob -> Prog -> IO ReqResponse
-install' cid prog = ic_install_single_chunk' ic00 (enum #install) cid store_canister_id ucan_chunk_hash (run prog)
-  where
-    Just store_canister_id = tc_store_canister_id agentConfig
-    Just ucan_chunk_hash = tc_ucan_chunk_hash agentConfig
+install' cid prog = do
+  universal_wasm <- getTestWasm "universal_canister.wasm.gz"
+  ic_install' ic00 (enum #install) cid universal_wasm (run prog)
 
 installAt :: (HasCallStack, HasAgentConfig) => Blob -> Prog -> IO ()
-installAt cid prog = ic_install_single_chunk ic00 (enum #install) cid store_canister_id ucan_chunk_hash (run prog)
-  where
-    Just store_canister_id = tc_store_canister_id agentConfig
-    Just ucan_chunk_hash = tc_ucan_chunk_hash agentConfig
+installAt cid prog = do
+  universal_wasm <- getTestWasm "universal_canister.wasm.gz"
+  ic_install ic00 (enum #install) cid universal_wasm (run prog)
 
 -- Also calls create, used default 'ic00'
 install :: (HasCallStack, HasAgentConfig) => Blob -> Prog -> IO Blob
@@ -227,28 +225,24 @@ create :: (HasCallStack, HasAgentConfig) => Blob -> IO Blob
 create ecid = ic_provisional_create ic00 ecid Nothing (Just (2 ^ (60 :: Int))) Nothing
 
 upgrade' :: (HasCallStack, HasAgentConfig) => Blob -> Prog -> IO ReqResponse
-upgrade' cid prog = ic_install_single_chunk' ic00 (enumNothing #upgrade) cid store_canister_id ucan_chunk_hash (run prog)
-  where
-    Just store_canister_id = tc_store_canister_id agentConfig
-    Just ucan_chunk_hash = tc_ucan_chunk_hash agentConfig
+upgrade' cid prog = do
+  universal_wasm <- getTestWasm "universal_canister.wasm.gz"
+  ic_install' ic00 (enumNothing #upgrade) cid universal_wasm (run prog)
 
 upgrade :: (HasCallStack, HasAgentConfig) => Blob -> Prog -> IO ()
-upgrade cid prog = ic_install_single_chunk ic00 (enumNothing #upgrade) cid store_canister_id ucan_chunk_hash (run prog)
-  where
-    Just store_canister_id = tc_store_canister_id agentConfig
-    Just ucan_chunk_hash = tc_ucan_chunk_hash agentConfig
+upgrade cid prog = do
+  universal_wasm <- getTestWasm "universal_canister.wasm.gz"
+  ic_install ic00 (enumNothing #upgrade) cid universal_wasm (run prog)
 
 reinstall' :: (HasCallStack, HasAgentConfig) => Blob -> Prog -> IO ReqResponse
-reinstall' cid prog = ic_install_single_chunk' ic00 (enum #reinstall) cid store_canister_id ucan_chunk_hash (run prog)
-  where
-    Just store_canister_id = tc_store_canister_id agentConfig
-    Just ucan_chunk_hash = tc_ucan_chunk_hash agentConfig
+reinstall' cid prog = do
+  universal_wasm <- getTestWasm "universal_canister.wasm.gz"
+  ic_install' ic00 (enum #reinstall) cid universal_wasm (run prog)
 
 reinstall :: (HasCallStack, HasAgentConfig) => Blob -> Prog -> IO ()
-reinstall cid prog = ic_install_single_chunk ic00 (enum #reinstall) cid store_canister_id ucan_chunk_hash (run prog)
-  where
-    Just store_canister_id = tc_store_canister_id agentConfig
-    Just ucan_chunk_hash = tc_ucan_chunk_hash agentConfig
+reinstall cid prog = do
+  universal_wasm <- getTestWasm "universal_canister.wasm.gz"
+  ic_install ic00 (enum #reinstall) cid universal_wasm (run prog)
 
 callRequestAs :: (HasCallStack, HasAgentConfig) => Blob -> Blob -> Prog -> GenR
 callRequestAs user cid prog =
@@ -351,11 +345,7 @@ isRelay =
 
 -- Shortcut for test cases that just need one canister.
 simpleTestCase :: (HasCallStack, HasAgentConfig) => String -> Blob -> (Blob -> IO ()) -> TestTree
-simpleTestCase name ecid act = testCase name $ do
-  cid <- install ecid noop
-  act cid
-  ic_stop_canister ic00 cid
-  ic_delete_canister ic00 cid
+simpleTestCase name ecid act = testCase name $ install ecid noop >>= act
 
 -- * Programmatic test generation
 

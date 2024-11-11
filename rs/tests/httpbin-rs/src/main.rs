@@ -10,7 +10,7 @@ use std::{
 use axum::{
     body::Body,
     extract::{Path, Request},
-    http::{HeaderMap, HeaderName, Method, StatusCode},
+    http::{HeaderMap, HeaderName, Method, StatusCode, Uri},
     middleware::map_response,
     response::{Html, IntoResponse, Redirect, Response},
     routing::{get, post},
@@ -26,20 +26,17 @@ use rustls::ServerConfig;
 use serde_json::json;
 use tokio::{
     net::TcpListener,
-    select, signal,
     time::{sleep, Duration},
 };
 use tokio_rustls::TlsAcceptor;
 use tower::Service;
 
-const DETERMINISTIC_HEADERS: [(&str, &str); 3] = [
-    ("access-control-allow-origin", "*"),
-    ("access-control-allow-credentials", "true"),
-    ("date", "Jan 1 1970 00:00:00 GMT"),
+const DETERMINISTIC_HEADERS: [(&str, &str); 4] = [
+    ("Access-Control-Allow-Origin", "*"),
+    ("Access-Control-Allow-Credentials", "true"),
+    ("Connection", "close"),
+    ("Date", "Jan 1 1970 00:00:00 GMT"),
 ];
-
-/// Set a very large limit for the headers to accept.
-const MAX_HEADER_LIST_SIZE: u32 = 1024 * 1024; // 1MiB
 
 /// Returns a normal HTML response
 async fn root_handler() -> Html<&'static str> {
@@ -88,7 +85,8 @@ async fn redirect_handler(Path(n): Path<u64>) -> impl IntoResponse {
 }
 
 /// Builds the response body using the request
-async fn anything_handler(method: Method, headers: HeaderMap, body: String) -> Vec<u8> {
+async fn anything_handler(method: Method, uri: Uri, headers: HeaderMap, body: String) -> Vec<u8> {
+    let host = headers.get("host").unwrap().to_str().unwrap_or("");
     let headers = headers
         .iter()
         .map(|h| (h.0.to_string(), h.1.to_str().unwrap().to_string()))
@@ -98,6 +96,7 @@ async fn anything_handler(method: Method, headers: HeaderMap, body: String) -> V
         "method": method.to_string(),
         "headers": headers,
         "data": body,
+        "url": format!("https://{}{}", host, uri),
     })
     .to_string();
 
@@ -270,8 +269,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         port_file.write_all(real_port.to_string().as_bytes())?;
     }
 
-    let mut pinned_shutdown_signal = std::pin::pin!(shutdown_signal());
-
     match (args.cert_file, args.key_file) {
         (Some(cert_file), Some(key_file)) => {
             // Load public certificate.
@@ -292,66 +289,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             let tls_acceptor = TlsAcceptor::from(Arc::new(config));
 
             loop {
-                select! {
-                    connection = listener.accept() => {
-                        let (tcp_stream, _) = connection?;
-                        let tls_acceptor = tls_acceptor.clone();
+                let (tcp_stream, _remote_addr) = listener.accept().await?;
 
-                        let router = router();
-                        let hyper_service =
-                            hyper::service::service_fn(move |request: Request<Incoming>| {
-                                router.clone().call(request)
-                            });
+                let tls_acceptor = tls_acceptor.clone();
 
-                        tokio::spawn(async move {
-                            let tls_stream = match tls_acceptor.accept(tcp_stream).await {
-                                Ok(tls_stream) => tls_stream,
-                                Err(err) => {
-                                    eprintln!("failed to perform tls handshake: {err:#}");
-                                    return;
-                                }
-                            };
-                            if let Err(err) = Builder::new(TokioExecutor::new())
-                                .http2()
-                                .max_header_list_size(MAX_HEADER_LIST_SIZE)
-                                .serve_connection(TokioIo::new(tls_stream), hyper_service)
-                                .await
-                            {
-                                eprintln!("failed to serve connection: {err:#}");
-                            }
-                        });
+                let router = router();
+                let hyper_service =
+                    hyper::service::service_fn(move |request: Request<Incoming>| {
+                        router.clone().call(request)
+                    });
+
+                tokio::spawn(async move {
+                    let tls_stream = match tls_acceptor.accept(tcp_stream).await {
+                        Ok(tls_stream) => tls_stream,
+                        Err(err) => {
+                            eprintln!("failed to perform tls handshake: {err:#}");
+                            return;
+                        }
+                    };
+                    if let Err(err) = Builder::new(TokioExecutor::new())
+                        .serve_connection(TokioIo::new(tls_stream), hyper_service)
+                        .await
+                    {
+                        eprintln!("failed to serve connection: {err:#}");
                     }
-                    _ = &mut pinned_shutdown_signal => {
-                        break;
-                    }
-                };
+                });
             }
         }
-        _ => {
-            axum::serve(listener, router())
-                .with_graceful_shutdown(shutdown_signal())
-                .await?
-        }
+        _ => axum::serve(listener, router()).await?,
     };
     Ok(())
-}
-
-async fn shutdown_signal() {
-    let ctrl_c = async {
-        signal::ctrl_c()
-            .await
-            .expect("failed to install Ctrl+C handler");
-    };
-
-    let terminate = async {
-        signal::unix::signal(signal::unix::SignalKind::terminate())
-            .expect("failed to install signal handler")
-            .recv()
-            .await;
-    };
-
-    tokio::select! {
-        _ = ctrl_c => {},
-        _ = terminate => {},
-    }
 }

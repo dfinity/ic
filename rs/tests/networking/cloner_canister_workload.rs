@@ -41,7 +41,7 @@ const TEST_TIMEOUT: Duration = Duration::from_secs(4 * 60 * 60); // 4 hours
 /// Time to keep the testnet alive once all canisters are installed
 const TESTNET_LIFETIME_AFTER_SETUP: Duration = Duration::from_secs(60 * 60); // 1 hour
 
-const COUNTER_CANISTER_WAT: &str = "rs/tests/counter.wat";
+const COUNTER_CANISTER_WAT: &str = "rs/tests/src/counter.wat";
 
 const SUBNET_SIZE: usize = 13;
 const INITIAL_NOTARY_DELAY: Duration = Duration::from_millis(200);

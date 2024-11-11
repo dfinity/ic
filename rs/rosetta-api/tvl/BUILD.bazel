@@ -89,7 +89,6 @@ DEV_DEPENDENCIES = [
     "//rs/rosetta-api/tvl/xrc_mock",
     "//rs/state_machine_tests",
     "//rs/test_utilities/load_wasm",
-    "//rs/types/base_types",
     "@crate_index//:assert_matches",
     "@crate_index//:candid",
     "@crate_index//:rand",

@@ -2,7 +2,6 @@ use ic00::{
     CanisterSettingsArgsBuilder, CanisterSnapshotResponse, LoadCanisterSnapshotArgs,
     TakeCanisterSnapshotArgs,
 };
-use ic_base_types::PrincipalId;
 use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
 use ic_crypto_sha2::Sha256;
 use ic_error_types::{ErrorCode, UserError};
@@ -16,7 +15,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::{
     CanisterHistory, MAX_CANISTER_HISTORY_CHANGES,
 };
-use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
+use ic_state_machine_tests::{PrincipalId, StateMachine, StateMachineBuilder, StateMachineConfig};
 use ic_types::{ingress::WasmResult, CanisterId, Cycles};
 use ic_types_test_utils::ids::user_test_id;
 use ic_universal_canister::{
@@ -1000,7 +999,9 @@ fn canister_history_load_snapshot_fails_incorrect_sender_version() {
     let (_, test_canister, test_canister_sha256) = test_setup(SubnetType::Application, now);
 
     // Set up StateMachine
-    let env = StateMachineBuilder::new().build();
+    let env = StateMachineBuilder::new()
+        .with_canister_snapshots(true)
+        .build();
     // Set time of StateMachine to current system time
     env.set_time(now);
 

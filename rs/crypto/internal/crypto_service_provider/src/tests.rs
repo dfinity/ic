@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 mod csp_tests {
     use crate::api::CspSigner;
     use crate::Csp;

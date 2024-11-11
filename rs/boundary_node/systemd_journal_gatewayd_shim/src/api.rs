@@ -7,6 +7,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+use ic_async_utils::axum::BodyDataStream;
 use itertools::{concat, Itertools};
 use reqwest::Method;
 use url::Url;
@@ -92,7 +93,7 @@ pub(crate) async fn entries(
     });
 
     let (parts, body) = req.into_parts();
-    let body_stream = body.into_data_stream();
+    let body_stream = BodyDataStream::new(body);
 
     let mut upstream_req = reqwest::Request::new(Method::GET, u);
 

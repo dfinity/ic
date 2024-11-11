@@ -57,17 +57,17 @@ pub struct GitRepository {
 }
 
 impl GitRepository {
-    pub fn clone(url: &str) -> Self {
+    pub fn clone_ic() -> Self {
         let repo = TempDir::new().expect("failed to create a temporary directory");
         // Blobless clone
         // see https://github.blog/2020-12-21-get-up-to-speed-with-partial-clone-and-shallow-clone/
         let git_clone = Command::new("git")
             .arg("clone")
             .arg("--filter=blob:none")
-            .arg(url)
+            .arg("https://github.com/dfinity/ic.git")
             .arg(repo.path())
             .status()
-            .expect("failed to clone the repository");
+            .expect("failed to clone the IC repository");
         assert!(git_clone.success());
 
         GitRepository { dir: repo }
@@ -159,7 +159,7 @@ impl GitRepository {
             git_log.arg(repo_dir);
         }
         let log = git_log.output().expect("failed to run git log");
-        assert!(log.status.success(), "failed to run git log: {:?}", log);
+        assert!(log.status.success());
 
         let executed_command = iter::once(git_log.get_program())
             .chain(git_log.get_args())
@@ -183,21 +183,16 @@ impl GitRepository {
         &mut self,
         canister: &[TargetCanister],
     ) -> Vec<CompressedWasmHash> {
-        canister
-            .iter()
-            .map(|c| {
-                self.build_canister_artifact(c);
-                self.sha256_artifact(c)
-            })
-            .collect()
+        self.build_canisters();
+        canister.iter().map(|c| self.sha256_artifact(c)).collect()
     }
 
-    fn build_canister_artifact(&mut self, canister: &TargetCanister) {
-        let build = canister
-            .build_artifact()
+    fn build_canisters(&mut self) {
+        let build = Command::new("./ci/container/build-ic.sh")
+            .arg("--canisters")
             .current_dir(self.dir.path())
             .status()
-            .expect("failed to build canister artifact");
+            .expect("failed to build canister artifacts");
         assert!(build.success());
     }
 

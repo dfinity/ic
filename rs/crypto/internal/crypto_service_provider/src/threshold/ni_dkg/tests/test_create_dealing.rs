@@ -72,6 +72,7 @@ impl StateWithConfig {
 
         let dealing = dealer_node.create_dealing(
             incorrect_algorithm_id,
+            self.config.dkg_id,
             self.config
                 .dealers
                 .position(dealer_node.node_id)
@@ -121,6 +122,7 @@ impl StateWithConfig {
         for incorrect_threshold in &[0, num_receivers + 1, num_receivers + 2] {
             let dealing = dealer_node.create_dealing(
                 self.config.algorithm_id,
+                self.config.dkg_id,
                 self.config
                     .dealers
                     .position(dealer_node.node_id)
@@ -166,6 +168,7 @@ impl StateWithConfig {
 
         let dealing = dealer_node.create_dealing(
             self.config.algorithm_id,
+            self.config.dkg_id,
             self.config
                 .dealers
                 .position(dealer_node.node_id)

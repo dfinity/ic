@@ -276,7 +276,7 @@ top_up_canister() {
         --amount "$AMOUNT" "$CANISTER"
 }
 
-# Note, this will be deprecated soon when get_state is deprecated from swap canister.
+# Note, this will be deprecated soon when get_state is deprecated from sale canister.
 call_swap() {
     local NNS_URL=$1
     local SWAP_CANISTER_ID=$2
@@ -290,7 +290,7 @@ call_swap() {
         $SWAP_CANISTER_ID $METHOD '(record {})'
 }
 
-sns_quill_participate_in_swap() {
+sns_quill_participate_in_sale() {
     ensure_variable_set SNS_QUILL
 
     # Please forgive me we need separate urls for these subnets until we get the boundary node in the script :(
@@ -347,7 +347,7 @@ sns_get_sns_canisters_summary() {
         "$SNS_ROOT_CANISTER_ID" get_sns_canisters_summary '(record {})'
 }
 
-sns_finalize_swap() {
+sns_finalize_sale() {
     local SNS_URL=$1
     local SWAP_CANISTER_ID=$2
 

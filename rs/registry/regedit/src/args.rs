@@ -36,15 +36,17 @@ pub enum CommandArg {
         keys: Option<String>,
 
         /// Path to the local store (may not be specified together with --url).
+        #[clap(parse(from_os_str))]
         local_store_path: PathBuf,
     },
     CanisterToProto {
         /// Url to a node hosting the registry canister (may not be specified
         /// together with --local-store).
-        #[clap(long)]
+        #[clap(long, parse(try_from_str = url::Url::parse))]
         url: Url,
 
         /// Path to the local store (may not be specified together with --url).
+        #[clap(parse(from_os_str))]
         path: PathBuf,
 
         /// The registry version where the delta starts. (default: 0)
@@ -58,6 +60,7 @@ pub enum CommandArg {
         /// Optional path to the threshold public key of the root subnet
         /// (a.k.a. NNS public key). One way to get this key is via
         /// "ic-admin --nns-url https://nns.ic0.app  get-subnet-public-key"
+        #[clap(parse(from_os_str))]
         nns_public_key: Option<PathBuf>,
     },
     ShowDiff {
@@ -67,9 +70,11 @@ pub enum CommandArg {
         version: Option<i64>,
 
         /// Path to the local store (may not be specified together with --url).
+        #[clap(parse(from_os_str))]
         local_store_path: PathBuf,
 
         /// Path to the local store (may not be specified together with --url).
+        #[clap(parse(from_os_str))]
         snapshot_file: PathBuf,
     },
     ApplyUpdate {
@@ -79,21 +84,23 @@ pub enum CommandArg {
         amend: bool,
 
         /// Path to the local store (may not be specified together with --url).
+        #[clap(parse(from_os_str))]
         local_store_path: PathBuf,
 
         /// Path to the local store (may not be specified together with --url).
+        #[clap(parse(from_os_str))]
         snapshot_file: PathBuf,
     },
     CanisterSnapshot {
         /// Url to a node hosting the registry canister (may not be specified
         /// together with --local-store).
-        #[clap(long)]
+        #[clap(long, parse(try_from_str = url::Url::parse))]
         url: Url,
 
         /// Optional path to the threshold public key of the root subnet
         /// (a.k.a. NNS public key). One way to get this key is via
         /// "ic-admin --nns-url https://nns.ic0.app  get-subnet-public-key"
-        #[clap(long)]
+        #[clap(long, parse(from_os_str))]
         nns_public_key: Option<PathBuf>,
 
         /// The registry version of the snapshot. (default: latest available
@@ -113,12 +120,13 @@ pub enum CommandArg {
     CanisterShowDiff {
         /// Url to a node hosting the registry canister (may not be specified
         /// together with --local-store).
-        #[clap(long)]
+        #[clap(long, parse(try_from_str = url::Url::parse))]
         url: Url,
 
         /// Optional path to the threshold public key of the root subnet
         /// (a.k.a. NNS public key). One way to get this key is via
         /// "ic-admin --nns-url https://nns.ic0.app  get-subnet-public-key"
+        #[clap(parse(from_os_str))]
         nns_public_key: Option<PathBuf>,
 
         /// The registry version of the snapshot. (default: latest available
@@ -127,6 +135,7 @@ pub enum CommandArg {
         version: Option<i64>,
 
         /// Path to the local store (may not be specified together with --url).
+        #[clap(parse(from_os_str))]
         snapshot_file: PathBuf,
     },
 }

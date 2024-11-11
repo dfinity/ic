@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 //! Tests for threshold signature implementations
 
 use crate::api::ThresholdSignatureCspClient;

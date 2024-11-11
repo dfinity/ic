@@ -17,18 +17,17 @@ use ic_base_types::{
     CanisterId, NodeId, NumBytes, PrincipalId, RegistryVersion, SnapshotId, SubnetId,
 };
 use ic_error_types::{ErrorCode, UserError};
-use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::proxy::{try_decode_hash, try_from_option_field};
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::subnet::v1::{InitialIDkgDealings, InitialNiDkgTranscriptRecord};
 use ic_protobuf::state::canister_state_bits::v1::{self as pb_canister_state_bits};
-use ic_protobuf::types::v1 as pb_types;
 use ic_protobuf::types::v1::CanisterInstallModeV2 as CanisterInstallModeV2Proto;
 use ic_protobuf::types::v1::{
     CanisterInstallMode as CanisterInstallModeProto,
     CanisterUpgradeOptions as CanisterUpgradeOptionsProto,
     WasmMemoryPersistence as WasmMemoryPersistenceProto,
 };
+use ic_protobuf::{proxy::ProxyDecodeError, registry::crypto::v1 as pb_registry_crypto};
 use num_traits::cast::ToPrimitive;
 pub use provisional::{ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs};
 use serde::Serialize;
@@ -122,7 +121,7 @@ pub enum Method {
 fn candid_error_to_user_error(err: candid::Error) -> UserError {
     UserError::new(
         ErrorCode::InvalidManagementPayload,
-        format!("Error decoding candid: {:#}", err),
+        format!("Error decoding candid: {:?}", err),
     )
 }
 
@@ -869,7 +868,6 @@ impl TryFrom<pb_canister_state_bits::LogVisibilityV2> for LogVisibilityV2 {
 ///     reserved_cycles_limit: nat;
 ///     log_visibility: log_visibility;
 ///     wasm_memory_limit: nat;
-///     wasm_memory_threshold: nat;
 /// })`
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct DefiniteCanisterSettingsArgs {
@@ -881,7 +879,6 @@ pub struct DefiniteCanisterSettingsArgs {
     reserved_cycles_limit: candid::Nat,
     log_visibility: LogVisibilityV2,
     wasm_memory_limit: candid::Nat,
-    wasm_memory_threshold: candid::Nat,
 }
 
 impl DefiniteCanisterSettingsArgs {
@@ -894,7 +891,6 @@ impl DefiniteCanisterSettingsArgs {
         reserved_cycles_limit: Option<u128>,
         log_visibility: LogVisibilityV2,
         wasm_memory_limit: Option<u64>,
-        wasm_memory_threshold: u64,
     ) -> Self {
         let memory_allocation = candid::Nat::from(memory_allocation.unwrap_or(0));
         let reserved_cycles_limit = candid::Nat::from(reserved_cycles_limit.unwrap_or(0));
@@ -908,7 +904,6 @@ impl DefiniteCanisterSettingsArgs {
             reserved_cycles_limit,
             log_visibility,
             wasm_memory_limit,
-            wasm_memory_threshold: candid::Nat::from(wasm_memory_threshold),
         }
     }
 
@@ -926,18 +921,6 @@ impl DefiniteCanisterSettingsArgs {
 
     pub fn wasm_memory_limit(&self) -> candid::Nat {
         self.wasm_memory_limit.clone()
-    }
-
-    pub fn compute_allocation(&self) -> candid::Nat {
-        self.compute_allocation.clone()
-    }
-
-    pub fn memory_allocation(&self) -> candid::Nat {
-        self.memory_allocation.clone()
-    }
-
-    pub fn freezing_threshold(&self) -> candid::Nat {
-        self.freezing_threshold.clone()
     }
 }
 
@@ -1062,7 +1045,6 @@ impl CanisterStatusResultV2 {
         query_ingress_payload_size: u128,
         query_egress_payload_size: u128,
         wasm_memory_limit: Option<u64>,
-        wasm_memory_threshold: u64,
     ) -> Self {
         Self {
             status,
@@ -1082,7 +1064,6 @@ impl CanisterStatusResultV2 {
                 reserved_cycles_limit,
                 log_visibility,
                 wasm_memory_limit,
-                wasm_memory_threshold,
             ),
             freezing_threshold: candid::Nat::from(freezing_threshold),
             idle_cycles_burned_per_day: candid::Nat::from(idle_cycles_burned_per_day),
@@ -2041,21 +2022,21 @@ pub enum EcdsaCurve {
     Secp256k1,
 }
 
-impl From<&EcdsaCurve> for pb_types::EcdsaCurve {
+impl From<&EcdsaCurve> for pb_registry_crypto::EcdsaCurve {
     fn from(item: &EcdsaCurve) -> Self {
         match item {
-            EcdsaCurve::Secp256k1 => pb_types::EcdsaCurve::Secp256k1,
+            EcdsaCurve::Secp256k1 => pb_registry_crypto::EcdsaCurve::Secp256k1,
         }
     }
 }
 
-impl TryFrom<pb_types::EcdsaCurve> for EcdsaCurve {
+impl TryFrom<pb_registry_crypto::EcdsaCurve> for EcdsaCurve {
     type Error = ProxyDecodeError;
 
-    fn try_from(item: pb_types::EcdsaCurve) -> Result<Self, Self::Error> {
+    fn try_from(item: pb_registry_crypto::EcdsaCurve) -> Result<Self, Self::Error> {
         match item {
-            pb_types::EcdsaCurve::Secp256k1 => Ok(EcdsaCurve::Secp256k1),
-            pb_types::EcdsaCurve::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
+            pb_registry_crypto::EcdsaCurve::Secp256k1 => Ok(EcdsaCurve::Secp256k1),
+            pb_registry_crypto::EcdsaCurve::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
                 typ: "EcdsaCurve",
                 err: format!("Unable to convert {:?} to an EcdsaCurve", item),
             }),
@@ -2094,25 +2075,27 @@ pub struct EcdsaKeyId {
     pub name: String,
 }
 
-impl From<&EcdsaKeyId> for pb_types::EcdsaKeyId {
+impl From<&EcdsaKeyId> for pb_registry_crypto::EcdsaKeyId {
     fn from(item: &EcdsaKeyId) -> Self {
         Self {
-            curve: pb_types::EcdsaCurve::from(&item.curve) as i32,
+            curve: pb_registry_crypto::EcdsaCurve::from(&item.curve) as i32,
             name: item.name.clone(),
         }
     }
 }
 
-impl TryFrom<pb_types::EcdsaKeyId> for EcdsaKeyId {
+impl TryFrom<pb_registry_crypto::EcdsaKeyId> for EcdsaKeyId {
     type Error = ProxyDecodeError;
-    fn try_from(item: pb_types::EcdsaKeyId) -> Result<Self, Self::Error> {
+    fn try_from(item: pb_registry_crypto::EcdsaKeyId) -> Result<Self, Self::Error> {
         Ok(Self {
-            curve: EcdsaCurve::try_from(pb_types::EcdsaCurve::try_from(item.curve).map_err(
-                |_| ProxyDecodeError::ValueOutOfRange {
-                    typ: "EcdsaKeyId",
-                    err: format!("Unable to convert {} to an EcdsaCurve", item.curve),
-                },
-            )?)?,
+            curve: EcdsaCurve::try_from(
+                pb_registry_crypto::EcdsaCurve::try_from(item.curve).map_err(|_| {
+                    ProxyDecodeError::ValueOutOfRange {
+                        typ: "EcdsaKeyId",
+                        err: format!("Unable to convert {} to an EcdsaCurve", item.curve),
+                    }
+                })?,
+            )?,
             name: item.name,
         })
     }
@@ -2162,26 +2145,32 @@ pub enum SchnorrAlgorithm {
     Ed25519,
 }
 
-impl From<&SchnorrAlgorithm> for pb_types::SchnorrAlgorithm {
+impl From<&SchnorrAlgorithm> for pb_registry_crypto::SchnorrAlgorithm {
     fn from(item: &SchnorrAlgorithm) -> Self {
         match item {
-            SchnorrAlgorithm::Bip340Secp256k1 => pb_types::SchnorrAlgorithm::Bip340secp256k1,
-            SchnorrAlgorithm::Ed25519 => pb_types::SchnorrAlgorithm::Ed25519,
+            SchnorrAlgorithm::Bip340Secp256k1 => {
+                pb_registry_crypto::SchnorrAlgorithm::Bip340secp256k1
+            }
+            SchnorrAlgorithm::Ed25519 => pb_registry_crypto::SchnorrAlgorithm::Ed25519,
         }
     }
 }
 
-impl TryFrom<pb_types::SchnorrAlgorithm> for SchnorrAlgorithm {
+impl TryFrom<pb_registry_crypto::SchnorrAlgorithm> for SchnorrAlgorithm {
     type Error = ProxyDecodeError;
 
-    fn try_from(item: pb_types::SchnorrAlgorithm) -> Result<Self, Self::Error> {
+    fn try_from(item: pb_registry_crypto::SchnorrAlgorithm) -> Result<Self, Self::Error> {
         match item {
-            pb_types::SchnorrAlgorithm::Bip340secp256k1 => Ok(SchnorrAlgorithm::Bip340Secp256k1),
-            pb_types::SchnorrAlgorithm::Ed25519 => Ok(SchnorrAlgorithm::Ed25519),
-            pb_types::SchnorrAlgorithm::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
-                typ: "SchnorrAlgorithm",
-                err: format!("Unable to convert {:?} to a SchnorrAlgorithm", item),
-            }),
+            pb_registry_crypto::SchnorrAlgorithm::Bip340secp256k1 => {
+                Ok(SchnorrAlgorithm::Bip340Secp256k1)
+            }
+            pb_registry_crypto::SchnorrAlgorithm::Ed25519 => Ok(SchnorrAlgorithm::Ed25519),
+            pb_registry_crypto::SchnorrAlgorithm::Unspecified => {
+                Err(ProxyDecodeError::ValueOutOfRange {
+                    typ: "SchnorrAlgorithm",
+                    err: format!("Unable to convert {:?} to a SchnorrAlgorithm", item),
+                })
+            }
         }
     }
 }
@@ -2218,26 +2207,27 @@ pub struct SchnorrKeyId {
     pub name: String,
 }
 
-impl From<&SchnorrKeyId> for pb_types::SchnorrKeyId {
+impl From<&SchnorrKeyId> for pb_registry_crypto::SchnorrKeyId {
     fn from(item: &SchnorrKeyId) -> Self {
         Self {
-            algorithm: pb_types::SchnorrAlgorithm::from(&item.algorithm) as i32,
+            algorithm: pb_registry_crypto::SchnorrAlgorithm::from(&item.algorithm) as i32,
             name: item.name.clone(),
         }
     }
 }
 
-impl TryFrom<pb_types::SchnorrKeyId> for SchnorrKeyId {
+impl TryFrom<pb_registry_crypto::SchnorrKeyId> for SchnorrKeyId {
     type Error = ProxyDecodeError;
-    fn try_from(item: pb_types::SchnorrKeyId) -> Result<Self, Self::Error> {
-        let pb_types::SchnorrKeyId { algorithm, name } = item;
-        let algorithm =
-            SchnorrAlgorithm::try_from(pb_types::SchnorrAlgorithm::try_from(algorithm).map_err(
-                |_| ProxyDecodeError::ValueOutOfRange {
+    fn try_from(item: pb_registry_crypto::SchnorrKeyId) -> Result<Self, Self::Error> {
+        let pb_registry_crypto::SchnorrKeyId { algorithm, name } = item;
+        let algorithm = SchnorrAlgorithm::try_from(
+            pb_registry_crypto::SchnorrAlgorithm::try_from(algorithm).map_err(|_| {
+                ProxyDecodeError::ValueOutOfRange {
                     typ: "SchnorrKeyId",
                     err: format!("Unable to convert {} to a SchnorrAlgorithm", algorithm),
-                },
-            )?)?;
+                }
+            })?,
+        )?;
         Ok(Self { algorithm, name })
     }
 }
@@ -2261,127 +2251,6 @@ impl FromStr for SchnorrKeyId {
     }
 }
 
-/// Types of curves that can be used for threshold key derivation (vetKD).
-/// ```text
-/// (variant { bls12_381_g2; })
-/// ```
-#[derive(
-    Copy,
-    Clone,
-    Eq,
-    PartialEq,
-    Ord,
-    PartialOrd,
-    Hash,
-    Debug,
-    CandidType,
-    Deserialize,
-    EnumIter,
-    Serialize,
-)]
-pub enum VetKdCurve {
-    #[serde(rename = "bls12_381_g2")]
-    #[allow(non_camel_case_types)]
-    Bls12_381_G2,
-}
-
-impl From<&VetKdCurve> for pb_types::VetKdCurve {
-    fn from(item: &VetKdCurve) -> Self {
-        match item {
-            VetKdCurve::Bls12_381_G2 => pb_types::VetKdCurve::Bls12381G2,
-        }
-    }
-}
-
-impl TryFrom<pb_types::VetKdCurve> for VetKdCurve {
-    type Error = ProxyDecodeError;
-
-    fn try_from(item: pb_types::VetKdCurve) -> Result<Self, Self::Error> {
-        match item {
-            pb_types::VetKdCurve::Bls12381G2 => Ok(VetKdCurve::Bls12_381_G2),
-            pb_types::VetKdCurve::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
-                typ: "VetKdCurve",
-                err: format!("Unable to convert {:?} to a VetKdCurve", item),
-            }),
-        }
-    }
-}
-
-impl std::fmt::Display for VetKdCurve {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
-impl FromStr for VetKdCurve {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "bls12_381_g2" => Ok(Self::Bls12_381_G2),
-            _ => Err(format!("{} is not a recognized vetKD curve", s)),
-        }
-    }
-}
-
-/// Unique identifier for a key that can be used for threshold key derivation
-/// (vetKD). The name is just an identifier, but it may be used to convey
-/// some information about the key (e.g. that the key is meant to be used for
-/// testing purposes).
-/// ```text
-/// (record { curve: vetkd_curve; name: text})
-/// ```
-#[derive(
-    Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, CandidType, Deserialize, Serialize,
-)]
-pub struct VetKdKeyId {
-    pub curve: VetKdCurve,
-    pub name: String,
-}
-
-impl From<&VetKdKeyId> for pb_types::VetKdKeyId {
-    fn from(item: &VetKdKeyId) -> Self {
-        Self {
-            curve: pb_types::VetKdCurve::from(&item.curve) as i32,
-            name: item.name.clone(),
-        }
-    }
-}
-
-impl TryFrom<pb_types::VetKdKeyId> for VetKdKeyId {
-    type Error = ProxyDecodeError;
-    fn try_from(item: pb_types::VetKdKeyId) -> Result<Self, Self::Error> {
-        Ok(Self {
-            curve: VetKdCurve::try_from(pb_types::VetKdCurve::try_from(item.curve).map_err(
-                |_| ProxyDecodeError::ValueOutOfRange {
-                    typ: "VetKdKeyId",
-                    err: format!("Unable to convert {} to a VetKdCurve", item.curve),
-                },
-            )?)?,
-            name: item.name,
-        })
-    }
-}
-
-impl std::fmt::Display for VetKdKeyId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}:{}", self.curve, self.name)
-    }
-}
-
-impl FromStr for VetKdKeyId {
-    type Err = String;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (curve, name) = s
-            .split_once(':')
-            .ok_or_else(|| format!("vetKD key id {} does not contain a ':'", s))?;
-        Ok(VetKdKeyId {
-            curve: curve.parse::<VetKdCurve>()?,
-            name: name.to_string(),
-        })
-    }
-}
-
 /// Unique identifier for a key that can be used for one of the signature schemes
 /// supported on the IC.
 /// ```text
@@ -2393,16 +2262,14 @@ impl FromStr for VetKdKeyId {
 pub enum MasterPublicKeyId {
     Ecdsa(EcdsaKeyId),
     Schnorr(SchnorrKeyId),
-    VetKd(VetKdKeyId),
 }
 
-impl From<&MasterPublicKeyId> for pb_types::MasterPublicKeyId {
+impl From<&MasterPublicKeyId> for pb_registry_crypto::MasterPublicKeyId {
     fn from(item: &MasterPublicKeyId) -> Self {
-        use pb_types::master_public_key_id::KeyId;
+        use pb_registry_crypto::master_public_key_id::KeyId;
         let key_id_pb = match item {
             MasterPublicKeyId::Schnorr(schnorr_key_id) => KeyId::Schnorr(schnorr_key_id.into()),
             MasterPublicKeyId::Ecdsa(ecdsa_key_id) => KeyId::Ecdsa(ecdsa_key_id.into()),
-            MasterPublicKeyId::VetKd(vetkd_key_id) => KeyId::Vetkd(vetkd_key_id.into()),
         };
         Self {
             key_id: Some(key_id_pb),
@@ -2410,10 +2277,10 @@ impl From<&MasterPublicKeyId> for pb_types::MasterPublicKeyId {
     }
 }
 
-impl TryFrom<pb_types::MasterPublicKeyId> for MasterPublicKeyId {
+impl TryFrom<pb_registry_crypto::MasterPublicKeyId> for MasterPublicKeyId {
     type Error = ProxyDecodeError;
-    fn try_from(item: pb_types::MasterPublicKeyId) -> Result<Self, Self::Error> {
-        use pb_types::master_public_key_id::KeyId;
+    fn try_from(item: pb_registry_crypto::MasterPublicKeyId) -> Result<Self, Self::Error> {
+        use pb_registry_crypto::master_public_key_id::KeyId;
         let Some(key_id_pb) = item.key_id else {
             return Err(ProxyDecodeError::MissingField("MasterPublicKeyId::key_id"));
         };
@@ -2422,7 +2289,6 @@ impl TryFrom<pb_types::MasterPublicKeyId> for MasterPublicKeyId {
                 MasterPublicKeyId::Schnorr(schnorr_key_id.try_into()?)
             }
             KeyId::Ecdsa(ecdsa_key_id) => MasterPublicKeyId::Ecdsa(ecdsa_key_id.try_into()?),
-            KeyId::Vetkd(vetkd_key_id) => MasterPublicKeyId::VetKd(vetkd_key_id.try_into()?),
         };
         Ok(master_public_key_id)
     }
@@ -2439,10 +2305,6 @@ impl std::fmt::Display for MasterPublicKeyId {
                 write!(f, "schnorr:")?;
                 schnorr_key_id.fmt(f)
             }
-            Self::VetKd(vetkd_key_id) => {
-                write!(f, "vetkd:")?;
-                vetkd_key_id.fmt(f)
-            }
         }
     }
 }
@@ -2456,7 +2318,6 @@ impl FromStr for MasterPublicKeyId {
         match scheme.to_lowercase().as_str() {
             "ecdsa" => Ok(Self::Ecdsa(EcdsaKeyId::from_str(key_id)?)),
             "schnorr" => Ok(Self::Schnorr(SchnorrKeyId::from_str(key_id)?)),
-            "vetkd" => Ok(Self::VetKd(VetKdKeyId::from_str(key_id)?)),
             _ => Err(format!(
                 "Scheme {} in master public key id {} is not supported.",
                 scheme, s
@@ -3137,14 +2998,17 @@ impl<'a> Payload<'a> for TakeCanisterSnapshotArgs {
     fn decode(blob: &'a [u8]) -> Result<Self, UserError> {
         let args = Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error)?;
 
-        if let Some(replace_snapshot) = &args.replace_snapshot {
-            // Verify that snapshot ID has the correct format.
-            if let Err(err) = SnapshotId::try_from(&replace_snapshot.clone().into_vec()) {
-                return Err(UserError::new(
-                    ErrorCode::InvalidManagementPayload,
-                    format!("Payload deserialization error: {err:?}"),
-                ));
+        match &args.replace_snapshot {
+            Some(replace_snapshot) => {
+                // Verify that snapshot ID has the correct format.
+                if let Err(err) = SnapshotId::try_from(&replace_snapshot.clone().into_vec()) {
+                    return Err(UserError::new(
+                        ErrorCode::InvalidManagementPayload,
+                        format!("Payload deserialization error: {err:?}"),
+                    ));
+                }
             }
+            None => {}
         }
         Ok(args)
     }
@@ -3483,26 +3347,6 @@ mod tests {
     }
 
     #[test]
-    fn vetkd_curve_round_trip() {
-        for curve in VetKdCurve::iter() {
-            assert_eq!(format!("{}", curve).parse::<VetKdCurve>().unwrap(), curve);
-        }
-    }
-
-    #[test]
-    fn vetkd_key_id_round_trip() {
-        for curve in VetKdCurve::iter() {
-            for name in ["bls12_381_g2", "", "other_key", "other key", "other:key"] {
-                let key = VetKdKeyId {
-                    curve,
-                    name: name.to_string(),
-                };
-                assert_eq!(format!("{}", key).parse::<VetKdKeyId>().unwrap(), key);
-            }
-        }
-    }
-
-    #[test]
     fn master_public_key_id_round_trip() {
         for algorithm in SchnorrAlgorithm::iter() {
             for name in ["Ed25519", "", "other_key", "other key", "other:key"] {
@@ -3520,19 +3364,6 @@ mod tests {
         for curve in EcdsaCurve::iter() {
             for name in ["secp256k1", "", "other_key", "other key", "other:key"] {
                 let key = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
-                    curve,
-                    name: name.to_string(),
-                });
-                assert_eq!(
-                    format!("{}", key).parse::<MasterPublicKeyId>().unwrap(),
-                    key
-                );
-            }
-        }
-
-        for curve in VetKdCurve::iter() {
-            for name in ["bls12_381_g2", "", "other_key", "other key", "other:key"] {
-                let key = MasterPublicKeyId::VetKd(VetKdKeyId {
                     curve,
                     name: name.to_string(),
                 });

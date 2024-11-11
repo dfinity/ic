@@ -303,7 +303,8 @@ fn canister_status(
         machine,
         CanisterId::ic_00(),
         "canister_status",
-        CanisterIdRecord::from(target),
+        candid_one,
+        &CanisterIdRecord::from(target),
         sender,
     )
 }

@@ -251,10 +251,24 @@ pub(crate) fn validation_error_to_http_error(
     err: RequestValidationError,
     log: &ReplicaLogger,
 ) -> HttpError {
-    info!(log, "msg_id: {}, err: {}", message_id, err);
-    HttpError {
-        status: StatusCode::BAD_REQUEST,
-        message: format!("{err}"),
+    match err {
+        RequestValidationError::InvalidIngressExpiry(message)
+        | RequestValidationError::InvalidDelegationExpiry(message) => HttpError {
+            status: StatusCode::BAD_REQUEST,
+            message,
+        },
+        _ => {
+            let message = format!(
+                "Failed to authenticate request {} due to: {}",
+                message_id, err
+            );
+            info!(log, "Unexpected http request validation error: {}", message);
+
+            HttpError {
+                status: StatusCode::FORBIDDEN,
+                message,
+            }
+        }
     }
 }
 

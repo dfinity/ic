@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 use crate::LocalCspVault;
 
 mod key_id_computations {

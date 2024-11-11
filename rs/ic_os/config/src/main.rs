@@ -3,7 +3,6 @@ use clap::{Parser, Subcommand};
 use config::config_ini::{get_config_ini_settings, ConfigIniSettings};
 use config::deployment_json::get_deployment_settings;
 use config::serialize_and_write_config;
-use mac_address::mac_address::{get_ipmi_mac, FormattedMacAddress};
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
@@ -107,31 +106,22 @@ pub fn main() -> Result<()> {
                 elasticsearch_tags: None,
             };
 
-            let mgmt_mac = match deployment_json_settings.deployment.mgmt_mac {
-                Some(config_mac) => {
-                    let mgmt_mac = FormattedMacAddress::try_from(config_mac.as_str())?;
-                    println!(
-                        "Using mgmt_mac address found in deployment.json: {}",
-                        mgmt_mac
-                    );
-                    mgmt_mac
-                }
-                None => get_ipmi_mac()?,
+            let icos_dev_settings = ICOSDevSettings {
+                mgmt_mac: deployment_json_settings.deployment.mgmt_mac,
             };
 
             let icos_settings = ICOSSettings {
-                mgmt_mac,
-                deployment_environment: deployment_json_settings.deployment.name,
                 logging,
                 nns_public_key_path: nns_public_key_path.to_path_buf(),
                 nns_urls: deployment_json_settings.nns.url.clone(),
+                hostname: deployment_json_settings.deployment.name.to_string(),
                 node_operator_private_key_path: node_operator_private_key_path
                     .exists()
                     .then_some(node_operator_private_key_path),
                 ssh_authorized_keys_path: ssh_authorized_keys_path
                     .exists()
                     .then_some(ssh_authorized_keys_path),
-                icos_dev_settings: ICOSDevSettings::default(),
+                icos_dev_settings,
             };
 
             let setupos_settings = SetupOSSettings;

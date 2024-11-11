@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 //! Signature tests
 
 use super::super::crypto;

@@ -1,4 +1,3 @@
-#![allow(clippy::disallowed_types)]
 use async_trait::async_trait;
 use ic_ledger_canister_blocks_synchronizer::blocks::{Blocks, HashedBlock, RosettaBlocksMode};
 use ic_ledger_canister_core::ledger::LedgerTransaction;

@@ -271,7 +271,7 @@ function generate_prep_material() {
 
 function build_bootstrap_images() {
     # Collect NNS URLs
-    NNS_URLS=()
+    NNS_URL=()
     for n in ${NODES}; do
         declare -n NODE=$n
         local ipv6_address=${NODE["ipv6_address"]}
@@ -282,11 +282,11 @@ function build_bootstrap_images() {
             continue
         fi
 
-        NNS_URLS+=("http://[${ipv6_address}]:8080")
+        NNS_URL+=("http://[${ipv6_address}]:8080")
     done
-    NNS_URLS=$(
+    NNS_URL=$(
         IFS=,
-        echo "${NNS_URLS[*]}"
+        echo "${NNS_URL[*]}"
     )
 
     for n in ${NODES}; do
@@ -318,7 +318,7 @@ function build_bootstrap_images() {
             "${OUTPUT}/${NODE_PREFIX}.img" \
             ${root_subnet:+"--ic_registry_local_store"} ${root_subnet:+"${IC_PREP_DIR}/ic_registry_local_store"} \
             ${use_crypto:+"--ic_crypto"} ${use_crypto:+"${IC_PREP_DIR}/node-${node_idx}/crypto/"} \
-            "--nns_urls" "${NNS_URLS}" \
+            "--nns_url" "${NNS_URL}" \
             "--nns_public_key" "${IC_PREP_DIR}/nns_public_key.pem" \
             "--hostname" "${hostname}" \
             "--accounts_ssh_authorized_keys" "${SSH}" \

@@ -2,7 +2,6 @@ use clap::Parser;
 use ic_types::{PrincipalId, SubnetId};
 use std::path::PathBuf;
 
-#[derive(Clone)]
 pub struct ClapSubnetId(pub SubnetId);
 
 impl std::str::FromStr for ClapSubnetId {

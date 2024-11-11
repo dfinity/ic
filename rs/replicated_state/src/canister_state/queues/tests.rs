@@ -657,20 +657,20 @@ fn test_shed_inbound_response() {
     const NO_LOCAL_CANISTERS: BTreeMap<CanisterId, CanisterState> = BTreeMap::new();
 
     // Shed the largest response (callback ID 3).
-    let memory_usage3 = queues.best_effort_message_memory_usage();
+    let memory_usage3 = queues.best_effort_memory_usage();
     assert!(queues.shed_largest_message(&this, &NO_LOCAL_CANISTERS));
-    let memory_usage2 = queues.best_effort_message_memory_usage();
+    let memory_usage2 = queues.best_effort_memory_usage();
     assert!(memory_usage2 < memory_usage3);
 
     // Shed the next largest response (callback ID 2).
     assert!(queues.shed_largest_message(&this, &NO_LOCAL_CANISTERS));
-    let memory_usage1 = queues.best_effort_message_memory_usage();
+    let memory_usage1 = queues.best_effort_memory_usage();
     assert!(memory_usage1 < memory_usage2);
 
     // Pop the response for callback ID 1.
     assert_matches!(queues.pop_input(), Some(CanisterInput::Response(response)) if response.originator_reply_callback.get() == 1);
     assert_eq!(2, queues.input_queues_response_count());
-    assert_eq!(0, queues.best_effort_message_memory_usage());
+    assert_eq!(0, queues.best_effort_memory_usage());
 
     // There's nothing else to shed.
     assert!(!queues.shed_largest_message(&this, &NO_LOCAL_CANISTERS));
@@ -2018,6 +2018,7 @@ fn decode_with_duplicate_reference() {
     // Replace the reference to the second response with a duplicate reference to
     // the third.
     let input_queue = encoded.canister_queues[0].input_queue.as_mut().unwrap();
+    input_queue.deprecated_queue[1] = input_queue.deprecated_queue.get(2).cloned().unwrap();
     input_queue.queue[1] = input_queue.queue[2];
 
     let metrics = CountingMetrics(RefCell::new(0));
@@ -2084,6 +2085,7 @@ fn decode_with_unreferenced_inbound_response() {
 
     // Remove the reference to the second response.
     let input_queue = encoded.canister_queues[0].input_queue.as_mut().unwrap();
+    input_queue.deprecated_queue.remove(1);
     input_queue.queue.remove(1);
 
     let metrics = CountingMetrics(RefCell::new(0));
@@ -2101,6 +2103,7 @@ fn decode_with_unreferenced_shed_response() {
 
     // Remove the reference to the third (shed) response.
     let input_queue = encoded.canister_queues[0].input_queue.as_mut().unwrap();
+    input_queue.deprecated_queue.remove(2);
     input_queue.queue.remove(2);
 
     assert_matches!(

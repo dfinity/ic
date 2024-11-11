@@ -100,7 +100,7 @@
         create_funds_whitelist: "5o66h-77qch-43oup-7aaui-kz5ty-tww4j-t2wmx-e3lym-cbtct-l3gpw-wae",
 
         // Enable Query Stats
-        query_stats_aggregation: "Enabled",
+        query_stats_aggregation: {{ query_stats_aggregation }},
 
         // Length of an epoch for query stats collection.
         query_stats_epoch_length: {{ query_stats_epoch_length }},
@@ -404,7 +404,7 @@ table ip6 filter {\n\
     icmp type { echo-reply, destination-unreachable, source-quench, echo-request, time-exceeded } accept\n\
     ct state invalid drop\n\
     ct state { established, related } accept\n\
-    ip saddr { 0.0.0.0-255.255.255.255 } ct state new tcp dport 443 accept\n\
+    ip saddr { 0.0.0.0-255.255.255.255 } ct state new tcp dport { 80, 443 } accept\n\
 \n\
     <<IPv4_TCP_RULES>>\n\
     <<IPv4_UDP_RULES>>\n\
@@ -458,7 +458,7 @@ table ip6 filter {\n\
     icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, echo-request, echo-reply, nd-router-advert, nd-neighbor-solicit, nd-neighbor-advert } accept\n\
     ct state { invalid } drop\n\
     ct state { established, related } accept\n\
-    ip6 saddr { ::-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff } ct state new tcp dport 443 accept\n\
+    ip6 saddr { ::-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff } ct state new tcp dport { 80, 443 } accept\n\
 \n\
     <<IPv6_TCP_RULES>>\n\
     <<IPv6_UDP_RULES>>\n\
@@ -504,7 +504,7 @@ table ip6 filter {\n\
     },
 
     registration: {
-        nns_url: "{{ nns_urls }}",
+        nns_url: "{{ nns_url }}",
         nns_pub_key_pem: "/var/lib/ic/data/nns_public_key.pem",
         node_operator_pem: "/var/lib/ic/data/node_operator_private_key.pem"
     },

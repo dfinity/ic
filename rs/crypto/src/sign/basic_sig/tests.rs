@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used)]
+
 use super::*;
 use crate::common::test_utils::crypto_component::crypto_component_with_csp;
 use crate::sign::tests::*;

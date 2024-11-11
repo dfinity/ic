@@ -1,4 +1,3 @@
-#![allow(clippy::disallowed_types)]
 //! # The Test Environment API
 //!
 //! The goal of this module is to provide the user with an extensible,
@@ -173,7 +172,6 @@ use ic_protobuf::registry::{
     subnet::v1 as pb_subnet,
 };
 use ic_registry_client_helpers::{
-    api_boundary_node::ApiBoundaryNodeRegistry,
     node::NodeRegistry,
     routing_table::RoutingTableRegistry,
     subnet::{SubnetListRegistry, SubnetRegistry},
@@ -304,21 +302,6 @@ impl std::fmt::Display for TopologySnapshot {
                 .unwrap();
             });
         });
-        if self.api_boundary_nodes().count() > 0 {
-            writeln!(f, "API boundary nodes:").unwrap();
-        }
-        self.api_boundary_nodes().enumerate().for_each(|(idx, n)| {
-            writeln!(
-                f,
-                "\tNode id={}, ipv6={:<width$}, domain_name={}, index={}",
-                n.node_id,
-                n.get_ip_addr(),
-                n.get_domain().map_or("n/a".to_string(), |domain| domain),
-                idx,
-                width = max_length_ipv6,
-            )
-            .unwrap()
-        });
         if self.unassigned_nodes().count() > 0 {
             writeln!(f, "Unassigned nodes:").unwrap();
         }
@@ -348,7 +331,6 @@ impl TopologySnapshot {
         pub struct NodeView {
             pub id: NodeId,
             pub ipv6: IpAddr,
-            pub domain: Option<String>,
         }
 
         #[derive(Deserialize, Serialize)]
@@ -363,7 +345,6 @@ impl TopologySnapshot {
             pub registry_version: String,
             pub subnets: Vec<SubnetView>,
             pub unassigned_nodes: Vec<NodeView>,
-            pub api_boundary_nodes: Vec<NodeView>,
         }
         let subnets: Vec<_> = self
             .subnets()
@@ -373,7 +354,6 @@ impl TopologySnapshot {
                     .map(|n| NodeView {
                         id: n.node_id,
                         ipv6: n.get_ip_addr(),
-                        domain: n.get_domain(),
                     })
                     .collect();
                 SubnetView {
@@ -388,15 +368,6 @@ impl TopologySnapshot {
             .map(|n| NodeView {
                 id: n.node_id,
                 ipv6: n.get_ip_addr(),
-                domain: n.get_domain(),
-            })
-            .collect();
-        let api_boundary_nodes: Vec<_> = self
-            .api_boundary_nodes()
-            .map(|n| NodeView {
-                id: n.node_id,
-                ipv6: n.get_ip_addr(),
-                domain: n.get_domain(),
             })
             .collect();
         let event = log_events::LogEvent::new(
@@ -405,7 +376,6 @@ impl TopologySnapshot {
                 registry_version: self.registry_version.to_string(),
                 subnets,
                 unassigned_nodes,
-                api_boundary_nodes,
             },
         );
         event.emit_log(log);
@@ -455,39 +425,12 @@ impl TopologySnapshot {
             })
             .collect();
 
-        let api_boundary_nodes = self
-            .local_registry
-            .get_api_boundary_node_ids(registry_version)
-            .unwrap();
-
         Box::new(
             self.local_registry
                 .get_node_ids(registry_version)
                 .unwrap()
                 .into_iter()
-                .filter(|node_id| {
-                    !assigned_nodes.contains(node_id) && !api_boundary_nodes.contains(node_id)
-                })
-                .map(|node_id| IcNodeSnapshot {
-                    node_id,
-                    registry_version,
-                    local_registry: self.local_registry.clone(),
-                    env: self.env.clone(),
-                    ic_name: self.ic_name.clone(),
-                })
-                .collect::<Vec<_>>()
-                .into_iter(),
-        )
-    }
-
-    pub fn api_boundary_nodes(&self) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
-        let registry_version = self.local_registry.get_latest_version();
-
-        Box::new(
-            self.local_registry
-                .get_api_boundary_node_ids(registry_version)
-                .unwrap()
-                .into_iter()
+                .filter(|node_id| !assigned_nodes.contains(node_id))
                 .map(|node_id| IcNodeSnapshot {
                     node_id,
                     registry_version,

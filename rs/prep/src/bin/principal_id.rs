@@ -1,4 +1,4 @@
-use clap::{Parser, ValueEnum};
+use clap::{ArgEnum, Parser};
 use ic_types::PrincipalId;
 use std::{
     env,
@@ -11,7 +11,7 @@ use std::{
 use x509_cert::der; // re-export of der crate
 use x509_cert::spki; // re-export of spki crate
 
-#[derive(Clone, Debug, ValueEnum)]
+#[derive(Clone, Debug, ArgEnum)]
 enum PemOrDer {
     Pem,
     Der,
@@ -51,14 +51,14 @@ EXAMPLES:
 )]
 enum CliArgs {
     SelfSigned {
-        #[clap(short = 'i', long = "input")]
+        #[clap(short = 'i', long = "input", parse(from_os_str))]
         file: Option<PathBuf>,
 
-        #[clap(value_enum, short = 't', long = "type")]
+        #[clap(arg_enum, short = 't', long = "type")]
         pem_or_der: Option<PemOrDer>,
     },
     Raw {
-        #[clap(short = 'i', long = "input")]
+        #[clap(short = 'i', long = "input", parse(from_os_str))]
         file: Option<PathBuf>,
     },
 }

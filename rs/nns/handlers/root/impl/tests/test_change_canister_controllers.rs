@@ -1,3 +1,4 @@
+use dfn_candid::candid_one;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
@@ -98,6 +99,7 @@ fn test_change_canister_controllers_integrates_with_management_canister() {
         &machine,
         ROOT_CANISTER_ID,
         "canister_status",
+        candid_one,
         CanisterIdRecord::from(universal),
         PrincipalId::new_anonymous(),
     )
@@ -109,11 +111,11 @@ fn test_change_canister_controllers_integrates_with_management_canister() {
 
     // calls to change_canister_controllers from unauthorized callers should fail
     let unauthorized_caller = CanisterId::from_u64(1000).get();
-
-    let err = update_with_sender::<_, ChangeCanisterControllersResponse>(
+    let err = update_with_sender(
         &machine,
         ROOT_CANISTER_ID,
         "change_canister_controllers",
+        candid_one::<ChangeCanisterControllersRequest, _>,
         ChangeCanisterControllersRequest {
             target_canister_id: universal.get(),
             new_controllers: vec![ROOT_CANISTER_ID.get(), test_canister_id.get()],
@@ -128,6 +130,7 @@ fn test_change_canister_controllers_integrates_with_management_canister() {
         &machine,
         ROOT_CANISTER_ID,
         "change_canister_controllers",
+        candid_one,
         ChangeCanisterControllersRequest {
             target_canister_id: universal.get(),
             new_controllers: vec![ROOT_CANISTER_ID.get(), test_canister_id.get()],
@@ -148,6 +151,7 @@ fn test_change_canister_controllers_integrates_with_management_canister() {
         &machine,
         ROOT_CANISTER_ID,
         "canister_status",
+        candid_one,
         CanisterIdRecord::from(universal),
         PrincipalId::new_anonymous(),
     )

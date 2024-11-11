@@ -51,16 +51,10 @@ pub const LOG_CANISTER_OPERATION_CYCLES_THRESHOLD: u128 = 100_000_000_000;
 pub const KILOBYTE: u64 = 1024;
 pub const MEGABYTE: u64 = KILOBYTE * KILOBYTE;
 
-/// How long to wait before a block maker of higher rank can create a block. The value should be
-/// high enough to allow a lower rank block marker to broadcast their block to all their peers,
-/// before a higher rank block maker starts creating one. It should then depend on the size of the
-/// subnet and the maximum size of a block. For example, on an app subnet with 13 nodes and with
-/// maximum block size set to 4MB, assuming at least 300Mbit/s throughput for each node, a block
-/// maker will need roughly one second to broadcast their block. On the nns subnet with 40 nodes,
-/// it should take roughly three seconds on average.
 pub const UNIT_DELAY_APP_SUBNET: Duration = Duration::from_millis(1000);
 pub const UNIT_DELAY_NNS_SUBNET: Duration = Duration::from_millis(3000);
-pub const INITIAL_NOTARY_DELAY: Duration = Duration::from_millis(300);
+pub const INITIAL_NOTARY_DELAY_APP_SUBNET: Duration = Duration::from_millis(300);
+pub const INITIAL_NOTARY_DELAY_NNS_SUBNET: Duration = Duration::from_millis(1000);
 pub const MAX_INGRESS_MESSAGES_PER_BLOCK: u64 = 1000;
 pub const MAX_BLOCK_PAYLOAD_SIZE: u64 = 4 * MEGABYTE;
 /// This sets the upper bound on how big a single ingress message can be, as

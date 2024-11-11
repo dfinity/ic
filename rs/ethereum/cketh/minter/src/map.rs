@@ -240,10 +240,6 @@ impl<Key: Ord, AltKey: Ord, V> DedupMultiKeyMap<Key, AltKey, V> {
         }
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.map.is_empty()
-    }
-
     pub fn try_insert(
         &mut self,
         key: Key,

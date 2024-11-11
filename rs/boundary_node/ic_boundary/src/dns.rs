@@ -2,7 +2,6 @@ use std::{net::SocketAddr, sync::Arc};
 
 use arc_swap::ArcSwapOption;
 use futures_util::future::ready;
-use ic_bn_lib::http::client::CloneableDnsResolver;
 use reqwest::dns::{Addrs, Name, Resolve, Resolving};
 
 use crate::snapshot::RegistrySnapshot;
@@ -23,7 +22,6 @@ impl DnsResolver {
         Self { snapshot }
     }
 }
-impl CloneableDnsResolver for DnsResolver {}
 
 // Implement resolver based on the routing table
 // It's used by reqwest to resolve node IDs to an IP address

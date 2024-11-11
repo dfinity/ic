@@ -1,6 +1,7 @@
 //! Module that deals with requests to /api/v3/canister/.../call.
 
 use super::{
+    call_v2::{self, Accepted, AsynchronousCallHandlerState, CallV2Response},
     ingress_watcher::{IngressWatcherHandle, SubscriptionError},
     IngressError, IngressValidator,
 };
@@ -10,14 +11,13 @@ use crate::{
         HttpHandlerMetrics, CALL_V3_EARLY_RESPONSE_CERTIFICATION_TIMEOUT,
         CALL_V3_EARLY_RESPONSE_DUPLICATE_SUBSCRIPTION,
         CALL_V3_EARLY_RESPONSE_INGRESS_WATCHER_NOT_RUNNING,
-        CALL_V3_EARLY_RESPONSE_MESSAGE_ALREADY_IN_CERTIFIED_STATE,
         CALL_V3_EARLY_RESPONSE_SUBSCRIPTION_TIMEOUT,
     },
     HttpError,
 };
 use axum::{
     body::Body,
-    extract::{DefaultBodyLimit, State},
+    extract::{self, DefaultBodyLimit, State},
     response::{IntoResponse, Response},
     Router,
 };
@@ -38,12 +38,7 @@ use ic_types::{
     CanisterId,
 };
 use serde_cbor::Value as CBOR;
-use std::{
-    collections::BTreeMap,
-    convert::Infallible,
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+use std::{collections::BTreeMap, convert::Infallible, sync::Arc, time::Duration};
 use tokio::sync::OnceCell;
 use tokio_util::time::FutureExt;
 use tower::{util::BoxCloneService, ServiceBuilder};
@@ -70,7 +65,6 @@ struct SynchronousCallHandlerState {
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ingress_message_certificate_timeout_seconds: u64,
     call_handler: IngressValidator,
-    is_malicious: Arc<Mutex<bool>>,
 }
 
 impl IntoResponse for CallV3Response {
@@ -140,7 +134,6 @@ pub(crate) fn new_router(
     delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
 ) -> Router {
-    let is_malicious = Arc::new(Mutex::new(false));
     let call_service = SynchronousCallHandlerState {
         delegation_from_nns,
         ingress_watcher_handle,
@@ -148,36 +141,14 @@ pub(crate) fn new_router(
         ingress_message_certificate_timeout_seconds,
         call_handler,
         state_reader,
-        is_malicious: is_malicious.clone(),
     };
 
-    let router = Router::new()
-        .route_service(
-            route(),
-            axum::routing::post(call_sync_v3)
-                .with_state(call_service)
-                .layer(ServiceBuilder::new().layer(DefaultBodyLimit::disable())),
-        )
-        .route_service(
-            "/malicious",
-            axum::routing::post(|State(is_malicious): State<Arc<Mutex<bool>>>| async move {
-                *is_malicious.lock().unwrap() = true;
-                (StatusCode::OK, "Malicious flag set").into_response()
-            })
-            .with_state(is_malicious.clone())
+    Router::new().route_service(
+        route(),
+        axum::routing::post(call_sync_v3)
+            .with_state(call_service)
             .layer(ServiceBuilder::new().layer(DefaultBodyLimit::disable())),
-        )
-        .route_service(
-            "/honest",
-            axum::routing::post(|State(is_malicious): State<Arc<Mutex<bool>>>| async move {
-                *is_malicious.lock().unwrap() = false;
-                (StatusCode::OK, "Malicious flag unset").into_response()
-            })
-            .with_state(is_malicious)
-            .layer(ServiceBuilder::new().layer(DefaultBodyLimit::disable())),
-        );
-
-    router
+    )
 }
 
 pub fn new_service(
@@ -209,11 +180,9 @@ async fn call_sync_v3(
         ingress_message_certificate_timeout_seconds,
         state_reader,
         delegation_from_nns,
-        is_malicious,
     }): State<SynchronousCallHandlerState>,
     WithTimeout(Cbor(request)): WithTimeout<Cbor<HttpRequestEnvelope<HttpCallContent>>>,
 ) -> CallV3Response {
-    let is_malicious = *is_malicious.lock().unwrap();
     let log = call_handler.log.clone();
 
     let ingress_submitter = match call_handler
@@ -235,11 +204,6 @@ async fn call_sync_v3(
         if let ParsedMessageStatus::Known(_) = parsed_message_status(&tree, &message_id) {
             let delegation_from_nns = delegation_from_nns.get().cloned();
             let signature = certification.signed.signature.signature.get().0;
-
-            metrics
-                .call_v3_early_response_trigger_total
-                .with_label_values(&[CALL_V3_EARLY_RESPONSE_MESSAGE_ALREADY_IN_CERTIFIED_STATE])
-                .inc();
 
             return CallV3Response::Certificate(Certificate {
                 tree,
@@ -347,18 +311,11 @@ async fn call_sync_v3(
     let delegation_from_nns = delegation_from_nns.get().cloned();
     let signature = certification.signed.signature.signature.get().0;
 
-    if is_malicious {
-        CallV3Response::HttpError(HttpError {
-            status: StatusCode::INTERNAL_SERVER_ERROR,
-            message: "Internal server error".to_string(),
-        })
-    } else {
-        CallV3Response::Certificate(Certificate {
-            tree,
-            signature: Blob(signature),
-            delegation: delegation_from_nns,
-        })
-    }
+    CallV3Response::Certificate(Certificate {
+        tree,
+        signature: Blob(signature),
+        delegation: delegation_from_nns,
+    })
 }
 
 enum ParsedMessageStatus {
@@ -405,4 +362,41 @@ async fn tree_and_certificate_for_message(
             .expect("Path is within length bound.");
 
     certified_state_reader.read_certified_state(&tree)
+}
+
+pub(crate) fn new_asynchronous_call_service_router(
+    ingress_validator: IngressValidator,
+    ingress_watcher_handle: Option<IngressWatcherHandle>,
+) -> Router {
+    Router::new().route_service(
+        route(),
+        axum::routing::post(async_v3_handler)
+            .with_state(AsynchronousCallHandlerState::new(
+                ingress_validator,
+                ingress_watcher_handle,
+            ))
+            .layer(ServiceBuilder::new().layer(DefaultBodyLimit::disable())),
+    )
+}
+
+/// Temporary wrapper to serve V3 requests with V2 the implementation,
+/// while we do a gradual rollout of the V3 implementation.
+async fn async_v3_handler(
+    effective_canister_id: extract::Path<CanisterId>,
+    state: State<AsynchronousCallHandlerState>,
+    request: WithTimeout<Cbor<HttpRequestEnvelope<HttpCallContent>>>,
+) -> CallV3Response {
+    /// Allows us to map the response of the response of a v2 call to a v3 response.
+    impl From<CallV2Response> for CallV3Response {
+        fn from(v2_response: CallV2Response) -> Self {
+            match v2_response {
+                Ok(Accepted) => CallV3Response::Accepted(""),
+                Err(IngressError::UserError(user_error)) => CallV3Response::UserError(user_error),
+                Err(IngressError::HttpError(http_error)) => CallV3Response::HttpError(http_error),
+            }
+        }
+    }
+    call_v2::handler(effective_canister_id, state, request)
+        .await
+        .into()
 }

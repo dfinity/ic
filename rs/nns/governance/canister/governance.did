@@ -577,7 +577,6 @@ type Neuron = record {
   transfer : opt NeuronStakeTransfer;
   known_neuron_data : opt KnownNeuronData;
   spawn_at_timestamp_seconds : opt nat64;
-  voting_power_refreshed_timestamp_seconds : opt nat64;
 };
 
 type NeuronBasketConstructionParameters = record {
@@ -629,7 +628,6 @@ type NeuronInfo = record {
   known_neuron_data : opt KnownNeuronData;
   voting_power : nat64;
   age_seconds : nat64;
-  voting_power_refreshed_timestamp_seconds : opt nat64;
 };
 
 type NeuronStakeTransfer = record {
@@ -811,7 +809,6 @@ type ProposalData = record {
   wait_for_quiet_state : opt WaitForQuietState;
   executed_timestamp_seconds : nat64;
   original_total_community_fund_maturity_e8s_equivalent : opt nat64;
-  total_potential_voting_power : opt nat64;
 };
 
 type ProposalInfo = record {
@@ -832,7 +829,6 @@ type ProposalInfo = record {
   proposal : opt Proposal;
   proposer : opt NeuronId;
   executed_timestamp_seconds : nat64;
-  total_potential_voting_power : opt nat64;
 };
 
 type RegisterVote = record {

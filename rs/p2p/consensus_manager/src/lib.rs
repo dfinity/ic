@@ -116,7 +116,7 @@ fn start_consensus_manager<Artifact, WireArtifact, Assembler>(
     metrics_registry: &MetricsRegistry,
     rt_handle: Handle,
     // Locally produced adverts to send to the node's peers.
-    outbound_transmits: Receiver<ArtifactTransmit<Artifact>>,
+    adverts_to_send: Receiver<ArtifactTransmit<Artifact>>,
     // Adverts received from peers
     adverts_received: Receiver<(SlotUpdate<WireArtifact>, NodeId, ConnId)>,
     sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
@@ -137,7 +137,7 @@ where
         metrics.clone(),
         rt_handle.clone(),
         transport.clone(),
-        outbound_transmits,
+        adverts_to_send,
         assembler.clone(),
     );
 
@@ -154,23 +154,23 @@ where
     vec![shutdown_send_side, shutdown_receive_side]
 }
 
-struct SlotUpdate<Artifact: PbArtifact> {
+pub(crate) struct SlotUpdate<Artifact: PbArtifact> {
     slot_number: SlotNumber,
     commit_id: CommitId,
     update: Update<Artifact>,
 }
 
-enum Update<Artifact: PbArtifact> {
+pub(crate) enum Update<Artifact: PbArtifact> {
     Artifact(Artifact),
     Id(Artifact::Id),
 }
 
-fn uri_prefix<Artifact: PbArtifact>() -> String {
+pub fn uri_prefix<Artifact: PbArtifact>() -> String {
     Artifact::NAME.to_lowercase()
 }
 
 struct SlotNumberTag;
-type SlotNumber = AmountOf<SlotNumberTag, u64>;
+pub(crate) type SlotNumber = AmountOf<SlotNumberTag, u64>;
 
 struct CommitIdTag;
-type CommitId = AmountOf<CommitIdTag, u64>;
+pub(crate) type CommitId = AmountOf<CommitIdTag, u64>;

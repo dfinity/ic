@@ -1,9 +1,8 @@
 use candid::CandidType;
 use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
-use ic_protobuf::types::v1 as pb_types;
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
-    registry::subnet::v1 as pb,
+    registry::{crypto::v1 as crypto_pb, subnet::v1 as pb},
 };
 use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, str::FromStr};
@@ -142,7 +141,7 @@ impl From<KeyConfig> for pb::KeyConfig {
             max_queue_size,
         } = src;
 
-        let key_id = Some(pb_types::MasterPublicKeyId::from(&key_id));
+        let key_id = Some(crypto_pb::MasterPublicKeyId::from(&key_id));
 
         let pre_signatures_to_create_in_advance = Some(pre_signatures_to_create_in_advance);
 
@@ -316,7 +315,7 @@ mod tests {
         // Run code under test.
         let chain_key_config_pb = pb::ChainKeyConfig::from(pb::EcdsaConfig {
             quadruples_to_create_in_advance: 77,
-            key_ids: vec![pb_types::EcdsaKeyId {
+            key_ids: vec![crypto_pb::EcdsaKeyId {
                 curve: 1,
                 name: "test_curve".to_string(),
             }],
@@ -329,9 +328,9 @@ mod tests {
             chain_key_config_pb,
             pb::ChainKeyConfig {
                 key_configs: vec![pb::KeyConfig {
-                    key_id: Some(pb_types::MasterPublicKeyId {
-                        key_id: Some(pb_types::master_public_key_id::KeyId::Ecdsa(
-                            pb_types::EcdsaKeyId {
+                    key_id: Some(crypto_pb::MasterPublicKeyId {
+                        key_id: Some(crypto_pb::master_public_key_id::KeyId::Ecdsa(
+                            crypto_pb::EcdsaKeyId {
                                 curve: 1,
                                 name: "test_curve".to_string(),
                             }
@@ -367,9 +366,9 @@ mod tests {
         // Assert expected result value.
         let expected_chain_key_config_pb = pb::ChainKeyConfig {
             key_configs: vec![pb::KeyConfig {
-                key_id: Some(pb_types::MasterPublicKeyId {
-                    key_id: Some(pb_types::master_public_key_id::KeyId::Ecdsa(
-                        pb_types::EcdsaKeyId {
+                key_id: Some(crypto_pb::MasterPublicKeyId {
+                    key_id: Some(crypto_pb::master_public_key_id::KeyId::Ecdsa(
+                        crypto_pb::EcdsaKeyId {
                             curve: 1,
                             name: "test_curve".to_string(),
                         },

@@ -16,7 +16,7 @@ use ic_xnet_payload_builder::certified_slice_pool::{
     certified_slice_count_bytes, testing, CertifiedSliceError, CertifiedSlicePool, InvalidAppend,
     InvalidSlice, UnpackedStreamSlice, LABEL_STATUS, STATUS_NONE, STATUS_SUCCESS,
 };
-use ic_xnet_payload_builder::{max_message_index, ExpectedIndices, MAX_STREAM_MESSAGES};
+use ic_xnet_payload_builder::ExpectedIndices;
 use maplit::btreemap;
 use mockall::predicate::{always, eq};
 use proptest::prelude::*;
@@ -137,8 +137,6 @@ proptest! {
             if let (Some(byte_limit), Some(prefix)) = (byte_limit, prefix.as_ref()) {
                 assert!(prefix.count_bytes() <= byte_limit);
             }
-            // Testing the signal limit is pointless here because it requires very large streams
-            // that would make this test needlessly slow. There is a dedicated test for it.
 
             // And that a longer prefix would have gone over one the limits.
             let unpacked = UnpackedStreamSlice::try_from(certified_slice.clone()).unwrap();
@@ -1112,52 +1110,6 @@ proptest! {
             assert_eq!(
                 0,
                 fixture.fetch_pool_size_bytes()
-            );
-        });
-    }
-}
-
-proptest! {
-    #![proptest_config(ProptestConfig::with_cases(10))]
-
-    // Testing the 'signals limit' (the limit on messages in a slice such that the number of
-    // signals after inducting it is capped) requires streams with thousands of messages in it.
-    //
-    // It is therefore using a reduced number of cases to keep the load within reasonable bounds.
-    #[test]
-    fn pool_take_slice_respects_signal_limit(
-        (stream, from, msg_count) in arb_stream_slice(MAX_STREAM_MESSAGES, 2 * MAX_STREAM_MESSAGES, 0, 0),
-    ) {
-        with_test_replica_logger(|log| {
-            // Stream position matching slice begin.
-            let begin = ExpectedIndices{
-                message_index: from,
-                signal_index: stream.signals_end(),
-            };
-
-            let stream_begin = stream.messages_begin();
-            let fixture = StateManagerFixture::new(log.clone()).with_stream(SRC_SUBNET, stream);
-            let slice = fixture.get_slice(SRC_SUBNET, from, msg_count);
-
-            let mut certified_stream_store = MockCertifiedStreamStore::new();
-            // Actual return value does not matter as long as it's `Ok(_)`.
-            certified_stream_store
-                .expect_decode_certified_stream_slice()
-                .returning(|_, _, _| Ok(StreamSliceBuilder::new().build()));
-            let certified_stream_store = Arc::new(certified_stream_store) as Arc<_>;
-            let mut pool = CertifiedSlicePool::new(Arc::clone(&certified_stream_store), &fixture.metrics);
-
-            pool.put(SRC_SUBNET, slice, REGISTRY_VERSION, log.clone()).unwrap();
-            let _ = pool.take_slice(SRC_SUBNET, Some(&begin), None, None).unwrap().unwrap();
-
-            let (new_begin, _, _, _) = pool.slice_stats(SRC_SUBNET);
-            let messages_end = new_begin.unwrap().message_index;
-
-            assert!(
-                messages_end <= max_message_index(stream_begin),
-                "messages_end: {} > max_message_index: {}",
-                messages_end,
-                max_message_index(stream_begin),
             );
         });
     }

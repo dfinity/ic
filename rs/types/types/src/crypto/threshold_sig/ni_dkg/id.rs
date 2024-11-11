@@ -8,7 +8,7 @@ use ic_protobuf::types::v1 as pb;
 mod tests;
 
 /// The ID for non-interactive DKG. Identifies a DKG epoch.
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct NiDkgId {
     /// This field refers to the height of the block denoting the start of the

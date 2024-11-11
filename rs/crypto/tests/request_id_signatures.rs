@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 use assert_matches::assert_matches;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto::CryptoComponent;

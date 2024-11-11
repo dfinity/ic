@@ -11,6 +11,3 @@ candid = { workspace = true }
 lazy_static = { workspace = true }
 serde = { workspace = true }
 wee_alloc = "0.4.3"
-
-[features]
-heartbeat = []

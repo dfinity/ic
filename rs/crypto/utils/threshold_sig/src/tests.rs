@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 use super::*;
 use ic_crypto_internal_csp::types::{CspSignature, ThresBls12_381_Signature};
 use ic_crypto_internal_threshold_sig_bls12381::types::CombinedSignatureBytes;

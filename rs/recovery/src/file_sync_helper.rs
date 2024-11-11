@@ -85,7 +85,9 @@ pub fn rsync_with_retries(
             require_confirmation,
             key_file,
         ) {
-            Err(e) => warn!(logger, "Rsync failed: {:?}, retrying...", e),
+            Err(e) => {
+                warn!(logger, "Rsync failed: {:?}, retrying...", e);
+            }
             success => return success,
         }
         thread::sleep(time::Duration::from_secs(10));

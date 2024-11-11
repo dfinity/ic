@@ -118,9 +118,6 @@ bazel-bep.txt
 bazel-timestamp.txt
 user.bazelrc
 
-# Bazel profile
-profile.json
-
 # Visual Studio Code
 .vscode
 

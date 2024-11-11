@@ -60,6 +60,7 @@ async fn drun_main() -> Result<(), String> {
             .rate_limiting_of_debug_prints = FlagStatus::Disabled;
         hypervisor_config.rate_limiting_of_heap_delta = FlagStatus::Disabled;
         hypervisor_config.rate_limiting_of_instructions = FlagStatus::Disabled;
+        hypervisor_config.canister_snapshots = FlagStatus::Enabled;
         // For testing enhanced orthogonal persistence in Motoko,
         // enable Wasm Memory64 and re-configure the main memory capacity.
         hypervisor_config.embedders_config.feature_flags.wasm64 = FlagStatus::Enabled;

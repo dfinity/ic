@@ -92,8 +92,8 @@ pub struct Cache {
 // Estimate rough amount of bytes that cache entry takes in memory
 fn weigh_entry(k: &Arc<RequestContext>, v: &CacheItem) -> u32 {
     let mut cost = v.body.len()
-        + size_of::<CacheItem>()
-        + size_of::<Arc<RequestContext>>()
+        + std::mem::size_of::<CacheItem>()
+        + std::mem::size_of::<Arc<RequestContext>>()
         + k.method_name.as_ref().map(|x| x.len()).unwrap_or(0)
         + k.arg.as_ref().map(|x| x.len()).unwrap_or(0)
         + k.nonce.as_ref().map(|x| x.len()).unwrap_or(0)

@@ -11,8 +11,9 @@ use candid::{CandidType, Decode, Deserialize, Encode, Nat, Principal};
 use ic_agent::Agent;
 use slog::{info, Logger};
 use std::collections::BTreeMap;
-use std::env;
 use tokio::task;
+
+const ASSET_CANISTER_WASM: &str = "external/asset_canister/file/assetstorage.wasm.gz";
 
 #[async_trait]
 pub trait DeployAssetCanister {
@@ -31,13 +32,7 @@ where
 
         let canister_id = task::spawn_blocking({
             let app_node = app_node.clone();
-            move || {
-                app_node.create_and_install_canister_with_arg(
-                    &env::var("ASSET_CANISTER_WASM_PATH")
-                        .expect("ASSET_CANISTER_WASM_PATH not set"),
-                    None,
-                )
-            }
+            move || app_node.create_and_install_canister_with_arg(ASSET_CANISTER_WASM, None)
         })
         .await
         .context("failed to deploy asset canister")?;

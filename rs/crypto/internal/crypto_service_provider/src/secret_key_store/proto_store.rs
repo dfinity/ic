@@ -1,4 +1,5 @@
 //! Filesystem-backed secret key store
+#![allow(clippy::unwrap_used)]
 use crate::canister_threshold::IDKG_MEGA_SCOPE;
 use crate::key_id::KeyId;
 use crate::secret_key_store::{

@@ -415,8 +415,6 @@ mod tests {
 
     use super::{Reply, Request, TerminateRequest};
 
-    const IS_WASM64_EXECUTION: bool = false;
-
     fn wasm_module() -> (CompilationResult, SerializedModule) {
         let wat = r#"
             (module
@@ -594,7 +592,6 @@ mod tests {
                     RequestMetadata::new(0, Time::from_nanos_since_unix_epoch(10)),
                     Some(canister_test_id(1).get()),
                     Some(CallContextId::new(123)),
-                    IS_WASM64_EXECUTION,
                 ),
                 wasm_reserved_pages: NumWasmPages::new(1),
             },

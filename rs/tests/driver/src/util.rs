@@ -58,7 +58,7 @@ use icp_ledger::{
 };
 use itertools::Itertools;
 use on_wire::FromWire;
-use slog::{debug, info, Logger};
+use slog::{debug, info};
 use std::{
     collections::BTreeMap,
     convert::{TryFrom, TryInto},
@@ -1410,8 +1410,9 @@ pub fn get_config() -> ConfigOptional {
         .replace("{{ ipv6_address }}", "::")
         .replace("{{ backup_retention_time_secs }}", "0")
         .replace("{{ backup_purging_interval_secs }}", "0")
-        .replace("{{ nns_urls }}", "http://www.fakeurl.com/")
+        .replace("{{ nns_url }}", "http://www.fakeurl.com/")
         .replace("{{ malicious_behavior }}", "null")
+        .replace("{{ query_stats_aggregation }}", "\"Enabled\"")
         .replace("{{ query_stats_epoch_length }}", "600");
 
     json5::from_str::<ConfigOptional>(&cfg).expect("Could not parse json5")
@@ -1850,16 +1851,4 @@ pub fn expiry_time() -> Duration {
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap()
         + Duration::from_secs(4 * 60)
-}
-
-/// Time the duration of the given closure and log it.
-pub fn timeit<F, R>(log: Logger, description: &str, f: F) -> R
-where
-    F: FnOnce() -> R,
-{
-    let start = Instant::now();
-    let result = f(); // Run the closure
-    let duration = start.elapsed();
-    info!(log, "Executed '{}' in: {:?}", description, duration);
-    result
 }

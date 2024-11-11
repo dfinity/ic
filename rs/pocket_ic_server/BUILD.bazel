@@ -34,7 +34,6 @@ LIB_DEPENDENCIES = [
     "//rs/state_machine_tests",
     "//rs/test_utilities",
     "//rs/test_utilities/registry",
-    "//rs/types/error_types",
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/utils/thread",
@@ -49,8 +48,7 @@ LIB_DEPENDENCIES = [
     "@crate_index//:bitcoin",
     "@crate_index//:bytes",
     "@crate_index//:candid",
-    "@crate_index//:clap",
-    "@crate_index//:ctrlc",
+    "@crate_index//:clap_3_2_25",
     "@crate_index//:flate2",
     "@crate_index//:form_urlencoded",
     "@crate_index//:fqdn",
@@ -69,7 +67,6 @@ LIB_DEPENDENCIES = [
     "@crate_index//:serde",
     "@crate_index//:serde_cbor",
     "@crate_index//:serde_json",
-    "@crate_index//:slog",
     "@crate_index//:tempfile",
     "@crate_index//:time",
     "@crate_index//:tokio",
@@ -102,7 +99,6 @@ TEST_DEPENDENCIES = [
     "@crate_index//:ic-btc-interface",
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-utils",
-    "@crate_index//:nix",
     "@crate_index//:rcgen",
     "@crate_index//:reqwest",
     "@crate_index//:serde",
@@ -114,7 +110,7 @@ TEST_DEPENDENCIES = [
 ]
 
 SPEC_TEST_DEPENDENCIES = TEST_DEPENDENCIES + [
-    "//rs/tests/research/spec_compliance",
+    "//rs/tests/testing_verification/spec_compliance",
     "//rs/registry/subnet_type",
 ]
 
@@ -178,9 +174,9 @@ rust_test(
         "@ii_dev_canister//file",
     ],
     env = {
-        "POCKET_IC_BIN": "$(rootpath :pocket-ic-server)",
+        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
         "REGISTRY_WASM": "$(rootpath //rs/registry/canister:registry-canister)",
-        "II_WASM": "$(rootpath @ii_dev_canister//file)",
+        "II_WASM": "external/ii_dev_canister/file/internet_identity_dev.wasm.gz",
     },
     tags = ["cpu:8"],
     deps = TEST_DEPENDENCIES,
@@ -195,13 +191,13 @@ rust_test(
     ],
     data = [
         ":pocket-ic-server",
+        "//rs/tests:ic-hs",
         "//rs/tests/httpbin-rs:httpbin",
-        "//rs/tests/research:ic-hs",
     ],
     env = {
         "HTTPBIN_BIN": "$(rootpath //rs/tests/httpbin-rs:httpbin)",
-        "POCKET_IC_BIN": "$(rootpath :pocket-ic-server)",
-        "IC_REF_TEST_ROOT": "rs/tests/research/ic-hs",
+        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+        "IC_REF_TEST_ROOT": "rs/tests/ic-hs",
     },
     tags = ["cpu:8"],
     deps = SPEC_TEST_DEPENDENCIES,
@@ -221,7 +217,7 @@ rust_test(
         "@btc_canister//file",
     ],
     env = {
-        "POCKET_IC_BIN": "$(rootpath :pocket-ic-server)",
+        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
         "BASIC_BITCOIN_WASM": "$(rootpath @bitcoin_example_canister//file)",
         "BITCOIND_BIN": "$(rootpath @bitcoin_core//:bitcoind)",
         "BTC_WASM": "$(rootpath @btc_canister//file)",

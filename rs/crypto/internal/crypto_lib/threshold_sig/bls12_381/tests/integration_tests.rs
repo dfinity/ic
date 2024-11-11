@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 //! Tests for combined forward secure encryption and ZK proofs
 #![allow(clippy::many_single_char_names)]
 

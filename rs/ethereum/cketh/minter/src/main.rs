@@ -16,9 +16,7 @@ use ic_cketh_minter::endpoints::{
     WithdrawalDetail, WithdrawalError, WithdrawalSearchParameter,
 };
 use ic_cketh_minter::erc20::CkTokenSymbol;
-use ic_cketh_minter::eth_logs::{
-    EventSource, LedgerSubaccount, ReceivedErc20Event, ReceivedEthEvent,
-};
+use ic_cketh_minter::eth_logs::{EventSource, ReceivedErc20Event, ReceivedEthEvent};
 use ic_cketh_minter::guard::retrieve_withdraw_guard;
 use ic_cketh_minter::ledger_client::{LedgerBurnError, LedgerClient};
 use ic_cketh_minter::lifecycle::MinterArg;
@@ -26,7 +24,6 @@ use ic_cketh_minter::logs::INFO;
 use ic_cketh_minter::memo::BurnMemo;
 use ic_cketh_minter::numeric::{Erc20Value, LedgerBurnIndex, Wei};
 use ic_cketh_minter::state::audit::{process_event, Event, EventType};
-use ic_cketh_minter::state::eth_logs_scraping::LogScrapingId;
 use ic_cketh_minter::state::transactions::{
     Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed, ReimbursementIndex,
     ReimbursementRequest,
@@ -107,21 +104,12 @@ fn init(arg: MinterArg) {
 
 fn emit_preupgrade_events() {
     read_state(|s| {
-        for (id, scraping_state) in s.log_scrapings.iter() {
-            let block_number = scraping_state.last_scraped_block_number();
-            let event = match id {
-                LogScrapingId::EthDepositWithoutSubaccount => {
-                    EventType::SyncedToBlock { block_number }
-                }
-                LogScrapingId::Erc20DepositWithoutSubaccount => {
-                    EventType::SyncedErc20ToBlock { block_number }
-                }
-                LogScrapingId::EthOrErc20DepositWithSubaccount => {
-                    EventType::SyncedDepositWithSubaccountToBlock { block_number }
-                }
-            };
-            storage::record_event(event);
-        }
+        storage::record_event(EventType::SyncedToBlock {
+            block_number: s.last_scraped_block_number,
+        });
+        storage::record_event(EventType::SyncedErc20ToBlock {
+            block_number: s.last_erc20_scraped_block_number,
+        });
     });
 }
 
@@ -150,13 +138,9 @@ async fn minter_address() -> String {
 
 #[query]
 async fn smart_contract_address() -> String {
-    read_state(|s| {
-        s.log_scrapings
-            .contract_address(LogScrapingId::EthDepositWithoutSubaccount)
-            .cloned()
-    })
-    .map(|a| a.to_string())
-    .unwrap_or("N/A".to_string())
+    read_state(|s| s.eth_helper_contract_address)
+        .map(|a| a.to_string())
+        .unwrap_or("N/A".to_string())
 }
 
 /// Estimate price of EIP-1559 transaction based on the
@@ -221,18 +205,11 @@ async fn get_minter_info() -> MinterInfo {
             (None, None)
         };
 
-        let eth_helper_contract_address = s
-            .log_scrapings
-            .contract_address(LogScrapingId::EthDepositWithoutSubaccount)
-            .map(|a| a.to_string());
         MinterInfo {
             minter_address: s.minter_address().map(|a| a.to_string()),
-            smart_contract_address: eth_helper_contract_address.clone(),
-            eth_helper_contract_address,
-            erc20_helper_contract_address: s
-                .log_scrapings
-                .contract_address(LogScrapingId::Erc20DepositWithoutSubaccount)
-                .map(|a| a.to_string()),
+            smart_contract_address: s.eth_helper_contract_address.map(|a| a.to_string()),
+            eth_helper_contract_address: s.eth_helper_contract_address.map(|a| a.to_string()),
+            erc20_helper_contract_address: s.erc20_helper_contract_address.map(|a| a.to_string()),
             supported_ckerc20_tokens,
             minimum_withdrawal_amount: Some(s.cketh_minimum_withdrawal_amount.into()),
             ethereum_block_height: Some(s.ethereum_block_height.into()),
@@ -246,23 +223,9 @@ async fn get_minter_info() -> MinterInfo {
                 },
             ),
             erc20_balances,
-            last_eth_scraped_block_number: Some(
-                s.log_scrapings
-                    .last_scraped_block_number(LogScrapingId::EthDepositWithoutSubaccount)
-                    .into(),
-            ),
-            last_erc20_scraped_block_number: Some(
-                s.log_scrapings
-                    .last_scraped_block_number(LogScrapingId::Erc20DepositWithoutSubaccount)
-                    .into(),
-            ),
-            last_deposit_with_subaccount_scraped_block_number: Some(
-                s.log_scrapings
-                    .last_scraped_block_number(LogScrapingId::EthOrErc20DepositWithSubaccount)
-                    .into(),
-            ),
+            last_eth_scraped_block_number: Some(s.last_scraped_block_number.into()),
+            last_erc20_scraped_block_number: Some(s.last_erc20_scraped_block_number.into()),
             cketh_ledger_id: Some(s.cketh_ledger_id),
-            evm_rpc_id: s.evm_rpc_id,
         }
     })
 }
@@ -377,8 +340,8 @@ async fn withdrawal_status(parameter: WithdrawalSearchParameter) -> Vec<Withdraw
                 from: request.from(),
                 from_subaccount: request
                     .from_subaccount()
-                    .cloned()
-                    .map(LedgerSubaccount::to_bytes),
+                    .clone()
+                    .map(|subaccount| subaccount.0),
                 status,
             })
             .collect()
@@ -664,7 +627,6 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     from_address,
                     value,
                     principal,
-                    subaccount,
                 }) => EP::AcceptedDeposit {
                     transaction_hash: transaction_hash.to_string(),
                     block_number: block_number.into(),
@@ -672,7 +634,6 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     from_address: from_address.to_string(),
                     value: value.into(),
                     principal,
-                    subaccount: subaccount.map(|s| s.to_bytes()),
                 },
                 EventType::AcceptedErc20Deposit(ReceivedErc20Event {
                     transaction_hash,
@@ -682,7 +643,6 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     value,
                     principal,
                     erc20_contract_address,
-                    subaccount,
                 }) => EP::AcceptedErc20Deposit {
                     transaction_hash: transaction_hash.to_string(),
                     block_number: block_number.into(),
@@ -691,7 +651,6 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     value: value.into(),
                     principal,
                     erc20_contract_address: erc20_contract_address.to_string(),
-                    subaccount: subaccount.map(|s| s.to_bytes()),
                 },
                 EventType::InvalidDeposit {
                     event_source,
@@ -713,11 +672,6 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                 EventType::SyncedErc20ToBlock { block_number } => EP::SyncedErc20ToBlock {
                     block_number: block_number.into(),
                 },
-                EventType::SyncedDepositWithSubaccountToBlock { block_number } => {
-                    EP::SyncedDepositWithSubaccountToBlock {
-                        block_number: block_number.into(),
-                    }
-                }
                 EventType::AcceptedEthWithdrawalRequest(EthWithdrawalRequest {
                     withdrawal_amount,
                     destination,
@@ -730,7 +684,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     destination: destination.to_string(),
                     ledger_burn_index: ledger_burn_index.get().into(),
                     from,
-                    from_subaccount: from_subaccount.map(LedgerSubaccount::to_bytes),
+                    from_subaccount: from_subaccount.map(|s| s.0),
                     created_at,
                 },
                 EventType::CreatedTransaction {
@@ -817,7 +771,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     ckerc20_ledger_id,
                     ckerc20_ledger_burn_index: ckerc20_ledger_burn_index.get().into(),
                     from,
-                    from_subaccount: from_subaccount.map(LedgerSubaccount::to_bytes),
+                    from_subaccount: from_subaccount.map(|s| s.0),
                     created_at,
                 },
                 EventType::MintedCkErc20 {
@@ -841,7 +795,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     withdrawal_id: ledger_burn_index.get().into(),
                     reimbursed_amount: reimbursed_amount.into(),
                     to,
-                    to_subaccount: to_subaccount.map(LedgerSubaccount::to_bytes),
+                    to_subaccount: to_subaccount.map(|s| s.0),
                 },
                 EventType::QuarantinedDeposit { event_source } => EP::QuarantinedDeposit {
                     event_source: map_event_source(event_source),
@@ -877,30 +831,18 @@ fn http_request(req: HttpRequest) -> HttpResponse {
     if req.path() == "/metrics" {
         let mut writer = MetricsEncoder::new(vec![], ic_cdk::api::time() as i64 / 1_000_000);
 
-        fn last_processed_block_metric_name(id: &LogScrapingId) -> &'static str {
-            match *id {
-                LogScrapingId::EthDepositWithoutSubaccount => "cketh_minter_last_processed_block",
-                LogScrapingId::Erc20DepositWithoutSubaccount => {
-                    "ckerc20_minter_last_processed_block"
-                }
-                LogScrapingId::EthOrErc20DepositWithSubaccount => {
-                    "subaccount_minter_last_processed_block"
-                }
-            }
-        }
-
         fn encode_metrics(w: &mut MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
             const WASM_PAGE_SIZE_IN_BYTES: f64 = 65536.0;
 
             read_state(|s| {
                 w.encode_gauge(
-                    "stable_memory_bytes",
+                    "cketh_minter_stable_memory_bytes",
                     ic_cdk::api::stable::stable_size() as f64 * WASM_PAGE_SIZE_IN_BYTES,
                     "Size of the stable memory allocated by this canister.",
                 )?;
 
                 w.encode_gauge(
-                    "heap_memory_bytes",
+                    "cketh_minter_heap_memory_bytes",
                     heap_memory_size_bytes() as f64,
                     "Size of the heap memory allocated by this canister.",
                 )?;
@@ -919,16 +861,17 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "The last Ethereum block the ckETH minter observed.",
                 )?;
 
-                for (id, scraping_state) in s.log_scrapings.iter() {
-                    w.encode_gauge(
-                        last_processed_block_metric_name(id),
-                        scraping_state.last_scraped_block_number().as_f64(),
-                        &format!(
-                            "The last Ethereum block the ckETH minter checked for {} deposits.",
-                            id
-                        ),
-                    )?;
-                }
+                w.encode_gauge(
+                    "cketh_minter_last_processed_block",
+                    s.last_scraped_block_number.as_f64(),
+                    "The last Ethereum block the ckETH minter checked for ckETH deposits.",
+                )?;
+
+                w.encode_gauge(
+                    "ckerc20_minter_last_processed_block",
+                    s.last_erc20_scraped_block_number.as_f64(),
+                    "The last Ethereum block the ckETH minter checked for ckERC20 deposits.",
+                )?;
 
                 w.encode_counter(
                     "cketh_minter_skipped_blocks",

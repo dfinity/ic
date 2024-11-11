@@ -54,13 +54,10 @@ fn test_fetch_status() {
     use bitcoin::Network;
     let tx = Transaction::consensus_decode(&mut bytes.to_vec().as_slice()).unwrap();
     let txid_1 = Txid::from(*(tx.compute_txid().as_ref() as &[u8; 32]));
-    let from_tx = |tx: &bitcoin::Transaction| {
-        TransactionKytData::from_transaction(&BtcNetwork::Mainnet, tx.clone()).unwrap()
-    };
     set_fetch_status(
         txid_1,
         FetchTxStatus::Fetched(FetchedTx {
-            tx: from_tx(&tx),
+            tx: tx.clone(),
             input_addresses: vec![None; 2],
         }),
     );

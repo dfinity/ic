@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package types.v1;
 
+import "registry/crypto/v1/crypto.proto";
 import "registry/subnet/v1/subnet.proto";
 import "state/queues/v1/queues.proto";
 import "types/v1/signature.proto";
@@ -33,7 +34,7 @@ message MasterKeyTranscript {
   reserved 1;
   UnmaskedTranscriptWithAttributes current = 2;
   KeyTranscriptCreation next_in_creation = 3;
-  types.v1.MasterPublicKeyId master_key_id = 4;
+  registry.crypto.v1.MasterPublicKeyId master_key_id = 4;
 }
 
 message AvailablePreSignature {
@@ -59,10 +60,11 @@ message XnetReshareAgreement {
 }
 
 message RequestId {
-  reserved 1, 2, 4;
+  reserved 4;
   reserved "key_id";
+  bytes pseudo_random_id = 1;
+  uint64 pre_signature_id = 2;
   uint64 height = 3;
-  uint64 callback_id = 5;
 }
 
 message TranscriptRef {
@@ -153,7 +155,7 @@ message QuadrupleInCreation {
   UnmaskedTimesMaskedParams kappa_times_lambda_config = 9;
   MaskedTranscript kappa_times_lambda = 10;
 
-  types.v1.EcdsaKeyId key_id = 12;
+  registry.crypto.v1.EcdsaKeyId key_id = 12;
 }
 
 message PreSignatureQuadrupleRef {
@@ -162,17 +164,17 @@ message PreSignatureQuadrupleRef {
   MaskedTranscript kappa_times_lambda_ref = 3;
   MaskedTranscript key_times_lambda_ref = 4;
   UnmaskedTranscript key_unmasked_ref = 5;
-  types.v1.EcdsaKeyId key_id = 6;
+  registry.crypto.v1.EcdsaKeyId key_id = 6;
 }
 
 message TranscriptInCreation {
-  types.v1.SchnorrKeyId key_id = 1;
+  registry.crypto.v1.SchnorrKeyId key_id = 1;
   RandomUnmaskedTranscriptParams blinder_unmasked_config = 2;
   UnmaskedTranscript blinder_unmasked = 3;
 }
 
 message PreSignatureTranscriptRef {
-  types.v1.SchnorrKeyId key_id = 1;
+  registry.crypto.v1.SchnorrKeyId key_id = 1;
   UnmaskedTranscript blinder_unmasked_ref = 2;
   UnmaskedTranscript key_unmasked_ref = 3;
 }
@@ -188,7 +190,7 @@ message IDkgReshareRequest {
   reserved 1, 4;
   repeated types.v1.NodeId receiving_node_ids = 2;
   uint64 registry_version = 3;
-  types.v1.MasterPublicKeyId master_key_id = 5;
+  registry.crypto.v1.MasterPublicKeyId master_key_id = 5;
 }
 
 enum KeyTranscriptCreationState {

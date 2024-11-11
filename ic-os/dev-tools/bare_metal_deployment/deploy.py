@@ -25,7 +25,8 @@ DEFAULT_IDRAC_SCRIPT_DIR = f"{site.getuserbase()}/bin"
 # IDRAC versions after 6 use different REST API endpoints.
 NEWER_IDRAC_VERSION_THRESHOLD = 6000000
 
-DEFAULT_SETUPOS_WAIT_TIME_MINS = 20
+# May vary depending on network or other conditions!
+DEFAULT_SETUPOS_WAIT_TIME_MINS = 25
 
 BMC_INFO_ENV_VAR = "BMC_INFO_CSV_FILENAME"
 
@@ -211,6 +212,10 @@ def parse_from_row(row: List[str], network_image_url: str) -> BMCInfo:
     assert False, f"Invalid csv row found. Must be 3 or 4 items: {row}"
 
 
+def parse_from_rows(rows: List[List[str]], network_image_url: str) -> List["BMCInfo"]:
+    return [parse_from_row(row, network_image_url) for row in rows]
+
+
 def parse_from_csv_file(csv_filename: str, network_image_url: str) -> List["BMCInfo"]:
     with open(csv_filename, "r") as csv_file:
         rows = [line.strip().split(",") for line in csv_file]
@@ -386,13 +391,11 @@ def deploy_server(bmc_info: BMCInfo, wait_time_mins: int, idrac_script_dir: Path
         iterate_func = check_connectivity_func if bmc_info.guestos_ipv6_address else wait_func
 
         log.info(f"Machine booting. Checking on SetupOS completion periodically. Timeout (mins): {wait_time_mins}")
-        start_time = time.time()
-        end_time = start_time + wait_time_mins * 60
-        while time.time() < end_time:
+        for i in tqdm.tqdm(range(int(60 * (wait_time_mins / timeout_secs))), disable=DISABLE_PROGRESS_BAR):
             if iterate_func():
                 log.info("*** Deployment SUCCESS!")
                 return OperationResult(bmc_info, success=True)
-            time.sleep(timeout_secs)
+
         raise Exception("Could not successfully verify connectivity to node.")
 
     except DeploymentError as e:

@@ -2,8 +2,7 @@ use candid::Encode;
 use canister_test::Wasm;
 use ic_base_types::PrincipalId;
 use ic_ledger_core::Tokens;
-use ic_management_canister_types::CanisterSettingsArgsBuilder;
-use ic_nervous_system_clients::canister_status::DefiniteCanisterSettingsArgs;
+use ic_management_canister_types::{CanisterSettingsArgsBuilder, DefiniteCanisterSettingsArgs};
 use ic_nervous_system_common::ONE_YEAR_SECONDS;
 use ic_nns_test_utils::state_test_helpers::{
     create_canister, sns_claim_staked_neuron, sns_get_proposal, sns_make_proposal,
@@ -97,14 +96,16 @@ fn test_manage_dapp_canister_settings_successful() {
         .canister_status_as(canister_ids.root_canister_id.get(), dapp_canister_id)
         .unwrap()
         .unwrap();
-    let dapp_settings: DefiniteCanisterSettingsArgs = status.settings().into();
     assert_eq!(
-        dapp_settings,
+        status.settings(),
         DefiniteCanisterSettingsArgs::new(
+            canister_ids.root_canister_id.get(),
             vec![canister_ids.root_canister_id.get()],
             50,
             Some(1 << 30),
             100_000,
+            Some(1_000_000_000_000),
+            ic_management_canister_types::LogVisibilityV2::Public,
             Some(1_000_000_000),
         ),
     );
@@ -148,14 +149,16 @@ fn test_manage_dapp_canister_settings_successful() {
         .canister_status_as(canister_ids.root_canister_id.get(), dapp_canister_id)
         .unwrap()
         .unwrap();
-    let dapp_settings: DefiniteCanisterSettingsArgs = status.settings().into();
     assert_eq!(
-        dapp_settings,
+        status.settings(),
         DefiniteCanisterSettingsArgs::new(
+            canister_ids.root_canister_id.get(),
             vec![canister_ids.root_canister_id.get()],
             0,
             Some(0),
             0,
+            Some(0),
+            ic_management_canister_types::LogVisibilityV2::Controllers,
             Some(2_000_000_000),
         ),
     );
@@ -223,14 +226,16 @@ fn test_manage_dapp_canister_settings_failure() {
         .canister_status_as(canister_ids.root_canister_id.get(), dapp_canister_id)
         .unwrap()
         .unwrap();
-    let dapp_settings: DefiniteCanisterSettingsArgs = status.settings().into();
     assert_eq!(
-        dapp_settings,
+        status.settings(),
         DefiniteCanisterSettingsArgs::new(
+            canister_ids.root_canister_id.get(),
             vec![canister_ids.root_canister_id.get()],
             50,
             Some(1 << 30),
             100_000,
+            Some(1_000_000_000_000),
+            ic_management_canister_types::LogVisibilityV2::Public,
             Some(1_000_000_000),
         ),
     );
@@ -294,14 +299,16 @@ fn test_manage_dapp_canister_settings_failure() {
         .canister_status_as(canister_ids.root_canister_id.get(), dapp_canister_id)
         .unwrap()
         .unwrap();
-    let dapp_settings: DefiniteCanisterSettingsArgs = dapp_canister_status.settings().into();
     assert_eq!(
-        dapp_settings,
+        dapp_canister_status.settings(),
         DefiniteCanisterSettingsArgs::new(
+            canister_ids.root_canister_id.get(),
             vec![canister_ids.root_canister_id.get()],
             50,
             Some(1 << 30),
             100_000,
+            Some(1_000_000_000_000),
+            ic_management_canister_types::LogVisibilityV2::Public,
             Some(1_000_000_000),
         ),
     );

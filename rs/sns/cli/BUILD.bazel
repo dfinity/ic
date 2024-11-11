@@ -91,6 +91,7 @@ rust_test(
     crate_root = "src/lib.rs",
     data = [
         "test.png",
+        "test_sns_init_v1.yaml",
         "test_sns_init_v2.yaml",
     ],
     env = {

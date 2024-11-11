@@ -31,7 +31,7 @@ DEPENDENCIES = [
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/ledger_suite/icp/test_utils",
-    "//rs/ledger_suite/tests/sm-tests:ic-ledger-suite-state-machine-tests",
+    "//rs/ledger_suite/tests/sm-tests",
     "//rs/rosetta-api/icp/test_utils",
     "//rs/state_machine_tests",
     "//rs/test_utilities/load_wasm",
@@ -98,7 +98,6 @@ rust_ic_test(
     ],
     edition = "2018",
     env = {
-        "RUST_TEST_THREADS": "4",
         "CARGO_MANIFEST_DIR": "rs/ledger_suite/icp/index",
         "IC_ICP_INDEX_WASM_PATH": "$(rootpath :ic-icp-index-canister.wasm)",
         "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method)",

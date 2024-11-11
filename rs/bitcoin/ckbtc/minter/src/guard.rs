@@ -166,6 +166,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::needless_collect)]
     fn guard_prevents_more_than_max_concurrent_principals() {
         // test that at most MAX_CONCURRENT guards can be created if each one
         // is for a different principal

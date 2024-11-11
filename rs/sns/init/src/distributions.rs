@@ -52,7 +52,7 @@ impl FractionalDeveloperVotingPower {
 
     /// Given the configuration of the different buckets, create the neurons that will be available
     /// at genesis. These neurons will have reduced functionality until after the
-    /// decentralization swap. Return a map of NeuronId to Neuron.
+    /// decentralization sale. Return a map of NeuronId to Neuron.
     pub fn get_initial_neurons(
         &self,
         parameters: &NervousSystemParameters,

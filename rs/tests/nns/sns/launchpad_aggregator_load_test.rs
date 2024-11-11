@@ -73,8 +73,8 @@ fn workload_via_aggregator_rps9600(env: TestEnv) {
 ///
 /// 1. Install NNS, SNS, and the Aggregator canister
 /// 2. Wait until the aggregator finds the SNS
-/// 3. Initiate the token swap
-/// 4. Wait until the aggregator finds swap params, and validate these params
+/// 3. Initiate the token sale
+/// 4. Wait until the aggregator finds sale params, and validate these params
 /// 5. Generate workload (http requests to aggregator) at various RPSs
 fn main() -> Result<()> {
     SystemTestGroup::new()

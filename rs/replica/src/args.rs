@@ -1,6 +1,7 @@
 use clap::Parser;
 use ic_config::ConfigSource;
 use ic_types::ReplicaVersion;
+use std::convert::TryFrom;
 use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
@@ -15,7 +16,7 @@ pub struct ReplicaArgs {
     pub print_sample_config: bool,
 
     /// The path to the Replica config file
-    #[clap(long)]
+    #[clap(long, parse(from_os_str))]
     pub config_file: Option<PathBuf>,
 
     /// A string representation of the Replica config
@@ -23,11 +24,11 @@ pub struct ReplicaArgs {
     pub config_literal: Option<String>,
 
     /// A path to a CBOR-encoded catch-up package to seed the Replica with
-    #[clap(long)]
+    #[clap(long, parse(from_os_str))]
     pub catch_up_package: Option<PathBuf>,
 
     /// The version of the Replica being run
-    #[clap(long)]
+    #[clap(long, parse(try_from_str = ReplicaVersion::try_from))]
     pub replica_version: ReplicaVersion,
 
     /// Force to use the given subnet ID. This is needed to upgrade NNS

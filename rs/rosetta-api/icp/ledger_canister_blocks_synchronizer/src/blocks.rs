@@ -477,11 +477,7 @@ mod database_access {
                 .map_err(|e| {
                     BlockStoreError::Other(
                         e.to_string()
-                            + format!(
-                                " | Block IDX: {} , Account {}, Tokens {}",
-                                hb.index, account, tokens
-                            )
-                            .as_str(),
+                            + format!(" | Block IDX: {} , Account {}", hb.index, account).as_str(),
                     )
                 })?;
         }

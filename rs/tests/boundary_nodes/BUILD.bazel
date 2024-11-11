@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "CUSTOM_DOMAINS_RUNTIME_DEPS", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -17,25 +17,15 @@ system_test_nns(
     env = {
         "KV_STORE_WASM_PATH": "$(rootpath //rs/tests/test_canisters/kv_store)",
         "HTTP_COUNTER_WASM_PATH": "$(rootpath //rs/tests/test_canisters/http_counter)",
-        "ASSET_CANISTER_WASM_PATH": "$(rootpath @asset_canister//file)",
     },
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
-        "long_test",  # since it takes longer than 5 minutes.
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + TEST_CANISTERS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
-    deps = [
-        # Keep sorted.
-        "//rs/tests/boundary_nodes/integration_test_common",
-        "//rs/tests/boundary_nodes/utils",
-        "//rs/tests/driver:ic-system-test-driver",
-        "//rs/types/types",
-        "@crate_index//:anyhow",
-    ],
+    deps = DEPENDENCIES + ["//rs/tests"],
 )
 
 system_test_nns(
@@ -43,7 +33,6 @@ system_test_nns(
     env = {
         "KV_STORE_WASM_PATH": "$(rootpath //rs/tests/test_canisters/kv_store)",
         "HTTP_COUNTER_WASM_PATH": "$(rootpath //rs/tests/test_canisters/http_counter)",
-        "ASSET_CANISTER_WASM_PATH": "$(rootpath @asset_canister//file)",
     },
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -52,14 +41,7 @@ system_test_nns(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + TEST_CANISTERS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
-    deps = [
-        # Keep sorted.
-        "//rs/tests/boundary_nodes/integration_test_common",
-        "//rs/tests/boundary_nodes/utils",
-        "//rs/tests/driver:ic-system-test-driver",
-        "//rs/types/types",
-        "@crate_index//:anyhow",
-    ],
+    deps = DEPENDENCIES + ["//rs/tests"],
 )
 
 system_test_nns(
@@ -72,11 +54,7 @@ system_test_nns(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "long",
     runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
-    deps = [
-        "//rs/tests/driver:ic-system-test-driver",
-        "//rs/tests/networking/subnet_update_workload",
-        "@crate_index//:anyhow",
-    ],
+    deps = DEPENDENCIES + ["//rs/tests"],
 )
 
 system_test_nns(
@@ -93,52 +71,7 @@ system_test_nns(
                    GUESTOS_RUNTIME_DEPS +
                    UNIVERSAL_VM_RUNTIME_DEPS +
                    CERTIFICATE_ORCHESTRATOR_RUNTIME_DEPS,
-    deps = [
-        # Keep sorted.
-        "//rs/boundary_node/certificate_issuance/certificate_orchestrator_interface",
-        "//rs/registry/subnet_type",
-        "//rs/tests/driver:ic-system-test-driver",
-        "//rs/types/types",
-        "@crate_index//:anyhow",
-        "@crate_index//:candid",
-        "@crate_index//:ic-agent",
-        "@crate_index//:k256",
-        "@crate_index//:rand",
-        "@crate_index//:rand_chacha",
-        "@crate_index//:slog",
-        "@crate_index//:tokio",
-    ],
-)
-
-system_test_nns(
-    name = "rate_limit_canister_test",
-    env = {
-        "RATE_LIMIT_CANISTER_WASM_PATH": "$(rootpath //rs/boundary_node/rate_limits:rate_limit_canister)",
-    },
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "k8s",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + [
-        "//rs/boundary_node/rate_limits:rate_limit_canister",
-    ],
-    deps = [
-        # Keep sorted.
-        "//rs/boundary_node/rate_limits/api:rate_limits_api",
-        "//rs/registry/subnet_type",
-        "//rs/tests/driver:ic-system-test-driver",
-        "//rs/types/types",
-        "@crate_index//:anyhow",
-        "@crate_index//:candid",
-        "@crate_index//:ic-agent",
-        "@crate_index//:k256",
-        "@crate_index//:rand",
-        "@crate_index//:rand_chacha",
-        "@crate_index//:regex",
-        "@crate_index//:slog",
-        "@crate_index//:tokio",
-    ],
+    deps = DEPENDENCIES + ["//rs/tests"],
 )
 
 system_test_nns(
@@ -154,13 +87,7 @@ system_test_nns(
     tags = ["manual"],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
-    deps = [
-        # Keep sorted.
-        "//rs/tests/boundary_nodes/performance_test_common",
-        "//rs/tests/boundary_nodes/utils",
-        "//rs/tests/driver:ic-system-test-driver",
-        "@crate_index//:anyhow",
-    ],
+    deps = DEPENDENCIES + ["//rs/tests"],
 )
 
 system_test(
@@ -180,12 +107,7 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
-    deps = [
-        # Keep sorted.
-        "//rs/tests/boundary_nodes/performance_test_common",
-        "//rs/tests/driver:ic-system-test-driver",
-        "@crate_index//:anyhow",
-    ],
+    deps = DEPENDENCIES + ["//rs/tests"],
 )
 
 system_test(
@@ -205,46 +127,35 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
-    deps = [
-        # Keep sorted.
-        "//rs/tests/boundary_nodes/performance_test_common",
-        "//rs/tests/driver:ic-system-test-driver",
-        "@crate_index//:anyhow",
+    deps = DEPENDENCIES + ["//rs/tests"],
+)
+
+system_test_nns(
+    name = "custom_domains_integration_test",
+    env = {
+        "CERTIFICATE_ORCHESTRATOR_WASM_PATH": "$(rootpath //rs/boundary_node/certificate_issuance/certificate_orchestrator:certificate_orchestrator)",
+    },
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "manual",
     ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS +
+                   GUESTOS_RUNTIME_DEPS +
+                   UNIVERSAL_VM_RUNTIME_DEPS +
+                   CERTIFICATE_ORCHESTRATOR_RUNTIME_DEPS +
+                   CUSTOM_DOMAINS_RUNTIME_DEPS,
+    deps = DEPENDENCIES + ["//rs/tests"],
 )
 
 system_test_nns(
     name = "api_bn_decentralization_test",
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
-        "long_test",  # since it takes longer than 5 minutes.
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
-    deps = [
-        # Keep sorted.
-        "//rs/boundary_node/discower_bowndary:discower-bowndary",
-        "//rs/canister_client",
-        "//rs/nervous_system/common/test_keys",
-        "//rs/nns/common",
-        "//rs/nns/constants",
-        "//rs/nns/governance/api",
-        "//rs/nns/test_utils",
-        "//rs/registry/canister",
-        "//rs/tests/boundary_nodes/utils",
-        "//rs/tests/driver:ic-system-test-driver",
-        "//rs/types/base_types",
-        "//rs/types/types",
-        "@crate_index//:anyhow",
-        "@crate_index//:candid",
-        "@crate_index//:ic-agent",
-        "@crate_index//:itertools",
-        "@crate_index//:k256",
-        "@crate_index//:slog",
-        "@crate_index//:tokio",
-        "@crate_index//:wat",
-    ],
+    deps = DEPENDENCIES + ["//rs/tests"],
 )

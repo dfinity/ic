@@ -21,11 +21,11 @@ use ic_nns_test_utils::{
     },
     registry::{invariant_compliant_mutation_as_atomic_req, INITIAL_MUTATION_ID},
 };
+use ic_protobuf::registry::crypto::v1::MasterPublicKeyId as MasterPublicKeyIdPb;
 use ic_protobuf::registry::subnet::v1::{
     ChainKeyConfig as ChainKeyConfigPb, KeyConfig as KeyConfigPb,
     SubnetListRecord as SubnetListRecordPb, SubnetRecord as SubnetRecordPb,
 };
-use ic_protobuf::types::v1::MasterPublicKeyId as MasterPublicKeyIdPb;
 use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
 use ic_registry_subnet_features::{
     ChainKeyConfig, KeyConfig as KeyConfigInternal, DEFAULT_ECDSA_MAX_QUEUE_SIZE,

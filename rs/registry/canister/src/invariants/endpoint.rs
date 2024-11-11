@@ -391,7 +391,10 @@ mod tests {
                     ip_addr: "200.1.1.3".to_string(),
                     port: 9001,
                 }),
-                ..Default::default()
+                hostos_version_id: None,
+                chip_id: None,
+                public_ipv4_config: None,
+                domain: None,
             }
             .encode_to_vec(),
         );
@@ -418,8 +421,10 @@ mod tests {
                     ip_addr: "200.1.1.1".to_string(),
                     port: 9001,
                 }),
-
-                ..Default::default()
+                hostos_version_id: None,
+                chip_id: None,
+                public_ipv4_config: None,
+                domain: None,
             }
             .encode_to_vec(),
         );
@@ -453,7 +458,10 @@ mod tests {
                     ip_addr: "200.1.1.2".to_string(),
                     port: 9001,
                 }),
-                ..Default::default()
+                hostos_version_id: None,
+                chip_id: None,
+                public_ipv4_config: None,
+                domain: None,
             }
             .encode_to_vec(),
         );

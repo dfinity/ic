@@ -16,13 +16,12 @@
 
 use crate::pb::v1::VotingRewardsParameters;
 use ic_nervous_system_common::i2d;
-use ic_nervous_system_linear_map::LinearMap;
 use lazy_static::lazy_static;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use std::{
     fmt::Debug,
-    ops::{Add, Div, Mul, RangeBounds, Sub},
+    ops::{Add, Div, Mul, Range, RangeBounds, Sub},
 };
 
 lazy_static! {
@@ -124,6 +123,41 @@ impl RewardRate {
 
     fn per_day(&self) -> Decimal {
         self.per_year / *NOMINAL_DAYS_PER_YEAR
+    }
+}
+
+/// A function that linearly maps values in the from Range to the to Range.
+// TODO: Generic-ify, and (move to a place where this can be) share(d) more broadly.
+#[derive(Clone, Eq, PartialEq, Debug)]
+struct LinearMap {
+    from: Range<Decimal>,
+    to: Range<Decimal>,
+}
+
+impl LinearMap {
+    pub fn new(from: Range<Decimal>, to: Range<Decimal>) -> Self {
+        // from must have nonzero length.
+        assert!(from.end != from.start, "{:#?}", from);
+        Self { from, to }
+    }
+
+    pub fn apply(&self, x: Decimal) -> Decimal {
+        let Self { from, to } = &self;
+
+        // t varies from 0 to 1 as x varies from from.start to from.end...
+        // But if from.end == from.start, we set t to 1 to avoid division by
+        // zero.
+        let t = if from.end == from.start {
+            i2d(1)
+        } else {
+            (x - from.start) / (from.end - from.start)
+        };
+
+        // Thus, the result varies from
+        //   to.start * 1 + to.end * 0 = to.start
+        // to
+        //   to.start * (1 - 1) + to.end * 1 = to.end
+        to.start * (i2d(1) - t) + to.end * t
     }
 }
 
@@ -463,6 +497,20 @@ mod test {
     use super::*;
     use ic_nervous_system_common::{assert_is_err, assert_is_ok, E8};
     use pretty_assertions::{assert_eq, assert_ne};
+
+    #[test]
+    fn linear_map() {
+        let map = LinearMap::new(dec!(5.0)..dec!(6.0), dec!(100.0)..dec!(200.0));
+
+        // Look at the extrema (this should be a no-brainer).
+        assert_eq!(map.apply(dec!(5.0)), dec!(100.0));
+        assert_eq!(map.apply(dec!(6.0)), dec!(200.0));
+
+        // Look at the middle.
+        assert_eq!(map.apply(dec!(5.50)), dec!(150.0));
+        assert_eq!(map.apply(dec!(5.25)), dec!(125.0));
+        assert_eq!(map.apply(dec!(5.75)), dec!(175.0));
+    }
 
     const TRANSITION_ROUND_COUNT: u64 = 42;
 

@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use ic_types::{
     batch::{Batch, BatchMessages, BlockmakerMetrics},
     time::UNIX_EPOCH,
-    Height, Randomness, RegistryVersion, ReplicaVersion, Time,
+    Height, Randomness, RegistryVersion, Time,
 };
 
 pub struct BatchBuilder {
@@ -26,7 +26,6 @@ impl Default for BatchBuilder {
                 time: UNIX_EPOCH,
                 consensus_responses: vec![],
                 blockmaker_metrics: BlockmakerMetrics::new_for_test(),
-                replica_version: ReplicaVersion::default(),
             },
         }
     }

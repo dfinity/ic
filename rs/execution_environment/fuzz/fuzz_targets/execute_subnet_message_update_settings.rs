@@ -1,3 +1,4 @@
+#![no_main]
 use ic_management_canister_types::{Method, Payload, UpdateSettingsArgs};
 use ic_test_utilities_execution_environment::ExecutionTestBuilder;
 use libfuzzer_sys::{fuzz_target, Corpus};
@@ -6,16 +7,14 @@ use libfuzzer_sys::{fuzz_target, Corpus};
 //
 // The fuzz test is only compiled but not executed by CI.
 //
-// ASAN_OPTIONS="detect_leaks=0:allow_user_segv_handler=1:handle_segv=1:handle_sigfpe=1:handle_sigill=0:quarantine_size_mb=16"
-// LSAN_OPTIONS="handle_sigill=0"
-// ASAN_OPTIONS=$ASAN_OPTIONS LSAN_OPTIONS=$LSAN_OPTIONS bazel run --config=fuzzing //rs/execution_environment/fuzz:execute_subnet_message_update_settings
-
-fn main() {
-    fuzzer_sandbox::fuzzer_main();
-}
+// To execute the fuzzer run
+// bazel run --config=fuzzing //rs/execution_environment/fuzz:execute_subnet_message_update_settings
 
 fuzz_target!(|args: UpdateSettingsArgs| -> Corpus {
-    let mut test = ExecutionTestBuilder::new().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_deterministic_time_slicing_disabled()
+        .with_canister_sandboxing_disabled()
+        .build();
 
     let wat = r#"(module)"#;
     let canister_id = test.canister_from_wat(wat).unwrap();

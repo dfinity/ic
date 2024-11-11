@@ -6,7 +6,7 @@ use ic_sns_governance::pb::v1::{
 };
 use serde::{Deserialize, Serialize};
 
-#[derive(Copy, Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GovernanceCanister {
     pub canister_id: PrincipalId,
 }

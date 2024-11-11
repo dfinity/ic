@@ -109,7 +109,7 @@ fn bench_threshold_sig_n_nodes<M: Measurement>(
     for &node_id in &nodes_in_subnet {
         load_transcript(&transcript, &env.crypto_components, node_id);
     }
-    let dkg_id = &transcript.dkg_id;
+    let dkg_id = transcript.dkg_id;
 
     bench_threshold_sign(
         group,
@@ -162,7 +162,7 @@ fn bench_threshold_sign<M: Measurement, R: Rng + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     nodes_in_subnet: &[NodeId],
     crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<ChaCha20Rng>>,
-    dkg_id: &NiDkgId,
+    dkg_id: NiDkgId,
     message_size: usize,
     rng: &mut R,
 ) {
@@ -185,7 +185,7 @@ fn bench_verify_threshold_sig_share_incl_loading_pubkey<M: Measurement, R: Rng +
     group: &mut BenchmarkGroup<'_, M>,
     nodes_in_subnet: &[NodeId],
     crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<ChaCha20Rng>>,
-    dkg_id: &NiDkgId,
+    dkg_id: NiDkgId,
     transcript: &NiDkgTranscript,
     message_size: usize,
     rng: &mut R,
@@ -234,7 +234,7 @@ fn bench_verify_threshold_sig_share_excl_loading_pubkey<M: Measurement, R: Rng +
     group: &mut BenchmarkGroup<'_, M>,
     nodes_in_subnet: &[NodeId],
     crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<ChaCha20Rng>>,
-    dkg_id: &NiDkgId,
+    dkg_id: NiDkgId,
     message_size: usize,
     rng: &mut R,
 ) {
@@ -280,7 +280,7 @@ fn bench_combine_threshold_sig_shares<M: Measurement, R: Rng + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     nodes: &[NodeId],
     crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<ChaCha20Rng>>,
-    dkg_id: &NiDkgId,
+    dkg_id: NiDkgId,
     message_size: usize,
     rng: &mut R,
 ) {
@@ -310,7 +310,7 @@ fn bench_verify_threshold_sig_combined<M: Measurement, R: Rng + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     nodes: &[NodeId],
     crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<ChaCha20Rng>>,
-    dkg_id: &NiDkgId,
+    dkg_id: NiDkgId,
     message_size: usize,
     rng: &mut R,
 ) {
@@ -355,7 +355,7 @@ fn random_nodes<R: Rng + CryptoRng>(nodes: &[NodeId], n: usize, rng: &mut R) -> 
 /// dummy transcripts derived from `transcript` until the maximum storage
 /// capacity is reached.
 fn purge_dkg_id_from_data_store(
-    dkg_id: &NiDkgId,
+    dkg_id: NiDkgId,
     node: &TempCryptoComponentGeneric<ChaCha20Rng>,
     transcript: &NiDkgTranscript,
 ) {
@@ -368,7 +368,7 @@ fn purge_dkg_id_from_data_store(
         .expect("overflow")
     {
         dummy_transcript.dkg_id.start_block_height += Height::from(1);
-        assert_ne!(&dummy_transcript.dkg_id, dkg_id);
+        assert_ne!(dummy_transcript.dkg_id, dkg_id);
 
         assert!(node.load_transcript(&dummy_transcript).is_ok());
     }

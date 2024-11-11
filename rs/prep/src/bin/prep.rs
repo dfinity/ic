@@ -3,6 +3,7 @@
 
 use std::{
     collections::{BTreeMap, BTreeSet},
+    convert::TryFrom,
     fs,
     io::{self, BufRead},
     path::{Path, PathBuf},
@@ -48,7 +49,7 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(12);
 /// See the README.adoc file for more details.
 struct CliArgs {
     /// The version of the Replica being run
-    #[clap(long)]
+    #[clap(long, parse(try_from_str = ReplicaVersion::try_from))]
     pub replica_version: Option<ReplicaVersion>,
 
     /// The URL against which a HTTP GET request will return a release
@@ -58,7 +59,7 @@ struct CliArgs {
     /// and release-package-sha256-hex are unspecified, the
     /// release-package-download-url will default to
     /// https://download.dfinity.systems/ic/<REPLICA_VERSION>/guest-os/update-img/update-img.tar.zst
-    #[clap(long)]
+    #[clap(long, parse(try_from_str = url::Url::parse))]
     pub release_package_download_url: Option<Url>,
 
     /// The hex-formatted SHA-256 hash of the archive served by
@@ -73,11 +74,11 @@ struct CliArgs {
     pub release_package_sha256_hex: Option<String>,
 
     /// JSON5 node definition
-    #[clap(long = "node", group = "node_spec", num_args(1..), value_parser = Node::from_json5_without_braces)]
+    #[clap(long = "node", group = "node_spec", multiple_values(true), parse(try_from_str = Node::from_json5_without_braces))]
     pub nodes: Vec<Node>,
 
     /// Path to working directory for node states.
-    #[clap(long)]
+    #[clap(long, parse(from_os_str))]
     pub working_dir: PathBuf,
 
     /// Skip generating subnet records
@@ -90,7 +91,7 @@ struct CliArgs {
 
     /// Reads a directory containing datacenter's DER keys and a "meta.json"
     /// file containing metainformation for each datacenter.
-    #[clap(long)]
+    #[clap(long, parse(from_os_str))]
     pub dc_pk_path: Option<PathBuf>,
 
     /// Indicate whether each node operator entry is required to specify a file
@@ -107,7 +108,7 @@ struct CliArgs {
     /// A json-file containing a list of whitelisted principal IDs. A
     /// whitelisted principal is allowed to create canisters on any subnet on
     /// the IC.
-    #[clap(long)]
+    #[clap(long, parse(from_os_str))]
     pub provisional_whitelist: Option<PathBuf>,
 
     /// The Principal Id of the node operator that is used for all nodes created
@@ -125,13 +126,13 @@ struct CliArgs {
     /// The path to the file which contains the initial set of SSH public keys
     /// to populate the registry with, to give "readonly" access to all the
     /// nodes.
-    #[clap(long)]
+    #[clap(long, parse(from_os_str))]
     pub ssh_readonly_access_file: Option<PathBuf>,
 
     /// The path to the file which contains the initial set of SSH public keys
     /// to populate the registry with, to give "backup" access to all the
     /// nodes.
-    #[clap(long)]
+    #[clap(long, parse(from_os_str))]
     pub ssh_backup_access_file: Option<PathBuf>,
 
     /// Maximum size of ingress message in bytes.
@@ -508,7 +509,6 @@ mod test_flag_node_parser {
                 public_api: "3.4.5.6:82".parse().unwrap(),
                 node_operator_principal_id: None,
                 secret_key_store: None,
-                domain: None,
             },
         };
 

@@ -38,6 +38,7 @@ use tracing::instrument;
 
 type ReceivedAdvertSender<A> = Sender<(SlotUpdate<A>, NodeId, ConnId)>;
 
+#[allow(unused)]
 pub fn build_axum_router<Artifact: PbArtifact>(
     log: ReplicaLogger,
 ) -> (Router, Receiver<(SlotUpdate<Artifact>, NodeId, ConnId)>) {
@@ -173,6 +174,7 @@ impl PeerCounter {
     }
 }
 
+#[allow(unused)]
 pub(crate) struct ConsensusManagerReceiver<
     Artifact: IdentifiableArtifact,
     WireArtifact: IdentifiableArtifact,
@@ -199,6 +201,7 @@ pub(crate) struct ConsensusManagerReceiver<
     slot_limit: usize,
 }
 
+#[allow(unused)]
 impl<Artifact, WireArtifact, Assembler>
     ConsensusManagerReceiver<
         Artifact,
@@ -285,9 +288,9 @@ where
                 self.artifact_processor_tasks.len()
                     >= HashSet::<WireArtifact::Id>::from_iter(
                         self.slot_table
-                            .values()
-                            .flat_map(HashMap::values)
-                            .map(|s| s.id.clone())
+                            .iter()
+                            .flat_map(|(k, v)| v.iter())
+                            .map(|(_, s)| s.id.clone())
                     )
                     .len(),
                 "Number of assemble tasks should always be the same or exceed the number of distinct ids stored."
@@ -327,9 +330,9 @@ where
         }
         debug_assert!(
             self.slot_table
-                .values()
-                .flat_map(HashMap::values)
-                .all(|v| self.active_assembles.contains_key(&v.id)),
+                .iter()
+                .flat_map(|(k, v)| v.iter())
+                .all(|(k, v)| self.active_assembles.contains_key(&v.id)),
             "Every entry in the slot table should have an active assemble task."
         );
     }
@@ -407,7 +410,7 @@ where
                 None => {
                     self.metrics.assemble_task_started_total.inc();
 
-                    let peer_counter = PeerCounter::new();
+                    let mut peer_counter = PeerCounter::new();
                     let (tx, rx) = watch::channel(peer_counter);
                     tx.send_if_modified(|h| h.insert(peer_id));
                     self.active_assembles.insert(id.clone(), tx);
@@ -457,10 +460,10 @@ where
         log: ReplicaLogger,
         id: WireArtifact::Id,
         // Only first peer for specific artifact ID is considered for push
-        artifact: Option<(WireArtifact, NodeId)>,
+        mut artifact: Option<(WireArtifact, NodeId)>,
         mut peer_rx: watch::Receiver<PeerCounter>,
         sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
-        artifact_assembler: Assembler,
+        mut artifact_assembler: Assembler,
         metrics: ConsensusManagerMetrics,
         cancellation_token: CancellationToken,
     ) -> (watch::Receiver<PeerCounter>, WireArtifact::Id) {
@@ -471,13 +474,13 @@ where
             loop {
                 match peer_rx_clone.changed().await {
                     Err(_) => break,
-                    Ok(_) if peer_rx_clone.borrow().is_empty() => break,
+                    Ok(x) if peer_rx_clone.borrow().is_empty() => break,
                     _ => {}
                 }
             }
         };
 
-        let peer_rx_c = peer_rx.clone();
+        let mut peer_rx_c = peer_rx.clone();
         let id_c = id.clone();
         let assemble_artifact = async move {
             artifact_assembler
@@ -491,18 +494,13 @@ where
                     Ok((artifact, peer_id)) => {
                         let id = artifact.id();
                         // Send artifact to pool
-                        if sender.send(UnvalidatedArtifactMutation::Insert((artifact, peer_id))).is_err() {
-                            error!(log, "The receiving side of the channel, owned by the consensus thread, was closed. This should be infallible situation since a cancellation token should be received. If this happens then most likely there is very subnet synchonization bug.");
-                        }
+                        sender.send(UnvalidatedArtifactMutation::Insert((artifact, peer_id)));
 
                         // wait for deletion from peers
-                        // TODO: NET-1774
-                        let _ = peer_rx.wait_for(|p| p.is_empty()).await;
+                        peer_rx.wait_for(|p| p.is_empty()).await;
 
                         // Purge from the unvalidated pool
-                        if sender.send(UnvalidatedArtifactMutation::Remove(id)).is_err() {
-                            error!(log, "The receiving side of the channel, owned by the consensus thread, was closed. This should be infallible situation since a cancellation token should be received. If this happens then most likely there is very subnet synchonization bug.");
-                        }
+                        sender.send(UnvalidatedArtifactMutation::Remove(id));
                         metrics
                             .assemble_task_result_total
                             .with_label_values(&[ASSEMBLE_TASK_RESULT_COMPLETED])
@@ -510,8 +508,7 @@ where
                     }
                     Err(Aborted) => {
                         // wait for deletion from peers
-                        // TODO: NET-1774
-                        let _ = peer_rx.wait_for(|p| p.is_empty()).await;
+                        peer_rx.wait_for(|p| p.is_empty()).await;
                         metrics
                             .assemble_task_result_total
                             .with_label_values(&[ASSEMBLE_TASK_RESULT_DROP])
@@ -542,8 +539,7 @@ where
         self.slot_table.retain(|node_id, _| {
             if !new_topology.is_member(node_id) {
                 nodes_leaving_topology.insert(*node_id);
-                let _ = self
-                    .metrics
+                self.metrics
                     .slot_table_new_entry_total
                     .remove_label_values(&[node_id.to_string().as_str()]);
                 false

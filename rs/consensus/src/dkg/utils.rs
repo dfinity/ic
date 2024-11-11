@@ -12,11 +12,7 @@ pub(super) fn get_dealers_from_chain(
 ) -> HashSet<(NiDkgId, NodeId)> {
     get_dkg_dealings(pool_reader, block)
         .into_iter()
-        .flat_map(|(dkg_id, dealings)| {
-            dealings
-                .into_keys()
-                .map(move |node_id| (dkg_id.clone(), node_id))
-        })
+        .flat_map(|(dkg_id, dealings)| dealings.into_keys().map(move |node_id| (dkg_id, node_id)))
         .collect()
 }
 
@@ -39,7 +35,7 @@ pub(super) fn get_dkg_dealings(
                 .messages
                 .iter()
                 .for_each(|msg| {
-                    let collected_dealings = acc.entry(msg.content.dkg_id.clone()).or_default();
+                    let collected_dealings = acc.entry(msg.content.dkg_id).or_default();
                     assert!(
                         collected_dealings
                             .insert(msg.signature.signer, msg.content.dealing.clone())

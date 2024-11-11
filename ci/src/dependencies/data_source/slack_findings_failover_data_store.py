@@ -15,8 +15,6 @@ from integration.slack.slack_channel_config import SlackChannelConfig
 from model.finding import Finding
 from model.project import Project
 from model.team import Team
-from resources import resource_reader
-from resources.resource_reader import IgnoreList
 
 SUPPORTED_TEAMS = (Team.NODE_TEAM, Team.BOUNDARY_NODE_TEAM)
 SLACK_CHANNEL_CONFIG_BY_TEAM = {
@@ -36,15 +34,6 @@ if SLACK_OAUTH_TOKEN is None:
 
 FAILOVER_FINDING_PREFIXES = {
     ("ic", "BAZEL_TRIVY_CS"): ["linux-libc-dev", "linux-modules"],
-}
-
-IGNORE_LIST_BY_PROJECT = {
-    "OSP: ic/ic-os/boundary-guestos/envs/prod (https://github.com/dfinity/ic/tree/master/ic-os/boundary-guestos/context)": resource_reader.read_ignore_list(
-        IgnoreList.BOUNDARY_GUEST_OS
-    ),
-    "OSP: ic/ic-os/guestos/envs/prod (https://github.com/dfinity/ic/tree/master/ic-os/guestos/context)": resource_reader.read_ignore_list(
-        IgnoreList.GUEST_OS
-    ),
 }
 
 
@@ -115,41 +104,6 @@ class SlackFindingsFailoverDataStore(FindingsFailoverDataStore):
             res[finding_proj] = SlackProjectInfo(finding_proj, channels, risk_assessors_sorted)
         return res
 
-    @staticmethod
-    def _filter_vulns(vuln_by_vuln_id: Dict[str, VulnerabilityInfo], ignore_list_by_project: Dict[str, Set[str]]):
-        # remove vulns with too low score
-        vuln_ids = list(vuln_by_vuln_id.keys())
-        for vid in vuln_ids:
-            if vuln_by_vuln_id[vid].vulnerability.score < VULNERABILITY_THRESHOLD_SCORE:
-                del vuln_by_vuln_id[vid]
-
-        # remove vulns that contain words on ignore list or adapt findings
-        vulns_to_delete = set()
-        for vi in vuln_by_vuln_id.values():
-            findings_to_delete = set()
-            for finding in vi.finding_by_id.values():
-                filtered_projects = []
-                for proj in finding.projects:
-                    add_proj = True
-                    if proj in ignore_list_by_project:
-                        for expr in ignore_list_by_project[proj]:
-                            if expr.lower() in vi.vulnerability.description.lower():
-                                add_proj = False
-                                break
-                    if add_proj:
-                        filtered_projects.append(proj)
-                if len(filtered_projects) == 0:
-                    findings_to_delete.add(finding.id())
-                else:
-                    finding.projects = filtered_projects
-            if len(findings_to_delete) == len(vi.finding_by_id):
-                vulns_to_delete.add(vi.vulnerability.id)
-            else:
-                for finding_id in findings_to_delete:
-                    del vi.finding_by_id[finding_id]
-        for vuln_id in vulns_to_delete:
-            del vuln_by_vuln_id[vuln_id]
-
     def can_handle(self, finding: Finding) -> bool:
         is_failover_finding = False
         key = (finding.repository, finding.scanner)
@@ -176,9 +130,13 @@ class SlackFindingsFailoverDataStore(FindingsFailoverDataStore):
                     raise RuntimeError(
                         f"vulnerability with same id but different values found in current findings: {vuln} {vuln_by_vuln_id[vuln.id].vulnerability}"
                     )
-                vuln_by_vuln_id[vuln.id].finding_by_id[finding.id()] = deepcopy(finding)
+                vuln_by_vuln_id[vuln.id].finding_by_id[finding.id()] = finding
 
-        self._filter_vulns(vuln_by_vuln_id, IGNORE_LIST_BY_PROJECT)
+        # remove vulns with too low score
+        vuln_ids = list(vuln_by_vuln_id.keys())
+        for vid in vuln_ids:
+            if vuln_by_vuln_id[vid].vulnerability.score < VULNERABILITY_THRESHOLD_SCORE:
+                del vuln_by_vuln_id[vid]
 
         slack_vuln_by_vuln_id = self.slack_loader.load_findings()
         for vuln_info in slack_vuln_by_vuln_id.values():

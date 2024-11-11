@@ -131,8 +131,8 @@ expression: out
     i32.sub
   )
   (table (;0;) 5 5 funcref)
-  (memory (;0;) i64 0 8192000)
-  (memory (;1;) 2000 2000)
+  (memory (;0;) i64 0 6553600)
+  (memory (;1;) 1600 1600)
   (global (;0;) (mut i64) i64.const 0)
   (global (;1;) (mut i64) i64.const 0)
   (global (;2;) (mut i64) i64.const 0)

@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 use ic_crypto_sha2::Sha224;
 use std::hash::Hash;
 

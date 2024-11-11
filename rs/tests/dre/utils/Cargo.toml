@@ -7,6 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+tests = { path = "../../" }
 ic-system-test-driver = { path = "../../driver" }
 ic-protobuf = { path = "../../../protobuf" }
 tokio.workspace = true
@@ -23,7 +24,6 @@ futures.workspace = true
 anyhow.workspace = true
 reqwest.workspace = true
 ic-types = { path = "../../../types/types" }
-xnet-slo-test-lib = { path = "../../message_routing/xnet/slo_test_lib" }
 
 [lib]
 path = "lib.rs"

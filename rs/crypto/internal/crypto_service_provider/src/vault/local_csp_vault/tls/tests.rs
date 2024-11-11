@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used)]
+
 use crate::vault::local_csp_vault::tls::SecretKeyStoreInsertionError;
 use crate::vault::test_utils::sks::secret_key_store_containing_key_with_invalid_encoding;
 use crate::vault::test_utils::sks::secret_key_store_with_duplicated_key_id_error_on_insert;

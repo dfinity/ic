@@ -293,6 +293,7 @@ mod tests {
                 }
                 Ok(Response::builder()
                     .status(StatusCode::OK)
+                    .extension(NODE_1)
                     .body(compress_empty_bytes())
                     .unwrap())
             });

@@ -1,4 +1,3 @@
-from copy import deepcopy
 from typing import Dict, List
 from unittest.mock import Mock
 
@@ -10,7 +9,7 @@ from data_source.slack_findings_failover.data import (
     SlackVulnerabilityEventType,
 )
 from data_source.slack_findings_failover.scan_result import SlackScanResult
-from data_source.slack_findings_failover.vuln_info import SlackVulnerabilityInfo, VulnerabilityInfo
+from data_source.slack_findings_failover.vuln_info import SlackVulnerabilityInfo
 from data_source.slack_findings_failover.vuln_store import SlackVulnerabilityStore
 from data_source.slack_findings_failover_data_store import SLACK_CHANNEL_CONFIG_BY_TEAM, SlackFindingsFailoverDataStore
 from model.dependency import Dependency
@@ -143,55 +142,6 @@ def test_store_findings():
         ),
     ]
     assert slack_api.send_message.call_count == 2
-
-
-def test_filter_findings():
-    v1 = Vulnerability("v1id", "v1 name", "V1 desc", 10)
-    # filtered because only f1 is affected and ic/proj1 ignores it
-    v2 = Vulnerability("v2id", "v2 name", "v2 desc", 10)
-    v3 = Vulnerability("v3id", "v3 name", "v3 desc", 10)
-    # filtered because of too low score
-    v4 = Vulnerability("v4id", "v4 name", "v4 desc", 2)
-    # filtered in v1 and v3
-    f1 = Finding(
-        "ic",
-        "BAZEL_TRIVY_CS",
-        Dependency("f1id", "f1 name", "1.0"),
-        [v1, v2, v4],
-        [],
-        ["ic/proj1"],
-        [],
-    )
-    # ic/proj1 filtered in v1
-    f2 = Finding(
-        "ic",
-        "BAZEL_TRIVY_CS",
-        Dependency("f2id", "f2 name", "2.0"),
-        [v1, v3, v4],
-        [],
-        ["ic/proj1", "ic/proj2"],
-        [],
-    )
-    ignore_list_by_project = {"ic/proj1": {"v1 DES", "v2"}}
-    vuln_by_vuln_id = {
-        v1.id: VulnerabilityInfo(v1, {f1.id(): deepcopy(f1), f2.id(): deepcopy(f2)}),
-        v2.id: VulnerabilityInfo(v2, {f1.id(): deepcopy(f1)}),
-        v3.id: VulnerabilityInfo(v3, {f2.id(): deepcopy(f2)}),
-    }
-
-    SlackFindingsFailoverDataStore._filter_vulns(vuln_by_vuln_id, ignore_list_by_project)
-
-    assert len(vuln_by_vuln_id) == 2
-
-    assert v1.id in vuln_by_vuln_id
-    assert len(vuln_by_vuln_id[v1.id].finding_by_id) == 1
-    assert f2.id() in vuln_by_vuln_id[v1.id].finding_by_id
-    assert vuln_by_vuln_id[v1.id].finding_by_id[f2.id()].projects == ["ic/proj2"]
-
-    assert v3.id in vuln_by_vuln_id
-    assert len(vuln_by_vuln_id[v3.id].finding_by_id) == 1
-    assert f2.id() in vuln_by_vuln_id[v3.id].finding_by_id
-    assert vuln_by_vuln_id[v3.id].finding_by_id[f2.id()].projects == ["ic/proj1", "ic/proj2"]
 
 
 class MockSlackStore(SlackVulnerabilityStore):

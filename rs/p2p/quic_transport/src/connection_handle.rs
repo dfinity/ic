@@ -1,8 +1,14 @@
-//! The module implements the RPC abstraction over an established QUIC connection.
+//! Quic Transport connection handle.
 //!
-use anyhow::Context;
+//! Contains a wrapper, called `ConnectionHandle`, around quinn's Connection.
+//! The `ConnectionHandle` implements `rpc` and `push` methods for the given
+//! connection.
+//!
+
+use anyhow::{anyhow, Context};
+use axum::http::{Method, Request, Response, Version};
 use bytes::Bytes;
-use http::{Method, Request, Response, Version};
+use ic_base_types::NodeId;
 use ic_protobuf::transport::v1 as pb;
 use prost::Message;
 use quinn::{Connection, RecvStream, SendStream, VarInt};
@@ -40,36 +46,46 @@ impl Drop for SendStreamDropGuard {
 }
 
 #[derive(Clone, Debug)]
-pub struct ConnectionHandle {
+pub(crate) struct ConnectionHandle {
+    pub peer_id: NodeId,
     pub connection: Connection,
     pub metrics: QuicTransportMetrics,
-    pub conn_id: ConnId,
+    conn_id: ConnId,
 }
 
 impl ConnectionHandle {
-    /// Executes an RPC operation over an already-established connection.
-    ///
-    /// This method leverages the QUIC transport layer, which continuously monitors the connection’s health
-    /// and automatically attempts reconnection as necessary. As a result, any errors returned by this method
-    /// should be considered transient (retryable).
-    ///
-    /// In this P2P architecture, where there is a designated dialer and receiver, connection management
-    /// is delegated solely to the transport layer. This differs from typical client-server architectures,
-    /// where connections can be managed directly by the caller.
-    ///
-    /// Note: This method provides the same cancellation safety guarantees as the `quinn::Connection` methods.
-    pub async fn rpc(&self, request: Request<Bytes>) -> Result<Response<Bytes>, anyhow::Error> {
+    pub(crate) fn new(
+        peer_id: NodeId,
+        connection: Connection,
+        metrics: QuicTransportMetrics,
+        conn_id: ConnId,
+    ) -> Self {
+        Self {
+            peer_id,
+            connection,
+            metrics,
+            conn_id,
+        }
+    }
+
+    pub(crate) fn conn_id(&self) -> ConnId {
+        self.conn_id
+    }
+
+    pub(crate) async fn rpc(
+        &self,
+        request: Request<Bytes>,
+    ) -> Result<Response<Bytes>, anyhow::Error> {
         let _timer = self
             .metrics
             .connection_handle_duration_seconds
             .with_label_values(&[request.uri().path()])
             .start_timer();
-
-        let bytes_sent_counter = self
-            .metrics
+        self.metrics
             .connection_handle_bytes_sent_total
-            .with_label_values(&[request.uri().path()]);
-        let bytes_received_counter = self
+            .with_label_values(&[request.uri().path()])
+            .inc_by(request.body().len() as u64);
+        let in_counter = self
             .metrics
             .connection_handle_bytes_received_total
             .with_label_values(&[request.uri().path()]);
@@ -90,7 +106,6 @@ impl ConnectionHandle {
             .unwrap_or_default();
         let _ = send_stream.set_priority(priority.into());
 
-        bytes_sent_counter.inc_by(request.body().len() as u64);
         write_request(send_stream, request).await.inspect_err(|_| {
             self.metrics
                 .connection_handle_errors_total
@@ -112,14 +127,16 @@ impl ConnectionHandle {
                 .inc();
         })?;
 
-        let response = read_response(recv_stream).await.inspect_err(|_| {
+        let mut response = read_response(recv_stream).await.inspect_err(|_| {
             self.metrics
                 .connection_handle_errors_total
                 .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_READ])
                 .inc();
         })?;
 
-        bytes_received_counter.inc_by(response.body().len() as u64);
+        // Propagate PeerId from this request to upper layers.
+        response.extensions_mut().insert(self.peer_id);
+        in_counter.inc_by(response.body().len() as u64);
         Ok(response)
     }
 }
@@ -133,10 +150,16 @@ async fn read_response(mut recv_stream: RecvStream) -> Result<Response<Bytes>, a
     let response_proto = pb::HttpResponse::decode(raw_msg.as_slice())
         .with_context(|| "Failed to decode response header.")?;
 
-    let status: u16 = response_proto
-        .status_code
-        .try_into()
-        .with_context(|| "Failed to decode status code.")?;
+    let status: u16 = match response_proto.status_code.try_into() {
+        Ok(status) => status,
+        Err(e) => {
+            return Err(anyhow!(
+                "Received invalid status code {} {}",
+                response_proto.status_code,
+                e
+            ))
+        }
+    };
 
     let mut response = Response::builder().status(status).version(Version::HTTP_3);
     for h in response_proto.headers {
@@ -178,7 +201,7 @@ async fn write_request(
             Method::CONNECT => pb::HttpMethod::Connect.into(),
             Method::PATCH => pb::HttpMethod::Patch.into(),
             Method::TRACE => pb::HttpMethod::Trace.into(),
-            _ => pb::HttpMethod::Unspecified.into(),
+            _ => return Err(anyhow!("invalid method")),
         },
         body: body.into(),
     };
@@ -187,7 +210,8 @@ async fn write_request(
     send_stream
         .write_all(&request_bytes)
         .await
-        .with_context(|| "Failed to write request to stream.")
+        .with_context(|| "Failed to write request to stream.")?;
+    Ok(())
 }
 
 // tests

@@ -136,6 +136,7 @@ fn test_root_restarts_canister_during_upgrade_canister_with_stop_canister_timeou
         &state_machine,
         ROOT_CANISTER_ID,
         "change_nns_canister",
+        candid_one,
         proposal,
         GOVERNANCE_CANISTER_ID.get(),
     )
@@ -152,6 +153,7 @@ fn test_root_restarts_canister_during_upgrade_canister_with_stop_canister_timeou
         &state_machine,
         ROOT_CANISTER_ID,
         "canister_status",
+        candid_one,
         CanisterIdRecord::from(GOVERNANCE_CANISTER_ID),
         PrincipalId::new_anonymous(),
     )
@@ -168,6 +170,7 @@ fn test_root_restarts_canister_during_upgrade_canister_with_stop_canister_timeou
         &state_machine,
         ROOT_CANISTER_ID,
         "canister_status",
+        candid_one,
         CanisterIdRecord::from(GOVERNANCE_CANISTER_ID),
         PrincipalId::new_anonymous(),
     )

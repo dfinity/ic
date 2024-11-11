@@ -2181,8 +2181,7 @@ impl StateManagerImpl {
             .expect("Failed to receive deallocation notification");
     }
 
-    /// Remove any inmemory state at height h with h < last_height_to_keep
-    /// except for any heights provided in `extra_inmemory_heights_to_keep`, and
+    /// Remove any inmemory state at height h with h < last_height_to_keep, and
     /// any checkpoint at height h < last_checkpoint_to_keep
     ///
     /// Shared inner function of the public functions remove_states_below
@@ -2191,7 +2190,6 @@ impl StateManagerImpl {
         &self,
         last_height_to_keep: Height,
         last_checkpoint_to_keep: Height,
-        extra_inmemory_heights_to_keep: &BTreeSet<Height>,
     ) {
         debug_assert!(
             last_height_to_keep >= last_checkpoint_to_keep,
@@ -2225,19 +2223,6 @@ impl StateManagerImpl {
                     state_metadata.bundled_manifest.as_ref().map(|_| *height)
                 });
 
-        // The `extra_inmemory_heights_to_keep` is used for preserving in-memory states,
-        // but it can safely be included in the `heights_to_keep` set, which retains both
-        // in-memory states and checkpoints. This is safe because:
-        //
-        // 1. When called by `remove_inmemory_states_below`, checkpoints are never removed,
-        //    regardless of the inclusion of `extra_inmemory_heights_to_keep`, so no harm
-        //    or unnecessary preservation occurs.
-        //
-        // 2. When called by `remove_states_below`, `extra_inmemory_heights_to_keep` is always
-        //    an empty set, having no effect on the outcome.
-        //
-        // In the future, separating these sets could clarify their distinct purposes and
-        // simplify reasoning about correctness without relying heavily on input behavior.
         let heights_to_keep: BTreeSet<Height> = states
             .states_metadata
             .keys()
@@ -2247,7 +2232,6 @@ impl StateManagerImpl {
             })
             .chain(std::iter::once(latest_certified_height))
             .chain(latest_manifest_height)
-            .chain(extra_inmemory_heights_to_keep.iter().copied())
             .collect();
 
         // Send object to deallocation thread if it has capacity.
@@ -2384,11 +2368,9 @@ impl StateManagerImpl {
 
             let state_heights = self.list_state_heights(CERT_ANY);
 
-            debug_assert!(heights_to_keep
-                .iter()
-                .all(|h| unfiltered_checkpoint_heights.contains(h)
-                    || extra_inmemory_heights_to_keep.contains(h)
-                    || *h == latest_certified_height));
+            debug_assert!(heights_to_keep.iter().all(|h| unfiltered_checkpoint_heights
+                .contains(h)
+                || *h == latest_certified_height));
 
             debug_assert!(state_heights.contains(&latest_state_height));
             debug_assert!(state_heights.contains(&latest_certified_height));
@@ -3316,12 +3298,7 @@ impl StateManager for StateManagerImpl {
                 .min(oldest_checkpoint_to_keep)
         };
 
-        // The public interface does not protect extra states, so we pass an empty set here.
-        self.remove_states_below_impl(
-            oldest_height_to_keep,
-            oldest_checkpoint_to_keep,
-            &BTreeSet::new(),
-        );
+        self.remove_states_below_impl(oldest_height_to_keep, oldest_checkpoint_to_keep);
     }
 
     /// Variant of `remove_states_below()` that only removes states committed with
@@ -3333,12 +3310,7 @@ impl StateManager for StateManagerImpl {
     /// * The latest state
     /// * The latest certified state
     /// * State 0
-    /// * Specified extra heights to keep
-    fn remove_inmemory_states_below(
-        &self,
-        requested_height: Height,
-        extra_heights_to_keep: &BTreeSet<Height>,
-    ) {
+    fn remove_inmemory_states_below(&self, requested_height: Height) {
         let _timer = self
             .metrics
             .api_call_duration
@@ -3351,42 +3323,7 @@ impl StateManager for StateManagerImpl {
             .min(requested_height)
             .max(Height::new(1));
 
-        // Log how Consensus calls this API when it has some extra states to keep.
-        if !extra_heights_to_keep.is_empty() {
-            info!(
-                self.log,
-                "Removing in-memory states below {} except for {:?}",
-                requested_height,
-                extra_heights_to_keep,
-            );
-
-            let states = self.states.read();
-            let checkpoint_heights_below_oldest_height_to_keep: BTreeSet<Height> = states
-                .snapshots
-                .iter()
-                .map(|snapshot| snapshot.height)
-                .filter(|height| {
-                    states.states_metadata.contains_key(height) && *height < oldest_height_to_keep
-                })
-                .collect();
-            drop(states);
-
-            // Memory usage can be saved by removing them if they are not protected by `extra_heights_to_keep`.
-            // Log these potential removal candidates and evaluate them against `extra_heights_to_keep` before actual removal in future versions.
-            if !checkpoint_heights_below_oldest_height_to_keep.is_empty() {
-                info!(
-                    self.log,
-                    "In-memory states at checkpoint heights {:?} are candidates for removal in future.",
-                    checkpoint_heights_below_oldest_height_to_keep,
-                );
-            }
-        }
-
-        self.remove_states_below_impl(
-            oldest_height_to_keep,
-            Self::INITIAL_STATE_HEIGHT,
-            extra_heights_to_keep,
-        );
+        self.remove_states_below_impl(oldest_height_to_keep, Self::INITIAL_STATE_HEIGHT);
     }
 
     fn commit_and_certify(
@@ -3698,7 +3635,6 @@ impl StateReader for StateManagerImpl {
             (snapshot.height == height).then(|| Labeled::new(height, snapshot.state.clone()))
         }) {
             Some(state) => Ok(state),
-            // In normal operation, getting in-memory states should not fall back to loading checkpoints.
             None => match load_checkpoint(
                 &self.state_layout,
                 height,
@@ -3706,30 +3642,9 @@ impl StateReader for StateManagerImpl {
                 self.own_subnet_type,
                 Arc::clone(&self.get_fd_factory()),
             ) {
-                Ok((state, _)) => {
-                    self.metrics
-                        .state_manager_error_count
-                        .with_label_values(&["state_fallback_to_checkpoint"])
-                        .inc();
-                    warn!(
-                        self.log,
-                        "State @{} unavailable in memory; fallback to checkpoint succeeded.",
-                        height
-                    );
-
-                    Ok(Labeled::new(height, Arc::new(state)))
-                }
+                Ok((state, _)) => Ok(Labeled::new(height, Arc::new(state))),
                 Err(CheckpointError::NotFound(_)) => Err(StateManagerError::StateRemoved(height)),
                 Err(err) => {
-                    self.metrics
-                        .state_manager_error_count
-                        .with_label_values(&["state_fallback_to_checkpoint"])
-                        .inc();
-                    warn!(
-                        self.log,
-                        "State @{} unavailable in memory; fallback to checkpoint failed.", height
-                    );
-
                     self.metrics
                         .state_manager_error_count
                         .with_label_values(&["recover_checkpoint"])

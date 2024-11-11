@@ -307,8 +307,8 @@ impl<'a> PoolReader<'a> {
         self.cache.catch_up_package()
     }
 
-    /// Get the finalized DKG summary block with greatest height.
-    pub fn get_highest_finalized_summary_block(&self) -> Block {
+    /// Get the DKG summary block with greatest height.
+    pub fn get_highest_summary_block(&self) -> Block {
         self.cache.summary_block()
     }
 
@@ -661,7 +661,7 @@ pub mod test {
                 pool_reader.dkg_summary_block_for_finalized_height(block4.height)
             );
             // The summary of block5 should be the highest summary block eventhough no CUP was created at that height.
-            let summary = pool_reader.get_highest_finalized_summary_block();
+            let summary = pool_reader.get_highest_summary_block();
             assert_eq!(
                 Some(summary.clone()),
                 pool_reader.dkg_summary_block(&block5)

@@ -25,6 +25,7 @@ LEDGER_CANISTER_RUSTC_ENV = {
 
 LEDGER_CANISTER_DEPS = [
     # Keep sorted.
+    ":ledger",
     "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/ledger_suite/common/ledger_canister_core",
@@ -47,7 +48,7 @@ LEDGER_CANISTER_DEPS = [
     "@crate_index//:serde_bytes",
 ]
 
-def rust_ledger_canister(name, extra_deps = [":ledger"], crate_features = None):
+def rust_ledger_canister(name, crate_features = None):
     rust_canister(
         name = name,
         srcs = ["src/main.rs"],
@@ -55,6 +56,6 @@ def rust_ledger_canister(name, extra_deps = [":ledger"], crate_features = None):
         data = LEDGER_CANISTER_DATA,
         rustc_env = LEDGER_CANISTER_RUSTC_ENV,
         service_file = "//rs/ledger_suite/icp:ledger.did",
-        deps = LEDGER_CANISTER_DEPS + extra_deps,
+        deps = LEDGER_CANISTER_DEPS,
         crate_features = crate_features if crate_features else [],
     )

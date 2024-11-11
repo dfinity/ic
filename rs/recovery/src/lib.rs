@@ -25,7 +25,6 @@ use registry_helper::RegistryPollingStrategy;
 use serde::{Deserialize, Serialize};
 use slog::{info, warn, Logger};
 use ssh_helper::SshHelper;
-use std::io::ErrorKind;
 use std::{
     net::IpAddr,
     path::{Path, PathBuf},
@@ -95,7 +94,6 @@ pub struct NodeMetrics {
     _ip: IpAddr,
     pub finalization_height: Height,
     pub certification_height: Height,
-    pub certification_share_height: Height,
 }
 
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
@@ -150,22 +148,7 @@ impl Recovery {
         let local_store_path = work_dir.join("data").join(IC_REGISTRY_LOCAL_STORE);
         let nns_pem = recovery_dir.join("nns.pem");
 
-        match Recovery::create_dirs(&[&binary_dir, &data_dir, &work_dir, &local_store_path]) {
-            Err(RecoveryError::IoError(s, err)) => match err.kind() {
-                ErrorKind::PermissionDenied => Err(RecoveryError::IoError(
-                    format!(
-                        "No permission to create recovery directory. Consider manually \
-                        creating the directory with the right permissions by running:\n\n  \
-                        sudo mkdir -p {} && sudo chown $USER {}\n",
-                        recovery_dir.display(),
-                        recovery_dir.display()
-                    ),
-                    err,
-                )),
-                _ => Err(RecoveryError::IoError(s, err)),
-            },
-            x => x,
-        }?;
+        Recovery::create_dirs(&[&binary_dir, &data_dir, &work_dir, &local_store_path])?;
 
         let registry_helper = RegistryHelper::new(
             logger.clone(),
@@ -908,29 +891,16 @@ pub async fn get_node_metrics(logger: &Logger, ip: &IpAddr) -> Option<NodeMetric
     let mut node_heights = NodeMetrics {
         finalization_height: Height::from(0),
         certification_height: Height::from(0),
-        certification_share_height: Height::from(0),
         _ip: *ip,
     };
     for line in body.split('\n') {
         let mut parts = line.split(' ');
         if let (Some(prefix), Some(height)) = (parts.next(), parts.next()) {
             match prefix {
-                r#"artifact_pool_certification_height_stat{pool_type="validated",stat="max",type="certification"}"# => {
-                    match height.trim().parse::<u64>() {
-                        Ok(val) => node_heights.certification_height = Height::from(val),
-                        error => {
-                            warn!(logger, "Couldn't parse height {}: {:?}", height, error)
-                        }
-                    }
-                }
-                r#"artifact_pool_certification_height_stat{pool_type="validated",stat="max",type="certification_share"}"# => {
-                    match height.trim().parse::<u64>() {
-                        Ok(val) => node_heights.certification_share_height = Height::from(val),
-                        error => {
-                            warn!(logger, "Couldn't parse height {}: {:?}", height, error)
-                        }
-                    }
-                }
+                "certification_last_certified_height" => match height.trim().parse::<u64>() {
+                    Ok(val) => node_heights.certification_height = Height::from(val),
+                    error => warn!(logger, "Couldn't parse height {}: {:?}", height, error),
+                },
                 r#"artifact_pool_consensus_height_stat{pool_type="validated",stat="max",type="finalization"}"# => {
                     match height.trim().parse::<u64>() {
                         Ok(val) => node_heights.finalization_height = Height::from(val),
@@ -1006,7 +976,6 @@ pub fn get_member_ips(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::error::GracefulExpect;
     use ic_test_utilities_tmpdir::tmpdir;
 
     #[test]
@@ -1022,7 +991,7 @@ mod tests {
 
         let (name, height) =
             Recovery::get_latest_checkpoint_name_and_height(checkpoints_dir.path())
-                .expect_graceful("Failed getting the latest checkpoint name and height");
+                .expect("Failed getting the latest checkpoint name and height");
 
         assert_eq!(name, "000000000000fd84");
         assert_eq!(height, Height::from(64900));

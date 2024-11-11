@@ -918,7 +918,7 @@ trait HasId<T> {
 
 impl HasId<NiDkgId> for NiDkgConfig {
     fn get_id(&self) -> Option<NiDkgId> {
-        Some(self.dkg_id().clone())
+        Some(self.dkg_id())
     }
 }
 impl HasId<IDkgTranscriptId> for IDkgTranscript {

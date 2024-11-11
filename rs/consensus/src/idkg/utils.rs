@@ -8,7 +8,7 @@ use ic_interfaces::consensus_pool::ConsensusBlockChain;
 use ic_interfaces::idkg::{IDkgChangeAction, IDkgChangeSet, IDkgPool};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{warn, ReplicaLogger};
-use ic_management_canister_types::{EcdsaCurve, MasterPublicKeyId, SchnorrAlgorithm, VetKdCurve};
+use ic_management_canister_types::{EcdsaCurve, MasterPublicKeyId, SchnorrAlgorithm};
 use ic_protobuf::registry::subnet::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_features::ChainKeyConfig;
@@ -32,7 +32,6 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
 };
 use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterPublicKey};
 use ic_types::crypto::AlgorithmId;
-use ic_types::messages::CallbackId;
 use ic_types::registry::RegistryClientError;
 use ic_types::{Height, RegistryVersion, SubnetId};
 use phantom_newtype::Id;
@@ -224,6 +223,17 @@ pub(super) fn block_chain_cache(
     }
 }
 
+/// Helper to build the [`RequestId`] if the context is already completed
+pub(super) fn get_context_request_id(context: &SignWithThresholdContext) -> Option<RequestId> {
+    context
+        .matched_pre_signature
+        .map(|(pre_signature_id, height)| RequestId {
+            pre_signature_id,
+            pseudo_random_id: context.pseudo_random_id,
+            height,
+        })
+}
+
 #[derive(Debug)]
 #[allow(dead_code)]
 pub(crate) enum BuildSignatureInputsError {
@@ -249,24 +259,18 @@ impl BuildSignatureInputsError {
 /// Helper to build threshold signature inputs from the context and
 /// the pre-signature
 pub(super) fn build_signature_inputs(
-    callback_id: CallbackId,
     context: &SignWithThresholdContext,
     block_reader: &dyn IDkgBlockReader,
 ) -> Result<(RequestId, ThresholdSigInputsRef), BuildSignatureInputsError> {
-    let (pre_sig_id, height) = context
-        .matched_pre_signature
-        .ok_or(BuildSignatureInputsError::ContextIncomplete)?;
+    let request_id =
+        get_context_request_id(context).ok_or(BuildSignatureInputsError::ContextIncomplete)?;
     let extended_derivation_path = ExtendedDerivationPath {
         caller: context.request.sender.into(),
         derivation_path: context.derivation_path.clone(),
     };
-    let request_id = RequestId {
-        callback_id,
-        height,
-    };
     let pre_signature = block_reader
-        .available_pre_signature(&pre_sig_id)
-        .ok_or(BuildSignatureInputsError::MissingPreSignature(request_id))?
+        .available_pre_signature(&request_id.pre_signature_id)
+        .ok_or_else(|| BuildSignatureInputsError::MissingPreSignature(request_id.clone()))?
         .clone();
     let nonce = Id::from(
         context
@@ -412,22 +416,17 @@ pub(crate) fn inspect_chain_key_initializations(
                 )
             })?;
 
-        let dealings = match &chain_key_init.initialization {
-            Some(pb::chain_key_initialization::Initialization::Dealings(dealings)) => dealings,
-            Some(pb::chain_key_initialization::Initialization::TranscriptRecord(_)) => continue,
-            None => {
-                return Err(
-                    "Error: Failed to find dealings in chain_key_initializations".to_string(),
+        let dealings = chain_key_init
+            .dealings
+            .as_ref()
+            .expect("Error: Failed to find dealings in chain_key_initializations")
+            .try_into()
+            .map_err(|err| {
+                format!(
+                    "Error reading initial IDkg dealings: {:?}. Setting idkg_summary to None.",
+                    err
                 )
-            }
-        };
-
-        let dealings = dealings.try_into().map_err(|err| {
-            format!(
-                "Error reading initial IDkg dealings: {:?}. Setting idkg_summary to None.",
-                err
-            )
-        })?;
+            })?;
 
         initial_dealings_per_key_id.insert(key_id, dealings);
     }
@@ -443,9 +442,6 @@ pub(crate) fn algorithm_for_key_id(key_id: &MasterPublicKeyId) -> AlgorithmId {
         MasterPublicKeyId::Schnorr(schnorr_key_id) => match schnorr_key_id.algorithm {
             SchnorrAlgorithm::Bip340Secp256k1 => AlgorithmId::ThresholdSchnorrBip340,
             SchnorrAlgorithm::Ed25519 => AlgorithmId::ThresholdEd25519,
-        },
-        MasterPublicKeyId::VetKd(vetkd_key_id) => match vetkd_key_id.curve {
-            VetKdCurve::Bls12_381_G2 => AlgorithmId::Placeholder,
         },
     }
 }
@@ -662,9 +658,7 @@ mod tests {
         let key_id = fake_ecdsa_master_public_key_id();
         let chain_key_init = ChainKeyInitialization {
             key_id: Some((&key_id).into()),
-            initialization: Some(pb::chain_key_initialization::Initialization::Dealings(
-                (&initial_dealings).into(),
-            )),
+            dealings: Some((&initial_dealings).into()),
         };
 
         let init = inspect_chain_key_initializations(&[], &[chain_key_init])
@@ -699,15 +693,11 @@ mod tests {
         };
         let chain_key_init = ChainKeyInitialization {
             key_id: Some((&master_key_id).into()),
-            initialization: Some(pb::chain_key_initialization::Initialization::Dealings(
-                (&initial_dealings).into(),
-            )),
+            dealings: Some((&initial_dealings).into()),
         };
         let chain_key_init_2 = ChainKeyInitialization {
             key_id: Some((&master_key_id_2).into()),
-            initialization: Some(pb::chain_key_initialization::Initialization::Dealings(
-                (&initial_dealings_2).into(),
-            )),
+            dealings: Some((&initial_dealings_2).into()),
         };
 
         let init =

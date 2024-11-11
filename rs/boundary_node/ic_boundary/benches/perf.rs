@@ -10,7 +10,7 @@ use tokio_util::sync::CancellationToken;
 use ic_boundary::test_utils::setup_test_router;
 
 fn gen_request(cli: &reqwest::Client, addr: &SocketAddr, bytes_size: usize) -> reqwest::Request {
-    let mut rng = thread_rng();
+    let mut rng = rand::thread_rng();
 
     let canister_id: u64 = rng.gen_range(0..100_000_000);
     let canister_id = Principal::from_slice(canister_id.to_be_bytes().as_slice());
@@ -58,10 +58,6 @@ fn benchmark(c: &mut Criterion) {
         http2_keepalive_timeout: Duration::from_secs(30),
         grace_period: Duration::from_secs(60),
         max_requests_per_conn: Some(1000),
-        tls_handshake_timeout: Duration::from_secs(10),
-        read_timeout: Some(Duration::from_secs(10)),
-        write_timeout: Some(Duration::from_secs(10)),
-        idle_timeout: Duration::from_secs(10),
     };
 
     let runtime = tokio::runtime::Builder::new_current_thread()

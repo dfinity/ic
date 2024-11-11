@@ -1,4 +1,4 @@
-use ic_consensus_utils::pool_reader::PoolReader;
+use ic_consensus_utils::{pool_reader::PoolReader, ACCEPTABLE_VALIDATION_CUP_GAP};
 use ic_interfaces::consensus_pool::ConsensusPool;
 use ic_interfaces::p2p::consensus::{Bouncer, BouncerValue, BouncerValue::*};
 use ic_types::{artifact::ConsensusMessageId, consensus::ConsensusMessageHash, Height};
@@ -30,11 +30,6 @@ pub fn new_bouncer(
 
 /// We do not need to request artifacts that are too far ahead.
 const LOOK_AHEAD: u64 = 10;
-
-/// In order to have a bound on the validated consensus pool, we don't validate
-/// artifacts with a height greater than the given value above the next pending CUP.
-/// The only exception to this are CUPs, which have no upper bound on the height.
-const ACCEPTABLE_VALIDATION_CUP_GAP: u64 = 70;
 
 /// The actual bouncer computation utilizing cached BlockSets instead of
 /// having to read from the pool every time when it is called.
@@ -121,6 +116,7 @@ fn compute_bouncer(
 mod tests {
     use super::*;
     use ic_consensus_mocks::{dependencies, dependencies_with_subnet_params, Dependencies};
+    use ic_consensus_utils::ACCEPTABLE_VALIDATION_CUP_GAP;
     use ic_test_utilities_consensus::fake::FakeContent;
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};

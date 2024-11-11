@@ -1,10 +1,11 @@
-use super::*;
 use assert_matches::assert_matches;
 use ic_base_types::{CanisterId, SnapshotId};
 use ic_registry_routing_table::{CanisterIdRange, CanisterIdRanges};
 use ic_state_layout::{CheckpointLayout, ReadOnly};
 use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1};
 use ic_types::{state_sync::CURRENT_STATE_SYNC_VERSION, Height};
+
+use super::*;
 
 /// Expected hash of a zero length file.
 const EMPTY_FILE_HASH: [u8; 32] = [
@@ -395,26 +396,23 @@ fn expected_split_marker() -> (FileInfo, ChunkInfo) {
 
 /// Returns the expected `FileInfo` and `ChunkInfo` for the system metadata of
 /// `SUBNET_1`.
-///
-/// `SystemMetadata` encodes the `CURRENT_CERTIFICATION_VERSION`, therefore the hashes in this
-/// test must be updated every time the current certification version is bumped.
 fn expected_subnet_1_system_metadata() -> (FileInfo, ChunkInfo) {
     (
         FileInfo {
             relative_path: PathBuf::from(SYSTEM_METADATA_FILE),
-            size_bytes: 65,
+            size_bytes: 63,
             hash: [
-                135, 141, 106, 99, 2, 246, 244, 239, 255, 254, 121, 198, 217, 0, 168, 217, 254,
-                105, 171, 56, 159, 169, 160, 159, 87, 16, 106, 9, 168, 21, 6, 246,
+                122, 238, 38, 137, 170, 83, 240, 133, 62, 48, 18, 112, 233, 148, 191, 115, 239,
+                115, 135, 234, 25, 157, 24, 45, 161, 179, 219, 112, 242, 95, 10, 217,
             ],
         },
         ChunkInfo {
             file_index: 13,
-            size_bytes: 65,
+            size_bytes: 63,
             offset: 0,
             hash: [
-                48, 206, 112, 95, 239, 131, 62, 43, 197, 160, 224, 171, 236, 107, 12, 29, 127, 75,
-                227, 118, 27, 199, 106, 203, 192, 91, 53, 67, 219, 53, 31, 173,
+                167, 162, 133, 251, 148, 255, 80, 204, 229, 63, 140, 219, 43, 228, 234, 250, 69,
+                49, 7, 200, 173, 216, 136, 186, 183, 255, 101, 117, 229, 161, 238, 156,
             ],
         },
     )

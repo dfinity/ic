@@ -16,7 +16,7 @@ mod handle_start_dissolve;
 mod handle_stop_dissolve;
 pub mod list_known_neurons_response;
 pub mod list_neurons_response;
-pub mod neuron_response;
+mod neuron_response;
 pub mod pending_proposals_response;
 pub mod proposal_info_response;
 
@@ -129,25 +129,12 @@ pub struct LedgerClient {
     offline: bool,
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
 pub enum OperationOutput {
     BlockIndex(BlockIndex),
     NeuronId(u64),
     NeuronResponse(NeuronResponse),
     ProposalInfoResponse(ProposalInfoResponse),
     ListNeuronsResponse(ListNeuronsResponse),
-}
-
-impl TryFrom<ObjectMap> for OperationOutput {
-    type Error = ApiError;
-    fn try_from(o: ObjectMap) -> Result<Self, Self::Error> {
-        serde_json::from_value(serde_json::Value::Object(o)).map_err(|e| {
-            ApiError::internal_error(format!(
-                "Could not parse OperationOutput from Object: {}",
-                e
-            ))
-        })
-    }
 }
 
 fn public_key_to_der(key: ThresholdSigPublicKey) -> Result<Vec<u8>, ApiError> {

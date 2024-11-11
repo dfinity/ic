@@ -81,26 +81,16 @@ pub struct SubnetRecord {
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaInitialization {
     #[prost(message, optional, tag = "1")]
-    pub key_id: ::core::option::Option<super::super::super::types::v1::EcdsaKeyId>,
+    pub key_id: ::core::option::Option<super::super::crypto::v1::EcdsaKeyId>,
     #[prost(message, optional, tag = "2")]
     pub dealings: ::core::option::Option<InitialIDkgDealings>,
 }
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct ChainKeyInitialization {
     #[prost(message, optional, tag = "1")]
-    pub key_id: ::core::option::Option<super::super::super::types::v1::MasterPublicKeyId>,
-    #[prost(oneof = "chain_key_initialization::Initialization", tags = "2, 3")]
-    pub initialization: ::core::option::Option<chain_key_initialization::Initialization>,
-}
-/// Nested message and enum types in `ChainKeyInitialization`.
-pub mod chain_key_initialization {
-    #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Oneof)]
-    pub enum Initialization {
-        #[prost(message, tag = "2")]
-        Dealings(super::InitialIDkgDealings),
-        #[prost(message, tag = "3")]
-        TranscriptRecord(super::InitialNiDkgTranscriptRecord),
-    }
+    pub key_id: ::core::option::Option<super::super::crypto::v1::MasterPublicKeyId>,
+    #[prost(message, optional, tag = "2")]
+    pub dealings: ::core::option::Option<InitialIDkgDealings>,
 }
 /// Contains the initial DKG transcripts for the subnet and materials to construct a base CUP (i.e.
 /// a CUP with no dependencies on previous CUPs or blocks). Such CUP materials can be used to
@@ -326,7 +316,7 @@ pub struct EcdsaConfig {
     pub quadruples_to_create_in_advance: u32,
     /// Identifiers for threshold ECDSA keys held by the subnet.
     #[prost(message, repeated, tag = "3")]
-    pub key_ids: ::prost::alloc::vec::Vec<super::super::super::types::v1::EcdsaKeyId>,
+    pub key_ids: ::prost::alloc::vec::Vec<super::super::crypto::v1::EcdsaKeyId>,
     /// The maximum number of signature requests that can be enqueued at once.
     #[prost(uint32, tag = "4")]
     pub max_queue_size: u32,
@@ -342,7 +332,7 @@ pub struct EcdsaConfig {
 pub struct KeyConfig {
     /// The key's identifier.
     #[prost(message, optional, tag = "1")]
-    pub key_id: ::core::option::Option<super::super::super::types::v1::MasterPublicKeyId>,
+    pub key_id: ::core::option::Option<super::super::crypto::v1::MasterPublicKeyId>,
     /// Number of pre-signatures to create in advance.
     #[prost(uint32, optional, tag = "3")]
     pub pre_signatures_to_create_in_advance: ::core::option::Option<u32>,

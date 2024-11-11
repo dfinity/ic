@@ -60,7 +60,6 @@ module IC.Test.Agent
     code202_or_4xx,
     code2xx,
     code4xx,
-    code400,
     code403,
     decodeCert',
     defaultSK,
@@ -82,6 +81,7 @@ module IC.Test.Agent
     ic00as,
     ic00',
     ic00WithSubnetas',
+    ingressDelay,
     is2xx,
     isErr4xx,
     isErrOrReject,
@@ -223,9 +223,7 @@ data AgentConfig = AgentConfig
     tc_subnets :: [AgentSubnetConfig],
     tc_httpbin_proto :: String,
     tc_httpbin :: String,
-    tc_timeout :: Int,
-    tc_ucan_chunk_hash :: Maybe Blob,
-    tc_store_canister_id :: Maybe Blob
+    tc_timeout :: Int
   }
 
 makeAgentConfig :: Bool -> String -> [AgentSubnetConfig] -> String -> String -> Int -> IO AgentConfig
@@ -259,9 +257,7 @@ makeAgentConfig allow_self_signed_certs ep' subnets httpbin_proto httpbin' to = 
         tc_subnets = subnets,
         tc_httpbin_proto = httpbin_proto,
         tc_httpbin = httpbin,
-        tc_timeout = to,
-        tc_ucan_chunk_hash = Nothing,
-        tc_store_canister_id = Nothing
+        tc_timeout = to
       }
   where
     -- strip trailing slash
@@ -291,8 +287,8 @@ preFlight os = do
 
 type HasAgentConfig = (?agentConfig :: AgentConfig)
 
-withAgentConfig :: AgentConfig -> (forall. (HasAgentConfig) => a) -> a
-withAgentConfig tc act = let ?agentConfig = tc in act
+withAgentConfig :: (forall. (HasAgentConfig) => a) -> AgentConfig -> a
+withAgentConfig act tc = let ?agentConfig = tc in act
 
 agentConfig :: (HasAgentConfig) => AgentConfig
 agentConfig = ?agentConfig
@@ -762,7 +758,12 @@ isPendingOrProcessing Processing = return ()
 isPendingOrProcessing r = assertFailure $ "Expected pending or processing, got " <> show r
 
 pollDelay :: IO ()
-pollDelay = threadDelay $ 500 * 1000 -- 500 milliseconds
+pollDelay = threadDelay $ 10 * 1000 -- 10 milliseconds
+
+-- How long to wait before checking if a request that should _not_ show up on
+-- the system indeed did not show up
+ingressDelay :: IO ()
+ingressDelay = threadDelay $ 2 * 1000 * 1000 -- 2 seconds
 
 -- * HTTP Response predicates
 
@@ -779,8 +780,6 @@ code2xx, code202, code4xx, code202_or_4xx :: (HasCallStack) => Response BS.ByteS
 code2xx = codePred "2xx" $ \c -> 200 <= c && c < 300
 code202 = codePred "202" $ \c -> c == 202
 code4xx = codePred "4xx" $ \c -> 400 <= c && c < 500
-
-code400 = codePred "400" $ \c -> c == 400
 
 code403 = codePred "403" $ \c -> c == 403
 

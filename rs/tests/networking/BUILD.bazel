@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "CANISTER_HTTP_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "CANISTER_HTTP_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -12,6 +12,7 @@ CANISTER_HTTP_BASE_DEPS = [
     # Keep sorted.
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/proxy_canister:lib",
+    "//rs/tests",
     "//rs/tests/driver:ic-system-test-driver",
     "//rs/tests/networking/canister_http:canister_http",
     "//rs/types/management_canister_types",
@@ -21,28 +22,14 @@ CANISTER_HTTP_BASE_DEPS = [
     "@crate_index//:slog",
 ]
 
-COMMON_DEPS = [
-    # Keep sorted.
-    "//rs/limits",
-    "//rs/registry/subnet_type",
-    "//rs/tests/driver:ic-system-test-driver",
-    "@crate_index//:anyhow",
-    "@crate_index//:slog",
-    "@crate_index//:slog-async",
-    "@crate_index//:slog-term",
-]
-
 system_test_nns(
     name = "canister_http_test",
     env = {
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
-    tags = [
-        "k8s",
-        "long_test",  # since it takes longer than 5 minutes.
-    ],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = ["k8s"],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
@@ -57,6 +44,7 @@ system_test_nns(
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
     flaky = True,
+    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         # TODO(NET-1710): enable on CI again when the problematic firewall rule in the IC node has been removed.
         #"system_test_hourly",
@@ -81,9 +69,8 @@ system_test_nns(
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
     flaky = True,
-    tags = [
-        "k8s",
-    ],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = ["k8s"],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
@@ -95,8 +82,6 @@ system_test_nns(
         "//rs/test_utilities/types",
         "//rs/types/base_types",
         "//rs/types/types",
-        "@crate_index//:assert_matches",
-        "@crate_index//:tokio",
     ],
 )
 
@@ -106,6 +91,7 @@ system_test_nns(
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
     flaky = True,
+    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
         "manual",
@@ -131,6 +117,7 @@ system_test_nns(
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
     flaky = True,
+    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
         "system_test_hourly",
@@ -146,41 +133,46 @@ system_test_nns(
 system_test_nns(
     name = "firewall_max_connections_test",
     flaky = True,
+    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
     ],
     target_compatible_with = ["@platforms//os:linux"],
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
-    deps = COMMON_DEPS + [
-        "@crate_index//:tokio",
-        "@crate_index//:tokio-util",
-    ],
+    deps = DEPENDENCIES + ["//rs/tests"],
 )
 
 system_test_nns(
     name = "firewall_priority_test",
     flaky = True,
+    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
     ],
     target_compatible_with = ["@platforms//os:linux"],
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
-    deps = COMMON_DEPS + [
-        "//rs/nns/governance/api",
-        "//rs/protobuf",
-        "//rs/registry/canister",
-        "//rs/registry/keys",
-        "//rs/types/types",
-        "@crate_index//:candid",
-        "@crate_index//:reqwest",
-        "@crate_index//:url",
+    deps = DEPENDENCIES + ["//rs/tests"],
+)
+
+system_test_nns(
+    name = "network_reliability_test",
+    extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
+    flaky = True,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "k8s",
+        "system_test_nightly",
     ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = GUESTOS_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
+    deps = DEPENDENCIES + ["//rs/tests"],
 )
 
 system_test_nns(
     name = "network_large_test",
     extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
     flaky = True,
+    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
         "system_test_nightly",
@@ -188,33 +180,40 @@ system_test_nns(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
-    deps = COMMON_DEPS + [
-        "//rs/types/types",
-        "@crate_index//:tokio",
-        "@crate_index//:tokio-util",
-    ],
+    deps = DEPENDENCIES + ["//rs/tests"],
 )
 
 system_test_nns(
-    name = "network_reliability_test",
-    extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
+    name = "query_workload_long_test",
     flaky = True,
+    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
-        "system_test_nightly",
+        "system_test_hourly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
-    deps = COMMON_DEPS + [
-        "//rs/types/base_types",
-        "@crate_index//:rand",
-        "@crate_index//:rand_chacha",
-    ],
+    test_timeout = "long",
+    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
+    deps = DEPENDENCIES + ["//rs/tests"],
 )
 
 system_test_nns(
-    name = "p2p_performance_test",
+    name = "update_workload_large_payload",
     flaky = True,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "system_test_hourly",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    test_timeout = "long",
+    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
+    deps = DEPENDENCIES + ["//rs/tests"],
+)
+
+system_test_nns(
+    name = "p2p_performance",
+    flaky = True,
+    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
         "manual",
@@ -224,38 +223,7 @@ system_test_nns(
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS + [
         "//rs/tests:jaeger_uvm_config_image",
     ],
-    deps = COMMON_DEPS + [
-        "@crate_index//:ic-agent",
-    ],
-)
-
-system_test_nns(
-    name = "query_workload_long_test",
-    flaky = True,
-    tags = [
-        "k8s",
-        "system_test_hourly",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    test_timeout = "long",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
-    deps = COMMON_DEPS + [
-        "//rs/tests/networking/subnet_update_workload",
-    ],
-)
-
-system_test_nns(
-    name = "update_workload_large_payload",
-    flaky = True,
-    tags = [
-        "system_test_hourly",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    test_timeout = "long",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
-    deps = COMMON_DEPS + [
-        "//rs/tests/networking/subnet_update_workload",
-    ],
+    deps = DEPENDENCIES + ["//rs/tests"],
 )
 
 system_test(

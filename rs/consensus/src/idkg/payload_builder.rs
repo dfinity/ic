@@ -677,6 +677,7 @@ mod tests {
     use crate::idkg::test_utils::*;
     use crate::idkg::utils::algorithm_for_key_id;
     use crate::idkg::utils::block_chain_reader;
+    use crate::idkg::utils::get_context_request_id;
     use assert_matches::assert_matches;
     use ic_consensus_mocks::{dependencies, Dependencies};
     use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_initial_idkg_dealing_for_tests;
@@ -808,15 +809,12 @@ mod tests {
     }
 
     fn set_up_signature_request_contexts(
-        parameters: Vec<(MasterPublicKeyId, u64, Time, Option<PreSigId>)>,
+        parameters: Vec<(MasterPublicKeyId, u8, Time, Option<PreSigId>)>,
     ) -> BTreeMap<CallbackId, SignWithThresholdContext> {
         let mut contexts = BTreeMap::new();
         for (key_id, id, batch_time, pre_sig) in parameters {
-            let (callback_id, mut context) = fake_signature_request_context_with_pre_sig(
-                request_id(id, Height::from(0)),
-                key_id,
-                pre_sig,
-            );
+            let (callback_id, mut context) =
+                fake_signature_request_context_with_pre_sig(id, key_id, pre_sig);
             context.batch_time = batch_time;
             contexts.insert(callback_id, context);
         }
@@ -1062,9 +1060,7 @@ mod tests {
     fn test_signature_is_only_delivered_once(key_id: MasterPublicKeyId) {
         let (mut idkg_payload, _env) = set_up_idkg_payload_with_keys(vec![key_id.clone()]);
         let pre_sig_id = create_available_pre_signature(&mut idkg_payload, key_id.clone(), 13);
-        let request_id = request_id(0, Height::from(0));
-        let context =
-            fake_signature_request_context_from_id(key_id.clone(), pre_sig_id, request_id);
+        let context = fake_completed_signature_request_context(0, key_id.clone(), pre_sig_id);
         let signature_request_contexts = BTreeMap::from([context.clone()]);
 
         let valid_keys = BTreeSet::from([key_id.clone()]);
@@ -1074,7 +1070,7 @@ mod tests {
         let mut signature_builder = TestThresholdSignatureBuilder::new();
 
         signature_builder.signatures.insert(
-            request_id,
+            get_context_request_id(&context.1).unwrap(),
             match key_id {
                 MasterPublicKeyId::Ecdsa(_) => {
                     CombinedSignature::Ecdsa(ThresholdEcdsaCombinedSignature {
@@ -1086,7 +1082,6 @@ mod tests {
                         signature: vec![2; 32],
                     })
                 }
-                MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
             },
         );
 
@@ -1338,7 +1333,7 @@ mod tests {
             }
             let block_reader = block_chain_reader(
                 &pool_reader,
-                &pool_reader.get_highest_finalized_summary_block(),
+                &pool_reader.get_highest_summary_block(),
                 &parent_block,
                 None,
                 &no_op_logger(),
@@ -1570,7 +1565,7 @@ mod tests {
             summary.single_key_transcript_mut().current = Some(current_key_transcript);
             let block_reader = block_chain_reader(
                 &pool_reader,
-                &pool_reader.get_highest_finalized_summary_block(),
+                &pool_reader.get_highest_summary_block(),
                 &parent_block,
                 None,
                 &no_op_logger(),
@@ -1924,13 +1919,11 @@ mod tests {
                         &key_transcript,
                         &[1; 64],
                         Randomness::from([0; 32]),
-                        None,
                         &derivation_path,
                         algorithm,
                         &mut rng,
                     ))
                 }
-                MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
             };
             payload_0.available_pre_signatures.insert(
                 payload_0.uid_generator.next_pre_signature_id(),

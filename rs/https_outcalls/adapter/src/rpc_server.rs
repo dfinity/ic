@@ -27,19 +27,15 @@ use std::str::FromStr;
 use std::time::Duration;
 use tonic::{Request, Response, Status};
 
-/// Hyper only supports a maximum of 32768 headers https://docs.rs/hyper/1.5.0/hyper/header/index.html
+/// Hyper only supports a maximum of 32768 headers https://docs.rs/hyper/0.14.23/hyper/header/index.html#limitations-1
 /// and it panics if we try to allocate more headers. And since hyper sometimes grows the map by doubling the entries
 /// we choose a lower value to be safe.
 const HEADERS_LIMIT: usize = 1_024;
-/// Hyper also limits the size of the HeaderName to 32768. https://docs.rs/hyper/1.5.0/hyper/header/index.html.
+/// Hyper also limits the size of the HeaderName to 32768. https://docs.rs/hyper/0.14.23/hyper/header/index.html#limitations.
 const HEADER_NAME_VALUE_LIMIT: usize = 8_192;
 
 /// By default most higher-level http libs like `curl` set some `User-Agent` so we do the same here to avoid getting rejected due to strict server requirements.
 const USER_AGENT_ADAPTER: &str = "ic/1.0";
-
-/// We should support at least 48 KB in headers and values according to the IC spec:
-/// "the total number of bytes representing the header names and values must not exceed 48KiB".
-const MAX_HEADER_LIST_SIZE: u32 = 52 * 1024;
 
 type OutboundRequestBody = Full<Bytes>;
 
@@ -74,7 +70,7 @@ impl CanisterHttp {
             .with_native_roots()
             .expect("Failed to set native roots")
             .https_only()
-            .enable_all_versions()
+            .enable_http1()
             .wrap_connector(proxy_connector);
 
         // Https client setup.
@@ -86,14 +82,13 @@ impl CanisterHttp {
         #[cfg(feature = "http")]
         let builder = builder.https_or_http();
 
-        let builder = builder.enable_all_versions();
+        let builder = builder.enable_http1();
         let direct_https_connector = builder.wrap_connector(http_connector);
 
         let socks_client =
             Client::builder(TokioExecutor::new()).build::<_, Full<Bytes>>(proxied_https_connector);
-        let client = Client::builder(TokioExecutor::new())
-            .http2_max_header_list_size(MAX_HEADER_LIST_SIZE)
-            .build::<_, Full<Bytes>>(direct_https_connector);
+        let client =
+            Client::builder(TokioExecutor::new()).build::<_, Full<Bytes>>(direct_https_connector);
 
         Self {
             client,
@@ -209,7 +204,7 @@ impl HttpsOutcallsService for CanisterHttp {
             *http_req.headers_mut() = headers;
             *http_req.method_mut() = method;
             *http_req.uri_mut() = uri.clone();
-            self.client.request(http_req).await.map_err(|e| format!("Failed to directly connect: {:?}", e))
+            self.client.request(http_req).await.map_err(|e| format!("Failed to directly connect: {e}"))
         }
         .map_err(|err| {
             debug!(self.logger, "Failed to connect: {}", err);

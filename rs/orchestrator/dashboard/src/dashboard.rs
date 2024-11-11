@@ -56,7 +56,7 @@ pub trait Dashboard {
         let response = match buffer.starts_with(get) {
             true => {
                 let headers = "HTTP/1.1 200 OK\r\n\r\n";
-                let contents = self.build_response();
+                let contents = self.build_response().await;
                 format!("{}{}", headers, contents)
             }
             false => {
@@ -87,7 +87,7 @@ pub trait Dashboard {
     fn port() -> u16;
 
     /// Builds the contents of the dashboard and returns it as `String`.
-    fn build_response(&self) -> String {
+    async fn build_response(&self) -> String {
         "Default response must be overridden".to_string()
     }
 

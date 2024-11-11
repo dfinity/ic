@@ -12,20 +12,22 @@
 //!
 use std::time::Duration;
 
-use anyhow::Context;
-use axum::{body::Body, Router};
+use anyhow::{anyhow, Context};
+use axum::{
+    body::Body,
+    http::{Method, Request, Response, Version},
+    Router,
+};
 use bytes::Bytes;
-use http::{Method, Request, Response, Version};
 use ic_base_types::NodeId;
 use ic_logger::{info, ReplicaLogger};
 use ic_protobuf::transport::v1 as pb;
 use prost::Message;
-use quinn::{RecvStream, SendStream};
+use quinn::{Connection, RecvStream, SendStream};
 use tower::ServiceExt;
 use tracing::instrument;
 
 use crate::{
-    connection_handle::ConnectionHandle,
     metrics::{
         QuicTransportMetrics, ERROR_TYPE_ACCEPT, ERROR_TYPE_APP, ERROR_TYPE_FINISH,
         ERROR_TYPE_READ, ERROR_TYPE_STOPPED, ERROR_TYPE_WRITE, STREAM_TYPE_BIDI,
@@ -35,10 +37,12 @@ use crate::{
 
 const QUIC_METRIC_SCRAPE_INTERVAL: Duration = Duration::from_secs(5);
 
-pub async fn run_stream_acceptor(
+pub(crate) async fn run_stream_acceptor(
     log: ReplicaLogger,
     peer_id: NodeId,
-    conn_handle: ConnectionHandle,
+    conn_id: ConnId,
+    connection: Connection,
+    metrics: QuicTransportMetrics,
     router: Router,
 ) {
     let mut inflight_requests = tokio::task::JoinSet::new();
@@ -51,18 +55,18 @@ pub async fn run_stream_acceptor(
     loop {
         tokio::select! {
              _ = quic_metrics_scrape.tick() => {
-                conn_handle.metrics.collect_quic_connection_stats(&conn_handle.connection, &peer_id);
+                metrics.collect_quic_connection_stats(&connection, &peer_id);
             }
-            bi = conn_handle.connection.accept_bi() => {
+            bi = connection.accept_bi() => {
                 match bi {
                     Ok((bi_tx, bi_rx)) => {
                         inflight_requests.spawn(
-                            conn_handle.metrics.request_task_monitor.instrument(
+                            metrics.request_task_monitor.instrument(
                                 handle_bi_stream(
                                     log.clone(),
                                     peer_id,
-                                    conn_handle.conn_id,
-                                    conn_handle.metrics.clone(),
+                                    conn_id,
+                                    metrics.clone(),
                                     router.clone(),
                                     bi_tx,
                                     bi_rx
@@ -72,7 +76,7 @@ pub async fn run_stream_acceptor(
                     }
                     Err(e) => {
                         info!(log, "Error accepting bi stream {}", e.to_string());
-                        conn_handle.metrics
+                        metrics
                             .request_handle_errors_total
                             .with_label_values(&[
                                 STREAM_TYPE_BIDI,
@@ -83,8 +87,8 @@ pub async fn run_stream_acceptor(
                     }
                 }
             },
-            _ = conn_handle.connection.accept_uni() => {},
-            _ = conn_handle.connection.read_datagram() => {},
+            _ = connection.accept_uni() => {},
+            _ = connection.read_datagram() => {},
             Some(completed_request) = inflight_requests.join_next() => {
                 if let Err(err) = completed_request {
                     // Cancelling tasks is ok. Panicking tasks are not.
@@ -177,34 +181,33 @@ async fn read_request(mut recv_stream: RecvStream) -> Result<Request<Body>, anyh
     let request_proto = pb::HttpRequest::decode(raw_msg.as_slice())
         .with_context(|| "Failed to decode http request.")?;
 
-    let pb_http_method = pb::HttpMethod::try_from(request_proto.method)
-        .with_context(|| "Failed to decode http method.")?;
-    let http_method = match pb_http_method {
-        pb::HttpMethod::Get => Some(Method::GET),
-        pb::HttpMethod::Post => Some(Method::POST),
-        pb::HttpMethod::Put => Some(Method::PUT),
-        pb::HttpMethod::Delete => Some(Method::DELETE),
-        pb::HttpMethod::Head => Some(Method::HEAD),
-        pb::HttpMethod::Options => Some(Method::OPTIONS),
-        pb::HttpMethod::Connect => Some(Method::CONNECT),
-        pb::HttpMethod::Patch => Some(Method::PATCH),
-        pb::HttpMethod::Trace => Some(Method::TRACE),
-        pb::HttpMethod::Unspecified => None,
-    };
-    let mut request_builder = Request::builder();
-    if let Some(http_method) = http_method {
-        request_builder = request_builder.method(http_method);
-    }
-    request_builder = request_builder
+    let mut request = Request::builder()
+        .method(match pb::HttpMethod::try_from(request_proto.method) {
+            Ok(pb::HttpMethod::Get) => Method::GET,
+            Ok(pb::HttpMethod::Post) => Method::POST,
+            Ok(pb::HttpMethod::Put) => Method::PUT,
+            Ok(pb::HttpMethod::Delete) => Method::DELETE,
+            Ok(pb::HttpMethod::Head) => Method::HEAD,
+            Ok(pb::HttpMethod::Options) => Method::OPTIONS,
+            Ok(pb::HttpMethod::Connect) => Method::CONNECT,
+            Ok(pb::HttpMethod::Patch) => Method::PATCH,
+            Ok(pb::HttpMethod::Trace) => Method::TRACE,
+            Ok(pb::HttpMethod::Unspecified) => {
+                return Err(anyhow!("received http method unspecified."));
+            }
+            Err(e) => {
+                return Err(anyhow!("received invalid method {}", e));
+            }
+        })
         .version(Version::HTTP_3)
         .uri(request_proto.uri);
     for h in request_proto.headers {
         let pb::HttpHeader { key, value } = h;
-        request_builder = request_builder.header(key, value);
+        request = request.header(key, value);
     }
     // This consumes the body without requiring allocation or cloning the whole content.
     let body_bytes = Bytes::from(request_proto.body);
-    request_builder
+    request
         .body(Body::from(body_bytes))
         .with_context(|| "Failed to build request.")
 }
@@ -238,5 +241,6 @@ async fn write_response(
     send_stream
         .write_all(&response_bytes)
         .await
-        .with_context(|| "Failed to write request to stream.")
+        .with_context(|| "Failed to write request to stream.")?;
+    Ok(())
 }

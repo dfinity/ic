@@ -15,15 +15,14 @@ impl<T: Client> Client for WithMetrics<T> {
 
         let success = if res.is_ok() { "yes" } else { "no" };
 
-        let status = res.as_ref().map(|x| x.status());
-        let status_code = status.as_ref().map(|x| x.as_str()).unwrap_or("0");
-
-        let http_version = res
+        // TODO try to avoid allocating String here?
+        // Not sure how, status() returns non-static &str for some reason though CODE_DIGITS is static
+        let (status_code, http_version) = res
             .as_ref()
-            .map(|x| http_version(x.version()))
-            .unwrap_or("-");
+            .map(|x| (x.status().as_str().to_string(), http_version(x.version())))
+            .unwrap_or(("0".into(), "-"));
 
-        let labels = &[success, status_code, http_version];
+        let labels = &[success, status_code.as_str(), http_version];
         self.1.counter.with_label_values(labels).inc();
         self.1.recorder.with_label_values(labels).observe(dur);
 

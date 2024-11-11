@@ -12,8 +12,7 @@ on:
 # cancel the previous one if necessary; except on master where we want to build
 # every commit
 concurrency:
-  # never scheduled so head_ref or ref will always be set (no run_id fallback)
-  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.ref_name != 'master' }}
 
 jobs:
@@ -27,26 +26,6 @@ jobs:
           # Creates a bazelrc configuration fragment which tells bazel where the cache lives.
           nsc bazel cache setup --bazelrc=/tmp/bazel-cache.bazelrc
       - uses: actions/checkout@v4
-
-      - name: Build replica
-        run: |
-          bazel \
-            --noworkspace_rc \
-            --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \
-            build \
-            --config=ci --config=macos_ci \
-            //rs/replica
-
-      - name: Copy replica
-        run: |
-          cp ./bazel-bin/rs/replica/replica replica
-
-      - name: Upload replica
-        uses: actions/upload-artifact@v4
-        with:
-          name: replica
-          path: |
-            ./replica
 
       # Build and test, excluding 'upload' jobs that are not required on macOS (used in reproducibility tests)
       - name: Test

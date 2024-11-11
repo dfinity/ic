@@ -1,4 +1,7 @@
+#[rustfmt::skip]
+
 use anyhow::Result;
+
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::systest;

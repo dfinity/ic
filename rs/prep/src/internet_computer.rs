@@ -14,8 +14,6 @@ use std::{
     str::FromStr,
 };
 
-use anyhow::{anyhow, Result};
-
 use prost::Message;
 use serde_json::Value;
 use thiserror::Error;
@@ -30,7 +28,6 @@ use ic_protobuf::registry::firewall::v1::{
     FirewallAction, FirewallRule, FirewallRuleDirection, FirewallRuleSet,
 };
 use ic_protobuf::registry::{
-    api_boundary_node::v1::ApiBoundaryNodeRecord,
     node_operator::v1::NodeOperatorRecord,
     provisional_whitelist::v1::ProvisionalWhitelist as PbProvisionalWhitelist,
     replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
@@ -41,11 +38,10 @@ use ic_protobuf::registry::{
 use ic_protobuf::types::v1::{PrincipalId as PrincipalIdProto, SubnetId as SubnetIdProto};
 use ic_registry_client::client::RegistryDataProviderError;
 use ic_registry_keys::{
-    make_api_boundary_node_record_key, make_blessed_replica_versions_key,
-    make_firewall_rules_record_key, make_node_operator_record_key,
-    make_provisional_whitelist_record_key, make_replica_version_key, make_routing_table_record_key,
-    make_subnet_list_record_key, make_unassigned_nodes_config_record_key, FirewallRulesScope,
-    ROOT_SUBNET_ID_KEY,
+    make_blessed_replica_versions_key, make_firewall_rules_record_key,
+    make_node_operator_record_key, make_provisional_whitelist_record_key, make_replica_version_key,
+    make_routing_table_record_key, make_subnet_list_record_key,
+    make_unassigned_nodes_config_record_key, FirewallRulesScope, ROOT_SUBNET_ID_KEY,
 };
 use ic_registry_local_store::{Changelog, KeyMutation, LocalStoreImpl, LocalStoreWriter};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
@@ -90,7 +86,6 @@ pub struct TopologyConfig {
     subnets: BTreeMap<SubnetIndex, SubnetConfig>,
     subnet_ids: BTreeMap<SubnetIndex, SubnetId>,
     unassigned_nodes: BTreeMap<NodeIndex, NodeConfiguration>,
-    api_boundary_nodes: BTreeMap<NodeIndex, NodeConfiguration>,
 }
 
 impl TopologyConfig {
@@ -148,21 +143,6 @@ impl TopologyConfig {
             }
         }
         routing_table
-    }
-
-    pub fn insert_api_boundary_node(
-        &mut self,
-        idx: NodeIndex,
-        config: NodeConfiguration,
-    ) -> Result<()> {
-        if config.domain.is_none() {
-            return Err(anyhow!(
-                "Missing domain name: an API boundary node requires a domain name."
-            ));
-        }
-
-        self.api_boundary_nodes.insert(idx, config);
-        Ok(())
     }
 
     pub fn insert_unassigned_node(&mut self, idx: NodeIndex, nc: NodeConfiguration) {
@@ -224,7 +204,6 @@ impl From<NodeOperatorEntry> for NodeOperatorRecord {
 
 pub type InitializedTopology = BTreeMap<SubnetIndex, InitializedSubnet>;
 pub type UnassignedNodes = BTreeMap<NodeIndex, InitializedNode>;
-pub type ApiBoundaryNodes = BTreeMap<NodeIndex, InitializedNode>;
 
 #[derive(Clone, Debug)]
 pub struct IcConfig {
@@ -484,27 +463,6 @@ impl IcConfig {
             unassigned_nodes.insert(*n_idx, init_node);
         }
 
-        let mut api_boundary_nodes = BTreeMap::new();
-        for (n_idx, nc) in self.topology_config.api_boundary_nodes.iter() {
-            // create all the registry entries for the node
-            let node_path = InitializedSubnet::build_node_path(self.target_dir.as_path(), *n_idx);
-            let init_node = nc.clone().initialize(node_path)?;
-            init_node.write_registry_entries(&data_provider, version)?;
-            api_boundary_nodes.insert(*n_idx, init_node.clone());
-
-            // create the API boundary node registry entry
-            let api_bn_record = ApiBoundaryNodeRecord {
-                version: self.initial_replica_version_id.to_string(),
-            };
-            write_registry_entry(
-                &data_provider,
-                self.target_dir.as_path(),
-                &make_api_boundary_node_record_key(init_node.node_id),
-                version,
-                api_bn_record,
-            );
-        }
-
         // Set the routing table after initializing the subnet ids
         let routing_table_record = if self.generate_subnet_records {
             PbRoutingTable::from(if self.use_specified_ids_allocation_range {
@@ -685,7 +643,6 @@ impl IcConfig {
             target_dir: self.target_dir,
             initialized_topology,
             unassigned_nodes,
-            api_boundary_nodes,
         })
     }
 
@@ -853,7 +810,6 @@ pub struct InitializedIc {
     pub target_dir: PathBuf,
     pub initialized_topology: InitializedTopology,
     pub unassigned_nodes: UnassignedNodes,
-    pub api_boundary_nodes: ApiBoundaryNodes,
 }
 
 impl InitializedIc {

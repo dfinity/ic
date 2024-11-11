@@ -3,22 +3,20 @@ use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_crypto_standalone_sig_verifier::{user_public_key_from_bytes, KeyBytesContentType};
 use ic_crypto_tree_hash::Path;
 use ic_limits::{MAX_INGRESS_TTL, PERMITTED_DRIFT_AT_VALIDATOR};
+use ic_types::crypto::threshold_sig::RootOfTrustProvider;
+use ic_types::crypto::{CanisterSig, CanisterSigOf};
+use ic_types::messages::{Query, ReadState, SignedIngressContent};
 use ic_types::{
-    crypto::{
-        threshold_sig::RootOfTrustProvider, AlgorithmId, BasicSig, BasicSigOf, CanisterSig,
-        CanisterSigOf, CryptoError, UserPublicKey,
-    },
+    crypto::{AlgorithmId, BasicSig, BasicSigOf, CryptoError, UserPublicKey},
     messages::{
         Authentication, Delegation, HasCanisterId, HttpRequest, HttpRequestContent, MessageId,
-        Query, ReadState, SignedDelegation, SignedIngressContent, UserSignature, WebAuthnSignature,
+        SignedDelegation, UserSignature, WebAuthnSignature,
     },
     CanisterId, PrincipalId, Time, UserId,
 };
-use std::{
-    collections::{BTreeSet, HashSet},
-    convert::TryFrom,
-    sync::Arc,
-};
+use std::collections::HashSet;
+use std::sync::Arc;
+use std::{collections::BTreeSet, convert::TryFrom, fmt};
 use thiserror::Error;
 use AuthenticationError::*;
 use RequestValidationError::*;
@@ -112,7 +110,6 @@ where
         current_time: Time,
         root_of_trust_provider: &R,
     ) -> Result<CanisterIdSet, RequestValidationError> {
-        validate_ingress_expiry(request, current_time)?;
         let delegation_targets = validate_request_content(
             request,
             self.validator.as_ref(),
@@ -135,9 +132,6 @@ where
         current_time: Time,
         root_of_trust_provider: &R,
     ) -> Result<CanisterIdSet, RequestValidationError> {
-        if !request.sender().get().is_anonymous() {
-            validate_ingress_expiry(request, current_time)?;
-        }
         let delegation_targets = validate_request_content(
             request,
             self.validator.as_ref(),
@@ -161,9 +155,6 @@ where
         root_of_trust_provider: &R,
     ) -> Result<CanisterIdSet, RequestValidationError> {
         validate_paths_width_and_depth(&request.content().paths)?;
-        if !request.sender().get().is_anonymous() {
-            validate_ingress_expiry(request, current_time)?;
-        }
         validate_request_content(
             request,
             self.validator.as_ref(),
@@ -175,14 +166,14 @@ where
 
 fn validate_paths_width_and_depth(paths: &[Path]) -> Result<(), RequestValidationError> {
     if paths.len() > MAXIMUM_NUMBER_OF_PATHS {
-        return Err(TooManyPaths {
+        return Err(TooManyPathsError {
             maximum: MAXIMUM_NUMBER_OF_PATHS,
             length: paths.len(),
         });
     }
     for path in paths {
         if path.len() > MAXIMUM_NUMBER_OF_LABELS_PER_PATH {
-            return Err(PathTooLong {
+            return Err(PathTooLongError {
                 maximum: MAXIMUM_NUMBER_OF_LABELS_PER_PATH,
                 length: path.len(),
             });
@@ -201,6 +192,7 @@ where
     R::Error: std::error::Error,
 {
     validate_nonce(request)?;
+    validate_ingress_expiry(request, current_time)?;
     validate_user_id_and_signature(
         ingress_signature_verifier,
         &request.sender(),
@@ -228,51 +220,94 @@ fn validate_request_target<C: HasCanisterId>(
 }
 
 /// Error in validating an [HttpRequest].
-#[derive(PartialEq, Debug, Error)]
+#[derive(PartialEq, Debug)]
 pub enum RequestValidationError {
-    #[error("Invalid request expiry: {0}")]
-    InvalidRequestExpiry(String),
-    #[error("Invalid delegation expiry: {0}")]
+    InvalidIngressExpiry(String),
     InvalidDelegationExpiry(String),
-    #[error("The user id '{0}' does not match the public key '{:?}'", hex::encode(.1))]
     UserIdDoesNotMatchPublicKey(UserId, Vec<u8>),
-    #[error("Invalid signature: {0}")]
     InvalidSignature(AuthenticationError),
-    #[error("Invalid delegation: {0}")]
     InvalidDelegation(AuthenticationError),
-    #[error("Missing signature from user: {0}")]
     MissingSignature(UserId),
-    #[error("Signature is not allowed for the anonymous user.")]
     AnonymousSignatureNotAllowed,
-    #[error("Canister '{0}' is not one of the delegation targets.")]
     CanisterNotInDelegationTargets(CanisterId),
-    #[error("Too many paths in read state request: got {length} paths, but at most {maximum} are allowed.")]
-    TooManyPaths { length: usize, maximum: usize },
-    #[error("At least one path in read state request is too deep: got {length} labels, but at most {maximum} are allowed.")]
-    PathTooLong { length: usize, maximum: usize },
-    #[error(
-        "Nonce in request is too big: got {num_bytes} bytes, but at most {maximum} are allowed."
-    )]
-    NonceTooBig { num_bytes: usize, maximum: usize },
+    TooManyPathsError { length: usize, maximum: usize },
+    PathTooLongError { length: usize, maximum: usize },
+    NonceTooBigError { num_bytes: usize, maximum: usize },
+}
+
+impl fmt::Display for RequestValidationError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            InvalidIngressExpiry(msg) => write!(f, "{}", msg),
+            InvalidDelegationExpiry(msg) => write!(f, "{}", msg),
+            UserIdDoesNotMatchPublicKey(user_id, pubkey) => write!(
+                f,
+                "The user id {} does not match the public key {}",
+                user_id,
+                hex::encode(pubkey)
+            ),
+            InvalidSignature(err) => write!(f, "Invalid signature: {}", err),
+            InvalidDelegation(err) => write!(f, "Invalid delegation: {}", err),
+            MissingSignature(user_id) => write!(f, "Missing signature from user: {}", user_id),
+            AnonymousSignatureNotAllowed => {
+                write!(f, "Signature is not allowed for the anonymous user")
+            }
+            CanisterNotInDelegationTargets(canister_id) => write!(
+                f,
+                "Canister {} is not one of the delegation targets",
+                canister_id
+            ),
+            TooManyPathsError { length, maximum } => write!(
+                f,
+                "Too many paths in read state request: got {} paths, but at most {} are allowed",
+                length, maximum
+            ),
+            PathTooLongError { length, maximum } => write!(
+                f,
+                "At least one path in read state request is too deep: got {} labels, but at most {} are allowed",
+                length, maximum
+            ),
+            NonceTooBigError { num_bytes: length, maximum } => write!(
+                f,
+                "Nonce in request is too big: got {} bytes, but at most {} are allowed",
+                length, maximum
+            ),
+        }
+    }
 }
 
 /// Error in verifying the signature or authentication part of a request.
-#[derive(PartialEq, Debug, Error)]
+#[derive(PartialEq, Debug)]
 pub enum AuthenticationError {
-    #[error("Invalid basic signature: {0}")]
     InvalidBasicSignature(CryptoError),
-    #[error("Invalid canister signature: {0}")]
     InvalidCanisterSignature(String),
-    #[error("Invalid public key: {0}")]
     InvalidPublicKey(CryptoError),
-    #[error("WebAuthn error: {0}")]
     WebAuthnError(String),
-    #[error("Delegation target error: {0}")]
     DelegationTargetError(String),
-    #[error{"Chain of delegations is too long: got {length} delegations, but at most {maximum} are allowed."}]
     DelegationTooLongError { length: usize, maximum: usize },
-    #[error("Chain of delegations contains at least one cycle: first repeating public key encountered {}", hex::encode(.public_key))]
     DelegationContainsCyclesError { public_key: Vec<u8> },
+}
+
+impl fmt::Display for AuthenticationError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            InvalidBasicSignature(err) => write!(f, "Invalid basic signature: {}", err),
+            InvalidCanisterSignature(err) => write!(f, "Invalid canister signature: {}", err),
+            InvalidPublicKey(err) => write!(f, "Invalid public key: {}", err),
+            WebAuthnError(msg) => write!(f, "{}", msg),
+            DelegationTargetError(msg) => write!(f, "{}", msg),
+            DelegationTooLongError { length, maximum } => write!(
+                f,
+                "Chain of delegations is too long: got {} delegations, but at most {} are allowed",
+                length, maximum
+            ),
+            DelegationContainsCyclesError { public_key } => write!(
+                f,
+                "Chain of delegations contains at least one cycle: first repeating public key encountered {}",
+                hex::encode(public_key)
+            ),
+        }
+    }
 }
 
 /// Set of canister IDs.
@@ -411,7 +446,7 @@ fn validate_nonce<C: HttpRequestContent>(
     request: &HttpRequest<C>,
 ) -> Result<(), RequestValidationError> {
     match request.nonce() {
-        Some(nonce) if nonce.len() > MAXIMUM_NUMBER_OF_BYTES_IN_NONCE => Err(NonceTooBig {
+        Some(nonce) if nonce.len() > MAXIMUM_NUMBER_OF_BYTES_IN_NONCE => Err(NonceTooBigError {
             num_bytes: nonce.len(),
             maximum: MAXIMUM_NUMBER_OF_BYTES_IN_NONCE,
         }),
@@ -433,7 +468,7 @@ fn validate_ingress_expiry<C: HttpRequestContent>(
     let max_expiry_diff = MAX_INGRESS_TTL
         .checked_add(PERMITTED_DRIFT_AT_VALIDATOR)
         .ok_or_else(|| {
-            InvalidRequestExpiry(format!(
+            InvalidIngressExpiry(format!(
                 "Addition of MAX_INGRESS_TTL {MAX_INGRESS_TTL:?} with \
                 PERMITTED_DRIFT_AT_VALIDATOR {PERMITTED_DRIFT_AT_VALIDATOR:?} overflows",
             ))
@@ -441,7 +476,7 @@ fn validate_ingress_expiry<C: HttpRequestContent>(
     let max_allowed_expiry = min_allowed_expiry
         .checked_add(max_expiry_diff)
         .ok_or_else(|| {
-            InvalidRequestExpiry(format!(
+            InvalidIngressExpiry(format!(
                 "Addition of min_allowed_expiry {min_allowed_expiry:?} \
                 with max_expiry_diff {max_expiry_diff:?} overflows",
             ))
@@ -454,7 +489,7 @@ fn validate_ingress_expiry<C: HttpRequestContent>(
              Provided expiry:        {}",
             min_allowed_expiry, max_allowed_expiry, provided_expiry
         );
-        return Err(InvalidRequestExpiry(msg));
+        return Err(InvalidIngressExpiry(msg));
     }
     Ok(())
 }

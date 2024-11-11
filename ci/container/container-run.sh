@@ -1,22 +1,18 @@
 #!/usr/bin/env bash
 set -eEuo pipefail
 
-eprintln() {
-    echo "$@" >&2
-}
-
 if [ -n "${IN_NIX_SHELL:-}" ]; then
-    eprintln "Please do not run $0 inside of nix-shell."
+    echo "Please do not run $0 inside of nix-shell." >&2
     exit 1
 fi
 
 if [ -e /run/.containerenv ]; then
-    eprintln "Nested $0 is not supported."
+    echo "Nested $0 is not supported." >&2
     exit 1
 fi
 
 if ! which podman >/dev/null 2>&1; then
-    eprintln "Podman missing...install it."
+    echo "Podman missing...install it." >&2
     exit 1
 fi
 
@@ -43,17 +39,17 @@ CTR=0
 while test $# -gt $CTR; do
     case "$1" in
         -h | --help) usage && exit 0 ;;
-        -f | --full) eprintln "The legacy image has been deprecated, --full is not an option anymore." && exit 0 ;;
+        -f | --full) echo "The legacy image has been deprecated, --full is not an option anymore." && exit 0 ;;
         -c | --cache-dir)
             if [[ $# -gt "$CTR + 1" ]]; then
                 if [ ! -d "$2" ]; then
-                    eprintln "$2 is not a directory! Create it and try again."
+                    echo "$2 is not a directory! Create it and try again."
                     usage && exit 1
                 fi
                 CACHE_DIR="$2"
-                eprintln "Bind-mounting $CACHE_DIR as cache directory."
+                echo "Bind-mounting $CACHE_DIR as cache directory."
             else
-                eprintln "Missing argument for -c | --cache-dir!"
+                echo "Missing argument for -c | --cache-dir!"
                 usage && exit 1
             fi
             shift
@@ -77,7 +73,7 @@ if ! sudo podman "${PODMAN_ARGS[@]}" image exists $IMAGE; then
 fi
 
 if findmnt /hoststorage >/dev/null; then
-    eprintln "Purging non-relevant container images"
+    echo "Purging non-relevant container images"
     sudo podman "${PODMAN_ARGS[@]}" image prune -a -f --filter "reference!=$IMAGE"
 fi
 
@@ -131,7 +127,6 @@ if [ "$(id -u)" = "1000" ]; then
         PODMAN_RUN_ARGS+=(
             --mount type=bind,source="${HOME}/.bash_history",target="/home/ubuntu/.bash_history"
         )
-
     fi
     if [ -e "${HOME}/.local/share/fish" ]; then
         PODMAN_RUN_ARGS+=(
@@ -141,19 +136,6 @@ if [ "$(id -u)" = "1000" ]; then
     if [ -e "${HOME}/.zsh_history" ]; then
         PODMAN_RUN_ARGS+=(
             --mount type=bind,source="${HOME}/.zsh_history",target="/home/ubuntu/.zsh_history"
-        )
-    fi
-
-    if findmnt /hoststorage >/dev/null; then
-        # use host's storage for cargo target
-        # * shared with VSCode's devcontainer, see .devcontainer/devcontainer.json
-        # this configuration improves performance of rust-analyzer
-        if [ ! -d /hoststorage/cache/cargo ]; then
-            sudo mkdir -p /hoststorage/cache/cargo
-            sudo chown -R 1000:1000 /hoststorage/cache/cargo
-        fi
-        PODMAN_RUN_ARGS+=(
-            --mount type=bind,source="/hoststorage/cache/cargo",target="/ic/target"
         )
     fi
 
@@ -169,7 +151,7 @@ if [ -n "${SSH_AUTH_SOCK:-}" ] && [ -e "${SSH_AUTH_SOCK:-}" ]; then
         -e SSH_AUTH_SOCK="/ssh-agent"
     )
 else
-    eprintln "No ssh-agent to forward."
+    echo "No ssh-agent to forward."
 fi
 
 # make sure we have all bind-mounts
@@ -178,28 +160,22 @@ mkdir -p ~/.{aws,ssh,cache,local/share/fish} && touch ~/.{zsh,bash}_history
 PODMAN_RUN_USR_ARGS=()
 if [ -f "$HOME/.container-run.conf" ]; then
     # conf file with user's custom PODMAN_RUN_USR_ARGS
-    eprintln "Sourcing user's ~/.container-run.conf"
+    echo "Sourcing user's ~/.container-run.conf"
     source "$HOME/.container-run.conf"
 fi
 
-# Omit -t if not a tty.
-# Also shut up logging, because podman will by default log
-# every byte of standard output to the journal, and that
-# destroys the journal + wastes enormous amounts of CPU.
-# I witnessed journald and syslog peg 2 cores of my devenv
-# when running a simple cat /path/to/file.
-if tty >/dev/null 2>&1; then
-    tty_arg=-t
-else
-    tty_arg=
-fi
-other_args="--pids-limit=-1 -i $tty_arg --log-driver=none --rm --privileged --network=host --cgroupns=host"
-# Privileged rootful podman is required due to requirements of IC-OS guest build;
-# additionally, we need to use hosts's cgroups and network.
+# privileged rootful podman is required due to requirements of IC-OS guest build
+# additionally, we need to use hosts's cgroups and network
 if [ $# -eq 0 ]; then
     set -x
-    exec sudo podman "${PODMAN_ARGS[@]}" run $other_args "${PODMAN_RUN_ARGS[@]}" ${PODMAN_RUN_USR_ARGS[@]} -w "$WORKDIR" "$IMAGE" "${USHELL:-/usr/bin/bash}"
+    sudo podman "${PODMAN_ARGS[@]}" run --pids-limit=-1 -it --rm --privileged --network=host --cgroupns=host \
+        "${PODMAN_RUN_ARGS[@]}" ${PODMAN_RUN_USR_ARGS[@]} -w "$WORKDIR" \
+        "$IMAGE" ${USHELL:-/usr/bin/bash}
+    set +x
 else
     set -x
-    exec sudo podman "${PODMAN_ARGS[@]}" run $other_args "${PODMAN_RUN_ARGS[@]}" ${PODMAN_RUN_USR_ARGS[@]} -w "$WORKDIR" "$IMAGE" "$@"
+    sudo podman "${PODMAN_ARGS[@]}" run --pids-limit=-1 -it --rm --privileged --network=host --cgroupns=host \
+        "${PODMAN_RUN_ARGS[@]}" "${PODMAN_RUN_USR_ARGS[@]}" -w "$WORKDIR" \
+        "$IMAGE" "$@"
+    set +x
 fi

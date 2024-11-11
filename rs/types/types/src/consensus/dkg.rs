@@ -152,8 +152,9 @@ pub struct Summary {
     /// corresponding to this tag.
     #[serde_as(as = "Vec<(_, _)>")]
     next_transcripts: BTreeMap<NiDkgTag, NiDkgTranscript>,
-    /// Transcripts that are computed for remote subnets.
-    pub transcripts_for_remote_subnets: Vec<(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)>,
+    /// Transcripts that are computed for new subnets being created.
+    pub transcripts_for_new_subnets_with_callback_ids:
+        Vec<(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)>,
     /// The length of the current interval in rounds (following the start
     /// block).
     pub interval_length: Height,
@@ -172,7 +173,7 @@ impl Summary {
         configs: Vec<NiDkgConfig>,
         current_transcripts: BTreeMap<NiDkgTag, NiDkgTranscript>,
         next_transcripts: BTreeMap<NiDkgTag, NiDkgTranscript>,
-        transcripts_for_remote_subnets: Vec<(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)>,
+        transcripts_for_new_subnets: Vec<(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)>,
         registry_version: RegistryVersion,
         interval_length: Height,
         next_interval_length: Height,
@@ -182,11 +183,11 @@ impl Summary {
         Self {
             configs: configs
                 .into_iter()
-                .map(|config| (config.dkg_id().clone(), config))
+                .map(|config| (config.dkg_id(), config))
                 .collect(),
             current_transcripts,
             next_transcripts,
-            transcripts_for_remote_subnets,
+            transcripts_for_new_subnets_with_callback_ids: transcripts_for_new_subnets,
             registry_version,
             interval_length,
             next_interval_length,
@@ -247,10 +248,7 @@ impl Summary {
         let mut next_transcripts = self.next_transcripts;
         self.current_transcripts
             .into_iter()
-            .map(|(tag, current)| {
-                let new_next_transcripts = next_transcripts.remove(&tag).unwrap_or(current);
-                (tag, new_next_transcripts)
-            })
+            .map(|(tag, current)| (tag, next_transcripts.remove(&tag).unwrap_or(current)))
             .collect()
     }
 
@@ -311,7 +309,7 @@ fn build_callback_ided_transcripts_vec(
         .iter()
         .map(
             |(id, callback_id, transcript_result)| pb::CallbackIdedNiDkgTranscript {
-                dkg_id: Some(pb::NiDkgId::from(id.clone())),
+                dkg_id: Some(pb::NiDkgId::from(*id)),
                 transcript_result: match transcript_result {
                     Ok(transcript) => Some(pb::NiDkgTranscriptResult {
                         val: Some(pb::ni_dkg_transcript_result::Val::Transcript(
@@ -355,8 +353,10 @@ impl From<&Summary> for pb::Summary {
             interval_length: summary.interval_length.get(),
             next_interval_length: summary.next_interval_length.get(),
             height: summary.height.get(),
-            transcripts_for_remote_subnets: build_callback_ided_transcripts_vec(
-                summary.transcripts_for_remote_subnets.as_slice(),
+            transcripts_for_new_subnets_with_callback_ids: build_callback_ided_transcripts_vec(
+                summary
+                    .transcripts_for_new_subnets_with_callback_ids
+                    .as_slice(),
             ),
             initial_dkg_attempts: build_initial_dkg_attempts_vec(&summary.initial_dkg_attempts),
         }
@@ -392,7 +392,7 @@ fn build_tagged_transcripts_map(
 fn build_transcripts_vec_from_pb(
     transcripts: Vec<pb::CallbackIdedNiDkgTranscript>,
 ) -> Result<Vec<(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)>, String> {
-    let mut transcripts_for_remote_subnets = Vec::new();
+    let mut transcripts_for_new_subnets = Vec::new();
     for transcript in transcripts.into_iter() {
         let id = transcript.dkg_id.ok_or_else(|| {
             "Missing DkgPayload::Summary::IdedNiDkgTranscript::NiDkgId".to_string()
@@ -405,9 +405,9 @@ fn build_transcripts_vec_from_pb(
             .ok_or("Missing DkgPayload::Summary::IdedNiDkgTranscript::NiDkgTranscriptResult")?;
         let transcript_result = build_transcript_result(&transcript_result)
             .map_err(|e| format!("Failed to convert NiDkgTranscriptResult: {:?}", e))?;
-        transcripts_for_remote_subnets.push((id, callback_id, transcript_result));
+        transcripts_for_new_subnets.push((id, callback_id, transcript_result));
     }
-    Ok(transcripts_for_remote_subnets)
+    Ok(transcripts_for_new_subnets)
 }
 
 fn build_initial_dkg_attempts_map(
@@ -455,7 +455,7 @@ impl TryFrom<pb::Summary> for Summary {
             configs: summary
                 .configs
                 .into_iter()
-                .map(|config| NiDkgConfig::try_from(config).map(|c| (c.dkg_id.clone(), c)))
+                .map(|config| NiDkgConfig::try_from(config).map(|c| (c.dkg_id, c)))
                 .collect::<Result<BTreeMap<_, _>, _>>()
                 .map_err(ProxyDecodeError::Other)?,
             current_transcripts: build_tagged_transcripts_map(&summary.current_transcripts)?,
@@ -463,8 +463,8 @@ impl TryFrom<pb::Summary> for Summary {
             interval_length: Height::from(summary.interval_length),
             next_interval_length: Height::from(summary.next_interval_length),
             height: Height::from(summary.height),
-            transcripts_for_remote_subnets: build_transcripts_vec_from_pb(
-                summary.transcripts_for_remote_subnets,
+            transcripts_for_new_subnets_with_callback_ids: build_transcripts_vec_from_pb(
+                summary.transcripts_for_new_subnets_with_callback_ids,
             )
             .map_err(ProxyDecodeError::Other)?,
             initial_dkg_attempts: build_initial_dkg_attempts_map(&summary.initial_dkg_attempts),

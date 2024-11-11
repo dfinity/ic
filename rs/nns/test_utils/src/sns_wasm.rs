@@ -4,6 +4,7 @@ use crate::{
 };
 use candid::{Decode, Encode};
 use canister_test::Project;
+use dfn_candid::candid_one;
 use ic_base_types::CanisterId;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL};
 use ic_nervous_system_common_test_utils::wasm_helpers;
@@ -185,6 +186,7 @@ fn make_proposal_with_test_neuron_1(env: &StateMachine, proposal: Proposal) -> P
         env,
         GOVERNANCE_CANISTER_ID,
         "manage_neuron",
+        candid_one,
         ManageNeuron {
             id: None,
             command: Some(Command::MakeProposal(Box::new(proposal))),
@@ -283,6 +285,7 @@ pub fn deploy_new_sns(
         env,
         sns_wasm_canister_id,
         "deploy_new_sns",
+        candid_one,
         DeployNewSnsRequest {
             sns_init_payload: Some(sns_init_payload),
         },

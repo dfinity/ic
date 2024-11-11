@@ -46,7 +46,7 @@ fn workload_direct_auth_rps9600(env: TestEnv) {
 /// See https://github.com/dfinity/nns-dapp/blob/6b85f56b6f5261bf0d1e4a1848752828ff0f4238/frontend/src/lib/services/%24public/sns.services.ts#L82
 ///
 /// 1. Install NNS and SNS
-/// 2. Initiate the token swap
+/// 2. Initiate the token sale
 /// 3. Generate workload (mimicking nns-dapp frontend) at various RPSs
 fn main() -> Result<()> {
     SystemTestGroup::new()

@@ -55,9 +55,7 @@ pub enum CheckTransactionRetriable {
 pub enum CheckTransactionIrrecoverableError {
     /// Response size is too large (> `RETRY_MAX_RESPONSE_BYTES`) when fetching the transaction data of a txid.
     ResponseTooLarge { txid: Vec<u8> },
-    /// Invalid transaction id because it fails to decode.
-    InvalidTransactionId(String),
-    /// Invalid transaction.
+    /// Invalid transaction, e.g. error decoding transaction or transaction id mismatch, etc.
     InvalidTransaction(String),
 }
 
@@ -82,34 +80,14 @@ impl From<CheckTransactionStatus> for CheckTransactionResponse {
 #[derive(CandidType, Clone, Debug, Deserialize, Serialize)]
 pub struct InitArg {
     pub btc_network: BtcNetwork,
-    pub kyt_mode: KytMode,
 }
 
-#[derive(CandidType, Clone, Deserialize, Debug, Eq, PartialEq, Serialize, Hash)]
+#[derive(CandidType, Clone, Copy, Deserialize, Debug, Eq, PartialEq, Serialize, Hash)]
 pub enum BtcNetwork {
     #[serde(rename = "mainnet")]
     Mainnet,
     #[serde(rename = "testnet")]
     Testnet,
-    #[serde(rename = "regtest")]
-    Regtest { json_rpc_url: String },
-}
-
-#[derive(CandidType, Clone, Copy, Deserialize, Debug, Eq, PartialEq, Serialize, Hash)]
-pub enum KytMode {
-    AcceptAll,
-    RejectAll,
-    Normal,
-}
-
-impl fmt::Display for KytMode {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::AcceptAll => write!(f, "AcceptAll"),
-            Self::RejectAll => write!(f, "RejectAll"),
-            Self::Normal => write!(f, "Normal"),
-        }
-    }
 }
 
 impl From<BtcNetwork> for bitcoin::Network {
@@ -117,7 +95,6 @@ impl From<BtcNetwork> for bitcoin::Network {
         match btc_network {
             BtcNetwork::Mainnet => Self::Bitcoin,
             BtcNetwork::Testnet => Self::Testnet,
-            BtcNetwork::Regtest { .. } => Self::Regtest,
         }
     }
 }
@@ -127,15 +104,12 @@ impl fmt::Display for BtcNetwork {
         match self {
             Self::Mainnet => write!(f, "mainnet"),
             Self::Testnet => write!(f, "testnet"),
-            Self::Regtest { .. } => write!(f, "regtest"),
         }
     }
 }
 
 #[derive(CandidType, Debug, Deserialize, Serialize)]
-pub struct UpgradeArg {
-    pub kyt_mode: Option<KytMode>,
-}
+pub struct UpgradeArg {}
 
 #[derive(CandidType, Debug, Deserialize, Serialize)]
 pub enum KytArg {

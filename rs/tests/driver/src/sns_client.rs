@@ -122,7 +122,7 @@ impl SnsClient {
         let payload = {
             let mut payload =
                 open_sns_token_swap_payload(swap_id.get(), create_service_nervous_system_proposal);
-            // Make sure there's no delay. (Therefore, the swap will be opened immediately.)
+            // Make sure there's no delay. (Therefore, the sale will be opened immediately.)
             payload.params.as_mut().unwrap().sale_delay_seconds = Some(0);
             payload
         };

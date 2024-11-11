@@ -1,5 +1,3 @@
-#![allow(clippy::disallowed_types)]
-
 use std::{sync::Arc, time::Instant};
 
 use anyhow::Error;

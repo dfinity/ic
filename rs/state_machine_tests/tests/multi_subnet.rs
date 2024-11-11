@@ -3,7 +3,7 @@ use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
-    finalize_registry, StateMachine, StateMachineBuilder, StateMachineConfig, Subnets,
+    finalize_registry, StateMachine, StateMachineBuilder, StateMachineConfig,
 };
 use ic_test_utilities_types::ids::user_test_id;
 use ic_types::{
@@ -16,32 +16,8 @@ use std::sync::{Arc, RwLock};
 
 const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
 
-struct SubnetsImpl {
-    subnets: Arc<RwLock<BTreeMap<SubnetId, Arc<StateMachine>>>>,
-}
-
-impl SubnetsImpl {
-    fn new() -> Self {
-        Self {
-            subnets: Arc::new(RwLock::new(BTreeMap::new())),
-        }
-    }
-}
-
-impl Subnets for SubnetsImpl {
-    fn insert(&self, state_machine: Arc<StateMachine>) {
-        self.subnets
-            .write()
-            .unwrap()
-            .insert(state_machine.get_subnet_id(), state_machine);
-    }
-    fn get(&self, subnet_id: SubnetId) -> Option<Arc<StateMachine>> {
-        self.subnets.read().unwrap().get(&subnet_id).cloned()
-    }
-}
-
 fn test_setup(
-    subnets: Arc<SubnetsImpl>,
+    subnets: Arc<RwLock<BTreeMap<SubnetId, Arc<StateMachine>>>>,
     subnet_seed: u8,
     subnet_type: SubnetType,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
@@ -64,7 +40,7 @@ fn counter_canister_call_test() {
     let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
 
     // Set up the two state machines for the two (app) subnets.
-    let subnets = Arc::new(SubnetsImpl::new());
+    let subnets = Arc::new(RwLock::new(BTreeMap::new()));
     let env1 = test_setup(
         subnets.clone(),
         1,

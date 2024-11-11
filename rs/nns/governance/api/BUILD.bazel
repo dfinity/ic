@@ -46,3 +46,17 @@ rust_library(
     version = "0.9.0",
     deps = DEPENDENCIES,
 )
+
+rust_library(
+    name = "api--test_feature",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["**/*tests.rs"],
+    ),
+    aliases = ALIASES,
+    crate_features = ["test"],
+    crate_name = "ic_nns_governance_api",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
+    deps = DEPENDENCIES,
+)

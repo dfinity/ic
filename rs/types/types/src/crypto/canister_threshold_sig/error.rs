@@ -405,7 +405,6 @@ pub enum ThresholdSchnorrSigInputsCreationError {
     InconsistentAlgorithmIds(String, String),
     InconsistentReceivers,
     InvalidPreSignatureOrigin(String),
-    InvalidUseOfTaprootHash,
     UnsupportedAlgorithm(String),
 }
 impl_display_using_debug!(ThresholdSchnorrSigInputsCreationError);

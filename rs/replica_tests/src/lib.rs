@@ -36,7 +36,7 @@ use ic_test_utilities_types::{
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
     ingress::{IngressState, IngressStatus, WasmResult},
-    messages::{Query, QuerySource, SignedIngress},
+    messages::{CertificateDelegation, Query, QuerySource, SignedIngress},
     replica_config::NODE_INDEX_DEFAULT,
     time::expiry_time_from_now,
     CanisterId, Height, NodeId, ReplicaVersion, Time,
@@ -54,7 +54,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::sync::mpsc::UnboundedSender;
-use tower::ServiceExt;
+use tower::{buffer::Buffer as TowerBuffer, ServiceExt};
 
 const CYCLES_BALANCE: u128 = 1 << 120;
 
@@ -151,7 +151,8 @@ where
 /// The code of the replica is the real one, only the interface is changed, with
 /// function calls instead of http calls.
 pub struct LocalTestRuntime {
-    pub query_handler: Arc<Mutex<QueryExecutionService>>,
+    pub query_handler:
+        tower::buffer::Buffer<QueryExecutionService, (Query, Option<CertificateDelegation>)>,
     pub ingress_sender: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
     pub ingress_history_reader: Arc<dyn IngressHistoryReader>,
     pub state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
@@ -217,7 +218,6 @@ pub fn get_ic_config() -> IcConfig {
             public_api: SocketAddr::from_str("128.0.0.1:1").expect("can't fail"),
             node_operator_principal_id: None,
             secret_key_store: Some(node_sks),
-            domain: None,
         },
     );
 
@@ -370,7 +370,8 @@ where
         }
 
         let runtime = LocalTestRuntime {
-            query_handler: Arc::new(Mutex::new(query_handler)),
+            query_handler: tokio::runtime::Handle::current()
+                .block_on(async { TowerBuffer::new(query_handler, 1) }),
             ingress_sender: ingress_tx,
             ingress_history_reader: Arc::new(ingress_history_reader),
             state_reader,
@@ -621,9 +622,14 @@ impl LocalTestRuntime {
         while self.state_reader.latest_certified_height() < latest {
             thread::sleep(Duration::from_millis(100));
         }
-        let query_svc = self.query_handler.lock().unwrap().clone();
 
-        let result = match query_svc.oneshot((query, None)).await.unwrap() {
+        let result = match self
+            .query_handler
+            .clone()
+            .oneshot((query, None))
+            .await
+            .unwrap()
+        {
             Ok((result, _)) => result,
             Err(QueryExecutionError::CertifiedStateUnavailable) => {
                 panic!("Certified state unavailable for query call.")

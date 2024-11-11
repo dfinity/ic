@@ -1,4 +1,3 @@
-#![allow(clippy::disallowed_types)]
 use anyhow::{bail, Context, Result};
 use axum::{
     body::Body,

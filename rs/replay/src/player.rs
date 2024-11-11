@@ -61,7 +61,7 @@ use ic_types::{
     },
     ingress::{IngressState, IngressStatus, WasmResult},
     malicious_flags::MaliciousFlags,
-    messages::{Query, QuerySource},
+    messages::{CertificateDelegation, Query, QuerySource},
     signature::ThresholdSignature,
     time::current_time,
     CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, PrincipalId, Randomness,
@@ -77,7 +77,7 @@ use std::{
 };
 use tempfile::TempDir;
 use tokio::runtime::Runtime;
-use tower::ServiceExt;
+use tower::{buffer::Buffer as TowerBuffer, ServiceExt};
 
 // Amount of time we are waiting for execution, after batches are delivered.
 const WAIT_DURATION: Duration = Duration::from_millis(500);
@@ -116,7 +116,8 @@ pub struct Player {
     membership: Option<Arc<Membership>>,
     validator: Option<ReplayValidator>,
     crypto: Arc<dyn CryptoComponentForVerificationOnly>,
-    query_handler: QueryExecutionService,
+    query_handler:
+        tower::buffer::Buffer<QueryExecutionService, (Query, Option<CertificateDelegation>)>,
     ingress_history_reader: Box<dyn IngressHistoryReader>,
     certification_pool: Option<CertificationPoolImpl>,
     pub registry: Arc<RegistryClientImpl>,
@@ -367,7 +368,8 @@ impl Player {
             membership,
             validator,
             crypto,
-            query_handler: execution_service.query_execution_service,
+            query_handler: runtime
+                .block_on(async { TowerBuffer::new(execution_service.query_execution_service, 1) }),
             ingress_history_reader: execution_service.ingress_history_reader,
             certification_pool,
             registry,
@@ -699,6 +701,7 @@ impl Player {
                 pool,
                 &*self.registry,
                 self.subnet_id,
+                self.replica_version.clone(),
                 &self.log,
                 replay_target_height,
                 None,
@@ -725,12 +728,11 @@ impl Player {
         pool: Option<&ConsensusPoolImpl>,
         mut extra: F,
     ) -> (Time, Option<(Height, Vec<IngressWithPrinter>)>) {
-        let (registry_version, time, randomness, replica_version) = match pool {
+        let (registry_version, time, randomness) = match pool {
             None => (
                 self.registry.get_latest_version(),
                 ic_types::time::current_time(),
                 Randomness::from([0; 32]),
-                ReplicaVersion::default(),
             ),
             Some(pool) => {
                 let pool = PoolReader::new(pool);
@@ -748,7 +750,6 @@ impl Player {
                     last_block.context.registry_version,
                     last_block.context.time + Duration::from_nanos(1),
                     Randomness::from(crypto_hashable_to_seed(&last_block)),
-                    last_block.version.clone(),
                 )
             }
         };
@@ -765,7 +766,6 @@ impl Player {
             time,
             consensus_responses: Vec::new(),
             blockmaker_metrics: BlockmakerMetrics::new_for_test(),
-            replica_version,
         };
         let context_time = extra_batch.time;
         let extra_msgs = extra(self, context_time);
@@ -1238,7 +1238,7 @@ fn find_malicious_nodes(
 ) -> HashSet<NodeId> {
     let mut malicious = HashSet::new();
     if let Some(range) = certification_pool
-        .validated
+        .persistent_pool
         .certification_shares()
         .height_range()
     {
@@ -1494,7 +1494,9 @@ mod tests {
             make_share(3, vec![3], 7),
         ];
 
-        shares.into_iter().for_each(|s| pool.validated.insert(s));
+        shares
+            .into_iter()
+            .for_each(|s| pool.persistent_pool.insert(s));
 
         let malicious = find_malicious_nodes(&pool, Height::new(0), &verify);
         assert_eq!(malicious.len(), 1);

@@ -1,9 +1,8 @@
-use clap::{Parser, Subcommand};
+use clap::Parser;
 use ic_types::{CanisterId, PrincipalId, SubnetId};
 use icp_ledger::AccountIdentifier;
 use std::path::PathBuf;
 
-#[derive(Clone)]
 pub struct ClapSubnetId(pub SubnetId);
 
 impl std::str::FromStr for ClapSubnetId {
@@ -42,7 +41,7 @@ pub struct ReplayToolArgs {
     pub replay_until_height: Option<u64>,
 }
 
-#[derive(Clone, Subcommand)]
+#[derive(Clone, Parser)]
 pub enum SubCommand {
     /// Add a new version of the replica binary to the registry.
     AddAndBlessReplicaVersion(AddAndBlessReplicaVersionCmd),

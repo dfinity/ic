@@ -2,24 +2,11 @@ pub mod checker;
 pub mod tla_state;
 pub mod tla_value;
 use std::cell::RefCell;
-use std::fmt::Formatter;
 use std::mem;
 use std::rc::Rc;
 
 pub use tla_state::*;
 pub use tla_value::*;
-
-#[derive(Clone, Debug)]
-pub struct SourceLocation {
-    pub file: String,
-    pub line: String,
-}
-
-impl std::fmt::Display for SourceLocation {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&format!("{}: Line {}", self.file, self.line))
-    }
-}
 
 #[derive(Clone, Debug)]
 pub struct Update {
@@ -41,7 +28,7 @@ pub struct Update {
     pub post_process: fn(&mut Vec<ResolvedStatePair>) -> TlaConstantAssignment,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct UpdateTrace {
     pub update: Update,
     pub state_pairs: Vec<ResolvedStatePair>,
@@ -89,11 +76,11 @@ impl Context {
         }
     }
 
-    pub fn call_function(&mut self) {
+    fn call_function(&mut self) {
         self.location.0.push(LocationStackElem::Placeholder);
     }
 
-    pub fn return_from_function(&mut self) {
+    fn return_from_function(&mut self) {
         let _f = self.location.0.pop().expect("No function in call stack");
     }
 
@@ -135,7 +122,7 @@ pub struct MessageHandlerState {
 }
 
 impl MessageHandlerState {
-    pub fn new(update: Update, global: GlobalState, source_location: SourceLocation) -> Self {
+    pub fn new(update: Update, global: GlobalState) -> Self {
         let locals = update.default_start_locals.clone();
         let label = update.start_label.clone();
         Self {
@@ -144,7 +131,6 @@ impl MessageHandlerState {
                 global,
                 local: LocalState { locals, label },
                 responses: Vec::new(),
-                source_location,
             }),
         }
     }
@@ -162,9 +148,8 @@ impl InstrumentationState {
         update: Update,
         global: GlobalState,
         globals_snapshotter: Rc<dyn Fn() -> GlobalState>,
-        source_location: SourceLocation,
     ) -> Self {
-        let state = MessageHandlerState::new(update, global, source_location);
+        let state = MessageHandlerState::new(update, global);
         Self {
             handler_state: Rc::new(RefCell::new(state)),
             state_pairs: Rc::new(RefCell::new(Vec::new())),
@@ -192,15 +177,9 @@ pub fn log_request(
     method: &str,
     args: TlaValue,
     global: GlobalState,
-    source_location: SourceLocation,
 ) -> ResolvedStatePair {
-    *state
-        .context
-        .location
-        .0
-        .last_mut()
-        .expect("Asked to log a request, but the location stack is empty.") =
-        LocationStackElem::Label(Label::new(label));
+    // TODO: do we want to push the label to the location stack here, or just replace it?
+    state.context.location.0 = vec![LocationStackElem::Label(Label::new(label))];
     let old_stage = mem::replace(&mut state.stage, Stage::Start);
     let start_state = match old_stage {
         Stage::End(start) => start,
@@ -216,7 +195,6 @@ pub fn log_request(
                 method: method.to_string(),
                 args,
             }],
-            source_location,
         },
     };
     ResolvedStatePair::resolve(
@@ -231,7 +209,6 @@ pub fn log_response(
     from: Destination,
     message: TlaValue,
     global: GlobalState,
-    source_location: SourceLocation,
 ) {
     let local = state.context.get_state();
     let stage = &mut state.stage;
@@ -245,7 +222,6 @@ pub fn log_response(
         global,
         local,
         responses: vec![ResponseBuffer { from, message }],
-        source_location,
     });
     state.context.global = GlobalState::new();
     state.context.locals = VarAssignment::new();
@@ -259,10 +235,14 @@ pub fn log_fn_return(state: &mut MessageHandlerState) {
     state.context.return_from_function()
 }
 
+// TODO: Does this work for modeling arguments as non-deterministically chosen locals?
+pub fn log_method_call(function: Update, global: GlobalState) -> MessageHandlerState {
+    MessageHandlerState::new(function, global)
+}
+
 pub fn log_method_return(
     state: &mut MessageHandlerState,
     global: GlobalState,
-    source_location: SourceLocation,
 ) -> ResolvedStatePair {
     let local = state.context.end_update();
 
@@ -276,7 +256,6 @@ pub fn log_method_return(
             global,
             local,
             requests: Vec::new(),
-            source_location,
         },
     };
     ResolvedStatePair::resolve(
@@ -284,16 +263,6 @@ pub fn log_method_return(
         state.context.update.process_id.as_str(),
         state.context.update.canister_name.as_str(),
     )
-}
-
-pub fn log_label(state: &mut MessageHandlerState, label: &str) {
-    *state
-        .context
-        .location
-        .0
-        .last_mut()
-        .unwrap_or_else(|| panic!("Asked to log label {}, but the location stack empty", label)) =
-        LocationStackElem::Label(Label::new(label));
 }
 
 /// Logs the value of local variables at the end of the current message handler.
@@ -371,8 +340,7 @@ macro_rules! tla_log_request {
         let res = TLA_INSTRUMENTATION_STATE.try_with(|state| {
             let mut handler_state = state.handler_state.borrow_mut();
             let globals = (*state.globals_snapshotter)();
-            let location = $crate::SourceLocation { file: file!().to_string(), line: line!().to_string() };
-            let new_state_pair = $crate::log_request(&mut handler_state, $label, $to, $method, message.clone(), globals, location);
+            let new_state_pair = $crate::log_request(&mut handler_state, $label, $to, $method, message.clone(), globals);
             let mut state_pairs = state.state_pairs.borrow_mut();
             state_pairs.push(new_state_pair);
         });
@@ -394,11 +362,10 @@ macro_rules! tla_log_request {
 macro_rules! tla_log_response {
     ($from:expr, $message:expr) => {{
         let message = $message.to_tla_value();
-        let location = $crate::SourceLocation { file: file!().to_string(), line: line!().to_string() };
         let res = TLA_INSTRUMENTATION_STATE.try_with(|state| {
             let mut handler_state = state.handler_state.borrow_mut();
             let globals = (*state.globals_snapshotter)();
-            $crate::log_response(&mut handler_state, $from, message.clone(), globals, location);
+            $crate::log_response(&mut handler_state, $from, message.clone(), globals);
         });
         match res {
             Ok(_) => (),
@@ -420,24 +387,5 @@ macro_rules! tla_log_response {
 macro_rules! tla_log_method_call {
     ($update:expr, $global:expr) => {{
         $crate::log_method_call($update, $global)
-    }};
-}
-
-#[macro_export]
-macro_rules! tla_log_label {
-    ($label:expr) => {{
-        let res = TLA_INSTRUMENTATION_STATE.try_with(|state| {
-            let mut handler_state = state.handler_state.borrow_mut();
-            $crate::log_label(&mut handler_state, $label);
-        });
-        match res {
-            Ok(_) => (),
-            Err(_) => {
-                println!(
-                    "Asked to log label {}, but instrumentation not initialized",
-                    $label
-                );
-            }
-        };
     }};
 }

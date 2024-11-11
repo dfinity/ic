@@ -45,12 +45,11 @@ pub fn deserialize_config<T: for<'de> Deserialize<'de>>(file_path: &str) -> Resu
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mac_address::mac_address::FormattedMacAddress;
     use std::path::PathBuf;
     use types::*;
 
     #[test]
-    fn test_serialize_and_deserialize() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_serialize_and_deserialize() {
         let ipv6_config = Ipv6Config::Deterministic(DeterministicIpv6Config {
             prefix: "2a00:fb01:400:200".to_string(),
             prefix_length: 64_u8,
@@ -70,13 +69,12 @@ mod tests {
             .join(" "),
             elasticsearch_tags: None,
         };
-        let icos_dev_settings = ICOSDevSettings::default();
+        let icos_dev_settings = ICOSDevSettings { mgmt_mac: None };
         let icos_settings = ICOSSettings {
-            mgmt_mac: FormattedMacAddress::try_from("ec:2a:72:31:a2:0c")?,
-            deployment_environment: "Mainnet".to_string(),
             logging,
             nns_public_key_path: PathBuf::from("/path/to/key"),
             nns_urls: vec!["http://localhost".parse().unwrap()],
+            hostname: "mainnet".to_string(),
             node_operator_private_key_path: None,
             ssh_authorized_keys_path: None,
             icos_dev_settings,
@@ -133,7 +131,5 @@ mod tests {
         serialize_and_deserialize(&setupos_config_struct);
         serialize_and_deserialize(&hostos_config_struct);
         serialize_and_deserialize(&guestos_config_struct);
-
-        Ok(())
     }
 }

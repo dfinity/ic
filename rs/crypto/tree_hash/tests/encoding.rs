@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 use assert_matches::assert_matches;
 use ic_crypto_tree_hash::{Label, MixedHashTree};
 use ic_crypto_tree_hash_test_utils::arbitrary::arbitrary_mixed_hash_tree;

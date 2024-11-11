@@ -75,33 +75,7 @@ impl<Rt: Runtime + Send + Sync> IcpLedger for LoggingIcpLedgerCanister<Rt> {
         &self,
         account: AccountIdentifier,
     ) -> Result<Tokens, NervousSystemError> {
-        tla_log_request!(
-            "WaitForBalanceQuery",
-            Destination::new("ledger"),
-            "AccountBalance",
-            tla::TlaValue::Record(BTreeMap::from([(
-                "account".to_string(),
-                account_to_tla(account)
-            )]))
-        );
-
-        let result = self.0.account_balance(account).await;
-
-        tla_log_response!(
-            Destination::new("ledger"),
-            match result {
-                Ok(balance) => tla::TlaValue::Variant {
-                    tag: "BalanceQueryOk".to_string(),
-                    value: Box::new(balance.get_e8s().to_tla_value()),
-                },
-                _ => tla::TlaValue::Variant {
-                    tag: "Fail".to_string(),
-                    value: Box::new(tla::TlaValue::Constant("UNIT".to_string())),
-                },
-            }
-        );
-
-        result
+        self.0.account_balance(account).await
     }
 
     fn canister_id(&self) -> CanisterId {

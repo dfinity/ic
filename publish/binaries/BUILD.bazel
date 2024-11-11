@@ -57,6 +57,7 @@ TESTONLY_BINARIES = [
     "ic-starter",
     "ic-test-state-machine",
     "pocket-ic",
+    "sns-test-feature",
     "types-test",
     "replicated-state-test",
 ]
@@ -120,7 +121,7 @@ filegroup(
     srcs = [name + ".gz" for name in ALL_BINARIES],
 )
 
-upload_artifacts(ba
+upload_artifacts(
     name = "upload",
     testonly = True,
     inputs = [":binaries"],

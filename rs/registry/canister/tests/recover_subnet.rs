@@ -15,13 +15,12 @@ use ic_nns_test_utils::{
     registry::{get_value_or_panic, prepare_registry},
 };
 use ic_protobuf::registry::{
-    crypto::v1::ChainKeySigningSubnetList,
+    crypto::v1::{ChainKeySigningSubnetList, MasterPublicKeyId as MasterPublicKeyIdPb},
     subnet::v1::{
         CatchUpPackageContents, ChainKeyConfig as ChainKeyConfigPb, EcdsaInitialization,
         KeyConfig as KeyConfigPb, SubnetListRecord, SubnetRecord,
     },
 };
-use ic_protobuf::types::v1::MasterPublicKeyId as MasterPublicKeyIdPb;
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_chain_key_signing_subnet_list_key,
     make_subnet_list_record_key, make_subnet_record_key,

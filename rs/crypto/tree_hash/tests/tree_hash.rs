@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 use assert_matches::assert_matches;
 use ic_crypto_sha2::Sha256;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;

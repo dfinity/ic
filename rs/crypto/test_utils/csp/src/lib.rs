@@ -12,6 +12,7 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
     CspFsEncryptionPublicKey, CspNiDkgDealing, CspNiDkgTranscript, Epoch,
 };
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
+use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
 use ic_types::crypto::{AlgorithmId, CryptoResult};
 use ic_types::{NodeIndex, NumberOfNodes};
 use mockall::predicate::*;
@@ -109,6 +110,7 @@ mock! {
         fn create_dealing(
             &self,
             algorithm_id: AlgorithmId,
+            dkg_id: NiDkgId,
             dealer_index: NodeIndex,
             threshold: NumberOfNodes,
             epoch: Epoch,
@@ -128,6 +130,7 @@ mock! {
         fn verify_dealing(
             &self,
             algorithm_id: AlgorithmId,
+            dkg_id: NiDkgId,
             dealer_index: NodeIndex,
             threshold: NumberOfNodes,
             epoch: Epoch,
@@ -138,6 +141,7 @@ mock! {
         fn verify_resharing_dealing(
             &self,
             algorithm_id: AlgorithmId,
+            dkg_id: NiDkgId,
             dealer_resharing_index: u32,
             threshold: NumberOfNodes,
             epoch: Epoch,
@@ -167,6 +171,7 @@ mock! {
         fn load_threshold_signing_key(
             &self,
             algorithm_id: AlgorithmId,
+            dkg_id: NiDkgId,
             epoch: Epoch,
             csp_transcript: CspNiDkgTranscript,
             receiver_index: u32,

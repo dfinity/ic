@@ -1,6 +1,5 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::cli::Cli;
 use anyhow::Error;
 use serde::ser::{SerializeMap, Serializer as _};
 use serde_json::Serializer;
@@ -10,8 +9,10 @@ use tracing_serde::AsSerde;
 use tracing_subscriber::{
     filter::LevelFilter,
     fmt::layer,
-    layer::{Context, Layer, SubscriberExt},
+    layer::{Layer, SubscriberExt},
 };
+
+use crate::cli::Cli;
 
 // 1k is an average request log message which is a vast majority of log entries
 const LOG_ENTRY_SIZE: usize = 1024;
@@ -81,11 +82,11 @@ impl JournaldLayer {
     }
 }
 
-impl<S> Layer<S> for JournaldLayer
+impl<S> tracing_subscriber::layer::Layer<S> for JournaldLayer
 where
     S: tracing::Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
 {
-    fn on_event(&self, event: &tracing::Event, _ctx: Context<'_, S>) {
+    fn on_event(&self, event: &tracing::Event, _ctx: tracing_subscriber::layer::Context<'_, S>) {
         // Do stuff in closure to simplify error handling
         let send = || -> Result<(), Error> {
             let msg = event_to_json(event)?;
@@ -109,23 +110,23 @@ where
 
 // Sets up logging
 pub fn setup_logging(cli: &Cli) -> Result<(), Error> {
-    let level_filter = LevelFilter::from_level(cli.obs.obs_max_logging_level);
+    let level_filter = LevelFilter::from_level(cli.monitoring.max_logging_level);
 
     let subscriber = tracing_subscriber::registry::Registry::default()
         // Journald
-        .with(cli.obs.obs_log_journald.then(|| {
+        .with(cli.monitoring.log_journald.then(|| {
             JournaldLayer::new()
                 .expect("failed to setup logging to journald")
                 .with_filter(level_filter)
         }))
         // Stdout
         .with(
-            cli.obs
-                .obs_log_stdout
+            cli.monitoring
+                .log_stdout
                 .then(|| layer().json().flatten_event(true).with_filter(level_filter)),
         )
         // Null
-        .with(cli.obs.obs_log_null.then(|| {
+        .with(cli.monitoring.log_null.then(|| {
             layer()
                 .with_writer(std::io::sink)
                 .json()

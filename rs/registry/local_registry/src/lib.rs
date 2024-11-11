@@ -1,4 +1,3 @@
-#![allow(clippy::disallowed_types)]
 //! Access a local store through the standard `RegistryClient` trait. Hides the
 //! complexities of syncing the local store with the NNS registry behind a
 //! simple function call. Control over when the synchronization happens is left

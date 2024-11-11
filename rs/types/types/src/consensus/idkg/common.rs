@@ -1,18 +1,15 @@
 //! Canister threshold transcripts and references related defininitions.
-use crate::{
-    crypto::{
-        canister_threshold_sig::{
-            error::IDkgParamsValidationError,
-            idkg::{
-                IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
-                IDkgTranscriptType,
-            },
-            ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs,
-            ThresholdSchnorrCombinedSignature, ThresholdSchnorrSigInputs,
+use crate::crypto::{
+    canister_threshold_sig::{
+        error::IDkgParamsValidationError,
+        idkg::{
+            IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
+            IDkgTranscriptType,
         },
-        AlgorithmId,
+        ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs,
+        ThresholdSchnorrCombinedSignature, ThresholdSchnorrSigInputs,
     },
-    messages::CallbackId,
+    AlgorithmId,
 };
 use crate::{Height, RegistryVersion};
 use ic_base_types::{NodeId, PrincipalId};
@@ -53,17 +50,19 @@ pub type PseudoRandomId = [u8; 32];
 ///
 /// The height field represents at which block the RequestId is created.
 /// It is used for purging purpose.
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct RequestId {
-    pub callback_id: CallbackId,
+    pub pre_signature_id: PreSigId,
+    pub pseudo_random_id: PseudoRandomId,
     pub height: Height,
 }
 
 impl From<RequestId> for pb::RequestId {
     fn from(request_id: RequestId) -> Self {
         Self {
-            callback_id: request_id.callback_id.get(),
+            pre_signature_id: request_id.pre_signature_id.id(),
+            pseudo_random_id: request_id.pseudo_random_id.to_vec(),
             height: request_id.height.get(),
         }
     }
@@ -73,10 +72,20 @@ impl TryFrom<&pb::RequestId> for RequestId {
     type Error = ProxyDecodeError;
 
     fn try_from(request_id: &pb::RequestId) -> Result<Self, Self::Error> {
-        Ok(Self {
-            callback_id: CallbackId::from(request_id.callback_id),
-            height: Height::from(request_id.height),
-        })
+        if request_id.pseudo_random_id.len() != 32 {
+            Err(ProxyDecodeError::Other(String::from(
+                "request_id.pseudo_random_id must be 32 bytes long",
+            )))
+        } else {
+            let mut pseudo_random_id = [0; 32];
+            pseudo_random_id.copy_from_slice(&request_id.pseudo_random_id);
+
+            Ok(Self {
+                pre_signature_id: PreSigId(request_id.pre_signature_id),
+                pseudo_random_id,
+                height: Height::from(request_id.height),
+            })
+        }
     }
 }
 

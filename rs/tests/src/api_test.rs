@@ -105,7 +105,7 @@ pub fn install_counter_canister(test_env: TestEnv) {
         .next()
         .unwrap();
     node.await_status_is_healthy().unwrap();
-    let canister_id = node.create_and_install_canister_with_arg("rs/tests/counter.wat", None);
+    let canister_id = node.create_and_install_canister_with_arg("rs/tests/src/counter.wat", None);
 
     let counter_state = node.with_default_agent(move |agent| async move {
         agent.query(&canister_id, "read").call().await.unwrap()

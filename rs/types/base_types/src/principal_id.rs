@@ -260,14 +260,16 @@ impl PrincipalId {
             }
 
             while data.len() > r.end {
-                if let [x @ .., _] = data {
-                    data = x
+                match data {
+                    [x @ .., _] => data = x,
+                    [] => {} //unreachable!(),
                 }
             }
 
             while data.len() > r.end - r.start {
-                if let [_, x @ ..] = data {
-                    data = x
+                match data {
+                    [_, x @ ..] => data = x,
+                    [] => {} //unreachable!(),
                 }
             }
 

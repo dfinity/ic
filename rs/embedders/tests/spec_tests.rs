@@ -1,4 +1,4 @@
-use std::{fmt::Write, fs, path::PathBuf};
+use std::{ffi::OsString, fmt::Write, fs, path::PathBuf};
 
 use ic_embedders::wasm_utils::validation::wasmtime_validation_config;
 use wasmtime::{
@@ -744,10 +744,18 @@ fn test_spec_file(
     }
 }
 
-/// Run tests on the spec files and collect errors.
-fn run_testsuite(test_files: Vec<PathBuf>, config: &Config, parsing_multi_memory_enabled: bool) {
-    if test_files.is_empty() {
-        panic!("No test files");
+fn run_testsuite(subdirectory: &str, config: &Config, parsing_multi_memory_enabled: bool) {
+    let dir_path = format!("./external/wasm_spec_testsuite/{}", subdirectory);
+    let directory = std::fs::read_dir(dir_path).unwrap();
+    let mut test_files = vec![];
+    for entry in directory {
+        let entry = entry.unwrap();
+        let path = entry.path();
+        if path.extension() == Some(&OsString::from("wast"))
+            && !FILES_TO_SKIP.contains(&path.file_name().unwrap().to_str().unwrap())
+        {
+            test_files.push(path);
+        }
     }
 
     println!("Running spec tests on {} files", test_files.len());
@@ -762,19 +770,6 @@ fn run_testsuite(test_files: Vec<PathBuf>, config: &Config, parsing_multi_memory
     if !errors.is_empty() {
         panic!("Errors from spec tests: {}", errors.join("\n"));
     }
-}
-
-/// Return the list of (wasm spec) test files pointed to by the environment variable (potentially
-/// filtered out, see below).
-fn parse_env_test_files(varname: &str) -> Vec<PathBuf> {
-    let files =
-        std::env::var(varname).unwrap_or_else(|_| panic!("Could not read env var '{varname}'"));
-    files
-        .split(" ") /* File names are space-separated */
-        .map(|f| f.into()) /* str -> PathBuf */
-        /* see FILES_TO_SKIP */
-        .filter(|f: &PathBuf| !FILES_TO_SKIP.contains(&f.file_name().unwrap().to_str().unwrap()))
-        .collect()
 }
 
 /// Returns the config that is as close as possible to the actual config used in
@@ -799,23 +794,29 @@ fn error_to_string(e: anyhow::Error) -> String {
 /// included in our repo, but is imported by Bazel using the `new_git_repository`
 /// rule in `WORKSPACE.bazel`.
 ///
-/// See BUILD.bazel for inspecting the `wast` files.
+/// If you need to look at the test `wast` files directly they can be found in
+/// `bazel-ic/external/wasm_spec_testsuite/` after building this test.
 #[test]
 fn spec_testsuite() {
-    let test_files = parse_env_test_files("WASM_SPEC_BASE");
-    run_testsuite(test_files, &default_config(), false)
+    run_testsuite("", &default_config(), false)
 }
 
 #[test]
 fn multi_memory_testsuite() {
-    let test_files = parse_env_test_files("WASM_SPEC_MULTI_MEMORY");
-    run_testsuite(test_files, default_config().wasm_multi_memory(true), true)
+    run_testsuite(
+        "proposals/multi-memory",
+        default_config().wasm_multi_memory(true),
+        true,
+    )
 }
 
 #[test]
 fn memory64_testsuite() {
     let mut config = Config::default();
     config.wasm_memory64(true);
-    let test_files = parse_env_test_files("WASM_SPEC_MEMORY64");
-    run_testsuite(test_files, default_config().wasm_memory64(true), false)
+    run_testsuite(
+        "proposals/memory64",
+        default_config().wasm_memory64(true),
+        false,
+    )
 }

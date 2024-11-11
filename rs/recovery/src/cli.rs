@@ -2,7 +2,6 @@
 use crate::{
     app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs},
     args_merger::merge,
-    error::GracefulExpect,
     get_node_heights_from_metrics,
     nns_recovery_failover_nodes::{NNSRecoveryFailoverNodes, NNSRecoveryFailoverNodesArgs},
     nns_recovery_same_nodes::{NNSRecoverySameNodes, NNSRecoverySameNodesArgs},
@@ -300,7 +299,7 @@ pub fn read_and_maybe_update_state<T: Serialize + DeserializeOwned + Clone + Par
     subcommand_args: Option<T>,
 ) -> RecoveryState<T> {
     let state = RecoveryState::<T>::read(&recovery_args.dir)
-        .expect_graceful("Failed to read the recovery state file");
+        .expect("Failed to read the recovery state file");
 
     if let Some(state) = state {
         info!(

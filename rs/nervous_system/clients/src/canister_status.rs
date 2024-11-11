@@ -320,20 +320,6 @@ pub struct DefiniteCanisterSettingsArgs {
     pub wasm_memory_limit: Option<candid::Nat>,
 }
 
-impl From<ic_management_canister_types::DefiniteCanisterSettingsArgs>
-    for DefiniteCanisterSettingsArgs
-{
-    fn from(settings: ic_management_canister_types::DefiniteCanisterSettingsArgs) -> Self {
-        Self {
-            controllers: settings.controllers(),
-            compute_allocation: settings.compute_allocation(),
-            memory_allocation: settings.memory_allocation(),
-            freezing_threshold: settings.freezing_threshold(),
-            wasm_memory_limit: Some(settings.wasm_memory_limit()),
-        }
-    }
-}
-
 impl DefiniteCanisterSettingsArgs {
     pub fn new(
         controllers: Vec<PrincipalId>,

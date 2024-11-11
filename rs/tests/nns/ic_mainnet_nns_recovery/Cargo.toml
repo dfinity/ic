@@ -29,4 +29,5 @@ icp-ledger = { path = "../../../ledger_suite/icp" }
 reqwest = { workspace = true }
 serde = { workspace = true }
 slog = { workspace = true }
+tests = { path = "../../" }
 url = { workspace = true }

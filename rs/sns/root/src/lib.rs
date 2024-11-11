@@ -994,7 +994,6 @@ mod tests {
             archive_canister_ids: vec![],
             index_canister_id: Some(PrincipalId::new_user_test_id(4)),
             testflight,
-            timers: None,
         }
     }
 
@@ -2806,7 +2805,6 @@ mod tests {
                 archive_canister_ids: vec![],
                 index_canister_id: Some(PrincipalId::new_user_test_id(4)),
                 testflight: false,
-                timers: None,
             }) };
         }
 
@@ -2958,7 +2956,6 @@ mod tests {
                 archive_canister_ids: vec![],
                 index_canister_id: Some(PrincipalId::new_user_test_id(4)),
                 testflight: false,
-                timers: None,
             });
         }
 
@@ -3187,7 +3184,6 @@ mod tests {
                 archive_canister_ids: EXPECTED_ARCHIVE_CANISTERS_PRINCIPAL_IDS.with(|i| i.clone()),
                 index_canister_id: Some(PrincipalId::new_user_test_id(4)),
                 testflight: false,
-                timers: None,
             });
         }
 

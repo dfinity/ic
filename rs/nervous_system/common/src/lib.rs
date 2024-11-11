@@ -722,21 +722,6 @@ pub fn serve_metrics(
     }
 }
 
-pub fn serve_journal<Journal>(journal: &Journal) -> HttpResponse
-where
-    Journal: serde::Serialize,
-{
-    match serde_json::to_string(journal) {
-        Err(err) => {
-            HttpResponseBuilder::server_error(format!("Failed to encode journal: {}", err)).build()
-        }
-        Ok(body) => HttpResponseBuilder::ok()
-            .header("Content-Type", "application/json")
-            .with_body_and_content_length(body)
-            .build(),
-    }
-}
-
 /// Returns the total amount of memory (heap, stable memory, etc) that the calling canister has allocated.
 #[cfg(target_arch = "wasm32")]
 pub fn total_memory_size_bytes() -> usize {

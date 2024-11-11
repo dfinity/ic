@@ -1,3 +1,4 @@
+#![allow(clippy::redundant_clone)]
 use crate::{
     consensus::certification::{Certification, CertificationContent},
     crypto::{

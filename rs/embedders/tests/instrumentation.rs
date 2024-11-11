@@ -279,16 +279,9 @@ fn instr_used(instance: &mut WasmtimeInstance) -> u64 {
 }
 
 #[allow(clippy::field_reassign_with_default)]
-fn new_instance(
-    wat: &str,
-    instruction_limit: u64,
-    wasm_memory_type: WasmMemoryType,
-) -> WasmtimeInstance {
+fn new_instance(wat: &str, instruction_limit: u64) -> WasmtimeInstance {
     let mut config = EmbeddersConfig::default();
     config.dirty_page_overhead = SchedulerConfig::application_subnet().dirty_page_overhead;
-    if let WasmMemoryType::Wasm64 = wasm_memory_type {
-        config.feature_flags.wasm64 = FlagStatus::Enabled;
-    }
     WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -354,7 +347,7 @@ fn metering_plain() {
         )"#,
         body = add_one().repeat(10)
     );
-    let mut instance = new_instance(&wat, 1000, WasmMemoryType::Wasm32);
+    let mut instance = new_instance(&wat, 1000);
     let res = instance.run(func_ref("test")).unwrap();
 
     let g = &res.exported_globals;
@@ -365,7 +358,7 @@ fn metering_plain() {
     assert_eq!(instructions_used, 1 + cost_a(10));
 
     // Now run the same with insufficient instructions
-    let mut instance = new_instance(&wat, instructions_used - 1, WasmMemoryType::Wasm32);
+    let mut instance = new_instance(&wat, instructions_used - 1);
     let err = instance.run(func_ref("test")).unwrap_err();
     assert_eq!(
         err,
@@ -390,7 +383,7 @@ fn metering_plain() {
         p1 = add_one().repeat(10),
         p2 = add_one().repeat(10),
     );
-    let mut instance = new_instance(&wat, 30, WasmMemoryType::Wasm32);
+    let mut instance = new_instance(&wat, 30);
     let res = instance.run(func_ref("test")).unwrap();
 
     let g = &res.exported_globals;
@@ -402,7 +395,7 @@ fn metering_plain() {
     assert_eq!(instructions_used, 1 + cost_a(10) + cret);
 
     // Now run the same with insufficient instructions
-    let mut instance = new_instance(&wat, instructions_used - 1, WasmMemoryType::Wasm32);
+    let mut instance = new_instance(&wat, instructions_used - 1);
     let err = instance.run(func_ref("test")).unwrap_err();
     assert_eq!(
         err,
@@ -427,7 +420,7 @@ fn metering_plain() {
         p1 = add_one().repeat(10),
         p2 = add_one().repeat(10),
     );
-    let mut instance = new_instance(&wat, 30, WasmMemoryType::Wasm32);
+    let mut instance = new_instance(&wat, 30);
     instance.run(func_ref("test")).unwrap_err();
 
     let instructions_used = instr_used(&mut instance);
@@ -453,7 +446,7 @@ fn metering_block() {
         body = add_one().repeat(10)
     );
 
-    let mut instance = new_instance(&wat, 30, WasmMemoryType::Wasm32);
+    let mut instance = new_instance(&wat, 30);
     let res = instance.run(func_ref("test")).unwrap();
 
     let g = &res.exported_globals;
@@ -496,7 +489,7 @@ fn metering_block() {
         p3 = add_one().repeat(10),
     );
 
-    let mut instance = new_instance(&wat, 1_000, WasmMemoryType::Wasm32);
+    let mut instance = new_instance(&wat, 1_000);
     let res = instance.run(func_ref("test")).unwrap();
 
     let g = &res.exported_globals;
@@ -543,7 +536,7 @@ fn metering_block() {
         p3 = add_one().repeat(10),
     );
 
-    let mut instance = new_instance(&wat, 1_000, WasmMemoryType::Wasm32);
+    let mut instance = new_instance(&wat, 1_000);
     let res = instance.run(func_ref("test")).unwrap();
 
     let g = &res.exported_globals;
@@ -589,7 +582,7 @@ fn metering_if() {
         p4 = add_one().repeat(30)
     );
 
-    let mut instance = new_instance(&wat, 100, WasmMemoryType::Wasm32);
+    let mut instance = new_instance(&wat, 100);
     let res = instance.run(func_ref("test")).unwrap();
 
     let g = &res.exported_globals;
@@ -646,7 +639,7 @@ fn metering_if() {
         p4 = add_one().repeat(30),
     );
 
-    let mut instance = new_instance(&wat, 1000, WasmMemoryType::Wasm32);
+    let mut instance = new_instance(&wat, 1000);
     let res = instance.run(func_ref("test")).unwrap();
 
     let g = &res.exported_globals;
@@ -703,7 +696,7 @@ fn metering_loop() {
         p4 = add_one().repeat(30)
     );
 
-    let mut instance = new_instance(&wat, 1000, WasmMemoryType::Wasm32);
+    let mut instance = new_instance(&wat, 1000);
     let res = instance.run(func_ref("test")).unwrap();
 
     let g = &res.exported_globals;
@@ -739,31 +732,20 @@ fn metering_loop() {
     );
 }
 
-fn run_charge_for_dirty_heap(wasm_memory_type: WasmMemoryType) {
-    let memory = match wasm_memory_type {
-        WasmMemoryType::Wasm32 => r#"(memory (export "memory") 10)"#,
-        WasmMemoryType::Wasm64 => r#"(memory (export "memory") i64 10)"#,
-    };
-    let address = match wasm_memory_type {
-        WasmMemoryType::Wasm32 => "i32.const",
-        WasmMemoryType::Wasm64 => "i64.const",
-    };
-    let wat = format!(
-        r#"
+#[test]
+fn charge_for_dirty_heap() {
+    let wat = r#"
         (module
             (global $g1 (export "g1") (mut i64) (i64.const 0))
             (func $test (export "canister_update test")
-                (i64.store ({ADDRESS} 0) (i64.const 17))
-                (i64.store ({ADDRESS} 4096) (i64.const 117))
-                (i64.load ({ADDRESS} 0))
+                (i64.store (i32.const 0) (i64.const 17))
+                (i64.store (i32.const 4096) (i64.const 117))
+                (i64.load (i32.const 0))
                 global.set $g1
             )
-            {MEMORY}
-        )"#,
-        ADDRESS = address,
-        MEMORY = memory
-    );
-    let mut instance = new_instance(&wat, 10000, wasm_memory_type);
+            (memory (export "memory") 10)
+        )"#;
+    let mut instance = new_instance(wat, 10000);
     let res = instance.run(func_ref("test")).unwrap();
 
     let g = &res.exported_globals;
@@ -771,11 +753,11 @@ fn run_charge_for_dirty_heap(wasm_memory_type: WasmMemoryType) {
 
     let cc = instruction_to_cost(
         &wasmparser::Operator::I64Const { value: 1 },
-        wasm_memory_type,
+        WasmMemoryType::Wasm32,
     );
     let cg = instruction_to_cost(
         &wasmparser::Operator::GlobalSet { global_index: 0 },
-        wasm_memory_type,
+        WasmMemoryType::Wasm32,
     );
     let cs = instruction_to_cost(
         &wasmparser::Operator::I64Store {
@@ -786,7 +768,7 @@ fn run_charge_for_dirty_heap(wasm_memory_type: WasmMemoryType) {
                 memory: 0,
             },
         },
-        wasm_memory_type,
+        WasmMemoryType::Wasm32,
     );
     let cl = instruction_to_cost(
         &wasmparser::Operator::I64Load {
@@ -797,15 +779,11 @@ fn run_charge_for_dirty_heap(wasm_memory_type: WasmMemoryType) {
                 memory: 0,
             },
         },
-        wasm_memory_type,
+        WasmMemoryType::Wasm32,
     );
-    let mut cd = SchedulerConfig::application_subnet()
+    let cd = SchedulerConfig::application_subnet()
         .dirty_page_overhead
         .get();
-
-    if let WasmMemoryType::Wasm64 = wasm_memory_type {
-        cd *= EmbeddersConfig::default().wasm64_dirty_page_overhead_multiplier;
-    }
 
     let instructions_used = instr_used(&mut instance);
     // Function is 1 instruction.
@@ -814,18 +792,8 @@ fn run_charge_for_dirty_heap(wasm_memory_type: WasmMemoryType) {
     // Now run the same with insufficient instructions
     // We should still succeed (to avoid potentially failing pre-upgrades
     // of canisters that did not adjust their code to new metering)
-    let mut instance = new_instance(&wat, 100, wasm_memory_type);
+    let mut instance = new_instance(wat, 100);
     instance.run(func_ref("test")).unwrap();
-}
-
-#[test]
-fn charge_for_dirty_heap() {
-    run_charge_for_dirty_heap(WasmMemoryType::Wasm32);
-}
-
-#[test]
-fn charge_for_dirty_heap_wasm64() {
-    run_charge_for_dirty_heap(WasmMemoryType::Wasm64);
 }
 
 fn run_charge_for_dirty_stable64_test(native_stable: FlagStatus) {
@@ -1080,90 +1048,39 @@ fn charge_for_dirty_stable() {
     run_charge_for_dirty_stable_test(FlagStatus::Disabled);
 }
 
-/// Helper method to generate a wasm module with tables in both
-/// 32 and 64 bit modes and compile that module. The method
-/// is then used to check if instrumentation of tables works
-/// correctly for both Wasm32 and Wasm64 wrt tables.
-fn test_table_validation(code: &str, is_wasm64: bool) -> String {
-    let execution_mode = if is_wasm64 { "i64" } else { "" };
-    let wat = format!(
-        r#"(module
-            (table $table {execution_mode} 101 funcref)
-            (elem func 0)
-            (func $f {code})
-            
-        )"#
-    );
-    use ic_config::embedders::FeatureFlags;
-    use ic_config::flag_status::FlagStatus;
+#[test]
+fn table_modifications_are_unsupported() {
+    fn test(code: &str) -> String {
+        let wat = format!(
+            r#"(module
+                (table $table 101 funcref)
+                (elem func 0)
+                (func $f {code})
+            )"#
+        );
+        let embedder = WasmtimeEmbedder::new(EmbeddersConfig::default(), no_op_logger());
+        let wasm = wat::parse_str(wat).expect("Failed to convert wat to wasm");
 
-    let embedders_config = EmbeddersConfig {
-        feature_flags: FeatureFlags {
-            wasm64: if is_wasm64 {
-                FlagStatus::Enabled
-            } else {
-                FlagStatus::Disabled
-            },
-            ..Default::default()
-        },
-        ..Default::default()
-    };
+        wasm_utils::compile(&embedder, &BinaryEncodedWasm::new(wasm))
+            .1
+            .unwrap_err()
+            .to_string()
+    }
 
-    let embedder = WasmtimeEmbedder::new(embedders_config, no_op_logger());
-    let wasm = wat::parse_str(wat).expect("Failed to convert wat to wasm");
-
-    wasm_utils::compile(&embedder, &BinaryEncodedWasm::new(wasm))
-        .1
-        .unwrap_err()
-        .to_string()
-}
-
-fn table_modifications_are_unsupported_for_wasm_version(is_wasm64: bool) {
-    let address_type = if is_wasm64 { "i64" } else { "i32" };
-
-    let err = test_table_validation(
-        &format!("(drop (table.grow $table (ref.func 0) ({address_type}.const 0)))"),
-        is_wasm64,
-    );
+    let err = test("(drop (table.grow $table (ref.func 0) (i32.const 0)))");
     assert!(err.contains("unsupported instruction table.grow"));
 
-    let err = test_table_validation(
-        &format!("(table.set $table ({address_type}.const 0) (ref.func 0))"),
-        is_wasm64,
-    );
+    let err = test("(table.set $table (i32.const 0) (ref.func 0))");
     assert!(err.contains("unsupported instruction table.set"));
 
-    let err = test_table_validation(
-        &format!(
-            "(table.fill $table ({address_type}.const 0) (ref.func 0) ({address_type}.const 50))"
-        ),
-        is_wasm64,
-    );
+    let err = test("(table.fill $table (i32.const 0) (ref.func 0) (i32.const 50))");
     assert!(err.contains("unsupported instruction table.fill"));
 
-    let err = test_table_validation(
-        &format!(
-        "(table.copy ({address_type}.const 0) ({address_type}.const 0) ({address_type}.const 0))"
-    ),
-        is_wasm64,
-    );
+    let err = test("(table.copy (i32.const 0) (i32.const 0) (i32.const 0))");
     assert!(err.contains("unsupported instruction table.copy"));
 
-    let err = test_table_validation(
-        &format!("(table.init 0 ({address_type}.const 0) (i32.const 0) (i32.const 0))"),
-        is_wasm64,
-    );
+    let err = test("(table.init 0 (i32.const 0) (i32.const 0) (i32.const 0))");
     assert!(err.contains("unsupported instruction table.init"));
-}
-
-#[test]
-fn table_modifications_are_unsupported_for_wasm32() {
-    table_modifications_are_unsupported_for_wasm_version(false);
-}
-
-#[test]
-fn table_modifications_are_unsupported_for_wasm64() {
-    table_modifications_are_unsupported_for_wasm_version(true);
 }
 
 #[test]

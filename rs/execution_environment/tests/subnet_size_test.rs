@@ -45,11 +45,11 @@ fn inc_instruction_cost(config: HypervisorConfig) -> u64 {
         MeteringType::None => |_op: &wasmparser::Operator, _mem_type: WasmMemoryType| 0u64,
     };
 
-    let cost_const = instruction_to_cost(
+    let cc = instruction_to_cost(
         &wasmparser::Operator::I32Const { value: 1 },
         WasmMemoryType::Wasm32,
     );
-    let cost_store = instruction_to_cost(
+    let cs = instruction_to_cost(
         &wasmparser::Operator::I32Store {
             memarg: wasmparser::MemArg {
                 align: 0,
@@ -60,7 +60,7 @@ fn inc_instruction_cost(config: HypervisorConfig) -> u64 {
         },
         WasmMemoryType::Wasm32,
     );
-    let cost_load = instruction_to_cost(
+    let cl = instruction_to_cost(
         &wasmparser::Operator::I32Load {
             memarg: wasmparser::MemArg {
                 align: 0,
@@ -71,12 +71,12 @@ fn inc_instruction_cost(config: HypervisorConfig) -> u64 {
         },
         WasmMemoryType::Wasm32,
     );
-    let cost_add = instruction_to_cost(&wasmparser::Operator::I32Add, WasmMemoryType::Wasm32);
-    let cost_call = instruction_to_cost(
+    let ca = instruction_to_cost(&wasmparser::Operator::I32Add, WasmMemoryType::Wasm32);
+    let ccall = instruction_to_cost(
         &wasmparser::Operator::Call { function_index: 0 },
         WasmMemoryType::Wasm32,
     );
-    let cost_sys = match config.embedders_config.metering_type {
+    let csys = match config.embedders_config.metering_type {
         MeteringType::New => {
             ic_embedders::wasmtime_embedder::system_api_complexity::overhead::MSG_REPLY_DATA_APPEND
                 .get()
@@ -85,7 +85,7 @@ fn inc_instruction_cost(config: HypervisorConfig) -> u64 {
         MeteringType::None => 0,
     };
 
-    let cost_dirty = if let MeteringType::New = config.embedders_config.metering_type {
+    let cd = if let MeteringType::New = config.embedders_config.metering_type {
         ic_config::subnet_config::SchedulerConfig::application_subnet()
             .dirty_page_overhead
             .get()
@@ -93,25 +93,7 @@ fn inc_instruction_cost(config: HypervisorConfig) -> u64 {
         0
     };
 
-    let cost_default = 1; // Default cost of executing a function, even if it is empty.
-
-    // Total cost of `(func $inc ...)`:
-    cost_default +
-    // (i32.store
-    cost_store + cost_dirty +
-    // (i32.const 0)
-    cost_const +
-    // (i32.add
-    cost_add +
-    // (i32.load (i32.const 0))
-    cost_load + cost_const +
-    // (i32.const 1)
-    cost_const +
-    // (call $msg_reply_data_append (i32.const 0) (i32.const 0))
-    // (call $msg_reply)
-    cost_sys +
-    cost_call + cost_const + cost_const +
-    cost_call
+    5 * cc + cs + cl + ca + 2 * ccall + csys + cd
 }
 
 /// This is a canister that keeps a counter on the heap and exposes various test
@@ -143,7 +125,7 @@ const TEST_CANISTER: &str = r#"
     (i32.store
 
         ;; store at the beginning of the heap
-        (i32.const 0)
+        (i32.const 0) ;; store at the beginning of the heap
 
         ;; increment heap[0]
         (i32.add
@@ -316,8 +298,6 @@ fn apply_filter(
                 initial_config.update_message_execution_fee;
             filtered_config.ten_update_instructions_execution_fee =
                 initial_config.ten_update_instructions_execution_fee;
-            filtered_config.ten_update_instructions_execution_fee_wasm64 =
-                initial_config.ten_update_instructions_execution_fee_wasm64;
             filtered_config
         }
         KeepFeesFilter::IngressInduction => {
@@ -715,8 +695,6 @@ fn trillion_cycles(value: f64) -> Cycles {
 }
 
 fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountManagerConfig {
-    let ten_update_instructions_execution_fee_in_cycles = 10;
-    const WASM64_INSTRUCTION_COST_MULTIPLIER: u128 = 2;
     match subnet_type {
         SubnetType::System => CyclesAccountManagerConfig {
             reference_subnet_size: DEFAULT_REFERENCE_SUBNET_SIZE,
@@ -724,7 +702,6 @@ fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountMa
             compute_percent_allocated_per_second_fee: Cycles::new(0),
             update_message_execution_fee: Cycles::new(0),
             ten_update_instructions_execution_fee: Cycles::new(0),
-            ten_update_instructions_execution_fee_wasm64: Cycles::new(0),
             xnet_call_fee: Cycles::new(0),
             xnet_byte_transmission_fee: Cycles::new(0),
             ingress_message_reception_fee: Cycles::new(0),
@@ -748,20 +725,14 @@ fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountMa
         },
         SubnetType::Application | SubnetType::VerifiedApplication => CyclesAccountManagerConfig {
             reference_subnet_size: DEFAULT_REFERENCE_SUBNET_SIZE,
-            canister_creation_fee: Cycles::new(500_000_000_000),
+            canister_creation_fee: Cycles::new(100_000_000_000),
             compute_percent_allocated_per_second_fee: Cycles::new(10_000_000),
 
             // The following fields are set based on a thought experiment where
             // we estimated how many resources a representative benchmark on a
             // verified subnet is using.
-            update_message_execution_fee: Cycles::new(5_000_000),
-            ten_update_instructions_execution_fee: Cycles::new(
-                ten_update_instructions_execution_fee_in_cycles,
-            ),
-            ten_update_instructions_execution_fee_wasm64: Cycles::new(
-                WASM64_INSTRUCTION_COST_MULTIPLIER
-                    * ten_update_instructions_execution_fee_in_cycles,
-            ),
+            update_message_execution_fee: Cycles::new(590_000),
+            ten_update_instructions_execution_fee: Cycles::new(4),
             xnet_call_fee: Cycles::new(260_000),
             xnet_byte_transmission_fee: Cycles::new(1_000),
             ingress_message_reception_fee: Cycles::new(1_200_000),
@@ -1156,20 +1127,16 @@ fn test_subnet_size_execute_message_cost() {
     let subnet_type = SubnetType::Application;
     let config = get_cycles_account_manager_config(subnet_type);
     let reference_subnet_size = config.reference_subnet_size;
-    let reference_instructions_cost = inc_instruction_cost(HypervisorConfig::default());
     let reference_cost = calculate_execution_cost(
         &config,
-        NumInstructions::from(reference_instructions_cost),
+        NumInstructions::from(inc_instruction_cost(HypervisorConfig::default())),
         reference_subnet_size,
     );
 
     // Check default cost.
-    assert_eq!(reference_instructions_cost, 2019);
-    let simulated_cost = simulate_execute_message_cost(subnet_type, reference_subnet_size);
     assert_eq!(
-        simulated_cost,
-        reference_cost,
-        "subnet_size={reference_subnet_size}, simulated_cost={simulated_cost}, reference_cost={reference_cost}"
+        simulate_execute_message_cost(subnet_type, reference_subnet_size),
+        reference_cost
     );
 
     // Check if cost is increasing with subnet size.
@@ -1262,19 +1229,19 @@ fn test_subnet_size_execute_heartbeat_default_cost() {
 
     // Assert small subnet size costs per single heartbeat and per year.
     let cost = simulate_execute_canister_heartbeat_cost(subnet_type, subnet_size_lo);
-    assert_eq!(cost, Cycles::new(5_000_001));
-    assert_eq!(cost * per_year, Cycles::new(171_952_049_390_403));
+    assert_eq!(cost, Cycles::new(590001));
+    assert_eq!(cost * per_year, Cycles::new(20290372160403));
 
     // Assert big subnet size cost per single heartbeat and per year.
     let cost = simulate_execute_canister_heartbeat_cost(subnet_type, subnet_size_hi);
     // Scaled instrumentation + update message cost.
-    assert_eq!(cost, Cycles::new(13_076_926));
-    assert_eq!(cost * per_year, Cycles::new(449_720_755_141_178));
+    assert_eq!(cost, Cycles::new(1543080));
+    assert_eq!(cost * per_year, Cycles::new(53067143061240));
 
     // Assert big subnet size cost scaled to a small size.
     let adjusted_cost = (cost * subnet_size_lo) / subnet_size_hi;
-    assert_eq!(adjusted_cost, Cycles::new(5_000_001));
-    assert_eq!(adjusted_cost * per_year, Cycles::new(171_952_049_390_403));
+    assert_eq!(adjusted_cost, Cycles::new(590001));
+    assert_eq!(adjusted_cost * per_year, Cycles::new(20290372160403));
 }
 
 #[test]

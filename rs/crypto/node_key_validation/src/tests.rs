@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 use super::*;
 use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;

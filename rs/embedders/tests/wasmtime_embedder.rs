@@ -8,9 +8,7 @@ use ic_embedders::{
     wasm_utils::instrumentation::WasmMemoryType,
     wasmtime_embedder::{system_api_complexity, CanisterMemoryType},
 };
-use ic_interfaces::execution_environment::{
-    CanisterBacktrace, ExecutionMode, HypervisorError, SystemApi, TrapCode,
-};
+use ic_interfaces::execution_environment::{ExecutionMode, HypervisorError, SystemApi, TrapCode};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{canister_state::WASM_PAGE_SIZE_IN_BYTES, Global};
 use ic_test_utilities_embedders::{WasmtimeInstanceBuilder, DEFAULT_NUM_INSTRUCTIONS};
@@ -307,18 +305,13 @@ fn stack_overflow_traps() {
 
             let result = instance.run(FuncRef::Method(WasmMethod::Update("f".to_string())));
 
-            let err = result.err().unwrap();
-            let HypervisorError::Trapped {
-                trap_code,
-                backtrace,
-            } = err
-            else {
-                panic!("Unexpected error {:?}", err);
-            };
-            assert_eq!(trap_code, TrapCode::StackOverflow);
-            for (_index, name) in backtrace.unwrap().0 {
-                assert_eq!(name, Some("f".to_string()));
-            }
+            assert_eq!(
+                result.err(),
+                Some(HypervisorError::Trapped {
+                    trap_code: TrapCode::StackOverflow,
+                    backtrace: None
+                })
+            );
         })
         .unwrap();
 
@@ -1659,7 +1652,7 @@ fn wasm_heap_oob_access() {
     let wat = r#"
             (module
                 (type (;0;) (func))
-                (func $foo (type 0)
+                (func (;0;) (type 0)
                     i32.const -943208505
                     i32.load8_s offset=3933426208
                     unreachable
@@ -1676,7 +1669,7 @@ fn wasm_heap_oob_access() {
         err,
         HypervisorError::Trapped {
             trap_code: TrapCode::HeapOutOfBounds,
-            backtrace: Some(CanisterBacktrace(vec![(5, Some("foo".to_string()))]))
+            backtrace: None
         }
     );
 }

@@ -37,16 +37,6 @@ rust_canister(
     name = "universal_canister",
     srcs = glob(["src/*.rs"]),
     aliases = ALIASES,
-    crate_features = ["heartbeat"],
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    service_file = ":interface.did",
-    deps = LIB_DEPENDENCIES + DEPENDENCIES,
-)
-
-rust_canister(
-    name = "universal_canister_no_heartbeat",
-    srcs = glob(["src/*.rs"]),
-    aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":interface.did",
     deps = LIB_DEPENDENCIES + DEPENDENCIES,

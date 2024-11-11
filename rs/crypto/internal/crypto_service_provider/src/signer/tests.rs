@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used)]
+
 use super::*;
 use crate::api::CspSigner;
 use crate::imported_test_utils::ed25519::csp_testvec;

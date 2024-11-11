@@ -61,7 +61,7 @@ mod tests {
     use super::*;
     use hex::FromHex;
     use ic_base_types::{NumBytes, NumSeconds};
-    use ic_canonical_state::{all_supported_versions, CertificationVersion};
+    use ic_canonical_state::CertificationVersion;
     use ic_crypto_tree_hash::Digest;
     use ic_error_types::{ErrorCode, UserError};
     use ic_management_canister_types::{
@@ -99,6 +99,7 @@ mod tests {
         collections::{BTreeMap, BTreeSet},
         sync::Arc,
     };
+    use strum::{EnumCount, IntoEnumIterator};
 
     const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
 
@@ -366,17 +367,35 @@ mod tests {
         // PLEASE INCREMENT THE CERTIFICATION VERSION AND PROVIDE APPROPRIATE
         // BACKWARD COMPATIBILITY CODE FOR OLD CERTIFICATION VERSIONS THAT
         // NEED TO BE SUPPORTED.
-        let expected_hashes: [&str; 3] = [
+        let expected_hashes: [&str; CertificationVersion::COUNT] = [
+            "1B931426F36191153996B82CE305BE659AAE65D8AE75B4839736176C0453BDF3",
+            "3B3F058CD6BAF16A990585223CDD9ED98BC5507B51403707E486B764F1FF5DAE",
+            "5F17DC054CBE03F1887400247E4255764AAF3CDBFBA0AD4F414CB7ABAA4782C2",
+            "2A615692EF107355C38439DC5AABDF85BAE4979C4135F761213485C655B6F196",
+            "2A615692EF107355C38439DC5AABDF85BAE4979C4135F761213485C655B6F196",
+            "2A615692EF107355C38439DC5AABDF85BAE4979C4135F761213485C655B6F196",
+            "F86FEBBF994627432621BE7DEBD9D59BECEBD922C9C8B4F7F37BD34A5709F16B",
+            "F86FEBBF994627432621BE7DEBD9D59BECEBD922C9C8B4F7F37BD34A5709F16B",
+            "410BD1929B6884DE65DDBACC54749FDCC2A5FA3585898B9B2644147DE2760678",
+            "410BD1929B6884DE65DDBACC54749FDCC2A5FA3585898B9B2644147DE2760678",
+            "4BAB4FD35605188FDDCA534204C8E8852C9E450CEB6BE53129FB84DF109D8905",
+            "1ED37E00D177681A4111B6D45F518DF3E414B0B614333BB6552EBC0D8492B687",
+            "62B2E77DFCD17C7E0CE3E762FD37281776C4B0A38CE1B83A1316614C3F849E39",
+            "80D4B528CC9E09C775273994261DD544D45EFFF90B655D90FC3A6E3F633ED718",
+            "970BC5155AEB4B4F81E470CBF6748EFA7D8805B936998A54AE70B7DD21F5DDCC",
+            "EA3B53B72150E3982CB0E6773F86634685EE7B153DCFE10D86D9927778409D97",
+            "D13F75C42D3E2BDA2F742510029088A9ADB119E30241AC969DE24936489168B5",
             "D13F75C42D3E2BDA2F742510029088A9ADB119E30241AC969DE24936489168B5",
             "E739B8EA1585E9BB97988C80ED0C0CDFDF064D4BC5A2B6B06EB414BFF6139CCE",
             "31F4593CC82CDB0B858F190E00112AF4599B5333F7AED9403EEAE88B656738D5",
         ];
-        assert_eq!(expected_hashes.len(), all_supported_versions().count());
 
-        for (certification_version, expected_hash) in
-            all_supported_versions().zip(expected_hashes.iter())
-        {
-            assert_partial_state_hash_matches(certification_version, expected_hash);
+        for certification_version in CertificationVersion::iter() {
+            assert_partial_state_hash_matches(
+                certification_version,
+                // expected_hash
+                expected_hashes[certification_version as usize],
+            );
         }
     }
 }

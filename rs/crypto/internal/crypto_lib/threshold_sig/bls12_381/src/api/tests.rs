@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 use super::super::api as tsig;
 use super::super::crypto;
 use super::super::test_utils::select_n;

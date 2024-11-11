@@ -1,3 +1,4 @@
+pub mod bitcoin_set_config_proposal;
 pub mod create_subnet;
 pub mod cycles_minting;
 pub mod neurons_fund;

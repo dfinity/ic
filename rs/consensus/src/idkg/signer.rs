@@ -30,14 +30,13 @@ use ic_types::crypto::canister_threshold_sig::error::{
     ThresholdSchnorrCombineSigSharesError, ThresholdSchnorrCreateSigShareError,
     ThresholdSchnorrVerifySigShareError,
 };
-use ic_types::messages::CallbackId;
 use ic_types::{Height, NodeId};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{self, Debug, Formatter};
 use std::sync::Arc;
 
-use super::utils::{build_signature_inputs, update_purge_height};
+use super::utils::{build_signature_inputs, get_context_request_id, update_purge_height};
 
 #[derive(Clone, Debug)]
 #[allow(dead_code)]
@@ -135,9 +134,9 @@ impl ThresholdSignerImpl {
         state_snapshot
             .get_state()
             .signature_request_contexts()
-            .iter()
-            .flat_map(|(id, context)| {
-                build_signature_inputs(*id, context, block_reader).map_err(|err| {
+            .values()
+            .flat_map(|context| {
+                build_signature_inputs(context, block_reader).map_err(|err| {
                     if err.is_fatal() {
                         warn!(every_n_seconds => 15, self.log,
                             "send_signature_shares(): failed to build signature inputs: {:?}",
@@ -161,7 +160,7 @@ impl ThresholdSignerImpl {
                         self.create_signature_share(
                             idkg_pool,
                             transcript_loader,
-                            request_id,
+                            &request_id,
                             &sig_inputs,
                         )
                     })
@@ -180,16 +179,16 @@ impl ThresholdSignerImpl {
         let sig_inputs_map = state_snapshot
             .get_state()
             .signature_request_contexts()
-            .iter()
-            .map(|(id, c)| {
-                let inputs = build_signature_inputs(*id, c, block_reader).map_err(|err| if err.is_fatal() {
+            .values()
+            .map(|c| {
+                let inputs = build_signature_inputs(c, block_reader).map_err(|err| if err.is_fatal() {
                     warn!(every_n_seconds => 15, self.log,
                         "validate_signature_shares(): failed to build signatures inputs: {:?}", 
                         err
                     );
                     self.metrics.sign_errors_inc("signature_inputs_malformed");
                 }).ok();
-                (*id, inputs)
+                (c.pseudo_random_id, inputs)
             })
             .collect::<BTreeMap<_, _>>();
 
@@ -304,8 +303,8 @@ impl ThresholdSignerImpl {
         let in_progress = state_snapshot
             .get_state()
             .signature_request_contexts()
-            .keys()
-            .cloned()
+            .values()
+            .map(|context| context.pseudo_random_id)
             .collect::<BTreeSet<_>>();
 
         let mut ret = Vec::new();
@@ -360,7 +359,7 @@ impl ThresholdSignerImpl {
         &self,
         idkg_pool: &dyn IDkgPool,
         transcript_loader: &dyn IDkgTranscriptLoader,
-        request_id: RequestId,
+        request_id: &RequestId,
         sig_inputs: &ThresholdSigInputs,
     ) -> IDkgChangeSet {
         if let Some(changes) = self.load_dependencies(idkg_pool, transcript_loader, sig_inputs) {
@@ -385,7 +384,7 @@ impl ThresholdSignerImpl {
 
     fn crypto_create_sig_share(
         &self,
-        request_id: RequestId,
+        request_id: &RequestId,
         sig_inputs: &ThresholdSigInputs,
     ) -> Result<IDkgMessage, CreateSigShareError> {
         match sig_inputs {
@@ -395,7 +394,7 @@ impl ThresholdSignerImpl {
                     |share| {
                         let sig_share = EcdsaSigShare {
                             signer_id: self.node_id,
-                            request_id,
+                            request_id: request_id.clone(),
                             share,
                         };
                         Ok(IDkgMessage::EcdsaSigShare(sig_share))
@@ -408,7 +407,7 @@ impl ThresholdSignerImpl {
                     |share| {
                         let sig_share = SchnorrSigShare {
                             signer_id: self.node_id,
-                            request_id,
+                            request_id: request_id.clone(),
                             share,
                         };
                         Ok(IDkgMessage::SchnorrSigShare(sig_share))
@@ -494,10 +493,10 @@ impl ThresholdSignerImpl {
         &self,
         share: &SigShare,
         current_height: Height,
-        in_progress: &BTreeSet<CallbackId>,
+        in_progress: &BTreeSet<[u8; 32]>,
     ) -> bool {
         let request_id = share.request_id();
-        request_id.height <= current_height && !in_progress.contains(&request_id.callback_id)
+        request_id.height <= current_height && !in_progress.contains(&request_id.pseudo_random_id)
     }
 
     /// Resolves the ThresholdSigInputsRef -> ThresholdSigInputs
@@ -550,13 +549,8 @@ impl ThresholdSigner for ThresholdSignerImpl {
         let active_requests = snapshot
             .get_state()
             .signature_request_contexts()
-            .iter()
-            .flat_map(|(callback_id, context)| {
-                context.matched_pre_signature.map(|(_, height)| RequestId {
-                    callback_id: *callback_id,
-                    height,
-                })
-            })
+            .values()
+            .flat_map(get_context_request_id)
             .collect();
         idkg_pool
             .stats()
@@ -606,7 +600,6 @@ pub(crate) trait ThresholdSignatureBuilder {
     /// built from the current sig shares in the IDKG pool
     fn get_completed_signature(
         &self,
-        id: CallbackId,
         context: &SignWithThresholdContext,
     ) -> Option<CombinedSignature>;
 }
@@ -681,23 +674,21 @@ impl<'a> ThresholdSignatureBuilderImpl<'a> {
 impl<'a> ThresholdSignatureBuilder for ThresholdSignatureBuilderImpl<'a> {
     fn get_completed_signature(
         &self,
-        callback_id: CallbackId,
         context: &SignWithThresholdContext,
     ) -> Option<CombinedSignature> {
         // Find the sig inputs for the request and translate the refs.
-        let (request_id, sig_inputs_ref) =
-            build_signature_inputs(callback_id, context, self.block_reader)
-                .map_err(|err| {
-                    if err.is_fatal() {
-                        warn!(every_n_seconds => 15, self.log,
-                            "get_completed_signature(): failed to build signature inputs: {:?}",
-                            err
-                        );
-                        self.metrics
-                            .payload_errors_inc("signature_inputs_malformed");
-                    }
-                })
-                .ok()?;
+        let (request_id, sig_inputs_ref) = build_signature_inputs(context, self.block_reader)
+            .map_err(|err| {
+                if err.is_fatal() {
+                    warn!(every_n_seconds => 15, self.log,
+                        "get_completed_signature(): failed to build signature inputs: {:?}",
+                        err
+                    );
+                    self.metrics
+                        .payload_errors_inc("signature_inputs_malformed");
+                }
+            })
+            .ok()?;
 
         let sig_inputs = match sig_inputs_ref.translate(self.block_reader) {
             Ok(sig_inputs) => sig_inputs,
@@ -751,7 +742,7 @@ enum Action<'a> {
 impl<'a> Action<'a> {
     /// Decides the action to take on a received message with the given height/RequestId
     fn new(
-        requested_signatures: &'a BTreeMap<CallbackId, Option<(RequestId, ThresholdSigInputsRef)>>,
+        requested_signatures: &'a BTreeMap<[u8; 32], Option<(RequestId, ThresholdSigInputsRef)>>,
         request_id: &RequestId,
         certified_height: Height,
     ) -> Action<'a> {
@@ -762,14 +753,14 @@ impl<'a> Action<'a> {
             return Action::Defer;
         }
 
-        match requested_signatures.get(&request_id.callback_id) {
+        match requested_signatures.get(&request_id.pseudo_random_id) {
             Some(Some((own_request_id, sig_inputs))) => {
                 if request_id == own_request_id {
                     Action::Process(sig_inputs)
                 } else {
                     // A signature for the received ID was requested and the context was completed.
-                    // However, the received share claims a pre-signature was matched at a different
-                    // height, therefore drop the message.
+                    // However, the received share claims a different pre-signature was matched,
+                    // therefore drop the message.
                     Action::Drop
                 }
             }
@@ -826,32 +817,43 @@ mod tests {
     use std::ops::Deref;
     use std::sync::RwLock;
 
+    fn create_request_id(generator: &mut IDkgUIDGenerator, height: Height) -> RequestId {
+        let pre_signature_id = generator.next_pre_signature_id();
+        let pseudo_random_id = [pre_signature_id.id() as u8; 32];
+        RequestId {
+            pre_signature_id,
+            pseudo_random_id,
+            height,
+        }
+    }
+
     #[test]
     fn test_ecdsa_signer_action() {
         let key_id = fake_ecdsa_master_public_key_id();
+        let mut uid_generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
         let height = Height::from(100);
         let (id_1, id_2, id_3, id_4, id_5) = (
-            request_id(1, height),
-            request_id(2, Height::from(10)),
-            request_id(3, height),
-            request_id(4, height),
-            request_id(5, Height::from(200)),
+            create_request_id(&mut uid_generator, height),
+            create_request_id(&mut uid_generator, Height::from(10)),
+            create_request_id(&mut uid_generator, height),
+            create_request_id(&mut uid_generator, height),
+            create_request_id(&mut uid_generator, Height::from(200)),
         );
 
         let requested = BTreeMap::from([
             (
-                id_1.callback_id,
-                Some((id_1, create_sig_inputs(1, &key_id).sig_inputs_ref)),
+                id_1.pseudo_random_id,
+                Some((id_1.clone(), create_sig_inputs(1, &key_id).sig_inputs_ref)),
             ),
             (
-                id_2.callback_id,
-                Some((id_2, create_sig_inputs(2, &key_id).sig_inputs_ref)),
+                id_2.pseudo_random_id,
+                Some((id_2.clone(), create_sig_inputs(2, &key_id).sig_inputs_ref)),
             ),
             (
-                id_3.callback_id,
-                Some((id_3, create_sig_inputs(3, &key_id).sig_inputs_ref)),
+                id_3.pseudo_random_id,
+                Some((id_3.clone(), create_sig_inputs(3, &key_id).sig_inputs_ref)),
             ),
-            (id_4.callback_id, None),
+            (id_4.pseudo_random_id, None),
         ]);
 
         // Message from a node ahead of us
@@ -859,11 +861,19 @@ mod tests {
 
         // Messages for transcripts not being currently requested
         assert_eq!(
-            Action::new(&requested, &request_id(6, Height::from(100)), height),
+            Action::new(
+                &requested,
+                &create_request_id(&mut uid_generator, Height::from(100)),
+                height,
+            ),
             Action::Drop
         );
         assert_eq!(
-            Action::new(&requested, &request_id(7, Height::from(10)), height),
+            Action::new(
+                &requested,
+                &create_request_id(&mut uid_generator, Height::from(10)),
+                height,
+            ),
             Action::Drop
         );
 
@@ -874,10 +884,10 @@ mod tests {
         let action = Action::new(&requested, &id_2, height);
         assert_matches!(action, Action::Process(_));
 
-        // Message for a signature currently requested but specifying wrong height
+        // Message for a signature currently requested but specifying wrong pre-signature
         let wrong_id_2 = RequestId {
-            height: id_2.height.decrement(),
-            ..id_2
+            pre_signature_id: id_1.pre_signature_id,
+            ..id_2.clone()
         };
         let action = Action::new(&requested, &wrong_id_2, height);
         assert_eq!(action, Action::Drop);
@@ -919,12 +929,13 @@ mod tests {
                         ))
                     });
 
-                let id_1 = request_id(1, height_0);
-                let id_2 = request_id(2, height_30);
+                let mut uid_generator = IDkgUIDGenerator::new(subnet_test_id(1), height_0);
+                let id_1 = create_request_id(&mut uid_generator, height_0);
+                let id_2 = create_request_id(&mut uid_generator, height_30);
 
-                let share1 = create_signature_share(&key_id, NODE_1, id_1);
+                let share1 = create_signature_share(&key_id, NODE_1, id_1.clone());
                 let msg_id1 = share1.message_id();
-                let share2 = create_signature_share(&key_id, NODE_2, id_2);
+                let share2 = create_signature_share(&key_id, NODE_2, id_2.clone());
                 let msg_id2 = share2.message_id();
                 let change_set = vec![
                     IDkgChangeAction::AddToValidated(share1),
@@ -967,43 +978,40 @@ mod tests {
     }
 
     fn test_send_signature_shares(key_id: MasterPublicKeyId) {
-        let mut generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
+        let mut uid_generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
         let height = Height::from(100);
-        let ids: Vec<_> = (0..5).map(|i| request_id(i, height)).collect();
+        let (id_1, id_2, id_3, id_4, id_5) = (
+            create_request_id(&mut uid_generator, height),
+            create_request_id(&mut uid_generator, height),
+            create_request_id(&mut uid_generator, height),
+            create_request_id(&mut uid_generator, height),
+            create_request_id(&mut uid_generator, height),
+        );
 
-        // Set up the IDKG pool. Pool has shares for requests 0, 1, 2.
-        // Only the share for request 0 is issued by us
+        // Set up the IDKG pool. Pool has shares for requests 1, 2, 3.
+        // Only the share for request 1 is issued by us
         let shares = vec![
-            create_signature_share(&key_id, NODE_1, ids[0]),
-            create_signature_share(&key_id, NODE_2, ids[1]),
-            create_signature_share(&key_id, NODE_3, ids[2]),
+            create_signature_share(&key_id, NODE_1, id_1.clone()),
+            create_signature_share(&key_id, NODE_2, id_2.clone()),
+            create_signature_share(&key_id, NODE_3, id_3.clone()),
         ];
 
-        // The block has pre-signatures for requests 0, 3, 4
-        let sig_inputs: Vec<_> = [0, 3, 4]
-            .into_iter()
-            .map(|i: usize| {
-                (
-                    ids[i],
-                    generator.next_pre_signature_id(),
-                    create_sig_inputs(i as u8, &key_id),
-                )
-            })
-            .collect();
-
+        // Set up the signature requests
+        // The block requests signatures 1, 4, 5
         let block_reader = TestIDkgBlockReader::for_signer_test(
             Height::from(100),
-            sig_inputs
-                .iter()
-                .map(|(_, pid, inputs)| (*pid, inputs.clone()))
-                .collect(),
+            vec![
+                (id_1.clone(), create_sig_inputs(1, &key_id)),
+                (id_4.clone(), create_sig_inputs(4, &key_id)),
+                (id_5.clone(), create_sig_inputs(5, &key_id)),
+            ],
         );
         let transcript_loader: TestIDkgTranscriptLoader = Default::default();
 
         let state = fake_state_with_signature_requests(
             height,
-            sig_inputs.into_iter().map(|(request_id, pre_sig_id, _)| {
-                fake_signature_request_context_from_id(key_id.clone(), pre_sig_id, request_id)
+            block_reader.requested_signatures().map(|(request_id, _)| {
+                fake_signature_request_context_from_id(key_id.clone(), request_id)
             }),
         );
 
@@ -1019,8 +1027,8 @@ mod tests {
                         .collect(),
                 );
 
-                // Since request 0 is already in progress, we should issue
-                // shares only for transcripts 3, 4
+                // Since request 1 is already in progress, we should issue
+                // shares only for transcripts 4, 5
                 let change_set = signer.send_signature_shares(
                     &idkg_pool,
                     &transcript_loader,
@@ -1030,12 +1038,12 @@ mod tests {
                 assert_eq!(change_set.len(), 2);
                 assert!(is_signature_share_added_to_validated(
                     &change_set,
-                    &ids[3],
+                    &id_4,
                     block_reader.tip_height()
                 ));
                 assert!(is_signature_share_added_to_validated(
                     &change_set,
-                    &ids[4],
+                    &id_5,
                     block_reader.tip_height()
                 ));
             })
@@ -1079,28 +1087,31 @@ mod tests {
     }
 
     fn test_send_signature_shares_incomplete_contexts(key_id: MasterPublicKeyId) {
-        let mut generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
+        let mut uid_generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
         let height = Height::from(100);
-        let ids: Vec<_> = (0..5).map(|i| request_id(i, height)).collect();
-        let pids: Vec<_> = (0..5).map(|_| generator.next_pre_signature_id()).collect();
-
+        let (id_1, id_2, id_3, id_4, id_5) = (
+            create_request_id(&mut uid_generator, height),
+            create_request_id(&mut uid_generator, height),
+            create_request_id(&mut uid_generator, height),
+            create_request_id(&mut uid_generator, height),
+            create_request_id(&mut uid_generator, height),
+        );
         let wrong_key_id = match key_id {
             MasterPublicKeyId::Ecdsa(_) => {
                 fake_schnorr_master_public_key_id(SchnorrAlgorithm::Ed25519)
             }
             MasterPublicKeyId::Schnorr(_) => fake_ecdsa_master_public_key_id(),
-            MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
         };
 
         // Set up the signature requests
-        // The block contains pre-signatures for all requests except request 4
+        // The block contains pre-signatures for all requests except request 5
         let block_reader = TestIDkgBlockReader::for_signer_test(
             height,
             vec![
-                (pids[0], create_sig_inputs(0, &key_id)),
-                (pids[1], create_sig_inputs(1, &key_id)),
-                (pids[2], create_sig_inputs(2, &key_id)),
-                (pids[3], create_sig_inputs(3, &wrong_key_id)),
+                (id_1.clone(), create_sig_inputs(1, &key_id)),
+                (id_2.clone(), create_sig_inputs(2, &key_id)),
+                (id_3.clone(), create_sig_inputs(3, &key_id)),
+                (id_4.clone(), create_sig_inputs(4, &wrong_key_id)),
             ],
         );
         let transcript_loader: TestIDkgTranscriptLoader = Default::default();
@@ -1109,15 +1120,31 @@ mod tests {
             height,
             [
                 // One context without matched pre-signature
-                fake_signature_request_context_with_pre_sig(ids[0], key_id.clone(), None),
+                fake_signature_request_context_with_pre_sig(
+                    id_1.pre_signature_id.id() as u8,
+                    key_id.clone(),
+                    None,
+                ),
                 // One context without nonce
-                fake_signature_request_context_with_pre_sig(ids[1], key_id.clone(), Some(pids[1])),
+                fake_signature_request_context_with_pre_sig(
+                    id_2.pre_signature_id.id() as u8,
+                    key_id.clone(),
+                    Some(id_2.pre_signature_id),
+                ),
                 // One completed context
-                fake_signature_request_context_from_id(key_id.clone(), pids[2], ids[2]),
+                fake_signature_request_context_from_id(key_id.clone(), &id_3),
                 // One completed context matched to a pre-signature of the wrong scheme
-                fake_signature_request_context_from_id(key_id.clone(), pids[3], ids[3]),
+                fake_completed_signature_request_context(
+                    id_4.pre_signature_id.id() as u8,
+                    key_id.clone(),
+                    id_4.pre_signature_id,
+                ),
                 // One completed context matched to a pre-signature that doesn't exist
-                fake_signature_request_context_from_id(key_id.clone(), pids[4], ids[4]),
+                fake_completed_signature_request_context(
+                    id_5.pre_signature_id.id() as u8,
+                    key_id.clone(),
+                    id_5.pre_signature_id,
+                ),
             ],
         );
 
@@ -1126,7 +1153,7 @@ mod tests {
             with_test_replica_logger(|logger| {
                 let (idkg_pool, signer) = create_signer_dependencies(pool_config, logger);
 
-                // We should issue shares only for completed request 2
+                // We should issue shares only for completed request 3
                 let change_set = signer.send_signature_shares(
                     &idkg_pool,
                     &transcript_loader,
@@ -1137,7 +1164,7 @@ mod tests {
                 assert_eq!(change_set.len(), 1);
                 assert!(is_signature_share_added_to_validated(
                     &change_set,
-                    &ids[2],
+                    &id_3,
                     block_reader.tip_height()
                 ));
             })
@@ -1155,24 +1182,27 @@ mod tests {
     fn test_send_signature_shares_when_failure(key_id: MasterPublicKeyId) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let mut generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
+                let mut uid_generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
                 let height = Height::from(100);
-                let ids: Vec<_> = (0..3).map(|i| request_id(i, height)).collect();
-                let pids: Vec<_> = (0..3).map(|_| generator.next_pre_signature_id()).collect();
-
+                let (id_1, id_2, id_3) = (
+                    create_request_id(&mut uid_generator, height),
+                    create_request_id(&mut uid_generator, height),
+                    create_request_id(&mut uid_generator, height),
+                );
                 // Set up the signature requests
+                // The block requests signatures 1, 2, 3
                 let block_reader = TestIDkgBlockReader::for_signer_test(
                     height,
                     vec![
-                        (pids[0], create_sig_inputs(0, &key_id)),
-                        (pids[1], create_sig_inputs(1, &key_id)),
-                        (pids[2], create_sig_inputs(2, &key_id)),
+                        (id_1, create_sig_inputs(1, &key_id)),
+                        (id_2, create_sig_inputs(2, &key_id)),
+                        (id_3, create_sig_inputs(3, &key_id)),
                     ],
                 );
                 let state = fake_state_with_signature_requests(
                     height,
-                    (0..3).map(|i| {
-                        fake_signature_request_context_from_id(key_id.clone(), pids[i], ids[i])
+                    block_reader.requested_signatures().map(|(request_id, _)| {
+                        fake_signature_request_context_from_id(key_id.clone(), request_id)
                     }),
                 );
 
@@ -1218,24 +1248,28 @@ mod tests {
     fn test_send_signature_shares_with_complaints(key_id: MasterPublicKeyId) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let mut generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
+                let mut uid_generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
                 let height = Height::from(100);
-                let ids: Vec<_> = (0..3).map(|i| request_id(i, height)).collect();
-                let pids: Vec<_> = (0..3).map(|_| generator.next_pre_signature_id()).collect();
+                let (id_1, id_2, id_3) = (
+                    create_request_id(&mut uid_generator, height),
+                    create_request_id(&mut uid_generator, height),
+                    create_request_id(&mut uid_generator, height),
+                );
 
                 // Set up the signature requests
+                // The block requests signatures 1, 2, 3
                 let block_reader = TestIDkgBlockReader::for_signer_test(
                     height,
                     vec![
-                        (pids[0], create_sig_inputs(0, &key_id)),
-                        (pids[1], create_sig_inputs(1, &key_id)),
-                        (pids[2], create_sig_inputs(2, &key_id)),
+                        (id_1, create_sig_inputs(1, &key_id)),
+                        (id_2, create_sig_inputs(2, &key_id)),
+                        (id_3, create_sig_inputs(3, &key_id)),
                     ],
                 );
                 let state = fake_state_with_signature_requests(
                     height,
-                    (0..3).map(|i| {
-                        fake_signature_request_context_from_id(key_id.clone(), pids[i], ids[i])
+                    block_reader.requested_signatures().map(|(request_id, _)| {
+                        fake_signature_request_context_from_id(key_id.clone(), request_id)
                     }),
                 );
 
@@ -1250,11 +1284,10 @@ mod tests {
                     &block_reader,
                     &state,
                 );
-                let requested_signatures_count = ids.len();
+                let requested_signatures_count = block_reader.requested_signatures().count();
                 let expected_complaints_count = match key_id {
                     MasterPublicKeyId::Ecdsa(_) => requested_signatures_count * 5,
                     MasterPublicKeyId::Schnorr(_) => requested_signatures_count * 2,
-                    MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
                 };
                 let complaints = transcript_loader.returned_complaints();
                 assert_eq!(change_set.len(), complaints.len());
@@ -1326,7 +1359,6 @@ mod tests {
                             &key_transcript,
                             &[0; 32],
                             Randomness::from([0; 32]),
-                            None,
                             &derivation_path,
                             algorithm_for_key_id(&key_id),
                             &mut rng,
@@ -1336,7 +1368,6 @@ mod tests {
                             ThresholdSigInputs::Schnorr(inputs),
                         )
                     }
-                    MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
                 };
                 let crypto = env
                     .nodes
@@ -1346,7 +1377,8 @@ mod tests {
                     .crypto();
                 let (_, signer) =
                     create_signer_dependencies_with_crypto(pool_config, logger, Some(crypto));
-                let id = request_id(1, Height::from(5));
+                let mut uid_generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
+                let id = create_request_id(&mut uid_generator, Height::from(5));
                 let message = create_signature_share(&key_id, NODE_2, id);
                 let share = match message {
                     IDkgMessage::EcdsaSigShare(share) => SigShare::Ecdsa(share),
@@ -1371,17 +1403,13 @@ mod tests {
     }
 
     fn test_validate_signature_shares(key_id: MasterPublicKeyId) {
-        let mut generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
+        let mut uid_generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
         let height = Height::from(100);
         let (id_1, id_2, id_3, id_4) = (
-            request_id(1, Height::from(200)),
-            request_id(2, height),
-            request_id(3, Height::from(10)),
-            request_id(4, Height::from(5)),
-        );
-        let (pid_2, pid_3) = (
-            generator.next_pre_signature_id(),
-            generator.next_pre_signature_id(),
+            create_request_id(&mut uid_generator, Height::from(200)),
+            create_request_id(&mut uid_generator, height),
+            create_request_id(&mut uid_generator, Height::from(10)),
+            create_request_id(&mut uid_generator, Height::from(5)),
         );
 
         // Set up the transcript creation request
@@ -1389,16 +1417,15 @@ mod tests {
         let block_reader = TestIDkgBlockReader::for_signer_test(
             height,
             vec![
-                (pid_2, create_sig_inputs(2, &key_id)),
-                (pid_3, create_sig_inputs(3, &key_id)),
+                (id_2.clone(), create_sig_inputs(2, &key_id)),
+                (id_3.clone(), create_sig_inputs(3, &key_id)),
             ],
         );
         let state = fake_state_with_signature_requests(
             height,
-            vec![
-                fake_signature_request_context_from_id(key_id.clone(), pid_2, id_2),
-                fake_signature_request_context_from_id(key_id.clone(), pid_3, id_3),
-            ],
+            block_reader.requested_signatures().map(|(request_id, _)| {
+                fake_signature_request_context_from_id(key_id.clone(), request_id)
+            }),
         );
 
         // Set up the IDKG pool
@@ -1481,12 +1508,11 @@ mod tests {
     }
 
     fn test_validate_signature_shares_mismatching_schemes(key_id: MasterPublicKeyId) {
-        let mut generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
+        let mut uid_generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
         let height = Height::from(100);
-        let (id_1, id_2) = (request_id(1, height), request_id(2, height));
-        let (pid_1, pid_2) = (
-            generator.next_pre_signature_id(),
-            generator.next_pre_signature_id(),
+        let (id_1, id_2) = (
+            create_request_id(&mut uid_generator, height),
+            create_request_id(&mut uid_generator, height),
         );
 
         // Set up the signature requests
@@ -1494,16 +1520,15 @@ mod tests {
         let block_reader = TestIDkgBlockReader::for_signer_test(
             height,
             vec![
-                (pid_1, create_sig_inputs(1, &key_id)),
-                (pid_2, create_sig_inputs(2, &key_id)),
+                (id_1.clone(), create_sig_inputs(1, &key_id)),
+                (id_2.clone(), create_sig_inputs(2, &key_id)),
             ],
         );
         let state = fake_state_with_signature_requests(
             height,
-            [
-                fake_signature_request_context_from_id(key_id.clone(), pid_1, id_1),
-                fake_signature_request_context_from_id(key_id.clone(), pid_2, id_2),
-            ],
+            block_reader.requested_signatures().map(|(request_id, _)| {
+                fake_signature_request_context_from_id(key_id.clone(), request_id)
+            }),
         );
 
         // Set up the IDKG pool
@@ -1523,9 +1548,8 @@ mod tests {
                 fake_schnorr_master_public_key_id(SchnorrAlgorithm::Ed25519)
             }
             MasterPublicKeyId::Schnorr(_) => fake_ecdsa_master_public_key_id(),
-            MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
         };
-        let message = create_signature_share(&key_id_wrong_scheme, NODE_2, id_2);
+        let message = create_signature_share(&key_id_wrong_scheme, NODE_2, id_2.clone());
         let msg_id_2 = message.message_id();
         artifacts.push(UnvalidatedArtifact {
             message,
@@ -1557,37 +1581,48 @@ mod tests {
     }
 
     fn test_validate_signature_shares_incomplete_contexts(key_id: MasterPublicKeyId) {
-        let mut generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
+        let mut uid_generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
         let height = Height::from(100);
-        let ids: Vec<_> = (0..3).map(|i| request_id(i, height)).collect();
-        let pids: Vec<_> = (0..3).map(|_| generator.next_pre_signature_id()).collect();
+        let (id_1, id_2, id_3) = (
+            create_request_id(&mut uid_generator, height),
+            create_request_id(&mut uid_generator, height),
+            create_request_id(&mut uid_generator, height),
+        );
 
         // Set up the signature requests
-        // The block contains pre-signatures for requests 0, 1, 2
+        // The block contains pre-signatures for requests 1, 2, 3
         let block_reader = TestIDkgBlockReader::for_signer_test(
             height,
             vec![
-                (pids[0], create_sig_inputs(0, &key_id)),
-                (pids[1], create_sig_inputs(1, &key_id)),
-                (pids[2], create_sig_inputs(2, &key_id)),
+                (id_1.clone(), create_sig_inputs(1, &key_id)),
+                (id_2.clone(), create_sig_inputs(2, &key_id)),
+                (id_3.clone(), create_sig_inputs(3, &key_id)),
             ],
         );
         let state = fake_state_with_signature_requests(
             height,
             [
                 // One context without matched pre-signature
-                fake_signature_request_context_with_pre_sig(ids[0], key_id.clone(), None),
+                fake_signature_request_context_with_pre_sig(
+                    id_1.pre_signature_id.id() as u8,
+                    key_id.clone(),
+                    None,
+                ),
                 // One context without nonce
-                fake_signature_request_context_with_pre_sig(ids[1], key_id.clone(), Some(pids[1])),
+                fake_signature_request_context_with_pre_sig(
+                    id_2.pre_signature_id.id() as u8,
+                    key_id.clone(),
+                    Some(id_2.pre_signature_id),
+                ),
                 // One completed context
-                fake_signature_request_context_from_id(key_id.clone(), pids[2], ids[2]),
+                fake_signature_request_context_from_id(key_id.clone(), &id_3),
             ],
         );
 
         // Set up the IDKG pool
         let mut artifacts = Vec::new();
         // A share for the first incomplete context (deferred)
-        let message = create_signature_share(&key_id, NODE_2, ids[0]);
+        let message = create_signature_share(&key_id, NODE_2, id_1);
         artifacts.push(UnvalidatedArtifact {
             message,
             peer_id: NODE_2,
@@ -1595,7 +1630,7 @@ mod tests {
         });
 
         // A share for the second incomplete context (deferred)
-        let message = create_signature_share(&key_id, NODE_2, ids[1]);
+        let message = create_signature_share(&key_id, NODE_2, id_2.clone());
         artifacts.push(UnvalidatedArtifact {
             message,
             peer_id: NODE_2,
@@ -1603,7 +1638,7 @@ mod tests {
         });
 
         // A share for a the completed context (accepted)
-        let message = create_signature_share(&key_id, NODE_2, ids[2]);
+        let message = create_signature_share(&key_id, NODE_2, id_3.clone());
         let msg_id_3 = message.message_id();
         artifacts.push(UnvalidatedArtifact {
             message,
@@ -1611,9 +1646,9 @@ mod tests {
             timestamp: UNIX_EPOCH,
         });
 
-        // A share for a the completed context, but specifying wrong pre-signature height (dropped)
-        let mut wrong_id_3 = ids[2];
-        wrong_id_3.height = ids[2].height.decrement();
+        // A share for a the completed context, but specifying wrong pre-signature (dropped)
+        let mut wrong_id_3 = id_3.clone();
+        wrong_id_3.pre_signature_id = id_2.pre_signature_id;
         let message = create_signature_share(&key_id, NODE_2, wrong_id_3);
         let msg_id_4 = message.message_id();
         artifacts.push(UnvalidatedArtifact {
@@ -1650,33 +1685,30 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let height = Height::from(100);
-                let mut generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
-                let id_2 = request_id(2, Height::from(100));
-                let pid_2 = generator.next_pre_signature_id();
+                let mut uid_generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
+                let id_2 = create_request_id(&mut uid_generator, Height::from(100));
 
                 let block_reader = TestIDkgBlockReader::for_signer_test(
                     height,
-                    vec![(pid_2, create_sig_inputs(2, &key_id))],
+                    vec![(id_2.clone(), create_sig_inputs(2, &key_id))],
                 );
                 let state = fake_state_with_signature_requests(
                     height,
-                    [fake_signature_request_context_from_id(
-                        key_id.clone(),
-                        pid_2,
-                        id_2,
-                    )],
+                    block_reader.requested_signatures().map(|(request_id, _)| {
+                        fake_signature_request_context_from_id(key_id.clone(), request_id)
+                    }),
                 );
 
                 let (mut idkg_pool, signer) = create_signer_dependencies(pool_config, logger);
 
                 // Set up the IDKG pool
                 // Validated pool has: {signature share 2, signer = NODE_2}
-                let share = create_signature_share(&key_id, NODE_2, id_2);
+                let share = create_signature_share(&key_id, NODE_2, id_2.clone());
                 let change_set = vec![IDkgChangeAction::AddToValidated(share)];
                 idkg_pool.apply(change_set);
 
                 // Unvalidated pool has: {signature share 2, signer = NODE_2, height = 100}
-                let message = create_signature_share(&key_id, NODE_2, id_2);
+                let message = create_signature_share(&key_id, NODE_2, id_2.clone());
                 let msg_id_2 = message.message_id();
                 idkg_pool.insert(UnvalidatedArtifact {
                     message,
@@ -1706,27 +1738,24 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let height = Height::from(100);
-                let mut generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
-                let id_1 = request_id(1, Height::from(100));
-                let pid_1 = generator.next_pre_signature_id();
+                let mut uid_generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
+                let id_1 = create_request_id(&mut uid_generator, Height::from(100));
 
                 let block_reader = TestIDkgBlockReader::for_signer_test(
                     height,
-                    vec![(pid_1, create_sig_inputs(2, &key_id))],
+                    vec![(id_1.clone(), create_sig_inputs(2, &key_id))],
                 );
                 let state = fake_state_with_signature_requests(
                     height,
-                    [fake_signature_request_context_from_id(
-                        key_id.clone(),
-                        pid_1,
-                        id_1,
-                    )],
+                    block_reader.requested_signatures().map(|(request_id, _)| {
+                        fake_signature_request_context_from_id(key_id.clone(), request_id)
+                    }),
                 );
 
                 let (mut idkg_pool, signer) = create_signer_dependencies(pool_config, logger);
 
                 // Unvalidated pool has: {signature share 1, signer = NODE_2}
-                let message = create_signature_share_with_nonce(&key_id, NODE_2, id_1, 0);
+                let message = create_signature_share_with_nonce(&key_id, NODE_2, id_1.clone(), 0);
                 let msg_id_1 = message.message_id();
                 idkg_pool.insert(UnvalidatedArtifact {
                     message,
@@ -1735,7 +1764,7 @@ mod tests {
                 });
 
                 // Unvalidated pool has: {signature share 2, signer = NODE_2}
-                let message = create_signature_share_with_nonce(&key_id, NODE_2, id_1, 1);
+                let message = create_signature_share_with_nonce(&key_id, NODE_2, id_1.clone(), 1);
                 let msg_id_2 = message.message_id();
                 idkg_pool.insert(UnvalidatedArtifact {
                     message,
@@ -1744,7 +1773,7 @@ mod tests {
                 });
 
                 // Unvalidated pool has: {signature share 2, signer = NODE_3}
-                let message = create_signature_share_with_nonce(&key_id, NODE_3, id_1, 2);
+                let message = create_signature_share_with_nonce(&key_id, NODE_3, id_1.clone(), 2);
                 let msg_id_3 = message.message_id();
                 idkg_pool.insert(UnvalidatedArtifact {
                     message,
@@ -1754,15 +1783,11 @@ mod tests {
 
                 let change_set =
                     signer.validate_signature_shares(&idkg_pool, &block_reader, &state);
-                println!("{change_set:?}");
                 assert_eq!(change_set.len(), 3);
-                let msg_1_valid = is_moved_to_validated(&change_set, &msg_id_1)
-                    && is_handle_invalid(&change_set, &msg_id_2);
-                let msg_2_valid = is_moved_to_validated(&change_set, &msg_id_2)
-                    && is_handle_invalid(&change_set, &msg_id_1);
-
                 // One is considered duplicate
-                assert!(msg_1_valid || msg_2_valid);
+                assert!(is_handle_invalid(&change_set, &msg_id_1));
+                // One is considered validated
+                assert!(is_moved_to_validated(&change_set, &msg_id_2));
                 assert!(is_moved_to_validated(&change_set, &msg_id_3));
             })
         })
@@ -1781,24 +1806,27 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let height = Height::from(100);
-                let mut generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
+                let mut uid_generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
                 let (id_1, id_2, id_3) = (
-                    request_id(1, Height::from(10)),
-                    request_id(2, Height::from(20)),
-                    request_id(3, Height::from(200)),
-                );
-                let (pid_1, pid_3) = (
-                    generator.next_pre_signature_id(),
-                    generator.next_pre_signature_id(),
+                    create_request_id(&mut uid_generator, Height::from(10)),
+                    create_request_id(&mut uid_generator, Height::from(20)),
+                    create_request_id(&mut uid_generator, Height::from(200)),
                 );
 
                 // Set up the transcript creation request
+                // The block requests transcripts 1, 3
+                let block_reader = TestIDkgBlockReader::for_signer_test(
+                    height,
+                    vec![
+                        (id_1.clone(), create_sig_inputs(1, &key_id)),
+                        (id_3.clone(), create_sig_inputs(3, &key_id)),
+                    ],
+                );
                 let state = fake_state_with_signature_requests(
                     height,
-                    [
-                        fake_signature_request_context_from_id(key_id.clone(), pid_1, id_1),
-                        fake_signature_request_context_from_id(key_id.clone(), pid_3, id_3),
-                    ],
+                    block_reader.requested_signatures().map(|(request_id, _)| {
+                        fake_signature_request_context_from_id(key_id.clone(), request_id)
+                    }),
                 );
 
                 let (mut idkg_pool, signer) = create_signer_dependencies(pool_config, logger);
@@ -1848,24 +1876,27 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let height = Height::from(100);
-                let mut generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
+                let mut uid_generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
                 let (id_1, id_2, id_3) = (
-                    request_id(1, Height::from(10)),
-                    request_id(2, Height::from(20)),
-                    request_id(3, Height::from(200)),
-                );
-                let (pid_1, pid_3) = (
-                    generator.next_pre_signature_id(),
-                    generator.next_pre_signature_id(),
+                    create_request_id(&mut uid_generator, Height::from(10)),
+                    create_request_id(&mut uid_generator, Height::from(20)),
+                    create_request_id(&mut uid_generator, Height::from(200)),
                 );
 
                 // Set up the transcript creation request
+                // The block requests transcripts 1, 3
+                let block_reader = TestIDkgBlockReader::for_signer_test(
+                    height,
+                    vec![
+                        (id_1.clone(), create_sig_inputs(1, &key_id)),
+                        (id_3.clone(), create_sig_inputs(3, &key_id)),
+                    ],
+                );
                 let state = fake_state_with_signature_requests(
                     height,
-                    [
-                        fake_signature_request_context_from_id(key_id.clone(), pid_1, id_1),
-                        fake_signature_request_context_from_id(key_id.clone(), pid_3, id_3),
-                    ],
+                    block_reader.requested_signatures().map(|(request_id, _)| {
+                        fake_signature_request_context_from_id(key_id.clone(), request_id)
+                    }),
                 );
 
                 let (mut idkg_pool, signer) = create_signer_dependencies(pool_config, logger);
@@ -1900,6 +1931,8 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, _) = create_signer_dependencies(pool_config, logger.clone());
+                let mut uid_generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
+                let req_id = create_request_id(&mut uid_generator, Height::from(10));
                 let env = CanisterThresholdSigTestEnvironment::new(3, &mut rng);
                 let (dealers, receivers) = env.choose_dealers_and_receivers(
                     &IDkgParticipants::AllNodesAsDealersAndReceivers,
@@ -1916,17 +1949,15 @@ mod tests {
                     caller: canister_test_id(1).get(),
                     derivation_path: vec![],
                 };
-                let req_id = request_id(1, Height::from(10));
-                let pre_sig_id = PreSigId(1);
+                let pre_sig_id = req_id.pre_signature_id;
                 let message_hash = [0; 32];
-                let callback_id = CallbackId::from(1);
                 let context = SignWithThresholdContext {
                     request: RequestBuilder::new().sender(canister_test_id(1)).build(),
                     args: ThresholdArguments::Ecdsa(EcdsaArguments {
                         key_id: fake_ecdsa_key_id(),
                         message_hash,
                     }),
-                    pseudo_random_id: [1; 32],
+                    pseudo_random_id: req_id.pseudo_random_id,
                     derivation_path: vec![],
                     batch_time: UNIX_EPOCH,
                     matched_pre_signature: Some((pre_sig_id, req_id.height)),
@@ -1947,7 +1978,7 @@ mod tests {
                 // Set up the transcript creation request
                 let block_reader = TestIDkgBlockReader::for_signer_test(
                     Height::from(100),
-                    vec![(pre_sig_id, (&sig_inputs).into())],
+                    vec![(req_id.clone(), (&sig_inputs).into())],
                 );
 
                 let metrics = IDkgPayloadMetrics::new(MetricsRegistry::new());
@@ -1968,7 +1999,7 @@ mod tests {
                     );
 
                     // There are no signature shares yet, no signature can be completed
-                    let result = sig_builder.get_completed_signature(callback_id, &context);
+                    let result = sig_builder.get_completed_signature(&context);
                     assert_matches!(result, None);
                 }
 
@@ -1982,7 +2013,7 @@ mod tests {
                             .expect("failed to create sig share");
                         EcdsaSigShare {
                             signer_id: receiver.id(),
-                            request_id: req_id,
+                            request_id: req_id.clone(),
                             share,
                         }
                     })
@@ -2001,7 +2032,7 @@ mod tests {
                 );
 
                 // Signature completion should succeed now.
-                let r1 = sig_builder.get_completed_signature(callback_id, &context);
+                let r1 = sig_builder.get_completed_signature(&context);
                 // Compare to combined signature returned by crypto environment
                 let r2 = CombinedSignature::Ecdsa(run_tecdsa_protocol(&env, &sig_inputs, &mut rng));
                 assert_matches!(r1, Some(ref s) if s == &r2);
@@ -2009,7 +2040,7 @@ mod tests {
                 // If the context's nonce hasn't been set yet, no signature should be completed
                 let mut context_without_nonce = context.clone();
                 context_without_nonce.nonce = None;
-                let res = sig_builder.get_completed_signature(callback_id, &context_without_nonce);
+                let res = sig_builder.get_completed_signature(&context_without_nonce);
                 assert_eq!(None, res);
 
                 // If resolving the transcript refs fails, no signature should be completed
@@ -2022,7 +2053,7 @@ mod tests {
                     logger,
                 );
 
-                let result = sig_builder.get_completed_signature(callback_id, &context);
+                let result = sig_builder.get_completed_signature(&context);
                 assert_matches!(result, None);
             });
         })
@@ -2042,7 +2073,8 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, _) = create_signer_dependencies(pool_config, logger.clone());
-                let req_id = request_id(1, Height::from(10));
+                let mut uid_generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
+                let req_id = create_request_id(&mut uid_generator, Height::from(10));
                 let env = CanisterThresholdSigTestEnvironment::new(3, &mut rng);
                 let (dealers, receivers) = env.choose_dealers_and_receivers(
                     &IDkgParticipants::AllNodesAsDealersAndReceivers,
@@ -2054,16 +2086,15 @@ mod tests {
                     caller: canister_test_id(1).get(),
                     derivation_path: vec![],
                 };
-                let pre_sig_id = PreSigId(1);
+                let pre_sig_id = req_id.pre_signature_id;
                 let message = vec![0; 32];
-                let callback_id = CallbackId::from(1);
                 let context = SignWithThresholdContext {
                     request: RequestBuilder::new().sender(canister_test_id(1)).build(),
                     args: ThresholdArguments::Schnorr(SchnorrArguments {
                         key_id: fake_schnorr_key_id(schnorr_algorithm(algorithm)),
                         message: Arc::new(message.clone()),
                     }),
-                    pseudo_random_id: [1; 32],
+                    pseudo_random_id: req_id.pseudo_random_id,
                     derivation_path: vec![],
                     batch_time: UNIX_EPOCH,
                     matched_pre_signature: Some((pre_sig_id, req_id.height)),
@@ -2076,7 +2107,6 @@ mod tests {
                     &key_transcript,
                     &message,
                     Randomness::from(context.nonce.unwrap()),
-                    None,
                     &derivation_path,
                     algorithm,
                     &mut rng,
@@ -2085,7 +2115,7 @@ mod tests {
                 // Set up the transcript creation request
                 let block_reader = TestIDkgBlockReader::for_signer_test(
                     Height::from(100),
-                    vec![(pre_sig_id, (&sig_inputs).into())],
+                    vec![(req_id.clone(), (&sig_inputs).into())],
                 );
 
                 let metrics = IDkgPayloadMetrics::new(MetricsRegistry::new());
@@ -2106,7 +2136,7 @@ mod tests {
                     );
 
                     // There are no signature shares yet, no signature can be completed
-                    let result = sig_builder.get_completed_signature(callback_id, &context);
+                    let result = sig_builder.get_completed_signature(&context);
                     assert_matches!(result, None);
                 }
 
@@ -2120,7 +2150,7 @@ mod tests {
                             .expect("failed to create sig share");
                         SchnorrSigShare {
                             signer_id: receiver.id(),
-                            request_id: req_id,
+                            request_id: req_id.clone(),
                             share,
                         }
                     })
@@ -2139,7 +2169,7 @@ mod tests {
                 );
 
                 // Signature completion should succeed now.
-                let r1 = sig_builder.get_completed_signature(callback_id, &context);
+                let r1 = sig_builder.get_completed_signature(&context);
                 // Compare to combined signature returned by crypto environment
                 let r2 =
                     CombinedSignature::Schnorr(run_tschnorr_protocol(&env, &sig_inputs, &mut rng));
@@ -2148,7 +2178,7 @@ mod tests {
                 // If the context's nonce hasn't been set yet, no signature should be completed
                 let mut context_without_nonce = context.clone();
                 context_without_nonce.nonce = None;
-                let res = sig_builder.get_completed_signature(callback_id, &context_without_nonce);
+                let res = sig_builder.get_completed_signature(&context_without_nonce);
                 assert_eq!(None, res);
 
                 // If resolving the transcript refs fails, no signature should be completed
@@ -2161,7 +2191,7 @@ mod tests {
                     logger,
                 );
 
-                let result = sig_builder.get_completed_signature(callback_id, &context);
+                let result = sig_builder.get_completed_signature(&context);
                 assert_matches!(result, None);
             });
         })

@@ -58,7 +58,8 @@ fn run_memory_grows(grows: &[GrowCommand]) {
 
 #[test]
 fn random_stable_grows() {
-    let config = Config::with_cases(10);
+    // The default is 256 cases, but we do half of that to reduce the test time.
+    let config = Config::with_cases(128);
     let algorithm = config.rng_algorithm;
     let mut runner = TestRunner::new_with_rng(config, TestRng::deterministic_rng(algorithm));
     runner

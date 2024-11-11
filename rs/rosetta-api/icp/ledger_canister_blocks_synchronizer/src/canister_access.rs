@@ -1,4 +1,3 @@
-#![allow(clippy::disallowed_types)]
 use dfn_protobuf::{ProtoBuf, ToProto};
 use ic_agent::agent::http_transport::reqwest_transport::ReqwestTransport;
 use ic_agent::identity::AnonymousIdentity;

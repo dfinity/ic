@@ -2,9 +2,7 @@ use crate::dashboard::tests::assertions::DashboardAssert;
 use crate::dashboard::DashboardTemplate;
 use crate::erc20::CkErc20Token;
 use candid::{Nat, Principal};
-use ic_cketh_minter::eth_logs::{
-    EventSource, LedgerSubaccount, ReceivedErc20Event, ReceivedEthEvent,
-};
+use ic_cketh_minter::eth_logs::{EventSource, ReceivedErc20Event, ReceivedEthEvent};
 use ic_cketh_minter::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use ic_cketh_minter::lifecycle::EthereumNetwork;
 use ic_cketh_minter::numeric::{
@@ -12,10 +10,9 @@ use ic_cketh_minter::numeric::{
     TransactionNonce, Wei, WeiPerGas,
 };
 use ic_cketh_minter::state::audit::{apply_state_transition, EventType};
-use ic_cketh_minter::state::eth_logs_scraping::LogScrapingId;
 use ic_cketh_minter::state::transactions::{
     create_transaction, Erc20WithdrawalRequest, EthWithdrawalRequest, ReimbursementIndex,
-    WithdrawalRequest,
+    Subaccount, WithdrawalRequest,
 };
 use ic_cketh_minter::state::State;
 use ic_cketh_minter::tx::{
@@ -28,8 +25,9 @@ use std::str::FromStr;
 
 #[test]
 fn should_display_metadata() {
-    let dashboard = DashboardTemplate {
+    let mut dashboard = DashboardTemplate {
         minter_address: "0x1789F79e95324A47c5Fd6693071188e82E9a3558".to_string(),
+        eth_helper_contract_address: "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34".to_string(),
         cketh_ledger_id: Principal::from_text("apia6-jaaaa-aaaar-qabma-cai")
             .expect("BUG: invalid principal"),
         ecdsa_key_name: "key_1".to_string(),
@@ -41,6 +39,8 @@ fn should_display_metadata() {
     DashboardAssert::assert_that(dashboard.clone())
         .has_ethereum_network("Ethereum Testnet Sepolia")
         .has_minter_address("0x1789F79e95324A47c5Fd6693071188e82E9a3558")
+        .has_eth_helper_contract_address("0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34")
+        .has_erc20_helper_contract_address("N/A")
         .has_cketh_ledger_canister_id("apia6-jaaaa-aaaar-qabma-cai")
         .has_tecdsa_key_name("key_1")
         .has_next_transaction_nonce("42")
@@ -48,30 +48,41 @@ fn should_display_metadata() {
         .has_eth_balance("0")
         .has_total_effective_tx_fees("0")
         .has_total_unspent_tx_fees("0");
+
+    dashboard.erc20_helper_contract_address =
+        "0xE1788E4834c896F1932188645cc36c54d1b80AC1".to_string();
+    DashboardAssert::assert_that(dashboard.clone())
+        .has_erc20_helper_contract_address("0xE1788E4834c896F1932188645cc36c54d1b80AC1");
 }
 
 #[test]
 fn should_display_block_sync() {
     let dashboard = DashboardTemplate {
         last_observed_block: None,
+        last_eth_synced_block: BlockNumber::from(4552270_u32),
         ..initial_dashboard()
     };
     DashboardAssert::assert_that(dashboard)
         .has_no_elements_matching("#last-observed-block-number")
+        .has_no_elements_matching("#last-erc20-synced-block-number")
+        .has_last_eth_synced_block_href("https://sepolia.etherscan.io/block/4552270")
         .has_first_synced_block_href("https://sepolia.etherscan.io/block/3956207")
         .has_no_elements_matching("#skipped-blocks");
 
     let dashboard = DashboardTemplate {
         last_observed_block: Some(BlockNumber::from(4552271_u32)),
+        last_eth_synced_block: BlockNumber::from(4552270_u32),
+        last_erc20_synced_block: Some(BlockNumber::from(4552269_u32)),
         skipped_blocks: btreemap! {
             "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34".to_string() => btreeset! {BlockNumber::from(3552270_u32), BlockNumber::from(2552270_u32)},
             "0xE1788E4834c896F1932188645cc36c54d1b80AC1".to_string() => btreeset! {BlockNumber::from(3552370_u32), BlockNumber::from(2552370_u32)},
         },
         ..initial_dashboard()
     };
-
     DashboardAssert::assert_that(dashboard)
         .has_last_observed_block_href("https://sepolia.etherscan.io/block/4552271")
+        .has_last_eth_synced_block_href("https://sepolia.etherscan.io/block/4552270")
+        .has_last_erc20_synced_block_href("https://sepolia.etherscan.io/block/4552269")
         .has_first_synced_block_href("https://sepolia.etherscan.io/block/3956207")
         .has_skipped_blocks(
             "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
@@ -81,78 +92,6 @@ fn should_display_block_sync() {
             "0xE1788E4834c896F1932188645cc36c54d1b80AC1",
             &[2552370, 3552370],
         );
-}
-
-#[test]
-fn should_display_helper_smart_contracts() {
-    let dashboard = initial_dashboard();
-
-    DashboardAssert::assert_that(dashboard.clone())
-        .has_helper_contract(
-            LogScrapingId::EthDepositWithoutSubaccount,
-            "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
-            &format!("https://sepolia.etherscan.io/block/{INITIAL_LAST_SCRAPED_BLOCK_NUMBER}"),
-        )
-        .has_no_helper_contract(LogScrapingId::Erc20DepositWithoutSubaccount)
-        .has_no_helper_contract(LogScrapingId::EthOrErc20DepositWithSubaccount);
-
-    let mut dashboard = dashboard;
-    set_log_scraping(
-        &mut dashboard,
-        LogScrapingId::Erc20DepositWithoutSubaccount,
-        "0xE1788E4834c896F1932188645cc36c54d1b80AC1",
-        4552269,
-    );
-    DashboardAssert::assert_that(dashboard.clone())
-        .has_helper_contract(
-            LogScrapingId::EthDepositWithoutSubaccount,
-            "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
-            &format!("https://sepolia.etherscan.io/block/{INITIAL_LAST_SCRAPED_BLOCK_NUMBER}"),
-        )
-        .has_helper_contract(
-            LogScrapingId::Erc20DepositWithoutSubaccount,
-            "0xE1788E4834c896F1932188645cc36c54d1b80AC1",
-            "https://sepolia.etherscan.io/block/4552269",
-        )
-        .has_no_helper_contract(LogScrapingId::EthOrErc20DepositWithSubaccount);
-
-    set_log_scraping(
-        &mut dashboard,
-        LogScrapingId::EthOrErc20DepositWithSubaccount,
-        "0x2D39863d30716aaf2B7fFFd85Dd03Dda2BFC2E38",
-        4552270,
-    );
-    DashboardAssert::assert_that(dashboard.clone())
-        .has_helper_contract(
-            LogScrapingId::EthDepositWithoutSubaccount,
-            "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
-            &format!("https://sepolia.etherscan.io/block/{INITIAL_LAST_SCRAPED_BLOCK_NUMBER}"),
-        )
-        .has_helper_contract(
-            LogScrapingId::Erc20DepositWithoutSubaccount,
-            "0xE1788E4834c896F1932188645cc36c54d1b80AC1",
-            "https://sepolia.etherscan.io/block/4552269",
-        )
-        .has_helper_contract(
-            LogScrapingId::EthOrErc20DepositWithSubaccount,
-            "0x2D39863d30716aaf2B7fFFd85Dd03Dda2BFC2E38",
-            "https://sepolia.etherscan.io/block/4552270",
-        );
-
-    fn set_log_scraping(
-        dashboard: &mut DashboardTemplate,
-        id: LogScrapingId,
-        contract_address: &str,
-        last_scraped_block_number: u32,
-    ) {
-        dashboard
-            .log_scrapings
-            .set_contract_address(id, contract_address.parse().unwrap())
-            .unwrap();
-        dashboard
-            .log_scrapings
-            .set_last_scraped_block_number(id, BlockNumber::from(last_scraped_block_number));
-    }
 }
 
 #[test]
@@ -275,7 +214,6 @@ fn should_display_minted_events_sorted_by_decreasing_mint_block_index() {
             transaction_hash: "0x5e5a5954e0a6fe5e61067330ea6f1398425a5e01a1dc1ef895b5dde00994e796"
                 .parse()
                 .unwrap(),
-            subaccount: LedgerSubaccount::from_bytes([42; 32]),
             ..received_eth_event()
         };
         let event_3 = ReceivedErc20Event {
@@ -323,7 +261,7 @@ fn should_display_minted_events_sorted_by_decreasing_mint_block_index() {
                 "0xdd2851Cdd40aE6536831558DD46db62fAc7A844d",
                 "ckETH",
                 "10_000_000_000_000_000",
-                "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae-pfew5sq.2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a",
+                "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae",
                 "43",
             ],
         )
@@ -1005,20 +943,18 @@ fn initial_dashboard() -> DashboardTemplate {
     DashboardTemplate::from_state(&initial_state())
 }
 
-const INITIAL_LAST_SCRAPED_BLOCK_NUMBER: u32 = 3_956_206_u32;
-
 fn initial_state() -> State {
     use ic_cketh_minter::lifecycle::init::InitArg;
     State::try_from(InitArg {
         ethereum_network: Default::default(),
         ecdsa_key_name: "test_key_1".to_string(),
-        ethereum_contract_address: Some("0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34".to_string()),
+        ethereum_contract_address: None,
         ledger_id: Principal::from_text("apia6-jaaaa-aaaar-qabma-cai")
             .expect("BUG: invalid principal"),
         ethereum_block_height: Default::default(),
         minimum_withdrawal_amount: Nat::from(10_000_000_000_000_000_u64),
         next_transaction_nonce: TransactionNonce::ZERO.into(),
-        last_scraped_block_number: candid::Nat::from(INITIAL_LAST_SCRAPED_BLOCK_NUMBER),
+        last_scraped_block_number: candid::Nat::from(3_956_206_u32),
     })
     .expect("valid init args")
 }
@@ -1044,7 +980,6 @@ fn received_eth_event() -> ReceivedEthEvent {
         principal: "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae"
             .parse()
             .unwrap(),
-        subaccount: None,
     }
 }
 
@@ -1065,7 +1000,6 @@ fn received_erc20_event() -> ReceivedErc20Event {
         erc20_contract_address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
             .parse()
             .unwrap(),
-        subaccount: None,
     }
 }
 
@@ -1102,7 +1036,7 @@ fn cketh_withdrawal_request_with_index(ledger_burn_index: LedgerBurnIndex) -> Et
         destination: Address::from_str(DEFAULT_RECIPIENT_ADDRESS).unwrap(),
         withdrawal_amount: Wei::new(DEFAULT_WITHDRAWAL_AMOUNT),
         from: candid::Principal::from_str(DEFAULT_PRINCIPAL).unwrap(),
-        from_subaccount: LedgerSubaccount::from_bytes(DEFAULT_SUBACCOUNT),
+        from_subaccount: Some(Subaccount(DEFAULT_SUBACCOUNT)),
         created_at: None,
     }
 }
@@ -1124,7 +1058,7 @@ fn ckerc20_withdrawal_request_with_index(
         ckerc20_ledger_id: ckerc20_token.ckerc20_ledger_id,
         ckerc20_ledger_burn_index: (cketh_ledger_burn_index.get() + 1_u64).into(),
         from: candid::Principal::from_str(DEFAULT_PRINCIPAL).unwrap(),
-        from_subaccount: LedgerSubaccount::from_bytes(DEFAULT_SUBACCOUNT),
+        from_subaccount: Some(Subaccount(DEFAULT_SUBACCOUNT)),
         created_at: 1712305423000000000,
     }
 }
@@ -1242,13 +1176,11 @@ fn ckerc20_withdrawal_flow(
 }
 
 mod assertions {
-    use crate::dashboard::filters::lower_alphanumeric;
     use crate::dashboard::DashboardTemplate;
     use askama::Template;
     use ic_cketh_minter::erc20::CkErc20Token;
-    use ic_cketh_minter::state::eth_logs_scraping::LogScrapingId;
+    use scraper::Html;
     use scraper::Selector;
-    use scraper::{ElementRef, Html};
 
     pub struct DashboardAssert {
         rendered_html: String,
@@ -1290,14 +1222,19 @@ mod assertions {
             )
         }
 
-        pub fn has_last_synced_block_href(&self, id: LogScrapingId, expected_href: &str) -> &Self {
+        pub fn has_last_eth_synced_block_href(&self, expected_href: &str) -> &Self {
             self.has_href_value(
-                &format!(
-                    "#helper-smart-contract-{} > td:nth-child(3) > code > a",
-                    lower_alphanumeric(id).unwrap()
-                ),
+                "#last-eth-synced-block-number > td > a",
                 expected_href,
-                &format!("wrong last {} synced block href", id),
+                "wrong last ETH synced block href",
+            )
+        }
+
+        pub fn has_last_erc20_synced_block_href(&self, expected_href: &str) -> &Self {
+            self.has_href_value(
+                "#last-erc20-synced-block-number > td > a",
+                expected_href,
+                "wrong last ERC20 synced block href",
             )
         }
 
@@ -1354,35 +1291,19 @@ mod assertions {
             )
         }
 
-        pub fn has_helper_contract(
-            &self,
-            id: LogScrapingId,
-            expected_address: &str,
-            expected_last_synced_block_href: &str,
-        ) -> &Self {
-            self.has_helper_contract_address(id, expected_address)
-                .has_last_synced_block_href(id, expected_last_synced_block_href)
-        }
-
-        pub fn has_no_helper_contract(&self, id: LogScrapingId) -> &Self {
-            self.has_no_elements_matching(&format!(
-                "#helper-smart-contract-{}",
-                lower_alphanumeric(id).unwrap()
-            ))
-        }
-
-        pub fn has_helper_contract_address(
-            &self,
-            id: LogScrapingId,
-            expected_address: &str,
-        ) -> &Self {
+        pub fn has_eth_helper_contract_address(&self, expected_address: &str) -> &Self {
             self.has_string_value(
-                &format!(
-                    "#helper-smart-contract-{} > td:nth-child(2)",
-                    lower_alphanumeric(id).unwrap()
-                ),
+                "#eth-helper-contract-address > td",
                 expected_address,
-                &format!("wrong {} helper contract address", id),
+                "wrong ETH helper contract address",
+            )
+        }
+
+        pub fn has_erc20_helper_contract_address(&self, expected_address: &str) -> &Self {
+            self.has_string_value(
+                "#erc20-helper-contract-address > td",
+                expected_address,
+                "wrong ERC20 helper contract address",
             )
         }
 
@@ -1537,7 +1458,8 @@ mod assertions {
             expected_value: &Vec<&str>,
             error_msg: &str,
         ) -> &Self {
-            let actual_value = self.select_only_one(selector);
+            let selector = Selector::parse(selector).unwrap();
+            let actual_value = only_one(&mut self.actual.select(&selector));
             let string_value = actual_value
                 .text()
                 .map(|s| s.trim())
@@ -1552,7 +1474,8 @@ mod assertions {
         }
 
         fn has_string_value(&self, selector: &str, expected_value: &str, error_msg: &str) -> &Self {
-            let actual_value = self.select_only_one(selector);
+            let selector = Selector::parse(selector).unwrap();
+            let actual_value = only_one(&mut self.actual.select(&selector));
             let string_value = actual_value.text().collect::<String>();
             assert_eq!(
                 string_value, expected_value,
@@ -1563,7 +1486,8 @@ mod assertions {
         }
 
         fn has_html_value(&self, selector: &str, expected_value: &str, error_msg: &str) -> &Self {
-            let actual_value = self.select_only_one(selector);
+            let selector = Selector::parse(selector).unwrap();
+            let actual_value = only_one(&mut self.actual.select(&selector));
             let string_value = actual_value.inner_html();
             assert_eq!(
                 string_value, expected_value,
@@ -1574,8 +1498,8 @@ mod assertions {
         }
 
         fn has_href_value(&self, selector: &str, expected_href: &str, error_msg: &str) -> &Self {
-            let actual_href = self
-                .select_only_one(selector)
+            let selector = Selector::parse(selector).unwrap();
+            let actual_href = only_one(&mut self.actual.select(&selector))
                 .value()
                 .attr("href")
                 .expect("href not found");
@@ -1586,23 +1510,14 @@ mod assertions {
             );
             self
         }
+    }
 
-        fn select_only_one(&self, selector: &str) -> ElementRef {
-            let css_selector = Selector::parse(selector).unwrap();
-            let mut iter = self.actual.select(&css_selector);
-            let value = iter.next().unwrap_or_else(|| {
-                panic!(
-                    "expected one element for selector '{}', got zero. Rendered html: {}",
-                    selector, self.rendered_html
-                )
-            });
-            assert!(
-                iter.next().is_none(),
-                "expected one element for selector '{}', got more. Rendered html: {}",
-                selector,
-                self.rendered_html
-            );
-            value
-        }
+    fn only_one<I, T>(iter: &mut I) -> T
+    where
+        I: Iterator<Item = T>,
+    {
+        let value = iter.next().expect("expected one element, got zero");
+        assert!(iter.next().is_none(), "expected one element, got more");
+        value
     }
 }

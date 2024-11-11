@@ -101,7 +101,7 @@ impl Set {
     }
 
     // Converts a list of ips into an NFTables object
-    fn convert(&self, addrs: Vec<IpAddr>) -> NfListObject {
+    fn convert(&self, addrs: Vec<IpAddr>) -> schema::NfListObject {
         let elem = addrs
             .into_iter()
             .map(|x| Expression::String(x.to_string()))
@@ -110,7 +110,7 @@ impl Set {
         // There is a discrepancy between `cargo clippy` and `bazel lint`.
         // Remove this once it is fixed.
         #[allow(clippy::clone_on_copy)]
-        NfListObject::Element(schema::Element {
+        schema::NfListObject::Element(schema::Element {
             family: self.family,
             table: self.table.clone(),
             name: self.name.clone(),
@@ -338,7 +338,7 @@ mod test {
         fw.apply(decisions).await.unwrap();
 
         // Check if the payload sent to executor is correct
-        let payload_expected = json!({
+        let payload_expected = serde_json::json!({
             "nftables": [
                 {
                     "add": {

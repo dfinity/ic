@@ -1,4 +1,4 @@
-use ic_consensus_utils::pool_reader::PoolReader;
+use ic_consensus_utils::{get_block_hash_string, pool_reader::PoolReader};
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpBatchStats;
 use ic_interfaces::ingress_manager::IngressSelector;
 use ic_metrics::{
@@ -126,7 +126,7 @@ pub struct BlockStats {
 impl From<&Block> for BlockStats {
     fn from(block: &Block) -> Self {
         Self {
-            block_hash: format!("{:?}", ic_types::crypto::crypto_hash(block)),
+            block_hash: get_block_hash_string(block),
             block_height: block.height().get(),
             block_context_certified_height: block.context.certified_height.get(),
             idkg_stats: block.payload.as_ref().as_idkg().map(IDkgStats::from),

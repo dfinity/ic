@@ -1,11 +1,12 @@
 use candid::{CandidType, Nat, Principal};
+use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::{
     fmt,
     fmt::{Display, Formatter},
 };
 
-#[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, CandidType)]
+#[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, CandidType, Deserialize)]
 pub enum TlaValue {
     Set(BTreeSet<TlaValue>),
     Record(BTreeMap<String, TlaValue>),
@@ -16,24 +17,6 @@ pub enum TlaValue {
     Bool(bool),
     Int(Nat),
     Variant { tag: String, value: Box<TlaValue> },
-}
-
-impl TlaValue {
-    /// An approximation of the size of the TLA value, in terms of the number of atoms.
-    /// Ignores string lengths or number sizes.
-    pub fn size(&self) -> u64 {
-        match self {
-            TlaValue::Set(set) => set.iter().map(|x| x.size()).sum(),
-            TlaValue::Record(map) => map.iter().map(|(_k, v)| 1 + v.size()).sum(),
-            TlaValue::Function(map) => map.iter().map(|(k, v)| k.size() + v.size()).sum(),
-            TlaValue::Seq(vec) => vec.iter().map(|x| x.size()).sum(),
-            TlaValue::Literal(_s) => 1_u64,
-            TlaValue::Constant(_s) => 1_u64,
-            TlaValue::Bool(_) => 1,
-            TlaValue::Int(_) => 1,
-            TlaValue::Variant { tag: _, value } => 1 + value.size(),
-        }
-    }
 }
 
 impl Display for TlaValue {
@@ -113,7 +96,7 @@ impl fmt::Debug for TlaValue {
     }
 }
 
-#[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, CandidType, Debug)]
+#[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, CandidType, Deserialize, Debug)]
 pub struct TlaConstantAssignment {
     pub constants: BTreeMap<String, TlaValue>,
 }

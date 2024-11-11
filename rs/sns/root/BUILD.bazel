@@ -15,7 +15,6 @@ DEPENDENCIES = [
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
-    "//rs/nervous_system/proto",
     "//rs/nervous_system/root",
     "//rs/nervous_system/runtime",
     "//rs/rust_canisters/canister_log",
@@ -88,7 +87,6 @@ generated_files_check(
     srcs = ["tests/check_generated_files.rs"],
     data = glob(["src/gen/*.rs"]) + [
         ":protos",
-        "//rs/nervous_system/proto:protos",
         "//rs/types/base_types:protos",
     ],
     manifest_dir = "rs/sns/root",

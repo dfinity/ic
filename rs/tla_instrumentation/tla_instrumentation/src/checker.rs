@@ -1,7 +1,6 @@
 // use ic_state_machine_tests::StateMachine;
 // use ic_test_utilities_load_wasm::load_wasm;
 use std::collections::HashMap;
-use std::fmt::Formatter;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -14,64 +13,17 @@ pub trait HasTlaRepr {
     fn to_tla_state(&self) -> HashMap<String, String>;
 }
 
+#[derive(Debug)]
 pub enum ApalacheError {
-    CheckFailed(Option<i32>, String),
+    CheckFailed(String),
     SetupError(String),
 }
 
-impl std::fmt::Debug for ApalacheError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ApalacheError::SetupError(e) => f.write_str(&format!("Apalache setup error: {}", e)),
-            ApalacheError::CheckFailed(Some(code), s) => {
-                f.write_str(&format!("{}\n", s))?;
-                match *code {
-                    12 =>
-                    // code used to signal deadlocks
-                    {
-                        f.write_str("This is most likely a mismatch between the code and the model")
-                    }
-                    _ => f.write_str("This is most likely a problem with the model itself."),
-                }
-            }
-            ApalacheError::CheckFailed(None, s) => {
-                f.write_str(s)?;
-                f.write_str(
-                    "The error code was not available - this is not expected, please report.",
-                )
-            }
-        }
-    }
-}
-
+#[derive(Debug)]
 pub struct TlaCheckError {
     pub apalache_error: ApalacheError,
     pub pair: ResolvedStatePair,
     pub constants: TlaConstantAssignment,
-}
-
-impl std::fmt::Debug for TlaCheckError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str(
-            &format!(
-                "Apalache returned the error: {:?}\nThe error occured while checking the transition between:\n",
-                self.apalache_error,
-            )
-        )?;
-        f.debug_map()
-            .entries(self.pair.start.0 .0.iter())
-            .finish()?;
-        f.write_str("\nand\n")?;
-        f.debug_map().entries(self.pair.end.0 .0.iter()).finish()?;
-        f.write_str(&format!(
-            "\nThe start and end locations in the code are:\n{}\nand\n{}",
-            self.pair.start_source_location, self.pair.end_source_location
-        ))?;
-        f.write_str("\nThe constants are:\n")?;
-        f.debug_map()
-            .entries(self.constants.constants.iter())
-            .finish()
-    }
 }
 
 const INIT_PREDICATE_NAME: &str = "Check_Code_Link_Init";
@@ -169,7 +121,6 @@ fn run_apalache(
                 Ok(())
             } else {
                 Err(ApalacheError::CheckFailed(
-                    e.code(),
                     format!(
                         "When checking file\n{:?}\nApalache returned the error: {}",
                         tla_module, e

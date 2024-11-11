@@ -102,7 +102,7 @@ pub fn create_payload(
             // Make sure the message relates to one of the ongoing DKGs and it's from a unique
             // dealer.
             last_dkg_summary.configs.contains_key(&msg.content.dkg_id)
-                && !dealers_from_chain.contains(&(msg.content.dkg_id.clone(), msg.signature.signer))
+                && !dealers_from_chain.contains(&(msg.content.dkg_id, msg.signature.signer))
         })
         .take(max_dealings_per_block)
         .cloned()
@@ -152,7 +152,7 @@ pub(super) fn create_summary_payload(
     logger: ReplicaLogger,
 ) -> Result<dkg::Summary, PayloadCreationError> {
     let all_dealings = utils::get_dkg_dealings(pool_reader, parent);
-    let mut transcripts_for_remote_subnets = BTreeMap::new();
+    let mut transcripts_for_new_subnets = BTreeMap::new();
     let mut next_transcripts = BTreeMap::new();
     // Try to create transcripts from the last round.
     for (dkg_id, config) in last_summary.configs.iter() {
@@ -160,11 +160,11 @@ pub(super) fn create_summary_payload(
             Ok(transcript) => {
                 let previous_value_found = if dkg_id.target_subnet == NiDkgTargetSubnet::Local {
                     next_transcripts
-                        .insert(dkg_id.dkg_tag.clone(), transcript)
+                        .insert(dkg_id.dkg_tag, transcript)
                         .is_some()
                 } else {
-                    transcripts_for_remote_subnets
-                        .insert(dkg_id.clone(), Ok(transcript))
+                    transcripts_for_new_subnets
+                        .insert(*dkg_id, Ok(transcript))
                         .is_some()
                 };
                 if previous_value_found {
@@ -188,22 +188,21 @@ pub(super) fn create_summary_payload(
 
     let height = parent.height.increment();
 
-    let (mut configs, transcripts_for_remote_subnets, initial_dkg_attempts) =
-        compute_remote_dkg_data(
-            subnet_id,
-            height,
-            registry_client,
-            state_manager,
-            validation_context,
-            transcripts_for_remote_subnets,
-            &last_summary
-                .transcripts_for_remote_subnets
-                .iter()
-                .map(|(id, _, result)| (id.clone(), result.clone()))
-                .collect(),
-            &last_summary.initial_dkg_attempts,
-            &logger,
-        )?;
+    let (mut configs, transcripts_for_new_subnets, initial_dkg_attempts) = compute_remote_dkg_data(
+        subnet_id,
+        height,
+        registry_client,
+        state_manager,
+        validation_context,
+        transcripts_for_new_subnets,
+        &last_summary
+            .transcripts_for_new_subnets_with_callback_ids
+            .iter()
+            .map(|(id, _, result)| (*id, result.clone()))
+            .collect(),
+        &last_summary.initial_dkg_attempts,
+        &logger,
+    )?;
 
     let interval_length = last_summary.next_interval_length;
     let next_interval_length = get_dkg_interval_length(
@@ -245,7 +244,7 @@ pub(super) fn create_summary_payload(
         configs,
         current_transcripts,
         next_transcripts,
-        transcripts_for_remote_subnets,
+        transcripts_for_new_subnets,
         registry_version,
         interval_length,
         next_interval_length,
@@ -261,7 +260,7 @@ fn create_transcript(
     _logger: &ReplicaLogger,
 ) -> Result<NiDkgTranscript, DkgCreateTranscriptError> {
     let no_dealings = BTreeMap::new();
-    let dealings = all_dealings.get(config.dkg_id()).unwrap_or(&no_dealings);
+    let dealings = all_dealings.get(&config.dkg_id()).unwrap_or(&no_dealings);
 
     ic_interfaces::crypto::NiDkgAlgorithm::create_transcript(crypto, config, dealings)
 }
@@ -312,16 +311,16 @@ fn compute_remote_dkg_data(
             // if we do, move it to the new summary.
             if let Some((id, transcript)) = previous_transcripts
                 .iter()
-                .find(|(id, _)| eq_sans_height(id, dkg_id))
+                .find(|(id, _)| eq_sans_height(id, &dkg_id))
             {
-                new_transcripts.insert(id.clone(), transcript.clone());
+                new_transcripts.insert(*id, transcript.clone());
             }
             // If not, we check if we computed a transcript for this config in the last round. And
             // if not, we move the config into the new summary so that we try again in
             // the next round.
             else if !new_transcripts
                 .iter()
-                .any(|(id, _)| eq_sans_height(id, dkg_id))
+                .any(|(id, _)| eq_sans_height(id, &dkg_id))
             {
                 expected_configs.push(config)
             }
@@ -364,7 +363,7 @@ fn compute_remote_dkg_data(
             if failed_target_ids.contains(&id) {
                 for config in config_group.iter() {
                     new_transcripts.insert(
-                        config.dkg_id().clone(),
+                        config.dkg_id(),
                         Err(REMOTE_DKG_REPEATED_FAILURE_ERROR.to_string()),
                     );
                 }
@@ -493,7 +492,7 @@ pub(crate) fn get_configs_for_local_transcripts(
         let dkg_id = NiDkgId {
             start_block_height,
             dealer_subnet: subnet_id,
-            dkg_tag: tag.clone(),
+            dkg_tag: *tag,
             target_subnet: NiDkgTargetSubnet::Local,
         };
         let (dealers, resharing_transcript) = match tag {
@@ -701,13 +700,9 @@ fn create_remote_dkg_configs(
     };
 
     let low_thr_config =
-        do_create_remote_dkg_config(low_thr_dkg_id.clone(), dealers, receivers, registry_version);
-    let high_thr_config = do_create_remote_dkg_config(
-        high_thr_dkg_id.clone(),
-        dealers,
-        receivers,
-        registry_version,
-    );
+        do_create_remote_dkg_config(&low_thr_dkg_id, dealers, receivers, registry_version);
+    let high_thr_config =
+        do_create_remote_dkg_config(&high_thr_dkg_id, dealers, receivers, registry_version);
     let sibl_err = String::from("Failed to create the sibling config");
     match (low_thr_config, high_thr_config) {
         (Ok(config0), Ok(config1)) => Ok((config0, config1)),
@@ -737,20 +732,20 @@ fn create_remote_dkg_configs(
 }
 
 fn do_create_remote_dkg_config(
-    dkg_id: NiDkgId,
+    dkg_id: &NiDkgId,
     dealers: &BTreeSet<NodeId>,
     receivers: &BTreeSet<NodeId>,
     registry_version: &RegistryVersion,
 ) -> Result<NiDkgConfig, NiDkgConfigValidationError> {
     NiDkgConfig::new(NiDkgConfigData {
-        threshold: NumberOfNodes::from(
-            dkg_id.dkg_tag.threshold_for_subnet_of_size(receivers.len()) as u32,
-        ),
-        dkg_id,
+        dkg_id: *dkg_id,
         max_corrupt_dealers: NumberOfNodes::from(get_faults_tolerated(dealers.len()) as u32),
         max_corrupt_receivers: NumberOfNodes::from(get_faults_tolerated(receivers.len()) as u32),
         dealers: dealers.clone(),
         receivers: receivers.clone(),
+        threshold: NumberOfNodes::from(
+            dkg_id.dkg_tag.threshold_for_subnet_of_size(receivers.len()) as u32,
+        ),
         registry_version: *registry_version,
         resharing_transcript: None,
     })
@@ -846,10 +841,10 @@ mod tests {
             let config = configs[index].clone();
             assert_eq!(
                 config.dkg_id(),
-                &NiDkgId {
+                NiDkgId {
                     start_block_height,
                     dealer_subnet: subnet_id,
-                    dkg_tag: tag.clone(),
+                    dkg_tag: *tag,
                     target_subnet: NiDkgTargetSubnet::Local,
                 }
             );
@@ -987,7 +982,7 @@ mod tests {
                 // have already attempted to run remote DKG for this target
                 // MAX_REMOTE_DKG_ATTEMPTS times.
                 initial_dkg_attempts.insert(target_id, MAX_REMOTE_DKG_ATTEMPTS);
-                let (configs, transcripts_for_remote_subnets, initial_dkg_attempts) =
+                let (configs, transcripts_for_new_subnets, initial_dkg_attempts) =
                     compute_remote_dkg_data(
                         subnet_id,
                         Height::from(0),
@@ -1013,7 +1008,7 @@ mod tests {
 
                 // We rather respond with errors for this target.
                 assert_eq!(
-                    transcripts_for_remote_subnets
+                    transcripts_for_new_subnets
                         .iter()
                         .filter(|(dkg_id, _, result)| dkg_id.target_subnet
                             == NiDkgTargetSubnet::Remote(target_id)
@@ -1030,7 +1025,7 @@ mod tests {
                 // STEP 3:
                 // Call compute_remote_dkg_data the last time, with an empty call context.
                 // (As arranged in the initialization of the state manager...)
-                let (configs, transcripts_for_remote_subnets, initial_dkg_attempts) =
+                let (configs, transcripts_for_new_subnets, initial_dkg_attempts) =
                     compute_remote_dkg_data(
                         subnet_id,
                         Height::from(0),
@@ -1047,7 +1042,7 @@ mod tests {
                 // No configs are created for this remote target any more.
                 assert_eq!(configs.len(), 0);
                 // No transcripts or errors are returned for this target.
-                assert_eq!(transcripts_for_remote_subnets.len(), 0);
+                assert_eq!(transcripts_for_new_subnets.len(), 0);
                 // The corresponding entry is removed from the counter.
                 assert_eq!(initial_dkg_attempts.len(), 0);
             });
@@ -1184,12 +1179,12 @@ mod tests {
                     &NiDkgId {
                         start_block_height: Height::from(0),
                         dealer_subnet: subnet_id,
-                        dkg_tag: tag.clone(),
+                        dkg_tag: *tag,
                         target_subnet: NiDkgTargetSubnet::Local,
                     }
                 );
 
-                assert_eq!(conf.dkg_id(), id);
+                assert_eq!(&conf.dkg_id(), id);
                 assert_eq!(
                     conf.registry_version(),
                     RegistryVersion::from(initial_registry_version)
@@ -1289,12 +1284,12 @@ mod tests {
                         &NiDkgId {
                             start_block_height: Height::from(expected_height),
                             dealer_subnet: subnet_id,
-                            dkg_tag: tag.clone(),
+                            dkg_tag: *tag,
                             target_subnet: NiDkgTargetSubnet::Local,
                         }
                     );
 
-                    assert_eq!(conf.dkg_id(), id);
+                    assert_eq!(&conf.dkg_id(), id);
                     assert_eq!(
                         conf.registry_version(),
                         RegistryVersion::from(initial_registry_version)

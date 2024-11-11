@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used)]
+
 mod keygen {
     use crate::keypair_from_rng;
     use ic_crypto_internal_test_vectors::unhex::hex_to_32_bytes;

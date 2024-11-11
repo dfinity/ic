@@ -172,6 +172,7 @@ impl PoolMutationsProducer<TestConsensus<U64Artifact>> for TestConsensus<U64Arti
     }
 }
 
+#[allow(dead_code)]
 impl TestConsensus<U64Artifact> {
     pub fn new(
         log: ReplicaLogger,

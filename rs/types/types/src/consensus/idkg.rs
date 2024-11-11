@@ -32,10 +32,9 @@ use ic_crypto_sha2::Sha256;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types::MasterPublicKeyId;
-use ic_protobuf::types::v1 as pb_types;
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
-    registry::subnet::v1 as subnet_pb,
+    registry::{crypto::v1 as crypto_pb, subnet::v1 as subnet_pb},
     types::v1 as pb,
 };
 use phantom_newtype::Id;
@@ -487,7 +486,9 @@ impl From<MasterKeyTranscript> for pb::MasterKeyTranscript {
             next_in_creation: Some(pb::KeyTranscriptCreation::from(
                 &transcript.next_in_creation,
             )),
-            master_key_id: Some(pb_types::MasterPublicKeyId::from(&transcript.master_key_id)),
+            master_key_id: Some(crypto_pb::MasterPublicKeyId::from(
+                &transcript.master_key_id,
+            )),
         }
     }
 }
@@ -935,7 +936,7 @@ pub fn ecdsa_sig_share_prefix(
     sig_share_node_id.hash(&mut hasher);
 
     IDkgPrefixOf::new(IDkgPrefix::new(
-        request_id.callback_id.get(),
+        request_id.pre_signature_id.id(),
         hasher.finish(),
     ))
 }
@@ -949,7 +950,7 @@ pub fn schnorr_sig_share_prefix(
     sig_share_node_id.hash(&mut hasher);
 
     IDkgPrefixOf::new(IDkgPrefix::new(
-        request_id.callback_id.get(),
+        request_id.pre_signature_id.id(),
         hasher.finish(),
     ))
 }
@@ -1274,7 +1275,7 @@ impl From<&EcdsaSigShare> for pb::EcdsaSigShare {
     fn from(value: &EcdsaSigShare) -> Self {
         Self {
             signer_id: Some(node_id_into_protobuf(value.signer_id)),
-            request_id: Some(pb::RequestId::from(value.request_id)),
+            request_id: Some(pb::RequestId::from(value.request_id.clone())),
             sig_share_raw: value.share.sig_share_raw.clone(),
         }
     }
@@ -1323,7 +1324,7 @@ impl From<&SchnorrSigShare> for pb::SchnorrSigShare {
     fn from(value: &SchnorrSigShare) -> Self {
         Self {
             signer_id: Some(node_id_into_protobuf(value.signer_id)),
-            request_id: Some(pb::RequestId::from(value.request_id)),
+            request_id: Some(pb::RequestId::from(value.request_id.clone())),
             sig_share_raw: value.share.sig_share_raw.clone(),
         }
     }
@@ -1380,8 +1381,8 @@ impl SigShare {
 
     pub fn request_id(&self) -> RequestId {
         match self {
-            SigShare::Ecdsa(share) => share.request_id,
-            SigShare::Schnorr(share) => share.request_id,
+            SigShare::Ecdsa(share) => share.request_id.clone(),
+            SigShare::Schnorr(share) => share.request_id.clone(),
         }
     }
 

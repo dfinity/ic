@@ -1,12 +1,11 @@
 use candid::Decode;
-use ic_base_types::PrincipalId;
 use ic_management_canister_types::{
     self as ic00, CanisterInstallMode, DerivationPath, ECDSAPublicKeyResponse, EcdsaCurve,
     EcdsaKeyId, MasterPublicKeyId, Method, Payload as Ic00Payload, SchnorrAlgorithm, SchnorrKeyId,
     SchnorrPublicKeyResponse, SignWithECDSAReply, SignWithSchnorrReply,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_state_machine_tests::{StateMachine, StateMachineBuilder, UserError};
+use ic_state_machine_tests::{PrincipalId, StateMachine, StateMachineBuilder, UserError};
 use ic_test_utilities::universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use ic_types::{ingress::WasmResult, CanisterId, Cycles, RegistryVersion, SubnetId};
 use ic_types_test_utils::ids::{node_test_id, subnet_test_id};

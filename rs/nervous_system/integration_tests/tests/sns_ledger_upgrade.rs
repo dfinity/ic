@@ -12,7 +12,7 @@ use ic_nervous_system_integration_tests::{
 };
 use ic_nns_constants::{self, GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
 use ic_nns_test_utils::sns_wasm::{
-    build_archive_sns_wasm, build_index_ng_sns_wasm, build_ledger_sns_wasm,
+    build_archive_sns_wasm, build_index_ng_sns_wasm, build_ledger_sns_wasm, build_swap_sns_wasm,
     create_modified_sns_wasm,
 };
 use ic_sns_wasm::pb::v1::SnsCanisterType;
@@ -65,6 +65,12 @@ async fn test_deploy_fresh_sns() {
 
     upgrade_nns_canister_to_tip_of_master_or_panic(&pocket_ic, SNS_WASM_CANISTER_ID).await;
 
+    // Publish the newest Swap. This needs to happen here due to a recent breaking change in sns_init
+    {
+        let wasm = build_swap_sns_wasm();
+        let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm).await.unwrap();
+        assert_eq!(proposal_info.failure_reason, None);
+    }
     // Test upgrading SNS Ledger via proposals. First, add all the WASMs to SNS-W.
     {
         let wasm = build_index_ng_sns_wasm();
@@ -190,6 +196,13 @@ async fn test_upgrade_existing_sns() {
     upgrade_nns_canister_to_tip_of_master_or_panic(&pocket_ic, GOVERNANCE_CANISTER_ID).await;
     upgrade_nns_canister_to_tip_of_master_or_panic(&pocket_ic, SNS_WASM_CANISTER_ID).await;
 
+    // Publish the newest Swap.
+    {
+        let wasm = build_swap_sns_wasm();
+        let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm).await.unwrap();
+        assert_eq!(proposal_info.failure_reason, None);
+    }
+
     // Test upgrading SNS Ledger via proposals. First, add all the WASMs to SNS-W.
     {
         let wasm = build_index_ng_sns_wasm();
@@ -211,6 +224,14 @@ async fn test_upgrade_existing_sns() {
     // --- Run code under test ---
     // ---------------------------
 
+    // Upgrade Swap - should be non-event
+    sns::upgrade_sns_to_next_version_and_assert_change(
+        &pocket_ic,
+        sns.root.canister_id,
+        SnsCanisterType::Swap,
+    )
+    .await;
+
     // Upgrade Index-Ng
     {
         sns::upgrade_sns_to_next_version_and_assert_change(
@@ -220,7 +241,7 @@ async fn test_upgrade_existing_sns() {
         )
         .await;
 
-        // Index-Ng check 1: The Index canister still recognized our Ledger canister.
+        // Index-Ng check 1: The Index canister still recognised our Ledger canitser.
         assert_eq!(
             sns::index_ng::ledger_id(&pocket_ic, sns.index.canister_id).await,
             sns.ledger.canister_id
@@ -383,6 +404,11 @@ async fn test_upgrade_existing_sns() {
 
     // Publish modified versions of all the wasms and ensure we can upgrade a second time (pre-upgrade smoke test)
     {
+        let wasm = create_modified_sns_wasm(&build_swap_sns_wasm(), Some(42));
+        let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm).await.unwrap();
+        assert_eq!(proposal_info.failure_reason, None);
+    }
+    {
         let wasm = create_modified_sns_wasm(&build_index_ng_sns_wasm(), Some(42));
         let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm).await.unwrap();
         assert_eq!(proposal_info.failure_reason, None);
@@ -399,6 +425,7 @@ async fn test_upgrade_existing_sns() {
     }
 
     for sns_canister_type in [
+        SnsCanisterType::Swap,
         SnsCanisterType::Index,
         SnsCanisterType::Ledger,
         SnsCanisterType::Archive,

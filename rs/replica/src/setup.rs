@@ -29,19 +29,22 @@ pub fn parse_args() -> Result<ReplicaArgs, clap::Error> {
 
 /// Set the Replica version passed in via command-line
 pub fn set_replica_version(args: &Result<ReplicaArgs, clap::Error>, logger: &ReplicaLogger) {
-    if let Ok(args) = args {
-        info!(
-            logger,
-            "Setting replica version to: {}",
-            args.replica_version.as_ref()
-        );
-        if ReplicaVersion::set_default_version(args.replica_version.clone()).is_err() {
-            warn!(
+    match args {
+        Ok(args) => {
+            info!(
                 logger,
-                "Failed to set replica version, defaulting to: {}",
-                ReplicaVersion::default().as_ref()
+                "Setting replica version to: {}",
+                args.replica_version.as_ref()
             );
+            if ReplicaVersion::set_default_version(args.replica_version.clone()).is_err() {
+                warn!(
+                    logger,
+                    "Failed to set replica version, defaulting to: {}",
+                    ReplicaVersion::default().as_ref()
+                );
+            }
         }
+        Err(_) => (),
     }
 }
 

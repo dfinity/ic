@@ -14,10 +14,7 @@ use ic_management_canister_types::{
 };
 use ic_protobuf::registry::{
     crypto::v1::ChainKeySigningSubnetList,
-    subnet::v1::{
-        chain_key_initialization, CatchUpPackageContents, ChainKeyInitialization, SubnetListRecord,
-        SubnetRecord,
-    },
+    subnet::v1::{CatchUpPackageContents, ChainKeyInitialization, SubnetListRecord, SubnetRecord},
 };
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_chain_key_signing_subnet_list_key,
@@ -256,9 +253,7 @@ impl Registry {
 
         ChainKeyInitialization {
             key_id: Some((&dealing_request.key_id).into()),
-            initialization: Some(chain_key_initialization::Initialization::Dealings(
-                response.initial_dkg_dealings,
-            )),
+            dealings: Some(response.initial_dkg_dealings),
         }
     }
 

@@ -207,7 +207,7 @@ pub type CatchUpContentHash = CryptoHashOf<CatchUpContent>;
 impl From<&CatchUpPackage> for pb::CatchUpPackage {
     fn from(cup: &CatchUpPackage) -> Self {
         Self {
-            signer: Some(pb::NiDkgId::from(cup.signature.signer.clone())),
+            signer: Some(pb::NiDkgId::from(cup.signature.signer)),
             signature: cup.signature.signature.clone().get().0,
             content: pb::CatchUpContent::from(&cup.content).as_protobuf_vec(),
         }

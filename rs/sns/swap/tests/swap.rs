@@ -209,7 +209,6 @@ fn create_generic_committed_swap() -> Swap {
         auto_finalize_swap_response: None,
         direct_participation_icp_e8s: Some(50 * E8),
         neurons_fund_participation_icp_e8s: None,
-        timers: None,
     }
 }
 

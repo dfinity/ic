@@ -1,7 +1,7 @@
-use crate::state;
+use crate::{state, BtcNetwork};
 use askama::Template;
 use ic_btc_interface::Txid;
-use state::{Config, FetchTxStatus, Timestamp};
+use state::{FetchTxStatus, Timestamp};
 use std::fmt;
 
 #[cfg(test)]
@@ -25,7 +25,7 @@ mod filters {
 #[derive(Template)]
 #[template(path = "dashboard.html", whitespace = "suppress")]
 pub struct DashboardTemplate {
-    config: Config,
+    btc_network: BtcNetwork,
     outcall_capacity: u32,
     cached_entries: usize,
     tx_table_page_size: usize,
@@ -80,7 +80,7 @@ const DEFAULT_TX_TABLE_PAGE_SIZE: usize = 500;
 pub fn dashboard(page_index: usize) -> DashboardTemplate {
     let tx_table_page_size = DEFAULT_TX_TABLE_PAGE_SIZE;
     DashboardTemplate {
-        config: state::get_config(),
+        btc_network: state::get_config().btc_network,
         outcall_capacity: state::OUTCALL_CAPACITY.with(|capacity| *capacity.borrow()),
         cached_entries: state::FETCH_TX_CACHE.with(|cache| cache.borrow().iter().count()),
         tx_table_page_size,
@@ -113,7 +113,7 @@ pub fn dashboard(page_index: usize) -> DashboardTemplate {
                         match status {
                             FetchTxStatus::PendingOutcall => Status::PendingOutcall,
                             FetchTxStatus::PendingRetry { .. } => Status::PendingRetry,
-                            FetchTxStatus::Error(err) => Status::Error(format!("{:?}", err.error)),
+                            FetchTxStatus::Error(err) => Status::Error(format!("{:?}", err)),
                             FetchTxStatus::Fetched(fetched) => {
                                 // Return an empty list if no input address is available yet.
                                 let input_addresses =

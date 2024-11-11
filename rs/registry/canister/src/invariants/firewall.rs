@@ -284,9 +284,8 @@ fn get_firewall_rules(snapshot: &RegistrySnapshot, record_key: String) -> Option
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_protobuf::registry::{
-        firewall::v1::FirewallRuleDirection, node::v1::NodeRecord, subnet::v1::SubnetListRecord,
-    };
+    use ic_protobuf::registry::subnet::v1::SubnetListRecord;
+    use ic_protobuf::registry::{firewall::v1::FirewallRuleDirection, node::v1::NodeRecord};
     use ic_registry_keys::{make_node_record_key, make_subnet_list_record_key};
     use prost::Message;
 
@@ -340,7 +339,6 @@ mod tests {
             chip_id: None,
             public_ipv4_config: None,
             domain: None,
-            node_reward_type: None,
         }
     }
 

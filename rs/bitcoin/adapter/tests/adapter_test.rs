@@ -29,11 +29,6 @@ type BitcoinAdapterClient = Box<
     dyn RpcAdapterClient<BitcoinAdapterRequestWrapper, Response = BitcoinAdapterResponseWrapper>,
 >;
 
-enum AdapterState {
-    Idle,
-    Active,
-}
-
 struct ForkTestData {
     blocks: Vec<BlockHash>,
     exclude_start: usize,
@@ -105,7 +100,6 @@ fn start_adapter(
         nodes,
         ipv6_only: true,
         address_limits: (1, 1),
-        idle_seconds: 6, // it can take at most 5 seconds for tcp connections etc to be established.
         ..Default::default()
     };
 
@@ -164,7 +158,6 @@ fn start_adapter_and_client(
     urls: Vec<SocketAddr>,
     logger: ReplicaLogger,
     network: bitcoin::Network,
-    adapter_state: AdapterState,
 ) -> (BitcoinAdapterClient, TempPath) {
     let metrics_registry = MetricsRegistry::new();
     let res = Builder::new()
@@ -190,30 +183,10 @@ fn start_adapter_and_client(
     let anchor: BlockHash = "0000000000000000035908aacac4c97fb4e172a1758bbbba2ee2b188765780eb"
         .parse()
         .unwrap();
-    if let AdapterState::Active = adapter_state {
-        // We send this request to make sure the adapter is not idle.
-        let _ = make_get_successors_request(&res.0, anchor.to_vec(), vec![]);
-    }
+    // We send this request to make sure the adapter is not idle.
+    let _ = make_get_successors_request(&res.0, anchor.to_vec(), vec![]);
 
     res
-}
-
-fn start_idle_adapter_and_client(
-    rt: &Runtime,
-    urls: Vec<SocketAddr>,
-    logger: ReplicaLogger,
-    network: bitcoin::Network,
-) -> (BitcoinAdapterClient, TempPath) {
-    start_adapter_and_client(rt, urls, logger, network, AdapterState::Idle)
-}
-
-fn start_active_adapter_and_client(
-    rt: &Runtime,
-    urls: Vec<SocketAddr>,
-    logger: ReplicaLogger,
-    network: bitcoin::Network,
-) -> (BitcoinAdapterClient, TempPath) {
-    start_adapter_and_client(rt, urls, logger, network, AdapterState::Active)
 }
 
 fn wait_for_blocks(client: &Client, blocks: u64) {
@@ -235,20 +208,6 @@ fn wait_for_connection(client: &Client, connection_count: usize) {
         if tries > 5 {
             panic!("Timeout in wait_for_connection");
         }
-    }
-}
-
-// This is an expensive operation. Should only be used when checking for an upper bound on the number of connections.
-fn exact_connections(client: &Client, connection_count: usize) {
-    // It always takes less than 5 seconds for the client to connect to the adapter.
-    // TODO: Rethink this. It's not a good idea to have a fixed sleep time. ditto in wait_for_connection
-    std::thread::sleep(std::time::Duration::from_secs(5));
-    if client.get_connection_count().unwrap() != connection_count {
-        panic!(
-            "Expected {} connections, got {}",
-            connection_count,
-            client.get_connection_count().unwrap()
-        );
     }
 }
 
@@ -532,7 +491,7 @@ fn test_receives_blocks() {
 
     let rt = tokio::runtime::Runtime::new().unwrap();
 
-    let (adapter_client, _path) = start_active_adapter_and_client(
+    let (adapter_client, _path) = start_adapter_and_client(
         &rt,
         vec![SocketAddr::V4(get_bitcoind_url(&bitcoind).unwrap())],
         logger,
@@ -542,60 +501,6 @@ fn test_receives_blocks() {
     let blocks = sync_until_end_block(&adapter_client, &client, 0, &mut vec![], 15);
 
     assert_eq!(blocks.len(), 150);
-}
-
-// Checks that the adapter disconnects from the clients when it becomes idle.
-#[test]
-fn test_adapter_disconnects_when_idle() {
-    let logger = no_op_logger();
-
-    let bitcoind = get_default_bitcoind();
-    let client = Client::new(
-        bitcoind.rpc_url().as_str(),
-        Auth::CookieFile(bitcoind.params.cookie_file.clone()),
-    )
-    .unwrap();
-
-    let url = SocketAddr::V4(get_bitcoind_url(&bitcoind).unwrap());
-
-    let rt: Runtime = tokio::runtime::Runtime::new().unwrap();
-
-    let _r = start_active_adapter_and_client(&rt, vec![url], logger, bitcoin::Network::Regtest);
-
-    // The client should be connected to the adapter
-    wait_for_connection(&client, 1);
-
-    // it takes 6 seconds for the adapter to become idle (in the test config).
-    std::thread::sleep(std::time::Duration::from_secs(7)); // wait for the adapter to become idle.
-
-    // As the adapter is now idle, the connection with the client should be dropped.
-    // Hence the client should not have any connections.
-    exact_connections(&client, 0);
-}
-
-/// Checks that an idle adapter does not connect to any peers.
-#[test]
-fn idle_adapter_does_not_connect_to_peers() {
-    let logger = no_op_logger();
-
-    let bitcoind = get_default_bitcoind();
-    let client = Client::new(
-        bitcoind.rpc_url().as_str(),
-        Auth::CookieFile(bitcoind.params.cookie_file.clone()),
-    )
-    .unwrap();
-
-    let url = SocketAddr::V4(get_bitcoind_url(&bitcoind).unwrap());
-
-    // The client does not have any connections
-    wait_for_connection(&client, 0);
-
-    let rt = tokio::runtime::Runtime::new().unwrap();
-
-    let _r = start_idle_adapter_and_client(&rt, vec![url], logger, bitcoin::Network::Regtest);
-
-    // The client still does not have any connections
-    exact_connections(&client, 0);
 }
 
 /// Checks that the adapter can connect to multiple BitcoinD peers.
@@ -642,9 +547,13 @@ fn test_connection_to_multiple_peers() {
     wait_for_connection(&client2, 2);
     wait_for_connection(&client3, 2);
 
+    assert_eq!(client1.get_connection_count().unwrap(), 2);
+    assert_eq!(client2.get_connection_count().unwrap(), 2);
+    assert_eq!(client3.get_connection_count().unwrap(), 2);
+
     let rt = tokio::runtime::Runtime::new().unwrap();
 
-    let _r = start_active_adapter_and_client(
+    let _r = start_adapter_and_client(
         &rt,
         vec![url1, url2, url3],
         logger,
@@ -663,7 +572,7 @@ fn test_receives_new_3rd_party_txs() {
     let bitcoind = get_default_bitcoind();
 
     let rt = tokio::runtime::Runtime::new().unwrap();
-    let (adapter_client, _path) = start_active_adapter_and_client(
+    let (adapter_client, _path) = start_adapter_and_client(
         &rt,
         vec![SocketAddr::V4(get_bitcoind_url(&bitcoind).unwrap())],
         logger,
@@ -719,7 +628,7 @@ fn test_send_tx() {
     let bitcoind = get_default_bitcoind();
 
     let rt = tokio::runtime::Runtime::new().unwrap();
-    let (adapter_client, _path) = start_active_adapter_and_client(
+    let (adapter_client, _path) = start_adapter_and_client(
         &rt,
         vec![SocketAddr::V4(get_bitcoind_url(&bitcoind).unwrap())],
         logger,
@@ -806,7 +715,7 @@ fn test_receives_blocks_from_forks() {
     let url2 = get_bitcoind_url(&bitcoind2).unwrap();
 
     let rt = tokio::runtime::Runtime::new().unwrap();
-    let (adapter_client, _path) = start_active_adapter_and_client(
+    let (adapter_client, _path) = start_adapter_and_client(
         &rt,
         vec![SocketAddr::V4(url1), SocketAddr::V4(url2)],
         logger,
@@ -874,7 +783,7 @@ fn test_bfs_order() {
     let url2 = get_bitcoind_url(&bitcoind2).unwrap();
 
     let rt = tokio::runtime::Runtime::new().unwrap();
-    let (adapter_client, _path) = start_active_adapter_and_client(
+    let (adapter_client, _path) = start_adapter_and_client(
         &rt,
         vec![SocketAddr::V4(url1), SocketAddr::V4(url2)],
         logger,
@@ -981,12 +890,8 @@ fn test_mainnet_data() {
     );
 
     let rt = tokio::runtime::Runtime::new().unwrap();
-    let (adapter_client, _path) = start_active_adapter_and_client(
-        &rt,
-        vec![bitcoind_addr],
-        logger,
-        bitcoin::Network::Bitcoin,
-    );
+    let (adapter_client, _path) =
+        start_adapter_and_client(&rt, vec![bitcoind_addr], logger, bitcoin::Network::Bitcoin);
     sync_headers_until_checkpoint(&adapter_client, genesis[..].to_vec());
 
     // Block 350,989's block hash.
@@ -1020,12 +925,8 @@ fn test_testnet_data() {
     );
 
     let rt = tokio::runtime::Runtime::new().unwrap();
-    let (adapter_client, _path) = start_active_adapter_and_client(
-        &rt,
-        vec![bitcoind_addr],
-        logger,
-        bitcoin::Network::Testnet,
-    );
+    let (adapter_client, _path) =
+        start_adapter_and_client(&rt, vec![bitcoind_addr], logger, bitcoin::Network::Testnet);
     sync_headers_until_checkpoint(&adapter_client, genesis[..].to_vec());
 
     let anchor: BlockHash = "0000000000ec75f32a0805740a6fa1364cc1683e419e915d99892db97c3e80b2"

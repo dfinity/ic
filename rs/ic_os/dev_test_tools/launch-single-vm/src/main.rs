@@ -157,7 +157,6 @@ fn main() {
             public_api: SocketAddr::new(ipv6_addr, 8080),
             node_operator_principal_id: None,
             secret_key_store: None,
-            domain: None,
         },
     )]);
 
@@ -207,7 +206,7 @@ fn main() {
         let local_store = prep_dir.join("ic_registry_local_store");
         Command::new(build_bootstrap_script)
             .arg(&config_path)
-            .arg("--nns_urls")
+            .arg("--nns_url")
             .arg(ipv6_addr.to_string())
             .arg("--ic_crypto")
             .arg(node.crypto_path())

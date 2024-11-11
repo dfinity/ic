@@ -1,7 +1,5 @@
 use criterion::Criterion;
-use ic_base_types::PrincipalId;
-use ic_state_machine_tests::StateMachine;
-use ic_types::Cycles;
+use ic_state_machine_tests::{Cycles, PrincipalId, StateMachine};
 
 const NUM_CREATOR_CANISTERS: usize = 10;
 const NUM_CANISTERS_PER_CREATOR_CANISTER: usize = 10_000;

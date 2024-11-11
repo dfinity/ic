@@ -2,7 +2,7 @@ use crate::{
     config::{Config, IncomingSource},
     get_successors_handler::{GetSuccessorsRequest, GetSuccessorsResponse},
     metrics::{ServiceMetrics, LABEL_GET_SUCCESSOR, LABEL_SEND_TRANSACTION},
-    GetSuccessorsHandler, TransactionManagerRequest,
+    AdapterState, GetSuccessorsHandler, TransactionManagerRequest,
 };
 use bitcoin::{consensus::Encodable, hashes::Hash, BlockHash};
 use ic_async_utils::{incoming_from_first_systemd_socket, incoming_from_path};
@@ -14,15 +14,13 @@ use ic_btc_service::{
 use ic_logger::{debug, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use std::convert::{TryFrom, TryInto};
-use std::time::Instant;
-use tokio::sync::mpsc;
-use tokio::sync::watch;
+use tokio::sync::mpsc::Sender;
 use tonic::{transport::Server, Request, Response, Status};
 
 struct BtcServiceImpl {
-    last_received_tx: watch::Sender<Option<Instant>>,
+    adapter_state: AdapterState,
     get_successors_handler: GetSuccessorsHandler,
-    transaction_manager_tx: mpsc::Sender<TransactionManagerRequest>,
+    transaction_manager_tx: Sender<TransactionManagerRequest>,
     logger: ReplicaLogger,
     metrics: ServiceMetrics,
 }
@@ -85,7 +83,7 @@ impl BtcService for BtcServiceImpl {
             .request_duration
             .with_label_values(&[LABEL_GET_SUCCESSOR])
             .start_timer();
-        let _ = self.last_received_tx.send(Some(Instant::now()));
+        self.adapter_state.received_now();
         let inner = request.into_inner();
         debug!(self.logger, "Received GetSuccessorsRequest: {:?}", inner);
         let request = inner.try_into()?;
@@ -110,7 +108,7 @@ impl BtcService for BtcServiceImpl {
             .request_duration
             .with_label_values(&[LABEL_SEND_TRANSACTION])
             .start_timer();
-        let _ = self.last_received_tx.send(Some(Instant::now()));
+        self.adapter_state.received_now();
         let transaction = request.into_inner().transaction;
         self.transaction_manager_tx
             .send(TransactionManagerRequest::SendTransaction(transaction))
@@ -126,13 +124,13 @@ impl BtcService for BtcServiceImpl {
 pub fn start_grpc_server(
     config: Config,
     logger: ReplicaLogger,
-    last_received_tx: watch::Sender<Option<Instant>>,
+    adapter_state: AdapterState,
     get_successors_handler: GetSuccessorsHandler,
-    transaction_manager_tx: mpsc::Sender<TransactionManagerRequest>,
+    transaction_manager_tx: Sender<TransactionManagerRequest>,
     metrics_registry: &MetricsRegistry,
 ) {
     let btc_adapter_impl = BtcServiceImpl {
-        last_received_tx,
+        adapter_state,
         get_successors_handler,
         transaction_manager_tx,
         logger,

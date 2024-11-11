@@ -195,10 +195,11 @@ canister_http_calls sub httpbin_proto =
                   date: Jan 1 1970 00:00:00 GMT
                   content-type: application/octet-stream
                   content-length: 11
+                  connection: close
                   access-control-allow-origin: *
                   access-control-allow-credentials: true
               -}
-              let header_size = 143
+              let header_size = 158
               resp <- ic_http_get_request (ic00viaWithCyclesRefund 0 cid) sub httpbin_proto ("ascii/" ++ s) (Just $ fromIntegral $ length s + header_size) Nothing cid
               (resp .! #status) @?= 200
               (resp .! #body) @?= BLU.fromString s
@@ -209,20 +210,22 @@ canister_http_calls sub httpbin_proto =
                   date: Jan 1 1970 00:00:00 GMT
                   content-type: application/octet-stream
                   content-length: 11
+                  connection: close
                   access-control-allow-origin: *
                   access-control-allow-credentials: true
               -}
-              let header_size = 143
+              let header_size = 158
               ic_http_get_request' (ic00viaWithCyclesRefund 0 cid) sub httpbin_proto ("ascii/" ++ s) (Just $ fromIntegral $ length s + header_size - 1) Nothing cid >>= isReject [1],
             simpleTestCase "small maximum possible response size (only headers)" ecid $ \cid -> do
               {- Response headers (size: 157)
                   date: Jan 1 1970 00:00:00 GMT
                   content-type: application/octet-stream
                   content-length: 0
+                  connection: close
                   access-control-allow-origin: *
                   access-control-allow-credentials: true
               -}
-              let header_size = 142
+              let header_size = 157
               resp <- ic_http_get_request (ic00viaWithCyclesRefund 0 cid) sub httpbin_proto ("equal_bytes/0") (Just header_size) Nothing cid
               (resp .! #status) @?= 200
               (resp .! #body) @?= BS.empty
@@ -232,10 +235,11 @@ canister_http_calls sub httpbin_proto =
                   date: Jan 1 1970 00:00:00 GMT
                   content-type: application/octet-stream
                   content-length: 0
+                  connection: close
                   access-control-allow-origin: *
                   access-control-allow-credentials: true
               -}
-              let header_size = 142
+              let header_size = 157
               ic_http_get_request' (ic00viaWithCyclesRefund 0 cid) sub httpbin_proto ("equal_bytes/0") (Just $ header_size - 1) Nothing cid >>= isReject [1],
             -- "The upper limit on the maximal size for the response is 2MB (2,000,000B) and this value also applies if no maximal size value is specified."
 
@@ -244,10 +248,11 @@ canister_http_calls sub httpbin_proto =
                   date: Jan 1 1970 00:00:00 GMT
                   content-type: application/octet-stream
                   content-length: 1999837
+                  connection: close
                   access-control-allow-origin: *
                   access-control-allow-credentials: true
               -}
-              let header_size = 148
+              let header_size = 163
               cid <- install ecid (onTransform (callback (replyData (bytes (Candid.encode dummyResponse)))))
               resp <- ic_http_get_request (ic00viaWithCyclesRefund 0 cid) sub httpbin_proto ("equal_bytes/" ++ show (max_response_bytes_limit - header_size)) Nothing (Just ("transform", "")) cid
               (resp .! #status) @?= 202
@@ -258,10 +263,11 @@ canister_http_calls sub httpbin_proto =
                   date: Jan 1 1970 00:00:00 GMT
                   content-type: application/octet-stream
                   content-length: 1999838
+                  connection: close
                   access-control-allow-origin: *
                   access-control-allow-credentials: true
               -}
-              let header_size = 148
+              let header_size = 163
               cid <- install ecid (onTransform (callback (replyData (bytes (Candid.encode dummyResponse)))))
               ic_http_get_request' (ic00viaWithCyclesRefund 0 cid) sub httpbin_proto ("equal_bytes/" ++ show (max_response_bytes_limit - header_size + 1)) Nothing (Just ("transform", "")) cid >>= isReject [1],
             -- "The URL must be valid according to RFC-3986 and its length must not exceed 8192."
@@ -320,10 +326,11 @@ canister_http_calls sub httpbin_proto =
                   date: Jan 1 1970 00:00:00 GMT
                   content-type: application/octet-stream
                   content-length: 1999837
+                  connection: close
                   access-control-allow-origin: *
                   access-control-allow-credentials: true
               -}
-              let header_size = 148
+              let header_size = 163
               let size = maximumSizeResponseBodySize
               let new_pages = int $ size `div` (64 * 1024) + 1
               let max_size = int $ size
@@ -336,10 +343,11 @@ canister_http_calls sub httpbin_proto =
                   date: Jan 1 1970 00:00:00 GMT
                   content-type: application/octet-stream
                   content-length: 1999837
+                  connection: close
                   access-control-allow-origin: *
                   access-control-allow-credentials: true
               -}
-              let header_size = 148
+              let header_size = 163
               let size = maximumSizeResponseBodySize + 1
               let new_pages = int $ size `div` (64 * 1024) + 1
               let max_size = int $ size
@@ -367,28 +375,30 @@ canister_http_calls sub httpbin_proto =
               let hs = [(T.pack ("name" ++ show i), T.pack ("value" ++ show i)) | i <- [0 .. http_headers_max_number]]
               ic_http_post_request' (\fee -> ic00viaWithCyclesRefund fee cid fee) sub httpbin_proto "anything" Nothing (Just b) (vec_header_from_list_text hs) Nothing cid >>= isReject [4],
             simpleTestCase "maximum number of response headers" ecid $ \cid -> do
-              {- These 5 response headers are always included:
+              {- These 6 response headers are always included:
                   date: Jan 1 1970 00:00:00 GMT
                   content-type: text/plain; charset=utf-8
                   content-length: 0
+                  connection: close
                   access-control-allow-origin: *
                   access-control-allow-credentials: true
               -}
-              let n = http_headers_max_number - 5
+              let n = http_headers_max_number - 6
               let hs = [(T.pack ("name" ++ show i), T.pack ("value" ++ show i)) | i <- [0 .. n - 1]]
               resp <- ic_http_get_request (ic00viaWithCyclesRefund 0 cid) sub httpbin_proto ("many_response_headers/" ++ show n) Nothing Nothing cid
               (resp .! #status) @?= 200
               assertBool "Response HTTP headers have not been received properly." $ list_subset (map_to_lower hs) (map_to_lower $ http_response_headers resp)
               check_http_response resp,
             simpleTestCase "maximum number of response headers exceeded" ecid $ \cid -> do
-              {- These 5 response headers are always included:
+              {- These 6 response headers are always included:
                   date: Jan 1 1970 00:00:00 GMT
                   content-type: text/plain; charset=utf-8
                   content-length: 0
+                  connection: close
                   access-control-allow-origin: *
                   access-control-allow-credentials: true
               -}
-              let n = http_headers_max_number - 5 + 1
+              let n = http_headers_max_number - 6 + 1
               ic_http_get_request' (ic00viaWithCyclesRefund 0 cid) sub httpbin_proto ("many_response_headers/" ++ show n) Nothing Nothing cid >>= isReject [1],
             -- "The following additional limits apply to HTTP requests and HTTP responses from the remote sever: the number of bytes representing a header name must not exceed 8KiB."
 

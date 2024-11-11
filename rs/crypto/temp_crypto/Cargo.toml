@@ -20,7 +20,6 @@ ic-crypto-tls-interfaces = { path = "../tls_interfaces" }
 ic-crypto-utils-basic-sig = { path = "../utils/basic_sig" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
-ic-limits = { path = "../../limits" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-client-fake = { path = "../../registry/fake" }

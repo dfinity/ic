@@ -216,31 +216,3 @@ sh_binary(
     ],
     visibility = ["//visibility:public"],
 )
-
-sh_test(
-    name = "buf-breaking",
-    size = "small",
-    srcs = ["check-incompatibilities.sh"],
-    data = [
-        "//:WORKSPACE.bazel",
-        "//:buf.yaml",
-        "@buf",
-    ],
-    env = {
-        # Hack to escape the sandbox and grep on the actual repository
-        "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
-        "buf_config": "$(rootpath //:buf.yaml)",
-        "buf_path": "$(rootpath @buf//:buf)",
-    },
-    env_inherit = [
-        "MERGE_BASE_SHA",
-        "CI_OVERRIDE_BUF_BREAKING",
-    ],
-    tags = [
-        # tags copied from other pre-commit tests, but unclear if they are required
-        "external",
-        "local",
-        "smoke",
-    ],
-    visibility = ["//visibility:public"],
-)
