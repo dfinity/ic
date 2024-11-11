@@ -16,7 +16,9 @@ use ic_cketh_minter::endpoints::{
     WithdrawalDetail, WithdrawalError, WithdrawalSearchParameter,
 };
 use ic_cketh_minter::erc20::CkTokenSymbol;
-use ic_cketh_minter::eth_logs::{EventSource, ReceivedErc20Event, ReceivedEthEvent};
+use ic_cketh_minter::eth_logs::{
+    EventSource, LedgerSubaccount, ReceivedErc20Event, ReceivedEthEvent,
+};
 use ic_cketh_minter::guard::retrieve_withdraw_guard;
 use ic_cketh_minter::ledger_client::{LedgerBurnError, LedgerClient};
 use ic_cketh_minter::lifecycle::MinterArg;
@@ -375,8 +377,8 @@ async fn withdrawal_status(parameter: WithdrawalSearchParameter) -> Vec<Withdraw
                 from: request.from(),
                 from_subaccount: request
                     .from_subaccount()
-                    .clone()
-                    .map(|subaccount| subaccount.0),
+                    .cloned()
+                    .map(LedgerSubaccount::to_bytes),
                 status,
             })
             .collect()
@@ -728,7 +730,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     destination: destination.to_string(),
                     ledger_burn_index: ledger_burn_index.get().into(),
                     from,
-                    from_subaccount: from_subaccount.map(|s| s.0),
+                    from_subaccount: from_subaccount.map(LedgerSubaccount::to_bytes),
                     created_at,
                 },
                 EventType::CreatedTransaction {
@@ -815,7 +817,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     ckerc20_ledger_id,
                     ckerc20_ledger_burn_index: ckerc20_ledger_burn_index.get().into(),
                     from,
-                    from_subaccount: from_subaccount.map(|s| s.0),
+                    from_subaccount: from_subaccount.map(LedgerSubaccount::to_bytes),
                     created_at,
                 },
                 EventType::MintedCkErc20 {
@@ -839,7 +841,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     withdrawal_id: ledger_burn_index.get().into(),
                     reimbursed_amount: reimbursed_amount.into(),
                     to,
-                    to_subaccount: to_subaccount.map(|s| s.0),
+                    to_subaccount: to_subaccount.map(LedgerSubaccount::to_bytes),
                 },
                 EventType::QuarantinedDeposit { event_source } => EP::QuarantinedDeposit {
                     event_source: map_event_source(event_source),

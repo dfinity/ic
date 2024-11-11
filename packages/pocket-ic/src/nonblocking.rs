@@ -4,14 +4,16 @@ use crate::common::rest::{
     HttpGatewayConfig, HttpGatewayInfo, HttpsConfig, InstanceConfig, InstanceId,
     MockCanisterHttpResponse, RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId,
     RawCanisterResult, RawCycles, RawEffectivePrincipal, RawMessageId, RawMockCanisterHttpResponse,
-    RawSetStableMemory, RawStableMemory, RawSubmitIngressResult, RawSubnetId, RawTime,
-    RawVerifyCanisterSigArg, RawWasmResult, SubnetId, Topology,
+    RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubmitIngressResult, RawSubnetId,
+    RawTime, RawVerifyCanisterSigArg, RawWasmResult, SubnetId, Topology,
 };
 use crate::management_canister::{
     CanisterId, CanisterIdRecord, CanisterInstallMode, CanisterInstallModeUpgradeInner,
     CanisterInstallModeUpgradeInnerWasmMemoryPersistenceInner, CanisterLogRecord, CanisterSettings,
-    CanisterStatusResult, ChunkHash, FetchCanisterLogsResult, InstallChunkedCodeArgs,
-    InstallCodeArgs, ProvisionalCreateCanisterWithCyclesArgs, UpdateSettingsArgs, UploadChunkArgs,
+    CanisterStatusResult, ChunkHash, DeleteCanisterSnapshotArgs, FetchCanisterLogsResult,
+    InstallChunkedCodeArgs, InstallCodeArgs, LoadCanisterSnapshotArgs,
+    ProvisionalCreateCanisterWithCyclesArgs, Snapshot, StoredChunksResult,
+    TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs, UploadChunkResult,
 };
 pub use crate::DefaultEffectiveCanisterIdError;
 use crate::{CallError, PocketIcBuilder, UserError, WasmResult};
@@ -456,6 +458,22 @@ impl PocketIc {
         self.set_time(now + duration).await;
     }
 
+    /// Get the controllers of a canister.
+    /// Panics if the canister does not exist.
+    #[instrument(ret, skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string()))]
+    pub async fn get_controllers(&self, canister_id: CanisterId) -> Vec<Principal> {
+        let endpoint = "read/get_controllers";
+        let result: Vec<RawPrincipalId> = self
+            .post(
+                endpoint,
+                RawCanisterId {
+                    canister_id: canister_id.as_slice().to_vec(),
+                },
+            )
+            .await;
+        result.into_iter().map(|p| p.into()).collect()
+    }
+
     /// Get the current cycles balance of a canister.
     #[instrument(ret, skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string()))]
     pub async fn cycle_balance(&self, canister_id: CanisterId) -> u128 {
@@ -754,6 +772,98 @@ impl PocketIc {
         canister_id
     }
 
+    /// Upload a WASM chunk to the WASM chunk store of a canister.
+    /// Returns the WASM chunk hash.
+    #[instrument(skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub async fn upload_chunk(
+        &self,
+        canister_id: CanisterId,
+        sender: Option<Principal>,
+        chunk: Vec<u8>,
+    ) -> Result<Vec<u8>, CallError> {
+        call_candid_as::<_, (UploadChunkResult,)>(
+            self,
+            Principal::management_canister(),
+            RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
+            sender.unwrap_or(Principal::anonymous()),
+            "upload_chunk",
+            (UploadChunkArgs { canister_id, chunk },),
+        )
+        .await
+        .map(|responses| responses.0.hash)
+    }
+
+    /// List WASM chunk hashes in the WASM chunk store of a canister.
+    #[instrument(skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub async fn stored_chunks(
+        &self,
+        canister_id: CanisterId,
+        sender: Option<Principal>,
+    ) -> Result<Vec<Vec<u8>>, CallError> {
+        call_candid_as::<_, (StoredChunksResult,)>(
+            self,
+            Principal::management_canister(),
+            RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
+            sender.unwrap_or(Principal::anonymous()),
+            "stored_chunks",
+            (CanisterIdRecord { canister_id },),
+        )
+        .await
+        .map(|responses| responses.0.into_iter().map(|chunk| chunk.hash).collect())
+    }
+
+    /// Clear the WASM chunk store of a canister.
+    #[instrument(skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub async fn clear_chunk_store(
+        &self,
+        canister_id: CanisterId,
+        sender: Option<Principal>,
+    ) -> Result<(), CallError> {
+        call_candid_as(
+            self,
+            Principal::management_canister(),
+            RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
+            sender.unwrap_or(Principal::anonymous()),
+            "clear_chunk_store",
+            (CanisterIdRecord { canister_id },),
+        )
+        .await
+    }
+
+    /// Install a WASM module assembled from chunks on an existing canister.
+    #[instrument(skip(self, mode, chunk_hashes_list, wasm_module_hash, arg), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string(), store_canister_id = %store_canister_id.to_string(), arg_len = %arg.len()))]
+    pub async fn install_chunked_canister(
+        &self,
+        canister_id: CanisterId,
+        sender: Option<Principal>,
+        mode: CanisterInstallMode,
+        store_canister_id: CanisterId,
+        chunk_hashes_list: Vec<Vec<u8>>,
+        wasm_module_hash: Vec<u8>,
+        arg: Vec<u8>,
+    ) -> Result<(), CallError> {
+        call_candid_as(
+            self,
+            Principal::management_canister(),
+            RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
+            sender.unwrap_or(Principal::anonymous()),
+            "install_chunked_code",
+            (InstallChunkedCodeArgs {
+                mode,
+                target_canister: canister_id,
+                store_canister: Some(store_canister_id),
+                chunk_hashes_list: chunk_hashes_list
+                    .into_iter()
+                    .map(|hash| ChunkHash { hash })
+                    .collect(),
+                wasm_module_hash,
+                arg,
+                sender_canister_version: None,
+            },),
+        )
+        .await
+    }
+
     async fn install_canister_helper(
         &self,
         mode: CanisterInstallMode,
@@ -779,60 +889,27 @@ impl PocketIc {
             )
             .await
         } else {
+            self.clear_chunk_store(canister_id, sender).await.unwrap();
             let chunks: Vec<_> = wasm_module.chunks(INSTALL_CODE_CHUNK_SIZE).collect();
-            let hashes: Vec<_> = chunks
-                .iter()
-                .map(|c| {
-                    let mut hasher = Sha256::new();
-                    hasher.update(c);
-                    ChunkHash {
-                        hash: hasher.finalize().to_vec(),
-                    }
-                })
-                .collect();
-            call_candid_as::<_, ()>(
-                self,
-                Principal::management_canister(),
-                RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
-                sender.unwrap_or(Principal::anonymous()),
-                "clear_chunk_store",
-                (CanisterIdRecord { canister_id },),
-            )
-            .await
-            .unwrap();
+            let mut hashes = vec![];
             for chunk in chunks {
-                call_candid_as::<_, ()>(
-                    self,
-                    Principal::management_canister(),
-                    RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
-                    sender.unwrap_or(Principal::anonymous()),
-                    "upload_chunk",
-                    (UploadChunkArgs {
-                        canister_id,
-                        chunk: chunk.to_vec(),
-                    },),
-                )
-                .await
-                .unwrap();
+                let hash = self
+                    .upload_chunk(canister_id, sender, chunk.to_vec())
+                    .await
+                    .unwrap();
+                hashes.push(hash);
             }
             let mut hasher = Sha256::new();
             hasher.update(wasm_module);
             let wasm_module_hash = hasher.finalize().to_vec();
-            call_candid_as::<_, ()>(
-                self,
-                Principal::management_canister(),
-                RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
-                sender.unwrap_or(Principal::anonymous()),
-                "install_chunked_code",
-                (InstallChunkedCodeArgs {
-                    mode,
-                    target_canister: canister_id,
-                    store_canister: None,
-                    chunk_hashes_list: hashes,
-                    wasm_module_hash,
-                    arg,
-                    sender_canister_version: None,
-                },),
+            self.install_chunked_canister(
+                canister_id,
+                sender,
+                mode,
+                canister_id,
+                hashes,
+                wasm_module_hash,
+                arg,
             )
             .await
         }
@@ -915,6 +992,93 @@ impl PocketIc {
             sender.unwrap_or(Principal::anonymous()),
             "uninstall_code",
             (CanisterIdRecord { canister_id },),
+        )
+        .await
+    }
+
+    /// Take canister snapshot.
+    #[instrument(skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub async fn take_canister_snapshot(
+        &self,
+        canister_id: CanisterId,
+        sender: Option<Principal>,
+        replace_snapshot: Option<Vec<u8>>,
+    ) -> Result<Snapshot, CallError> {
+        call_candid_as::<_, (Snapshot,)>(
+            self,
+            Principal::management_canister(),
+            RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
+            sender.unwrap_or(Principal::anonymous()),
+            "take_canister_snapshot",
+            (TakeCanisterSnapshotArgs {
+                canister_id,
+                replace_snapshot,
+            },),
+        )
+        .await
+        .map(|responses| responses.0)
+    }
+
+    /// Load canister snapshot.
+    #[instrument(skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub async fn load_canister_snapshot(
+        &self,
+        canister_id: CanisterId,
+        sender: Option<Principal>,
+        snapshot_id: Vec<u8>,
+    ) -> Result<(), CallError> {
+        call_candid_as(
+            self,
+            Principal::management_canister(),
+            RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
+            sender.unwrap_or(Principal::anonymous()),
+            "load_canister_snapshot",
+            (LoadCanisterSnapshotArgs {
+                canister_id,
+                snapshot_id,
+                sender_canister_version: None,
+            },),
+        )
+        .await
+    }
+
+    /// List canister snapshots.
+    #[instrument(skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub async fn list_canister_snapshots(
+        &self,
+        canister_id: CanisterId,
+        sender: Option<Principal>,
+    ) -> Result<Vec<Snapshot>, CallError> {
+        call_candid_as::<_, (Vec<Snapshot>,)>(
+            self,
+            Principal::management_canister(),
+            RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
+            sender.unwrap_or(Principal::anonymous()),
+            "list_canister_snapshots",
+            (CanisterIdRecord { canister_id },),
+        )
+        .await
+        .map(|responses| responses.0)
+    }
+
+    /// Delete canister snapshot.
+    #[instrument(skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub async fn delete_canister_snapshot(
+        &self,
+        canister_id: CanisterId,
+        sender: Option<Principal>,
+        snapshot_id: Vec<u8>,
+    ) -> Result<(), CallError> {
+        call_candid_as(
+            self,
+            Principal::management_canister(),
+            RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
+            sender.unwrap_or(Principal::anonymous()),
+            "delete_canister_snapshot",
+            (DeleteCanisterSnapshotArgs {
+                canister_id,
+                snapshot_id,
+            },),
         )
         .await
     }
