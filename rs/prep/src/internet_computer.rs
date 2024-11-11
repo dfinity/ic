@@ -143,7 +143,7 @@ impl TopologyConfig {
             }
 
             // Adjust start and end for the next subnet.
-            start = end;
+            start = end + 1;
             end = end.saturating_add(CANISTER_IDS_PER_SUBNET);
         }
 
