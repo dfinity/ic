@@ -1292,7 +1292,7 @@ pub fn estimate_retrieve_btc_fee(
         vsize * median_fee_millisatoshi_per_vbyte / 1000 / (DEFAULT_OUTPUT_COUNT - 1).max(1);
     let minter_fee = minter_fee / (DEFAULT_OUTPUT_COUNT - 1).max(1);
     WithdrawalFee {
-        minter_fee: minter_fee,
+        minter_fee,
         bitcoin_fee,
     }
 }
