@@ -66,14 +66,13 @@ pub fn setup(env: TestEnv) {
             memory_kibibytes: Some(AmountOfMemoryKiB::new(480 << 20)),
             boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(2_000)),
         })
+        .use_specified_ids_allocation_range()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
         .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
         .setup_and_start(&env)
         .expect("Failed to setup IC under test");
-    install_nns_with_customizations_and_check_progress(
-        env.topology_snapshot(),
-        NnsCustomizations::default(),
-    );
+    check_nodes_health(&env);
+    install_nns_canisters_at_ids(&env);
     BoundaryNode::new(String::from(BOUNDARY_NODE_NAME))
         .allocate_vm(&env)
         .expect("Allocation of BoundaryNode failed.")
@@ -83,4 +82,59 @@ pub fn setup(env: TestEnv) {
         .expect("failed to setup BoundaryNode VM");
     env.sync_with_prometheus();
     await_boundary_node_healthy(&env, BOUNDARY_NODE_NAME);
+}
+
+fn check_nodes_health(env: &TestEnv) {
+    info!(
+        &env.logger(),
+        "Checking readiness of all nodes after the IC setup ..."
+    );
+    env.topology_snapshot().subnets().for_each(|subnet| {
+        subnet
+            .nodes()
+            .for_each(|node| node.await_status_is_healthy().unwrap())
+    });
+    info!(&env.logger(), "All nodes are ready, IC setup succeeded.");
+}
+
+pub fn install_nns_canisters_at_ids(env: &TestEnv) {
+    let nns_node = env
+        .topology_snapshot()
+        .root_subnet()
+        .nodes()
+        .next()
+        .expect("there is no NNS node");
+    NnsInstallationBuilder::new()
+        .at_ids()
+        .install(&nns_node, env)
+        .expect("NNS canisters not installed");
+    info!(&env.logger(), "NNS canisters installed");
+
+    for subnet in topology
+        .subnets()
+        .filter(|subnet| subnet.subnet_id != topology.root_subnet_id())
+    {
+        if !subnet.raw_subnet_record().is_halted {
+            info!(
+                logger,
+                "Checking if all the nodes are participating in the subnet {}", subnet.subnet_id
+            );
+            for node in subnet.nodes() {
+                cert_state_makes_progress_with_retries(
+                    &node.get_public_url(),
+                    node.effective_canister_id(),
+                    &logger,
+                    /*timeout=*/ secs(600),
+                    /*backoff=*/ secs(2),
+                );
+            }
+        } else {
+            info!(
+                logger,
+                "Subnet {} is halted. \
+            Not checking if all the nodes are participating in the subnet",
+                subnet.subnet_id,
+            );
+        }
+    }
 }
