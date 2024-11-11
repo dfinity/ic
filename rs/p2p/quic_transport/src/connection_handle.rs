@@ -157,7 +157,7 @@ impl ConnectionHandle {
             .with_label_values(&[request.uri().path()]);
 
         let (send_stream, mut recv_stream) = self.conn.open_bi().await.inspect_err(|err| {
-            observe_conn_error(&err, "open_bi", &self.metrics);
+            observe_conn_error(err, "open_bi", &self.metrics);
         })?;
 
         let mut send_stream_guard = SendStreamDropGuard::new(send_stream);
@@ -177,7 +177,7 @@ impl ConnectionHandle {
             .write_all(&request_bytes)
             .await
             .inspect_err(|err| {
-                observe_write_error(&err, "write_all", &self.metrics);
+                observe_write_error(err, "write_all", &self.metrics);
             })?;
 
         send_stream.finish().inspect_err(|_| {
@@ -190,7 +190,7 @@ impl ConnectionHandle {
 
         send_stream.stopped().await.inspect_err(|err| match err {
             StoppedError::ConnectionLost(conn_err) => {
-                observe_conn_error(&conn_err, "stopped", &self.metrics);
+                observe_conn_error(conn_err, "stopped", &self.metrics);
             }
             StoppedError::ZeroRttRejected => {
                 self.metrics
