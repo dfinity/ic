@@ -278,7 +278,7 @@ pub trait HasPrometheus {
 
 impl HasPrometheus for TestEnv {
     fn sync_with_prometheus(&self, boundary_node_name: &str) {
-        let boundary_node = env
+        let boundary_node = self
             .get_deployed_boundary_node(boundary_node_name)
             .unwrap()
             .get_snapshot()
