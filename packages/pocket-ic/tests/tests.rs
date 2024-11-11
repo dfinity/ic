@@ -1595,3 +1595,45 @@ fn test_get_default_effective_canister_id_invalid_url() {
         err => panic!("Unexpected error: {}", err),
     };
 }
+
+#[test]
+fn test_wasm_chunk_store() {
+    let pic = PocketIc::new();
+
+    // We create an empty canister and top it up with cycles (WASM chunk store operations cost cycles).
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
+
+    // There should be no chunks in the WASM chunk store yet.
+    let stored_chunks = pic.stored_chunks(canister_id, None).unwrap();
+    assert!(stored_chunks.is_empty());
+
+    // We upload a bogus chunk to the WASM chunk store and confirm that the returned hash
+    // matches the actual hash of the chunk.
+    let chunk = vec![1, 2, 3, 4];
+    let chunk_hash = pic.upload_chunk(canister_id, None, chunk.clone()).unwrap();
+    let mut hasher = Sha256::new();
+    hasher.update(chunk.clone());
+    assert_eq!(chunk_hash, hasher.finalize().to_vec());
+
+    // We upload the same chunk once more and get the same hash back.
+    let same_chunk_hash = pic.upload_chunk(canister_id, None, chunk.clone()).unwrap();
+    assert_eq!(chunk_hash, same_chunk_hash);
+
+    // We upload a different chunk.
+    let other_chunk = vec![5, 6, 7, 8];
+    let other_chunk_hash = pic.upload_chunk(canister_id, None, other_chunk).unwrap();
+
+    // Now the two chunks should be stored in the WASM chunk store.
+    let stored_chunks = pic.stored_chunks(canister_id, None).unwrap();
+    assert_eq!(stored_chunks.len(), 2);
+    assert!(stored_chunks.contains(&chunk_hash));
+    assert!(stored_chunks.contains(&other_chunk_hash));
+
+    // We clear the WASM chunk store.
+    pic.clear_chunk_store(canister_id, None).unwrap();
+
+    // There should be no more chunks in the WASM chunk store.
+    let stored_chunks = pic.stored_chunks(canister_id, None).unwrap();
+    assert!(stored_chunks.is_empty());
+}
