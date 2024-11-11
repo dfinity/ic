@@ -36,7 +36,7 @@ fn inspect_message() {
     } else {
         // For the update methods:
         // - Check if the canister's authorized principal is set
-        // - Check the caller_id matches authorized principal
+        // - Check caller_id matches the authorized principal
         with_canister_state(|state| {
             if let Some(authorized_principal) = state.get_authorized_principal() {
                 if caller_id == authorized_principal {
