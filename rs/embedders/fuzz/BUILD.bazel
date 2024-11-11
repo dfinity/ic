@@ -60,6 +60,7 @@ rust_binary(
     testonly = True,
     srcs = [
         "src/ic_wasm.rs",
+        "src/imports.rs",
         "src/ws2wasm.rs",
     ],
     proc_macro_deps = [],
@@ -75,12 +76,12 @@ rust_binary(
         "//rs/types/wasm_types",
         "@crate_index//:arbitrary",
         "@crate_index//:clap",
-        "@crate_index//:lazy_static",
         "@crate_index//:libflate",
         "@crate_index//:wasm-encoder",
         "@crate_index//:wasm-smith",
         "@crate_index//:wasmparser",
         "@crate_index//:wasmprinter",
+        "@crate_index//:wat",
     ],
 )
 

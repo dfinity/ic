@@ -10,6 +10,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 mod ic_wasm;
 use ic_wasm::ICWasmModule;
+mod imports;
 use wasmprinter::print_bytes;
 
 use ic_embedders::{
