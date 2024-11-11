@@ -29,7 +29,6 @@ pub(crate) const ERROR_APP_CLOSED_CONN: &str = "app_closed_conn";
 pub(crate) const ERROR_INTERNALLY_CLOSED_CONN: &str = "internally_closed_conn";
 pub(crate) const ERROR_LOCALLY_CLOSED_CONN: &str = "locally_closed_conn";
 pub(crate) const STREAM_TYPE_BIDI: &str = "bidi";
-pub(crate) const REQUEST_TYPE_RPC: &str = "rpc";
 
 #[derive(Clone, Debug)]
 pub struct QuicTransportMetrics {

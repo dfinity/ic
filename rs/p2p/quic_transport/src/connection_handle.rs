@@ -16,7 +16,7 @@ use crate::{
     metrics::{
         QuicTransportMetrics, ERROR_APP_CLOSED_CONN, ERROR_CLOSED_STREAM,
         ERROR_INTERNALLY_CLOSED_CONN, ERROR_LOCALLY_CLOSED_CONN, ERROR_RESET_STREAM,
-        ERROR_STOPPED_STREAM, INFALIBBLE, REQUEST_TYPE_RPC,
+        ERROR_STOPPED_STREAM, INFALIBBLE,
     },
     ConnId, MessagePriority, MAX_MESSAGE_SIZE_BYTES,
 };
@@ -94,15 +94,21 @@ fn observe_write_error(err: &WriteError, op: &str, metrics: &QuicTransportMetric
 
 fn observe_read_error(err: &ReadError, op: &str, metrics: &QuicTransportMetrics) {
     match err {
+        // This can happen if the peer reset the stream due to aborting the future that writes to the stream.
+        // E.g. the RPC method is part of a select branch.
         ReadError::Reset(_) => metrics
             .connection_handle_errors_total
             .with_label_values(&[op, ERROR_RESET_STREAM])
             .inc(),
         ReadError::ConnectionLost(conn_err) => observe_conn_error(&conn_err, op, metrics),
-        _ => metrics
-            .connection_handle_errors_total
-            .with_label_values(&[op, INFALIBBLE])
-            .inc(),
+        // If any of the following errors occur it means that we have a bug in the protocol implementation or
+        // there is malicious peer on the other side.
+        ReadError::IllegalOrderedRead | ReadError::ClosedStream | ReadError::ZeroRttRejected => {
+            metrics
+                .connection_handle_errors_total
+                .with_label_values(&[op, INFALIBBLE])
+                .inc()
+        }
     }
 }
 
@@ -178,18 +184,18 @@ impl ConnectionHandle {
             // This should be infallible
             self.metrics
                 .connection_handle_errors_total
-                .with_label_values(&["finish", ERROR_CLOSED_STREAM])
+                .with_label_values(&["finish", INFALIBBLE])
                 .inc();
         })?;
 
         send_stream.stopped().await.inspect_err(|err| match err {
             StoppedError::ConnectionLost(conn_err) => {
-                observe_conn_error(&conn_err, REQUEST_TYPE_RPC, &self.metrics);
+                observe_conn_error(&conn_err, "stopped", &self.metrics);
             }
             StoppedError::ZeroRttRejected => {
                 self.metrics
                     .connection_handle_errors_total
-                    .with_label_values(&["read_to_end", INFALIBBLE])
+                    .with_label_values(&["stopped", INFALIBBLE])
                     .inc();
             }
         })?;
