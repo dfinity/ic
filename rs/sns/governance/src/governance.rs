@@ -1,3 +1,4 @@
+use crate::upgrading::CachedUpgradeSteps;
 use crate::{
     canister_control::{
         get_canister_id, perform_execute_generic_nervous_system_function_call,
@@ -20,8 +21,8 @@ use crate::{
             governance::{
                 self,
                 neuron_in_flight_command::{self, Command as InFlightCommand},
-                CachedUpgradeSteps, MaturityModulation, NeuronInFlightCommand, PendingVersion,
-                SnsMetadata, Version, Versions,
+                CachedUpgradeSteps as CachedUpgradeStepsPb, MaturityModulation,
+                NeuronInFlightCommand, PendingVersion, SnsMetadata, Version,
             },
             governance_error::ErrorType,
             manage_neuron::{
@@ -433,12 +434,12 @@ impl GovernanceProto {
         result
     }
 
-    /// Gets the current deployed version of the SNS or panics.
-    pub fn deployed_version_or_panic(&self) -> Version {
-        self.deployed_version
-            .as_ref()
-            .cloned()
-            .expect("No version set in Governance.")
+    pub(crate) fn cached_upgrade_steps_or_err(&self) -> Result<CachedUpgradeSteps, String> {
+        let Some(cached_upgrade_steps) = &self.cached_upgrade_steps else {
+            return Err("GovernanceProto.cached_upgrade_steps is not specified.".to_string());
+        };
+
+        CachedUpgradeSteps::try_from(cached_upgrade_steps)
     }
 
     /// Returns 0 if maturity modulation is disabled (per
@@ -896,6 +897,18 @@ impl Governance {
                 memo
             ),
         )
+    }
+
+    pub(crate) fn cached_upgrade_steps_or_err(
+        &self,
+        context: &str,
+    ) -> Result<CachedUpgradeSteps, GovernanceError> {
+        self.proto.cached_upgrade_steps_or_err().map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                format!("Cannot read CachedUpgradeSteps for {}: {}", context, err),
+            )
+        })
     }
 
     /// Locks a given neuron, signaling there is an ongoing neuron operation.
@@ -2460,7 +2473,7 @@ impl Governance {
 
     /// Executes a UpgradeSnsControlledCanister proposal by calling the root canister
     /// to upgrade an SNS controlled canister.  This does not upgrade "core" SNS canisters
-    /// (i.e. Root, Governance, Ledger, Ledger Archives, or Sale)
+    /// (i.e. Root, Governance, Ledger, Ledger Archives, or Swap)
     async fn perform_upgrade_sns_controlled_canister(
         &mut self,
         proposal_id: u64,
@@ -2598,7 +2611,10 @@ impl Governance {
     ) -> Result<bool, GovernanceError> {
         self.check_no_upgrades_in_progress(Some(proposal_id))?;
 
-        let current_version = self.proto.deployed_version_or_panic();
+        let current_version = self
+            .cached_upgrade_steps_or_err("perform_upgrade_to_next_sns_version")?
+            .current();
+
         let root_canister_id = self.proto.root_canister_id_or_panic();
 
         let UpgradeSnsParams {
@@ -2851,7 +2867,10 @@ impl Governance {
     ) -> Result<(), GovernanceError> {
         self.check_no_upgrades_in_progress(Some(proposal_id))?;
 
-        let current_version = self.proto.deployed_version_or_panic();
+        let current_version = self
+            .cached_upgrade_steps_or_err("perform_manage_ledger_parameters")?
+            .current();
+
         let ledger_canister_id = self.proto.ledger_canister_id_or_panic();
 
         let ledger_canister_info = self.env
@@ -3993,10 +4012,10 @@ impl Governance {
         }
     }
 
-    /// Attempts to claim a batch of new neurons allocated by the SNS Sale canister.
+    /// Attempts to claim a batch of new neurons allocated by the SNS Swap canister.
     ///
     /// Preconditions:
-    /// - The caller must be the Sale canister deployed along with this SNS Governance
+    /// - The caller must be the Swap canister deployed along with this SNS Governance
     ///   canister.
     /// - Each NeuronRecipe's `stake_e8s` is at least neuron_minimum_stake_e8s
     ///   as defined in the `NervousSystemParameters`
@@ -4008,9 +4027,9 @@ impl Governance {
     ///
     /// Claiming Neurons via this method differs from the primary
     /// `ManageNeuron::ClaimOrRefresh` way of creating neurons for governance. This
-    /// method is only callable by the SNS Sale canister associated with this SNS
+    /// method is only callable by the SNS Swap canister associated with this SNS
     /// Governance canister, and claims a batch of neurons instead of just one.
-    /// As this is requested by the Sale canister which ensures the correct
+    /// As this is requested by the Swap canister which ensures the correct
     /// transfer of the tokens, this method does not check in the ledger. Additionally,
     /// the dissolve delay is set as part of the neuron creation process, while typically
     /// that is a separate command.
@@ -4957,7 +4976,7 @@ impl Governance {
         let upgrade_steps =
             self.proto
                 .cached_upgrade_steps
-                .get_or_insert_with(|| CachedUpgradeSteps {
+                .get_or_insert_with(|| CachedUpgradeStepsPb {
                     requested_timestamp_seconds: Some(self.env.now()),
                     ..Default::default()
                 });
@@ -4979,54 +4998,126 @@ impl Governance {
         true
     }
 
-    /// Refreshes the cached_upgrade_steps field
-    pub async fn refresh_cached_upgrade_steps(&mut self) {
-        let Some(deployed_version) = self.proto.deployed_version.as_ref() else {
-            log!(
-                ERROR,
-                "Cannot refresh cached_upgrade_steps: deployed_version not set."
-            );
-            return;
-        };
+    /// Tries to refresh the cached_upgrade_steps field.
+    ///
+    /// Returns Ok if and only if refreshing took place.
+    pub async fn refresh_cached_upgrade_steps(&mut self) -> Option<()> {
         let sns_governance_canister_id = self.env.canister_id().get();
 
-        let upgrade_steps = crate::sns_upgrade::get_upgrade_steps(
+        let cached_upgrade_steps = |context| -> Option<CachedUpgradeSteps> {
+            match self.cached_upgrade_steps_or_err(context) {
+                Ok(cached_upgrade_steps) => Some(cached_upgrade_steps),
+                Err(err) => {
+                    // Error handing is not possible in periodic tasks; we log the fact of an error
+                    // for human inspection and exit, hoping this was transient and retrying later.
+                    log!(ERROR, "{}", err.error_message);
+                    None
+                }
+            }
+        };
+
+        let original_cached_upgrade_steps =
+            cached_upgrade_steps("refresh_cached_upgrade_steps (before await)")?;
+
+        let current_version = original_cached_upgrade_steps.current();
+
+        let requested_timestamp_seconds = self.env.now();
+
+        let versions = crate::sns_upgrade::get_upgrade_steps(
             &*self.env,
-            deployed_version.clone(),
+            current_version.clone(),
             sns_governance_canister_id,
         )
         .await;
 
-        let upgrade_steps = match upgrade_steps {
-            Ok(upgrade_steps) => upgrade_steps,
+        let versions = match versions {
+            Ok(versions) => versions,
             Err(err) => {
                 log!(
                     ERROR,
                     "Cannot refresh cached_upgrade_steps: call to SNS-W failed: {}",
                     err
                 );
-                return;
+                return None;
             }
         };
-        let upgrade_steps = Versions {
-            versions: upgrade_steps,
+
+        let Some((new_current_version, subsequent_versions)) = versions.split_first() else {
+            log!(
+                ERROR,
+                "Cannot refresh cached_upgrade_steps: upgrade steps should start from the current \
+                 version {:?}, but SNS-W returned an empty sequence.",
+                current_version
+            );
+            return None;
         };
 
-        // Ensure `cached_upgrade_steps` is initialized
-        let cached_upgrade_steps = self
-            .proto
+        if *new_current_version != current_version {
+            log!(
+                ERROR,
+                "Cannot refresh cached_upgrade_steps: upgrade steps should start from the current \
+                 version {:?}, but SNS-W returned a sequence starting from {:?}.",
+                current_version,
+                new_current_version,
+            );
+            return None;
+        }
+
+        {
+            // Check reentrancy safety: The cache is the same as before calling SNS-W for new data.
+            //
+            // This might not be the case if another task has consumed some upgrade steps while this
+            // function was refreshing them.
+            let cached_upgrade_steps =
+                cached_upgrade_steps("refresh_cached_upgrade_steps (after await)")?;
+            if cached_upgrade_steps != original_cached_upgrade_steps {
+                log!(
+                    INFO,
+                    "Upgrade steps were not refreshed because someone modified the cache while we were \
+                     waiting for a response form SNS-W. Try again later."
+                );
+                return None;
+            }
+        }
+
+        // Finally, refresh the cached data.
+
+        let new_cached_upgrade_steps = CachedUpgradeSteps::new(
+            new_current_version.clone(),
+            subsequent_versions.to_vec(),
+            requested_timestamp_seconds,
+            self.env.now(),
+        );
+
+        self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeStepsRefreshed::new(
+            Versions::from(new_cached_upgrade_steps.clone())
+        ));
+
+        self.proto
             .cached_upgrade_steps
-            .get_or_insert_with(Default::default);
+            .replace(CachedUpgradeStepsPb::from(new_cached_upgrade_steps));
 
-        // Update `response_timestamp_seconds`
-        cached_upgrade_steps.response_timestamp_seconds = Some(self.env.now());
+        Some(())
+    }
 
-        // Refresh the upgrade steps if they have changed
-        if cached_upgrade_steps.upgrade_steps != Some(upgrade_steps.clone()) {
-            cached_upgrade_steps.upgrade_steps = Some(upgrade_steps.clone());
-            self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeStepsRefreshed::new(
-                upgrade_steps.versions,
-            ));
+    pub fn push_to_upgrade_journal<Event>(&mut self, event: Event)
+    where
+        upgrade_journal_entry::Event: From<Event>,
+    {
+        let event = upgrade_journal_entry::Event::from(event);
+        let upgrade_journal_entry = UpgradeJournalEntry {
+            event: Some(event),
+            timestamp_seconds: Some(self.env.now()),
+        };
+        match self.proto.upgrade_journal {
+            None => {
+                self.proto.upgrade_journal = Some(UpgradeJournal {
+                    entries: vec![upgrade_journal_entry],
+                });
+            }
+            Some(ref mut journal) => {
+                journal.entries.push(upgrade_journal_entry);
+            }
         }
     }
 
@@ -5511,7 +5602,7 @@ impl Governance {
         finalizing_disburse_maturity.is_none() || !finalizing_disburse_maturity.unwrap()
     }
 
-    /// Checks if pending upgrade is complete and either updates deployed_version
+    /// Checks if pending upgrade is complete and either updates cached_upgrade_steps
     /// or clears pending_upgrade if beyond the limit.
     async fn check_upgrade_status(&mut self) {
         // This expect is safe because we only call this after checking exactly that condition in
@@ -5643,7 +5734,7 @@ impl Governance {
 
                 &running_version
             }
-            Some(version) => version,
+            Ok(cached_upgrade_steps) => cached_upgrade_steps,
         };
 
         let expected_changes = {

@@ -13,7 +13,7 @@ pub mod reward;
 pub mod sns_upgrade;
 pub mod types;
 pub mod upgrade_journal;
-
+pub(crate) mod upgrading;
 mod treasury;
 
 trait Len {

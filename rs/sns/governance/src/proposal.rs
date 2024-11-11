@@ -372,8 +372,16 @@ pub(crate) async fn validate_and_render_action(
             validate_and_render_upgrade_sns_controlled_canister(upgrade)
         }
         Action::UpgradeSnsToNextVersion(upgrade_sns) => {
-            let current_version = governance_proto.deployed_version_or_panic();
-
+            let current_version = match governance_proto.cached_upgrade_steps_or_err() {
+                Err(err) => {
+                    return Err(format!(
+                        "Cannot identify current_version required for validating \
+                             and rendering an UpgradeSnsToNextVersion: {}",
+                        err
+                    ));
+                }
+                Ok(cached_upgrade_steps) => cached_upgrade_steps.current(),
+            };
             validate_and_render_upgrade_sns_to_next_version(
                 upgrade_sns,
                 env,
