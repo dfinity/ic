@@ -143,12 +143,14 @@ async fn handle_bi_stream(
     // We can ignore the errors because if both peers follow the protocol an errors will only occur
     // if the other peer has closed the connection. In this case `accept_bi` in the peer event
     // loop will close this connection.
-    write_response(&mut bi_tx, response).await.inspect_err(|_| {
-        metrics
-            .request_handle_errors_total
-            .with_label_values(&[STREAM_TYPE_BIDI, ERROR_TYPE_WRITE])
-            .inc();
-    })?;
+    write_response(&mut bi_tx, response)
+        .await
+        .inspect_err(|_| {
+            metrics
+                .request_handle_errors_total
+                .with_label_values(&[STREAM_TYPE_BIDI, ERROR_TYPE_WRITE])
+                .inc();
+        })?;
     bi_tx.finish().inspect_err(|_| {
         metrics
             .request_handle_errors_total
