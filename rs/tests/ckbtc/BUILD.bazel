@@ -53,26 +53,15 @@ rust_library(
     deps = DEPENDENCIES,
 )
 
-CKBTC_RUNTIME_DEPS = [
-    # Keep sorted.
-    "//rs/bitcoin/ckbtc/kyt:kyt_canister",
-    "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
-    "//rs/ledger_suite/icrc1/ledger:ledger_canister",
-    "//rs/universal_canister/impl:universal_canister.wasm.gz",
-    "@btc_canister//file",
-]
-
-CKBTC_ENV = {
-    "BTC_WASM_PATH": "$(rootpath @btc_canister//file)",
-    "IC_CKBTC_KYT_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/kyt:kyt_canister)",
-    "IC_CKBTC_MINTER_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/minter:ckbtc_minter_debug)",
-    "LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
-    "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
-}
-
 system_test_nns(
     name = "ckbtc_minter_basics_test",
-    env = CKBTC_ENV,
+    env = {
+        "BTC_WASM_PATH": "$(rootpath @btc_canister//file)",
+        "IC_CKBTC_KYT_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/kyt:kyt_canister)",
+        "IC_CKBTC_MINTER_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/minter:ckbtc_minter_debug)",
+        "LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
+        "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
+    },
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
     tags = [
@@ -82,14 +71,26 @@ system_test_nns(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS +
-        CKBTC_RUNTIME_DEPS,
+        UNIVERSAL_VM_RUNTIME_DEPS + [
+            # Keep sorted.
+            "//rs/bitcoin/ckbtc/kyt:kyt_canister",
+            "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
+            "//rs/ledger_suite/icrc1/ledger:ledger_canister",
+            "//rs/universal_canister/impl:universal_canister.wasm.gz",
+            "@btc_canister//file",
+        ],
     deps = DEPENDENCIES + [":ckbtc"],
 )
 
 system_test_nns(
     name = "ckbtc_minter_deposit_and_withdrawal",
-    env = CKBTC_ENV,
+    env = {
+        "BTC_WASM_PATH": "$(rootpath @btc_canister//file)",
+        "IC_CKBTC_KYT_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/kyt:kyt_canister)",
+        "IC_CKBTC_MINTER_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/minter:ckbtc_minter_debug)",
+        "LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
+        "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
+    },
     flaky = True,
     tags = [
         "k8s",
@@ -98,14 +99,26 @@ system_test_nns(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS +
-        CKBTC_RUNTIME_DEPS,
+        UNIVERSAL_VM_RUNTIME_DEPS + [
+            # Keep sorted.
+            "//rs/bitcoin/ckbtc/kyt:kyt_canister",
+            "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
+            "//rs/ledger_suite/icrc1/ledger:ledger_canister",
+            "//rs/universal_canister/impl:universal_canister.wasm.gz",
+            "@btc_canister//file",
+        ],
     deps = DEPENDENCIES + [":ckbtc"],
 )
 
 system_test_nns(
     name = "ckbtc_minter_kyt",
-    env = CKBTC_ENV,
+    env = {
+        "BTC_WASM_PATH": "$(rootpath @btc_canister//file)",
+        "IC_CKBTC_KYT_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/kyt:kyt_canister)",
+        "IC_CKBTC_MINTER_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/minter:ckbtc_minter_debug)",
+        "LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
+        "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
+    },
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
     tags = [
@@ -115,14 +128,26 @@ system_test_nns(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS +
-        CKBTC_RUNTIME_DEPS,
+        UNIVERSAL_VM_RUNTIME_DEPS + [
+            # Keep sorted.
+            "//rs/bitcoin/ckbtc/kyt:kyt_canister",
+            "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
+            "//rs/ledger_suite/icrc1/ledger:ledger_canister",
+            "//rs/universal_canister/impl:universal_canister.wasm.gz",
+            "@btc_canister//file",
+        ],
     deps = DEPENDENCIES + [":ckbtc"],
 )
 
 system_test_nns(
     name = "ckbtc_minter_update_balance",
-    env = CKBTC_ENV,
+    env = {
+        "BTC_WASM_PATH": "$(rootpath @btc_canister//file)",
+        "IC_CKBTC_KYT_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/kyt:kyt_canister)",
+        "IC_CKBTC_MINTER_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/minter:ckbtc_minter_debug)",
+        "LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
+        "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
+    },
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
     tags = [
@@ -132,14 +157,26 @@ system_test_nns(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS +
-        CKBTC_RUNTIME_DEPS,
+        UNIVERSAL_VM_RUNTIME_DEPS + [
+            # Keep sorted.
+            "//rs/bitcoin/ckbtc/kyt:kyt_canister",
+            "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
+            "//rs/ledger_suite/icrc1/ledger:ledger_canister",
+            "//rs/universal_canister/impl:universal_canister.wasm.gz",
+            "@btc_canister//file",
+        ],
     deps = DEPENDENCIES + [":ckbtc"],
 )
 
 system_test_nns(
     name = "ckbtc_minter_retrieve_btc",
-    env = CKBTC_ENV,
+    env = {
+        "BTC_WASM_PATH": "$(rootpath @btc_canister//file)",
+        "IC_CKBTC_KYT_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/kyt:kyt_canister)",
+        "IC_CKBTC_MINTER_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/minter:ckbtc_minter_debug)",
+        "LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
+        "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
+    },
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
     tags = [
@@ -149,7 +186,13 @@ system_test_nns(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS +
-        CKBTC_RUNTIME_DEPS,
+        UNIVERSAL_VM_RUNTIME_DEPS + [
+            # Keep sorted.
+            "//rs/bitcoin/ckbtc/kyt:kyt_canister",
+            "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
+            "//rs/ledger_suite/icrc1/ledger:ledger_canister",
+            "//rs/universal_canister/impl:universal_canister.wasm.gz",
+            "@btc_canister//file",
+        ],
     deps = DEPENDENCIES + [":ckbtc"],
 )
