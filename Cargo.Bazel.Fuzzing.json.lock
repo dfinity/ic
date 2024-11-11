@@ -71079,7 +71079,8 @@
         "crate_features": {
           "common": [
             "background_threads_runtime_support",
-            "default"
+            "default",
+            "profiling"
           ],
           "selects": {}
         },
@@ -71172,7 +71173,8 @@
         "crate_features": {
           "common": [
             "background_threads_runtime_support",
-            "default"
+            "default",
+            "profiling"
           ],
           "selects": {}
         },

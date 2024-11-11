@@ -44,6 +44,10 @@ configure_make(
         # recommended for static libs:
         # https://github.com/jemalloc/jemalloc/blob/2a693b83d2d1631b6a856d178125e1c47c12add9/INSTALL.md?plain=1#L102-L107
         "--with-private-namespace=_rjem_",
+        # Enable heap profiling and leak detection functionality:
+        # https://github.com/tikv/jemallocator/blob/master/jemalloc-sys/README.md#cargo-features
+        "--enable-prof",
+        # "--enable-prof-libunwind",
     ],
     lib_source = ":all",
 
