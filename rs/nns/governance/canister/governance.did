@@ -656,19 +656,24 @@ type Neuron = record {
 
   // The amount of "sway" this neuron has when voting on proposals.
   //
-  // If a neuron regularly refreshes its voting power, this value is the same as
-  // potential_voting_power.
+  // If a neuron regularly refreshes its voting power, this has the same value
+  // as potential_voting_power. Actions that cause a refresh are as follows:
   //
-  // However, if a neuron has not refreshed in more than six months, this will
-  // be less than potential voting power.
+  //     1. voting directly (not via following)
+  //     2. set following
+  //     3. refresh voting power
   //
-  // As a further secondary consequence, the neuron receives less voting rewards
-  // (when it votes indirectly via following).
+  // (All of these actions are performed via the manage_neuron method.)
+  //
+  // However, if a neuron has not refreshed in a "long" time, this will be less
+  // than potential voting power. See VotingPowerEconomics. As a further result
+  // of less deciding voting power, not only does it have less influence on the
+  // outcome of proposals, the neuron receives less voting rewards (when it
+  // votes indirectly via following).
   //
   // For details, see https://dashboard.internetcomputer.org/proposal/132411.
   //
-  // Per NNS policy, this is opt. Nevertheless, it will never be null (unless we
-  // later deprecate this feature).
+  // Per NNS policy, this is opt. Nevertheless, it will never be null.
   deciding_voting_power : opt nat64;
 
   // The amount of "sway" this neuron has when voting on proposals, assuming
