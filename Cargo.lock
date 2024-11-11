@@ -6524,7 +6524,9 @@ dependencies = [
  "candid_parser",
  "canister-test",
  "ciborium",
+ "flate2",
  "hex",
+ "ic-agent",
  "ic-base-types",
  "ic-bitcoin-canister-mock",
  "ic-btc-interface",
@@ -6561,6 +6563,7 @@ dependencies = [
  "serde_bytes",
  "serde_json",
  "simple_asn1",
+ "tokio",
 ]
 
 [[package]]

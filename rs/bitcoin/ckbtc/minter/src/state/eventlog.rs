@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use crate::lifecycle::init::InitArgs;
 use crate::lifecycle::upgrade::UpgradeArgs;
 use crate::state::{

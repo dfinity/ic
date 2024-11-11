@@ -107,11 +107,18 @@ alias(
 rust_test(
     name = "ckbtc_minter_lib_unit_tests",
     crate = ":ckbtc_minter_lib",
+    data = [
+        "test_resources/mainnet_events.gz",
+        "test_resources/testnet_events.gz",
+    ],
     deps = [
         # Keep sorted.
         "@crate_index//:bitcoin",
+        "@crate_index//:flate2",
+        "@crate_index//:ic-agent",
         "@crate_index//:proptest",
         "@crate_index//:simple_asn1",
+        "@crate_index//:tokio",
     ],
 )
 
