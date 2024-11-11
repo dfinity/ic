@@ -831,7 +831,7 @@ http_file(
 # Management canister candid interface (release v0.22 used in fuzzers)
 
 http_file(
-    name = "interface_spec",
+    name = "management_canister_did",
     downloaded_file_path = "ic.did",
     sha256 = "bf3987bd483cf710ff0c54134350ca188c29ff0fdd38567aa4df5e74131543e4",
     url = "https://raw.githubusercontent.com/dfinity/interface-spec/a82220c1156f5e3e80ea65be6a4f69b766cbe6d1/spec/_attachments/ic.did",
@@ -840,7 +840,7 @@ http_file(
 # Management canister candid interface (recent master commit used in PocketIC tests)
 
 http_file(
-    name = "management_canister_did",
+    name = "management_canister_did_HEAD",
     downloaded_file_path = "ic.did",
     sha256 = "31d4654d60b364420a2e52f546f06b2255dc78ac8c2d768271f004b8946e92cb",
     url = "https://raw.githubusercontent.com/dfinity/interface-spec/b7cbca243f527b6819a0b0f644f87366a47d3eb4/spec/_attachments/ic.did",

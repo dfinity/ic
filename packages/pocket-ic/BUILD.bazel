@@ -59,9 +59,9 @@ rust_test(
 rust_test(
     name = "management-canister-test",
     srcs = ["tests/management_canister.rs"],
-    data = ["@management_canister_did//file"],
+    data = ["@management_canister_did_HEAD//file"],
     env = {
-        "IC_DID": "$(rootpath @management_canister_did//file)",
+        "IC_DID": "$(rootpath @management_canister_did_HEAD//file)",
     },
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = [":pocket-ic"] + DEPENDENCIES + TEST_DEPENDENCIES,
