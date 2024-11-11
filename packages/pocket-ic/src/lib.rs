@@ -41,7 +41,7 @@ use crate::{
         InstanceId, MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId, SubnetId,
         SubnetKind, SubnetSpec, Topology,
     },
-    management_canister::{CanisterId, CanisterStatusResult, Snapshot},
+    management_canister::{CanisterId, CanisterInstallMode, CanisterStatusResult, Snapshot},
     nonblocking::PocketIc as PocketIcAsync,
 };
 use candid::{
@@ -735,6 +735,73 @@ impl PocketIc {
         runtime.block_on(async {
             self.pocket_ic
                 .create_canister_on_subnet(sender, settings, subnet_id)
+                .await
+        })
+    }
+
+    /// Upload a WASM chunk to the WASM chunk store of a canister.
+    /// Returns the WASM chunk hash.
+    #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub fn upload_chunk(
+        &self,
+        canister_id: CanisterId,
+        sender: Option<Principal>,
+        chunk: Vec<u8>,
+    ) -> Result<Vec<u8>, CallError> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .upload_chunk(canister_id, sender, chunk)
+                .await
+        })
+    }
+
+    /// List WASM chunk hashes in the WASM chunk store of a canister.
+    #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub fn stored_chunks(
+        &self,
+        canister_id: CanisterId,
+        sender: Option<Principal>,
+    ) -> Result<Vec<Vec<u8>>, CallError> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.stored_chunks(canister_id, sender).await })
+    }
+
+    /// Clear the WASM chunk store of a canister.
+    #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub fn clear_chunk_store(
+        &self,
+        canister_id: CanisterId,
+        sender: Option<Principal>,
+    ) -> Result<(), CallError> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.clear_chunk_store(canister_id, sender).await })
+    }
+
+    /// Install a WASM module assembled from chunks on an existing canister.
+    #[instrument(skip(self, mode, chunk_hashes_list, wasm_module_hash, arg), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string(), store_canister_id = %store_canister_id.to_string(), arg_len = %arg.len()))]
+    pub fn install_chunked_canister(
+        &self,
+        canister_id: CanisterId,
+        sender: Option<Principal>,
+        mode: CanisterInstallMode,
+        store_canister_id: CanisterId,
+        chunk_hashes_list: Vec<Vec<u8>>,
+        wasm_module_hash: Vec<u8>,
+        arg: Vec<u8>,
+    ) -> Result<(), CallError> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .install_chunked_canister(
+                    canister_id,
+                    sender,
+                    mode,
+                    store_canister_id,
+                    chunk_hashes_list,
+                    wasm_module_hash,
+                    arg,
+                )
                 .await
         })
     }
