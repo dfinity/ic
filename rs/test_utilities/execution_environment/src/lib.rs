@@ -470,7 +470,7 @@ impl ExecutionTest {
     }
 
     pub fn ingress_status(&self, message_id: &MessageId) -> IngressStatus {
-        self.state().get_ingress_status(message_id)
+        self.state().get_ingress_status(message_id).clone()
     }
 
     pub fn ingress_state(&self, message_id: &MessageId) -> IngressState {
@@ -1644,8 +1644,12 @@ impl ExecutionTest {
                     .unwrap();
             }
             let factory = Arc::clone(&fd_factory);
-            es.wasm_memory.page_map =
-                PageMap::open(&base_only_storage_layout(path), Height::new(0), factory).unwrap();
+            es.wasm_memory.page_map = PageMap::open(
+                Box::new(base_only_storage_layout(path)),
+                Height::new(0),
+                factory,
+            )
+            .unwrap();
             *es.wasm_memory.sandbox_memory.lock().unwrap() = SandboxMemory::Unsynced;
             new_checkpoint_files.push(checkpoint_file);
 
@@ -1664,8 +1668,12 @@ impl ExecutionTest {
                     .unwrap();
             }
             let factory = Arc::clone(&fd_factory);
-            es.stable_memory.page_map =
-                PageMap::open(&base_only_storage_layout(path), Height::new(0), factory).unwrap();
+            es.stable_memory.page_map = PageMap::open(
+                Box::new(base_only_storage_layout(path)),
+                Height::new(0),
+                factory,
+            )
+            .unwrap();
             *es.stable_memory.sandbox_memory.lock().unwrap() = SandboxMemory::Unsynced;
             new_checkpoint_files.push(checkpoint_file);
         }

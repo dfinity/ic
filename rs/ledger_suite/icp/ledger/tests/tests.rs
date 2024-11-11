@@ -1594,17 +1594,25 @@ fn test_query_archived_blocks() {
     let user1 = Principal::from_slice(&[1]);
     let user2 = Principal::from_slice(&[2]);
 
+    // advance time so that time does not grow implicitly when executing a round
+    env.advance_time(Duration::from_secs(1));
     // mint block
-    let mint_time = system_time_to_nanos(env.time_of_next_round());
+    let mint_time = system_time_to_nanos(env.time());
     transfer(&env, ledger, MINTER, user1, 2_000_000_000).unwrap();
+    // advance time so that time does not grow implicitly when executing a round
+    env.advance_time(Duration::from_secs(1));
     // burn block
-    let burn_time = system_time_to_nanos(env.time_of_next_round());
+    let burn_time = system_time_to_nanos(env.time());
     transfer(&env, ledger, user1, MINTER, 1_000_000_000).unwrap();
+    // advance time so that time does not grow implicitly when executing a round
+    env.advance_time(Duration::from_secs(1));
     // xfer block
-    let xfer_time = system_time_to_nanos(env.time_of_next_round());
+    let xfer_time = system_time_to_nanos(env.time());
     transfer(&env, ledger, user1, user2, 100_000_000).unwrap();
+    // advance time so that time does not grow implicitly when executing a round
+    env.advance_time(Duration::from_secs(1));
     // approve block
-    let approve_time = system_time_to_nanos(env.time_of_next_round());
+    let approve_time = system_time_to_nanos(env.time());
     send_approval(
         &env,
         ledger,

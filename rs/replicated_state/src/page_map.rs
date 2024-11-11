@@ -468,6 +468,10 @@ pub struct PageMap {
 }
 
 impl PageMap {
+    pub fn is_loaded(&self) -> bool {
+        self.storage.is_loaded()
+    }
+
     /// Creates a new page map that always returns zeroed pages.
     /// The allocator of this page map is backed by the file descriptor
     /// the page map is instantiated with.
@@ -498,12 +502,12 @@ impl PageMap {
     ///
     /// Note that the file is assumed to be read-only.
     pub fn open(
-        storage_layout: &dyn StorageLayout,
+        storage_layout: Box<dyn StorageLayout + Send + Sync>,
         base_height: Height,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     ) -> Result<Self, PersistenceError> {
         Ok(Self {
-            storage: Storage::load(storage_layout)?,
+            storage: Storage::lazy_load(storage_layout)?,
             base_height: Some(base_height),
             page_delta: Default::default(),
             unflushed_delta: Default::default(),
@@ -886,6 +890,7 @@ impl PageMap {
         assert!(self.unflushed_delta.is_empty());
         assert!(checkpointed_page_map.page_delta.is_empty());
         assert!(checkpointed_page_map.unflushed_delta.is_empty());
+        assert!(!checkpointed_page_map.is_loaded());
         // Keep the page allocators of the states disjoint.
     }
 
