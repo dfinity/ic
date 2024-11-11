@@ -37,9 +37,9 @@
 pub use crate::management_canister::CanisterSettings;
 use crate::{
     common::rest::{
-        BlobCompression, BlobId, CanisterHttpRequest, DtsFlag, ExtendedSubnetConfigSet,
-        HttpsConfig, InstanceId, MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId,
-        SubnetId, SubnetKind, SubnetSpec, Topology,
+        BlobCompression, BlobId, CanisterHttpRequest, ExtendedSubnetConfigSet, HttpsConfig,
+        InstanceId, MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId, SubnetId,
+        SubnetKind, SubnetSpec, Topology,
     },
     management_canister::{CanisterId, CanisterStatusResult},
     nonblocking::PocketIc as PocketIcAsync,
@@ -323,12 +323,6 @@ impl PocketIcBuilder {
         config
             .system
             .push(SubnetSpec::default().with_benchmarking_instruction_config());
-        self.config = Some(config);
-        self
-    }
-
-    pub fn with_dts_flag(mut self, dts_flag: DtsFlag) -> Self {
-        let config = self.config.unwrap_or_default().with_dts_flag(dts_flag);
         self.config = Some(config);
         self
     }
