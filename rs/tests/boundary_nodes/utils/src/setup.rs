@@ -112,7 +112,7 @@ pub fn setup_ic_with_bn(bn_name: &str, bn_https_config: BoundaryNodeHttpsConfig,
         )
         .unwrap();
     debug!(log, "systemctl {bn_name} = '{list_dependencies}'");
-    env.sync_with_prometheus(Some(bn_name));
+    env.with_boundary_node(Some(bn_name)).sync_with_prometheus();
 }
 
 pub fn setup_ic(env: TestEnv) {
@@ -144,5 +144,5 @@ pub fn setup_ic(env: TestEnv) {
                 .expect("Replica did not come up healthy.");
         }
     }
-    env.sync_with_prometheus(None);
+    env.sync_with_prometheus();
 }

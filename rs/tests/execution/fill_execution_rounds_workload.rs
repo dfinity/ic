@@ -133,7 +133,7 @@ pub fn setup(env: TestEnv, subnet_size: usize, initial_notary_delay: Duration) {
         )
         .setup_and_start(&env)
         .expect("Failed to setup IC under test.");
-    env.sync_with_prometheus(None);
+    env.sync_with_prometheus();
 
     // Await Replicas
     info!(&logger, "Checking readiness of all replica nodes...");

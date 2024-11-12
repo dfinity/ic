@@ -31,6 +31,7 @@ const ASYNC_CHAN_SIZE: usize = 8192;
 #[derive(Clone, Debug)]
 pub struct TestEnv {
     inner: Arc<TestEnvInner>,
+    pub boundary_node_name: Option<String>,
 }
 
 /// A TestEnv represents a directory storing all state related to a test.
@@ -57,6 +58,7 @@ impl TestEnv {
         let logger = slog::Logger::root(slog::Duplicate(logger, file_drain).fuse(), o!());
         Ok(Self {
             inner: Arc::new(TestEnvInner { base_path, logger }),
+            boundary_node_name: None,
         })
     }
 
@@ -64,6 +66,7 @@ impl TestEnv {
         let base_path = PathBuf::from(path.as_ref());
         Self {
             inner: Arc::new(TestEnvInner { base_path, logger }),
+            boundary_node_name: None,
         }
     }
 

@@ -67,5 +67,5 @@ pub fn setup(env: TestEnv) {
         )
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
-    env.sync_with_prometheus(None);
+    env.sync_with_prometheus();
 }

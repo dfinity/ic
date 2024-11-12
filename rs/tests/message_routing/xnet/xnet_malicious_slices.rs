@@ -111,7 +111,7 @@ fn setup(env: TestEnv, config: Config, malicious_behavior: MaliciousBehaviour) {
             .nodes()
             .for_each(|node| node.await_status_is_healthy().unwrap())
     });
-    env.sync_with_prometheus(None);
+    env.sync_with_prometheus();
 }
 
 pub fn test(env: TestEnv, config: Config) {
