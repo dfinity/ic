@@ -22,12 +22,14 @@ pub(crate) const ERROR_TYPE_STOPPED: &str = "stopped";
 pub(crate) const ERROR_TYPE_READ: &str = "read";
 pub(crate) const INFALIBBLE: &str = "infallible";
 pub(crate) const ERROR_TYPE_WRITE: &str = "write";
-pub(crate) const ERROR_CLOSED_STREAM: &str = "closed_stream";
-pub(crate) const ERROR_RESET_STREAM: &str = "reset_stream";
-pub(crate) const ERROR_STOPPED_STREAM: &str = "stopped_stream";
-pub(crate) const ERROR_APP_CLOSED_CONN: &str = "app_closed_conn";
-pub(crate) const ERROR_INTERNALLY_CLOSED_CONN: &str = "internally_closed_conn";
-pub(crate) const ERROR_LOCALLY_CLOSED_CONN: &str = "locally_closed_conn";
+const ERROR_CLOSED_STREAM: &str = "closed_stream";
+const ERROR_RESET_STREAM: &str = "reset_stream";
+const ERROR_STOPPED_STREAM: &str = "stopped_stream";
+const ERROR_APP_CLOSED_CONN: &str = "app_closed_conn";
+const ERROR_LOCALLY_CLOSED_CONN: &str = "locally_closed_conn";
+// A connection was closed by the QUIC protocol.
+const ERROR_QUIC_CLOSED_CONN: &str = "quic_closed_conn";
+
 pub(crate) const STREAM_TYPE_BIDI: &str = "bidi";
 
 #[derive(Clone, Debug)]
@@ -216,7 +218,7 @@ pub fn observe_conn_error(err: &ConnectionError, op: &str, counter: &IntCounterV
             .with_label_values(&[op, ERROR_APP_CLOSED_CONN])
             .inc(),
         _ => counter
-            .with_label_values(&[op, ERROR_INTERNALLY_CLOSED_CONN])
+            .with_label_values(&[op, ERROR_QUIC_CLOSED_CONN])
             .inc(),
     }
 }
