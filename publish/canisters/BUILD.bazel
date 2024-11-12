@@ -12,6 +12,7 @@ CANISTERS = {
     "genesis-token-canister.wasm.gz": "//rs/nns/gtc:genesis-token-canister",
     "governance-canister.wasm.gz": "//rs/nns/governance:governance-canister",
     "governance-canister_test.wasm.gz": "//rs/nns/governance:governance-canister-test",
+    "ic-btc-kyt.wasm.gz": "//rs/bitcoin/kyt:btc_kyt_canister",
     "ic-ckbtc-minter.wasm.gz": "//rs/bitcoin/ckbtc/minter:ckbtc_minter",
     "ic-ckbtc-minter_debug.wasm.gz": "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
     "ic-ckbtc-kyt.wasm.gz": "//rs/bitcoin/ckbtc/kyt:kyt_canister",
@@ -52,7 +53,6 @@ COMPRESSED_CANISTERS = {
 DEFAULT_CANISTERS_MAX_SIZE_E5_BYTES = "21"
 
 CANISTERS_MAX_SIZE_E5_BYTES = {
-    "ic-ckbtc-minter.wasm": "19",
     "ledger-canister.wasm": "19",
     "ledger-canister_notify-method.wasm": "19",
 }
@@ -66,6 +66,9 @@ CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {
     "ic-icrc1-ledger-u256.wasm.gz": "7",
 
     # -- XC team --
+    "ic-btc-kyt.wasm.gz": "6",
+    "ic-ckbtc-minter.wasm.gz": "8",
+    "ic-cketh-minter.wasm.gz": "13",
     # The orchestrator needs to embed 3 wasms at compile time
     # (ICRC1 index, ICRC1 ledger, and ICRC1 archive) and size is
     # therefore strictly controlled.
