@@ -8,6 +8,7 @@ use ic_config::{
     subnet_config::SubnetConfig,
 };
 use ic_cycles_account_manager::CyclesAccountManager;
+use ic_cycles_account_manager::WasmExecutionMode;
 use ic_embedders::{
     wasm_utils::{compile, decoding::decode_wasm},
     WasmtimeEmbedder,
@@ -153,7 +154,7 @@ pub fn test_registry_settings() -> RegistryExecutionSettings {
 /// actually charged). This function returns the amount needed to correct for
 /// that difference.
 pub fn universal_canister_compilation_cost_correction() -> NumInstructions {
-    let cost = wasm_compilation_cost(UNIVERSAL_CANISTER_WASM);
+    let cost = wasm_compilation_cost(&UNIVERSAL_CANISTER_WASM);
     cost - CompilationCostHandling::CountReducedAmount.adjusted_compilation_cost(cost)
 }
 
@@ -275,6 +276,18 @@ impl ExecutionTest {
             .execution_state
             .as_ref()
             .unwrap()
+    }
+
+    pub fn canister_wasm_execution_mode(&self, canister_id: CanisterId) -> WasmExecutionMode {
+        // In case of any error or missing state, default to Wasm32.
+        if let Some(state) = self.state.as_ref() {
+            if let Some(canister) = state.canister_state(&canister_id).as_ref() {
+                if let Some(execution_state) = canister.execution_state.as_ref() {
+                    return execution_state.is_wasm64.into();
+                }
+            }
+        }
+        WasmExecutionMode::Wasm32
     }
 
     pub fn xnet_messages(&self) -> &Vec<RequestOrResponse> {
@@ -419,13 +432,17 @@ impl ExecutionTest {
         self.cycles_account_manager()
             .convert_instructions_to_cycles(
                 cost - CompilationCostHandling::CountReducedAmount.adjusted_compilation_cost(cost),
+                WasmExecutionMode::Wasm32, // In this case it does not matter if it is a Wasm64 or Wasm32 canister.
             )
     }
 
     pub fn install_code_reserved_execution_cycles(&self) -> Cycles {
         let num_instructions = self.install_code_instruction_limits.message();
-        self.cycles_account_manager
-            .execution_cost(num_instructions, self.subnet_size())
+        self.cycles_account_manager.execution_cost(
+            num_instructions,
+            self.subnet_size(),
+            WasmExecutionMode::Wasm32, // For this test, we can assume a Wasm32 execution.
+        )
     }
 
     pub fn subnet_available_memory(&self) -> SubnetAvailableMemory {
@@ -453,7 +470,7 @@ impl ExecutionTest {
     }
 
     pub fn ingress_status(&self, message_id: &MessageId) -> IngressStatus {
-        self.state().get_ingress_status(message_id)
+        self.state().get_ingress_status(message_id).clone()
     }
 
     pub fn ingress_state(&self, message_id: &MessageId) -> IngressState {
@@ -1454,11 +1471,19 @@ impl ExecutionTest {
             .executed_instructions
             .entry(canister_id)
             .or_insert(NumInstructions::new(0)) += limit - left;
+
+        let is_wasm64_execution = self.canister_wasm_execution_mode(canister_id);
+
         // Ideally we would simply add `execution_cost(limit - left)`
         // but that leads to small precision errors because 1 Cycle = 0.4 Instructions.
-        let fixed_cost = mgr.execution_cost(NumInstructions::from(0), self.subnet_size());
-        let instruction_cost = mgr.execution_cost(limit, self.subnet_size())
-            - mgr.execution_cost(left, self.subnet_size());
+        let fixed_cost = mgr.execution_cost(
+            NumInstructions::from(0),
+            self.subnet_size(),
+            is_wasm64_execution,
+        );
+        let instruction_cost = mgr.execution_cost(limit, self.subnet_size(), is_wasm64_execution)
+            - mgr.execution_cost(left, self.subnet_size(), is_wasm64_execution);
+
         *self
             .execution_cost
             .entry(canister_id)
@@ -1619,8 +1644,12 @@ impl ExecutionTest {
                     .unwrap();
             }
             let factory = Arc::clone(&fd_factory);
-            es.wasm_memory.page_map =
-                PageMap::open(&base_only_storage_layout(path), Height::new(0), factory).unwrap();
+            es.wasm_memory.page_map = PageMap::open(
+                Box::new(base_only_storage_layout(path)),
+                Height::new(0),
+                factory,
+            )
+            .unwrap();
             *es.wasm_memory.sandbox_memory.lock().unwrap() = SandboxMemory::Unsynced;
             new_checkpoint_files.push(checkpoint_file);
 
@@ -1639,8 +1668,12 @@ impl ExecutionTest {
                     .unwrap();
             }
             let factory = Arc::clone(&fd_factory);
-            es.stable_memory.page_map =
-                PageMap::open(&base_only_storage_layout(path), Height::new(0), factory).unwrap();
+            es.stable_memory.page_map = PageMap::open(
+                Box::new(base_only_storage_layout(path)),
+                Height::new(0),
+                factory,
+            )
+            .unwrap();
             *es.stable_memory.sandbox_memory.lock().unwrap() = SandboxMemory::Unsynced;
             new_checkpoint_files.push(checkpoint_file);
         }
@@ -2049,11 +2082,6 @@ impl ExecutionTestBuilder {
             .embedders_config
             .feature_flags
             .wasm_native_stable_memory = FlagStatus::Disabled;
-        self
-    }
-
-    pub fn with_snapshots(mut self, status: FlagStatus) -> Self {
-        self.execution_config.canister_snapshots = status;
         self
     }
 

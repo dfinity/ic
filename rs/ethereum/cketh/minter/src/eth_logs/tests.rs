@@ -1,7 +1,9 @@
 mod parser {
+    use crate::eth_logs::parser::ReceivedEthOrErc20LogParser;
     use crate::eth_logs::{
-        Erc20WithSubaccountLogParser, LedgerSubaccount, LogParser, ReceivedErc20Event,
-        ReceivedErc20LogParser, ReceivedEthEvent, ReceivedEthLogParser, RECEIVED_ETH_EVENT_TOPIC,
+        LedgerSubaccount, LogParser, ReceivedErc20Event, ReceivedErc20LogParser, ReceivedEthEvent,
+        ReceivedEthLogParser, RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_EVENT_TOPIC,
+        RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC,
     };
     use crate::eth_rpc::LogEntry;
     use crate::numeric::{BlockNumber, Erc20Value, LogIndex, Wei};
@@ -11,10 +13,22 @@ mod parser {
 
     #[test]
     fn should_have_correct_topic() {
-        //must match event signature in minter.sol
-        let event_signature = "ReceivedEth(address,uint256,bytes32)";
-        let topic = Keccak256::hash(event_signature);
-        assert_eq!(topic, RECEIVED_ETH_EVENT_TOPIC)
+        for (event_signature, expected_topic) in [
+            (
+                "ReceivedEth(address,uint256,bytes32)",
+                RECEIVED_ETH_EVENT_TOPIC,
+            ),
+            (
+                "ReceivedErc20(address,address,uint256,bytes32)",
+                RECEIVED_ERC20_EVENT_TOPIC,
+            ),
+            (
+                "ReceivedEthOrErc20(address,address,uint256,bytes32,bytes32)",
+                RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC,
+            ),
+        ] {
+            assert_eq!(Keccak256::hash(event_signature), expected_topic)
+        }
     }
 
     #[test]
@@ -103,35 +117,35 @@ mod parser {
     #[test]
     fn should_parse_received_erc20_event_with_subaccount() {
         let event = r#"{
-            "address": "0x11d7c426eedc044b21066d2be9480d4b99e7cc1a",
+            "address": "0x2d39863d30716aaf2b7fffd85dd03dda2bfc2e38",
             "topics": [
-                "0xaef895090c2f5d6e81a70bef80dce496a0558487845aada57822159d5efae5cf",
+                "0x918adbebdb8f3b36fc337ab76df10b147b2def5c9dd62cb3456d9aeca40e0b07",
                 "0x0000000000000000000000001c7d4b196cb0c7b01d743fbc6116a902379c7238",
                 "0x000000000000000000000000dd2851cdd40ae6536831558dd46db62fac7a844d",
                 "0x1d9facb184cbe453de4841b6b9d9cc95bfc065344e485789b550544529020000"
             ],
-            "data": "0x000000000000000000000000000000000000000000000000000000000001869fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-            "blockNumber": "0x698adb",
-            "transactionHash": "0xf353e17cbcfea236a8b03d2d800205074e1f5014a3ce0f6dedcf128addb6bea4",
-            "transactionIndex": "0x15",
-            "blockHash": "0xeee67434b62fe62182ee51cdaf2693f112994fd3aa4d043c7e4a16fe775c37e3",
-            "logIndex": "0x45",
+            "data": "0x000000000000000000000000000000000000000000000000000000000000000aff00000000000000000000000000000000000000000000000000000000000000",
+            "blockNumber": "0x6a5c7b",
+            "transactionHash": "0x89a5cd5304b8e210e1888862be09d6bb75ba0d1b9e741021223758f92f714a15",
+            "transactionIndex": "0x7",
+            "blockHash": "0x610b7733af90f0ddbcc15756e6de041c928804ad01a1bb036aeeec43e29a1a45",
+            "logIndex": "0x5",
             "removed": false
         }"#;
-        let parsed_event = Erc20WithSubaccountLogParser::parse_log(
+        let parsed_event = ReceivedEthOrErc20LogParser::parse_log(
             serde_json::from_str::<LogEntry>(event).unwrap(),
         )
         .unwrap();
         let expected_event = ReceivedErc20Event {
-            transaction_hash: "0xf353e17cbcfea236a8b03d2d800205074e1f5014a3ce0f6dedcf128addb6bea4"
+            transaction_hash: "0x89a5cd5304b8e210e1888862be09d6bb75ba0d1b9e741021223758f92f714a15"
                 .parse()
                 .unwrap(),
-            block_number: BlockNumber::new(6916827),
-            log_index: LogIndex::from(69_u8),
+            block_number: BlockNumber::new(6970491),
+            log_index: LogIndex::from(5_u8),
             from_address: "0xdd2851Cdd40aE6536831558DD46db62fAc7A844d"
                 .parse()
                 .unwrap(),
-            value: Erc20Value::from(99_999_u128),
+            value: Erc20Value::from(10_u8),
             principal: Principal::from_str(
                 "hkroy-sm7vs-yyjs7-ekppe-qqnwx-hm4zf-n7ybs-titsi-k6e3k-ucuiu-uqe",
             )
@@ -139,7 +153,55 @@ mod parser {
             erc20_contract_address: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238"
                 .parse()
                 .unwrap(),
-            subaccount: LedgerSubaccount::from_bytes([0xff; 32]),
+            subaccount: LedgerSubaccount::from_bytes([
+                0xff, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0,
+            ]),
+        }
+        .into();
+
+        assert_eq!(parsed_event, expected_event);
+    }
+    #[test]
+    fn should_parse_received_eth_event_with_subaccount() {
+        let event = r#"{
+            "address": "0x2d39863d30716aaf2b7fffd85dd03dda2bfc2e38",
+            "topics": [
+                "0x918adbebdb8f3b36fc337ab76df10b147b2def5c9dd62cb3456d9aeca40e0b07",
+                "0x0000000000000000000000000000000000000000000000000000000000000000",
+                "0x000000000000000000000000dd2851cdd40ae6536831558dd46db62fac7a844d",
+                "0x1d9facb184cbe453de4841b6b9d9cc95bfc065344e485789b550544529020000"
+            ],
+            "data": "0x00000000000000000000000000000000000000000000000000038d7ea4c68000ff00000000000000000000000000000000000000000000000000000000000000",
+            "blockNumber": "0x6a5c69",
+            "transactionHash": "0x5a258e23fa361d60dcee4cd1eac24473cc4391e1cb4022aea722c49ab26cadf8",
+            "transactionIndex": "0xc",
+            "blockHash": "0xc419283f22e6c6d33971837a01962c9688f291499971bd22b08e596db40b167a",
+            "logIndex": "0xa",
+            "removed": false
+        }"#;
+        let parsed_event = ReceivedEthOrErc20LogParser::parse_log(
+            serde_json::from_str::<LogEntry>(event).unwrap(),
+        )
+        .unwrap();
+        let expected_event = ReceivedEthEvent {
+            transaction_hash: "0x5a258e23fa361d60dcee4cd1eac24473cc4391e1cb4022aea722c49ab26cadf8"
+                .parse()
+                .unwrap(),
+            block_number: BlockNumber::new(6970473),
+            log_index: LogIndex::from(10_u8),
+            from_address: "0xdd2851Cdd40aE6536831558DD46db62fAc7A844d"
+                .parse()
+                .unwrap(),
+            value: Wei::from(1_000_000_000_000_000_u64),
+            principal: Principal::from_str(
+                "hkroy-sm7vs-yyjs7-ekppe-qqnwx-hm4zf-n7ybs-titsi-k6e3k-ucuiu-uqe",
+            )
+            .unwrap(),
+            subaccount: LedgerSubaccount::from_bytes([
+                0xff, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0,
+            ]),
         }
         .into();
 
@@ -180,6 +242,97 @@ mod parser {
             ),
         });
         assert_eq!(parsed_event, expected_error);
+    }
+}
+
+mod scraping {
+    mod received_eth_or_erc20_log_scraping {
+        use crate::erc20::CkErc20Token;
+        use crate::eth_logs::scraping::Scrape;
+        use crate::eth_logs::{
+            LogScraping, ReceivedEthOrErc20LogScraping,
+            RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC,
+        };
+        use crate::eth_rpc::{FixedSizeData, Topic};
+        use crate::lifecycle::EthereumNetwork;
+        use crate::numeric::BlockNumber;
+        use crate::state::eth_logs_scraping::LogScrapingId;
+        use crate::test_fixtures::initial_state;
+        use hex_literal::hex;
+        use ic_ethereum_types::Address;
+
+        const CONTRACT_ADDRESS: Address =
+            Address::new(hex!("2D39863d30716aaf2B7fFFd85Dd03Dda2BFC2E38"));
+
+        #[test]
+        fn should_be_no_scrape_when_helper_contract_address_is_none() {
+            let state = initial_state();
+            let scrape = ReceivedEthOrErc20LogScraping::next_scrape(&state);
+            assert_eq!(scrape, None);
+        }
+
+        #[test]
+        fn should_always_contain_the_zero_address_in_second_topic() {
+            let last_scraped_block_number = BlockNumber::from(6_970_446_u32);
+            let state = {
+                let mut state = initial_state();
+                state
+                    .log_scrapings
+                    .set_contract_address(
+                        LogScrapingId::EthOrErc20DepositWithSubaccount,
+                        CONTRACT_ADDRESS,
+                    )
+                    .unwrap();
+                state.log_scrapings.set_last_scraped_block_number(
+                    LogScrapingId::EthOrErc20DepositWithSubaccount,
+                    last_scraped_block_number,
+                );
+                state
+            };
+
+            let scrape_without_erc20 = ReceivedEthOrErc20LogScraping::next_scrape(&state).unwrap();
+
+            assert_eq!(scrape_without_erc20.contract_address, CONTRACT_ADDRESS);
+            assert_eq!(
+                scrape_without_erc20.last_scraped_block_number,
+                last_scraped_block_number
+            );
+            assert_eq!(
+                scrape_without_erc20.topics,
+                vec![
+                    Topic::Single(FixedSizeData(
+                        RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC
+                    )),
+                    Topic::Multiple(vec![FixedSizeData::ZERO])
+                ]
+            );
+
+            let mut state = state;
+            state.record_add_ckerc20_token(CkErc20Token {
+                erc20_ethereum_network: EthereumNetwork::Sepolia,
+                erc20_contract_address: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238"
+                    .parse()
+                    .unwrap(),
+                ckerc20_token_symbol: "ckSepoliaUSDC".parse().unwrap(),
+                ckerc20_ledger_id: "yfumr-cyaaa-aaaar-qaela-cai".parse().unwrap(),
+            });
+
+            let scrape_with_erc20 = ReceivedEthOrErc20LogScraping::next_scrape(&state).unwrap();
+            assert_eq!(
+                scrape_with_erc20,
+                Scrape {
+                    topics: {
+                        let mut topics = scrape_without_erc20.topics;
+                        let _ = std::mem::replace(
+                            &mut topics[1],
+                            Topic::Multiple(vec![FixedSizeData::ZERO, FixedSizeData(hex!("0000000000000000000000001c7d4b196cb0c7b01d743fbc6116a902379c7238"))]),
+                        );
+                        topics
+                    },
+                    ..scrape_without_erc20
+                }
+            )
+        }
     }
 }
 
@@ -305,6 +458,7 @@ mod parse_principal_from_slice {
 
 mod subaccount {
     use crate::eth_logs::LedgerSubaccount;
+    use minicbor::{Decode, Encode};
     use proptest::{array::uniform32, prelude::any, prop_assert_eq, prop_assume, proptest};
 
     proptest! {
@@ -316,5 +470,55 @@ mod subaccount {
 
             prop_assert_eq!(bytes, actual_bytes);
         }
+    }
+
+    proptest! {
+        #[test]
+        fn should_migrate_struct_with_legacy_subaccount_set_to_none_to_new_struct_with_ledger_subaccount(
+            field_before in any::<u64>(), field_after in any::<u64>()
+        ) {
+            let legacy = WithLegacySubaccount {
+                field_before,
+                from_subaccount: None,
+                field_after,
+            };
+            let mut buf = vec![];
+            minicbor::encode(&legacy, &mut buf).expect("encoding should succeed");
+            let decoded: WithLedgerSubaccount =
+                minicbor::decode(&buf).expect("decoding should succeed");
+
+            prop_assert_eq!(
+                decoded,
+                WithLedgerSubaccount {
+                    field_before: legacy.field_before,
+                    from_subaccount: None,
+                    field_after: legacy.field_after,
+                }
+            );
+        }
+    }
+
+    #[derive(Clone, Debug, Eq, PartialEq, Decode, Encode)]
+    pub struct WithLegacySubaccount {
+        #[n(0)]
+        pub field_before: u64,
+        #[n(1)]
+        pub from_subaccount: Option<LegacySubaccount>,
+        #[n(2)]
+        pub field_after: u64,
+    }
+
+    #[derive(Clone, Debug, Eq, PartialEq, Decode, Encode)]
+    #[cbor(transparent)]
+    pub struct LegacySubaccount(#[cbor(n(0), with = "minicbor::bytes")] pub [u8; 32]);
+
+    #[derive(Clone, Debug, Eq, PartialEq, Decode, Encode)]
+    pub struct WithLedgerSubaccount {
+        #[n(0)]
+        pub field_before: u64,
+        #[n(1)]
+        pub from_subaccount: Option<LedgerSubaccount>,
+        #[n(2)]
+        pub field_after: u64,
     }
 }

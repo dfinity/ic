@@ -48,17 +48,16 @@ use ic_types::{
     messages::{HttpCallContent, HttpQueryContent},
     CanisterId, Cycles, PrincipalId,
 };
-use ic_universal_canister::{
-    call_args, wasm as universal_canister_argument_builder, UNIVERSAL_CANISTER_WASM,
-};
+use ic_universal_canister::{call_args, wasm as universal_canister_argument_builder};
 use ic_utils::{call::AsyncCall, interfaces::ManagementCanister};
 use icp_ledger::{
     tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Memo, SendArgs, Subaccount, Tokens,
     DEFAULT_TRANSFER_FEE,
 };
 use itertools::Itertools;
+use lazy_static::lazy_static;
 use on_wire::FromWire;
-use slog::{debug, info};
+use slog::{debug, info, Logger};
 use std::{
     collections::BTreeMap,
     convert::{TryFrom, TryInto},
@@ -113,6 +112,25 @@ pub fn runtime_from_url(url: Url, effective_canister_id: PrincipalId) -> Runtime
         agent,
         effective_canister_id,
     })
+}
+
+// Note that we can't use the UNIVERSAL_CANISTER_WASM from rs/universal_canister/lib/src/lib.rs
+// since in system-tests paths to runtime dependencies need to be get via get_dependency_path(path).
+lazy_static! {
+    /// The WASM of the Universal Canister.
+    pub static ref UNIVERSAL_CANISTER_WASM: &'static [u8] = {
+        let vec = get_universal_canister_wasm();
+        Box::leak(vec.into_boxed_slice())
+    };
+}
+
+fn get_universal_canister_wasm() -> Vec<u8> {
+    let uc_wasm_path = get_dependency_path(
+        std::env::var("UNIVERSAL_CANISTER_WASM_PATH")
+            .expect("UNIVERSAL_CANISTER_WASM_PATH not set"),
+    );
+    std::fs::read(&uc_wasm_path)
+        .unwrap_or_else(|e| panic!("Could not read WASM from {:?}: {e:?}", uc_wasm_path))
 }
 
 /// Provides an abstraction to the universal canister.
@@ -251,7 +269,7 @@ impl<'a> UniversalCanister<'a> {
             .0;
 
         // Install the universal canister.
-        mgr.install_code(&canister_id, UNIVERSAL_CANISTER_WASM)
+        mgr.install_code(&canister_id, &UNIVERSAL_CANISTER_WASM)
             .with_raw_arg(payload.clone())
             .call_and_wait()
             .await
@@ -278,7 +296,7 @@ impl<'a> UniversalCanister<'a> {
             .0;
 
         // Install the universal canister.
-        mgr.install_code(&canister_id, UNIVERSAL_CANISTER_WASM)
+        mgr.install_code(&canister_id, &UNIVERSAL_CANISTER_WASM)
             .with_raw_arg(payload.clone())
             .call_and_wait()
             .await
@@ -306,7 +324,7 @@ impl<'a> UniversalCanister<'a> {
             .0;
 
         // Install the universal canister.
-        mgr.install_code(&canister_id, UNIVERSAL_CANISTER_WASM)
+        mgr.install_code(&canister_id, &UNIVERSAL_CANISTER_WASM)
             .with_raw_arg(payload.clone())
             .call_and_wait()
             .await
@@ -1850,4 +1868,16 @@ pub fn expiry_time() -> Duration {
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap()
         + Duration::from_secs(4 * 60)
+}
+
+/// Time the duration of the given closure and log it.
+pub fn timeit<F, R>(log: Logger, description: &str, f: F) -> R
+where
+    F: FnOnce() -> R,
+{
+    let start = Instant::now();
+    let result = f(); // Run the closure
+    let duration = start.elapsed();
+    info!(log, "Executed '{}' in: {:?}", description, duration);
+    result
 }

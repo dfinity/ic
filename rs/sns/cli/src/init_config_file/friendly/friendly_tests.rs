@@ -119,7 +119,7 @@ fn test_parse() {
             ],
 
             initial_balances: InitialBalances {
-                governance: nervous_system_pb::Tokens { e8s: Some(60 * E8) },
+                treasury: nervous_system_pb::Tokens { e8s: Some(60 * E8) },
                 swap: nervous_system_pb::Tokens { e8s: Some(40 * E8) },
             },
 

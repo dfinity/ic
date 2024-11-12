@@ -71,6 +71,7 @@ go_deps.bzl               @dfinity/idx
 /.github/CODEOWNERS                                                      @dfinity/ic-owners-owners
 /ci/                                                                     @dfinity/idx
 /ci/src/dependencies/                                                    @dfinity/product-security
+/ci/src/dependencies/resources/container_scanner_finding_failover_ignore_list_guestos.txt @dfinity/node
 /.pre-commit-config.yaml                                                 @dfinity/idx
 /pre-commit/                                                             @dfinity/idx
 
@@ -225,9 +226,11 @@ go_deps.bzl               @dfinity/idx
 /rs/test_utilities/embedders/                           @dfinity/execution
 /rs/test_utilities/execution_environment/               @dfinity/execution
 /rs/test_utilities/in_memory_logger/                    @dfinity/crypto-team
+/rs/test_utilities/metrics                              @dfinity/networking @dfinity/ic-message-routing-owners
 /rs/test_utilities/src/crypto.rs                        @dfinity/crypto-team
 /rs/test_utilities/src/crypto/                          @dfinity/crypto-team
 /rs/test_utilities/src/cycles_account_manager.rs        @dfinity/execution
+/rs/test_utilities/state/                               @dfinity/execution @dfinity/ic-message-routing-owners
 /rs/test_utilities/types/src/batch/                     @dfinity/consensus
 /rs/tests/                                              @dfinity/idx
 /rs/tests/research                                      @dfinity/research @dfinity/idx
