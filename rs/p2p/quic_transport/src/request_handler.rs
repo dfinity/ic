@@ -114,16 +114,8 @@ async fn handle_bi_stream(
     let request_bytes = recv_stream
         .read_to_end(MAX_MESSAGE_SIZE_BYTES)
         .await
-        .inspect_err(|err| match err {
-            ReadToEndError::TooLong => metrics
-                .request_handle_errors_total
-                .with_label_values(&["read_to_end", INFALIBBLE])
-                .inc(),
-            ReadToEndError::Read(read_err) => observe_read_error(
-                read_err,
-                "read_to_end",
-                &metrics.request_handle_errors_total,
-            ),
+        .inspect_err(|err| {
+            observe_read_to_end_error(err, "read_to_end", &metrics.request_handle_errors_total)
         })?;
     let mut request = to_request(request_bytes)?;
     request.extensions_mut().insert::<NodeId>(peer_id);
