@@ -1813,7 +1813,7 @@ fn canister_logs() {
 }
 
 #[test]
-fn get_default_subnet() {
+fn get_subnet() {
     let pic = PocketIcBuilder::new()
         .with_nns_subnet()
         .with_application_subnet()
