@@ -125,7 +125,7 @@ prop_compose! {
 prop_compose! {
     /// Generates an arbitrary [`Request`], with or without populated `metadata` and
     /// `deadline` fields.
-    pub fn request_with_config(populate_metadata: bool, populate_deadline: bool)(
+    pub fn request_with_config(populate_deadline: bool)(
         receiver in canister_id(),
         sender in canister_id(),
         cycles_payment in any::<u64>(),
@@ -142,7 +142,7 @@ prop_compose! {
             payment: Cycles::from(cycles_payment),
             method_name,
             method_payload,
-            metadata: if populate_metadata { metadata } else { None },
+            metadata: metadata,
             deadline: if populate_deadline { deadline } else { NO_DEADLINE },
         }
     }
@@ -158,7 +158,7 @@ prop_compose! {
         // Always populate all fields, regardless of e.g. current certification version.
         // `ic_canonical_state` should not be using this generator; and all other crates /
         // proptests should be able to deal with all fields being populated.
-        request in request_with_config(true, true),
+        request in request_with_config(true),
     ) -> Request {
         request
     }
@@ -216,12 +216,10 @@ prop_compose! {
 /// Produces an arbitrary [`RequestOrResponse`], with the respective fields
 /// populated or not.
 pub fn request_or_response_with_config(
-    populate_request_metadata: bool,
     populate_deadline: bool,
 ) -> impl Strategy<Value = RequestOrResponse> {
     prop_oneof![
-        request_with_config(populate_request_metadata, populate_deadline)
-            .prop_flat_map(|req| Just(req.into())),
+        request_with_config(populate_deadline).prop_flat_map(|req| Just(req.into())),
         response_with_config(populate_deadline).prop_flat_map(|rep| Just(rep.into())),
     ]
 }

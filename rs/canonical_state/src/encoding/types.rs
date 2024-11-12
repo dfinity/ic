@@ -10,7 +10,7 @@
 //! Newtypes, such as various IDs are replaced by the wrapped type.
 //! `CanisterIds` are represented as byte vectors.
 
-use crate::CertificationVersion;
+use crate::{is_supported, CertificationVersion};
 use ic_error_types::TryFromError;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_types::{
@@ -233,18 +233,7 @@ impl From<(&ic_types::xnet::StreamHeader, CertificationVersion)> for StreamHeade
     fn from(
         (header, certification_version): (&ic_types::xnet::StreamHeader, CertificationVersion),
     ) -> Self {
-        // Replicas with certification version < 9 do not produce reject signals. This
-        // includes replicas with certification version 8, but they may "inherit" reject
-        // signals from a replica with certification version 9 after a downgrade.
-        assert!(
-            header.reject_signals().is_empty() || certification_version >= CertificationVersion::V8,
-            "Replicas with certification version < 9 should not be producing reject signals"
-        );
-        // Replicas with certification version < 17 should not have flags set.
-        assert!(
-            *header.flags() == STREAM_DEFAULT_FLAGS
-                || certification_version >= CertificationVersion::V17
-        );
+        assert!(is_supported(certification_version));
 
         let mut flags = 0;
         let ic_types::xnet::StreamFlags {
@@ -458,6 +447,7 @@ impl From<(&ic_types::messages::RequestOrResponse, CertificationVersion)> for Re
         ),
     ) -> Self {
         use ic_types::messages::RequestOrResponse::*;
+        assert!(is_supported(certification_version));
         match message {
             Request(request) => Self {
                 request: Some((request.as_ref(), certification_version).into()),
@@ -517,6 +507,8 @@ impl From<(&ic_types::messages::Request, CertificationVersion)> for Request {
     fn from(
         (request, certification_version): (&ic_types::messages::Request, CertificationVersion),
     ) -> Self {
+        assert!(is_supported(certification_version));
+
         // Replicas with certification version < 18 should not apply request deadlines.
         debug_assert!(
             request.deadline == NO_DEADLINE || certification_version >= CertificationVersion::V18
@@ -535,9 +527,7 @@ impl From<(&ic_types::messages::Request, CertificationVersion)> for Request {
             method_name: request.method_name.clone(),
             method_payload: request.method_payload.clone(),
             cycles_payment: None,
-            metadata: request.metadata.as_ref().and_then(|metadata| {
-                (certification_version >= CertificationVersion::V14).then_some(metadata.into())
-            }),
+            metadata: request.metadata.as_ref().map(From::from),
             deadline: request.deadline.as_secs_since_unix_epoch(),
         }
     }
@@ -574,6 +564,8 @@ impl From<(&ic_types::messages::Response, CertificationVersion)> for Response {
     fn from(
         (response, certification_version): (&ic_types::messages::Response, CertificationVersion),
     ) -> Self {
+        assert!(is_supported(certification_version));
+
         // Replicas with certification version < 18 should not apply response deadlines.
         debug_assert!(
             response.deadline == NO_DEADLINE || certification_version >= CertificationVersion::V18
@@ -623,8 +615,9 @@ impl TryFrom<Response> for ic_types::messages::Response {
 
 impl From<(&ic_types::funds::Cycles, CertificationVersion)> for Cycles {
     fn from(
-        (cycles, _certification_version): (&ic_types::funds::Cycles, CertificationVersion),
+        (cycles, certification_version): (&ic_types::funds::Cycles, CertificationVersion),
     ) -> Self {
+        assert!(is_supported(certification_version));
         let (high, low) = cycles.into_parts();
         Self {
             low,
@@ -652,6 +645,7 @@ impl From<(&ic_types::funds::Funds, CertificationVersion)> for Funds {
     fn from(
         (funds, certification_version): (&ic_types::funds::Funds, CertificationVersion),
     ) -> Self {
+        assert!(is_supported(certification_version));
         Self {
             cycles: (&funds.cycles(), certification_version).into(),
             icp: 0,
@@ -672,6 +666,7 @@ impl From<(&ic_types::messages::Payload, CertificationVersion)> for Payload {
         (payload, certification_version): (&ic_types::messages::Payload, CertificationVersion),
     ) -> Self {
         use ic_types::messages::Payload::*;
+        assert!(is_supported(certification_version));
         match payload {
             Data(data) => Self {
                 data: Some(data.clone()),
@@ -708,11 +703,12 @@ impl TryFrom<Payload> for ic_types::messages::Payload {
 
 impl From<(&ic_types::messages::RejectContext, CertificationVersion)> for RejectContext {
     fn from(
-        (context, _certification_version): (
+        (context, certification_version): (
             &ic_types::messages::RejectContext,
             CertificationVersion,
         ),
     ) -> Self {
+        assert!(is_supported(certification_version));
         Self {
             code: context.code() as u8,
             message: context.message().clone(),
@@ -748,12 +744,9 @@ impl
             CertificationVersion,
         ),
     ) -> Self {
+        assert!(is_supported(certification_version));
         Self {
-            id_counter: if certification_version <= CertificationVersion::V9 {
-                Some(0)
-            } else {
-                None
-            },
+            id_counter: None,
             prev_state_hash: metadata
                 .prev_state_hash
                 .as_ref()
@@ -769,11 +762,12 @@ impl
     )> for SubnetMetrics
 {
     fn from(
-        (metrics, _certification_version): (
+        (metrics, certification_version): (
             &ic_replicated_state::metadata_state::SubnetMetrics,
             CertificationVersion,
         ),
     ) -> Self {
+        assert!(is_supported(certification_version));
         let (high, low) = metrics.consumed_cycles_total().into_parts();
         Self {
             num_canisters: metrics.num_canisters,

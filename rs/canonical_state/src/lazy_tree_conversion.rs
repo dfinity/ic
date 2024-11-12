@@ -5,7 +5,8 @@ use crate::{
         encode_controllers, encode_message, encode_metadata, encode_stream_header,
         encode_subnet_canister_ranges, encode_subnet_metrics,
     },
-    CertificationVersion, MAX_SUPPORTED_CERTIFICATION_VERSION, MIN_SUPPORTED_CERTIFICATION_VERSION,
+    is_supported, CertificationVersion, MAX_SUPPORTED_CERTIFICATION_VERSION,
+    MIN_SUPPORTED_CERTIFICATION_VERSION,
 };
 use ic_canonical_state_tree_hash::lazy_tree::{blob, fork, num, string, Lazy, LazyFork, LazyTree};
 use ic_crypto_tree_hash::Label;
@@ -294,16 +295,12 @@ pub fn replicated_state_as_lazy_tree(state: &ReplicatedState) -> LazyTree<'_> {
 
     fork(
         FiniteMap::default()
-            .with_if(
-                certification_version >= CertificationVersion::V16,
-                "api_boundary_nodes",
-                move || {
-                    api_boundary_nodes_as_tree(
-                        &state.metadata.api_boundary_nodes,
-                        certification_version,
-                    )
-                },
-            )
+            .with("api_boundary_nodes", move || {
+                api_boundary_nodes_as_tree(
+                    &state.metadata.api_boundary_nodes,
+                    certification_version,
+                )
+            })
             .with("metadata", move || {
                 system_metadata_as_tree(&state.metadata, certification_version)
             })
@@ -345,6 +342,7 @@ fn streams_as_tree(
     streams: &StreamMap,
     certification_version: CertificationVersion,
 ) -> LazyTree<'_> {
+    assert!(is_supported(certification_version));
     fork(MapTransformFork {
         map: streams,
         certification_version,
@@ -377,6 +375,7 @@ fn system_metadata_as_tree(
     m: &SystemMetadata,
     certification_version: CertificationVersion,
 ) -> LazyTree<'_> {
+    assert!(is_supported(certification_version));
     blob(move || encode_metadata(m, certification_version))
 }
 
@@ -522,19 +521,19 @@ impl<'a> LazyFork<'a> for RejectStatus<'a> {
 }
 
 fn status_to_tree(status: &IngressStatus, version: CertificationVersion) -> LazyTree<'_> {
+    assert!(is_supported(version));
     match status {
         IngressStatus::Known { state, .. } => match state {
             IngressState::Completed(WasmResult::Reply(b)) => fork(ReplyStatus(b)),
             IngressState::Completed(WasmResult::Reject(s)) => fork(RejectStatus {
                 reject_code: RejectCode::CanisterReject as u64,
-                error_code: (version >= CertificationVersion::V11)
-                    .then_some(ErrorCode::CanisterRejectedMessage),
+                error_code: Some(ErrorCode::CanisterRejectedMessage),
                 message: s,
                 version,
             }),
             IngressState::Failed(error) => fork(RejectStatus {
                 reject_code: error.reject_code() as u64,
-                error_code: (version >= CertificationVersion::V11).then_some(error.code()),
+                error_code: Some(error.code()),
                 message: error.description(),
                 version,
             }),
@@ -552,16 +551,11 @@ const CONTROLLERS_LABEL: &[u8] = b"controllers";
 const METADATA_LABEL: &[u8] = b"metadata";
 const MODULE_HASH_LABEL: &[u8] = b"module_hash";
 
-const CANISTER_LABELS: [(&[u8], CertificationVersion, CertificationVersion); 5] = [
+const CANISTER_LABELS: [(&[u8], CertificationVersion, CertificationVersion); 4] = [
     (
         CERTIFIED_DATA_LABEL,
         CertificationVersion::V0,
         MAX_SUPPORTED_CERTIFICATION_VERSION,
-    ),
-    (
-        CONTROLLER_LABEL,
-        CertificationVersion::V1,
-        CertificationVersion::V12,
     ),
     (
         CONTROLLERS_LABEL,
@@ -580,18 +574,11 @@ const CANISTER_LABELS: [(&[u8], CertificationVersion, CertificationVersion); 5] 
     ),
 ];
 
-const CANISTER_NO_MODULE_LABELS: [(&[u8], CertificationVersion, CertificationVersion); 2] = [
-    (
-        CONTROLLER_LABEL,
-        CertificationVersion::V1,
-        CertificationVersion::V12,
-    ),
-    (
-        CONTROLLERS_LABEL,
-        CertificationVersion::V2,
-        MAX_SUPPORTED_CERTIFICATION_VERSION,
-    ),
-];
+const CANISTER_NO_MODULE_LABELS: [(&[u8], CertificationVersion, CertificationVersion); 1] = [(
+    CONTROLLERS_LABEL,
+    CertificationVersion::V2,
+    MAX_SUPPORTED_CERTIFICATION_VERSION,
+)];
 
 #[derive(Clone)]
 struct CanisterFork<'a> {
@@ -691,6 +678,7 @@ fn api_boundary_nodes_as_tree(
     api_boundary_nodes: &BTreeMap<NodeId, ApiBoundaryNodeEntry>,
     certification_version: CertificationVersion,
 ) -> LazyTree<'_> {
+    assert!(is_supported(certification_version));
     fork(MapTransformFork {
         map: api_boundary_nodes,
         certification_version,
@@ -713,6 +701,7 @@ fn canisters_as_tree(
     canisters: &BTreeMap<CanisterId, CanisterState>,
     certification_version: CertificationVersion,
 ) -> LazyTree<'_> {
+    assert!(is_supported(certification_version));
     fork(MapTransformFork {
         map: canisters,
         certification_version,
@@ -733,6 +722,7 @@ fn subnets_as_tree<'a>(
     metrics: &'a SubnetMetrics,
     certification_version: CertificationVersion,
 ) -> LazyTree<'a> {
+    assert!(is_supported(certification_version));
     fork(MapTransformFork {
         map: subnets,
         certification_version,
@@ -740,8 +730,7 @@ fn subnets_as_tree<'a>(
             fork(
                 FiniteMap::default()
                     .with_tree("public_key", Blob(&subnet_topology.public_key[..], None))
-                    .with_tree_if(
-                        certification_version > CertificationVersion::V2,
+                    .with_tree(
                         "canister_ranges",
                         blob({
                             let inverted_routing_table = Arc::clone(&inverted_routing_table);
@@ -752,15 +741,11 @@ fn subnets_as_tree<'a>(
                             }
                         }),
                     )
-                    .with_if(
-                        certification_version > CertificationVersion::V11
-                            && subnet_id == own_subnet_id,
-                        "node",
-                        move || nodes_as_tree(own_subnet_node_public_keys, certification_version),
-                    )
+                    .with_if(subnet_id == own_subnet_id, "node", move || {
+                        nodes_as_tree(own_subnet_node_public_keys, certification_version)
+                    })
                     .with_tree_if(
-                        certification_version >= CertificationVersion::V15
-                            && subnet_id == own_subnet_id,
+                        subnet_id == own_subnet_id,
                         "metrics",
                         blob(move || encode_subnet_metrics(metrics, certification_version)),
                     ),
@@ -773,6 +758,7 @@ fn nodes_as_tree(
     own_subnet_node_public_keys: &BTreeMap<NodeId, Vec<u8>>,
     certification_version: CertificationVersion,
 ) -> LazyTree<'_> {
+    assert!(is_supported(certification_version));
     fork(MapTransformFork {
         map: own_subnet_node_public_keys,
         certification_version,
@@ -786,6 +772,7 @@ fn canister_metadata_as_tree(
     execution_state: &ExecutionState,
     certification_version: CertificationVersion,
 ) -> LazyTree<'_> {
+    assert!(is_supported(certification_version));
     fork(MapTransformFork {
         map: execution_state.metadata.custom_sections(),
         certification_version,

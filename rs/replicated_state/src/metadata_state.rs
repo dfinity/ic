@@ -2421,7 +2421,7 @@ pub(crate) mod testing {
             split_from: None,
             prev_state_hash: Default::default(),
             state_sync_version: CURRENT_STATE_SYNC_VERSION,
-            certification_version: CertificationVersion::V0,
+            certification_version: CURRENT_CERTIFICATION_VERSION,
             heap_delta_estimate: Default::default(),
             subnet_metrics: Default::default(),
             expected_compiled_wasms: Default::default(),

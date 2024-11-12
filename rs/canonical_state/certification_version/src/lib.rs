@@ -100,8 +100,18 @@ pub fn all_supported_versions() -> impl std::iter::Iterator<Item = Certification
     })
 }
 
+/// Returns `true` iff `certification_version` is supported.
+pub fn is_supported(certification_version: CertificationVersion) -> bool {
+    all_supported_versions()
+        .find(|v| *v == certification_version)
+        .is_some()
+}
+
 #[test]
 fn version_constants_consistent() {
     assert!(MIN_SUPPORTED_CERTIFICATION_VERSION <= CURRENT_CERTIFICATION_VERSION);
     assert!(CURRENT_CERTIFICATION_VERSION <= MAX_SUPPORTED_CERTIFICATION_VERSION);
+    assert!(is_supported(MIN_SUPPORTED_CERTIFICATION_VERSION));
+    assert!(is_supported(CURRENT_CERTIFICATION_VERSION));
+    assert!(is_supported(MAX_SUPPORTED_CERTIFICATION_VERSION));
 }
