@@ -3,9 +3,9 @@ use ic_logger::{info, ReplicaLogger};
 use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId, SchnorrKeyId};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
-    registry::crypto::v1 as pb_crypto,
     state::queues::v1 as pb_queues,
     state::system_metadata::v1 as pb_metadata,
+    types::v1 as pb_types,
 };
 use ic_types::{
     canister_http::CanisterHttpRequestContext,
@@ -17,7 +17,6 @@ use ic_types::{
 };
 use phantom_newtype::Id;
 use std::{
-    borrow::Borrow,
     collections::{BTreeMap, BTreeSet, VecDeque},
     convert::{From, TryFrom},
     sync::Arc,
@@ -955,7 +954,7 @@ impl From<&IDkgDealingsContext> for pb_metadata::IDkgDealingsContext {
     fn from(context: &IDkgDealingsContext) -> Self {
         Self {
             request: Some(pb_queues::Request::from(&context.request)),
-            key_id: Some(pb_crypto::MasterPublicKeyId::from(context.key_id.borrow())),
+            key_id: Some(pb_types::MasterPublicKeyId::from(context.key_id.inner())),
             nodes: context
                 .nodes
                 .iter()

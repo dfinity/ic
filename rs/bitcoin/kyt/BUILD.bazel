@@ -79,11 +79,15 @@ rust_canister(
 rust_ic_test(
     name = "integration_tests",
     srcs = ["tests/tests.rs"],
-    data = [":btc_kyt_canister"],
+    data = [
+        ":btc_kyt_canister",
+        "//rs/universal_canister/impl:universal_canister.wasm.gz",
+    ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/bitcoin/kyt",
         "IC_BTC_KYT_CANISTER_WASM_PATH": "$(rootpath :btc_kyt_canister)",
         "POCKET_IC_BIN": "$(rootpath //:pocket-ic-server)",
+        "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
     deps = [
         # Keep sorted.

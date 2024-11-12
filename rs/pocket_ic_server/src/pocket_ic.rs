@@ -76,7 +76,7 @@ use ic_validator_ingress_message::StandaloneIngressSigVerifier;
 use itertools::Itertools;
 use pocket_ic::common::rest::{
     self, BinaryBlob, BlobCompression, CanisterHttpHeader, CanisterHttpMethod, CanisterHttpRequest,
-    CanisterHttpResponse, DtsFlag, ExtendedSubnetConfigSet, MockCanisterHttpResponse, RawAddCycles,
+    CanisterHttpResponse, ExtendedSubnetConfigSet, MockCanisterHttpResponse, RawAddCycles,
     RawCanisterCall, RawCanisterId, RawEffectivePrincipal, RawMessageId, RawSetStableMemory,
     SubnetInstructionConfig, SubnetKind, SubnetSpec, Topology,
 };
@@ -168,7 +168,6 @@ struct SubnetConfigInternal {
     pub subnet_id: SubnetId,
     pub subnet_kind: SubnetKind,
     pub instruction_config: SubnetInstructionConfig,
-    pub dts_flag: DtsFlag,
     pub ranges: Vec<CanisterIdRange>,
     pub alloc_range: Option<CanisterIdRange>,
 }
@@ -464,6 +463,11 @@ impl PocketIc {
         let mut subnet_configs = BTreeMap::new();
         for (subnet_seed, config) in self.topology.subnet_configs.iter() {
             // What will be returned to the client:
+            let mut canister_ranges: Vec<rest::CanisterIdRange> =
+                config.ranges.iter().map(from_range).collect();
+            if let Some(alloc_range) = config.alloc_range {
+                canister_ranges.push(from_range(&alloc_range));
+            }
             let subnet_config = pocket_ic::common::rest::SubnetConfig {
                 subnet_kind: config.subnet_kind,
                 subnet_seed: *subnet_seed,
@@ -475,7 +479,7 @@ impl PocketIc {
                     .iter()
                     .map(|n| n.node_id.get().0.into())
                     .collect(),
-                canister_ranges: config.ranges.iter().map(from_range).collect(),
+                canister_ranges,
                 instruction_config: config.instruction_config.clone(),
             };
             subnet_configs.insert(config.subnet_id.get().into(), subnet_config);
@@ -523,6 +527,7 @@ impl PocketIc {
                 subnet_config.scheduler_config.max_instructions_per_round = instruction_limit;
             }
             subnet_config.scheduler_config.max_instructions_per_message = instruction_limit;
+            subnet_config.scheduler_config.max_instructions_per_slice = instruction_limit;
             subnet_config
                 .scheduler_config
                 .max_instructions_per_message_without_dts = instruction_limit;
@@ -600,7 +605,6 @@ impl PocketIc {
                     subnet_kind: config.subnet_config.subnet_kind,
                     subnet_seed: hex::decode(subnet_seed).unwrap().try_into().unwrap(),
                     instruction_config: config.subnet_config.instruction_config,
-                    dts_flag: config.subnet_config.dts_flag,
                     time: config.time,
                 })
                 .collect()
@@ -613,7 +617,6 @@ impl PocketIc {
                         spec.get_state_path(),
                         spec.get_subnet_id(),
                         spec.get_instruction_config(),
-                        spec.get_dts_flag(),
                     )
                 });
                 let app = subnet_configs.application.iter().map(|spec| {
@@ -622,7 +625,6 @@ impl PocketIc {
                         spec.get_state_path(),
                         spec.get_subnet_id(),
                         spec.get_instruction_config(),
-                        spec.get_dts_flag(),
                     )
                 });
                 let verified_app = subnet_configs.verified_application.iter().map(|spec| {
@@ -631,7 +633,6 @@ impl PocketIc {
                         spec.get_state_path(),
                         spec.get_subnet_id(),
                         spec.get_instruction_config(),
-                        spec.get_dts_flag(),
                     )
                 });
                 sys.chain(app).chain(verified_app)
@@ -641,7 +642,7 @@ impl PocketIc {
 
             let ii_subnet_split = subnet_configs.ii.is_some();
 
-            for (subnet_kind, subnet_state_dir, subnet_id, instruction_config, dts_flag) in
+            for (subnet_kind, subnet_state_dir, subnet_id, instruction_config) in
                 fixed_range_subnets.into_iter().chain(flexible_subnets)
             {
                 let RangeConfig {
@@ -667,7 +668,6 @@ impl PocketIc {
                     subnet_kind,
                     subnet_seed,
                     instruction_config,
-                    dts_flag,
                     time: GENESIS.into(),
                 });
             }
@@ -690,7 +690,6 @@ impl PocketIc {
             subnet_kind,
             subnet_seed,
             instruction_config,
-            dts_flag,
             time,
         } in subnet_config_info.into_iter()
         {
@@ -713,10 +712,6 @@ impl PocketIc {
                 log_level,
                 bitcoin_adapter_uds_path.clone(),
             );
-
-            if let DtsFlag::Disabled = dts_flag {
-                builder = builder.no_dts();
-            };
 
             if subnet_kind == SubnetKind::NNS {
                 builder = builder.with_root_subnet_config();
@@ -784,7 +779,6 @@ impl PocketIc {
                 instruction_config,
                 ranges,
                 alloc_range,
-                dts_flag,
             };
             subnet_configs.insert(subnet_seed, subnet_config_internal);
         }
@@ -1098,7 +1092,6 @@ struct SubnetConfigInfo {
     pub subnet_kind: SubnetKind,
     pub subnet_seed: [u8; 32],
     pub instruction_config: SubnetInstructionConfig,
-    pub dts_flag: DtsFlag,
     pub time: SystemTime,
 }
 
@@ -2345,6 +2338,30 @@ impl Operation for GetStableMemory {
     }
 }
 
+#[derive(Copy, Clone, Debug)]
+pub struct GetControllers {
+    pub canister_id: CanisterId,
+}
+
+impl Operation for GetControllers {
+    fn compute(&self, pic: &mut PocketIc) -> OpOut {
+        let subnet = pic.try_route_canister(self.canister_id);
+        match subnet {
+            Some(subnet) => subnet
+                .get_controllers(self.canister_id)
+                .map(OpOut::Controllers)
+                .unwrap_or(OpOut::Error(PocketIcError::CanisterNotFound(
+                    self.canister_id,
+                ))),
+            None => OpOut::Error(PocketIcError::CanisterNotFound(self.canister_id)),
+        }
+    }
+
+    fn id(&self) -> OpId {
+        OpId(format!("get_controllers({})", self.canister_id))
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct GetCyclesBalance {
     pub canister_id: CanisterId,
@@ -2479,7 +2496,6 @@ fn route(
                         return Err(format!("The effective canister ID {canister_id} belongs to the NNS or II subnet on the IC mainnet for which PocketIC provides a `SubnetKind`: please set up your PocketIC instance with a subnet of that `SubnetKind`."));
                     }
                     let instruction_config = SubnetInstructionConfig::Production;
-                    let dts_flag = DtsFlag::Enabled;
                     // The binary representation of canister IDs on the IC mainnet consists of exactly 10 bytes.
                     let canister_id_slice: &[u8] = canister_id.as_ref();
                     if canister_id_slice.len() != 10 {
@@ -2552,7 +2568,6 @@ fn route(
                         instruction_config,
                         ranges: vec![range],
                         alloc_range: Some(canister_allocation_range),
-                        dts_flag,
                     };
                     pic.topology
                         .subnet_configs

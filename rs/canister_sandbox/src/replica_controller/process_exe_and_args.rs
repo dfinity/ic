@@ -31,6 +31,7 @@ const RUNNABLE_AS_SANDBOX: &[&str] = &[
     // need a different approach to enable multiple fuzzers use this
     // approach. The logic can be gated with #[cfg(feature = "fuzzing_code")]
     "execute_with_wasm_executor_system_api_call",
+    "execute_subnet_message_update_settings",
 ];
 
 enum SandboxCrate {
