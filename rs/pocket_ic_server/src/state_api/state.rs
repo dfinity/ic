@@ -554,12 +554,16 @@ async fn handler(
     if request.uri().path().contains("malicious") {
         *state.is_malicious.lock().unwrap() = true;
         return Ok(HandlerResponse::ResponseBody(
-            "Pocket IC set to malicious mode".into(),
+            (
+                StatusCode::OK,
+                "Pocket IC set to malicious mode".to_string(),
+            )
+                .into_response(),
         ));
     } else if request.uri().path().contains("honest") {
         *state.is_malicious.lock().unwrap() = false;
         return Ok(HandlerResponse::ResponseBody(
-            "Pocket IC set to honest mode".into(),
+            (StatusCode::OK, "Pocket IC set to honest mode".to_string()).into_response(),
         ));
     }
 
@@ -631,9 +635,13 @@ async fn handler(
 
         Ok(HandlerResponse::ResponseBody(
             if *state.is_malicious.lock().unwrap() {
-                (StatusCode::INTERNAL_SERVER_ERROR, "Malicious mode".into()).into_response()
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Malicious mode".to_string(),
+                )
+                    .into_response()
             } else {
-                response
+                response.into_response()
             },
         ))
     }
