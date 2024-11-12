@@ -125,14 +125,6 @@ pub fn distributed_kyt_fee(
     state.distribute_kyt_fee(kyt_provider, amount)
 }
 
-pub fn retrieve_btc_ofac_failed(owner: Principal, address: String, amount: u64) {
-    record_event(&Event::RetrieveBtcOfacFailed {
-        owner,
-        address,
-        amount,
-    });
-}
-
 pub fn schedule_deposit_reimbursement(
     state: &mut CkBtcMinterState,
     account: Account,

@@ -156,17 +156,6 @@ pub enum Event {
         block_index: u64,
     },
 
-    /// Indicates that the KYT check for the specified address failed.
-    #[serde(rename = "retrieve_btc_ofac_failed")]
-    RetrieveBtcOfacFailed {
-        /// The owner of the address.
-        owner: Principal,
-        /// The address that failed the KYT check.
-        address: String,
-        /// The amount associated with the failed KYT check.
-        amount: u64,
-    },
-
     /// Indicates a reimbursement.
     #[serde(rename = "schedule_deposit_reimbursement")]
     ScheduleDepositReimbursement {
@@ -347,7 +336,6 @@ pub fn replay(mut events: impl Iterator<Item = Event>) -> Result<CkBtcMinterStat
             Event::RetrieveBtcKytFailed { kyt_provider, .. } => {
                 *state.owed_kyt_amount.entry(kyt_provider).or_insert(0) += state.kyt_fee;
             }
-            Event::RetrieveBtcOfacFailed { .. } => {}
             Event::ScheduleDepositReimbursement {
                 account,
                 amount,
