@@ -293,4 +293,11 @@ async fn canister_log(msg: String) {
     ic_cdk::print(msg);
 }
 
+// time
+
+#[query]
+fn time() -> u64 {
+    ic_cdk::api::time()
+}
+
 fn main() {}

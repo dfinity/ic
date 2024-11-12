@@ -463,6 +463,11 @@ impl PocketIc {
         let mut subnet_configs = BTreeMap::new();
         for (subnet_seed, config) in self.topology.subnet_configs.iter() {
             // What will be returned to the client:
+            let mut canister_ranges: Vec<rest::CanisterIdRange> =
+                config.ranges.iter().map(from_range).collect();
+            if let Some(alloc_range) = config.alloc_range {
+                canister_ranges.push(from_range(&alloc_range));
+            }
             let subnet_config = pocket_ic::common::rest::SubnetConfig {
                 subnet_kind: config.subnet_kind,
                 subnet_seed: *subnet_seed,
@@ -474,7 +479,7 @@ impl PocketIc {
                     .iter()
                     .map(|n| n.node_id.get().0.into())
                     .collect(),
-                canister_ranges: config.ranges.iter().map(from_range).collect(),
+                canister_ranges,
                 instruction_config: config.instruction_config.clone(),
             };
             subnet_configs.insert(config.subnet_id.get().into(), subnet_config);
@@ -1106,11 +1111,23 @@ pub struct SetTime {
 
 impl Operation for SetTime {
     fn compute(&self, pic: &mut PocketIc) -> OpOut {
-        // Sets the time on all subnets.
-        for subnet in pic.subnets.get_all() {
-            subnet.state_machine.set_time(self.time.into());
+        // Time is kept in sync across subnets, so one can take any subnet.
+        let current_time: SystemTime = pic.any_subnet().time();
+        let set_time: SystemTime = self.time.into();
+        match current_time.cmp(&set_time) {
+            std::cmp::Ordering::Greater => OpOut::Error(PocketIcError::SettingTimeIntoPast((
+                systemtime_to_unix_epoch_nanos(current_time),
+                systemtime_to_unix_epoch_nanos(set_time),
+            ))),
+            std::cmp::Ordering::Equal => OpOut::NoOutput,
+            std::cmp::Ordering::Less => {
+                // Sets the time on all subnets.
+                for subnet in pic.subnets.get_all() {
+                    subnet.state_machine.set_time(set_time);
+                }
+                OpOut::NoOutput
+            }
         }
-        OpOut::NoOutput
     }
 
     fn id(&self) -> OpId {
