@@ -52,11 +52,6 @@ COMPRESSED_CANISTERS = {
 
 DEFAULT_CANISTERS_MAX_SIZE_E5_BYTES = "21"
 
-CANISTERS_MAX_SIZE_E5_BYTES = {
-    "ledger-canister.wasm": "19",
-    "ledger-canister_notify-method.wasm": "19",
-}
-
 CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {
     # -- FI team --
     # The compressed version of these two canisters should be ~600kb,
@@ -64,14 +59,22 @@ CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {
     # but enough to get an alert in case of a spike in size.
     "ic-icrc1-ledger.wasm.gz": "7",
     "ic-icrc1-ledger-u256.wasm.gz": "7",
+    # Size when constraint addded: 841_234 bytes
+    "ledger-canister.wasm.gz": "9",
+    # Size when constraint addded: 847_186 bytes
+    "ledger-canister_notify-method.wasm.gz": "9",
 
     # -- XC team --
+    # Size when constraint addded: 447_593 bytes
     "ic-btc-kyt.wasm.gz": "6",
+    # Size when constraint addded: 696_633 bytes
     "ic-ckbtc-minter.wasm.gz": "8",
+    # Size when constraint addded: 1_230_630 bytes
     "ic-cketh-minter.wasm.gz": "13",
     # The orchestrator needs to embed 3 wasms at compile time
     # (ICRC1 index, ICRC1 ledger, and ICRC1 archive) and size is
     # therefore strictly controlled.
+    # Size when constraint addded: 1_655_752 bytes
     "ic-ledger-suite-orchestrator-canister.wasm.gz": "17",
 }
 
@@ -104,23 +107,6 @@ SNS_CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {
 CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES.update(NNS_CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES)
 
 CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES.update(SNS_CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES)
-
-[
-    sh_test(
-        name = name + "_size_test",
-        srcs = ["file_size_test.sh"],
-        data = [target],
-        env = {
-            "FILE": "$(rootpath " + target + ")",
-            "MAX_SIZE": CANISTERS_MAX_SIZE_E5_BYTES.get(
-                name,
-                DEFAULT_CANISTERS_MAX_SIZE_E5_BYTES,
-            ) + "0" * 5,
-        },
-    )
-    for (name, target) in CANISTERS.items()
-    if name not in CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES
-]
 
 [
     sh_test(
