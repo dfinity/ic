@@ -11,7 +11,7 @@ use ic_types::{
         common::{PreSignatureInCreation, PreSignatureRef},
         ecdsa::{PreSignatureQuadrupleRef, QuadrupleInCreation},
         schnorr::{PreSignatureTranscriptRef, TranscriptInCreation},
-        HasMasterPublicKeyId, IDkgMasterPublicKeyId, IDkgUIDGenerator, PreSigId,
+        HasIDkgMasterPublicKeyId, IDkgMasterPublicKeyId, IDkgUIDGenerator, PreSigId,
         TranscriptAttributes, UnmaskedTranscriptWithAttributes,
     },
     crypto::canister_threshold_sig::idkg::IDkgTranscript,

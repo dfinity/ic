@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use ic_logger::{warn, ReplicaLogger};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::IDkgDealingsContext;
 use ic_types::{
-    consensus::idkg::{self, HasMasterPublicKeyId, IDkgBlockReader, IDkgReshareRequest},
+    consensus::idkg::{self, HasIDkgMasterPublicKeyId, IDkgBlockReader, IDkgReshareRequest},
     crypto::canister_threshold_sig::{
         error::InitialIDkgDealingsValidationError, idkg::InitialIDkgDealings,
     },

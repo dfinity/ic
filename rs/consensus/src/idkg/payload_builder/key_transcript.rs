@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 use crate::idkg::{pre_signer::IDkgTranscriptBuilder, utils::algorithm_for_key_id};
 use ic_logger::{info, ReplicaLogger};
-use ic_types::consensus::idkg::HasMasterPublicKeyId;
+use ic_types::consensus::idkg::HasIDkgMasterPublicKeyId;
 use ic_types::{
     consensus::idkg::{
         self, IDkgBlockReader, IDkgUIDGenerator, MasterKeyTranscript, TranscriptAttributes,
@@ -126,7 +126,7 @@ pub(super) fn update_next_key_transcript(
                     dealers_set,
                     receivers_set,
                     registry_version,
-                    algorithm_for_key_id(&key_transcript.key_id().try_into().unwrap()),
+                    algorithm_for_key_id(&key_transcript.key_id()),
                 ),
             );
         }
@@ -220,7 +220,7 @@ mod tests {
     use ic_logger::replica_logger::no_op_logger;
     use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
     use ic_test_utilities_types::ids::subnet_test_id;
-    use ic_types::consensus::idkg::HasMasterPublicKeyId;
+    use ic_types::consensus::idkg::HasIDkgMasterPublicKeyId;
     use ic_types::consensus::idkg::IDkgMasterPublicKeyId;
     use ic_types::{
         crypto::{canister_threshold_sig::idkg::IDkgTranscript, AlgorithmId},
@@ -479,7 +479,7 @@ mod tests {
             completed_transcript.algorithm_id,
             algorithm_for_key_id(&key_id)
         );
-        assert_eq!(payload.single_key_transcript().key_id(), key_id.into());
+        assert_eq!(payload.single_key_transcript().key_id(), key_id);
     }
 
     #[test]

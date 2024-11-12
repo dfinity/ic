@@ -44,7 +44,7 @@ use ic_types::consensus::idkg::{
     SignedIDkgOpening, TranscriptAttributes, TranscriptLookupError, TranscriptRef,
     UnmaskedTranscript,
 };
-use ic_types::consensus::idkg::{HasMasterPublicKeyId, SchnorrSigShare};
+use ic_types::consensus::idkg::{HasIDkgMasterPublicKeyId, SchnorrSigShare};
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgComplaint, IDkgDealing, IDkgDealingSupport, IDkgMaskedTranscriptOrigin, IDkgOpening,
     IDkgReceivers, IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
@@ -73,7 +73,7 @@ pub(crate) fn dealings_context_from_reshare_request(
 ) -> IDkgDealingsContext {
     IDkgDealingsContext {
         request: RequestBuilder::new().build(),
-        key_id: request.key_id().try_into().unwrap(),
+        key_id: request.key_id(),
         nodes: request.receiving_node_ids.into_iter().collect(),
         registry_version: request.registry_version,
         time: time::UNIX_EPOCH,
@@ -452,7 +452,7 @@ impl IDkgBlockReader for TestIDkgBlockReader {
 
     fn pre_signatures_in_creation(
         &self,
-    ) -> Box<dyn Iterator<Item = (PreSigId, MasterPublicKeyId)> + '_> {
+    ) -> Box<dyn Iterator<Item = (PreSigId, IDkgMasterPublicKeyId)> + '_> {
         Box::new(std::iter::empty())
     }
 

@@ -18,7 +18,7 @@ use ic_replicated_state::metadata_state::subnet_call_context_manager::{
 use ic_types::consensus::idkg::common::{PreSignatureRef, SignatureScheme, ThresholdSigInputsRef};
 use ic_types::consensus::idkg::ecdsa::ThresholdEcdsaSigInputsRef;
 use ic_types::consensus::idkg::schnorr::ThresholdSchnorrSigInputsRef;
-use ic_types::consensus::idkg::{HasMasterPublicKeyId, IDkgMasterPublicKeyId};
+use ic_types::consensus::idkg::{HasIDkgMasterPublicKeyId, IDkgMasterPublicKeyId};
 use ic_types::consensus::Block;
 use ic_types::consensus::{
     idkg::{
@@ -81,7 +81,7 @@ impl IDkgBlockReader for IDkgBlockReaderImpl {
 
     fn pre_signatures_in_creation(
         &self,
-    ) -> Box<dyn Iterator<Item = (PreSigId, MasterPublicKeyId)> + '_> {
+    ) -> Box<dyn Iterator<Item = (PreSigId, IDkgMasterPublicKeyId)> + '_> {
         self.chain.tip().payload.as_ref().as_idkg().map_or(
             Box::new(std::iter::empty()),
             |idkg_payload| {
@@ -509,7 +509,10 @@ pub(crate) fn get_pre_signature_ids_to_deliver(
                     == pre_signature.key_unmasked().as_ref().transcript_id
             })
         {
-            pre_sig_ids.entry(key_id).or_default().insert(*pre_sig_id);
+            pre_sig_ids
+                .entry(key_id.into())
+                .or_default()
+                .insert(*pre_sig_id);
         }
     }
 

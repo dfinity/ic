@@ -5,7 +5,7 @@ use crate::consensus::idkg::common::{PreSignatureInCreation, PreSignatureRef};
 use crate::consensus::idkg::ecdsa::{QuadrupleInCreation, ThresholdEcdsaSigInputsRef};
 use crate::consensus::idkg::IDkgMasterPublicKeyId;
 use crate::consensus::idkg::{
-    CompletedReshareRequest, CompletedSignature, HasMasterPublicKeyId, IDkgPayload,
+    CompletedReshareRequest, CompletedSignature, HasIDkgMasterPublicKeyId, IDkgPayload,
     IDkgReshareRequest, IDkgUIDGenerator, MaskedTranscript, MasterKeyTranscript, PreSigId,
     PseudoRandomId, RandomTranscriptParams, RandomUnmaskedTranscriptParams, RequestId,
     ReshareOfMaskedParams, ReshareOfUnmaskedParams, UnmaskedTimesMaskedParams, UnmaskedTranscript,
@@ -940,13 +940,13 @@ impl HasId<PreSigId> for PreSignatureRef {}
 
 impl HasId<MasterPublicKeyId> for MasterKeyTranscript {
     fn get_id(&self) -> Option<MasterPublicKeyId> {
-        Some(self.key_id())
+        Some(self.key_id().into())
     }
 }
 
 impl HasId<IDkgMasterPublicKeyId> for MasterKeyTranscript {
     fn get_id(&self) -> Option<IDkgMasterPublicKeyId> {
-        Some(self.key_id().try_into().unwrap())
+        Some(self.key_id())
     }
 }
 

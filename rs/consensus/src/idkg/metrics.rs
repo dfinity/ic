@@ -4,7 +4,7 @@ use ic_metrics::{
     buckets::{decimal_buckets, linear_buckets},
     MetricsRegistry,
 };
-use ic_types::consensus::idkg::{HasMasterPublicKeyId, IDkgMasterPublicKeyId, IDkgPayload};
+use ic_types::consensus::idkg::{HasIDkgMasterPublicKeyId, IDkgMasterPublicKeyId, IDkgPayload};
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
 use std::collections::BTreeMap;
 
@@ -438,7 +438,7 @@ pub fn expected_keys(payload: &IDkgPayload) -> Vec<IDkgMasterPublicKeyId> {
 
 pub type CounterPerMasterPublicKeyId = BTreeMap<IDkgMasterPublicKeyId, usize>;
 
-pub fn count_by_master_public_key_id<T: HasMasterPublicKeyId>(
+pub fn count_by_master_public_key_id<T: HasIDkgMasterPublicKeyId>(
     collection: impl Iterator<Item = T>,
     expected_keys: &[IDkgMasterPublicKeyId],
 ) -> CounterPerMasterPublicKeyId {
@@ -451,9 +451,7 @@ pub fn count_by_master_public_key_id<T: HasMasterPublicKeyId>(
     }
 
     for item in collection {
-        *counter_per_key_id
-            .entry(item.key_id().try_into().unwrap())
-            .or_default() += 1;
+        *counter_per_key_id.entry(item.key_id()).or_default() += 1;
     }
 
     counter_per_key_id

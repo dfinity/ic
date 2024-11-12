@@ -17,7 +17,7 @@ use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_features::ChainKeyConfig;
 use ic_replicated_state::{metadata_state::subnet_call_context_manager::*, ReplicatedState};
-use ic_types::consensus::idkg::{HasMasterPublicKeyId, IDkgMasterPublicKeyId};
+use ic_types::consensus::idkg::{HasIDkgMasterPublicKeyId, IDkgMasterPublicKeyId};
 use ic_types::{
     batch::ValidationContext,
     consensus::{
@@ -294,10 +294,7 @@ fn create_summary_payload_helper(
     // We do purge the pre-signatures in creation, though.
     idkg_summary
         .pre_signatures_in_creation
-        .retain(|_, pre_sig| {
-            !new_key_transcripts
-                .contains(&IDkgMasterPublicKeyId::try_from(pre_sig.key_id()).unwrap())
-        });
+        .retain(|_, pre_sig| !new_key_transcripts.contains(&pre_sig.key_id()));
     // This will clear the current ongoing reshares, and the execution requests will be restarted
     // with the new key and different transcript IDs.
     idkg_summary
@@ -1326,19 +1323,19 @@ mod tests {
                 new_summary_height
             );
             for pre_signature in summary.available_pre_signatures.values() {
-                assert_eq!(pre_signature.key_id(), key_id.clone().into());
+                assert_eq!(pre_signature.key_id(), key_id.clone());
                 for transcript_ref in pre_signature.get_refs() {
                     assert_ne!(transcript_ref.height, new_summary_height);
                 }
             }
             for pre_signature in summary.pre_signatures_in_creation.values() {
-                assert_eq!(pre_signature.key_id(), key_id.clone().into());
+                assert_eq!(pre_signature.key_id(), key_id.clone());
                 for transcript_ref in pre_signature.get_refs() {
                     assert_ne!(transcript_ref.height, new_summary_height);
                 }
             }
             for (request, reshare_params) in &summary.ongoing_xnet_reshares {
-                assert_eq!(request.key_id(), key_id.clone().into());
+                assert_eq!(request.key_id(), key_id.clone());
                 assert_eq!(
                     reshare_params.as_ref().algorithm_id,
                     algorithm_for_key_id(&key_id.clone())
@@ -1378,19 +1375,19 @@ mod tests {
                 new_summary_height
             );
             for pre_signature in summary.available_pre_signatures.values() {
-                assert_eq!(pre_signature.key_id(), key_id.clone().into());
+                assert_eq!(pre_signature.key_id(), key_id.clone());
                 for transcript_ref in pre_signature.get_refs() {
                     assert_eq!(transcript_ref.height, new_summary_height);
                 }
             }
             for pre_signature in summary.pre_signatures_in_creation.values() {
-                assert_eq!(pre_signature.key_id(), key_id.clone().into());
+                assert_eq!(pre_signature.key_id(), key_id.clone());
                 for transcript_ref in pre_signature.get_refs() {
                     assert_eq!(transcript_ref.height, new_summary_height);
                 }
             }
             for (request, reshare_params) in &summary.ongoing_xnet_reshares {
-                assert_eq!(request.key_id(), key_id.clone().into());
+                assert_eq!(request.key_id(), key_id.clone());
                 assert_eq!(
                     reshare_params.as_ref().algorithm_id,
                     algorithm_for_key_id(&key_id.clone())

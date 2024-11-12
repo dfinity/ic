@@ -178,7 +178,7 @@ impl IDkgPayload {
         Self {
             key_transcripts: key_transcripts
                 .into_iter()
-                .map(|key_transcript| (key_transcript.key_id().try_into().unwrap(), key_transcript))
+                .map(|key_transcript| (key_transcript.key_id(), key_transcript))
                 .collect(),
             uid_generator: IDkgUIDGenerator::new(subnet_id, height),
             signature_agreements: BTreeMap::new(),
@@ -243,7 +243,7 @@ impl IDkgPayload {
     /// Return an iterator of all ids of pre-signatures for the given key in the payload.
     pub fn iter_pre_signature_ids<'a>(
         &'a self,
-        key_id: &'a MasterPublicKeyId,
+        key_id: &'a IDkgMasterPublicKeyId,
     ) -> impl Iterator<Item = PreSigId> + '_ {
         let available_pre_signature_ids = self
             .available_pre_signatures
@@ -1799,7 +1799,7 @@ impl TryFrom<&pb::IDkgPayload> for IDkgPayload {
         for key_transcript_proto in &payload.key_transcripts {
             let key_transcript = MasterKeyTranscript::try_from(key_transcript_proto)?;
 
-            key_transcripts.insert(key_transcript.key_id().try_into().unwrap(), key_transcript);
+            key_transcripts.insert(key_transcript.key_id(), key_transcript);
         }
 
         let mut signature_agreements = BTreeMap::new();
@@ -2089,67 +2089,69 @@ impl From<&IDkgMessage> for IDkgArtifactId {
     }
 }
 
-pub trait HasMasterPublicKeyId {
+pub trait HasIDkgMasterPublicKeyId {
     /// Returns a reference to the [`MasterPublicKeyId`] associated with the object.
-    fn key_id(&self) -> MasterPublicKeyId;
+    fn key_id(&self) -> IDkgMasterPublicKeyId;
 }
 
-impl HasMasterPublicKeyId for QuadrupleInCreation {
-    fn key_id(&self) -> MasterPublicKeyId {
-        MasterPublicKeyId::Ecdsa(self.key_id.clone())
+impl HasIDkgMasterPublicKeyId for QuadrupleInCreation {
+    fn key_id(&self) -> IDkgMasterPublicKeyId {
+        IDkgMasterPublicKeyId(MasterPublicKeyId::Ecdsa(self.key_id.clone()))
     }
 }
 
-impl HasMasterPublicKeyId for PreSignatureQuadrupleRef {
-    fn key_id(&self) -> MasterPublicKeyId {
-        MasterPublicKeyId::Ecdsa(self.key_id.clone())
+impl HasIDkgMasterPublicKeyId for PreSignatureQuadrupleRef {
+    fn key_id(&self) -> IDkgMasterPublicKeyId {
+        IDkgMasterPublicKeyId(MasterPublicKeyId::Ecdsa(self.key_id.clone()))
     }
 }
 
-impl HasMasterPublicKeyId for PreSignatureInCreation {
-    fn key_id(&self) -> MasterPublicKeyId {
-        match self {
+impl HasIDkgMasterPublicKeyId for PreSignatureInCreation {
+    fn key_id(&self) -> IDkgMasterPublicKeyId {
+        let key = match self {
             PreSignatureInCreation::Ecdsa(quadruple) => {
                 MasterPublicKeyId::Ecdsa(quadruple.key_id.clone())
             }
             PreSignatureInCreation::Schnorr(transcript) => {
                 MasterPublicKeyId::Schnorr(transcript.key_id.clone())
             }
-        }
+        };
+        IDkgMasterPublicKeyId(key)
     }
 }
 
-impl HasMasterPublicKeyId for PreSignatureRef {
-    fn key_id(&self) -> MasterPublicKeyId {
-        match self {
+impl HasIDkgMasterPublicKeyId for PreSignatureRef {
+    fn key_id(&self) -> IDkgMasterPublicKeyId {
+        let key = match self {
             PreSignatureRef::Ecdsa(quadruple) => MasterPublicKeyId::Ecdsa(quadruple.key_id.clone()),
             PreSignatureRef::Schnorr(transcript) => {
                 MasterPublicKeyId::Schnorr(transcript.key_id.clone())
             }
-        }
+        };
+        IDkgMasterPublicKeyId(key)
     }
 }
 
-impl HasMasterPublicKeyId for IDkgReshareRequest {
-    fn key_id(&self) -> MasterPublicKeyId {
-        self.master_key_id.clone().into()
+impl HasIDkgMasterPublicKeyId for IDkgReshareRequest {
+    fn key_id(&self) -> IDkgMasterPublicKeyId {
+        self.master_key_id.clone()
     }
 }
 
-impl HasMasterPublicKeyId for MasterKeyTranscript {
-    fn key_id(&self) -> MasterPublicKeyId {
-        self.master_key_id.clone().into()
+impl HasIDkgMasterPublicKeyId for MasterKeyTranscript {
+    fn key_id(&self) -> IDkgMasterPublicKeyId {
+        self.master_key_id.clone()
     }
 }
 
-impl<T: HasMasterPublicKeyId, U> HasMasterPublicKeyId for (T, U) {
-    fn key_id(&self) -> MasterPublicKeyId {
+impl<T: HasIDkgMasterPublicKeyId, U> HasIDkgMasterPublicKeyId for (T, U) {
+    fn key_id(&self) -> IDkgMasterPublicKeyId {
         self.0.key_id()
     }
 }
 
-impl<T: HasMasterPublicKeyId> HasMasterPublicKeyId for &T {
-    fn key_id(&self) -> MasterPublicKeyId {
+impl<T: HasIDkgMasterPublicKeyId> HasIDkgMasterPublicKeyId for &T {
+    fn key_id(&self) -> IDkgMasterPublicKeyId {
         (*self).key_id()
     }
 }
