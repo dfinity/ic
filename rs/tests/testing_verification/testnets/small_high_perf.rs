@@ -76,7 +76,7 @@ pub fn setup(env: TestEnv) {
         .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
         .setup_and_start(&env)
         .expect("Failed to setup IC under test");
-    check_nodes_health(&env);
+    await_nodes_healthy(&env);
     install_nns_canisters_at_ids(&env);
     BoundaryNode::new(String::from(BOUNDARY_NODE_NAME))
         .allocate_vm(&env)
@@ -89,7 +89,7 @@ pub fn setup(env: TestEnv) {
     await_boundary_node_healthy(&env, BOUNDARY_NODE_NAME);
 }
 
-fn check_nodes_health(env: &TestEnv) {
+fn await_nodes_healthy(env: &TestEnv) {
     info!(
         &env.logger(),
         "Checking readiness of all nodes after the IC setup ..."
