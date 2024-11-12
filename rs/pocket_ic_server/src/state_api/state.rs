@@ -33,7 +33,8 @@ use hyper::{Request, Response as HyperResponse};
 use hyper_util::client::legacy::{connect::HttpConnector, Client};
 use ic_http_endpoints_public::cors_layer;
 use ic_http_gateway::{CanisterRequest, HttpGatewayClient, HttpGatewayRequestArgs};
-use ic_types::{canister_http::CanisterHttpRequestId, CanisterId, SubnetId};
+use ic_types::{canister_http::CanisterHttpRequestId, CanisterId, PrincipalId, SubnetId};
+use itertools::Itertools;
 use pocket_ic::common::rest::{
     CanisterHttpRequest, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayDetails,
     HttpGatewayInfo, Topology,
@@ -206,6 +207,7 @@ pub enum OpOut {
     Time(u64),
     CanisterResult(Result<WasmResult, UserError>),
     CanisterId(CanisterId),
+    Controllers(Vec<PrincipalId>),
     Cycles(u128),
     Bytes(Vec<u8>),
     StableMemBytes(Vec<u8>),
@@ -225,6 +227,7 @@ pub enum PocketIcError {
     RequestRoutingError(String),
     InvalidCanisterHttpRequestId((SubnetId, CanisterHttpRequestId)),
     InvalidMockCanisterHttpResponses((usize, usize)),
+    SettingTimeIntoPast((u64, u64)),
 }
 
 impl From<Result<ic_state_machine_tests::WasmResult, ic_state_machine_tests::UserError>> for OpOut {
@@ -252,6 +255,11 @@ impl std::fmt::Debug for OpOut {
             OpOut::Time(x) => write!(f, "Time({})", x),
             OpOut::Topology(t) => write!(f, "Topology({:?})", t),
             OpOut::CanisterId(cid) => write!(f, "CanisterId({})", cid),
+            OpOut::Controllers(controllers) => write!(
+                f,
+                "Controllers({})",
+                controllers.iter().map(|c| c.to_string()).join(",")
+            ),
             OpOut::Cycles(x) => write!(f, "Cycles({})", x),
             OpOut::CanisterResult(Ok(x)) => write!(f, "CanisterResult: Ok({:?})", x),
             OpOut::CanisterResult(Err(x)) => write!(f, "CanisterResult: Err({})", x),
@@ -283,6 +291,9 @@ impl std::fmt::Debug for OpOut {
                     "InvalidMockCanisterHttpResponses(actual={},expected={})",
                     actual, expected
                 )
+            }
+            OpOut::Error(PocketIcError::SettingTimeIntoPast((current, set))) => {
+                write!(f, "SettingTimeIntoPast(current={},set={})", current, set)
             }
             OpOut::Bytes(bytes) => write!(f, "Bytes({})", base64::encode(bytes)),
             OpOut::StableMemBytes(bytes) => write!(f, "StableMemory({})", base64::encode(bytes)),
@@ -1060,6 +1071,13 @@ impl ApiState {
         let mut http_gateways = self.http_gateways.write().await;
         if instance_id < http_gateways.len() {
             http_gateways[instance_id] = None;
+        }
+    }
+
+    pub async fn stop_all_http_gateways(&self) {
+        let mut http_gateways = self.http_gateways.write().await;
+        for i in 0..http_gateways.len() {
+            http_gateways[i] = None;
         }
     }
 

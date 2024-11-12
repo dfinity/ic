@@ -1,4 +1,7 @@
-use std::{sync::Arc, time::SystemTime};
+use std::{
+    sync::Arc,
+    time::{Duration, Instant, SystemTime},
+};
 
 use anonymization_interface::{self as ifc};
 use anyhow::{anyhow, Context, Error};
@@ -11,8 +14,60 @@ use rsa::{
     Pkcs1v15Encrypt, RsaPrivateKey, RsaPublicKey,
 };
 
+#[allow(clippy::disallowed_types)]
+use tokio::{sync::Mutex, time::sleep};
+
 const SALT_SIZE: usize = 64;
 const RSA_KEY_SIZE: usize = 2048;
+
+struct WithLogs<T>(T);
+
+pub struct ThrottleParams {
+    pub d: Duration,
+
+    #[allow(clippy::disallowed_types)]
+    pub next: Arc<Mutex<Option<Instant>>>,
+}
+
+impl ThrottleParams {
+    pub fn new(d: Duration) -> Self {
+        Self {
+            d,
+
+            #[allow(clippy::disallowed_types)]
+            next: Arc::new(Mutex::new(None)),
+        }
+    }
+}
+
+struct WithThrottle<T>(T, ThrottleParams);
+
+impl<T> WithThrottle<T> {
+    async fn throttle(&self) {
+        // Start
+        let cur = Instant::now();
+
+        let mut next = self.1.next.lock().await;
+
+        // Check
+        if let Some(next) = *next {
+            if next > cur {
+                sleep(next - cur).await;
+            }
+        }
+
+        // Reset
+        *next = Some(Instant::now() + self.1.d);
+    }
+}
+
+#[async_trait]
+impl<T: Query> Query for WithThrottle<T> {
+    async fn query(&self) -> Result<Vec<u8>, QueryError> {
+        self.throttle().await;
+        self.0.query().await
+    }
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum RegisterError {
@@ -26,6 +81,32 @@ pub enum RegisterError {
 #[async_trait]
 pub trait Register: Sync + Send {
     async fn register(&self, pubkey: &[u8]) -> Result<(), RegisterError>;
+}
+
+#[async_trait]
+impl<T: Register> Register for WithLogs<T> {
+    async fn register(&self, pubkey: &[u8]) -> Result<(), RegisterError> {
+        let start_time = Instant::now();
+
+        let out = self.0.register(pubkey).await;
+
+        let status = match &out {
+            Ok(_) => "ok",
+            Err(err) => match err {
+                RegisterError::Unauthorized => "unauthorized",
+                RegisterError::UnexpectedError(_) => "fail",
+            },
+        };
+
+        let duration = start_time.elapsed().as_secs_f64();
+
+        println!(
+            "action = 'register', status = {status}, duration = {duration}, error = {:?}",
+            out.as_ref().err()
+        );
+
+        return out;
+    }
 }
 
 /// LeaderMode indicates whether a new salt is required
@@ -91,6 +172,37 @@ pub trait Query: Sync + Send {
     async fn query(&self) -> Result<Vec<u8>, QueryError>;
 }
 
+#[async_trait]
+impl<T: Query> Query for WithLogs<T> {
+    async fn query(&self) -> Result<Vec<u8>, QueryError> {
+        let start_time = Instant::now();
+
+        let out = self.0.query().await;
+
+        let status = match &out {
+            Ok(_) => "ok",
+            Err(err) => match err {
+                QueryError::Unauthorized => "unauthorized",
+                QueryError::Unavailable => "unavailable",
+                QueryError::LeaderDuty(mode, _) => match mode {
+                    LeaderMode::Bootstrap => "leader-bootstrap",
+                    LeaderMode::Refresh => "leader-refresh",
+                },
+                QueryError::UnexpectedError(_) => "fail",
+            },
+        };
+
+        let duration = start_time.elapsed().as_secs_f64();
+
+        println!(
+            "action = 'query', status = {status}, duration = {duration}, error = {:?}",
+            out.as_ref().err()
+        );
+
+        return out;
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum SubmitError {
     #[error("unauthorized")]
@@ -103,6 +215,32 @@ pub enum SubmitError {
 #[async_trait]
 pub trait Submit: Sync + Send {
     async fn submit(&self, vs: &[Pair]) -> Result<(), SubmitError>;
+}
+
+#[async_trait]
+impl<T: Submit> Submit for WithLogs<T> {
+    async fn submit(&self, vs: &[Pair]) -> Result<(), SubmitError> {
+        let start_time = Instant::now();
+
+        let out = self.0.submit(vs).await;
+
+        let status = match &out {
+            Ok(_) => "ok",
+            Err(err) => match err {
+                SubmitError::Unauthorized => "unauthorized",
+                SubmitError::UnexpectedError(_) => "fail",
+            },
+        };
+
+        let duration = start_time.elapsed().as_secs_f64();
+
+        println!(
+            "action = 'submit', status = {status}, duration = {duration}, error = {:?}",
+            out.as_ref().err()
+        );
+
+        return out;
+    }
 }
 
 #[derive(Clone)]
@@ -281,9 +419,19 @@ pub struct CanisterMethods {
 impl From<Canister> for CanisterMethods {
     fn from(value: Canister) -> Self {
         Self {
-            register: Arc::new(value.clone()),
-            query: Arc::new(value.clone()),
-            submit: Arc::new(value.clone()),
+            register: Arc::new({
+                let v = value.clone();
+                WithLogs(v)
+            }),
+            query: Arc::new({
+                let v = value.clone();
+                let v = WithLogs(v);
+                WithThrottle(v, ThrottleParams::new(Duration::from_secs(10)))
+            }),
+            submit: Arc::new({
+                let v = value.clone();
+                WithLogs(v)
+            }),
         }
     }
 }
