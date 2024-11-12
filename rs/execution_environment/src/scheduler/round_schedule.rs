@@ -334,12 +334,6 @@ impl RoundSchedule {
                 + free_capacity_per_canister;
             // Increase accumulated priority by de-facto compute allocation.
             canister.scheduler_state.accumulated_priority += factual.into();
-
-            let has_aborted_or_paused_execution =
-                canister.has_aborted_execution() || canister.has_paused_execution();
-            if !has_aborted_or_paused_execution {
-                RoundSchedule::apply_priority_credit(canister);
-            }
         }
     }
 
@@ -423,6 +417,9 @@ impl RoundSchedule {
 
             let has_aborted_or_paused_execution =
                 canister.has_aborted_execution() || canister.has_paused_execution();
+            if !has_aborted_or_paused_execution {
+                RoundSchedule::apply_priority_credit(canister);
+            }
 
             let compute_allocation = canister.scheduler_state.compute_allocation;
             let accumulated_priority = canister.scheduler_state.accumulated_priority;
