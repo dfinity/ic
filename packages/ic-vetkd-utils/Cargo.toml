@@ -21,7 +21,7 @@ rand = { workspace = true }
 rand_chacha = { workspace = true }
 sha2 = { workspace = true }
 sha3 = { workspace = true }
-subtle = "2.5"
+subtle = { workspace = true }
 wasm-bindgen = { version = "0.2.84", optional = true }
 zeroize = { workspace = true }
 

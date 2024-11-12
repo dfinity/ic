@@ -295,22 +295,6 @@ impl Block {
             context,
         }
     }
-
-    /// Create a BlockLogEntry from this block
-    pub fn log_entry(&self, block_hash: String) -> BlockLogEntry {
-        BlockLogEntry {
-            byte_size: None,
-            certified_height: Some(self.context.certified_height.get()),
-            dkg_payload_type: Some(self.payload.as_ref().payload_type().to_string()),
-            hash: Some(block_hash),
-            height: Some(self.height.get()),
-            parent_hash: Some(hex::encode(self.parent.get_ref().0.clone())),
-            rank: Some(self.rank.0),
-            registry_version: Some(self.context.registry_version.get()),
-            time: Some(self.context.time.as_nanos_since_unix_epoch()),
-            version: Some(self.version().to_string()),
-        }
-    }
 }
 
 impl SignedBytesWithoutDomainSeparator for BlockMetadata {
@@ -319,8 +303,32 @@ impl SignedBytesWithoutDomainSeparator for BlockMetadata {
     }
 }
 
-/// HashedBlock contains a Block together with its hash
+/// [`HashedBlock`] contains a [`Block`] together with its hash
 pub type HashedBlock = Hashed<CryptoHashOf<Block>, Block>;
+
+impl HashedBlock {
+    /// Create a [`BlockLogEntry`] from this block
+    pub fn log_entry(&self) -> BlockLogEntry {
+        let block = &self.value;
+
+        BlockLogEntry {
+            byte_size: None,
+            certified_height: Some(block.context.certified_height.get()),
+            dkg_payload_type: Some(block.payload.as_ref().payload_type().to_string()),
+            hash: Some(block_hash_to_string(&self.hash)),
+            height: Some(block.height.get()),
+            parent_hash: Some(block_hash_to_string(&block.parent)),
+            rank: Some(block.rank.0),
+            registry_version: Some(block.context.registry_version.get()),
+            time: Some(block.context.time.as_nanos_since_unix_epoch()),
+            version: Some(block.version().to_string()),
+        }
+    }
+}
+
+fn block_hash_to_string(hash: &CryptoHashOf<Block>) -> String {
+    hex::encode(&hash.get_ref().0)
+}
 
 /// BlockMetadata contains the version, height and hash of a block
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
@@ -654,7 +662,7 @@ impl From<&RandomBeacon> for pb::RandomBeacon {
             height: random_beacon.content.height.get(),
             parent: random_beacon.content.parent.clone().get().0,
             signature: random_beacon.signature.signature.clone().get().0,
-            signer: Some(pb::NiDkgId::from(random_beacon.signature.signer)),
+            signer: Some(pb::NiDkgId::from(random_beacon.signature.signer.clone())),
         }
     }
 }
@@ -749,7 +757,7 @@ impl From<&RandomTape> for pb::RandomTape {
             version: random_tape.content.version.to_string(),
             height: random_tape.content.height.get(),
             signature: random_tape.signature.signature.clone().get().0,
-            signer: Some(pb::NiDkgId::from(random_tape.signature.signer)),
+            signer: Some(pb::NiDkgId::from(random_tape.signature.signer.clone())),
         }
     }
 }

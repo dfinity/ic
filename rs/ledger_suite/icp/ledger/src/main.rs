@@ -26,8 +26,9 @@ use ic_ledger_core::{
     tokens::{Tokens, DECIMAL_PLACES},
 };
 use ic_stable_structures::reader::{BufferedReader, Reader};
-#[cfg(feature = "upgrade-to-memory-manager")]
 use ic_stable_structures::writer::{BufferedWriter, Writer};
+#[cfg(feature = "icp-allowance-getter")]
+use icp_ledger::IcpAllowanceArgs;
 use icp_ledger::{
     max_blocks_per_request, protobuf, tokens_into_proto, AccountBalanceArgs, AccountIdBlob,
     AccountIdentifier, ArchiveInfo, ArchivedBlocksRange, ArchivedEncodedBlocksRange, Archives,
@@ -53,7 +54,7 @@ use icrc_ledger_types::{
     icrc1::transfer::TransferArg,
     icrc21::{errors::Icrc21Error, requests::ConsentMessageRequest, responses::ConsentInfo},
 };
-use ledger_canister::{Ledger, LEDGER, MAX_MESSAGE_SIZE_BYTES, UPGRADES_MEMORY};
+use ledger_canister::{Ledger, LEDGER, LEDGER_VERSION, MAX_MESSAGE_SIZE_BYTES, UPGRADES_MEMORY};
 use num_traits::cast::ToPrimitive;
 #[allow(unused_imports)]
 use on_wire::IntoWire;
@@ -802,6 +803,14 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
         });
     }
 
+    if ledger.ledger_version > LEDGER_VERSION {
+        panic!(
+            "Trying to downgrade from incompatible version {}. Current version is {}.",
+            ledger.ledger_version, LEDGER_VERSION
+        );
+    }
+    ledger.ledger_version = LEDGER_VERSION;
+
     if let Some(args) = args {
         match args {
             LedgerCanisterPayload::Init(_) => trap_with("Cannot upgrade the canister with an Init argument. Please provide an Upgrade argument."),
@@ -832,30 +841,6 @@ fn post_upgrade_() {
     over_init(|CandidOne(args)| post_upgrade(args));
 }
 
-#[cfg(not(feature = "upgrade-to-memory-manager"))]
-#[export_name = "canister_pre_upgrade"]
-fn pre_upgrade() {
-    let start = dfn_core::api::performance_counter(0);
-    setup::START.call_once(|| {
-        printer::hook();
-    });
-
-    let ledger = LEDGER
-        .read()
-        // This should never happen, but it's better to be safe than sorry
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let mut stable_writer = dfn_core::stable::StableWriter::new();
-    ciborium::ser::into_writer(&*ledger, &mut stable_writer)
-        .expect("failed to write ledger state to stable memory");
-    let end = dfn_core::api::performance_counter(0);
-    let instructions_consumed = end - start;
-    let counter_bytes: [u8; 8] = instructions_consumed.to_le_bytes();
-    stable_writer
-        .write_all(&counter_bytes)
-        .expect("failed to write instructions consumed to stable memory");
-}
-
-#[cfg(feature = "upgrade-to-memory-manager")]
 #[export_name = "canister_pre_upgrade"]
 fn pre_upgrade() {
     let start = dfn_core::api::performance_counter(0);
@@ -1620,25 +1605,41 @@ fn icrc2_approve_candid() {
     })
 }
 
-#[candid_method(query, rename = "icrc2_allowance")]
-fn icrc2_allowance(arg: AllowanceArgs) -> Allowance {
-    if !LEDGER.read().unwrap().feature_flags.icrc2 {
-        trap_with("ICRC-2 features are not enabled on the ledger.");
-    }
+fn get_allowance(from: AccountIdentifier, spender: AccountIdentifier) -> Allowance {
     let now = TimeStamp::from_nanos_since_unix_epoch(time_nanos());
     let ledger = LEDGER.read().unwrap();
-    let account = AccountIdentifier::from(arg.account);
-    let spender = AccountIdentifier::from(arg.spender);
-    let allowance = ledger.approvals.allowance(&account, &spender, now);
+    let allowance = ledger.approvals.allowance(&from, &spender, now);
     Allowance {
         allowance: Nat::from(allowance.amount.get_e8s()),
         expires_at: allowance.expires_at.map(|t| t.as_nanos_since_unix_epoch()),
     }
 }
 
+#[candid_method(query, rename = "icrc2_allowance")]
+fn icrc2_allowance(arg: AllowanceArgs) -> Allowance {
+    if !LEDGER.read().unwrap().feature_flags.icrc2 {
+        trap_with("ICRC-2 features are not enabled on the ledger.");
+    }
+    let from = AccountIdentifier::from(arg.account);
+    let spender = AccountIdentifier::from(arg.spender);
+    get_allowance(from, spender)
+}
+
 #[export_name = "canister_query icrc2_allowance"]
 fn icrc2_allowance_candid() {
     over(candid_one, icrc2_allowance)
+}
+
+#[cfg(feature = "icp-allowance-getter")]
+#[candid_method(query, rename = "allowance")]
+fn icp_allowance(arg: IcpAllowanceArgs) -> Allowance {
+    get_allowance(arg.account, arg.spender)
+}
+
+#[cfg(feature = "icp-allowance-getter")]
+#[export_name = "canister_query allowance"]
+fn allowance_candid() {
+    over(candid_one, icp_allowance)
 }
 
 #[candid_method(update, rename = "icrc21_canister_call_consent_message")]

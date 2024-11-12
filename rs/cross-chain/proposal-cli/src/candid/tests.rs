@@ -14,7 +14,7 @@ fn should_encode_default_upgrade_args() {
         let upgrade_args = encode_upgrade_args(&path, canister.default_upgrade_args());
 
         assert_eq!(
-            upgrade_args.upgrade_args_hex(),
+            hex::encode(upgrade_args.upgrade_args_bin()),
             expected,
             "failed to encode default upgrade args for: {:?}",
             canister
@@ -29,7 +29,7 @@ fn should_encode_non_empty_ledger_upgrade_args() {
 
     let upgrade_args = encode_upgrade_args(&path, "(variant {Upgrade})");
 
-    assert_matches!(upgrade_args.upgrade_args_hex(), _string);
+    assert!(hex::encode(upgrade_args.upgrade_args_bin()).starts_with("4449444c"));
 }
 
 #[test]
@@ -38,6 +38,10 @@ fn should_parse_constructor_parameters() {
         if canister == TargetCanister::IcpArchive1
             || canister == TargetCanister::IcpArchive2
             || canister == TargetCanister::IcpArchive3
+            //canister lives outside the monorepo
+            || canister == TargetCanister::EvmRpc
+            || canister == TargetCanister::CyclesLedger
+            || canister == TargetCanister::ExchangeRateCanister
         {
             continue;
         }

@@ -3,7 +3,7 @@ use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::wasm_utils::decoding::decode_wasm;
 use ic_embedders::wasm_utils::validation::{RESERVED_SYMBOLS, WASM_FUNCTION_SIZE_LIMIT};
 use ic_replicated_state::Global;
-use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
+use ic_test_utilities::universal_canister::get_universal_canister_wasm;
 use ic_types::methods::WasmMethod;
 use ic_wasm_types::BinaryEncodedWasm;
 use lazy_static::lazy_static;
@@ -21,7 +21,7 @@ use wasmparser::*;
 lazy_static! {
     static ref UNIVERSAL_CANISTER_WASM_BYTES : BinaryEncodedWasm = {
         // Universal canister wasm is gzipped
-        decode_wasm(EmbeddersConfig::new().wasm_max_size, Arc::new(UNIVERSAL_CANISTER_WASM.to_vec())).expect("Unable to decode universal canister wasm")
+        decode_wasm(EmbeddersConfig::new().wasm_max_size, Arc::new(get_universal_canister_wasm())).expect("Unable to decode universal canister wasm")
     };
 }
 
@@ -284,6 +284,7 @@ fn export_name(
         "canister_post_upgrade".to_string(),
         "canister_heartbeat".to_string(),
         "canister_global_timer".to_string(),
+        "canister_on_low_wasm_memory".to_string(),
     ];
 
     let export_func_prefix: Vec<String> = vec![

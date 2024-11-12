@@ -145,7 +145,12 @@ impl IngressHistoryWriterImpl {
 impl IngressHistoryWriter for IngressHistoryWriterImpl {
     type State = ReplicatedState;
 
-    fn set_status(&self, state: &mut Self::State, message_id: MessageId, status: IngressStatus) {
+    fn set_status(
+        &self,
+        state: &mut Self::State,
+        message_id: MessageId,
+        status: IngressStatus,
+    ) -> Arc<IngressStatus> {
         let time = state.time();
         let current_status = state.get_ingress_status(&message_id);
 
@@ -232,7 +237,7 @@ impl IngressHistoryWriter for IngressHistoryWriterImpl {
             message_id,
             status,
             self.config.ingress_history_memory_capacity,
-        );
+        )
     }
 }
 

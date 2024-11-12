@@ -1,8 +1,10 @@
 //! Utilities for testing IDkg and canister threshold signature operations.
 
 use crate::node::{Node, Nodes};
-use ic_crypto_internal_threshold_sig_ecdsa::test_utils::{corrupt_dealing, ComplaintCorrupter};
-use ic_crypto_internal_threshold_sig_ecdsa::{
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::test_utils::{
+    corrupt_dealing, ComplaintCorrupter,
+};
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
     IDkgComplaintInternal, IDkgDealingInternal, NodeIndex, Seed,
 };
 use ic_crypto_temp_crypto::{TempCryptoComponent, TempCryptoComponentGeneric};
@@ -1944,6 +1946,7 @@ pub fn generate_tschnorr_protocol_inputs<R: RngCore + CryptoRng>(
     key_transcript: &IDkgTranscript,
     message: &[u8],
     nonce: Randomness,
+    taproot_tree_root: Option<&[u8]>,
     derivation_path: &ExtendedDerivationPath,
     alg: AlgorithmId,
     rng: &mut R,
@@ -1959,6 +1962,7 @@ pub fn generate_tschnorr_protocol_inputs<R: RngCore + CryptoRng>(
     ThresholdSchnorrSigInputs::new(
         derivation_path,
         message,
+        taproot_tree_root,
         nonce,
         presig,
         key_transcript.clone(),
@@ -2462,6 +2466,7 @@ impl IntoBuilder for ThresholdEcdsaSigInputs {
 pub struct ThresholdSchnorrSigInputsBuilder {
     derivation_path: ExtendedDerivationPath,
     message: Vec<u8>,
+    taproot_tree_root: Option<Vec<u8>>,
     nonce: Randomness,
     presig_transcript: SchnorrPreSignatureTranscript,
     key_transcript: IDkgTranscript,
@@ -2472,6 +2477,7 @@ impl ThresholdSchnorrSigInputsBuilder {
         ThresholdSchnorrSigInputs::new(
             &self.derivation_path,
             &self.message,
+            self.taproot_tree_root.as_deref(),
             self.nonce,
             self.presig_transcript,
             self.key_transcript,
@@ -2497,6 +2503,7 @@ impl IntoBuilder for ThresholdSchnorrSigInputs {
         ThresholdSchnorrSigInputsBuilder {
             derivation_path: self.derivation_path().clone(),
             message: Vec::from(self.message()),
+            taproot_tree_root: self.taproot_tree_root().map(Vec::from),
             nonce: *self.nonce(),
             presig_transcript: self.presig_transcript().clone(),
             key_transcript: self.key_transcript().clone(),
@@ -2798,7 +2805,7 @@ fn corrupt_signed_dealing_for_one_receiver<R: Rng + CryptoRng>(
                 .expect("failed to deserialize internal dealing");
 
         let corrupted_internal_dealing =
-            ic_crypto_internal_threshold_sig_ecdsa::test_utils::corrupt_dealing(
+            ic_crypto_internal_threshold_sig_canister_threshold_sig::test_utils::corrupt_dealing(
                 &internal_dealing,
                 &[receiver_index],
                 Seed::from_rng(rng),
@@ -2971,6 +2978,21 @@ pub mod schnorr {
         rng.fill_bytes(&mut message);
         let seed = Randomness::from(rng.gen::<[u8; 32]>());
 
+        let taproot_tree_root = {
+            if alg == AlgorithmId::ThresholdSchnorrBip340 {
+                let choose = rng.gen::<u8>();
+                if choose <= 128 {
+                    None
+                } else if choose <= 192 {
+                    Some(vec![])
+                } else {
+                    Some(rng.gen::<[u8; 32]>().to_vec())
+                }
+            } else {
+                None
+            }
+        };
+
         let key_transcript = generate_key_transcript(&env, &dealers, &receivers, alg, rng);
         let tsig_inputs = generate_tschnorr_protocol_inputs(
             &env,
@@ -2979,6 +3001,7 @@ pub mod schnorr {
             &key_transcript,
             &message,
             seed,
+            taproot_tree_root.as_deref(),
             &derivation_path,
             alg,
             rng,

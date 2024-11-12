@@ -447,6 +447,7 @@ impl Hypervisor {
             request_metadata,
             api_type.caller(),
             api_type.call_context_id(),
+            execution_state.is_wasm64,
         );
         let api_type_str = api_type.as_str();
         let (compilation_result, mut execution_result) = Arc::clone(&self.wasm_executor).execute(

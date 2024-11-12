@@ -95,7 +95,6 @@ impl TryFrom<&InitialNiDkgTranscriptRecord> for CspNiDkgTranscript {
 /// A tag for defining the `Epoch` as `AmountOf`.
 pub struct EpochTag;
 /// A unit of DKG time.
-#[allow(unused)]
 pub type Epoch = AmountOf<EpochTag, u32>;
 
 pub mod ni_dkg_groth20_bls12_381 {

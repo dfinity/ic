@@ -1,0 +1,21 @@
+[package]
+name = "ic-crypto-internal-threshold-sig-canister-threshold-sig-test-utils"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+assert_matches = { workspace = true }
+ed25519-dalek = { workspace = true }
+bitcoin = { version = "0.28.2" }
+hex = "0.4"
+secp256k1 = { version = "0.22", features = ["global-context", "rand-std"] }
+ic-crypto-internal-threshold-sig-canister-threshold-sig = { path = ".." }
+ic-crypto-sha2 = { path = "../../../../../sha2" }
+ic-types = { path = "../../../../../../types/types" }
+k256 = { workspace = true }
+p256 = { workspace = true }
+rand = { workspace = true }
+sha2 = { workspace = true }

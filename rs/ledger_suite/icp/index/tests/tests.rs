@@ -592,7 +592,9 @@ fn test_ledger_index_icrc1_mint_parity() {
     let minter_account = Account::from(MINTER_PRINCIPAL.0);
     let recipient_account = account(4, 0);
     let recipient_account_identifier = AccountIdentifier::from(recipient_account);
-    let created_at_time = TimeStamp::from(setup.env.time_of_next_round());
+    // advance time so that time does not grow implicitly when executing a round
+    setup.env.advance_time(Duration::from_secs(1));
+    let created_at_time = TimeStamp::from(setup.env.time());
     let mint_block_index = icrc1_transfer(
         &setup.env,
         setup.ledger_id,
@@ -633,8 +635,10 @@ fn test_ledger_index_icrc1_mint_parity() {
 fn test_ledger_index_icrc1_transfer_parity() {
     // Set up an environment with a ledger, and index, and a single mint transaction
     let setup = ParitySetup::new();
+    // advance time so that time does not grow implicitly when executing a round
+    setup.env.advance_time(Duration::from_secs(1));
     // Create an ICRC1 Transfer transaction with all fields set
-    let tx_timestamp = TimeStamp::from(setup.env.time_of_next_round());
+    let tx_timestamp = TimeStamp::from(setup.env.time());
     let tx_block_index = icrc1_transfer(
         &setup.env,
         setup.ledger_id,
@@ -678,8 +682,10 @@ fn test_ledger_index_icrc1_transfer_parity() {
 fn test_ledger_index_icrc1_transfer_without_created_at_time_parity() {
     // Set up an environment with a ledger, and index, and a single mint transaction
     let setup = ParitySetup::new();
+    // advance time so that time does not grow implicitly when executing a round
+    setup.env.advance_time(Duration::from_secs(1));
     // Create an ICRC1 Transfer transaction with all fields set
-    let tx_timestamp = TimeStamp::from(setup.env.time_of_next_round());
+    let tx_timestamp = TimeStamp::from(setup.env.time());
     let tx_block_index = icrc1_transfer(
         &setup.env,
         setup.ledger_id,
@@ -723,8 +729,10 @@ fn test_ledger_index_icrc1_transfer_without_created_at_time_parity() {
 fn test_ledger_index_icrc1_approve_parity() {
     // Set up an environment with a ledger, and index, and a single mint transaction
     let setup = ParitySetup::new();
+    // advance time so that time does not grow implicitly when executing a round
+    setup.env.advance_time(Duration::from_secs(1));
     // Create an ICRC1 Approve transaction with all fields set
-    let tx_timestamp = TimeStamp::from(setup.env.time_of_next_round());
+    let tx_timestamp = TimeStamp::from(setup.env.time());
     let expires_at = tx_timestamp.as_nanos_since_unix_epoch() + 3600 * 1_000_000_000;
     let tx_block_index = approve(
         &setup.env,
@@ -775,8 +783,10 @@ fn test_ledger_index_icrc1_approve_parity() {
 fn test_ledger_index_icrc1_transfer_from_parity() {
     // Set up an environment with a ledger, and index, and a single mint transaction
     let setup = ParitySetup::new();
+    // advance time so that time does not grow implicitly when executing a round
+    setup.env.advance_time(Duration::from_secs(1));
     // Create an ICRC1 Approve transaction with all fields set
-    let tx_timestamp = TimeStamp::from(setup.env.time_of_next_round());
+    let tx_timestamp = TimeStamp::from(setup.env.time());
     let expires_at = tx_timestamp.as_nanos_since_unix_epoch() + 3600 * 1_000_000_000;
     let tx_block_index = approve(
         &setup.env,
@@ -794,9 +804,11 @@ fn test_ledger_index_icrc1_transfer_from_parity() {
         .expires_at(Some(expires_at)),
     );
     assert_eq!(tx_block_index, Nat::from(1u8));
+    // advance time so that time does not grow implicitly when executing a round
+    setup.env.advance_time(Duration::from_secs(1));
     // Create an ICRC2 TransferFrom transaction with all fields set, based on the previously
     // executed ICRC1 Approve transaction
-    let tx_timestamp = TimeStamp::from(setup.env.time_of_next_round());
+    let tx_timestamp = TimeStamp::from(setup.env.time());
     let tx_block_index = icrc2_transfer_from(
         &setup.env,
         setup.ledger_id,
@@ -1185,7 +1197,9 @@ fn test_get_account_transactions_start_length() {
     let env = &StateMachine::new();
     let ledger_id = install_ledger(env, initial_balances, default_archive_options());
     let index_id = install_index(env, ledger_id);
-    let time = env.time_of_next_round();
+    // advance time so that time does not grow implicitly when executing a round
+    env.advance_time(Duration::from_secs(1));
+    let time = env.time();
     for i in 0..10 {
         transfer(
             env,
@@ -1254,7 +1268,9 @@ fn test_get_account_identifier_transactions_pagination() {
     let env = &StateMachine::new();
     let ledger_id = install_ledger(env, initial_balances, default_archive_options());
     let index_id = install_index(env, ledger_id);
-    let time = env.time_of_next_round();
+    // advance time so that time does not grow implicitly when executing a round
+    env.advance_time(Duration::from_secs(1));
+    let time = env.time();
     for i in 0..10 {
         transfer(
             env,
@@ -1685,7 +1701,7 @@ mod metrics {
 
     #[test]
     fn should_export_total_memory_usage_bytes_metrics() {
-        ic_icrc1_ledger_sm_tests::metrics::assert_existence_of_index_total_memory_bytes_metric(
+        ic_ledger_suite_state_machine_tests::metrics::assert_existence_of_index_total_memory_bytes_metric(
             index_wasm(),
             encode_init_args,
         );

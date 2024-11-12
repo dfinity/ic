@@ -2,15 +2,19 @@
 
 #### Proposal generators
 
-generate_sale_canister_upgrade_proposal_text() {
+generate_swap_canister_upgrade_proposal_text() {
     local LAST_COMMIT=$1
     local NEXT_COMMIT=$2
     local CANISTER_ID=$3
     local OUTPUT_FILE=${4:-}
 
+    PROPOSER=$(git config user.email | sed 's/@/ at /')
+
     WASM_GZ=$(download_sns_canister_wasm_gz_for_type "swap" "$NEXT_COMMIT")
     WASM_SHA=$(sha_256 "$WASM_GZ")
-    CAPITALIZED_CANISTER_NAME="Swap"
+    SHORT_NEXT_COMMIT="${NEXT_COMMIT:0:7}"
+    CANISTER_TYPE="swap"
+    CAPITALIZED_CANISTER_TYPE="Swap"
     LAST_WASM_HASH=$(canister_hash ic $CANISTER_ID)
 
     IC_REPO=$(repo_root)
@@ -19,33 +23,73 @@ generate_sale_canister_upgrade_proposal_text() {
     ESCAPED_IC_REPO=$(printf '%s\n' "$IC_REPO" | sed -e 's/[]\/$*.^[]/\\&/g')
     RELATIVE_CODE_LOCATION=$(echo "$CANISTER_CODE_LOCATION" | sed "s/$ESCAPED_IC_REPO/./g")
 
+    ROOT_CANISTER_ID=$(
+        dfx \
+            --identity default \
+            canister --network ic \
+            call ${CANISTER_ID} get_init '(record {})' \
+            | idl2json \
+            | jq -r ".init[0].sns_root_canister_id"
+    )
+    SNS_PROJECT_NAME=$(curl -s "https://sns-api.internetcomputer.org/api/v1/snses/$ROOT_CANISTER_ID" | jq -r ".name")
+
     OUTPUT=$(
-        cat <<EOF
-## Proposal to Upgrade the Sale Canister for TODO
-### Proposer: DFINITY Foundation
-### Git Hash: $NEXT_COMMIT
-### New Wasm Hash: $WASM_SHA
-### Target canister: $CANISTER_ID
----
-## Features
-TODO ADD FEATURE NOTES
-## Release Notes
+        cat <<++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# Upgrade the $SNS_PROJECT_NAME $CAPITALIZED_CANISTER_TYPE Canister to Commit $SHORT_NEXT_COMMIT
+
+__Proposer__: ${PROPOSER}
+
+__Source code__: [$NEXT_COMMIT][new-commit]
+
+__New wasm hash__: $WASM_SHA
+
+__Target canister__: [$CANISTER_ID](https://dashboard.internetcomputer.org/canister/$CANISTER_ID)
+
+[new-commit]: https://github.com/dfinity/ic/tree/$NEXT_COMMIT
+
+## New Commits
+
 \`\`\`
 \$ git log --format="%C(auto) %h %s" $LAST_COMMIT..$NEXT_COMMIT --  $RELATIVE_CODE_LOCATION
-$(git log --format="%C(auto) %h %s" "$LAST_COMMIT".."$NEXT_COMMIT" -- "$CANISTER_CODE_LOCATION")
+$(git log --format="%C(auto) %h %s" "$LAST_COMMIT".."$NEXT_COMMIT" -- $CANISTER_CODE_LOCATION)
 \`\`\`
-## Wasm Verification
-Verify that the hash of the gzipped WASM matches the proposed hash.
+
+## Current Version
+
+__Current git hash__: $LAST_COMMIT
+
+__Current wasm hash__: $LAST_WASM_HASH
+
+## Verification
+
+See the general instructions on [how to verify] proposals like this. A "quick
+start" guide is provided here.
+
+[how to verify]: https://github.com/dfinity/ic/tree/${NEXT_COMMIT}/rs/nervous_system/docs/proposal_verification.md
+
+### WASM Verification
+
+See ["Building the code"][prereqs] for prerequisites.
+
+[prereqs]: https://github.com/dfinity/ic/tree/${NEXT_COMMIT}/README.adoc#building-the-code
+
 \`\`\`
+# 1. Get a copy of the code.
+git clone git@github.com:dfinity/ic.git
+cd ic
+# Or, if you already have a copy of the ic repo,
 git fetch
 git checkout $NEXT_COMMIT
+
+# 2. Build canisters.
 ./ci/container/build-ic.sh -c
-sha256sum ./artifacts/canisters/$(_canister_download_name_for_sns_canister_type swap).wasm.gz
+
+# 3. Fingerprint the result.
+sha256sum ./artifacts/canisters/$(_canister_download_name_for_sns_canister_type "$CANISTER_TYPE").wasm.gz
 \`\`\`
-## Current Version
-- Current Git Hash: $LAST_COMMIT
-- Current Wasm Hash: $LAST_WASM_HASH
-EOF
+
+This should match \`wasm_module_hash\` field of this proposal.
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
     )
 
     if [ -z "$OUTPUT_FILE" ]; then
@@ -90,8 +134,9 @@ generate_nns_upgrade_proposal_text() {
         cat <<++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 # Upgrade the $CAPITALIZED_CANISTER_NAME Canister to Commit $SHORT_NEXT_COMMIT
 
-__Proposer__: ${PROPOSER}\\
-__Source Code__: [$NEXT_COMMIT][new-commit]
+__Proposer__: ${PROPOSER}
+
+__Source code__: [$NEXT_COMMIT][new-commit]
 
 [new-commit]: https://github.com/dfinity/ic/tree/$NEXT_COMMIT
 
@@ -115,8 +160,9 @@ $CANDID_ARGS
 
 ## Current Version
 
-- Current Git Hash: $LAST_COMMIT
-- Current Wasm Hash: $LAST_WASM_HASH
+__Current git hash__: $LAST_COMMIT
+
+__Current wasm hash__: $LAST_WASM_HASH
 
 
 ## Verification
@@ -131,7 +177,7 @@ start" guide is provided here.
 
 See ["Building the code"][prereqs] for prerequisites.
 
-[prereqs]: https://github.com/dfinity/ic?tab=readme-ov-file#building-the-code
+[prereqs]: https://github.com/dfinity/ic/tree/${NEXT_COMMIT}/README.adoc#building-the-code
 
 \`\`\`
 # 1. Get a copy of the code.
@@ -202,8 +248,9 @@ generate_sns_bless_wasm_proposal_text() {
         cat <<++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 # Publish SNS $CAPITALIZED_CANISTER_TYPE WASM Built at Commit $SHORT_NEXT_COMMIT
 
-__Proposer__: $PROPOSER\\
-__Source Code__: [$NEXT_COMMIT][new-commit]
+__Proposer__: $PROPOSER
+
+__Source code__: [$NEXT_COMMIT][new-commit]
 
 [new-commit]: https://github.com/dfinity/ic/tree/$NEXT_COMMIT
 
@@ -225,7 +272,7 @@ start" guide is provided here.
 
 See ["Building the code"][prereqs] for prerequisites.
 
-[prereqs]: https://github.com/dfinity/ic?tab=readme-ov-file#building-the-code
+[prereqs]: https://github.com/dfinity/ic/tree/${NEXT_COMMIT}/README.adoc#building-the-code
 
 \`\`\`
 # 1. Get a copy of the code.
@@ -347,7 +394,9 @@ generate_forum_post_nns_upgrades() {
 
     OUTPUT=$(
         cat <<EOF
-The NNS Team will be submitting the following upgrade proposals this Friday, $THIS_FRIDAY.  DFINITY plans to vote on these proposals the following Monday.
+The NNS Team submitted the following proposals.  DFINITY plans to vote on these proposals the following Monday.
+
+TODO proposal links
 
 ## Additional Notes / Breaking Changes
 
@@ -379,7 +428,9 @@ generate_forum_post_sns_wasm_publish() {
 
     OUTPUT=$(
         cat <<EOF
-The NNS Team will be submitting the following proposals to publish new versions of SNS canisters to SNS-WASM this Friday, $THIS_FRIDAY.  DFINITY plans to vote on these proposals the following Monday.
+The NNS Team submitted the following proposals to publish new versions of SNS canisters to SNS-WASM.  DFINITY plans to vote on these proposals the following Monday.
+
+TODO proposal links
 
 ## Additional Notes / Breaking Changes
 
@@ -455,12 +506,52 @@ extract_candid_upgrade_args() {
 # Extracts a proposal header field value if the field title is given.
 # Example:
 #   For file with line like: "### Some Field: foo"
-#   the value of foo can be extracted with "proposal_header_field_value <FILE> 'Some Field:'"
-# Usage: proposal_header_field_value <FILE> <FIELD_NAME>
-proposal_header_field_value() {
+#   the value of foo can be extracted with "old_proposal_header_field_value <FILE> 'Some Field:'"
+# Usage: old_proposal_header_field_value <FILE> <FIELD_NAME>
+#
+# Deprecated; please use `proposal_canister_id_value` instead.
+old_proposal_header_field_value() {
     local FILE=$1
     local FIELD=$2
     cat $FILE | grep "### $FIELD" | sed "s/.*$FIELD[[:space:]]*//"
+}
+
+# If the input starts with `[...`, tries to extract the markdown link's display name.
+# Otherwise, returns the full input string as-is.
+#
+# Example 1:
+# ```
+# extract_first_markdown_link_display_name "[abc](https://dashboard.internetcomputer.org/canister/abc)"
+# abc
+# ```
+#
+# Example 2:
+# extract_first_markdown_link_display_name "user at dfinity.org"
+# user at dfinity.org
+# ```
+extract_first_markdown_link_display_name() {
+    local STRING_POTENTIALLY_WITH_MARKDOWN_LINKS=$1
+    FIRST_MARKDOWN_LINK_DISPLAY_NAME=$(printf "$STRING_POTENTIALLY_WITH_MARKDOWN_LINKS" | sed -nre 's/\[([^]]+)\].*/\1/p')
+    if [ -z "$FIRST_MARKDOWN_LINK_DISPLAY_NAME" ]; then
+        printf "$STRING_POTENTIALLY_WITH_MARKDOWN_LINKS"
+    else
+        printf "$FIRST_MARKDOWN_LINK_DISPLAY_NAME"
+    fi
+}
+
+# Extracts a proposal header field value if the field title is given.
+# Example:
+#   For file with line like: "__Some Field__: foo"
+#   the value of foo can be extracted with "proposal_field_value <FILE> 'Some Field:'"
+# Usage: proposal_field_value <FILE> <FIELD_NAME>
+proposal_field_value() {
+    local FILE=$1
+    local FIELD=$2
+    VALUE=$(cat $FILE | grep "__${FIELD}__" | sed "s/.*__${FIELD}__:[[:space:]]*//")
+    if [ -z "$VALUE" ]; then
+        echo >&2 "WARNING: Cannot find field '$FIELD' in '$FILE'."
+    fi
+    extract_first_markdown_link_display_name "$VALUE"
 }
 
 nns_upgrade_proposal_canister_raw_name() {

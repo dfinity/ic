@@ -146,11 +146,11 @@ pub(crate) struct ProposeToUpdateSubnetCmd {
 
     /// The list of public keys whose owners have "readonly" SSH access to all
     /// replicas on this subnet.
-    #[clap(long, multiple_values(true))]
+    #[clap(long, num_args(1..))]
     ssh_readonly_access: Option<Vec<String>>,
     /// The list of public keys whose owners have "backup" SSH access to nodes
     /// on the NNS subnet.
-    #[clap(long, multiple_values(true))]
+    #[clap(long, num_args(1..))]
     ssh_backup_access: Option<Vec<String>>,
 
     /// If set, the created proposal will contain a desired override of that

@@ -126,12 +126,9 @@ impl CanisterSnapshots {
     /// Additionally, new items are added to the `unflushed_changes`,
     /// representing the deleted backups since the last flush to the disk.
     pub fn delete_snapshots(&mut self, canister_id: CanisterId) {
-        if let Some(snapshot_ids) = self.snapshot_ids.remove(&canister_id) {
+        if let Some(snapshot_ids) = self.snapshot_ids.get(&canister_id).cloned() {
             for snapshot_id in snapshot_ids {
-                debug_assert!(self.snapshots.contains_key(&snapshot_id));
-                self.snapshots.remove(&snapshot_id).unwrap();
-                self.unflushed_changes
-                    .push(SnapshotOperation::Delete(snapshot_id));
+                self.remove(snapshot_id);
             }
         }
     }

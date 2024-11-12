@@ -37,6 +37,7 @@ use ic_test_utilities_types::{
 };
 use ic_types::batch::BlockmakerMetrics;
 use ic_types::xnet::{StreamIndexedQueue, StreamSlice};
+use ic_types::ReplicaVersion;
 use ic_types::{
     batch::{Batch, BatchMessages},
     crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript},
@@ -1043,6 +1044,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             time: Time::from_nanos_since_unix_epoch(0),
             consensus_responses: Vec::new(),
             blockmaker_metrics: BlockmakerMetrics::new_for_test(),
+            replica_version: ReplicaVersion::default(),
         });
         let latest_state = state_manager.get_latest_state().take();
         assert_eq!(network_topology, latest_state.metadata.network_topology);
@@ -1842,6 +1844,7 @@ fn process_batch_updates_subnet_metrics() {
             time: Time::from_nanos_since_unix_epoch(0),
             consensus_responses: Vec::new(),
             blockmaker_metrics: BlockmakerMetrics::new_for_test(),
+            replica_version: ReplicaVersion::default(),
         });
 
         let latest_state = state_manager.get_latest_state().take();

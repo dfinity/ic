@@ -23,6 +23,8 @@ pub const UNIVERSAL_VM_NAME: &str = "httpbin";
 pub const EXPIRATION: Duration = Duration::from_secs(120);
 pub const BACKOFF_DELAY: Duration = Duration::from_secs(5);
 
+const PROXY_CANISTER_ID_PATH: &str = "proxy_canister_id";
+
 pub enum PemType {
     PemCert,
     PemKey,
@@ -51,31 +53,48 @@ pub fn install_nns_canisters(env: &TestEnv) {
 }
 
 pub fn setup(env: TestEnv) {
-    // Set up Universal VM with HTTP Bin testing service
-    UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
-        .with_config_img(get_dependency_path(
-            "rs/tests/networking/canister_http/http_uvm_config_image.zst",
-        ))
-        .enable_ipv4()
-        .start(&env)
-        .expect("failed to set up universal VM");
+    std::thread::scope(|s| {
+        // Set up IC with 1 system subnet and 4 application subnets
+        s.spawn(|| {
+            InternetComputer::new()
+                .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
+                .add_subnet(
+                    Subnet::new(SubnetType::Application)
+                        .with_features(SubnetFeatures {
+                            http_requests: true,
+                            ..SubnetFeatures::default()
+                        })
+                        .add_nodes(4),
+                )
+                .setup_and_start(&env)
+                .expect("failed to setup IC under test");
 
-    start_httpbin_on_uvm(&env);
+            await_nodes_healthy(&env);
 
-    InternetComputer::new()
-        .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
-        .add_subnet(
-            Subnet::new(SubnetType::Application)
-                .with_features(SubnetFeatures {
-                    http_requests: true,
-                    ..SubnetFeatures::default()
-                })
-                .add_nodes(4),
-        )
-        .setup_and_start(&env)
-        .expect("failed to setup IC under test");
-    await_nodes_healthy(&env);
-    install_nns_canisters(&env);
+            s.spawn(|| {
+                install_nns_canisters(&env);
+            });
+            s.spawn(|| {
+                // Get application subnet node to deploy canister to.
+                let mut nodes = get_node_snapshots(&env);
+                let node = nodes.next().expect("there is no application node");
+                let runtime = get_runtime_from_node(&node);
+                let _ = create_proxy_canister(&env, &runtime, &node);
+            });
+        });
+        // Set up Universal VM with HTTP Bin testing service
+        s.spawn(|| {
+            UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
+                .with_config_img(get_dependency_path(
+                    "rs/tests/networking/canister_http/http_uvm_config_image.zst",
+                ))
+                .enable_ipv4()
+                .start(&env)
+                .expect("failed to set up universal VM");
+
+            start_httpbin_on_uvm(&env);
+        });
+    });
 }
 
 pub fn get_universal_vm_address(env: &TestEnv) -> Ipv6Addr {
@@ -198,8 +217,17 @@ pub fn create_proxy_canister<'a>(
         &env.logger(),
         "proxy_canister {} installed", proxy_canister_id
     );
-    Canister::new(
-        runtime,
-        CanisterId::unchecked_from_principal(PrincipalId::from(proxy_canister_id)),
-    )
+
+    let principal_id = PrincipalId::from(proxy_canister_id);
+
+    // write proxy canister id to TestEnv
+    env.write_json_object(PROXY_CANISTER_ID_PATH, &principal_id)
+        .expect("Could not write proxy canister id to TestEnv.");
+
+    Canister::new(runtime, CanisterId::unchecked_from_principal(principal_id))
+}
+
+pub fn get_proxy_canister_id(env: &TestEnv) -> PrincipalId {
+    env.read_json_object(PROXY_CANISTER_ID_PATH)
+        .expect("Proxy canister should should .")
 }

@@ -1,26 +1,92 @@
 benches:
   add_neuron_active_maximum:
     total:
-      instructions: 45003037
+      instructions: 35970325
       heap_increase: 1
       stable_memory_increase: 0
     scopes: {}
   add_neuron_active_typical:
     total:
-      instructions: 2703302
+      instructions: 1837226
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   add_neuron_inactive_maximum:
     total:
-      instructions: 122465697
+      instructions: 98527974
       heap_increase: 1
       stable_memory_increase: 0
     scopes: {}
   add_neuron_inactive_typical:
     total:
-      instructions: 10581822
+      instructions: 7584030
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
-version: 0.1.3
+  cascading_vote_all_heap:
+    total:
+      instructions: 35794036
+      heap_increase: 0
+      stable_memory_increase: 0
+    scopes: {}
+  cascading_vote_heap_neurons_stable_index:
+    total:
+      instructions: 57972358
+      heap_increase: 0
+      stable_memory_increase: 0
+    scopes: {}
+  cascading_vote_stable_everything:
+    total:
+      instructions: 2936044986
+      heap_increase: 1
+      stable_memory_increase: 0
+    scopes: {}
+  cascading_vote_stable_neurons_with_heap_index:
+    total:
+      instructions: 2913853879
+      heap_increase: 1
+      stable_memory_increase: 0
+    scopes: {}
+  centralized_following_all_stable:
+    total:
+      instructions: 2169878594
+      heap_increase: 0
+      stable_memory_increase: 0
+    scopes: {}
+  compute_ballots_for_new_proposal_with_stable_neurons:
+    total:
+      instructions: 1555655
+      heap_increase: 0
+      stable_memory_increase: 0
+    scopes: {}
+  neuron_metrics_calculation_heap:
+    total:
+      instructions: 845228
+      heap_increase: 0
+      stable_memory_increase: 0
+    scopes: {}
+  neuron_metrics_calculation_stable:
+    total:
+      instructions: 1898294
+      heap_increase: 0
+      stable_memory_increase: 0
+    scopes: {}
+  range_neurons_performance:
+    total:
+      instructions: 47389870
+      heap_increase: 0
+      stable_memory_increase: 0
+    scopes: {}
+  single_vote_all_stable:
+    total:
+      instructions: 13047584
+      heap_increase: 0
+      stable_memory_increase: 0
+    scopes: {}
+  update_recent_ballots:
+    total:
+      instructions: 16205133
+      heap_increase: 0
+      stable_memory_increase: 0
+    scopes: {}
+version: 0.1.7

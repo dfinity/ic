@@ -44,7 +44,7 @@ type Ballot = record {
 
 type BallotInfo = record {
   vote : int32;
-  proposal_id : opt NeuronId;
+  proposal_id : opt ProposalId;
 };
 
 type By = variant {
@@ -253,7 +253,7 @@ type FollowersMap = record {
 };
 
 type GetNeuronsFundAuditInfoRequest = record {
-  nns_proposal_id : opt NeuronId;
+  nns_proposal_id : opt ProposalId;
 };
 
 type GetNeuronsFundAuditInfoResponse = record {
@@ -437,7 +437,7 @@ type ListNodeProvidersResponse = record {
 type ListProposalInfo = record {
   include_reward_status : vec int32;
   omit_large_fields : opt bool;
-  before_proposal : opt NeuronId;
+  before_proposal : opt ProposalId;
   limit : nat32;
   exclude_topic : vec int32;
   include_all_manage_neuron_proposals : opt bool;
@@ -457,7 +457,7 @@ type MakeProposalRequest = record {
 
 type MakeProposalResponse = record {
   message : opt text;
-  proposal_id : opt NeuronId;
+  proposal_id : opt ProposalId;
 };
 
 type MakingSnsProposal = record {
@@ -577,6 +577,7 @@ type Neuron = record {
   transfer : opt NeuronStakeTransfer;
   known_neuron_data : opt KnownNeuronData;
   spawn_at_timestamp_seconds : opt nat64;
+  voting_power_refreshed_timestamp_seconds : opt nat64;
 };
 
 type NeuronBasketConstructionParameters = record {
@@ -598,6 +599,10 @@ type NeuronDistribution = record {
 };
 
 type NeuronId = record {
+  id : nat64;
+};
+
+type ProposalId = record {
   id : nat64;
 };
 
@@ -624,6 +629,7 @@ type NeuronInfo = record {
   known_neuron_data : opt KnownNeuronData;
   voting_power : nat64;
   age_seconds : nat64;
+  voting_power_refreshed_timestamp_seconds : opt nat64;
 };
 
 type NeuronStakeTransfer = record {
@@ -788,7 +794,7 @@ type ProposalActionRequest = variant {
 };
 
 type ProposalData = record {
-  id : opt NeuronId;
+  id : opt ProposalId;
   failure_reason : opt GovernanceError;
   ballots : vec record { nat64; Ballot };
   proposal_timestamp_seconds : nat64;
@@ -805,10 +811,11 @@ type ProposalData = record {
   wait_for_quiet_state : opt WaitForQuietState;
   executed_timestamp_seconds : nat64;
   original_total_community_fund_maturity_e8s_equivalent : opt nat64;
+  total_potential_voting_power : opt nat64;
 };
 
 type ProposalInfo = record {
-  id : opt NeuronId;
+  id : opt ProposalId;
   status : int32;
   topic : int32;
   failure_reason : opt GovernanceError;
@@ -825,11 +832,12 @@ type ProposalInfo = record {
   proposal : opt Proposal;
   proposer : opt NeuronId;
   executed_timestamp_seconds : nat64;
+  total_potential_voting_power : opt nat64;
 };
 
 type RegisterVote = record {
   vote : int32;
-  proposal : opt NeuronId;
+  proposal : opt ProposalId;
 };
 
 type RemoveHotKey = record {
@@ -908,7 +916,7 @@ type RewardEvent = record {
   total_available_e8s_equivalent : nat64;
   latest_round_available_e8s_equivalent : opt nat64;
   distributed_e8s_equivalent : nat64;
-  settled_proposals : vec NeuronId;
+  settled_proposals : vec ProposalId;
 };
 
 type RewardMode = variant {

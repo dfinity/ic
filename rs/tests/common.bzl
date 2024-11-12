@@ -20,7 +20,6 @@ DEPENDENCIES = [
     "//rs/config",
     "//rs/limits",
     "//rs/crypto/sha2",
-    "//rs/crypto/test_utils/reproducible_rng",
     "//rs/crypto/tree_hash",
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/cup_explorer",
@@ -28,7 +27,6 @@ DEPENDENCIES = [
     "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator",
     "//rs/http_utils",
     "//rs/ic_os/dev_test_tools/deterministic_ips",
-    "//rs/ic_os/fstrim_tool",
     "//rs/interfaces",
     "//rs/interfaces/registry",
     "//rs/nervous_system/clients",
@@ -146,10 +144,8 @@ DEPENDENCIES = [
     "@crate_index//:rcgen",
     "@crate_index//:regex",
     "@crate_index//:reqwest",
-    "@crate_index//:ring",
     "@crate_index//:rsa",
     "@crate_index//:rust_decimal",
-    "@crate_index//:schnorr_fun",
     "@crate_index//:serde_bytes",
     "@crate_index//:serde_cbor",
     "@crate_index//:serde_json",
@@ -324,15 +320,10 @@ BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS = [
     "//ic-os/boundary-guestos:scripts/build-bootstrap-config-image.sh",
 ]
 
-COUNTER_CANISTER_RUNTIME_DEPS = ["//rs/tests:src/counter.wat"]
+COUNTER_CANISTER_RUNTIME_DEPS = ["//rs/tests:counter.wat"]
 
 CANISTER_HTTP_RUNTIME_DEPS = [
     "//rs/tests/networking/canister_http:http_uvm_config_image",
-]
-
-CUSTOM_DOMAINS_RUNTIME_DEPS = [
-    "//rs/tests:custom_domains_uvm_config_image",
-    "@asset_canister//file",
 ]
 
 XNET_TEST_CANISTER_RUNTIME_DEPS = ["//rs/rust_canisters/xnet_test:xnet-test-canister"]
@@ -353,3 +344,11 @@ IC_MAINNET_NNS_RECOVERY_RUNTIME_DEPS = GUESTOS_RUNTIME_DEPS + \
     "@candid//:didc",
     "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister",
 ]
+
+UNIVERSAL_CANISTER_RUNTIME_DEPS = [
+    "//rs/universal_canister/impl:universal_canister.wasm.gz",
+]
+
+UNIVERSAL_CANISTER_ENV = {
+    "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
+}
