@@ -3,7 +3,6 @@ use crate::logs::P0;
 use crate::logs::P1;
 use crate::management::check_withdrawal_destination_address;
 use crate::memo::{BurnMemo, Status};
-use crate::state::ReimbursementReason;
 use crate::tasks::{schedule_now, TaskType};
 use crate::{
     address::{account_to_bitcoin_address, BitcoinAddress, ParseAddressError},
@@ -200,7 +199,6 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
             .into()
     });
     let status = new_kyt_check_address(new_kyt_principal, args.address.clone()).await?;
-
     match status {
         BtcAddressCheckStatus::Tainted => {
             log!(
@@ -216,6 +214,7 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
         }
         BtcAddressCheckStatus::Clean => {}
     }
+
     let burn_memo = BurnMemo::Convert {
         address: Some(&args.address),
         kyt_fee: None,
@@ -223,6 +222,7 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
     };
     let block_index =
         burn_ckbtcs(caller, args.amount, crate::memo::encode(&burn_memo).into()).await?;
+
     let request = RetrieveBtcRequest {
         amount: args.amount,
         address: parsed_address,
@@ -299,6 +299,31 @@ pub async fn retrieve_btc_with_approval(
         ));
     }
 
+    let new_kyt_principal = read_state(|s| {
+        s.new_kyt_principal
+            .expect("BUG: upgrade procedure must ensure that the new KYT principal is set")
+            .get()
+            .into()
+    });
+
+    match new_kyt_check_address(new_kyt_principal, args.address.clone()).await {
+        Err(error) => {
+            return Err(RetrieveBtcWithApprovalError::GenericError {
+                error_message: format!("Failed to call KYT canister with error: {:?}", error),
+                error_code: ErrorCode::KytCallFailed as u64,
+            })
+        }
+        Ok(status) => match status {
+            BtcAddressCheckStatus::Tainted => {
+                return Err(RetrieveBtcWithApprovalError::GenericError {
+                    error_message: "Destination address is tainted".to_string(),
+                    error_code: ErrorCode::TaintedAddress as u64,
+                });
+            }
+            BtcAddressCheckStatus::Clean => {}
+        },
+    }
+
     let burn_memo_icrc2 = BurnMemo::Convert {
         address: Some(&args.address),
         kyt_fee: None,
@@ -314,90 +339,28 @@ pub async fn retrieve_btc_with_approval(
     )
     .await?;
 
-    let new_kyt_principal = read_state(|s| {
-        s.new_kyt_principal
-            .expect("BUG: upgrade procedure must ensure that the new KYT principal is set")
-            .get()
-            .into()
-    });
+    let request = RetrieveBtcRequest {
+        amount: args.amount,
+        address: parsed_address,
+        block_index,
+        received_at: ic_cdk::api::time(),
+        kyt_provider: None,
+        reimbursement_account: Some(Account {
+            owner: caller,
+            subaccount: args.from_subaccount,
+        }),
+    };
 
-    match new_kyt_check_address(new_kyt_principal, args.address.clone()).await {
-        Ok(status) => {
-            match status {
-                BtcAddressCheckStatus::Tainted => {
-                    mutate_state(|s| {
-                        state::audit::schedule_deposit_reimbursement(
-                            s,
-                            Account {
-                                owner: caller,
-                                subaccount: args.from_subaccount,
-                            },
-                            args.amount,
-                            ReimbursementReason::TaintedDestination {
-                                kyt_provider: new_kyt_principal,
-                                kyt_fee: 0,
-                            },
-                            block_index,
-                        );
-                    });
-                    schedule_now(TaskType::ProcessLogic);
-                    return Err(RetrieveBtcWithApprovalError::GenericError {
-                        error_message: "Destination address is tainted".to_string(),
-                        error_code: ErrorCode::TaintedAddress as u64,
-                    });
-                }
-                BtcAddressCheckStatus::Clean => {}
-            }
+    mutate_state(|s| state::audit::accept_retrieve_btc_request(s, request));
 
-            let request = RetrieveBtcRequest {
-                amount: args.amount,
-                address: parsed_address,
-                block_index,
-                received_at: ic_cdk::api::time(),
-                kyt_provider: None,
-                reimbursement_account: Some(Account {
-                    owner: caller,
-                    subaccount: args.from_subaccount,
-                }),
-            };
+    assert_eq!(
+        crate::state::RetrieveBtcStatus::Pending,
+        read_state(|s| s.retrieve_btc_status(block_index))
+    );
 
-            mutate_state(|s| state::audit::accept_retrieve_btc_request(s, request));
+    schedule_now(TaskType::ProcessLogic);
 
-            assert_eq!(
-                crate::state::RetrieveBtcStatus::Pending,
-                read_state(|s| s.retrieve_btc_status(block_index))
-            );
-
-            schedule_now(TaskType::ProcessLogic);
-
-            Ok(RetrieveBtcOk { block_index })
-        }
-        Err(error) => {
-            mutate_state(|s| {
-                state::audit::schedule_deposit_reimbursement(
-                    s,
-                    Account {
-                        owner: caller,
-                        subaccount: args.from_subaccount,
-                    },
-                    args.amount,
-                    ReimbursementReason::CallFailed,
-                    block_index,
-                );
-            });
-
-            schedule_now(TaskType::ProcessLogic);
-
-            Err(RetrieveBtcWithApprovalError::GenericError {
-                error_message: format!(
-                    "Failed to call KYT canister with error: {:?}, will reimburse {} ckBTC",
-                    error,
-                    crate::tx::DisplayAmount(args.amount),
-                ),
-                error_code: ErrorCode::KytCallFailed as u64,
-            })
-        }
-    }
+    Ok(RetrieveBtcOk { block_index })
 }
 
 async fn balance_of(user: Principal) -> Result<u64, RetrieveBtcError> {
