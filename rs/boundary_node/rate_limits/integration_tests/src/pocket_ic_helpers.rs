@@ -7,7 +7,9 @@ use ic_nns_test_utils::common::{
     build_mainnet_registry_wasm, build_registry_wasm, NnsInitPayloadsBuilder,
 };
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
-use pocket_ic::{nonblocking::PocketIc, CanisterSettings, PocketIcBuilder, WasmResult};
+use pocket_ic::{
+    management_canister::CanisterSettings, nonblocking::PocketIc, PocketIcBuilder, WasmResult,
+};
 use rate_limits_api::InitArg;
 use serde::de::DeserializeOwned;
 
