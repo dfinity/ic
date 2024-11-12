@@ -145,17 +145,21 @@ fn get_ipmi_mac() -> Result<FormattedMacAddress> {
 /// Retrieves the MAC address from IPMI if available, else falls back to
 /// a known hard-coded string that is hexadecimally-encoded "invirt".
 pub fn get_mgmt_mac() -> Result<FormattedMacAddress> {
-    let stdout = Command::new("systemd-detect-virt")
+    let output = Command::new("systemd-detect-virt")
         .output()?
-        .stdout
-        .into_iter()
-        .collect::<Vec<u8>>();
-    let output = std::str::from_utf8(&stdout).unwrap_or("[INVALID UTF8]");
-    match output {
-        "none\n" => get_ipmi_mac(),
-        // The following string is hex for "invirt".
-        _ => FormattedMacAddress::try_from("69:6e:76:69:72:74"),
-    }
+        .stdout;
+
+    let stdout = std::str::from_utf8(&output)?.trim();
+    
+    match stdout {
+        "none" => {
+             println!("Running on bare metal. Retrieving IPMI MAC address.");
+             get_ipmi_mac()
+        },
+        _ => {
+             println!("Virtualization detected. Using hard-coded mac address.");
+             FormattedMacAddress::try_from("69:6e:76:69:72:74")
+        },
 }
 
 #[cfg(test)]
