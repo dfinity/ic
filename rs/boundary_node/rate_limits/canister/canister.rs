@@ -4,7 +4,7 @@ use crate::confidentiality_formatting::{
     ConfigConfidentialityFormatter, RuleConfidentialityFormatter,
 };
 use crate::disclose::{DisclosesRules, RulesDiscloser};
-use crate::fetcher::{ConfigFetcher, EntityFetcher, RuleFetcher};
+use crate::fetcher::{ConfigFetcher, EntityFetcher, IncidentFetcher, RuleFetcher};
 use crate::metrics::{
     export_metrics_as_http_response, with_metrics_registry, WithMetrics,
     LAST_CANISTER_UPGRADE_GAUGE, LAST_SUCCESSFUL_REGISTRY_POLL_GAUGE,
@@ -17,8 +17,8 @@ use ic_cdk_macros::{init, post_upgrade, query, update};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use rate_limits_api::{
     AddConfigResponse, ApiBoundaryNodeIdRecord, DiscloseRulesArg, DiscloseRulesResponse,
-    GetApiBoundaryNodeIdsRequest, GetConfigResponse, GetRuleByIdResponse, InitArg, InputConfig,
-    RuleId, Version,
+    GetApiBoundaryNodeIdsRequest, GetConfigResponse, GetRuleByIdResponse,
+    GetRulesByIncidentIdResponse, IncidentId, InitArg, InputConfig, RuleId, Version,
 };
 use std::{sync::Arc, time::Duration};
 
@@ -82,6 +82,18 @@ fn get_rule_by_id(rule_id: RuleId) -> GetRuleByIdResponse {
         let formatter = RuleConfidentialityFormatter;
         let fetcher = RuleFetcher::new(state, formatter, access_resolver);
         fetcher.fetch(rule_id)
+    })?;
+    Ok(response)
+}
+
+#[query]
+fn get_rules_by_incident_id(incident_id: IncidentId) -> GetRulesByIncidentIdResponse {
+    let caller_id = ic_cdk::api::caller();
+    let response = with_canister_state(|state| {
+        let access_resolver = AccessLevelResolver::new(caller_id, state.clone());
+        let formatter = RuleConfidentialityFormatter;
+        let fetcher = IncidentFetcher::new(state, formatter, access_resolver);
+        fetcher.fetch(incident_id)
     })?;
     Ok(response)
 }

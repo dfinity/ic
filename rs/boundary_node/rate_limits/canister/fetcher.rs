@@ -2,7 +2,7 @@ use crate::{
     access_control::{AccessLevel, ResolveAccessLevel},
     confidentiality_formatting::ConfidentialityFormatting,
     state::CanisterApi,
-    types::{OutputConfig, OutputRule, OutputRuleMetadata, RuleId, Version},
+    types::{IncidentId, OutputConfig, OutputRule, OutputRuleMetadata, RuleId, Version},
 };
 
 pub trait EntityFetcher {
@@ -20,6 +20,12 @@ pub struct ConfigFetcher<R, F, A> {
 }
 
 pub struct RuleFetcher<R, F, A> {
+    pub canister_api: R,
+    pub formatter: F,
+    pub access_resolver: A,
+}
+
+pub struct IncidentFetcher<R, F, A> {
     pub canister_api: R,
     pub formatter: F,
     pub access_resolver: A,
@@ -45,6 +51,16 @@ impl<R, F, A> RuleFetcher<R, F, A> {
     }
 }
 
+impl<R, F, A> IncidentFetcher<R, F, A> {
+    pub fn new(canister_api: R, formatter: F, access_resolver: A) -> Self {
+        Self {
+            canister_api,
+            formatter,
+            access_resolver,
+        }
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum FetchConfigError {
     #[error("Config for version={0} not found")]
@@ -56,8 +72,8 @@ pub enum FetchConfigError {
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum FetchRuleError {
-    #[error("Rule with id = {0} not found")]
+pub enum FetchError {
+    #[error("The provided id = {0} not found")]
     NotFound(String),
     #[error("The provided id = {0} is not a valid UUID")]
     InvalidUuidFormat(String),
@@ -133,23 +149,73 @@ impl<
         R: CanisterApi,
         F: ConfidentialityFormatting<Input = OutputRuleMetadata>,
         A: ResolveAccessLevel,
+    > EntityFetcher for IncidentFetcher<R, F, A>
+{
+    type Input = rate_limits_api::IncidentId;
+    type Output = Vec<rate_limits_api::OutputRuleMetadata>;
+    type Error = FetchError;
+
+    fn fetch(&self, incident_id: Self::Input) -> Result<Self::Output, Self::Error> {
+        let incident_id = IncidentId::try_from(incident_id.clone())
+            .map_err(|_| FetchError::InvalidUuidFormat(incident_id))?;
+
+        let incident_metadata = self
+            .canister_api
+            .get_incident(&incident_id)
+            .ok_or_else(|| FetchError::NotFound(incident_id.0.to_string()))?;
+
+        let mut output_rules = Vec::with_capacity(incident_metadata.rule_ids.len());
+
+        for rule_id in incident_metadata.rule_ids.into_iter() {
+            let stored_rule_metadata = self.canister_api.get_rule(&rule_id).ok_or_else(|| {
+                FetchError::UnexpectedError(anyhow::anyhow!("Rule with id = {rule_id} not found"))
+            })?;
+
+            let mut rule_metadata = OutputRuleMetadata {
+                id: rule_id,
+                incident_id,
+                rule_raw: Some(stored_rule_metadata.rule_raw),
+                description: Some(stored_rule_metadata.description),
+                disclosed_at: stored_rule_metadata.disclosed_at,
+                added_in_version: stored_rule_metadata.added_in_version,
+                removed_in_version: stored_rule_metadata.removed_in_version,
+            };
+
+            // If the rule is not disclosed and the viewer is not authorized, redact the rule.
+            if rule_metadata.disclosed_at.is_none() {
+                let is_authorized_viewer = self.access_resolver.get_access_level()
+                    == AccessLevel::FullAccess
+                    || self.access_resolver.get_access_level() == AccessLevel::FullRead;
+                if !is_authorized_viewer {
+                    rule_metadata = self.formatter.format(&rule_metadata);
+                }
+            }
+
+            output_rules.push(rule_metadata.into());
+        }
+
+        Ok(output_rules)
+    }
+}
+
+impl<
+        R: CanisterApi,
+        F: ConfidentialityFormatting<Input = OutputRuleMetadata>,
+        A: ResolveAccessLevel,
     > EntityFetcher for RuleFetcher<R, F, A>
 {
     type Input = rate_limits_api::RuleId;
     type Output = rate_limits_api::OutputRuleMetadata;
-    type Error = FetchRuleError;
+    type Error = FetchError;
 
-    fn fetch(
-        &self,
-        rule_id: rate_limits_api::RuleId,
-    ) -> Result<rate_limits_api::OutputRuleMetadata, FetchRuleError> {
+    fn fetch(&self, rule_id: rate_limits_api::RuleId) -> Result<Self::Output, Self::Error> {
         let rule_id = RuleId::try_from(rule_id.clone())
-            .map_err(|_| FetchRuleError::InvalidUuidFormat(rule_id))?;
+            .map_err(|_| FetchError::InvalidUuidFormat(rule_id))?;
 
         let stored_metadata = self
             .canister_api
             .get_rule(&rule_id)
-            .ok_or_else(|| FetchRuleError::NotFound(rule_id.0.to_string()))?;
+            .ok_or_else(|| FetchError::NotFound(rule_id.0.to_string()))?;
 
         let mut rule_metadata = OutputRuleMetadata {
             id: rule_id,
@@ -161,12 +227,15 @@ impl<
             removed_in_version: stored_metadata.removed_in_version,
         };
 
-        let is_authorized_viewer = self.access_resolver.get_access_level()
-            == AccessLevel::FullAccess
-            || self.access_resolver.get_access_level() == AccessLevel::FullRead;
-
-        if !is_authorized_viewer {
-            rule_metadata = self.formatter.format(&rule_metadata);
+        // If the rule is not disclosed and the viewer is not authorized, redact the rule.
+        if rule_metadata.disclosed_at.is_none() {
+            // And the viewer is not authorized, redact the rule.
+            let is_authorized_viewer = self.access_resolver.get_access_level()
+                == AccessLevel::FullAccess
+                || self.access_resolver.get_access_level() == AccessLevel::FullRead;
+            if !is_authorized_viewer {
+                rule_metadata = self.formatter.format(&rule_metadata);
+            }
         }
 
         Ok(rule_metadata.into())
@@ -179,8 +248,8 @@ impl From<FetchConfigError> for String {
     }
 }
 
-impl From<FetchRuleError> for String {
-    fn from(value: FetchRuleError) -> Self {
+impl From<FetchError> for String {
+    fn from(value: FetchError) -> Self {
         value.to_string()
     }
 }
