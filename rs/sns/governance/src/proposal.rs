@@ -2457,7 +2457,7 @@ mod tests {
     use super::*;
     use crate::{
         pb::v1::{
-            governance::{self, Version},
+            governance::{self, CachedUpgradeSteps, Version, Versions},
             Ballot, Empty, Governance as GovernanceProto, NeuronId, Proposal, ProposalId,
             Subaccount, WaitForQuietState,
         },
@@ -2515,14 +2515,22 @@ mod tests {
             genesis_timestamp_seconds: 0,
             metrics: None,
             mode: governance::Mode::Normal.into(),
-            deployed_version,
+            cached_upgrade_steps: deployed_version.map(|deployed_version| CachedUpgradeSteps {
+                upgrade_steps: Some(Versions {
+                    versions: vec![Version::from(deployed_version)],
+                }),
+                requested_timestamp_seconds: Some(123),
+                response_timestamp_seconds: Some(456),
+            }),
             pending_version: None,
             is_finalizing_disburse_maturity: None,
             maturity_modulation: None,
-            cached_upgrade_steps: None,
             target_version: None,
             timers: None,
             upgrade_journal: None,
+
+            // Deprecated field.
+            deployed_version: None,
         }
     }
 

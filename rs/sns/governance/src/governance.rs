@@ -5073,8 +5073,8 @@ impl Governance {
             if cached_upgrade_steps != original_cached_upgrade_steps {
                 log!(
                     INFO,
-                    "Upgrade steps were not refreshed because someone modified the cache while we were \
-                     waiting for a response form SNS-W. Try again later."
+                    "Upgrade steps were not refreshed because someone modified the cache while we \
+                     were waiting for a response form SNS-W. Try again later."
                 );
                 return None;
             }
