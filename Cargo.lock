@@ -16942,7 +16942,7 @@ dependencies = [
  "candid",
  "clap 4.5.20",
  "pocket-ic",
- "reqwest 0.12.8",
+ "reqwest 0.12.9",
 ]
 
 [[package]]
