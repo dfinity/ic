@@ -126,7 +126,6 @@ fn disclose_rules(args: DiscloseRulesArg) -> DiscloseRulesResponse {
     Ok(())
 }
 
-// TODO: adjust quota
 #[query(decoding_quota = 10000)]
 fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
