@@ -1215,6 +1215,17 @@ impl CkBtcMinterState {
 
         Ok(())
     }
+
+    pub fn get_total_btc_managed(&self) -> u64 {
+        let mut total_btc = 0_u64;
+        for req in self.submitted_transactions.iter() {
+            if let Some(change_output) = &req.change_output {
+                total_btc += change_output.value;
+            }
+        }
+        total_btc += self.available_utxos.iter().map(|u| u.value).sum::<u64>();
+        total_btc
+    }
 }
 
 fn as_sorted_vec<T, K: Ord>(values: impl Iterator<Item = T>, key: impl Fn(&T) -> K) -> Vec<T> {

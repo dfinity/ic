@@ -1,4 +1,5 @@
-use crate::state::eventlog::Event;
+use crate::state::eventlog::{replay, Event};
+use crate::Network;
 use candid::{CandidType, Deserialize, Principal};
 use ic_agent::Agent;
 use std::path::PathBuf;
@@ -9,7 +10,10 @@ async fn should_replay_events_for_mainnet() {
         .retrieve_and_store_events_if_env()
         .await;
 
-    // let state = replay_events_internal(GetEventsFile::Sepolia.deserialize());
+    let state = replay(GetEventsFile::Mainnet.deserialize()).expect("Failed to replay events");
+
+    assert_eq!(state.btc_network, Network::Mainnet);
+    assert_eq!(state.get_total_btc_managed(), 22_330_465_791);
 }
 
 #[tokio::test]
@@ -18,7 +22,10 @@ async fn should_replay_events_for_testnet() {
         .retrieve_and_store_events_if_env()
         .await;
 
-    // let state = replay_events_internal(GetEventsFile::Sepolia.deserialize());
+    let state = replay(GetEventsFile::Testnet.deserialize()).expect("Failed to replay events");
+
+    assert_eq!(state.btc_network, Network::Testnet);
+    assert_eq!(state.get_total_btc_managed(), 16_578_205_978);
 }
 
 enum GetEventsFile {
@@ -29,7 +36,7 @@ enum GetEventsFile {
 impl GetEventsFile {
     /// To refresh the stored events on disk, call the tests as follows
     /// ```
-    /// bazel test --spawn_strategy=standalone //rs/bitcoin/ckbtc/minter:ckbtc_minter_lib_unit_tests  --test_env=RETRIEVE_MINTER_EVENTS=true --test_arg "should_replay_events_for_mainnet"
+    /// bazel test --spawn_strategy=standalone //rs/bitcoin/ckbtc/minter:ckbtc_minter_lib_unit_tests  --test_env=RETRIEVE_MINTER_EVENTS=true --test_arg "should_replay_events_for_mainnet" --test_timeout 900
     /// ```
     /// The parameter `spawn_strategy=standalone` is needed, because the events will be fetched from the running canister and the default sandbox doesn't allow it.
     /// The parameter `test_env=RETRIEVE_MINTER_EVENTS=true` is needed to enable the fetching of the events.
@@ -108,6 +115,25 @@ impl GetEventsFile {
             GetEventsFile::Mainnet => "mainnet_events.gz",
             GetEventsFile::Testnet => "testnet_events.gz",
         }
+    }
+
+    fn deserialize(&self) -> impl Iterator<Item = Event> {
+        use candid::Decode;
+        use flate2::read::GzDecoder;
+        use std::fs::File;
+        use std::io::Read;
+
+        let file = File::open(self.path_to_events_file()).unwrap();
+        let mut gz = GzDecoder::new(file);
+        let mut decompressed_buffer = Vec::new();
+        gz.read_to_end(&mut decompressed_buffer)
+            .expect("BUG: failed to decompress events");
+        let events =
+            Decode!(&decompressed_buffer, GetEventsResult).expect("Failed to decode events");
+        events.events.into_iter().map(|event|{
+            println!("Replaying event: {:?}", event);
+            event
+        })
     }
 }
 
