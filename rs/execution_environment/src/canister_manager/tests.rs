@@ -8010,24 +8010,22 @@ fn node_metrics_history_canister_call_succeeds() {
     let uni_canister = test
         .universal_canister_with_cycles(Cycles::new(1_000_000_000_000))
         .unwrap();
-    let payload = NodeMetricsHistoryArgs {
-        subnet_id: own_subnet_id.get(),
-        start_at_timestamp_nanos: 0,
-    }
-    .encode();
-    let uc_call = wasm()
+    let update = wasm()
         .call_simple(
             CanisterId::ic_00(),
             Method::NodeMetricsHistory,
-            call_args().other_side(payload),
+            call_args().other_side(
+                NodeMetricsHistoryArgs {
+                    subnet_id: own_subnet_id.get(),
+                    start_at_timestamp_nanos: 0,
+                }
+                .encode(),
+            ),
         )
         .build();
-    let result = test.ingress(uni_canister, "update", uc_call).unwrap();
-    let bytes = match result {
-        WasmResult::Reply(bytes) => bytes,
-        WasmResult::Reject(err_msg) => panic!("Unexpected reject, expected reply: {}", err_msg),
-    };
-    let _res = Decode!(&bytes, Vec<NodeMetricsHistoryResponse>).unwrap();
+    let result = test.ingress(uni_canister, "update", update).unwrap();
+    let bytes = get_reply(result);
+    let _ = Decode!(&bytes, Vec<NodeMetricsHistoryResponse>).unwrap();
 }
 
 #[test]
