@@ -280,10 +280,9 @@ pub trait HasPrometheus {
 }
 
 impl HasPrometheus for TestEnv {
-    fn with_boundary_node(self, boundary_node_name: Option<&str>) -> Self {
-        let mut new = self;
-        new.boundary_node_name = boundary_node_name.map(String::from);
-        new
+    fn with_boundary_node(mut self, boundary_node_name: Option<&str>) -> Self {
+        self.boundary_node_name = boundary_node_name.map(String::from);
+        self
     }
 
     fn sync_with_prometheus(&self) {
