@@ -277,6 +277,8 @@ pub trait HasPrometheus {
 }
 
 impl HasPrometheus for TestEnv {
+    /// Synchronizes with Prometheus.
+    /// - `boundary_node_name`: An optional name for the boundary node. Pass `None` if no boundary node is specified.
     fn sync_with_prometheus(&self, boundary_node_name: Option<&str>) {
         let playnet_url = boundary_node_name.and_then(|bn_name| {
             self.get_deployed_boundary_node(bn_name)
