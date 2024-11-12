@@ -91,8 +91,8 @@ pub fn setup(
         )
         .setup_and_start(&env)
         .expect("Failed to setup IC under test.");
-    env.with_boundary_node(Some(BOUNDARY_NODE_NAME))
-        .sync_with_prometheus();
+    let playnet_url = env.get_playnet_url(BOUNDARY_NODE_NAME);
+    env.sync_with_prometheus_by_name("", playnet_url);
     info!(logger, "Step 1: Installing NNS canisters ...");
     let nns_node = env
         .topology_snapshot()

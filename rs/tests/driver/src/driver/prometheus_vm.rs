@@ -258,9 +258,6 @@ fi
 /// configuring its scraping targets based on the latest IC topology
 /// and finally downloading its data directory.
 pub trait HasPrometheus {
-    /// Configures the Prometheus VM to scrape metrics from the specified boundary node.
-    fn with_boundary_node(self, boundary_node_name: Option<&str>) -> Self;
-
     /// Retrieves a topology snapshot, converts it into p8s scraping target
     /// JSON files and scps them to the prometheus VM.
     fn sync_with_prometheus(&self);
@@ -277,22 +274,20 @@ pub trait HasPrometheus {
     /// This allows this function to be used in a finalizer where no prometheus
     /// server has been setup.
     fn download_prometheus_data_dir_if_exists(&self);
+
+    /// Get the playnet URL of the boundary node with the given name.
+    fn get_playnet_url(&self, boundary_node_name: &str) -> Option<String>;
 }
 
 impl HasPrometheus for TestEnv {
-    fn with_boundary_node(mut self, boundary_node_name: Option<&str>) -> Self {
-        self.boundary_node_name = boundary_node_name.map(String::from);
-        self
+    fn get_playnet_url(&self, boundary_node_name: &str) -> Option<String> {
+        self.get_deployed_boundary_node(boundary_node_name)
+            .ok()
+            .and_then(|bn| bn.get_snapshot().ok()?.get_playnet())
     }
 
     fn sync_with_prometheus(&self) {
-        let playnet_url = self.boundary_node_name.clone().and_then(|bn_name| {
-            self.get_deployed_boundary_node(&bn_name)
-                .ok()
-                .and_then(|bn| bn.get_snapshot().ok()?.get_playnet())
-        });
-
-        self.sync_with_prometheus_by_name("", playnet_url)
+        self.sync_with_prometheus_by_name("", None)
     }
 
     fn sync_with_prometheus_by_name(&self, name: &str, mut playnet_url: Option<String>) {

@@ -112,7 +112,8 @@ pub fn setup_ic_with_bn(bn_name: &str, bn_https_config: BoundaryNodeHttpsConfig,
         )
         .unwrap();
     debug!(log, "systemctl {bn_name} = '{list_dependencies}'");
-    env.with_boundary_node(Some(bn_name)).sync_with_prometheus();
+    let playnet_url = env.get_playnet_url(bn_name);
+    env.sync_with_prometheus_by_name("", playnet_url);
 }
 
 pub fn setup_ic(env: TestEnv) {
