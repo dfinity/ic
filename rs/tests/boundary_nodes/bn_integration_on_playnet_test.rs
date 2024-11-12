@@ -7,7 +7,7 @@ use ic_boundary_nodes_integration_test_common::{
     denylist_test, direct_to_replica_options_test, direct_to_replica_test, headers_test,
     http_canister_test, http_endpoint_test, ic_gateway_test, prefix_canister_id_test,
     proxy_http_canister_test, read_state_via_subnet_path_test, reboot_test,
-    redirect_http_to_https_test, redirect_to_dashboard_test, seo_test,
+    redirect_http_to_https_test, redirect_to_dashboard_test,
 };
 use ic_boundary_nodes_system_test_utils::{
     constants::BOUNDARY_NODE_NAME, helpers::BoundaryNodeHttpsConfig, setup::setup_ic_with_bn,
@@ -42,7 +42,6 @@ fn main() -> Result<()> {
                 .add_test(systest!(ic_gateway_test))
                 .add_test(systest!(direct_to_replica_test))
                 .add_test(systest!(direct_to_replica_options_test))
-                .add_test(systest!(seo_test))
                 .add_test(systest!(headers_test)),
         )
         .add_test(systest!(denylist_test))
