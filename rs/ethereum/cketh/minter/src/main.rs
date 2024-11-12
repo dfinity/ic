@@ -45,6 +45,7 @@ use ic_cketh_minter::{
     SCRAPING_ETH_LOGS_INTERVAL,
 };
 use ic_ethereum_types::Address;
+use icrc_ledger_types::icrc1::account::Account;
 use std::collections::BTreeSet;
 use std::convert::TryFrom;
 use std::str::FromStr;
@@ -269,7 +270,11 @@ async fn get_minter_info() -> MinterInfo {
 
 #[update]
 async fn withdraw_eth(
-    WithdrawalArg { amount, recipient }: WithdrawalArg,
+    WithdrawalArg {
+        amount,
+        recipient,
+        from_subaccount,
+    }: WithdrawalArg,
 ) -> Result<RetrieveEthRequest, WithdrawalError> {
     let caller = validate_caller_not_anonymous();
     let _guard = retrieve_withdraw_guard(caller).unwrap_or_else(|e| {
@@ -302,7 +307,10 @@ async fn withdraw_eth(
     log!(INFO, "[withdraw]: burning {:?}", amount);
     match client
         .burn_from(
-            caller.into(),
+            Account {
+                owner: caller,
+                subaccount: from_subaccount,
+            },
             amount,
             BurnMemo::Convert {
                 to_address: destination,
@@ -316,7 +324,7 @@ async fn withdraw_eth(
                 destination,
                 ledger_burn_index,
                 from: caller,
-                from_subaccount: None,
+                from_subaccount: from_subaccount.and_then(LedgerSubaccount::from_bytes),
                 created_at: Some(now),
             };
 
