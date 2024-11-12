@@ -37,11 +37,12 @@ use ic_types::{
     ingress::{IngressState, IngressStatus},
     messages::{CanisterMessage, Ingress, MessageId, Response, NO_DEADLINE},
     CanisterId, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NumBytes,
-    NumInstructions, NumSlices, Randomness, ReplicaVersion, SubnetId, Time,
+    NumInstructions, NumSlices, PrincipalId, Randomness, ReplicaVersion, SubnetId, Time,
     MAX_WASM_MEMORY_IN_BYTES,
 };
 use ic_types::{nominal_cycles::NominalCycles, NumMessages};
 use num_rational::Ratio;
+use prometheus::Histogram;
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet},
@@ -401,6 +402,7 @@ impl SchedulerImpl {
         round_schedule: &RoundSchedule,
         current_round: ExecutionRound,
         root_measurement_scope: &MeasurementScope<'a>,
+        canister_ingress_latencies: &mut CanisterIngressQueueLatencies,
         scheduler_round_limits: &mut SchedulerRoundLimits,
         registry_settings: &RegistryExecutionSettings,
         replica_version: &ReplicaVersion,
@@ -608,8 +610,10 @@ impl SchedulerImpl {
         }
 
         for (message_id, status) in ingress_execution_results {
-            self.ingress_history_writer
+            let old_status = self
+                .ingress_history_writer
                 .set_status(&mut state, message_id, status);
+            canister_ingress_latencies.on_ingress_status_changed(old_status);
         }
         self.metrics
             .executable_canisters_per_round
@@ -779,7 +783,11 @@ impl SchedulerImpl {
         )
     }
 
-    fn purge_expired_ingress_messages(&self, state: &mut ReplicatedState) {
+    fn purge_expired_ingress_messages(
+        &self,
+        state: &mut ReplicatedState,
+        canister_ingress_latencies: &mut CanisterIngressQueueLatencies,
+    ) {
         let current_time = state.time();
         let not_expired_yet = |ingress: &Arc<Ingress>| ingress.expiry_time >= current_time;
         let mut expired_ingress_messages =
@@ -801,7 +809,7 @@ impl SchedulerImpl {
                     ingress.message_id
                 ),
             );
-            self.ingress_history_writer.set_status(
+            let old_status = self.ingress_history_writer.set_status(
                 state,
                 ingress.message_id.clone(),
                 IngressStatus::Known {
@@ -811,6 +819,7 @@ impl SchedulerImpl {
                     state: IngressState::Failed(error),
                 },
             );
+            canister_ingress_latencies.on_ingress_status_changed(old_status);
         }
         state.put_canister_states(canisters);
     }
@@ -1184,6 +1193,10 @@ impl Scheduler for SchedulerImpl {
         let round_log;
         let mut csprng;
         let long_running_canister_ids: BTreeSet<_>;
+        let mut canister_ingress_latencies = CanisterIngressQueueLatencies::new(
+            state.time(),
+            self.metrics.canister_ingress_queue_latencies.clone(),
+        );
 
         // Round preparation.
         let mut scheduler_round_limits = {
@@ -1240,7 +1253,7 @@ impl Scheduler for SchedulerImpl {
 
             {
                 let _timer = self.metrics.round_preparation_ingress.start_timer();
-                self.purge_expired_ingress_messages(&mut state);
+                self.purge_expired_ingress_messages(&mut state, &mut canister_ingress_latencies);
             }
 
             // In the future, subnet messages might be executed in threads. In
@@ -1444,6 +1457,7 @@ impl Scheduler for SchedulerImpl {
             &round_schedule,
             current_round,
             &root_measurement_scope,
+            &mut canister_ingress_latencies,
             &mut scheduler_round_limits,
             registry_settings,
             replica_version,
@@ -2174,6 +2188,7 @@ fn can_execute_subnet_msg(
         | Ic00Method::BitcoinSendTransactionInternal
         | Ic00Method::BitcoinGetSuccessors
         | Ic00Method::NodeMetricsHistory
+        | Ic00Method::SubnetInfo
         | Ic00Method::FetchCanisterLogs
         | Ic00Method::ProvisionalCreateCanisterWithCycles
         | Ic00Method::ProvisionalTopUpCanister
@@ -2237,6 +2252,7 @@ fn get_instructions_limits_for_subnet_message(
             | BitcoinGetCurrentFeePercentiles
             | BitcoinGetSuccessors
             | NodeMetricsHistory
+            | SubnetInfo
             | FetchCanisterLogs
             | ProvisionalCreateCanisterWithCycles
             | ProvisionalTopUpCanister
@@ -2375,4 +2391,50 @@ fn scheduled_heap_delta_limit(
         .get()
         .saturating_sub(remaining_heap_delta_reserve)
         .into()
+}
+
+/// Aggregator and observer of per-canister ingress queue latencies.
+struct CanisterIngressQueueLatencies {
+    /// Per canister observed ingress message latency sum and count.
+    latencies: BTreeMap<PrincipalId, (f64, usize)>,
+    /// Current block time.
+    time: Time,
+    /// Histogram to observe the latencies.
+    histogram: Histogram,
+}
+
+impl CanisterIngressQueueLatencies {
+    fn new(time: Time, histogram: Histogram) -> Self {
+        Self {
+            latencies: BTreeMap::new(),
+            time,
+            histogram,
+        }
+    }
+
+    /// Records the ingress queue latency of a message iff it is transitioning from
+    /// `Received` to some other state (i.e. when popped from the ingress queue).
+    fn on_ingress_status_changed(&mut self, old_status: Arc<IngressStatus>) {
+        if let IngressStatus::Known {
+            receiver,
+            user_id: _,
+            time,
+            state: IngressState::Received,
+        } = &*old_status
+        {
+            let (latency, count) = self.latencies.entry(*receiver).or_default();
+            *latency += self.time.saturating_duration_since(*time).as_secs_f64();
+            *count += 1;
+        }
+    }
+}
+
+impl Drop for CanisterIngressQueueLatencies {
+    /// Observes the average ingress queue latency of each canister at the end of
+    /// the round.
+    fn drop(&mut self) {
+        for (latency, count) in self.latencies.values() {
+            self.histogram.observe(*latency / *count as f64);
+        }
+    }
 }
