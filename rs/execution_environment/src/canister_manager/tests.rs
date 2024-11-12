@@ -8023,7 +8023,7 @@ fn node_metrics_history_canister_call_succeeds() {
             ),
         )
         .build();
-    let result = test.ingress(uni_canister, "update", update).unwrap();
+    let result = test.ingress(uni_canister, "update", update);
     let bytes = get_reply(result);
     let _ = Decode!(&bytes, Vec<NodeMetricsHistoryResponse>).unwrap();
 }
