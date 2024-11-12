@@ -8,7 +8,7 @@ pub(crate) struct CachedUpgradeSteps {
     subsequent_versions: Vec<Version>,
 
     response_timestamp_seconds: u64,
-    requested_timestamp_seconds: u64,
+    pub requested_timestamp_seconds: u64,
 }
 
 impl From<CachedUpgradeSteps> for CachedUpgradeStepsPb {
@@ -47,11 +47,9 @@ impl TryFrom<&CachedUpgradeStepsPb> for CachedUpgradeSteps {
             response_timestamp_seconds,
         } = src
         else {
-            return Err(
-                "Cannot interpret CachedUpgradeSteps; \
+            return Err("Cannot interpret CachedUpgradeSteps; \
                  please specify the required field upgrade_steps"
-                    .to_string(),
-            );
+                .to_string());
         };
 
         let Some((current_version, subsequent_versions)) = upgrade_steps.versions.split_first()
@@ -179,5 +177,10 @@ impl CachedUpgradeSteps {
                 response_timestamp_seconds,
             },
         ))
+    }
+
+    pub fn is_equivalent_to(&self, other: &Self) -> bool {
+        self.current_version == other.current_version
+            && self.subsequent_versions == other.subsequent_versions
     }
 }
