@@ -504,6 +504,7 @@ pub(crate) struct HandlerState {
     backend_client: Client<HttpConnector, Body>,
     resolver: DomainResolver,
     replica_url: String,
+    is_malicious: Arc<std::sync::Mutex<bool>>,
 }
 
 impl HandlerState {
@@ -518,6 +519,7 @@ impl HandlerState {
             backend_client,
             resolver,
             replica_url,
+            is_malicious: Arc::new(std::sync::Mutex::new(false)),
         }
     }
 
@@ -549,6 +551,18 @@ async fn handler(
     referer_query_param_canister_id: Option<canister_id::RefererHeaderQueryParam>,
     mut request: AxumRequest,
 ) -> Result<impl IntoResponse, ErrorCause> {
+    if request.uri().path().contains("malicious") {
+        *state.is_malicious.lock().unwrap() = true;
+        return Ok(HandlerResponse::ResponseBody(
+            "Pocket IC set to malicious mode".into(),
+        ));
+    } else if request.uri().path().contains("honest") {
+        *state.is_malicious.lock().unwrap() = false;
+        return Ok(HandlerResponse::ResponseBody(
+            "Pocket IC set to honest mode".into(),
+        ));
+    }
+
     // Resolve the domain
     let lookup =
         extract_authority(&request).and_then(|authority| state.resolver.resolve(&authority));
@@ -615,7 +629,13 @@ async fn handler(
         // Convert it into Axum response
         let response = resp.canister_response.into_response();
 
-        Ok(HandlerResponse::ResponseBody(response))
+        Ok(HandlerResponse::ResponseBody(
+            if *state.is_malicious.lock().unwrap() {
+                (StatusCode::INTERNAL_SERVER_ERROR, "Malicious mode".into()).into_response()
+            } else {
+                response
+            },
+        ))
     }
 }
 
