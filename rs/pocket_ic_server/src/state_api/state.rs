@@ -1070,6 +1070,13 @@ impl ApiState {
         }
     }
 
+    pub async fn stop_all_http_gateways(&self) {
+        let mut http_gateways = self.http_gateways.write().await;
+        for i in 0..http_gateways.len() {
+            http_gateways[i] = None;
+        }
+    }
+
     pub async fn auto_progress(
         &self,
         instance_id: InstanceId,

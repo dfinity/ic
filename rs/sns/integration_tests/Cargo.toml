@@ -78,7 +78,7 @@ lazy_static = { workspace = true }
 num-traits = { workspace = true }
 on_wire = { path = "../../rust_canisters/on_wire" }
 pretty_assertions = { workspace = true }
-rust_decimal = "1.25"
-rust_decimal_macros = "1.25"
+rust_decimal = "1.36.0"
+rust_decimal_macros = "1.36.0"
 tokio = { workspace = true }
 wat = { workspace = true }

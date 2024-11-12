@@ -627,7 +627,7 @@ pub async fn set_up_universal_canister_with_cycles(
 }
 
 async fn install_universal_canister(canister: &mut Canister<'_>) {
-    Wasm::from_bytes(UNIVERSAL_CANISTER_WASM)
+    Wasm::from_bytes(UNIVERSAL_CANISTER_WASM.to_vec())
         .install_with_retries_onto_canister(canister, None, None)
         .await
         .unwrap();

@@ -20,10 +20,9 @@ use axum::{
     extract::{Request, State},
     routing::any,
 };
+use canister_test::{Canister, Runtime, Wasm};
 use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_from_der;
-use ic_nns_test_utils::itest_helpers::{
-    forward_call_via_universal_canister, set_up_universal_canister,
-};
+use ic_nns_test_utils::itest_helpers::forward_call_via_universal_canister;
 use ic_nns_test_utils::{
     itest_helpers::install_registry_canister, registry::invariant_compliant_mutation_as_atomic_req,
 };
@@ -34,7 +33,7 @@ use ic_registry_transport::upsert;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::{HasIcPrepDir, TestEnv};
 use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
-use ic_system_test_driver::util::{block_on, runtime_from_url};
+use ic_system_test_driver::util::{block_on, runtime_from_url, UNIVERSAL_CANISTER_WASM};
 use ic_types::RegistryVersion;
 use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
@@ -211,4 +210,25 @@ async fn mitm_service(
         }
     }
     Ok((headers, bytes.into()))
+}
+
+/// Compiles the universal canister, builds its initial payload and installs it
+pub async fn set_up_universal_canister(runtime: &'_ Runtime) -> Canister<'_> {
+    let mut canister = runtime
+        .create_canister_max_cycles_with_retries()
+        .await
+        .unwrap();
+    install_universal_canister(&mut canister).await;
+    canister
+}
+
+async fn install_universal_canister(canister: &mut Canister<'_>) {
+    Wasm::from_bytes(UNIVERSAL_CANISTER_WASM.to_vec())
+        .install_with_retries_onto_canister(canister, None, None)
+        .await
+        .unwrap();
+    println!(
+        "Installed {} with the universal canister",
+        canister.canister_id(),
+    );
 }

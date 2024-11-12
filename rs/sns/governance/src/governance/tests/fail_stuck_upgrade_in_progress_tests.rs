@@ -10,7 +10,7 @@ use crate::{
     },
     pb::v1::{
         get_proposal_response,
-        governance::{UpgradeInProgress, Version},
+        governance::{PendingVersion, Version},
         governance_error::ErrorType,
         proposal::Action,
         Ballot, FailStuckUpgradeInProgressRequest, FailStuckUpgradeInProgressResponse, GetProposal,
@@ -75,7 +75,7 @@ lazy_static! {
         GovernanceProto {
             root_canister_id: Some(PrincipalId::from(*TEST_ROOT_CANISTER_ID)),
             deployed_version: Some(SNS_VERSION_1.clone()),
-            pending_version: Some(UpgradeInProgress {
+            pending_version: Some(PendingVersion {
                 target_version: Some(SNS_VERSION_2.clone()),
                 mark_failed_at_seconds: UPGRADE_DEADLINE_TIMESTAMP_SECONDS,
                 checking_upgrade_lock: 10,
@@ -169,7 +169,7 @@ fn test_does_nothing_if_upgrade_attempt_not_expired() {
     // inspect them here to make sure that any expected changes are
     // real, not just because the world was (accidentally) already the
     // way we expected them afterwards.
-    let expected_upgrade_in_progress = UpgradeInProgress {
+    let expected_upgrade_in_progress = PendingVersion {
         target_version: Some(SNS_VERSION_2.clone()),
         mark_failed_at_seconds: UPGRADE_DEADLINE_TIMESTAMP_SECONDS,
         checking_upgrade_lock: 10,
@@ -248,7 +248,7 @@ fn test_fails_proposal_and_removes_upgrade_if_upgrade_attempt_is_expired() {
     // way we expected them afterwards.
     assert_eq!(
         governance.proto.pending_version.clone().unwrap(),
-        UpgradeInProgress {
+        PendingVersion {
             target_version: Some(SNS_VERSION_2.clone()),
             mark_failed_at_seconds: UPGRADE_DEADLINE_TIMESTAMP_SECONDS,
             checking_upgrade_lock: 10,

@@ -103,7 +103,7 @@ fn setup_sns(
         vec![dapp_canister_id],
     );
 
-    let new_dapp_wasm = Wasm::from_bytes(UNIVERSAL_CANISTER_WASM).bytes();
+    let new_dapp_wasm = Wasm::from_bytes(UNIVERSAL_CANISTER_WASM.to_vec()).bytes();
     let new_dapp_wasm_hash = &ic_crypto_sha2::Sha256::hash(&new_dapp_wasm);
 
     let status = state_machine
@@ -121,7 +121,7 @@ fn test_upgrade_canister_proposal_is_successful() {
     let state_machine = state_machine_builder_for_sns_tests().build();
     let (canister_ids, dapp_canister_id, user, neuron_id) = setup_sns(&state_machine);
 
-    let new_dapp_wasm = Wasm::from_bytes(UNIVERSAL_CANISTER_WASM).bytes();
+    let new_dapp_wasm = Wasm::from_bytes(UNIVERSAL_CANISTER_WASM.to_vec()).bytes();
     let new_dapp_wasm_hash = &ic_crypto_sha2::Sha256::hash(&new_dapp_wasm);
 
     // Step 2.b: Make the proposal. (This should get executed right
@@ -206,7 +206,7 @@ fn test_upgrade_canister_proposal_reinstall() {
             .await
             .expect("Could not create dapp canister");
 
-        let dapp_wasm = Wasm::from_bytes(UNIVERSAL_CANISTER_WASM);
+        let dapp_wasm = Wasm::from_bytes(UNIVERSAL_CANISTER_WASM.to_vec());
 
         dapp_wasm
             .install_with_retries_onto_canister(
@@ -251,7 +251,7 @@ fn test_upgrade_canister_proposal_reinstall() {
         // Step 2: Execute code under test: Propose that we upgrade dapp.
         // (This should get executed right away,
         // because the proposing neuron is the only neuron.)
-        let new_dapp_wasm = Wasm::from_bytes(UNIVERSAL_CANISTER_WASM).bytes();
+        let new_dapp_wasm = Wasm::from_bytes(UNIVERSAL_CANISTER_WASM.to_vec()).bytes();
         let new_dapp_wasm_hash = &ic_crypto_sha2::Sha256::hash(&new_dapp_wasm);
         let proposal = Proposal {
             title: "Reinstall dapp.".into(),
@@ -507,7 +507,7 @@ fn test_upgrade_canister_proposal_too_large() {
     let state_machine = state_machine_builder_for_sns_tests().build();
     let (canister_ids, dapp_canister_id, user, neuron_id) = setup_sns(&state_machine);
 
-    let new_dapp_wasm = Wasm::from_bytes(UNIVERSAL_CANISTER_WASM).bytes();
+    let new_dapp_wasm = Wasm::from_bytes(UNIVERSAL_CANISTER_WASM.to_vec()).bytes();
 
     // Step 2.b: Make the proposal. (This should get executed right
     // away, because the proposing neuron is the only neuron.)

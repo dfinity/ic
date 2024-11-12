@@ -14,10 +14,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The function `PocketIcBuilder::with_subnet_state` to load subnet state from a state directory for an arbitrary subnet kind and subnet id.
 - The function `get_default_effective_canister_id` to retrieve a default effective canister id for canister creation on a PocketIC instance.
 - The function `PocketIc::get_controllers` to get the controllers of a canister.
+- Functions `PocketIc::take_canister_snapshot`, `PocketIc::load_canister_snapshot`, `PocketIc::list_canister_snapshots`, and `PocketIc::delete_canister_snapshot` to manage canister snapshots.
+- Functions `PocketIc::upload_chunk`, `PocketIc::stored_chunks`, and `PocketIc::clear_chunk_store` to manage the WASM chunk store of a canister.
+- The function `PocketIc::install_chunked_canister` to install a canister from WASM chunks in the WASM chunk store of a canister.
+- The function `PocketIc::fetch_canister_logs` to fetch canister logs via a query call to the management canister.
 
 ### Removed
 - Functions `PocketIc::from_config`, `PocketIc::from_config_and_max_request_time`, and `PocketIc::from_config_and_server_url`.
   Use the `PocketIcBuilder` instead.
+- The enumeration `DtsFlag` and its associated builder patterns: DTS is always enabled in PocketIC.
 
 ### Changed
 - The type `Topology` becomes a struct with two fields: `subnet_configs` contains an association of subnet ids to their configurations

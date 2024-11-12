@@ -35,6 +35,7 @@ pub fn base_only_storage_layout(path: PathBuf) -> TestStorageLayout {
     }
 }
 
+#[derive(Clone)]
 pub struct ShardedTestStorageLayout {
     pub base: PathBuf,
     pub dir_path: PathBuf,

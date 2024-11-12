@@ -22,7 +22,7 @@ use ratelimit::Ratelimiter;
 use tracing::{debug, error, info, warn};
 
 use crate::{
-    cli::BouncerConfig,
+    cli,
     routes::{ErrorCause, RateLimitCause},
 };
 
@@ -257,7 +257,7 @@ impl Bouncer {
     }
 }
 
-pub fn setup(cli: &BouncerConfig, registry: &Registry) -> Result<Arc<Bouncer>, Error> {
+pub fn setup(cli: &cli::Bouncer, registry: &Registry) -> Result<Arc<Bouncer>, Error> {
     let executor = Arc::new(exec::Executor::new(
         cli.bouncer_sudo,
         cli.bouncer_sudo_path.clone(),
@@ -279,9 +279,9 @@ pub fn setup(cli: &BouncerConfig, registry: &Registry) -> Result<Arc<Bouncer>, E
         Bouncer::new(
             cli.bouncer_ratelimit,
             cli.bouncer_burst_size,
-            Duration::from_secs(cli.bouncer_ban_seconds),
+            cli.bouncer_ban_time,
             cli.bouncer_max_buckets,
-            Duration::from_secs(cli.bouncer_bucket_ttl),
+            cli.bouncer_bucket_ttl,
             firewall,
             registry,
         )
@@ -290,7 +290,7 @@ pub fn setup(cli: &BouncerConfig, registry: &Registry) -> Result<Arc<Bouncer>, E
 
     // Start background task
     let bouncer_task = bouncer.clone();
-    let interval = Duration::from_secs(cli.bouncer_apply_interval);
+    let interval = cli.bouncer_apply_interval;
     tokio::spawn(async move {
         bouncer_task.clone().run(interval).await;
     });

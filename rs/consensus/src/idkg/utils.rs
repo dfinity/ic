@@ -32,6 +32,7 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
 };
 use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterPublicKey};
 use ic_types::crypto::AlgorithmId;
+use ic_types::messages::CallbackId;
 use ic_types::registry::RegistryClientError;
 use ic_types::{Height, RegistryVersion, SubnetId};
 use phantom_newtype::Id;
@@ -223,17 +224,6 @@ pub(super) fn block_chain_cache(
     }
 }
 
-/// Helper to build the [`RequestId`] if the context is already completed
-pub(super) fn get_context_request_id(context: &SignWithThresholdContext) -> Option<RequestId> {
-    context
-        .matched_pre_signature
-        .map(|(pre_signature_id, height)| RequestId {
-            pre_signature_id,
-            pseudo_random_id: context.pseudo_random_id,
-            height,
-        })
-}
-
 #[derive(Debug)]
 #[allow(dead_code)]
 pub(crate) enum BuildSignatureInputsError {
@@ -259,18 +249,24 @@ impl BuildSignatureInputsError {
 /// Helper to build threshold signature inputs from the context and
 /// the pre-signature
 pub(super) fn build_signature_inputs(
+    callback_id: CallbackId,
     context: &SignWithThresholdContext,
     block_reader: &dyn IDkgBlockReader,
 ) -> Result<(RequestId, ThresholdSigInputsRef), BuildSignatureInputsError> {
-    let request_id =
-        get_context_request_id(context).ok_or(BuildSignatureInputsError::ContextIncomplete)?;
+    let (pre_sig_id, height) = context
+        .matched_pre_signature
+        .ok_or(BuildSignatureInputsError::ContextIncomplete)?;
     let extended_derivation_path = ExtendedDerivationPath {
         caller: context.request.sender.into(),
         derivation_path: context.derivation_path.clone(),
     };
+    let request_id = RequestId {
+        callback_id,
+        height,
+    };
     let pre_signature = block_reader
-        .available_pre_signature(&request_id.pre_signature_id)
-        .ok_or_else(|| BuildSignatureInputsError::MissingPreSignature(request_id.clone()))?
+        .available_pre_signature(&pre_sig_id)
+        .ok_or(BuildSignatureInputsError::MissingPreSignature(request_id))?
         .clone();
     let nonce = Id::from(
         context
