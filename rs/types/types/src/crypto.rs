@@ -1,6 +1,8 @@
 //! Defines crypto component types.
 pub mod canister_threshold_sig;
 
+pub mod vetkd;
+
 mod hash;
 
 pub use hash::crypto_hash;
