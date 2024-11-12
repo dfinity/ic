@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Functions `PocketIc::upload_chunk`, `PocketIc::stored_chunks`, and `PocketIc::clear_chunk_store` to manage the WASM chunk store of a canister.
 - The function `PocketIc::install_chunked_canister` to install a canister from WASM chunks in the WASM chunk store of a canister.
 - The function `PocketIc::fetch_canister_logs` to fetch canister logs via a query call to the management canister.
+- The function `Topology::get_subnet` to get a subnet to which a canister belongs independently of whether the canister exists.
 
 ### Removed
 - Functions `PocketIc::from_config`, `PocketIc::from_config_and_max_request_time`, and `PocketIc::from_config_and_server_url`.

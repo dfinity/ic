@@ -1811,3 +1811,25 @@ fn canister_logs() {
         log_msg_multiple
     );
 }
+
+#[test]
+fn get_subnet() {
+    let pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+
+    let topology = pic.topology();
+
+    let default_subnet = topology
+        .get_subnet(topology.default_effective_canister_id.clone().into())
+        .unwrap();
+    let default_subnet_config = topology.subnet_configs.get(&default_subnet).unwrap();
+    assert_eq!(default_subnet_config.subnet_kind, SubnetKind::Application);
+
+    let nns_subnet = topology
+        .get_subnet(Principal::from_text("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap())
+        .unwrap();
+    let nns_subnet_config = topology.subnet_configs.get(&nns_subnet).unwrap();
+    assert_eq!(nns_subnet_config.subnet_kind, SubnetKind::NNS);
+}
