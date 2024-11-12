@@ -1291,7 +1291,7 @@ dependencies = [
  "core-rpc",
  "log",
  "tempfile",
- "which",
+ "which 4.4.2",
 ]
 
 [[package]]
@@ -6123,7 +6123,7 @@ dependencies = [
  "tempfile",
  "threadpool",
  "wat",
- "which",
+ "which 4.4.2",
 ]
 
 [[package]]
@@ -13179,9 +13179,9 @@ name = "ic-universal-canister"
 version = "0.9.0"
 dependencies = [
  "candid",
- "hex-literal",
  "ic-crypto-sha2",
  "ic-types",
+ "lazy_static",
  "serde",
  "universal-canister",
 ]
@@ -15030,6 +15030,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "78b3ae25bc7c8c38cec158d1f2757ee79e9b3740fbc7ccf0e59e4b08d793fa89"
 
 [[package]]
+name = "linux_kernel_command_line"
+version = "0.9.0"
+
+[[package]]
 name = "litemap"
 version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -16536,6 +16540,7 @@ dependencies = [
  "pcre2",
  "tempfile",
  "tokio",
+ "which 6.0.3",
 ]
 
 [[package]]
@@ -16908,6 +16913,7 @@ dependencies = [
  "ed25519-dalek",
  "flate2",
  "hex",
+ "ic-cdk 0.16.0",
  "ic-certification 2.6.0",
  "ic-error-types",
  "ic-transport-types",
@@ -19353,7 +19359,9 @@ dependencies = [
  "anyhow",
  "clap 4.5.20",
  "indoc",
+ "linux_kernel_command_line",
  "partition_tools",
+ "regex",
  "tempfile",
  "tokio",
 ]
@@ -22184,6 +22192,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "which"
+version = "6.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b4ee928febd44d98f2f459a4a79bd4d928591333a494a10a868418ac1b39cf1f"
+dependencies = [
+ "either",
+ "home",
+ "rustix",
+ "winsafe",
+]
+
+[[package]]
 name = "widestring"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -22431,6 +22451,12 @@ dependencies = [
  "cfg-if 1.0.0",
  "windows-sys 0.48.0",
 ]
+
+[[package]]
+name = "winsafe"
+version = "0.0.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d135d17ab770252ad95e9a872d365cf3090e3be864a34ab46f48555993efc904"
 
 [[package]]
 name = "wit-parser"

@@ -154,7 +154,7 @@ pub fn test_registry_settings() -> RegistryExecutionSettings {
 /// actually charged). This function returns the amount needed to correct for
 /// that difference.
 pub fn universal_canister_compilation_cost_correction() -> NumInstructions {
-    let cost = wasm_compilation_cost(UNIVERSAL_CANISTER_WASM);
+    let cost = wasm_compilation_cost(&UNIVERSAL_CANISTER_WASM);
     cost - CompilationCostHandling::CountReducedAmount.adjusted_compilation_cost(cost)
 }
 
@@ -1644,8 +1644,12 @@ impl ExecutionTest {
                     .unwrap();
             }
             let factory = Arc::clone(&fd_factory);
-            es.wasm_memory.page_map =
-                PageMap::open(&base_only_storage_layout(path), Height::new(0), factory).unwrap();
+            es.wasm_memory.page_map = PageMap::open(
+                Box::new(base_only_storage_layout(path)),
+                Height::new(0),
+                factory,
+            )
+            .unwrap();
             *es.wasm_memory.sandbox_memory.lock().unwrap() = SandboxMemory::Unsynced;
             new_checkpoint_files.push(checkpoint_file);
 
@@ -1664,8 +1668,12 @@ impl ExecutionTest {
                     .unwrap();
             }
             let factory = Arc::clone(&fd_factory);
-            es.stable_memory.page_map =
-                PageMap::open(&base_only_storage_layout(path), Height::new(0), factory).unwrap();
+            es.stable_memory.page_map = PageMap::open(
+                Box::new(base_only_storage_layout(path)),
+                Height::new(0),
+                factory,
+            )
+            .unwrap();
             *es.stable_memory.sandbox_memory.lock().unwrap() = SandboxMemory::Unsynced;
             new_checkpoint_files.push(checkpoint_file);
         }

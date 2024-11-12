@@ -292,6 +292,9 @@ pub struct CkBtcMinterState {
     /// Minimum amount of bitcoin that can be retrieved
     pub retrieve_btc_min_amount: u64,
 
+    /// Minimum amount of bitcoin that can be retrieved based on recent fees
+    pub fee_based_retrieve_btc_min_amount: u64,
+
     /// Retrieve_btc requests that are waiting to be served, sorted by
     /// received_at.
     pub pending_retrieve_btc_requests: Vec<RetrieveBtcRequest>,
@@ -432,6 +435,7 @@ impl CkBtcMinterState {
         self.btc_network = btc_network.into();
         self.ecdsa_key_name = ecdsa_key_name;
         self.retrieve_btc_min_amount = retrieve_btc_min_amount;
+        self.fee_based_retrieve_btc_min_amount = retrieve_btc_min_amount;
         self.ledger_id = ledger_id;
         self.max_time_in_queue_nanos = max_time_in_queue_nanos;
         self.mode = mode;
@@ -457,6 +461,7 @@ impl CkBtcMinterState {
     ) {
         if let Some(retrieve_btc_min_amount) = retrieve_btc_min_amount {
             self.retrieve_btc_min_amount = retrieve_btc_min_amount;
+            self.fee_based_retrieve_btc_min_amount = retrieve_btc_min_amount;
         }
         if let Some(max_time_in_queue_nanos) = max_time_in_queue_nanos {
             self.max_time_in_queue_nanos = max_time_in_queue_nanos;
@@ -1247,6 +1252,7 @@ impl From<InitArgs> for CkBtcMinterState {
             update_balance_principals: Default::default(),
             retrieve_btc_principals: Default::default(),
             retrieve_btc_min_amount: args.retrieve_btc_min_amount,
+            fee_based_retrieve_btc_min_amount: args.retrieve_btc_min_amount,
             pending_retrieve_btc_requests: Default::default(),
             requests_in_flight: Default::default(),
             last_transaction_submission_time_ns: None,
