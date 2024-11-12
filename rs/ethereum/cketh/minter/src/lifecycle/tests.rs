@@ -1,6 +1,7 @@
 mod init {
     use crate::lifecycle::init::InitArg;
     use crate::numeric::{TransactionNonce, Wei};
+    use crate::state::eth_logs_scraping::LogScrapingId;
     use crate::state::{InvalidStateError, State};
     use crate::test_fixtures::valid_init_arg;
     use assert_matches::assert_matches;
@@ -80,7 +81,12 @@ mod init {
 
         assert_eq!(state.ethereum_network, init_arg.ethereum_network);
         assert_eq!(state.ecdsa_key_name, init_arg.ecdsa_key_name);
-        assert_eq!(state.eth_log_scraping.contract_address(), None);
+        assert_eq!(
+            state
+                .log_scrapings
+                .contract_address(LogScrapingId::EthDepositWithoutSubaccount),
+            None
+        );
         assert_eq!(state.cketh_ledger_id, init_arg.ledger_id);
         assert_eq!(
             state.cketh_minimum_withdrawal_amount,

@@ -2,9 +2,14 @@ use super::*;
 use crate::{
     governance::{MAX_FOLLOWEES_PER_TOPIC, MAX_NEURON_RECENT_BALLOTS, MAX_NUM_HOT_KEYS_PER_NEURON},
     neuron::{DissolveStateAndAge, NeuronBuilder},
+    now_seconds,
     pb::v1::{neuron::Followees, BallotInfo, Vote},
+    temporarily_disable_active_neurons_in_stable_memory,
+    temporarily_enable_active_neurons_in_stable_memory,
+    temporarily_enable_stable_memory_following_index,
 };
 use canbench_rs::{bench, bench_fn, BenchResult};
+use ic_nervous_system_common::E8;
 use ic_nns_common::pb::v1::ProposalId;
 use maplit::hashmap;
 use rand::{rngs::StdRng, RngCore, SeedableRng};
@@ -173,6 +178,32 @@ fn add_neuron_inactive_typical() -> BenchResult {
 }
 
 #[bench(raw)]
+fn update_recent_ballots() -> BenchResult {
+    let _a = temporarily_enable_active_neurons_in_stable_memory();
+    let _b = temporarily_enable_stable_memory_following_index();
+    let mut rng = new_rng();
+    let mut neuron_store = set_up_neuron_store(&mut rng, 100, 200);
+    let neuron = build_neuron(&mut rng, NeuronLocation::Heap, NeuronSize::Maximum);
+    let id = neuron.id();
+
+    assert_eq!(neuron.recent_ballots.len(), MAX_NEURON_RECENT_BALLOTS);
+
+    neuron_store.add_neuron(neuron).unwrap();
+
+    bench_fn(|| {
+        neuron_store
+            .with_neuron_mut(&id, |neuron| {
+                neuron.register_recent_ballot(
+                    Topic::NetworkEconomics,
+                    &ProposalId { id: rng.next_u64() },
+                    Vote::Yes,
+                )
+            })
+            .unwrap();
+    })
+}
+
+#[bench(raw)]
 fn add_neuron_inactive_maximum() -> BenchResult {
     let mut rng = new_rng();
     let mut neuron_store = set_up_neuron_store(&mut rng, 100, 200);
@@ -195,5 +226,27 @@ fn range_neurons_performance() -> BenchResult {
                 n.id();
             }
         });
+    })
+}
+
+#[bench(raw)]
+fn neuron_metrics_calculation_heap() -> BenchResult {
+    let _ = temporarily_disable_active_neurons_in_stable_memory();
+    let mut rng = new_rng();
+    let neuron_store = set_up_neuron_store(&mut rng, 100, 0);
+
+    bench_fn(|| neuron_store.compute_neuron_metrics(now_seconds(), E8))
+}
+
+#[bench(raw)]
+fn neuron_metrics_calculation_stable() -> BenchResult {
+    let _f = temporarily_enable_active_neurons_in_stable_memory();
+
+    let mut rng = new_rng();
+    let neuron_store = set_up_neuron_store(&mut rng, 100, 0);
+
+    bench_fn(|| {
+        let _ = temporarily_enable_active_neurons_in_stable_memory();
+        neuron_store.compute_neuron_metrics(now_seconds(), E8)
     })
 }

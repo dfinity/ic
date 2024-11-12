@@ -14,8 +14,8 @@ use ic_cketh_minter::memo::{BurnMemo, MintMemo};
 use ic_cketh_minter::numeric::BlockNumber;
 use ic_cketh_minter::{PROCESS_REIMBURSEMENT, SCRAPING_ETH_LOGS_INTERVAL};
 use ic_cketh_test_utils::flow::{
-    double_and_increment_base_fee_per_gas, DepositCkEthParams, DepositParams,
-    ProcessWithdrawalParams,
+    double_and_increment_base_fee_per_gas, DepositCkEthParams, DepositCkEthWithSubaccountParams,
+    DepositParams, ProcessWithdrawalParams,
 };
 use ic_cketh_test_utils::mock::{JsonRpcMethod, MockJsonRpcProviders};
 use ic_cketh_test_utils::response::{
@@ -26,7 +26,7 @@ use ic_cketh_test_utils::{
     use_evm_rpc_canister, CkEthSetup, JsonRpcProvider, CKETH_MINIMUM_WITHDRAWAL_AMOUNT,
     CKETH_TRANSFER_FEE, CKETH_WITHDRAWAL_AMOUNT, DEFAULT_BLOCK_HASH, DEFAULT_BLOCK_NUMBER,
     DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_DEPOSIT_LOG_INDEX, DEFAULT_DEPOSIT_TRANSACTION_HASH,
-    DEFAULT_PRINCIPAL_ID, DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS,
+    DEFAULT_PRINCIPAL_ID, DEFAULT_USER_SUBACCOUNT, DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS,
     DEFAULT_WITHDRAWAL_TRANSACTION_HASH, EFFECTIVE_GAS_PRICE, ETH_HELPER_CONTRACT_ADDRESS,
     EXPECTED_BALANCE, GAS_USED, LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MINTER_ADDRESS,
 };
@@ -37,108 +37,135 @@ use icrc_ledger_types::icrc3::transactions::{Burn, Mint};
 use num_traits::cast::ToPrimitive;
 use serde_json::json;
 use std::str::FromStr;
+use std::time::Duration;
 
 #[test]
 fn should_deposit_and_withdraw() {
-    let cketh = CkEthSetup::default_with_maybe_evm_rpc();
-    let minter: Principal = cketh.minter_id.into();
-    let caller: Principal = cketh.caller.into();
-    let withdrawal_amount = Nat::from(CKETH_WITHDRAWAL_AMOUNT);
-    let destination = DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string();
+    deposit_and_withdraw(
+        CkEthSetup::default_with_maybe_evm_rpc(),
+        DepositParams::default(),
+        CKETH_WITHDRAWAL_AMOUNT,
+        DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
+    );
 
-    let cketh = cketh
-        .deposit(DepositParams::default())
-        .expect_mint()
-        .call_ledger_get_transaction(0_u8)
-        .expect_mint(Mint {
-            amount: EXPECTED_BALANCE.into(),
-            to: Account {
-                owner: PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID).into(),
+    deposit_and_withdraw(
+        CkEthSetup::default_with_maybe_evm_rpc().add_support_for_subaccount(),
+        DepositCkEthWithSubaccountParams {
+            recipient_subaccount: Some(DEFAULT_USER_SUBACCOUNT),
+            ..Default::default()
+        },
+        CKETH_WITHDRAWAL_AMOUNT,
+        DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
+    );
+
+    fn deposit_and_withdraw<T: Into<DepositParams>>(
+        cketh: CkEthSetup,
+        deposit_params: T,
+        withdrawal_amount: u64,
+        destination: String,
+    ) {
+        let deposit_params = deposit_params.into();
+        let account = match &deposit_params {
+            DepositParams::CkEth(params) => Account {
+                owner: params.recipient,
                 subaccount: None,
             },
-            memo: Some(Memo::from(MintMemo::Convert {
-                from_address: DEFAULT_DEPOSIT_FROM_ADDRESS.parse().unwrap(),
-                tx_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.parse().unwrap(),
-                log_index: DEFAULT_DEPOSIT_LOG_INDEX.into(),
-            })),
-            created_at_time: None,
-        })
-        .call_ledger_approve_minter(caller, EXPECTED_BALANCE, None)
-        .expect_ok(1)
-        .call_minter_withdraw_eth(caller, withdrawal_amount.clone(), destination.clone())
-        .expect_withdrawal_request_accepted();
-
-    let withdrawal_id = cketh.withdrawal_id().clone();
-
-    let time = cketh.setup.env.get_time().as_nanos_since_unix_epoch();
-    let max_fee_per_gas = Nat::from(33003708258u64);
-    let gas_limit = Nat::from(21_000_u32);
-    let max_priority_fee_per_gas = Nat::from(1_500_000_000_u32);
-
-    let cketh = cketh
-        .wait_and_validate_withdrawal(ProcessWithdrawalParams::default())
-        .expect_finalized_status(TxFinalizedStatus::Success {
-            transaction_hash: DEFAULT_WITHDRAWAL_TRANSACTION_HASH.to_string(),
-            effective_transaction_fee: Some((GAS_USED * EFFECTIVE_GAS_PRICE).into()),
-        })
-        .call_ledger_get_transaction(withdrawal_id.clone())
-        .expect_burn(Burn {
-            amount: withdrawal_amount.clone(),
-            from: Account {
-                owner: PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID).into(),
-                subaccount: None,
+            DepositParams::CkEthWithSubaccount(params) => Account {
+                owner: params.recipient,
+                subaccount: params.recipient_subaccount,
             },
-            spender: Some(Account {
-                owner: minter,
-                subaccount: None,
-            }),
-            memo: Some(Memo::from(BurnMemo::Convert {
-                to_address: destination.parse().unwrap(),
-            })),
-            created_at_time: None,
-        });
-    assert_eq!(cketh.balance_of(caller), Nat::from(0_u8));
+        };
+        let minter: Principal = cketh.minter_id.into();
+        let withdrawal_amount = Nat::from(withdrawal_amount);
 
-    cketh.assert_has_unique_events_in_order(&vec![
-        EventPayload::AcceptedEthWithdrawalRequest {
-            withdrawal_amount: withdrawal_amount.clone(),
-            destination: destination.clone(),
-            ledger_burn_index: withdrawal_id.clone(),
-            from: caller,
-            from_subaccount: None,
-            created_at: Some(time),
-        },
-        EventPayload::CreatedTransaction {
-            withdrawal_id: withdrawal_id.clone(),
-            transaction: UnsignedTransaction {
-                chain_id: Nat::from(1_u8),
-                nonce: Nat::from(0_u8),
-                max_priority_fee_per_gas,
-                max_fee_per_gas: max_fee_per_gas.clone(),
-                gas_limit: gas_limit.clone(),
-                destination,
-                value: withdrawal_amount - max_fee_per_gas * gas_limit,
-                data: Default::default(),
-                access_list: vec![],
+        let cketh = cketh
+            .deposit(deposit_params)
+            .expect_mint()
+            .call_ledger_get_transaction(0_u8)
+            .expect_mint(Mint {
+                amount: EXPECTED_BALANCE.into(),
+                to: account,
+                memo: Some(Memo::from(MintMemo::Convert {
+                    from_address: DEFAULT_DEPOSIT_FROM_ADDRESS.parse().unwrap(),
+                    tx_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.parse().unwrap(),
+                    log_index: DEFAULT_DEPOSIT_LOG_INDEX.into(),
+                })),
+                created_at_time: None,
+            })
+            .call_ledger_approve_minter(account.owner, EXPECTED_BALANCE, account.subaccount)
+            .expect_ok(1)
+            .call_minter_withdraw_eth(account, withdrawal_amount.clone(), destination.clone())
+            .expect_withdrawal_request_accepted();
+
+        let withdrawal_id = cketh.withdrawal_id().clone();
+
+        let time = cketh.setup.env.get_time().as_nanos_since_unix_epoch();
+        let max_fee_per_gas = Nat::from(33003708258u64);
+        let gas_limit = Nat::from(21_000_u32);
+        let max_priority_fee_per_gas = Nat::from(1_500_000_000_u32);
+
+        let cketh = cketh
+            .wait_and_validate_withdrawal(ProcessWithdrawalParams::default())
+            .expect_finalized_status(TxFinalizedStatus::Success {
+                transaction_hash: DEFAULT_WITHDRAWAL_TRANSACTION_HASH.to_string(),
+                effective_transaction_fee: Some((GAS_USED * EFFECTIVE_GAS_PRICE).into()),
+            })
+            .call_ledger_get_transaction(withdrawal_id.clone())
+            .expect_burn(Burn {
+                amount: withdrawal_amount.clone(),
+                from: account,
+                spender: Some(Account {
+                    owner: minter,
+                    subaccount: None,
+                }),
+                memo: Some(Memo::from(BurnMemo::Convert {
+                    to_address: destination.parse().unwrap(),
+                })),
+                created_at_time: None,
+            });
+        assert_eq!(cketh.balance_of(account), Nat::from(0_u8));
+
+        cketh.assert_has_unique_events_in_order(&vec![
+            EventPayload::AcceptedEthWithdrawalRequest {
+                withdrawal_amount: withdrawal_amount.clone(),
+                destination: destination.clone(),
+                ledger_burn_index: withdrawal_id.clone(),
+                from: account.owner,
+                from_subaccount: account.subaccount,
+                created_at: Some(time),
             },
-        },
-        EventPayload::SignedTransaction {
-            withdrawal_id: withdrawal_id.clone(),
-            raw_transaction: "0x02f87301808459682f008507af2c9f6282520894221e931fbfcb9bd54ddd26ce6f5e29e98add01c0880160cf1e9917a0e680c001a0b27af25a08e87836a778ac2858fdfcff1f6f3a0d43313782c81d05ca34b80271a078026b399a32d3d7abab625388a3c57f651c66a182eb7f8b1a58d9aef7547256".to_string(),
-        },
-        EventPayload::FinalizedTransaction {
-            withdrawal_id,
-            transaction_receipt: TransactionReceipt {
-                block_hash: DEFAULT_BLOCK_HASH.to_string(),
-                block_number: Nat::from(DEFAULT_BLOCK_NUMBER),
-                effective_gas_price: Nat::from(4277923390u64),
-                gas_used: Nat::from(21_000_u32),
-                status: TransactionStatus::Success,
-                transaction_hash:
-                "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string(),
+            EventPayload::CreatedTransaction {
+                withdrawal_id: withdrawal_id.clone(),
+                transaction: UnsignedTransaction {
+                    chain_id: Nat::from(1_u8),
+                    nonce: Nat::from(0_u8),
+                    max_priority_fee_per_gas,
+                    max_fee_per_gas: max_fee_per_gas.clone(),
+                    gas_limit: gas_limit.clone(),
+                    destination,
+                    value: withdrawal_amount - max_fee_per_gas * gas_limit,
+                    data: Default::default(),
+                    access_list: vec![],
+                },
             },
-        },
-    ]);
+            EventPayload::SignedTransaction {
+                withdrawal_id: withdrawal_id.clone(),
+                raw_transaction: "0x02f87301808459682f008507af2c9f6282520894221e931fbfcb9bd54ddd26ce6f5e29e98add01c0880160cf1e9917a0e680c001a0b27af25a08e87836a778ac2858fdfcff1f6f3a0d43313782c81d05ca34b80271a078026b399a32d3d7abab625388a3c57f651c66a182eb7f8b1a58d9aef7547256".to_string(),
+            },
+            EventPayload::FinalizedTransaction {
+                withdrawal_id,
+                transaction_receipt: TransactionReceipt {
+                    block_hash: DEFAULT_BLOCK_HASH.to_string(),
+                    block_number: Nat::from(DEFAULT_BLOCK_NUMBER),
+                    effective_gas_price: Nat::from(4277923390u64),
+                    gas_used: Nat::from(21_000_u32),
+                    status: TransactionStatus::Success,
+                    transaction_hash:
+                    "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string(),
+                },
+            },
+        ]);
+    }
 }
 
 #[test]
@@ -436,10 +463,9 @@ fn should_reimburse() {
     let balance_before_withdrawal = cketh.balance_of(caller);
     assert_eq!(balance_before_withdrawal, withdrawal_amount);
 
-    let time_at_withdrawal = cketh
-        .env
-        .get_time_of_next_round()
-        .as_nanos_since_unix_epoch();
+    // advance time so that time does not grow implicitly when executing a round
+    cketh.env.advance_time(Duration::from_secs(1));
+    let time_at_withdrawal = cketh.env.get_time().as_nanos_since_unix_epoch();
 
     let cketh = cketh
         .call_minter_withdraw_eth(caller, withdrawal_amount.clone(), destination.clone())
@@ -1070,6 +1096,9 @@ fn should_retrieve_minter_info() {
             erc20_balances: None,
             last_eth_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
             last_erc20_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
+            last_deposit_with_subaccount_scraped_block_number: Some(
+                LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()
+            ),
             cketh_ledger_id: Some(cketh.ledger_id.into()),
             evm_rpc_id: cketh.evm_rpc_id.map(Principal::from),
         }

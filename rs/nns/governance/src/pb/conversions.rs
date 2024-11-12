@@ -1825,6 +1825,7 @@ impl From<pb::ProposalData> for pb_api::ProposalData {
             sns_token_swap_lifecycle: item.sns_token_swap_lifecycle,
             derived_proposal_information: item.derived_proposal_information.map(|x| x.into()),
             neurons_fund_data: item.neurons_fund_data.map(|x| x.into()),
+            total_potential_voting_power: item.total_potential_voting_power,
         }
     }
 }
@@ -1853,6 +1854,7 @@ impl From<pb_api::ProposalData> for pb::ProposalData {
             sns_token_swap_lifecycle: item.sns_token_swap_lifecycle,
             derived_proposal_information: item.derived_proposal_information.map(|x| x.into()),
             neurons_fund_data: item.neurons_fund_data.map(|x| x.into()),
+            total_potential_voting_power: item.total_potential_voting_power,
         }
     }
 }
@@ -2309,9 +2311,11 @@ impl From<pb::ProposalInfo> for pb_api::ProposalInfo {
             reward_status: item.reward_status,
             deadline_timestamp_seconds: item.deadline_timestamp_seconds,
             derived_proposal_information: item.derived_proposal_information.map(|x| x.into()),
+            total_potential_voting_power: item.total_potential_voting_power,
         }
     }
 }
+
 impl From<pb_api::ProposalInfo> for pb::ProposalInfo {
     fn from(item: pb_api::ProposalInfo) -> Self {
         Self {
@@ -2336,6 +2340,7 @@ impl From<pb_api::ProposalInfo> for pb::ProposalInfo {
             reward_status: item.reward_status,
             deadline_timestamp_seconds: item.deadline_timestamp_seconds,
             derived_proposal_information: item.derived_proposal_information.map(|x| x.into()),
+            total_potential_voting_power: item.total_potential_voting_power,
         }
     }
 }

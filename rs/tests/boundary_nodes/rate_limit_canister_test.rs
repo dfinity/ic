@@ -128,7 +128,7 @@ pub fn complete_flow_test(env: TestEnv) {
         assert!(rule_metadata.description.is_none());
 
         info!(&logger, "Call 5. Disclose two rules linked to one incident");
-        let incident_id = "incident_id_1".to_string();
+        let incident_id = "b97730ac-4879-47f2-9fea-daf20b8d4b64".to_string();
         disclose_incident(logger.clone(), &agent_full_access, incident_id, canister_id).await;
 
         info!(&logger, "Call 6. Read config by non-privileged user again. Now rules related to the disclosed incident are fully visible");
@@ -199,26 +199,26 @@ async fn add_config_1(logger: Logger, agent: &Agent, canister_id: Principal) {
         schema_version: 1,
         rules: vec![
             InputRule {
-                incident_id: "incident_id_1".to_string(),
+                incident_id: "b97730ac-4879-47f2-9fea-daf20b8d4b64".to_string(),
                 rule_raw: rule_1.to_bytes_json().unwrap(),
                 description:
                     "Some vulnerability #1 discovered, temporarily rate-limiting the canister calls"
                         .to_string(),
             },
             InputRule {
-                incident_id: "incident_id_2".to_string(),
+                incident_id: "f63c821c-9320-476a-bc89-94cb99d04639".to_string(),
                 rule_raw: rule_2.to_bytes_json().unwrap(),
                 description: "Some vulnerability #2 discovered".to_string(),
             },
             InputRule {
-                incident_id: "incident_id_1".to_string(),
+                incident_id: "b97730ac-4879-47f2-9fea-daf20b8d4b64".to_string(),
                 rule_raw: rule_3.to_bytes_json().unwrap(),
                 description:
                     "Some vulnerability #1 discovered, temporarily rate-limiting the canister calls"
                         .to_string(),
             },
             InputRule {
-                incident_id: "incident_id_3".to_string(),
+                incident_id: "389bbff8-bffa-4430-bb70-8ce1ea399c07".to_string(),
                 rule_raw: rule_4.to_bytes_json().unwrap(),
                 description: "Some vulnerability #3 discovered".to_string(),
             },
@@ -277,26 +277,26 @@ async fn add_config_2(logger: Logger, agent: &Agent, canister_id: Principal) {
         schema_version: 1,
         rules: vec![
             InputRule {
-                incident_id: "incident_id_1".to_string(),
+                incident_id: "b97730ac-4879-47f2-9fea-daf20b8d4b64".to_string(),
                 rule_raw: rule_1.to_bytes_json().unwrap(),
                 description:
                     "Some vulnerability #1 discovered, temporarily rate-limiting the canister calls"
                         .to_string(),
             },
             InputRule {
-                incident_id: "incident_id_2".to_string(),
+                incident_id: "f63c821c-9320-476a-bc89-94cb99d04639".to_string(),
                 rule_raw: rule_2.to_bytes_json().unwrap(),
                 description: "Some vulnerability #2 discovered".to_string(),
             },
             // Only this rule is different from config 1, it also has another incident_id and description
             // It means that the old rule is removed (not mutated) and this new rule is applied instead.
             InputRule {
-                incident_id: "incident_id_4".to_string(),
+                incident_id: "ebe7dbb1-63c9-420e-980d-eb0f8c20a9fb".to_string(),
                 rule_raw: rule_3.to_bytes_json().unwrap(),
                 description: "Some vulnerability #4 discovered".to_string(),
             },
             InputRule {
-                incident_id: "incident_id_3".to_string(),
+                incident_id: "389bbff8-bffa-4430-bb70-8ce1ea399c07".to_string(),
                 rule_raw: rule_4.to_bytes_json().unwrap(),
                 description: "Some vulnerability #3 discovered".to_string(),
             },

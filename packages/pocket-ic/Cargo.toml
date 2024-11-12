@@ -48,6 +48,7 @@ wslpath = "0.0.2"
 candid_parser = { workspace = true }
 ed25519-dalek = { workspace = true }
 flate2 = { workspace = true }
+ic-cdk = { workspace = true }
 ic-error-types = { path = "../../rs/types/error_types" }
 k256 = { workspace = true }
 lazy_static = { workspace = true }
