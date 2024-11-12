@@ -1,5 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test_suite")
-load("//bazel:defs.bzl", "rust_ic_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -36,6 +35,7 @@ TEST_DEPENDENCIES = [
     "@crate_index//:candid_parser",
     "@crate_index//:ed25519-dalek",
     "@crate_index//:flate2",
+    "@crate_index//:ic-cdk",
     "@crate_index//:k256",
     "@crate_index//:lazy_static",
     "@crate_index//:wat",
@@ -49,11 +49,22 @@ rust_library(
     deps = DEPENDENCIES,
 )
 
-rust_ic_test(
+rust_test(
     name = "pocket-ic-test",
     srcs = glob(["src/**/*.rs"]),
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + TEST_DEPENDENCIES,
+)
+
+rust_test(
+    name = "management-canister-test",
+    srcs = ["tests/management_canister.rs"],
+    data = ["@management_canister_did//file"],
+    env = {
+        "IC_DID": "$(rootpath @management_canister_did//file)",
+    },
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = [":pocket-ic"] + DEPENDENCIES + TEST_DEPENDENCIES,
 )
 
 rust_test_suite(
