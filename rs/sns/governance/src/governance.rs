@@ -4821,7 +4821,7 @@ impl Governance {
         };
 
         let original_cached_upgrade_steps =
-            cached_upgrade_steps("refresh_cached_upgrade_steps (before await)")?;
+            cached_upgrade_steps("refresh_cached_upgrade_steps (before awaiting SNS-W response)")?;
 
         let current_version = original_cached_upgrade_steps.current();
 
@@ -4873,7 +4873,7 @@ impl Governance {
             // This might not be the case if another task has consumed some upgrade steps while this
             // function was refreshing them.
             let cached_upgrade_steps =
-                cached_upgrade_steps("refresh_cached_upgrade_steps (after await)")?;
+                cached_upgrade_steps("refresh_cached_upgrade_steps (after awaiting SNS-W response)")?;
             if cached_upgrade_steps != original_cached_upgrade_steps {
                 log!(
                     INFO,
