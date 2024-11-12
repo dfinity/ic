@@ -181,10 +181,10 @@ impl Storable for Account {
 
         // Subaccount
         if let Some(subaccount) = self.subaccount {
-            buffer.extend(32u8.to_le_bytes());
+            buffer.extend([32u8]);
             buffer.extend(subaccount.as_slice());
         } else {
-            buffer.extend(0u8.to_le_bytes());
+            buffer.extend([0u8]);
         }
 
         Cow::Owned(buffer)
