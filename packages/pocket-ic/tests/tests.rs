@@ -9,8 +9,8 @@ use pocket_ic::{
         BlobCompression, CanisterHttpReply, CanisterHttpResponse, MockCanisterHttpResponse,
         RawEffectivePrincipal, SubnetKind,
     },
-    update_candid, DefaultEffectiveCanisterIdError, ErrorCode, PocketIc, PocketIcBuilder,
-    WasmResult,
+    query_candid, update_candid, DefaultEffectiveCanisterIdError, ErrorCode, PocketIc,
+    PocketIcBuilder, WasmResult,
 };
 #[cfg(unix)]
 use reqwest::blocking::Client;
@@ -352,19 +352,74 @@ fn test_multiple_large_xnet_payloads() {
 #[test]
 fn test_get_and_set_and_advance_time() {
     let pic = PocketIc::new();
+
     let unix_time_secs = 1630328630;
-    pic.set_time(SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(unix_time_secs));
-    let time = pic.get_time();
-    assert_eq!(
-        time,
-        SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(unix_time_secs)
-    );
+    let set_time = SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(unix_time_secs);
+    pic.set_time(set_time);
+    assert_eq!(pic.get_time(), set_time);
+    pic.tick();
+    assert_eq!(pic.get_time(), set_time);
+
     pic.advance_time(std::time::Duration::from_secs(420));
-    let time = pic.get_time();
     assert_eq!(
-        time,
-        SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(unix_time_secs + 420)
+        pic.get_time(),
+        set_time + std::time::Duration::from_secs(420)
     );
+    pic.tick();
+    assert_eq!(
+        pic.get_time(),
+        set_time + std::time::Duration::from_secs(420)
+    );
+}
+
+#[test]
+#[should_panic(expected = "SettingTimeIntoPast")]
+fn set_time_into_past() {
+    let pic = PocketIc::new();
+
+    let now = SystemTime::now();
+    pic.set_time(now + std::time::Duration::from_secs(1));
+
+    pic.set_time(now);
+}
+
+fn query_and_check_time(pic: &PocketIc, test_canister: Principal) {
+    let current_time = pic
+        .get_time()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let t: (u64,) = query_candid(pic, test_canister, "time", ((),)).unwrap();
+    assert_eq!(
+        pic.get_time()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos(),
+        current_time
+    );
+    assert_eq!(current_time, t.0 as u128);
+}
+
+#[test]
+fn query_call_after_advance_time() {
+    let pic = PocketIc::new();
+
+    // We create a test canister.
+    let canister = pic.create_canister();
+    pic.add_cycles(canister, INIT_CYCLES);
+    pic.install_canister(canister, test_canister_wasm(), vec![], None);
+
+    query_and_check_time(&pic, canister);
+
+    pic.advance_time(std::time::Duration::from_secs(420));
+    pic.tick();
+
+    query_and_check_time(&pic, canister);
+
+    pic.advance_time(std::time::Duration::from_secs(0));
+    pic.tick();
+
+    query_and_check_time(&pic, canister);
 }
 
 #[test]
@@ -1304,6 +1359,62 @@ fn test_canister_http_with_one_additional_response() {
 }
 
 #[test]
+fn test_canister_http_timeout() {
+    let pic = PocketIc::new();
+
+    // Create a canister and charge it with 2T cycles.
+    let can_id = pic.create_canister();
+    pic.add_cycles(can_id, INIT_CYCLES);
+
+    // Install the test canister wasm file on the canister.
+    let test_wasm = test_canister_wasm();
+    pic.install_canister(can_id, test_wasm, vec![], None);
+
+    // Submit an update call to the test canister making a canister http outcall
+    // and mock a canister http outcall response.
+    let call_id = pic
+        .submit_call(
+            can_id,
+            Principal::anonymous(),
+            "canister_http",
+            encode_one(()).unwrap(),
+        )
+        .unwrap();
+
+    // We need a pair of ticks for the test canister method to make the http outcall
+    // and for the management canister to start processing the http outcall.
+    pic.tick();
+    pic.tick();
+    let canister_http_requests = pic.get_canister_http();
+    assert_eq!(canister_http_requests.len(), 1);
+
+    // Advance time so that the canister http outcall times out.
+    pic.advance_time(std::time::Duration::from_secs(180));
+    pic.tick();
+
+    // The canister http outcall should time out by now.
+    let canister_http_requests = pic.get_canister_http();
+    assert_eq!(canister_http_requests.len(), 0);
+
+    // Now the test canister will receive the http outcall response
+    // and reply to the ingress message from the test driver.
+    let reply = pic.await_call(call_id).unwrap();
+    match reply {
+        WasmResult::Reply(data) => {
+            let http_response: Result<HttpRequestResult, (RejectionCode, String)> =
+                decode_one(&data).unwrap();
+            let (reject_code, err) = http_response.unwrap_err();
+            match reject_code {
+                RejectionCode::SysTransient => (),
+                _ => panic!("Unexpected reject code {:?}", reject_code),
+            };
+            assert_eq!(err, "Canister http request timed out");
+        }
+        WasmResult::Reject(msg) => panic!("Unexpected reject {}", msg),
+    };
+}
+
+#[test]
 fn subnet_metrics() {
     const INIT_CYCLES: u128 = 2_000_000_000_000;
     let pic = PocketIcBuilder::new().with_application_subnet().build();
@@ -1810,4 +1921,26 @@ fn canister_logs() {
         String::from_utf8(logs[1].content.clone()).unwrap(),
         log_msg_multiple
     );
+}
+
+#[test]
+fn get_subnet() {
+    let pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+
+    let topology = pic.topology();
+
+    let default_subnet = topology
+        .get_subnet(topology.default_effective_canister_id.clone().into())
+        .unwrap();
+    let default_subnet_config = topology.subnet_configs.get(&default_subnet).unwrap();
+    assert_eq!(default_subnet_config.subnet_kind, SubnetKind::Application);
+
+    let nns_subnet = topology
+        .get_subnet(Principal::from_text("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap())
+        .unwrap();
+    let nns_subnet_config = topology.subnet_configs.get(&nns_subnet).unwrap();
+    assert_eq!(nns_subnet_config.subnet_kind, SubnetKind::NNS);
 }
