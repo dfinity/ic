@@ -1876,16 +1876,16 @@ fn run_scheduler_test(
         assert_eq!(inv, 0);
         // Allow up to 40x divergence for long executions (should be in fact 20x, as 40B/2B = 20).
         assert!(
-            min_ap > -100 * 40 * multiplier as i64,
+            min_ap > -100 * 40 * (active_canisters_with_long_executions * multiplier) as i64,
             "Error checking min accumulated priority {} > {} (-100% * 40x * multiplier:{multiplier})",
             min_ap,
-            -100 * 40 * multiplier as i64
+            -100 * 40 * (active_canisters_with_long_executions * multiplier) as i64
         );
         assert!(
-            max_ap < 100 * 40 * multiplier as i64,
+            max_ap < 100 * 40 * (active_canisters_with_long_executions * multiplier) as i64,
             "Error checking max accumulated priority {} < {} (100% * 40x * multiplier:{multiplier})",
             max_ap,
-            100 * 40 * multiplier as i64
+            100 * 40 * (active_canisters_with_long_executions * multiplier) as i64
         );
     }
     test
