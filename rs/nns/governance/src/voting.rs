@@ -15,7 +15,7 @@ struct VotingStateMachine {
     // votes to cast
     votes_to_cast: BTreeMap<NeuronId, Vote>,
     // Votes that have been cast before checking followees
-    votes_cast_before_followees_checked: BTreeMap<NeuronId, Vote>,
+    neurons_to_check_followers: BTreeSet<NeuronId>,
     // followers to process
     followers_to_check: BTreeSet<NeuronId>,
     // votes that need to be recorded in each neuron's recent_ballots
@@ -41,7 +41,7 @@ impl VotingStateMachine {
             proposal_id,
             topic,
             votes_to_cast,
-            votes_cast_before_followees_checked: BTreeMap::new(),
+            neurons_to_check_followers: BTreeSet::new(),
             followers_to_check: BTreeSet::new(),
             recent_neuron_ballots_to_record: BTreeMap::new(),
             votes_fully_cast: BTreeMap::new(),
@@ -50,7 +50,7 @@ impl VotingStateMachine {
 
     fn is_done(&self) -> bool {
         self.votes_to_cast.is_empty()
-            && self.votes_cast_before_followees_checked.is_empty()
+            && self.neurons_to_check_followers.is_empty()
             && self.followers_to_check.is_empty()
             && self.recent_neuron_ballots_to_record.is_empty()
     }
@@ -76,8 +76,7 @@ impl VotingStateMachine {
             if ballot.vote == Vote::Unspecified as i32 {
                 ballot.vote = vote as i32;
                 // record the votes that have been cast, to log
-                self.votes_cast_before_followees_checked
-                    .insert(neuron_id, vote);
+                self.neurons_to_check_followers.insert(neuron_id);
                 // votes to be recorded
                 self.recent_neuron_ballots_to_record.insert(neuron_id, vote);
             }
@@ -102,13 +101,11 @@ impl VotingStateMachine {
             }
         }
 
-        if !self.votes_cast_before_followees_checked.is_empty() {
-            while let Some((neuron_id, vote)) = self.votes_cast_before_followees_checked.pop_first()
-            {
+        if !self.neurons_to_check_followers.is_empty() {
+            while let Some(neuron_id) = self.neurons_to_check_followers.pop_first() {
                 if self.topic != NeuronManagement {
                     self.add_followers_to_check(neuron_store, neuron_id, self.topic);
                 }
-                self.votes_fully_cast.insert(neuron_id, vote);
             }
         }
 
@@ -139,7 +136,9 @@ impl VotingStateMachine {
                 match neuron_store.with_neuron_mut(&neuron_id, |neuron| {
                     neuron.register_recent_ballot(self.topic, &self.proposal_id, vote)
                 }) {
-                    Ok(_) => {}
+                    Ok(_) => {
+                        self.votes_fully_cast.insert(neuron_id, vote);
+                    }
                     Err(e) => {
                         // This is a bad inconsistency, but there is
                         // nothing that can be done about it at this
@@ -190,179 +189,6 @@ pub(crate) fn cast_vote_and_cascade_follow(
     }
 }
 
-/// Register `voting_neuron_id` voting according to
-/// `vote_of_neuron` (which must be `yes` or `no`) in 'ballots' and
-/// cascade voting according to the following relationships
-/// specified in 'followee_index' (mapping followees to followers for
-/// the topic) and 'neurons' (which contains a mapping of followers
-/// to followees).
-/// Cascading only occurs for proposal topics that support following (i.e.,
-/// all topics except Topic::NeuronManagement).
-#[allow(dead_code)]
-pub(crate) fn old_cast_vote_and_cascade_follow(
-    proposal_id: &ProposalId,
-    ballots: &mut HashMap<u64, Ballot>,
-    voting_neuron_id: &NeuronId,
-    vote_of_neuron: Vote,
-    topic: Topic,
-    neuron_store: &mut NeuronStore,
-) {
-    assert!(topic != Topic::Unspecified);
-
-    // This is the induction variable of the loop: a map from
-    // neuron ID to the neuron's vote - 'yes' or 'no' (other
-    // values not allowed).
-    let mut induction_votes = BTreeMap::new();
-    induction_votes.insert(*voting_neuron_id, vote_of_neuron);
-
-    // Retain only neurons that have a ballot that can still be cast.  This excludes
-    // neurons with no ballots or ballots that have already been cast.
-    fn retain_neurons_with_castable_ballots(
-        followers: &mut BTreeSet<NeuronId>,
-        ballots: &HashMap<u64, Ballot>,
-    ) {
-        followers.retain(|f| {
-            ballots
-                .get(&f.id)
-                // Only retain neurons with unspecified ballots
-                .map(|b| b.vote == Vote::Unspecified as i32)
-                // Neurons without ballots are also dropped
-                .unwrap_or_default()
-        });
-    }
-
-    loop {
-        // First, we cast the specified votes (in the first round,
-        // this will be a single vote) and collect all neurons
-        // that follow some of the neurons that are voting.
-        let mut all_followers = BTreeSet::new();
-        for (k, v) in induction_votes.iter() {
-            // The new/induction votes cannot be unspecified.
-            assert!(*v != Vote::Unspecified);
-            if let Some(k_ballot) = ballots.get_mut(&k.id) {
-                // Neuron with ID k is eligible to vote.
-                if k_ballot.vote == (Vote::Unspecified as i32) {
-                    let register_ballot_result =
-                        neuron_store.with_neuron_mut(&NeuronId { id: k.id }, |k_neuron| {
-                            // Register the neuron's ballot in the
-                            // neuron itself.
-                            k_neuron.register_recent_ballot(topic, proposal_id, *v);
-                        });
-                    match register_ballot_result {
-                        Ok(_) => {
-                            // Only update a vote if it was previously unspecified. Following
-                            // can trigger votes for neurons that have already voted (manually)
-                            // and we don't change these votes.
-                            k_ballot.vote = *v as i32;
-                            // Here k is the followee, i.e., the neuron that has just cast a
-                            // vote that may be followed by other neurons.
-                            //
-                            // Insert followers from 'topic'
-                            all_followers.extend(
-                                neuron_store.get_followers_by_followee_and_topic(*k, topic),
-                            );
-                            // Default following doesn't apply to governance or SNS
-                            // decentralization swap proposals.
-                            if ![Topic::Governance, Topic::SnsAndCommunityFund].contains(&topic) {
-                                // Insert followers from 'Unspecified' (default followers)
-                                all_followers.extend(
-                                    neuron_store.get_followers_by_followee_and_topic(
-                                        *k,
-                                        Topic::Unspecified,
-                                    ),
-                                );
-                            }
-                        }
-                        Err(e) => {
-                            // The voting neuron not found in the neurons table. This is a bad
-                            // inconsistency, but there is nothing that can be done about it at
-                            // this place.
-                            eprintln!("error in cast_vote_and_cascade_follow when attempting to cast ballot: {:?}", e);
-                        }
-                    }
-                }
-            } else {
-                // A non-eligible voter was specified in
-                // new/induction votes. We don't compute the
-                // followers of this neuron as it didn't actually
-                // vote.
-            }
-        }
-        // Clear the induction_votes, as we are going to compute a
-        // new set now.
-        induction_votes.clear();
-
-        // Following is not enabled for neuron management proposals
-        if topic == Topic::NeuronManagement {
-            return;
-        }
-
-        // Calling "would_follow_ballots" for neurons that cannot vote is wasteful.
-        retain_neurons_with_castable_ballots(&mut all_followers, ballots);
-
-        for f in all_followers.iter() {
-            let f_vote = match neuron_store.with_neuron(&NeuronId { id: f.id }, |n| {
-                n.would_follow_ballots(topic, ballots)
-            }) {
-                Ok(vote) => vote,
-                Err(e) => {
-                    // This is a bad inconsistency, but there is
-                    // nothing that can be done about it at this
-                    // place.  We somehow have followers recorded that don't exist.
-                    eprintln!("error in cast_vote_and_cascade_follow when gathering induction votes: {:?}", e);
-                    Vote::Unspecified
-                }
-            };
-            if f_vote != Vote::Unspecified {
-                // f_vote is yes or no, i.e., f_neuron's
-                // followee relations indicates that it should
-                // vote now.
-                induction_votes.insert(*f, f_vote);
-            }
-        }
-        // If induction_votes is empty, the loop will terminate
-        // here.
-        if induction_votes.is_empty() {
-            return;
-        }
-        // We now continue to the next iteration of the loop.
-        // Because induction_votes is not empty, either at least
-        // one entry in 'ballots' will change from unspecified to
-        // yes or no, or all_followers will be empty, whence
-        // induction_votes will become empty.
-        //
-        // Thus, for each iteration of the loop, the number of
-        // entries in 'ballots' that have an unspecified value
-        // decreases, or else the loop terminates. As nothing is
-        // added to 'ballots' (or removed for that matter), the
-        // loop terminates in at most 'ballots.len()+1' steps.
-        //
-        // The worst case is attained if there is a linear
-        // following graph, like this:
-        //
-        // X follows A follows B follows C,
-        //
-        // where X is not eligible to vote and nobody has
-        // voted, i.e.,
-        //
-        // ballots = {
-        //   A -> unspecified, B -> unspecified, C -> unspecified
-        // }
-        //
-        // In this case, the subsequent values of
-        // 'induction_votes' will be {C}, {B}, {A}, {X}.
-        //
-        // Note that it does not matter if X has followers. As X
-        // doesn't vote, its followers are not considered.
-        //
-        // The above argument also shows how the algorithm deals
-        // with cycles in the following graph: votes are
-        // propagated through the graph in a manner similar to the
-        // breadth-first search (BFS) algorithm. A node is
-        // explored when it has voted yes or no.
-    }
-}
-
 #[cfg(test)]
 mod test {
 
@@ -370,17 +196,15 @@ mod test {
         governance::MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
         neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
         neuron_store::NeuronStore,
-        pb::v1::{neuron::Followees, BallotInfo, Topic, Vote},
+        pb::v1::{neuron::Followees, Topic, Vote},
         voting::VotingStateMachine,
     };
 
     use crate::pb::v1::Ballot;
     use ic_base_types::PrincipalId;
-    use ic_config::ConfigSource::Default;
     use ic_nns_common::pb::v1::{NeuronId, ProposalId};
     use icp_ledger::Subaccount;
     use maplit::{btreemap, hashmap};
-    use rand_chacha::ChaCha20Rng;
     use std::collections::{BTreeMap, BTreeSet, HashMap};
 
     // Only some fields are relevant for the functionality, but because we're benchmarking we need
@@ -415,7 +239,7 @@ mod test {
             followees
         };
 
-        let mut neuron = NeuronBuilder::new(
+        NeuronBuilder::new(
             NeuronId { id },
             subaccount,
             PrincipalId::new_user_test_id(id),
@@ -425,9 +249,7 @@ mod test {
         .with_hot_keys(hot_keys)
         .with_followees(followees)
         .with_cached_neuron_stake_e8s(cached_neuron_stake_e8s)
-        .build();
-
-        neuron
+        .build()
     }
 
     #[test]
@@ -449,7 +271,7 @@ mod test {
             proposal_id: ProposalId { id: 0 },
             topic: Topic::Governance,
             votes_to_cast: BTreeMap::new(),
-            votes_cast_before_followees_checked: BTreeMap::new(),
+            neurons_to_check_followers: BTreeSet::new(),
             followers_to_check: BTreeSet::new(),
             recent_neuron_ballots_to_record: BTreeMap::new(),
             votes_fully_cast: BTreeMap::new(),
@@ -465,10 +287,10 @@ mod test {
         state_machine.votes_to_cast.clear();
 
         state_machine
-            .votes_cast_before_followees_checked
-            .insert(NeuronId { id: 0 }, Vote::Yes);
+            .neurons_to_check_followers
+            .insert(NeuronId { id: 0 });
         assert!(!state_machine.is_done());
-        state_machine.votes_cast_before_followees_checked.clear();
+        state_machine.neurons_to_check_followers.clear();
 
         state_machine.followers_to_check.insert(NeuronId { id: 0 });
         assert!(!state_machine.is_done());
@@ -488,7 +310,7 @@ mod test {
     }
 
     #[test]
-    fn single_pass_with_following_results_in_not_done_with_followers_to_check() {
+    fn test_continue_processsing() {
         let mut state_machine = VotingStateMachine::try_new(
             ProposalId { id: 0 },
             Topic::NetworkEconomics,
@@ -537,14 +359,14 @@ mod test {
         assert_eq!(
             neuron_store
                 .with_neuron(&NeuronId { id: 1 }, |n| {
-                    n.recent_ballots.get(0).unwrap().vote
+                    n.recent_ballots.first().unwrap().vote
                 })
                 .unwrap(),
             Vote::Yes as i32
         );
         assert!(neuron_store
             .with_neuron(&NeuronId { id: 2 }, |n| {
-                n.recent_ballots.get(0).is_none()
+                n.recent_ballots.first().is_none()
             })
             .unwrap());
         assert!(!state_machine.is_done());
@@ -560,7 +382,7 @@ mod test {
         assert_eq!(
             neuron_store
                 .with_neuron(&NeuronId { id: 1 }, |n| {
-                    n.recent_ballots.get(0).unwrap().vote
+                    n.recent_ballots.first().unwrap().vote
                 })
                 .unwrap(),
             Vote::Yes as i32
@@ -568,7 +390,7 @@ mod test {
         assert_eq!(
             neuron_store
                 .with_neuron(&NeuronId { id: 2 }, |n| {
-                    n.recent_ballots.get(0).unwrap().vote
+                    n.recent_ballots.first().unwrap().vote
                 })
                 .unwrap(),
             Vote::Yes as i32
