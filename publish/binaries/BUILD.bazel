@@ -120,7 +120,7 @@ filegroup(
     srcs = [name + ".gz" for name in ALL_BINARIES],
 )
 
-upload_artifacts(ba
+upload_artifacts(
     name = "upload",
     testonly = True,
     inputs = [":binaries"],
