@@ -9,7 +9,6 @@ component_files = {
     # setupos-scripts
     Label("//ic-os/components/setupos-scripts:check-setupos-age.sh"): "/opt/ic/bin/check-setupos-age.sh",
     Label("//ic-os/components/setupos-scripts:check-config.sh"): "/opt/ic/bin/check-config.sh",
-    Label("//ic-os/components/setupos-scripts:config.sh"): "/opt/ic/bin/config.sh",
     Label("//ic-os/components/setupos-scripts:setup-hostos-config.sh"): "/opt/ic/bin/setup-hostos-config.sh",
     Label("//ic-os/components/setupos-scripts:setup-disk.sh"): "/opt/ic/bin/setup-disk.sh",
     Label("//ic-os/components/setupos-scripts:functions.sh"): "/opt/ic/bin/functions.sh",
