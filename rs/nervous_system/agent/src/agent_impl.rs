@@ -1,6 +1,6 @@
+use crate::Request;
 use candid::Principal;
 use ic_agent::Agent;
-use ic_nervous_system_clients::Request;
 use thiserror::Error;
 
 use crate::CallCanisters;
@@ -25,10 +25,10 @@ impl CallCanisters for Agent {
         request: R,
     ) -> Result<R::Response, Self::Error> {
         let canister_id = canister_id.into();
-        let request_bytes = candid::encode_one(&request).map_err(AgentCallError::CandidEncode)?;
-        let response = if R::UPDATE {
+        let request_bytes = request.payload();
+        let response = if request.update() {
             let request = self
-                .update(&canister_id, R::METHOD)
+                .update(&canister_id, request.method())
                 .with_arg(request_bytes)
                 .call()
                 .await?;
@@ -39,7 +39,7 @@ impl CallCanisters for Agent {
                 }
             }
         } else {
-            self.query(&canister_id, R::METHOD)
+            self.query(&canister_id, request.method())
                 .with_arg(request_bytes)
                 .call()
                 .await?
