@@ -92,6 +92,14 @@ async fn distribute_kyt_fee() {
 #[cfg(feature = "self_check")]
 #[update]
 async fn refresh_fee_percentiles() {
+    // Use `TimerLogicGuard` here because:
+    // 1. `estimate_fee_per_vbyte` could potentially change the state.
+    // 2. `estimate_fee_per_vbyte` is also called from timer
+    //    `TaskType::ProcessLogic` and `TaskType::RefreshFeePercentiles`.
+    let _guard = match ic_ckbtc_minter::guard::TimerLogicGuard::new() {
+        Some(guard) => guard,
+        None => return,
+    };
     let _ = ic_ckbtc_minter::estimate_fee_per_vbyte().await;
 }
 
@@ -215,7 +223,7 @@ fn get_minter_info() -> MinterInfo {
     read_state(|s| MinterInfo {
         kyt_fee: s.kyt_fee,
         min_confirmations: s.min_confirmations,
-        retrieve_btc_min_amount: s.retrieve_btc_min_amount,
+        retrieve_btc_min_amount: s.fee_based_retrieve_btc_min_amount,
     })
 }
 
