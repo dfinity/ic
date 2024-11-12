@@ -192,13 +192,13 @@ impl std::fmt::Display for WasmHash {
 #[test]
 fn wasmhash_display() {
     let hash = WasmHash([0; WASM_HASH_LENGTH]);
-    let expected: String = std::iter::repeat("00").take(WASM_HASH_LENGTH).collect();
+    let expected: String = "00".repeat(WASM_HASH_LENGTH);
     assert_eq!(expected, format!("{}", hash));
     let hash = WasmHash([11; WASM_HASH_LENGTH]);
-    let expected: String = std::iter::repeat("0b").take(WASM_HASH_LENGTH).collect();
+    let expected: String = "0b".repeat(WASM_HASH_LENGTH);
     assert_eq!(expected, format!("{}", hash));
     let hash = WasmHash([255; WASM_HASH_LENGTH]);
-    let expected: String = std::iter::repeat("ff").take(WASM_HASH_LENGTH).collect();
+    let expected: String = "ff".repeat(WASM_HASH_LENGTH);
     assert_eq!(expected, format!("{}", hash));
 }
 
