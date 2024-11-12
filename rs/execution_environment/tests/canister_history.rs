@@ -199,7 +199,7 @@ fn canister_history_tracks_create_install_reinstall() {
         InstallCodeArgs::new(
             Reinstall,
             canister_id,
-            UNIVERSAL_CANISTER_WASM.into(),
+            UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
             None,
             None,
@@ -212,7 +212,7 @@ fn canister_history_tracks_create_install_reinstall() {
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         2,
         CanisterChangeOrigin::from_user(user_id1),
-        CanisterChangeDetails::code_deployment(Reinstall, UNIVERSAL_CANISTER_WASM_SHA256),
+        CanisterChangeDetails::code_deployment(Reinstall, *UNIVERSAL_CANISTER_WASM_SHA256),
     ));
     let history = get_canister_history(&env, canister_id);
     assert_eq!(
@@ -311,7 +311,7 @@ fn canister_history_tracks_upgrade() {
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         2,
         CanisterChangeOrigin::from_user(user_id1),
-        CanisterChangeDetails::code_deployment(Upgrade, UNIVERSAL_CANISTER_WASM_SHA256),
+        CanisterChangeDetails::code_deployment(Upgrade, *UNIVERSAL_CANISTER_WASM_SHA256),
     ));
     let history = get_canister_history(&env, canister_id);
     assert_eq!(
@@ -611,7 +611,7 @@ fn canister_history_tracks_changes_from_canister() {
     // create and install universal_canister
     let ucan = env
         .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.into(),
+            UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
             Some(
                 CanisterSettingsArgsBuilder::new()
@@ -710,7 +710,7 @@ fn canister_history_fails_with_incorrect_sender_version() {
     // create and install universal_canister
     let ucan = env
         .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.into(),
+            UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
             Some(
                 CanisterSettingsArgsBuilder::new()
@@ -761,7 +761,7 @@ fn canister_history_fails_with_incorrect_sender_version() {
         InstallCodeArgs {
             mode: Install,
             canister_id: canister_id.into(),
-            wasm_module: UNIVERSAL_CANISTER_WASM.into(),
+            wasm_module: UNIVERSAL_CANISTER_WASM.to_vec(),
             arg: vec![],
             compute_allocation: None,
             memory_allocation: None,
@@ -878,13 +878,13 @@ fn canister_info_retrieval() {
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
         2,
         CanisterChangeOrigin::from_user(user_id1),
-        CanisterChangeDetails::code_deployment(Upgrade, UNIVERSAL_CANISTER_WASM_SHA256),
+        CanisterChangeDetails::code_deployment(Upgrade, *UNIVERSAL_CANISTER_WASM_SHA256),
     ));
 
     // create and install universal_canister
     let ucan = env
         .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.into(),
+            UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
             Some(
                 CanisterSettingsArgsBuilder::new()
@@ -1012,7 +1012,7 @@ fn canister_history_load_snapshot_fails_incorrect_sender_version() {
     // Create and install universal_canister
     let ucan = env
         .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.into(),
+            UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
             Some(
                 CanisterSettingsArgsBuilder::new()
