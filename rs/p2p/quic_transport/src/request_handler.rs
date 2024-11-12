@@ -160,12 +160,10 @@ async fn handle_bi_stream(
     Ok(())
 }
 
+// The function returns infallible error.
 fn to_request(request_bytes: Vec<u8>) -> Result<Request<Body>, anyhow::Error> {
-    let request_proto = pb::HttpRequest::decode(request_bytes.as_slice())
-        .with_context(|| "Failed to decode http request.")?;
-
-    let pb_http_method = pb::HttpMethod::try_from(request_proto.method)
-        .with_context(|| "Failed to decode http method.")?;
+    let request_proto = pb::HttpRequest::decode(request_bytes.as_slice())?;
+    let pb_http_method = pb::HttpMethod::try_from(request_proto.method)?;
     let http_method = match pb_http_method {
         pb::HttpMethod::Get => Some(Method::GET),
         pb::HttpMethod::Post => Some(Method::POST),

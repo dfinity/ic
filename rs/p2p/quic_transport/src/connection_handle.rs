@@ -2,7 +2,6 @@
 //!
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use anyhow::Context;
 use bytes::Bytes;
 use http::{Method, Request, Response, Version};
 use ic_protobuf::transport::v1 as pb;
@@ -127,14 +126,10 @@ impl ConnectionHandle {
     }
 }
 
+// The function returns infallible error.
 fn to_response(response_bytes: Vec<u8>) -> Result<Response<Bytes>, anyhow::Error> {
-    let response_proto = pb::HttpResponse::decode(response_bytes.as_slice())
-        .with_context(|| "Failed to decode response header.")?;
-
-    let status: u16 = response_proto
-        .status_code
-        .try_into()
-        .with_context(|| "Failed to decode status code.")?;
+    let response_proto = pb::HttpResponse::decode(response_bytes.as_slice())?;
+    let status: u16 = response_proto.status_code.try_into()?;
 
     let mut response = Response::builder().status(status).version(Version::HTTP_3);
     for h in response_proto.headers {
@@ -143,9 +138,7 @@ fn to_response(response_bytes: Vec<u8>) -> Result<Response<Bytes>, anyhow::Error
     }
     // This consumes the body without requiring allocation or cloning the whole content.
     let body_bytes = Bytes::from(response_proto.body);
-    response
-        .body(body_bytes)
-        .with_context(|| "Failed to build response.")
+    Ok(response.body(body_bytes)?)
 }
 
 fn into_request_bytes(request: Request<Bytes>) -> Vec<u8> {
