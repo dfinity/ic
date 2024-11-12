@@ -107,7 +107,7 @@ pub fn setup(
         )
         .setup_and_start(&env)
         .expect("Failed to setup IC under test.");
-    env.sync_with_prometheus("");
+    env.sync_with_prometheus(None);
     info!(logger, "Step 1: Installing NNS canisters ...");
     let nns_node = env
         .topology_snapshot()

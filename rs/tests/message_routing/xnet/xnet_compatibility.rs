@@ -114,7 +114,7 @@ fn setup(env: TestEnv, config: Config) {
     });
     install_nns_and_check_progress(env.topology_snapshot());
     if config.with_prometheus {
-        env.sync_with_prometheus("");
+        env.sync_with_prometheus(None);
     }
 }
 

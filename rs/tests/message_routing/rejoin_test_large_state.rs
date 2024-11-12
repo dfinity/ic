@@ -123,7 +123,7 @@ fn setup(env: TestEnv, config: Config) {
             .for_each(|node| node.await_status_is_healthy().unwrap())
     });
 
-    env.sync_with_prometheus("");
+    env.sync_with_prometheus(None);
 }
 
 fn test(env: TestEnv, config: Config) {

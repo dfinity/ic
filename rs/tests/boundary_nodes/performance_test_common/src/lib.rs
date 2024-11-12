@@ -142,7 +142,7 @@ pub fn setup(bn_https_config: BoundaryNodeHttpsConfig, env: TestEnv) {
     boundary_node
         .await_status_is_healthy()
         .expect("Boundary node did not come up healthy.");
-    env.sync_with_prometheus(BOUNDARY_NODE_NAME);
+    env.sync_with_prometheus(Some(BOUNDARY_NODE_NAME));
 }
 
 // Execute update calls (without polling) with an increasing req/s rate, against a counter canister via the boundary node agent.

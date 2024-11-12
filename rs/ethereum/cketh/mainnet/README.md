@@ -200,7 +200,7 @@ pub fn setup(env: TestEnv) {
         env.topology_snapshot(),
         NnsCustomizations::default(),
     );
-    env.sync_with_prometheus("");
+    env.sync_with_prometheus(None);
 }
 ```
 
