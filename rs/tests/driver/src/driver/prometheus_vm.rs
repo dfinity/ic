@@ -260,7 +260,7 @@ fi
 pub trait HasPrometheus {
     /// Retrieves a topology snapshot, converts it into p8s scraping target
     /// JSON files and scps them to the prometheus VM.
-    fn sync_with_prometheus(&self, boundary_node_name: &str);
+    fn sync_with_prometheus(&self, boundary_node_name: Option<&str>);
 
     /// Retrieves a topology snapshot by name, converts it into p8s scraping target
     /// JSON files and scps them to the prometheus VM. If `playnet_url` is specified, add a
@@ -277,13 +277,13 @@ pub trait HasPrometheus {
 }
 
 impl HasPrometheus for TestEnv {
-    fn sync_with_prometheus(&self, boundary_node_name: &str) {
-        let boundary_node = self
-            .get_deployed_boundary_node(boundary_node_name)
-            .unwrap()
-            .get_snapshot()
-            .unwrap();
-        let playnet_url = boundary_node.get_playnet();
+    fn sync_with_prometheus(&self, boundary_node_name: Option<&str>) {
+        let playnet_url = boundary_node_name.and_then(|bn_name| {
+            self.get_deployed_boundary_node(bn_name)
+                .ok()
+                .and_then(|bn| bn.get_snapshot().ok()?.get_playnet())
+        });
+
         self.sync_with_prometheus_by_name("", playnet_url)
     }
 
