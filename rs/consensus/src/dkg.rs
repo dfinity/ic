@@ -1018,7 +1018,7 @@ mod tests {
 
             // Verify that the first summary block contains only two local configs and the
             // two errors for the remote DKG request.
-            let block: Block = PoolReader::new(&pool).get_highest_summary_block();
+            let block: Block = PoolReader::new(&pool).get_highest_finalized_summary_block();
             if let BlockPayload::Summary(summary) = block.payload.as_ref() {
                 assert_eq!(
                     summary.dkg.configs.len(),
@@ -1509,7 +1509,8 @@ mod tests {
                     // Verify that the first summary block contains only two local configs.
                     pool_1.advance_round_normal_operation_n(dkg_interval_length + 1);
                     pool_2.advance_round_normal_operation_n(dkg_interval_length + 1);
-                    let block: Block = PoolReader::new(&pool_1).get_highest_summary_block();
+                    let block: Block =
+                        PoolReader::new(&pool_1).get_highest_finalized_summary_block();
                     if let BlockPayload::Summary(summary) = block.payload.as_ref() {
                         assert_eq!(summary.dkg.configs.len(), 2);
                         for (dkg_id, _) in summary.dkg.configs.iter() {
@@ -1527,7 +1528,8 @@ mod tests {
                     // block contains only two local and two remote configs.
                     pool_1.advance_round_normal_operation_n(dkg_interval_length + 1);
                     pool_2.advance_round_normal_operation_n(dkg_interval_length + 1);
-                    let block: Block = PoolReader::new(&pool_1).get_highest_summary_block();
+                    let block: Block =
+                        PoolReader::new(&pool_1).get_highest_finalized_summary_block();
                     if let BlockPayload::Summary(summary) = block.payload.as_ref() {
                         assert_eq!(summary.dkg.configs.len(), 4);
                     } else {

@@ -207,18 +207,22 @@ function query_nns_nodes() {
 # Establish run order
 main() {
     log_start "$(basename $0)"
-    read_config_variables
-    get_network_settings
-    print_network_settings
+    if kernel_cmdline_bool_default_true ic.setupos.check_network; then
+        read_config_variables
+        get_network_settings
+        print_network_settings
 
-    if [[ -n ${ipv4_address} && -n ${ipv4_prefix_length} && -n ${ipv4_gateway} ]]; then
-        validate_domain_name
-        setup_ipv4_network
-        ping_ipv4_gateway
+        if [[ -n ${ipv4_address} && -n ${ipv4_prefix_length} && -n ${ipv4_gateway} ]]; then
+            validate_domain_name
+            setup_ipv4_network
+            ping_ipv4_gateway
+        fi
+
+        ping_ipv6_gateway
+        query_nns_nodes
+    else
+        echo "* Network checks skipped by request via kernel command line"
     fi
-
-    ping_ipv6_gateway
-    query_nns_nodes
     log_end "$(basename $0)"
 }
 
