@@ -286,7 +286,7 @@ fn ic0_performance_counter_helper(
     }
 }
 
-pub(crate) fn syscalls<
+pub fn syscalls<
     I: TryInto<usize>
         + TryInto<u64>
         + TryInto<u32>
