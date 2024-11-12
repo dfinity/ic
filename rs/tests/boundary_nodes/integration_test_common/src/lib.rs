@@ -112,108 +112,313 @@ async fn install_canister(env: TestEnv, logger: Logger, path: &str) -> Result<Pr
     Ok::<_, Error>(canister_id)
 }
 
-/* tag::catalog[]
-Title:: Boundary nodes binary canister test
+async fn install_counter_canister(env: TestEnv, logger: Logger) -> Result<Principal, Error> {
+    info!(&logger, "creating management agent");
+    let (install_url, effective_canister_id) =
+        get_install_url(&env).expect("failed to get install url");
 
-Goal:: Install and query a binary canister
+    let agent = assert_create_agent(install_url.as_str()).await;
+
+    info!(&logger, "creating canister");
+    let cid = create_canister(
+        &agent,
+        effective_canister_id,
+        wat::parse_str(COUNTER_CANISTER_WAT).unwrap().as_slice(),
+        None,
+    )
+    .await
+    .map_err(|err| anyhow!(format!("failed to create canister: {}", err)))?;
+
+    info!(&logger, "Waiting for canisters to finish installing...");
+    retry_with_msg_async!(
+        format!(
+            "agent of {} observes canister module {}",
+            install_url.to_string(),
+            cid.to_string()
+        ),
+        &logger,
+        READY_WAIT_TIMEOUT,
+        RETRY_BACKOFF,
+        || async {
+            match agent_observes_canister_module(&agent, &cid).await {
+                true => Ok(()),
+                false => panic!("Canister module not available yet"),
+            }
+        }
+    )
+    .await?;
+
+    info!(&logger, "created canister {cid}");
+
+    Ok::<_, Error>(cid)
+}
+
+/* tag::catalog[]
+Title:: Boundary Nodes API Endpoints Test
+
+Goal:: Check all API endpoints (status/read_state/query/call)
 
 Runbook:
-. Set up a subnet with 4 nodes and a boundary node.
-
-Success:: The canister installs successfully and calls against it
-return the expected responses
-
-Coverage:: binary canisters behave as expected
+There are 5 subtests:
+* api/v2/status - just make a status call against the boundary node
+* api/v2/query - install a counter canister and query it
+* api/v2/call - install a counter canister and update it
+* api/v3/call - install a counter canister and update it
+* api/v2/read_state subnet path - request the subnet metrics from the certified state
+* api/v2/read_state canister path - install a counter canister and request the module hash of the canister from the state
 
 end::catalog[] */
-
-pub fn canister_test(env: TestEnv) {
+pub fn api_endpoints_test(env: TestEnv) {
     let logger = env.logger();
-
-    let mut install_node = None;
-    for subnet in env.topology_snapshot().subnets() {
-        for node in subnet.nodes() {
-            install_node = Some((node.get_public_url(), node.effective_canister_id()));
-        }
-    }
 
     let boundary_node = env
         .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
         .unwrap()
         .get_snapshot()
-        .unwrap();
+        .expect("failed to get BN snapshot");
 
-    let rt = runtime();
+    let client_builder = ClientBuilder::new().redirect(Policy::none());
+    let (client_builder, host_orig) = if let Some(playnet) = boundary_node.get_playnet() {
+        (client_builder, playnet)
+    } else {
+        let host = "ic0.app";
+        let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 0, 0, 0);
+        let client_builder = client_builder
+            .danger_accept_invalid_certs(true)
+            .resolve(host, bn_addr.into());
+        (client_builder, host.to_string())
+    };
+    let client = client_builder.build().unwrap();
+
+    let rt = Runtime::new().expect("failed to create tokio runtime");
+    let futs: FuturesUnordered<tokio::task::JoinHandle<Result<(), Error>>> =
+        FuturesUnordered::new();
+
+    // api/v2/status
+    futs.push(rt.spawn({
+        let host = host_orig.clone();
+        let client = client.clone();
+        let logger = logger.clone();
+        let name = "api/v2/status";
+        info!(&logger, "Starting subtest {}", name);
+
+        async move {
+            let res = client
+                .get(format!("https://{host}/api/v2/status"))
+                .send()
+                .await?;
+
+            if res.status() != StatusCode::OK {
+                bail!("{name} failed: {}", res.status())
+            }
+
+            #[derive(Deserialize)]
+            struct Status {
+                replica_health_status: String,
+            }
+
+            let body = res.bytes().await?;
+
+            let Status {
+                replica_health_status,
+            } = serde_cbor::from_slice::<Status>(&body)?;
+
+            if replica_health_status != "healthy" {
+                bail!("{name} failed: status check failed: {replica_health_status}")
+            }
+
+            info!(&logger, "done {}", name);
+            Ok(())
+        }
+    }));
+
+    // api/v2/query
+    let host = host_orig.clone();
+    futs.push(rt.spawn({
+        let logger = logger.clone();
+        let client = client.clone();
+        let env = env.clone();
+        let name = "api/v2/query - query counter";
+        info!(&logger, "Starting subtest {}", name);
+
+        async move {
+            let cid = install_counter_canister(env, logger.clone()).await?;
+
+            info!(&logger, "creating agent");
+            let transport =
+                ReqwestTransport::create_with_client(format!("https://{host}/"), client)?;
+
+            let agent = Agent::builder().with_transport(transport).build()?;
+            info!(&logger, "fetch root key");
+            agent.fetch_root_key().await?;
+
+            info!(&logger, "query");
+            let out = agent.query(&cid, "read").call().await?;
+            if !out.eq(&[0, 0, 0, 0]) {
+                bail!("{name} failed: got {:?}, expected {:?}", out, &[0, 0, 0, 0],)
+            }
+
+            info!(&logger, "done {}", name);
+            Ok(())
+        }
+    }));
+
+    // api/v2/call
+    futs.push(rt.spawn({
+        let host = host_orig.clone();
+        let logger = logger.clone();
+        let client = client.clone();
+        let env = env.clone();
+        let name = "api/v2/call - update counter";
+        info!(&logger, "Starting subtest {}", name);
+
+        async move {
+            let cid = install_counter_canister(env, logger.clone()).await?;
+
+            info!(&logger, "creating agent");
+            let transport =
+                ReqwestTransport::create_with_client(format!("https://{host}/"), client)?;
+
+            let agent = Agent::builder().with_transport(transport).build()?;
+            info!(&logger, "fetch root key");
+            agent.fetch_root_key().await?;
+
+            info!(&logger, "updating canister");
+            agent.update(&cid, "write").call_and_wait().await?;
+
+            info!(&logger, "querying canister");
+            let out = agent.query(&cid, "read").call().await?;
+            if !out.eq(&[1, 0, 0, 0]) {
+                bail!("{name} failed: got {:?}, expected {:?}", out, &[1, 0, 0, 0],)
+            }
+
+            info!(&logger, "done {}", name);
+            Ok(())
+        }
+    }));
+
+    // api/v3/call
+    futs.push(rt.spawn({
+        let host = host_orig.clone();
+        let logger = logger.clone();
+        let client = client.clone();
+        let env = env.clone();
+        let name = "api/v3/call - update counter";
+        info!(&logger, "Starting subtest {}", name);
+
+        async move {
+            let cid = install_counter_canister(env.clone(), logger.clone()).await?;
+
+            info!(&logger, "creating agent");
+            let transport =
+                ReqwestTransport::create_with_client(format!("https://{host}/"), client)?
+                    .with_use_call_v3_endpoint();
+
+            let agent = Agent::builder().with_transport(transport).build()?;
+            info!(&logger, "fetch root key");
+            agent.fetch_root_key().await?;
+
+            info!(&logger, "updating canister");
+            agent.update(&cid, "write").call_and_wait().await?;
+
+            info!(&logger, "querying canister");
+            let out = agent.query(&cid, "read").call().await?;
+            if !out.eq(&[1, 0, 0, 0]) {
+                bail!("{name} failed: got {:?}, expected {:?}", out, &[1, 0, 0, 0],)
+            }
+
+            info!(&logger, "done {}", name);
+            Ok(())
+        }
+    }));
+
+    // api/v2/read_state via subnet (fetching the subnet metrics)
+    futs.push(rt.spawn({
+        let host = host_orig.clone();
+        let logger = logger.clone();
+        let client = client.clone();
+        let env = env.clone();
+        let name = "api/v2/read state - subnet path";
+        info!(&logger, "Starting subtest {}", name);
+
+        async move {
+            info!(&logger, "creating agent");
+            let transport =
+                ReqwestTransport::create_with_client(format!("https://{host}/"), client)?;
+
+            let agent = Agent::builder().with_transport(transport).build()?;
+            info!(&logger, "fetch root key");
+            agent.fetch_root_key().await?;
+
+            let subnet_id: Principal = env
+                .topology_snapshot()
+                .subnets()
+                .next()
+                .expect("no subnets found")
+                .subnet_id
+                .get()
+                .0;
+            let metrics = agent.read_state_subnet_metrics(subnet_id).await?;
+            info!(&logger, "subnet metrics are {:?}", metrics);
+
+            info!(&logger, "done {}", name);
+            Ok(())
+        }
+    }));
+
+    // api/v2/read_state via canister (fetching the module hash of a canister)
+    futs.push(rt.spawn({
+        let host = host_orig.clone();
+        let logger = logger.clone();
+        let client = client;
+        let env = env.clone();
+        let name = "api/v2/read state - canister path";
+        info!(&logger, "Starting subtest {}", name);
+
+        async move {
+            let cid = install_counter_canister(env.clone(), logger.clone()).await?;
+
+            info!(&logger, "creating agent");
+            let transport =
+                ReqwestTransport::create_with_client(format!("https://{host}/"), client)?;
+
+            let agent = Agent::builder().with_transport(transport).build()?;
+            info!(&logger, "fetch root key");
+            agent.fetch_root_key().await?;
+
+            let data = agent.read_state_canister_info(cid, "module_hash").await?;
+            let module_hash: String = data.iter().map(|x| format!("{:02x}", x)).collect();
+            info!(&logger, "canister module hash is {:?}", module_hash);
+
+            info!(&logger, "done {}", name);
+            Ok(())
+        }
+    }));
 
     rt.block_on(async move {
-        info!(&logger, "Creating replica agent...");
-        let agent = assert_create_agent(install_node.as_ref().unwrap().0.as_str()).await;
+        let mut cnt_err = 0;
+        info!(&logger, "Waiting for subtests");
 
-        info!(&logger, "installing canister");
-        let canister_id = create_canister(
-            &agent,
-            install_node.clone().unwrap().1,
-            wat::parse_str(COUNTER_CANISTER_WAT).unwrap().as_slice(),
-            None,
-        )
-        .await
-        .expect("Could not create counter canister");
-
-        info!(&logger, "created canister={canister_id}");
-
-        info!(&logger, "Waiting for canisters to finish installing...");
-        retry_with_msg_async!(
-            format!(
-                "agent of {} observes canister module {}",
-                install_node.as_ref().unwrap().0.to_string(),
-                canister_id.to_string()
-            ),
-            &logger,
-            READY_WAIT_TIMEOUT,
-            RETRY_BACKOFF,
-            || async {
-                match agent_observes_canister_module(&agent, &canister_id).await {
-                    true => Ok(()),
-                    false => panic!("Canister module not available yet"),
+        for fut in futs {
+            match fut.await {
+                Ok(Err(err)) => {
+                    error!(logger, "test failed: {}", err);
+                    cnt_err += 1;
                 }
+                Err(err) => {
+                    error!(logger, "test panicked: {}", err);
+                    cnt_err += 1;
+                }
+                _ => {}
             }
-        )
-        .await
-        .unwrap();
+        }
 
-        info!(&logger, "Creating BN agent...");
-        let agent = retry_with_msg_async!(
-            format!(
-                "build agent for BoundaryNode {}",
-                boundary_node.get_public_url().to_string()
-            ),
-            &logger,
-            READY_WAIT_TIMEOUT,
-            RETRY_BACKOFF,
-            || async { Ok(boundary_node.try_build_default_agent_async().await?) }
-        )
-        .await
-        .expect("Failed to create agent.");
-
-        info!(&logger, "Calling read...");
-        // We must retry the first request to a canister.
-        // This is because a new canister might take a few seconds to show up in the BN's routing tables
-        let read_result = retry_with_msg_async!(
-            format!(
-                "calling read on canister {} on BoundaryNode {}",
-                canister_id.to_string(),
-                boundary_node.get_public_url().to_string()
-            ),
-            &logger,
-            READY_WAIT_TIMEOUT,
-            RETRY_BACKOFF,
-            || async { Ok(agent.query(&canister_id, "read").call().await?) }
-        )
-        .await
-        .unwrap();
-
-        assert_eq!(read_result, [0; 4]);
-    });
+        match cnt_err {
+            0 => Ok(()),
+            _ => bail!("failed with {cnt_err} errors"),
+        }
+    })
+    .expect("test suite failed");
 }
 
 /* tag::catalog[]
@@ -1149,132 +1354,14 @@ pub fn proxy_http_canister_test(env: TestEnv) {
 }
 
 /* tag::catalog[]
-Title:: Boundary nodes denylist blocking test
+Title:: Boundary Nodes Denylist Test
 
-Goal:: Ensure that access to a canister specified in the denylist is blocked
-
-Runbook:
-. Set up a subnet with 4 nodes and a boundary node.
-. ?
-
-Success:: ?
-
-Coverage:: Blocking requests based on the denylist works
+Goal:: Ensure that the denylist blocks requests to canisters and the allowlist
+overrides the denylist.
 
 end::catalog[] */
 
-pub fn denylist_test(env: TestEnv) {
-    let logger = env.logger();
-
-    let mut install_node = None;
-    for subnet in env.topology_snapshot().subnets() {
-        for node in subnet.nodes() {
-            install_node = Some((node.get_public_url(), node.effective_canister_id()));
-        }
-    }
-
-    let boundary_node = env
-        .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
-        .unwrap()
-        .get_snapshot()
-        .unwrap();
-
-    let rt = runtime();
-    rt.block_on(async move {
-        info!(&logger, "creating replica agent");
-        let agent = assert_create_agent(install_node.as_ref().unwrap().0.as_str()).await;
-
-        let http_counter_canister = load_wasm(env::var("HTTP_COUNTER_WASM_PATH").expect("HTTP_COUNTER_WASM_PATH not set"));
-
-        info!(&logger, "installing canister");
-        let canister_id = create_canister(&agent, install_node.clone().unwrap().1, &http_counter_canister, None)
-            .await
-            .expect("Could not create http_counter canister");
-
-        info!(&logger, "Waiting for canisters to finish installing...");
-        retry_with_msg_async!(
-            format!(
-                "agent of {} observes canister module {}",
-                install_node.as_ref().unwrap().0,
-                canister_id.to_string()
-            ),
-            &logger,
-            READY_WAIT_TIMEOUT,
-            RETRY_BACKOFF,
-            || async {
-                match agent_observes_canister_module(&agent, &canister_id).await {
-                    true => Ok(()),
-                    false => panic!("Canister module not available yet"),
-                }
-            }
-        )
-        .await
-        .unwrap();
-
-        info!(&logger, "created canister={canister_id}");
-
-        // Update the denylist and restart ic-gateway
-        let denylist_command = format!(r#"echo "{{\"canisters\":{{\"{}\": {{}}}}}}" | sudo tee /run/ic-node/etc/ic-gateway/denylist.json && sudo service ic-gateway restart"#, canister_id);
-        info!(
-            logger,
-            "update denylist {BOUNDARY_NODE_NAME} with {denylist_command}"
-        );
-        if let Err(e) = boundary_node.block_on_bash_script(&denylist_command) {
-            panic!("bash script failed: {:?}", e);
-        }
-
-        // Wait a bit for the restart to complete
-        sleep(Duration::from_secs(3)).await;
-
-        let client_builder = ClientBuilder::new();
-        let (client_builder, host) = if let Some(playnet) = boundary_node.get_playnet() {
-            (client_builder, playnet)
-        } else {
-            let host = "ic0.app";
-            let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 0, 0, 0);
-            let client_builder = client_builder
-                .danger_accept_invalid_certs(true)
-                .resolve(&format!("{canister_id}.raw.{host}"),bn_addr.into());
-            (client_builder, host.to_string())
-        };
-        let client = client_builder.build().unwrap();
-
-        // Probe the blocked canister, we should get a 451
-        let url = &format!("https://{canister_id}.raw.{host}/");
-        retry_with_msg_async!(
-            format!("GET {} (expecting 451)", url),
-            &logger,
-            READY_WAIT_TIMEOUT,
-            RETRY_BACKOFF,
-            || async {
-                let res = client
-                    .get(url)
-                    .send()
-                    .await?
-                    .status();
-
-                if res != StatusCode::UNAVAILABLE_FOR_LEGAL_REASONS {
-                    bail!("expected 451, got {res}");
-                }
-
-                Ok(())
-            }
-        ).await.unwrap();
-    });
-}
-
-/* tag::catalog[]
-Title:: Boundary nodes canister-allowlist blocking test
-
-Goal:: Ensure that the canister-allowlist overrides the denylist
-
-Success::
-    A canister being present in the Allowlist overrides the restriction
-    due to that canister being present in the denylist.
-
-end::catalog[] */
-
-pub fn canister_allowlist_test(env: TestEnv) {
+pub fn canister_denylist_test(env: TestEnv) {
     let logger = env.logger();
 
     let mut install_node = None;
@@ -1695,6 +1782,19 @@ pub fn http_endpoint_test(env: TestEnv) {
                 bail!("{name} failed: expected response but got {body}")
             }
 
+            Ok(())
+        }
+    }));
+
+    let host = host_orig.clone();
+    let logger = logger_orig.clone();
+    let asset_canister = asset_canister_orig.clone();
+    futs.push(rt.spawn({
+        let client = client.clone();
+        let name = "get foo.js with response verification";
+        info!(&logger, "Starting subtest {}", name);
+
+        async move {
             let hello_world_js = vec![
                 99, 111, 110, 115, 111, 108, 101, 46, 108, 111, 103, 40, 34, 72, 101, 108, 108,
                 111, 32, 87, 111, 114, 108, 100, 33, 34, 41,
@@ -1933,224 +2033,22 @@ pub fn ic_gateway_test(env: TestEnv) {
     .expect("test suite failed");
 }
 
-pub fn direct_to_replica_test(env: TestEnv) {
-    let logger = env.logger();
+/* tag::catalog[]
+Title:: Boundary nodes headers test
 
-    let boundary_node = env
-        .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
-        .unwrap()
-        .get_snapshot()
-        .expect("failed to get BN snapshot");
+Goal:: Make sure the boundary node sets the all the correct headers both for the
+CORS preflight requests (OPTIONS) and the actual requests.
 
-    let client_builder = ClientBuilder::new().redirect(Policy::none());
-    let (client_builder, host_orig) = if let Some(playnet) = boundary_node.get_playnet() {
-        (client_builder, playnet)
-    } else {
-        let host = "ic0.app";
-        let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 0, 0, 0);
-        let client_builder = client_builder
-            .danger_accept_invalid_certs(true)
-            .resolve(host, bn_addr.into());
-        (client_builder, host.to_string())
-    };
-    let client = client_builder.build().unwrap();
+For the preflight requests, we expect the following CORS headers:
+Access-Control-Allow-Origin, Access-Control-Allow-Methods,
+Access-Control-Allow-Headers, Access-Control-Max-Age
 
-    let (install_url, effective_canister_id) =
-        get_install_url(&env).expect("failed to get install url");
+For the actual requests, we expect the following headers:
+Access-Control-Allow-Origin, Access-Control-Expose-Headers,
 
-    let rt = Runtime::new().expect("failed to create tokio runtime");
+end::catalog[] */
 
-    let futs = FuturesUnordered::new();
-
-    let host = host_orig.clone();
-    futs.push(rt.spawn({
-        let client = client.clone();
-        let name = "status from random node";
-        info!(&logger, "Starting subtest {}", name);
-
-        async move {
-            let res = client
-                .get(format!("https://{host}/api/v2/status"))
-                .send()
-                .await?;
-
-            if res.status() != StatusCode::OK {
-                bail!("{name} failed: {}", res.status())
-            }
-
-            #[derive(Deserialize)]
-            struct Status {
-                replica_health_status: String,
-            }
-
-            let body = res.bytes().await?;
-
-            let Status {
-                replica_health_status,
-            } = serde_cbor::from_slice::<Status>(&body)?;
-
-            if replica_health_status != "healthy" {
-                bail!("{name} failed: status check failed: {replica_health_status}")
-            }
-
-            Ok(())
-        }
-    }));
-
-    let host = host_orig.clone();
-    futs.push(rt.spawn({
-        let logger = logger.clone();
-        let client = client.clone();
-        let install_url = install_url.clone();
-        let name = "query random node";
-        info!(&logger, "Starting subtest {}", name);
-
-        async move {
-            info!(&logger, "creating management agent");
-            let agent = assert_create_agent(install_url.as_str()).await;
-
-            info!(&logger, "creating canister");
-            let cid = create_canister(
-                &agent,
-                effective_canister_id,
-                wat::parse_str(COUNTER_CANISTER_WAT).unwrap().as_slice(),
-                None,
-            )
-            .await
-            .map_err(|err| anyhow!(format!("failed to create canister: {}", err)))?;
-
-            info!(&logger, "Waiting for canisters to finish installing...");
-            retry_with_msg_async!(
-                format!(
-                    "agent of {} observes canister module {}",
-                    install_url.to_string(),
-                    cid.to_string()
-                ),
-                &logger,
-                READY_WAIT_TIMEOUT,
-                RETRY_BACKOFF,
-                || async {
-                    match agent_observes_canister_module(&agent, &cid).await {
-                        true => Ok(()),
-                        false => panic!("Canister module not available yet"),
-                    }
-                }
-            )
-            .await
-            .unwrap();
-
-            info!(&logger, "creating agent");
-            let transport =
-                ReqwestTransport::create_with_client(format!("https://{host}/"), client)?;
-
-            let agent = Agent::builder().with_transport(transport).build()?;
-            agent.fetch_root_key().await?;
-
-            let out = agent.query(&cid, "read").call().await?;
-            if !out.eq(&[0, 0, 0, 0]) {
-                bail!(
-                    "{name} failed: read failed with output {:?}, expected {:?}",
-                    out,
-                    &[0, 0, 0, 0],
-                )
-            }
-
-            Ok(())
-        }
-    }));
-
-    let host = host_orig;
-    futs.push(rt.spawn({
-        let logger = logger.clone();
-        let client = client;
-        let name = "update random node";
-        info!(&logger, "Starting subtest {}", name);
-
-        async move {
-            info!(&logger, "creating management agent");
-            let agent = assert_create_agent(install_url.as_str()).await;
-
-            info!(&logger, "creating canister");
-            let cid = create_canister(
-                &agent,
-                effective_canister_id,
-                wat::parse_str(COUNTER_CANISTER_WAT).unwrap().as_slice(),
-                None,
-            )
-            .await
-            .map_err(|err| anyhow!(format!("failed to create canister: {}", err)))?;
-
-            info!(&logger, "Waiting for canisters to finish installing...");
-            retry_with_msg_async!(
-                format!(
-                    "agent of {} observes canister module {}",
-                    install_url.to_string(),
-                    cid.to_string()
-                ),
-                &logger,
-                READY_WAIT_TIMEOUT,
-                RETRY_BACKOFF,
-                || async {
-                    match agent_observes_canister_module(&agent, &cid).await {
-                        true => Ok(()),
-                        false => panic!("Canister module not available yet"),
-                    }
-                }
-            )
-            .await
-            .unwrap();
-
-            info!(&logger, "creating agent");
-            let transport =
-                ReqwestTransport::create_with_client(format!("https://{host}/"), client)?;
-
-            let agent = Agent::builder().with_transport(transport).build()?;
-            agent.fetch_root_key().await?;
-
-            info!(&logger, "updating canister");
-            agent.update(&cid, "write").call_and_wait().await?;
-
-            info!(&logger, "querying canister");
-            let out = agent.query(&cid, "read").call().await?;
-            if !out.eq(&[1, 0, 0, 0]) {
-                bail!(
-                    "{name} failed: read failed with output {:?}, expected {:?}",
-                    out,
-                    &[1, 0, 0, 0],
-                )
-            }
-
-            Ok(())
-        }
-    }));
-
-    rt.block_on(async move {
-        let mut cnt_err = 0;
-        info!(&logger, "Waiting for subtests");
-
-        for fut in futs {
-            match fut.await {
-                Ok(Err(err)) => {
-                    error!(logger, "test failed: {}", err);
-                    cnt_err += 1;
-                }
-                Err(err) => {
-                    error!(logger, "test panicked: {}", err);
-                    cnt_err += 1;
-                }
-                _ => {}
-            }
-        }
-
-        match cnt_err {
-            0 => Ok(()),
-            _ => bail!("failed with {cnt_err} errors"),
-        }
-    })
-    .expect("test suite failed");
-}
-
-pub fn direct_to_replica_options_test(env: TestEnv) {
+pub fn cors_headers_test(env: TestEnv) {
     let logger = env.logger();
 
     let boundary_node = env
@@ -2229,28 +2127,28 @@ pub fn direct_to_replica_options_test(env: TestEnv) {
 
     let test_cases = [
         TestCase {
-            name: "status OPTIONS".into(),
+            name: "status".into(),
             method: Method::GET,
             expect: StatusCode::OK,
             path: "/api/v2/status".into(),
             allowed_methods: "HEAD, GET".into(),
         },
         TestCase {
-            name: "query OPTIONS".into(),
+            name: "query".into(),
             method: Method::POST,
             expect: StatusCode::BAD_REQUEST,
             path: format!("/api/v2/canister/{cid}/query"),
             allowed_methods: "POST".into(),
         },
         TestCase {
-            name: "call OPTIONS".into(),
+            name: "call".into(),
             method: Method::POST,
             expect: StatusCode::BAD_REQUEST,
             path: format!("/api/v2/canister/{cid}/call"),
             allowed_methods: "POST".into(),
         },
         TestCase {
-            name: "read_state OPTIONS".into(),
+            name: "read_state".into(),
             method: Method::POST,
             expect: StatusCode::BAD_REQUEST,
             path: format!("/api/v2/canister/{cid}/read_state"),
@@ -2281,7 +2179,7 @@ pub fn direct_to_replica_options_test(env: TestEnv) {
 
             // Both 200 and 204 are valid OPTIONS codes
             if ![StatusCode::NO_CONTENT, StatusCode::OK].contains(&res.status())  {
-                bail!("{name} failed: {}", res.status())
+                bail!("{name} OPTIONS failed: {}", res.status())
             }
 
             // Normalize & sort header values so that they can be compared regardless of their order
@@ -2301,13 +2199,13 @@ pub fn direct_to_replica_options_test(env: TestEnv) {
                 let hdr = res
                     .headers()
                     .get(k)
-                    .ok_or_else(|| anyhow!("missing {k} header"))?.to_str()?;
+                    .ok_or_else(|| anyhow!("{name} OPTIONS failed: missing {k} header"))?.to_str()?;
 
                 let hdr = normalize(hdr);
                 let expect = normalize(v);
 
                 if hdr != expect {
-                    bail!("wrong {k} header: {hdr} expected {expect}")
+                    bail!("{name} OPTIONS failed: wrong {k} header: {hdr} expected {expect}")
                 }
             }
 
@@ -2328,13 +2226,13 @@ pub fn direct_to_replica_options_test(env: TestEnv) {
                 let hdr = res
                     .headers()
                     .get(k)
-                    .ok_or_else(|| anyhow!("missing {k} header"))?.to_str()?;
+                    .ok_or_else(|| anyhow!("{name} failed: missing {k} header"))?.to_str()?;
 
                 let hdr = normalize(hdr);
                 let expect = normalize(v);
 
                 if hdr != expect {
-                    bail!("wrong {k} header: {hdr} expected {expect}")
+                    bail!("{name} failed: wrong {k} header: {hdr} expected {expect}")
                 }
             }
 
@@ -2494,43 +2392,13 @@ pub fn canister_routing_test(env: TestEnv) {
 }
 
 /* tag::catalog[]
-Title:: Check read state via subnet path (`api/v2/subnet/<subnet_id>/read_state`)
-
-Goal:: Make sure the boundary node supports read states using the subnet path
-
-end::catalog[] */
-
-pub fn read_state_via_subnet_path_test(env: TestEnv) {
-    let log = env.logger();
-    let bn_agent = {
-        let boundary_node = env
-            .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
-            .unwrap()
-            .get_snapshot()
-            .unwrap();
-        boundary_node.build_default_agent()
-    };
-    let subnet_id: Principal = env
-        .topology_snapshot()
-        .subnets()
-        .next()
-        .expect("no subnets found")
-        .subnet_id
-        .get()
-        .0;
-    let metrics = block_on(bn_agent.read_state_subnet_metrics(subnet_id))
-        .expect("Call to read_state via /api/v2/subnet/{subnet_id}/read_state failed.");
-    info!(log, "subnet metrics are {:?}", metrics);
-}
-
-/* tag::catalog[]
 Title:: Boundary nodes headers test
 
 Goal:: Make sure the boundary node sets the content-type, x-content-type-options, x-frame-options headers
 
 end::catalog[] */
 
-pub fn headers_test(env: TestEnv) {
+pub fn content_type_headers_test(env: TestEnv) {
     let logger = env.logger();
 
     let boundary_node = env
