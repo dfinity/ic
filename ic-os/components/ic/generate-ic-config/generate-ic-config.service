@@ -16,7 +16,7 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=/opt/ic/bin/generate-ic-config.sh -n -i /opt/ic/share/ic.json5.template -o /run/ic-node/config/ic.json5
+ExecStart=/opt/ic/bin/generate-ic-config.sh -i /opt/ic/share/ic.json5.template -o /run/ic-node/config/ic.json5
 
 [Install]
 WantedBy=multi-user.target
