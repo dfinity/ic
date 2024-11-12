@@ -1111,11 +1111,23 @@ pub struct SetTime {
 
 impl Operation for SetTime {
     fn compute(&self, pic: &mut PocketIc) -> OpOut {
-        // Sets the time on all subnets.
-        for subnet in pic.subnets.get_all() {
-            subnet.state_machine.set_time(self.time.into());
+        // Time is kept in sync across subnets, so one can take any subnet.
+        let current_time: SystemTime = pic.any_subnet().time();
+        let set_time: SystemTime = self.time.into();
+        match current_time.cmp(&set_time) {
+            std::cmp::Ordering::Greater => OpOut::Error(PocketIcError::SettingTimeIntoPast((
+                systemtime_to_unix_epoch_nanos(current_time),
+                systemtime_to_unix_epoch_nanos(set_time),
+            ))),
+            std::cmp::Ordering::Equal => OpOut::NoOutput,
+            std::cmp::Ordering::Less => {
+                // Sets the time on all subnets.
+                for subnet in pic.subnets.get_all() {
+                    subnet.state_machine.set_time(set_time);
+                }
+                OpOut::NoOutput
+            }
         }
-        OpOut::NoOutput
     }
 
     fn id(&self) -> OpId {

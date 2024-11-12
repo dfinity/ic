@@ -3,7 +3,7 @@ use ic_metrics::{
     buckets::decimal_buckets, tokio_metrics_collector::TokioTaskMetricsCollector, MetricsRegistry,
 };
 use prometheus::{GaugeVec, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
-use quinn::Connection;
+use quinn::{Connection, ConnectionError, ReadError, WriteError};
 use tokio_metrics::TaskMonitor;
 
 const CONNECTION_RESULT_LABEL: &str = "status";
@@ -16,15 +16,20 @@ const REQUEST_TYPE_LABEL: &str = "request";
 pub(crate) const CONNECTION_RESULT_SUCCESS_LABEL: &str = "success";
 pub(crate) const CONNECTION_RESULT_FAILED_LABEL: &str = "failed";
 pub(crate) const ERROR_TYPE_ACCEPT: &str = "accept";
-pub(crate) const ERROR_TYPE_OPEN: &str = "open";
 pub(crate) const ERROR_TYPE_APP: &str = "app";
 pub(crate) const ERROR_TYPE_FINISH: &str = "finish";
 pub(crate) const ERROR_TYPE_STOPPED: &str = "stopped";
 pub(crate) const ERROR_TYPE_READ: &str = "read";
+pub(crate) const INFALIBBLE: &str = "infallible";
 pub(crate) const ERROR_TYPE_WRITE: &str = "write";
+const ERROR_CLOSED_STREAM: &str = "closed_stream";
+const ERROR_RESET_STREAM: &str = "reset_stream";
+const ERROR_STOPPED_STREAM: &str = "stopped_stream";
+const ERROR_APP_CLOSED_CONN: &str = "app_closed_conn";
+const ERROR_LOCALLY_CLOSED_CONN: &str = "locally_closed_conn";
+const ERROR_QUIC_CLOSED_CONN: &str = "quic_closed_conn";
+
 pub(crate) const STREAM_TYPE_BIDI: &str = "bidi";
-pub(crate) const REQUEST_TYPE_PUSH: &str = "push";
-pub(crate) const REQUEST_TYPE_RPC: &str = "rpc";
 
 #[derive(Clone, Debug)]
 pub struct QuicTransportMetrics {
@@ -199,5 +204,46 @@ impl QuicTransportMetrics {
         self.quinn_path_lost_packets
             .with_label_values(&peer_id_label)
             .set(path_stats.lost_packets as i64);
+    }
+}
+
+pub fn observe_conn_error(err: &ConnectionError, op: &str, counter: &IntCounterVec) {
+    match err {
+        // TODO: most likely this can be made infallible
+        ConnectionError::LocallyClosed => counter
+            .with_label_values(&[op, ERROR_LOCALLY_CLOSED_CONN])
+            .inc(),
+        ConnectionError::ApplicationClosed(_) => counter
+            .with_label_values(&[op, ERROR_APP_CLOSED_CONN])
+            .inc(),
+        // A connection was closed by the QUIC protocol.
+        _ => counter
+            .with_label_values(&[op, ERROR_QUIC_CLOSED_CONN])
+            .inc(),
+    }
+}
+
+pub fn observe_write_error(err: &WriteError, op: &str, counter: &IntCounterVec) {
+    match err {
+        // This should be infallible. The peer will never stop a stream, it can only reset it.
+        WriteError::Stopped(_) => counter.with_label_values(&[op, ERROR_STOPPED_STREAM]).inc(),
+        WriteError::ConnectionLost(conn_err) => observe_conn_error(conn_err, op, counter),
+        // This should be infallible
+        WriteError::ClosedStream => counter.with_label_values(&[op, ERROR_CLOSED_STREAM]).inc(),
+        _ => counter.with_label_values(&[op, INFALIBBLE]).inc(),
+    }
+}
+
+pub fn observe_read_error(err: &ReadError, op: &str, counter: &IntCounterVec) {
+    match err {
+        // This can happen if the peer reset the stream due to aborting the future that writes to the stream.
+        // E.g. the RPC method is part of a select branch.
+        ReadError::Reset(_) => counter.with_label_values(&[op, ERROR_RESET_STREAM]).inc(),
+        ReadError::ConnectionLost(conn_err) => observe_conn_error(conn_err, op, counter),
+        // If any of the following errors occur it means that we have a bug in the protocol implementation or
+        // there is malicious peer on the other side.
+        ReadError::IllegalOrderedRead | ReadError::ClosedStream | ReadError::ZeroRttRejected => {
+            counter.with_label_values(&[op, INFALIBBLE]).inc()
+        }
     }
 }

@@ -1,29 +1,18 @@
+use crate::imports::SYSTEM_API_IMPORTS;
 use arbitrary::{Arbitrary, Result, Unstructured};
 use ic_config::embedders::Config as EmbeddersConfig;
-use ic_embedders::wasm_utils::decoding::decode_wasm;
 use ic_embedders::wasm_utils::validation::{RESERVED_SYMBOLS, WASM_FUNCTION_SIZE_LIMIT};
 use ic_replicated_state::Global;
-use ic_test_utilities::universal_canister::get_universal_canister_wasm;
 use ic_types::methods::WasmMethod;
-use ic_wasm_types::BinaryEncodedWasm;
-use lazy_static::lazy_static;
 use std::collections::BTreeSet;
 use std::collections::HashSet;
 use std::fmt::Write;
-use std::sync::Arc;
 use wasm_encoder::{
     CodeSection, ExportKind, ExportSection, Function, FunctionSection, GlobalSection, GlobalType,
     Instruction, Module as WasmModule, TypeSection,
 };
 use wasm_smith::{Config, Module};
 use wasmparser::*;
-
-lazy_static! {
-    static ref UNIVERSAL_CANISTER_WASM_BYTES : BinaryEncodedWasm = {
-        // Universal canister wasm is gzipped
-        decode_wasm(EmbeddersConfig::new().wasm_max_size, Arc::new(get_universal_canister_wasm())).expect("Unable to decode universal canister wasm")
-    };
-}
 
 #[derive(Debug)]
 pub struct ICWasmModule {
@@ -161,7 +150,9 @@ fn ic_wasm_config(embedder_config: EmbeddersConfig) -> Config {
         canonicalize_nans: false,
         exceptions_enabled: false,
 
-        available_imports: Some(UNIVERSAL_CANISTER_WASM_BYTES.as_slice().to_vec()),
+        available_imports: Some(
+            wat::parse_str(SYSTEM_API_IMPORTS).expect("Unable to parse SYSTEM API imports"),
+        ),
         ..Default::default()
     }
 }
