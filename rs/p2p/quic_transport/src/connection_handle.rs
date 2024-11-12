@@ -7,16 +7,12 @@ use bytes::Bytes;
 use http::{Method, Request, Response, Version};
 use ic_protobuf::transport::v1 as pb;
 use prost::Message;
-use quinn::{
-    Connection, ConnectionError, ReadError, ReadToEndError, SendStream, StoppedError, VarInt,
-    WriteError,
-};
+use quinn::{Connection, ReadToEndError, SendStream, StoppedError, VarInt};
 
 use crate::{
     metrics::{
-        QuicTransportMetrics, ERROR_APP_CLOSED_CONN, ERROR_CLOSED_STREAM,
-        ERROR_INTERNALLY_CLOSED_CONN, ERROR_LOCALLY_CLOSED_CONN, ERROR_RESET_STREAM,
-        ERROR_STOPPED_STREAM, INFALIBBLE,
+        observe_conn_error, observe_read_error, observe_write_error, QuicTransportMetrics,
+        INFALIBBLE,
     },
     ConnId, MessagePriority, MAX_MESSAGE_SIZE_BYTES,
 };
@@ -52,64 +48,6 @@ pub struct ConnectionHandle {
     conn: Connection,
     metrics: QuicTransportMetrics,
     conn_id: ConnId,
-}
-
-fn observe_conn_error(err: &ConnectionError, op: &str, metrics: &QuicTransportMetrics) {
-    match err {
-        // TODO: most likely this can be made infallible
-        ConnectionError::LocallyClosed => metrics
-            .connection_handle_errors_total
-            .with_label_values(&[op, ERROR_LOCALLY_CLOSED_CONN])
-            .inc(),
-        ConnectionError::ApplicationClosed(_) => metrics
-            .connection_handle_errors_total
-            .with_label_values(&[op, ERROR_APP_CLOSED_CONN])
-            .inc(),
-        _ => metrics
-            .connection_handle_errors_total
-            .with_label_values(&[op, ERROR_INTERNALLY_CLOSED_CONN])
-            .inc(),
-    }
-}
-
-fn observe_write_error(err: &WriteError, op: &str, metrics: &QuicTransportMetrics) {
-    match err {
-        // This should be infallible. The peer will never stop a stream, it can only reset it.
-        WriteError::Stopped(_) => metrics
-            .connection_handle_errors_total
-            .with_label_values(&[op, ERROR_STOPPED_STREAM])
-            .inc(),
-        WriteError::ConnectionLost(conn_err) => observe_conn_error(conn_err, op, metrics),
-        // This should be infallible
-        WriteError::ClosedStream => metrics
-            .connection_handle_errors_total
-            .with_label_values(&[op, ERROR_CLOSED_STREAM])
-            .inc(),
-        _ => metrics
-            .connection_handle_errors_total
-            .with_label_values(&[op, INFALIBBLE])
-            .inc(),
-    }
-}
-
-fn observe_read_error(err: &ReadError, op: &str, metrics: &QuicTransportMetrics) {
-    match err {
-        // This can happen if the peer reset the stream due to aborting the future that writes to the stream.
-        // E.g. the RPC method is part of a select branch.
-        ReadError::Reset(_) => metrics
-            .connection_handle_errors_total
-            .with_label_values(&[op, ERROR_RESET_STREAM])
-            .inc(),
-        ReadError::ConnectionLost(conn_err) => observe_conn_error(conn_err, op, metrics),
-        // If any of the following errors occur it means that we have a bug in the protocol implementation or
-        // there is malicious peer on the other side.
-        ReadError::IllegalOrderedRead | ReadError::ClosedStream | ReadError::ZeroRttRejected => {
-            metrics
-                .connection_handle_errors_total
-                .with_label_values(&[op, INFALIBBLE])
-                .inc()
-        }
-    }
 }
 
 impl ConnectionHandle {
@@ -157,7 +95,7 @@ impl ConnectionHandle {
             .with_label_values(&[request.uri().path()]);
 
         let (send_stream, mut recv_stream) = self.conn.open_bi().await.inspect_err(|err| {
-            observe_conn_error(err, "open_bi", &self.metrics);
+            observe_conn_error(err, "open_bi", &self.metrics.connection_handle_errors_total);
         })?;
 
         let mut send_stream_guard = SendStreamDropGuard::new(send_stream);
@@ -177,7 +115,11 @@ impl ConnectionHandle {
             .write_all(&request_bytes)
             .await
             .inspect_err(|err| {
-                observe_write_error(err, "write_all", &self.metrics);
+                observe_write_error(
+                    err,
+                    "write_all",
+                    &self.metrics.connection_handle_errors_total,
+                );
             })?;
 
         send_stream.finish().inspect_err(|_| {
@@ -190,7 +132,11 @@ impl ConnectionHandle {
 
         send_stream.stopped().await.inspect_err(|err| match err {
             StoppedError::ConnectionLost(conn_err) => {
-                observe_conn_error(conn_err, "stopped", &self.metrics);
+                observe_conn_error(
+                    conn_err,
+                    "stopped",
+                    &self.metrics.connection_handle_errors_total,
+                );
             }
             StoppedError::ZeroRttRejected => {
                 self.metrics
@@ -209,9 +155,11 @@ impl ConnectionHandle {
                     .connection_handle_errors_total
                     .with_label_values(&["read_to_end", INFALIBBLE])
                     .inc(),
-                ReadToEndError::Read(read_err) => {
-                    observe_read_error(read_err, "read_to_end", &self.metrics)
-                }
+                ReadToEndError::Read(read_err) => observe_read_error(
+                    read_err,
+                    "read_to_end",
+                    &self.metrics.connection_handle_errors_total,
+                ),
             })?;
 
         let response = to_response(response_bytes)?;
