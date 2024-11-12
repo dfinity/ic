@@ -187,7 +187,7 @@ impl OnDiskSerializedModule {
         let mut bytes_file = File::create(bytes_path).unwrap();
         bytes_file.write_all(&bytes).unwrap();
         // TODO handle unwrap
-        println!("creating initial state file: {:?}", initial_state_path);
+        // println!("creating initial state file: {:?}", initial_state_path);
         let mut initial_state_file = File::create(initial_state_path).unwrap();
         initial_state_file
             .write_all(&bincode::serialize(&initial_state_data).unwrap())

@@ -303,7 +303,7 @@ impl Hypervisor {
             }
         };
         let temp_dir = tempfile::tempdir().unwrap();
-        println!("Cache temp directory {:?}", temp_dir.path());
+        // println!("Cache temp directory {:?}", temp_dir.path());
         Self {
             wasm_executor,
             metrics: Arc::new(HypervisorMetrics::new(metrics_registry)),
@@ -336,7 +336,7 @@ impl Hypervisor {
         dirty_page_overhead: NumInstructions,
     ) -> Self {
         let temp_dir = tempfile::tempdir().unwrap();
-        println!("Cache temp directory {:?}", temp_dir.path());
+        // println!("Cache temp directory {:?}", temp_dir.path());
         Self {
             wasm_executor,
             metrics: Arc::new(HypervisorMetrics::new(metrics_registry)),
