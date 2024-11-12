@@ -275,12 +275,52 @@ impl NetworkEconomics {
     }
 }
 
+impl Default for &'_ VotingPowerEconomics { // DO NOT MERGE: Move.
+    fn default() -> Self {
+        &VotingPowerEconomics::DEFAULT
+    }
+}
+
+use std::time::Duration; use ic_nervous_system_linear_map::LinearMap; // DO NOT MERGE
 impl VotingPowerEconomics {
+    const DEFAULT: Self = Self {
+        start_reducing_voting_power_after_seconds: Some(Self::DEFAULT_START_REDUCING_VOTING_POWER_AFTER_SECONDS),
+        clear_following_after_seconds: Some(Self::DEFAULT_CLEAR_FOLLOWING_AFTER_SECONDS),
+    };
+
+    const DEFAULT_START_REDUCING_VOTING_POWER_AFTER_SECONDS: u64 = 6 * ONE_MONTH_SECONDS;
+    const DEFAULT_CLEAR_FOLLOWING_AFTER_SECONDS: u64 = ONE_MONTH_SECONDS;
+
     pub fn with_default_values() -> Self {
-        Self {
-            start_reducing_voting_power_after_seconds: Some(6 * ONE_MONTH_SECONDS),
-            clear_following_after_seconds: Some(ONE_MONTH_SECONDS),
-        }
+        Self::DEFAULT.clone()
+    }
+
+    pub fn deciding_voting_power_adjustment_factor(&self, time_since_last_voting_power_refreshed: Duration) -> Decimal {
+        self.deciding_voting_power_adjustment_factor_function()
+            .apply(time_since_last_voting_power_refreshed.as_secs())
+            .clamp(Decimal::from(0), Decimal::from(1))
+    }
+
+    fn deciding_voting_power_adjustment_factor_function(&self) -> LinearMap {
+        let from_range = {
+            let begin = self.get_start_reducing_voting_power_after_seconds();
+            let end = begin + self.get_clear_following_after_seconds();
+
+            begin..end
+        };
+
+        let to_range = 1..0;
+
+        LinearMap::new(from_range, to_range)
+    }
+
+    fn get_start_reducing_voting_power_after_seconds(&self) -> u64 {
+        self.start_reducing_voting_power_after_seconds
+            .unwrap_or(Self::DEFAULT_START_REDUCING_VOTING_POWER_AFTER_SECONDS)
+    }
+
+    fn get_clear_following_after_seconds(&self) -> u64 {
+        self.clear_following_after_seconds.unwrap_or(Self::DEFAULT_CLEAR_FOLLOWING_AFTER_SECONDS)
     }
 }
 
@@ -1932,6 +1972,20 @@ impl Governance {
             heap_governance_proto,
             rng_seed,
         )
+    }
+
+    fn get_voting_power_economics<'a>(&'a self) -> &'a VotingPowerEconomics {
+        let economics = match &self.heap_data.economics {
+            Some(ok) => ok,
+            None => {
+                return &VotingPowerEconomics::DEFAULT;
+            }
+        };
+
+        economics
+            .voting_power_economics
+            .as_ref()
+            .unwrap_or_default()
     }
 
     pub fn __get_state_for_test(&self) -> GovernanceProto {
@@ -5730,7 +5784,10 @@ impl Governance {
             _ => {
                 let (ballots, total_deciding_power, potential_voting_power) = self
                     .neuron_store
-                    .create_ballots_for_standard_proposal(now_seconds);
+                    .create_ballots_for_standard_proposal(
+                        self.get_voting_power_economics(),
+                        now_seconds,
+                    );
 
                 if total_deciding_power >= (u64::MAX as u128) {
                     // The way the neurons are configured, the total voting
