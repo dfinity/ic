@@ -10,6 +10,7 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
 use ic_nervous_system_proto::pb::v1::{Percentage, Principals};
+use ic_sns_governance::pb::v1::governance::CachedUpgradeSteps;
 use ic_sns_governance::{
     governance::{
         MATURITY_DISBURSEMENT_DELAY_SECONDS, UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS,
@@ -55,7 +56,6 @@ use maplit::btreemap;
 use pretty_assertions::assert_eq;
 use std::collections::{BTreeMap, HashSet};
 use strum::IntoEnumIterator;
-use ic_sns_governance::pb::v1::governance::CachedUpgradeSteps;
 
 pub mod fixtures;
 

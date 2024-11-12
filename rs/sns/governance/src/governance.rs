@@ -22,7 +22,7 @@ use crate::{
                 self,
                 neuron_in_flight_command::{self, Command as InFlightCommand},
                 CachedUpgradeSteps as CachedUpgradeStepsPb, MaturityModulation,
-                NeuronInFlightCommand, PendingVersion, SnsMetadata, Version,
+                NeuronInFlightCommand, PendingVersion, SnsMetadata, Version, Versions,
             },
             governance_error::ErrorType,
             manage_neuron::{
@@ -5021,7 +5021,10 @@ impl Governance {
 
         let current_version = original_cached_upgrade_steps.current();
 
-        let requested_timestamp_seconds = self.env.now();
+        // We use this `requested_timestamp_seconds` of the previous cache to save the time at which
+        // the next cache was requested. A cleaner, but less lightweight implementation would
+        // save both the previous and the next caches.
+        let requested_timestamp_seconds = original_cached_upgrade_steps.requested_timestamp_seconds;
 
         let versions = crate::sns_upgrade::get_upgrade_steps(
             &*self.env,
@@ -5068,8 +5071,9 @@ impl Governance {
             //
             // This might not be the case if another task has consumed some upgrade steps while this
             // function was refreshing them.
-            let cached_upgrade_steps =
-                cached_upgrade_steps("refresh_cached_upgrade_steps (after awaiting SNS-W response)")?;
+            let cached_upgrade_steps = cached_upgrade_steps(
+                "refresh_cached_upgrade_steps (after awaiting SNS-W response)",
+            )?;
             if cached_upgrade_steps != original_cached_upgrade_steps {
                 log!(
                     INFO,
@@ -5080,13 +5084,15 @@ impl Governance {
             }
         }
 
-        // Finally, refresh the cached data.
+        // Finally, journal a potential change and refresh the cached data.
+
+        let response_timestamp_seconds = self.env.now();
 
         let new_cached_upgrade_steps = CachedUpgradeSteps::new(
             new_current_version.clone(),
             subsequent_versions.to_vec(),
             requested_timestamp_seconds,
-            self.env.now(),
+            response_timestamp_seconds,
         );
 
         self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeStepsRefreshed::new(
