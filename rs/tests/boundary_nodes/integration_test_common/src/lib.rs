@@ -2594,6 +2594,13 @@ pub fn canister_routing_test(env: TestEnv) {
     assert_eq!(counters, canister_values);
 }
 
+/* tag::catalog[]
+Title:: Check read state via subnet path (`api/v2/subnet/<subnet_id>/read_state`)
+
+Goal:: Make sure the boundary node supports read states using the subnet path
+
+end::catalog[] */
+
 pub fn read_state_via_subnet_path_test(env: TestEnv) {
     let log = env.logger();
     let bn_agent = {
@@ -2620,7 +2627,7 @@ pub fn read_state_via_subnet_path_test(env: TestEnv) {
 /* tag::catalog[]
 Title:: Boundary nodes headers test
 
-Goal:: Make sure the boundary node sets the content-type, x-content-type-options, x-frame-options ehaders
+Goal:: Make sure the boundary node sets the content-type, x-content-type-options, x-frame-options headers
 
 end::catalog[] */
 
