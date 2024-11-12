@@ -16,8 +16,6 @@ pub struct VetKdArgs {
     pub encryption_key: Vec<u8>,
 }
 
-impl_display_using_debug!(VetKdArgs);
-
 impl std::fmt::Debug for VetKdArgs {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "VetKdArgs {{ ")?;
@@ -33,6 +31,7 @@ impl std::fmt::Debug for VetKdArgs {
         Ok(())
     }
 }
+impl_display_using_debug!(VetKdArgs);
 
 #[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
 pub struct VetKdEncryptedKeyShare {
@@ -42,8 +41,6 @@ pub struct VetKdEncryptedKeyShare {
     #[serde(with = "serde_bytes")]
     pub node_signature: Vec<u8>,
 }
-
-impl_display_using_debug!(VetKdEncryptedKeyShare);
 
 impl std::fmt::Debug for VetKdEncryptedKeyShare {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -62,14 +59,13 @@ impl std::fmt::Debug for VetKdEncryptedKeyShare {
         Ok(())
     }
 }
+impl_display_using_debug!(VetKdEncryptedKeyShare);
 
 #[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
 pub struct VetKdEncryptedKey {
     #[serde(with = "serde_bytes")]
     pub encrypted_key: Vec<u8>,
 }
-
-impl_display_using_debug!(VetKdEncryptedKey);
 
 impl std::fmt::Debug for VetKdEncryptedKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -79,6 +75,7 @@ impl std::fmt::Debug for VetKdEncryptedKey {
         Ok(())
     }
 }
+impl_display_using_debug!(VetKdEncryptedKey);
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum VedKdKeyShareCreationError {
