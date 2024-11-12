@@ -24,9 +24,7 @@ const HELLO_WORLD_WAT: &str = r#"
 )"#;
 
 // To run the fuzzer,
-// ASAN_OPTIONS="detect_leaks=0:allow_user_segv_handler=1:handle_segv=1:handle_sigfpe=1:handle_sigill=0:quarantine_size_mb=16"
-// LSAN_OPTIONS="handle_sigill=0"
-// ASAN_OPTIONS=$ASAN_OPTIONS LSAN_OPTIONS=$LSAN_OPTIONS bazel run --config=fuzzing //rs/execution_environment/fuzz:execute_with_wasm_executor_system_api_call
+// bazel run --config=sandbox_fuzzing //rs/execution_environment/fuzz:execute_with_wasm_executor_system_api_call
 
 fn main() {
     fuzzer_sandbox::fuzzer_main();
