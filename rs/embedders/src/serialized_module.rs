@@ -3,7 +3,11 @@ use std::{
     convert::TryFrom,
     fs::File,
     io::{Read, Write},
-    os::fd::{FromRawFd, IntoRawFd, RawFd},
+    os::{
+        fd::{AsRawFd, FromRawFd, IntoRawFd, RawFd},
+        unix::fs::MetadataExt,
+    },
+    path::Path,
     sync::Arc,
 };
 
@@ -11,6 +15,7 @@ use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_replicated_state::canister_state::execution_state::WasmMetadata;
 use ic_types::{methods::WasmMethod, CountBytes, NumInstructions};
 use ic_wasm_types::WasmEngineError;
+use nix::sys::mman::{mmap, MapFlags, ProtFlags};
 use serde::{Deserialize, Serialize};
 use wasmtime::Module;
 
@@ -142,16 +147,6 @@ pub struct OnDiskSerializedModule {
     pub is_wasm64: bool,
 }
 
-impl Drop for OnDiskSerializedModule {
-    fn drop(&mut self) {
-        // TODO unsafe
-        unsafe {
-            drop(File::from_raw_fd(self.bytes));
-            drop(File::from_raw_fd(self.initial_state_data));
-        }
-    }
-}
-
 impl CountBytes for OnDiskSerializedModule {
     fn count_bytes(&self) -> usize {
         0
@@ -159,10 +154,27 @@ impl CountBytes for OnDiskSerializedModule {
 }
 
 impl OnDiskSerializedModule {
+    /// An `OnDiskSerializedModule` contains shared file descriptors, so they
+    /// should not be closed unless this is the last copy. If that's the case
+    /// the object should be explicitly destructed with this method.
+    ///
+    /// In the replica this should only happen when removing the module from the
+    /// `CompilationCache`. In sandboxes this can happen when closing the
+    /// associated `wasmtime::Module` because each new request to open a Wasm
+    /// will come with a new `OnDiskSerializedModule` with freshly duplicated
+    /// file descriptors.
+    pub fn close(self) {
+        // TODO unsafe
+        unsafe {
+            drop(File::from_raw_fd(self.bytes));
+            drop(File::from_raw_fd(self.initial_state_data));
+        }
+    }
+
     pub(crate) fn from_serialized_module(
         serialized_module: &SerializedModule,
-        mut bytes_file: File,
-        mut initial_state_file: File,
+        bytes_path: &Path,
+        initial_state_path: &Path,
     ) -> Self {
         let bytes = &serialized_module.bytes.0;
         // TODO don't clone here.
@@ -172,11 +184,28 @@ impl OnDiskSerializedModule {
             wasm_metadata: serialized_module.wasm_metadata.clone(),
         };
         // TODO handle unwrap
+        let mut bytes_file = File::create(bytes_path).unwrap();
         bytes_file.write_all(&bytes).unwrap();
         // TODO handle unwrap
+        println!("creating initial state file: {:?}", initial_state_path);
+        let mut initial_state_file = File::create(initial_state_path).unwrap();
         initial_state_file
             .write_all(&bincode::serialize(&initial_state_data).unwrap())
             .unwrap();
+
+        // Set file permissions to readonly and reopen with new permissions.
+        let mut permissions = bytes_file.metadata().unwrap().permissions();
+        permissions.set_readonly(true);
+        bytes_file.set_permissions(permissions.clone());
+        initial_state_file.set_permissions(permissions);
+        let bytes_file = File::open(bytes_path).unwrap();
+        let initial_state_file = File::open(initial_state_path).unwrap();
+
+        /// Delete the files so that they are automatically cleaned up
+        /// when there are no more descriptors.
+        std::fs::remove_file(bytes_path).unwrap();
+        std::fs::remove_file(initial_state_path).unwrap();
+
         Self {
             bytes: bytes_file.into_raw_fd(),
             initial_state_data: initial_state_file.into_raw_fd(),
@@ -189,17 +218,46 @@ impl OnDiskSerializedModule {
     pub(crate) fn into_serialized_module(&self) -> SerializedModule {
         // TODO map files, don't read to end because the fds are shared.
         let mut bytes_file = unsafe { File::from_raw_fd(self.bytes) };
-        let mut bytes = vec![];
-        bytes_file.read_to_end(&mut bytes).unwrap();
-        let bytes = Arc::new(SerializedModuleBytes(bytes));
-        // Don't drop the file as it will close the fd in the cache.
-        let _ = bytes_file.into_raw_fd();
+        let mmap_size = bytes_file.metadata().unwrap().size() as usize;
+        let mmap_ptr = unsafe {
+            mmap(
+                std::ptr::null_mut(),
+                mmap_size,
+                ProtFlags::PROT_READ,
+                MapFlags::MAP_PRIVATE,
+                bytes_file.as_raw_fd(),
+                0,
+            )
+        }
+        .unwrap_or_else(|err| panic!("Reading OnDiskSerializedModule bytes failed: {:?}", err))
+            as *mut u8;
+        // TODO: Safety
+        let bytes = unsafe { std::slice::from_raw_parts(mmap_ptr, mmap_size) };
+        let bytes = Arc::new(SerializedModuleBytes(bytes.to_vec()));
 
         let mut initial_state_file = unsafe { File::from_raw_fd(self.initial_state_data) };
-        let mut data = vec![];
-        initial_state_file.read_to_end(&mut data).unwrap();
+        let mmap_size = initial_state_file.metadata().unwrap().size() as usize;
+        let mmap_ptr = unsafe {
+            mmap(
+                std::ptr::null_mut(),
+                mmap_size,
+                ProtFlags::PROT_READ,
+                MapFlags::MAP_PRIVATE,
+                initial_state_file.as_raw_fd(),
+                0,
+            )
+        }
+        .unwrap_or_else(|err| {
+            panic!(
+                "Reading OnDiskSerializedModule initial_state failed: {:?}",
+                err
+            )
+        }) as *mut u8;
+        // TODO: Safety
+        let data = unsafe { std::slice::from_raw_parts(mmap_ptr, mmap_size) };
         let initial_state_data = bincode::deserialize::<InitialStateData>(&data).unwrap();
-        // Don't drop the file as it will close the fd in the cache.
+        // Don't drop the files as they will close the fd in the cache.
+        let _ = bytes_file.into_raw_fd();
         let _ = initial_state_file.into_raw_fd();
 
         SerializedModule {

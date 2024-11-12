@@ -1,9 +1,11 @@
 use std::{
     collections::BTreeSet,
-    fs::File,
+    fs::{File, OpenOptions},
     path::PathBuf,
     sync::{Arc, Mutex},
 };
+
+use tempfile::TempDir;
 
 use crate::{
     wasm_utils::{InstrumentationOutput, Segments, WasmImportsDetails, WasmValidationDetails},
@@ -25,6 +27,8 @@ pub enum CompilationCache {
         dir: PathBuf,
         /// Map from wasm hash to an open fd with the serialized Module result.
         cache: Mutex<LruCache<WasmHash, HypervisorResult<OnDiskSerializedModule>>>,
+        /// In a test setup this destructor will delete the directory.
+        temp_dir: Option<TempDir>,
     },
 }
 
@@ -38,6 +42,15 @@ impl CompilationCache {
     pub fn new_on_disk(dir: PathBuf, capacity: NumBytes) -> Self {
         Self::Disk {
             dir,
+            temp_dir: None,
+            cache: Mutex::new(LruCache::new(capacity)),
+        }
+    }
+
+    pub fn new_on_disk_for_testing(dir: TempDir, capacity: NumBytes) -> Self {
+        Self::Disk {
+            dir: dir.path().into(),
+            temp_dir: Some(dir),
             cache: Mutex::new(LruCache::new(capacity)),
         }
     }
@@ -50,11 +63,14 @@ impl CompilationCache {
                     .unwrap()
                     .push(WasmHash::from(canister_module), Err(err));
             }
-            Self::Disk { dir: _, cache } => {
-                cache
+            Self::Disk { cache, .. } => {
+                let removed = cache
                     .lock()
                     .unwrap()
                     .push(WasmHash::from(canister_module), Err(err));
+                for module in removed {
+                    module.1.map(|s| s.close());
+                }
             }
         }
     }
@@ -74,21 +90,58 @@ impl CompilationCache {
                     .push(WasmHash::from(canister_module), Ok(serialized_module));
                 StoredCompilation::Memory(copy)
             }
-            Self::Disk { dir, cache } => {
+            Self::Disk { dir, cache, .. } => {
                 let hash = WasmHash::from(canister_module);
                 let mut bytes_path = dir.clone();
                 bytes_path.push(format!("{}.bytes", hash));
-                let bytes_file = File::create(bytes_path).unwrap();
-                let mut initial_data_path = dir.clone();
-                initial_data_path.push(format!("{}.initial_data", hash));
-                let initial_data_file = File::create(initial_data_path).unwrap();
+                // let bytes_file = OpenOptions::new()
+                //     .read(true)
+                //     .write(true)
+                //     .truncate(true)
+                //     .create(true)
+                //     .open(&bytes_path)
+                //     .unwrap();
+                // let bytes_file = File::create(&bytes_path).unwrap();
+                // let bytes_file_copy = bytes_file.try_clone().unwrap();
+                let mut initial_state_path = dir.clone();
+                initial_state_path.push(format!("{}.initial_data", hash));
+                // let initial_state_file = OpenOptions::new()
+                //     .read(true)
+                //     .write(true)
+                //     .truncate(true)
+                //     .create(true)
+                //     .open(&initial_state_path)
+                //     .unwrap();
 
                 let on_disk = OnDiskSerializedModule::from_serialized_module(
                     &serialized_module,
-                    bytes_file,
-                    initial_data_file,
+                    &bytes_path,
+                    &initial_state_path,
                 );
-                cache.lock().unwrap().push(hash, Ok(on_disk.clone()));
+                // {
+                //     use nix::sys::mman::{mmap, MapFlags, ProtFlags};
+                //     use std::os::fd::AsRawFd;
+                //     use std::os::unix::fs::MetadataExt;
+
+                //     let mmap_size = bytes_file_copy.metadata().unwrap().size() as usize;
+                //     let mmap_ptr = unsafe {
+                //         mmap(
+                //             std::ptr::null_mut(),
+                //             mmap_size,
+                //             ProtFlags::PROT_READ,
+                //             MapFlags::MAP_PRIVATE,
+                //             bytes_file_copy.as_raw_fd(),
+                //             0,
+                //         )
+                //     }
+                //     .unwrap_or_else(|err| panic!("Testing initial mapping: {:?}", err))
+                //         as *mut u8;
+                // }
+
+                let removed = cache.lock().unwrap().push(hash, Ok(on_disk.clone()));
+                for module in removed {
+                    module.1.map(|s| s.close());
+                }
                 StoredCompilation::Disk(on_disk)
             }
         }
@@ -107,7 +160,7 @@ impl CompilationCache {
                     Ok(m) => Ok(StoredCompilation::Memory(Arc::clone(m))),
                     Err(e) => Err(e.clone()),
                 }),
-            Self::Disk { dir: _, cache } => cache
+            Self::Disk { cache, .. } => cache
                 .lock()
                 .unwrap()
                 .get(&WasmHash::from(canister_module))
@@ -119,10 +172,11 @@ impl CompilationCache {
     }
 
     #[doc(hidden)]
+    /// Don't use in production as this will leak the file descriptors in the cache.
     pub fn clear_for_testing(&self) {
         match self {
             Self::Memory { cache } => cache.lock().unwrap().clear(),
-            Self::Disk { dir: _, cache } => cache.lock().unwrap().clear(),
+            Self::Disk { cache, .. } => cache.lock().unwrap().clear(),
         }
     }
 }

@@ -302,7 +302,8 @@ impl Hypervisor {
                 Arc::new(executor)
             }
         };
-
+        let temp_dir = tempfile::tempdir().unwrap();
+        println!("Cache temp directory {:?}", temp_dir.path());
         Self {
             wasm_executor,
             metrics: Arc::new(HypervisorMetrics::new(metrics_registry)),
@@ -310,7 +311,10 @@ impl Hypervisor {
             own_subnet_type,
             log,
             cycles_account_manager,
-            compilation_cache: Arc::new(CompilationCache::new(config.max_compilation_cache_size)),
+            compilation_cache: Arc::new(CompilationCache::new_on_disk_for_testing(
+                temp_dir,
+                MAX_COMPILATION_CACHE_SIZE,
+            )),
             deterministic_time_slicing: config.deterministic_time_slicing,
             cost_to_compile_wasm_instruction: config
                 .embedders_config
@@ -331,6 +335,8 @@ impl Hypervisor {
         cost_to_compile_wasm_instruction: NumInstructions,
         dirty_page_overhead: NumInstructions,
     ) -> Self {
+        let temp_dir = tempfile::tempdir().unwrap();
+        println!("Cache temp directory {:?}", temp_dir.path());
         Self {
             wasm_executor,
             metrics: Arc::new(HypervisorMetrics::new(metrics_registry)),
@@ -338,7 +344,10 @@ impl Hypervisor {
             own_subnet_type,
             log,
             cycles_account_manager,
-            compilation_cache: Arc::new(CompilationCache::new(MAX_COMPILATION_CACHE_SIZE)),
+            compilation_cache: Arc::new(CompilationCache::new_on_disk_for_testing(
+                temp_dir,
+                MAX_COMPILATION_CACHE_SIZE,
+            )),
             deterministic_time_slicing,
             cost_to_compile_wasm_instruction,
             dirty_page_overhead,

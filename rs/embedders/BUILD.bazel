@@ -34,6 +34,7 @@ DEPENDENCIES = [
     "@crate_index//:serde_bytes",
     "@crate_index//:slog",
     "@crate_index//:slog-term",
+    "@crate_index//:tempfile",
     "@crate_index//:wasm-encoder",
     "@crate_index//:wasmparser",
     "@crate_index//:wasmprinter",

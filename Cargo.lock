@@ -8133,6 +8133,7 @@ dependencies = [
  "serde_bytes",
  "slog",
  "slog-term",
+ "tempfile",
  "wasm-encoder 0.217.0",
  "wasmparser 0.217.0",
  "wasmprinter",

@@ -51,6 +51,7 @@ DEPENDENCIES = [
     "@crate_index//:serde_cbor",
     "@crate_index//:slog",
     "@crate_index//:strum",
+    "@crate_index//:tempfile",
     "@crate_index//:threadpool",
     "@crate_index//:tokio",
     "@crate_index//:tower",
@@ -81,7 +82,6 @@ DEV_DEPENDENCIES = [
     "@crate_index//:maplit",
     "@crate_index//:more-asserts",
     "@crate_index//:proptest",
-    "@crate_index//:tempfile",
     "@crate_index//:wasmparser",
     "@crate_index//:wat",
 ]

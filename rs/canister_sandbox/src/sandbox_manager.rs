@@ -567,10 +567,33 @@ impl SandboxManager {
         let (embedder_cache, deserialization_time) =
             self.open_wasm_via_file(wasm_id, serialized_module.bytes)?;
         // TODO: safety
-        let initial_state_data: InitialStateData = bincode::deserialize_from(unsafe {
-            File::from_raw_fd(serialized_module.initial_state_data)
-        })
-        .unwrap();
+        let initial_state_data: InitialStateData = {
+            use nix::sys::mman::{mmap, MapFlags, ProtFlags};
+            use std::os::{fd::AsRawFd, unix::fs::MetadataExt};
+
+            let initial_state_file =
+                unsafe { File::from_raw_fd(serialized_module.initial_state_data) };
+            let mmap_size = initial_state_file.metadata().unwrap().size() as usize;
+            let mmap_ptr = unsafe {
+                mmap(
+                    std::ptr::null_mut(),
+                    mmap_size,
+                    ProtFlags::PROT_READ,
+                    MapFlags::MAP_PRIVATE,
+                    initial_state_file.as_raw_fd(),
+                    0,
+                )
+            }
+            .unwrap_or_else(|err| {
+                panic!(
+                    "Reading OnDiskSerializedModule initial_state failed: {:?}",
+                    err
+                )
+            }) as *mut u8;
+            // TODO: Safety
+            let data = unsafe { std::slice::from_raw_parts(mmap_ptr, mmap_size) };
+            bincode::deserialize(data).unwrap()
+        };
         let (wasm_memory_modifications, exported_globals) = self
             .create_initial_memory_and_globals(
                 &embedder_cache,

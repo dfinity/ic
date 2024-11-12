@@ -341,8 +341,8 @@ impl WasmtimeEmbedder {
             mmap(
                 std::ptr::null_mut(),
                 mmap_size,
-                ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
-                MapFlags::MAP_SHARED,
+                ProtFlags::PROT_READ,
+                MapFlags::MAP_PRIVATE,
                 serialized_module.as_raw_fd(),
                 0,
             )
