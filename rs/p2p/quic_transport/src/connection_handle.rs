@@ -114,7 +114,7 @@ impl ConnectionHandle {
             .await
             .inspect_err(|err| {
                 observe_read_to_end_error(
-                    &err,
+                    err,
                     "read_to_end",
                     &self.metrics.connection_handle_errors_total,
                 )

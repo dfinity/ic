@@ -146,7 +146,7 @@ async fn handle_bi_stream(
         .write_all(&response_bytes)
         .await
         .inspect_err(|err| {
-            observe_write_error(&err, "write_all", &metrics.request_handle_errors_total);
+            observe_write_error(err, "write_all", &metrics.request_handle_errors_total);
         })?;
     send_stream.finish().inspect_err(|_| {
         metrics
@@ -155,7 +155,7 @@ async fn handle_bi_stream(
             .inc();
     })?;
     send_stream.stopped().await.inspect_err(|err| {
-        observe_stopped_error(&err, "stopped", &metrics.request_handle_errors_total);
+        observe_stopped_error(err, "stopped", &metrics.request_handle_errors_total);
     })?;
     Ok(())
 }
