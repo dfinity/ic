@@ -58,13 +58,13 @@ impl TryFrom<&CachedUpgradeStepsPb> for CachedUpgradeSteps {
             // requested_timestamp_seconds is not guaranteed to be <= response_timestamp_seconds,
             // when requested_timestamp_seconds > response_timestamp_seconds it indicates a request
             // for upgrade steps is in-flight. Thus we don't validate the relationship between them.
-            requested_timestamp_seconds: Some(requested_timestamp_seconds),
-            response_timestamp_seconds: Some(response_timestamp_seconds),
+            requested_timestamp_seconds,
+            response_timestamp_seconds,
         } = src
         else {
             return Err(
-                "Cannot interpret CachedUpgradeSteps; please specify all the required fields: \
-                 upgrade_steps, requested_timestamp_seconds, response_timestamp_seconds."
+                "Cannot interpret CachedUpgradeSteps; \
+                 please specify the required field upgrade_steps"
                     .to_string(),
             );
         };
@@ -76,11 +76,15 @@ impl TryFrom<&CachedUpgradeStepsPb> for CachedUpgradeSteps {
             );
         };
 
+        let requested_timestamp_seconds = requested_timestamp_seconds.unwrap_or_default();
+
+        let response_timestamp_seconds = response_timestamp_seconds.unwrap_or_default();
+
         Ok(Self {
             current_version: current_version.clone(),
             subsequent_versions: subsequent_versions.to_vec(),
-            requested_timestamp_seconds: *requested_timestamp_seconds,
-            response_timestamp_seconds: *response_timestamp_seconds,
+            requested_timestamp_seconds,
+            response_timestamp_seconds,
         })
     }
 }

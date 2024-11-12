@@ -55,6 +55,7 @@ use maplit::btreemap;
 use pretty_assertions::assert_eq;
 use std::collections::{BTreeMap, HashSet};
 use strum::IntoEnumIterator;
+use ic_sns_governance::pb::v1::governance::CachedUpgradeSteps;
 
 pub mod fixtures;
 
@@ -2864,7 +2865,7 @@ async fn test_mint_tokens() {
 }
 
 #[tokio::test]
-async fn test_refresh_cached_upgrade_steps_noop_if_deployed_version_none() {
+async fn test_refresh_cached_upgrade_steps_noop_if_cached_upgrade_steps_none() {
     let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
 
     // Check that the initial state is None
@@ -2886,7 +2887,7 @@ async fn test_refresh_cached_upgrade_steps_noop_if_deployed_version_none() {
     }
 
     {
-        canister_fixture.governance.proto.deployed_version = None;
+        canister_fixture.governance.proto.cached_upgrade_steps = None;
         canister_fixture
             .governance
             .refresh_cached_upgrade_steps()
@@ -2926,17 +2927,13 @@ async fn test_refresh_cached_upgrade_steps() {
         canister_fixture
             .environment_fixture
             .push_mocked_canister_reply(ListUpgradeStepsResponse { steps });
-        canister_fixture.governance.proto.deployed_version = Some(Version::default());
-    }
-
-    // Check that the initial state is None
-    {
-        let original_cached_upgrade_steps = canister_fixture
-            .governance
-            .proto
-            .cached_upgrade_steps
-            .clone();
-        assert_eq!(original_cached_upgrade_steps, None);
+        canister_fixture.governance.proto.cached_upgrade_steps = Some(CachedUpgradeSteps {
+            upgrade_steps: Some(Versions {
+                versions: vec![Version::default()],
+            }),
+            requested_timestamp_seconds: Some(123),
+            response_timestamp_seconds: Some(456),
+        });
     }
 
     // Check that the canister wants to refresh the cached_upgrade_steps
