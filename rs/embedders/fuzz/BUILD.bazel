@@ -38,7 +38,6 @@ rust_library(
         "//rs/test_utilities/state",
         "//rs/test_utilities/time",
         "//rs/test_utilities/types",
-        "//rs/types/base_types",
         "//rs/types/types",
         "//rs/types/wasm_types",
         "@crate_index//:arbitrary",
