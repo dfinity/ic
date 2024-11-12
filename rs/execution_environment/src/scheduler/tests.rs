@@ -1953,6 +1953,98 @@ fn scheduler_accumulated_priority_divergence_many_long_executions() {
     );
 }
 
+// To run:
+// bazel test //rs/execution_environment:execution_environment_test --test_arg=--nocapture --test_arg=--include-ignored --test_output=streamed --test_arg=scheduler_unfairness
+#[ignore]
+#[test]
+fn scheduler_unfairness() {
+    let scheduler_cores = 4;
+
+    let interactive_canisters = scheduler_cores;
+    let active_interactive_canisters = scheduler_cores;
+    let batch_canisters = scheduler_cores * 2;
+    let active_batch_canisters = scheduler_cores * 2;
+    let batch_executions = 200;
+    let short_execution_instructions = 10_000_000;
+
+    let rounds = 10;
+
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores,
+            ..SchedulerConfig::application_subnet()
+        })
+        .build();
+
+    // Bump up the round number to 1.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    let mut interactive_ids = vec![];
+    for _ in 0..interactive_canisters {
+        let canister_id = test.create_canister();
+        interactive_ids.push(canister_id);
+    }
+    let mut batch_ids = vec![];
+    for _ in 0..batch_canisters {
+        let canister_id = test.create_canister();
+        batch_ids.push(canister_id);
+    }
+
+    let mut inv = 0;
+    for r in 1..=rounds {
+        test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+        for id in interactive_ids.iter().take(active_interactive_canisters) {
+            test.send_ingress(*id, ingress(short_execution_instructions));
+        }
+        for id in batch_ids.iter().take(active_batch_canisters) {
+            for _ in 0..batch_executions {
+                test.send_ingress(*id, ingress(short_execution_instructions));
+            }
+        }
+
+        for canister in test.state().canisters_iter() {
+            inv += canister.scheduler_state.accumulated_priority.get()
+                - canister.scheduler_state.priority_credit.get();
+        }
+        println!("XXX Round:{r} inv:{inv}");
+        for canister in test.state().canisters_iter() {
+            println!(
+                    "XXX   END {} RP:{:>9} AP:{:>9} PC:{:>6} ex:{:>6} SF:{:>4} LE:{} LEM:{:?} LFER:{:>4}",
+                    canister.canister_id().get().as_slice()[7],
+                    canister.scheduler_state.accumulated_priority.get()
+                        - canister.scheduler_state.priority_credit.get(),
+                    canister.scheduler_state.accumulated_priority.get(),
+                    canister.scheduler_state.priority_credit.get(),
+                    canister.system_state.canister_metrics.executed,
+                    canister.system_state.canister_metrics.scheduled_as_first,
+                    (canister.has_paused_execution() || canister.has_aborted_execution()) as i32,
+                    canister.scheduler_state.long_execution_mode as i32,
+                    canister.scheduler_state.last_full_execution_round
+                );
+        }
+        assert_eq!(inv, 0);
+    }
+    batch_ids
+        .iter()
+        .map(|canister_id| {
+            test.canister_state(*canister_id)
+                .system_state
+                .canister_metrics
+                .executed
+        })
+        .reduce(|prev_executed, next_executed| {
+            assert!(
+                prev_executed < next_executed * 2,
+                "Error checking fairness for batch canisters: {} < {} *2",
+                prev_executed,
+                next_executed,
+            );
+            next_executed
+        })
+        .unwrap();
+}
+
 #[test]
 fn can_fully_execute_canisters_deterministically_until_out_of_cycles() {
     // In this test we have 5 canisters with 10 input messages each. The maximum
