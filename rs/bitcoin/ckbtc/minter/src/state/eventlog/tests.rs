@@ -130,10 +130,15 @@ impl GetEventsFile {
             .expect("BUG: failed to decompress events");
         let events =
             Decode!(&decompressed_buffer, GetEventsResult).expect("Failed to decode events");
-        events.events.into_iter().map(|event|{
-            println!("Replaying event: {:?}", event);
-            event
-        })
+        let total_event_count = events.total_event_count;
+        events
+            .events
+            .into_iter()
+            .enumerate()
+            .map(move |(index, event)| {
+                println!("Replaying event {index}/{total_event_count}: {:?}", event);
+                event
+            })
     }
 }
 
