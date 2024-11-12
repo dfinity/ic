@@ -7,7 +7,7 @@ use crate::disclose::{DisclosesRules, RulesDiscloser};
 use crate::fetcher::{ConfigFetcher, EntityFetcher, IncidentFetcher, RuleFetcher};
 use crate::metrics::{
     export_metrics_as_http_response, with_metrics_registry, WithMetrics,
-    LAST_CANISTER_UPGRADE_GAUGE, LAST_SUCCESSFUL_REGISTRY_POLL_GAUGE,
+    LAST_CANISTER_UPGRADE_TIME, LAST_SUCCESSFUL_REGISTRY_POLL_TIME,
 };
 use crate::state::{init_version_and_config, with_canister_state, CanisterApi};
 use candid::Principal;
@@ -56,7 +56,7 @@ fn post_upgrade(init_arg: InitArg) {
     init(init_arg);
     // Set metric to track last upgrade time.
     let current_time = ic_cdk::api::time() as i64;
-    LAST_CANISTER_UPGRADE_GAUGE.with(|cell| {
+    LAST_CANISTER_UPGRADE_TIME.with(|cell| {
         cell.borrow_mut().set(current_time);
     });
     ic_cdk::println!("Finished canister post-upgrade");
@@ -156,7 +156,7 @@ fn periodically_poll_api_boundary_nodes(interval: u64, canister_api: Arc<dyn Can
                     );
                     // Update metrics.
                     let current_time = ic_cdk::api::time() as i64;
-                    LAST_SUCCESSFUL_REGISTRY_POLL_GAUGE.with(|cell| {
+                    LAST_SUCCESSFUL_REGISTRY_POLL_TIME.with(|cell| {
                         cell.borrow_mut().set(current_time);
                     });
                 }

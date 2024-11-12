@@ -12,7 +12,7 @@ use std::cell::RefCell;
 const SERVICE_NAME: &str = "rate_limit";
 
 thread_local! {
-    static STABLE_MEMORY_GAUGE: RefCell<Gauge> = RefCell::new(Gauge::new(
+    static STABLE_MEMORY_SIZE: RefCell<Gauge> = RefCell::new(Gauge::new(
         format!("{SERVICE_NAME}_stable_memory_bytes"),
         "Size of the stable memory allocated by this canister in bytes.").unwrap());
 
@@ -41,18 +41,18 @@ thread_local! {
         format!("{SERVICE_NAME}_stored_configs_count"),
         "Number of stored rate-limit configurations").unwrap());
 
-    pub static LAST_SUCCESSFUL_REGISTRY_POLL_GAUGE: RefCell<IntGauge> = RefCell::new(IntGauge::new(
+    pub static LAST_SUCCESSFUL_REGISTRY_POLL_TIME: RefCell<IntGauge> = RefCell::new(IntGauge::new(
         format!("{SERVICE_NAME}_last_successful_registry_poll"),
         "The Unix timestamp of the last successful poll of the API boundary nodes from registry canister").unwrap());
 
-    pub static LAST_CANISTER_UPGRADE_GAUGE: RefCell<IntGauge> = RefCell::new(IntGauge::new(
+    pub static LAST_CANISTER_UPGRADE_TIME: RefCell<IntGauge> = RefCell::new(IntGauge::new(
         format!("{SERVICE_NAME}_last_successful_canister_upgrade"),
         "The Unix timestamp of the last successful canister upgrade").unwrap());
 
     static METRICS_REGISTRY: RefCell<Registry> = RefCell::new({
         let registry = Registry::new();
 
-        STABLE_MEMORY_GAUGE.with(|cell| {
+        STABLE_MEMORY_SIZE.with(|cell| {
             let cell = Box::new(cell.borrow().clone());
             registry.register(cell).unwrap();
         });
@@ -87,12 +87,12 @@ thread_local! {
             registry.register(cell).unwrap();
         });
 
-        LAST_SUCCESSFUL_REGISTRY_POLL_GAUGE.with(|cell| {
+        LAST_SUCCESSFUL_REGISTRY_POLL_TIME.with(|cell| {
             let cell = Box::new(cell.borrow().clone());
             registry.register(cell).unwrap();
         });
 
-        LAST_CANISTER_UPGRADE_GAUGE.with(|cell| {
+        LAST_CANISTER_UPGRADE_TIME.with(|cell| {
             let cell = Box::new(cell.borrow().clone());
             registry.register(cell).unwrap();
         });
@@ -123,7 +123,7 @@ pub fn export_metrics_as_http_response(registry: &Registry) -> HttpResponse {
 }
 
 pub fn recompute_metrics() {
-    STABLE_MEMORY_GAUGE.with(|cell| {
+    STABLE_MEMORY_SIZE.with(|cell| {
         let memory = (ic_cdk::api::stable::stable_size() * WASM_PAGE_SIZE_IN_BYTES) as f64;
         cell.borrow_mut().set(memory);
     });
