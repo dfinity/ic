@@ -324,20 +324,17 @@ impl RoundSchedule {
         let mut total_charged_priority = 0;
         for canister_id in fully_executed_canister_ids {
             if let Some(canister) = canister_states.get_mut(&canister_id) {
-                // Cap accumulated priority to -100.
-                if canister.scheduler_state.accumulated_priority >= (-100 * multiplier).into() {
-                    total_charged_priority += 100 * multiplier;
-                    // println!(
-                    //     "XXX     - {} RP:{:>9} AP:{:>9} PC:{} + {}",
-                    //     canister.canister_id().get().as_slice()[7],
-                    //     canister.scheduler_state.accumulated_priority.get()
-                    //         - canister.scheduler_state.priority_credit.get(),
-                    //     canister.scheduler_state.accumulated_priority.get(),
-                    //     canister.scheduler_state.priority_credit.get(),
-                    //     100 * multiplier
-                    // );
-                    canister.scheduler_state.priority_credit += (100 * multiplier).into();
-                }
+                total_charged_priority += 100 * multiplier;
+                // println!(
+                //     "XXX     - {} RP:{:>9} AP:{:>9} PC:{} + {}",
+                //     canister.canister_id().get().as_slice()[7],
+                //     canister.scheduler_state.accumulated_priority.get()
+                //         - canister.scheduler_state.priority_credit.get(),
+                //     canister.scheduler_state.accumulated_priority.get(),
+                //     canister.scheduler_state.priority_credit.get(),
+                //     100 * multiplier
+                // );
+                canister.scheduler_state.priority_credit += (100 * multiplier).into();
             }
         }
 
@@ -366,7 +363,8 @@ impl RoundSchedule {
 
             let has_aborted_or_paused_execution =
                 canister.has_aborted_execution() || canister.has_paused_execution();
-            if !has_aborted_or_paused_execution {
+            let good_standing = canister.scheduler_state.accumulated_priority >= 0.into();
+            if !has_aborted_or_paused_execution || !good_standing {
                 RoundSchedule::apply_priority_credit(canister);
             }
         }
@@ -453,17 +451,19 @@ impl RoundSchedule {
                 canister.scheduler_state.priority_credit = Default::default();
             }
 
+            let accumulated_priority = canister.scheduler_state.accumulated_priority;
+            let good_standing = accumulated_priority >= 0.into();
             let has_aborted_or_paused_execution =
                 canister.has_aborted_execution() || canister.has_paused_execution();
 
             let compute_allocation = canister.scheduler_state.compute_allocation;
-            let accumulated_priority = canister.scheduler_state.accumulated_priority;
             round_states.push(CanisterRoundState {
                 canister_id,
                 accumulated_priority,
                 compute_allocation,
                 long_execution_mode: canister.scheduler_state.long_execution_mode,
-                has_aborted_or_paused_execution,
+                // Treat long execution just like a best effort new execution.
+                has_aborted_or_paused_execution: good_standing && has_aborted_or_paused_execution,
             });
 
             total_compute_allocation_percent += compute_allocation.as_percent() as i64;
