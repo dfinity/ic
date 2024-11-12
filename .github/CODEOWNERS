@@ -227,9 +227,11 @@ go_deps.bzl               @dfinity/idx
 /rs/test_utilities/embedders/                           @dfinity/execution
 /rs/test_utilities/execution_environment/               @dfinity/execution
 /rs/test_utilities/in_memory_logger/                    @dfinity/crypto-team
+/rs/test_utilities/metrics                              @dfinity/networking @dfinity/ic-message-routing-owners
 /rs/test_utilities/src/crypto.rs                        @dfinity/crypto-team
 /rs/test_utilities/src/crypto/                          @dfinity/crypto-team
 /rs/test_utilities/src/cycles_account_manager.rs        @dfinity/execution
+/rs/test_utilities/state/                               @dfinity/execution @dfinity/ic-message-routing-owners
 /rs/test_utilities/types/src/batch/                     @dfinity/consensus
 /rs/tests/                                              @dfinity/idx
 /rs/tests/research                                      @dfinity/research @dfinity/idx

@@ -9,6 +9,7 @@ use std::{str::FromStr, time::Duration};
 
 const MIB: u64 = 1024 * 1024;
 const GIB: u64 = MIB * 1024;
+const TIB: u64 = GIB * 1024;
 
 /// This specifies the threshold in bytes at which the subnet memory usage is
 /// considered to be high. If this value is greater or equal to the subnet
@@ -21,7 +22,7 @@ const SUBNET_MEMORY_THRESHOLD: NumBytes = NumBytes::new(450 * GIB);
 /// Logical storage is the amount of storage being used from the point of view
 /// of the canister. The actual storage used by the nodes can be higher as the
 /// IC protocol requires storing copies of the canister state.
-const SUBNET_MEMORY_CAPACITY: NumBytes = NumBytes::new(700 * GIB);
+const SUBNET_MEMORY_CAPACITY: NumBytes = NumBytes::new(TIB);
 
 /// This is the upper limit on how much memory can be used by all guaranteed
 /// response canister messages on a given subnet.

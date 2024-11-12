@@ -12,7 +12,7 @@ ic-nervous-system-common = { path = "../../../nervous_system/common" }
 ic-nervous-system-proto = { path = "../../../nervous_system/proto" }
 ic-sns-swap = { path = "../../../sns/swap" }
 ic-system-test-driver = { path = "../../driver" }
-rust_decimal = "1.25"
+rust_decimal = "1.36.0"
 slog = { workspace = true }
 tests = { path = "../../" }
 

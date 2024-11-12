@@ -254,6 +254,7 @@ async fn terminate(
 ) {
     debug!("The PocketIC server will terminate");
 
+    app_state.api_state.stop_all_http_gateways().await;
     ApiState::delete_all_instances(app_state.api_state).await;
 
     if let Some(port_file_path) = port_file_path {

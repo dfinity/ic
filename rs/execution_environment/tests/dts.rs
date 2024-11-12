@@ -564,7 +564,7 @@ fn dts_pending_upgrade_with_heartbeat() {
 
     let controller = env
         .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.into(),
+            UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
             None,
             INITIAL_CYCLES_BALANCE,
@@ -661,7 +661,7 @@ fn dts_scheduling_of_install_code() {
 
     let controller = env
         .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.into(),
+            UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
             None,
             INITIAL_CYCLES_BALANCE,
@@ -827,7 +827,7 @@ fn dts_pending_install_code_does_not_block_subnet_messages_of_other_canisters() 
     for _ in 0..n {
         let id = env
             .install_canister_with_cycles(
-                UNIVERSAL_CANISTER_WASM.into(),
+                UNIVERSAL_CANISTER_WASM.to_vec(),
                 vec![],
                 None,
                 INITIAL_CYCLES_BALANCE,
@@ -1032,7 +1032,7 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
         let user_id = PrincipalId::new_anonymous();
         let other_canister_id = env
             .install_canister_with_cycles(
-                UNIVERSAL_CANISTER_WASM.into(),
+                UNIVERSAL_CANISTER_WASM.to_vec(),
                 vec![],
                 None,
                 INITIAL_CYCLES_BALANCE,
@@ -1040,7 +1040,7 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
             .unwrap();
         let aborted_canister_id = env
             .install_canister_with_cycles(
-                UNIVERSAL_CANISTER_WASM.into(),
+                UNIVERSAL_CANISTER_WASM.to_vec(),
                 vec![],
                 Some(
                     CanisterSettingsArgsBuilder::new()
@@ -1164,6 +1164,7 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
             | Method::BitcoinSendTransactionInternal
             | Method::BitcoinGetSuccessors
             | Method::NodeMetricsHistory
+            | Method::SubnetInfo
             | Method::ProvisionalCreateCanisterWithCycles
             | Method::ProvisionalTopUpCanister => {}
             // Unsupported methods accepting just one argument.
@@ -1180,7 +1181,7 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
                 let args = InstallCodeArgs {
                     canister_id: aborted_canister_id.get(),
                     mode: CanisterInstallMode::Install,
-                    wasm_module: UNIVERSAL_CANISTER_WASM.into(),
+                    wasm_module: UNIVERSAL_CANISTER_WASM.to_vec(),
                     arg: vec![],
                     compute_allocation: None,
                     memory_allocation: None,
@@ -1281,7 +1282,7 @@ fn dts_paused_execution_blocks_deposit_cycles() {
     let user_id = PrincipalId::new_anonymous();
     let long_canister_id = env
         .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.into(),
+            UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
             None,
             INITIAL_CYCLES_BALANCE,
@@ -1289,7 +1290,7 @@ fn dts_paused_execution_blocks_deposit_cycles() {
         .unwrap();
     let other_canister_id = env
         .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.into(),
+            UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
             None,
             INITIAL_CYCLES_BALANCE,
@@ -1451,7 +1452,7 @@ fn dts_long_running_install_and_update() {
     for _ in 0..n {
         let id = env
             .install_canister_with_cycles(
-                UNIVERSAL_CANISTER_WASM.into(),
+                UNIVERSAL_CANISTER_WASM.to_vec(),
                 vec![],
                 None,
                 INITIAL_CYCLES_BALANCE,
@@ -1471,7 +1472,7 @@ fn dts_long_running_install_and_update() {
 
         let id = env
             .install_canister_with_cycles(
-                UNIVERSAL_CANISTER_WASM.into(),
+                UNIVERSAL_CANISTER_WASM.to_vec(),
                 vec![],
                 settings.clone(),
                 INITIAL_CYCLES_BALANCE,
@@ -1482,7 +1483,7 @@ fn dts_long_running_install_and_update() {
 
     let short = env
         .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.into(),
+            UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
             None,
             INITIAL_CYCLES_BALANCE,
@@ -1494,7 +1495,7 @@ fn dts_long_running_install_and_update() {
         let args = InstallCodeArgs::new(
             CanisterInstallMode::Upgrade,
             canister[i],
-            UNIVERSAL_CANISTER_WASM.into(),
+            UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
             None,
             None,
@@ -1584,7 +1585,7 @@ fn dts_long_running_calls() {
     for _ in 0..n {
         let id = env
             .install_canister_with_cycles(
-                UNIVERSAL_CANISTER_WASM.into(),
+                UNIVERSAL_CANISTER_WASM.to_vec(),
                 vec![],
                 None,
                 INITIAL_CYCLES_BALANCE,
@@ -1595,7 +1596,7 @@ fn dts_long_running_calls() {
 
     let short = env
         .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.into(),
+            UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
             None,
             INITIAL_CYCLES_BALANCE,
@@ -1745,7 +1746,9 @@ fn dts_ingress_status_of_update_is_correct() {
         .install_canister_with_cycles(binary, vec![], None, INITIAL_CYCLES_BALANCE)
         .unwrap();
 
-    let original_time = env.time_of_next_round();
+    // advance time so that time does not grow implicitly when executing a round
+    env.advance_time(Duration::from_secs(1));
+    let original_time = env.time();
     let update = env.send_ingress(user_id, canister, "update", vec![]);
 
     env.tick();
@@ -1815,7 +1818,9 @@ fn dts_ingress_status_of_install_is_correct() {
         .install_canister_with_cycles(binary.clone(), vec![], None, INITIAL_CYCLES_BALANCE)
         .unwrap();
 
-    let original_time = env.time_of_next_round();
+    // advance time so that time does not grow implicitly when executing a round
+    env.advance_time(Duration::from_secs(1));
+    let original_time = env.time();
 
     let install = {
         let args = InstallCodeArgs::new(
@@ -1896,7 +1901,9 @@ fn dts_ingress_status_of_upgrade_is_correct() {
         .install_canister_with_cycles(binary.clone(), vec![], None, INITIAL_CYCLES_BALANCE)
         .unwrap();
 
-    let original_time = env.time_of_next_round();
+    // advance time so that time does not grow implicitly when executing a round
+    env.advance_time(Duration::from_secs(1));
+    let original_time = env.time();
 
     let install = {
         let args = InstallCodeArgs::new(
@@ -1996,7 +2003,9 @@ fn dts_ingress_status_of_update_with_call_is_correct() {
         .inter_update(b_id, call_args().other_side(b))
         .build();
 
-    let original_time = env.time_of_next_round();
+    // advance time so that time does not grow implicitly when executing a round
+    env.advance_time(Duration::from_secs(1));
+    let original_time = env.time();
     let update = env.send_ingress(user_id, a_id, "update", a);
 
     env.tick();
