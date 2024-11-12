@@ -1,7 +1,5 @@
 use std::rc::Rc;
-use std::sync::Arc;
 
-use ic_base_types::NumSeconds;
 use ic_config::flag_status::FlagStatus;
 use ic_config::{embedders::Config as EmbeddersConfig, subnet_config::SchedulerConfig};
 use ic_cycles_account_manager::ResourceSaturation;
@@ -10,20 +8,19 @@ use ic_embedders::WasmtimeEmbedder;
 use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::page_map::TestPageAllocatorFileDescriptorImpl;
 use ic_replicated_state::NumWasmPages;
-use ic_replicated_state::{Memory, NetworkTopology, SystemState};
+use ic_replicated_state::{Memory, NetworkTopology};
 use ic_system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
     ExecutionParameters, InstructionLimits, SystemApiImpl,
 };
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
-use ic_test_utilities_types::ids::canister_test_id;
+use ic_test_utilities_state::SystemStateBuilder;
+use ic_test_utilities_types::ids::user_test_id;
 use ic_types::{
-    messages::RequestMetadata, time::UNIX_EPOCH, ComputeAllocation, Cycles, MemoryAllocation,
-    NumBytes, NumInstructions,
+    messages::RequestMetadata, time::UNIX_EPOCH, ComputeAllocation, MemoryAllocation, NumBytes,
+    NumInstructions,
 };
-use lazy_static::lazy_static;
 use std::collections::HashMap;
 use wasm_encoder::{
     EntityType, FuncType, ImportSection, Module, TypeSection, ValType as EncodedValType,
@@ -31,34 +28,24 @@ use wasm_encoder::{
 use wasmtime::{Engine, Extern, Store, StoreLimits, ValType};
 
 const SUBNET_MEMORY_CAPACITY: i64 = i64::MAX / 2;
-
-lazy_static! {
-    static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory = SubnetAvailableMemory::new(
-        SUBNET_MEMORY_CAPACITY,
-        SUBNET_MEMORY_CAPACITY,
-        SUBNET_MEMORY_CAPACITY
-    );
-}
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000);
 
 pub(crate) fn system_api_imports() -> Vec<u8> {
     let config = EmbeddersConfig::default();
     let engine = Engine::new(&WasmtimeEmbedder::wasmtime_execution_config(&config))
         .expect("Failed to initialize Wasmtime engine");
-    let canister_id = canister_test_id(53);
-    let system_state = SystemState::new_running(
-        canister_id,
-        canister_id.get(),
-        Cycles::zero(),
-        NumSeconds::from(0),
-        Arc::new(TestPageAllocatorFileDescriptorImpl),
-    );
-    let api_type = ApiType::start(UNIX_EPOCH);
+    let api_type = ApiType::init(UNIX_EPOCH, vec![], user_test_id(24).get());
+
+    let system_state = SystemStateBuilder::default().build();
+    let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
+    let dirty_page_overhead = SchedulerConfig::application_subnet().dirty_page_overhead;
+    let network_topology = NetworkTopology::default();
+
     let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
-        CyclesAccountManagerBuilder::new().build(),
-        &NetworkTopology::default(),
-        SchedulerConfig::application_subnet().dirty_page_overhead,
+        cycles_account_manager,
+        &network_topology,
+        dirty_page_overhead,
         ComputeAllocation::default(),
         RequestMetadata::new(0, UNIX_EPOCH),
         api_type.caller(),
@@ -86,7 +73,11 @@ pub(crate) fn system_api_imports() -> Vec<u8> {
             execution_mode: ExecutionMode::Replicated,
             subnet_memory_saturation: ResourceSaturation::default(),
         },
-        *MAX_SUBNET_AVAILABLE_MEMORY,
+        SubnetAvailableMemory::new(
+            SUBNET_MEMORY_CAPACITY,
+            SUBNET_MEMORY_CAPACITY,
+            SUBNET_MEMORY_CAPACITY,
+        ),
         EmbeddersConfig::default()
             .feature_flags
             .wasm_native_stable_memory,
@@ -114,7 +105,7 @@ pub(crate) fn system_api_imports() -> Vec<u8> {
         config.feature_flags,
         config.stable_memory_dirty_page_limit,
         config.stable_memory_accessed_page_limit,
-        ic_embedders::wasm_utils::instrumentation::WasmMemoryType::Wasm32,
+        ic_embedders::wasm_utils::instrumentation::WasmMemoryType::Wasm64,
     );
 
     // to avoid store move
