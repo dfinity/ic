@@ -2097,7 +2097,47 @@ pub struct NetworkEconomics {
     /// Global Neurons' Fund participation thresholds.
     #[prost(message, optional, tag = "11")]
     pub neurons_fund_economics: Option<NeuronsFundEconomics>,
+
+    /// Parameters that affect the voting power of neurons.
+    #[prost(message, optional, tag = "12")]
+    pub voting_power_economics: ::core::option::Option<VotingPowerEconomics>,
 }
+
+/// Parameters that affect the voting power of neurons.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct VotingPowerEconomics {
+    /// If a neuron has not "refreshed" its voting power after this amount of time,
+    /// its deciding voting power starts decreasing linearly. See also
+    /// clear_following_after_seconds.
+    ///
+    /// For explanation of what "refresh" means in this context, see
+    /// <https://dashboard.internetcomputer.org/proposal/132411>
+    ///
+    /// Initially, set to 0.5 years. (The nominal length of a year is 365.25 days).
+    #[prost(uint64, optional, tag = "1")]
+    pub start_reducing_voting_power_after_seconds: ::core::option::Option<u64>,
+
+    /// After a neuron has experienced voting power reduction for this amount of
+    /// time, a couple of things happen:
+    ///
+    ///      1. Deciding voting power reaches 0.
+    ///
+    ///      2. Its following on topics other than NeuronManagement are cleared.
+    ///
+    /// Initially, set to 1/12 years.
+    #[prost(uint64, optional, tag = "2")]
+    pub clear_following_after_seconds: ::core::option::Option<u64>,
+}
+
 /// The thresholds specify the shape of the ideal matching function used by the Neurons' Fund to
 /// determine how much to contribute for a given direct participation amount. Note that the actual
 /// swap participation is in ICP, whereas these thresholds are specifid in XDR; the conversion rate

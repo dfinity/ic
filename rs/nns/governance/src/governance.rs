@@ -63,7 +63,7 @@ use crate::{
         RewardEvent, RewardNodeProvider, RewardNodeProviders,
         SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,
         StopOrStartCanister, Tally, Topic, UpdateCanisterSettings, UpdateNodeProvider, Visibility,
-        Vote, WaitForQuietState, XdrConversionRate as XdrConversionRatePb,
+        Vote, VotingPowerEconomics, WaitForQuietState, XdrConversionRate as XdrConversionRatePb,
     },
     proposals::{call_canister::CallCanister, sum_weighted_voting_power},
 };
@@ -270,6 +270,16 @@ impl NetworkEconomics {
             transaction_fee_e8s: DEFAULT_TRANSFER_FEE.get_e8s(),
             max_proposals_to_keep_per_topic: 100,
             neurons_fund_economics: Some(NeuronsFundNetworkEconomicsPb::with_default_values()),
+            voting_power_economics: Some(VotingPowerEconomics::with_default_values()),
+        }
+    }
+}
+
+impl VotingPowerEconomics {
+    pub fn with_default_values() -> Self {
+        Self {
+            start_reducing_voting_power_after_seconds: Some(6 * ONE_MONTH_SECONDS),
+            clear_following_after_seconds: Some(ONE_MONTH_SECONDS),
         }
     }
 }

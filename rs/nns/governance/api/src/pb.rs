@@ -2,8 +2,9 @@ use crate::pb::v1::{
     governance::migration::MigrationStatus, governance_error::ErrorType, manage_neuron_response,
     neuron::DissolveState, CreateServiceNervousSystem, GovernanceError, ManageNeuronResponse,
     NetworkEconomics, Neuron, NeuronState, NeuronsFundEconomics,
-    NeuronsFundMatchedFundingCurveCoefficients, XdrConversionRate,
+    NeuronsFundMatchedFundingCurveCoefficients, VotingPowerEconomics, XdrConversionRate,
 };
+use ic_nervous_system_common::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
 use ic_nervous_system_proto::pb::v1::{Decimal, Duration, GlobalTimeOfDay, Percentage};
 use icp_ledger::{DEFAULT_TRANSFER_FEE, TOKEN_SUBDIVIDABLE_BY};
 use std::fmt;
@@ -14,8 +15,6 @@ pub mod v1;
 
 /// The number of e8s per ICP;
 const E8S_PER_ICP: u64 = TOKEN_SUBDIVIDABLE_BY;
-// TODO get this from nervous_system/common/consts after we migrate consts out of nervous_system/common
-pub const ONE_DAY_SECONDS: u64 = 24 * 60 * 60;
 
 impl ManageNeuronResponse {
     pub fn panic_if_error(self, msg: &str) -> Self {
@@ -100,6 +99,16 @@ impl NetworkEconomics {
             transaction_fee_e8s: DEFAULT_TRANSFER_FEE.get_e8s(),
             max_proposals_to_keep_per_topic: 100,
             neurons_fund_economics: Some(NeuronsFundEconomics::with_default_values()),
+            voting_power_economics: Some(VotingPowerEconomics::with_default_values()),
+        }
+    }
+}
+
+impl VotingPowerEconomics {
+    pub fn with_default_values() -> Self {
+        Self {
+            start_reducing_voting_power_after_seconds: Some(6 * ONE_MONTH_SECONDS),
+            clear_following_after_seconds: Some(ONE_MONTH_SECONDS),
         }
     }
 }
