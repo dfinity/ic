@@ -289,6 +289,7 @@ EOF
             -keyout ${BOOTSTRAP_TMPDIR}/ic-boundary-tls.key \
             -out ${BOOTSTRAP_TMPDIR}/ic-boundary-tls.crt -sha256 -days 3650 -nodes \
             -subj /C=CH/ST=Zurich/L=Zurich/O=InternetComputer/OU=ApiBoundaryNodes/CN=${IC_BOUNDARY_TLS_CERT_DOMAIN_NAME}
+    fi
     if [ "${FIREWALL_RULES_FILE}" != "" ]; then
         cp "${FIREWALL_RULES_FILE}" "${BOOTSTRAP_TMPDIR}/firewall.json"
     fi
