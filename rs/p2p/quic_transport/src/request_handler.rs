@@ -20,14 +20,14 @@ use ic_base_types::NodeId;
 use ic_logger::{info, ReplicaLogger};
 use ic_protobuf::transport::v1 as pb;
 use prost::Message;
-use quinn::{ReadToEndError, RecvStream, SendStream};
+use quinn::{RecvStream, SendStream};
 use tower::ServiceExt;
 use tracing::instrument;
 
 use crate::{
     connection_handle::ConnectionHandle,
     metrics::{
-        observe_conn_error, observe_read_error, observe_stopped_error, observe_write_error,
+        observe_conn_error, observe_read_to_end_error, observe_stopped_error, observe_write_error,
         QuicTransportMetrics, ERROR_TYPE_APP, INFALIBBLE, STREAM_TYPE_BIDI,
     },
     ConnId, ResetStreamOnDrop, MAX_MESSAGE_SIZE_BYTES,
