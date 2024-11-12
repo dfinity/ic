@@ -99,18 +99,18 @@ pub async fn run_stream_acceptor(
     inflight_requests.shutdown().await;
 }
 
-#[instrument(skip(metrics, router, bi_tx, recv_stream))]
+#[instrument(skip(metrics, router, send_stream, recv_stream))]
 /// Note: The method is cancel-safe.
 async fn handle_bi_stream(
     peer_id: NodeId,
     conn_id: ConnId,
     metrics: QuicTransportMetrics,
     router: Router,
-    bi_tx: SendStream,
+    send_stream: SendStream,
     mut recv_stream: RecvStream,
 ) -> Result<(), anyhow::Error> {
-    let mut send_stream_guard = ResetStreamOnDrop::new(bi_tx);
-    let bi_tx = &mut send_stream_guard.send_stream;
+    let mut send_stream_guard = ResetStreamOnDrop::new(send_stream);
+    let send_stream = &mut send_stream_guard.send_stream;
     let request_bytes = recv_stream
         .read_to_end(MAX_MESSAGE_SIZE_BYTES)
         .await
@@ -130,7 +130,7 @@ async fn handle_bi_stream(
     request.extensions_mut().insert::<ConnId>(conn_id);
 
     let svc = router.oneshot(request);
-    let stopped = bi_tx.stopped();
+    let stopped = send_stream.stopped();
     let response = tokio::select! {
         response = svc => response.expect("Infallible"),
         stopped_res = stopped => {
@@ -150,16 +150,19 @@ async fn handle_bi_stream(
     // if the other peer has closed the connection. In this case `accept_bi` in the peer event
     // loop will close this connection.
     let response_bytes = to_response_bytes(response).await?;
-    bi_tx.write_all(&response_bytes).await.inspect_err(|err| {
-        observe_write_error(&err, "write_all", &metrics.request_handle_errors_total);
-    })?;
-    bi_tx.finish().inspect_err(|_| {
+    send_stream
+        .write_all(&response_bytes)
+        .await
+        .inspect_err(|err| {
+            observe_write_error(&err, "write_all", &metrics.request_handle_errors_total);
+        })?;
+    send_stream.finish().inspect_err(|_| {
         metrics
             .request_handle_errors_total
             .with_label_values(&["finish", INFALIBBLE])
             .inc();
     })?;
-    bi_tx.stopped().await.inspect_err(|_| {
+    send_stream.stopped().await.inspect_err(|_| {
         metrics
             .request_handle_errors_total
             .with_label_values(&[STREAM_TYPE_BIDI, ERROR_TYPE_STOPPED])
