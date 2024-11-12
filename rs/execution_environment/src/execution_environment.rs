@@ -40,8 +40,8 @@ use ic_management_canister_types::{
     LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs,
     Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
     SchnorrPublicKeyArgs, SchnorrPublicKeyResponse, SetupInitialDKGArgs, SignWithECDSAArgs,
-    SignWithSchnorrArgs, StoredChunksArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
-    UpdateSettingsArgs, UploadChunkArgs, IC_00,
+    SignWithSchnorrArgs, StoredChunksArgs, SubnetInfoArgs, SubnetInfoResponse,
+    TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs, IC_00,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -473,7 +473,7 @@ impl ExecutionEnvironment {
         instruction_limits: InstructionLimits,
         rng: &mut dyn RngCore,
         idkg_subnet_public_keys: &BTreeMap<MasterPublicKeyId, MasterPublicKey>,
-        _replica_version: &ReplicaVersion,
+        replica_version: &ReplicaVersion,
         registry_settings: &RegistryExecutionSettings,
         round_limits: &mut RoundLimits,
     ) -> (ReplicatedState, Option<NumInstructions>) {
@@ -1380,6 +1380,18 @@ impl ExecutionEnvironment {
                 }
             }
 
+            Ok(Ic00Method::SubnetInfo) => match &msg {
+                CanisterCall::Ingress(_) => self.reject_unexpected_ingress(Ic00Method::SubnetInfo),
+                CanisterCall::Request(_) => {
+                    let res = SubnetInfoArgs::decode(payload)
+                        .and_then(|args| self.subnet_info(replica_version, args));
+                    ExecuteSubnetMessageResult::Finished {
+                        response: res,
+                        refund: msg.take_cycles(),
+                    }
+                }
+            },
+
             Ok(Ic00Method::FetchCanisterLogs) => ExecuteSubnetMessageResult::Finished {
                 response: Err(UserError::new(
                     ErrorCode::CanisterRejectedMessage,
@@ -2176,6 +2188,26 @@ impl ExecutionEnvironment {
                 args.start_at_timestamp_nanos,
             ));
         Ok(Encode!(&result).unwrap())
+    }
+
+    fn subnet_info(
+        &self,
+        replica_version: &ReplicaVersion,
+        args: SubnetInfoArgs,
+    ) -> Result<Vec<u8>, UserError> {
+        if args.subnet_id != self.own_subnet_id.get() {
+            return Err(UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "Provided target subnet ID {} does not match current subnet ID {}.",
+                    args.subnet_id, self.own_subnet_id
+                ),
+            ));
+        }
+        let res = SubnetInfoResponse {
+            replica_version: replica_version.to_string(),
+        };
+        Ok(Encode!(&res).unwrap())
     }
 
     // Executes an inter-canister response.
@@ -3305,7 +3337,7 @@ impl ExecutionEnvironment {
                         time,
                         state: ingress_state,
                     },
-                )
+                );
             }
             StopCanisterContext::Canister {
                 sender,

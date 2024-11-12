@@ -14,7 +14,8 @@ use ic_test_utilities_metrics::fetch_int_counter_vec;
 use ic_types::messages::CanisterTask;
 use ic_types::Cycles;
 use ic_types::{CanisterId, NumBytes};
-use ic_universal_canister::{wasm, UNIVERSAL_CANISTER_WASM};
+use ic_universal_canister::wasm;
+use ic_universal_canister::UNIVERSAL_CANISTER_WASM;
 use maplit::btreemap;
 use std::time::{Duration, UNIX_EPOCH};
 

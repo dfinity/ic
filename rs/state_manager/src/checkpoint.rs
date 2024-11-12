@@ -7,7 +7,7 @@ use ic_replicated_state::canister_snapshots::{
     CanisterSnapshot, CanisterSnapshots, ExecutionStateSnapshot, PageMemory,
 };
 use ic_replicated_state::canister_state::system_state::wasm_chunk_store::WasmChunkStore;
-use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
+use ic_replicated_state::page_map::{storage::verify, PageAllocatorFileDescriptor};
 use ic_replicated_state::{
     canister_state::execution_state::WasmBinary, page_map::PageMap, CanisterMetrics, CanisterState,
     ExecutionState, ReplicatedState, SchedulerState, SystemState,
@@ -15,13 +15,13 @@ use ic_replicated_state::{
 use ic_replicated_state::{CheckpointLoadingMetrics, Memory};
 use ic_state_layout::{
     CanisterLayout, CanisterSnapshotBits, CanisterStateBits, CheckpointLayout, ReadOnly,
-    ReadPolicy, SnapshotLayout,
+    SnapshotLayout,
 };
 use ic_types::batch::RawQueryStats;
 use ic_types::{CanisterTimer, Height, Time};
 use ic_utils::thread::maybe_parallel_map;
 use std::collections::BTreeMap;
-use std::convert::TryFrom;
+use std::convert::{identity, TryFrom};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -138,42 +138,45 @@ pub(crate) fn make_checkpoint(
         )?
     };
 
-    cp.remove_unverified_checkpoint_marker()?;
-
     Ok((cp, state, has_downgrade))
 }
 
-/// Calls [load_checkpoint] with a newly created thread pool.
-/// See [load_checkpoint] for further details.
-pub fn load_checkpoint_parallel(
+pub(crate) fn validate_checkpoint_and_remove_unverified_marker(
+    checkpoint_layout: &CheckpointLayout<ReadOnly>,
+    mut thread_pool: Option<&mut scoped_threadpool::Pool>,
+) -> Result<(), CheckpointError> {
+    maybe_parallel_map(
+        &mut thread_pool,
+        checkpoint_layout.all_existing_pagemaps()?.into_iter(),
+        |pm| verify(pm),
+    )
+    .into_iter()
+    .try_for_each(identity)?;
+    checkpoint_layout
+        .remove_unverified_checkpoint_marker()
+        .map_err(CheckpointError::from)?;
+    Ok(())
+}
+
+/// Loads checkpoint and validates correctness of the overlays in parallel, if success removes the
+/// unverified checkpoint marker.
+/// This combination is useful when marking a checkpoint as verified immediately after a
+/// successful loading.
+pub fn load_checkpoint_and_validate_parallel(
     checkpoint_layout: &CheckpointLayout<ReadOnly>,
     own_subnet_type: SubnetType,
     metrics: &CheckpointMetrics,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) -> Result<ReplicatedState, CheckpointError> {
     let mut thread_pool = scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS);
-
-    load_checkpoint(
+    let state = load_checkpoint(
         checkpoint_layout,
         own_subnet_type,
         metrics,
         Some(&mut thread_pool),
         Arc::clone(&fd_factory),
-    )
-}
-
-/// Calls [load_checkpoint_parallel] and removes the unverified checkpoint marker.
-/// This combination is useful when marking a checkpoint as verified immediately after a successful loading.
-pub fn load_checkpoint_parallel_and_mark_verified(
-    checkpoint_layout: &CheckpointLayout<ReadOnly>,
-    own_subnet_type: SubnetType,
-    metrics: &CheckpointMetrics,
-    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
-) -> Result<ReplicatedState, CheckpointError> {
-    let state = load_checkpoint_parallel(checkpoint_layout, own_subnet_type, metrics, fd_factory)?;
-    checkpoint_layout
-        .remove_unverified_checkpoint_marker()
-        .map_err(CheckpointError::from)?;
+    )?;
+    validate_checkpoint_and_remove_unverified_marker(checkpoint_layout, Some(&mut thread_pool))?;
     Ok(state)
 }
 
@@ -392,7 +395,11 @@ pub fn load_canister_state(
             let starting_time = Instant::now();
             let wasm_memory_layout = canister_layout.vmemory_0();
             let wasm_memory = Memory::new(
-                PageMap::open(&wasm_memory_layout, height, Arc::clone(&fd_factory))?,
+                PageMap::open(
+                    Box::new(wasm_memory_layout),
+                    height,
+                    Arc::clone(&fd_factory),
+                )?,
                 execution_state_bits.heap_size,
             );
             durations.insert("wasm_memory", starting_time.elapsed());
@@ -400,7 +407,11 @@ pub fn load_canister_state(
             let starting_time = Instant::now();
             let stable_memory_layout = canister_layout.stable_memory();
             let stable_memory = Memory::new(
-                PageMap::open(&stable_memory_layout, height, Arc::clone(&fd_factory))?,
+                PageMap::open(
+                    Box::new(stable_memory_layout),
+                    height,
+                    Arc::clone(&fd_factory),
+                )?,
                 canister_state_bits.stable_memory_size,
             );
             durations.insert("stable_memory", starting_time.elapsed());
@@ -457,8 +468,11 @@ pub fn load_canister_state(
 
     let starting_time = Instant::now();
     let wasm_chunk_store_layout = canister_layout.wasm_chunk_store();
-    let wasm_chunk_store_data =
-        PageMap::open(&wasm_chunk_store_layout, height, Arc::clone(&fd_factory))?;
+    let wasm_chunk_store_data = PageMap::open(
+        Box::new(wasm_chunk_store_layout),
+        height,
+        Arc::clone(&fd_factory),
+    )?;
     durations.insert("wasm_chunk_store", starting_time.elapsed());
 
     let system_state = SystemState::new_from_checkpoint(
@@ -529,8 +543,8 @@ fn load_canister_state_from_checkpoint(
     )
 }
 
-pub fn load_snapshot<P: ReadPolicy>(
-    snapshot_layout: &SnapshotLayout<P>,
+pub fn load_snapshot(
+    snapshot_layout: &SnapshotLayout<ReadOnly>,
     snapshot_id: &SnapshotId,
     height: Height,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
@@ -560,7 +574,11 @@ pub fn load_snapshot<P: ReadPolicy>(
         let starting_time = Instant::now();
         let wasm_memory_layout = snapshot_layout.vmemory_0();
         let wasm_memory = PageMemory {
-            page_map: PageMap::open(&wasm_memory_layout, height, Arc::clone(&fd_factory))?,
+            page_map: PageMap::open(
+                Box::new(wasm_memory_layout),
+                height,
+                Arc::clone(&fd_factory),
+            )?,
             size: canister_snapshot_bits.wasm_memory_size,
         };
         durations.insert("snapshot_wasm_memory", starting_time.elapsed());
@@ -568,7 +586,11 @@ pub fn load_snapshot<P: ReadPolicy>(
         let starting_time = Instant::now();
         let stable_memory_layout = snapshot_layout.stable_memory();
         let stable_memory = PageMemory {
-            page_map: PageMap::open(&stable_memory_layout, height, Arc::clone(&fd_factory))?,
+            page_map: PageMap::open(
+                Box::new(stable_memory_layout),
+                height,
+                Arc::clone(&fd_factory),
+            )?,
             size: canister_snapshot_bits.stable_memory_size,
         };
         durations.insert("snapshot_stable_memory", starting_time.elapsed());
@@ -591,8 +613,11 @@ pub fn load_snapshot<P: ReadPolicy>(
 
     let starting_time = Instant::now();
     let wasm_chunk_store_layout = snapshot_layout.wasm_chunk_store();
-    let wasm_chunk_store_data =
-        PageMap::open(&wasm_chunk_store_layout, height, Arc::clone(&fd_factory))?;
+    let wasm_chunk_store_data = PageMap::open(
+        Box::new(wasm_chunk_store_layout),
+        height,
+        Arc::clone(&fd_factory),
+    )?;
     let wasm_chunk_store = WasmChunkStore::from_checkpoint(
         wasm_chunk_store_data,
         canister_snapshot_bits.wasm_chunk_store_metadata,
@@ -614,13 +639,13 @@ pub fn load_snapshot<P: ReadPolicy>(
     Ok((canister_snapshot, metrics))
 }
 
-fn load_snapshot_from_checkpoint<P: ReadPolicy>(
-    checkpoint_layout: &CheckpointLayout<P>,
+fn load_snapshot_from_checkpoint(
+    checkpoint_layout: &CheckpointLayout<ReadOnly>,
     snapshot_id: &SnapshotId,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) -> Result<(CanisterSnapshot, LoadCanisterMetrics), CheckpointError> {
     let snapshot_layout = checkpoint_layout.snapshot(snapshot_id)?;
-    load_snapshot::<P>(
+    load_snapshot(
         &snapshot_layout,
         snapshot_id,
         checkpoint_layout.height(),
