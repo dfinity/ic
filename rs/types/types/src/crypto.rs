@@ -38,6 +38,17 @@ use strum_macros::{Display, EnumIter};
 #[cfg(test)]
 mod tests;
 
+macro_rules! impl_display_using_debug {
+    ($t:ty) => {
+        impl std::fmt::Display for $t {
+            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                write!(f, "{:?}", self)
+            }
+        }
+    };
+}
+pub(crate) use impl_display_using_debug;
+
 /// A cryptographic hash.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Deserialize, Serialize)]
 pub struct CryptoHash(#[serde(with = "serde_bytes")] pub Vec<u8>);

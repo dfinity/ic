@@ -1,19 +1,10 @@
 use crate::crypto::canister_threshold_sig::ExtendedDerivationPath;
+use crate::crypto::impl_display_using_debug;
 use crate::crypto::threshold_sig::errors::threshold_sig_data_not_found_error::ThresholdSigDataNotFoundError;
 use crate::crypto::threshold_sig::ni_dkg::NiDkgId;
 use crate::NodeId;
 use serde::{Deserialize, Serialize};
 use std::fmt;
-
-macro_rules! impl_display_using_debug {
-    ($t:ty) => {
-        impl std::fmt::Display for $t {
-            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-                write!(f, "{:?}", self)
-            }
-        }
-    };
-}
 
 #[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
 pub struct VetKdArgs {
