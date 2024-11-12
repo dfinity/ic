@@ -2,7 +2,7 @@ use candid::{CandidType, Nat};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_profiler::{measure_span, SpanStats};
 use ic_cdk::api::stable::{StableReader, StableWriter};
-use ic_ledger_canister_core::runtime::total_memory_size_bytes;
+use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
 use icrc_ledger_types::icrc1::transfer::BlockIndex;
 use icrc_ledger_types::icrc3::archive::QueryTxArchiveFn;
 use icrc_ledger_types::icrc3::transactions::{
@@ -457,7 +457,7 @@ pub fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> st
     )?;
     w.encode_gauge(
         "heap_memory_bytes",
-        total_memory_size_bytes() as f64,
+        heap_memory_size_bytes() as f64,
         "Size of the heap memory allocated by this canister measured in bytes.",
     )?;
 

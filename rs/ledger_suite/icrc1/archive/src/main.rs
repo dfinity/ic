@@ -2,7 +2,7 @@ use candid::{candid_method, Principal};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk_macros::{init, post_upgrade, query, update};
 use ic_icrc1::{blocks::encoded_block_to_generic_block, Block};
-use ic_ledger_canister_core::runtime::total_memory_size_bytes;
+use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
 use ic_stable_structures::{
@@ -370,7 +370,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     )?;
     w.encode_gauge(
         "heap_memory_bytes",
-        total_memory_size_bytes() as f64,
+        heap_memory_size_bytes() as f64,
         "Size of the heap memory allocated by this canister measured in bytes.",
     )?;
 

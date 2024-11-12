@@ -14,7 +14,7 @@ use ic_icrc1_index_ng::{
     GetAccountTransactionsResult, GetBlocksMethod, IndexArg, InitArg, ListSubaccountsArgs, Log,
     LogEntry, Status, TransactionWithId, UpgradeArg, DEFAULT_MAX_BLOCKS_PER_RESPONSE,
 };
-use ic_ledger_canister_core::runtime::total_memory_size_bytes;
+use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
 use ic_ledger_core::block::{BlockIndex as BlockIndex64, BlockType, EncodedBlock};
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub, Zero};
 use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
@@ -1127,7 +1127,7 @@ pub fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> st
     )?;
     w.encode_gauge(
         "heap_memory_bytes",
-        total_memory_size_bytes() as f64,
+        heap_memory_size_bytes() as f64,
         "Size of the heap memory allocated by this canister measured in bytes.",
     )?;
 

@@ -11,7 +11,7 @@ use dfn_protobuf::protobuf;
 use ic_base_types::CanisterId;
 use ic_canister_log::{LogEntry, Sink};
 use ic_icrc1::endpoints::{convert_transfer_error, StandardRecord};
-use ic_ledger_canister_core::runtime::total_memory_size_bytes;
+use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
 use ic_ledger_canister_core::{
     archive::{Archive, ArchiveOptions},
     ledger::{
@@ -1371,7 +1371,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     )?;
     w.encode_gauge(
         "heap_memory_bytes",
-        total_memory_size_bytes() as f64,
+        heap_memory_size_bytes() as f64,
         "Size of the stable memory allocated by this canister measured in bytes.",
     )?;
     w.encode_gauge(
