@@ -34,7 +34,6 @@
 //! ```
 //! For more information, see the [README](https://crates.io/crates/pocket-ic).
 //!
-pub use crate::management_canister::CanisterSettings;
 use crate::{
     common::rest::{
         BlobCompression, BlobId, CanisterHttpRequest, ExtendedSubnetConfigSet, HttpsConfig,
@@ -42,7 +41,8 @@ use crate::{
         SubnetKind, SubnetSpec, Topology,
     },
     management_canister::{
-        CanisterId, CanisterInstallMode, CanisterLogRecord, CanisterStatusResult, Snapshot,
+        CanisterId, CanisterInstallMode, CanisterLogRecord, CanisterSettings, CanisterStatusResult,
+        Snapshot,
     },
     nonblocking::PocketIc as PocketIcAsync,
 };
