@@ -479,6 +479,15 @@ fn icrc1_test_metrics_while_migrating() {
     );
 }
 
+#[test]
+fn icrc1_test_migration_timer_canceled() {
+    ic_ledger_suite_state_machine_tests::test_migration_timer_canceled(
+        ledger_mainnet_wasm(),
+        ledger_wasm_lowupgradeinstructionlimits(),
+        encode_init_args,
+    );
+}
+
 mod metrics {
     use crate::{encode_init_args, encode_upgrade_args, ledger_wasm};
     use ic_ledger_suite_state_machine_tests::metrics::LedgerSuiteType;

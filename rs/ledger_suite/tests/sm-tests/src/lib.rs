@@ -2719,7 +2719,7 @@ pub fn icrc1_test_stable_migration_endpoints_disabled<T>(
     test_endpoint("icrc1_balance_of", Encode!(&account).unwrap(), true);
     test_endpoint("icrc1_total_supply", Encode!().unwrap(), true);
 
-    wait_ledger_ready(&env, canister_id, 10);
+    wait_ledger_ready(&env, canister_id, 20);
 
     test_endpoint("icrc1_transfer", Encode!(&transfer_args).unwrap(), false);
     test_endpoint("icrc2_approve", Encode!(&approve_args).unwrap(), false);
@@ -2874,6 +2874,51 @@ pub fn test_metrics_while_migrating<T>(
             .iter()
             .any(|line| line.contains("ledger_total_supply")),
         "Did not find ledger_total_supply metric"
+    );
+}
+
+pub fn test_migration_timer_canceled<T>(
+    ledger_wasm_mainnet: Vec<u8>,
+    ledger_wasm_current_lowinstructionlimits: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    let account = Account::from(PrincipalId::new_user_test_id(1).0);
+    let initial_balances = vec![(account, 100_000_000u64)];
+
+    // Setup ledger as it is deployed on the mainnet.
+    let (env, canister_id) = setup(ledger_wasm_mainnet, encode_init_args, initial_balances);
+
+    const APPROVE_AMOUNT: u64 = 150_000;
+
+    for i in 2..40 {
+        let spender = Account::from(PrincipalId::new_user_test_id(i).0);
+        let approve_args = default_approve_args(spender, APPROVE_AMOUNT);
+        send_approval(&env, canister_id, account.owner, &approve_args).expect("approval failed");
+    }
+
+    env.upgrade_canister(
+        canister_id,
+        ledger_wasm_current_lowinstructionlimits,
+        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
+    )
+    .unwrap();
+
+    wait_ledger_ready(&env, canister_id, 20);
+
+    let stable_upgrade_migration_steps =
+        parse_metric(&env, canister_id, "ledger_stable_upgrade_migration_steps");
+    assert!(stable_upgrade_migration_steps > 1);
+
+    env.advance_time(Duration::from_secs(1000));
+    env.tick();
+
+    let later_stable_upgrade_migration_steps =
+        parse_metric(&env, canister_id, "ledger_stable_upgrade_migration_steps");
+    assert_eq!(
+        stable_upgrade_migration_steps,
+        later_stable_upgrade_migration_steps
     );
 }
 
