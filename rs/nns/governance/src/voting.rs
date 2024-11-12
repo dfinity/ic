@@ -6,6 +6,7 @@ use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use maplit::btreemap;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
+#[derive(Debug, PartialEq)]
 struct VotingStateMachine {
     // The proposal ID that is being voted on.
     proposal_id: ProposalId,
@@ -49,6 +50,7 @@ impl VotingStateMachine {
 
     fn is_done(&self) -> bool {
         self.votes_to_cast.is_empty()
+            && self.votes_cast_before_followees_checked.is_empty()
             && self.followers_to_check.is_empty()
             && self.recent_neuron_ballots_to_record.is_empty()
     }
@@ -358,5 +360,219 @@ pub(crate) fn old_cast_vote_and_cascade_follow(
         // propagated through the graph in a manner similar to the
         // breadth-first search (BFS) algorithm. A node is
         // explored when it has voted yes or no.
+    }
+}
+
+#[cfg(test)]
+mod test {
+
+    use crate::{
+        governance::MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
+        neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
+        neuron_store::NeuronStore,
+        pb::v1::{neuron::Followees, BallotInfo, Topic, Vote},
+        voting::VotingStateMachine,
+    };
+
+    use crate::pb::v1::Ballot;
+    use ic_base_types::PrincipalId;
+    use ic_config::ConfigSource::Default;
+    use ic_nns_common::pb::v1::{NeuronId, ProposalId};
+    use icp_ledger::Subaccount;
+    use maplit::{btreemap, hashmap};
+    use rand_chacha::ChaCha20Rng;
+    use std::collections::{BTreeMap, BTreeSet, HashMap};
+
+    // Only some fields are relevant for the functionality, but because we're benchmarking we need
+    // neurons that have some heft to them, so we populate fields that aren't strictly necessary for
+    // the functionality.
+    fn make_neuron(
+        id: u64,
+        cached_neuron_stake_e8s: u64,
+        followees: HashMap<i32, Followees>,
+    ) -> Neuron {
+        let mut account = vec![0; 32];
+        for (destination, data) in account.iter_mut().zip(id.to_le_bytes().iter().cycle()) {
+            *destination = *data;
+        }
+        let subaccount = Subaccount::try_from(account.as_slice()).unwrap();
+
+        let now = 123_456_789;
+        let dissolve_state_and_age = DissolveStateAndAge::NotDissolving {
+            dissolve_delay_seconds: MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
+            aging_since_timestamp_seconds: now - MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
+        };
+
+        let hot_keys = (0..15).map(PrincipalId::new_user_test_id).collect();
+
+        let followees = if followees.is_empty() {
+            hashmap! {
+                Topic::Unspecified as i32 => Followees {
+                    followees: (0..15).map(|id| NeuronId { id }).collect(),
+                },
+            }
+        } else {
+            followees
+        };
+
+        let mut neuron = NeuronBuilder::new(
+            NeuronId { id },
+            subaccount,
+            PrincipalId::new_user_test_id(id),
+            dissolve_state_and_age,
+            now,
+        )
+        .with_hot_keys(hot_keys)
+        .with_followees(followees)
+        .with_cached_neuron_stake_e8s(cached_neuron_stake_e8s)
+        .build();
+
+        neuron
+    }
+
+    #[test]
+    fn test_invalid_topic() {
+        let err = VotingStateMachine::try_new(
+            ProposalId { id: 0 },
+            Topic::Unspecified,
+            NeuronId { id: 0 },
+            Vote::Yes,
+        )
+        .unwrap_err();
+
+        assert_eq!(err, "Topic must be specified");
+    }
+
+    #[test]
+    fn test_is_done() {
+        let mut state_machine = VotingStateMachine {
+            proposal_id: ProposalId { id: 0 },
+            topic: Topic::Governance,
+            votes_to_cast: BTreeMap::new(),
+            votes_cast_before_followees_checked: BTreeMap::new(),
+            followers_to_check: BTreeSet::new(),
+            recent_neuron_ballots_to_record: BTreeMap::new(),
+            votes_fully_cast: BTreeMap::new(),
+        };
+
+        assert!(state_machine.is_done());
+
+        // Test that the 4 state field all result in things not being finished.
+        state_machine
+            .votes_to_cast
+            .insert(NeuronId { id: 0 }, Vote::Yes);
+        assert!(!state_machine.is_done());
+        state_machine.votes_to_cast.clear();
+
+        state_machine
+            .votes_cast_before_followees_checked
+            .insert(NeuronId { id: 0 }, Vote::Yes);
+        assert!(!state_machine.is_done());
+        state_machine.votes_cast_before_followees_checked.clear();
+
+        state_machine.followers_to_check.insert(NeuronId { id: 0 });
+        assert!(!state_machine.is_done());
+        state_machine.followers_to_check.clear();
+
+        state_machine
+            .recent_neuron_ballots_to_record
+            .insert(NeuronId { id: 0 }, Vote::Yes);
+        assert!(!state_machine.is_done());
+        state_machine.recent_neuron_ballots_to_record.clear();
+
+        // Votes fully cast don't mean it's not done.
+        state_machine
+            .votes_fully_cast
+            .insert(NeuronId { id: 0 }, Vote::Yes);
+        assert!(state_machine.is_done());
+    }
+
+    #[test]
+    fn single_pass_with_following_results_in_not_done_with_followers_to_check() {
+        let mut state_machine = VotingStateMachine::try_new(
+            ProposalId { id: 0 },
+            Topic::NetworkEconomics,
+            NeuronId { id: 1 },
+            Vote::Yes,
+        )
+        .unwrap();
+
+        let mut ballots = HashMap::new();
+        let mut neuron_store = NeuronStore::new(btreemap! {});
+        neuron_store
+            .add_neuron(make_neuron(1, 101, hashmap! {}))
+            .expect("Couldn't add neuron");
+        ballots.insert(
+            1,
+            Ballot {
+                vote: Vote::Unspecified as i32,
+                voting_power: 101,
+            },
+        );
+        neuron_store
+            .add_neuron(make_neuron(
+                2,
+                102,
+                hashmap! {Topic::NetworkEconomics.into() => Followees {
+                    followees: vec![NeuronId { id: 1 }],
+                }},
+            ))
+            .expect("Couldn't add neuron");
+        ballots.insert(
+            2,
+            Ballot {
+                vote: Vote::Unspecified as i32,
+                voting_power: 102,
+            },
+        );
+
+        state_machine.continue_processing(&mut neuron_store, &mut ballots);
+
+        assert_eq!(
+            ballots,
+            hashmap! {
+            1 => Ballot { vote: Vote::Yes as i32, voting_power: 101 },
+            2 => Ballot { vote: Vote::Unspecified as i32, voting_power: 102 }}
+        );
+        assert_eq!(
+            neuron_store
+                .with_neuron(&NeuronId { id: 1 }, |n| {
+                    n.recent_ballots.get(0).unwrap().vote
+                })
+                .unwrap(),
+            Vote::Yes as i32
+        );
+        assert!(neuron_store
+            .with_neuron(&NeuronId { id: 2 }, |n| {
+                n.recent_ballots.get(0).is_none()
+            })
+            .unwrap());
+        assert!(!state_machine.is_done());
+
+        state_machine.continue_processing(&mut neuron_store, &mut ballots);
+
+        assert_eq!(
+            ballots,
+            hashmap! {
+            1 => Ballot { vote: Vote::Yes as i32, voting_power: 101 },
+            2 => Ballot { vote: Vote::Yes as i32, voting_power: 102 }}
+        );
+        assert_eq!(
+            neuron_store
+                .with_neuron(&NeuronId { id: 1 }, |n| {
+                    n.recent_ballots.get(0).unwrap().vote
+                })
+                .unwrap(),
+            Vote::Yes as i32
+        );
+        assert_eq!(
+            neuron_store
+                .with_neuron(&NeuronId { id: 2 }, |n| {
+                    n.recent_ballots.get(0).unwrap().vote
+                })
+                .unwrap(),
+            Vote::Yes as i32
+        );
+        assert!(state_machine.is_done());
     }
 }
