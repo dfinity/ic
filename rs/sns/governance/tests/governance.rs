@@ -10,6 +10,7 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
 use ic_nervous_system_proto::pb::v1::{Percentage, Principals};
+use ic_sns_governance::pb::v1::governance::CachedUpgradeSteps;
 use ic_sns_governance::{
     governance::{
         MATURITY_DISBURSEMENT_DELAY_SECONDS, UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS,
@@ -2864,7 +2865,7 @@ async fn test_mint_tokens() {
 }
 
 #[tokio::test]
-async fn test_refresh_cached_upgrade_steps_noop_if_deployed_version_none() {
+async fn test_refresh_cached_upgrade_steps_noop_if_cached_upgrade_steps_none() {
     let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
 
     // Check that the initial state is None
@@ -2886,7 +2887,7 @@ async fn test_refresh_cached_upgrade_steps_noop_if_deployed_version_none() {
     }
 
     {
-        canister_fixture.governance.proto.deployed_version = None;
+        canister_fixture.governance.proto.cached_upgrade_steps = None;
         canister_fixture
             .governance
             .refresh_cached_upgrade_steps()
@@ -2926,17 +2927,13 @@ async fn test_refresh_cached_upgrade_steps() {
         canister_fixture
             .environment_fixture
             .push_mocked_canister_reply(ListUpgradeStepsResponse { steps });
-        canister_fixture.governance.proto.deployed_version = Some(Version::default());
-    }
-
-    // Check that the initial state is None
-    {
-        let original_cached_upgrade_steps = canister_fixture
-            .governance
-            .proto
-            .cached_upgrade_steps
-            .clone();
-        assert_eq!(original_cached_upgrade_steps, None);
+        canister_fixture.governance.proto.cached_upgrade_steps = Some(CachedUpgradeSteps {
+            upgrade_steps: Some(Versions {
+                versions: vec![Version::default()],
+            }),
+            requested_timestamp_seconds: Some(123),
+            response_timestamp_seconds: Some(456),
+        });
     }
 
     // Check that the canister wants to refresh the cached_upgrade_steps

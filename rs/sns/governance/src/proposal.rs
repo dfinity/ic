@@ -372,8 +372,16 @@ pub(crate) async fn validate_and_render_action(
             validate_and_render_upgrade_sns_controlled_canister(upgrade)
         }
         Action::UpgradeSnsToNextVersion(upgrade_sns) => {
-            let current_version = governance_proto.deployed_version_or_panic();
-
+            let current_version = match governance_proto.cached_upgrade_steps_or_err() {
+                Err(err) => {
+                    return Err(format!(
+                        "Cannot identify current_version required for validating \
+                             and rendering an UpgradeSnsToNextVersion: {}",
+                        err
+                    ));
+                }
+                Ok(cached_upgrade_steps) => cached_upgrade_steps.current(),
+            };
             validate_and_render_upgrade_sns_to_next_version(
                 upgrade_sns,
                 env,
@@ -2449,7 +2457,7 @@ mod tests {
     use super::*;
     use crate::{
         pb::v1::{
-            governance::{self, Version},
+            governance::{self, CachedUpgradeSteps, Version, Versions},
             Ballot, Empty, Governance as GovernanceProto, NeuronId, Proposal, ProposalId,
             Subaccount, WaitForQuietState,
         },
@@ -2507,14 +2515,22 @@ mod tests {
             genesis_timestamp_seconds: 0,
             metrics: None,
             mode: governance::Mode::Normal.into(),
-            deployed_version,
+            cached_upgrade_steps: deployed_version.map(|deployed_version| CachedUpgradeSteps {
+                upgrade_steps: Some(Versions {
+                    versions: vec![Version::from(deployed_version)],
+                }),
+                requested_timestamp_seconds: Some(123),
+                response_timestamp_seconds: Some(456),
+            }),
             pending_version: None,
             is_finalizing_disburse_maturity: None,
             maturity_modulation: None,
-            cached_upgrade_steps: None,
             target_version: None,
             timers: None,
             upgrade_journal: None,
+
+            // Deprecated field.
+            deployed_version: None,
         }
     }
 
