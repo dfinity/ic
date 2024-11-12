@@ -741,10 +741,9 @@ type NeuronInfo = record {
   // instead. Has the same value as deciding_voting_power.
   //
   // Previously, if a neuron had < 6 months dissolve delay (making it ineligible
-  // to vote), this would not get zeroed out. That was pretty confusing. At the
-  // same time this field became deprecated, it started being set to 0 when the
-  // neuron became ineligible to vote, due to inheriting the behavior of
-  // deciding_voting_power (which is derived from potential_voting_power).
+  // to vote), this would not get set to 0 (zero). That was pretty confusing.
+  // Now that this is set to deciding_voting_power, this actually does get
+  // zeroed out.
   voting_power : nat64;
 
   age_seconds : nat64;
