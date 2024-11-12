@@ -77,6 +77,7 @@ pub(crate) fn system_api_imports() -> Vec<u8> {
             }
         }
     }
+    system_api_imports.sort_by(|a, b| a.1.cmp(b.1));
 
     let mut types = TypeSection::new();
     let mut imports = ImportSection::new();
