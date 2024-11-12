@@ -209,6 +209,7 @@ function build_ic_bootstrap_tar() {
                 ;;
             --generate_ic_boundary_tls_cert)
                 IC_BOUNDARY_TLS_CERT_DOMAIN_NAME="$2"
+                ;;
             --firewall_rules_file)
                 FIREWALL_RULES_FILE="$2"
                 ;;
