@@ -123,6 +123,12 @@ pub fn encode_metrics(
     )?;
 
     metrics.encode_gauge(
+        "ckbtc_minter_fee_based_min_retrievable_amount",
+        state::read_state(|s| s.fee_based_retrieve_btc_min_amount) as f64,
+        "Minimum number of ckBTC a user can withdraw (fee based).",
+    )?;
+
+    metrics.encode_gauge(
         "ckbtc_minter_min_confirmations",
         state::read_state(|s| s.min_confirmations) as f64,
         "Min number of confirmations on BTC network",

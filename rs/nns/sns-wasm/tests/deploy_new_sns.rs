@@ -181,7 +181,7 @@ fn test_deploy_cleanup_on_wasm_install_failure() {
     sns_wasm::add_real_wasms_to_sns_wasms(&machine);
     // we add a wasm that will fail with the given payload on installation
     let bad_wasm = SnsWasm {
-        wasm: Wasm::from_bytes(UNIVERSAL_CANISTER_WASM).bytes(),
+        wasm: Wasm::from_bytes(UNIVERSAL_CANISTER_WASM.to_vec()).bytes(),
         canister_type: SnsCanisterType::Governance.into(),
         ..SnsWasm::default()
     };
