@@ -6,7 +6,7 @@ use clap::{Parser, Subcommand};
 use config::config_ini::config_map_from_path;
 use config::deployment_json::get_deployment_settings;
 use config::{DEFAULT_HOSTOS_CONFIG_INI_FILE_PATH, DEFAULT_HOSTOS_DEPLOYMENT_JSON_PATH};
-use mac_address::mac_address::{generate_mac_address, get_ipmi_mac, FormattedMacAddress};
+use mac_address::mac_address::{generate_mac_address, get_mgmt_mac, FormattedMacAddress};
 use mac_address::node_type::NodeType;
 use network::generate_network_config;
 use network::info::NetworkInfo;
@@ -82,7 +82,7 @@ pub fn main() -> Result<()> {
                     );
                     mgmt_mac
                 }
-                None => get_ipmi_mac()?,
+                None => get_mgmt_mac()?,
             };
             let generated_mac = generate_mac_address(
                 &mgmt_mac,
@@ -119,7 +119,7 @@ pub fn main() -> Result<()> {
                     );
                     mgmt_mac
                 }
-                None => get_ipmi_mac()?,
+                None => get_mgmt_mac()?,
             };
             let generated_mac = generate_mac_address(
                 &mgmt_mac,
@@ -157,7 +157,7 @@ pub fn main() -> Result<()> {
                     );
                     mgmt_mac
                 }
-                None => get_ipmi_mac()?,
+                None => get_mgmt_mac()?,
             };
             let generated_mac = generate_mac_address(
                 &mgmt_mac,
@@ -186,7 +186,7 @@ pub fn main() -> Result<()> {
                     );
                     mgmt_mac
                 }
-                None => get_ipmi_mac()?,
+                None => get_mgmt_mac()?,
             };
             println!("{}", mgmt_mac);
             Ok(())
