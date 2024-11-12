@@ -551,22 +551,6 @@ async fn handler(
     referer_query_param_canister_id: Option<canister_id::RefererHeaderQueryParam>,
     mut request: AxumRequest,
 ) -> Result<impl IntoResponse, ErrorCause> {
-    if request.uri().path().contains("malicious") {
-        *state.is_malicious.lock().unwrap() = true;
-        return Ok(HandlerResponse::ResponseBody(
-            (
-                StatusCode::OK,
-                "Pocket IC set to malicious mode".to_string(),
-            )
-                .into_response(),
-        ));
-    } else if request.uri().path().contains("honest") {
-        *state.is_malicious.lock().unwrap() = false;
-        return Ok(HandlerResponse::ResponseBody(
-            (StatusCode::OK, "Pocket IC set to honest mode".to_string()).into_response(),
-        ));
-    }
-
     // Resolve the domain
     let lookup =
         extract_authority(&request).and_then(|authority| state.resolver.resolve(&authority));
@@ -583,7 +567,21 @@ async fn handler(
         .or(referer_query_param_canister_id)
         .ok_or(ErrorCause::CanisterIdNotFound);
 
-    if request.uri().path().starts_with("/_/") && canister_id.is_err() {
+    if request.uri().path().contains("malicious") {
+        *state.is_malicious.lock().unwrap() = true;
+        return Ok(HandlerResponse::ResponseBody(
+            (
+                StatusCode::OK,
+                "Pocket IC set to malicious mode".to_string(),
+            )
+                .into_response(),
+        ));
+    } else if request.uri().path().contains("honest") {
+        *state.is_malicious.lock().unwrap() = false;
+        return Ok(HandlerResponse::ResponseBody(
+            (StatusCode::OK, "Pocket IC set to honest mode".to_string()).into_response(),
+        ));
+    } else if request.uri().path().starts_with("/_/") && canister_id.is_err() {
         *request.uri_mut() = Uri::from_str(&format!(
             "{}{}",
             state.replica_url,

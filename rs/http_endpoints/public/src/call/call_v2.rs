@@ -149,5 +149,18 @@ pub(super) async fn handler(
         });
     }
 
-    Ok(Accepted)
+    // read from file if is malicious
+    let is_malicious =
+        std::fs::read_to_string("/Users/daniel.sharifi/dev/dfx-test/is_malicious.txt")
+            .unwrap_or_else(|_| "not_set".to_string());
+    println!("IS_MALICIOUS: {}", is_malicious);
+
+    if is_malicious == "true" {
+        Err(IngressError::HttpError(HttpError {
+            status: StatusCode::INTERNAL_SERVER_ERROR,
+            message: "Maliciously failing the call".to_string(),
+        }))
+    } else {
+        Ok(Accepted)
+    }
 }

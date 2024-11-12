@@ -317,11 +317,24 @@ async fn call_sync_v3(
     let delegation_from_nns = delegation_from_nns.get().cloned();
     let signature = certification.signed.signature.signature.get().0;
 
-    CallV3Response::Certificate(Certificate {
-        tree,
-        signature: Blob(signature),
-        delegation: delegation_from_nns,
-    })
+    // read from file if is malicious
+    let is_malicious =
+        std::fs::read_to_string("/Users/daniel.sharifi/dev/dfx-test/is_malicious.txt")
+            .unwrap_or_else(|_| "not_set".to_string());
+    println!("IS_MALICIOUS: {}", is_malicious);
+
+    if is_malicious == "true" {
+        CallV3Response::HttpError(HttpError {
+            status: StatusCode::INTERNAL_SERVER_ERROR,
+            message: "Maliciously failing the request.".to_string(),
+        })
+    } else {
+        CallV3Response::Certificate(Certificate {
+            tree,
+            signature: Blob(signature),
+            delegation: delegation_from_nns,
+        })
+    }
 }
 
 enum ParsedMessageStatus {
