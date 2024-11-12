@@ -20,15 +20,15 @@ use ic_base_types::NodeId;
 use ic_logger::{info, ReplicaLogger};
 use ic_protobuf::transport::v1 as pb;
 use prost::Message;
-use quinn::{RecvStream, SendStream};
+use quinn::{ReadToEndError, RecvStream, SendStream};
 use tower::ServiceExt;
 use tracing::instrument;
 
 use crate::{
     connection_handle::ConnectionHandle,
     metrics::{
-        QuicTransportMetrics, ERROR_TYPE_ACCEPT, ERROR_TYPE_APP, ERROR_TYPE_FINISH,
-        ERROR_TYPE_READ, ERROR_TYPE_STOPPED, ERROR_TYPE_WRITE, STREAM_TYPE_BIDI,
+        observe_conn_error, observe_read_error, observe_write_error, QuicTransportMetrics,
+        ERROR_TYPE_APP, ERROR_TYPE_STOPPED, INFALIBBLE, STREAM_TYPE_BIDI,
     },
     ConnId, ResetStreamOnDrop, MAX_MESSAGE_SIZE_BYTES,
 };
@@ -70,15 +70,9 @@ pub async fn run_stream_acceptor(
                             )
                         );
                     }
-                    Err(e) => {
-                        info!(log, "Error accepting bi stream {}", e.to_string());
-                        metrics
-                            .request_handle_errors_total
-                            .with_label_values(&[
-                                STREAM_TYPE_BIDI,
-                                ERROR_TYPE_ACCEPT,
-                            ])
-                            .inc();
+                    Err(err) => {
+                        info!(log, "Error accepting bi stream {}", err.to_string());
+                        observe_conn_error(&err, "accept_bi", &metrics.request_handle_errors_total);
                         break;
                     }
                 }
@@ -105,7 +99,7 @@ pub async fn run_stream_acceptor(
     inflight_requests.shutdown().await;
 }
 
-#[instrument(skip(metrics, router, bi_tx, bi_rx))]
+#[instrument(skip(metrics, router, bi_tx, recv_stream))]
 /// Note: The method is cancel-safe.
 async fn handle_bi_stream(
     peer_id: NodeId,
@@ -113,16 +107,25 @@ async fn handle_bi_stream(
     metrics: QuicTransportMetrics,
     router: Router,
     bi_tx: SendStream,
-    bi_rx: RecvStream,
+    mut recv_stream: RecvStream,
 ) -> Result<(), anyhow::Error> {
     let mut send_stream_guard = ResetStreamOnDrop::new(bi_tx);
     let bi_tx = &mut send_stream_guard.send_stream;
-    let mut request = read_request(bi_rx).await.inspect_err(|_| {
-        metrics
-            .request_handle_errors_total
-            .with_label_values(&[STREAM_TYPE_BIDI, ERROR_TYPE_READ])
-            .inc();
-    })?;
+    let request_bytes = recv_stream
+        .read_to_end(MAX_MESSAGE_SIZE_BYTES)
+        .await
+        .inspect_err(|err| match err {
+            ReadToEndError::TooLong => metrics
+                .request_handle_errors_total
+                .with_label_values(&["read_to_end", INFALIBBLE])
+                .inc(),
+            ReadToEndError::Read(read_err) => observe_read_error(
+                read_err,
+                "read_to_end",
+                &metrics.request_handle_errors_total,
+            ),
+        })?;
+    let mut request = to_request(request_bytes)?;
     request.extensions_mut().insert::<NodeId>(peer_id);
     request.extensions_mut().insert::<ConnId>(conn_id);
 
@@ -147,16 +150,13 @@ async fn handle_bi_stream(
     // if the other peer has closed the connection. In this case `accept_bi` in the peer event
     // loop will close this connection.
     let response_bytes = to_response_bytes(response).await?;
-    bi_tx.write_all(&response_bytes).await.inspect_err(|_| {
-        metrics
-            .request_handle_errors_total
-            .with_label_values(&[STREAM_TYPE_BIDI, ERROR_TYPE_WRITE])
-            .inc();
+    bi_tx.write_all(&response_bytes).await.inspect_err(|err| {
+        observe_write_error(&err, "write_all", &metrics.request_handle_errors_total);
     })?;
     bi_tx.finish().inspect_err(|_| {
         metrics
             .request_handle_errors_total
-            .with_label_values(&[STREAM_TYPE_BIDI, ERROR_TYPE_FINISH])
+            .with_label_values(&["finish", INFALIBBLE])
             .inc();
     })?;
     bi_tx.stopped().await.inspect_err(|_| {
@@ -168,13 +168,8 @@ async fn handle_bi_stream(
     Ok(())
 }
 
-async fn read_request(mut recv_stream: RecvStream) -> Result<Request<Body>, anyhow::Error> {
-    let raw_msg = recv_stream
-        .read_to_end(MAX_MESSAGE_SIZE_BYTES)
-        .await
-        .with_context(|| "Failed to read request from the stream.")?;
-
-    let request_proto = pb::HttpRequest::decode(raw_msg.as_slice())
+fn to_request(request_bytes: Vec<u8>) -> Result<Request<Body>, anyhow::Error> {
+    let request_proto = pb::HttpRequest::decode(request_bytes.as_slice())
         .with_context(|| "Failed to decode http request.")?;
 
     let pb_http_method = pb::HttpMethod::try_from(request_proto.method)
