@@ -65,6 +65,11 @@ pub enum CompletedSignature {
     Unreported(crate::batch::ConsensusResponse),
 }
 
+/// A [`MasterPublicKeyId`], that contains a variant that is compatible with the IDKG protocol.
+///
+/// The [`MasterPublicKeyId`] can hold a number of different key types.
+/// Some of them can be used with the IDKG protocol, while others can not.
+/// The [`IDkgMasterPublicKeyId`] type indicates, that this key id can be used with a IDKG protocol.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct IDkgMasterPublicKeyId(MasterPublicKeyId);
