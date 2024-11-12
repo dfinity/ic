@@ -1,10 +1,9 @@
 use crate::{
-    governance::Governance,
-    neuron_store::{NeuronStore, NeuronStoreError},
+    neuron_store::NeuronStore,
     pb::v1::{Ballot, Topic, Topic::NeuronManagement, Vote},
 };
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
-use maplit::{btreemap, hashmap};
+use maplit::btreemap;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 struct VotingStateMachine {
@@ -197,6 +196,7 @@ pub(crate) fn cast_vote_and_cascade_follow(
 /// to followees).
 /// Cascading only occurs for proposal topics that support following (i.e.,
 /// all topics except Topic::NeuronManagement).
+#[allow(dead_code)]
 pub(crate) fn old_cast_vote_and_cascade_follow(
     proposal_id: &ProposalId,
     ballots: &mut HashMap<u64, Ballot>,

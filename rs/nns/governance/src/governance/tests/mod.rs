@@ -1136,7 +1136,7 @@ mod neuron_archiving_tests {
 
 mod cast_vote_and_cascade_follow {
     use crate::{
-        governance::{Governance, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS},
+        governance::MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
         neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
         neuron_store::NeuronStore,
         pb::v1::{neuron::Followees, Ballot, Topic, Vote},

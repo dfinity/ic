@@ -113,7 +113,7 @@ use rust_decimal_macros::dec;
 use std::{
     borrow::Cow,
     cmp::{max, Ordering},
-    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    collections::{HashMap, HashSet},
     convert::{TryFrom, TryInto},
     fmt,
     future::Future,
