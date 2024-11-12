@@ -49,9 +49,8 @@ impl TryFrom<&CachedUpgradeStepsPb> for CachedUpgradeSteps {
         else {
             return Err(
                 "Cannot interpret CachedUpgradeSteps; please specify all the required fields: \
-                 upgrade_steps, requested_timestamp_seconds, response_timestamp_seconds.
-                 "
-                .to_string(),
+                 upgrade_steps, requested_timestamp_seconds, response_timestamp_seconds."
+                    .to_string(),
             );
         };
 
@@ -95,6 +94,7 @@ impl CachedUpgradeSteps {
         }
     }
 
+    #[allow(unused)]
     pub fn last(&self) -> Version {
         let Some(last) = self.subsequent_versions.last() else {
             return self.current_version.clone();
@@ -102,10 +102,12 @@ impl CachedUpgradeSteps {
         last.clone()
     }
 
+    #[allow(unused)]
     pub fn contains(&self, version: &Version) -> bool {
         &self.current_version == version || self.subsequent_versions.contains(version)
     }
 
+    #[allow(unused)]
     pub fn is_current(&self, version: &Version) -> bool {
         version == &self.current_version
     }
@@ -115,6 +117,7 @@ impl CachedUpgradeSteps {
     }
 
     /// Approximate time at which this cache was valid.
+    #[allow(unused)]
     pub fn approximate_time_of_validity_timestamp_seconds(&self) -> u64 {
         self.response_timestamp_seconds
     }
@@ -122,6 +125,7 @@ impl CachedUpgradeSteps {
     // Clippy wants us to implement `Iterator for CachedUpgradeSteps`, but that would require adding
     // iterator-specific state to this type, which is an overkill for the purpose of having a simple
     // self-consuming method with an intuitive name.
+    #[allow(unused)]
     #[allow(clippy::should_implement_trait)]
     pub fn into_iter(self) -> impl Iterator<Item = Version> {
         Iterator::chain(
@@ -130,6 +134,7 @@ impl CachedUpgradeSteps {
         )
     }
 
+    #[allow(unused)]
     pub fn validate_new_target_version(&self, new_target: &Version) -> Result<(), String> {
         if !self.contains(new_target) {
             return Err("new_target_version must be among the upgrade steps.".to_string());

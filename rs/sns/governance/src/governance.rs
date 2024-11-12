@@ -4877,8 +4877,8 @@ impl Governance {
             if cached_upgrade_steps != original_cached_upgrade_steps {
                 log!(
                     INFO,
-                    "Upgrade steps were not refreshed because someone modified the cache while we were \
-                     waiting for a response form SNS-W. Try again later."
+                    "Upgrade steps were not refreshed because someone modified the cache while we \
+                     were waiting for a response form SNS-W. Try again later."
                 );
                 return None;
             }
@@ -5534,10 +5534,10 @@ impl Governance {
         {
             Err(err) => {
                 let error = format!(
-                    "Upgrade marked as failed at timestamp {} seconds: {}. 
-                        Keeping the currently running version and marking the upgrade as failed.",
-                    err,
+                    "Keeping the currently running version and marking the upgrade as failed \
+                     at timestamp {} seconds: {}",
                     self.env.now(),
+                    err,
                 );
 
                 self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome {
@@ -5925,7 +5925,7 @@ mod tests {
     use super::*;
     use crate::{
         pb::v1::{
-            governance::SnsMetadata,
+            governance::{SnsMetadata, Versions},
             manage_neuron_response,
             nervous_system_function::{FunctionType, GenericNervousSystemFunction},
             neuron, Account as AccountProto, Motion, NeuronPermissionType, ProposalData,
@@ -7385,7 +7385,7 @@ mod tests {
                 },
                 root_canister_id: Some(root_canister_id.get()),
                 ledger_canister_id: Some(ledger_canister_id.get()),
-                deployed_version: Some(current_version.into()),
+                cached_upgrade_steps: Some(trivial_cached_upgrade_steps(&current_version)),
                 ..basic_governance_proto()
             }
             .try_into()
@@ -7666,7 +7666,10 @@ mod tests {
         let mut governance = Governance::new(
             GovernanceProto {
                 root_canister_id: Some(root_canister_id.get()),
-                deployed_version: Some(current_version.clone().into()),
+                cached_upgrade_steps: Some(single_upgrade_possibility_upgrade_steps(
+                    &current_version,
+                    &next_version,
+                )),
                 parameters: Some(NervousSystemParameters {
                     voting_rewards_parameters: Some(VotingRewardsParameters {
                         round_duration_seconds: Some(ONE_DAY_SECONDS),
@@ -7735,7 +7738,11 @@ mod tests {
             }
         );
         assert_eq!(
-            governance.proto.deployed_version.clone().unwrap(),
+            governance
+                .proto
+                .cached_upgrade_steps_or_err()
+                .unwrap()
+                .current(),
             current_version.into()
         );
 
@@ -7751,7 +7758,11 @@ mod tests {
         assert_ne!(initial_reward_event, latest_reward_event);
         assert!(governance.proto.pending_version.is_none());
         assert_eq!(
-            governance.proto.deployed_version.unwrap(),
+            governance
+                .proto
+                .cached_upgrade_steps_or_err()
+                .unwrap()
+                .current(),
             next_version.into()
         );
 
@@ -7814,7 +7825,10 @@ mod tests {
         let mut governance = Governance::new(
             GovernanceProto {
                 root_canister_id: Some(root_canister_id.get()),
-                deployed_version: Some(current_version.clone().into()),
+                cached_upgrade_steps: Some(single_upgrade_possibility_upgrade_steps(
+                    &current_version,
+                    &next_version,
+                )),
                 pending_version: Some(PendingVersion {
                     target_version: Some(next_version.clone().into()),
                     mark_failed_at_seconds: now - 1,
@@ -7841,17 +7855,25 @@ mod tests {
             }
         );
         assert_eq!(
-            governance.proto.deployed_version.clone().unwrap(),
+            governance
+                .proto
+                .cached_upgrade_steps_or_err()
+                .unwrap()
+                .current(),
             current_version.clone().into()
         );
         // After we run our periodic tasks, the version should be marked as failed because of time
         // constraint.
         governance.run_periodic_tasks().now_or_never();
 
-        // A failed deployment is when pending is erased but deployed_version is not updated.
+        // A failed deployment is when pending is erased but cached_upgrade_steps is not updated.
         assert!(governance.proto.pending_version.is_none());
         assert_eq!(
-            governance.proto.deployed_version.unwrap(),
+            governance
+                .proto
+                .cached_upgrade_steps_or_err()
+                .unwrap()
+                .current(),
             current_version.into()
         );
 
@@ -7909,7 +7931,10 @@ mod tests {
         let mut governance = Governance::new(
             GovernanceProto {
                 root_canister_id: Some(root_canister_id.get()),
-                deployed_version: Some(current_version.clone().into()),
+                cached_upgrade_steps: Some(single_upgrade_possibility_upgrade_steps(
+                    &current_version,
+                    &next_version,
+                )),
                 pending_version: Some(PendingVersion {
                     target_version: Some(next_version.clone().into()),
                     mark_failed_at_seconds: now + 5 * 60,
@@ -7917,7 +7942,8 @@ mod tests {
                     proposal_id,
                 }),
                 // we make a proposal that is already decided so that it won't execute again because
-                // proposals to upgrade SNS's cannot execute if there's no deployed_version set on Governance state
+                // proposals to upgrade SNS's cannot execute if there's no cached_upgrade_steps set
+                // on Governance state
                 proposals: btreemap! {
                     proposal_id => ProposalData {
                         action: (&action).into(),
@@ -7964,7 +7990,11 @@ mod tests {
             }
         );
         assert_eq!(
-            governance.proto.deployed_version.clone().unwrap(),
+            governance
+                .proto
+                .cached_upgrade_steps_or_err()
+                .unwrap()
+                .current(),
             current_version.into()
         );
         // After we run our periodic tasks, the version should be marked as successful
@@ -7972,7 +8002,11 @@ mod tests {
 
         assert!(governance.proto.pending_version.is_none());
         assert_eq!(
-            governance.proto.deployed_version.clone().unwrap(),
+            governance
+                .proto
+                .cached_upgrade_steps_or_err()
+                .unwrap()
+                .current(),
             next_version.into()
         );
         // Assert proposal executed
@@ -8050,7 +8084,7 @@ mod tests {
         let mut governance = Governance::new(
             GovernanceProto {
                 root_canister_id: Some(root_canister_id.get()),
-                deployed_version: Some(current_version.clone().into()),
+                cached_upgrade_steps: Some(trivial_cached_upgrade_steps(&current_version)),
                 pending_version: Some(PendingVersion {
                     target_version: Some(next_version.clone().into()),
                     mark_failed_at_seconds: now + 1,
@@ -8058,7 +8092,8 @@ mod tests {
                     proposal_id,
                 }),
                 // we make a proposal that is already decided so that it won't execute again because
-                // proposals to upgrade SNS's cannot execute if there's no deployed_version set on Governance state
+                // proposals to upgrade SNS's cannot execute if there's no cached_upgrade_steps set
+                // on Governance state
                 proposals: btreemap! {
                     proposal_id => ProposalData {
                         action: (&action).into(),
@@ -8105,7 +8140,11 @@ mod tests {
             }
         );
         assert_eq!(
-            governance.proto.deployed_version.clone().unwrap(),
+            governance
+                .proto
+                .cached_upgrade_steps_or_err()
+                .unwrap()
+                .current(),
             current_version.into()
         );
         // After we run our periodic tasks, the version should be marked as successful
@@ -8186,7 +8225,7 @@ mod tests {
         let mut governance = Governance::new(
             GovernanceProto {
                 root_canister_id: Some(root_canister_id.get()),
-                deployed_version: Some(current_version.clone().into()),
+                cached_upgrade_steps: Some(trivial_cached_upgrade_steps(&current_version)),
                 pending_version: Some(PendingVersion {
                     target_version: Some(next_version.clone().into()),
                     mark_failed_at_seconds: now - 1,
@@ -8194,7 +8233,8 @@ mod tests {
                     proposal_id,
                 }),
                 // we make a proposal that is already decided so that it won't execute again because
-                // proposals to upgrade SNS's cannot execute if there's no deployed_version set on Governance state
+                // proposals to upgrade SNS's cannot execute if there's no cached_upgrade_steps set
+                // on Governance state
                 proposals: btreemap! {
                     proposal_id => ProposalData {
                         action: (&action).into(),
@@ -8241,7 +8281,11 @@ mod tests {
             }
         );
         assert_eq!(
-            governance.proto.deployed_version.clone().unwrap(),
+            governance
+                .proto
+                .cached_upgrade_steps_or_err()
+                .unwrap()
+                .current(),
             current_version.into()
         );
         // After we run our periodic tasks, the version should be marked as successful
@@ -8249,7 +8293,11 @@ mod tests {
 
         assert!(governance.proto.pending_version.is_none());
         assert_ne!(
-            governance.proto.deployed_version.clone().unwrap(),
+            governance
+                .proto
+                .cached_upgrade_steps_or_err()
+                .unwrap()
+                .current(),
             next_version.into()
         );
 
@@ -8333,7 +8381,7 @@ mod tests {
         let mut governance = Governance::new(
             GovernanceProto {
                 root_canister_id: Some(root_canister_id.get()),
-                deployed_version: Some(current_version.into()),
+                cached_upgrade_steps: Some(trivial_cached_upgrade_steps(&current_version)),
                 pending_version: Some(PendingVersion {
                     // This should be impossible due to how it's set, but is the condition of this test
                     target_version: None,
@@ -8342,7 +8390,8 @@ mod tests {
                     proposal_id,
                 }),
                 // we make a proposal that is already decided so that it won't execute again because
-                // proposals to upgrade SNS's cannot execute if there's no deployed_version set on Governance state
+                // proposals to upgrade SNS's cannot execute if there's no cached_upgrade_steps set
+                // on Governance state
                 proposals: btreemap! {
                     proposal_id => ProposalData {
                         action: (&action).into(),
@@ -8384,7 +8433,11 @@ mod tests {
 
         assert!(governance.proto.pending_version.is_none());
         assert_ne!(
-            governance.proto.deployed_version.clone().unwrap(),
+            governance
+                .proto
+                .cached_upgrade_steps_or_err()
+                .unwrap()
+                .current(),
             next_version.into()
         );
 
@@ -8431,7 +8484,7 @@ mod tests {
     }
 
     #[test]
-    fn test_check_upgrade_fails_and_sets_deployed_version_if_deployed_version_missing() {
+    fn test_check_upgrade_fails_and_sets_cached_upgrade_steps_if_cached_upgrade_steps_missing() {
         let root_canister_id = *TEST_ROOT_CANISTER_ID;
         let governance_canister_id = *TEST_GOVERNANCE_CANISTER_ID;
         let next_version = SnsVersion {
@@ -8469,7 +8522,7 @@ mod tests {
         let mut governance = Governance::new(
             GovernanceProto {
                 root_canister_id: Some(root_canister_id.get()),
-                deployed_version: None,
+                cached_upgrade_steps: None,
                 pending_version: Some(PendingVersion {
                     target_version: Some(next_version.clone().into()),
                     mark_failed_at_seconds: now + 5 * 60,
@@ -8477,7 +8530,8 @@ mod tests {
                     proposal_id,
                 }),
                 // we make a proposal that is already decided so that it won't execute again because
-                // proposals to upgrade SNS's cannot execute if there's no deployed_version set on Governance state
+                // proposals to upgrade SNS's cannot execute if there's no cached_upgrade_steps set
+                // on Governance state
                 proposals: btreemap! {
                     proposal_id => ProposalData {
                         action: (&action).into(),
@@ -8524,14 +8578,18 @@ mod tests {
             }
         );
 
-        assert_eq!(governance.proto.deployed_version, None);
+        assert_eq!(governance.proto.cached_upgrade_steps, None);
         // After we run our periodic tasks, the version should be marked as successful
         governance.run_periodic_tasks().now_or_never();
 
         assert!(governance.proto.pending_version.is_none());
         // This is set to the running version to avoid non-recoverable state
         assert_eq!(
-            governance.proto.deployed_version.clone().unwrap(),
+            governance
+                .proto
+                .cached_upgrade_steps_or_err()
+                .unwrap()
+                .current(),
             running_version.into()
         );
 
@@ -8552,9 +8610,9 @@ mod tests {
             GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 format!(
-                    "Upgrade marked as failed at {} seconds from genesis. \
-                Governance had no recorded deployed_version.  \
-                Setting it to currently running version and failing upgrade.",
+                    "Keeping the currently running version and marking the upgrade as failed \
+                     at timestamp {} seconds: \
+                     GovernanceProto.cached_upgrade_steps is not specified.",
                     now
                 )
             )
@@ -8634,6 +8692,32 @@ mod tests {
         assert!(!gov.acquire_upgrade_periodic_task_lock());
     }
 
+    fn trivial_cached_upgrade_steps(current_version: &SnsVersion) -> CachedUpgradeStepsPb {
+        CachedUpgradeStepsPb {
+            upgrade_steps: Some(Versions {
+                versions: vec![Version::from(current_version.clone())],
+            }),
+            requested_timestamp_seconds: Some(123),
+            response_timestamp_seconds: Some(456),
+        }
+    }
+
+    fn single_upgrade_possibility_upgrade_steps(
+        current_version: &SnsVersion,
+        next_version: &SnsVersion,
+    ) -> CachedUpgradeStepsPb {
+        CachedUpgradeStepsPb {
+            upgrade_steps: Some(Versions {
+                versions: vec![
+                    Version::from(current_version.clone()),
+                    Version::from(next_version.clone()),
+                ],
+            }),
+            requested_timestamp_seconds: Some(123),
+            response_timestamp_seconds: Some(456),
+        }
+    }
+
     #[test]
     fn test_check_upgrade_can_succeed_if_archives_out_of_sync() {
         let root_canister_id = *TEST_ROOT_CANISTER_ID;
@@ -8676,7 +8760,10 @@ mod tests {
         let mut governance = Governance::new(
             GovernanceProto {
                 root_canister_id: Some(root_canister_id.get()),
-                deployed_version: Some(current_version.clone().into()),
+                cached_upgrade_steps: Some(single_upgrade_possibility_upgrade_steps(
+                    &current_version,
+                    &next_version,
+                )),
                 pending_version: Some(PendingVersion {
                     target_version: Some(next_version.clone().into()),
                     mark_failed_at_seconds: now + 5 * 60,
@@ -8703,7 +8790,11 @@ mod tests {
             }
         );
         assert_eq!(
-            governance.proto.deployed_version.clone().unwrap(),
+            governance
+                .proto
+                .cached_upgrade_steps_or_err()
+                .unwrap()
+                .current(),
             current_version.into()
         );
         // After we run our periodic tasks, the version should succeed
@@ -8711,7 +8802,11 @@ mod tests {
 
         assert!(governance.proto.pending_version.is_none());
         assert_eq!(
-            governance.proto.deployed_version.clone().unwrap(),
+            governance
+                .proto
+                .cached_upgrade_steps_or_err()
+                .unwrap()
+                .current(),
             next_version.into()
         );
     }
@@ -8754,7 +8849,7 @@ mod tests {
         let mut governance = Governance::new(
             GovernanceProto {
                 root_canister_id: Some(root_canister_id.get()),
-                deployed_version: Some(current_version.clone().into()),
+                cached_upgrade_steps: Some(trivial_cached_upgrade_steps(&current_version)),
                 pending_version: Some(PendingVersion {
                     target_version: Some(next_version.clone().into()),
                     mark_failed_at_seconds: now + 5 * 60,
@@ -8781,7 +8876,11 @@ mod tests {
             }
         );
         assert_eq!(
-            governance.proto.deployed_version.clone().unwrap(),
+            governance
+                .proto
+                .cached_upgrade_steps_or_err()
+                .unwrap()
+                .current(),
             current_version.into()
         );
         // After we run our periodic tasks, the version should be marked as successful
@@ -8789,7 +8888,11 @@ mod tests {
 
         assert!(governance.proto.pending_version.is_none());
         assert_eq!(
-            governance.proto.deployed_version.unwrap(),
+            governance
+                .proto
+                .cached_upgrade_steps_or_err()
+                .unwrap()
+                .current(),
             next_version.into()
         );
     }
