@@ -3,7 +3,7 @@ use ic_metrics::{
     buckets::decimal_buckets, tokio_metrics_collector::TokioTaskMetricsCollector, MetricsRegistry,
 };
 use prometheus::{GaugeVec, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
-use quinn::{Connection, ConnectionError, ReadError, WriteError};
+use quinn::{Connection, ConnectionError, ReadError, ReadToEndError, StoppedError, WriteError};
 use tokio_metrics::TaskMonitor;
 
 const CONNECTION_RESULT_LABEL: &str = "status";
@@ -16,7 +16,6 @@ const REQUEST_TYPE_LABEL: &str = "request";
 pub(crate) const CONNECTION_RESULT_SUCCESS_LABEL: &str = "success";
 pub(crate) const CONNECTION_RESULT_FAILED_LABEL: &str = "failed";
 pub(crate) const ERROR_TYPE_APP: &str = "app";
-pub(crate) const ERROR_TYPE_STOPPED: &str = "stopped";
 pub(crate) const INFALIBBLE: &str = "infallible";
 const ERROR_CLOSED_STREAM: &str = "closed_stream";
 const ERROR_RESET_STREAM: &str = "reset_stream";
@@ -241,5 +240,19 @@ pub fn observe_read_error(err: &ReadError, op: &str, counter: &IntCounterVec) {
         ReadError::IllegalOrderedRead | ReadError::ClosedStream | ReadError::ZeroRttRejected => {
             counter.with_label_values(&[op, INFALIBBLE]).inc()
         }
+    }
+}
+
+pub fn observe_stopped_error(err: &StoppedError, op: &str, counter: &IntCounterVec) {
+    match err {
+        StoppedError::ConnectionLost(conn_err) => observe_conn_error(conn_err, op, counter),
+        StoppedError::ZeroRttRejected => counter.with_label_values(&[op, INFALIBBLE]).inc(),
+    }
+}
+
+pub fn observe_read_to_end_error(err: &ReadToEndError, op: &str, counter: &IntCounterVec) {
+    match err {
+        ReadToEndError::TooLong => counter.with_label_values(&[op, INFALIBBLE]).inc(),
+        ReadToEndError::Read(read_err) => observe_read_error(read_err, op, counter),
     }
 }

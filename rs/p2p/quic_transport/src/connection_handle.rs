@@ -7,12 +7,12 @@ use bytes::Bytes;
 use http::{Method, Request, Response, Version};
 use ic_protobuf::transport::v1 as pb;
 use prost::Message;
-use quinn::{Connection, ReadToEndError, StoppedError};
+use quinn::Connection;
 
 use crate::{
     metrics::{
-        observe_conn_error, observe_read_error, observe_write_error, QuicTransportMetrics,
-        INFALIBBLE,
+        observe_conn_error, observe_read_to_end_error, observe_stopped_error, observe_write_error,
+        QuicTransportMetrics, INFALIBBLE,
     },
     ConnId, MessagePriority, ResetStreamOnDrop, MAX_MESSAGE_SIZE_BYTES,
 };
@@ -106,36 +106,18 @@ impl ConnectionHandle {
                 .inc();
         })?;
 
-        send_stream.stopped().await.inspect_err(|err| match err {
-            StoppedError::ConnectionLost(conn_err) => {
-                observe_conn_error(
-                    conn_err,
-                    "stopped",
-                    &self.metrics.connection_handle_errors_total,
-                );
-            }
-            StoppedError::ZeroRttRejected => {
-                self.metrics
-                    .connection_handle_errors_total
-                    .with_label_values(&["stopped", INFALIBBLE])
-                    .inc();
-            }
+        send_stream.stopped().await.inspect_err(|err| {
+            observe_stopped_error(err, "stopped", &self.metrics.connection_handle_errors_total)
         })?;
-
         let response_bytes = recv_stream
             .read_to_end(MAX_MESSAGE_SIZE_BYTES)
             .await
-            .inspect_err(|err| match err {
-                ReadToEndError::TooLong => self
-                    .metrics
-                    .connection_handle_errors_total
-                    .with_label_values(&["read_to_end", INFALIBBLE])
-                    .inc(),
-                ReadToEndError::Read(read_err) => observe_read_error(
-                    read_err,
+            .inspect_err(|err| {
+                observe_read_to_end_error(
+                    &err,
                     "read_to_end",
                     &self.metrics.connection_handle_errors_total,
-                ),
+                )
             })?;
 
         let response = to_response(response_bytes)?;

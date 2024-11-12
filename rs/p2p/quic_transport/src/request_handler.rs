@@ -27,8 +27,8 @@ use tracing::instrument;
 use crate::{
     connection_handle::ConnectionHandle,
     metrics::{
-        observe_conn_error, observe_read_error, observe_write_error, QuicTransportMetrics,
-        ERROR_TYPE_APP, ERROR_TYPE_STOPPED, INFALIBBLE, STREAM_TYPE_BIDI,
+        observe_conn_error, observe_read_error, observe_stopped_error, observe_write_error,
+        QuicTransportMetrics, ERROR_TYPE_APP, INFALIBBLE, STREAM_TYPE_BIDI,
     },
     ConnId, ResetStreamOnDrop, MAX_MESSAGE_SIZE_BYTES,
 };
@@ -162,11 +162,8 @@ async fn handle_bi_stream(
             .with_label_values(&["finish", INFALIBBLE])
             .inc();
     })?;
-    send_stream.stopped().await.inspect_err(|_| {
-        metrics
-            .request_handle_errors_total
-            .with_label_values(&[STREAM_TYPE_BIDI, ERROR_TYPE_STOPPED])
-            .inc();
+    send_stream.stopped().await.inspect_err(|err| {
+        observe_stopped_error(&err, "stopped", &metrics.request_handle_errors_total);
     })?;
     Ok(())
 }
