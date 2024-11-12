@@ -47,7 +47,7 @@ pub struct NeuronIds {
     pub neuron_ids: ::prost::alloc::vec::Vec<NeuronId>,
 }
 /// The id of a specific proposal.
-#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
+#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable, serde::Serialize)]
 #[self_describing]
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct ProposalId {
@@ -1636,7 +1636,7 @@ pub struct Governance {
     pub deployed_version: ::core::option::Option<governance::Version>,
     /// Version SNS is in process of upgrading to.
     #[prost(message, optional, tag = "24")]
-    pub pending_version: ::core::option::Option<governance::UpgradeInProgress>,
+    pub pending_version: ::core::option::Option<governance::PendingVersion>,
     #[prost(message, optional, tag = "30")]
     pub target_version: ::core::option::Option<governance::Version>,
     /// True if the run_periodic_tasks function is currently finalizing disburse maturity, meaning
@@ -1835,6 +1835,7 @@ pub mod governance {
         candid::CandidType,
         candid::Deserialize,
         comparable::Comparable,
+        serde::Serialize,
         Clone,
         PartialEq,
         ::prost::Message,
@@ -1869,6 +1870,7 @@ pub mod governance {
         candid::CandidType,
         candid::Deserialize,
         comparable::Comparable,
+        serde::Serialize,
         Clone,
         PartialEq,
         ::prost::Message,
@@ -1886,7 +1888,7 @@ pub mod governance {
         PartialEq,
         ::prost::Message,
     )]
-    pub struct UpgradeInProgress {
+    pub struct PendingVersion {
         /// Version to  be upgraded to
         #[prost(message, optional, tag = "1")]
         pub target_version: ::core::option::Option<Version>,
@@ -1998,64 +2000,6 @@ pub mod governance {
         }
     }
 }
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    comparable::Comparable,
-    Clone,
-    Copy,
-    PartialEq,
-    ::prost::Message,
-)]
-pub struct Timers {
-    #[prost(uint64, optional, tag = "1")]
-    pub last_reset_timestamp_seconds: ::core::option::Option<u64>,
-    #[prost(uint64, optional, tag = "2")]
-    pub last_spawned_timestamp_seconds: ::core::option::Option<u64>,
-}
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    comparable::Comparable,
-    Clone,
-    Copy,
-    PartialEq,
-    ::prost::Message,
-)]
-pub struct ResetTimersRequest {}
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    comparable::Comparable,
-    Clone,
-    Copy,
-    PartialEq,
-    ::prost::Message,
-)]
-pub struct ResetTimersResponse {}
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    comparable::Comparable,
-    Clone,
-    Copy,
-    PartialEq,
-    ::prost::Message,
-)]
-pub struct GetTimersRequest {}
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    comparable::Comparable,
-    Clone,
-    Copy,
-    PartialEq,
-    ::prost::Message,
-)]
-pub struct GetTimersResponse {
-    #[prost(message, optional, tag = "1")]
-    pub timers: ::core::option::Option<Timers>,
-}
 /// Request message for 'get_metadata'.
 #[derive(
     candid::CandidType,
@@ -2123,6 +2067,7 @@ pub struct GetSnsInitializationParametersResponse {
 pub struct GetRunningSnsVersionRequest {}
 /// Response with the SNS's currently running version and any upgrades
 /// that are in progress.
+/// GetUpgradeJournal is a superior API to this one that should
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -2137,7 +2082,35 @@ pub struct GetRunningSnsVersionResponse {
     pub deployed_version: ::core::option::Option<governance::Version>,
     /// The upgrade in progress, if any.
     #[prost(message, optional, tag = "2")]
-    pub pending_version: ::core::option::Option<governance::UpgradeInProgress>,
+    pub pending_version:
+        ::core::option::Option<get_running_sns_version_response::UpgradeInProgress>,
+}
+/// Nested message and enum types in `GetRunningSnsVersionResponse`.
+pub mod get_running_sns_version_response {
+    /// The same as PendingVersion (stored in the governance proto). They are separated to make it easy to change one without changing the other.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct UpgradeInProgress {
+        /// Version to  be upgraded to
+        #[prost(message, optional, tag = "1")]
+        pub target_version: ::core::option::Option<super::governance::Version>,
+        /// Seconds since UNIX epoch to mark this as a failed version if not in sync with current version
+        #[prost(uint64, tag = "2")]
+        pub mark_failed_at_seconds: u64,
+        /// Lock to avoid checking over and over again.  Also, it is a counter for how many times we have attempted to check,
+        /// allowing us to fail in case we otherwise have gotten stuck.
+        #[prost(uint64, tag = "3")]
+        pub checking_upgrade_lock: u64,
+        /// The proposal that initiated this upgrade
+        #[prost(uint64, tag = "4")]
+        pub proposal_id: u64,
+    }
 }
 /// Request to fail an upgrade proposal that is Adopted but not Executed or
 /// Failed if it is past the time when it should have been marked as failed.
@@ -2170,6 +2143,7 @@ pub struct FailStuckUpgradeInProgressResponse {}
     candid::CandidType,
     candid::Deserialize,
     comparable::Comparable,
+    serde::Serialize,
     Clone,
     Copy,
     PartialEq,
@@ -3399,6 +3373,7 @@ pub struct AdvanceTargetVersionResponse {}
     candid::CandidType,
     candid::Deserialize,
     comparable::Comparable,
+    serde::Serialize,
     Clone,
     PartialEq,
     ::prost::Message,
@@ -3415,6 +3390,7 @@ pub mod upgrade_journal_entry {
         candid::CandidType,
         candid::Deserialize,
         comparable::Comparable,
+        serde::Serialize,
         Clone,
         PartialEq,
         ::prost::Message,
@@ -3427,6 +3403,7 @@ pub mod upgrade_journal_entry {
         candid::CandidType,
         candid::Deserialize,
         comparable::Comparable,
+        serde::Serialize,
         Clone,
         PartialEq,
         ::prost::Message,
@@ -3441,6 +3418,22 @@ pub mod upgrade_journal_entry {
         candid::CandidType,
         candid::Deserialize,
         comparable::Comparable,
+        serde::Serialize,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct TargetVersionReset {
+        #[prost(message, optional, tag = "1")]
+        pub old_target_version: ::core::option::Option<super::governance::Version>,
+        #[prost(message, optional, tag = "2")]
+        pub new_target_version: ::core::option::Option<super::governance::Version>,
+    }
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        serde::Serialize,
         Clone,
         PartialEq,
         ::prost::Message,
@@ -3459,6 +3452,7 @@ pub mod upgrade_journal_entry {
             candid::CandidType,
             candid::Deserialize,
             comparable::Comparable,
+            serde::Serialize,
             Clone,
             Copy,
             PartialEq,
@@ -3475,6 +3469,7 @@ pub mod upgrade_journal_entry {
         candid::CandidType,
         candid::Deserialize,
         comparable::Comparable,
+        serde::Serialize,
         Clone,
         PartialEq,
         ::prost::Message,
@@ -3491,6 +3486,7 @@ pub mod upgrade_journal_entry {
             candid::CandidType,
             candid::Deserialize,
             comparable::Comparable,
+            serde::Serialize,
             Clone,
             PartialEq,
             ::prost::Message,
@@ -3503,6 +3499,7 @@ pub mod upgrade_journal_entry {
             candid::CandidType,
             candid::Deserialize,
             comparable::Comparable,
+            serde::Serialize,
             Clone,
             PartialEq,
             ::prost::Oneof,
@@ -3523,6 +3520,7 @@ pub mod upgrade_journal_entry {
         candid::CandidType,
         candid::Deserialize,
         comparable::Comparable,
+        serde::Serialize,
         Clone,
         PartialEq,
         ::prost::Oneof,
@@ -3533,7 +3531,7 @@ pub mod upgrade_journal_entry {
         #[prost(message, tag = "2")]
         TargetVersionSet(TargetVersionSet),
         #[prost(message, tag = "3")]
-        TargetVersionReset(TargetVersionSet),
+        TargetVersionReset(TargetVersionReset),
         #[prost(message, tag = "4")]
         UpgradeStarted(UpgradeStarted),
         #[prost(message, tag = "5")]
@@ -3545,6 +3543,7 @@ pub mod upgrade_journal_entry {
     candid::CandidType,
     candid::Deserialize,
     comparable::Comparable,
+    serde::Serialize,
     Clone,
     PartialEq,
     ::prost::Message,

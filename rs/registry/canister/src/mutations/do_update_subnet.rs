@@ -613,13 +613,11 @@ mod tests {
     };
     use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId};
     use ic_nervous_system_common_test_keys::{TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL};
-    use ic_protobuf::registry::{
-        crypto::v1::MasterPublicKeyId as MasterPublicKeyIdPb,
-        subnet::v1::{
-            ChainKeyConfig as ChainKeyConfigPb, EcdsaConfig as EcdsaConfigPb,
-            KeyConfig as KeyConfigPb, SubnetRecord as SubnetRecordPb,
-        },
+    use ic_protobuf::registry::subnet::v1::{
+        ChainKeyConfig as ChainKeyConfigPb, EcdsaConfig as EcdsaConfigPb, KeyConfig as KeyConfigPb,
+        SubnetRecord as SubnetRecordPb,
     };
+    use ic_protobuf::types::v1::MasterPublicKeyId as MasterPublicKeyIdPb;
     use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
     use ic_registry_subnet_type::SubnetType;
     use ic_test_utilities_types::ids::subnet_test_id;

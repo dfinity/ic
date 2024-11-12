@@ -110,6 +110,12 @@ type UpgradeArg = record {
     // The principal of the EVM RPC canister that handles the communication
     // with the Ethereum blockchain.
     evm_rpc_id : opt principal;
+
+    // Change the deposit with subaccount helper smart contract address.
+    deposit_with_subaccount_helper_contract_address : opt text;
+
+    // Change the last scraped block number of the deposit with subaccount helper smart contract.
+    last_deposit_with_subaccount_scraped_block_number : opt nat;
 };
 
 type MinterArg = variant { UpgradeArg : UpgradeArg; InitArg : InitArg };
@@ -195,6 +201,9 @@ type MinterInfo = record {
     // Last scraped block number for logs of the ERC20 helper contract.
     last_erc20_scraped_block_number: opt nat;
 
+    // Last scraped block number for logs of the deposit with subaccount helper contract.
+    last_deposit_with_subaccount_scraped_block_number: opt nat;
+
     // Canister ID of the ckETH ledger.
     cketh_ledger_id: opt principal;
 
@@ -256,7 +265,16 @@ type RetrieveEthStatus = variant {
     TxFinalized : TxFinalizedStatus;
 };
 
-type WithdrawalArg = record { recipient : text; amount : nat };
+type WithdrawalArg = record {
+    // The address to which the minter should deposit ETH.
+    recipient : text;
+
+    // The amount of ckETH in Wei that the client wants to withdraw.
+    amount : nat;
+
+    // The subaccount to burn ckETH from.
+    from_subaccount : opt Subaccount;
+};
 
 // Details of a withdrawal request and its status.
 type WithdrawalDetail = record {
@@ -447,6 +465,9 @@ type Event = record {
             block_number : nat;
         };
         SyncedErc20ToBlock : record {
+            block_number : nat;
+        };
+        SyncedDepositWithSubaccountToBlock : record {
             block_number : nat;
         };
         AcceptedEthWithdrawalRequest : record {

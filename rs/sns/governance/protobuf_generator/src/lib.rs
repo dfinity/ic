@@ -55,6 +55,26 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         vec!["Governance.Mode", "NeuronPermissionType", "Proposal.action"],
     );
     apply_attribute(
+        "#[derive(serde::Serialize)]",
+        vec![
+            "Empty",
+            "ProposalId",
+            "UpgradeJournal",
+            "Governance.Version",
+            "Governance.Versions",
+            "UpgradeJournalEntry",
+            "UpgradeJournalEntry.event",
+            "UpgradeJournalEntry.UpgradeStepsRefreshed",
+            "UpgradeJournalEntry.TargetVersionSet",
+            "UpgradeJournalEntry.TargetVersionReset",
+            "UpgradeJournalEntry.UpgradeStarted",
+            "UpgradeJournalEntry.UpgradeStarted.reason",
+            "UpgradeJournalEntry.UpgradeOutcome",
+            "UpgradeJournalEntry.UpgradeOutcome.status",
+            "UpgradeJournalEntry.UpgradeOutcome.InvalidState",
+        ],
+    );
+    apply_attribute(
         "#[self_describing]",
         vec!["ProposalId", "Motion", "Ballot", "Tally"],
     );

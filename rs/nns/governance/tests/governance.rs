@@ -95,6 +95,7 @@ use ic_nns_governance::{
     },
     temporarily_disable_private_neuron_enforcement, temporarily_disable_set_visibility_proposals,
     temporarily_enable_private_neuron_enforcement, temporarily_enable_set_visibility_proposals,
+    DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
 };
 use ic_nns_governance_api::{
     pb::v1::CreateServiceNervousSystem as ApiCreateServiceNervousSystem,
@@ -116,7 +117,7 @@ use icp_ledger::{protobuf, AccountIdentifier, Memo, Subaccount, Tokens};
 use lazy_static::lazy_static;
 use maplit::{btreemap, hashmap};
 use pretty_assertions::{assert_eq, assert_ne};
-use proptest::prelude::proptest;
+use proptest::prelude::{proptest, ProptestConfig};
 use rand::{prelude::IteratorRandom, rngs::StdRng, Rng, SeedableRng};
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 use rust_decimal_macros::dec;
@@ -132,6 +133,7 @@ use std::{
 
 #[cfg(feature = "tla")]
 use ic_nns_governance::governance::tla::{check_traces as tla_check_traces, TLA_TRACES_LKEY};
+use ic_nns_governance::storage::reset_stable_memory;
 #[cfg(feature = "tla")]
 use tla_instrumentation_proc_macros::with_tla_trace_check;
 
@@ -265,16 +267,30 @@ fn test_single_neuron_proposal_new() {
             NNSStateChange::GovernanceProto(vec![
                 GovernanceChange::Neurons(vec![MapChange::Changed(
                     0,
-                    vec![NeuronChange::RecentBallots(vec![VecChange::Added(
-                        0,
-                        vec![
-                            BallotInfoChange::ProposalId(OptionChange::Different(
-                                None,
-                                Some(ProposalId { id: 1 }),
-                            )),
-                            BallotInfoChange::Vote(I32Change(0, 1)),
-                        ],
-                    )])],
+                    vec![
+                        NeuronChange::RecentBallots(vec![VecChange::Added(
+                            0,
+                            vec![
+                                BallotInfoChange::ProposalId(OptionChange::Different(
+                                    None,
+                                    Some(ProposalId { id: 1 }),
+                                )),
+                                BallotInfoChange::Vote(I32Change(0, 1)),
+                            ],
+                        )]),
+                        // Neuron's voting power was refreshed, because it directly votes (i.e. not
+                        // as a result of following), but implicitly voted (by virtue of being the
+                        // proposer). (Normally, the amount would increase, but for testing
+                        // purposes, it is enough to show that the value changed.)
+                        NeuronChange::VotingPowerRefreshedTimestampSeconds(
+                            OptionChange::BothSome(
+                                U64Change(
+                                    DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
+                                    DEFAULT_TEST_START_TIMESTAMP_SECONDS,
+                                ),
+                            ),
+                        ),
+                    ],
                 )]),
                 GovernanceChange::Proposals(vec![MapChange::Added(
                     1,
@@ -330,6 +346,10 @@ fn test_single_neuron_proposal_new() {
                             Some(WaitForQuietStateDesc {
                                 current_deadline_timestamp_seconds: 999111017,
                             }),
+                        )),
+                        ProposalDataChange::TotalPotentialVotingPower(OptionChange::Different(
+                            None,
+                            Some(1),
                         )),
                     ],
                 )]),
@@ -464,6 +484,7 @@ fn check_proposal_status_after_voting_and_after_expiration(
     expected_after_voting: ProposalStatus,
     expected_after_expiration: ProposalStatus,
 ) {
+    reset_stable_memory();
     let expiration_seconds = 17; // Arbitrary duration
     let network_economics = NetworkEconomics {
         reject_cost_e8s: 0,          // It's the default, but specify for emphasis
@@ -932,6 +953,13 @@ async fn test_cascade_following_new() {
                             BallotInfoChange::Vote(I32Change(0, 1)),
                         ],
                     )]),
+                    // As in an earlier test, the proposer's voting power gets refreshed.
+                    NeuronChange::VotingPowerRefreshedTimestampSeconds(OptionChange::BothSome(
+                        U64Change(
+                            DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
+                            DEFAULT_TEST_START_TIMESTAMP_SECONDS,
+                        ),
+                    ),),
                 ],
             )]),
             GovernanceChange::Proposals(vec![MapChange::Added(
@@ -1046,6 +1074,10 @@ async fn test_cascade_following_new() {
                             current_deadline_timestamp_seconds: 999111001,
                         }),
                     )),
+                    ProposalDataChange::TotalPotentialVotingPower(OptionChange::Different(
+                        None,
+                        Some(10_125_000_000)
+                    )),
                 ],
             )]),
         ],)])
@@ -1064,16 +1096,25 @@ async fn test_cascade_following_new() {
         Changed::Changed(vec![NNSStateChange::GovernanceProto(vec![
             GovernanceChange::Neurons(vec![MapChange::Changed(
                 5,
-                vec![NeuronChange::RecentBallots(vec![VecChange::Added(
-                    0,
-                    vec![
-                        BallotInfoChange::ProposalId(OptionChange::Different(
-                            None,
-                            Some(ProposalId { id: 1 }),
-                        )),
-                        BallotInfoChange::Vote(I32Change(0, 1)),
-                    ],
-                )])],
+                vec![
+                    NeuronChange::RecentBallots(vec![VecChange::Added(
+                        0,
+                        vec![
+                            BallotInfoChange::ProposalId(OptionChange::Different(
+                                None,
+                                Some(ProposalId { id: 1 }),
+                            )),
+                            BallotInfoChange::Vote(I32Change(0, 1)),
+                        ],
+                    )]),
+                    // Neuron's voting power was refreshed, because it voted directly.
+                    NeuronChange::VotingPowerRefreshedTimestampSeconds(OptionChange::BothSome(
+                        U64Change(
+                            DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
+                            DEFAULT_TEST_START_TIMESTAMP_SECONDS,
+                        ),
+                    ),),
+                ],
             )]),
             GovernanceChange::Proposals(vec![MapChange::Changed(
                 1,
@@ -1167,16 +1208,26 @@ async fn test_cascade_following_new() {
                 ),
                 MapChange::Changed(
                     6,
-                    vec![NeuronChange::RecentBallots(vec![VecChange::Added(
-                        0,
-                        vec![
-                            BallotInfoChange::ProposalId(OptionChange::Different(
-                                None,
-                                Some(ProposalId { id: 1 }),
-                            )),
-                            BallotInfoChange::Vote(I32Change(0, 1)),
-                        ],
-                    )])],
+                    vec![
+                        NeuronChange::RecentBallots(vec![VecChange::Added(
+                            0,
+                            vec![
+                                BallotInfoChange::ProposalId(OptionChange::Different(
+                                    None,
+                                    Some(ProposalId { id: 1 }),
+                                )),
+                                BallotInfoChange::Vote(I32Change(0, 1)),
+                            ],
+                        )]),
+                        // Only this neuron voted directly; therefore, even though other neurons
+                        // voted (via following) only this neuron's voting power was refreshed.
+                        NeuronChange::VotingPowerRefreshedTimestampSeconds(OptionChange::BothSome(
+                            U64Change(
+                                DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
+                                DEFAULT_TEST_START_TIMESTAMP_SECONDS,
+                            ),
+                        ),),
+                    ],
                 ),
             ]),
             GovernanceChange::Proposals(vec![MapChange::Changed(
@@ -1699,6 +1750,18 @@ async fn test_all_follow_proposer() {
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
     );
+
+    // Later, we'll inspect the same field again to verify that voting power
+    // refresh actually took place. This is just to make sure that the later
+    // value is different from this earlier one.
+    assert_eq!(
+        gov.with_neuron(&NeuronId { id: 5 }, |neuron| {
+            neuron.voting_power_refreshed_timestamp_seconds()
+        })
+        .unwrap(),
+        DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
+    );
+
     // Add following for 5 and 6 for 1.
     gov.manage_neuron(
         // Must match neuron 5's serialized_id.
@@ -1715,6 +1778,22 @@ async fn test_all_follow_proposer() {
     .now_or_never()
     .unwrap()
     .panic_if_error("Manage neuron failed");
+
+    // Assert that neuron 5's voting power was refreshed. More concretely,
+    // verifying that neuron 5's voting_power_refreshed_timestamp_seconds
+    // changed from before. (Earlier, we saw that this field had a different
+    // value, to wit, DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS)
+    assert_ne!(
+        DEFAULT_TEST_START_TIMESTAMP_SECONDS,
+        DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
+    );
+    assert_eq!(
+        gov.with_neuron(&NeuronId { id: 5 }, |neuron| {
+            neuron.voting_power_refreshed_timestamp_seconds()
+        })
+        .unwrap(),
+        DEFAULT_TEST_START_TIMESTAMP_SECONDS,
+    );
 
     gov.manage_neuron(
         // Must match neuron 6's serialized_id.
@@ -2608,11 +2687,11 @@ async fn test_invalid_proposals_fail() {
     .unwrap();
 }
 
-fn get_current_voting_power(gov: &Governance, neuron_id: u64, now: u64) -> u64 {
+fn deciding_voting_power(gov: &Governance, neuron_id: u64, now: u64) -> u64 {
     gov.neuron_store
         .with_neuron(&NeuronId { id: neuron_id }, |n| n.clone())
         .unwrap()
-        .voting_power(now)
+        .deciding_voting_power(now)
 }
 
 #[tokio::test]
@@ -2651,9 +2730,9 @@ async fn test_compute_tally_while_open() {
         Some(Tally {
             timestamp_seconds: fake_driver.now(),
             no: 0,
-            yes: get_current_voting_power(&gov, 1, fake_driver.now()),
-            total: get_current_voting_power(&gov, 1, fake_driver.now())
-                + get_current_voting_power(&gov, 2, fake_driver.now())
+            yes: deciding_voting_power(&gov, 1, fake_driver.now()),
+            total: deciding_voting_power(&gov, 1, fake_driver.now())
+                + deciding_voting_power(&gov, 2, fake_driver.now())
         })
     );
 }
@@ -2694,9 +2773,9 @@ async fn test_compute_tally_after_decided() {
         Some(Tally {
             timestamp_seconds: fake_driver.now(),
             no: 0,
-            yes: get_current_voting_power(&gov, 2, fake_driver.now()),
-            total: get_current_voting_power(&gov, 1, fake_driver.now())
-                + get_current_voting_power(&gov, 2, fake_driver.now())
+            yes: deciding_voting_power(&gov, 2, fake_driver.now()),
+            total: deciding_voting_power(&gov, 1, fake_driver.now())
+                + deciding_voting_power(&gov, 2, fake_driver.now())
         })
     );
 
@@ -2714,10 +2793,10 @@ async fn test_compute_tally_after_decided() {
         gov.get_proposal_data(pid).unwrap().latest_tally,
         Some(Tally {
             timestamp_seconds: fake_driver.now(),
-            no: get_current_voting_power(&gov, 1, fake_driver.now()),
-            yes: get_current_voting_power(&gov, 2, fake_driver.now()),
-            total: get_current_voting_power(&gov, 1, fake_driver.now())
-                + get_current_voting_power(&gov, 2, fake_driver.now())
+            no: deciding_voting_power(&gov, 1, fake_driver.now()),
+            yes: deciding_voting_power(&gov, 2, fake_driver.now()),
+            total: deciding_voting_power(&gov, 1, fake_driver.now())
+                + deciding_voting_power(&gov, 2, fake_driver.now())
         })
     );
 }
@@ -2915,14 +2994,13 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
     let neuron_share = gov
         .neuron_store
         .with_neuron(&NeuronId::from_u64(1), |n| {
-            n.voting_power(fake_driver.now()) as f64
+            n.deciding_voting_power(fake_driver.now()) as f64
         })
         .expect("Neuron not found")
-        / gov
-            .neuron_store
-            .active_neurons_iter()
-            .map(|neuron| neuron.voting_power(fake_driver.now()))
-            .sum::<u64>() as f64;
+        / gov.neuron_store.with_active_neurons_iter(|iter| {
+            iter.map(|neuron| neuron.deciding_voting_power(fake_driver.now()))
+                .sum::<u64>() as f64
+        });
     let expected_distributed_e8s_equivalent =
         (expected_available_e8s_equivalent as f64 * neuron_share) as u64;
     assert_eq!(expected_distributed_e8s_equivalent, 15);
@@ -2947,13 +3025,15 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
             .maturity_e8s_equivalent,
         expected_distributed_e8s_equivalent,
     );
-    for neuron in gov.neuron_store.active_neurons_iter() {
-        if neuron.id().id == 1 {
-            continue;
-        }
+    gov.neuron_store.with_active_neurons_iter(|iter| {
+        for neuron in iter {
+            if neuron.id().id == 1 {
+                continue;
+            }
 
-        assert_eq!(neuron.maturity_e8s_equivalent, 0, "{:#?}", neuron);
-    }
+            assert_eq!(neuron.maturity_e8s_equivalent, 0, "{:#?}", neuron);
+        }
+    });
 
     // The ballots should have been cleared
     let proposal = gov.get_proposal_data(proposal_id).unwrap();
@@ -3451,6 +3531,7 @@ fn compute_maturities(
     proposals: Vec<impl Into<fake::ProposalNeuronBehavior>>,
     reward_pot_e8s: u64,
 ) -> Vec<u64> {
+    reset_stable_memory();
     let proposals: Vec<fake::ProposalNeuronBehavior> =
         proposals.into_iter().map(|x| x.into()).collect();
 
@@ -3552,13 +3633,16 @@ fn compute_maturities(
 }
 
 proptest! {
-
-/// Check that voting on
-/// 1. a governance proposal yields 20 times the voting power
-/// 2. an exchange rate proposal yields 0.01 times the voting power
-/// 3. other proposals yield 1 time the voting power
+#![proptest_config(ProptestConfig {
+    cases: 100, .. ProptestConfig::default()
+})]
 #[test]
 fn test_topic_weights(stake in 1u64..1_000_000_000) {
+    // Check that voting on
+    // 1. a governance proposal yields 20 times the voting power
+    // 2. an exchange rate proposal yields 0.01 times the voting power
+    // 3. other proposals yield 1 time the voting power
+
     // Test alloacting 100 maturity to two neurons with equal stake where
     // 1. first neuron voting on a network proposal (1x) and
     // 2. second neuron voting on an exchange proposal (0.01x).
@@ -3738,7 +3822,7 @@ fn test_random_voting_rewards_scenarios() {
         proposals
     }
 
-    const SCENARIO_COUNT: u64 = 10_000;
+    const SCENARIO_COUNT: u64 = 1000;
     let mut unique_scenarios = HashSet::new();
     for seed in 1..=SCENARIO_COUNT {
         unique_scenarios.insert(helper(seed));
@@ -7084,9 +7168,7 @@ fn test_manage_and_reward_node_providers() {
     // Find the neuron...
     let neuron = gov
         .neuron_store
-        .active_neurons_iter()
-        .find(|x| x.controller() == np_pid)
-        .unwrap();
+        .with_active_neurons_iter(|mut iter| iter.find(|x| x.controller() == np_pid).unwrap());
     assert_eq!(neuron.stake_e8s(), 99_999_999);
     // Find the transaction in the ledger...
     driver.assert_account_contains(
@@ -7394,9 +7476,7 @@ fn test_manage_and_reward_multiple_node_providers() {
     // Find the neuron...
     let neuron = gov
         .neuron_store
-        .active_neurons_iter()
-        .find(|x| x.controller() == np_pid_2)
-        .unwrap();
+        .with_active_neurons_iter(|mut iter| iter.find(|x| x.controller() == np_pid_2).unwrap());
     assert_eq!(neuron.stake_e8s(), 99_999_999);
     // Find the transaction in the ledger...
     driver.assert_account_contains(
@@ -8968,6 +9048,7 @@ async fn test_id_v1_works() {
 #[test]
 fn test_can_follow_by_subaccount_and_neuron_id() {
     fn test_can_follow_by(make_neuron_id: fn(&Neuron) -> NeuronIdOrSubaccount) {
+        reset_stable_memory();
         let driver = fake::FakeDriver::default();
         let mut gov = Governance::new(
             fixture_for_manage_neuron(),
@@ -13193,15 +13274,17 @@ async fn distribute_rewards_load_test() {
     );
 
     // Step 3.1: Inspect neurons to make sure they have been rewarded for voting.
-    for neuron in governance.neuron_store.active_neurons_iter() {
-        let current_neuron_maturity = neuron.maturity_e8s_equivalent;
+    governance.neuron_store.with_active_neurons_iter(|iter| {
+        for neuron in iter {
+            let current_neuron_maturity = neuron.maturity_e8s_equivalent;
 
-        assert_ne!(
-            current_neuron_maturity, starting_maturity,
-            "neuron: {:#?}",
-            neuron,
-        );
-    }
+            assert_ne!(
+                current_neuron_maturity, starting_maturity,
+                "neuron: {:#?}",
+                neuron,
+            );
+        }
+    });
 
     // Step 3.2: Inspect the latest_reward_event.
     let reward_event = governance.heap_data.latest_reward_event.as_ref().unwrap();

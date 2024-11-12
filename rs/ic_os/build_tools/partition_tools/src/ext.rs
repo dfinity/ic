@@ -11,6 +11,7 @@ use tokio::fs::File;
 use tokio::io::{self, AsyncReadExt, AsyncSeekExt, AsyncWriteExt, SeekFrom};
 use tokio::process::Command;
 
+use crate::exes::{debugfs, faketime};
 use crate::partition;
 use crate::Partition;
 
@@ -26,6 +27,8 @@ pub struct ExtPartition {
 impl Partition for ExtPartition {
     /// Open an ext4 partition for writing, via debugfs
     async fn open(image: PathBuf, index: Option<usize>) -> Result<Self> {
+        let _ = debugfs().context("debugfs is needed to open ext4 partitions")?;
+
         let backing_dir = tempdir()?;
         let output_path = backing_dir.path().join(STORE_NAME);
 
@@ -74,11 +77,15 @@ impl Partition for ExtPartition {
 
     /// Copy a file into place
     async fn write_file(&mut self, input: &Path, output: &Path) -> Result<()> {
-        let mut cmd = Command::new("/usr/bin/faketime")
+        let mut cmd = Command::new(faketime().context("faketime is needed to write files")?)
             .args([
                 "-f",
                 "1970-1-1 0:0:0",
-                "/usr/sbin/debugfs",
+                // debugfs has already been ensured.
+                debugfs()
+                    .context("debugfs is needed to write files")?
+                    .to_str()
+                    .unwrap(),
                 "-w",
                 (self.backing_dir.path().join(STORE_NAME).to_str().unwrap()),
                 "-f",
@@ -88,7 +95,7 @@ impl Partition for ExtPartition {
             .stdout(Stdio::null())
             .stderr(Stdio::piped())
             .spawn()
-            .context("failed to run debugfs")?;
+            .context("failed to write file using debugfs")?;
 
         cmd.stdin
             .as_mut()
@@ -101,7 +108,8 @@ impl Partition for ExtPartition {
     /// Read a file from a given partition
     async fn read_file(&mut self, input: &Path) -> Result<String> {
         // run the underlying debugfs operation
-        let mut cmd = Command::new("/usr/sbin/debugfs")
+        // debugfs has already been ensured.
+        let mut cmd = Command::new(debugfs().context("debugfs is needed to read files")?)
             .args([
                 (self.backing_dir.path().join(STORE_NAME).to_str().unwrap()),
                 "-f",
@@ -111,7 +119,7 @@ impl Partition for ExtPartition {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .context("failed to run debugfs")?;
+            .context("failed to read file using debugfs")?;
 
         let mut stdin = cmd.stdin.as_mut().unwrap();
         io::copy(
@@ -149,21 +157,26 @@ impl ExtPartition {
         mode: usize,
         context: Option<&str>,
     ) -> Result<()> {
-        let mut cmd = Command::new("/usr/bin/faketime")
-            .args([
-                "-f",
-                "1970-1-1 0:0:0",
-                "/usr/sbin/debugfs",
-                "-w",
-                (self.backing_dir.path().join(STORE_NAME).to_str().unwrap()),
-                "-f",
-                "-",
-            ])
-            .stdin(Stdio::piped())
-            .stdout(Stdio::null())
-            .stderr(Stdio::piped())
-            .spawn()
-            .context("failed to run debugfs")?;
+        let mut cmd =
+            Command::new(faketime().context("faketime is needed to fix metadata in files")?)
+                .args([
+                    "-f",
+                    "1970-1-1 0:0:0",
+                    // debugfs has already been ensured.
+                    debugfs()
+                        .context("debugfs is needed to write files")?
+                        .to_str()
+                        .unwrap(),
+                    "-w",
+                    (self.backing_dir.path().join(STORE_NAME).to_str().unwrap()),
+                    "-f",
+                    "-",
+                ])
+                .stdin(Stdio::piped())
+                .stdout(Stdio::null())
+                .stderr(Stdio::piped())
+                .spawn()
+                .context("failed to run debugfs")?;
 
         let mut stdin = cmd.stdin.as_mut().unwrap();
 
