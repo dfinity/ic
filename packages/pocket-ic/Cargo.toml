@@ -19,14 +19,11 @@ include = [
 authors.workspace = true
 edition.workspace = true
 
-[lib]
-doctest = false
-
 [dependencies]
 base64 = { workspace = true }
 candid = { workspace = true }
 hex = { workspace = true }
-ic-agent = { workspace = true }
+ic-certification = { workspace = true }
 ic-transport-types = { workspace = true }
 reqwest = { workspace = true }
 schemars = "0.8.16"
@@ -36,6 +33,8 @@ serde_cbor = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 slog = { workspace = true }
+strum = { workspace = true }
+strum_macros = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
@@ -49,6 +48,8 @@ wslpath = "0.0.2"
 candid_parser = { workspace = true }
 ed25519-dalek = { workspace = true }
 flate2 = { workspace = true }
+ic-cdk = { workspace = true }
+ic-error-types = { path = "../../rs/types/error_types" }
 k256 = { workspace = true }
 lazy_static = { workspace = true }
 wat = { workspace = true }

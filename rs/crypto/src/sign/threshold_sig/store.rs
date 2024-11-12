@@ -23,7 +23,7 @@ pub trait ThresholdSigDataStore {
     /// before.
     fn insert_transcript_data(
         &mut self,
-        dkg_id: NiDkgId,
+        dkg_id: &NiDkgId,
         public_coefficients: CspPublicCoefficients,
         indices: BTreeMap<NodeId, NodeIndex>,
     );
@@ -35,19 +35,19 @@ pub trait ThresholdSigDataStore {
     /// with the given `dkg_id`, this key will be overwritten.
     fn insert_individual_public_key(
         &mut self,
-        dkg_id: NiDkgId,
+        dkg_id: &NiDkgId,
         node_id: NodeId,
         individual_public_key: CspThresholdSigPublicKey,
     );
 
     /// Returns the transcript data for the node_id if it has been loaded.
-    fn transcript_data(&self, dkg_id: NiDkgId) -> Option<&TranscriptData>;
+    fn transcript_data(&self, dkg_id: &NiDkgId) -> Option<&TranscriptData>;
 
     /// Returns a reference to the individual public key of the node with ID
     /// `node_id` for the given `dkg_id`.
     fn individual_public_key(
         &self,
-        dkg_id: NiDkgId,
+        dkg_id: &NiDkgId,
         node_id: NodeId,
     ) -> Option<&CspThresholdSigPublicKey>;
 }
@@ -133,24 +133,27 @@ impl ThresholdSigDataStoreImpl {
     }
 
     #[allow(clippy::map_entry)]
-    fn entry_for(&mut self, dkg_id: NiDkgId) -> &mut ThresholdSigData {
-        if !self.store.contains_key(&dkg_id) {
-            self.store.insert(dkg_id, ThresholdSigData::default());
+    fn entry_for(&mut self, dkg_id: &NiDkgId) -> &mut ThresholdSigData {
+        if !self.store.contains_key(dkg_id) {
+            self.store
+                .insert(dkg_id.clone(), ThresholdSigData::default());
             match dkg_id.dkg_tag {
                 NiDkgTag::LowThreshold => {
-                    self.low_threshold_dkg_id_insertion_order.push_back(dkg_id);
+                    self.low_threshold_dkg_id_insertion_order
+                        .push_back(dkg_id.clone());
                 }
                 NiDkgTag::HighThreshold => {
-                    self.high_threshold_dkg_id_insertion_order.push_back(dkg_id);
+                    self.high_threshold_dkg_id_insertion_order
+                        .push_back(dkg_id.clone());
                 }
             }
         }
         self.store
-            .get_mut(&dkg_id)
+            .get_mut(dkg_id)
             .expect("Missing dkg id from store")
     }
 
-    fn purge_entry_for_oldest_dkg_id_if_necessary(&mut self, tag: NiDkgTag) {
+    fn purge_entry_for_oldest_dkg_id_if_necessary(&mut self, tag: &NiDkgTag) {
         let dkg_id_insertion_order = match tag {
             NiDkgTag::LowThreshold => &mut self.low_threshold_dkg_id_insertion_order,
             NiDkgTag::HighThreshold => &mut self.high_threshold_dkg_id_insertion_order,
@@ -177,7 +180,7 @@ impl ThresholdSigDataStoreImpl {
 impl ThresholdSigDataStore for ThresholdSigDataStoreImpl {
     fn insert_transcript_data(
         &mut self,
-        dkg_id: NiDkgId,
+        dkg_id: &NiDkgId,
         public_coefficients: CspPublicCoefficients,
         indices: BTreeMap<NodeId, NodeIndex>,
     ) {
@@ -187,13 +190,13 @@ impl ThresholdSigDataStore for ThresholdSigDataStoreImpl {
             indices,
         });
 
-        self.purge_entry_for_oldest_dkg_id_if_necessary(dkg_id.dkg_tag);
+        self.purge_entry_for_oldest_dkg_id_if_necessary(&dkg_id.dkg_tag);
         self.assert_length_invariant();
     }
 
     fn insert_individual_public_key(
         &mut self,
-        dkg_id: NiDkgId,
+        dkg_id: &NiDkgId,
         node_id: NodeId,
         public_key: CspThresholdSigPublicKey,
     ) {
@@ -202,22 +205,22 @@ impl ThresholdSigDataStore for ThresholdSigDataStoreImpl {
             .get_or_insert_with(BTreeMap::new)
             .insert(node_id, public_key);
 
-        self.purge_entry_for_oldest_dkg_id_if_necessary(dkg_id.dkg_tag);
+        self.purge_entry_for_oldest_dkg_id_if_necessary(&dkg_id.dkg_tag);
         self.assert_length_invariant();
     }
 
-    fn transcript_data(&self, dkg_id: NiDkgId) -> Option<&TranscriptData> {
+    fn transcript_data(&self, dkg_id: &NiDkgId) -> Option<&TranscriptData> {
         self.store
-            .get(&dkg_id)
+            .get(dkg_id)
             .and_then(|data| data.transcript_data.as_ref())
     }
 
     fn individual_public_key(
         &self,
-        dkg_id: NiDkgId,
+        dkg_id: &NiDkgId,
         node_id: NodeId,
     ) -> Option<&CspThresholdSigPublicKey> {
-        self.store.get(&dkg_id).and_then(|data| {
+        self.store.get(dkg_id).and_then(|data| {
             data.public_keys
                 .as_ref()
                 .and_then(|public_key_map| public_key_map.get(&node_id))

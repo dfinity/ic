@@ -14,11 +14,8 @@ use ic_metrics::MetricsRegistry;
 use ic_sys::PAGE_SIZE;
 use ic_types::{Height, MAX_STABLE_MEMORY_IN_BYTES};
 use nix::unistd::dup;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::{
-    fs::OpenOptions,
-    path::{Path, PathBuf},
-};
 use tempfile::Builder;
 
 fn persist_delta_to_base(
@@ -154,7 +151,7 @@ fn persisted_map_is_equivalent_to_the_original() {
         );
         persist_delta_to_base(pagemap, heap_file.to_path_buf(), metrics).unwrap();
         let persisted_map = PageMap::open(
-            &base_only_storage_layout(heap_file.to_path_buf()),
+            Box::new(base_only_storage_layout(heap_file.to_path_buf())),
             Height::new(0),
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
         )
@@ -232,7 +229,7 @@ fn can_persist_and_load_an_empty_page_map() {
     let metrics = StorageMetrics::new(&MetricsRegistry::new());
     persist_delta_to_base(&original_map, heap_file.to_path_buf(), &metrics).unwrap();
     let persisted_map = PageMap::open(
-        &base_only_storage_layout(heap_file.to_path_buf()),
+        Box::new(base_only_storage_layout(heap_file.to_path_buf())),
         Height::new(0),
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     )
@@ -251,7 +248,7 @@ fn can_load_a_page_map_without_files() {
     let heap_file = tmp.path().join("missing_file");
 
     let loaded_map = PageMap::open(
-        &base_only_storage_layout(heap_file.to_path_buf()),
+        Box::new(base_only_storage_layout(heap_file.to_path_buf())),
         Height::new(0),
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     )
@@ -259,38 +256,6 @@ fn can_load_a_page_map_without_files() {
 
     // base_height will be different, but is not part of eq
     assert_eq!(PageMap::new_for_testing(), loaded_map);
-}
-
-#[test]
-fn returns_an_error_if_file_size_is_not_a_multiple_of_page_size() {
-    use std::io::Write;
-
-    let tmp = tempfile::Builder::new()
-        .prefix("checkpoints")
-        .tempdir()
-        .unwrap();
-    let heap_file = tmp.path().join("heap");
-    OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(false)
-        .open(&heap_file)
-        .unwrap()
-        .write_all(&vec![1; PAGE_SIZE / 2])
-        .unwrap();
-
-    match PageMap::open(
-        &base_only_storage_layout(heap_file.to_path_buf()),
-        Height::new(0),
-        Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
-    ) {
-        Err(err) => assert!(
-            err.is_invalid_heap_file(),
-            "Expected invalid heap file error, got {:?}",
-            err
-        ),
-        Ok(_) => panic!("Expected a invalid heap file error, got Ok(_)"),
-    }
 }
 
 #[test]
@@ -484,7 +449,7 @@ fn get_memory_instructions_returns_deltas() {
     persist_delta_to_base(&page_map, heap_file.to_path_buf(), &metrics).unwrap();
 
     let mut page_map = PageMap::open(
-        &base_only_storage_layout(heap_file.to_path_buf()),
+        Box::new(base_only_storage_layout(heap_file.to_path_buf())),
         Height::new(0),
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     )
@@ -639,7 +604,7 @@ fn get_memory_instructions_ignores_base_file() {
         .exists());
 
     let page_map = PageMap::open(
-        &storage_layout,
+        Box::new(storage_layout),
         Height::new(0),
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     )
@@ -702,7 +667,7 @@ fn get_memory_instructions_stops_at_instructions_outside_min_range() {
         .exists());
 
     let page_map = PageMap::open(
-        &storage_layout,
+        Box::new(storage_layout),
         Height::new(1),
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     )
@@ -773,7 +738,7 @@ fn get_memory_instructions_extends_mmap_past_min_range() {
         .exists());
 
     let page_map = PageMap::open(
-        &storage_layout,
+        Box::new(storage_layout),
         Height::new(1),
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     )

@@ -5,9 +5,9 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     fs::{File, OpenOptions},
     io::{Read, Seek, SeekFrom, Write},
-    ops::Range,
+    ops::{Deref, DerefMut, Range},
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{Arc, Mutex, OnceLock},
 };
 
 use crate::page_map::{
@@ -151,15 +151,99 @@ impl BaseFile {
 /// For any page that appears in multiple overlay files, its contents are read
 /// from the newest overlay containing the page.
 /// The contents of pages that appear in no overlay file are read from `base`.
-#[derive(Clone, Default)]
-pub(crate) struct Storage {
+///
+/// DO NOT IMPLEMENT CLONE TO ELIMINATE DOUBLE INITIALIZATION IN `Storage`
+#[derive(Default)]
+pub(crate) struct StorageImpl {
     /// The lowest level data we mmap during loading.
     base: BaseFile,
     /// Stack of overlay files, newest file last.
     overlays: Vec<OverlayFile>,
 }
 
+pub fn verify(storage_layout: &dyn StorageLayout) -> Result<(), PersistenceError> {
+    StorageImpl::load(storage_layout)?;
+    Ok(())
+}
+
+/// Lazy loaded representation of `StorageImpl` (see above).
+/// The `storage_layout` points to the files on disk, which are loaded at the first access.
+/// The loaded `StorageImpl` is never modified or unloaded till `drop`, meaning we don't read
+/// `storage_layout` ever again.
+/// If `storage_layout` is `None` during load we construct `StorageLayout` with the default
+/// constructor.
+#[derive(Clone, Default)]
+pub(crate) struct Storage {
+    storage_layout: Arc<Mutex<Option<Box<dyn StorageLayout + Send + Sync>>>>,
+    storage_impl: Arc<OnceLock<StorageImpl>>,
+}
+
 impl Storage {
+    fn init_or_die(&self) -> &StorageImpl {
+        self.storage_impl.get_or_init(|| {
+            match std::mem::take(
+                self.storage_layout
+                    .lock()
+                    .expect("Failed to lock storage_layout")
+                    .deref_mut(),
+            ) {
+                None => Default::default(),
+                Some(storage_layout) => StorageImpl::load(storage_layout.deref())
+                    .expect("Failed to load storage layout"),
+            }
+        })
+    }
+
+    /// Whether the `storage_impl` is already loaded.
+    pub fn is_loaded(&self) -> bool {
+        self.storage_impl.get().is_some()
+    }
+
+    /// Create `Storage`.
+    pub fn lazy_load(
+        storage_layout: Box<dyn StorageLayout + Send + Sync>,
+    ) -> Result<Self, PersistenceError> {
+        Ok(Storage {
+            storage_layout: Arc::new(Mutex::new(Some(storage_layout))),
+            storage_impl: OnceLock::default().into(),
+        })
+    }
+
+    pub fn get_page(&self, page_index: PageIndex) -> &PageBytes {
+        self.init_or_die().get_page(page_index)
+    }
+
+    pub fn get_base_memory_instructions(&self) -> MemoryInstructions {
+        self.init_or_die().get_base_memory_instructions()
+    }
+
+    pub fn get_memory_instructions(
+        &self,
+        range: Range<PageIndex>,
+        filter: &mut BitVec,
+    ) -> MemoryInstructions {
+        self.init_or_die().get_memory_instructions(range, filter)
+    }
+
+    pub fn num_logical_pages(&self) -> usize {
+        self.init_or_die().num_logical_pages()
+    }
+
+    pub fn serialize(&self) -> StorageSerialization {
+        self.init_or_die().serialize()
+    }
+
+    pub fn deserialize(serialized_storage: StorageSerialization) -> Result<Self, PersistenceError> {
+        let storage_impl = OnceLock::new();
+        let _ = storage_impl.set(StorageImpl::deserialize(serialized_storage)?);
+        Ok(Self {
+            storage_layout: Arc::new(Mutex::new(None)),
+            storage_impl: storage_impl.into(),
+        })
+    }
+}
+
+impl StorageImpl {
     pub fn load(storage_layout: &dyn StorageLayout) -> Result<Self, PersistenceError> {
         // For each shard, the oldest (i.e. lowest height) overlay belongs to `BaseFile` if it
         // consists of a single range.
@@ -878,7 +962,6 @@ impl dyn StorageLayout + '_ {
         for overlay in self.existing_overlays()? {
             result = std::cmp::max(result, Self::num_overlay_logical_pages(&overlay)?);
         }
-        debug_assert_eq!(result, Storage::load(self).unwrap().num_logical_pages());
         Ok(result)
     }
     fn existing_base(&self) -> Option<PathBuf> {

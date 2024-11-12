@@ -1,10 +1,11 @@
 use crate::dashboard::tests::assertions::DashboardAssert;
 use crate::dashboard::{filters, DashboardTemplate, Fetched, Status, DEFAULT_TX_TABLE_PAGE_SIZE};
 use crate::state::{Config, Timestamp, TransactionKytData};
-use crate::{blocklist::BTC_ADDRESS_BLOCKLIST, dashboard, state, BtcNetwork, KytMode};
+use crate::{dashboard, state};
 use bitcoin::Address;
 use bitcoin::{absolute::LockTime, transaction::Version, Transaction};
 use ic_btc_interface::Txid;
+use ic_btc_kyt::{blocklist::BTC_ADDRESS_BLOCKLIST, BtcNetwork, KytMode};
 use std::str::FromStr;
 
 fn mock_txid(v: usize) -> Txid {

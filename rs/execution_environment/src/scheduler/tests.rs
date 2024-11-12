@@ -43,7 +43,6 @@ use ic_types::{
     ComputeAllocation, Cycles, Height, NumBytes,
 };
 use ic_types_test_utils::ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id};
-use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use proptest::prelude::*;
 use std::collections::HashMap;
 use std::{cmp::min, ops::Range};
@@ -1254,9 +1253,7 @@ fn canisters_with_insufficient_cycles_are_uninstalled() {
 #[test]
 fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
     let initial_time = UNIX_EPOCH + Duration::from_secs(1);
-    let mut test = SchedulerTestBuilder::new()
-        .with_canister_snapshots(true)
-        .build();
+    let mut test = SchedulerTestBuilder::new().build();
 
     let canister_id = test.create_canister_with_controller(
         Cycles::new(12_700_000),
@@ -1360,9 +1357,7 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
 #[test]
 fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
     let initial_time = UNIX_EPOCH + Duration::from_secs(1);
-    let mut test = SchedulerTestBuilder::new()
-        .with_canister_snapshots(true)
-        .build();
+    let mut test = SchedulerTestBuilder::new().build();
 
     let canister_id = test.create_canister_with_controller(
         Cycles::new(12_700_000),
@@ -2824,6 +2819,8 @@ fn stopping_canisters_are_not_stopped_if_not_ready() {
 
 #[test]
 fn canister_is_stopped_if_timeout_occurs_and_ready_to_stop() {
+    use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+
     let test = StateMachineBuilder::new().build();
 
     let canister_id = test
@@ -4124,7 +4121,7 @@ fn construct_scheduler_for_prop_test(
         .build();
 
     // Ensure that compute allocation of canisters doesn't exceed the capacity.
-    let capacity = SchedulerImpl::compute_capacity_percent(scheduler_cores) as u64 - 1;
+    let capacity = RoundSchedule::compute_capacity_percent(scheduler_cores) as u64 - 1;
     let total = canister_params
         .iter()
         .fold(0, |acc, (ca, _)| acc + ca.as_percent());

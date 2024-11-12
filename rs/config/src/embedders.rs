@@ -61,6 +61,9 @@ pub(crate) const DEFAULT_MAX_DIRTY_PAGES_WITHOUT_OPTIMIZATION: usize = (GiB as u
 /// Scheduling overhead for copying dirty pages, in instructions.
 pub(crate) const DIRTY_PAGE_COPY_OVERHEAD: NumInstructions = NumInstructions::new(3_000);
 
+/// The overhead for dirty pages in Wasm64.
+pub const WASM64_DIRTY_PAGE_OVERHEAD_MULTIPLIER: u64 = 4;
+
 #[allow(non_upper_case_globals)]
 const KiB: u64 = 1024;
 #[allow(non_upper_case_globals)]
@@ -119,7 +122,7 @@ impl FeatureFlags {
             wasm_native_stable_memory: FlagStatus::Enabled,
             wasm64: FlagStatus::Disabled,
             best_effort_responses: FlagStatus::Disabled,
-            canister_backtrace: FlagStatus::Disabled,
+            canister_backtrace: FlagStatus::Enabled,
         }
     }
 }
@@ -229,6 +232,9 @@ pub struct Config {
     /// The dirty page copying overhead, in instructions.
     pub dirty_page_copy_overhead: NumInstructions,
 
+    /// The dirty page overhead factor for Wasm64.
+    pub wasm64_dirty_page_overhead_multiplier: u64,
+
     /// The maximum allowed size for an uncompressed canister Wasm module.
     pub wasm_max_size: NumBytes,
 
@@ -275,6 +281,7 @@ impl Config {
             wasm_max_size: WASM_MAX_SIZE,
             max_wasm_memory_size: NumBytes::new(MAX_WASM_MEMORY_IN_BYTES),
             max_stable_memory_size: NumBytes::new(MAX_STABLE_MEMORY_IN_BYTES),
+            wasm64_dirty_page_overhead_multiplier: WASM64_DIRTY_PAGE_OVERHEAD_MULTIPLIER,
         }
     }
 }
