@@ -27,7 +27,6 @@ const ERROR_RESET_STREAM: &str = "reset_stream";
 const ERROR_STOPPED_STREAM: &str = "stopped_stream";
 const ERROR_APP_CLOSED_CONN: &str = "app_closed_conn";
 const ERROR_LOCALLY_CLOSED_CONN: &str = "locally_closed_conn";
-// A connection was closed by the QUIC protocol.
 const ERROR_QUIC_CLOSED_CONN: &str = "quic_closed_conn";
 
 pub(crate) const STREAM_TYPE_BIDI: &str = "bidi";
@@ -217,6 +216,7 @@ pub fn observe_conn_error(err: &ConnectionError, op: &str, counter: &IntCounterV
         ConnectionError::ApplicationClosed(_) => counter
             .with_label_values(&[op, ERROR_APP_CLOSED_CONN])
             .inc(),
+        // A connection was closed by the QUIC protocol.
         _ => counter
             .with_label_values(&[op, ERROR_QUIC_CLOSED_CONN])
             .inc(),
