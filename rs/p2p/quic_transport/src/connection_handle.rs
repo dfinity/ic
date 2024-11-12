@@ -218,7 +218,7 @@ mod tests {
     use tokio::sync::Barrier;
     use turmoil::Builder;
 
-    use crate::connection_handle::ResetStreamOnDrop;
+    use crate::ResetStreamOnDrop;
 
     const MAX_READ_SIZE: usize = 10_000;
 
