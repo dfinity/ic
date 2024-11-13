@@ -5016,15 +5016,34 @@ impl Governance {
             }
         };
 
-        let original_cached_upgrade_steps =
-            cached_upgrade_steps("refresh_cached_upgrade_steps (before awaiting SNS-W response)")?;
-
-        let current_version = original_cached_upgrade_steps.current();
+        let original_cached_upgrade_steps = match cached_upgrade_steps(
+            "refresh_cached_upgrade_steps (before awaiting SNS-W response)",
+        ) {
+            Some(original_cached_upgrade_steps) => original_cached_upgrade_steps,
+            None => {
+                log!(ERROR, "Asking SNS Root for the current version ...");
+                let requested_timestamp_seconds = self.env.now();
+                // TODO: Replace root_canister_id_or_panic with root_canister_id_or_err.
+                let current_version =
+                    get_running_version(&*self.env, self.proto.root_canister_id_or_panic())
+                        .await
+                        .ok()?;
+                let response_timestamp_seconds = self.env.now();
+                CachedUpgradeSteps::new(
+                    current_version,
+                    vec![],
+                    requested_timestamp_seconds,
+                    response_timestamp_seconds,
+                )
+            }
+        };
 
         // We use this `requested_timestamp_seconds` of the previous cache to save the time at which
         // the next cache was requested. A cleaner, but less lightweight implementation would
         // save both the previous and the next caches.
         let requested_timestamp_seconds = original_cached_upgrade_steps.requested_timestamp_seconds;
+
+        let current_version = original_cached_upgrade_steps.current();
 
         let versions = crate::sns_upgrade::get_upgrade_steps(
             &*self.env,
@@ -5624,13 +5643,15 @@ impl Governance {
             // If we have an upgrade_in_progress with no target_version, we are in an unexpected
             // situation. We recover to workable state by marking upgrade as failed.
 
-            let message = "No target_version set for upgrade_in_progress. This should be impossible. \
-                Clearing upgrade_in_progress state and marking proposal failed to unblock further upgrades.";
+            let message = "No target_version set for upgrade_in_progress. This should be \
+                impossible. Clearing upgrade_in_progress state and marking proposal failed \
+                to unblock further upgrades.";
 
             self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome::invalid_state(
                 message.to_string(),
                 None,
             ));
+
             self.fail_sns_upgrade_to_next_version_proposal(
                 upgrade_in_progress.proposal_id,
                 GovernanceError::new_with_message(ErrorType::PreconditionFailed, message),
@@ -5698,14 +5719,16 @@ impl Governance {
                 if self.env.now() > mark_failed_at {
                     let message = format!(
                         "Upgrade marked as failed at {} seconds from unix epoch. \
-                             Governance could not determine running version from root: {}. \
-                             Setting upgrade to failed to unblock retry.",
+                         Governance could not determine running version from root: {}. \
+                         Setting upgrade to failed to unblock retry.",
                         self.env.now(),
                         message,
                     );
+
                     self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome::timeout(
                         message.to_string(),
                     ));
+
                     self.fail_sns_upgrade_to_next_version_proposal(
                         proposal_id,
                         GovernanceError::new_with_message(ErrorType::External, message),
