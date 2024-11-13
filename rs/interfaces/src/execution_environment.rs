@@ -1132,6 +1132,26 @@ pub trait SystemApi {
     /// Returns the amount of cycles added to the canister's balance.
     fn ic0_mint_cycles(&mut self, amount: u64) -> HypervisorResult<u64>;
 
+    /// Mints the `amount` cycles
+    /// Adds cycles to the canister's balance.
+    ///
+    /// Adds no more cycles than `amount`.
+    ///
+    /// The canister balance afterwards does not exceed
+    /// maximum amount of cycles it can hold.
+    /// However, canisters on system subnets have no balance limit.
+    ///
+    /// The amount of cycles added to the canister's balance is
+    /// represented by a 128-bit value and is copied in the canister
+    /// memory starting starting at the location `dst`.
+    fn ic0_mint_cycles128(
+        &mut self,
+        amount_high: u64,
+        amount_low: u64,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
+
     /// Checks whether the principal identified by src/size is one of the
     /// controllers of the canister. If yes, then a value of 1 is returned,
     /// otherwise a 0 is returned. It can be called multiple times.

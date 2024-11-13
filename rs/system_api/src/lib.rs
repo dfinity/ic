@@ -3167,7 +3167,8 @@ impl SystemApi for SystemApiImpl {
         trace_syscall!(self, CanisterStatus, result);
         result
     }
-
+    // TODO: This can be removed (in favour of ic0_mint_cycles128) once the CMC is upgraded, so it
+    // doesn't make sense to deduplicate the shared code.
     fn ic0_mint_cycles(&mut self, amount: u64) -> HypervisorResult<u64> {
         let result = match self.api_type {
             ApiType::Start { .. }
@@ -3193,6 +3194,41 @@ impl SystemApi for SystemApiImpl {
             }
         };
         trace_syscall!(self, MintCycles, result, amount);
+        result
+    }
+
+    fn ic0_mint_cycles128(
+        &mut self,
+        amount_high: u64,
+        amount_low: u64,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()> {
+        let cycles = Cycles::from_parts(amount_high, amount_low);
+        let result = match self.api_type {
+            ApiType::Start { .. }
+            | ApiType::Init { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::InspectMessage { .. } => Err(self.error_for("ic0_mint_cycles128")),
+            ApiType::Update { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. } => {
+                if self.execution_parameters.execution_mode == ExecutionMode::NonReplicated {
+                    // Non-replicated mode means we are handling a composite query.
+                    // Access to this syscall not permitted.
+                    Err(self.error_for("ic0_mint_cycles128"))
+                } else {
+                    self.sandbox_safe_system_state.mint_cycles(cycles)?;
+                    copy_cycles_to_heap(cycles, dst, heap, "ic0_mint_cycles_128")?;
+                    Ok(())
+                }
+            }
+        };
+        trace_syscall!(self, MintCycles, result, cycles);
         result
     }
 
