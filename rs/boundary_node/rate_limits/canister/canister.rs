@@ -28,7 +28,6 @@ const REGISTRY_CANISTER_METHOD: &str = "get_api_boundary_node_ids";
 fn init(init_arg: InitArg) {
     // TODO: rework logging
     ic_cdk::println!("Starting canister init");
-    // Set authorized principal, which performs write operations, such as adding new configurations
     with_canister_state(|state| {
         // Set authorized principal, which performs write operations, such as adding new configurations
         if let Some(principal) = init_arg.authorized_principal {
