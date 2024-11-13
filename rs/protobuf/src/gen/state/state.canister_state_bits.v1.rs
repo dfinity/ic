@@ -546,6 +546,15 @@ pub struct SnapshotId {
     pub content: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct TaskQueue {
+    #[prost(message, optional, tag = "1")]
+    pub paused_or_aborted_task: ::core::option::Option<ExecutionTask>,
+    #[prost(enumeration = "OnLowWasmMemoryHookStatus", tag = "2")]
+    pub on_low_wasm_memory_hook_status: i32,
+    #[prost(message, repeated, tag = "3")]
+    pub queue: ::prost::alloc::vec::Vec<ExecutionTask>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterStateBits {
     #[prost(uint64, tag = "2")]
     pub last_full_execution_round: u64,
@@ -655,6 +664,124 @@ pub struct CanisterStateBits {
 }
 /// Nested message and enum types in `CanisterStateBits`.
 pub mod canister_state_bits {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum CanisterStatus {
+        #[prost(message, tag = "11")]
+        Running(super::CanisterStatusRunning),
+        #[prost(message, tag = "12")]
+        Stopping(super::CanisterStatusStopping),
+        #[prost(message, tag = "13")]
+        Stopped(super::CanisterStatusStopped),
+    }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterStateBitsV2 {
+    #[prost(uint64, tag = "2")]
+    pub last_full_execution_round: u64,
+    #[prost(message, optional, tag = "3")]
+    pub call_context_manager: ::core::option::Option<CallContextManager>,
+    #[prost(uint64, tag = "4")]
+    pub compute_allocation: u64,
+    #[prost(int64, tag = "5")]
+    pub accumulated_priority: i64,
+    #[prost(message, optional, tag = "7")]
+    pub execution_state_bits: ::core::option::Option<ExecutionStateBits>,
+    #[prost(uint64, tag = "8")]
+    pub memory_allocation: u64,
+    #[prost(uint64, tag = "15")]
+    pub scheduled_as_first: u64,
+    #[prost(uint64, tag = "17")]
+    pub skipped_round_due_to_no_messages: u64,
+    /// In how many rounds a canister is executed.
+    #[prost(uint64, tag = "18")]
+    pub executed: u64,
+    #[prost(bytes = "vec", tag = "20")]
+    pub certified_data: ::prost::alloc::vec::Vec<u8>,
+    #[prost(uint64, tag = "21")]
+    pub interrupted_during_execution: u64,
+    #[prost(message, optional, tag = "22")]
+    pub consumed_cycles: ::core::option::Option<super::super::super::types::v1::NominalCycles>,
+    #[prost(uint64, tag = "23")]
+    pub freeze_threshold: u64,
+    #[prost(message, repeated, tag = "25")]
+    pub controllers: ::prost::alloc::vec::Vec<super::super::super::types::v1::PrincipalId>,
+    #[prost(message, optional, tag = "26")]
+    pub cycles_balance: ::core::option::Option<super::super::queues::v1::Cycles>,
+    /// The size of the canister's stable memory in bytes.
+    #[prost(uint64, tag = "27")]
+    pub stable_memory_size64: u64,
+    /// The memory delta debit of this canister. This is tracked for the purposes
+    /// of rate limiting the amount of memory delta generated per round.
+    #[prost(uint64, tag = "28")]
+    pub heap_delta_debit: u64,
+    /// The instruction debit for install_code messages of this canister. This is
+    /// tracked for the purposes of rate limiting the install_code messages.
+    #[prost(uint64, tag = "29")]
+    pub install_code_debit: u64,
+    /// Time of last charge for resource allocations.
+    #[prost(message, optional, tag = "31")]
+    pub time_of_last_allocation_charge_nanos: ::core::option::Option<u64>,
+    /// Postponed charges that are not applied to `cycles_balance` yet.
+    #[prost(message, optional, tag = "32")]
+    pub cycles_debit: ::core::option::Option<super::super::queues::v1::Cycles>,
+    /// Canister global timer, in nanoseconds since Unix epoch.
+    #[prost(uint64, optional, tag = "33")]
+    pub global_timer_nanos: ::core::option::Option<u64>,
+    /// Canister version.
+    #[prost(uint64, tag = "34")]
+    pub canister_version: u64,
+    #[prost(message, repeated, tag = "36")]
+    pub consumed_cycles_by_use_cases: ::prost::alloc::vec::Vec<ConsumedCyclesByUseCase>,
+    #[prost(message, optional, tag = "37")]
+    pub canister_history: ::core::option::Option<CanisterHistory>,
+    /// Resource reservation cycles.
+    #[prost(message, optional, tag = "38")]
+    pub reserved_balance: ::core::option::Option<super::super::queues::v1::Cycles>,
+    /// The user-specified upper limit on `reserved_balance`.
+    #[prost(message, optional, tag = "39")]
+    pub reserved_balance_limit: ::core::option::Option<super::super::queues::v1::Cycles>,
+    /// Maps tracking chunks in the Wasm chunk store.
+    #[prost(message, optional, tag = "40")]
+    pub wasm_chunk_store_metadata: ::core::option::Option<WasmChunkStoreMetadata>,
+    /// Statistics on query execution for entire lifetime of canister.
+    #[prost(message, optional, tag = "41")]
+    pub total_query_stats: ::core::option::Option<TotalQueryStats>,
+    /// Log visibility for the canister.
+    #[prost(message, optional, tag = "51")]
+    pub log_visibility_v2: ::core::option::Option<LogVisibilityV2>,
+    /// Log records of the canister.
+    #[prost(message, repeated, tag = "43")]
+    pub canister_log_records: ::prost::alloc::vec::Vec<CanisterLogRecord>,
+    /// The index of the next log record to be created.
+    #[prost(uint64, tag = "44")]
+    pub next_canister_log_record_idx: u64,
+    /// The Wasm memory limit. This is a field in developer-visible canister
+    /// settings that allows the developer to limit the usage of the Wasm memory
+    /// by the canister to leave some room in 4GiB for upgrade calls.
+    /// See the interface specification for more information.
+    #[prost(uint64, optional, tag = "45")]
+    pub wasm_memory_limit: ::core::option::Option<u64>,
+    /// The next local snapshot ID.
+    #[prost(uint64, tag = "46")]
+    pub next_snapshot_id: u64,
+    /// Captures the memory usage of all snapshots associated with a canister.
+    #[prost(uint64, tag = "52")]
+    pub snapshots_memory_usage: u64,
+    #[prost(int64, tag = "48")]
+    pub priority_credit: i64,
+    #[prost(enumeration = "LongExecutionMode", tag = "49")]
+    pub long_execution_mode: i32,
+    #[prost(uint64, optional, tag = "50")]
+    pub wasm_memory_threshold: ::core::option::Option<u64>,
+    /// Contains tasks that need to be executed before processing any input of the
+    /// canister.
+    #[prost(message, optional, tag = "54")]
+    pub task_queue: ::core::option::Option<TaskQueue>,
+    #[prost(oneof = "canister_state_bits_v2::CanisterStatus", tags = "11, 12, 13")]
+    pub canister_status: ::core::option::Option<canister_state_bits_v2::CanisterStatus>,
+}
+/// Nested message and enum types in `CanisterStateBitsV2`.
+pub mod canister_state_bits_v2 {
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum CanisterStatus {
         #[prost(message, tag = "11")]
