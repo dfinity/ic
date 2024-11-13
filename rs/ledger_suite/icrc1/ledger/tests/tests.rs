@@ -453,6 +453,19 @@ fn icrc1_test_downgrade_from_incompatible_version() {
 }
 
 #[test]
+fn icrc1_benchmark_account_serialization() {
+    ic_ledger_suite_state_machine_tests::icrc1_benchmark_account_serialization(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn icrc1_benchmark_transfers() {
+    ic_ledger_suite_state_machine_tests::icrc1_benchmark_transfers(ledger_wasm(), encode_init_args);
+}
+
+#[test]
 fn icrc1_test_stable_migration_endpoints_disabled() {
     ic_ledger_suite_state_machine_tests::icrc1_test_stable_migration_endpoints_disabled(
         ledger_mainnet_wasm(),

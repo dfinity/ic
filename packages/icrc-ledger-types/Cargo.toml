@@ -17,6 +17,7 @@ crc32fast = "1.2.0"
 hex = { workspace = true }
 ic-stable-structures = { workspace = true }
 itertools = { workspace = true }
+minicbor = { workspace = true }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
 serde = { workspace = true }
@@ -25,8 +26,13 @@ sha2 = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 time = { workspace = true }
+ciborium = { workspace = true }
+ic-cdk = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
 hex = { workspace = true }
 proptest = { workspace = true }
+minicbor = { workspace = true }
+ciborium = { workspace = true }
+ic-cdk = { workspace = true }

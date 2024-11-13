@@ -1,8 +1,8 @@
 #[cfg(feature = "canbench-rs")]
 mod benches;
 
-use candid::candid_method;
 use candid::types::number::Nat;
+use candid::{candid_method, Principal};
 use ic_canister_log::{declare_log_buffer, export, log};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::stable::StableReader;
@@ -17,7 +17,7 @@ use ic_icrc1::{
 };
 use ic_icrc1_ledger::{
     is_ready, ledger_state, migration_timer_id, panic_if_not_ready, set_ledger_state,
-    set_migration_timer_id, LEDGER_VERSION, UPGRADES_MEMORY,
+    set_migration_timer_id, ALLOWANCES_MEMORY, LEDGER_VERSION, UPGRADES_MEMORY,
 };
 use ic_icrc1_ledger::{InitArgs, Ledger, LedgerArgument, LedgerField, LedgerState};
 use ic_ledger_canister_core::ledger::{
@@ -553,7 +553,7 @@ async fn execute_transfer(
     ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
 
     archive_blocks::<Access>(&LOG, MAX_MESSAGE_SIZE).await;
-    Ok(Nat::from(block_idx))
+    Ok(Nat::from(instruction_counter()))
 }
 
 fn execute_transfer_not_async(
@@ -655,7 +655,7 @@ fn execute_transfer_not_async(
         };
 
         let (block_idx, _) = apply_transaction(ledger, tx, now, effective_fee)?;
-        Ok(block_idx)
+        Ok(instruction_counter())
     })
 }
 
@@ -862,7 +862,7 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
                 };
                 err
             })?;
-        Ok(block_idx)
+        Ok(instruction_counter())
     })?;
 
     // NB. we need to set the certified data before the first async call to make sure that the
@@ -870,7 +870,7 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
     ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
 
     archive_blocks::<Access>(&LOG, MAX_MESSAGE_SIZE).await;
-    Ok(Nat::from(block_idx))
+    Ok(Nat::from(instruction_counter()))
 }
 
 #[query]
@@ -971,6 +971,69 @@ fn icrc21_canister_call_consent_message(
 #[candid_method(query)]
 fn is_ledger_ready() -> bool {
     is_ready()
+}
+
+#[query]
+#[candid_method(query)]
+fn serialize_account() -> u64 {
+    let mut principal_bytes = [0u8; 29];
+    let mut principal_from_u64 = |num: u64| {
+        for (i, b) in num.to_le_bytes().iter().enumerate() {
+            principal_bytes[i] = *b;
+        }
+        Principal::from_slice(&principal_bytes)
+    };
+    let subaccount = Some(
+        hex::decode("0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20")
+            .unwrap()
+            .try_into()
+            .unwrap(),
+    );
+    let allowance = ic_ledger_core::approvals::Allowance {
+        amount: 10u64.into(),
+        expires_at: Some(TimeStamp::from_nanos_since_unix_epoch(999999999999)),
+        arrived_at: TimeStamp::from_nanos_since_unix_epoch(999999999999),
+    };
+
+    const NUM_ACCOUNTS: u64 = 5_000;
+
+    let start = ic_cdk::api::instruction_counter();
+    for i in 0..NUM_ACCOUNTS {
+        let a1 = Account {
+            owner: principal_from_u64(i),
+            subaccount,
+        };
+        let a2 = Account {
+            owner: principal_from_u64(i + NUM_ACCOUNTS),
+            subaccount,
+        };
+        ALLOWANCES_MEMORY
+            .with_borrow_mut(|allowances| allowances.insert((a1, a2), allowance.clone()));
+    }
+    let total = ic_cdk::api::instruction_counter() - start;
+    ic_cdk::println!("stable map {NUM_ACCOUNTS} writes, instructions used {total}");
+
+    let start = ic_cdk::api::instruction_counter();
+    for i in 0..NUM_ACCOUNTS {
+        let a1 = Account {
+            owner: principal_from_u64(i),
+            subaccount,
+        };
+        let a2 = Account {
+            owner: principal_from_u64(i + NUM_ACCOUNTS),
+            subaccount,
+        };
+        let allowance = ALLOWANCES_MEMORY.with_borrow(|allowances| allowances.get(&(a1, a2)));
+        if let Some(allowance) = allowance {
+            assert_eq!(allowance.amount, 10u64.into());
+        } else {
+            panic!("allwance not found");
+        }
+    }
+    let total = ic_cdk::api::instruction_counter() - start;
+    ic_cdk::println!("stable map {NUM_ACCOUNTS} reads, instructions used {total}");
+
+    0
 }
 
 candid::export_service!();

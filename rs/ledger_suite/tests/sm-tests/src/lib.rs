@@ -2733,6 +2733,94 @@ pub fn icrc1_test_stable_migration_endpoints_disabled<T>(
     test_endpoint("icrc1_total_supply", Encode!().unwrap(), false);
 }
 
+pub fn icrc1_benchmark_account_serialization<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    // Setup ledger as it is deployed on the mainnet.
+    let (env, canister_id) = setup(ledger_wasm, encode_init_args, vec![]);
+
+    let instructions = Decode!(
+        &env.query(canister_id, "serialize_account", Encode!().unwrap())
+            .expect("failed to call is_ledger_ready")
+            .bytes(),
+        u64
+    )
+    .expect("failed to decode is_ledger_ready response");
+    assert_eq!(instructions, 0);
+}
+
+pub fn icrc1_benchmark_transfers<T>(
+    ledger_wasm_mainnet: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    let from_subaccount = Some([1u8; 32]);
+    let mut account = Account::from(PrincipalId::new_user_test_id(1).0);
+    account.subaccount = from_subaccount;
+    let initial_balances = vec![(account, 100_000_000_000u64)];
+
+    // Setup ledger as it is deployed on the mainnet.
+    let (env, canister_id) = setup(ledger_wasm_mainnet, encode_init_args, initial_balances);
+
+    const APPROVE_AMOUNT: u64 = 150_000;
+
+    println!("ciborium");
+
+    const NUM_APPROVALS: u64 = 10_000;
+    let mut total_approve = 0;
+    let mut max_approve = 0;
+    let spender_subaccount = Some([2u8; 32]);
+
+    for i in 2..NUM_APPROVALS {
+        let mut spender = Account::from(PrincipalId::new_user_test_id(i).0);
+        spender.subaccount = spender_subaccount;
+        let mut approve_args = default_approve_args(spender, APPROVE_AMOUNT);
+        approve_args.from_subaccount = from_subaccount;
+        let instr: u64 = send_approval(&env, canister_id, account.owner, &approve_args)
+            .expect("approval failed");
+        total_approve += instr;
+        if instr > max_approve {
+            max_approve = instr;
+        }
+        if i % 500 == 0 {
+            println!("iteration {i}, instructions used: {instr}, max: {max_approve}");
+        }
+    }
+
+    println!("num approvals {NUM_APPROVALS}, total instructions {total_approve}");
+
+    let transfer_from_args = TransferFromArgs {
+        spender_subaccount,
+        from: account,
+        to: Account::from(PrincipalId::new_user_test_id(100_000_000).0),
+        amount: Nat::from(1u64),
+        fee: Some(Nat::from(FEE)),
+        memo: None,
+        created_at_time: None,
+    };
+
+    let mut total_transfer = 0;
+    let mut max_transfer = 0;
+    for i in 2..NUM_APPROVALS {
+        let spender = Account::from(PrincipalId::new_user_test_id(i).0);
+        let instr = send_transfer_from(&env, canister_id, spender.owner, &transfer_from_args)
+            .expect("approval failed");
+        total_transfer += instr;
+        if instr > max_transfer {
+            max_transfer = instr;
+        }
+        if i % 500 == 0 {
+            println!("iteration {i}, instructions used: {instr}, max {max_transfer}");
+        }
+    }
+
+    println!("num transfers {NUM_APPROVALS}, total instructions {total_transfer}");
+}
+
 pub fn test_incomplete_migration<T>(
     ledger_wasm_mainnet: Vec<u8>,
     ledger_wasm_current_lowinstructionlimits: Vec<u8>,

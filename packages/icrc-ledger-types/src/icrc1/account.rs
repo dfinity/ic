@@ -6,7 +6,9 @@ use std::{
 
 use base32::Alphabet;
 use candid::{types::principal::PrincipalError, CandidType, Deserialize, Principal};
+// use candid::{Encode, Decode};
 use ic_stable_structures::{storable::Bound, Storable};
+use minicbor::{Decode, Encode};
 use serde::Serialize;
 use std::borrow::Cow;
 
@@ -15,9 +17,11 @@ pub type Subaccount = [u8; 32];
 pub const DEFAULT_SUBACCOUNT: &Subaccount = &[0; 32];
 
 // Account representation of ledgers supporting the ICRC1 standard
-#[derive(Serialize, CandidType, Deserialize, Clone, Debug, Copy)]
+#[derive(Serialize, CandidType, Deserialize, Clone, Debug, Copy, Encode, Decode)]
 pub struct Account {
+    #[cbor(n(0), with = "crate::icrc1::principal")]
     pub owner: Principal,
+    #[cbor(n(1), with = "minicbor::bytes")]
     pub subaccount: Option<Subaccount>,
 }
 
@@ -169,47 +173,86 @@ impl FromStr for Account {
     }
 }
 
-const MAX_SERIALIZATION_LEN: u32 = 63;
+const MAX_SERIALIZATION_LEN: u32 = 92;
 
 impl Storable for Account {
+    //// MINICBOR
+    // fn to_bytes(&self) -> Cow<[u8]> {
+    //     let mut buf = vec![];
+    //     minicbor::encode(self, &mut buf).expect("event encoding should always succeed");
+    //     Cow::Owned(buf)
+    // }
+
+    // fn from_bytes(bytes: Cow<[u8]>) -> Self {
+    //     minicbor::decode(bytes.as_ref())
+    //         .unwrap_or_else(|e| panic!("failed to decode event bytes {}: {e}", hex::encode(bytes)))
+    // }
+
+    //// CANDID
+    // fn to_bytes(&self) -> Cow<[u8]> {
+    //     Cow::Owned(Encode!(self).unwrap())
+    // }
+
+    // fn from_bytes(bytes: Cow<[u8]>) -> Self {
+    //     Decode!(&bytes, Self).unwrap()
+    // }
+
+    //// MANUAL
+    // fn to_bytes(&self) -> Cow<[u8]> {
+    //     let mut buffer: Vec<u8> = vec![0];
+
+    //     // Owner principal
+    //     buffer.extend(self.owner.as_slice());
+    //     buffer[0] = (buffer.len() - 1) as u8;
+
+    //     // Subaccount
+    //     if let Some(subaccount) = self.subaccount {
+    //         buffer.extend([32u8]);
+    //         buffer.extend(subaccount.as_slice());
+    //     } else {
+    //         buffer.extend([0u8]);
+    //     }
+
+    //     Cow::Owned(buffer)
+    // }
+
+    // fn from_bytes(bytes: Cow<[u8]>) -> Self {
+    //     let mut index = 0usize;
+    //     let len_owner = bytes[index] as usize;
+    //     index += 1;
+    //     let owner = Principal::from_slice(&bytes[index..index + len_owner]);
+    //     index += len_owner;
+
+    //     // Subaccount
+    //     let len_subaccount = bytes[index] as usize;
+    //     index += 1;
+    //     let subaccount = if len_subaccount > 0 {
+    //         let subaccount_bytes: [u8; 32] =
+    //             bytes[index..index + len_subaccount].try_into().unwrap();
+    //         Some(subaccount_bytes)
+    //     } else {
+    //         None
+    //     };
+
+    //     Account { owner, subaccount }
+    // }
+
+    //// CIBORIUM
     fn to_bytes(&self) -> Cow<[u8]> {
-        let mut buffer: Vec<u8> = vec![0];
-
-        // Owner principal
-        buffer.extend(self.owner.as_slice());
-        buffer[0] = (buffer.len() - 1) as u8;
-
-        // Subaccount
-        if let Some(subaccount) = self.subaccount {
-            buffer.extend([32u8]);
-            buffer.extend(subaccount.as_slice());
-        } else {
-            buffer.extend([0u8]);
-        }
-
-        Cow::Owned(buffer)
+        let mut buf = vec![];
+        ciborium::ser::into_writer(self, &mut buf).unwrap_or_else(|err| {
+            ic_cdk::api::trap(&format!("{:?}", err));
+        });
+        Cow::Owned(buf)
     }
 
-    fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        let mut index = 0usize;
-        let len_owner = bytes[index] as usize;
-        index += 1;
-        let owner = Principal::from_slice(&bytes[index..index + len_owner]);
-        index += len_owner;
-
-        // Subaccount
-        let len_subaccount = bytes[index] as usize;
-        index += 1;
-        let subaccount = if len_subaccount > 0 {
-            let subaccount_bytes: [u8; 32] =
-                bytes[index..index + len_subaccount].try_into().unwrap();
-            Some(subaccount_bytes)
-        } else {
-            None
-        };
-
-        Account { owner, subaccount }
+    fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
+        ciborium::de::from_reader(&bytes[..]).unwrap_or_else(|err| {
+            ic_cdk::api::trap(&format!("{:?}", err));
+        })
     }
+
+    // const BOUND: Bound = Bound::Unbounded;
 
     const BOUND: Bound = Bound::Bounded {
         max_size: MAX_SERIALIZATION_LEN,
@@ -383,12 +426,14 @@ mod tests {
         let owner =
             Principal::from_text("k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae")
                 .unwrap();
+        // let owner = Principal::anonymous();
         let subaccount = Some(
             hex::decode("0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20")
                 .unwrap()
                 .try_into()
                 .unwrap(),
         );
+        // let subaccount = None;
         let account = Account { owner, subaccount };
         let serialized_len = account.to_bytes().len();
         assert_eq!(
