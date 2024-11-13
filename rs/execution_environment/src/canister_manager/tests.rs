@@ -8054,23 +8054,15 @@ fn node_metrics_history_ingress_query_fails() {
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet_id)
         .build();
-    let query = wasm()
-        .call_simple(
-            CanisterId::ic_00(),
-            Method::NodeMetricsHistory,
-            call_args().other_side(
-                NodeMetricsHistoryArgs {
-                    subnet_id: own_subnet_id.get(),
-                    start_at_timestamp_nanos: 0,
-                }
-                .encode(),
-            ),
-        )
-        .build();
-    test.subnet_message(Method::NodeMetricsHistory, query)
+    let payload = NodeMetricsHistoryArgs {
+        subnet_id: own_subnet_id.get(),
+        start_at_timestamp_nanos: 0,
+    }
+    .encode();
+    test.non_replicated_query(CanisterId::ic_00(), "node_metrics_history", payload)
         .unwrap_err()
         .assert_contains(
-            ErrorCode::CanisterContractViolation,
-            "cannot be called by a user",
+            ErrorCode::CanisterMethodNotFound,
+            "Query method node_metrics_history not found.",
         );
 }
