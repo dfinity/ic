@@ -361,4 +361,39 @@ mod tests {
             }
         );
     }
+
+    #[test]
+    fn evic_due_to_rss_based_on_scheduler_priorities_and_last_used() {
+        let mut candidates = vec![];
+        let now = Instant::now();
+        let mut i = 0;
+        let mut total_rss = NumBytes::new(0);
+        for priority in vec![1, 5, 10, 100, 101, 1_000, 1_001, 1_010, 1_100, 2_000] {
+            for time_dist in vec![1, 5, 10, 100, 101, 1_000, 1_001, 1_010, 1_100, 2_000] {
+                candidates.push(EvictionCandidate {
+                    id: canister_test_id(i),
+                    last_used: now - Duration::from_secs(time_dist),
+                    rss: 50.into(),
+                    scheduler_priority: AccumulatedPriority::new(priority.try_into().unwrap()),
+                });
+                i += 1;
+                total_rss += 50.into();
+            }
+        }
+        candidates.shuffle(&mut thread_rng());
+
+        assert_eq!(
+            evict(
+                candidates.clone(),
+                total_rss,
+                100,
+                now - Duration::from_secs(10_000),
+                total_rss / 2
+            ),
+            {
+                candidates.sort_by_key(|x| (x.scheduler_priority, x.last_used));
+                candidates.into_iter().take(50).collect::<Vec<_>>()
+            }
+        );
+    }
 }
