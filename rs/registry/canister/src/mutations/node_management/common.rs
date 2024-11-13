@@ -3,6 +3,7 @@ use std::{default::Default, str::FromStr};
 use crate::{common::LOG_PREFIX, registry::Registry};
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
+use ic_interfaces_registry::RegistryVersionedRecord;
 use ic_protobuf::registry::{
     dc::v1::DataCenterRecord, node::v1::NodeRecord, node_operator::v1::NodeOperatorRecord, subnet::v1::SubnetListRecord
 };
@@ -14,7 +15,7 @@ use ic_registry_transport::{
     pb::v1::{RegistryMutation, RegistryValue},
     update,
 };
-use ic_types::crypto::KeyPurpose;
+use ic_types::{crypto::KeyPurpose, RegistryVersion};
 use prost::Message;
 use std::convert::TryFrom;
 
@@ -273,36 +274,33 @@ pub(crate) fn get_key_family_iter<'a, T: prost::Message + Default>(
         })
 }
 
-pub(crate) fn get_key_family_between_versions_iter<'a, T: prost::Message + Default>(
+pub(crate) fn get_key_family_versioned_iter<'a, T: prost::Message + Default>(
     registry: &'a Registry,
     prefix: &'a str,
-    version_start: u64,
-    version_end: u64
-) -> impl Iterator<Item = (String, T)> + 'a {
+) -> impl Iterator<Item = (String, RegistryVersionedRecord<T>)> + 'a {
     let prefix_bytes = prefix.as_bytes();
-    let start = prefix_bytes.to_vec();
 
     registry
         .store
-        .range(start..)
+        .range(prefix_bytes.to_vec()..)
         .take_while(|(k, _)| k.starts_with(prefix_bytes))
         .filter_map(move |(k, v)| {
-            let mut v_iter = v.iter().rev();
-            let mut v_found = v_iter.find(|v| v.version <= version_end)?;
+            let v_last = v.back()?;
+            let k_str = std::str::from_utf8(k).ok()?;
 
-            if v_found.deletion_marker {
-                if v_found.version > version_start {
-                    v_found = v_iter.next()?;
-                } else {
-                    return None; 
-                }
-            }
+            let id = k_str[prefix.len()..].to_string();
+            let maybe_value = if !v_last.deletion_marker {
+                Some(T::decode(v_last.value.as_slice()).ok()?)
+            } else {
+                None
+            };
 
-            let id = k.strip_prefix(prefix_bytes)
-                .and_then(|v| std::str::from_utf8(v).ok())?
-                .to_string();
+            let record = RegistryVersionedRecord {
+                key: k_str.to_string(),
+                version: RegistryVersion::from(v_last.version),
+                value: maybe_value,
+            };
 
-            let value = T::decode(v_found.value.as_slice()).ok()?;
-            Some((id, value))
+            Some((id, record))
         })
 }
