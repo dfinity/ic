@@ -14,7 +14,7 @@ async fn should_replay_events_for_mainnet() {
         .expect("Failed to replay events");
 
     assert_eq!(state.btc_network, Network::Mainnet);
-    assert_eq!(state.get_total_btc_managed(), 22_330_465_791);
+    assert_eq!(state.get_total_btc_managed(), 21_723_786_340);
 }
 
 #[tokio::test]
@@ -45,7 +45,7 @@ async fn should_not_have_too_many_useless_events() {
 
         match file {
             GetEventsFile::Mainnet => {
-                assert_eq!(events.total_event_count, 431_885);
+                assert_eq!(events.total_event_count, 432_050);
                 assert_eq!(useless_events_indexes.len(), 409_141);
                 assert_eq!(useless_events_indexes.last(), Some(&411_301_usize));
             }
@@ -80,7 +80,7 @@ enum GetEventsFile {
 impl GetEventsFile {
     /// To refresh the stored events on disk, call the tests as follows
     /// ```
-    /// bazel test --spawn_strategy=standalone //rs/bitcoin/ckbtc/minter:ckbtc_minter_lib_unit_tests  --test_env=RETRIEVE_MINTER_EVENTS=true --test_arg "should_replay_events_for_mainnet" --test_timeout 900
+    /// bazel test --spawn_strategy=standalone //rs/bitcoin/ckbtc/minter:ckbtc_minter_replay_events_tests  --test_env=RETRIEVE_MINTER_EVENTS=true --test_arg "should_replay_events_for_mainnet" --test_timeout 900
     /// ```
     /// The parameter `spawn_strategy=standalone` is needed, because the events will be fetched from the running canister and the default sandbox doesn't allow it.
     /// The parameter `test_env=RETRIEVE_MINTER_EVENTS=true` is needed to enable the fetching of the events.
