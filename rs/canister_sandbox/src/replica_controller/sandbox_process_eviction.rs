@@ -334,13 +334,13 @@ mod tests {
         let mut candidates = vec![];
         let now = Instant::now();
         let mut i = 0;
-        for priority in vec![1, 5, 10, 100, 101, 1_000, 1_001, 1_010, 1_100, 2_000] {
-            for time_dist in vec![1, 5, 10, 100, 101, 1_000, 1_001, 1_010, 1_100, 2_000] {
+        for priority in [1, 5, 10, 100, 101, 1_000, 1_001, 1_010, 1_100, 2_000] {
+            for time_dist in [1, 5, 10, 100, 101, 1_000, 1_001, 1_010, 1_100, 2_000] {
                 candidates.push(EvictionCandidate {
                     id: canister_test_id(i),
                     last_used: now - Duration::from_secs(time_dist),
                     rss: 0.into(),
-                    scheduler_priority: AccumulatedPriority::new(priority.try_into().unwrap()),
+                    scheduler_priority: AccumulatedPriority::new(priority.into()),
                 });
                 i += 1;
             }
@@ -368,13 +368,13 @@ mod tests {
         let now = Instant::now();
         let mut i = 0;
         let mut total_rss = NumBytes::new(0);
-        for priority in vec![1, 5, 10, 100, 101, 1_000, 1_001, 1_010, 1_100, 2_000] {
-            for time_dist in vec![1, 5, 10, 100, 101, 1_000, 1_001, 1_010, 1_100, 2_000] {
+        for priority in [1, 5, 10, 100, 101, 1_000, 1_001, 1_010, 1_100, 2_000] {
+            for time_dist in [1, 5, 10, 100, 101, 1_000, 1_001, 1_010, 1_100, 2_000] {
                 candidates.push(EvictionCandidate {
                     id: canister_test_id(i),
                     last_used: now - Duration::from_secs(time_dist),
                     rss: 50.into(),
-                    scheduler_priority: AccumulatedPriority::new(priority.try_into().unwrap()),
+                    scheduler_priority: AccumulatedPriority::new(priority.into()),
                 });
                 i += 1;
                 total_rss += 50.into();
