@@ -69,14 +69,11 @@ pub(crate) fn system_api_imports() -> Vec<u8> {
     );
 
     // to avoid store move
-    let mut system_api_imports: Vec<(&str, &str, wasmtime::Func)> = vec![];
-    for (module_name, item_name, item) in linker.iter(&mut store) {
-        if let Extern::Func(func) = item {
-            if module_name == "ic0" {
-                system_api_imports.push((module_name, item_name, func));
-            }
-        }
-    }
+    let mut system_api_imports: Vec<(&str, &str, wasmtime::Func)> = linker
+        .iter(&mut store)
+        .filter(|(module_name, _, item)| *module_name == "ic0" && matches!(item, Extern::Func(_)))
+        .map(|(module_name, item_name, item)| (module_name, item_name, item.into_func().unwrap()))
+        .collect();
     system_api_imports.sort_by(|a, b| a.1.cmp(b.1));
 
     let mut types = TypeSection::new();
@@ -85,15 +82,8 @@ pub(crate) fn system_api_imports() -> Vec<u8> {
 
     for (module_name, item_name, func) in system_api_imports.iter() {
         let ty = func.ty(&store);
-        let mut params = vec![];
-        let mut results = vec![];
-        for param in ty.params() {
-            params.push(vtype(param));
-        }
-        for result in ty.results() {
-            results.push(vtype(result));
-        }
-
+        let params: Vec<EncodedValType> = ty.params().map(|param| vtype(param)).collect();
+        let results: Vec<EncodedValType> = ty.results().map(|result| vtype(result)).collect();
         let func_type = FuncType::new(params, results);
         if !type_mapping.contains_key(&func_type) {
             type_mapping.insert(func_type.clone(), type_mapping.len());

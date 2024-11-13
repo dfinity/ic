@@ -22,6 +22,7 @@ DEPENDENCIES = [
     "//rs/utils/lru_cache",
     "//rs/wasm_transform",
     "@crate_index//:anyhow",
+    "@crate_index//:cfg-if",
     "@crate_index//:libc",
     "@crate_index//:libflate",
     "@crate_index//:nix",
@@ -82,6 +83,10 @@ rust_library(
     name = "embedders",
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
+    crate_features = select({
+        "//bazel:fuzzing_code_enabled": ["fuzzing_code"],
+        "//conditions:default": [],
+    }),
     crate_name = "ic_embedders",
     proc_macro_deps = MACRO_DEPENDENCIES,
     rustc_flags = select({

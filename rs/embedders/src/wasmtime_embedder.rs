@@ -1,6 +1,14 @@
 pub mod host_memory;
 mod signal_stack;
-pub mod system_api;
+cfg_if::cfg_if! {
+    // FIXME: Since cfg(test) doesn't cross the crate boundary, we
+    // use debug_assertions to enable it for unit testing
+    if #[cfg(any(debug_assertions, feature = "fuzzing_code"))] {
+        pub mod system_api;
+    } else {
+        mod system_api;
+    }
+}
 pub mod system_api_complexity;
 
 use std::{
