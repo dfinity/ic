@@ -105,11 +105,18 @@ impl NetworkEconomics {
 }
 
 impl VotingPowerEconomics {
+    pub const DEFAULT: Self = Self {
+        start_reducing_voting_power_after_seconds: Some(
+            Self::DEFAULT_START_REDUCING_VOTING_POWER_AFTER_SECONDS,
+        ),
+        clear_following_after_seconds: Some(Self::DEFAULT_CLEAR_FOLLOWING_AFTER_SECONDS),
+    };
+
+    pub const DEFAULT_START_REDUCING_VOTING_POWER_AFTER_SECONDS: u64 = 6 * ONE_MONTH_SECONDS;
+    pub const DEFAULT_CLEAR_FOLLOWING_AFTER_SECONDS: u64 = ONE_MONTH_SECONDS;
+
     pub fn with_default_values() -> Self {
-        Self {
-            start_reducing_voting_power_after_seconds: Some(6 * ONE_MONTH_SECONDS),
-            clear_following_after_seconds: Some(ONE_MONTH_SECONDS),
-        }
+        Self::DEFAULT
     }
 }
 
