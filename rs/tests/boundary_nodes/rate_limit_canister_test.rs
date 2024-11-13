@@ -325,9 +325,9 @@ async fn read_config(
     let args = Encode!(&Some(version)).unwrap();
 
     let response = agent
-        .update(&canister_id, "get_config")
+        .query(&canister_id, "get_config")
         .with_arg(args)
-        .call_and_wait()
+        .call()
         .await
         .expect("update call failed");
 
@@ -375,9 +375,9 @@ async fn read_rule(
     let args = Encode!(rule_id).unwrap();
 
     let response = agent
-        .update(&canister_id, "get_rule_by_id")
+        .query(&canister_id, "get_rule_by_id")
         .with_arg(args)
-        .call_and_wait()
+        .call()
         .await
         .expect("update call failed");
 
