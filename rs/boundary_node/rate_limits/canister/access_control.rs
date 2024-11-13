@@ -91,10 +91,9 @@ impl<T: DisclosesRules, R: ResolveAccessLevel> DisclosesRules for WithAuthorizat
         current_time: Timestamp,
     ) -> Result<(), DiscloseRulesError> {
         // Only privileged users can perform this operation
-        if self.access_resolver.get_access_level() != AccessLevel::FullAccess {
-            return Err(DiscloseRulesError::Unauthorized);
+        if self.access_resolver.get_access_level() == AccessLevel::FullAccess {
+            return self.inner.disclose_rules(arg, current_time);
         }
-        // Perform the inner call only if authorized.
-        self.inner.disclose_rules(arg, current_time)
+        Err(DiscloseRulesError::Unauthorized)
     }
 }
