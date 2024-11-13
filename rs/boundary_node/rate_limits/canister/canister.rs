@@ -6,8 +6,8 @@ use crate::confidentiality_formatting::{
 use crate::disclose::{DisclosesRules, RulesDiscloser};
 use crate::fetcher::{ConfigFetcher, EntityFetcher, IncidentFetcher, RuleFetcher};
 use crate::metrics::{
-    export_metrics_as_http_response, with_metrics_registry, WithMetrics,
-    LAST_CANISTER_UPGRADE_TIME, LAST_SUCCESSFUL_REGISTRY_POLL_TIME, REGISTRY_POLL_CALLS_COUNTER,
+    export_metrics_as_http_response, with_metrics_registry, WithMetrics, LAST_CANISTER_CHANGE_TIME,
+    LAST_SUCCESSFUL_REGISTRY_POLL_TIME, REGISTRY_POLL_CALLS_COUNTER,
 };
 use crate::state::{init_version_and_config, with_canister_state, CanisterApi};
 use candid::Principal;
@@ -23,10 +23,10 @@ use rate_limits_api::{
 use std::{sync::Arc, time::Duration};
 
 const REGISTRY_CANISTER_METHOD: &str = "get_api_boundary_node_ids";
-
 const UPDATE_METHODS: [&str; 2] = ["add_config", "disclose_rules"];
 const REPLICATED_QUERY_METHOD: &str = "get_config";
 
+// Inspect the ingress messages in the pre-consensus phase and reject early, if the conditions are not met
 #[inspect_message]
 fn inspect_message() {
     // In order for this hook to succeed, accept_message() must be invoked.
@@ -59,16 +59,17 @@ fn inspect_message() {
     }
 }
 
+// Run when the canister is first installed
 #[init]
 fn init(init_arg: InitArg) {
+    let current_time = ic_cdk::api::time();
     with_canister_state(|state| {
         // Set authorized principal, which performs write operations, such as adding new configurations
         if let Some(principal) = init_arg.authorized_principal {
             state.set_authorized_principal(principal);
         }
-        // Initialize config
+        // Initialize config only on the very first invocation
         if state.get_version().is_none() {
-            let current_time = ic_cdk::api::time();
             init_version_and_config(current_time, state.clone());
         }
         // Spawn periodic job of fetching latest API boundary node topology
@@ -78,16 +79,17 @@ fn init(init_arg: InitArg) {
             Arc::new(state),
         );
     });
+    // Update metric.
+    LAST_CANISTER_CHANGE_TIME.with(|cell| {
+        cell.borrow_mut().set(current_time as i64);
+    });
 }
 
+// Run every time a canister is upgraded
 #[post_upgrade]
 fn post_upgrade(init_arg: InitArg) {
+    // Run the same initialization logic
     init(init_arg);
-    // Set metric to track last upgrade time.
-    let current_time = ic_cdk::api::time() as i64;
-    LAST_CANISTER_UPGRADE_TIME.with(|cell| {
-        cell.borrow_mut().set(current_time);
-    });
 }
 
 #[query]
