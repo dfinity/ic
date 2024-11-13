@@ -30,7 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Subnet ids can be specified in `SubnetSpec`s for all subnet kinds.
 - The certified time of a round is only bumped by `1ns` if the time of the corresponding PocketIC instance did not increase since the last round.
 - The endpoint `/instances/<instance_id>/update/set_time` returns an error if the time of a PocketIC instance is set into the past.
-- Subnet sizes to match the subnet size on the ICP mainnet: II from 28 to 31 nodes, Fiduciary from 28 to 34 nodes.
+- Subnet sizes to match the subnet sizes on the ICP mainnet: II from 28 to 31 nodes, Fiduciary from 28 to 34 nodes.
 
 ### Removed
 - The CLI option `--pid`: use the CLI option `--port-file` instead.
