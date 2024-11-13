@@ -474,11 +474,10 @@ where
     Tokens: Default + TokensType + PartialEq + std::fmt::Debug + std::fmt::Display,
 {
     fn consume_blocks(&mut self, blocks: &[ic_icrc1::Block<Tokens>]) {
-        for block in blocks.iter() {
+        for (index, block) in blocks.iter().enumerate() {
             if let Some(fee_collector) = block.fee_collector {
                 self.fee_collector = Some(fee_collector);
             }
-
             match &block.transaction.operation {
                 Operation::Mint { to, amount } => self.process_mint(to, amount),
                 Operation::Transfer {
@@ -487,12 +486,12 @@ where
                     spender,
                     amount,
                     fee,
-                } => self.process_transfer(from, to, spender, amount, fee),
+                } => self.process_transfer(from, to, spender, amount, &fee.clone().or(block.effective_fee.clone())),
                 Operation::Burn {
                     from,
                     spender,
                     amount,
-                } => self.process_burn(from, spender, amount, 0),
+                } => self.process_burn(from, spender, amount, index),
                 Operation::Approve {
                     from,
                     spender,
@@ -506,7 +505,7 @@ where
                     amount,
                     expected_allowance,
                     expires_at,
-                    fee,
+                    &fee.clone().or(block.effective_fee.clone()),
                     TimeStamp::from_nanos_since_unix_epoch(block.timestamp),
                 ),
             }
@@ -519,7 +518,7 @@ impl BlockConsumer<icp_ledger::Block>
     for InMemoryLedger<AccountIdentifier, ic_ledger_core::Tokens>
 {
     fn consume_blocks(&mut self, blocks: &[icp_ledger::Block]) {
-        for block in blocks.iter() {
+        for (index, block) in blocks.iter().enumerate() {
             match &block.transaction.operation {
                 icp_ledger::Operation::Mint { to, amount } => self.process_mint(to, amount),
                 icp_ledger::Operation::Transfer {
@@ -533,7 +532,7 @@ impl BlockConsumer<icp_ledger::Block>
                     from,
                     amount,
                     spender,
-                } => self.process_burn(from, spender, amount, 0),
+                } => self.process_burn(from, spender, amount, index),
                 icp_ledger::Operation::Approve {
                     from,
                     spender,
