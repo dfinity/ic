@@ -98,8 +98,8 @@ jobs:
       - <<: *checkout
       - <<: *docker-login
       - name: Run Libfuzzer targets
-          shell: bash
-          run: ./bin/run-all-fuzzers.sh --libfuzzer 100
+        shell: bash
+        run: ./bin/run-all-fuzzers.sh --libfuzzer 100
       - name: Run AFL targets
-          shell: bash
-          run: ./bin/run-all-fuzzers.sh --afl 100
+        shell: bash
+        run: ./bin/run-all-fuzzers.sh --afl 100
