@@ -1415,7 +1415,7 @@ message Governance {
   Version deployed_version = 23;
 
   // An upgrade in progress, defined as a version target and a time at which it is considered failed.
-  message UpgradeInProgress {
+  message PendingVersion {
     // Version to  be upgraded to
     Version target_version = 1;
     // Seconds since UNIX epoch to mark this as a failed version if not in sync with current version
@@ -1428,7 +1428,7 @@ message Governance {
   }
 
   // Version SNS is in process of upgrading to.
-  UpgradeInProgress pending_version = 24;
+  PendingVersion pending_version = 24;
   Version target_version = 30;
 
   // True if the run_periodic_tasks function is currently finalizing disburse maturity, meaning
@@ -1501,11 +1501,25 @@ message GetRunningSnsVersionRequest {}
 
 // Response with the SNS's currently running version and any upgrades
 // that are in progress.
+// GetUpgradeJournal is a superior API to this one that should
 message GetRunningSnsVersionResponse {
   // The currently deployed version of the SNS.
   Governance.Version deployed_version = 1;
   // The upgrade in progress, if any.
-  Governance.UpgradeInProgress pending_version = 2;
+  UpgradeInProgress pending_version = 2;
+
+  // The same as PendingVersion (stored in the governance proto). They are separated to make it easy to change one without changing the other.
+  message UpgradeInProgress {
+    // Version to  be upgraded to
+    Governance.Version target_version = 1;
+    // Seconds since UNIX epoch to mark this as a failed version if not in sync with current version
+    uint64 mark_failed_at_seconds = 2;
+    // Lock to avoid checking over and over again.  Also, it is a counter for how many times we have attempted to check,
+    // allowing us to fail in case we otherwise have gotten stuck.
+    uint64 checking_upgrade_lock = 3;
+    // The proposal that initiated this upgrade
+    uint64 proposal_id = 4;
+  }
 }
 
 // Request to fail an upgrade proposal that is Adopted but not Executed or
@@ -2147,7 +2161,7 @@ message UpgradeJournalEntry {
   oneof event {
     UpgradeStepsRefreshed upgrade_steps_refreshed = 1;
     TargetVersionSet target_version_set = 2;
-    TargetVersionSet target_version_reset = 3;
+    TargetVersionReset target_version_reset = 3;
     UpgradeStarted upgrade_started = 4;
     UpgradeOutcome upgrade_outcome = 5;
   }
@@ -2158,6 +2172,11 @@ message UpgradeJournalEntry {
   }
 
   message TargetVersionSet {
+    optional Governance.Version old_target_version = 1;
+    optional Governance.Version new_target_version = 2;
+  }
+
+  message TargetVersionReset {
     optional Governance.Version old_target_version = 1;
     optional Governance.Version new_target_version = 2;
   }

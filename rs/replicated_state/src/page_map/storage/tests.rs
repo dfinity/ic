@@ -362,8 +362,8 @@ fn verify_storage(dir: &Path, expected: &PageDelta) {
         dir_path: dir.to_path_buf(),
         base: dir.join("vmemory_0.bin"),
         overlay_suffix: "vmemory_0.overlay".to_owned(),
-    });
-    let storage = Storage::lazy_load(storage_layout.clone()).unwrap();
+    };
+    let storage = Storage::lazy_load(Box::new(storage_layout.clone())).unwrap();
 
     let expected_num_pages = if let Some(max) = expected.max_page_index() {
         max.get() + 1
@@ -1428,7 +1428,7 @@ fn sharded_base_file() {
         &lsmt_config_sharded(),
         &dir,
     );
-    let storage = Storage::lazy_load(Arc::new(ShardedTestStorageLayout {
+    let storage = Storage::lazy_load(Box::new(ShardedTestStorageLayout {
         dir_path: dir.path().to_path_buf(),
         base: dir.path().join("vmemory_0.bin"),
         overlay_suffix: "vmemory_0.overlay".to_owned(),
@@ -1461,7 +1461,7 @@ fn sharded_base_file() {
         &lsmt_config_sharded(),
         &dir,
     );
-    let storage = Storage::lazy_load(Arc::new(ShardedTestStorageLayout {
+    let storage = Storage::lazy_load(Box::new(ShardedTestStorageLayout {
         dir_path: dir.path().to_path_buf(),
         base: dir.path().join("vmemory_0.bin"),
         overlay_suffix: "vmemory_0.overlay".to_owned(),

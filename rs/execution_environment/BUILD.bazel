@@ -113,8 +113,12 @@ rust_ic_test(
     timeout = "long",
     aliases = ALIASES,
     crate = ":execution_environment",
-    data = DATA,
-    env = ENV,
+    data = DATA + [
+        "//rs/universal_canister/impl:universal_canister.wasm.gz",
+    ],
+    env = ENV | {
+        "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
+    },
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     # TODO(IDX-3164): enable on PR when flakiness issue is resolved
     #                 or we have new darwin runners in use
@@ -130,9 +134,13 @@ rust_ic_test_suite(
     srcs = glob(["tests/*.rs"]),
     aliases = ALIASES,
     compile_data = glob(["tests/test-data/**"]),
-    data = DATA + ["//rs/rust_canisters/backtrace_canister:backtrace-canister"],
+    data = DATA + [
+        "//rs/rust_canisters/backtrace_canister:backtrace-canister",
+        "//rs/universal_canister/impl:universal_canister.wasm.gz",
+    ],
     env = dict(ENV.items() + [
         ("BACKTRACE_CANISTER_WASM_PATH", "$(rootpath //rs/rust_canisters/backtrace_canister:backtrace-canister)"),
+        ("UNIVERSAL_CANISTER_WASM_PATH", "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)"),
     ]),
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
@@ -258,9 +266,13 @@ rust_library(
 rust_ic_bench(
     name = "management_canister_bench",
     srcs = glob(["benches/management_canister/*.rs"]),
-    data = DATA + ["//rs/execution_environment/benches/management_canister/test_canister"],
+    data = DATA + [
+        "//rs/execution_environment/benches/management_canister/test_canister",
+        "//rs/universal_canister/impl:universal_canister.wasm.gz",
+    ],
     env = dict(ENV.items() + [
         ("TEST_CANISTER_WASM_PATH", "$(rootpath //rs/execution_environment/benches/management_canister/test_canister)"),
+        ("UNIVERSAL_CANISTER_WASM_PATH", "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)"),
     ]),
     deps = [
         # Keep sorted.

@@ -5,9 +5,9 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     fs::{File, OpenOptions},
     io::{Read, Seek, SeekFrom, Write},
-    ops::{Deref, Range},
+    ops::{Deref, DerefMut, Range},
     path::{Path, PathBuf},
-    sync::{Arc, OnceLock},
+    sync::{Arc, Mutex, OnceLock},
 };
 
 use crate::page_map::{
@@ -151,7 +151,9 @@ impl BaseFile {
 /// For any page that appears in multiple overlay files, its contents are read
 /// from the newest overlay containing the page.
 /// The contents of pages that appear in no overlay file are read from `base`.
-#[derive(Clone, Default)]
+///
+/// DO NOT IMPLEMENT CLONE TO ELIMINATE DOUBLE INITIALIZATION IN `Storage`
+#[derive(Default)]
 pub(crate) struct StorageImpl {
     /// The lowest level data we mmap during loading.
     base: BaseFile,
@@ -164,26 +166,32 @@ pub fn verify(storage_layout: &dyn StorageLayout) -> Result<(), PersistenceError
     Ok(())
 }
 
-/// Lazy loaded representation of StorageImpl (see above).
+/// Lazy loaded representation of `StorageImpl` (see above).
 /// The `storage_layout` points to the files on disk, which are loaded at the first access.
 /// The loaded `StorageImpl` is never modified or unloaded till `drop`, meaning we don't read
 /// `storage_layout` ever again.
-/// If `storage_layout` is None during load we construct `StorageLayout` with the default
+/// If `storage_layout` is `None` during load we construct `StorageLayout` with the default
 /// constructor.
-#[derive(Default, Clone)]
+#[derive(Clone, Default)]
 pub(crate) struct Storage {
-    storage_layout: Option<Arc<dyn StorageLayout + Send + Sync>>,
-    storage_impl: OnceLock<StorageImpl>,
+    storage_layout: Arc<Mutex<Option<Box<dyn StorageLayout + Send + Sync>>>>,
+    storage_impl: Arc<OnceLock<StorageImpl>>,
 }
 
 impl Storage {
     fn init_or_die(&self) -> &StorageImpl {
-        self.storage_impl
-            .get_or_init(|| match self.storage_layout.as_ref() {
+        self.storage_impl.get_or_init(|| {
+            match std::mem::take(
+                self.storage_layout
+                    .lock()
+                    .expect("Failed to lock storage_layout")
+                    .deref_mut(),
+            ) {
                 None => Default::default(),
                 Some(storage_layout) => StorageImpl::load(storage_layout.deref())
                     .expect("Failed to load storage layout"),
-            })
+            }
+        })
     }
 
     /// Whether the `storage_impl` is already loaded.
@@ -191,13 +199,13 @@ impl Storage {
         self.storage_impl.get().is_some()
     }
 
-    /// Create Storage.
+    /// Create `Storage`.
     pub fn lazy_load(
-        storage_layout: Arc<dyn StorageLayout + Send + Sync>,
+        storage_layout: Box<dyn StorageLayout + Send + Sync>,
     ) -> Result<Self, PersistenceError> {
         Ok(Storage {
-            storage_layout: Some(storage_layout),
-            storage_impl: OnceLock::default(),
+            storage_layout: Arc::new(Mutex::new(Some(storage_layout))),
+            storage_impl: OnceLock::default().into(),
         })
     }
 
@@ -229,8 +237,8 @@ impl Storage {
         let storage_impl = OnceLock::new();
         let _ = storage_impl.set(StorageImpl::deserialize(serialized_storage)?);
         Ok(Self {
-            storage_layout: None,
-            storage_impl,
+            storage_layout: Arc::new(Mutex::new(None)),
+            storage_impl: storage_impl.into(),
         })
     }
 }

@@ -154,7 +154,7 @@ pub fn test_registry_settings() -> RegistryExecutionSettings {
 /// actually charged). This function returns the amount needed to correct for
 /// that difference.
 pub fn universal_canister_compilation_cost_correction() -> NumInstructions {
-    let cost = wasm_compilation_cost(UNIVERSAL_CANISTER_WASM);
+    let cost = wasm_compilation_cost(&UNIVERSAL_CANISTER_WASM);
     cost - CompilationCostHandling::CountReducedAmount.adjusted_compilation_cost(cost)
 }
 
@@ -470,7 +470,7 @@ impl ExecutionTest {
     }
 
     pub fn ingress_status(&self, message_id: &MessageId) -> IngressStatus {
-        self.state().get_ingress_status(message_id)
+        self.state().get_ingress_status(message_id).clone()
     }
 
     pub fn ingress_state(&self, message_id: &MessageId) -> IngressState {
@@ -1645,7 +1645,7 @@ impl ExecutionTest {
             }
             let factory = Arc::clone(&fd_factory);
             es.wasm_memory.page_map = PageMap::open(
-                Arc::new(base_only_storage_layout(path)),
+                Box::new(base_only_storage_layout(path)),
                 Height::new(0),
                 factory,
             )
@@ -1669,7 +1669,7 @@ impl ExecutionTest {
             }
             let factory = Arc::clone(&fd_factory);
             es.stable_memory.page_map = PageMap::open(
-                Arc::new(base_only_storage_layout(path)),
+                Box::new(base_only_storage_layout(path)),
                 Height::new(0),
                 factory,
             )

@@ -12,7 +12,6 @@ def launch_bare_metal(name, image_zst_file):
         main = "//ic-os/dev-tools/bare_metal_deployment:deploy.py",
         deps = [
             requirement("fabric"),
-            requirement("icmplib"),
             requirement("idracredfishsupport"),
             requirement("invoke"),
             requirement("loguru"),

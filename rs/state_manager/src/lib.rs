@@ -2670,7 +2670,7 @@ impl StateManagerImpl {
                 .make_checkpoint_step_duration
                 .with_label_values(&["switch_to_checkpoint"])
                 .start_timer();
-            switch_to_checkpoint(state, &cp_layout, &self.fd_factory);
+            switch_to_checkpoint(state, &checkpointed_state);
             self.tip_channel
                 .send(TipRequest::ValidateReplicatedState {
                     checkpoint_layout: cp_layout.clone(),
@@ -3372,6 +3372,37 @@ impl StateManager for StateManagerImpl {
             .min(requested_height)
             .max(Height::new(1));
 
+        // Log how Consensus calls this API when it has some extra states to keep.
+        if !extra_heights_to_keep.is_empty() {
+            info!(
+                self.log,
+                "Removing in-memory states below {} except for {:?}",
+                requested_height,
+                extra_heights_to_keep,
+            );
+
+            let states = self.states.read();
+            let checkpoint_heights_below_oldest_height_to_keep: BTreeSet<Height> = states
+                .snapshots
+                .iter()
+                .map(|snapshot| snapshot.height)
+                .filter(|height| {
+                    states.states_metadata.contains_key(height) && *height < oldest_height_to_keep
+                })
+                .collect();
+            drop(states);
+
+            // Memory usage can be saved by removing them if they are not protected by `extra_heights_to_keep`.
+            // Log these potential removal candidates and evaluate them against `extra_heights_to_keep` before actual removal in future versions.
+            if !checkpoint_heights_below_oldest_height_to_keep.is_empty() {
+                info!(
+                    self.log,
+                    "In-memory states at checkpoint heights {:?} are candidates for removal in future.",
+                    checkpoint_heights_below_oldest_height_to_keep,
+                );
+            }
+        }
+
         self.remove_states_below_impl(
             oldest_height_to_keep,
             Self::INITIAL_STATE_HEIGHT,
@@ -3687,6 +3718,7 @@ impl StateReader for StateManagerImpl {
             (snapshot.height == height).then(|| Labeled::new(height, snapshot.state.clone()))
         }) {
             Some(state) => Ok(state),
+            // In normal operation, getting in-memory states should not fall back to loading checkpoints.
             None => match load_checkpoint(
                 &self.state_layout,
                 height,
@@ -3694,9 +3726,30 @@ impl StateReader for StateManagerImpl {
                 self.own_subnet_type,
                 Arc::clone(&self.get_fd_factory()),
             ) {
-                Ok((state, _)) => Ok(Labeled::new(height, Arc::new(state))),
+                Ok((state, _)) => {
+                    self.metrics
+                        .state_manager_error_count
+                        .with_label_values(&["state_fallback_to_checkpoint"])
+                        .inc();
+                    warn!(
+                        self.log,
+                        "State @{} unavailable in memory; fallback to checkpoint succeeded.",
+                        height
+                    );
+
+                    Ok(Labeled::new(height, Arc::new(state)))
+                }
                 Err(CheckpointError::NotFound(_)) => Err(StateManagerError::StateRemoved(height)),
                 Err(err) => {
+                    self.metrics
+                        .state_manager_error_count
+                        .with_label_values(&["state_fallback_to_checkpoint"])
+                        .inc();
+                    warn!(
+                        self.log,
+                        "State @{} unavailable in memory; fallback to checkpoint failed.", height
+                    );
+
                     self.metrics
                         .state_manager_error_count
                         .with_label_values(&["recover_checkpoint"])

@@ -243,78 +243,6 @@ impl From<pb_api::Visibility> for pb::Visibility {
     }
 }
 
-impl From<pb::AbridgedNeuron> for pb_api::AbridgedNeuron {
-    fn from(item: pb::AbridgedNeuron) -> Self {
-        Self {
-            account: item.account,
-            controller: item.controller,
-            cached_neuron_stake_e8s: item.cached_neuron_stake_e8s,
-            neuron_fees_e8s: item.neuron_fees_e8s,
-            created_timestamp_seconds: item.created_timestamp_seconds,
-            aging_since_timestamp_seconds: item.aging_since_timestamp_seconds,
-            spawn_at_timestamp_seconds: item.spawn_at_timestamp_seconds,
-            kyc_verified: item.kyc_verified,
-            maturity_e8s_equivalent: item.maturity_e8s_equivalent,
-            staked_maturity_e8s_equivalent: item.staked_maturity_e8s_equivalent,
-            auto_stake_maturity: item.auto_stake_maturity,
-            not_for_profit: item.not_for_profit,
-            joined_community_fund_timestamp_seconds: item.joined_community_fund_timestamp_seconds,
-            neuron_type: item.neuron_type,
-            dissolve_state: item.dissolve_state.map(|x| x.into()),
-            visibility: item.visibility,
-            voting_power_refreshed_timestamp_seconds: item.voting_power_refreshed_timestamp_seconds,
-        }
-    }
-}
-impl From<pb_api::AbridgedNeuron> for pb::AbridgedNeuron {
-    fn from(item: pb_api::AbridgedNeuron) -> Self {
-        Self {
-            account: item.account,
-            controller: item.controller,
-            cached_neuron_stake_e8s: item.cached_neuron_stake_e8s,
-            neuron_fees_e8s: item.neuron_fees_e8s,
-            created_timestamp_seconds: item.created_timestamp_seconds,
-            aging_since_timestamp_seconds: item.aging_since_timestamp_seconds,
-            spawn_at_timestamp_seconds: item.spawn_at_timestamp_seconds,
-            kyc_verified: item.kyc_verified,
-            maturity_e8s_equivalent: item.maturity_e8s_equivalent,
-            staked_maturity_e8s_equivalent: item.staked_maturity_e8s_equivalent,
-            auto_stake_maturity: item.auto_stake_maturity,
-            not_for_profit: item.not_for_profit,
-            joined_community_fund_timestamp_seconds: item.joined_community_fund_timestamp_seconds,
-            neuron_type: item.neuron_type,
-            dissolve_state: item.dissolve_state.map(|x| x.into()),
-            visibility: item.visibility,
-            voting_power_refreshed_timestamp_seconds: item.voting_power_refreshed_timestamp_seconds,
-        }
-    }
-}
-
-impl From<pb::abridged_neuron::DissolveState> for pb_api::abridged_neuron::DissolveState {
-    fn from(item: pb::abridged_neuron::DissolveState) -> Self {
-        match item {
-            pb::abridged_neuron::DissolveState::WhenDissolvedTimestampSeconds(v) => {
-                pb_api::abridged_neuron::DissolveState::WhenDissolvedTimestampSeconds(v)
-            }
-            pb::abridged_neuron::DissolveState::DissolveDelaySeconds(v) => {
-                pb_api::abridged_neuron::DissolveState::DissolveDelaySeconds(v)
-            }
-        }
-    }
-}
-impl From<pb_api::abridged_neuron::DissolveState> for pb::abridged_neuron::DissolveState {
-    fn from(item: pb_api::abridged_neuron::DissolveState) -> Self {
-        match item {
-            pb_api::abridged_neuron::DissolveState::WhenDissolvedTimestampSeconds(v) => {
-                pb::abridged_neuron::DissolveState::WhenDissolvedTimestampSeconds(v)
-            }
-            pb_api::abridged_neuron::DissolveState::DissolveDelaySeconds(v) => {
-                pb::abridged_neuron::DissolveState::DissolveDelaySeconds(v)
-            }
-        }
-    }
-}
-
 impl From<pb::ExecuteNnsFunction> for pb_api::ExecuteNnsFunction {
     fn from(item: pb::ExecuteNnsFunction) -> Self {
         Self {
@@ -1897,6 +1825,7 @@ impl From<pb::ProposalData> for pb_api::ProposalData {
             sns_token_swap_lifecycle: item.sns_token_swap_lifecycle,
             derived_proposal_information: item.derived_proposal_information.map(|x| x.into()),
             neurons_fund_data: item.neurons_fund_data.map(|x| x.into()),
+            total_potential_voting_power: item.total_potential_voting_power,
         }
     }
 }
@@ -1925,6 +1854,7 @@ impl From<pb_api::ProposalData> for pb::ProposalData {
             sns_token_swap_lifecycle: item.sns_token_swap_lifecycle,
             derived_proposal_information: item.derived_proposal_information.map(|x| x.into()),
             neurons_fund_data: item.neurons_fund_data.map(|x| x.into()),
+            total_potential_voting_power: item.total_potential_voting_power,
         }
     }
 }
@@ -2381,9 +2311,11 @@ impl From<pb::ProposalInfo> for pb_api::ProposalInfo {
             reward_status: item.reward_status,
             deadline_timestamp_seconds: item.deadline_timestamp_seconds,
             derived_proposal_information: item.derived_proposal_information.map(|x| x.into()),
+            total_potential_voting_power: item.total_potential_voting_power,
         }
     }
 }
+
 impl From<pb_api::ProposalInfo> for pb::ProposalInfo {
     fn from(item: pb_api::ProposalInfo) -> Self {
         Self {
@@ -2408,6 +2340,7 @@ impl From<pb_api::ProposalInfo> for pb::ProposalInfo {
             reward_status: item.reward_status,
             deadline_timestamp_seconds: item.deadline_timestamp_seconds,
             derived_proposal_information: item.derived_proposal_information.map(|x| x.into()),
+            total_potential_voting_power: item.total_potential_voting_power,
         }
     }
 }

@@ -1614,6 +1614,7 @@ pub struct PageMapLayout<Permissions: AccessPolicy> {
     root: PathBuf,
     name_stem: String,
     permissions_tag: PhantomData<Permissions>,
+    // Keep checkpoint alive so that the PageMap can be loaded asynchronously.
     _checkpoint: Option<CheckpointLayout<Permissions>>,
 }
 
