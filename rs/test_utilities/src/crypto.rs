@@ -525,7 +525,7 @@ use ic_types::crypto::vetkd::{
 impl VetKdProtocol for CryptoReturningOk {
     fn create_encrypted_key_share(
         &self,
-        _args: &VetKdArgs,
+        _args: VetKdArgs,
     ) -> Result<VetKdEncryptedKeyShare, VedKdKeyShareCreationError> {
         Ok(VetKdEncryptedKeyShare {
             encrypted_key_share: vec![],

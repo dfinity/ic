@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 pub trait VetKdProtocol {
     fn create_encrypted_key_share(
         &self,
-        args: &VetKdArgs,
+        args: VetKdArgs,
     ) -> Result<VetKdEncryptedKeyShare, VedKdKeyShareCreationError>;
 
     fn verify_encrypted_key_share(
