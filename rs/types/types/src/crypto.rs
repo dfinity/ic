@@ -55,7 +55,7 @@ pub struct HexEncoding<'a> {
 
 impl fmt::Debug for HexEncoding<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "0x{}", hex::encode(&self.bytes))?;
+        write!(f, "0x{}", hex::encode(self.bytes))?;
         Ok(())
     }
 }
