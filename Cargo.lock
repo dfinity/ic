@@ -17909,6 +17909,7 @@ dependencies = [
  "serde",
  "serde_cbor",
  "serde_json",
+ "strum",
  "thiserror",
  "uuid",
 ]
