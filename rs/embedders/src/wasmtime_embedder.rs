@@ -334,25 +334,9 @@ impl WasmtimeEmbedder {
         self.pre_instantiate(&module)
     }
 
-    fn deserialize_from_file(&self, serialized_module: &File) -> HypervisorResult<Module> {
-        // TODO: Use new Module::deserialize_open_file to not copy bytes.
-        let mmap_size = serialized_module.metadata().unwrap().size() as usize;
-        let mmap_ptr = unsafe {
-            mmap(
-                std::ptr::null_mut(),
-                mmap_size,
-                ProtFlags::PROT_READ,
-                MapFlags::MAP_PRIVATE,
-                serialized_module.as_raw_fd(),
-                0,
-            )
-        }
-        .unwrap_or_else(|err| panic!("Module deserialization failed: {:?}", err))
-            as *mut u8;
-        // TODO: Safety
-        let bytes = unsafe { std::slice::from_raw_parts(mmap_ptr, mmap_size) };
+    fn deserialize_from_file(&self, serialized_module: File) -> HypervisorResult<Module> {
         unsafe {
-            Module::deserialize(&self.create_engine()?, &bytes).map_err(|err| {
+            Module::deserialize_open_file(&self.create_engine()?, serialized_module).map_err(|err| {
                 HypervisorError::WasmEngineError(WasmEngineError::FailedToDeserializeModule(
                     format!("{:?}", err),
                 ))
@@ -365,8 +349,7 @@ impl WasmtimeEmbedder {
         serialized_module: RawFd,
     ) -> HypervisorResult<InstancePre<StoreData>> {
         let file = unsafe { File::from_raw_fd(serialized_module) };
-        let module = self.deserialize_from_file(&file)?;
-        let _ = file.into_raw_fd();
+        let module = self.deserialize_from_file(file)?;
         self.pre_instantiate(&module)
     }
 
