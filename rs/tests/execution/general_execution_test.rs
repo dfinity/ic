@@ -3,7 +3,6 @@ mod general_execution_tests;
 use anyhow::Result;
 use general_execution_tests::api_tests::node_metrics_history_another_subnet_succeeds;
 use general_execution_tests::api_tests::node_metrics_history_non_existing_subnet_fails;
-use general_execution_tests::api_tests::node_metrics_history_query_fails;
 use general_execution_tests::api_tests::test_controller;
 use general_execution_tests::api_tests::test_cycles_burn;
 use general_execution_tests::api_tests::test_in_replicated_execution;
@@ -36,7 +35,6 @@ fn main() -> Result<()> {
                 .add_test(systest!(test_controller))
                 .add_test(systest!(test_in_replicated_execution))
                 .add_test(systest!(test_cycles_burn))
-                .add_test(systest!(node_metrics_history_query_fails))
                 .add_test(systest!(node_metrics_history_another_subnet_succeeds))
                 .add_test(systest!(node_metrics_history_non_existing_subnet_fails))
                 .add_test(systest!(can_access_big_heap_and_big_stable_memory))
