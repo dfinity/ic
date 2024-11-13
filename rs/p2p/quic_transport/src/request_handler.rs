@@ -22,7 +22,6 @@ use ic_protobuf::transport::v1 as pb;
 use prost::Message;
 use quinn::RecvStream;
 use tower::ServiceExt;
-use tracing::instrument;
 
 use crate::{
     connection_handle::ConnectionHandle,
