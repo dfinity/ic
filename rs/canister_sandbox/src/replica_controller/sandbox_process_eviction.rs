@@ -11,9 +11,9 @@ pub(crate) struct EvictionCandidate {
     pub scheduler_priority: AccumulatedPriority,
 }
 
-/// Evicts the least recently used candidates in order to bring the number of
-/// the remaining candidates down to `max_count_threshold` and their total RSS
-/// down to `max_sandboxes_rss`.
+/// Evicts the candidates with lowest scheduler priority in order to bring the
+/// number of the remaining candidates down to `max_count_threshold` and their
+/// total RSS down to `max_sandboxes_rss`.
 ///
 /// The function also tries to evict candidates that have been idle for a long
 /// time (`last_used_threshold`).
@@ -36,17 +36,21 @@ pub(crate) fn evict(
     let mut evicted_num = 0;
 
     for candidate in idle.iter() {
-        evicted_num += 1;
-        evicted_rss = evicted_rss.saturating_add(&candidate.rss);
-
         if evicted_num >= evict_at_least
             && total_rss <= max_sandboxes_rss.saturating_add(&evicted_rss)
         {
-            // We have already evicted the minimum required number of candidates.
-            // No need to evict more.
-            idle.truncate(evicted_num);
-            return idle;
+            break;
         }
+        evicted_num += 1;
+        evicted_rss = evicted_rss.saturating_add(&candidate.rss);
+    }
+
+    if evicted_num >= evict_at_least && total_rss <= max_sandboxes_rss.saturating_add(&evicted_rss)
+    {
+        // We have already evicted the minimum required number of candidates.
+        // No need to evict more.
+        idle.truncate(evicted_num);
+        return idle;
     }
 
     // All idle candidates are evicted.
@@ -221,7 +225,7 @@ mod tests {
     }
 
     #[test]
-    fn dont_evict_all() {
+    fn dont_not_evict_any() {
         let mut candidates = vec![];
         let now = Instant::now();
         for i in 0..100 {
@@ -234,7 +238,25 @@ mod tests {
         }
         assert_eq!(
             evict(candidates.clone(), 0.into(), 100, now, 0.into()).len(),
-            100
+            0
+        );
+    }
+
+    #[test]
+    fn evict_half() {
+        let mut candidates = vec![];
+        let now = Instant::now();
+        for i in 0..100 {
+            candidates.push(EvictionCandidate {
+                id: canister_test_id(i),
+                last_used: now - Duration::from_secs(i + 1),
+                rss: 0.into(),
+                scheduler_priority: AccumulatedPriority::new(0),
+            });
+        }
+        assert_eq!(
+            evict(candidates.clone(), 0.into(), 50, now, 0.into()).len(),
+            50
         );
     }
 }
