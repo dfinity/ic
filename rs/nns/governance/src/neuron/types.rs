@@ -19,7 +19,7 @@ use crate::{
 };
 use ic_base_types::PrincipalId;
 use ic_cdk::println;
-use ic_nervous_system_common::{ONE_DAY_SECONDS};
+use ic_nervous_system_common::ONE_DAY_SECONDS;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use icp_ledger::Subaccount;
 use rust_decimal::Decimal;
@@ -359,7 +359,11 @@ impl Neuron {
     }
 
     /// How much swap this neuron has when it casts its vote on proposals.
-    pub fn deciding_voting_power(&self, voting_power_economics: &VotingPowerEconomics, now_seconds: u64) -> u64 {
+    pub fn deciding_voting_power(
+        &self,
+        voting_power_economics: &VotingPowerEconomics,
+        now_seconds: u64,
+    ) -> u64 {
         // Main inputs to main calculation.
 
         let adjustment_factor: Decimal = if is_voting_power_adjustment_enabled() {

@@ -283,19 +283,24 @@ impl Default for &'_ VotingPowerEconomics { // DO NOT MERGE: Move.
 
 use std::time::Duration; use ic_nervous_system_linear_map::LinearMap; // DO NOT MERGE
 impl VotingPowerEconomics {
-    const DEFAULT: Self = Self {
-        start_reducing_voting_power_after_seconds: Some(Self::DEFAULT_START_REDUCING_VOTING_POWER_AFTER_SECONDS),
+    pub const DEFAULT: Self = Self {
+        start_reducing_voting_power_after_seconds: Some(
+            Self::DEFAULT_START_REDUCING_VOTING_POWER_AFTER_SECONDS,
+        ),
         clear_following_after_seconds: Some(Self::DEFAULT_CLEAR_FOLLOWING_AFTER_SECONDS),
     };
 
-    const DEFAULT_START_REDUCING_VOTING_POWER_AFTER_SECONDS: u64 = 6 * ONE_MONTH_SECONDS;
-    const DEFAULT_CLEAR_FOLLOWING_AFTER_SECONDS: u64 = ONE_MONTH_SECONDS;
+    pub const DEFAULT_START_REDUCING_VOTING_POWER_AFTER_SECONDS: u64 = 6 * ONE_MONTH_SECONDS;
+    pub const DEFAULT_CLEAR_FOLLOWING_AFTER_SECONDS: u64 = ONE_MONTH_SECONDS;
 
     pub fn with_default_values() -> Self {
         Self::DEFAULT.clone()
     }
 
-    pub fn deciding_voting_power_adjustment_factor(&self, time_since_last_voting_power_refreshed: Duration) -> Decimal {
+    pub fn deciding_voting_power_adjustment_factor(
+        &self,
+        time_since_last_voting_power_refreshed: Duration,
+    ) -> Decimal {
         self.deciding_voting_power_adjustment_factor_function()
             .apply(time_since_last_voting_power_refreshed.as_secs())
             .clamp(Decimal::from(0), Decimal::from(1))
@@ -320,7 +325,8 @@ impl VotingPowerEconomics {
     }
 
     fn get_clear_following_after_seconds(&self) -> u64 {
-        self.clear_following_after_seconds.unwrap_or(Self::DEFAULT_CLEAR_FOLLOWING_AFTER_SECONDS)
+        self.clear_following_after_seconds
+            .unwrap_or(Self::DEFAULT_CLEAR_FOLLOWING_AFTER_SECONDS)
     }
 }
 
@@ -1974,7 +1980,7 @@ impl Governance {
         )
     }
 
-    fn get_voting_power_economics<'a>(&'a self) -> &'a VotingPowerEconomics {
+    fn get_voting_power_economics(&self) -> &VotingPowerEconomics {
         let economics = match &self.heap_data.economics {
             Some(ok) => ok,
             None => {
@@ -5782,9 +5788,8 @@ impl Governance {
             // vote, with a voting power determined at the
             // time of the proposal (i.e., now).
             _ => {
-                let (ballots, total_deciding_power, potential_voting_power) = self
-                    .neuron_store
-                    .create_ballots_for_standard_proposal(
+                let (ballots, total_deciding_power, potential_voting_power) =
+                    self.neuron_store.create_ballots_for_standard_proposal(
                         self.get_voting_power_economics(),
                         now_seconds,
                     );

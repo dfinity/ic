@@ -1604,7 +1604,9 @@ fn test_compute_ballots_for_new_proposal() {
 
     let deciding_vote = |g: &Governance, id, now| {
         g.neuron_store
-            .with_neuron(&NeuronId { id }, |n| n.deciding_voting_power(now))
+            .with_neuron(&NeuronId { id }, |n| {
+                n.deciding_voting_power(&VotingPowerEconomics::DEFAULT, now)
+            })
             .unwrap()
     };
     assert_eq!(tot_potential_voting_power, expected_potential_voting_power);
