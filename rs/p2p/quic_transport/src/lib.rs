@@ -49,7 +49,7 @@ use ic_interfaces_registry::RegistryClient;
 use ic_logger::{info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use phantom_newtype::AmountOf;
-use quinn::AsyncUdpSocket;
+use quinn::{AsyncUdpSocket, SendStream, VarInt};
 use tokio::sync::watch;
 use tokio::task::{JoinError, JoinHandle};
 use tokio_util::{sync::CancellationToken, task::task_tracker::TaskTracker};
@@ -115,6 +115,7 @@ impl Shutdown {
 
 #[derive(Clone)]
 pub struct QuicTransport {
+    log: ReplicaLogger,
     conn_handles: Arc<RwLock<HashMap<NodeId, ConnectionHandle>>>,
     shutdown: Arc<RwLock<Option<Shutdown>>>,
 }
@@ -166,6 +167,7 @@ impl QuicTransport {
         );
 
         QuicTransport {
+            log: log.clone(),
             conn_handles,
             shutdown: Arc::new(RwLock::new(Some(shutdown))),
         }
@@ -177,6 +179,30 @@ impl QuicTransport {
         if let Some(shutdown) = maybe_shutdown {
             let _ = shutdown.shutdown().await;
         }
+    }
+}
+
+/// QUIC error code for stream cancellation. See
+/// https://datatracker.ietf.org/doc/html/draft-ietf-quic-transport-03#section-12.3.
+const QUIC_STREAM_CANCELLED: VarInt = VarInt::from_u32(6);
+
+/// Drop guard to send a [`SendStream::reset`] frame on drop. QUINN sends a [`SendStream::finish`] frame by default when dropping a [`SendStream`],
+/// which can lead to the peer receiving the stream thinking a complete message was sent. This guard is used to send a reset frame instead, to signal
+/// that the transmission of the message was cancelled.
+struct ResetStreamOnDrop {
+    send_stream: SendStream,
+}
+
+impl ResetStreamOnDrop {
+    fn new(send_stream: SendStream) -> Self {
+        Self { send_stream }
+    }
+}
+
+impl Drop for ResetStreamOnDrop {
+    fn drop(&mut self) {
+        // fails silently if the stream is already closed.
+        let _ = self.send_stream.reset(QUIC_STREAM_CANCELLED);
     }
 }
 
@@ -195,7 +221,9 @@ impl Transport for QuicTransport {
             .get(peer_id)
             .ok_or(anyhow!("Currently not connected to this peer"))?
             .clone();
-        peer.rpc(request).await
+        peer.rpc(request).await.inspect_err(|err| {
+            info!(self.log, "{:?}", err);
+        })
     }
 
     fn peers(&self) -> Vec<(NodeId, ConnId)> {
