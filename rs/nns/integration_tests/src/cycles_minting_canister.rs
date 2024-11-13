@@ -38,7 +38,7 @@ use ic_nns_test_utils::{
         setup_nns_canisters, state_machine_builder_for_nns_tests, update_with_sender,
     },
 };
-use ic_state_machine_tests::{StateMachine, WasmResult};
+use ic_pocket_ic_tests::{StateMachine, WasmResult};
 use ic_test_utilities::universal_canister::{call_args, wasm};
 use ic_types::{CanisterId, Cycles, PrincipalId};
 use ic_types_test_utils::ids::subnet_test_id;

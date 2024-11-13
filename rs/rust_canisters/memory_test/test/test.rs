@@ -1,6 +1,6 @@
 use canister_test::*;
 use ic00::CanisterSettingsArgsBuilder;
-use ic_state_machine_tests::StateMachine;
+use ic_pocket_ic_tests::StateMachine;
 
 #[test]
 fn test_memory_test_canisters() {

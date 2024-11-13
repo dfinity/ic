@@ -20,6 +20,6 @@ build-info-build = { workspace = true }
 [dev-dependencies]
 candid_parser = { workspace = true }
 canister-test = { path = "../../../rust_canisters/canister_test" }
-ic-state-machine-tests = { path = "../../../state_machine_tests" }
+ic-pocket-ic-tests = { path = "../../../pocket_ic_tests" }
 ic-types = { path = "../../../types/types" }
 tokio = { workspace = true }

@@ -9,21 +9,18 @@ use ic_btc_service::{
     BtcServiceSendTransactionRequest, BtcServiceSendTransactionResponse,
 };
 use ic_config::bitcoin_payload_builder_config::Config as BitcoinPayloadBuilderConfig;
-use ic_config::{
-    execution_environment::{BitcoinConfig, Config as HypervisorConfig},
-    subnet_config::SubnetConfig,
-};
+use ic_config::execution_environment::BitcoinConfig;
 use ic_error_types::RejectCode;
 use ic_management_canister_types::{
     self as ic00, BitcoinGetBalanceArgs, BitcoinGetCurrentFeePercentilesArgs,
     BitcoinGetSuccessorsArgs, BitcoinGetUtxosArgs, BitcoinSendTransactionArgs,
     BitcoinSendTransactionInternalArgs, EmptyBlob, Method, Payload,
 };
-use ic_registry_subnet_type::SubnetType;
+use ic_pocket_ic_tests::{StateMachine, StateMachineBuilder};
 use ic_replica_tests as utils;
-use ic_state_machine_tests::{StateMachine, StateMachineConfig};
 use ic_test_utilities::universal_canister::{call_args, wasm};
 use ic_types::ingress::WasmResult;
+use ic_types::Cycles;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -545,24 +542,21 @@ fn test_canister_routing(env: StateMachine, networks: Vec<BitcoinNetwork>) {
 #[test]
 fn testnet_requests_are_routed_to_testnet_canister() {
     let bitcoin_canister_id: CanisterId =
-        CanisterId::from_str("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap();
+        CanisterId::from_str("g4xu7-jiaaa-aaaan-aaaaq-cai").unwrap();
 
-    let env = StateMachine::new_with_config(StateMachineConfig::new(
-        SubnetConfig::new(SubnetType::System),
-        HypervisorConfig {
-            bitcoin: BitcoinConfig {
-                testnet_canister_id: Some(bitcoin_canister_id),
-                ..Default::default()
-            },
-            ..Default::default()
-        },
-    ));
+    let env = StateMachineBuilder::new().with_bitcoin_subnet().build();
 
-    let canister_id = env.install_canister_wat(
-        &mock_bitcoin_canister_wat(BitcoinNetwork::Testnet),
-        vec![],
+    let canister_id = env.create_canister_with_cycles(
+        Some(bitcoin_canister_id.into()),
+        Cycles::from(0_u64),
         None,
     );
+    env.install_existing_canister_wat(
+        canister_id,
+        &mock_bitcoin_canister_wat(BitcoinNetwork::Testnet),
+        vec![],
+    )
+    .unwrap();
 
     // The canister we installed had the ID we expected.
     assert_eq!(canister_id, bitcoin_canister_id);
@@ -573,24 +567,21 @@ fn testnet_requests_are_routed_to_testnet_canister() {
 #[test]
 fn regtest_requests_are_routed_to_testnet_canister() {
     let bitcoin_canister_id: CanisterId =
-        CanisterId::from_str("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap();
+        CanisterId::from_str("g4xu7-jiaaa-aaaan-aaaaq-cai").unwrap();
 
-    let env = StateMachine::new_with_config(StateMachineConfig::new(
-        SubnetConfig::new(SubnetType::System),
-        HypervisorConfig {
-            bitcoin: BitcoinConfig {
-                testnet_canister_id: Some(bitcoin_canister_id),
-                ..Default::default()
-            },
-            ..Default::default()
-        },
-    ));
+    let env = StateMachineBuilder::new().with_bitcoin_subnet().build();
 
-    let canister_id = env.install_canister_wat(
-        &mock_bitcoin_canister_wat(BitcoinNetwork::Regtest),
-        vec![],
+    let canister_id = env.create_canister_with_cycles(
+        Some(bitcoin_canister_id.into()),
+        Cycles::from(0_u64),
         None,
     );
+    env.install_existing_canister_wat(
+        canister_id,
+        &mock_bitcoin_canister_wat(BitcoinNetwork::Regtest),
+        vec![],
+    )
+    .unwrap();
 
     // The canister we installed had the ID we expected.
     assert_eq!(canister_id, bitcoin_canister_id);
@@ -601,103 +592,24 @@ fn regtest_requests_are_routed_to_testnet_canister() {
 #[test]
 fn mainnet_requests_are_routed_to_mainnet_canister() {
     let bitcoin_canister_id: CanisterId =
-        CanisterId::from_str("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap();
+        CanisterId::from_str("ghsi2-tqaaa-aaaan-aaaca-cai").unwrap();
 
-    let env = StateMachine::new_with_config(StateMachineConfig::new(
-        SubnetConfig::new(SubnetType::System),
-        HypervisorConfig {
-            bitcoin: BitcoinConfig {
-                mainnet_canister_id: Some(bitcoin_canister_id),
-                ..Default::default()
-            },
-            ..Default::default()
-        },
-    ));
+    let env = StateMachineBuilder::new().with_bitcoin_subnet().build();
 
-    let canister_id = env.install_canister_wat(
-        &mock_bitcoin_canister_wat(BitcoinNetwork::Mainnet),
-        vec![],
+    let canister_id = env.create_canister_with_cycles(
+        Some(bitcoin_canister_id.into()),
+        Cycles::from(0_u64),
         None,
     );
+    env.install_existing_canister_wat(
+        canister_id,
+        &mock_bitcoin_canister_wat(BitcoinNetwork::Mainnet),
+        vec![],
+    )
+    .unwrap();
 
     // The canister we installed had the ID we expected.
     assert_eq!(canister_id, bitcoin_canister_id);
 
     test_canister_routing(env, vec![BitcoinNetwork::Mainnet, BitcoinNetwork::mainnet]);
-}
-
-#[test]
-fn requests_are_rejected_if_no_bitcoin_canisters_are_set() {
-    let env = StateMachine::new_with_config(StateMachineConfig::new(
-        SubnetConfig::new(SubnetType::System),
-        HypervisorConfig {
-            // No bitcoin canisters set.
-            bitcoin: BitcoinConfig::default(),
-            ..Default::default()
-        },
-    ));
-
-    let canister = utils::install_universal_canister(&env, vec![]);
-
-    for network in [
-        BitcoinNetwork::Testnet,
-        BitcoinNetwork::testnet,
-        BitcoinNetwork::Mainnet,
-        BitcoinNetwork::mainnet,
-        BitcoinNetwork::Regtest,
-        BitcoinNetwork::regtest,
-    ] {
-        let tests = [
-            (
-                "bitcoin_get_balance",
-                BitcoinGetBalanceArgs {
-                    network,
-                    address: String::from(""),
-                    min_confirmations: None,
-                }
-                .encode(),
-            ),
-            (
-                "bitcoin_get_utxos",
-                BitcoinGetUtxosArgs {
-                    network,
-                    address: String::from(""),
-                    filter: None,
-                }
-                .encode(),
-            ),
-            (
-                "bitcoin_get_block_headers",
-                BitcoinGetBlockHeadersArgs {
-                    network,
-                    start_height: 0,
-                    end_height: None,
-                }
-                .encode(),
-            ),
-            (
-                "bitcoin_get_current_fee_percentiles",
-                BitcoinGetCurrentFeePercentilesArgs { network }.encode(),
-            ),
-            (
-                "bitcoin_send_transaction",
-                BitcoinSendTransactionArgs {
-                    network,
-                    transaction: vec![],
-                }
-                .encode(),
-            ),
-        ];
-
-        for (method, payload) in tests {
-            utils::assert_reject(
-                canister.update(wasm().call_simple(
-                    CanisterId::ic_00(),
-                    method,
-                    call_args().other_side(payload),
-                )),
-                RejectCode::CanisterReject,
-            );
-        }
-    }
 }

@@ -19,6 +19,7 @@ use ic_nns_test_utils::{
     },
     state_test_helpers::set_controllers,
 };
+use ic_pocket_ic_tests::{StateMachine, StateMachineBuilder};
 use ic_sns_governance::pb::v1::{
     governance::Version,
     manage_neuron::{self, RegisterVote},
@@ -39,7 +40,6 @@ use ic_sns_swap::pb::v1::{
     ListCommunityFundParticipantsResponse, NewSaleTicketResponse, NotifyPaymentFailureResponse,
     RefreshBuyerTokensRequest, RefreshBuyerTokensResponse, Ticket,
 };
-use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_types::ingress::WasmResult;
 use icp_ledger::{
     AccountIdentifier, BlockIndex, Memo, TransferArgs, TransferError, DEFAULT_TRANSFER_FEE,
@@ -47,7 +47,10 @@ use icp_ledger::{
 use icrc_ledger_types::icrc1::account::Account;
 
 pub fn state_machine_builder_for_sns_tests() -> StateMachineBuilder {
-    StateMachineBuilder::new().with_current_time()
+    StateMachineBuilder::new()
+        .with_nns_subnet()
+        .with_sns_subnet()
+        .with_current_time()
 }
 
 #[derive(Copy, Clone, Debug)]

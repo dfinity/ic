@@ -17,7 +17,7 @@ use ic_nns_test_utils::{
         nns_governance_make_proposal, setup_nns_canisters, state_machine_builder_for_nns_tests,
     },
 };
-use ic_state_machine_tests::StateMachine;
+use ic_pocket_ic_tests::StateMachine;
 
 const INVALID_PROPOSAL_ID: u64 = 69420;
 

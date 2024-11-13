@@ -8,8 +8,7 @@ use ic_base_types::CanisterId;
 use ic_icrc1_index_ng::{IndexArg, InitArg, UpgradeArg};
 use ic_icrc1_test_utils::{arb_account, minter_identity};
 use ic_ledger_suite_state_machine_tests::send_transfer;
-use ic_registry_subnet_type::SubnetType;
-use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineBuilder, UserError};
+use ic_pocket_ic_tests::{ErrorCode, StateMachine, StateMachineBuilder, UserError};
 use ic_types::{Cycles, Time};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
@@ -32,8 +31,7 @@ fn install_and_upgrade(
     upgrade_interval: Option<u64>,
 ) -> Result<(), UserError> {
     let env = &StateMachineBuilder::new()
-        .with_subnet_type(SubnetType::Application)
-        .with_subnet_size(28)
+        .with_fiduciary_subnet()
         .with_time(GENESIS)
         .build();
     let ledger_id = install_ledger(
@@ -186,8 +184,7 @@ fn should_sync_according_to_interval() {
             |(install_interval, upgrade_interval, a1, a2)| {
                 // Create a new environment with an application subnet
                 let env = &StateMachineBuilder::new()
-                    .with_subnet_type(SubnetType::Application)
-                    .with_subnet_size(28)
+                    .with_fiduciary_subnet()
                     .with_time(GENESIS)
                     .build();
                 // Install a ledger with an initial balance for a1
@@ -268,10 +265,7 @@ fn should_install_and_upgrade_without_build_index_interval_field_set() {
         pub ledger_id: Option<Principal>,
     }
 
-    let env = &StateMachineBuilder::new()
-        .with_subnet_type(SubnetType::Application)
-        .with_subnet_size(28)
-        .build();
+    let env = &StateMachineBuilder::new().with_fiduciary_subnet().build();
     let ledger_id = install_ledger(
         env,
         vec![],
@@ -402,10 +396,7 @@ fn should_consume_expected_amount_of_cycles() {
             },
         },
     ] {
-        let env = &StateMachineBuilder::new()
-            .with_subnet_type(SubnetType::Application)
-            .with_subnet_size(28)
-            .build();
+        let env = &StateMachineBuilder::new().with_fiduciary_subnet().build();
         env.set_time(SystemTime::from(GENESIS));
         let ledger_id = install_ledger(
             env,

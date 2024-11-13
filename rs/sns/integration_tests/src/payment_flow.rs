@@ -4,6 +4,7 @@ use ic_icrc1_ledger::{InitArgs as Icrc1InitArgs, LedgerArgument};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
 use ic_nns_test_utils::state_test_helpers::icrc1_transfer;
+use ic_pocket_ic_tests::StateMachine;
 use ic_sns_swap::{
     pb::v1::{
         new_sale_ticket_response, BuyerState, GetLifecycleResponse, Init, Lifecycle,
@@ -17,7 +18,6 @@ use ic_sns_test_utils::state_test_helpers::{
     new_sale_ticket, notify_payment_failure, refresh_buyer_tokens,
     state_machine_builder_for_sns_tests,
 };
-use ic_state_machine_tests::StateMachine;
 use icp_ledger::{
     AccountIdentifier, LedgerCanisterInitPayload as IcpInitArgs, DEFAULT_TRANSFER_FEE,
 };

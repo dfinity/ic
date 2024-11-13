@@ -59,7 +59,7 @@ ic-nns-test-utils = { path = "../test_utils" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-sns-swap = { path = "../../sns/swap" }
 ic-sns-wasm-protobuf-generator = { path = "./protobuf_generator" }
-ic-state-machine-tests = { path = "../../state_machine_tests" }
+ic-pocket-ic-tests = { path = "../../pocket_ic_tests" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }

@@ -1,0 +1,18 @@
+[package]
+name = "ic-pocket-ic-tests"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+candid = { workspace = true }
+ic-error-types = { path = "../types/error_types" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
+ic-protobuf = { path = "../protobuf" }
+ic-types = { path = "../types/types" }
+pocket-ic = { path = "../../packages/pocket-ic" }
+wat = { workspace = true }

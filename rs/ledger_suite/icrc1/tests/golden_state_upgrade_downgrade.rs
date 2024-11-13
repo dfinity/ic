@@ -13,7 +13,7 @@ use ic_ledger_suite_state_machine_tests::{
     TransactionGenerationParameters,
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_fiduciary_state_or_panic;
-use ic_state_machine_tests::StateMachine;
+use ic_pocket_ic_tests::StateMachine;
 use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
 use std::str::FromStr;
@@ -782,7 +782,7 @@ mod index {
     use super::*;
     use candid::Decode;
     use ic_icrc1_index_ng::Status;
-    use ic_state_machine_tests::WasmResult;
+    use ic_pocket_ic_tests::WasmResult;
     use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
     use std::time::{Duration, Instant};
 

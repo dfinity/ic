@@ -66,7 +66,7 @@ ALIASES = {}
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/state_machine_tests",
+    "//rs/pocket_ic_tests",
     "@crate_index//:candid_parser",
     "@crate_index//:pretty_assertions",
     "@crate_index//:tokio",

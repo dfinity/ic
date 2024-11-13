@@ -18,7 +18,7 @@ use ic_ledger_suite_state_machine_tests::{
     NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY, TEXT_META_VALUE, TOKEN_NAME,
     TOKEN_SYMBOL,
 };
-use ic_state_machine_tests::StateMachine;
+use ic_pocket_ic_tests::StateMachine;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use icrc_ledger_types::icrc::generic_value::Value;
 use icrc_ledger_types::icrc1::account::Account;
@@ -1211,7 +1211,7 @@ mod verify_written_blocks {
     use super::*;
     use ic_icrc1_ledger::FeatureFlags;
     use ic_ledger_suite_state_machine_tests::{system_time_to_nanos, MINTER};
-    use ic_state_machine_tests::{StateMachine, WasmResult};
+    use ic_pocket_ic_tests::{StateMachine, WasmResult};
     use icrc_ledger_types::icrc1::account::Account;
     use icrc_ledger_types::icrc1::transfer::{Memo, NumTokens, TransferArg};
     use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
@@ -1659,7 +1659,7 @@ mod incompatible_token_type_upgrade {
     use super::*;
     use assert_matches::assert_matches;
     use ic_ledger_suite_state_machine_tests::metadata;
-    use ic_state_machine_tests::ErrorCode::CanisterCalledTrap;
+    use ic_pocket_ic_tests::ErrorCode::CanisterCalledTrap;
     use num_bigint::BigUint;
 
     fn default_init_args() -> Vec<u8> {

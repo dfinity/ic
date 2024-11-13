@@ -8,11 +8,11 @@ use ic_nns_test_utils::{
     },
     state_test_helpers,
 };
+use ic_pocket_ic_tests::StateMachine;
 use ic_sns_wasm::pb::v1::{
     add_wasm_response, get_wasm_metadata_response, GetWasmMetadataResponse, GetWasmResponse,
     MetadataSection, SnsWasmError,
 };
-use ic_state_machine_tests::StateMachine;
 
 pub mod common;
 

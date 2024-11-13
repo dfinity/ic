@@ -22,7 +22,7 @@ use ic_nns_test_utils::{
         nns_governance_get_neuron_info, setup_nns_canisters, state_machine_builder_for_nns_tests,
     },
 };
-use ic_state_machine_tests::StateMachine;
+use ic_pocket_ic_tests::StateMachine;
 use ic_types::ingress::WasmResult;
 use icp_ledger::{
     AccountIdentifier, BinaryAccountBalanceArgs, Subaccount, Tokens, DEFAULT_TRANSFER_FEE,

@@ -31,6 +31,7 @@ use ic_nns_test_utils::{
         sns_swap_get_auto_finalization_status,
     },
 };
+use ic_pocket_ic_tests::StateMachine;
 use ic_sns_governance::pb::v1::{
     governance::Mode::{Normal, PreInitializationSwap},
     ListNeurons,
@@ -40,7 +41,6 @@ use ic_sns_test_utils::state_test_helpers::{
     get_lifecycle, get_sns_canisters_summary, list_community_fund_participants,
     participate_in_swap, sns_governance_list_neurons, state_machine_builder_for_sns_tests,
 };
-use ic_state_machine_tests::StateMachine;
 use icp_ledger::DEFAULT_TRANSFER_FEE;
 use lazy_static::lazy_static;
 use maplit::hashmap;

@@ -15,7 +15,7 @@ use ic_nns_constants::{
     LEDGER_CANISTER_INDEX_IN_NNS_SUBNET, LEDGER_INDEX_CANISTER_INDEX_IN_NNS_SUBNET,
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
-use ic_state_machine_tests::StateMachine;
+use ic_pocket_ic_tests::StateMachine;
 use icp_ledger::{Archives, FeatureFlags, LedgerCanisterPayload, UpgradeArgs};
 use std::time::Instant;
 
