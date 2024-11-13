@@ -412,7 +412,7 @@ impl RoundSchedule {
         // of canisters and their compute allocations.
         let is_reset_round = (current_round.get() % accumulated_priority_reset_interval.get()) == 0;
 
-        // Compute the priority of the canisters for this round.
+        // Collect the priority of the canisters for this round.
         let mut accumulated_priority_invariant = AccumulatedPriority::default();
         let mut accumulated_priority_deviation = 0;
         for (&canister_id, canister) in canister_states.iter_mut() {
@@ -441,6 +441,12 @@ impl RoundSchedule {
             accumulated_priority_invariant += accumulated_priority;
             accumulated_priority_deviation +=
                 accumulated_priority.get() * accumulated_priority.get();
+            if !canister.has_input() {
+                canister
+                    .system_state
+                    .canister_metrics
+                    .skipped_round_due_to_no_messages += 1;
+            }
         }
         // Assert there is at least `1%` of free capacity to distribute across canisters.
         // It's guaranteed by `validate_compute_allocation()`
@@ -471,7 +477,7 @@ impl RoundSchedule {
             .saturating_sub(total_compute_allocation_percent)
             * scheduler_cores as i64;
 
-        // Fully divide the free allocation across all canisters.
+        // Compute `long_execution_compute_allocation`.
         let mut long_executions_compute_allocation = 0;
         let mut number_of_long_executions = 0;
         for rs in round_states.iter_mut() {
@@ -486,27 +492,10 @@ impl RoundSchedule {
             }
         }
 
-        // Optimization that makes use of accessing a canister state without an extra canister id lookup.
-        // IMPORTANT! Optimization relies on the fact that elements in `canister_states` and `round_states` follow in the same order.
-        for ((&_, canister), rs) in canister_states.iter_mut().zip(round_states.iter()) {
-            debug_assert!(
-                canister.canister_id() == rs.canister_id,
-                "Elements in canister_states and round_states must follow in the same order",
-            );
-
-            if !canister.has_input() {
-                canister
-                    .system_state
-                    .canister_metrics
-                    .skipped_round_due_to_no_messages += 1;
-            }
-        }
-
-        // Count long execution cores by dividing `long_execution_compute_allocation`
-        // by `100%` and rounding up (as one scheduler core is reserved to guarantee
-        // long executions progress).
-        // Note, the `long_execution_compute_allocation` is in percent multiplied
-        // by the `multiplier`.
+        // Compute the number of long execution cores by dividing
+        // `long_execution_compute_allocation` by `100%` and rounding up
+        // (as one scheduler core is reserved to guarantee long executions progress).
+        // The `long_execution_compute_allocation` is in multiplied percent.
         let long_execution_cores = ((long_executions_compute_allocation + 100 * multiplier - 1)
             / (100 * multiplier)) as usize;
         // If there are long executions, the `long_execution_cores` must be non-zero.
@@ -548,23 +537,15 @@ impl RoundSchedule {
                 .collect(),
         );
 
+        for canister_id in round_schedule
+            .ordered_long_execution_canister_ids
+            .iter()
+            .take(long_execution_cores)
         {
-            let scheduling_order = round_schedule.scheduling_order();
-            let scheduling_order = scheduling_order
-                .prioritized_long_canister_ids
-                .chain(scheduling_order.new_canister_ids)
-                .chain(scheduling_order.opportunistic_long_canister_ids);
-            // The number of active scheduler cores is limited by the number
-            // of canisters to schedule.
-            let active_cores = scheduler_cores.min(number_of_canisters);
-            for (i, canister_id) in scheduling_order.take(active_cores).enumerate() {
-                let canister_state = canister_states.get_mut(canister_id).unwrap();
-                if i < round_schedule.long_execution_cores {
-                    canister_state.scheduler_state.long_execution_mode =
-                        LongExecutionMode::Prioritized;
-                }
-            }
+            let canister = canister_states.get_mut(canister_id).unwrap();
+            canister.scheduler_state.long_execution_mode = LongExecutionMode::Prioritized;
         }
+
         round_schedule
     }
 
