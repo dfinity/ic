@@ -24,7 +24,10 @@ use ic_types::{
 };
 use ic_wasm_types::CanisterModule;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntGauge};
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use crate::execution::common::{apply_canister_state_changes, update_round_limits};
 use crate::execution_environment::{as_round_instructions, CompilationCostHandling, RoundLimits};
@@ -276,6 +279,7 @@ impl Hypervisor {
         cycles_account_manager: Arc<CyclesAccountManager>,
         dirty_page_overhead: NumInstructions,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+        temp_dir: &Path,
     ) -> Self {
         let mut embedder_config = config.embedders_config.clone();
         embedder_config.subnet_type = own_subnet_type;
@@ -302,7 +306,7 @@ impl Hypervisor {
                 Arc::new(executor)
             }
         };
-        let temp_dir = tempfile::tempdir().unwrap();
+        let temp_dir = tempfile::tempdir_in(temp_dir).unwrap();
         // println!("Cache temp directory {:?}", temp_dir.path());
         Self {
             wasm_executor,

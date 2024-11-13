@@ -69,13 +69,15 @@ use ic_types_test_utils::ids::{node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::UNIVERSAL_CANISTER_WASM;
 use ic_wasm_types::BinaryEncodedWasm;
 use maplit::{btreemap, btreeset};
-use std::convert::TryFrom;
-use std::sync::Arc;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
+    convert::TryFrom,
+    os::unix::prelude::FileExt,
+    path::Path,
+    str::FromStr,
+    sync::Arc,
     time::Duration,
 };
-use std::{os::unix::prelude::FileExt, str::FromStr};
 use tempfile::NamedTempFile;
 
 mod wat_canister;
@@ -2255,6 +2257,7 @@ impl ExecutionTestBuilder {
             Arc::clone(&cycles_account_manager),
             dirty_page_overhead,
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+            &Path::new("/tmp"),
         );
         let hypervisor = Arc::new(hypervisor);
         let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);

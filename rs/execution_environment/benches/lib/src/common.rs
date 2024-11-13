@@ -36,8 +36,7 @@ use ic_types::{
 };
 use ic_wasm_types::CanisterModule;
 use lazy_static::lazy_static;
-use std::convert::TryFrom;
-use std::sync::Arc;
+use std::{convert::TryFrom, path::Path, sync::Arc};
 
 pub const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(500_000_000_000);
 // Note: this canister ID is required for the `ic0_mint_cycles()`
@@ -293,6 +292,7 @@ where
         Arc::clone(&cycles_account_manager),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+        &Path::new("/tmp"),
     ));
 
     let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
