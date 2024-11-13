@@ -25,12 +25,11 @@ sudo mount -t tmpfs tmpfs-podman "${TMPFS}"
 trap 'rm -rf "${TMPDIR}"; sudo podman --root "${TMPFS}" rm -f "${CONTAINER}"' exit
 TMPDIR=$(mktemp -d -t build-image-XXXXXXXXXXXX)
 
-BASE_IMAGE="ghcr.io/dfinity/library/ubuntu@sha256:5d070ad5f7fe63623cbb99b4fc0fd997f5591303d4b03ccce50f403957d0ddc4"
+BASE_IMAGE="docker.io/dfinity/ic-build-bazel@sha256:1978886cfda51b09057bffd60f2e5edb588c6c0b74de87696cd4e964335dba87"
 
 sudo podman --root "${TMPFS}" build --iidfile ${TMPDIR}/iidfile - <<<"
     FROM $BASE_IMAGE
     USER root:root
-    RUN apt-get -y update && apt-get -y --no-install-recommends install grub-efi faketime
     RUN mkdir -p /build/boot/grub
     RUN cp -r /usr/lib/grub/x86_64-efi /build/boot/grub
     RUN mkdir -p /build/boot/efi/EFI/Boot

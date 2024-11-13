@@ -18,7 +18,7 @@ ic-neurons-fund = { path = "../" }
 ic-sns-governance = { path = "../../../sns/governance" }
 ic-sns-swap = { path = "../../../sns/swap" }
 rgb = "0.8.37"
-rust_decimal = { version = "1.25" }
+rust_decimal = "1.36.0"
 serde = { workspace = true }
 textplots = { version = "0.8" }
 tokio = { workspace = true }

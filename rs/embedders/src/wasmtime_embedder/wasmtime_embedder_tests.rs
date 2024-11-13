@@ -165,7 +165,7 @@ fn test_wasmtime_system_api() {
 #[test]
 fn test_initial_wasmtime_config() {
     // The following proposals should be disabled: tail_call, simd, relaxed_simd,
-    // threads, multi_memory, exceptions, memory64, extended_const, component_model,
+    // threads, multi_memory, exceptions, extended_const, component_model,
     // function_references, memory_control, gc
     for (proposal, _url, wat, expected_err_msg) in [
         (
@@ -193,12 +193,6 @@ fn test_initial_wasmtime_config() {
             "failed with multiple memories",
         ),
         // Exceptions
-        (
-            "memory64",
-            "https://github.com/WebAssembly/memory64/",
-            "(module (memory $m i64 1 1))",
-            "memory64 must be enabled",
-        ),
         (
             "extended_const",
             "https://github.com/WebAssembly/extended-const/",
