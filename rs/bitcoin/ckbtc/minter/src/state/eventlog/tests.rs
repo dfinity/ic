@@ -17,6 +17,43 @@ async fn should_replay_events_for_mainnet() {
 }
 
 #[tokio::test]
+async fn should_not_have_too_many_useless_events_for_mainnet() {
+    GetEventsFile::Mainnet
+        .retrieve_and_store_events_if_env()
+        .await;
+    let mut empty_received_utxos = Vec::new();
+    for event in GetEventsFile::Mainnet.deserialize() {
+        match &event {
+             Event::ReceivedUtxos { utxos, .. } if utxos.is_empty() => {
+                 println!("Found empty utxos: {:?}", event);
+                empty_received_utxos.push(event.clone());
+            }
+            _ => {}
+        }
+    }
+    assert_eq!(empty_received_utxos.len(), 409_141);
+    panic!("Last empty ReceivedUtxos {:?}", empty_received_utxos.iter().last().unwrap())
+}
+
+#[tokio::test]
+async fn should_not_have_too_many_useless_events_for_testnet() {
+    GetEventsFile::Testnet
+        .retrieve_and_store_events_if_env()
+        .await;
+    let mut empty_received_utxos = Vec::new();
+    for event in GetEventsFile::Testnet.deserialize() {
+        match &event {
+            Event::ReceivedUtxos { utxos, .. } if utxos.is_empty() => {
+                println!("Found empty utxos: {:?}", event);
+                empty_received_utxos.push(event.clone());
+            }
+            _ => {}
+        }
+    }
+    assert_eq!(empty_received_utxos.len(), 4_044);
+}
+
+#[tokio::test]
 async fn should_replay_events_for_testnet() {
     GetEventsFile::Testnet
         .retrieve_and_store_events_if_env()
