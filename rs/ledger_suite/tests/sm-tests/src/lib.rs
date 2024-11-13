@@ -83,7 +83,7 @@ pub const NAT_META_VALUE: u128 = u128::MAX;
 pub const INT_META_KEY: &str = "test:int";
 pub const INT_META_VALUE: i128 = i128::MIN;
 
-#[cfg(all(not(feature = "u256-tokens"), not(feature = "icp-tokens")))]
+#[cfg(not(any(feature = "u256-tokens", feature = "icp-tokens")))]
 type Tokens = ic_icrc1_tokens_u64::U64;
 
 #[cfg(all(feature = "u256-tokens", not(feature = "icp-tokens")))]
@@ -91,6 +91,7 @@ type Tokens = ic_icrc1_tokens_u256::U256;
 
 #[cfg(all(feature = "icp-tokens", not(feature = "u256-tokens")))]
 type Tokens = ic_ledger_core::Tokens;
+
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType)]
 pub struct InitArgs {
