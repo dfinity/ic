@@ -118,10 +118,12 @@ mod tests {
             });
         }
 
-        assert_eq!(
-            evict(candidates.clone(), 0.into(), 90, now, 0.into()),
-            candidates.into_iter().rev().take(10).collect::<Vec<_>>()
-        );
+        candidates.shuffle(&mut thread_rng());
+
+        assert_eq!(evict(candidates.clone(), 0.into(), 90, now, 0.into()), {
+            candidates.sort_by_key(|x| x.last_used);
+            candidates.into_iter().take(10).collect::<Vec<_>>()
+        });
     }
 
     #[test]
@@ -148,8 +150,6 @@ mod tests {
                 0.into()
             ),
             {
-                // Since scheduler_priority is the same for all candidates,
-                // we sort only by last_used.
                 candidates.sort_by_key(|x| x.last_used);
                 candidates.into_iter().take(49).collect::<Vec<_>>()
             }
@@ -171,8 +171,6 @@ mod tests {
         candidates.shuffle(&mut thread_rng());
 
         assert_eq!(evict(candidates.clone(), 0.into(), 10, now, 0.into()), {
-            // Since scheduler_priority is the same for all candidates,
-            // we sort only by last_used.
             candidates.sort_by_key(|x| x.last_used);
             candidates.into_iter().take(90).collect::<Vec<_>>()
         });
