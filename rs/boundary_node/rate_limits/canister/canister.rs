@@ -7,7 +7,7 @@ use crate::disclose::{DisclosesRules, RulesDiscloser};
 use crate::fetcher::{ConfigFetcher, EntityFetcher, IncidentFetcher, RuleFetcher};
 use crate::metrics::{
     export_metrics_as_http_response, with_metrics_registry, WithMetrics,
-    LAST_CANISTER_UPGRADE_TIME, LAST_SUCCESSFUL_REGISTRY_POLL_TIME,
+    LAST_CANISTER_UPGRADE_TIME, LAST_SUCCESSFUL_REGISTRY_POLL_TIME, REGISTRY_POLL_CALLS_COUNTER,
 };
 use crate::state::{init_version_and_config, with_canister_state, CanisterApi};
 use candid::Principal;
@@ -26,8 +26,6 @@ const REGISTRY_CANISTER_METHOD: &str = "get_api_boundary_node_ids";
 
 #[init]
 fn init(init_arg: InitArg) {
-    // TODO: rework logging
-    ic_cdk::println!("Starting canister init");
     with_canister_state(|state| {
         // Set authorized principal, which performs write operations, such as adding new configurations
         if let Some(principal) = init_arg.authorized_principal {
@@ -35,11 +33,8 @@ fn init(init_arg: InitArg) {
         }
         // Initialize config
         if state.get_version().is_none() {
-            ic_cdk::println!("Initializing rate-limit config");
             let current_time = ic_cdk::api::time();
             init_version_and_config(current_time, state.clone());
-        } else {
-            ic_cdk::println!("Rate-limit config is already initialized");
         }
         // Spawn periodic job of fetching latest API boundary node topology
         // API boundary nodes are authorized readers of all config rules (including not yet disclosed ones)
@@ -48,19 +43,16 @@ fn init(init_arg: InitArg) {
             Arc::new(state),
         );
     });
-    ic_cdk::println!("Finished canister init");
 }
 
 #[post_upgrade]
 fn post_upgrade(init_arg: InitArg) {
-    ic_cdk::println!("Starting canister post-upgrade");
     init(init_arg);
     // Set metric to track last upgrade time.
     let current_time = ic_cdk::api::time() as i64;
     LAST_CANISTER_UPGRADE_TIME.with(|cell| {
         cell.borrow_mut().set(current_time);
     });
-    ic_cdk::println!("Finished canister post-upgrade");
 }
 
 #[query]
@@ -144,31 +136,36 @@ fn periodically_poll_api_boundary_nodes(interval: u64, canister_api: Arc<dyn Can
         let canister_api = canister_api.clone();
         ic_cdk::spawn(async move {
             let canister_id = Principal::from(REGISTRY_CANISTER_ID);
-            match call::<_, (Result<Vec<ApiBoundaryNodeIdRecord>, String>,)>(
-                canister_id,
-                REGISTRY_CANISTER_METHOD,
-                (&GetApiBoundaryNodeIdsRequest {},),
-            )
-            .await
-            {
-                Ok((Ok(api_bn_records),)) => {
-                    // Set authorized readers of the rate-limit config.
-                    canister_api.set_api_boundary_nodes_principals(
-                        api_bn_records.into_iter().filter_map(|n| n.id).collect(),
-                    );
-                    // Update metrics.
-                    let current_time = ic_cdk::api::time() as i64;
-                    LAST_SUCCESSFUL_REGISTRY_POLL_TIME.with(|cell| {
-                        cell.borrow_mut().set(current_time);
-                    });
-                }
-                Ok((Err(err),)) => {
-                    ic_cdk::println!("Error fetching API boundary nodes: {}", err);
-                }
-                Err(err) => {
-                    ic_cdk::println!("Error calling registry canister: {:?}", err);
-                }
-            }
+
+            let (call_status, message) =
+                match call::<_, (Result<Vec<ApiBoundaryNodeIdRecord>, String>,)>(
+                    canister_id,
+                    REGISTRY_CANISTER_METHOD,
+                    (&GetApiBoundaryNodeIdsRequest {},),
+                )
+                .await
+                {
+                    Ok((Ok(api_bn_records),)) => {
+                        // Set authorized readers of the rate-limit config.
+                        canister_api.set_api_boundary_nodes_principals(
+                            api_bn_records.into_iter().filter_map(|n| n.id).collect(),
+                        );
+                        // Update metrics.
+                        let current_time = ic_cdk::api::time() as i64;
+                        LAST_SUCCESSFUL_REGISTRY_POLL_TIME.with(|cell| {
+                            cell.borrow_mut().set(current_time);
+                        });
+                        ("success", "")
+                    }
+                    Ok((Err(_),)) => ("failure", "calling_canister_method_failed"),
+                    Err(_) => ("failure", "canister_call_rejected"),
+                };
+
+            // Update metric.
+            REGISTRY_POLL_CALLS_COUNTER.with(|cell| {
+                let metric = cell.borrow_mut();
+                metric.with_label_values(&[call_status, message]).inc();
+            });
         });
     });
 }

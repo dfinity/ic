@@ -45,6 +45,11 @@ thread_local! {
         format!("{SERVICE_NAME}_last_successful_registry_poll"),
         "The Unix timestamp of the last successful poll of the API boundary nodes from registry canister").unwrap());
 
+    pub static REGISTRY_POLL_CALLS_COUNTER: RefCell<CounterVec> = RefCell::new(CounterVec::new(Opts::new(
+        format!("{SERVICE_NAME}_registry_poll_calls"),
+        "Number of registry polling calls with the status and message (in case of error)",
+    ), &["status", "message"]).unwrap());
+
     pub static LAST_CANISTER_UPGRADE_TIME: RefCell<IntGauge> = RefCell::new(IntGauge::new(
         format!("{SERVICE_NAME}_last_successful_canister_upgrade"),
         "The Unix timestamp of the last successful canister upgrade").unwrap());
@@ -88,6 +93,11 @@ thread_local! {
         });
 
         LAST_SUCCESSFUL_REGISTRY_POLL_TIME.with(|cell| {
+            let cell = Box::new(cell.borrow().clone());
+            registry.register(cell).unwrap();
+        });
+
+        REGISTRY_POLL_CALLS_COUNTER.with(|cell| {
             let cell = Box::new(cell.borrow().clone());
             registry.register(cell).unwrap();
         });
