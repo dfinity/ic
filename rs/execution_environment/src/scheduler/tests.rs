@@ -4543,7 +4543,7 @@ fn scheduler_respects_compute_allocation(
     let replicated_state = test.state();
     let number_of_canisters = replicated_state.canister_states.len();
     let total_compute_allocation = replicated_state.total_compute_allocation();
-    assert!(total_compute_allocation <= 100 * scheduler_cores as u64);
+    prop_assert!(total_compute_allocation <= 100 * scheduler_cores as u64);
 
     // Count, for each canister, how many times it is the first canister
     // to be executed by a thread.
@@ -4556,7 +4556,8 @@ fn scheduler_respects_compute_allocation(
 
     let canister_ids: Vec<_> = test.state().canister_states.iter().map(|x| *x.0).collect();
 
-    for _ in 0..number_of_rounds {
+    // Add one more round as we update the accumulated priorities at the end of the round now.
+    for _ in 0..=number_of_rounds {
         for canister_id in canister_ids.iter() {
             test.expect_heartbeat(*canister_id, instructions(B as u64));
         }
@@ -4584,7 +4585,7 @@ fn scheduler_respects_compute_allocation(
             number_of_rounds / 100 * compute_allocation + 1
         };
 
-        assert!(
+        prop_assert!(
             *count >= expected_count,
             "Canister {} (allocation {}) should have been scheduled \
                     {} out of {} rounds, was scheduled only {} rounds instead.",
