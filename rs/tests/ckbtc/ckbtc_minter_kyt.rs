@@ -34,6 +34,7 @@ use ic_tests_ckbtc::{
 };
 use icrc_ledger_agent::{CallMode, Icrc1Agent};
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
+use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
 use slog::debug;
 
 /// Test update_balance method of the minter canister.
@@ -332,6 +333,15 @@ pub fn test_kyt(env: TestEnv) {
         {
             assert_eq!(error_code, 1);
             assert_eq!(error_message, "Destination address is tainted");
+            // assert that the ckBTC ledger didn't add more transactions
+            let txs = ledger_agent
+                .get_blocks(GetBlocksRequest {
+                    start: transfer_result,
+                    length: 10_u8.into(),
+                })
+                .await
+                .expect("Error while calling ledger get_blocks");
+            assert_eq!(txs.blocks.len(), 1);
         } else {
             panic!("Expected to see a tainted destination address.")
         }
