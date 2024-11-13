@@ -28,6 +28,7 @@ ca-certificates
 curl
 faketime
 fdisk
+gettext-base
 iproute2
 isc-dhcp-client
 jq
@@ -61,7 +62,7 @@ ethtool
 ipmitool
 libarchive-zip-perl
 libusb-1.0-0
-libvirt-daemon-system 
+libvirt-daemon-system
 libvirt-dev
 locales
 moreutils

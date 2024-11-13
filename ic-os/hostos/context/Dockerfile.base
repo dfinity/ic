@@ -43,6 +43,11 @@ RUN cd /tmp/ && \
     echo "fbadb376afa7c883f87f70795700a8a200f7fd45412532cc1938a24d41078011  node_exporter-1.8.1.linux-amd64.tar.gz" > node_exporter.sha256 && \
     shasum -c node_exporter.sha256
 
+# Download and verify vector
+RUN cd /tmp/ && \
+    curl -L -O https://packages.timber.io/vector/0.40.0/vector-0.40.0-x86_64-unknown-linux-gnu.tar.gz && \
+    echo "112b047df17df46feb22fc69234e8fc2ad5a411cd2e7d369f3b70c00617a4e90  vector-0.40.0-x86_64-unknown-linux-gnu.tar.gz" > vector.sha256 && \
+    shasum -c vector.sha256
 
 #
 # Second build stage:
@@ -114,3 +119,9 @@ RUN cd /tmp/ && \
     mkdir -p /etc/node_exporter && \
     tar --strip-components=1 -C /usr/local/bin/ -zvxf node_exporter-1.8.1.linux-amd64.tar.gz node_exporter-1.8.1.linux-amd64/node_exporter && \
     rm /tmp/node_exporter-1.8.1.linux-amd64.tar.gz
+
+# Install vector
+COPY --from=download /tmp/vector-0.40.0-x86_64-unknown-linux-gnu.tar.gz /tmp/vector-0.40.0-x86_64-unknown-linux-gnu.tar.gz
+RUN cd /tmp/ && \
+    tar --strip-components=3 -C /usr/local/bin/ -zvxf vector-0.40.0-x86_64-unknown-linux-gnu.tar.gz ./vector-x86_64-unknown-linux-gnu/bin/vector && \
+    rm /tmp/vector-0.40.0-x86_64-unknown-linux-gnu.tar.gz
