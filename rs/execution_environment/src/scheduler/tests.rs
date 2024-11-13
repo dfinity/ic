@@ -1857,15 +1857,20 @@ fn run_scheduler_test(
             inv += canister.scheduler_state.accumulated_priority.get()
                 - canister.scheduler_state.priority_credit.get();
         }
-        println!("XXX Round:{r} inv:{inv} min_ap:{min_ap}..max_ap:{max_ap}");
+        println!(
+            "XXX Round:{r} inv:{} min_ap:{}..max_ap:{}",
+            inv / multiplier as i64,
+            min_ap / multiplier as i64,
+            max_ap / multiplier as i64
+        );
         for canister in test.state().canisters_iter() {
             println!(
                 "XXX   END {} RP:{:>9} AP:{:>9} PC:{:>6} ex:{:>6} SF:{:>4} LE:{} LEM:{:?} LFER:{:>4}",
                 canister.canister_id().get().as_slice()[7],
-                canister.scheduler_state.accumulated_priority.get()
-                    - canister.scheduler_state.priority_credit.get(),
-                canister.scheduler_state.accumulated_priority.get(),
-                canister.scheduler_state.priority_credit.get(),
+                (canister.scheduler_state.accumulated_priority.get()
+                    - canister.scheduler_state.priority_credit.get()) / multiplier as i64,
+                canister.scheduler_state.accumulated_priority.get() / multiplier as i64,
+                canister.scheduler_state.priority_credit.get() / multiplier as i64,
                 canister.system_state.canister_metrics.executed,
                 canister.system_state.canister_metrics.scheduled_as_first,
                 (canister.has_paused_execution() || canister.has_aborted_execution()) as i32,
@@ -1876,7 +1881,7 @@ fn run_scheduler_test(
         assert_eq!(inv, 0);
         // Allow up to 40x divergence for long executions (should be in fact 20x, as 40B/2B = 20).
         assert!(
-            min_ap > -100 * 40 * (active_canisters_with_long_executions * multiplier) as i64,
+            min_ap > -100 * 3 * (active_canisters_with_long_executions * multiplier) as i64,
             "Error checking min accumulated priority {} > {} (-100% * 40x * multiplier:{multiplier})",
             min_ap,
             -100 * 40 * (active_canisters_with_long_executions * multiplier) as i64
