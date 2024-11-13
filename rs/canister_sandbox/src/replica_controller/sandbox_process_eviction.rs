@@ -121,7 +121,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn evict_due_to_idle_time() {
         let mut candidates = vec![];
         let now = Instant::now();
@@ -137,16 +136,18 @@ mod tests {
             evict(
                 candidates.clone(),
                 0.into(),
-                100,
+                10,
                 now - Duration::from_secs(50),
                 0.into()
             ),
-            candidates.into_iter().rev().take(49).collect::<Vec<_>>()
+            {
+                candidates.sort_by_key(|x| x.last_used);
+                candidates.into_iter().take(90).collect::<Vec<_>>()
+            }
         );
     }
 
     #[test]
-    #[ignore]
     fn evict_some_due_to_idle_time() {
         let mut candidates = vec![];
         let now = Instant::now();
@@ -158,10 +159,10 @@ mod tests {
                 scheduler_priority: AccumulatedPriority::new(0),
             });
         }
-        assert_eq!(
-            evict(candidates.clone(), 0.into(), 100, now, 0.into()),
-            candidates.into_iter().rev().take(90).collect::<Vec<_>>()
-        );
+        assert_eq!(evict(candidates.clone(), 0.into(), 10, now, 0.into()), {
+            candidates.sort_by_key(|x| x.last_used);
+            candidates.into_iter().take(90).collect::<Vec<_>>()
+        });
     }
 
     #[test]
