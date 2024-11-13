@@ -12,7 +12,7 @@ mod test;
 
 #[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
 pub struct VetKdArgs {
-    pub dkg_id: NiDkgId,
+    pub ni_dkg_id: NiDkgId,
     pub derivation_path: ExtendedDerivationPath,
     #[serde(with = "serde_bytes")]
     pub derivation_id: Vec<u8>,
@@ -23,7 +23,7 @@ pub struct VetKdArgs {
 impl fmt::Debug for VetKdArgs {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt.debug_struct("VetKdArgs")
-            .field("dkg_id", &self.dkg_id)
+            .field("ni_dkg_id", &self.ni_dkg_id)
             .field("derivation_path", &self.derivation_path)
             .field("derivation_id", &HexEncoding::from(&self.derivation_id))
             .field("encryption_key", &HexEncoding::from(&self.encryption_key))

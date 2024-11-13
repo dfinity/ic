@@ -11,7 +11,7 @@ mod display_and_debug {
     #[test]
     fn should_correctly_print_vetkd_args() {
         let input = VetKdArgs {
-            dkg_id: NiDkgId {
+            ni_dkg_id: NiDkgId {
                 start_block_height: Height::new(7),
                 dealer_subnet: SubnetId::from(PrincipalId::new_subnet_test_id(42)),
                 dkg_tag: NiDkgTag::HighThreshold,
@@ -27,7 +27,7 @@ mod display_and_debug {
             encryption_key: b"ek".to_vec(),
         };
         let output = "VetKdArgs { \
-            dkg_id: NiDkgId { start_block_height: 7, dealer_subnet: ot5wk-sbkaa-aaaaa-aaaap-yai, dkg_tag: HighThreshold, target_subnet: Remote(0x2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a) }, \
+            ni_dkg_id: NiDkgId { start_block_height: 7, dealer_subnet: ot5wk-sbkaa-aaaaa-aaaap-yai, dkg_tag: HighThreshold, target_subnet: Remote(0x2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a) }, \
             derivation_path: ExtendedDerivationPath { caller: 7xzs3-rqraa-aaaaa-aaaap-2ai, \
             derivation_path: { 6470 } }, \
             derivation_id: 0x646964, \
