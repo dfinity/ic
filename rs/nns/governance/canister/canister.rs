@@ -6,7 +6,6 @@ use ic_cdk::{
     api::call::arg_data_raw, caller as ic_cdk_caller, heartbeat, post_upgrade, pre_upgrade,
     println, query, spawn, update,
 };
-use ic_management_canister_types::IC_00;
 use ic_nervous_system_canisters::cmc::CMCCanister;
 use ic_nervous_system_common::{
     memory_manager_upgrade_storage::{load_protobuf, store_protobuf},
@@ -21,7 +20,10 @@ use ic_nns_common::{
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::{
     decoder_config, encode_metrics,
-    governance::{Environment, Governance, HeapGrowthPotential, RngError, TimeWarp as GovTimeWarp},
+    governance::{
+        schedule_seeding, Environment, Governance, HeapGrowthPotential, RngError,
+        TimeWarp as GovTimeWarp,
+    },
     neuron_data_validation::NeuronDataValidationSummary,
     pb::v1::{self as gov_pb, Governance as InternalGovernanceProto},
     storage::{grow_upgrades_memory_to, validate_stable_storage, with_upgrades_memory},
@@ -57,6 +59,7 @@ use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use std::{
     boxed::Box,
+    cell::RefCell,
     str::FromStr,
     time::{Duration, SystemTime},
 };
@@ -82,7 +85,9 @@ pub(crate) const LOG_PREFIX: &str = "[Governance] ";
 //
 // Do not access these global variables directly. Instead, use accessor
 // functions, which are defined immediately after.
-static mut GOVERNANCE: Option<Governance> = None;
+thread_local! {
+    static GOVERNANCE: RefCell<Option<Governance>> = RefCell::new(None);
+}
 
 /*
 Recommendations for Using `unsafe` in the Governance canister:
@@ -131,7 +136,12 @@ are best practices for making use of the unsafe block:
 /// This should only be called once the global state has been initialized, which
 /// happens in `canister_init` or `canister_post_upgrade`.
 fn governance() -> &'static Governance {
-    unsafe { GOVERNANCE.as_ref().expect("Canister not initialized!") }
+    unsafe {
+        &*GOVERNANCE.with(|g| {
+            let ptr = g.as_ptr();
+            (*ptr).as_ref().expect("Canister not initialized!")
+        })
+    }
 }
 
 /// Returns a mutable reference to the global state.
@@ -139,53 +149,26 @@ fn governance() -> &'static Governance {
 /// This should only be called once the global state has been initialized, which
 /// happens in `canister_init` or `canister_post_upgrade`.
 fn governance_mut() -> &'static mut Governance {
-    unsafe { GOVERNANCE.as_mut().expect("Canister not initialized!") }
+    unsafe {
+        &mut *GOVERNANCE.with(|g| {
+            let ptr = g.as_ptr();
+            (*ptr).as_mut().expect("Canister not initialized!")
+        })
+    }
 }
 
 // Sets governance global state to the given object.
 fn set_governance(gov: Governance) {
-    unsafe {
-        assert!(
-            GOVERNANCE.is_none(),
-            "{}Trying to initialize an already-initialized governance canister!",
-            LOG_PREFIX
-        );
-        GOVERNANCE = Some(gov);
-    }
+    assert!(
+        GOVERNANCE.with(|g| g.borrow().is_none()),
+        "{}Trying to initialize an already-initialized governance canister!",
+        LOG_PREFIX
+    );
+    GOVERNANCE.with(|g| *g.borrow_mut() = Some(gov));
 
     governance()
         .validate()
         .expect("Error initializing the governance canister.");
-}
-
-// Seeding interval seeks to find a balance between the need for rng secrecy, and
-// avoiding the overhead of frequent reseeding.
-const SEEDING_INTERVAL: Duration = Duration::from_secs(3600);
-const RETRY_SEEDING_INTERVAL: Duration = Duration::from_secs(30);
-
-fn schedule_seeding(duration: Duration) {
-    ic_cdk_timers::set_timer(duration, || {
-        spawn(async {
-            let result: Result<([u8; 32],), (i32, String)> =
-                CdkRuntime::call_with_cleanup(IC_00, "raw_rand", ()).await;
-
-            let seed = match result {
-                Ok((seed,)) => seed,
-                Err((code, msg)) => {
-                    println!(
-                        "{}Error seeding RNG. Error Code: {}. Error Message: {}",
-                        LOG_PREFIX, code, msg
-                    );
-                    schedule_seeding(RETRY_SEEDING_INTERVAL);
-                    return;
-                }
-            };
-
-            () = governance_mut().env.seed_rng(seed);
-            // Schedule reseeding on a timer with duration SEEDING_INTERVAL
-            schedule_seeding(SEEDING_INTERVAL);
-        })
-    });
 }
 
 struct CanisterEnv {
@@ -408,7 +391,7 @@ fn canister_init_(init_payload: ApiGovernanceProto) {
         init_payload.neurons.len()
     );
 
-    schedule_seeding(Duration::from_nanos(0));
+    schedule_seeding(&GOVERNANCE, Duration::from_nanos(0));
     set_governance(Governance::new(
         InternalGovernanceProto::from(init_payload),
         Box::new(CanisterEnv::new()),
@@ -452,7 +435,7 @@ fn canister_post_upgrade() {
         restored_state.xdr_conversion_rate,
     );
 
-    schedule_seeding(Duration::from_nanos(0));
+    schedule_seeding(&GOVERNANCE, Duration::from_nanos(0));
     set_governance(Governance::new_restored(
         restored_state,
         Box::new(CanisterEnv::new()),

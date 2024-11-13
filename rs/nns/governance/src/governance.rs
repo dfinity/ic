@@ -112,6 +112,7 @@ use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use std::{
     borrow::Cow,
+    cell::RefCell,
     cmp::{max, Ordering},
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     convert::{TryFrom, TryInto},
@@ -119,6 +120,8 @@ use std::{
     future::Future,
     ops::RangeInclusive,
     string::ToString,
+    thread::LocalKey,
+    time::Duration,
 };
 
 mod ledger_helper;
@@ -246,6 +249,15 @@ const VALID_MATURITY_MODULATION_BASIS_POINTS_RANGE: RangeInclusive<i32> = -500..
 /// this constant can be used to obtain an upper bound for the number of SNS neurons created
 /// for the Neurons' Fund participants. See also `MAX_SNS_NEURONS_PER_BASKET`.
 pub const MAX_NEURONS_FUND_PARTICIPANTS: u64 = 5_000;
+
+type ThreadSafeGovernance = &'static LocalKey<RefCell<Option<Governance>>>;
+
+fn with_governance_mut<R>(
+    governance: ThreadSafeGovernance,
+    f: impl FnOnce(&mut Governance) -> R,
+) -> R {
+    governance.with(|g| f(g.borrow_mut().as_mut().expect("Governance not initialized")))
+}
 
 impl NetworkEconomics {
     /// The multiplier applied to minimum_icp_xdr_rate to convert the XDR unit to basis_points
@@ -8252,6 +8264,35 @@ fn validate_motion(motion: &Motion) -> Result<(), GovernanceError> {
     }
 
     Ok(())
+}
+
+pub fn schedule_seeding(governance: ThreadSafeGovernance, duration: Duration) {
+    ic_cdk_timers::set_timer(duration, move || {
+        ic_cdk::spawn(async move {
+            let result: Result<([u8; 32],), (i32, String)> = ic_cdk::api::call::call(
+                PrincipalId::from(ic_management_canister_types::IC_00).into(),
+                "raw_rand",
+                (),
+            )
+            .await
+            .map_err(|(code, msg)| (code as i32, msg));
+
+            let seed = match result {
+                Ok((seed,)) => seed,
+                Err((code, msg)) => {
+                    println!(
+                        "{}Error seeding RNG. Error Code: {}. Error Message: {}",
+                        LOG_PREFIX, code, msg
+                    );
+                    schedule_seeding(governance, Duration::from_secs(30));
+                    return;
+                }
+            };
+            with_governance_mut(governance, |g| g.env.seed_rng(seed));
+            // Schedule reseeding on a timer with duration SEEDING_INTERVAL
+            schedule_seeding(governance, Duration::from_secs(3600));
+        })
+    });
 }
 
 /// Given a target_canister_id, is it a CanisterId of a deployed SNS recorded by
