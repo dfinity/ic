@@ -1,12 +1,13 @@
 use candid::Principal;
 use mockall::automock;
+use std::collections::HashSet;
 
 use crate::{
     add_config::{INIT_SCHEMA_VERSION, INIT_VERSION},
     storage::{
         LocalRef, StableMap, StorableConfig, StorableIncidentId, StorableIncidentMetadata,
         StorablePrincipal, StorableRuleId, StorableRuleMetadata, StorableVersion,
-        AUTHORIZED_PRINCIPAL, CONFIGS, INCIDENTS, RULES,
+        API_BOUNDARY_NODE_PRINCIPALS, AUTHORIZED_PRINCIPAL, CONFIGS, INCIDENTS, RULES,
     },
     types::{IncidentId, InputConfig, InputRule, RuleId, Timestamp, Version},
 };
@@ -31,6 +32,7 @@ pub trait CanisterApi {
         incident_id: IncidentId,
         rule_ids: StorableIncidentMetadata,
     ) -> Option<StorableIncidentMetadata>;
+    fn is_api_boundary_node_principal(&self, principal: &Principal) -> bool;
 }
 
 #[derive(Clone)]
@@ -39,6 +41,7 @@ pub struct CanisterState {
     rules: LocalRef<StableMap<StorableRuleId, StorableRuleMetadata>>,
     incidents: LocalRef<StableMap<StorableIncidentId, StorableIncidentMetadata>>,
     authorized_principal: LocalRef<StableMap<(), StorablePrincipal>>,
+    api_boundary_node_principals: LocalRef<HashSet<Principal>>,
 }
 
 impl CanisterState {
@@ -48,6 +51,7 @@ impl CanisterState {
             rules: &RULES,
             incidents: &INCIDENTS,
             authorized_principal: &AUTHORIZED_PRINCIPAL,
+            api_boundary_node_principals: &API_BOUNDARY_NODE_PRINCIPALS,
         }
     }
 }
@@ -127,6 +131,11 @@ impl CanisterApi for CanisterState {
             cell.borrow_mut()
                 .insert(StorableIncidentId(incident_id.0), rule_ids)
         })
+    }
+
+    fn is_api_boundary_node_principal(&self, principal: &Principal) -> bool {
+        self.api_boundary_node_principals
+            .with(|cell| cell.borrow().contains(principal))
     }
 }
 

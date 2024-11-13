@@ -113,4 +113,5 @@ service : {
   call_with_large_blob : (principal, nat64) -> (nat64);
   execute_many_instructions : (nat64) -> ();
   canister_log : (text) -> ();
+  time : () -> (nat64) query;
 }
