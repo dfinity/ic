@@ -82,8 +82,8 @@ pub(crate) fn system_api_imports() -> Vec<u8> {
 
     for (module_name, item_name, func) in system_api_imports.iter() {
         let ty = func.ty(&store);
-        let params: Vec<EncodedValType> = ty.params().map(|param| vtype(param)).collect();
-        let results: Vec<EncodedValType> = ty.results().map(|result| vtype(result)).collect();
+        let params: Vec<EncodedValType> = ty.params().map(vtype).collect();
+        let results: Vec<EncodedValType> = ty.results().map(vtype).collect();
         let func_type = FuncType::new(params, results);
         if !type_mapping.contains_key(&func_type) {
             type_mapping.insert(func_type.clone(), type_mapping.len());
