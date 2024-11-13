@@ -4820,15 +4820,34 @@ impl Governance {
             }
         };
 
-        let original_cached_upgrade_steps =
-            cached_upgrade_steps("refresh_cached_upgrade_steps (before awaiting SNS-W response)")?;
-
-        let current_version = original_cached_upgrade_steps.current();
+        let original_cached_upgrade_steps = match cached_upgrade_steps(
+            "refresh_cached_upgrade_steps (before awaiting SNS-W response)",
+        ) {
+            Some(original_cached_upgrade_steps) => original_cached_upgrade_steps,
+            None => {
+                log!(ERROR, "Asking SNS Root for the current version ...");
+                let requested_timestamp_seconds = self.env.now();
+                // TODO: Replace root_canister_id_or_panic with root_canister_id_or_err.
+                let current_version =
+                    get_running_version(&*self.env, self.proto.root_canister_id_or_panic())
+                        .await
+                        .ok()?;
+                let response_timestamp_seconds = self.env.now();
+                CachedUpgradeSteps::new(
+                    current_version,
+                    vec![],
+                    requested_timestamp_seconds,
+                    response_timestamp_seconds,
+                )
+            }
+        };
 
         // We use this `requested_timestamp_seconds` of the previous cache to save the time at which
         // the next cache was requested. A cleaner, but less lightweight implementation would
         // save both the previous and the next caches.
         let requested_timestamp_seconds = original_cached_upgrade_steps.requested_timestamp_seconds;
+
+        let current_version = original_cached_upgrade_steps.current();
 
         let versions = crate::sns_upgrade::get_upgrade_steps(
             &*self.env,
@@ -5432,8 +5451,9 @@ impl Governance {
             // If we have an upgrade_in_progress with no target_version, we are in an unexpected
             // situation. We recover to workable state by marking upgrade as failed.
 
-            let msg = "No target_version set for upgrade_in_progress. This should be impossible. \
-                Clearing upgrade_in_progress state and marking proposal failed to unblock further upgrades.";
+            let message = "No target_version set for upgrade_in_progress. This should be \
+                impossible. Clearing upgrade_in_progress state and marking proposal failed \
+                to unblock further upgrades.";
 
             self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome {
                 status: Some(
@@ -5441,11 +5461,11 @@ impl Governance {
                         upgrade_journal_entry::upgrade_outcome::InvalidState { version: None },
                     ),
                 ),
-                human_readable: Some(msg.to_string()),
+                human_readable: Some(message.to_string()),
             });
             self.fail_sns_upgrade_to_next_version_proposal(
                 upgrade_in_progress.proposal_id,
-                GovernanceError::new_with_message(ErrorType::PreconditionFailed, msg),
+                GovernanceError::new_with_message(ErrorType::PreconditionFailed, message),
             );
 
             return;
@@ -5471,19 +5491,19 @@ impl Governance {
             .checking_upgrade_lock;
 
         if lock > 1000 {
-            let error =
+            let message =
                 "Too many attempts to check upgrade without success.  Marking upgrade failed.";
 
             self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome {
                 status: Some(upgrade_journal_entry::upgrade_outcome::Status::Timeout(
                     Empty {},
                 )),
-                human_readable: Some(error.to_string()),
+                human_readable: Some(message.to_string()),
             });
 
             self.fail_sns_upgrade_to_next_version_proposal(
                 proposal_id,
-                GovernanceError::new_with_message(ErrorType::External, error),
+                GovernanceError::new_with_message(ErrorType::External, message),
             );
             return;
         }
@@ -5510,10 +5530,10 @@ impl Governance {
                 log!(ERROR, "Could not get running version of SNS: {}", message);
 
                 if self.env.now() > mark_failed_at {
-                    let error = format!(
+                    let message = format!(
                         "Upgrade marked as failed at {} seconds from unix epoch. \
-                             Governance could not determine running version from root: {}. \
-                             Setting upgrade to failed to unblock retry.",
+                         Governance could not determine running version from root: {}. \
+                         Setting upgrade to failed to unblock retry.",
                         self.env.now(),
                         message,
                     );
@@ -5522,11 +5542,12 @@ impl Governance {
                         status: Some(upgrade_journal_entry::upgrade_outcome::Status::Timeout(
                             Empty {},
                         )),
-                        human_readable: Some(error.to_string()),
+                        human_readable: Some(message.to_string()),
                     });
+
                     self.fail_sns_upgrade_to_next_version_proposal(
                         proposal_id,
-                        GovernanceError::new_with_message(ErrorType::External, error),
+                        GovernanceError::new_with_message(ErrorType::External, message),
                     );
                 }
                 return;
@@ -5541,93 +5562,122 @@ impl Governance {
                 .clone_from(&target_version.archive_wasm_hash);
         }
 
-        let (current_version, new_cached_upgrade_steps) = match self
-            .proto
-            .cached_upgrade_steps_or_err()
-            .and_then(CachedUpgradeSteps::consume)
-        {
-            Err(err) => {
-                let error = format!(
-                    "Keeping the currently running version and marking the upgrade as failed \
-                     at timestamp {} seconds: {}",
+        // TODO: DO NOT MERGE
+        //
+        // This condition is simplified, but it does not take into account the fact that Ledgers
+        // may be of a different version than Archives. This is due to the fact that a Ledger
+        // is responsible for spawning archives using the sources stored in its own memory, whereas
+        // currently the Ledger is *not* responsible for upgrading the archives it had previously
+        // spawned. Due to this unfortunate circumstances, the SNS needs to take special care to
+        // treat the case of upgrading the archives.
+        //
+        // If in doubt, revert the change in this condition to the code on the master branch.
+        if running_version == target_version {
+            self.set_proposal_execution_status(proposal_id, Ok(()));
+
+            self.proto.pending_version = None;
+
+            self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome {
+                status: Some(upgrade_journal_entry::upgrade_outcome::Status::Success(
+                    Empty {},
+                )),
+                human_readable: Some(format!(
+                    "Marking upgrade SUCCESS at {} seconds.",
+                    self.env.now()
+                )),
+            });
+        } else {
+            if self.env.now() > mark_failed_at {
+                let message = format!(
+                    "Upgrade marked as failed at timestamp {} seconds. \
+                     Running SNS version {:?} was still different from the expected version {:?}",
                     self.env.now(),
-                    err,
+                    running_version,
+                    target_version,
                 );
 
                 self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome {
-                    status: Some(
-                        upgrade_journal_entry::upgrade_outcome::Status::InvalidState(
-                            upgrade_journal_entry::upgrade_outcome::InvalidState { version: None },
-                        ),
-                    ),
-                    human_readable: Some(error.to_string()),
+                    status: Some(upgrade_journal_entry::upgrade_outcome::Status::Timeout(
+                        Empty {},
+                    )),
+                    human_readable: Some(message.to_string()),
                 });
 
-                // Reset cached_upgrade_steps.
+                self.fail_sns_upgrade_to_next_version_proposal(
+                    proposal_id,
+                    GovernanceError::new_with_message(ErrorType::External, message),
+                );
+            }
+
+            // Do not update the cached upgrade steps since an upgrade did not happen (yet).
+            return;
+        }
+
+        // Update the cached upgrade steps to reflect the fact the 1st version is no longer needed.
+        //
+        // The rest of the code in this function should comply with the following specification:
+        //
+        // Case I:
+        //     old state (before previous await):
+        //         cached_upgrade_steps: [v1, v2, v3, v4]
+        //         v1: running_version -> v2: target_version
+        //
+        //     new state:
+        //         v2: running_version == target_version
+        //         cached_upgrade_steps: [v1]                  // notice that this is a singleton
+        //
+        //     cached_upgrade_steps' == [v2]                   // reset
+        //
+        // Case II:
+        //     old state (before previous await):
+        //         cached_upgrade_steps: [v1, v2, v3, v4]
+        //         v1: running_version -> v2: target_version
+        //
+        //     new state:
+        //         v2: running_version == target_version
+        //         cached_upgrade_steps: [v1, v2', ...]
+        //
+        //     Case II(a): v2' == v2:
+        //         cached_upgrade_steps' == [v2, ...]            // consume
+        //
+        //     Case II(b): v2' != v2:
+        //         cached_upgrade_steps' == [v2]                 // reset
+        match self
+            .proto
+            .cached_upgrade_steps_or_err()
+            .and_then(CachedUpgradeSteps::consume)
+            .and_then(|(_, new_cached_upgrade_steps)| {
+                if new_cached_upgrade_steps.current() == target_version {
+                    Ok(new_cached_upgrade_steps)
+                } else {
+                    Err("new_cached_upgrade_steps.current() != target_version".to_string())
+                }
+            }) {
+            Ok(new_cached_upgrade_steps) => {
+                self.proto
+                    .cached_upgrade_steps
+                    .replace(CachedUpgradeStepsPb::from(new_cached_upgrade_steps.clone()));
+            }
+            Err(err) => {
                 let cached_upgrade_steps =
                     CachedUpgradeSteps::empty(running_version, self.env.now());
 
                 self.proto
                     .cached_upgrade_steps
-                    .replace(CachedUpgradeStepsPb::from(cached_upgrade_steps));
+                    .replace(CachedUpgradeStepsPb::from(cached_upgrade_steps.clone()));
 
-                self.fail_sns_upgrade_to_next_version_proposal(
-                    proposal_id,
-                    GovernanceError::new_with_message(ErrorType::PreconditionFailed, error),
-                );
-                return;
-            }
-            Ok(cached_upgrade_steps) => cached_upgrade_steps,
-        };
-
-        let expected_changes = current_version.changes_against(&target_version);
-
-        match running_version.version_has_expected_hashes(&expected_changes) {
-            Ok(_) => {
-                log!(
-                    INFO,
-                    "Upgrade marked successful at {} from genesis.  New Version: {:?}",
-                    self.env.now(),
-                    target_version
-                );
-                self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome {
-                    status: Some(upgrade_journal_entry::upgrade_outcome::Status::Success(
-                        Empty {},
+                self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeStepsReset {
+                    upgrade_steps: Some(Versions {
+                        versions: cached_upgrade_steps.into_iter().collect(),
+                    }),
+                    human_readable: Some(format!(
+                        "When the SNS reached the expected version {:?}, an inconsistency has been \
+                         detected in SNS Governance at timestamp {} seconds: {}",
+                        target_version, self.env.now(), err,
                     )),
-                    human_readable: None,
                 });
-                self.set_proposal_execution_status(proposal_id, Ok(()));
-
-                self.proto
-                    .cached_upgrade_steps
-                    .replace(CachedUpgradeStepsPb::from(new_cached_upgrade_steps));
-
-                self.proto.pending_version = None;
             }
-            Err(errors) => {
-                // We are past mark_failed_at_seconds.
-                if self.env.now() > mark_failed_at {
-                    let error = format!(
-                        "Upgrade marked as failed at {} seconds from genesis. \
-                         Running system version does not match expected state.\n{:?}",
-                        self.env.now(),
-                        errors
-                    );
-
-                    self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome {
-                        status: Some(upgrade_journal_entry::upgrade_outcome::Status::Timeout(
-                            Empty {},
-                        )),
-                        human_readable: Some(error.to_string()),
-                    });
-
-                    self.fail_sns_upgrade_to_next_version_proposal(
-                        proposal_id,
-                        GovernanceError::new_with_message(ErrorType::External, error),
-                    );
-                }
-            }
-        }
+        };
     }
 
     // This method sets internal state to remove pending_version and sets the proposal status to
@@ -5950,7 +6000,7 @@ mod tests {
         sns_upgrade::{
             CanisterSummary, GetNextSnsVersionRequest, GetNextSnsVersionResponse,
             GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse, GetWasmRequest,
-            GetWasmResponse, SnsCanisterType, SnsVersion, SnsWasm,
+            GetWasmResponse, ListUpgradeStepsRequest, SnsCanisterType, SnsVersion, SnsWasm,
         },
         types::test_helpers::NativeEnvironment,
     };
@@ -8044,7 +8094,10 @@ mod tests {
                 timestamp_seconds: Some(now),
                 event: Some(upgrade_journal_entry::Event::UpgradeOutcome(
                     upgrade_journal_entry::UpgradeOutcome {
-                        human_readable: None,
+                        human_readable: Some(format!(
+                            "Marking upgrade SUCCESS at {} seconds.",
+                            now
+                        )),
                         status: Some(upgrade_journal_entry::upgrade_outcome::Status::Success(
                             Empty {}
                         )),
@@ -8510,6 +8563,14 @@ mod tests {
             index_wasm_hash: vec![9, 9, 9],
         };
 
+        // This is set to the version returned by std_sns_canisters_summary_response()
+        // But is different from next_version so we can assert the right result below
+        let running_version = {
+            let mut version = next_version.clone();
+            version.index_wasm_hash = vec![6, 7, 8];
+            version
+        };
+
         let mut env = NativeEnvironment::new(Some(governance_canister_id));
         // We set a status that matches our pending version
         env.set_call_canister_response(
@@ -8521,14 +8582,17 @@ mod tests {
             .unwrap(),
             Ok(Encode!(&std_sns_canisters_summary_response()).unwrap()),
         );
-
-        // This is set to the version returned by std_sns_canisters_summary_response()
-        // But is different from next_version so we can assert the right result below
-        let running_version = {
-            let mut version = next_version.clone();
-            version.index_wasm_hash = vec![6, 7, 8];
-            version
-        };
+        env.set_call_canister_response(
+            root_canister_id,
+            "list_upgrade_steps",
+            Encode!(&ListUpgradeStepsRequest {
+                starting_at: Some(running_version.clone().into()),
+                sns_governance_canister_id: Some(governance_canister_id.into()),
+                limit: 0,
+            })
+            .unwrap(),
+            Ok(Encode!(&std_sns_canisters_summary_response()).unwrap()),
+        );
 
         let now = env.now();
         let proposal_id = 12;
@@ -8596,7 +8660,7 @@ mod tests {
         // After we run our periodic tasks, the version should be marked as successful
         governance.run_periodic_tasks().now_or_never();
 
-        assert!(governance.proto.pending_version.is_none());
+        assert_eq!(governance.proto.pending_version, None);
         // This is set to the running version to avoid non-recoverable state
         assert_eq!(
             governance

@@ -2752,17 +2752,25 @@ pub mod test_helpers {
 
 impl From<upgrade_journal_entry::UpgradeStepsRefreshed> for upgrade_journal_entry::Event {
     fn from(event: upgrade_journal_entry::UpgradeStepsRefreshed) -> Self {
-        upgrade_journal_entry::Event::UpgradeStepsRefreshed(event)
+        Self::UpgradeStepsRefreshed(event)
     }
 }
+
+impl From<upgrade_journal_entry::UpgradeStepsReset> for upgrade_journal_entry::Event {
+    fn from(event: upgrade_journal_entry::UpgradeStepsReset) -> Self {
+        Self::UpgradeStepsReset(event)
+    }
+}
+
 impl From<upgrade_journal_entry::UpgradeStarted> for upgrade_journal_entry::Event {
     fn from(event: upgrade_journal_entry::UpgradeStarted) -> Self {
-        upgrade_journal_entry::Event::UpgradeStarted(event)
+        Self::UpgradeStarted(event)
     }
 }
+
 impl From<upgrade_journal_entry::UpgradeOutcome> for upgrade_journal_entry::Event {
     fn from(event: upgrade_journal_entry::UpgradeOutcome) -> Self {
-        upgrade_journal_entry::Event::UpgradeOutcome(event)
+        Self::UpgradeOutcome(event)
     }
 }
 // Note, we do not implement From<upgrade_journal_entry::TargetVersionSet> for upgrade_journal_entry::Event

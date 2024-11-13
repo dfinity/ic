@@ -64,6 +64,7 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
             "Governance.Versions",
             "UpgradeJournalEntry",
             "UpgradeJournalEntry.event",
+            "UpgradeJournalEntry.UpgradeStepsReset",
             "UpgradeJournalEntry.UpgradeStepsRefreshed",
             "UpgradeJournalEntry.TargetVersionSet",
             "UpgradeJournalEntry.TargetVersionReset",
