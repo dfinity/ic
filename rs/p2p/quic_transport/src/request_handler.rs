@@ -27,10 +27,10 @@ use tracing::instrument;
 use crate::{
     connection_handle::ConnectionHandle,
     metrics::{
-        QuicTransportMetrics, ERROR_TYPE_ACCEPT, ERROR_TYPE_APP, ERROR_TYPE_FINISH,
-        ERROR_TYPE_READ, ERROR_TYPE_STOPPED, ERROR_TYPE_WRITE, STREAM_TYPE_BIDI,
+        observe_conn_error, observe_read_to_end_error, observe_stopped_error, observe_write_error,
+        QuicTransportMetrics, ERROR_TYPE_APP, INFALIBBLE, STREAM_TYPE_BIDI,
     },
-    ConnId, MAX_MESSAGE_SIZE_BYTES,
+    ConnId, ResetStreamOnDrop, MAX_MESSAGE_SIZE_BYTES,
 };
 
 const QUIC_METRIC_SCRAPE_INTERVAL: Duration = Duration::from_secs(5);
@@ -70,15 +70,9 @@ pub async fn run_stream_acceptor(
                             )
                         );
                     }
-                    Err(e) => {
-                        info!(log, "Error accepting bi stream {}", e.to_string());
-                        metrics
-                            .request_handle_errors_total
-                            .with_label_values(&[
-                                STREAM_TYPE_BIDI,
-                                ERROR_TYPE_ACCEPT,
-                            ])
-                            .inc();
+                    Err(err) => {
+                        info!(log, "Error accepting bi stream {}", err.to_string());
+                        observe_conn_error(&err, "accept_bi", &metrics.request_handle_errors_total);
                         break;
                     }
                 }
@@ -105,26 +99,30 @@ pub async fn run_stream_acceptor(
     inflight_requests.shutdown().await;
 }
 
-#[instrument(skip(metrics, router, bi_tx, bi_rx))]
+#[instrument(skip(metrics, router, send_stream, recv_stream))]
+/// Note: The method is cancel-safe.
 async fn handle_bi_stream(
     peer_id: NodeId,
     conn_id: ConnId,
     metrics: QuicTransportMetrics,
     router: Router,
-    mut bi_tx: SendStream,
-    bi_rx: RecvStream,
+    send_stream: SendStream,
+    mut recv_stream: RecvStream,
 ) -> Result<(), anyhow::Error> {
-    let mut request = read_request(bi_rx).await.inspect_err(|_| {
-        metrics
-            .request_handle_errors_total
-            .with_label_values(&[STREAM_TYPE_BIDI, ERROR_TYPE_READ])
-            .inc();
-    })?;
+    let mut send_stream_guard = ResetStreamOnDrop::new(send_stream);
+    let send_stream = &mut send_stream_guard.send_stream;
+    let request_bytes = recv_stream
+        .read_to_end(MAX_MESSAGE_SIZE_BYTES)
+        .await
+        .inspect_err(|err| {
+            observe_read_to_end_error(err, "read_to_end", &metrics.request_handle_errors_total)
+        })?;
+    let mut request = to_request(request_bytes)?;
     request.extensions_mut().insert::<NodeId>(peer_id);
     request.extensions_mut().insert::<ConnId>(conn_id);
 
     let svc = router.oneshot(request);
-    let stopped = bi_tx.stopped();
+    let stopped = send_stream.stopped();
     let response = tokio::select! {
         response = svc => response.expect("Infallible"),
         stopped_res = stopped => {
@@ -143,40 +141,29 @@ async fn handle_bi_stream(
     // We can ignore the errors because if both peers follow the protocol an errors will only occur
     // if the other peer has closed the connection. In this case `accept_bi` in the peer event
     // loop will close this connection.
-    write_response(&mut bi_tx, response)
+    let response_bytes = to_response_bytes(response).await?;
+    send_stream
+        .write_all(&response_bytes)
         .await
-        .inspect_err(|_| {
-            metrics
-                .request_handle_errors_total
-                .with_label_values(&[STREAM_TYPE_BIDI, ERROR_TYPE_WRITE])
-                .inc();
+        .inspect_err(|err| {
+            observe_write_error(err, "write_all", &metrics.request_handle_errors_total);
         })?;
-    bi_tx.finish().inspect_err(|_| {
+    send_stream.finish().inspect_err(|_| {
         metrics
             .request_handle_errors_total
-            .with_label_values(&[STREAM_TYPE_BIDI, ERROR_TYPE_FINISH])
+            .with_label_values(&["finish", INFALIBBLE])
             .inc();
     })?;
-    bi_tx.stopped().await.inspect_err(|_| {
-        metrics
-            .request_handle_errors_total
-            .with_label_values(&[STREAM_TYPE_BIDI, ERROR_TYPE_STOPPED])
-            .inc();
+    send_stream.stopped().await.inspect_err(|err| {
+        observe_stopped_error(err, "stopped", &metrics.request_handle_errors_total);
     })?;
     Ok(())
 }
 
-async fn read_request(mut recv_stream: RecvStream) -> Result<Request<Body>, anyhow::Error> {
-    let raw_msg = recv_stream
-        .read_to_end(MAX_MESSAGE_SIZE_BYTES)
-        .await
-        .with_context(|| "Failed to read request from the stream.")?;
-
-    let request_proto = pb::HttpRequest::decode(raw_msg.as_slice())
-        .with_context(|| "Failed to decode http request.")?;
-
-    let pb_http_method = pb::HttpMethod::try_from(request_proto.method)
-        .with_context(|| "Failed to decode http method.")?;
+// The function returns infallible error.
+fn to_request(request_bytes: Vec<u8>) -> Result<Request<Body>, anyhow::Error> {
+    let request_proto = pb::HttpRequest::decode(request_bytes.as_slice())?;
+    let pb_http_method = pb::HttpMethod::try_from(request_proto.method)?;
     let http_method = match pb_http_method {
         pb::HttpMethod::Get => Some(Method::GET),
         pb::HttpMethod::Post => Some(Method::POST),
@@ -207,10 +194,7 @@ async fn read_request(mut recv_stream: RecvStream) -> Result<Request<Body>, anyh
         .with_context(|| "Failed to build request.")
 }
 
-async fn write_response(
-    send_stream: &mut SendStream,
-    response: Response<Body>,
-) -> Result<(), anyhow::Error> {
+async fn to_response_bytes(response: Response<Body>) -> Result<Vec<u8>, anyhow::Error> {
     let (parts, body) = response.into_parts();
     // Check for axum error in body
     // TODO: Think about this. What is the error that can happen here?
@@ -231,10 +215,5 @@ async fn write_response(
             .collect(),
         body: body.into(),
     };
-
-    let response_bytes = response_proto.encode_to_vec();
-    send_stream
-        .write_all(&response_bytes)
-        .await
-        .with_context(|| "Failed to write response to stream.")
+    Ok(response_proto.encode_to_vec())
 }
