@@ -1272,10 +1272,7 @@ impl CertifiedSlicePool {
                     Ok(None) => None,
 
                     // Invalid slice, drop it.
-                    Err(_) => {
-                        // TODO(MR-6): Log and increment an error counter.
-                        None
-                    }
+                    Err(_) => None,
                 }
             }
         }

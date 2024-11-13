@@ -159,6 +159,7 @@ members = [
     "rs/interfaces/state_manager",
     "rs/interfaces/state_manager/mocks",
     "rs/limits",
+    "rs/ic_os/linux_kernel_command_line",
     "rs/memory_tracker",
     "rs/messaging",
     "rs/monitoring/adapter_metrics/client",
@@ -392,6 +393,7 @@ members = [
     "rs/tests/nns",
     "rs/tests/nns/sns",
     "rs/tests/nns/ic_mainnet_nns_recovery",
+    "rs/tests/nns/cycles_minting",
     "rs/tests/nns/nns_dapp",
     "rs/tests/node",
     "rs/tests/research",
@@ -733,6 +735,7 @@ wasmparser = "0.217.0"
 wasmprinter = "0.217.0"
 wast = "212.0.0"
 wat = "1.212.0"
+which = "6.0.3"
 x509-cert = { version = "0.2.5", features = ["builder", "hazmat"] }
 x509-parser = { version = "0.16.0" }
 zeroize = { version = "1.8.1", features = ["zeroize_derive"] }

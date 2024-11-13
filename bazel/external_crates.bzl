@@ -366,7 +366,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.2.2",
             ),
             "clap": crate.spec(
-                version = "^4.5.18",
+                version = "^4.5.20",
                 features = [
                     "derive",
                     "string",
@@ -568,7 +568,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-bn-lib": crate.spec(
                 git = "https://github.com/dfinity/ic-bn-lib",
-                rev = "9abf1e385e4a32279de005d0019c17774e164828",
+                rev = "526d34d15cfbf369d8baf2dae9932aa18d570a1d",
             ),
             "ic-btc-interface": crate.spec(
                 version = "^0.2.2",
@@ -680,7 +680,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.31.0",
             ),
             "instant-acme": crate.spec(
-                version = "^0.7.1",
+                version = "^0.7.2",
             ),
             "intmap": crate.spec(
                 version = "^1.1.0",

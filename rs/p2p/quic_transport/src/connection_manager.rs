@@ -59,7 +59,7 @@ use tokio_util::{sync::CancellationToken, time::DelayQueue};
 use crate::{
     connection_handle::ConnectionHandle,
     metrics::{CONNECTION_RESULT_FAILED_LABEL, CONNECTION_RESULT_SUCCESS_LABEL},
-    ConnId, Shutdown, SubnetTopology,
+    Shutdown, SubnetTopology,
 };
 use crate::{metrics::QuicTransportMetrics, request_handler::run_stream_acceptor};
 
@@ -115,7 +115,6 @@ struct ConnectionManager {
     // Shared state
     watcher: tokio::sync::watch::Receiver<SubnetTopology>,
     peer_map: Arc<RwLock<HashMap<NodeId, ConnectionHandle>>>,
-    conn_id_counter: ConnId,
 
     // Local state.
     /// Task joinmap that holds stores a connecting tasks keys by peer id.
@@ -255,7 +254,6 @@ pub(crate) fn start_connection_manager(
         topology,
         connect_queue: DelayQueue::new(),
         peer_map,
-        conn_id_counter: ConnId::default(),
         watcher,
         endpoint,
         transport_config,
@@ -419,7 +417,7 @@ impl ConnectionManager {
             if should_close_connection {
                 self.metrics.peers_removed_total.inc();
                 conn_handle
-                    .connection
+                    .conn()
                     .close(VarInt::from_u32(0), b"node not part of subnet anymore");
                 false
             } else {
@@ -520,17 +518,12 @@ impl ConnectionManager {
                 // This should be done while holding a write lock to the peer map
                 // such that the next read call sees the new id.
 
-                self.conn_id_counter.inc_assign();
-                let conn_id = self.conn_id_counter;
-
-                let connection_handle =
-                    ConnectionHandle::new(connection, self.metrics.clone(), conn_id);
-                let req_handler_connection_handle = connection_handle.clone();
+                let connection_handle = ConnectionHandle::new(connection, self.metrics.clone());
 
                 // dropping the old connection will result in closing it
-                if let Some(old_conn) = peer_map_mut.insert(peer_id, connection_handle) {
+                if let Some(old_conn) = peer_map_mut.insert(peer_id, connection_handle.clone()) {
                     old_conn
-                        .connection
+                        .conn()
                         .close(VarInt::from_u32(0), b"using newer connection");
                     info!(
                         self.log,
@@ -549,8 +542,7 @@ impl ConnectionManager {
                     run_stream_acceptor(
                         self.log.clone(),
                         peer_id,
-                        req_handler_connection_handle.conn_id(),
-                        req_handler_connection_handle.connection,
+                        connection_handle,
                         self.metrics.clone(),
                         self.router.clone(),
                     ),

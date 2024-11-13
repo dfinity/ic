@@ -20,7 +20,7 @@ pub use scraping::{
     LogScraping, ReceivedErc20LogScraping, ReceivedEthLogScraping, ReceivedEthOrErc20LogScraping,
 };
 use std::fmt;
-use std::fmt::{Debug, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use thiserror::Error;
 
 // Keccak256("ReceivedEth(address,uint256,bytes32)")
@@ -317,5 +317,11 @@ impl LedgerSubaccount {
 impl Debug for LedgerSubaccount {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "LedgerSubaccount({:x?})", self.0.to_be_bytes())
+    }
+}
+
+impl Display for LedgerSubaccount {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), fmt::Error> {
+        write!(f, "{}", hex::encode(self.0.to_be_bytes()))
     }
 }
