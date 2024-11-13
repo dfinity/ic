@@ -1,6 +1,9 @@
 use crate::{
+    governance::Governance,
     neuron_store::NeuronStore,
-    pb::v1::{Ballot, Topic, Topic::NeuronManagement, Vote},
+    pb::v1::{
+        governance_error::ErrorType, Ballot, GovernanceError, Topic, Topic::NeuronManagement, Vote,
+    },
 };
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use std::{
@@ -10,6 +13,33 @@ use std::{
 
 thread_local! {
     static VOTING_STATE_MACHINES: RefCell<VotingStateMachines> = RefCell::new(VotingStateMachines::new());
+}
+impl Governance {
+    pub fn cast_vote_and_cascade_follow(
+        &mut self,
+        proposal_id: ProposalId,
+        voting_neuron_id: NeuronId,
+        vote_of_neuron: Vote,
+        topic: Topic,
+    ) -> Result<(), GovernanceError> {
+        let mut state_machine =
+            VotingStateMachine::try_new(proposal_id, topic, voting_neuron_id, vote_of_neuron)
+                .map_err(|e| {
+                    GovernanceError::new_with_message(ErrorType::InvalidCommand, format!("{:?}", e))
+                })?;
+
+        let mut ballots;
+        while !state_machine.is_done() {
+            ballots = &mut self
+                .heap_data
+                .proposals
+                .get_mut(&proposal_id.id)
+                .unwrap()
+                .ballots;
+            state_machine.continue_processing(&mut self.neuron_store, ballots);
+        }
+        Ok(())
+    }
 }
 
 struct VotingStateMachines {
@@ -131,6 +161,7 @@ impl ProposalVotingStateMachine {
             self.add_followers_to_check(neuron_store, neuron_id, self.topic);
         }
 
+        // Optimization, will not cause tests to fail if removed
         retain_neurons_with_castable_ballots(&mut self.followers_to_check, ballots);
 
         while let Some(follower) = self.followers_to_check.pop_first() {
