@@ -289,7 +289,7 @@ impl VotingPowerEconomics {
     pub const DEFAULT_CLEAR_FOLLOWING_AFTER_SECONDS: u64 = ONE_MONTH_SECONDS;
 
     pub fn with_default_values() -> Self {
-        Self::DEFAULT.clone()
+        Self::DEFAULT
     }
 
     pub fn deciding_voting_power_adjustment_factor(
@@ -1980,14 +1980,13 @@ impl Governance {
         let economics = match &self.heap_data.economics {
             Some(ok) => ok,
             None => {
-                return VotingPowerEconomics::with_default_values();
+                return VotingPowerEconomics::DEFAULT;
             }
         };
 
         economics
             .voting_power_economics
-            .clone()
-            .unwrap_or_else(VotingPowerEconomics::with_default_values)
+            .unwrap_or(VotingPowerEconomics::DEFAULT)
     }
 
     pub fn __get_state_for_test(&self) -> GovernanceProto {
