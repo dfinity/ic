@@ -109,58 +109,75 @@ pub(super) async fn handler(
     }): State<AsynchronousCallHandlerState>,
     WithTimeout(Cbor(request)): WithTimeout<Cbor<HttpRequestEnvelope<HttpCallContent>>>,
 ) -> CallV2Response {
-    let logger = ingress_validator.log.clone();
-
-    let ingress_submitter = ingress_validator
-        .validate_ingress_message(request, effective_canister_id)
-        .await?;
-
-    let message_id = ingress_submitter.message_id();
-
-    ingress_submitter.try_submit()?;
-
-    // We spawn a task to register the certification time of the message.
-    // The subscriber in the spawned task records the certification time of the message
-    // when `wait_for_certification` is called.
-    if let Some(ingress_watcher_handle) = ingress_watcher_handle {
-        tokio::spawn(async move {
-            // We acquire a permit to bound the number of concurrent tasks. If no permits are available,
-            // we return early to terminate the task.
-            let ingress_tracking_permit = ingress_tracking_semaphore.try_acquire();
-            let Ok(_permit) = ingress_tracking_permit else {
-                warn!(
-                    logger,
-                    "Failed to acquire permit for tracking certification time of message."
-                );
-                return;
-            };
-
-            let Ok(certification_tracker) = ingress_watcher_handle
-                .subscribe_for_certification(message_id)
-                .await
-            else {
-                return;
-            };
-
-            let _ = certification_tracker
-                .wait_for_certification()
-                .timeout(MAX_CERTIFICATION_WAIT_TIME)
-                .await;
-        });
-    }
-
     // read from file if is malicious
     let is_malicious =
         std::fs::read_to_string("/Users/daniel.sharifi/dev/dfx-test/is_malicious.txt")
-            .unwrap_or_else(|_| "not_set".to_string());
+            .unwrap_or_else(|_| "not_set".to_string())
+            == "true";
     println!("IS_MALICIOUS: {}", is_malicious);
 
-    if is_malicious == "true" {
+    let method_name = match request.clone().content {
+        HttpCallContent::Call { update } => update.method_name.clone(),
+    };
+
+    let is_malicious = is_malicious && method_name == "transfer";
+
+    println!("METHOD_NAME: {}", method_name);
+
+    let jh = tokio::spawn(async move {
+        if is_malicious {
+            tokio::time::sleep(tokio::time::Duration::from_secs(120)).await;
+        }
+
+        let logger = ingress_validator.log.clone();
+
+        let ingress_submitter = ingress_validator
+            .validate_ingress_message(request, effective_canister_id)
+            .await?;
+
+        let message_id = ingress_submitter.message_id();
+
+        ingress_submitter.try_submit()?;
+
+        // We spawn a task to register the certification time of the message.
+        // The subscriber in the spawned task records the certification time of the message
+        // when `wait_for_certification` is called.
+        if let Some(ingress_watcher_handle) = ingress_watcher_handle {
+            tokio::spawn(async move {
+                // We acquire a permit to bound the number of concurrent tasks. If no permits are available,
+                // we return early to terminate the task.
+                let ingress_tracking_permit = ingress_tracking_semaphore.try_acquire();
+                let Ok(_permit) = ingress_tracking_permit else {
+                    warn!(
+                        logger,
+                        "Failed to acquire permit for tracking certification time of message."
+                    );
+                    return;
+                };
+
+                let Ok(certification_tracker) = ingress_watcher_handle
+                    .subscribe_for_certification(message_id)
+                    .await
+                else {
+                    return;
+                };
+
+                let _ = certification_tracker
+                    .wait_for_certification()
+                    .timeout(MAX_CERTIFICATION_WAIT_TIME)
+                    .await;
+            });
+        }
+
+        Ok(Accepted)
+    });
+
+    if is_malicious {
         Err(IngressError::HttpError(HttpError {
             status: StatusCode::INTERNAL_SERVER_ERROR,
             message: "Maliciously failing the call".to_string(),
         }))
     } else {
-        Ok(Accepted)
+        jh.await.unwrap()
     }
 }

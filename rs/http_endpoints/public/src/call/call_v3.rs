@@ -186,154 +186,171 @@ async fn call_sync_v3(
 ) -> CallV3Response {
     let log = call_handler.log.clone();
 
-    let ingress_submitter = match call_handler
-        .validate_ingress_message(request, effective_canister_id)
-        .await
-    {
-        Ok(ingress_submitter) => ingress_submitter,
-        Err(ingress_error) => return CallV3Response::from(ingress_error),
-    };
-
-    let message_id = ingress_submitter.message_id();
-
-    // Check if the message is already known.
-    // If it is known, we can return the certificate without re-submitting the message
-    // to the ingress pool.
-    if let Some((tree, certification)) =
-        tree_and_certificate_for_message(state_reader.clone(), message_id.clone()).await
-    {
-        if let ParsedMessageStatus::Known(_) = parsed_message_status(&tree, &message_id) {
-            let delegation_from_nns = delegation_from_nns.get().cloned();
-            let signature = certification.signed.signature.signature.get().0;
-
-            metrics
-                .call_v3_early_response_trigger_total
-                .with_label_values(&[CALL_V3_EARLY_RESPONSE_MESSAGE_ALREADY_IN_CERTIFIED_STATE])
-                .inc();
-
-            return CallV3Response::Certificate(Certificate {
-                tree,
-                signature: Blob(signature),
-                delegation: delegation_from_nns,
-            });
-        }
-    };
-
-    let certification_subscriber = match ingress_watcher_handle
-        .subscribe_for_certification(message_id.clone())
-        .timeout(SUBSCRIPTION_TIMEOUT)
-        .await
-    {
-        Ok(Ok(message_subscriber)) => Ok(message_subscriber),
-        Ok(Err(SubscriptionError::DuplicateSubscriptionError)) => {
-            // TODO: At this point we could return early without submitting the ingress message.
-            Err((
-                "Duplicate request. Message is already being tracked and executed.",
-                CALL_V3_EARLY_RESPONSE_DUPLICATE_SUBSCRIPTION,
-            ))
-        }
-        Ok(Err(SubscriptionError::IngressWatcherNotRunning { error_message })) => {
-            // TODO: Send a warning or notification.
-            // This probably means that the ingress watcher panicked.
-            error!(
-                every_n_seconds => LOG_EVERY_N_SECONDS,
-                log,
-                "Error while waiting for subscriber of ingress message: {}", error_message
-            );
-            Err((
-                "Could not track the ingress message. Please try /read_state for the status.",
-                CALL_V3_EARLY_RESPONSE_INGRESS_WATCHER_NOT_RUNNING,
-            ))
-        }
-        Err(_) => {
-            warn!(
-                every_n_seconds => LOG_EVERY_N_SECONDS,
-                log,
-                "Timed out while submitting a certification subscription.";
-            );
-            Err((
-                "Could not track the ingress message. Please try /read_state for the status.",
-                CALL_V3_EARLY_RESPONSE_SUBSCRIPTION_TIMEOUT,
-            ))
-        }
-    };
-
-    let ingres_submission = ingress_submitter.try_submit();
-
-    if let Err(ingress_submission) = ingres_submission {
-        return CallV3Response::HttpError(ingress_submission);
-    }
-    // The ingress message was submitted successfully.
-    // From this point on we only return a certificate or `Accepted 202``.
-    let certification_subscriber = match certification_subscriber {
-        Ok(certification_subscriber) => certification_subscriber,
-        Err((reason, metric_label)) => {
-            metrics
-                .call_v3_early_response_trigger_total
-                .with_label_values(&[metric_label])
-                .inc();
-            return CallV3Response::Accepted(reason);
-        }
-    };
-
-    match certification_subscriber
-        .wait_for_certification()
-        .timeout(Duration::from_secs(
-            ingress_message_certificate_timeout_seconds,
-        ))
-        .await
-    {
-        Ok(()) => (),
-        Err(_) => {
-            metrics
-                .call_v3_early_response_trigger_total
-                .with_label_values(&[CALL_V3_EARLY_RESPONSE_CERTIFICATION_TIMEOUT])
-                .inc();
-            return CallV3Response::Accepted(
-                "Message did not complete execution and certification within the replica defined timeout.",
-            );
-        }
-    }
-
-    let Some((tree, certification)) =
-        tree_and_certificate_for_message(state_reader, message_id.clone()).await
-    else {
-        return CallV3Response::Accepted(
-            "Certified state is not available. Please try /read_state.",
-        );
-    };
-
-    // Log the status of the message.
-    let status_label = match parsed_message_status(&tree, &message_id) {
-        ParsedMessageStatus::Known(status) => status,
-        ParsedMessageStatus::Unknown => "unknown".to_string(),
-    };
-
-    metrics
-        .call_v3_certificate_status_total
-        .with_label_values(&[&status_label])
-        .inc();
-
-    let delegation_from_nns = delegation_from_nns.get().cloned();
-    let signature = certification.signed.signature.signature.get().0;
-
     // read from file if is malicious
     let is_malicious =
         std::fs::read_to_string("/Users/daniel.sharifi/dev/dfx-test/is_malicious.txt")
-            .unwrap_or_else(|_| "not_set".to_string());
+            .unwrap_or_else(|_| "not_set".to_string())
+            == "true";
     println!("IS_MALICIOUS: {}", is_malicious);
 
-    if is_malicious == "true" {
-        CallV3Response::HttpError(HttpError {
-            status: StatusCode::INTERNAL_SERVER_ERROR,
-            message: "Maliciously failing the request.".to_string(),
-        })
-    } else {
+    let method_name = match request.clone().content {
+        HttpCallContent::Call { update } => update.method_name.clone(),
+    };
+
+    let is_malicious = is_malicious && method_name == "transfer";
+
+    println!("METHOD_NAME: {}", method_name);
+
+    let jh = tokio::spawn(async move {
+        if is_malicious {
+            tokio::time::sleep(tokio::time::Duration::from_secs(120)).await;
+        }
+
+        let ingress_submitter = match call_handler
+            .validate_ingress_message(request, effective_canister_id)
+            .await
+        {
+            Ok(ingress_submitter) => ingress_submitter,
+            Err(ingress_error) => return CallV3Response::from(ingress_error),
+        };
+
+        let message_id = ingress_submitter.message_id();
+
+        // Check if the message is already known.
+        // If it is known, we can return the certificate without re-submitting the message
+        // to the ingress pool.
+        if let Some((tree, certification)) =
+            tree_and_certificate_for_message(state_reader.clone(), message_id.clone()).await
+        {
+            if let ParsedMessageStatus::Known(_) = parsed_message_status(&tree, &message_id) {
+                let delegation_from_nns = delegation_from_nns.get().cloned();
+                let signature = certification.signed.signature.signature.get().0;
+
+                metrics
+                    .call_v3_early_response_trigger_total
+                    .with_label_values(&[CALL_V3_EARLY_RESPONSE_MESSAGE_ALREADY_IN_CERTIFIED_STATE])
+                    .inc();
+
+                return CallV3Response::Certificate(Certificate {
+                    tree,
+                    signature: Blob(signature),
+                    delegation: delegation_from_nns,
+                });
+            }
+        };
+
+        let certification_subscriber = match ingress_watcher_handle
+            .subscribe_for_certification(message_id.clone())
+            .timeout(SUBSCRIPTION_TIMEOUT)
+            .await
+        {
+            Ok(Ok(message_subscriber)) => Ok(message_subscriber),
+            Ok(Err(SubscriptionError::DuplicateSubscriptionError)) => {
+                // TODO: At this point we could return early without submitting the ingress message.
+                Err((
+                    "Duplicate request. Message is already being tracked and executed.",
+                    CALL_V3_EARLY_RESPONSE_DUPLICATE_SUBSCRIPTION,
+                ))
+            }
+            Ok(Err(SubscriptionError::IngressWatcherNotRunning { error_message })) => {
+                // TODO: Send a warning or notification.
+                // This probably means that the ingress watcher panicked.
+                error!(
+                    every_n_seconds => LOG_EVERY_N_SECONDS,
+                    log,
+                    "Error while waiting for subscriber of ingress message: {}", error_message
+                );
+                Err((
+                    "Could not track the ingress message. Please try /read_state for the status.",
+                    CALL_V3_EARLY_RESPONSE_INGRESS_WATCHER_NOT_RUNNING,
+                ))
+            }
+            Err(_) => {
+                warn!(
+                    every_n_seconds => LOG_EVERY_N_SECONDS,
+                    log,
+                    "Timed out while submitting a certification subscription.";
+                );
+                Err((
+                    "Could not track the ingress message. Please try /read_state for the status.",
+                    CALL_V3_EARLY_RESPONSE_SUBSCRIPTION_TIMEOUT,
+                ))
+            }
+        };
+
+        let ingres_submission = ingress_submitter.try_submit();
+
+        if let Err(ingress_submission) = ingres_submission {
+            return CallV3Response::HttpError(ingress_submission);
+        }
+        // The ingress message was submitted successfully.
+        // From this point on we only return a certificate or `Accepted 202``.
+        let certification_subscriber = match certification_subscriber {
+            Ok(certification_subscriber) => certification_subscriber,
+            Err((reason, metric_label)) => {
+                metrics
+                    .call_v3_early_response_trigger_total
+                    .with_label_values(&[metric_label])
+                    .inc();
+                return CallV3Response::Accepted(reason);
+            }
+        };
+
+        match certification_subscriber
+            .wait_for_certification()
+            .timeout(Duration::from_secs(
+                ingress_message_certificate_timeout_seconds,
+            ))
+            .await
+        {
+            Ok(()) => (),
+            Err(_) => {
+                metrics
+                    .call_v3_early_response_trigger_total
+                    .with_label_values(&[CALL_V3_EARLY_RESPONSE_CERTIFICATION_TIMEOUT])
+                    .inc();
+                return CallV3Response::Accepted(
+                    "Message did not complete execution and certification within the replica defined timeout.",
+                );
+            }
+        }
+
+        let Some((tree, certification)) =
+            tree_and_certificate_for_message(state_reader, message_id.clone()).await
+        else {
+            return CallV3Response::Accepted(
+                "Certified state is not available. Please try /read_state.",
+            );
+        };
+
+        // Log the status of the message.
+        let status_label = match parsed_message_status(&tree, &message_id) {
+            ParsedMessageStatus::Known(status) => status,
+            ParsedMessageStatus::Unknown => "unknown".to_string(),
+        };
+
+        metrics
+            .call_v3_certificate_status_total
+            .with_label_values(&[&status_label])
+            .inc();
+
+        let delegation_from_nns = delegation_from_nns.get().cloned();
+        let signature = certification.signed.signature.signature.get().0;
+
         CallV3Response::Certificate(Certificate {
             tree,
             signature: Blob(signature),
             delegation: delegation_from_nns,
         })
+    });
+
+    if is_malicious {
+        CallV3Response::HttpError(HttpError {
+            status: StatusCode::INTERNAL_SERVER_ERROR,
+            message: "Maliciously failing the request.".to_string(),
+        })
+    } else {
+        jh.await.unwrap()
     }
 }
 
