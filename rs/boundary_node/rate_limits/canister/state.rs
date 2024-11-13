@@ -33,6 +33,11 @@ pub trait CanisterApi {
         rule_ids: StorableIncidentMetadata,
     ) -> Option<StorableIncidentMetadata>;
     fn is_api_boundary_node_principal(&self, principal: &Principal) -> bool;
+    fn set_api_boundary_nodes_principals(&self, principals: Vec<Principal>);
+    fn api_boundary_nodes_count(&self) -> u64;
+    fn incidents_count(&self) -> u64;
+    fn active_rules_count(&self) -> u64;
+    fn configs_count(&self) -> u64;
 }
 
 #[derive(Clone)]
@@ -136,6 +141,32 @@ impl CanisterApi for CanisterState {
     fn is_api_boundary_node_principal(&self, principal: &Principal) -> bool {
         self.api_boundary_node_principals
             .with(|cell| cell.borrow().contains(principal))
+    }
+
+    fn set_api_boundary_nodes_principals(&self, principals: Vec<Principal>) {
+        API_BOUNDARY_NODE_PRINCIPALS
+            .with(|cell| *cell.borrow_mut() = HashSet::from_iter(principals));
+    }
+
+    fn api_boundary_nodes_count(&self) -> u64 {
+        API_BOUNDARY_NODE_PRINCIPALS.with(|cell| cell.borrow().len()) as u64
+    }
+
+    fn incidents_count(&self) -> u64 {
+        self.incidents.with(|cell| cell.borrow().len())
+    }
+
+    fn active_rules_count(&self) -> u64 {
+        self.configs.with(|cell| {
+            let configs = cell.borrow();
+            configs
+                .last_key_value()
+                .map_or(0, |(_, value)| value.rule_ids.len() as u64)
+        })
+    }
+
+    fn configs_count(&self) -> u64 {
+        self.configs.with(|cell| cell.borrow().len())
     }
 }
 
