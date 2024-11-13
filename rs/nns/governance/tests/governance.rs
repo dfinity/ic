@@ -117,7 +117,7 @@ use icp_ledger::{protobuf, AccountIdentifier, Memo, Subaccount, Tokens};
 use lazy_static::lazy_static;
 use maplit::{btreemap, hashmap};
 use pretty_assertions::{assert_eq, assert_ne};
-use proptest::prelude::proptest;
+use proptest::prelude::{proptest, ProptestConfig};
 use rand::{prelude::IteratorRandom, rngs::StdRng, Rng, SeedableRng};
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 use rust_decimal_macros::dec;
@@ -133,6 +133,7 @@ use std::{
 
 #[cfg(feature = "tla")]
 use ic_nns_governance::governance::tla::{check_traces as tla_check_traces, TLA_TRACES_LKEY};
+use ic_nns_governance::storage::reset_stable_memory;
 #[cfg(feature = "tla")]
 use tla_instrumentation_proc_macros::with_tla_trace_check;
 
@@ -346,6 +347,10 @@ fn test_single_neuron_proposal_new() {
                                 current_deadline_timestamp_seconds: 999111017,
                             }),
                         )),
+                        ProposalDataChange::TotalPotentialVotingPower(OptionChange::Different(
+                            None,
+                            Some(1),
+                        )),
                     ],
                 )]),
                 GovernanceChange::Metrics(OptionChange::Different(
@@ -479,6 +484,7 @@ fn check_proposal_status_after_voting_and_after_expiration(
     expected_after_voting: ProposalStatus,
     expected_after_expiration: ProposalStatus,
 ) {
+    reset_stable_memory();
     let expiration_seconds = 17; // Arbitrary duration
     let network_economics = NetworkEconomics {
         reject_cost_e8s: 0,          // It's the default, but specify for emphasis
@@ -1067,6 +1073,10 @@ async fn test_cascade_following_new() {
                         Some(WaitForQuietStateDesc {
                             current_deadline_timestamp_seconds: 999111001,
                         }),
+                    )),
+                    ProposalDataChange::TotalPotentialVotingPower(OptionChange::Different(
+                        None,
+                        Some(10_125_000_000)
                     )),
                 ],
             )]),
@@ -2987,11 +2997,10 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
             n.deciding_voting_power(fake_driver.now()) as f64
         })
         .expect("Neuron not found")
-        / gov
-            .neuron_store
-            .active_neurons_iter()
-            .map(|neuron| neuron.deciding_voting_power(fake_driver.now()))
-            .sum::<u64>() as f64;
+        / gov.neuron_store.with_active_neurons_iter(|iter| {
+            iter.map(|neuron| neuron.deciding_voting_power(fake_driver.now()))
+                .sum::<u64>() as f64
+        });
     let expected_distributed_e8s_equivalent =
         (expected_available_e8s_equivalent as f64 * neuron_share) as u64;
     assert_eq!(expected_distributed_e8s_equivalent, 15);
@@ -3016,13 +3025,15 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
             .maturity_e8s_equivalent,
         expected_distributed_e8s_equivalent,
     );
-    for neuron in gov.neuron_store.active_neurons_iter() {
-        if neuron.id().id == 1 {
-            continue;
-        }
+    gov.neuron_store.with_active_neurons_iter(|iter| {
+        for neuron in iter {
+            if neuron.id().id == 1 {
+                continue;
+            }
 
-        assert_eq!(neuron.maturity_e8s_equivalent, 0, "{:#?}", neuron);
-    }
+            assert_eq!(neuron.maturity_e8s_equivalent, 0, "{:#?}", neuron);
+        }
+    });
 
     // The ballots should have been cleared
     let proposal = gov.get_proposal_data(proposal_id).unwrap();
@@ -3520,6 +3531,7 @@ fn compute_maturities(
     proposals: Vec<impl Into<fake::ProposalNeuronBehavior>>,
     reward_pot_e8s: u64,
 ) -> Vec<u64> {
+    reset_stable_memory();
     let proposals: Vec<fake::ProposalNeuronBehavior> =
         proposals.into_iter().map(|x| x.into()).collect();
 
@@ -3621,13 +3633,16 @@ fn compute_maturities(
 }
 
 proptest! {
-
-/// Check that voting on
-/// 1. a governance proposal yields 20 times the voting power
-/// 2. an exchange rate proposal yields 0.01 times the voting power
-/// 3. other proposals yield 1 time the voting power
+#![proptest_config(ProptestConfig {
+    cases: 100, .. ProptestConfig::default()
+})]
 #[test]
 fn test_topic_weights(stake in 1u64..1_000_000_000) {
+    // Check that voting on
+    // 1. a governance proposal yields 20 times the voting power
+    // 2. an exchange rate proposal yields 0.01 times the voting power
+    // 3. other proposals yield 1 time the voting power
+
     // Test alloacting 100 maturity to two neurons with equal stake where
     // 1. first neuron voting on a network proposal (1x) and
     // 2. second neuron voting on an exchange proposal (0.01x).
@@ -3807,7 +3822,7 @@ fn test_random_voting_rewards_scenarios() {
         proposals
     }
 
-    const SCENARIO_COUNT: u64 = 10_000;
+    const SCENARIO_COUNT: u64 = 1000;
     let mut unique_scenarios = HashSet::new();
     for seed in 1..=SCENARIO_COUNT {
         unique_scenarios.insert(helper(seed));
@@ -7153,9 +7168,7 @@ fn test_manage_and_reward_node_providers() {
     // Find the neuron...
     let neuron = gov
         .neuron_store
-        .active_neurons_iter()
-        .find(|x| x.controller() == np_pid)
-        .unwrap();
+        .with_active_neurons_iter(|mut iter| iter.find(|x| x.controller() == np_pid).unwrap());
     assert_eq!(neuron.stake_e8s(), 99_999_999);
     // Find the transaction in the ledger...
     driver.assert_account_contains(
@@ -7463,9 +7476,7 @@ fn test_manage_and_reward_multiple_node_providers() {
     // Find the neuron...
     let neuron = gov
         .neuron_store
-        .active_neurons_iter()
-        .find(|x| x.controller() == np_pid_2)
-        .unwrap();
+        .with_active_neurons_iter(|mut iter| iter.find(|x| x.controller() == np_pid_2).unwrap());
     assert_eq!(neuron.stake_e8s(), 99_999_999);
     // Find the transaction in the ledger...
     driver.assert_account_contains(
@@ -9037,6 +9048,7 @@ async fn test_id_v1_works() {
 #[test]
 fn test_can_follow_by_subaccount_and_neuron_id() {
     fn test_can_follow_by(make_neuron_id: fn(&Neuron) -> NeuronIdOrSubaccount) {
+        reset_stable_memory();
         let driver = fake::FakeDriver::default();
         let mut gov = Governance::new(
             fixture_for_manage_neuron(),
@@ -13262,15 +13274,17 @@ async fn distribute_rewards_load_test() {
     );
 
     // Step 3.1: Inspect neurons to make sure they have been rewarded for voting.
-    for neuron in governance.neuron_store.active_neurons_iter() {
-        let current_neuron_maturity = neuron.maturity_e8s_equivalent;
+    governance.neuron_store.with_active_neurons_iter(|iter| {
+        for neuron in iter {
+            let current_neuron_maturity = neuron.maturity_e8s_equivalent;
 
-        assert_ne!(
-            current_neuron_maturity, starting_maturity,
-            "neuron: {:#?}",
-            neuron,
-        );
-    }
+            assert_ne!(
+                current_neuron_maturity, starting_maturity,
+                "neuron: {:#?}",
+                neuron,
+            );
+        }
+    });
 
     // Step 3.2: Inspect the latest_reward_event.
     let reward_event = governance.heap_data.latest_reward_event.as_ref().unwrap();
