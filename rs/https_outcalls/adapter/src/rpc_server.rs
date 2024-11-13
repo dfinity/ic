@@ -53,6 +53,12 @@ pub struct CanisterHttp {
 }
 
 impl CanisterHttp {
+
+    fn generate_socks_clients(&self, api_bn_ips: Vec<String>) -> Vec<Client<HttpsConnector<SocksConnector<HttpConnector>>, OutboundRequestBody>> {
+        //TODO(mihailjianu): implement this.
+        return vec![];
+    }
+
     pub fn new(config: Config, logger: ReplicaLogger, metrics: &MetricsRegistry) -> Self {
         // Socks client setup
         let mut http_connector = HttpConnector::new();
@@ -113,6 +119,10 @@ impl HttpsOutcallsService for CanisterHttp {
         self.metrics.requests.inc();
 
         let req = request.into_inner();
+
+        let api_bn_ips = req.api_bn_ips;
+
+        let socks_clients = self.generate_socks_clients(api_bn_ips);
 
         let uri = req.url.parse::<Uri>().map_err(|err| {
             debug!(self.logger, "Failed to parse URL: {}", err);

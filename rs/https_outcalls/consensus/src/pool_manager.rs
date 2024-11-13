@@ -14,6 +14,8 @@ use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::*;
 use ic_metrics::MetricsRegistry;
+use ic_registry_client_helpers::api_boundary_node::ApiBoundaryNodeRegistry;
+use ic_registry_client_helpers::node::NodeRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
@@ -181,6 +183,13 @@ impl CanisterHttpPoolManagerImpl {
             .cloned()
             .collect();
 
+        //TODO(mihailjianu): handle errors.
+        let api_bn_ids = self.registry_client.get_api_boundary_node_ids(self.registry_client.get_latest_version()).unwrap();
+        let api_bn_ips = api_bn_ids.iter().map(|id| {
+            let record = self.registry_client.get_node_record(*id, self.registry_client.get_latest_version()).unwrap();
+            record.unwrap().http.unwrap().ip_addr
+        }).collect::<Vec<String>>();
+
         for (id, context) in http_requests {
             if !request_ids_already_made.contains(&id) {
                 let timeout = context.time + Duration::from_secs(5 * 60);
@@ -192,6 +201,7 @@ impl CanisterHttpPoolManagerImpl {
                         id,
                         timeout,
                         context,
+                        api_bn_ips: api_bn_ips.clone(),
                     })
                 {
                     warn!(
@@ -902,6 +912,7 @@ pub mod test {
                         timeout: ic_types::Time::from_nanos_since_unix_epoch(10)
                             + Duration::from_secs(60 * 5),
                         context: request.clone(),
+                        api_bn_ips: vec![],
                     }))
                     .times(1)
                     .return_const(Ok(()));
