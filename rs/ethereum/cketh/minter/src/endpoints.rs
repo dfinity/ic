@@ -4,7 +4,7 @@ use crate::numeric::LedgerBurnIndex;
 use crate::state::{transactions, transactions::EthWithdrawalRequest};
 use crate::tx::{SignedEip1559TransactionRequest, TransactionPrice};
 use candid::{CandidType, Deserialize, Nat, Principal};
-use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use minicbor::{Decode, Encode};
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
@@ -76,6 +76,7 @@ pub struct MinterInfo {
     pub erc20_balances: Option<Vec<Erc20Balance>>,
     pub last_eth_scraped_block_number: Option<Nat>,
     pub last_erc20_scraped_block_number: Option<Nat>,
+    pub last_deposit_with_subaccount_scraped_block_number: Option<Nat>,
     pub cketh_ledger_id: Option<Principal>,
     pub evm_rpc_id: Option<Principal>,
 }
@@ -195,6 +196,7 @@ impl Display for RetrieveEthStatus {
 pub struct WithdrawalArg {
     pub amount: Nat,
     pub recipient: String,
+    pub from_subaccount: Option<Subaccount>,
 }
 
 #[derive(PartialEq, Debug, CandidType, Deserialize)]

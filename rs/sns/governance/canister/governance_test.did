@@ -291,7 +291,7 @@ type Governance = record {
   cached_upgrade_steps : opt CachedUpgradeSteps;
   sns_initialization_parameters : text;
   latest_reward_event : opt RewardEvent;
-  pending_version : opt UpgradeInProgress;
+  pending_version : opt PendingVersion;
   swap_canister_id : opt principal;
   ledger_canister_id : opt principal;
   proposals : vec record { nat64; ProposalData };
@@ -686,6 +686,13 @@ type TransferSnsTreasuryFunds = record {
 };
 
 type UpgradeInProgress = record {
+  mark_failed_at_seconds : nat64;
+  checking_upgrade_lock : nat64;
+  proposal_id : nat64;
+  target_version : opt Version;
+};
+
+type PendingVersion = record {
   mark_failed_at_seconds : nat64;
   checking_upgrade_lock : nat64;
   proposal_id : nat64;
