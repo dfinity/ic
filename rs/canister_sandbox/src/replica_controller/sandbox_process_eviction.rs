@@ -81,6 +81,9 @@ mod tests {
     use ic_test_utilities_types::ids::canister_test_id;
     use ic_types::AccumulatedPriority;
     use ic_types::NumBytes;
+    use rand::seq::SliceRandom;
+    use rand::thread_rng;
+    use rand::Rng;
 
     #[test]
     fn evict_empty() {
@@ -114,6 +117,7 @@ mod tests {
                 scheduler_priority: AccumulatedPriority::new(0),
             });
         }
+
         assert_eq!(
             evict(candidates.clone(), 0.into(), 90, now, 0.into()),
             candidates.into_iter().rev().take(10).collect::<Vec<_>>()
@@ -132,6 +136,9 @@ mod tests {
                 scheduler_priority: AccumulatedPriority::new(0),
             });
         }
+
+        candidates.shuffle(&mut thread_rng());
+
         assert_eq!(
             evict(
                 candidates.clone(),
@@ -141,6 +148,8 @@ mod tests {
                 0.into()
             ),
             {
+                // Since scheduler_priority is the same for all candidates,
+                // we sort only by last_used.
                 candidates.sort_by_key(|x| x.last_used);
                 candidates.into_iter().take(49).collect::<Vec<_>>()
             }
@@ -159,7 +168,11 @@ mod tests {
                 scheduler_priority: AccumulatedPriority::new(0),
             });
         }
+        candidates.shuffle(&mut thread_rng());
+
         assert_eq!(evict(candidates.clone(), 0.into(), 10, now, 0.into()), {
+            // Since scheduler_priority is the same for all candidates,
+            // we sort only by last_used.
             candidates.sort_by_key(|x| x.last_used);
             candidates.into_iter().take(90).collect::<Vec<_>>()
         });
@@ -179,6 +192,9 @@ mod tests {
             });
             total_rss += 50.into();
         }
+
+        candidates.shuffle(&mut thread_rng());
+
         assert_eq!(
             evict(candidates.clone(), total_rss, 100, now, total_rss),
             vec![]
@@ -244,20 +260,107 @@ mod tests {
     }
 
     #[test]
-    fn evict_half() {
+    fn evict_half_idle_due_to_process_count() {
+        let mut candidates = vec![];
+        let now = Instant::now();
+        for i in 0..100 {
+            let priority = rand::thread_rng().gen_range(0..100);
+            candidates.push(EvictionCandidate {
+                id: canister_test_id(i),
+                last_used: now - Duration::from_secs(i + 1),
+                rss: 0.into(),
+                scheduler_priority: AccumulatedPriority::new(priority),
+            });
+        }
+
+        candidates.shuffle(&mut thread_rng());
+
+        assert_eq!(evict(candidates.clone(), 0.into(), 50, now, 0.into()), {
+            // Since scheduler priority is not important when candidate is idle,
+            // we sort only by last_used.
+            candidates.sort_by_key(|x| x.last_used);
+            candidates.into_iter().take(50).collect::<Vec<_>>()
+        });
+    }
+
+    #[test]
+    fn evict_half_due_to_process_count_based_on_scheduler_priorities() {
         let mut candidates = vec![];
         let now = Instant::now();
         for i in 0..100 {
             candidates.push(EvictionCandidate {
                 id: canister_test_id(i),
-                last_used: now - Duration::from_secs(i + 1),
+                last_used: now,
                 rss: 0.into(),
-                scheduler_priority: AccumulatedPriority::new(0),
+                scheduler_priority: AccumulatedPriority::new(i.try_into().unwrap()),
             });
         }
+        candidates.shuffle(&mut thread_rng());
+        assert_eq!(evict(candidates.clone(), 0.into(), 50, now, 0.into()), {
+            // Since last_used is the same for all candidates,
+            // we sort only by scheduler priority.
+            candidates.sort_by_key(|x| x.scheduler_priority);
+            candidates.into_iter().take(50).collect::<Vec<_>>()
+        });
+    }
+
+    #[test]
+    fn evict_some_due_to_rss_based_on_priorities() {
+        let mut candidates = vec![];
+        let now = Instant::now();
+        let mut total_rss = NumBytes::new(0);
+        for i in 0..100 {
+            candidates.push(EvictionCandidate {
+                id: canister_test_id(i),
+                last_used: now,
+                rss: 50.into(),
+                scheduler_priority: AccumulatedPriority::new(i.try_into().unwrap()),
+            });
+            total_rss += 50.into();
+        }
+        candidates.shuffle(&mut thread_rng());
+
         assert_eq!(
-            evict(candidates.clone(), 0.into(), 50, now, 0.into()).len(),
-            50
+            evict(candidates.clone(), total_rss, 100, now, total_rss / 2),
+            {
+                // Since last_used is the same for all candidates,
+                // we sort only by scheduler priority.
+                candidates.sort_by_key(|x| x.scheduler_priority);
+                candidates.into_iter().take(50).collect::<Vec<_>>()
+            }
+        );
+    }
+
+    #[test]
+    fn evic_due_to_process_count_based_on_scheduler_priorities_and_last_used() {
+        let mut candidates = vec![];
+        let now = Instant::now();
+        let mut i = 0;
+        for priority in vec![1, 5, 10, 100, 101, 1_000, 1_001, 1_010, 1_100, 2_000] {
+            for time_dist in vec![1, 5, 10, 100, 101, 1_000, 1_001, 1_010, 1_100, 2_000] {
+                candidates.push(EvictionCandidate {
+                    id: canister_test_id(i),
+                    last_used: now - Duration::from_secs(time_dist),
+                    rss: 0.into(),
+                    scheduler_priority: AccumulatedPriority::new(priority.try_into().unwrap()),
+                });
+                i += 1;
+            }
+        }
+        candidates.shuffle(&mut thread_rng());
+
+        assert_eq!(
+            evict(
+                candidates.clone(),
+                0.into(),
+                40,
+                now - Duration::from_secs(10_000),
+                0.into()
+            ),
+            {
+                candidates.sort_by_key(|x| (x.scheduler_priority, x.last_used));
+                candidates.into_iter().take(60).collect::<Vec<_>>()
+            }
         );
     }
 }

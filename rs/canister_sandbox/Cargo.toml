@@ -55,6 +55,7 @@ ic-test-utilities = { path = "../test_utilities" }
 # produced by `cargo test`.
 ic-test-utilities-types = { path = "../test_utilities/types" }
 mockall = { workspace = true }
+rand = { workspace = true }
 slog-async = { workspace = true }
 slog-term = { workspace = true }
 tempfile = { workspace = true }
