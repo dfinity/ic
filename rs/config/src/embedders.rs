@@ -51,7 +51,7 @@ pub(crate) const DEFAULT_MAX_SANDBOX_COUNT: usize = 5_000;
 pub(crate) const DEFAULT_MAX_SANDBOX_IDLE_TIME: Duration = Duration::from_secs(30 * 60);
 
 /// Sandbox processes may be evicted if their total RSS exceeds 50 GiB.
-pub(crate) const DEFAULT_MAX_SANDBOXES_RSS: NumBytes = NumBytes::new(50 * 1024 * 1024 * 1024);
+pub(crate) const DEFAULT_MAX_SANDBOXES_RSS: NumBytes = NumBytes::new(250 * 1024 * 1024 * 1024);
 
 /// The maximum number of pages that a message dirties without optimizing dirty
 /// page copying by triggering a new execution slice for copying pages.
