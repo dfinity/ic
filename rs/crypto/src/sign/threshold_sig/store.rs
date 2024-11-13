@@ -113,11 +113,11 @@ impl Default for ThresholdSigDataStoreImpl {
 }
 
 impl ThresholdSigDataStoreImpl {
-    pub const CAPACITY_PER_TAG: usize = 9;
+    pub const CAPACITY_PER_TAG_OR_KEY: usize = 9;
 
     /// Creates a new store with a default maximum size per tag.
     pub fn new() -> Self {
-        Self::new_with_max_size(Self::CAPACITY_PER_TAG)
+        Self::new_with_max_size(Self::CAPACITY_PER_TAG_OR_KEY)
     }
 
     /// Creates a new store that keeps the data for the

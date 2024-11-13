@@ -179,7 +179,7 @@ fn should_overwrite_existing_individual_public_keys() {
 
 #[test]
 fn should_have_capacity_per_tag_of_9() {
-    assert_eq!(ThresholdSigDataStoreImpl::CAPACITY_PER_TAG, 9)
+    assert_eq!(ThresholdSigDataStoreImpl::CAPACITY_PER_TAG_OR_KEY, 9)
 }
 
 #[test]
@@ -187,7 +187,7 @@ fn should_not_purge_data_on_inserting_coeffs_and_indices_if_capacity_not_exceede
     for tag in all_tags() {
         let mut store = ThresholdSigDataStoreImpl::new();
 
-        for i in 1..=ThresholdSigDataStoreImpl::CAPACITY_PER_TAG {
+        for i in 1..=ThresholdSigDataStoreImpl::CAPACITY_PER_TAG_OR_KEY {
             store.insert_transcript_data(
                 &ni_dkg_id_with_tag(tag.clone(), i),
                 public_coeffs(),
@@ -197,7 +197,7 @@ fn should_not_purge_data_on_inserting_coeffs_and_indices_if_capacity_not_exceede
 
         assert_eq!(
             store.store.len(),
-            ThresholdSigDataStoreImpl::CAPACITY_PER_TAG
+            ThresholdSigDataStoreImpl::CAPACITY_PER_TAG_OR_KEY
         );
     }
 }
@@ -207,7 +207,7 @@ fn should_not_purge_data_on_inserting_pubkeys_if_capacity_not_exceeded() {
     for tag in all_tags() {
         let mut store = ThresholdSigDataStoreImpl::new();
 
-        for i in 1..=ThresholdSigDataStoreImpl::CAPACITY_PER_TAG {
+        for i in 1..=ThresholdSigDataStoreImpl::CAPACITY_PER_TAG_OR_KEY {
             store.insert_individual_public_key(
                 &ni_dkg_id_with_tag(tag.clone(), i),
                 node_test_id(NODE_1),
@@ -217,7 +217,7 @@ fn should_not_purge_data_on_inserting_pubkeys_if_capacity_not_exceeded() {
 
         assert_eq!(
             store.store.len(),
-            ThresholdSigDataStoreImpl::CAPACITY_PER_TAG
+            ThresholdSigDataStoreImpl::CAPACITY_PER_TAG_OR_KEY
         );
     }
 }
@@ -228,7 +228,7 @@ fn should_purge_data_on_inserting_coeffs_and_indices_if_capacity_exceeded() {
         let mut store = ThresholdSigDataStoreImpl::new();
         let pub_coeffs = public_coeffs();
 
-        for i in 1..=ThresholdSigDataStoreImpl::CAPACITY_PER_TAG + 1 {
+        for i in 1..=ThresholdSigDataStoreImpl::CAPACITY_PER_TAG_OR_KEY + 1 {
             store.insert_transcript_data(
                 &ni_dkg_id_with_tag(tag.clone(), i),
                 pub_coeffs.clone(),
@@ -238,12 +238,12 @@ fn should_purge_data_on_inserting_coeffs_and_indices_if_capacity_exceeded() {
 
         assert_eq!(
             store.store.len(),
-            ThresholdSigDataStoreImpl::CAPACITY_PER_TAG
+            ThresholdSigDataStoreImpl::CAPACITY_PER_TAG_OR_KEY
         );
         assert!(store
             .transcript_data(&ni_dkg_id_with_tag(tag.clone(), 1))
             .is_none());
-        for i in 2..=ThresholdSigDataStoreImpl::CAPACITY_PER_TAG + 1 {
+        for i in 2..=ThresholdSigDataStoreImpl::CAPACITY_PER_TAG_OR_KEY + 1 {
             assert_eq!(
                 pub_coeffs_from_store(&store, ni_dkg_id_with_tag(tag.clone(), i)),
                 pub_coeffs
@@ -258,7 +258,7 @@ fn should_purge_data_in_insertion_order_on_inserting_coeffs_and_indices_if_capac
         let mut store = ThresholdSigDataStoreImpl::new();
         let pub_coeffs = public_coeffs();
 
-        for i in (1..=ThresholdSigDataStoreImpl::CAPACITY_PER_TAG + 1).rev() {
+        for i in (1..=ThresholdSigDataStoreImpl::CAPACITY_PER_TAG_OR_KEY + 1).rev() {
             store.insert_transcript_data(
                 &ni_dkg_id_with_tag(tag.clone(), i),
                 pub_coeffs.clone(),
@@ -268,9 +268,9 @@ fn should_purge_data_in_insertion_order_on_inserting_coeffs_and_indices_if_capac
 
         assert_eq!(
             store.store.len(),
-            ThresholdSigDataStoreImpl::CAPACITY_PER_TAG
+            ThresholdSigDataStoreImpl::CAPACITY_PER_TAG_OR_KEY
         );
-        for i in 1..=ThresholdSigDataStoreImpl::CAPACITY_PER_TAG {
+        for i in 1..=ThresholdSigDataStoreImpl::CAPACITY_PER_TAG_OR_KEY {
             assert_eq!(
                 pub_coeffs_from_store(&store, ni_dkg_id_with_tag(tag.clone(), i)),
                 pub_coeffs
@@ -279,7 +279,7 @@ fn should_purge_data_in_insertion_order_on_inserting_coeffs_and_indices_if_capac
         assert!(store
             .transcript_data(&ni_dkg_id_with_tag(
                 tag.clone(),
-                ThresholdSigDataStoreImpl::CAPACITY_PER_TAG + 1
+                ThresholdSigDataStoreImpl::CAPACITY_PER_TAG_OR_KEY + 1
             ))
             .is_none());
     }
@@ -297,7 +297,7 @@ fn should_not_purge_all_transcripts_of_certain_threshold_if_capacity_exceeded(
         pub_coeffs.clone(),
         BTreeMap::new(),
     );
-    for i in 0..ThresholdSigDataStoreImpl::CAPACITY_PER_TAG + 1 {
+    for i in 0..ThresholdSigDataStoreImpl::CAPACITY_PER_TAG_OR_KEY + 1 {
         store.insert_transcript_data(
             &ni_dkg_id_with_tag(other_transcripts_threshold.clone(), i),
             pub_coeffs.clone(),
@@ -307,7 +307,7 @@ fn should_not_purge_all_transcripts_of_certain_threshold_if_capacity_exceeded(
 
     assert_eq!(
         store.store.len(),
-        ThresholdSigDataStoreImpl::CAPACITY_PER_TAG + 1
+        ThresholdSigDataStoreImpl::CAPACITY_PER_TAG_OR_KEY + 1
     );
     assert_store_length_invariant(&store);
 
@@ -349,7 +349,7 @@ fn should_purge_data_on_inserting_pubkeys_if_capacity_exceeded() {
         let csp_pubkey = csp_public_key();
         let node_id = node_test_id(NODE_1);
 
-        for i in 1..=ThresholdSigDataStoreImpl::CAPACITY_PER_TAG + 1 {
+        for i in 1..=ThresholdSigDataStoreImpl::CAPACITY_PER_TAG_OR_KEY + 1 {
             store.insert_individual_public_key(
                 &ni_dkg_id_with_tag(tag.clone(), i),
                 node_id,
@@ -359,9 +359,9 @@ fn should_purge_data_on_inserting_pubkeys_if_capacity_exceeded() {
 
         assert_eq!(
             store.store.len(),
-            ThresholdSigDataStoreImpl::CAPACITY_PER_TAG
+            ThresholdSigDataStoreImpl::CAPACITY_PER_TAG_OR_KEY
         );
-        for i in 2..=ThresholdSigDataStoreImpl::CAPACITY_PER_TAG + 1 {
+        for i in 2..=ThresholdSigDataStoreImpl::CAPACITY_PER_TAG_OR_KEY + 1 {
             assert_eq!(
                 store.individual_public_key(&ni_dkg_id_with_tag(tag.clone(), i), node_id),
                 Some(&csp_pubkey)
@@ -381,7 +381,7 @@ fn should_purge_data_in_insertion_order_on_inserting_pubkeys_if_max_size_exceede
         let csp_pubkey = csp_public_key();
         let node_id = node_test_id(NODE_1);
 
-        for i in (1..=ThresholdSigDataStoreImpl::CAPACITY_PER_TAG + 1).rev() {
+        for i in (1..=ThresholdSigDataStoreImpl::CAPACITY_PER_TAG_OR_KEY + 1).rev() {
             store.insert_individual_public_key(
                 &ni_dkg_id_with_tag(tag.clone(), i),
                 node_id,
@@ -391,9 +391,9 @@ fn should_purge_data_in_insertion_order_on_inserting_pubkeys_if_max_size_exceede
 
         assert_eq!(
             store.store.len(),
-            ThresholdSigDataStoreImpl::CAPACITY_PER_TAG
+            ThresholdSigDataStoreImpl::CAPACITY_PER_TAG_OR_KEY
         );
-        for i in 1..=ThresholdSigDataStoreImpl::CAPACITY_PER_TAG {
+        for i in 1..=ThresholdSigDataStoreImpl::CAPACITY_PER_TAG_OR_KEY {
             assert_eq!(
                 store.individual_public_key(&ni_dkg_id_with_tag(tag.clone(), i), node_id),
                 Some(&csp_pubkey)
@@ -401,7 +401,10 @@ fn should_purge_data_in_insertion_order_on_inserting_pubkeys_if_max_size_exceede
         }
         assert_eq!(
             store.individual_public_key(
-                &ni_dkg_id_with_tag(tag.clone(), ThresholdSigDataStoreImpl::CAPACITY_PER_TAG + 1),
+                &ni_dkg_id_with_tag(
+                    tag.clone(),
+                    ThresholdSigDataStoreImpl::CAPACITY_PER_TAG_OR_KEY + 1
+                ),
                 node_id
             ),
             None
@@ -414,7 +417,7 @@ fn should_store_up_to_capacity_per_tag_for_all_tags() {
     let mut store = ThresholdSigDataStoreImpl::new();
     let pub_coeffs = public_coeffs();
 
-    for i in 0..ThresholdSigDataStoreImpl::CAPACITY_PER_TAG {
+    for i in 0..ThresholdSigDataStoreImpl::CAPACITY_PER_TAG_OR_KEY {
         for tag in all_tags() {
             store.insert_transcript_data(
                 &ni_dkg_id_with_tag(tag.clone(), i),
@@ -431,7 +434,7 @@ fn should_store_up_to_capacity_per_tag_for_all_tags() {
     // Insert one more transcript per tag
     for tag in all_tags() {
         store.insert_transcript_data(
-            &ni_dkg_id_with_tag(tag, ThresholdSigDataStoreImpl::CAPACITY_PER_TAG),
+            &ni_dkg_id_with_tag(tag, ThresholdSigDataStoreImpl::CAPACITY_PER_TAG_OR_KEY),
             pub_coeffs.clone(),
             BTreeMap::new(),
         );
@@ -547,8 +550,8 @@ fn vetkd_master_public_key_id() -> MasterPublicKeyId {
 fn assert_max_store_capacity(store: &ThresholdSigDataStoreImpl) {
     assert_eq!(
         store.store.len(),
-        ThresholdSigDataStoreImpl::CAPACITY_PER_TAG * 2
-            + ThresholdSigDataStoreImpl::CAPACITY_PER_TAG * (all_tags().len() - 2)
+        ThresholdSigDataStoreImpl::CAPACITY_PER_TAG_OR_KEY * 2
+            + ThresholdSigDataStoreImpl::CAPACITY_PER_TAG_OR_KEY * (all_tags().len() - 2)
     );
 }
 
