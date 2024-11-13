@@ -221,9 +221,10 @@ impl List for Lister {
                         .with(|rs| rs.borrow().get(&id.to_owned().into()))
                     {
                         Some(r) => Ok((id.to_owned(), timestamp.to_owned(), r)),
-                        None => {
-                            Err(anyhow!("invalid state: task id not found in registrations").into())
-                        }
+                        None => Err(anyhow!(
+                            "invalid state: task id {id} not found in registrations"
+                        )
+                        .into()),
                     }
                 })
                 .collect()
