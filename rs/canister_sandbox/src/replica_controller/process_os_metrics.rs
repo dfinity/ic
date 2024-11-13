@@ -39,9 +39,7 @@ fn parse_available_memory(meminfo: &str) -> Option<NumBytes> {
 
 /// Returns available memory or `None` if the information could not be obtained.
 pub fn available_memory() -> Option<NumBytes> {
-    let Ok(meminfo) = std::fs::read_to_string("/proc/meminfo") else {
-        return None;
-    };
+    let meminfo = std::fs::read_to_string("/proc/meminfo").ok()?;
     parse_available_memory(&meminfo)
 }
 
@@ -968,12 +966,12 @@ VmFlags: rd wr sh mr mw me ms sd
         check!("MemAvailable:   2  KB ", Some(2));
         check!("\n\r\nMemAvailable:   2  KB \n\r\n", Some(2));
         check!("MemAvailable:   2 kB", Some(2));
-        let meminfo = r#"
-MemTotal:       527992616 kB
-MemFree:        72818316 kB
-MemAvailable:   163060112 kB
-Buffers:         4322460 kB
-"#;
+        let meminfo = "\n\
+            MemTotal:       527992616 kB\n\
+            MemFree:        72818316 kB\n\
+            MemAvailable:   163060112 kB\n\
+            Buffers:         4322460 kB\n\
+        ";
         check!(meminfo, Some(163060112));
     }
 }
