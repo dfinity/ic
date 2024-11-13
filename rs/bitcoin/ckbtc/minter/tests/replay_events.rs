@@ -1,8 +1,7 @@
-use crate::state::eventlog::{replay, Event};
-use crate::Network;
 use candid::{CandidType, Deserialize, Principal};
 use ic_agent::Agent;
-use icrc_ledger_types::icrc1::account::Account;
+use ic_ckbtc_minter::state::eventlog::{replay, Event};
+use ic_ckbtc_minter::state::Network;
 use std::path::PathBuf;
 
 #[tokio::test]
@@ -37,10 +36,7 @@ async fn should_not_have_too_many_useless_events() {
         let events = file.deserialize();
         let received_utxo_to_minter_with_empty_utxos = Event::ReceivedUtxos {
             mint_txid: None,
-            to_account: Account {
-                owner: file.minter_canister_id(),
-                subaccount: None,
-            },
+            to_account: file.minter_canister_id().into(),
             utxos: vec![],
         };
 
@@ -181,8 +177,8 @@ impl GetEventsFile {
 }
 
 async fn get_events(agent: &Agent, minter_id: &Principal, start: u64, length: u64) -> Vec<Event> {
-    use crate::state::eventlog::GetEventsArg;
     use candid::{Decode, Encode};
+    use ic_ckbtc_minter::state::eventlog::GetEventsArg;
 
     let arg = GetEventsArg { start, length };
 
