@@ -1,5 +1,30 @@
+// The benchmark installs the specified number of `load_simulator` canisters
+// using the `canister_creator` and executes the specified amount of rounds.
+// It measures the total time taken to complete the rounds and the throughput,
+// i.e., the number of rounds executed per second (essentially, the FR).
+//
+// By default, each load_simulator canister runs a periodic timer with
+// a one-second interval and accesses stable memory every fifth call.
+//
+// This benchmark is useful for debugging and benchmarking scheduler
+// and sandbox eviction changes. For more realistic testnet load tests,
+// refer to the `dfinity/subnet-load-tester` project.
+//
 // Quick start:
-//     bazel run //rs/execution_environment:load_simulator_canisters_bench -- --quick 100
+//     bazel run //rs/execution_environment:load_simulator_canisters_bench -- --quick 200
+//
+// Example output:
+//     ==> Creating 2 creator canisters...
+//     ==> Creating 200 load simulator canisters...
+//     ==> Awaiting creation to finish...
+//     ==> Installing 200 load simulators...
+//     ==> Awaiting installation to finish...
+//     Load simulator/200 canisters/10 rounds
+//                             time:   [1.9450 s 1.9450 s 1.9450 s]
+//                                      ^ total time taken to complete 10 rounds
+//                             thrpt:  [5.1414  elem/s 5.1414  elem/s 5.1414  elem/s]
+//                                      ^ number of rounds executed per second (the FR)
+
 use std::time::Duration;
 
 use criterion::{criterion_group, criterion_main, Criterion};
@@ -74,34 +99,33 @@ fn setup_env(total_canisters: usize) -> StateMachine {
         env.await_ingress(ingress_id, 1_000).unwrap();
     }
     env.set_checkpoints_enabled(false);
-    println!("==> Benchmarking...");
 
     env
 }
 
 fn run_load_simulator_canisters(total_canisters: usize, rounds: u64, c: &mut Criterion) {
-    let mut group = c.benchmark_group("Load simulator round time");
+    let mut group = c.benchmark_group("Load simulator");
     group
         .throughput(criterion::Throughput::Elements(rounds))
-        .bench_function(format!("{total_canisters} canisters"), |bench| {
-            bench.iter_batched(
-                || setup_env(total_canisters),
-                |env| {
-                    for _ in 1..=rounds {
-                        env.advance_time(Duration::from_secs(1));
-                        env.tick();
-                    }
-                },
-                criterion::BatchSize::PerIteration,
-            );
-        });
+        .bench_function(
+            format!("{total_canisters} canisters/{rounds} rounds"),
+            |bench| {
+                bench.iter_batched(
+                    || setup_env(total_canisters),
+                    |env| {
+                        for _ in 1..=rounds {
+                            env.advance_time(Duration::from_secs(1));
+                            env.tick();
+                        }
+                    },
+                    criterion::BatchSize::PerIteration,
+                );
+            },
+        );
 }
 
-fn load_simulator_canisters_bench_100(c: &mut Criterion) {
-    run_load_simulator_canisters(100, 10, c);
-}
-fn load_simulator_canisters_bench_2000(c: &mut Criterion) {
-    run_load_simulator_canisters(2_000, 100, c);
+fn load_simulator_canisters_bench_200(c: &mut Criterion) {
+    run_load_simulator_canisters(200, 10, c);
 }
 fn load_simulator_canisters_bench_3000(c: &mut Criterion) {
     run_load_simulator_canisters(3_000, 100, c);
@@ -139,8 +163,7 @@ fn load_simulator_canisters_bench_8500(c: &mut Criterion) {
 
 criterion_group!(
     benchmarks,
-    load_simulator_canisters_bench_100,
-    load_simulator_canisters_bench_2000,
+    load_simulator_canisters_bench_200,
     load_simulator_canisters_bench_3000,
     load_simulator_canisters_bench_4000,
     load_simulator_canisters_bench_4500,
