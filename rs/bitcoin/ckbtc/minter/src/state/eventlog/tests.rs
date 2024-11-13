@@ -2,6 +2,7 @@ use crate::state::eventlog::{replay, Event};
 use crate::Network;
 use candid::{CandidType, Deserialize, Principal};
 use ic_agent::Agent;
+use icrc_ledger_types::icrc1::account::Account;
 use std::path::PathBuf;
 
 #[tokio::test]
@@ -10,47 +11,11 @@ async fn should_replay_events_for_mainnet() {
         .retrieve_and_store_events_if_env()
         .await;
 
-    let state = replay(GetEventsFile::Mainnet.deserialize()).expect("Failed to replay events");
+    let state = replay(GetEventsFile::Mainnet.deserialize().events.into_iter())
+        .expect("Failed to replay events");
 
     assert_eq!(state.btc_network, Network::Mainnet);
     assert_eq!(state.get_total_btc_managed(), 22_330_465_791);
-}
-
-#[tokio::test]
-async fn should_not_have_too_many_useless_events_for_mainnet() {
-    GetEventsFile::Mainnet
-        .retrieve_and_store_events_if_env()
-        .await;
-    let mut empty_received_utxos = Vec::new();
-    for event in GetEventsFile::Mainnet.deserialize() {
-        match &event {
-             Event::ReceivedUtxos { utxos, .. } if utxos.is_empty() => {
-                 println!("Found empty utxos: {:?}", event);
-                empty_received_utxos.push(event.clone());
-            }
-            _ => {}
-        }
-    }
-    assert_eq!(empty_received_utxos.len(), 409_141);
-    panic!("Last empty ReceivedUtxos {:?}", empty_received_utxos.iter().last().unwrap())
-}
-
-#[tokio::test]
-async fn should_not_have_too_many_useless_events_for_testnet() {
-    GetEventsFile::Testnet
-        .retrieve_and_store_events_if_env()
-        .await;
-    let mut empty_received_utxos = Vec::new();
-    for event in GetEventsFile::Testnet.deserialize() {
-        match &event {
-            Event::ReceivedUtxos { utxos, .. } if utxos.is_empty() => {
-                println!("Found empty utxos: {:?}", event);
-                empty_received_utxos.push(event.clone());
-            }
-            _ => {}
-        }
-    }
-    assert_eq!(empty_received_utxos.len(), 4_044);
 }
 
 #[tokio::test]
@@ -59,10 +24,56 @@ async fn should_replay_events_for_testnet() {
         .retrieve_and_store_events_if_env()
         .await;
 
-    let state = replay(GetEventsFile::Testnet.deserialize()).expect("Failed to replay events");
+    let state = replay(GetEventsFile::Testnet.deserialize().events.into_iter())
+        .expect("Failed to replay events");
 
     assert_eq!(state.btc_network, Network::Testnet);
     assert_eq!(state.get_total_btc_managed(), 16_578_205_978);
+}
+
+#[tokio::test]
+async fn should_not_have_too_many_useless_events() {
+    for file in [GetEventsFile::Mainnet, GetEventsFile::Testnet] {
+        let events = file.deserialize();
+        let received_utxo_to_minter_with_empty_utxos = Event::ReceivedUtxos {
+            mint_txid: None,
+            to_account: Account {
+                owner: file.minter_canister_id(),
+                subaccount: None,
+            },
+            utxos: vec![],
+        };
+
+        let useless_events_indexes =
+            assert_useless_events_eq(&events.events, &received_utxo_to_minter_with_empty_utxos);
+
+        match file {
+            GetEventsFile::Mainnet => {
+                assert_eq!(events.total_event_count, 431_885);
+                assert_eq!(useless_events_indexes.len(), 409_141);
+                assert_eq!(useless_events_indexes.last(), Some(&411_301_usize));
+            }
+            GetEventsFile::Testnet => {
+                assert_eq!(events.total_event_count, 46_815);
+                assert_eq!(useless_events_indexes.len(), 4_044);
+                assert_eq!(useless_events_indexes.last(), Some(&4_614_usize));
+            }
+        }
+    }
+
+    fn assert_useless_events_eq(events: &[Event], expected_useless_event: &Event) -> Vec<usize> {
+        let mut indexes = Vec::new();
+        for (index, event) in events.into_iter().enumerate() {
+            match &event {
+                Event::ReceivedUtxos { utxos, .. } if utxos.is_empty() => {
+                    assert_eq!(event, expected_useless_event);
+                    indexes.push(index);
+                }
+                _ => {}
+            }
+        }
+        indexes
+    }
 }
 
 enum GetEventsFile {
@@ -154,7 +165,7 @@ impl GetEventsFile {
         }
     }
 
-    fn deserialize(&self) -> impl Iterator<Item = Event> {
+    fn deserialize(&self) -> GetEventsResult {
         use candid::Decode;
         use flate2::read::GzDecoder;
         use std::fs::File;
@@ -165,17 +176,7 @@ impl GetEventsFile {
         let mut decompressed_buffer = Vec::new();
         gz.read_to_end(&mut decompressed_buffer)
             .expect("BUG: failed to decompress events");
-        let events =
-            Decode!(&decompressed_buffer, GetEventsResult).expect("Failed to decode events");
-        let total_event_count = events.total_event_count;
-        events
-            .events
-            .into_iter()
-            .enumerate()
-            .map(move |(index, event)| {
-                println!("Replaying event {index}/{total_event_count}: {:?}", event);
-                event
-            })
+        Decode!(&decompressed_buffer, GetEventsResult).expect("Failed to decode events")
     }
 }
 
