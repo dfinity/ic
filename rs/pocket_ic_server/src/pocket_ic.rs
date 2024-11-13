@@ -962,10 +962,10 @@ fn subnet_size(subnet: SubnetKind) -> u64 {
     match subnet {
         Application => 13,
         VerifiedApplication => 13,
-        Fiduciary => 28,
+        Fiduciary => 34,
         SNS => 34,
         Bitcoin => 13,
-        II => 28,
+        II => 31,
         NNS => 40,
         System => 13,
     }
