@@ -13,7 +13,7 @@ use crate::state::{init_version_and_config, with_canister_state, CanisterApi};
 use candid::Principal;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::call::call;
-use ic_cdk_macros::{init, post_upgrade, query, update};
+use ic_cdk_macros::{init, inspect_message, post_upgrade, query, update};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use rate_limits_api::{
     AddConfigResponse, ApiBoundaryNodeIdRecord, DiscloseRulesArg, DiscloseRulesResponse,
@@ -23,6 +23,41 @@ use rate_limits_api::{
 use std::{sync::Arc, time::Duration};
 
 const REGISTRY_CANISTER_METHOD: &str = "get_api_boundary_node_ids";
+
+const UPDATE_METHODS: [&str; 2] = ["add_config", "disclose_rules"];
+const REPLICATED_QUERY_METHOD: &str = "get_config";
+
+#[inspect_message]
+fn inspect_message() {
+    // In order for this hook to succeed, accept_message() must be invoked.
+    let caller_id: Principal = ic_cdk::api::caller();
+    let called_method = ic_cdk::api::call::method_name();
+
+    let (has_full_access, has_full_read_access) = with_canister_state(|state| {
+        let authorized_principal = state.get_authorized_principal();
+        (
+            Some(caller_id) == authorized_principal,
+            state.is_api_boundary_node_principal(&caller_id),
+        )
+    });
+
+    if called_method == REPLICATED_QUERY_METHOD {
+        if has_full_access || has_full_read_access {
+            ic_cdk::api::call::accept_message();
+        }
+    } else if UPDATE_METHODS.contains(&called_method.as_str()) {
+        if has_full_access {
+            ic_cdk::api::call::accept_message();
+        } else {
+            ic_cdk::api::trap("message_inspection_failed: unauthorized caller");
+        }
+    } else {
+        // All others calls are rejected
+        ic_cdk::api::trap(
+            "message_inspection_failed: method call is prohibited in the current context",
+        );
+    }
+}
 
 #[init]
 fn init(init_arg: InitArg) {

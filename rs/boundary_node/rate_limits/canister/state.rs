@@ -1,5 +1,6 @@
 use candid::Principal;
 use mockall::automock;
+use std::collections::HashSet;
 
 use crate::{
     add_config::{INIT_SCHEMA_VERSION, INIT_VERSION},
@@ -10,7 +11,6 @@ use crate::{
     },
     types::{IncidentId, InputConfig, InputRule, RuleId, Timestamp, Version},
 };
-use std::collections::HashSet;
 
 #[automock]
 pub trait CanisterApi {
@@ -70,11 +70,6 @@ impl CanisterApi for CanisterState {
     fn set_authorized_principal(&self, principal: Principal) {
         self.authorized_principal
             .with(|cell| cell.borrow_mut().insert((), principal));
-    }
-
-    fn is_api_boundary_node_principal(&self, principal: &Principal) -> bool {
-        self.api_boundary_node_principals
-            .with(|cell| cell.borrow().contains(principal))
     }
 
     fn get_version(&self) -> Option<StorableVersion> {
@@ -141,6 +136,11 @@ impl CanisterApi for CanisterState {
             cell.borrow_mut()
                 .insert(StorableIncidentId(incident_id.0), rule_ids)
         })
+    }
+
+    fn is_api_boundary_node_principal(&self, principal: &Principal) -> bool {
+        self.api_boundary_node_principals
+            .with(|cell| cell.borrow().contains(principal))
     }
 
     fn set_api_boundary_nodes_principals(&self, principals: Vec<Principal>) {

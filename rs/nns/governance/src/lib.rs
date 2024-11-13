@@ -176,17 +176,17 @@ mod subaccount_index;
 /// The value of 10_000 follows the Candid recommendation.
 const DEFAULT_SKIPPING_QUOTA: usize = 10_000;
 
-/// Value: one second after midnight, 2024-11-05 (UTC).
+/// Value: 2024-09-01T00:00:00Z.
 ///
-/// How this value was chosen: This is around the earliest time when
-/// "refreshing" a neuron's voting power might be released, (assuming the usual
-/// NNS release cycle). Significantly different values could also work, but this
-/// seems like a nice "neutral" value.
+/// How this value was chosen: This "pre-ages" "legacy" neurons by a couple of
+/// months. This is so that they are required to refresh their voting power
+/// sooner than new neurons.
 ///
-/// How this value is used: when a neuron does not have a value in the
-/// voting_power_refreshed_timestamp_seconds field (because it was created before
-/// this feature), we pretend as though this value is in that field.
-pub const DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS: u64 = 1731628801;
+/// How this value is used: when a neuron otherwise does not have a value in the
+/// voting_power_refreshed_timestamp_seconds field (because it was created
+/// before this feature), we pretend as though this value is in that field. The
+/// field is always populated in new neurons.
+pub const DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS: u64 = 1725148800;
 
 // TODO(NNS1-3248): Delete this once the feature has made it through the
 // probation period. At that point, we will not need this "kill switch". We can
