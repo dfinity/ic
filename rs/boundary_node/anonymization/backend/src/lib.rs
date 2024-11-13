@@ -2,12 +2,18 @@ use std::{cell::RefCell, thread::LocalKey, time::Duration};
 
 use acl::{Authorize, Authorizer, WithAuthorize};
 use anonymization_interface::{
-    self as ifc, HeaderField, HttpRequest, HttpResponse, InitArg, QueryResponse, RegisterResponse,
-    SubmitResponse,
+    self as ifc, HttpRequest, InitArg, QueryResponse, RegisterResponse, SubmitResponse,
 };
 use candid::Principal;
-use ic_cdk::{id, spawn, trap};
+use ic_cdk::{
+    api::{data_certificate, set_certified_data},
+    id, spawn, trap,
+};
 use ic_cdk_timers::set_timer_interval;
+use ic_http_certification::{
+    http::{HttpResponse, HttpResponseBuilder},
+    utils::{add_skip_certification_header, skip_certification_certified_data},
+};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_stable_structures::{
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
@@ -345,6 +351,9 @@ fn init(_arg: InitArg) {
 
     // Start timers
     timers();
+
+    // Set certified data
+    set_certified_data(&skip_certification_certified_data());
 }
 
 #[ic_cdk::post_upgrade]
@@ -399,21 +408,20 @@ fn submit(vs: Vec<ifc::Pair>) -> SubmitResponse {
 // Metrics
 
 #[ic_cdk::query]
-fn http_request(request: HttpRequest) -> HttpResponse {
+fn http_request(request: HttpRequest) -> HttpResponse<'static> {
     if request.url != "/metrics" {
-        return HttpResponse {
-            status_code: 404,
-            headers: vec![],
-            body: "404 Not Found".as_bytes().to_owned(),
-        };
+        return HttpResponseBuilder::new()
+            .with_status_code(404)
+            .with_body("404 Not Found".as_bytes().to_owned())
+            .build();
     }
 
     if request.method.to_lowercase() != "get" {
-        return HttpResponse {
-            status_code: 405,
-            headers: vec![HeaderField("Allow".into(), "GET".into())],
-            body: "405 Method Not Allowed".as_bytes().to_owned(),
-        };
+        return HttpResponseBuilder::new()
+            .with_status_code(405)
+            .with_headers(vec![("Allow".into(), "GET".into())])
+            .with_body("405 Method Not Allowed".as_bytes().to_owned())
+            .build();
     }
 
     // Set Gauges
@@ -442,9 +450,12 @@ fn http_request(request: HttpRequest) -> HttpResponse {
         buffer
     });
 
-    HttpResponse {
-        status_code: 200,
-        headers: vec![],
-        body: bs,
-    }
+    let mut response = HttpResponseBuilder::new()
+        .with_status_code(200)
+        .with_body(bs)
+        .build();
+
+    add_skip_certification_header(data_certificate().unwrap(), &mut response);
+
+    response
 }
