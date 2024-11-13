@@ -9,7 +9,7 @@ use std::{
 use axum::http::{Response, StatusCode};
 use bytes::Bytes;
 use ic_artifact_downloader::FetchArtifact;
-use ic_interfaces::p2p::consensus::{ArtifactAssembler, BouncerValue};
+use ic_interfaces::p2p::consensus::{ArtifactAssembler, AssembleResult, BouncerValue};
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_p2p_test_utils::{
@@ -71,11 +71,13 @@ async fn priority_from_stash_to_fetch() {
     let fetch_artifact: FetchArtifact<U64Artifact> = fetch_artifact(Arc::new(mock_transport));
     let mut mock_peers = MockPeers::default();
     mock_peers.expect_peers().return_const(vec![NODE_1]);
-    let artifact = fetch_artifact
-        .assemble_message(0, None, mock_peers)
-        .await
-        .unwrap();
-    assert_eq!(artifact, (U64Artifact::id_to_msg(0, 1024), NODE_1));
+    assert_eq!(
+        fetch_artifact.assemble_message(0, None, mock_peers).await,
+        AssembleResult::Done {
+            message: U64Artifact::id_to_msg(0, 1024),
+            peer_id: NODE_1
+        }
+    );
 }
 
 #[tokio::test]
@@ -142,11 +144,13 @@ async fn fetch_to_stash_to_fetch() {
     let fetch_artifact: FetchArtifact<U64Artifact> = fetch_artifact(Arc::new(mock_transport));
     let mut mock_peers = MockPeers::default();
     mock_peers.expect_peers().return_const(vec![NODE_1]);
-    let artifact = fetch_artifact
-        .assemble_message(0, None, mock_peers)
-        .await
-        .unwrap();
-    assert_eq!(artifact, (U64Artifact::id_to_msg(0, 1024), NODE_1));
+    assert_eq!(
+        fetch_artifact.assemble_message(0, None, mock_peers).await,
+        AssembleResult::Done {
+            message: U64Artifact::id_to_msg(0, 1024),
+            peer_id: NODE_1
+        }
+    );
 }
 
 /// Verify that downloads with AdvertId != ArtifactId are not added to the pool.
@@ -209,11 +213,13 @@ async fn invalid_artifact_not_accepted() {
     let fetch_artifact: FetchArtifact<U64Artifact> = fetch_artifact(Arc::new(mock_transport));
     let mut mock_peers = MockPeers::default();
     mock_peers.expect_peers().return_const(vec![NODE_1]);
-    let artifact = fetch_artifact
-        .assemble_message(0, None, mock_peers)
-        .await
-        .unwrap();
-    assert_eq!(artifact, (U64Artifact::id_to_msg(0, 1024), NODE_1));
+    assert_eq!(
+        fetch_artifact.assemble_message(0, None, mock_peers).await,
+        AssembleResult::Done {
+            message: U64Artifact::id_to_msg(0, 1024),
+            peer_id: NODE_1
+        }
+    );
 }
 
 /// Verify that advert that transitions from stash to drop is not downloaded.
@@ -261,8 +267,8 @@ async fn priority_from_stash_to_drop() {
     let fetch_artifact: FetchArtifact<U64Artifact> = fetch_artifact(Arc::new(mock_transport));
     let mut mock_peers = MockPeers::default();
     mock_peers.expect_peers().return_const(vec![NODE_1]);
-    fetch_artifact
-        .assemble_message(0, None, mock_peers)
-        .await
-        .unwrap_err();
+    assert_eq!(
+        fetch_artifact.assemble_message(0, None, mock_peers).await,
+        AssembleResult::Unwanted
+    );
 }
