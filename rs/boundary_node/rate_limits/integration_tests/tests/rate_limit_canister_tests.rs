@@ -108,6 +108,7 @@ async fn main() {
     let response: GetRulesByIncidentIdResponse = canister_call(
         &pocket_ic,
         "get_rules_by_incident_id",
+        "query",
         canister_id,
         Principal::anonymous(),
         Encode!(&incident_id).unwrap(),
