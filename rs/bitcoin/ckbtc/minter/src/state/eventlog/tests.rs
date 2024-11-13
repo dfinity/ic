@@ -63,7 +63,7 @@ async fn should_not_have_too_many_useless_events() {
 
     fn assert_useless_events_eq(events: &[Event], expected_useless_event: &Event) -> Vec<usize> {
         let mut indexes = Vec::new();
-        for (index, event) in events.into_iter().enumerate() {
+        for (index, event) in events.iter().enumerate() {
             match &event {
                 Event::ReceivedUtxos { utxos, .. } if utxos.is_empty() => {
                     assert_eq!(event, expected_useless_event);
@@ -97,7 +97,7 @@ impl GetEventsFile {
     }
 
     async fn retrieve_and_store_events(&self) {
-        use candid::{CandidType, Decode, Encode};
+        use candid::Encode;
         use flate2::bufread::GzEncoder;
         use flate2::Compression;
         use ic_agent::{identity::AnonymousIdentity, Agent};
