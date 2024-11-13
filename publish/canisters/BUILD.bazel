@@ -40,6 +40,9 @@ CANISTERS = {
     "xnet-test-canister.wasm.gz": "//rs/rust_canisters/xnet_test:xnet-test-canister",
     # Used in snsdemo repo for NNS dapp test environment
     "bitcoin-mock-canister.wasm.gz": "//rs/bitcoin/mock:bitcoin_canister_mock",
+
+    # Boundary Nodes
+    "certificate-orchestrator.wasm.gz": "//rs/boundary_node/certificate_issuance/certificate_orchestrator:certificate_orchestrator",
 }
 
 COMPRESSED_CANISTERS = {

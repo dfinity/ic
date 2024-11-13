@@ -265,7 +265,16 @@ type RetrieveEthStatus = variant {
     TxFinalized : TxFinalizedStatus;
 };
 
-type WithdrawalArg = record { recipient : text; amount : nat };
+type WithdrawalArg = record {
+    // The address to which the minter should deposit ETH.
+    recipient : text;
+
+    // The amount of ckETH in Wei that the client wants to withdraw.
+    amount : nat;
+
+    // The subaccount to burn ckETH from.
+    from_subaccount : opt Subaccount;
+};
 
 // Details of a withdrawal request and its status.
 type WithdrawalDetail = record {
@@ -353,6 +362,12 @@ type WithdrawErc20Arg = record {
 
     // Ethereum address to withdraw to.
     recipient : text;
+
+    // The subaccount to burn ckETH from to pay for the transaction fee.
+    from_cketh_subaccount : opt Subaccount;
+
+    // The subaccount to burn ckERC20 from.
+    from_ckerc20_subaccount : opt Subaccount;
 };
 
 type RetrieveErc20Request = record {

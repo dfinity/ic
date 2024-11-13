@@ -85,7 +85,7 @@ pub const _EMPTY_WASM: &[u8] = &[0, 97, 115, 109, 1, 0, 0, 0];
 pub const MESSAGE_CANISTER_WASM: &[u8] = include_bytes!("message.wasm");
 
 pub const CFG_TEMPLATE_BYTES: &[u8] =
-    include_bytes!("../../../../ic-os/components/ic/ic.json5.template");
+    include_bytes!("../../../../ic-os/components/ic/generate-ic-config/ic.json5.template");
 
 // Requests are multiplexed over H2 requests.
 pub const MAX_CONCURRENT_REQUESTS: usize = 10_000;
