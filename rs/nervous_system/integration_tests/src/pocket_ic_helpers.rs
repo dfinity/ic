@@ -1277,26 +1277,6 @@ pub mod sns {
         use ic_sns_governance::pb::v1::{get_neuron_response, GetRunningSnsVersionResponse};
         use pocket_ic::ErrorCode;
 
-        pub async fn get_mode(
-            pocket_ic: &PocketIc,
-            canister_id: PrincipalId,
-        ) -> sns_pb::GetModeResponse {
-            let result = pocket_ic
-                .query_call(
-                    canister_id.into(),
-                    Principal::anonymous(),
-                    "get_mode",
-                    Encode!(&sns_pb::GetMode {}).unwrap(),
-                )
-                .await
-                .unwrap();
-            let result = match result {
-                WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to get_mode failed: {:#?}", s),
-            };
-            Decode!(&result, sns_pb::GetModeResponse).unwrap()
-        }
-
         pub async fn get_running_sns_version(
             pocket_ic: &PocketIc,
             sns_governance_canister_id: PrincipalId,
