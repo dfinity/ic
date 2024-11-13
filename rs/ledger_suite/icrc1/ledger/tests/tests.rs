@@ -13,7 +13,7 @@ use ic_ledger_hash_of::{HashOf, HASH_LENGTH};
 use ic_ledger_suite_state_machine_tests::fee_collector::BlockRetrieval;
 use ic_ledger_suite_state_machine_tests::in_memory_ledger::verify_ledger_state;
 use ic_ledger_suite_state_machine_tests::{
-    get_allowance, send_approval, send_transfer_from, ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY,
+    send_approval, send_transfer_from, AllowanceProvider, ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY,
     BLOB_META_VALUE, DECIMAL_PLACES, FEE, INT_META_KEY, INT_META_VALUE, MINTER, NAT_META_KEY,
     NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY, TEXT_META_VALUE, TOKEN_NAME,
     TOKEN_SYMBOL,
@@ -649,7 +649,7 @@ fn test_icrc2_feature_flag_doesnt_disable_icrc2_endpoints() {
     // should trap
 
     assert_eq!(
-        get_allowance(&env, ledger_id, user1, user2),
+        Account::get_allowance(&env, ledger_id, user1, user2),
         Allowance {
             allowance: 0u32.into(),
             expires_at: None
@@ -1745,7 +1745,7 @@ mod incompatible_token_type_upgrade {
         // The balance, allowance, total supply, and blocks should not change
         let verify_state = || {
             assert_eq!(balance, balance_of(&env, ledger_id, account(1)));
-            let actual_allowance = get_allowance(&env, ledger_id, account(1), account(2));
+            let actual_allowance = Account::get_allowance(&env, ledger_id, account(1), account(2));
             assert_eq!(actual_allowance, initial_allowance);
             assert_eq!(
                 initial_blocks,
@@ -1849,7 +1849,7 @@ mod incompatible_token_type_upgrade {
         );
         assert_eq!(approval_result, Ok(BlockIndex::from(1u64)));
         balance_1 -= FEE;
-        let allowance_2 = get_allowance(&env, ledger_id, account(1), account(2));
+        let allowance_2 = Account::get_allowance(&env, ledger_id, account(1), account(2));
         assert_eq!(balance_1, balance_of(&env, ledger_id, account(1)));
         assert_eq!(allowance_2.allowance, Nat::from(big_amount));
         assert!(allowance_2.allowance > u64::MAX);
