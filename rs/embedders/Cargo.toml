@@ -8,6 +8,7 @@ version.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+cfg-if = "1.0.0"
 ic-config = { path = "../config" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-interfaces = { path = "../interfaces" }
