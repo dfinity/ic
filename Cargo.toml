@@ -393,6 +393,7 @@ members = [
     "rs/tests/nns",
     "rs/tests/nns/sns",
     "rs/tests/nns/ic_mainnet_nns_recovery",
+    "rs/tests/nns/cycles_minting",
     "rs/tests/nns/nns_dapp",
     "rs/tests/node",
     "rs/tests/research",
