@@ -2160,6 +2160,7 @@ message AdvanceTargetVersionResponse {}
 message UpgradeJournalEntry {
   oneof event {
     UpgradeStepsRefreshed upgrade_steps_refreshed = 1;
+    UpgradeStepsReset upgrade_steps_reset = 7;
     TargetVersionSet target_version_set = 2;
     TargetVersionReset target_version_reset = 3;
     UpgradeStarted upgrade_started = 4;
@@ -2168,6 +2169,11 @@ message UpgradeJournalEntry {
   optional uint64 timestamp_seconds = 6;
 
   message UpgradeStepsRefreshed {
+    optional Governance.Versions upgrade_steps = 2;
+  }
+
+  message UpgradeStepsReset {
+    optional string human_readable = 1;
     optional Governance.Versions upgrade_steps = 2;
   }
 
