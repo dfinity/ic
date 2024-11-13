@@ -130,7 +130,9 @@ fn disclose_rules(args: DiscloseRulesArg) -> DiscloseRulesResponse {
 #[query(decoding_quota = 10000)]
 fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
-        "/metrics" => with_metrics_registry(|registry| export_metrics_as_http_response(registry)),
+        "/metrics" => with_canister_state(|state| {
+            with_metrics_registry(|registry| export_metrics_as_http_response(registry, state))
+        }),
         _ => HttpResponseBuilder::not_found().build(),
     }
 }

@@ -1,7 +1,7 @@
 use crate::{
     add_config::{AddConfigError, AddsConfig},
     disclose::{DiscloseRulesError, DisclosesRules},
-    storage::{API_BOUNDARY_NODE_PRINCIPALS, CONFIGS, INCIDENTS},
+    state::CanisterApi,
     types::Timestamp,
 };
 use ic_canisters_http_types::{HttpResponse, HttpResponseBuilder};
@@ -101,9 +101,12 @@ thread_local! {
     });
 }
 
-pub fn export_metrics_as_http_response(registry: &Registry) -> HttpResponse {
+pub fn export_metrics_as_http_response(
+    registry: &Registry,
+    canister_api: impl CanisterApi,
+) -> HttpResponse {
     // Certain metrics need to be recomputed
-    recompute_metrics();
+    recompute_metrics(canister_api);
 
     let mut buffer = vec![];
     let encoder = TextEncoder::new();
@@ -122,7 +125,7 @@ pub fn export_metrics_as_http_response(registry: &Registry) -> HttpResponse {
     }
 }
 
-pub fn recompute_metrics() {
+pub fn recompute_metrics(canister_api: impl CanisterApi) {
     STABLE_MEMORY_SIZE.with(|cell| {
         let memory = (ic_cdk::api::stable::stable_size() * WASM_PAGE_SIZE_IN_BYTES) as f64;
         cell.borrow_mut().set(memory);
@@ -130,31 +133,25 @@ pub fn recompute_metrics() {
 
     API_BOUNDARY_NODES_COUNT.with(|cell| {
         cell.borrow_mut()
-            .set(API_BOUNDARY_NODE_PRINCIPALS.with(|cell| cell.borrow().len() as i64));
+            .set(canister_api.api_boundary_nodes_count() as i64);
     });
 
     ACTIVE_VERSION.with(|cell| {
-        cell.borrow_mut().set(
-            CONFIGS.with(|cell| cell.borrow().last_key_value().map_or(0, |(key, _)| key)) as i64,
-        );
+        cell.borrow_mut()
+            .set(canister_api.get_version().unwrap_or(0) as i64);
     });
 
     CONFIGS_COUNT.with(|cell| {
-        cell.borrow_mut()
-            .set(CONFIGS.with(|cell| cell.borrow().len() as i64));
+        cell.borrow_mut().set(canister_api.configs_count() as i64);
     });
 
     INCIDENTS_COUNT.with(|cell| {
-        cell.borrow_mut()
-            .set(INCIDENTS.with(|cell| cell.borrow().len() as i64));
+        cell.borrow_mut().set(canister_api.incidents_count() as i64);
     });
 
     ACTIVE_RATE_LIMIT_RULES_COUNT.with(|cell| {
-        cell.borrow_mut().set(CONFIGS.with(|cell| {
-            cell.borrow()
-                .last_key_value()
-                .map_or(0, |(_, value)| value.rule_ids.len() as i64)
-        }));
+        cell.borrow_mut()
+            .set(canister_api.active_rules_count() as i64);
     });
 }
 
