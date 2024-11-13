@@ -100,7 +100,6 @@ pub async fn run_stream_acceptor(
     inflight_requests.shutdown().await;
 }
 
-#[instrument(skip(metrics, router, send_stream_guard, recv_stream))]
 /// Note: The method is cancel-safe.
 async fn handle_bi_stream(
     peer_id: NodeId,
