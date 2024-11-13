@@ -2,9 +2,13 @@ use crate::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use crate::crypto::impl_display_using_debug;
 use crate::crypto::threshold_sig::errors::threshold_sig_data_not_found_error::ThresholdSigDataNotFoundError;
 use crate::crypto::threshold_sig::ni_dkg::NiDkgId;
+use crate::crypto::HexEncoding;
 use crate::NodeId;
 use serde::{Deserialize, Serialize};
 use std::fmt;
+
+#[cfg(test)]
+mod test;
 
 #[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
 pub struct VetKdArgs {
@@ -16,19 +20,14 @@ pub struct VetKdArgs {
     pub encryption_key: Vec<u8>,
 }
 
-impl std::fmt::Debug for VetKdArgs {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "VetKdArgs {{ ")?;
-        write!(f, "dkg_id: {:?}", self.dkg_id)?;
-        write!(f, ", derivation_path: {:?}", self.derivation_path)?;
-        write!(f, ", derivation_id: 0x{}", hex::encode(&self.derivation_id))?;
-        write!(
-            f,
-            ", encryption_key: 0x{}",
-            hex::encode(&self.encryption_key)
-        )?;
-        write!(f, " }}")?;
-        Ok(())
+impl fmt::Debug for VetKdArgs {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt.debug_struct("VetKdArgs")
+            .field("dkg_id", &self.dkg_id)
+            .field("derivation_path", &self.derivation_path)
+            .field("derivation_id", &HexEncoding::from(&self.derivation_id))
+            .field("encryption_key", &HexEncoding::from(&self.encryption_key))
+            .finish()
     }
 }
 impl_display_using_debug!(VetKdArgs);
@@ -43,20 +42,14 @@ pub struct VetKdEncryptedKeyShare {
 }
 
 impl std::fmt::Debug for VetKdEncryptedKeyShare {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "VetKdEncryptedKeyShare {{ ")?;
-        write!(
-            f,
-            "encrypted_key_share: 0x{}",
-            hex::encode(&self.encrypted_key_share)
-        )?;
-        write!(
-            f,
-            ", node_signature: 0x{}",
-            hex::encode(&self.node_signature)
-        )?;
-        write!(f, " }}")?;
-        Ok(())
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt.debug_struct("VetKdEncryptedKeyShare")
+            .field(
+                "encrypted_key_share",
+                &HexEncoding::from(&self.encrypted_key_share),
+            )
+            .field("node_signature", &HexEncoding::from(&self.node_signature))
+            .finish()
     }
 }
 impl_display_using_debug!(VetKdEncryptedKeyShare);
@@ -68,11 +61,10 @@ pub struct VetKdEncryptedKey {
 }
 
 impl std::fmt::Debug for VetKdEncryptedKey {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "VetKdEncryptedKey {{ ")?;
-        write!(f, "encrypted_key: 0x{}", hex::encode(&self.encrypted_key))?;
-        write!(f, " }}")?;
-        Ok(())
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt.debug_struct("VetKdEncryptedKey")
+            .field("encrypted_key", &HexEncoding::from(&self.encrypted_key))
+            .finish()
     }
 }
 impl_display_using_debug!(VetKdEncryptedKey);
