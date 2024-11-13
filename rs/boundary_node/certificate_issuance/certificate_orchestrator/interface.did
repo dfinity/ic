@@ -193,7 +193,7 @@ type RemoveTaskError = variant {
 };
 
 type RemoveTaskResponse = variant {
-    Ok: Id;
+    Ok;
     Err: RemoveTaskError;
 };
 
