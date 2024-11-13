@@ -34,6 +34,7 @@ fn init(init_arg: InitArg) {
         if let Some(principal) = init_arg.authorized_principal {
             state.set_authorized_principal(principal);
         }
+        // Initialize config
         if state.get_version().is_none() {
             ic_cdk::println!("Initializing rate-limit config");
             let current_time = ic_cdk::api::time();
