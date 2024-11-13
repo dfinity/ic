@@ -76,11 +76,11 @@ impl<T: AddsConfig, R: ResolveAccessLevel> AddsConfig for WithAuthorization<T, R
         time: Timestamp,
     ) -> Result<(), AddConfigError> {
         // Only privileged users can perform this operation
-        if self.access_resolver.get_access_level() == AccessLevel::FullAccess {      
-           // Perform the inner call only if authorized.
-           return self.inner.add_config(input_config, time)
+        if self.access_resolver.get_access_level() == AccessLevel::FullAccess {
+            // Perform the inner call only if authorized.
+            return self.inner.add_config(input_config, time);
         }
-       Err(AddConfigError::Unauthorized)
+        Err(AddConfigError::Unauthorized)
     }
 }
 
