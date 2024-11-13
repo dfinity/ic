@@ -136,13 +136,13 @@ mod tests {
             evict(
                 candidates.clone(),
                 0.into(),
-                10,
+                51,
                 now - Duration::from_secs(50),
                 0.into()
             ),
             {
                 candidates.sort_by_key(|x| x.last_used);
-                candidates.into_iter().take(90).collect::<Vec<_>>()
+                candidates.into_iter().take(49).collect::<Vec<_>>()
             }
         );
     }
