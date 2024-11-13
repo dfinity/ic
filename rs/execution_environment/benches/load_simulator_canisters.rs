@@ -1,29 +1,29 @@
-// The benchmark installs the specified number of `load_simulator` canisters
-// using the `canister_creator` and executes the specified amount of rounds.
-// It measures the total time taken to complete the rounds and the throughput,
-// i.e., the number of rounds executed per second (essentially, the FR).
-//
-// By default, each load_simulator canister runs a periodic timer with
-// a one-second interval and accesses stable memory every fifth call.
-//
-// This benchmark is useful for debugging and benchmarking scheduler
-// and sandbox eviction changes. For more realistic testnet load tests,
-// refer to the `dfinity/subnet-load-tester` project.
-//
-// Quick start:
-//     bazel run //rs/execution_environment:load_simulator_canisters_bench -- --quick 200
-//
-// Example output:
-//     ==> Creating 2 creator canisters...
-//     ==> Creating 200 load simulator canisters...
-//     ==> Awaiting creation to finish...
-//     ==> Installing 200 load simulators...
-//     ==> Awaiting installation to finish...
-//     Load simulator/200 canisters/10 rounds
-//                             time:   [1.9450 s 1.9450 s 1.9450 s]
-//                                      ^ total time taken to complete 10 rounds
-//                             thrpt:  [5.1414  elem/s 5.1414  elem/s 5.1414  elem/s]
-//                                      ^ number of rounds executed per second (the FR)
+//! The benchmark installs the specified number of `load_simulator` canisters
+//! using the `canister_creator` and executes the specified amount of rounds.
+//! It measures the total time taken to complete the rounds and the throughput,
+//! i.e., the number of rounds executed per second (essentially, the FR).
+//!
+//! By default, each `load_simulator`` canister runs a periodic timer with
+//! a one-second interval and accesses stable memory every fifth call.
+//!
+//! This benchmark is useful for debugging and benchmarking scheduler
+//! and sandbox eviction changes. For more realistic testnet load tests,
+//! refer to the `dfinity/subnet-load-tester` project.
+//!
+//! Quick start:
+//!     bazel run //rs/execution_environment:load_simulator_canisters_bench -- --quick 200
+//!
+//! Example output:
+//!     ==> Creating 2 creator canisters...
+//!     ==> Creating 200 load simulator canisters...
+//!     ==> Awaiting creation to finish...
+//!     ==> Installing 200 load simulators...
+//!     ==> Awaiting installation to finish...
+//!     Load simulator/200 canisters/10 rounds
+//!                             time:   [1.9450 s 1.9450 s 1.9450 s]
+//!                                      ^ total time taken to complete 10 rounds
+//!                             thrpt:  [5.1414  elem/s 5.1414  elem/s 5.1414  elem/s]
+//!                                      ^ number of rounds executed per second (the FR)
 
 use std::time::Duration;
 
