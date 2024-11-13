@@ -78,6 +78,8 @@ wasmprinter = { workspace = true }
 wast = { workspace = true }
 wat = { workspace = true }
 
+[features]
+fuzzing_code = []
 
 [[bin]]
 name = "instrument-wasm"
