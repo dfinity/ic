@@ -536,7 +536,7 @@ impl VetKdProtocol for CryptoReturningOk {
     fn verify_encrypted_key_share(
         &self,
         _signer: NodeId,
-        _key_share: VetKdEncryptedKeyShare,
+        _key_share: &VetKdEncryptedKeyShare,
         _args: &VetKdArgs,
     ) -> Result<(), VetKdKeyShareVerificationError> {
         Ok(())
@@ -544,7 +544,7 @@ impl VetKdProtocol for CryptoReturningOk {
 
     fn combine_encrypted_key_shares(
         &self,
-        _shares: BTreeMap<NodeId, VetKdEncryptedKeyShare>,
+        _shares: &BTreeMap<NodeId, VetKdEncryptedKeyShare>,
         _args: &VetKdArgs,
     ) -> Result<VetKdEncryptedKey, VetKdKeyShareCombinationError> {
         Ok(VetKdEncryptedKey {

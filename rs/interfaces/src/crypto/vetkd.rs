@@ -14,13 +14,13 @@ pub trait VetKdProtocol {
     fn verify_encrypted_key_share(
         &self,
         signer: NodeId,
-        key_share: VetKdEncryptedKeyShare,
+        key_share: &VetKdEncryptedKeyShare,
         args: &VetKdArgs,
     ) -> Result<(), VetKdKeyShareVerificationError>;
 
     fn combine_encrypted_key_shares(
         &self,
-        shares: BTreeMap<NodeId, VetKdEncryptedKeyShare>,
+        shares: &BTreeMap<NodeId, VetKdEncryptedKeyShare>,
         args: &VetKdArgs,
     ) -> Result<VetKdEncryptedKey, VetKdKeyShareCombinationError>;
 
