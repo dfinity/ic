@@ -2272,6 +2272,53 @@ fn ic0_mint_cycles_succeeds_on_cmc() {
     );
 }
 
+// TODO: change amount of cycles minted
+// TODO: change signature of mint_cycles to two u64 args
+const MINT_CYCLES128: &str = r#"
+    (module
+        (import "ic0" "msg_reply_data_append"
+            (func $msg_reply_data_append (param i32) (param i32))
+        )
+        (import "ic0" "mint_cycles128"
+            (func $mint_cycles128 (param i64) (result i64))
+        )
+        (import "ic0" "msg_reply" (func $ic0_msg_reply))
+
+        (func (export "canister_update test")
+            (i64.store
+                ;; store at the beginning of the heap
+                (i32.const 0) ;; store at the beginning of the heap
+                (call $mint_cycles128 (i64.const 10000000000))
+            )
+            (call $msg_reply_data_append (i32.const 0) (i32.const 8))
+            (call $ic0_msg_reply)
+        )
+        (memory 1 1)
+    )"#;
+
+#[test]
+fn ic0_mint_cycles128_succeeds_on_cmc() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_type(SubnetType::System)
+        .build();
+    let mut canister_id = test.canister_from_wat(MINT_CYCLES128).unwrap();
+    // This loop should finish after four iterations.
+    while canister_id != CYCLES_MINTING_CANISTER_ID {
+        canister_id = test.canister_from_wat(MINT_CYCLES128).unwrap();
+    }
+    let initial_cycles = test.canister_state(canister_id).system_state.balance();
+    let result = test.ingress(canister_id, "test", vec![]).unwrap();
+    // ic0_mint() returns the minted amount: hex(10_000_000_000) = 0x2_54_0b_e4_00.
+    assert_eq!(WasmResult::Reply(vec![0, 228, 11, 84, 2, 0, 0, 0]), result);
+    let canister_state = test.canister_state(canister_id);
+    assert_eq!(0, canister_state.system_state.queues().output_queues_len());
+    assert_balance_equals(
+        initial_cycles + Cycles::new(10_000_000_000),
+        canister_state.system_state.balance(),
+        BALANCE_EPSILON,
+    );
+}
+
 #[test]
 fn ic0_call_enqueues_request() {
     let mut test = ExecutionTestBuilder::new().build();
