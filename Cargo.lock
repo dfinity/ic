@@ -10975,6 +10975,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-registry-canister-client"
+version = "0.9.0"
+dependencies = [
+ "ic-cdk 0.16.0",
+ "ic-interfaces-registry",
+ "ic-registry-keys",
+ "ic-types",
+]
+
+[[package]]
 name = "ic-registry-client"
 version = "0.9.0"
 dependencies = [
