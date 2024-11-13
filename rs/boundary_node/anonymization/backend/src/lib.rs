@@ -360,6 +360,9 @@ fn init(_arg: InitArg) {
 fn post_upgrade() {
     // Start timers
     timers();
+
+    // Set certified data
+    set_certified_data(&skip_certification_certified_data());
 }
 
 #[ic_cdk::update]
