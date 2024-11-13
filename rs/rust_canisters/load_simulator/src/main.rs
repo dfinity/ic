@@ -3,7 +3,7 @@ use std::cell::RefCell;
 use std::time::Duration;
 
 thread_local! {
-    static COUNTER: RefCell<i32> = RefCell::new(0);
+    static COUNTER: RefCell<i32> = const { RefCell::new(0) };
 }
 
 async fn timer_handler() {

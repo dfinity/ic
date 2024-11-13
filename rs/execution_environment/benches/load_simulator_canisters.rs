@@ -61,7 +61,7 @@ fn setup_env(total_canisters: usize) -> StateMachine {
             format!(
                 r#"[[{}],[{}]]"#,
                 bytes_to_str(&wasm.clone().bytes()),
-                bytes_to_str(&vec![])
+                bytes_to_str(&[])
             )
             .as_bytes()
             .to_vec(),
@@ -87,7 +87,7 @@ fn run_load_simulator_canisters(total_canisters: usize, rounds: u64, c: &mut Cri
             bench.iter_batched(
                 || setup_env(total_canisters),
                 |env| {
-                    for r in 1..=rounds {
+                    for _ in 1..=rounds {
                         env.advance_time(Duration::from_secs(1));
                         env.tick();
                     }
