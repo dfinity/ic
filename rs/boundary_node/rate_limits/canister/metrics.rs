@@ -12,47 +12,81 @@ use std::cell::RefCell;
 const SERVICE_NAME: &str = "rate_limit";
 
 thread_local! {
-    static STABLE_MEMORY_SIZE: RefCell<Gauge> = RefCell::new(Gauge::new(
-        format!("{SERVICE_NAME}_stable_memory_bytes"),
-        "Size of the stable memory allocated by this canister in bytes.").unwrap());
+    static STABLE_MEMORY_SIZE: RefCell<Gauge> = RefCell::new(
+        Gauge::new(
+            format!("{SERVICE_NAME}_stable_memory_bytes"),
+            "Size of the stable memory allocated by this canister in bytes.",
+        )
+        .unwrap(),
+    );
 
     static CANISTER_API_CALLS_COUNTER: RefCell<CounterVec> = RefCell::new(CounterVec::new(Opts::new(
-        format!("{SERVICE_NAME}_canister_api_calls"),
-        "Number of calls to the canister methods with the status and message (in case of error)",
-    ), &["method", "status", "message"]).unwrap());
+            format!("{SERVICE_NAME}_canister_api_calls"),
+            "Number of calls to the canister methods with the status and message (in case of error)",
+        ), &["method", "status", "message"]).unwrap());
 
-    static API_BOUNDARY_NODES_COUNT: RefCell<IntGauge> = RefCell::new(IntGauge::new(
+    static API_BOUNDARY_NODES_COUNT: RefCell<IntGauge> = RefCell::new(
+        IntGauge::new(
             format!("{SERVICE_NAME}_api_boundary_nodes_count"),
-            "Number of API boundary nodes with full read access permission to rate-limit config.").unwrap());
+            "Number of API boundary nodes with full read access permission to rate-limit config.",
+        )
+        .unwrap(),
+    );
 
-    static ACTIVE_VERSION: RefCell<IntGauge> = RefCell::new(IntGauge::new(
-        format!("{SERVICE_NAME}_active_config_version"),
-        "Version of the currently active configuration").unwrap());
+    static ACTIVE_VERSION: RefCell<IntGauge> = RefCell::new(
+        IntGauge::new(
+            format!("{SERVICE_NAME}_active_config_version"),
+            "Version of the currently active configuration",
+        )
+        .unwrap(),
+    );
 
-    static ACTIVE_RATE_LIMIT_RULES_COUNT: RefCell<IntGauge> = RefCell::new(IntGauge::new(
-        format!("{SERVICE_NAME}_active_rules_count"),
-        "Number of rate-limit rules in the active configuration").unwrap());
+    static ACTIVE_RATE_LIMIT_RULES_COUNT: RefCell<IntGauge> = RefCell::new(
+        IntGauge::new(
+            format!("{SERVICE_NAME}_active_rules_count"),
+            "Number of rate-limit rules in the active configuration",
+        )
+        .unwrap(),
+    );
 
-    static INCIDENTS_COUNT: RefCell<IntGauge> = RefCell::new(IntGauge::new(
-        format!("{SERVICE_NAME}_stored_incidents_count"),
-        "Number of stored incidents").unwrap());
+    static INCIDENTS_COUNT: RefCell<IntGauge> = RefCell::new(
+        IntGauge::new(
+            format!("{SERVICE_NAME}_stored_incidents_count"),
+            "Number of stored incidents",
+        )
+        .unwrap(),
+    );
 
-    static CONFIGS_COUNT: RefCell<IntGauge> = RefCell::new(IntGauge::new(
-        format!("{SERVICE_NAME}_stored_configs_count"),
-        "Number of stored rate-limit configurations").unwrap());
+    static CONFIGS_COUNT: RefCell<IntGauge> = RefCell::new(
+        IntGauge::new(
+            format!("{SERVICE_NAME}_stored_configs_count"),
+            "Number of stored rate-limit configurations",
+        )
+        .unwrap(),
+    );
 
     pub static LAST_SUCCESSFUL_REGISTRY_POLL_TIME: RefCell<IntGauge> = RefCell::new(IntGauge::new(
-        format!("{SERVICE_NAME}_last_successful_registry_poll"),
-        "The Unix timestamp of the last successful poll of the API boundary nodes from registry canister").unwrap());
+            format!("{SERVICE_NAME}_last_successful_registry_poll"),
+            "The Unix timestamp of the last successful poll of the API boundary nodes from registry canister").unwrap());
 
-    pub static REGISTRY_POLL_CALLS_COUNTER: RefCell<CounterVec> = RefCell::new(CounterVec::new(Opts::new(
-        format!("{SERVICE_NAME}_registry_poll_calls"),
-        "Number of registry polling calls with the status and message (in case of error)",
-    ), &["status", "message"]).unwrap());
+    pub static REGISTRY_POLL_CALLS_COUNTER: RefCell<CounterVec> = RefCell::new(
+        CounterVec::new(
+            Opts::new(
+                format!("{SERVICE_NAME}_registry_poll_calls"),
+                "Number of registry polling calls with the status and message (in case of error)",
+            ),
+            &["status", "message"],
+        )
+        .unwrap(),
+    );
 
-    pub static LAST_CANISTER_UPGRADE_TIME: RefCell<IntGauge> = RefCell::new(IntGauge::new(
-        format!("{SERVICE_NAME}_last_successful_canister_upgrade"),
-        "The Unix timestamp of the last successful canister upgrade").unwrap());
+    pub static LAST_CANISTER_UPGRADE_TIME: RefCell<IntGauge> = RefCell::new(
+        IntGauge::new(
+            format!("{SERVICE_NAME}_last_successful_canister_upgrade"),
+            "The Unix timestamp of the last successful canister upgrade",
+        )
+        .unwrap(),
+    );
 
     static METRICS_REGISTRY: RefCell<Registry> = RefCell::new({
         let registry = Registry::new();
