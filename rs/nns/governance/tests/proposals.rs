@@ -7,6 +7,21 @@ use maplit::hashmap;
 
 #[test]
 fn test_sum_weighted_voting_power() {
+    // Step 1: Prepare the world. Basically, we come up with some proposal that
+    // have ballots in them. More precisely, there are three proposals here:
+    //
+    //   * Has no total_potential_voting_power. Thus, 100 + 2_000 + 30_000
+    //     is used in lieu of total_potential_voting_power.
+    //   * Actually has total_potential_voting_power.
+    //   * Also has total_potential_voting_power, but its reward weight is
+    //     20x, not the usual 1x.
+    //
+    // And three neurons that vote the same way on all of the above proposals:
+    //
+    //   * 1042 - never votes, and has 100 voting_power
+    //   * 1043 - Always votes Yes, and has 2_000 voting_power
+    //   * 1044 - Always votes No, and has 30_000 voting_power
+
     let proposal = Some(Proposal {
         action: Some(Action::AddOrRemoveNodeProvider(Default::default())),
         ..Default::default()
@@ -34,19 +49,6 @@ fn test_sum_weighted_voting_power() {
         ..Default::default()
     };
 
-    // Scenario: Three proposals, three neurons. They always vote the same:
-    //
-    //   * 1042 - never votes, and has 100 voting_power
-    //   * 1043 - Always votes Yes, and has 2_000 voting_power
-    //   * 1044 - Always votes No, and has 30_000 voting_power
-    //
-    // The proposals:
-    //
-    //   * 57 - Has no total_potential_voting_power. Thus, 100 + 2_000 + 30_000
-    //     is used in lieu of total_potential_voting_power.
-    //   * 58 - Actually has total_potential_voting_power.
-    //   * 59 - Also has total_potential_voting_power, but its reward weight is
-    //          20x, not 1x.
     let proposals = vec![
         ProposalData {
             total_potential_voting_power: None,
@@ -79,12 +81,14 @@ fn test_sum_weighted_voting_power() {
         result,
         (
             hashmap! {
-                // Neuron 1042 never voted, and as a result, has no entry in the result.
+                // Neuron 1042 never voted, and because of this, the return
+                // value has no entry for this neuron.
 
                 // Voted (Yes) twice on 1x weight proposals and once on a 20x weight proposal.
                 NeuronId { id: 1043 } => (2 * 2_000 + 20 * 2_000) as f64,
 
                 // Similar to previous, but voted No, and has different (more) voting power.
+                // In voting rewards, Yes and No are treated the same.
                 NeuronId { id: 1044 } => (2 * 30_000 + 20 * 30_000) as f64,
             },
             (

@@ -65,10 +65,11 @@ pub(crate) fn invalid_proposal_error(reason: &str) -> GovernanceError {
 /// For example, suppose this returns ({42 => 3.14}, 99.9). This means that
 /// neuron 42 should get 3.14/99.9 of today's reward purse.
 ///
-/// Non-essential fact: It is highly unusual for result.1 to be the sum of the
-/// values in result.0. The main reason they would not be equal is that not all
-/// neurons vote. Another (less imporant reason) is that some neurons lose
-/// voting power due to inactivity.
+/// Non-essential fact: Typically, result.1 is strictly greater than the sum of
+/// the values in result.0. The main reason they are usually not equal is that
+/// some neurons didn't vote. Another reason is that some neurons did not
+/// "refresh" their voting power recently enough. Probably the former has more
+/// of an impact on the sum of values in result.1.
 pub fn sum_weighted_voting_power<'a>(
     proposals: impl Iterator<Item = &'a ProposalData>,
 ) -> (
@@ -99,7 +100,7 @@ pub fn sum_weighted_voting_power<'a>(
             total_ballots_voting_power += ballot.voting_power;
 
             // Don't reward neurons that did not actually vote. (Whereas, ALL
-            // eligible neuron gets an "empty" ballot when the proposal is first
+            // eligible neurons get an "empty" ballot when the proposal is first
             // created. An "empty" ballot is one where the vote field is set to
             // Unspecified.)
             let vote = Vote::try_from(ballot.vote).unwrap_or_else(|err| {
