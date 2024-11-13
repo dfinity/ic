@@ -90,5 +90,6 @@ pub(crate) const SYSTEM_API_IMPORTS: &str = r#"
   (import "ic0" "is_controller" (func (;51;) (type 7)))
   (import "ic0" "in_replicated_execution" (func (;52;) (type 1)))
   (import "ic0" "cycles_burn128" (func (;53;) (type 31)))
+  (import "ic0" "mint_cycles128" (func (;54;) (type 31)))
 )
 "#;

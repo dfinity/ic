@@ -345,6 +345,48 @@ fn mint_cycles_fails_caller_not_on_nns() {
 }
 
 #[test]
+fn mint_cycles_very_large_value() {
+    let cycles_account_manager = CyclesAccountManagerBuilder::new()
+        .with_subnet_type(SubnetType::System)
+        .build();
+    let mut system_state = SystemStateBuilder::new()
+        .canister_id(CYCLES_MINTING_CANISTER_ID)
+        .build();
+
+    system_state.add_cycles(
+        Cycles::from(1_000_000_000_000_000_u128),
+        CyclesUseCase::NonConsumed,
+    );
+
+    let api_type = ApiTypeBuilder::build_update_api();
+    let mut api = get_system_api(api_type, &system_state, cycles_account_manager);
+    let mut balance_before = [0u8; 16];
+    api.ic0_canister_cycle_balance128(0, &mut balance_before)
+        .unwrap();
+    let balance_before = u128::from_le_bytes(balance_before);
+
+    let amount_high = u64::MAX;
+    let amount_low = 50;
+    let mut heap = [0u8; 16];
+    // Canisters on the System subnet can hold any amount of cycles
+    api.ic0_mint_cycles128(amount_high, amount_low, 0, &mut heap)
+        .unwrap();
+    let cycles_minted = u128::from_le_bytes(heap);
+    assert_eq!(
+        cycles_minted,
+        Cycles::from_parts(amount_high, amount_low).get()
+    );
+    let mut balance_after = [0u8; 16];
+    api.ic0_canister_cycle_balance128(0, &mut balance_after)
+        .unwrap();
+    let balance_after = u128::from_le_bytes(balance_after);
+    assert_eq!(
+        balance_after - balance_before,
+        Cycles::from_parts(amount_high, amount_low).get()
+    );
+}
+
+#[test]
 fn is_controller_test() {
     let mut system_state = SystemStateBuilder::default().build();
     system_state.controllers = BTreeSet::from([user_test_id(1).get(), user_test_id(2).get()]);
