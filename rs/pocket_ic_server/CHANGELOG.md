@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   directly to the PocketIC instance/replica (this only used to apply to requests for `/_/dashboard` independently
   of whether a canister ID could be found).
 - Subnet ids can be specified in `SubnetSpec`s for all subnet kinds.
+- Subnet sizes to match the subnet size on the ICP mainnet: II from 28 to 31 nodes, Fiduciary from 28 to 34 nodes.
 
 ### Removed
 - The CLI option `--pid`: use the CLI option `--port-file` instead.
