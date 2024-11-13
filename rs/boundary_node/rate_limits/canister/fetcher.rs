@@ -209,7 +209,7 @@ impl<
     type Output = rate_limits_api::OutputRuleMetadata;
     type Error = FetchError;
 
-    fn fetch(&self, rule_id: rate_limits_api::RuleId) -> Result<Self::Output, Self::Error> {
+    fn fetch(&self, rule_id: Self::Input) -> Result<Self::Output, Self::Error> {
         let rule_id = RuleId::try_from(rule_id.clone())
             .map_err(|_| FetchError::InvalidUuidFormat(rule_id))?;
 
