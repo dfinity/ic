@@ -22,6 +22,7 @@ DEPENDENCIES = [
     "@crate_index//:serde",
     "@crate_index//:serde_cbor",
     "@crate_index//:serde_json",
+    "@crate_index//:strum",
     "@crate_index//:thiserror",
     "@crate_index//:uuid",
 ]

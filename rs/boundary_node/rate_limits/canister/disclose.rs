@@ -2,6 +2,8 @@ use crate::{
     state::CanisterApi,
     types::{DiscloseRulesArg, DiscloseRulesArgError, IncidentId, RuleId, Timestamp},
 };
+use strum::AsRefStr;
+use thiserror::Error;
 
 pub trait DisclosesRules {
     fn disclose_rules(
@@ -11,30 +13,23 @@ pub trait DisclosesRules {
     ) -> Result<(), DiscloseRulesError>;
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Error, AsRefStr)]
 pub enum DiscloseRulesError {
     #[error("Unauthorized operation")]
+    #[strum(serialize = "unauthorized_error")]
     Unauthorized,
     #[error("Invalid input: {0}")]
+    #[strum(serialize = "invalid_input_error")]
     InvalidInput(#[from] DiscloseRulesArgError),
     #[error("Incident with ID={0} not found")]
+    #[strum(serialize = "incident_id_not_found_error")]
     IncidentIdNotFound(IncidentId),
     #[error("Rule with ID={0} not found")]
+    #[strum(serialize = "rule_id_not_found_error")]
     RuleIdNotFound(RuleId),
     #[error("An unexpected internal error occurred: {0}")]
+    #[strum(serialize = "internal_error")]
     Internal(#[from] anyhow::Error),
-}
-
-impl DiscloseRulesError {
-    pub fn to_error_name(&self) -> &'static str {
-        match self {
-            DiscloseRulesError::Unauthorized => "Unauthorized",
-            DiscloseRulesError::InvalidInput(_) => "InvalidInput",
-            DiscloseRulesError::IncidentIdNotFound(_) => "IncidentIdNotFound",
-            DiscloseRulesError::RuleIdNotFound(_) => "RuleIdNotFound",
-            DiscloseRulesError::Internal(_) => "Internal",
-        }
-    }
 }
 
 pub struct RulesDiscloser<A> {

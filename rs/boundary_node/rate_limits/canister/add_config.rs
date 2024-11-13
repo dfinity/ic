@@ -5,6 +5,7 @@ use crate::{
 use anyhow::Context;
 use getrandom::getrandom;
 use std::collections::{HashMap, HashSet};
+use strum::AsRefStr;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -34,30 +35,23 @@ pub enum RulePolicyError {
     },
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, AsRefStr)]
 pub enum AddConfigError {
     #[error("Unauthorized operation")]
+    #[strum(serialize = "unauthorized_error")]
     Unauthorized,
     #[error("Invalid input configuration: {0}")]
+    #[strum(serialize = "invalid_input_error")]
     InvalidInput(#[from] InputConfigError),
     #[error("Rule violates policy: {0}")]
+    #[strum(serialize = "policy_violation_error")]
     PolicyViolation(#[from] RulePolicyError),
     #[error("Initial version and configuration were not set")]
+    #[strum(serialize = "missing_initial_version_error")]
     MissingInitialVersion,
     #[error("An unexpected internal error occurred: {0}")]
+    #[strum(serialize = "internal_error")]
     Internal(#[from] anyhow::Error),
-}
-
-impl AddConfigError {
-    pub fn to_error_name(&self) -> &'static str {
-        match self {
-            AddConfigError::Unauthorized => "Unauthorized",
-            AddConfigError::InvalidInput(_) => "InvalidInput",
-            AddConfigError::PolicyViolation(_) => "PolicyViolation",
-            AddConfigError::MissingInitialVersion => "MissingInitialVersion",
-            AddConfigError::Internal(_) => "Internal",
-        }
-    }
 }
 
 pub struct ConfigAdder<A> {

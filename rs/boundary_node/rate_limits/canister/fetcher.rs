@@ -4,6 +4,7 @@ use crate::{
     state::CanisterApi,
     types::{IncidentId, OutputConfig, OutputRule, OutputRuleMetadata, RuleId, Version},
 };
+use thiserror::Error;
 
 pub trait EntityFetcher {
     type Input;
@@ -61,24 +62,24 @@ impl<R, F, A> IncidentFetcher<R, F, A> {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Error)]
 pub enum FetchConfigError {
     #[error("Config for version={0} not found")]
     NotFound(Version),
     #[error("No existing config versions")]
     NoExistingVersions,
     #[error(transparent)]
-    Unexpected(#[from] anyhow::Error),
+    Internal(#[from] anyhow::Error),
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Error)]
 pub enum FetchError {
     #[error("The provided id = {0} not found")]
     NotFound(String),
     #[error("The provided id = {0} is not a valid UUID")]
     InvalidUuidFormat(String),
     #[error(transparent)]
-    UnexpectedError(#[from] anyhow::Error),
+    Internal(#[from] anyhow::Error),
 }
 
 impl<R: CanisterApi, F: ConfidentialityFormatting<Input = OutputConfig>, A: ResolveAccessLevel>
@@ -108,7 +109,7 @@ impl<R: CanisterApi, F: ConfidentialityFormatting<Input = OutputConfig>, A: Reso
 
         for rule_id in stored_config.rule_ids.iter() {
             let rule = self.canister_api.get_rule(rule_id).ok_or_else(|| {
-                FetchConfigError::Unexpected(anyhow::anyhow!("Rule with id = {rule_id} not found"))
+                FetchConfigError::Internal(anyhow::anyhow!("Rule with id = {rule_id} not found"))
             })?;
 
             let output_rule = OutputRule {
@@ -168,7 +169,7 @@ impl<
 
         for rule_id in incident_metadata.rule_ids.into_iter() {
             let stored_rule_metadata = self.canister_api.get_rule(&rule_id).ok_or_else(|| {
-                FetchError::UnexpectedError(anyhow::anyhow!("Rule with id = {rule_id} not found"))
+                FetchError::Internal(anyhow::anyhow!("Rule with id = {rule_id} not found"))
             })?;
 
             let mut rule_metadata = OutputRuleMetadata {

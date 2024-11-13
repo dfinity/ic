@@ -179,7 +179,7 @@ impl<T: AddsConfig> AddsConfig for WithMetrics<T> {
         // Update metrics.
         let method = "add_config";
         let status = if result.is_ok() { "success" } else { "failure" };
-        let message: &str = result.as_ref().err().map_or("", |err| err.to_error_name());
+        let message: &str = result.as_ref().err().map_or("", |err| err.as_ref());
         update_canister_call_metrics(method, status, message);
         // Return unchanged result.
         result
@@ -197,7 +197,7 @@ impl<T: DisclosesRules> DisclosesRules for WithMetrics<T> {
         // Update metrics.
         let method = "disclose_rules";
         let status = if result.is_ok() { "success" } else { "failure" };
-        let message: &str = result.as_ref().err().map_or("", |err| err.to_error_name());
+        let message: &str = result.as_ref().err().map_or("", |err| err.as_ref());
         update_canister_call_metrics(method, status, message);
         // Return unchanged result.
         result
