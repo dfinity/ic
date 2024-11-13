@@ -486,7 +486,13 @@ where
                     spender,
                     amount,
                     fee,
-                } => self.process_transfer(from, to, spender, amount, &fee.clone().or(block.effective_fee.clone())),
+                } => self.process_transfer(
+                    from,
+                    to,
+                    spender,
+                    amount,
+                    &fee.clone().or(block.effective_fee.clone()),
+                ),
                 Operation::Burn {
                     from,
                     spender,
