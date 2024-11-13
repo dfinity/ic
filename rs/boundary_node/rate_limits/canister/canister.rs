@@ -30,6 +30,7 @@ fn init(init_arg: InitArg) {
     ic_cdk::println!("Starting canister init");
     // Set authorized principal, which performs write operations, such as adding new configurations
     with_canister_state(|state| {
+        // Set authorized principal, which performs write operations, such as adding new configurations
         if let Some(principal) = init_arg.authorized_principal {
             state.set_authorized_principal(principal);
         }
