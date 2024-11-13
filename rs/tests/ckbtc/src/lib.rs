@@ -30,6 +30,7 @@ use ic_nns_governance_api::pb::v1::{NnsFunction, ProposalStatus};
 use ic_nns_test_utils::{
     governance::submit_external_update_proposal, itest_helpers::install_rust_canister_from_path,
 };
+use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
@@ -38,7 +39,7 @@ use ic_system_test_driver::{
         test_env::TestEnv,
         test_env_api::{
             get_dependency_path, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-            IcNodeSnapshot, NnsInstallationBuilder, SubnetSnapshot,
+            IcNodeSnapshot, NnsInstallationBuilder, SshSession, SubnetSnapshot,
         },
         universal_vm::{UniversalVm, UniversalVms},
     },
@@ -52,8 +53,6 @@ use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use slog::{debug, info, Logger};
 use std::{
     env,
-    fs::File,
-    io::Write,
     net::{IpAddr, SocketAddr},
     str::FromStr,
     time::Duration,
@@ -82,54 +81,23 @@ pub const KYT_FEE: u64 = 1001;
 
 const UNIVERSAL_VM_NAME: &str = "btc-node";
 
-const BITCOIND_RPC_USER: &str = "btc-dev-preview";
+pub(crate) const BITCOIND_RPC_USER: &str = "btc-dev-preview";
 
-const BITCOIND_RPC_PASSWORD: &str = "Wjh4u6SAjT4UMJKxPmoZ0AN2r9qbE-ksXQ5I2_-Hm4w=";
+pub(crate) const BITCOIND_RPC_PASSWORD: &str = "Wjh4u6SAjT4UMJKxPmoZ0AN2r9qbE-ksXQ5I2_-Hm4w=";
 
 const BITCOIND_RPC_AUTH : &str = "btc-dev-preview:8555f1162d473af8e1f744aa056fd728$afaf9cb17b8cf0e8e65994d1195e4b3a4348963b08897b4084d210e5ee588bcb";
 
-const BITCOIND_RPC_PORT: u32 = 8332;
+const BITCOIND_RPC_PORT: u16 = 8332;
+
+const BITCOIN_CLI_PORT: u16 = 18444;
+
+const HTTPS_PORT: u16 = 20443;
 
 pub fn btc_config(env: TestEnv) {
-    // Regtest bitcoin node listens on 18444
-    // docker bitcoind image uses 8332 for the rpc server
-    // https://en.bitcoinwiki.org/wiki/Running_Bitcoind
-    let activate_script = r"#!/bin/sh
-cp /config/bitcoin.conf /tmp/bitcoin.conf
-docker run  --name=bitcoind-node -d \
-  --net=host \
-  -v /tmp:/bitcoin/.bitcoin \
-  ghcr.io/dfinity/bitcoind@sha256:17c7dd21690f3be34630db7389d2f0bff14649e27a964afef03806a6d631e0f1 -rpcbind=[::]:8332 -rpcallowip=::/0
-";
-    let config_dir = env
-        .single_activate_script_config_dir(UNIVERSAL_VM_NAME, activate_script)
-        .unwrap();
-
-    let bitcoin_conf_path = config_dir.join("bitcoin.conf");
-    let mut bitcoin_conf = File::create(bitcoin_conf_path).unwrap();
-    bitcoin_conf
-        .write_all(
-            format!(
-                r#"
-    # Enable regtest mode. This is required to setup a private bitcoin network.
-    regtest=1
-    debug=1
-    whitelist=::/0
-    fallbackfee=0.0002
-
-    # Dummy credentials that are required by `bitcoin-cli`.
-    rpcuser={BITCOIND_RPC_USER}
-    rpcpassword={BITCOIND_RPC_PASSWORD}
-    rpcauth={BITCOIND_RPC_AUTH}
-    "#
-            )
-            .as_bytes(),
-        )
-        .unwrap();
-    bitcoin_conf.sync_all().unwrap();
-
     UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
-        .with_config_dir(config_dir)
+        .with_config_img(get_dependency_path(
+            env::var("CKBTC_UVM_CONFIG_PATH").expect("CKBTC_UVM_CONFIG_PATH not set"),
+        ))
         .enable_ipv4()
         .start(&env)
         .expect("failed to setup universal VM");
@@ -138,11 +106,62 @@ docker run  --name=bitcoind-node -d \
     let universal_vm = deployed_universal_vm.get_vm().unwrap();
     let btc_node_ipv6 = universal_vm.ipv6;
 
+    // Regtest bitcoin node listens on 18444
+    // docker bitcoind image uses 8332 for the rpc server
+    // https://en.bitcoinwiki.org/wiki/Running_Bitcoind
+    // nginx auto proxy setups SSL reverse proxy and forwards HTTP request on 443 to 9332.
+    println!("{}", deployed_universal_vm
+        .block_on_bash_script(&format!(
+            r#"
+# Create SSL cert using minica. IC-OS already supports the CA cert used here.
+mkdir /tmp/certs
+cd /tmp/certs
+cp /config/cert.pem minica.pem
+cp /config/key.pem minica-key.pem
+echo "Making certs directory in $(pwd) ..."
+docker load -i /config/minica.tar
+docker run -v "$(pwd)":/output minica:image -ip-addresses="{btc_node_ipv6}"
+sudo mv "{btc_node_ipv6}"/cert.pem localhost.crt
+sudo mv "{btc_node_ipv6}"/key.pem localhost.key
+sudo chmod 644 localhost*
+
+# Run nginx auto proxy
+docker run -d --name=proxy -e ENABLE_IPV6=true -e DEFAULT_HOST=localhost -p 80:80 -p {HTTPS_PORT}:443 \
+           -v /tmp/certs:/etc/nginx/certs -v /var/run/docker.sock:/tmp/docker.sock:ro \
+           nginxproxy/nginx-proxy
+
+# Setup bitcoin.conf and run bitcoind
+# The following variable assignment prevents the dollar sign in Rust's BITCOIND_RPC_AUTH string
+# from being interpreted by shell.
+BITCOIND_RPC_AUTH='{BITCOIND_RPC_AUTH}'
+cat >/tmp/bitcoin.conf <<END
+    regtest=1
+    debug=1
+    whitelist=::/0
+    fallbackfee=0.0002
+    rpcauth=$BITCOIND_RPC_AUTH
+END
+docker run  --name=bitcoind-node -d \
+  -e VIRTUAL_HOST=localhost -e VIRTUAL_PORT={BITCOIND_RPC_PORT} -v /tmp:/bitcoin/.bitcoin \
+  -p {BITCOIN_CLI_PORT}:{BITCOIN_CLI_PORT} -p {BITCOIND_RPC_PORT}:{BITCOIND_RPC_PORT} \
+  ghcr.io/dfinity/bitcoind@sha256:17c7dd21690f3be34630db7389d2f0bff14649e27a964afef03806a6d631e0f1
+
+# docker load -i /config/httpbin.tar
+# docker run --rm -d -p {HTTPS_PORT}:80 -v /tmp/certs:/certs --name httpbin httpbin:image \
+#      --cert-file /certs/localhost.crt --key-file /certs/localhost.key --port 80
+"#
+        ))
+        .unwrap());
+
     InternetComputer::new()
-        .with_bitcoind_addr(SocketAddr::new(IpAddr::V6(btc_node_ipv6), 18444))
+        .with_bitcoind_addr(SocketAddr::new(IpAddr::V6(btc_node_ipv6), BITCOIN_CLI_PORT))
         .add_subnet(
             Subnet::new(SubnetType::System)
                 .with_dkg_interval_length(Height::from(10))
+                .with_features(SubnetFeatures {
+                    http_requests: true,
+                    ..SubnetFeatures::default()
+                })
                 .add_nodes(1),
         )
         .use_specified_ids_allocation_range()
@@ -409,12 +428,12 @@ pub async fn install_new_kyt(new_kyt_canister: &mut Canister<'_>, env: &TestEnv)
     let universal_vm = deployed_universal_vm.get_vm().unwrap();
     let btc_node_ipv6 = universal_vm.ipv6;
     let json_rpc_url = format!(
-        "http://{}:{}@[{}]:{}",
-        BITCOIND_RPC_USER, BITCOIND_RPC_PASSWORD, btc_node_ipv6, BITCOIND_RPC_PORT
+        "https://{}:{}@[{}]:{}",
+        BITCOIND_RPC_USER, BITCOIND_RPC_PASSWORD, btc_node_ipv6, HTTPS_PORT,
     );
     let kyt_init_args = NewKytArg::InitArg(NewKytInitArg {
         btc_network: BtcNetwork::Regtest { json_rpc_url },
-        kyt_mode: NewKytMode::AcceptAll,
+        kyt_mode: NewKytMode::Normal,
     });
 
     install_rust_canister_from_path(
