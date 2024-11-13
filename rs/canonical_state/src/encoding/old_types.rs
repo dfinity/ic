@@ -11,12 +11,11 @@ use std::{
     sync::Arc,
 };
 
-use crate::CertificationVersion;
+use crate::{is_supported, CertificationVersion};
 
 use super::types;
 use crate::encoding::types::{
     Bytes, Cycles, Funds, StreamFlagBits as StreamFlagBitsV17,
-    STREAM_DEFAULT_FLAGS as STREAM_DEFAULT_FLAGS_V17,
     STREAM_SUPPORTED_FLAGS as STREAM_SUPPORTED_FLAGS_V17,
 };
 use ic_protobuf::proxy::ProxyDecodeError;
@@ -237,18 +236,7 @@ impl From<(&ic_types::xnet::StreamHeader, CertificationVersion)> for StreamHeade
     fn from(
         (header, certification_version): (&ic_types::xnet::StreamHeader, CertificationVersion),
     ) -> Self {
-        // Replicas with certification version < 9 do not produce reject signals. This
-        // includes replicas with certification version 8, but they may "inherit" reject
-        // signals from a replica with certification version 9 after a downgrade.
-        assert!(
-            header.reject_signals().is_empty() || certification_version >= CertificationVersion::V8,
-            "Replicas with certification version < 9 should not be producing reject signals"
-        );
-        // Replicas with certification version < 17 should not have flags set.
-        assert!(
-            *header.flags() == STREAM_DEFAULT_FLAGS_V17
-                || certification_version >= CertificationVersion::V17
-        );
+        assert!(is_supported(certification_version));
 
         let mut next_index = header.signals_end();
         let mut reject_signal_deltas = vec![0; header.reject_signals().len()];

@@ -892,19 +892,10 @@ fn canonical_encoding_system_metadata() {
         let mut metadata = SystemMetadata::new(subnet_test_id(13), SubnetType::Application);
         metadata.prev_state_hash = Some(CryptoHashOfPartialState::new(CryptoHash(vec![15])));
 
-        if certification_version <= CertificationVersion::V9 {
-            // `generated_id_counter` encoded up to and including V9.
-            assert_eq!(
-                "A2 00 00 01 81 0F",
-                as_hex(&encode_metadata(&metadata, certification_version))
-            );
-        } else {
-            // `generated_id_counter` not encoded starting with V10.
-            assert_eq!(
-                "A1 01 81 0F",
-                as_hex(&encode_metadata(&metadata, certification_version))
-            );
-        }
+        assert_eq!(
+            "A1 01 81 0F",
+            as_hex(&encode_metadata(&metadata, certification_version))
+        );
     }
 }
 

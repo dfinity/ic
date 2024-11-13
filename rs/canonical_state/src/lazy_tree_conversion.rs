@@ -464,10 +464,10 @@ impl<'a> LazyFork<'a> for ReplyStatus<'a> {
 }
 
 const REJECT_STATUS_LABELS: [(&[u8], CertificationVersion); 4] = [
-    (ERROR_CODE_LABEL, CertificationVersion::V11),
-    (REJECT_CODE_LABEL, CertificationVersion::V0),
-    (REJECT_MESSAGE_LABEL, CertificationVersion::V0),
-    (STATUS_LABEL, CertificationVersion::V0),
+    (ERROR_CODE_LABEL, MIN_SUPPORTED_CERTIFICATION_VERSION),
+    (REJECT_CODE_LABEL, MIN_SUPPORTED_CERTIFICATION_VERSION),
+    (REJECT_MESSAGE_LABEL, MIN_SUPPORTED_CERTIFICATION_VERSION),
+    (STATUS_LABEL, MIN_SUPPORTED_CERTIFICATION_VERSION),
 ];
 
 #[derive(Clone)]
@@ -554,29 +554,29 @@ const MODULE_HASH_LABEL: &[u8] = b"module_hash";
 const CANISTER_LABELS: [(&[u8], CertificationVersion, CertificationVersion); 4] = [
     (
         CERTIFIED_DATA_LABEL,
-        CertificationVersion::V0,
+        MIN_SUPPORTED_CERTIFICATION_VERSION,
         MAX_SUPPORTED_CERTIFICATION_VERSION,
     ),
     (
         CONTROLLERS_LABEL,
-        CertificationVersion::V2,
+        MIN_SUPPORTED_CERTIFICATION_VERSION,
         MAX_SUPPORTED_CERTIFICATION_VERSION,
     ),
     (
         METADATA_LABEL,
-        CertificationVersion::V6,
+        MIN_SUPPORTED_CERTIFICATION_VERSION,
         MAX_SUPPORTED_CERTIFICATION_VERSION,
     ),
     (
         MODULE_HASH_LABEL,
-        CertificationVersion::V1,
+        MIN_SUPPORTED_CERTIFICATION_VERSION,
         MAX_SUPPORTED_CERTIFICATION_VERSION,
     ),
 ];
 
 const CANISTER_NO_MODULE_LABELS: [(&[u8], CertificationVersion, CertificationVersion); 1] = [(
     CONTROLLERS_LABEL,
-    CertificationVersion::V2,
+    MIN_SUPPORTED_CERTIFICATION_VERSION,
     MAX_SUPPORTED_CERTIFICATION_VERSION,
 )];
 
