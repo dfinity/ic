@@ -98,6 +98,15 @@ pub struct RegistryGetChangesSinceRequest {
     #[prost(uint64, tag = "1")]
     pub version: u64,
 }
+/// Message to retrieve the Node Providers Rewards since
+/// 'from_ts' from a specific registry version 'from_registry_version'
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct NodeProvidersRewardsRequest {
+    #[prost(uint64, tag = "1")]
+    pub from_ts: u64,
+    #[prost(uint64, tag = "2")]
+    pub from_registry_version: u64,
+}
 /// Message corresponding to the response from the registry
 /// canister to a get_latest_version() request.
 #[derive(Clone, PartialEq, ::prost::Message)]

@@ -89,6 +89,13 @@ message RegistryDelta {
 // since 'version'.
 message RegistryGetChangesSinceRequest { uint64 version = 1; }
 
+// Message to retrieve the Node Providers Rewards since
+// 'from_ts' from a specific registry version 'from_registry_version'
+message NodeProvidersRewardsRequest { 
+  uint64 from_ts = 1;
+  uint64 from_registry_version = 2;
+}
+
 // Message corresponding to the response from the registry
 // canister to a get_latest_version() request.
 message RegistryGetChangesSinceResponse {

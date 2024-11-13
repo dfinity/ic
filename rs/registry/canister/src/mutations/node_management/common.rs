@@ -4,12 +4,10 @@ use crate::{common::LOG_PREFIX, registry::Registry};
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_protobuf::registry::{
-    node::v1::NodeRecord, node_operator::v1::NodeOperatorRecord, subnet::v1::SubnetListRecord,
+    dc::v1::DataCenterRecord, node::v1::NodeRecord, node_operator::v1::NodeOperatorRecord, subnet::v1::SubnetListRecord
 };
 use ic_registry_keys::{
-    make_crypto_node_key, make_crypto_tls_cert_key, make_firewall_rules_record_key,
-    make_node_operator_record_key, make_node_record_key, make_subnet_list_record_key,
-    FirewallRulesScope, NODE_RECORD_KEY_PREFIX,
+    make_crypto_node_key, make_crypto_tls_cert_key, make_data_center_record_key, make_firewall_rules_record_key, make_node_operator_record_key, make_node_record_key, make_subnet_list_record_key, FirewallRulesScope, NODE_RECORD_KEY_PREFIX
 };
 use ic_registry_transport::{
     delete, insert,
@@ -94,6 +92,25 @@ pub fn get_node_operator_record(
             )),
             |result| {
                 let decoded = NodeOperatorRecord::decode(result.value.as_slice()).unwrap();
+                Ok(decoded)
+            },
+        )
+}
+
+pub fn get_data_center_record(
+    registry: &Registry,
+    data_center_id: &str,
+) -> Result<DataCenterRecord, String> {
+    let data_center_key = make_data_center_record_key(data_center_id);
+    registry
+        .get(data_center_key.as_bytes(), registry.latest_version())
+        .map_or(
+            Err(format!(
+                "Data Center Id {:} not found in the registry.",
+                data_center_key
+            )),
+            |result| {
+                let decoded = DataCenterRecord::decode(result.value.as_slice()).unwrap();
                 Ok(decoded)
             },
         )
@@ -253,5 +270,39 @@ pub(crate) fn get_key_family_iter<'a, T: prost::Message + Default>(
             let value = T::decode(v.value.as_slice()).unwrap();
 
             (id, value)
+        })
+}
+
+pub(crate) fn get_key_family_between_versions_iter<'a, T: prost::Message + Default>(
+    registry: &'a Registry,
+    prefix: &'a str,
+    version_start: u64,
+    version_end: u64
+) -> impl Iterator<Item = (String, T)> + 'a {
+    let prefix_bytes = prefix.as_bytes();
+    let start = prefix_bytes.to_vec();
+
+    registry
+        .store
+        .range(start..)
+        .take_while(|(k, _)| k.starts_with(prefix_bytes))
+        .filter_map(move |(k, v)| {
+            let mut v_iter = v.iter().rev();
+            let mut v_found = v_iter.find(|v| v.version <= version_end)?;
+
+            if v_found.deletion_marker {
+                if v_found.version > version_start {
+                    v_found = v_iter.next()?;
+                } else {
+                    return None; 
+                }
+            }
+
+            let id = k.strip_prefix(prefix_bytes)
+                .and_then(|v| std::str::from_utf8(v).ok())?
+                .to_string();
+
+            let value = T::decode(v_found.value.as_slice()).ok()?;
+            Some((id, value))
         })
 }
