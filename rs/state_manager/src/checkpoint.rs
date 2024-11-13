@@ -62,8 +62,6 @@ pub(crate) fn make_checkpoint(
     height: Height,
     tip_channel: &Sender<TipRequest>,
     metrics: &CheckpointMetrics,
-    thread_pool: &mut scoped_threadpool::Pool,
-    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     lsmt_storage: FlagStatus,
 ) -> Result<(CheckpointLayout<ReadOnly>, HasDowngrade), CheckpointError> {
     {
@@ -125,21 +123,7 @@ pub(crate) fn make_checkpoint(
         recv.recv().unwrap();
     }
 
-    let state = {
-        let _timer = metrics
-            .make_checkpoint_step_duration
-            .with_label_values(&["load"])
-            .start_timer();
-        load_checkpoint(
-            &cp,
-            state.metadata.own_subnet_type,
-            metrics,
-            Some(thread_pool),
-            Arc::clone(&fd_factory),
-        )?
-    };
-
-    Ok((cp, state, has_downgrade))
+    Ok((cp, has_downgrade))
 }
 
 pub(crate) fn validate_checkpoint_and_remove_unverified_marker(
@@ -377,7 +361,7 @@ pub fn validate_eq_checkpoint(
     assert!(checkpoint_loader
         .load_subnet_queues()
         .unwrap()
-        .validate_eq(&reference_state.subnet_queues())
+        .validate_eq(reference_state.subnet_queues())
         .is_ok());
     assert!(checkpoint_loader.load_query_stats().unwrap() == *reference_state.query_stats());
     assert!(checkpoint_loader

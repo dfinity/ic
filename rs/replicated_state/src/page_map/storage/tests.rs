@@ -5,7 +5,6 @@ use std::{
     io::Write,
     os::{fd::FromRawFd, unix::prelude::FileExt},
     path::{Path, PathBuf},
-    sync::Arc,
 };
 
 use crate::page_map::{
@@ -358,7 +357,7 @@ fn storage_files(dir: &Path) -> StorageFiles {
 
 /// Verify that the storage in the `dir` directory is equivalent to `expected`.
 fn verify_storage(dir: &Path, expected: &PageDelta) {
-    let storage_layout = Arc::new(ShardedTestStorageLayout {
+    let storage_layout = ShardedTestStorageLayout {
         dir_path: dir.to_path_buf(),
         base: dir.join("vmemory_0.bin"),
         overlay_suffix: "vmemory_0.overlay".to_owned(),
@@ -376,7 +375,7 @@ fn verify_storage(dir: &Path, expected: &PageDelta) {
     assert_eq!(expected_num_pages, storage.num_logical_pages() as u64);
     assert_eq!(
         expected_num_pages as usize,
-        (storage_layout.as_ref() as &dyn StorageLayout)
+        (&storage_layout as &dyn StorageLayout)
             .memory_size_pages()
             .unwrap()
     );
