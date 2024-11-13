@@ -81,6 +81,7 @@ use ic_nervous_system_common::{
     ONE_YEAR_SECONDS,
 };
 use ic_nervous_system_governance::maturity_modulation::apply_maturity_modulation;
+use ic_nervous_system_linear_map::LinearMap;
 use ic_nervous_system_proto::pb::v1::{GlobalTimeOfDay, Principals};
 use ic_nns_common::{
     pb::v1::{NeuronId, ProposalId},
@@ -121,6 +122,7 @@ use std::{
     future::Future,
     ops::RangeInclusive,
     string::ToString,
+    time::Duration,
 };
 
 mod ledger_helper;
@@ -275,13 +277,6 @@ impl NetworkEconomics {
     }
 }
 
-impl Default for &'_ VotingPowerEconomics { // DO NOT MERGE: Move.
-    fn default() -> Self {
-        &VotingPowerEconomics::DEFAULT
-    }
-}
-
-use std::time::Duration; use ic_nervous_system_linear_map::LinearMap; // DO NOT MERGE
 impl VotingPowerEconomics {
     pub const DEFAULT: Self = Self {
         start_reducing_voting_power_after_seconds: Some(
@@ -314,6 +309,7 @@ impl VotingPowerEconomics {
             begin..end
         };
 
+        #[allow(clippy::reversed_empty_ranges)]
         let to_range = 1..0;
 
         LinearMap::new(from_range, to_range)
@@ -1980,18 +1976,18 @@ impl Governance {
         )
     }
 
-    fn get_voting_power_economics(&self) -> &VotingPowerEconomics {
+    fn get_voting_power_economics(&self) -> VotingPowerEconomics {
         let economics = match &self.heap_data.economics {
             Some(ok) => ok,
             None => {
-                return &VotingPowerEconomics::DEFAULT;
+                return VotingPowerEconomics::with_default_values();
             }
         };
 
         economics
             .voting_power_economics
-            .as_ref()
-            .unwrap_or_default()
+            .clone()
+            .unwrap_or_else(VotingPowerEconomics::with_default_values)
     }
 
     pub fn __get_state_for_test(&self) -> GovernanceProto {
@@ -5790,7 +5786,7 @@ impl Governance {
             _ => {
                 let (ballots, total_deciding_power, potential_voting_power) =
                     self.neuron_store.create_ballots_for_standard_proposal(
-                        self.get_voting_power_economics(),
+                        &self.get_voting_power_economics(),
                         now_seconds,
                     );
 

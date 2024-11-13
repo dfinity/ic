@@ -535,7 +535,7 @@ fn canister_post_upgrade() {
              CANISTER MIGHT HAVE BROKEN STATE!!!!.",
     );
 
-    // TODO(NNS1- DO NOT MERGE): This can be deleted after it has been released.
+    // TODO(NNS1-3446): This can be deleted after it has been released.
     set_initial_voting_power_economics(&mut restored_state);
 
     grow_upgrades_memory_to(WASM_PAGES_RESERVED_FOR_UPGRADES_MEMORY);

@@ -8,7 +8,10 @@
 //! initial value, but thereafter, it can be changed as the result of requests
 //! (e.g. create a proposal followed by many votes in favor).
 
-use crate::pb::v1::{Governance, VotingPowerEconomics};
+use crate::{
+    governance::LOG_PREFIX,
+    pb::v1::{Governance, VotingPowerEconomics},
+};
 
 #[path = "data_migration_tests.rs"]
 #[cfg(test)]
@@ -32,7 +35,7 @@ pub fn set_initial_voting_power_economics(governance: &mut Governance) {
     let economics = governance.economics.as_mut();
 
     let Some(economics) = economics else {
-        // DO NOT MERGE - Log.
+        println!("{}ERROR: No NetworkEconomics!", LOG_PREFIX);
         return;
     };
 
@@ -40,13 +43,10 @@ pub fn set_initial_voting_power_economics(governance: &mut Governance) {
     let default = VotingPowerEconomics::with_default_values();
 
     let Some(voting_power_economics) = voting_power_economics else {
-        // DO NOT MERGE - Log.
+        println!("{}Setting voting_power_economics to default.", LOG_PREFIX);
         economics.voting_power_economics = Some(default);
         return;
     };
-
-    // This is weird, but we handle it anyway instead of freaking out.
-    // DO NOT MERGE - Log.
 
     let VotingPowerEconomics {
         start_reducing_voting_power_after_seconds,
@@ -54,13 +54,23 @@ pub fn set_initial_voting_power_economics(governance: &mut Governance) {
     } = voting_power_economics;
 
     if start_reducing_voting_power_after_seconds.is_none() {
-        // DO NOT MERGE - Log.
+        println!(
+            "{}WARNING: voting_power_economics was set, but not its \
+             start_reducing_voting_power_after_seconds field. This is weird. \
+             Nevertheless, setting the field to the default.",
+            LOG_PREFIX,
+        );
         *start_reducing_voting_power_after_seconds =
             default.start_reducing_voting_power_after_seconds;
     }
 
     if clear_following_after_seconds.is_none() {
-        // DO NOT MERGE - Log.
+        println!(
+            "{}WARNING: voting_power_economics was set, but not its \
+             clear_following_after_seconds field. This is weird. \
+             Nevertheless, setting the field to the default.",
+            LOG_PREFIX,
+        );
         *clear_following_after_seconds = default.clear_following_after_seconds;
     }
 }
