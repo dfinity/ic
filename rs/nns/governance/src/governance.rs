@@ -7028,9 +7028,17 @@ impl Governance {
         // reward weight of proposals being voted on.
         let mut actually_distributed_e8s_equivalent = 0_u64;
 
-        let proposals = considered_proposals
-            .iter()
-            .map(|proposal_id| (*proposal_id, self.heap_data.proposals.get(&proposal_id.id)));
+        let proposals = considered_proposals.iter().filter_map(|proposal_id| {
+            let result = self.heap_data.proposals.get(&proposal_id.id);
+            if result.is_none() {
+                println!(
+                    "{}ERROR: Trying to give voting rewards for proposal {}, \
+                         but it was not found.",
+                    LOG_PREFIX, proposal_id.id,
+                );
+            }
+            result
+        });
         let (voters_to_used_voting_right, total_voting_rights) =
             sum_weighted_voting_power(proposals);
 

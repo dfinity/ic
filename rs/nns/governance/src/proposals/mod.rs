@@ -3,7 +3,7 @@ use crate::{
     pb::v1::{governance_error::ErrorType, GovernanceError, ProposalData, Topic, Vote},
 };
 use ic_base_types::CanisterId;
-use ic_nns_common::pb::v1::{NeuronId, ProposalId};
+use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{
     BITCOIN_MAINNET_CANISTER_ID, BITCOIN_TESTNET_CANISTER_ID, CYCLES_LEDGER_CANISTER_ID,
     CYCLES_LEDGER_INDEX_CANISTER_ID, CYCLES_MINTING_CANISTER_ID, EXCHANGE_RATE_CANISTER_ID,
@@ -70,25 +70,19 @@ pub(crate) fn invalid_proposal_error(reason: &str) -> GovernanceError {
 /// neurons vote. Another (less imporant reason) is that some neurons lose
 /// voting power due to inactivity.
 pub fn sum_weighted_voting_power<'a>(
-    proposals: impl Iterator<Item = (ProposalId, Option<&'a ProposalData>)>,
-) -> (HashMap<NeuronId, /* exercised */ f64>, /* total */ f64) {
+    proposals: impl Iterator<Item = &'a ProposalData>,
+) -> (
+    HashMap<
+        NeuronId,
+        f64, // exercised
+    >,
+    f64, // total
+) {
     // Results.
     let mut neuron_id_to_exercised_weighted_voting_power: HashMap<NeuronId, f64> = HashMap::new();
     let mut total_weighted_voting_power = 0.0;
 
-    for (proposal_id, proposal) in proposals {
-        let proposal = match proposal {
-            Some(ok) => ok,
-            None => {
-                println!(
-                    "{}ERROR: Trying to give voting rewards for proposal {}, \
-                     but it was not found.",
-                    LOG_PREFIX, proposal_id.id,
-                );
-                continue;
-            }
-        };
-
+    for proposal in proposals {
         let reward_weight = proposal.topic().reward_weight();
 
         // This is used in lieu of total_potential_voting_power. That is, this
@@ -110,8 +104,8 @@ pub fn sum_weighted_voting_power<'a>(
             // Unspecified.)
             let vote = Vote::try_from(ballot.vote).unwrap_or_else(|err| {
                 println!(
-                    "{}ERROR: Unrecognized Vote {} in ballot by \
-                         neuron {} on proposal {:?}: {:?}",
+                    "{}ERROR: Unrecognized Vote {} in ballot by neuron {} \
+                     on proposal {:?}: {:?}",
                     LOG_PREFIX, ballot.vote, neuron_id, proposal.id, err,
                 );
                 Vote::Unspecified

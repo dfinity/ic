@@ -1,4 +1,4 @@
-use ic_nns_common::pb::v1::{NeuronId, ProposalId};
+use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::{
     pb::v1::{proposal::Action, Ballot, Proposal, ProposalData, Vote},
     proposals::sum_weighted_voting_power,
@@ -48,36 +48,30 @@ fn test_sum_weighted_voting_power() {
     //   * 59 - Also has total_potential_voting_power, but its reward weight is
     //          20x, not 1x.
     let proposals = vec![
-        (
-            ProposalId { id: 57 },
-            ProposalData {
-                total_potential_voting_power: None,
-                ..proposal_data.clone()
-            },
-        ),
-        (ProposalId { id: 58 }, proposal_data.clone()),
-        (ProposalId { id: 59 }, {
+        ProposalData {
+            total_potential_voting_power: None,
+            ..proposal_data.clone()
+        },
+        proposal_data.clone(),
+        {
             let mut proposal_data = proposal_data;
             let proposal = proposal_data.proposal.as_mut().unwrap();
             proposal.action = Some(Action::Motion(Default::default()));
             proposal_data
-        }),
+        },
     ];
 
     // Make sure our input has the reward weights as described in the scenario.
     assert_eq!(
         proposals
             .iter()
-            .map(|(_, proposal): &(_, ProposalData)| proposal.topic().reward_weight())
+            .map(|proposal: &ProposalData| proposal.topic().reward_weight())
             .collect::<Vec<f64>>(),
         [1.0, 1.0, 20.0]
     );
 
     // Step 2: Call code under test.
-    let proposals = proposals
-        .iter()
-        .map(|(id, proposal_data)| (*id, Some(proposal_data)));
-    let result = sum_weighted_voting_power(proposals);
+    let result = sum_weighted_voting_power(proposals.iter());
 
     // Step 3: Inspect result(s).
     #[rustfmt::skip]
