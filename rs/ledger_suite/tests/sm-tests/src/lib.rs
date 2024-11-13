@@ -92,6 +92,9 @@ type Tokens = ic_icrc1_tokens_u256::U256;
 #[cfg(all(feature = "icp-tokens", not(feature = "u256-tokens")))]
 type Tokens = ic_ledger_core::Tokens;
 
+#[cfg(all(feature = "u256-tokens", feature = "icp-tokens"))]
+compile_error!("Only one of 'u256-tokens' and 'icp-tokens' features can be enabled");
+
 #[derive(Clone, Eq, PartialEq, Debug, CandidType)]
 pub struct InitArgs {
     pub minting_account: Account,
