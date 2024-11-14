@@ -7828,7 +7828,9 @@ mod tests {
                 timestamp_seconds: _,
                 event: Some(upgrade_journal_entry::Event::UpgradeOutcome(
                     upgrade_journal_entry::UpgradeOutcome {
-                        human_readable: None,
+                        human_readable: Some(
+                            format!("Marking upgrade SUCCESS at {}} seconds.", governance.env.now())
+                        ),
                         status: Some(upgrade_journal_entry::upgrade_outcome::Status::Success(
                             Empty {}
                         )),
