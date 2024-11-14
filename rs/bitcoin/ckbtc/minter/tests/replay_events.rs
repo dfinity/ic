@@ -225,9 +225,9 @@ pub struct GetEventsResult {
 }
 
 /// This struct is used to skip the check invariants when replaying the events
-/// because it takes otherwise too long.
+/// because it otherwise takes too long.
 ///
-/// This is because invariants are checked upon `ReceivedUtxos` event and
+/// This is because invariants are checked upon `ReceivedUtxos` events and
 /// each check is linear over the state size, meaning overall complexity is quadratic
 /// with the number of `ReceivedUtxos` events.
 pub enum SkipCheckInvariantsImpl {}
