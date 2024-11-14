@@ -16,6 +16,7 @@ dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-btc-interface = { workspace = true }
+ic-btc-kyt = { path = "../../bitcoin/kyt" }
 ic-canister-client = { path = "../../canister_client" }
 ic-ckbtc-agent = { path = "../../bitcoin/ckbtc/agent" }
 ic-ckbtc-kyt = { path = "../../bitcoin/ckbtc/kyt" }

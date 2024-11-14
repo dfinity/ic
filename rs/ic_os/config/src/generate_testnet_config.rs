@@ -55,12 +55,9 @@ pub enum Ipv6ConfigType {
     RouterAdvertisement,
 }
 
-/// Generates a writes a serialized GuestOSConfig to guestos_config_json_path
-/// Any required config fields that aren't specified will receive dummy values
-pub fn generate_testnet_config(
-    config: GenerateTestnetConfigArgs,
-    guestos_config_json_path: PathBuf,
-) -> Result<()> {
+/// Constructs and returns a GuestOSConfig based on the provided arguments.
+/// Any required config fields that aren't specified will receive dummy values.
+fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSConfig> {
     let GenerateTestnetConfigArgs {
         ipv6_config_type,
         deterministic_prefix,
@@ -246,6 +243,17 @@ pub fn generate_testnet_config(
         guestos_settings,
     };
 
+    Ok(guestos_config)
+}
+
+/// Generates and writes a serialized GuestOSConfig to guestos_config_json_path.
+/// Any required config fields that aren't specified will receive dummy values.
+pub fn generate_testnet_config(
+    config: GenerateTestnetConfigArgs,
+    guestos_config_json_path: PathBuf,
+) -> Result<()> {
+    let guestos_config = create_guestos_config(config)?;
+
     println!("GuestOSConfig: {:?}", guestos_config);
 
     serialize_and_write_config(&guestos_config_json_path, &guestos_config)?;
@@ -261,7 +269,6 @@ pub fn generate_testnet_config(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::NamedTempFile;
 
     #[test]
     fn test_valid_configuration() {
@@ -272,13 +279,26 @@ mod tests {
             ..Default::default()
         };
 
-        let temp_file_path = NamedTempFile::new()
-            .expect("Failed to create temp file")
-            .path()
-            .to_path_buf();
+        let guestos_config =
+            create_guestos_config(args).expect("Expected valid configuration to succeed");
 
-        generate_testnet_config(args, temp_file_path)
-            .expect("Expected valid configuration to succeed");
+        assert_eq!(
+            guestos_config.icos_settings.mgmt_mac.to_string(),
+            "00:11:22:33:44:55"
+        );
+        assert_eq!(
+            guestos_config
+                .icos_settings
+                .nns_urls
+                .first()
+                .unwrap()
+                .as_str(),
+            "https://example.com/"
+        );
+        assert_eq!(
+            guestos_config.network_settings.ipv6_config,
+            Ipv6Config::RouterAdvertisement
+        );
     }
 
     #[test]
@@ -291,12 +311,7 @@ mod tests {
             ..Default::default()
         };
 
-        let temp_file_path = NamedTempFile::new()
-            .expect("Failed to create temp file")
-            .path()
-            .to_path_buf();
-
-        let err = generate_testnet_config(args, temp_file_path)
+        let err = create_guestos_config(args)
             .expect_err("Expected an error due to missing deterministic_prefix");
 
         assert_eq!(
@@ -315,12 +330,7 @@ mod tests {
             ..Default::default()
         };
 
-        let temp_file_path = NamedTempFile::new()
-            .expect("Failed to create temp file")
-            .path()
-            .to_path_buf();
-
-        let err = generate_testnet_config(args, temp_file_path)
+        let err = create_guestos_config(args)
             .expect_err("Expected an error due to missing deterministic_prefix_length");
 
         assert_eq!(
@@ -339,12 +349,7 @@ mod tests {
             ..Default::default()
         };
 
-        let temp_file_path = NamedTempFile::new()
-            .expect("Failed to create temp file")
-            .path()
-            .to_path_buf();
-
-        let err = generate_testnet_config(args, temp_file_path)
+        let err = create_guestos_config(args)
             .expect_err("Expected an error due to missing deterministic_gateway");
 
         assert_eq!(
@@ -363,12 +368,7 @@ mod tests {
             ..Default::default()
         };
 
-        let temp_file_path = NamedTempFile::new()
-            .expect("Failed to create temp file")
-            .path()
-            .to_path_buf();
-
-        let err = generate_testnet_config(args, temp_file_path)
+        let err = create_guestos_config(args)
             .expect_err("Expected parsing error due to invalid deterministic_gateway");
 
         assert!(
@@ -388,12 +388,7 @@ mod tests {
             ..Default::default()
         };
 
-        let temp_file_path = NamedTempFile::new()
-            .expect("Failed to create temp file")
-            .path()
-            .to_path_buf();
-
-        let err = generate_testnet_config(args, temp_file_path)
+        let err = create_guestos_config(args)
             .expect_err("Expected an error due to missing fixed_address");
 
         assert_eq!(
@@ -411,12 +406,7 @@ mod tests {
             ..Default::default()
         };
 
-        let temp_file_path = NamedTempFile::new()
-            .expect("Failed to create temp file")
-            .path()
-            .to_path_buf();
-
-        let err = generate_testnet_config(args, temp_file_path)
+        let err = create_guestos_config(args)
             .expect_err("Expected an error due to missing fixed_gateway");
 
         assert_eq!(
@@ -434,12 +424,7 @@ mod tests {
             ..Default::default()
         };
 
-        let temp_file_path = NamedTempFile::new()
-            .expect("Failed to create temp file")
-            .path()
-            .to_path_buf();
-
-        let err = generate_testnet_config(args, temp_file_path)
+        let err = create_guestos_config(args)
             .expect_err("Expected parsing error due to invalid fixed_gateway");
 
         assert!(
@@ -458,12 +443,7 @@ mod tests {
             ..Default::default()
         };
 
-        let temp_file_path = NamedTempFile::new()
-            .expect("Failed to create temp file")
-            .path()
-            .to_path_buf();
-
-        let err = generate_testnet_config(args, temp_file_path)
+        let err = create_guestos_config(args)
             .expect_err("Expected an error due to incomplete IPv4 configuration");
 
         assert_eq!(
@@ -481,12 +461,7 @@ mod tests {
             ..Default::default()
         };
 
-        let temp_file_path = NamedTempFile::new()
-            .expect("Failed to create temp file")
-            .path()
-            .to_path_buf();
-
-        let err = generate_testnet_config(args, temp_file_path)
+        let err = create_guestos_config(args)
             .expect_err("Expected parsing error due to invalid ipv4_address");
 
         assert!(
@@ -505,12 +480,7 @@ mod tests {
             ..Default::default()
         };
 
-        let temp_file_path = NamedTempFile::new()
-            .expect("Failed to create temp file")
-            .path()
-            .to_path_buf();
-
-        let err = generate_testnet_config(args, temp_file_path)
+        let err = create_guestos_config(args)
             .expect_err("Expected parsing error due to invalid ipv4_gateway");
 
         assert!(
