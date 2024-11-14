@@ -379,7 +379,7 @@ Coverage:: asset Canisters behave as expected
 end::catalog[] */
 
 pub fn asset_canister_test(env: TestEnv) {
-    let logger = env.logger();
+    let logger_orig = env.logger();
     let boundary_node = env
         .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
         .unwrap()
@@ -388,249 +388,256 @@ pub fn asset_canister_test(env: TestEnv) {
 
     let rt = runtime();
 
-    rt.block_on(async move {
-        info!(&logger, "Deploying asset canister...");
-        let asset_canister = env
-            .deploy_asset_canister()
-            .await
-            .expect("Could not install asset canister");
+    info!(&logger_orig, "Creating asset canister");
+    let asset_canister_orig = rt
+        .block_on(env.deploy_asset_canister())
+        .expect("Could not install asset canister");
 
-
-        let http_client_builder = ClientBuilder::new();
-        let (client_builder, host) = if let Some(playnet) = boundary_node.get_playnet() {
-            (
-                http_client_builder,
-                format!("{0}.{playnet}", asset_canister.canister_id),
-            )
-        } else {
-            let host = format!("{0}.ic0.app", asset_canister.canister_id);
-            let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 0, 0, 0).into();
-            let client_builder = http_client_builder
-                .danger_accept_invalid_certs(true)
-                .resolve(&host, bn_addr);
-            (client_builder, host)
-        };
-        let http_client = client_builder.build().unwrap();
-
-        retry_with_msg_async!(
-            "Requesting a small asset with the correct hash succeeds and is verified without streaming",
-            &logger,
-            READY_WAIT_TIMEOUT,
-            RETRY_BACKOFF,
-            || async {
-                let hello_world = vec![72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 33];
-
-                info!(&logger, "Uploading hello world asset...");
-                asset_canister
-                    .upload_asset(&UploadAssetRequest {
-                        key: "/hello-world.txt".to_string(),
-                        content: hello_world.clone(),
-                        content_type: "text/plain".to_string(),
-                        content_encoding: "identity".to_string(),
-                        sha_override: None,
-                    })
-                    .await?;
-
-                info!(&logger, "Requesting hello world asset...");
-                let res = http_client
-                    .get(format!("https://{host}/hello-world.txt"))
-                    .header("accept-encoding", "gzip")
-                    .send()
-                    .await?
-                    .bytes()
-                    .await?
-                    .to_vec();
-
-                if res != hello_world {
-                    bail!("hello world response did not match uploaded content")
-                }
-
-                Ok(())
-            }
+    let http_client_builder = ClientBuilder::new();
+    let (client_builder, host_orig) = if let Some(playnet) = boundary_node.get_playnet() {
+        (
+            http_client_builder,
+            format!("{0}.{playnet}", asset_canister_orig.canister_id),
         )
-        .await
-        .unwrap();
+    } else {
+        let host = format!("{0}.ic0.app", asset_canister_orig.canister_id);
+        let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 0, 0, 0).into();
+        let client_builder = http_client_builder
+            .danger_accept_invalid_certs(true)
+            .resolve(&host, bn_addr);
+        (client_builder, host)
+    };
+    let http_client = client_builder.build().unwrap();
 
-        retry_with_msg_async!(
-            "Requesting a small, gzipped asset with the correct hash succeeds and is verified without streaming",
-            &logger,
-            READY_WAIT_TIMEOUT,
-            RETRY_BACKOFF,
-            || async {
-                let hello_world_gzip = vec![
-                    31, 139, 8, 0, 0, 0, 0, 0, 0, 3, 243, 72, 205, 201, 201, 87, 8, 207, 47, 202, 73,
-                    81, 4, 0, 163, 28, 41, 28, 12, 0, 0, 0,
-                ];
+    let futs = FuturesUnordered::new();
+    futs.push(rt.spawn({
+        let host = host_orig.clone();
+        let logger = logger_orig.clone();
+        let asset_canister = asset_canister_orig.clone();
+        let http_client = http_client.clone();
+        let name = "Requesting a small asset with the correct hash succeeds and is verified without streaming";
+        info!(&logger, "Starting subtest {}", name);
 
-                info!(&logger, "Uploading gzipped hello world asset...");
-                asset_canister
-                    .upload_asset(&UploadAssetRequest {
-                        key: "/hello-world-gzipped.txt".to_string(),
-                        content: hello_world_gzip.clone(),
-                        content_type: "text/plain".to_string(),
-                        content_encoding: "gzip".to_string(),
-                        sha_override: None,
-                    })
-                    .await?;
+        async move {
+            let hello_world = vec![72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 33];
 
-                info!(&logger, "Requesting gzipped hello world asset...");
-                let res = http_client
-                    .get(format!("https://{host}/hello-world-gzipped.txt"))
-                    .header("accept-encoding", "gzip")
-                    .send()
-                    .await?
-                    .bytes()
-                    .await?
-                    .to_vec();
+            info!(&logger, "Uploading hello world asset...");
+            asset_canister
+                .upload_asset(&UploadAssetRequest {
+                    key: "/hello-world.txt".to_string(),
+                    content: hello_world.clone(),
+                    content_type: "text/plain".to_string(),
+                    content_encoding: "identity".to_string(),
+                    sha_override: None,
+                })
+                .await?;
 
-                if res != hello_world_gzip {
-                    bail!("gzipped hello world response did not match uploaded content")
-                }
+            info!(&logger, "Requesting hello world asset...");
+            let res = http_client
+                .get(format!("https://{host}/hello-world.txt"))
+                .header("accept-encoding", "gzip")
+                .send()
+                .await?
+                .bytes()
+                .await?
+                .to_vec();
 
-                Ok(())
+            if res != hello_world {
+                bail!("hello world response did not match uploaded content")
             }
-        )
-        .await
-        .unwrap();
 
-        retry_with_msg_async!(
-            "Requesting a 4mb asset with the correct hash succeeds and is within the limit that we can safely verify while streaming so it is verified",
-            &logger,
-            READY_WAIT_TIMEOUT,
-            RETRY_BACKOFF,
-            || async {
-                let hello_world = vec![72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 33];
-                // 12 bytes * 86 = 1024 bytes
-                let req_body = iter::repeat(hello_world)
-                    .take(86 * 4 * 1024)
-                    .flatten()
-                    .collect::<Vec<_>>();
+            Ok(())
+        }
+    }));
 
-                info!(&logger, "Uploading 4mb asset...");
-                asset_canister
-                    .upload_asset(&UploadAssetRequest {
-                        key: "/4mb.txt".to_string(),
-                        content: req_body.clone(),
-                        content_type: "text/plain".to_string(),
-                        content_encoding: "identity".to_string(),
-                        sha_override: None,
-                    })
-                    .await.context("unable to upload asset")?;
+    futs.push(rt.spawn({
+        let host = host_orig.clone();
+        let logger = logger_orig.clone();
+        let asset_canister = asset_canister_orig.clone();
+        let http_client = http_client.clone();
+        let name = "Requesting a small, gzipped asset with the correct hash succeeds and is verified without streaming";
+        info!(&logger, "Starting subtest {}", name);
 
-                info!(&logger, "Requesting 4mb asset...");
-                let res = http_client
-                    .get(format!("https://{host}/4mb.txt"))
-                    .header("accept-encoding", "gzip")
-                    .send()
-                    .await.context("unable to request asset")?
-                    .bytes()
-                    .await.context("unable to download asset body")?
-                    .to_vec();
+        async move {
+            let hello_world_gzip = vec![
+                31, 139, 8, 0, 0, 0, 0, 0, 0, 3, 243, 72, 205, 201, 201, 87, 8, 207, 47, 202, 73,
+                81, 4, 0, 163, 28, 41, 28, 12, 0, 0, 0,
+            ];
 
-                if res != req_body {
-                    bail!("4mb response did not match uploaded content: expected size: {}, got: {}", req_body.len(), res.len())
-                }
+            info!(&logger, "Uploading gzipped hello world asset...");
+            asset_canister
+                .upload_asset(&UploadAssetRequest {
+                    key: "/hello-world-gzipped.txt".to_string(),
+                    content: hello_world_gzip.clone(),
+                    content_type: "text/plain".to_string(),
+                    content_encoding: "gzip".to_string(),
+                    sha_override: None,
+                })
+                .await?;
 
-                Ok(())
+            info!(&logger, "Requesting gzipped hello world asset...");
+            let res = http_client
+                .get(format!("https://{host}/hello-world-gzipped.txt"))
+                .header("accept-encoding", "gzip")
+                .send()
+                .await?
+                .bytes()
+                .await?
+                .to_vec();
+
+            if res != hello_world_gzip {
+                bail!("gzipped hello world response did not match uploaded content")
             }
-        )
-        .await
-        .unwrap();
 
-        retry_with_msg_async!(
-            "Requesting a 6mb asset with the correct hash succeeds and is within the limit that we can safely verify while streaming so it is verified".to_string(),
-            &logger,
-            READY_WAIT_TIMEOUT,
-            RETRY_BACKOFF,
-            || async {
-                let hello_world = vec![72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 33];
-                // 12 bytes * 86 = 1024 bytes
-                let req_body = iter::repeat(hello_world)
-                    .take(86 * 6 * 1024)
-                    .flatten()
-                    .collect::<Vec<_>>();
+            Ok(())
+        }
+    }));
 
-                info!(&logger, "Uploading 6mb asset...");
-                asset_canister
-                    .upload_asset(&UploadAssetRequest {
-                        key: "/6mb.txt".to_string(),
-                        content: req_body.clone(),
-                        content_type: "text/plain".to_string(),
-                        content_encoding: "identity".to_string(),
-                        sha_override: None,
-                    })
-                    .await.context("unable to upload asset")?;
+    futs.push(rt.spawn({
+        let host = host_orig.clone();
+        let logger = logger_orig.clone();
+        let asset_canister = asset_canister_orig.clone();
+        let http_client = http_client.clone();
+        let name = "Requesting a 4mb asset with the correct hash succeeds and is within the limit that we can safely verify while streaming so it is verified";
+        info!(&logger, "Starting subtest {}", name);
 
-                info!(&logger, "Requesting 6mb asset...");
-                let res = http_client
-                    .get(format!("https://{host}/6mb.txt"))
-                    .header("accept-encoding", "gzip")
-                    .send()
-                    .await.context("unable to request asset")?
-                    .bytes()
-                    .await.context("unable to download asset body")?
-                    .to_vec();
+        async move {
+            let hello_world = vec![72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 33];
+            // 12 bytes * 86 = 1024 bytes
+            let req_body = iter::repeat(hello_world)
+                .take(86 * 4 * 1024)
+                .flatten()
+                .collect::<Vec<_>>();
 
-                if res != req_body {
-                    bail!("6mb response did not match uploaded content: expected size: {}, got: {}", req_body.len(), res.len())
-                }
+            info!(&logger, "Uploading 4mb asset...");
+            asset_canister
+                .upload_asset(&UploadAssetRequest {
+                    key: "/4mb.txt".to_string(),
+                    content: req_body.clone(),
+                    content_type: "text/plain".to_string(),
+                    content_encoding: "identity".to_string(),
+                    sha_override: None,
+                })
+                .await.context("unable to upload asset")?;
 
-                Ok(())
+            info!(&logger, "Requesting 4mb asset...");
+            let res = http_client
+                .get(format!("https://{host}/4mb.txt"))
+                .header("accept-encoding", "gzip")
+                .send()
+                .await.context("unable to request asset")?
+                .bytes()
+                .await.context("unable to download asset body")?
+                .to_vec();
+
+            if res != req_body {
+                bail!("4mb response did not match uploaded content: expected size: {}, got: {}", req_body.len(), res.len())
             }
-        )
-        .await
-        .unwrap();
 
-        retry_with_msg_async!(
-            "Requesting an 8mb asset with the correct hash succeeds and is within the limit that we can safely verify while streaming so it is verified",
-            &logger,
-            READY_WAIT_TIMEOUT,
-            RETRY_BACKOFF,
-            || async {
-                let hello_world = vec![72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 33];
-                // 12 bytes * 86 = 1024 bytes
-                let req_body = iter::repeat(hello_world)
-                    .take(86 * 8 * 1024)
-                    .flatten()
-                    .collect::<Vec<_>>();
+            Ok(())
+        }
+    }));
 
-                info!(&logger, "Uploading 8mb asset...");
-                asset_canister
-                    .upload_asset(&UploadAssetRequest {
-                        key: "/8mb.txt".to_string(),
-                        content: req_body.clone(),
-                        content_type: "text/plain".to_string(),
-                        content_encoding: "identity".to_string(),
-                        sha_override: None,
-                    })
-                    .await.context("unable to upload asset")?;
+    futs.push(rt.spawn({
+        let host = host_orig.clone();
+        let logger = logger_orig.clone();
+        let asset_canister = asset_canister_orig.clone();
+        let http_client = http_client.clone();
+        let name = "Requesting a 6mb asset with the correct hash succeeds and is within the limit that we can safely verify while streaming so it is verified";
+        info!(&logger, "Starting subtest {}", name);
 
-                info!(&logger, "Requesting 8mb asset...");
-                let res = http_client
-                    .get(format!("https://{host}/8mb.txt"))
-                    .header("accept-encoding", "gzip")
-                    .send()
-                    .await.context("unable to request asset")?
-                    .bytes()
-                    .await.context("unable to download asset body")?
-                    .to_vec();
+        async move {
+            let hello_world = vec![72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 33];
+            // 12 bytes * 86 = 1024 bytes
+            let req_body = iter::repeat(hello_world)
+                .take(86 * 6 * 1024)
+                .flatten()
+                .collect::<Vec<_>>();
 
-                if res != req_body {
-                    bail!("8mb response did not match uploaded content: expected size: {}, got: {}", req_body.len(), res.len())
-                }
+            info!(&logger, "Uploading 6mb asset...");
+            asset_canister
+                .upload_asset(&UploadAssetRequest {
+                    key: "/6mb.txt".to_string(),
+                    content: req_body.clone(),
+                    content_type: "text/plain".to_string(),
+                    content_encoding: "identity".to_string(),
+                    sha_override: None,
+                })
+                .await.context("unable to upload asset")?;
 
-                Ok(())
-            })
-        .await
-        .unwrap();
+            info!(&logger, "Requesting 6mb asset...");
+            let res = http_client
+                .get(format!("https://{host}/6mb.txt"))
+                .header("accept-encoding", "gzip")
+                .send()
+                .await.context("unable to request asset")?
+                .bytes()
+                .await.context("unable to download asset body")?
+                .to_vec();
 
-        retry_with_msg_async!(
-            "Requesting a 10mb asset with the correct hash succeeds but the asset is larger than the limit that we can safely verify while streaming so it is not verified",
-            &logger,
-            READY_WAIT_TIMEOUT,
-            RETRY_BACKOFF,
-            || async {
-                let hello_world = vec![72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 33];
+            if res != req_body {
+                bail!("6mb response did not match uploaded content: expected size: {}, got: {}", req_body.len(), res.len())
+            }
+
+            Ok(())
+        }
+    }));
+
+    futs.push(rt.spawn({
+        let host = host_orig.clone();
+        let logger = logger_orig.clone();
+        let asset_canister = asset_canister_orig.clone();
+        let http_client = http_client.clone();
+        let name = "Requesting an 8mb asset with the correct hash succeeds and is within the limit that we can safely verify while streaming so it is verified";
+        info!(&logger, "Starting subtest {}", name);
+
+        async move {
+            let hello_world = vec![72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 33];
+            // 12 bytes * 86 = 1024 bytes
+            let req_body = iter::repeat(hello_world)
+                .take(86 * 8 * 1024)
+                .flatten()
+                .collect::<Vec<_>>();
+
+            info!(&logger, "Uploading 8mb asset...");
+            asset_canister
+                .upload_asset(&UploadAssetRequest {
+                    key: "/8mb.txt".to_string(),
+                    content: req_body.clone(),
+                    content_type: "text/plain".to_string(),
+                    content_encoding: "identity".to_string(),
+                    sha_override: None,
+                })
+                .await.context("unable to upload asset")?;
+
+            info!(&logger, "Requesting 8mb asset...");
+            let res = http_client
+                .get(format!("https://{host}/8mb.txt"))
+                .header("accept-encoding", "gzip")
+                .send()
+                .await.context("unable to request asset")?
+                .bytes()
+                .await.context("unable to download asset body")?
+                .to_vec();
+
+            if res != req_body {
+                bail!("8mb response did not match uploaded content: expected size: {}, got: {}", req_body.len(), res.len())
+            }
+
+            Ok(())
+        }
+    }));
+
+    futs.push(rt.spawn({
+        let host = host_orig.clone();
+        let logger = logger_orig.clone();
+        let asset_canister = asset_canister_orig.clone();
+        let http_client = http_client.clone();
+        let name = "Requesting a 10mb asset with the correct hash succeeds but the asset is larger than the limit that we can safely verify while streaming so it is not verified";
+        info!(&logger, "Starting subtest {}", name);
+
+        async move {
+            let hello_world = vec![72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 33];
                 // 12 bytes * 86 = 1024 bytes
                 let req_body = iter::repeat(hello_world)
                     .take(86 * 10 * 1024)
@@ -662,19 +669,20 @@ pub fn asset_canister_test(env: TestEnv) {
                     bail!("10mb response did not match uploaded content: expected size: {}, got: {}", req_body.len(), res.len())
                 }
 
-                Ok(())
-            }
-        )
-        .await
-        .unwrap();
+            Ok(())
+        }
+    }));
 
-        retry_with_msg_async!(
-            "Requesting a 4mb asset with the incorrect hash fails because the asset is within the limit that we can safely verify while streaming",
-            &logger,
-            READY_WAIT_TIMEOUT,
-            RETRY_BACKOFF,
-            || async {
-                let hello_world = vec![72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 33];
+    futs.push(rt.spawn({
+        let host = host_orig.clone();
+        let logger = logger_orig.clone();
+        let asset_canister = asset_canister_orig.clone();
+        let http_client = http_client.clone();
+        let name = "Requesting a 4mb asset with the incorrect hash fails because the asset is within the limit that we can safely verify while streaming";
+        info!(&logger, "Starting subtest {}", name);
+
+        async move {
+            let hello_world = vec![72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 33];
                 // 12 bytes * 86 = 1024 bytes
                 let req_body = iter::repeat(hello_world)
                     .take(86 * 4 * 1024)
@@ -706,18 +714,19 @@ pub fn asset_canister_test(env: TestEnv) {
                 }
 
                 Ok(())
-            }
-        )
-        .await
-        .unwrap();
+        }
+    }));
 
-        retry_with_msg_async!(
-            "Requesting a 10mb asset with an invalid hash succeeds because the asset is larger than what we can safely verify while streaming",
-            &logger,
-            READY_WAIT_TIMEOUT,
-            RETRY_BACKOFF,
-            || async {
-                let hello_world = vec![72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 33];
+    futs.push(rt.spawn({
+        let host = host_orig.clone();
+        let logger = logger_orig.clone();
+        let asset_canister = asset_canister_orig.clone();
+        let http_client = http_client.clone();
+        let name = "Requesting a 10mb asset with an invalid hash succeeds because the asset is larger than what we can safely verify while streaming";
+        info!(&logger, "Starting subtest {}", name);
+
+        async move {
+            let hello_world = vec![72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 33];
                 // 12 bytes * 86 = 1024 bytes
                 let req_body = iter::repeat(hello_world)
                     .take(86 * 10 * 1024)
@@ -750,11 +759,34 @@ pub fn asset_canister_test(env: TestEnv) {
                 }
 
                 Ok(())
+        }
+    }));
+
+    let logger = logger_orig.clone();
+    rt.block_on(async move {
+        let mut cnt_err = 0;
+        info!(&logger, "Waiting for subtests");
+
+        for fut in futs {
+            match fut.await {
+                Ok(Err(err)) => {
+                    error!(logger, "test failed: {}", err);
+                    cnt_err += 1;
+                }
+                Err(err) => {
+                    error!(logger, "test panicked: {}", err);
+                    cnt_err += 1;
+                }
+                _ => {}
             }
-        )
-        .await
-        .unwrap();
-    });
+        }
+
+        match cnt_err {
+            0 => Ok(()),
+            _ => bail!("failed with {cnt_err} errors"),
+        }
+    })
+    .expect("test suite failed");
 }
 
 /* tag::catalog[]
