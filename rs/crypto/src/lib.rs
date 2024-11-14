@@ -184,15 +184,21 @@ impl CryptoComponentImpl<Csp> {
     /// ```
     pub fn new(
         config: &CryptoConfig,
-        tokio_runtime_handle: Option<tokio::runtime::Handle>,
         registry_client: Arc<dyn RegistryClient>,
         logger: ReplicaLogger,
         metrics_registry: Option<&MetricsRegistry>,
     ) -> Self {
+        let tokio_runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(4)
+            .thread_name("Crypto".to_string())
+            .enable_all()
+            .build()
+            .unwrap();
+
         let metrics = Arc::new(CryptoMetrics::new(metrics_registry));
         let vault = vault_from_config(
             config,
-            tokio_runtime_handle,
+            Some(tokio_runtime.handle().clone()),
             new_logger!(&logger),
             Arc::clone(&metrics),
         );

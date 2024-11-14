@@ -51,7 +51,6 @@ fn should_successfully_construct_crypto_component_with_default_config() {
         let registry_client = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
         CryptoComponent::new(
             &config,
-            None,
             Arc::new(registry_client),
             no_op_logger(),
             None,
@@ -71,7 +70,6 @@ fn should_successfully_construct_crypto_component_with_remote_csp_vault() {
     let registry_client = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
     CryptoComponent::new(
         &config,
-        Some(tokio_rt.handle().clone()),
         Arc::new(registry_client),
         no_op_logger(),
         None,
@@ -89,7 +87,6 @@ fn should_not_construct_crypto_component_if_remote_csp_vault_is_missing() {
     let registry_client = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
     CryptoComponent::new(
         &config,
-        Some(tokio_rt.handle().clone()),
         Arc::new(registry_client),
         no_op_logger(),
         None,

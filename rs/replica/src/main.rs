@@ -201,12 +201,8 @@ fn main() -> io::Result<()> {
         .set(1);
     }
 
-    let (registry, crypto) = setup::setup_crypto_registry(
-        &config,
-        rt_main.handle().clone(),
-        &metrics_registry,
-        logger.clone(),
-    );
+    let (registry, crypto) =
+        setup::setup_crypto_registry(&config, &metrics_registry, logger.clone());
 
     let node_id = crypto.get_node_id();
 
