@@ -100,7 +100,6 @@ impl RemoteCspVault {
 const DEFAULT_RPC_TIMEOUT: Duration = Duration::from_secs(300); // 5 minutes
 const LONG_RPC_TIMEOUT: Duration = Duration::from_secs(3600 * 24 * 100); // 100 days
 
-#[allow(dead_code)]
 impl RemoteCspVault {
     /// Creates a new `RemoteCspVault`-object that communicates
     /// with a server via a Unix socket specified by `socket_path`.
