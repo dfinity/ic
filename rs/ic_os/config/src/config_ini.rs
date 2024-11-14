@@ -15,7 +15,7 @@ pub struct ConfigIniSettings {
     pub ipv4_address: Option<Ipv4Addr>,
     pub ipv4_gateway: Option<Ipv4Addr>,
     pub ipv4_prefix_length: Option<u8>,
-    pub domain: Option<String>,
+    pub domain_name: Option<String>,
     pub verbose: bool,
 }
 
@@ -82,7 +82,7 @@ pub fn get_config_ini_settings(config_file_path: &Path) -> Result<ConfigIniSetti
         })
         .transpose()?;
 
-    let domain = config_map.get("domain").cloned();
+    let domain_name = config_map.get("domain").cloned();
 
     let verbose = config_map
         .get("verbose")
@@ -95,7 +95,7 @@ pub fn get_config_ini_settings(config_file_path: &Path) -> Result<ConfigIniSetti
         ipv4_address,
         ipv4_gateway,
         ipv4_prefix_length,
-        domain,
+        domain_name,
         verbose,
     })
 }
@@ -265,7 +265,10 @@ mod tests {
             "212.71.124.177".parse::<Ipv4Addr>()?
         );
         assert_eq!(config_ini_settings.ipv4_prefix_length.unwrap(), 28);
-        assert_eq!(config_ini_settings.domain, Some("example.com".to_string()));
+        assert_eq!(
+            config_ini_settings.domain_name,
+            Some("example.com".to_string())
+        );
         assert!(!config_ini_settings.verbose);
 
         // Test missing ipv6

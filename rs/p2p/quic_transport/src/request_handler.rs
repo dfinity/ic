@@ -20,9 +20,8 @@ use ic_base_types::NodeId;
 use ic_logger::{info, ReplicaLogger};
 use ic_protobuf::transport::v1 as pb;
 use prost::Message;
-use quinn::{RecvStream, SendStream};
+use quinn::RecvStream;
 use tower::ServiceExt;
-use tracing::instrument;
 
 use crate::{
     connection_handle::ConnectionHandle,
@@ -57,6 +56,7 @@ pub async fn run_stream_acceptor(
             bi = conn_handle.conn().accept_bi() => {
                 match bi {
                     Ok((bi_tx, bi_rx)) => {
+                        let send_stream = ResetStreamOnDrop::new(bi_tx);
                         inflight_requests.spawn(
                             metrics.request_task_monitor.instrument(
                                 handle_bi_stream(
@@ -64,14 +64,14 @@ pub async fn run_stream_acceptor(
                                     conn_handle.conn_id(),
                                     metrics.clone(),
                                     router.clone(),
-                                    bi_tx,
+                                    send_stream,
                                     bi_rx
                                 )
                             )
                         );
                     }
                     Err(err) => {
-                        info!(log, "Error accepting bi stream {}", err.to_string());
+                        info!(log, "Error accepting bi stream {:?}", err.to_string());
                         observe_conn_error(&err, "accept_bi", &metrics.request_handle_errors_total);
                         break;
                     }
@@ -82,7 +82,7 @@ pub async fn run_stream_acceptor(
             Some(completed_request) = inflight_requests.join_next() => {
                 match completed_request {
                     Ok(res) => {
-                        let _ = res.inspect_err(|err| info!(every_n_seconds => 60, log, "{}", err));
+                        let _ = res.inspect_err(|err| info!(every_n_seconds => 60, log, "{:?}", err));
                     }
                     Err(err) => {
                         // Cancelling tasks is ok. Panicking tasks are not.
@@ -94,33 +94,26 @@ pub async fn run_stream_acceptor(
             },
         }
     }
-    info!(log, "Shutting down request handler for peer {}", peer_id);
+    info!(log, "Shutting down request handler for peer {:?}", peer_id);
 
     inflight_requests.shutdown().await;
 }
 
-#[instrument(skip(metrics, router, send_stream, recv_stream))]
 /// Note: The method is cancel-safe.
 async fn handle_bi_stream(
     peer_id: NodeId,
     conn_id: ConnId,
     metrics: QuicTransportMetrics,
     router: Router,
-    send_stream: SendStream,
-    mut recv_stream: RecvStream,
+    mut send_stream_guard: ResetStreamOnDrop,
+    recv_stream: RecvStream,
 ) -> Result<(), anyhow::Error> {
-    let mut send_stream_guard = ResetStreamOnDrop::new(send_stream);
-    let send_stream = &mut send_stream_guard.send_stream;
-    let request_bytes = recv_stream
-        .read_to_end(MAX_MESSAGE_SIZE_BYTES)
-        .await
-        .inspect_err(|err| {
-            observe_read_to_end_error(err, "read_to_end", &metrics.request_handle_errors_total)
-        })?;
-    let mut request = to_request(request_bytes)?;
+    // Note that the 'recv_stream' is dropped before we call any method on the 'send_stream'
+    let mut request = read_request(recv_stream, &metrics).await?;
     request.extensions_mut().insert::<NodeId>(peer_id);
     request.extensions_mut().insert::<ConnId>(conn_id);
 
+    let send_stream = &mut send_stream_guard.send_stream;
     let svc = router.oneshot(request);
     let stopped = send_stream.stopped();
     let response = tokio::select! {
@@ -161,7 +154,17 @@ async fn handle_bi_stream(
 }
 
 // The function returns infallible error.
-fn to_request(request_bytes: Vec<u8>) -> Result<Request<Body>, anyhow::Error> {
+async fn read_request(
+    mut recv_stream: RecvStream,
+    metrics: &QuicTransportMetrics,
+) -> Result<Request<Body>, anyhow::Error> {
+    let request_bytes = recv_stream
+        .read_to_end(MAX_MESSAGE_SIZE_BYTES)
+        .await
+        .inspect_err(|err| {
+            observe_read_to_end_error(err, "read_to_end", &metrics.request_handle_errors_total)
+        })?;
+
     let request_proto = pb::HttpRequest::decode(request_bytes.as_slice())?;
     let pb_http_method = pb::HttpMethod::try_from(request_proto.method)?;
     let http_method = match pb_http_method {

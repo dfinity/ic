@@ -7,10 +7,12 @@ use certificate_orchestrator_interface::{
     ExportCertificatesError, ExportCertificatesResponse, ExportPackage, GetCertificateError,
     GetCertificateResponse, GetRegistrationError, GetRegistrationResponse, HeaderField,
     HttpRequest, HttpResponse, Id, InitArg, ListAllowedPrincipalsError,
-    ListAllowedPrincipalsResponse, ModifyAllowedPrincipalError, ModifyAllowedPrincipalResponse,
+    ListAllowedPrincipalsResponse, ListRegistrationsError, ListRegistrationsResponse,
+    ListTasksError, ListTasksResponse, ModifyAllowedPrincipalError, ModifyAllowedPrincipalResponse,
     Name, PeekTaskError, PeekTaskResponse, QueueTaskError, QueueTaskResponse, Registration,
-    RemoveRegistrationError, RemoveRegistrationResponse, State, UpdateRegistrationError,
-    UpdateRegistrationResponse, UpdateType, UploadCertificateError, UploadCertificateResponse,
+    RemoveRegistrationError, RemoveRegistrationResponse, RemoveTaskError, RemoveTaskResponse,
+    State, UpdateRegistrationError, UpdateRegistrationResponse, UpdateType, UploadCertificateError,
+    UploadCertificateResponse,
 };
 use ic_cdk::{
     api::{id, time},
@@ -24,7 +26,7 @@ use ic_stable_structures::{
 };
 use priority_queue::PriorityQueue;
 use prometheus::{CounterVec, Encoder, Gauge, GaugeVec, Opts, Registry, TextEncoder};
-use work::{Peek, PeekError};
+use work::{Peek, PeekError, TaskRemover};
 
 use crate::{
     acl::{Authorize, AuthorizeError, Authorizer, WithAuthorize},
@@ -148,6 +150,13 @@ thread_local! {
         ), &["status"]).unwrap()
     });
 
+    static COUNTER_REMOVE_TASK_TOTAL: RefCell<CounterVec> = RefCell::new({
+        CounterVec::new(Opts::new(
+            format!("{SERVICE_NAME}_remove_task_total"), // name
+            "number of times remove_task was called", // help
+        ), &["status"]).unwrap()
+    });
+
     static GAUGE_REGISTRATIONS_TOTAL: RefCell<GaugeVec> = RefCell::new({
         GaugeVec::new(Opts::new(
             format!("{SERVICE_NAME}_registrations_total"), // name
@@ -210,6 +219,11 @@ thread_local! {
         });
 
         COUNTER_DISPENSE_TASK_TOTAL.with(|c| {
+            let c = Box::new(c.borrow().to_owned());
+            r.register(c).unwrap();
+        });
+
+        COUNTER_REMOVE_TASK_TOTAL.with(|c| {
             let c = Box::new(c.borrow().to_owned());
             r.register(c).unwrap();
         });
@@ -344,6 +358,12 @@ thread_local! {
         let r = WithMetrics(r, &COUNTER_REMOVE_REGISTRATION_TOTAL);
         Box::new(r)
     });
+
+    static REGISTRATION_LISTER: RefCell<Box<dyn registration::List>> = RefCell::new({
+        let v = registration::Lister::new(&REGISTRATIONS);
+        let v = WithAuthorize(v, &ROOT_AUTHORIZER);
+        Box::new(v)
+    });
 }
 
 // Certificates
@@ -386,11 +406,24 @@ thread_local! {
         Box::new(d)
     });
 
+    static TASK_LISTER: RefCell<Box<dyn work::List>> = RefCell::new({
+        let v = work::Lister::new(&TASKS, &REGISTRATIONS);
+        let v = WithAuthorize(v, &ROOT_AUTHORIZER);
+        Box::new(v)
+    });
+
     static DISPENSER: RefCell<Box<dyn Dispense>> = RefCell::new({
         let d = Dispenser::new(&TASKS, &RETRIES);
         let d = WithAuthorize(d, &MAIN_AUTHORIZER);
         let d = WithMetrics(d, &COUNTER_DISPENSE_TASK_TOTAL);
         Box::new(d)
+    });
+
+    static TASK_REMOVER: RefCell<Box<dyn work::Remove>> = RefCell::new({
+        let v = TaskRemover::new(&TASKS);
+        let v = WithAuthorize(v, &ROOT_AUTHORIZER);
+        let v = WithMetrics(v, &COUNTER_REMOVE_TASK_TOTAL);
+        Box::new(v)
     });
 }
 
@@ -678,6 +711,20 @@ fn remove_registration(id: Id) -> RemoveRegistrationResponse {
     }
 }
 
+#[query(name = "listRegistrations")]
+#[candid_method(query, rename = "listRegistrations")]
+fn list_registrations() -> ListRegistrationsResponse {
+    match REGISTRATION_LISTER.with(|v| v.borrow().list()) {
+        Ok(rs) => ListRegistrationsResponse::Ok(rs),
+        Err(err) => ListRegistrationsResponse::Err(match err {
+            registration::ListError::Unauthorized => ListRegistrationsError::Unauthorized,
+            registration::ListError::UnexpectedError(err) => {
+                ListRegistrationsError::UnexpectedError(err.to_string())
+            }
+        }),
+    }
+}
+
 // Certificates
 
 #[query(name = "getCertificate")]
@@ -793,6 +840,35 @@ fn dispense_task() -> DispenseTaskResponse {
             DispenseError::Unauthorized => DispenseTaskError::Unauthorized,
             DispenseError::UnexpectedError(err) => {
                 DispenseTaskError::UnexpectedError(err.to_string())
+            }
+        }),
+    }
+}
+
+#[update(name = "removeTask")]
+#[candid_method(update, rename = "removeTask")]
+fn remove_task(id: Id) -> RemoveTaskResponse {
+    match TASK_REMOVER.with(|v| v.borrow().remove(&id)) {
+        Ok(()) => RemoveTaskResponse::Ok,
+        Err(err) => RemoveTaskResponse::Err(match err {
+            work::RemoveError::NotFound => RemoveTaskError::NotFound,
+            work::RemoveError::Unauthorized => RemoveTaskError::Unauthorized,
+            work::RemoveError::UnexpectedError(err) => {
+                RemoveTaskError::UnexpectedError(err.to_string())
+            }
+        }),
+    }
+}
+
+#[query(name = "listTasks")]
+#[candid_method(query, rename = "listTasks")]
+fn list_tasks() -> ListTasksResponse {
+    match TASK_LISTER.with(|v| v.borrow().list()) {
+        Ok(ts) => ListTasksResponse::Ok(ts),
+        Err(err) => ListTasksResponse::Err(match err {
+            work::ListError::Unauthorized => ListTasksError::Unauthorized,
+            work::ListError::UnexpectedError(err) => {
+                ListTasksError::UnexpectedError(err.to_string())
             }
         }),
     }
