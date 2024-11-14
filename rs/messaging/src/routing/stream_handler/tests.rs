@@ -639,7 +639,6 @@ fn with_induct_loopback_stream_setup(
     certification_version: CertificationVersion,
     test_impl: impl FnOnce(StreamHandlerImpl, ReplicatedState, MetricsFixture),
 ) {
-    assert!(certification_version <= CURRENT_CERTIFICATION_VERSION);
     with_local_test_setup_and_config(
         config,
         subnet_type,
@@ -3842,7 +3841,6 @@ fn with_test_setup_and_config(
         MetricsFixture,
     ),
 ) {
-    assert!(certification_version <= CURRENT_CERTIFICATION_VERSION);
     with_test_replica_logger(|log| {
         // Generate an empty `ReplicatedState` for `LOCAL_SUBNET`.
         let mut state = ReplicatedState::new(LOCAL_SUBNET, subnet_type);

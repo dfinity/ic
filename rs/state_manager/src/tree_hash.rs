@@ -167,8 +167,6 @@ mod tests {
     #[test]
     fn test_backward_compatibility() {
         fn state_fixture(certification_version: CertificationVersion) -> ReplicatedState {
-            assert!(certification_version <= CURRENT_CERTIFICATION_VERSION);
-
             let subnet_id = subnet_test_id(1);
             let mut state = ReplicatedState::new(subnet_id, SubnetType::Application);
 

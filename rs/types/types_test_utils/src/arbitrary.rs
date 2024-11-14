@@ -123,8 +123,7 @@ prop_compose! {
 }
 
 prop_compose! {
-    /// Generates an arbitrary [`Request`], with or without populated `metadata` and
-    /// `deadline` fields.
+    /// Generates an arbitrary [`Request`], with or without a populated `deadline` field.
     pub fn request_with_config(populate_deadline: bool)(
         receiver in canister_id(),
         sender in canister_id(),
