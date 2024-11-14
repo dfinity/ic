@@ -32,12 +32,14 @@ impl std::convert::TryFrom<u32> for CertificationVersion {
     type Error = UnsupportedCertificationVersion;
 
     fn try_from(n: u32) -> Result<Self, Self::Error> {
-        match n {
-            17 => Ok(CertificationVersion::V17),
-            18 => Ok(CertificationVersion::V18),
-            19 => Ok(CertificationVersion::V19),
-            _ => Err(UnsupportedCertificationVersion(n)),
-        }
+        use strum::IntoEnumIterator;
+        CertificationVersion::iter()
+            .find(|v| {
+                MIN_SUPPORTED_CERTIFICATION_VERSION <= *v
+                    && *v <= MAX_SUPPORTED_CERTIFICATION_VERSION
+                    && *v as u32 == n
+            })
+            .ok_or(UnsupportedCertificationVersion(n))
     }
 }
 
@@ -73,15 +75,16 @@ fn version_constants_consistent() {
 
 #[test]
 fn convert_from_u32_succeeds_for_all_supported_certification_versions() {
+    use strum::IntoEnumIterator;
     assert!(all_supported_versions().all(|v| (v as u32).try_into() == Ok(v)));
     // Old unsupported version should fail.
-    let v = all_supported_versions().next().unwrap() as u32 - 1;
+    let v = CertificationVersion::iter().next().unwrap() as u32 - 1;
     assert_eq!(
         CertificationVersion::try_from(v),
         Err(UnsupportedCertificationVersion(v))
     );
     // Non-existent version should fail.
-    let v = all_supported_versions().last().unwrap() as u32 + 1;
+    let v = CertificationVersion::iter().last().unwrap() as u32 + 1;
     assert_eq!(
         CertificationVersion::try_from(v),
         Err(UnsupportedCertificationVersion(v))

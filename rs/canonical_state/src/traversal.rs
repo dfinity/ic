@@ -276,7 +276,6 @@ mod tests {
                     edge("certified_data"),
                     E::VisitBlob(vec![]),
                 ]),
-                None,
                 Some(vec![
                     edge("controllers"),
                     E::VisitBlob(controllers_cbor.clone()),
