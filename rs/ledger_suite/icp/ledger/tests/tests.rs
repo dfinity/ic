@@ -463,18 +463,18 @@ fn test_tx_time_bounds() {
 // Check that different blocks produce different hashes.
 #[test]
 fn transaction_hashes_are_unique() {
-    ic_ledger_suite_state_machine_tests::transaction_hashes_are_unique();
+    ic_ledger_suite_state_machine_tests::transaction_hashes_are_unique::<Tokens>();
 }
 
 #[test]
 fn block_hashes_are_unique() {
-    ic_ledger_suite_state_machine_tests::block_hashes_are_unique();
+    ic_ledger_suite_state_machine_tests::block_hashes_are_unique::<Tokens>();
 }
 
 // Generate random blocks and check that the block hash is stable.
 #[test]
 fn block_hashes_are_stable() {
-    ic_ledger_suite_state_machine_tests::block_hashes_are_stable();
+    ic_ledger_suite_state_machine_tests::block_hashes_are_stable::<Tokens>();
 }
 
 #[test]
@@ -1239,7 +1239,7 @@ fn test_upgrade_serialization() {
 
     let init_args = CandidOne(payload).into_bytes().unwrap();
     let upgrade_args = Encode!(&LedgerCanisterPayload::Upgrade(None)).unwrap();
-    ic_ledger_suite_state_machine_tests::test_upgrade_serialization(
+    ic_ledger_suite_state_machine_tests::test_upgrade_serialization::<Tokens>(
         ledger_wasm_mainnet,
         ledger_wasm_current,
         init_args,
@@ -1367,7 +1367,10 @@ fn test_approve_cant_pay_fee() {
 
 #[test]
 fn test_approve_cap() {
-    ic_ledger_suite_state_machine_tests::test_approve_cap(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_approve_cap::<LedgerCanisterInitPayload, Tokens>(
+        ledger_wasm(),
+        encode_init_args,
+    );
 }
 
 #[test]

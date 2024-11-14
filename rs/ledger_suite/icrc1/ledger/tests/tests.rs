@@ -35,6 +35,12 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+#[cfg(not(feature = "u256-tokens"))]
+pub type Tokens = ic_icrc1_tokens_u64::U64;
+
+#[cfg(feature = "u256-tokens")]
+pub type Tokens = ic_icrc1_tokens_u256::U256;
+
 #[derive(Clone, Eq, PartialEq, Debug, CandidType)]
 pub struct LegacyInitArgs {
     pub minting_account: Account,
@@ -251,31 +257,31 @@ fn test_get_blocks() {
 // Generate random blocks and check that their CBOR encoding complies with the CDDL spec.
 #[test]
 fn block_encoding_agrees_with_the_schema() {
-    ic_ledger_suite_state_machine_tests::block_encoding_agrees_with_the_schema();
+    ic_ledger_suite_state_machine_tests::block_encoding_agrees_with_the_schema::<Tokens>();
 }
 
 // Generate random blocks and check that their value encoding complies with the ICRC-3 spec.
 #[test]
 fn block_encoding_agrees_with_the_icrc3_schema() {
-    ic_ledger_suite_state_machine_tests::block_encoding_agreed_with_the_icrc3_schema();
+    ic_ledger_suite_state_machine_tests::block_encoding_agreed_with_the_icrc3_schema::<Tokens>();
 }
 
 // Check that different blocks produce different hashes.
 #[test]
 fn transaction_hashes_are_unique() {
-    ic_ledger_suite_state_machine_tests::transaction_hashes_are_unique();
+    ic_ledger_suite_state_machine_tests::transaction_hashes_are_unique::<Tokens>();
 }
 
 // Check that different blocks produce different hashes.
 #[test]
 fn block_hashes_are_unique() {
-    ic_ledger_suite_state_machine_tests::block_hashes_are_unique();
+    ic_ledger_suite_state_machine_tests::block_hashes_are_unique::<Tokens>();
 }
 
 // Generate random blocks and check that the block hash is stable.
 #[test]
 fn block_hashes_are_stable() {
-    ic_ledger_suite_state_machine_tests::block_hashes_are_stable();
+    ic_ledger_suite_state_machine_tests::block_hashes_are_stable::<Tokens>();
 }
 
 #[test]
@@ -344,7 +350,10 @@ fn test_approve_cant_pay_fee() {
 
 #[test]
 fn test_approve_cap() {
-    ic_ledger_suite_state_machine_tests::test_approve_cap(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_approve_cap::<LedgerArgument, Tokens>(
+        ledger_wasm(),
+        encode_init_args,
+    );
 }
 
 #[test]
@@ -422,7 +431,7 @@ fn test_ledger_http_request_decoding_quota() {
 
 #[test]
 fn test_block_transformation() {
-    ic_ledger_suite_state_machine_tests::icrc1_test_block_transformation(
+    ic_ledger_suite_state_machine_tests::icrc1_test_block_transformation::<LedgerArgument, Tokens>(
         ledger_mainnet_wasm(),
         ledger_wasm(),
         encode_init_args,
@@ -437,7 +446,7 @@ fn icrc1_test_upgrade_serialization() {
         .with_transfer_fee(FEE);
     let init_args = Encode!(&LedgerArgument::Init(builder.build())).unwrap();
     let upgrade_args = Encode!(&LedgerArgument::Upgrade(None)).unwrap();
-    ic_ledger_suite_state_machine_tests::test_upgrade_serialization(
+    ic_ledger_suite_state_machine_tests::test_upgrade_serialization::<Tokens>(
         ledger_mainnet_wasm(),
         ledger_wasm(),
         init_args,
@@ -758,12 +767,6 @@ where
         .bytes();
     Decode!(&res, O).unwrap()
 }
-
-#[cfg(not(feature = "u256-tokens"))]
-pub type Tokens = ic_icrc1_tokens_u64::U64;
-
-#[cfg(feature = "u256-tokens")]
-pub type Tokens = ic_icrc1_tokens_u256::U256;
 
 #[test]
 fn test_icrc3_get_archives() {
@@ -1133,7 +1136,7 @@ fn test_icrc3_get_blocks() {
     // multiple ranges
     check_icrc3_get_blocks(vec![(2, 3), (1, 2), (0, 10), (10, 5)]);
 
-    verify_ledger_state(&env, ledger_id, None);
+    verify_ledger_state::<Tokens>(&env, ledger_id, None);
 }
 
 #[test]

@@ -728,13 +728,15 @@ pub struct BurnsWithoutSpender<AccountId> {
     pub burn_indexes: Vec<usize>,
 }
 
-pub fn verify_ledger_state(
+pub fn verify_ledger_state<Tokens>(
     env: &StateMachine,
     ledger_id: CanisterId,
     burns_without_spender: Option<BurnsWithoutSpender<Account>>,
-) {
+) where
+    Tokens: Default + TokensType + PartialEq + std::fmt::Debug + std::fmt::Display,
+{
     println!("verifying state of ledger {}", ledger_id);
-    let blocks = get_all_ledger_and_archive_blocks(env, ledger_id, None, None);
+    let blocks = get_all_ledger_and_archive_blocks::<Tokens>(env, ledger_id, None, None);
     println!("retrieved all ledger and archive blocks");
     let mut expected_ledger_state = InMemoryLedger::new(burns_without_spender);
     expected_ledger_state.consume_blocks(&blocks);

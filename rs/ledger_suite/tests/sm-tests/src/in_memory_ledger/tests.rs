@@ -1,5 +1,5 @@
 use crate::in_memory_ledger::{ApprovalKey, InMemoryLedger, InMemoryLedgerState};
-use crate::Tokens;
+
 use ic_ledger_core::approvals::Allowance;
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
@@ -20,6 +20,15 @@ const ZERO_AMOUNT: u64 = 0u64;
 const FEE_AMOUNT: u64 = 10_000u64;
 const TIMESTAMP_NOW: u64 = 0;
 const TIMESTAMP_LATER: u64 = 1;
+
+#[cfg(not(any(feature = "u256-tokens", feature = "icp-tokens")))]
+type Tokens = ic_icrc1_tokens_u64::U64;
+
+#[cfg(all(feature = "u256-tokens", not(feature = "icp-tokens")))]
+type Tokens = ic_icrc1_tokens_u256::U256;
+
+#[cfg(feature = "icp-tokens")]
+type Tokens = ic_ledger_core::Tokens;
 
 #[cfg(feature = "icp-tokens")]
 type AccountType = AccountIdentifier;
