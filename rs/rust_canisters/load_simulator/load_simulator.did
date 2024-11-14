@@ -1,1 +1,1 @@
-service : () -> { no_op_query : () -> () query; no_op_update : () -> () }
+service : () -> {}

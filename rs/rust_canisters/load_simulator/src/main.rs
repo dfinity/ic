@@ -23,16 +23,6 @@ async fn timer_handler() {
     });
 }
 
-#[ic_cdk::update]
-fn no_op_update() {
-    // Do nothing.
-}
-
-#[ic_cdk::query]
-fn no_op_query() {
-    // Do nothing.
-}
-
 #[ic_cdk::init]
 fn set_up_timer() {
     // Set up a canister timer to call a function every N seconds.
