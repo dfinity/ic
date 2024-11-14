@@ -1,5 +1,6 @@
 pub mod config_ini;
 pub mod deployment_json;
+pub mod generate_testnet_config;
 pub mod types;
 
 use anyhow::{Context, Result};
@@ -11,15 +12,14 @@ use std::path::Path;
 pub static DEFAULT_SETUPOS_CONFIG_OBJECT_PATH: &str = "/var/ic/config/config.json";
 pub static DEFAULT_SETUPOS_CONFIG_INI_FILE_PATH: &str = "/config/config.ini";
 pub static DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH: &str = "/data/deployment.json";
-pub static DEFAULT_SETUPOS_NNS_PUBLIC_KEY_PATH: &str = "/data/nns_public_key.pem";
-pub static DEFAULT_SETUPOS_SSH_AUTHORIZED_KEYS_PATH: &str = "/config/ssh_authorized_keys";
-pub static DEFAULT_SETUPOS_NODE_OPERATOR_PRIVATE_KEY_PATH: &str =
-    "/config/node_operator_private_key.pem";
 
 pub static DEFAULT_SETUPOS_HOSTOS_CONFIG_OBJECT_PATH: &str = "/var/ic/config/config-hostos.json";
 
 pub static DEFAULT_HOSTOS_CONFIG_INI_FILE_PATH: &str = "/boot/config/config.ini";
 pub static DEFAULT_HOSTOS_DEPLOYMENT_JSON_PATH: &str = "/boot/config/deployment.json";
+pub static DEFAULT_HOSTOS_CONFIG_OBJECT_PATH: &str = "/boot/config/config.json";
+pub static DEFAULT_HOSTOS_GUESTOS_CONFIG_OBJECT_PATH: &str = "/boot/config/config-guestos.json";
+pub static DEFAULT_GUESTOS_CONFIG_OBJECT_PATH: &str = "/boot/config/config.json";
 
 pub fn serialize_and_write_config<T: Serialize>(path: &Path, config: &T) -> Result<()> {
     let serialized_config =
@@ -34,11 +34,12 @@ pub fn serialize_and_write_config<T: Serialize>(path: &Path, config: &T) -> Resu
     Ok(())
 }
 
-pub fn deserialize_config<T: for<'de> Deserialize<'de>>(file_path: &str) -> Result<T> {
-    let file = File::open(file_path).context(format!("Failed to open file: {}", file_path))?;
+pub fn deserialize_config<T: for<'de> Deserialize<'de>, P: AsRef<Path>>(file_path: P) -> Result<T> {
+    let file =
+        File::open(&file_path).context(format!("Failed to open file: {:?}", file_path.as_ref()))?;
     serde_json::from_reader(file).context(format!(
-        "Failed to deserialize JSON from file: {}",
-        file_path
+        "Failed to deserialize JSON from file: {:?}",
+        file_path.as_ref()
     ))
 }
 
@@ -46,7 +47,6 @@ pub fn deserialize_config<T: for<'de> Deserialize<'de>>(file_path: &str) -> Resu
 mod tests {
     use super::*;
     use mac_address::mac_address::FormattedMacAddress;
-    use std::path::PathBuf;
     use types::*;
 
     #[test]
@@ -59,6 +59,7 @@ mod tests {
         let network_settings = NetworkSettings {
             ipv6_config,
             ipv4_config: None,
+            domain_name: None,
         };
         let logging = Logging {
             elasticsearch_hosts: [
@@ -75,10 +76,10 @@ mod tests {
             mgmt_mac: FormattedMacAddress::try_from("ec:2a:72:31:a2:0c")?,
             deployment_environment: "Mainnet".to_string(),
             logging,
-            nns_public_key_path: PathBuf::from("/path/to/key"),
+            nns_public_key_exists: true,
             nns_urls: vec!["http://localhost".parse().unwrap()],
-            node_operator_private_key_path: None,
-            ssh_authorized_keys_path: None,
+            node_operator_private_key_exists: true,
+            use_ssh_authorized_keys: false,
             icos_dev_settings,
         };
         let setupos_settings = SetupOSSettings;
@@ -88,13 +89,14 @@ mod tests {
             verbose: false,
         };
         let guestos_settings = GuestOSSettings {
-            ic_crypto_path: None,
-            ic_state_path: None,
-            ic_registry_local_store_path: None,
+            inject_ic_crypto: false,
+            inject_ic_state: false,
+            inject_ic_registry_local_store: false,
             guestos_dev_settings: GuestOSDevSettings::default(),
         };
 
         let setupos_config_struct = SetupOSConfig {
+            config_version: CONFIG_VERSION.to_string(),
             network_settings: network_settings.clone(),
             icos_settings: icos_settings.clone(),
             setupos_settings: setupos_settings.clone(),
@@ -102,12 +104,14 @@ mod tests {
             guestos_settings: guestos_settings.clone(),
         };
         let hostos_config_struct = HostOSConfig {
+            config_version: CONFIG_VERSION.to_string(),
             network_settings: network_settings.clone(),
             icos_settings: icos_settings.clone(),
             hostos_settings: hostos_settings.clone(),
             guestos_settings: guestos_settings.clone(),
         };
         let guestos_config_struct = GuestOSConfig {
+            config_version: CONFIG_VERSION.to_string(),
             network_settings: network_settings.clone(),
             icos_settings: icos_settings.clone(),
             guestos_settings: guestos_settings.clone(),
@@ -134,6 +138,139 @@ mod tests {
         serialize_and_deserialize(&hostos_config_struct);
         serialize_and_deserialize(&guestos_config_struct);
 
+        Ok(())
+    }
+
+    // Test config version 1.0.0
+    const HOSTOS_CONFIG_JSON_V1_0_0: &str = r#"
+    {
+        "config_version": "1.0.0",
+        "network_settings": {
+            "ipv6_config": {
+                "Deterministic": {
+                    "prefix": "2a00:fb01:400:200",
+                    "prefix_length": 64,
+                    "gateway": "2a00:fb01:400:200::1"
+                }
+            },
+            "ipv4_config": {
+                "address": "192.168.0.2",
+                "gateway": "192.168.0.1",
+                "prefix_length": 24
+            },
+            "domain_name": "example.com"
+        },
+        "icos_settings": {
+            "mgmt_mac": "ec:2a:72:31:a2:0c",
+            "deployment_environment": "Mainnet",
+            "logging": {
+                "elasticsearch_hosts": "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443",
+                "elasticsearch_tags": "tag1 tag2"
+            },
+            "nns_public_key_exists": true,
+            "nns_urls": [
+                "http://localhost"
+            ],
+            "node_operator_private_key_exists": true,
+            "use_ssh_authorized_keys": false,
+            "icos_dev_settings": {}
+        },
+        "hostos_settings": {
+            "vm_memory": 490,
+            "vm_cpu": "kvm",
+            "verbose": false
+        },
+        "guestos_settings": {
+            "inject_ic_crypto": false,
+            "inject_ic_state": false,
+            "inject_ic_registry_local_store": false,
+            "guestos_dev_settings": {
+                "backup_spool": {
+                    "backup_retention_time_seconds": 3600,
+                    "backup_purging_interval_seconds": 600
+                },
+                "malicious_behavior": null,
+                "query_stats_epoch_length": 1000,
+                "bitcoind_addr": "127.0.0.1:8333",
+                "jaeger_addr": "127.0.0.1:6831",
+                "socks_proxy": "127.0.0.1:1080",
+                "hostname": "my-node",
+                "generate_ic_boundary_tls_cert": "domain"
+            }
+        }
+    }
+    "#;
+
+    const GUESTOS_CONFIG_JSON_V1_0_0: &str = r#"
+    {
+        "config_version": "1.0.0",
+        "network_settings": {
+            "ipv6_config": {
+                "Deterministic": {
+                    "prefix": "2a00:fb01:400:200",
+                    "prefix_length": 64,
+                    "gateway": "2a00:fb01:400:200::1"
+                }
+            },
+            "ipv4_config": {
+                "address": "192.168.0.2",
+                "gateway": "192.168.0.1",
+                "prefix_length": 24
+            },
+            "domain_name": "example.com"
+        },
+        "icos_settings": {
+            "mgmt_mac": "ec:2a:72:31:a2:0c",
+            "deployment_environment": "Mainnet",
+            "logging": {
+                "elasticsearch_hosts": "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443",
+                "elasticsearch_tags": "tag1 tag2"
+            },
+            "nns_public_key_exists": true,
+            "nns_urls": [
+                "http://localhost"
+            ],
+            "node_operator_private_key_exists": true,
+            "use_ssh_authorized_keys": false,
+            "icos_dev_settings": {}
+        },
+        "guestos_settings": {
+            "inject_ic_crypto": false,
+            "inject_ic_state": false,
+            "inject_ic_registry_local_store": false,
+            "guestos_dev_settings": {
+                "backup_spool": {
+                    "backup_retention_time_seconds": 3600,
+                    "backup_purging_interval_seconds": 600
+                },
+                "malicious_behavior": null,
+                "query_stats_epoch_length": 1000,
+                "bitcoind_addr": "127.0.0.1:8333",
+                "jaeger_addr": "127.0.0.1:6831",
+                "socks_proxy": "127.0.0.1:1080",
+                "hostname": "my-node",
+                "generate_ic_boundary_tls_cert": "domain"
+            }
+        }
+    }
+    "#;
+
+    #[test]
+    fn test_deserialize_hostos_config_v1_0_0() -> Result<(), Box<dyn std::error::Error>> {
+        let config: HostOSConfig = serde_json::from_str(HOSTOS_CONFIG_JSON_V1_0_0)?;
+        assert_eq!(config.config_version, "1.0.0");
+        assert_eq!(config.hostos_settings.vm_cpu, "kvm");
+        Ok(())
+    }
+
+    #[test]
+    fn test_deserialize_guestos_config_v1_0_0() -> Result<(), Box<dyn std::error::Error>> {
+        let config: GuestOSConfig = serde_json::from_str(GUESTOS_CONFIG_JSON_V1_0_0)?;
+        assert_eq!(config.config_version, "1.0.0");
+        assert_eq!(
+            config.icos_settings.mgmt_mac.to_string(),
+            "ec:2a:72:31:a2:0c"
+        );
         Ok(())
     }
 }
