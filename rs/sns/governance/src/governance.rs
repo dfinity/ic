@@ -5998,9 +5998,7 @@ mod tests {
         },
         reward,
         sns_upgrade::{
-            CanisterSummary, GetNextSnsVersionRequest, GetNextSnsVersionResponse,
-            GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse, GetWasmRequest,
-            GetWasmResponse, ListUpgradeStepsRequest, SnsCanisterType, SnsVersion, SnsWasm,
+            CanisterSummary, GetNextSnsVersionRequest, GetNextSnsVersionResponse, GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse, GetWasmRequest, GetWasmResponse, ListUpgradeStep, ListUpgradeStepsRequest, ListUpgradeStepsResponse, SnsCanisterType, SnsVersion, SnsWasm
         },
         types::test_helpers::NativeEnvironment,
     };
@@ -8583,7 +8581,7 @@ mod tests {
             Ok(Encode!(&std_sns_canisters_summary_response()).unwrap()),
         );
         env.set_call_canister_response(
-            root_canister_id,
+            SNS_WASM_CANISTER_ID,
             "list_upgrade_steps",
             Encode!(&ListUpgradeStepsRequest {
                 starting_at: Some(running_version.clone().into()),
@@ -8591,7 +8589,17 @@ mod tests {
                 limit: 0,
             })
             .unwrap(),
-            Ok(Encode!(&std_sns_canisters_summary_response()).unwrap()),
+            Ok(Encode!(&ListUpgradeStepsResponse {
+                steps: vec![
+                    ListUpgradeStep {
+                        version: Some(running_version.clone().into())
+                    },
+                    ListUpgradeStep {
+                        version: Some(next_version.clone().into())
+                    },
+                ]
+            })
+            .unwrap()),
         );
 
         let now = env.now();
@@ -8658,6 +8666,7 @@ mod tests {
 
         assert_eq!(governance.proto.cached_upgrade_steps, None);
         // After we run our periodic tasks, the version should be marked as successful
+        governance.run_periodic_tasks().now_or_never();
         governance.run_periodic_tasks().now_or_never();
 
         assert_eq!(governance.proto.pending_version, None);
