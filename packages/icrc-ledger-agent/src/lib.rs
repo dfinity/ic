@@ -363,16 +363,25 @@ impl Icrc1Agent {
             }
         };
 
-        let last_block_index_leb128_encoded = lookup_leaf(&hash_tree, "last_block_index")?;
-        if let Some(last_block_index_leb128_encoded) = last_block_index_leb128_encoded {
-            let mut decode_buf = std::io::Cursor::new(&last_block_index_leb128_encoded);
+        let last_block_index_encoded = lookup_leaf(&hash_tree, "last_block_index")?;
+        if let Some(last_block_index_encoded) = last_block_index_encoded {
+            // We first try the leb128 encoded version of the last_block_index
+            let mut decode_buf = std::io::Cursor::new(&last_block_index_encoded);
             let last_block_index = match leb128::read::unsigned(&mut decode_buf) {
                 Ok(last_block_index_bytes) => last_block_index_bytes,
+                // If the leb128 decoding fails, we try to decode the last_block_index as a u64 from be encoding (Legacy icrc3 certification format)
                 Err(_) => {
-                    return Err(Icrc1AgentError::VerificationFailed(format!(
+                    let last_block_index_bytes: [u8; 8] =
+                        match last_block_index_encoded.clone().try_into() {
+                            Ok(last_block_index_bytes) => last_block_index_bytes,
+                            Err(_) => {
+                                return Err(Icrc1AgentError::VerificationFailed(format!(
                     "DataCertificate hash_tree bytes: {}, cannot be decoded as last_block_index",
-                    hex::encode(last_block_index_leb128_encoded)
+                    hex::encode(last_block_index_encoded)
                 )))
+                            }
+                        };
+                    u64::from_be_bytes(last_block_index_bytes)
                 }
             };
 

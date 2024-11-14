@@ -717,14 +717,18 @@ impl<Tokens: TokensType> Ledger<Tokens> {
                 #[allow(unused_mut)]
                 #[allow(unused_assignments)]
                 let mut last_block_hash_label = Label::from("tip_hash");
+                #[allow(unused_mut)]
+                #[allow(unused_assignments)]
+                let mut last_block_index_encoded = last_block_index.to_be_bytes().to_vec();
                 #[cfg(feature = "icrc3-compatible-data-certificate")]
                 {
                     last_block_hash_label = Label::from("last_block_hash");
+                    let mut buf = std::io::Cursor::new(Vec::new());
+                    leb128::write::unsigned(&mut buf, last_block_index)
+                        .expect("Failed to write LEB128");
+                    last_block_index_encoded = buf.into_inner();
                 }
-                let mut buf = std::io::Cursor::new(Vec::new());
-                leb128::write::unsigned(&mut buf, last_block_index)
-                    .expect("Failed to write LEB128");
-                let last_block_index_encoded = buf.into_inner();
+
                 fork(
                     label(last_block_hash_label, leaf(hash.as_slice().to_vec())),
                     label(
