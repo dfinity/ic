@@ -166,7 +166,7 @@ impl ProposalVotingStateMachine {
             self.add_followers_to_check(neuron_store, neuron_id, self.topic);
         }
 
-        // Optimization, will not cause tests to fail if removed
+        // Memory optimization, will not cause tests to fail if removed
         retain_neurons_with_castable_ballots(&mut self.followers_to_check, ballots);
 
         while let Some(follower) = self.followers_to_check.pop_first() {
@@ -304,10 +304,10 @@ mod test {
         assert!(state_machine.is_done());
 
         state_machine
-            .neurons_to_check_followers
+            .followers_to_collect
             .insert(NeuronId { id: 0 });
         assert!(!state_machine.is_done());
-        state_machine.neurons_to_check_followers.clear();
+        state_machine.followers_to_collect.clear();
 
         state_machine.followers_to_check.insert(NeuronId { id: 0 });
         assert!(!state_machine.is_done());
