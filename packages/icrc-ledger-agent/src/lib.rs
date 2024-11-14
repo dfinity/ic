@@ -342,41 +342,46 @@ impl Icrc1Agent {
         self.verify_root_hash(&certificate, &hash_tree.digest())
             .await?;
 
-        let last_block_hash_vec = lookup_leaf(&hash_tree, "tip_hash")?;
-        if let Some(last_block_hash_vec) = last_block_hash_vec {
-            let last_block_hash: Hash = match last_block_hash_vec.clone().try_into() {
-                Ok(last_block_hash) => last_block_hash,
-                Err(_) => {
-                    return Err(Icrc1AgentError::VerificationFailed(format!(
+        let last_block_hash_vec = match (
+            lookup_leaf(&hash_tree, "tip_hash")?,
+            lookup_leaf(&hash_tree, "last_block_hash")?,
+        ) {
+            (Some(tip_hash), _) => tip_hash,
+            (_, Some(last_block_hash_vec)) => last_block_hash_vec,
+            _ => {
+                return Ok(None);
+            }
+        };
+
+        let last_block_hash: Hash = match last_block_hash_vec.clone().try_into() {
+            Ok(last_block_hash) => last_block_hash,
+            Err(_) => {
+                return Err(Icrc1AgentError::VerificationFailed(format!(
                 "DataCertificate last_block_hash bytes: {}, cannot be decoded as last_block_hash",
                 hex::encode(last_block_hash_vec)
             )))
+            }
+        };
+
+        let last_block_index_leb128_encoded = lookup_leaf(&hash_tree, "last_block_index")?;
+        if let Some(last_block_index_leb128_encoded) = last_block_index_leb128_encoded {
+            let mut decode_buf = std::io::Cursor::new(&last_block_index_leb128_encoded);
+            let last_block_index = match leb128::read::unsigned(&mut decode_buf) {
+                Ok(last_block_index_bytes) => last_block_index_bytes,
+                Err(_) => {
+                    return Err(Icrc1AgentError::VerificationFailed(format!(
+                    "DataCertificate hash_tree bytes: {}, cannot be decoded as last_block_index",
+                    hex::encode(last_block_index_leb128_encoded)
+                )))
                 }
             };
 
-            let last_block_index_vec = lookup_leaf(&hash_tree, "last_block_index")?;
-            if let Some(last_block_index_vec) = last_block_index_vec {
-                let last_block_index_bytes: [u8; 8] = match last_block_index_vec.clone().try_into()
-                {
-                    Ok(last_block_index_bytes) => last_block_index_bytes,
-                    Err(_) => {
-                        return Err(Icrc1AgentError::VerificationFailed(format!(
-                    "DataCertificate hash_tree bytes: {}, cannot be decoded as last_block_index",
-                    hex::encode(last_block_index_vec)
-                )))
-                    }
-                };
-                let last_block_index = u64::from_be_bytes(last_block_index_bytes);
-
-                return Ok(Some((last_block_hash, Nat::from(last_block_index))));
-            } else {
-                return Err(Icrc1AgentError::VerificationFailed(
-                    "certified hash_tree contains tip_hash but not last_block_index".to_string(),
-                ));
-            }
+            Ok(Some((last_block_hash, Nat::from(last_block_index))))
+        } else {
+            Err(Icrc1AgentError::VerificationFailed(
+                "certified hash_tree contains last_block_hash but not last_block_index".to_string(),
+            ))
         }
-
-        Ok(None)
     }
 }
 

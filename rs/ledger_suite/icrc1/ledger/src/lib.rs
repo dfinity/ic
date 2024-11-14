@@ -10,7 +10,11 @@ use candid::{
 };
 use ic_base_types::PrincipalId;
 use ic_canister_log::{log, Sink};
-use ic_crypto_tree_hash::{Label, MixedHashTree};
+use ic_certification::{
+    hash_tree::{empty, fork, label, leaf, pruned, Hash, Label},
+    hash_tree::{HashTreeNode, SubtreeLookupResult},
+    Certificate, HashTree,
+};
 use ic_icrc1::blocks::encoded_block_to_generic_block;
 use ic_icrc1::{Block, LedgerAllowances, LedgerBalances, Transaction};
 use ic_ledger_canister_core::archive::Archive;
@@ -704,25 +708,31 @@ impl<Tokens: TokensType> Ledger<Tokens> {
     /// The canister code must call set_certified_data with the value this function returns after
     /// each successful modification of the ledger.
     pub fn root_hash(&self) -> [u8; 32] {
-        self.construct_hash_tree().digest().0
+        self.construct_hash_tree().digest()
     }
 
-    pub fn construct_hash_tree(&self) -> MixedHashTree {
+    pub fn construct_hash_tree(&self) -> HashTree {
         match self.blockchain().last_hash {
             Some(hash) => {
                 let last_block_index = self.blockchain().chain_length().checked_sub(1).unwrap();
-                MixedHashTree::Fork(Box::new((
-                    MixedHashTree::Labeled(
+                #[allow(unused_mut)]
+                let mut last_block_hash_label = Label::from("tip_hash");
+                #[cfg(feature = "icrc3-compatible-data-certificate")]
+                {
+                    last_block_hash_label = Label::from("last_block_hash");
+                }
+                let mut buf = std::io::Cursor::new(Vec::new());
+                leb128::write::unsigned(&mut buf, last_block_index).expect("Failed to write LEB128");
+                let last_block_index_encoded = buf.into_inner();
+                fork(
+                    label(last_block_hash_label, leaf(hash.as_slice().to_vec())),
+                    label(
                         Label::from("last_block_index"),
-                        Box::new(MixedHashTree::Leaf(last_block_index.to_be_bytes().to_vec())),
+                        leaf(last_block_index_encoded),
                     ),
-                    MixedHashTree::Labeled(
-                        Label::from("tip_hash"),
-                        Box::new(MixedHashTree::Leaf(hash.as_slice().to_vec())),
-                    ),
-                )))
+                )
             }
-            None => MixedHashTree::Empty,
+            None => empty(),
         }
     }
 

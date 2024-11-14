@@ -36,8 +36,10 @@ package(default_visibility = ["//visibility:public"])
             "@crate_index//:ciborium",
             "@crate_index//:hex",
             "@crate_index//:ic-cdk",
+            "@crate_index//:ic-certification",
             "@crate_index//:ic-metrics-encoder",
             "@crate_index//:ic-stable-structures",
+            "@crate_index//:leb128",
             "@crate_index//:serde",
             "@crate_index//:serde_bytes",
         ] + extra_deps,
@@ -81,6 +83,15 @@ package(default_visibility = ["//visibility:public"])
             [
             ],
         ),
+        (
+            "_icrc3_compatible_data_certificate",
+            "",
+            [
+                "icrc3-compatible-data-certificate",
+            ],
+            [
+            ],
+        ),
     ]
 ]
 
@@ -108,6 +119,7 @@ package(default_visibility = ["//visibility:public"])
             "@crate_index//:candid",
             "@crate_index//:ciborium",
             "@crate_index//:ic-cdk",
+            "@crate_index//:ic-certification",
             "@crate_index//:ic-metrics-encoder",
             "@crate_index//:ic-stable-structures",
             "@crate_index//:num-traits",
@@ -189,6 +201,14 @@ package(default_visibility = ["//visibility:public"])
             [
                 ":ledger_u256_nextledgerversion",
                 "//rs/ledger_suite/icrc1/tokens_u256",
+            ],
+        ),
+        (
+            "_icrc3_compatible_data_certificate",
+            ["icrc3-compatible-data-certificate"],
+            [
+                ":ledger_icrc3_compatible_data_certificate",
+                "//rs/ledger_suite/icrc1/tokens_u64",
             ],
         ),
     ]
