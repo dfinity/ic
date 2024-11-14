@@ -32,13 +32,8 @@ impl std::convert::TryFrom<u32> for CertificationVersion {
     type Error = UnsupportedCertificationVersion;
 
     fn try_from(n: u32) -> Result<Self, Self::Error> {
-        use strum::IntoEnumIterator;
-        CertificationVersion::iter()
-            .find(|v| {
-                MIN_SUPPORTED_CERTIFICATION_VERSION <= *v
-                    && *v <= MAX_SUPPORTED_CERTIFICATION_VERSION
-                    && *v as u32 == n
-            })
+        all_supported_versions()
+            .find(|v| *v as u32 == n)
             .ok_or(UnsupportedCertificationVersion(n))
     }
 }
@@ -59,7 +54,8 @@ pub const MIN_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = Certificat
 /// this.
 pub const MAX_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V19;
 
-/// Returns a list of all certification versions up to [MAX_SUPPORTED_CERTIFICATION_VERSION].
+/// Returns a list of all certification versions from `MIN_SUPPORTED_CERTIFICATION_VERSION`
+/// up to `MAX_SUPPORTED_CERTIFICATION_VERSION`.
 pub fn all_supported_versions() -> impl std::iter::Iterator<Item = CertificationVersion> {
     use strum::IntoEnumIterator;
     CertificationVersion::iter().filter(|v| {
