@@ -381,8 +381,30 @@ fn build_tagged_transcripts_map(
                 .and_then(|t| {
                     Ok((
                         match tagged_transcript.tag {
-                            1 => Ok(NiDkgTag::LowThreshold),
-                            2 => Ok(NiDkgTag::HighThreshold),
+                            1 => {
+                                if tagged_transcript.key_id.is_some() {
+                                    Err(ProxyDecodeError::Other(
+                                        "Failed to convert NiDkgTag of transcript: \
+                                        Invalid DkgTag: expected the master public key \
+                                        ID to be empty"
+                                            .to_string(),
+                                    ))
+                                } else {
+                                    Ok(NiDkgTag::LowThreshold)
+                                }
+                            }
+                            2 => {
+                                if tagged_transcript.key_id.is_some() {
+                                    Err(ProxyDecodeError::Other(
+                                        "Failed to convert NiDkgTag of transcript: \
+                                        Invalid DkgTag: expected the master public key \
+                                        ID to be empty"
+                                            .to_string(),
+                                    ))
+                                } else {
+                                    Ok(NiDkgTag::HighThreshold)
+                                }
+                            }
                             3 => {
                                 let mpkid_proto =
                                     tagged_transcript.key_id.as_ref().ok_or_else(|| {
