@@ -86,14 +86,15 @@ pub const INT_META_VALUE: i128 = i128::MIN;
 #[cfg(not(any(feature = "u256-tokens", feature = "icp-tokens")))]
 type Tokens = ic_icrc1_tokens_u64::U64;
 
-#[cfg(all(feature = "u256-tokens", not(feature = "icp-tokens")))]
+// TODO: This will make the library compile with the `u256-tokens` feature
+// when all features (including the `icp-tokens` feature) are enabled.
+// Therefore tests that use icp token might fail for Clippy, which enables
+// all features.
+#[cfg(feature = "u256-tokens")]
 type Tokens = ic_icrc1_tokens_u256::U256;
 
 #[cfg(all(feature = "icp-tokens", not(feature = "u256-tokens")))]
 type Tokens = ic_ledger_core::Tokens;
-
-#[cfg(all(feature = "u256-tokens", feature = "icp-tokens"))]
-compile_error!("Only one of 'u256-tokens' and 'icp-tokens' features can be enabled");
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType)]
 pub struct InitArgs {
