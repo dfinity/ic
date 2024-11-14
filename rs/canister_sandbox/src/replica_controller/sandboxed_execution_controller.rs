@@ -27,8 +27,9 @@ use ic_replicated_state::canister_state::execution_state::{
 use ic_replicated_state::{EmbedderCache, ExecutionState, ExportedFunctions, Memory, PageMap};
 use ic_types::ingress::WasmResult;
 use ic_types::methods::{FuncRef, WasmMethod};
-use ic_types::{CanisterId, NumInstructions};
+use ic_types::{CanisterId, NumBytes, NumInstructions};
 use ic_wasm_types::CanisterModule;
+use num_traits::ops::saturating::SaturatingSub;
 #[cfg(target_os = "linux")]
 use prometheus::IntGauge;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec};
@@ -52,13 +53,27 @@ use super::process_exe_and_args::{
 #[cfg(target_os = "linux")]
 use super::process_os_metrics;
 use super::sandbox_process_eviction::{self, EvictionCandidate};
-use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
+use ic_replicated_state::{
+    canister_state::execution_state::NextScheduledMethod, page_map::PageAllocatorFileDescriptor,
+};
+use ic_types::ExecutionRound;
 
 const SANDBOX_PROCESS_UPDATE_INTERVAL: Duration = Duration::from_secs(10);
 
-// The percentage of sandbox processes to evict in one go in order to amortize
-// for the eviction cost.
-const SANDBOX_PROCESS_EVICTION_PERCENT: usize = 20;
+/// The number of sandbox processes to evict in one go in order to amortize
+/// for the eviction cost. A large number could lead to the eviction
+/// of many sandboxes and increased system load. The number was chosen
+/// based on the assumption of 800 canister executions per round
+/// distributed across 4 execution cores.
+const SANDBOX_PROCESSES_TO_EVICT: usize = 200;
+
+/// The RSS to evict in one go in order to amortize for the eviction cost (1 GiB).
+const SANDBOX_PROCESSES_RSS_TO_EVICT: NumBytes = NumBytes::new(1024 * 1024 * 1024);
+
+/// By default, assume each sandbox process consumes 50 MiB of RSS.
+/// The actual memory usage is updated asynchronously.
+/// See `monitor_and_evict_sandbox_processes`
+const DEFAULT_SANDBOX_PROCESS_RSS: NumBytes = NumBytes::new(50 * 1024 * 1024);
 
 const SANDBOXED_EXECUTION_INVALID_MEMORY_SIZE: &str = "sandboxed_execution_invalid_memory_size";
 
@@ -457,6 +472,7 @@ enum Backend {
 #[derive(Clone)]
 struct SandboxProcessStats {
     last_used: std::time::Instant,
+    rss: NumBytes,
 }
 
 enum SandboxProcessStatus {
@@ -634,9 +650,9 @@ pub struct SandboxedExecutionController {
     /// - An entry is removed from the registry only if it is in the `evicted`
     ///   state and the strong reference count reaches zero.
     backends: Arc<Mutex<HashMap<CanisterId, Backend>>>,
-    min_sandbox_count: usize,
     max_sandbox_count: usize,
     max_sandbox_idle_time: Duration,
+    max_sandboxes_rss: NumBytes,
     trace_execution: FlagStatus,
     logger: ReplicaLogger,
     /// Executable and arguments to be passed to `canister_sandbox` which are
@@ -656,7 +672,7 @@ impl Drop for SandboxedExecutionController {
 
         // Evict all the sandbox processes.
         let mut guard = self.backends.lock().unwrap();
-        evict_sandbox_processes(&mut guard, 0, 0, Duration::default());
+        evict_sandbox_processes(&mut guard, 0, Duration::default(), 0.into());
 
         // Terminate the Sandbox Launcher process.
         self.launcher_service
@@ -993,15 +1009,20 @@ impl WasmExecutor for SandboxedExecutionController {
             stable_memory_page_map,
             ic_replicated_state::NumWasmPages::from(0),
         );
-        let execution_state = ExecutionState::new(
+        let is_wasm64 = serialized_module.is_wasm64;
+        let execution_state = ExecutionState {
             canister_root,
             wasm_binary,
-            ExportedFunctions::new(serialized_module.exported_functions.clone()),
+            exports: ExportedFunctions::new(serialized_module.exported_functions.clone()),
             wasm_memory,
             stable_memory,
             exported_globals,
-            serialized_module.wasm_metadata.clone(),
-        );
+            metadata: serialized_module.wasm_metadata.clone(),
+            last_executed_round: ExecutionRound::from(0),
+            next_scheduled_method: NextScheduledMethod::default(),
+            is_wasm64,
+        };
+
         Ok((
             execution_state,
             serialized_module.compilation_cost,
@@ -1052,9 +1073,9 @@ impl SandboxedExecutionController {
     ) -> std::io::Result<Self> {
         let launcher_exec_argv =
             create_launcher_argv(embedder_config).expect("No sandbox_launcher binary found");
-        let min_sandbox_count = embedder_config.min_sandbox_count;
         let max_sandbox_count = embedder_config.max_sandbox_count;
         let max_sandbox_idle_time = embedder_config.max_sandbox_idle_time;
+        let max_sandboxes_rss = embedder_config.max_sandboxes_rss;
         let trace_execution = embedder_config.trace_execution;
         let sandbox_exec_argv =
             create_sandbox_argv(embedder_config).expect("No canister_sandbox binary found");
@@ -1071,9 +1092,9 @@ impl SandboxedExecutionController {
                 logger_copy,
                 backends_copy,
                 metrics_copy,
-                min_sandbox_count,
                 max_sandbox_count,
                 max_sandbox_idle_time,
+                max_sandboxes_rss,
                 rx,
             );
         });
@@ -1100,9 +1121,9 @@ impl SandboxedExecutionController {
 
         Ok(Self {
             backends,
-            min_sandbox_count,
             max_sandbox_count,
             max_sandbox_idle_time,
+            max_sandboxes_rss,
             trace_execution,
             logger,
             sandbox_exec_argv,
@@ -1121,13 +1142,15 @@ impl SandboxedExecutionController {
         #[allow(unused_variables)] logger: ReplicaLogger,
         backends: Arc<Mutex<HashMap<CanisterId, Backend>>>,
         metrics: Arc<SandboxedExecutionMetrics>,
-        min_sandbox_count: usize,
         max_sandbox_count: usize,
         max_sandbox_idle_time: Duration,
+        max_sandboxes_rss: NumBytes,
         stop_request: Receiver<bool>,
     ) {
         loop {
             let sandbox_processes = get_sandbox_process_stats(&backends);
+            #[allow(unused_mut)] // for MacOS
+            let mut sandbox_processes_rss = HashMap::with_capacity(sandbox_processes.len());
 
             #[cfg(target_os = "linux")]
             {
@@ -1137,7 +1160,7 @@ impl SandboxedExecutionController {
 
                 // For all processes requested, get their memory usage and report
                 // it keyed by pid. Ignore processes failures to get
-                for (sandbox_process, stats, status) in &sandbox_processes {
+                for (canister_id, sandbox_process, stats, status) in &sandbox_processes {
                     let pid = sandbox_process.pid;
                     let mut process_rss = 0;
                     if let Ok(kib) = process_os_metrics::get_anon_rss(pid) {
@@ -1146,6 +1169,8 @@ impl SandboxedExecutionController {
                         metrics
                             .sandboxed_execution_subprocess_anon_rss
                             .observe(kib as f64);
+                        let bytes = NumBytes::new(kib * 1024);
+                        sandbox_processes_rss.insert(*canister_id, bytes);
                     } else {
                         warn!(logger, "Unable to get anon RSS for pid {}", pid);
                     }
@@ -1195,7 +1220,7 @@ impl SandboxedExecutionController {
                 let now = std::time::Instant::now();
                 // For all processes requested, get their memory usage and report
                 // it keyed by pid. Ignore processes failures to get
-                for (_sandbox_process, stats, status) in &sandbox_processes {
+                for (_canister_id, _sandbox_process, stats, status) in &sandbox_processes {
                     let time_since_last_usage = now
                         .checked_duration_since(stats.last_used)
                         .unwrap_or_else(|| std::time::Duration::from_secs(0));
@@ -1216,11 +1241,12 @@ impl SandboxedExecutionController {
 
             {
                 let mut guard = backends.lock().unwrap();
+                update_sandbox_processes_rss(&mut guard, sandbox_processes_rss);
                 evict_sandbox_processes(
                     &mut guard,
-                    min_sandbox_count,
                     max_sandbox_count,
                     max_sandbox_idle_time,
+                    max_sandboxes_rss,
                 );
             }
 
@@ -1251,17 +1277,23 @@ impl SandboxedExecutionController {
                 } => sandbox_process.upgrade().map(|p| (p, stats)),
                 Backend::Empty => None,
             };
-            if let Some((sandbox_process, _stats)) = sandbox_process_and_stats {
+            if let Some((sandbox_process, old_stats)) = sandbox_process_and_stats {
                 let now = std::time::Instant::now();
                 if self.max_sandbox_count > 0 {
                     *backend = Backend::Active {
                         sandbox_process: Arc::clone(&sandbox_process),
-                        stats: SandboxProcessStats { last_used: now },
+                        stats: SandboxProcessStats {
+                            last_used: now,
+                            rss: old_stats.rss,
+                        },
                     };
                 } else {
                     *backend = Backend::Evicted {
                         sandbox_process: Arc::downgrade(&sandbox_process),
-                        stats: SandboxProcessStats { last_used: now },
+                        stats: SandboxProcessStats {
+                            last_used: now,
+                            rss: old_stats.rss,
+                        },
                     };
                 }
                 return sandbox_process;
@@ -1269,14 +1301,22 @@ impl SandboxedExecutionController {
         }
 
         let _timer = self.metrics.sandboxed_execution_spawn_process.start_timer();
-        if guard.len() > self.max_sandbox_count {
-            let to_evict = self.max_sandbox_count * SANDBOX_PROCESS_EVICTION_PERCENT / 100;
-            let max_active_sandboxes = self.max_sandbox_count.saturating_sub(to_evict);
+        let total_rss = total_sandboxes_rss(&guard);
+        if guard.len() > self.max_sandbox_count || total_rss > self.max_sandboxes_rss {
+            // Make room for a few sandboxes in one go, assuming each sandbox
+            // takes `DEFAULT_SANDBOX_PROCESS_RSS`.
+            let max_active_sandboxes = self
+                .max_sandbox_count
+                .saturating_sub(SANDBOX_PROCESSES_TO_EVICT);
+            let max_sandboxes_rss = self
+                .max_sandboxes_rss
+                .saturating_sub(&SANDBOX_PROCESSES_RSS_TO_EVICT);
+
             evict_sandbox_processes(
                 &mut guard,
-                self.min_sandbox_count,
                 max_active_sandboxes,
                 self.max_sandbox_idle_time,
+                max_sandboxes_rss,
             );
         }
 
@@ -1302,7 +1342,10 @@ impl SandboxedExecutionController {
         let now = std::time::Instant::now();
         let backend = Backend::Active {
             sandbox_process: Arc::clone(&sandbox_process),
-            stats: SandboxProcessStats { last_used: now },
+            stats: SandboxProcessStats {
+                last_used: now,
+                rss: DEFAULT_SANDBOX_PROCESS_RSS,
+            },
         };
         (*guard).insert(canister_id, backend);
 
@@ -1631,14 +1674,38 @@ fn wrap_remote_memory(
     SandboxMemoryHandle::new(Arc::new(opened_memory))
 }
 
+/// Updates sandbox processes RSS.
+fn update_sandbox_processes_rss(
+    backends: &mut HashMap<CanisterId, Backend>,
+    sandbox_processes_rss: HashMap<CanisterId, NumBytes>,
+) {
+    for (id, rss) in sandbox_processes_rss {
+        backends.entry(id).and_modify(|backend| match backend {
+            Backend::Active { stats, .. } | Backend::Evicted { stats, .. } => stats.rss = rss,
+            Backend::Empty => {}
+        });
+    }
+}
+
+/// Returns the total RSS for active sandboxes.
+fn total_sandboxes_rss(backends: &HashMap<CanisterId, Backend>) -> NumBytes {
+    backends
+        .values()
+        .map(|backend| match backend {
+            Backend::Active { stats, .. } => stats.rss,
+            Backend::Evicted { .. } | Backend::Empty => 0.into(),
+        })
+        .sum()
+}
+
 // Evicts some sandbox process backends according to the heuristics of the
 // `sandbox_process_eviction::evict()` function. See the comments of that
 // function for the explanation of the threshold parameters.
 fn evict_sandbox_processes(
     backends: &mut HashMap<CanisterId, Backend>,
-    min_active_sandboxes: usize,
     max_active_sandboxes: usize,
     max_sandbox_idle_time: Duration,
+    max_sandboxes_rss: NumBytes,
 ) {
     // Remove the already terminated processes.
     backends.retain(|_id, backend| match backend {
@@ -1660,6 +1727,7 @@ fn evict_sandbox_processes(
             Backend::Active { stats, .. } => Some(EvictionCandidate {
                 id: *id,
                 last_used: stats.last_used,
+                rss: stats.rss,
             }),
             Backend::Evicted { .. } | Backend::Empty => None,
         })
@@ -1680,9 +1748,10 @@ fn evict_sandbox_processes(
 
     let evicted = sandbox_process_eviction::evict(
         candidates,
-        min_active_sandboxes,
+        total_sandboxes_rss(backends),
         max_active_sandboxes,
         last_used_threshold,
+        max_sandboxes_rss,
     );
 
     // Actually evict all the selected eviction candidates.
@@ -1708,19 +1777,21 @@ fn evict_sandbox_processes(
 fn get_sandbox_process_stats(
     backends: &Arc<Mutex<HashMap<CanisterId, Backend>>>,
 ) -> Vec<(
+    CanisterId,
     Arc<SandboxProcess>,
     SandboxProcessStats,
     SandboxProcessStatus,
 )> {
     let guard = backends.lock().unwrap();
     let mut result = vec![];
-    for backend in guard.values() {
+    for (canister_id, backend) in guard.iter() {
         match backend {
             Backend::Active {
                 sandbox_process,
                 stats,
             } => {
                 result.push((
+                    *canister_id,
                     Arc::clone(sandbox_process),
                     stats.clone(),
                     SandboxProcessStatus::Active,
@@ -1732,6 +1803,7 @@ fn get_sandbox_process_stats(
             } => {
                 if let Some(strong_reference) = sandbox_process.upgrade() {
                     result.push((
+                        *canister_id,
                         strong_reference,
                         stats.clone(),
                         SandboxProcessStatus::Evicted,
@@ -1753,7 +1825,7 @@ pub fn panic_due_to_exit(output: ExitStatus, pid: u32) {
             pid, code
         ),
         None => panic!(
-            "Error from launcher process, pid {} exited due to signal!",
+            "Error from launcher process, pid {} exited due to signal! In test environments (e.g., PocketIC), you can safely ignore this message.",
             pid
         ),
     }

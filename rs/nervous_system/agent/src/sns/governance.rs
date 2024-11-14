@@ -6,7 +6,7 @@ use ic_sns_governance::pb::v1::{
 };
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Copy, Clone, Debug, Deserialize, Serialize)]
 pub struct GovernanceCanister {
     pub canister_id: PrincipalId,
 }
@@ -26,5 +26,12 @@ impl GovernanceCanister {
         agent
             .call(self.canister_id, GetRunningSnsVersionRequest {})
             .await
+    }
+}
+
+impl GovernanceCanister {
+    pub fn new(canister_id: impl Into<PrincipalId>) -> Self {
+        let canister_id = canister_id.into();
+        Self { canister_id }
     }
 }

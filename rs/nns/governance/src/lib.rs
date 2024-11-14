@@ -131,6 +131,7 @@ use crate::{
     },
 };
 use candid::DecoderConfig;
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 use ic_nervous_system_temporary::Temporary;
 use mockall::automock;
 use std::{
@@ -140,7 +141,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-#[cfg(test)]
+#[cfg(any(test, feature = "canbench-rs"))]
 pub mod test_utils;
 
 mod account_id_index;
@@ -175,19 +176,53 @@ mod subaccount_index;
 /// The value of 10_000 follows the Candid recommendation.
 const DEFAULT_SKIPPING_QUOTA: usize = 10_000;
 
+/// Value: 2024-09-01T00:00:00Z.
+///
+/// How this value was chosen: This "pre-ages" "legacy" neurons by a couple of
+/// months. This is so that they are required to refresh their voting power
+/// sooner than new neurons.
+///
+/// How this value is used: when a neuron otherwise does not have a value in the
+/// voting_power_refreshed_timestamp_seconds field (because it was created
+/// before this feature), we pretend as though this value is in that field. The
+/// field is always populated in new neurons.
+pub const DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS: u64 = 1725148800;
+
 // TODO(NNS1-3248): Delete this once the feature has made it through the
 // probation period. At that point, we will not need this "kill switch". We can
 // leave this here indefinitely, but it will just be clutter after a modest
 // amount of time.
 thread_local! {
+    static IS_VOTING_POWER_ADJUSTMENT_ENABLED: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
+
     // TODO(NNS1-3247): To release the feature, set this to true. Do not simply
     // delete. That way, if we need to recall the feature, we can do that via a
     // 1-line change (by replacing true with `cfg!(feature = "test")`). After
     // the feature has been released, it will go through its "probation" period.
     // If that goes well, then, this can be deleted.
-    static IS_PRIVATE_NEURON_ENFORCEMENT_ENABLED: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
+    static IS_PRIVATE_NEURON_ENFORCEMENT_ENABLED: Cell<bool> = const { Cell::new(true) };
 
     static ARE_SET_VISIBILITY_PROPOSALS_ENABLED: Cell<bool> = const { Cell::new(true) };
+
+    static ACTIVE_NEURONS_IN_STABLE_MEMORY_ENABLED: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
+
+    static USE_STABLE_MEMORY_FOLLOWING_INDEX: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
+}
+
+pub fn is_voting_power_adjustment_enabled() -> bool {
+    IS_VOTING_POWER_ADJUSTMENT_ENABLED.with(|ok| ok.get())
+}
+
+/// Only integration tests should use this.
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_enable_voting_power_adjustment() -> Temporary {
+    Temporary::new(&IS_VOTING_POWER_ADJUSTMENT_ENABLED, true)
+}
+
+/// Only integration tests should use this.
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_disable_voting_power_adjustment() -> Temporary {
+    Temporary::new(&IS_VOTING_POWER_ADJUSTMENT_ENABLED, false)
 }
 
 pub fn is_private_neuron_enforcement_enabled() -> bool {
@@ -195,11 +230,13 @@ pub fn is_private_neuron_enforcement_enabled() -> bool {
 }
 
 /// Only integration tests should use this.
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 pub fn temporarily_enable_private_neuron_enforcement() -> Temporary {
     Temporary::new(&IS_PRIVATE_NEURON_ENFORCEMENT_ENABLED, true)
 }
 
 /// Only integration tests should use this.
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 pub fn temporarily_disable_private_neuron_enforcement() -> Temporary {
     Temporary::new(&IS_PRIVATE_NEURON_ENFORCEMENT_ENABLED, false)
 }
@@ -209,13 +246,47 @@ pub fn are_set_visibility_proposals_enabled() -> bool {
 }
 
 /// Only integration tests should use this.
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 pub fn temporarily_enable_set_visibility_proposals() -> Temporary {
     Temporary::new(&ARE_SET_VISIBILITY_PROPOSALS_ENABLED, true)
 }
 
 /// Only integration tests should use this.
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 pub fn temporarily_disable_set_visibility_proposals() -> Temporary {
     Temporary::new(&ARE_SET_VISIBILITY_PROPOSALS_ENABLED, false)
+}
+
+pub fn is_active_neurons_in_stable_memory_enabled() -> bool {
+    ACTIVE_NEURONS_IN_STABLE_MEMORY_ENABLED.with(|ok| ok.get())
+}
+
+/// Only integration tests should use this.
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_enable_active_neurons_in_stable_memory() -> Temporary {
+    Temporary::new(&ACTIVE_NEURONS_IN_STABLE_MEMORY_ENABLED, true)
+}
+
+/// Only integration tests should use this.
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_disable_active_neurons_in_stable_memory() -> Temporary {
+    Temporary::new(&ACTIVE_NEURONS_IN_STABLE_MEMORY_ENABLED, false)
+}
+
+pub fn use_stable_memory_following_index() -> bool {
+    USE_STABLE_MEMORY_FOLLOWING_INDEX.with(|ok| ok.get())
+}
+
+/// Only integration tests should use this.
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_enable_stable_memory_following_index() -> Temporary {
+    Temporary::new(&USE_STABLE_MEMORY_FOLLOWING_INDEX, true)
+}
+
+/// Only integration tests should use this.
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_disable_stable_memory_following_index() -> Temporary {
+    Temporary::new(&USE_STABLE_MEMORY_FOLLOWING_INDEX, false)
 }
 
 pub fn decoder_config() -> DecoderConfig {
@@ -328,6 +399,8 @@ pub fn encode_metrics(
     governance: &Governance,
     w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>,
 ) -> std::io::Result<()> {
+    // Space
+
     w.encode_gauge(
         "governance_stable_memory_size_bytes",
         ic_nervous_system_common::stable_memory_size_bytes() as f64,
@@ -339,6 +412,14 @@ pub fn encode_metrics(
         "Size of the total memory allocated by this canister measured in bytes.",
     )?;
     w.encode_gauge(
+        "governance_latest_gc_timestamp_seconds",
+        governance.latest_gc_timestamp_seconds as f64,
+        "Timestamp of the last proposal garbage collection event, in seconds since the Unix epoch.",
+    )?;
+
+    // Proposals (more detailed breakdowns later).
+
+    w.encode_gauge(
         "governance_proposals_total",
         governance.heap_data.proposals.len() as f64,
         "Total number of proposals that haven't been gc'd.",
@@ -348,21 +429,32 @@ pub fn encode_metrics(
         governance.num_ready_to_be_settled_proposals() as f64,
         "Total number of proposals that are ready to be settled.",
     )?;
+
+    // Neurons (many many more detailed breakdowns later).
+
     w.encode_gauge(
         "governance_neurons_total",
         governance.neuron_store.len() as f64,
         "Total number of neurons.",
     )?;
     w.encode_gauge(
-        "governance_latest_gc_timestamp_seconds",
-        governance.latest_gc_timestamp_seconds as f64,
-        "Timestamp of the last proposal gc, in seconds since the Unix epoch.",
-    )?;
-    w.encode_gauge(
         "governance_locked_neurons_total",
         governance.heap_data.in_flight_commands.len() as f64,
         "Total number of neurons that have been locked for disburse operations.",
     )?;
+    w.encode_gauge(
+        "governance_heap_neuron_count",
+        governance.neuron_store.heap_neuron_store_len() as f64,
+        "The number of neurons in NNS Governance canister's heap memory.",
+    )?;
+    w.encode_gauge(
+        "governance_stable_memory_neuron_count",
+        governance.neuron_store.stable_neuron_store_len() as f64,
+        "The number of neurons in NNS Governance canister's stable memory.",
+    )?;
+
+    // Rewards
+
     w.encode_gauge(
         "governance_latest_reward_event_timestamp_seconds",
         governance.latest_reward_event().actual_timestamp_seconds as f64,
@@ -402,6 +494,8 @@ pub fn encode_metrics(
         "Total number of available rewards in e8s in the latest reward event (including rollovers).",
     )?;
 
+    // Voting Power
+
     let total_voting_power = match governance
         .heap_data
         .proposals
@@ -427,6 +521,8 @@ pub fn encode_metrics(
         total_voting_power,
         "The total voting power, according to the most recent proposal.",
     )?;
+
+    // Neuron Indexes
 
     let neuron_store::NeuronIndexesLens {
         subaccount: subaccount_index_len,
@@ -462,16 +558,12 @@ pub fn encode_metrics(
         "Total number of entries in the account_id index",
     )?;
 
-    w.encode_gauge(
-        "governance_stable_memory_neuron_count",
-        governance.neuron_store.stable_neuron_store_len() as f64,
-        "The number of neurons in stable memory.",
-    )?;
-
     let mut builder = w.gauge_vec(
         "governance_proposal_deadline_timestamp_seconds",
         "The deadline for open proposals, labelled with proposal id",
     )?;
+
+    // Detailed Proposal Breakdowns
 
     let open_proposals_deadline = governance
         .heap_data
@@ -509,6 +601,8 @@ pub fn encode_metrics(
             .value(labels.as_slice(), Metric::into(*deadline_ts))
             .unwrap();
     }
+
+    // Periodically Calculated (almost entirely detailed neuron breakdowns/rollups)
 
     if let Some(metrics) = &governance.heap_data.metrics {
         let GovernanceCachedMetrics {
@@ -555,6 +649,8 @@ pub fn encode_metrics(
             public_neuron_subset_metrics,
         } = metrics;
 
+        // ICP
+
         w.encode_gauge(
             "governance_total_locked_e8s",
             *total_locked_e8s as f64,
@@ -572,6 +668,8 @@ pub fn encode_metrics(
             *total_staked_e8s as f64,
             "Total number of e8s that are staked.",
         )?;
+
+        // Detailed Neuron Breakdowns (This section is loooong.)
 
         w.encode_gauge(
             "governance_dissolved_neurons_count",

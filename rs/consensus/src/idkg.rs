@@ -180,6 +180,7 @@
 //! Completed pre-signatures are delivered to the deterministic state machnine,
 //! where they are matched with incoming signature requests.
 
+use crate::bouncer_metrics::BouncerMetrics;
 use crate::idkg::complaints::{IDkgComplaintHandler, IDkgComplaintHandlerImpl};
 use crate::idkg::metrics::{
     timed_call, IDkgClientMetrics, CRITICAL_ERROR_IDKG_RETAIN_ACTIVE_TRANSCRIPTS,
@@ -437,11 +438,13 @@ pub struct IDkgBouncer {
     subnet_id: SubnetId,
     consensus_block_cache: Arc<dyn ConsensusBlockCache>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    metrics: BouncerMetrics,
 }
 
 impl IDkgBouncer {
     /// Builds a new IDkgBouncer component
     pub fn new(
+        metrics_registry: &MetricsRegistry,
         subnet_id: SubnetId,
         consensus_block_cache: Arc<dyn ConsensusBlockCache>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
@@ -450,6 +453,7 @@ impl IDkgBouncer {
             subnet_id,
             consensus_block_cache,
             state_reader,
+            metrics: BouncerMetrics::new(metrics_registry, "idkg_pool"),
         }
     }
 }
@@ -473,6 +477,8 @@ impl IDkgBouncerArgs {
 
 impl<Pool: IDkgPool> BouncerFactory<IDkgMessageId, Pool> for IDkgBouncer {
     fn new_bouncer(&self, _idkg_pool: &Pool) -> Bouncer<IDkgMessageId> {
+        let _timer = self.metrics.update_duration.start_timer();
+
         let block_reader = IDkgBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
         let subnet_id = self.subnet_id;
         let args = IDkgBouncerArgs::new(&block_reader, self.state_reader.as_ref());
@@ -548,53 +554,36 @@ fn compute_bouncer(
 
 #[cfg(test)]
 mod tests {
-    use self::test_utils::{
-        fake_completed_signature_request_context, fake_ecdsa_master_public_key_id,
-        TestIDkgBlockReader,
-    };
-    use self::utils::get_context_request_id;
+    use self::test_utils::TestIDkgBlockReader;
 
     use super::*;
     use ic_test_utilities::state_manager::RefMockStateManager;
-    use ic_types::consensus::idkg::IDkgUIDGenerator;
     use ic_types::consensus::idkg::{
         complaint_prefix, dealing_prefix, dealing_support_prefix, ecdsa_sig_share_prefix,
-        opening_prefix, schnorr_sig_share_prefix, IDkgArtifactIdData, PreSigId,
+        opening_prefix, schnorr_sig_share_prefix, IDkgArtifactIdData,
     };
     use ic_types::{
         consensus::idkg::{RequestId, SigShareIdData},
         crypto::{canister_threshold_sig::idkg::IDkgTranscriptId, CryptoHash},
     };
     use ic_types_test_utils::ids::{NODE_1, NODE_2, SUBNET_1, SUBNET_2};
-
-    use tests::test_utils::create_sig_inputs;
+    use test_utils::request_id;
 
     #[test]
     fn test_idkg_priority_fn_args() {
         let state_manager = Arc::new(RefMockStateManager::default());
         let height = Height::from(100);
-        let key_id = fake_ecdsa_master_public_key_id();
-        // Add two contexts to state, one with, and one without quadruple
-        let pre_sig_id = PreSigId(0);
-        let context_with_quadruple =
-            fake_completed_signature_request_context(0, key_id.clone(), pre_sig_id);
+
         state_manager
             .get_mut()
             .expect_latest_certified_height()
             .returning(move || height);
 
-        let expected_request_id = get_context_request_id(&context_with_quadruple.1).unwrap();
-        assert_eq!(expected_request_id.pseudo_random_id, [0; 32]);
-        assert_eq!(expected_request_id.pre_signature_id, pre_sig_id);
+        let block_reader = TestIDkgBlockReader::for_signer_test(height.increment(), vec![]);
 
-        let block_reader = TestIDkgBlockReader::for_signer_test(
-            height,
-            vec![(expected_request_id.clone(), create_sig_inputs(0, &key_id))],
-        );
-
-        // Only the context with matched quadruple should be in "requested"
         let args = IDkgBouncerArgs::new(&block_reader, state_manager.as_ref());
         assert_eq!(args.certified_height, height);
+        assert_eq!(args.finalized_height, height.increment());
     }
 
     fn get_fake_artifact_id_data(i: IDkgTranscriptId) -> IDkgArtifactIdData {
@@ -696,22 +685,10 @@ mod tests {
     #[test]
     fn test_idkg_priority_fn_sig_shares() {
         let local_subnet_id = SUBNET_2;
-        let mut uid_generator = IDkgUIDGenerator::new(local_subnet_id, Height::new(0));
-        let request_id_fetch_1 = RequestId {
-            pre_signature_id: uid_generator.next_pre_signature_id(),
-            pseudo_random_id: [1; 32],
-            height: Height::from(80),
-        };
-        let request_id_fetch_2 = RequestId {
-            pre_signature_id: uid_generator.next_pre_signature_id(),
-            pseudo_random_id: [3; 32],
-            height: Height::from(102),
-        };
-        let request_id_stash = RequestId {
-            pre_signature_id: uid_generator.next_pre_signature_id(),
-            pseudo_random_id: [4; 32],
-            height: Height::from(200),
-        };
+        let request_id_fetch_1 = request_id(1, Height::from(80));
+        let request_id_fetch_2 = request_id(2, Height::from(102));
+        let request_id_stash = request_id(3, Height::from(200));
+
         let args = IDkgBouncerArgs {
             finalized_height: Height::from(100),
             certified_height: Height::from(100),

@@ -7,6 +7,8 @@ SHELL="/bin/bash"
 PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 CONFIG_DIR="/var/ic/config"
 
+source /opt/ic/bin/functions.sh
+
 function mount_config_partition() {
     echo "* Mounting hostOS config partition..."
 
@@ -58,12 +60,14 @@ function insert_hsm_if_necessary() {
             let retry=retry+1
             if [ ${retry} -ge 3600 ]; then
                 log_and_halt_installation_on_error "1" "Nitrokey HSM USB device could not be detected, giving up."
-                break
             else
                 echo "* Please insert Nitrokey HSM USB device..."
                 sleep 3
             fi
         done
+        echo "HSM successfully detected."
+    else
+        echo "node_operator_private_key.pem found."
     fi
 }
 
@@ -82,7 +86,6 @@ function unmount_config_partition() {
 
 # Establish run order
 main() {
-    source /opt/ic/bin/functions.sh
     log_start "$(basename $0)"
     mount_config_partition
     copy_config_files

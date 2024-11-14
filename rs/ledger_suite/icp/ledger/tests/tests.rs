@@ -3,32 +3,34 @@ use candid::{Decode, Encode, Nat};
 use dfn_candid::CandidOne;
 use dfn_protobuf::ProtoBuf;
 use ic_agent::identity::Identity;
-use ic_base_types::CanisterId;
-use ic_icrc1_ledger_sm_tests::{
-    balance_of, default_approve_args, default_transfer_from_args, expect_icrc2_disabled,
-    get_allowance, send_approval, send_transfer_from, supported_standards, transfer, MINTER,
-};
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_test_utils::minter_identity;
+use ic_ledger_core::block::BlockIndex;
 use ic_ledger_core::{block::BlockType, Tokens};
-use ic_state_machine_tests::{ErrorCode, PrincipalId, StateMachine, UserError};
+use ic_ledger_suite_state_machine_tests::{
+    balance_of, default_approve_args, default_transfer_from_args, expect_icrc2_disabled,
+    get_allowance, send_approval, send_transfer_from, setup, supported_standards, total_supply,
+    transfer, FEE, MINTER,
+};
+use ic_state_machine_tests::{ErrorCode, StateMachine, UserError};
 use icp_ledger::{
     AccountIdBlob, AccountIdentifier, ArchiveOptions, ArchivedBlocksRange, Block, CandidBlock,
     CandidOperation, CandidTransaction, FeatureFlags, GetBlocksArgs, GetBlocksRes, GetBlocksResult,
-    GetEncodedBlocksResult, InitArgs, IterBlocksArgs, IterBlocksRes, LedgerCanisterInitPayload,
-    LedgerCanisterPayload, LedgerCanisterUpgradePayload, Operation, QueryBlocksResponse,
-    QueryEncodedBlocksResponse, TimeStamp, UpgradeArgs, DEFAULT_TRANSFER_FEE,
+    GetEncodedBlocksResult, IcpAllowanceArgs, InitArgs, IterBlocksArgs, IterBlocksRes,
+    LedgerCanisterInitPayload, LedgerCanisterPayload, LedgerCanisterUpgradePayload, Operation,
+    QueryBlocksResponse, QueryEncodedBlocksResponse, TimeStamp, UpgradeArgs, DEFAULT_TRANSFER_FEE,
     MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST, MAX_BLOCKS_PER_REQUEST,
 };
 use icrc_ledger_types::icrc1::{
     account::Account,
     transfer::{Memo, TransferArg, TransferError},
 };
-use icrc_ledger_types::icrc2::allowance::AllowanceArgs;
+use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
 use icrc_ledger_types::icrc2::approve::ApproveArgs;
 use num_traits::cast::ToPrimitive;
 use on_wire::{FromWire, IntoWire};
 use serde_bytes::ByteBuf;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
@@ -44,7 +46,29 @@ fn ledger_wasm() -> Vec<u8> {
     )
 }
 
-fn encode_init_args(args: ic_icrc1_ledger_sm_tests::InitArgs) -> LedgerCanisterInitPayload {
+fn ledger_wasm_next_version() -> Vec<u8> {
+    ic_test_utilities_load_wasm::load_wasm(
+        std::env::var("CARGO_MANIFEST_DIR").unwrap(),
+        "ledger-canister-next-version",
+        &[],
+    )
+}
+
+fn ledger_wasm_mainnet() -> Vec<u8> {
+    std::fs::read(std::env::var("ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap()).unwrap()
+}
+
+fn ledger_wasm_allowance_getter() -> Vec<u8> {
+    ic_test_utilities_load_wasm::load_wasm(
+        std::env::var("CARGO_MANIFEST_DIR").unwrap(),
+        "ledger-canister-allowance-getter",
+        &[],
+    )
+}
+
+fn encode_init_args(
+    args: ic_ledger_suite_state_machine_tests::InitArgs,
+) -> LedgerCanisterInitPayload {
     let initial_values = args
         .initial_balances
         .into_iter()
@@ -172,75 +196,295 @@ fn account_identifier(env: &StateMachine, ledger: CanisterId, account: Account) 
 
 #[test]
 fn test_balance_of() {
-    ic_icrc1_ledger_sm_tests::test_balance_of(ledger_wasm(), encode_init_args)
+    ic_ledger_suite_state_machine_tests::test_balance_of(ledger_wasm(), encode_init_args)
 }
 
 #[test]
 fn test_metadata() {
-    ic_icrc1_ledger_sm_tests::test_metadata_icp_ledger(ledger_wasm(), encode_init_args)
+    ic_ledger_suite_state_machine_tests::test_metadata_icp_ledger(ledger_wasm(), encode_init_args)
 }
 
 #[test]
 fn test_total_supply() {
-    ic_icrc1_ledger_sm_tests::test_total_supply(ledger_wasm(), encode_init_args)
+    ic_ledger_suite_state_machine_tests::test_total_supply(ledger_wasm(), encode_init_args)
 }
 
 #[test]
 fn test_minting_account() {
-    ic_icrc1_ledger_sm_tests::test_minting_account(ledger_wasm(), encode_init_args)
+    ic_ledger_suite_state_machine_tests::test_minting_account(ledger_wasm(), encode_init_args)
+}
+
+#[test]
+fn test_anonymous_transfers() {
+    const INITIAL_BALANCE: u64 = 10_000_000;
+    const TRANSFER_AMOUNT: u64 = 1_000_000;
+    let p1 = PrincipalId::new_user_test_id(1);
+    let anon = PrincipalId::new_anonymous();
+    let (env, canister_id) = setup(
+        ledger_wasm(),
+        encode_init_args,
+        vec![(Account::from(p1.0), INITIAL_BALANCE)],
+    );
+
+    assert_eq!(INITIAL_BALANCE, total_supply(&env, canister_id));
+    assert_eq!(INITIAL_BALANCE, balance_of(&env, canister_id, p1.0));
+    assert_eq!(0u64, balance_of(&env, canister_id, anon.0));
+
+    // Transfer to the account of the anonymous principal using `icrc1_transfer` succeeds
+    // The expected block index after the transfer is 1 (0 is the initial mint to `p1`).
+    let mut expected_block_index = 1u64;
+    assert_eq!(
+        transfer(&env, canister_id, p1.0, anon.0, TRANSFER_AMOUNT).expect("transfer failed"),
+        expected_block_index
+    );
+    expected_block_index += 1;
+
+    // Transfer to the account of the anonymous principal using the ICP-specific `transfer` succeeds
+    let transfer_args = icp_ledger::TransferArgs {
+        memo: icp_ledger::Memo(0u64),
+        amount: Tokens::from_e8s(TRANSFER_AMOUNT),
+        fee: Tokens::from_e8s(FEE),
+        from_subaccount: None,
+        to: AccountIdentifier::new(anon, None).to_address(),
+        created_at_time: None,
+    };
+    let response = env.execute_ingress_as(
+        p1,
+        canister_id,
+        "transfer",
+        Encode!(&transfer_args).unwrap(),
+    );
+    let result = Decode!(
+        &response
+        .expect("failed to transfer funds")
+        .bytes(),
+        Result<BlockIndex, TransferError>
+    )
+    .expect("failed to decode transfer response");
+    assert_eq!(result, Ok(expected_block_index));
+
+    // Transfer from the account of the anonymous principal using `icrc1_transfer` fails
+    let transfer_arg = TransferArg {
+        from_subaccount: None,
+        to: Account::from(p1.0),
+        fee: None,
+        created_at_time: None,
+        amount: Nat::from(TRANSFER_AMOUNT),
+        memo: None,
+    };
+    let encoded_transfer_result = env
+        .execute_ingress_as(
+            anon,
+            canister_id,
+            "icrc1_transfer",
+            Encode!(&transfer_arg).unwrap(),
+        )
+        .expect("failed to transfer funds")
+        .bytes();
+    let string_from_bytes_result = String::from_utf8(encoded_transfer_result.clone());
+    assert_eq!(
+        string_from_bytes_result,
+        Ok("Anonymous principal cannot hold tokens on the ledger.".to_string())
+    );
+
+    // Transfer from the account of the anonymous principal using the ICP-specific `transfer` fails
+    let transfer_args = icp_ledger::TransferArgs {
+        memo: icp_ledger::Memo(0u64),
+        amount: Tokens::from_e8s(TRANSFER_AMOUNT),
+        fee: Tokens::from_e8s(FEE),
+        from_subaccount: None,
+        to: AccountIdentifier::new(p1, None).to_address(),
+        created_at_time: None,
+    };
+    let response = env.execute_ingress_as(
+        anon,
+        canister_id,
+        "transfer",
+        Encode!(&transfer_args).unwrap(),
+    );
+    assert!(response.is_err());
+    if let Err(err) = response {
+        assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+        assert!(err.description().contains("Canister called `ic0.trap` with message: Panicked at 'Sending from 2vxsx-fae is not allowed'"));
+    }
+
+    assert_eq!(INITIAL_BALANCE - FEE * 2, total_supply(&env, canister_id));
+    assert_eq!(
+        INITIAL_BALANCE - (TRANSFER_AMOUNT + FEE) * 2,
+        balance_of(&env, canister_id, p1.0)
+    );
+    assert_eq!(TRANSFER_AMOUNT * 2, balance_of(&env, canister_id, anon.0));
+}
+
+#[test]
+fn test_anonymous_approval() {
+    const INITIAL_BALANCE: u64 = 10_000_000;
+    const APPROVE_AMOUNT: u64 = 1_000_000;
+    let p1 = PrincipalId::new_user_test_id(1);
+    let anon = PrincipalId::new_anonymous();
+    let (env, canister_id) = setup(
+        ledger_wasm(),
+        encode_init_args,
+        vec![(Account::from(anon.0), INITIAL_BALANCE)],
+    );
+
+    assert_eq!(INITIAL_BALANCE, total_supply(&env, canister_id));
+    assert_eq!(0, balance_of(&env, canister_id, p1.0));
+    assert_eq!(INITIAL_BALANCE, balance_of(&env, canister_id, anon.0));
+
+    // Approve transfers for p1 from the account of the anonymous principal
+    let approve_args = ApproveArgs {
+        from_subaccount: None,
+        spender: p1.0.into(),
+        amount: Nat::from(APPROVE_AMOUNT),
+        fee: None,
+        memo: None,
+        expires_at: None,
+        expected_allowance: None,
+        created_at_time: None,
+    };
+    let encoded_transfer_result = env
+        .execute_ingress_as(
+            anon,
+            canister_id,
+            "icrc2_approve",
+            Encode!(&approve_args).unwrap(),
+        )
+        .expect("failed to approve transfer")
+        .bytes();
+    let string_from_bytes_result = String::from_utf8(encoded_transfer_result.clone());
+    assert_eq!(
+        string_from_bytes_result,
+        Ok("Anonymous principal cannot approve token transfers on the ledger.".to_string())
+    );
+}
+
+#[test]
+fn test_icp_allowance_getter_unavailable_in_prod() {
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+    let (env, canister_id) = setup(ledger_wasm(), encode_init_args, vec![]);
+    let allowance_args = IcpAllowanceArgs {
+        account: AccountIdentifier::from(p1.0),
+        spender: AccountIdentifier::from(p2.0),
+    };
+
+    let response = env.execute_ingress_as(
+        p1,
+        canister_id,
+        "allowance",
+        Encode!(&allowance_args).unwrap(),
+    );
+    let error = response.unwrap_err();
+
+    assert_eq!(error.code(), ErrorCode::CanisterMethodNotFound);
+}
+
+#[test]
+fn test_get_icp_approval() {
+    const INITIAL_BALANCE: u64 = 10_000_000;
+    const APPROVE_AMOUNT: u64 = 1_000_000;
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+    let (env, canister_id) = setup(
+        ledger_wasm_allowance_getter(),
+        encode_init_args,
+        vec![(Account::from(p1.0), INITIAL_BALANCE)],
+    );
+    assert_eq!(INITIAL_BALANCE, total_supply(&env, canister_id));
+    assert_eq!(INITIAL_BALANCE, balance_of(&env, canister_id, p1.0));
+    assert_eq!(0, balance_of(&env, canister_id, p2.0));
+    let approve_args = ApproveArgs {
+        from_subaccount: None,
+        spender: p2.0.into(),
+        amount: Nat::from(APPROVE_AMOUNT),
+        fee: None,
+        memo: None,
+        expires_at: None,
+        expected_allowance: None,
+        created_at_time: None,
+    };
+    let response = env.execute_ingress_as(
+        p1,
+        canister_id,
+        "icrc2_approve",
+        Encode!(&approve_args).unwrap(),
+    );
+    assert!(response.is_ok());
+    let allowance_args = IcpAllowanceArgs {
+        account: AccountIdentifier::from(p1.0),
+        spender: AccountIdentifier::from(p2.0),
+    };
+
+    let response = env.execute_ingress_as(
+        p1,
+        canister_id,
+        "allowance",
+        Encode!(&allowance_args).unwrap(),
+    );
+
+    let result = Decode!(
+        &response.expect("failed to get allowance").bytes(),
+        Allowance
+    )
+    .expect("failed to decode allowance response");
+    assert_eq!(result.allowance.0.to_u64(), Some(APPROVE_AMOUNT));
 }
 
 #[test]
 fn test_single_transfer() {
-    ic_icrc1_ledger_sm_tests::test_single_transfer(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_single_transfer(ledger_wasm(), encode_init_args);
 }
 
 #[ignore = "requires fix for FI-541"]
 #[test]
 fn test_tx_deduplication() {
-    ic_icrc1_ledger_sm_tests::test_tx_deduplication(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_tx_deduplication(ledger_wasm(), encode_init_args);
 }
 
 #[test]
 fn test_mint_burn() {
-    ic_icrc1_ledger_sm_tests::test_mint_burn(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_mint_burn(ledger_wasm(), encode_init_args);
 }
 
 #[test]
 fn test_account_canonicalization() {
-    ic_icrc1_ledger_sm_tests::test_account_canonicalization(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_account_canonicalization(
+        ledger_wasm(),
+        encode_init_args,
+    );
 }
 
 #[test]
 fn test_tx_time_bounds() {
-    ic_icrc1_ledger_sm_tests::test_tx_time_bounds(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_tx_time_bounds(ledger_wasm(), encode_init_args);
 }
 
 // Check that different blocks produce different hashes.
 #[test]
 fn transaction_hashes_are_unique() {
-    ic_icrc1_ledger_sm_tests::transaction_hashes_are_unique();
+    ic_ledger_suite_state_machine_tests::transaction_hashes_are_unique();
 }
 
 #[test]
 fn block_hashes_are_unique() {
-    ic_icrc1_ledger_sm_tests::block_hashes_are_unique();
+    ic_ledger_suite_state_machine_tests::block_hashes_are_unique();
 }
 
 // Generate random blocks and check that the block hash is stable.
 #[test]
 fn block_hashes_are_stable() {
-    ic_icrc1_ledger_sm_tests::block_hashes_are_stable();
+    ic_ledger_suite_state_machine_tests::block_hashes_are_stable();
 }
 
 #[test]
 fn check_transfer_model() {
-    ic_icrc1_ledger_sm_tests::check_transfer_model(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::check_transfer_model(ledger_wasm(), encode_init_args);
 }
 
 #[test]
 fn test_ledger_http_request_decoding_quota() {
-    ic_icrc1_ledger_sm_tests::test_ledger_http_request_decoding_quota(
+    ic_ledger_suite_state_machine_tests::test_ledger_http_request_decoding_quota(
         ledger_wasm(),
         encode_init_args,
     );
@@ -892,8 +1136,7 @@ fn check_archive_block_endpoint_limits() {
 
 #[test]
 fn test_block_transformation() {
-    let ledger_wasm_mainnet =
-        std::fs::read(std::env::var("ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap()).unwrap();
+    let ledger_wasm_mainnet = ledger_wasm_mainnet();
     let ledger_wasm_current = ledger_wasm();
 
     let p1 = PrincipalId::new_user_test_id(1);
@@ -981,8 +1224,7 @@ fn test_block_transformation() {
 
 #[test]
 fn test_upgrade_serialization() {
-    let ledger_wasm_mainnet =
-        std::fs::read(std::env::var("ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap()).unwrap();
+    let ledger_wasm_mainnet = ledger_wasm_mainnet();
     let ledger_wasm_current = ledger_wasm();
 
     let minter = Arc::new(minter_identity());
@@ -997,10 +1239,9 @@ fn test_upgrade_serialization() {
 
     let init_args = CandidOne(payload).into_bytes().unwrap();
     let upgrade_args = Encode!(&LedgerCanisterPayload::Upgrade(None)).unwrap();
-    ic_icrc1_ledger_sm_tests::test_upgrade_serialization(
+    ic_ledger_suite_state_machine_tests::test_upgrade_serialization(
         ledger_wasm_mainnet,
         ledger_wasm_current,
-        None,
         init_args,
         upgrade_args,
         minter,
@@ -1009,18 +1250,24 @@ fn test_upgrade_serialization() {
 }
 
 #[test]
-fn test_approval_upgrade() {
-    let ledger_wasm_mainnet =
-        std::fs::read(std::env::var("ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap()).unwrap();
+fn test_upgrade_serialization_fixed_tx() {
+    let ledger_wasm_mainnet = ledger_wasm_mainnet();
     let ledger_wasm_current = ledger_wasm();
 
     let p1 = PrincipalId::new_user_test_id(1);
     let p2 = PrincipalId::new_user_test_id(2);
     let p3 = PrincipalId::new_user_test_id(3);
+    let accounts = vec![
+        Account::from(p1.0),
+        Account::from(p2.0),
+        Account::from(p3.0),
+    ];
 
     let env = StateMachine::new();
     let mut initial_balances = HashMap::new();
-    initial_balances.insert(Account::from(p1.0).into(), Tokens::from_e8s(10_000_000));
+    for account in &accounts {
+        initial_balances.insert((*account).into(), Tokens::from_e8s(10_000_000));
+    }
 
     let payload = LedgerCanisterInitPayload::builder()
         .minting_account(MINTER.into())
@@ -1046,6 +1293,11 @@ fn test_approval_upgrade() {
     approve_args.expires_at = Some(expiration);
     send_approval(&env, canister_id, p1.0, &approve_args).expect("approval failed");
 
+    let mut balances = BTreeMap::new();
+    for account in &accounts {
+        balances.insert(account, balance_of(&env, canister_id, *account));
+    }
+
     let test_upgrade = |ledger_wasm: Vec<u8>| {
         env.upgrade_canister(
             canister_id,
@@ -1061,54 +1313,71 @@ fn test_approval_upgrade() {
         let allowance = get_allowance(&env, canister_id, p1.0, p3.0);
         assert_eq!(allowance.allowance.0.to_u64().unwrap(), 130_000);
         assert_eq!(allowance.expires_at, Some(expiration));
+
+        for account in &accounts {
+            assert_eq!(balances[account], balance_of(&env, canister_id, *account));
+        }
     };
 
-    // Test if the old serialized approvals are correctly deserialized
+    // Test if the old serialized approvals and balances are correctly deserialized
     test_upgrade(ledger_wasm_current.clone());
-    // Test if new approvals serialization also works
+    // Test the new wasm serialization
     test_upgrade(ledger_wasm_current);
     // Test if downgrade works
     test_upgrade(ledger_wasm_mainnet);
 }
 
 #[test]
+fn test_downgrade_from_incompatible_version() {
+    ic_ledger_suite_state_machine_tests::test_downgrade_from_incompatible_version(
+        ledger_wasm_mainnet(),
+        ledger_wasm_next_version(),
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
 fn test_approve_smoke() {
-    ic_icrc1_ledger_sm_tests::test_approve_smoke(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_approve_smoke(ledger_wasm(), encode_init_args);
 }
 
 #[test]
 fn test_approve_expiration() {
-    ic_icrc1_ledger_sm_tests::test_approve_expiration(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_approve_expiration(ledger_wasm(), encode_init_args);
 }
 
 #[test]
 fn test_approve_self() {
-    ic_icrc1_ledger_sm_tests::test_approve_self(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_approve_self(ledger_wasm(), encode_init_args);
 }
 
 #[test]
 fn test_approve_expected_allowance() {
-    ic_icrc1_ledger_sm_tests::test_approve_expected_allowance(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_approve_expected_allowance(
+        ledger_wasm(),
+        encode_init_args,
+    );
 }
 
 #[test]
 fn test_approve_cant_pay_fee() {
-    ic_icrc1_ledger_sm_tests::test_approve_cant_pay_fee(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_approve_cant_pay_fee(ledger_wasm(), encode_init_args);
 }
 
 #[test]
 fn test_approve_cap() {
-    ic_icrc1_ledger_sm_tests::test_approve_cap(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_approve_cap(ledger_wasm(), encode_init_args);
 }
 
 #[test]
 fn test_approve_pruning() {
-    ic_icrc1_ledger_sm_tests::test_approve_pruning(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_approve_pruning(ledger_wasm(), encode_init_args);
 }
 
 #[test]
 fn test_approve_from_minter() {
-    ic_icrc1_ledger_sm_tests::test_approve_from_minter(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_approve_from_minter(ledger_wasm(), encode_init_args);
 }
 
 #[test]
@@ -1210,32 +1479,32 @@ fn test_feature_flags() {
 
 #[test]
 fn test_transfer_from_smoke() {
-    ic_icrc1_ledger_sm_tests::test_transfer_from_smoke(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_transfer_from_smoke(ledger_wasm(), encode_init_args);
 }
 
 #[test]
 fn test_transfer_from_self() {
-    ic_icrc1_ledger_sm_tests::test_transfer_from_self(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_transfer_from_self(ledger_wasm(), encode_init_args);
 }
 
 #[test]
 fn test_transfer_from_minter() {
-    ic_icrc1_ledger_sm_tests::test_transfer_from_minter(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_transfer_from_minter(ledger_wasm(), encode_init_args);
 }
 
 #[test]
 fn test_transfer_from_burn() {
-    ic_icrc1_ledger_sm_tests::test_transfer_from_burn(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_transfer_from_burn(ledger_wasm(), encode_init_args);
 }
 
 #[test]
 fn test_balances_overflow() {
-    ic_icrc1_ledger_sm_tests::test_balances_overflow(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_balances_overflow(ledger_wasm(), encode_init_args);
 }
 
 #[test]
 fn test_approval_trimming() {
-    ic_icrc1_ledger_sm_tests::test_approval_trimming(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_approval_trimming(ledger_wasm(), encode_init_args);
 }
 
 #[test]
@@ -1319,17 +1588,25 @@ fn test_query_archived_blocks() {
     let user1 = Principal::from_slice(&[1]);
     let user2 = Principal::from_slice(&[2]);
 
+    // advance time so that time does not grow implicitly when executing a round
+    env.advance_time(Duration::from_secs(1));
     // mint block
-    let mint_time = system_time_to_nanos(env.time_of_next_round());
+    let mint_time = system_time_to_nanos(env.time());
     transfer(&env, ledger, MINTER, user1, 2_000_000_000).unwrap();
+    // advance time so that time does not grow implicitly when executing a round
+    env.advance_time(Duration::from_secs(1));
     // burn block
-    let burn_time = system_time_to_nanos(env.time_of_next_round());
+    let burn_time = system_time_to_nanos(env.time());
     transfer(&env, ledger, user1, MINTER, 1_000_000_000).unwrap();
+    // advance time so that time does not grow implicitly when executing a round
+    env.advance_time(Duration::from_secs(1));
     // xfer block
-    let xfer_time = system_time_to_nanos(env.time_of_next_round());
+    let xfer_time = system_time_to_nanos(env.time());
     transfer(&env, ledger, user1, user2, 100_000_000).unwrap();
+    // advance time so that time does not grow implicitly when executing a round
+    env.advance_time(Duration::from_secs(1));
     // approve block
-    let approve_time = system_time_to_nanos(env.time_of_next_round());
+    let approve_time = system_time_to_nanos(env.time());
     send_approval(
         &env,
         ledger,
@@ -1431,16 +1708,16 @@ fn test_query_archived_blocks() {
 
 #[test]
 fn test_icrc21_standard() {
-    ic_icrc1_ledger_sm_tests::test_icrc21_standard(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_icrc21_standard(ledger_wasm(), encode_init_args);
 }
 
 mod metrics {
     use crate::{encode_init_args, encode_upgrade_args, ledger_wasm};
-    use ic_icrc1_ledger_sm_tests::metrics::LedgerSuiteType;
+    use ic_ledger_suite_state_machine_tests::metrics::LedgerSuiteType;
 
     #[test]
     fn should_export_num_archives_metrics() {
-        ic_icrc1_ledger_sm_tests::metrics::assert_existence_of_ledger_num_archives_metric(
+        ic_ledger_suite_state_machine_tests::metrics::assert_existence_of_ledger_num_archives_metric(
             ledger_wasm(),
             encode_init_args,
         );
@@ -1448,7 +1725,7 @@ mod metrics {
 
     #[test]
     fn should_export_total_memory_usage_metrics() {
-        ic_icrc1_ledger_sm_tests::metrics::assert_existence_of_ledger_total_memory_bytes_metric(
+        ic_ledger_suite_state_machine_tests::metrics::assert_existence_of_ledger_total_memory_bytes_metric(
             ledger_wasm(),
             encode_init_args,
         );
@@ -1456,7 +1733,7 @@ mod metrics {
 
     #[test]
     fn should_export_ledger_total_blocks_metrics() {
-        ic_icrc1_ledger_sm_tests::metrics::assert_existence_of_ledger_total_transactions_metric(
+        ic_ledger_suite_state_machine_tests::metrics::assert_existence_of_ledger_total_transactions_metric(
             ledger_wasm(),
             encode_init_args,
             LedgerSuiteType::ICP,
@@ -1465,9 +1742,8 @@ mod metrics {
 
     #[test]
     fn should_set_ledger_upgrade_instructions_consumed_metric() {
-        ic_icrc1_ledger_sm_tests::metrics::assert_ledger_upgrade_instructions_consumed_metric_set(
+        ic_ledger_suite_state_machine_tests::metrics::assert_ledger_upgrade_instructions_consumed_metric_set(
             ledger_wasm(),
-            None,
             encode_init_args,
             encode_upgrade_args,
         );

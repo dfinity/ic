@@ -33,14 +33,5 @@ elif [[ -n "${HOSTUSER:-}" ]]; then
     echo "USER ${HOSTUSER}"
 fi
 
-# Used to pass volatile status over a side channel to not affect the cache.
-# Try user-independent path first, fall back to user-specific to for on shared machines.
-for s in /var/tmp/bazel-volatile-status.txt "$HOME/.bazel-volatile-status.txt"; do
-    if ln -fs "${WORKSPACE_ROOT}/bazel-out/volatile-status.txt" "$s"; then
-        echo "VERSION_FILE_PATH $s"
-        break
-    fi
-done
-
 # Generate a file that changes every time bazel runs. It can be used as dependency for targets we want to always rebuild.
 date '+%s' >"${WORKSPACE_ROOT}/bazel-timestamp.txt"

@@ -11,6 +11,8 @@ use ic_ledger_core::{
 };
 use ic_ledger_core::{block::BlockIndex, tokens::Tokens};
 use ic_ledger_hash_of::HashOf;
+use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
+use ic_stable_structures::DefaultMemoryImpl;
 use icp_ledger::{
     AccountIdentifier, Block, FeatureFlags, LedgerAllowances, LedgerBalances, Memo, Operation,
     PaymentError, Transaction, TransferError, TransferFee, UpgradeArgs, DEFAULT_TRANSFER_FEE,
@@ -20,6 +22,7 @@ use intmap::IntMap;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
+use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::sync::RwLock;
 use std::time::Duration;
@@ -60,6 +63,33 @@ fn default_transfer_fee() -> Tokens {
 fn unknown_token() -> String {
     "???".to_string()
 }
+
+fn default_ledger_version() -> u64 {
+    LEDGER_VERSION
+}
+
+const UPGRADES_MEMORY_ID: MemoryId = MemoryId::new(0);
+
+thread_local! {
+    static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> = RefCell::new(
+        MemoryManager::init(DefaultMemoryImpl::default())
+    );
+
+    // The memory where the ledger must write and read its state during an upgrade.
+    pub static UPGRADES_MEMORY: RefCell<VirtualMemory<DefaultMemoryImpl>> = MEMORY_MANAGER.with(|memory_manager|
+        RefCell::new(memory_manager.borrow().get(UPGRADES_MEMORY_ID)));
+}
+
+/// The ledger versions represent backwards incompatible versions of the ledger.
+/// Downgrading to a lower ledger version is never suppported.
+/// Upgrading from version N to version N+1 should always be possible.
+/// We have the following ledger versions:
+///   * 0 - the whole ledger state is stored on the heap.
+#[cfg(not(feature = "next-ledger-version"))]
+pub const LEDGER_VERSION: u64 = 0;
+
+#[cfg(feature = "next-ledger-version")]
+pub const LEDGER_VERSION: u64 = 1;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Ledger {
@@ -106,6 +136,9 @@ pub struct Ledger {
 
     #[serde(default)]
     pub feature_flags: FeatureFlags,
+
+    #[serde(default = "default_ledger_version")]
+    pub ledger_version: u64,
 }
 
 impl LedgerContext for Ledger {
@@ -224,6 +257,7 @@ impl Default for Ledger {
             token_symbol: unknown_token(),
             token_name: unknown_token(),
             feature_flags: FeatureFlags::default(),
+            ledger_version: LEDGER_VERSION,
         }
     }
 }

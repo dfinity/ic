@@ -106,7 +106,7 @@ use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::fmt;
 use std::sync::Arc;
-use strum::EnumIter;
+use strum_macros::EnumIter;
 use thousands::Separable;
 
 pub struct UserTag {}
@@ -477,17 +477,17 @@ pub struct InvalidMemoryAllocationError {
     pub given: candid::Nat,
 }
 
-const GB: u64 = 1024 * 1024 * 1024;
+const GIB: u64 = 1024 * 1024 * 1024;
 
 /// The upper limit on the stable memory size.
 /// This constant is used by other crates to define other constants, that's why
 /// it is public and `u64` (`NumBytes` cannot be used in const expressions).
-pub const MAX_STABLE_MEMORY_IN_BYTES: u64 = 400 * GB;
+pub const MAX_STABLE_MEMORY_IN_BYTES: u64 = 500 * GIB;
 
 /// The upper limit on the Wasm memory size.
 /// This constant is used by other crates to define other constants, that's why
 /// it is public and `u64` (`NumBytes` cannot be used in const expressions).
-pub const MAX_WASM_MEMORY_IN_BYTES: u64 = 4 * GB;
+pub const MAX_WASM_MEMORY_IN_BYTES: u64 = 4 * GIB;
 
 const MIN_MEMORY_ALLOCATION: NumBytes = NumBytes::new(0);
 pub const MAX_MEMORY_ALLOCATION: NumBytes =

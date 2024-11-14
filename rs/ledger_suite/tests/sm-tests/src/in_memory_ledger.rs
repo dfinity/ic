@@ -72,20 +72,118 @@ pub trait InMemoryLedgerState {
 
 pub struct InMemoryLedger<K, AccountId, Tokens>
 where
-    K: Ord,
+    K: Ord + Hash,
+    AccountId: Hash + Eq,
 {
     balances: HashMap<AccountId, Tokens>,
     allowances: HashMap<K, Allowance<Tokens>>,
     total_supply: Tokens,
     fee_collector: Option<AccountId>,
     burns_without_spender: Option<BurnsWithoutSpender<AccountId>>,
+    transactions: u64,
+}
+
+impl<K, AccountId, Tokens: std::fmt::Debug> PartialEq for InMemoryLedger<K, AccountId, Tokens>
+where
+    K: Ord + Hash + std::fmt::Debug,
+    AccountId: Hash + Eq + std::fmt::Debug,
+    Tokens: PartialEq + std::fmt::Debug,
+{
+    fn eq(&self, other: &Self) -> bool {
+        if self.balances.len() != other.balances.len() {
+            println!(
+                "Mismatch in number of balances: {} vs {}",
+                self.balances.len(),
+                other.balances.len()
+            );
+            return false;
+        }
+        if self.allowances.len() != other.allowances.len() {
+            println!(
+                "Mismatch in number of allowances: {} vs {}",
+                self.allowances.len(),
+                other.allowances.len()
+            );
+            return false;
+        }
+        if self.total_supply != other.total_supply {
+            println!(
+                "Mismatch in total supply: {:?} vs {:?}",
+                self.total_supply, other.total_supply
+            );
+            return false;
+        }
+        if self.fee_collector != other.fee_collector {
+            println!(
+                "Mismatch in fee collector: {:?} vs {:?}",
+                self.fee_collector, other.fee_collector
+            );
+            return false;
+        }
+        if self.burns_without_spender != other.burns_without_spender {
+            println!(
+                "Mismatch in burns without spender: {:?} vs {:?}",
+                self.burns_without_spender, other.burns_without_spender
+            );
+            return false;
+        }
+        if !self.balances.iter().all(|(account_id, balance)| {
+            other.balances.get(account_id).map_or_else(
+                || {
+                    println!(
+                        "Mismatch in balance for account {:?}: {:?} vs None",
+                        account_id, balance
+                    );
+                    false
+                },
+                |other_balance| {
+                    if *balance != *other_balance {
+                        println!(
+                            "Mismatch in balance for account {:?}: {:?} vs {:?}",
+                            account_id, balance, other_balance
+                        );
+                        false
+                    } else {
+                        true
+                    }
+                },
+            )
+        }) {
+            return false;
+        }
+        if !self.allowances.iter().all(|(account_id_pair, allowance)| {
+            other.allowances.get(account_id_pair).map_or_else(
+                || {
+                    println!(
+                        "Mismatch in allowance for account pair {:?}: {:?} vs None",
+                        account_id_pair, allowance
+                    );
+                    false
+                },
+                |other_allowance| {
+                    if *allowance != *other_allowance {
+                        println!(
+                            "Mismatch in allowance for account pair {:?}: {:?} vs {:?}",
+                            account_id_pair, allowance, other_allowance
+                        );
+                        false
+                    } else {
+                        true
+                    }
+                },
+            )
+        }) {
+            return false;
+        }
+        true
+    }
 }
 
 impl<K, AccountId, Tokens> InMemoryLedgerState for InMemoryLedger<K, AccountId, Tokens>
 where
-    K: Ord + for<'a> From<(&'a AccountId, &'a AccountId)> + Clone + Hash,
+    K: Eq + PartialEq + Ord + for<'a> From<(&'a AccountId, &'a AccountId)> + Clone + Hash,
     K: Into<(AccountId, AccountId)>,
-    AccountId: PartialEq + Ord + Clone + Hash + std::fmt::Debug,
+    AccountId: Eq + PartialEq + Ord + Clone + Hash + std::fmt::Debug,
     Tokens: TokensType + Default,
 {
     type AccountId = AccountId;
@@ -112,6 +210,7 @@ where
     ) {
         self.burn_fee(from, fee);
         self.set_allowance(from, spender, amount, expected_allowance, expires_at, now);
+        self.transactions += 1;
     }
 
     fn process_burn(
@@ -139,11 +238,13 @@ where
                 self.decrease_allowance(from, spender, amount, None);
             }
         }
+        self.transactions += 1;
     }
 
     fn process_mint(&mut self, to: &Self::AccountId, amount: &Self::Tokens) {
         self.increase_balance(to, amount);
         self.increase_total_supply(amount);
+        self.transactions += 1;
     }
 
     fn process_transfer(
@@ -164,6 +265,7 @@ where
             }
         }
         self.increase_balance(to, amount);
+        self.transactions += 1;
     }
 
     fn validate_invariants(&self) {
@@ -193,6 +295,7 @@ where
             total_supply: Tokens::zero(),
             fee_collector: None,
             burns_without_spender: None,
+            transactions: 0,
         }
     }
 }
@@ -398,11 +501,13 @@ impl InMemoryLedger<ApprovalKey, Account, Tokens> {
                     TimeStamp::from_nanos_since_unix_epoch(block.timestamp),
                 ),
             }
-            self.validate_invariants();
         }
-        self.prune_expired_allowances(TimeStamp::from_nanos_since_unix_epoch(
-            blocks.last().unwrap().timestamp,
-        ));
+        if !blocks.is_empty() {
+            self.validate_invariants();
+            self.prune_expired_allowances(TimeStamp::from_nanos_since_unix_epoch(
+                blocks.last().unwrap().timestamp,
+            ));
+        }
     }
 
     pub fn apply_arg_with_caller(
@@ -462,9 +567,23 @@ impl InMemoryLedger<ApprovalKey, Account, Tokens> {
         self.validate_invariants();
     }
 
-    pub fn verify_balances_and_allowances(&self, env: &StateMachine, ledger_id: CanisterId) {
+    pub fn verify_balances_and_allowances(
+        &self,
+        env: &StateMachine,
+        ledger_id: CanisterId,
+        num_ledger_blocks: u64,
+    ) {
         let actual_num_approvals = parse_metric(env, ledger_id, "ledger_num_approvals");
         let actual_num_balances = parse_metric(env, ledger_id, "ledger_balance_store_entries");
+        println!(
+            "total_blocks in ledger: {}, total InMemoryLedger transactions: {}",
+            num_ledger_blocks, self.transactions
+        );
+        assert_eq!(
+            num_ledger_blocks, self.transactions,
+            "Mismatch in number of transactions ({} vs {})",
+            self.transactions, num_ledger_blocks
+        );
         assert_eq!(
             self.balances.len() as u64,
             actual_num_balances,
@@ -524,7 +643,7 @@ impl InMemoryLedger<ApprovalKey, Account, Tokens> {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Eq, PartialEq, Clone, Debug)]
 pub struct BurnsWithoutSpender<AccountId> {
     pub minter: AccountId,
     pub burn_indexes: Vec<usize>,
@@ -536,11 +655,11 @@ pub fn verify_ledger_state(
     burns_without_spender: Option<BurnsWithoutSpender<Account>>,
 ) {
     println!("verifying state of ledger {}", ledger_id);
-    let blocks = get_all_ledger_and_archive_blocks(env, ledger_id);
+    let blocks = get_all_ledger_and_archive_blocks(env, ledger_id, None, None);
     println!("retrieved all ledger and archive blocks");
     let mut expected_ledger_state = InMemoryLedger::new(burns_without_spender);
     expected_ledger_state.ingest_icrc1_ledger_blocks(&blocks);
     println!("recreated expected ledger state");
-    expected_ledger_state.verify_balances_and_allowances(env, ledger_id);
+    expected_ledger_state.verify_balances_and_allowances(env, ledger_id, blocks.len() as u64);
     println!("ledger state verified successfully");
 }

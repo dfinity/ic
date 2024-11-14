@@ -182,7 +182,7 @@ pub fn get_system_api(
     cycles_account_manager: CyclesAccountManager,
 ) -> SystemApiImpl {
     let execution_mode = api_type.execution_mode();
-    let sandbox_safe_system_state = SandboxSafeSystemState::new(
+    let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
@@ -218,14 +218,13 @@ pub fn get_system_api(
 pub fn get_system_state() -> SystemState {
     let mut system_state = SystemStateBuilder::new().build();
     system_state
-        .call_context_manager_mut()
-        .unwrap()
         .new_call_context(
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5), NO_DEADLINE),
             Cycles::new(50),
             Time::from_nanos_since_unix_epoch(0),
             RequestMetadata::new(0, UNIX_EPOCH),
-        );
+        )
+        .unwrap();
     system_state
 }
 

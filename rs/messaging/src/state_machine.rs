@@ -1,13 +1,18 @@
-use crate::message_routing::{ApiBoundaryNodes, MessageRoutingMetrics, NodePublicKeys};
-use crate::routing::{demux::Demux, stream_builder::StreamBuilder};
+use crate::message_routing::{
+    ApiBoundaryNodes, MessageRoutingMetrics, NodePublicKeys, CRITICAL_ERROR_INDUCT_RESPONSE_FAILED,
+};
+use crate::routing::demux::Demux;
+use crate::routing::stream_builder::StreamBuilder;
+use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_interfaces::execution_environment::{
     ExecutionRoundSummary, ExecutionRoundType, RegistryExecutionSettings, Scheduler,
 };
-use ic_logger::{fatal, ReplicaLogger};
+use ic_logger::{error, fatal, ReplicaLogger};
 use ic_query_stats::deliver_query_stats;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_replicated_state::{NetworkTopology, ReplicatedState};
-use ic_types::{batch::Batch, ExecutionRound};
+use ic_types::batch::Batch;
+use ic_types::{ExecutionRound, NumBytes};
 use std::time::Instant;
 
 #[cfg(test)]
@@ -17,6 +22,7 @@ const PHASE_INDUCTION: &str = "induction";
 const PHASE_EXECUTION: &str = "execution";
 const PHASE_MESSAGE_ROUTING: &str = "message_routing";
 const PHASE_TIME_OUT_MESSAGES: &str = "time_out_messages";
+const PHASE_SHED_MESSAGES: &str = "shed_messages";
 
 pub(crate) trait StateMachine: Send {
     fn execute_round(
@@ -34,6 +40,7 @@ pub(crate) struct StateMachineImpl {
     scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
     demux: Box<dyn Demux>,
     stream_builder: Box<dyn StreamBuilder>,
+    best_effort_message_memory_capacity: NumBytes,
     log: ReplicaLogger,
     metrics: MessageRoutingMetrics,
 }
@@ -43,6 +50,7 @@ impl StateMachineImpl {
         scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
         demux: Box<dyn Demux>,
         stream_builder: Box<dyn StreamBuilder>,
+        hypervisor_config: HypervisorConfig,
         log: ReplicaLogger,
         metrics: MessageRoutingMetrics,
     ) -> Self {
@@ -50,6 +58,7 @@ impl StateMachineImpl {
             scheduler,
             demux,
             stream_builder,
+            best_effort_message_memory_capacity: hypervisor_config.subnet_message_memory_capacity,
             log,
             metrics,
         }
@@ -114,6 +123,23 @@ impl StateMachine for StateMachineImpl {
         self.metrics
             .timed_out_messages_total
             .inc_by(timed_out_messages as u64);
+
+        // Time out expired callbacks.
+        let (timed_out_callbacks, errors) = state.time_out_callbacks();
+        self.metrics
+            .timed_out_callbacks_total
+            .inc_by(timed_out_callbacks as u64);
+        for error in errors {
+            // Critical error, responses should always be inducted successfully.
+            error!(
+                self.log,
+                "{}: Inducting deadline expired response failed: {}",
+                CRITICAL_ERROR_INDUCT_RESPONSE_FAILED,
+                error
+            );
+            self.metrics.critical_error_induct_response_failed.inc();
+        }
+
         self.observe_phase_duration(PHASE_TIME_OUT_MESSAGES, &since);
 
         // Preprocess messages and add messages to the induction pool through the Demux.
@@ -144,6 +170,7 @@ impl StateMachine for StateMachineImpl {
             batch.randomness,
             batch.idkg_subnet_public_keys,
             batch.idkg_pre_signature_ids,
+            &batch.replica_version,
             ExecutionRound::from(batch.batch_number.get()),
             round_summary,
             execution_round_type,
@@ -161,9 +188,20 @@ impl StateMachine for StateMachineImpl {
         self.observe_phase_duration(PHASE_EXECUTION, &since);
 
         let since = Instant::now();
-        // Postprocess the state and consolidate the Streams.
-        let state_after_stream_builder = self.stream_builder.build_streams(state_after_execution);
+        // Postprocess the state: route messages into streams.
+        let mut state_after_stream_builder =
+            self.stream_builder.build_streams(state_after_execution);
         self.observe_phase_duration(PHASE_MESSAGE_ROUTING, &since);
+
+        let since = Instant::now();
+        // Shed enough messages to stay below the best-effort message memory limit.
+        let (shed_messages, shed_message_bytes) = state_after_stream_builder
+            .enforce_best_effort_message_limit(self.best_effort_message_memory_capacity);
+        self.metrics.shed_messages_total.inc_by(shed_messages);
+        self.metrics
+            .shed_message_bytes_total
+            .inc_by(shed_message_bytes.get());
+        self.observe_phase_duration(PHASE_SHED_MESSAGES, &since);
 
         state_after_stream_builder
     }

@@ -5,7 +5,7 @@ use dfn_core::BytesS;
 use dfn_core::{
     api::{caller, data_certificate, print, set_certified_data, time_nanos, trap_with},
     endpoint::reject_on_decode_error::{over, over_async, over_async_may_reject},
-    over_init, printer, setup, stable,
+    over_init, printer, setup,
 };
 use dfn_protobuf::protobuf;
 use ic_base_types::CanisterId;
@@ -25,6 +25,10 @@ use ic_ledger_core::{
     timestamp::TimeStamp,
     tokens::{Tokens, DECIMAL_PLACES},
 };
+use ic_stable_structures::reader::{BufferedReader, Reader};
+use ic_stable_structures::writer::{BufferedWriter, Writer};
+#[cfg(feature = "icp-allowance-getter")]
+use icp_ledger::IcpAllowanceArgs;
 use icp_ledger::{
     max_blocks_per_request, protobuf, tokens_into_proto, AccountBalanceArgs, AccountIdBlob,
     AccountIdentifier, ArchiveInfo, ArchivedBlocksRange, ArchivedEncodedBlocksRange, Archives,
@@ -50,7 +54,7 @@ use icrc_ledger_types::{
     icrc1::transfer::TransferArg,
     icrc21::{errors::Icrc21Error, requests::ConsentMessageRequest, responses::ConsentInfo},
 };
-use ledger_canister::{Ledger, LEDGER, MAX_MESSAGE_SIZE_BYTES};
+use ledger_canister::{Ledger, LEDGER, LEDGER_VERSION, MAX_MESSAGE_SIZE_BYTES, UPGRADES_MEMORY};
 use num_traits::cast::ToPrimitive;
 #[allow(unused_imports)]
 use on_wire::IntoWire;
@@ -745,11 +749,67 @@ fn main() {
     })
 }
 
+// We use 8MiB buffer
+const BUFFER_SIZE: usize = 8388608;
+
 fn post_upgrade(args: Option<LedgerCanisterPayload>) {
     let start = dfn_core::api::performance_counter(0);
-    let mut stable_reader = stable::StableReader::new();
+
+    // In order to read the first bytes we need to use ic_cdk.
+    // dfn_core assumes the first 4 bytes store stable memory length
+    // and return bytes starting from the 5th byte.
+    let mut magic_bytes_reader = ic_cdk::api::stable::StableReader::default();
+    const MAGIC_BYTES: &[u8; 3] = b"MGR";
+    let mut first_bytes = [0u8; 3];
+    let memory_manager_found = match magic_bytes_reader.read_exact(&mut first_bytes) {
+        Ok(_) => first_bytes == *MAGIC_BYTES,
+        Err(_) => false,
+    };
+
     let mut ledger = LEDGER.write().unwrap();
-    *ledger = ciborium::de::from_reader(&mut stable_reader).expect("Decoding stable memory failed");
+    let mut pre_upgrade_instructions_consumed = 0;
+    if !memory_manager_found {
+        // The ledger was written with dfn_core and has to be read with dfn_core in order
+        // to skip the first bytes that contain the length of the stable memory.
+        let mut stable_reader = dfn_core::stable::StableReader::new();
+        *ledger =
+            ciborium::de::from_reader(&mut stable_reader).expect("Decoding stable memory failed");
+        let mut pre_upgrade_instructions_counter_bytes = [0u8; 8];
+        pre_upgrade_instructions_consumed =
+            match stable_reader.read_exact(&mut pre_upgrade_instructions_counter_bytes) {
+                Ok(_) => u64::from_le_bytes(pre_upgrade_instructions_counter_bytes),
+                Err(_) => {
+                    // If upgrading from a version that didn't write the instructions counter to stable memory
+                    0u64
+                }
+            };
+    } else {
+        *ledger = UPGRADES_MEMORY.with_borrow(|bs| {
+            let reader = Reader::new(bs, 0);
+            let mut buffered_reader = BufferedReader::new(BUFFER_SIZE, reader);
+            let ledger_state = ciborium::de::from_reader(&mut buffered_reader).expect(
+                "Failed to read the Ledger state from memory manager managed stable memory",
+            );
+            let mut pre_upgrade_instructions_counter_bytes = [0u8; 8];
+            pre_upgrade_instructions_consumed =
+                match buffered_reader.read_exact(&mut pre_upgrade_instructions_counter_bytes) {
+                    Ok(_) => u64::from_le_bytes(pre_upgrade_instructions_counter_bytes),
+                    Err(_) => {
+                        // If upgrading from a version that didn't write the instructions counter to stable memory
+                        0u64
+                    }
+                };
+            ledger_state
+        });
+    }
+
+    if ledger.ledger_version > LEDGER_VERSION {
+        panic!(
+            "Trying to downgrade from incompatible version {}. Current version is {}.",
+            ledger.ledger_version, LEDGER_VERSION
+        );
+    }
+    ledger.ledger_version = LEDGER_VERSION;
 
     if let Some(args) = args {
         match args {
@@ -768,15 +828,6 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
             .map(|h| h.into_bytes())
             .unwrap_or([0u8; 32]),
     );
-    let mut pre_upgrade_instructions_counter_bytes = [0u8; 8];
-    let pre_upgrade_instructions_consumed =
-        match stable_reader.read_exact(&mut pre_upgrade_instructions_counter_bytes) {
-            Ok(_) => u64::from_le_bytes(pre_upgrade_instructions_counter_bytes),
-            Err(_) => {
-                // If upgrading from a version that didn't write the instructions counter to stable memory
-                0u64
-            }
-        };
     PRE_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow_mut() = pre_upgrade_instructions_consumed);
 
     let end = dfn_core::api::performance_counter(0);
@@ -801,15 +852,18 @@ fn pre_upgrade() {
         .read()
         // This should never happen, but it's better to be safe than sorry
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let mut stable_writer = stable::StableWriter::new();
-    ciborium::ser::into_writer(&*ledger, &mut stable_writer)
-        .expect("failed to write ledger state to stable memory");
-    let end = dfn_core::api::performance_counter(0);
-    let instructions_consumed = end - start;
-    let counter_bytes: [u8; 8] = instructions_consumed.to_le_bytes();
-    stable_writer
-        .write_all(&counter_bytes)
-        .expect("failed to write instructions consumed to stable memory");
+    UPGRADES_MEMORY.with_borrow_mut(|bs| {
+        let writer = Writer::new(bs, 0);
+        let mut buffered_writer = BufferedWriter::new(BUFFER_SIZE, writer);
+        ciborium::ser::into_writer(&*ledger, &mut buffered_writer)
+            .expect("Failed to write the Ledger state to memory manager managed stable memory");
+        let end = dfn_core::api::performance_counter(0);
+        let instructions_consumed = end - start;
+        let counter_bytes: [u8; 8] = instructions_consumed.to_le_bytes();
+        buffered_writer
+            .write_all(&counter_bytes)
+            .expect("failed to write instructions consumed to UPGRADES_MEMORY");
+    });
 }
 
 struct Access;
@@ -1551,25 +1605,41 @@ fn icrc2_approve_candid() {
     })
 }
 
-#[candid_method(query, rename = "icrc2_allowance")]
-fn icrc2_allowance(arg: AllowanceArgs) -> Allowance {
-    if !LEDGER.read().unwrap().feature_flags.icrc2 {
-        trap_with("ICRC-2 features are not enabled on the ledger.");
-    }
+fn get_allowance(from: AccountIdentifier, spender: AccountIdentifier) -> Allowance {
     let now = TimeStamp::from_nanos_since_unix_epoch(time_nanos());
     let ledger = LEDGER.read().unwrap();
-    let account = AccountIdentifier::from(arg.account);
-    let spender = AccountIdentifier::from(arg.spender);
-    let allowance = ledger.approvals.allowance(&account, &spender, now);
+    let allowance = ledger.approvals.allowance(&from, &spender, now);
     Allowance {
         allowance: Nat::from(allowance.amount.get_e8s()),
         expires_at: allowance.expires_at.map(|t| t.as_nanos_since_unix_epoch()),
     }
 }
 
+#[candid_method(query, rename = "icrc2_allowance")]
+fn icrc2_allowance(arg: AllowanceArgs) -> Allowance {
+    if !LEDGER.read().unwrap().feature_flags.icrc2 {
+        trap_with("ICRC-2 features are not enabled on the ledger.");
+    }
+    let from = AccountIdentifier::from(arg.account);
+    let spender = AccountIdentifier::from(arg.spender);
+    get_allowance(from, spender)
+}
+
 #[export_name = "canister_query icrc2_allowance"]
 fn icrc2_allowance_candid() {
     over(candid_one, icrc2_allowance)
+}
+
+#[cfg(feature = "icp-allowance-getter")]
+#[candid_method(query, rename = "allowance")]
+fn icp_allowance(arg: IcpAllowanceArgs) -> Allowance {
+    get_allowance(arg.account, arg.spender)
+}
+
+#[cfg(feature = "icp-allowance-getter")]
+#[export_name = "canister_query allowance"]
+fn allowance_candid() {
+    over(candid_one, icp_allowance)
 }
 
 #[candid_method(update, rename = "icrc21_canister_call_consent_message")]

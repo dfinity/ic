@@ -88,9 +88,10 @@ RUN rm /etc/ssh/ssh*key*
 # strictly necessary to be explicit here.
 RUN sed -e "s/.*PermitRootLogin.*/PermitRootLogin prohibit-password/" -i /etc/ssh/sshd_config
 
-RUN \
-    for SERVICE in /etc/systemd/system/*; do \
-    if [ -f "$SERVICE" -a ! -L "$SERVICE" ] && grep -q '^.Install.' "$SERVICE" ; then systemctl enable "${SERVICE#/etc/systemd/system/}" ; fi ; \
+RUN for SERVICE in /etc/systemd/system/*; do \
+        if [ -f "$SERVICE" ] && [ ! -L "$SERVICE" ] && ! echo "$SERVICE" | grep -Eq "@\.service$"; then \
+            systemctl enable "${SERVICE#/etc/systemd/system/}"; \
+        fi ; \
     done
 
 RUN systemctl enable \

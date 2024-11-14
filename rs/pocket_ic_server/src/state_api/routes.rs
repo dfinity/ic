@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_types)]
 /// This module contains the route handlers for the PocketIc server.
 ///
 /// A handler may receive a representation of a PocketIc Operation in the request
@@ -7,9 +8,10 @@
 use super::state::{ApiState, OpOut, PocketIcError, StateLabel, UpdateReply};
 use crate::pocket_ic::{
     AddCycles, AwaitIngressMessage, CallRequest, CallRequestVersion, CanisterReadStateRequest,
-    DashboardRequest, ExecuteIngressMessage, GetCanisterHttp, GetCyclesBalance, GetStableMemory,
-    GetSubnet, GetTime, GetTopology, MockCanisterHttp, PubKey, Query, QueryRequest,
-    SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage, SubnetReadStateRequest, Tick,
+    DashboardRequest, ExecuteIngressMessage, GetCanisterHttp, GetControllers, GetCyclesBalance,
+    GetStableMemory, GetSubnet, GetTime, GetTopology, MockCanisterHttp, PubKey, Query,
+    QueryRequest, SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage,
+    SubnetReadStateRequest, Tick,
 };
 use crate::{async_trait, pocket_ic::PocketIc, BlobStore, InstanceId, OpId, Operation};
 use aide::{
@@ -32,17 +34,17 @@ use backoff::backoff::Backoff;
 use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
 use hyper::header;
 use ic_http_endpoints_public::cors_layer;
-use ic_state_machine_tests::Level;
 use ic_types::{CanisterId, SubnetId};
 use pocket_ic::common::rest::{
     self, ApiResponse, AutoProgressConfig, ExtendedSubnetConfigSet, HttpGatewayConfig,
     HttpGatewayDetails, InstanceConfig, MockCanisterHttpResponse, RawAddCycles, RawCanisterCall,
     RawCanisterHttpRequest, RawCanisterId, RawCanisterResult, RawCycles, RawMessageId,
-    RawMockCanisterHttpResponse, RawSetStableMemory, RawStableMemory, RawSubmitIngressResult,
-    RawSubnetId, RawTime, RawWasmResult, Topology,
+    RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory,
+    RawSubmitIngressResult, RawSubnetId, RawTime, RawWasmResult, Topology,
 };
 use pocket_ic::WasmResult;
 use serde::Serialize;
+use slog::Level;
 use std::str::FromStr;
 use std::{collections::BTreeMap, fs::File, sync::Arc, time::Duration};
 use tokio::{runtime::Runtime, sync::RwLock, time::Instant};
@@ -74,6 +76,7 @@ where
         .directory_route("/topology", get(handler_topology))
         .directory_route("/get_time", get(handler_get_time))
         .directory_route("/get_canister_http", get(handler_get_canister_http))
+        .directory_route("/get_controllers", post(handler_get_controllers))
         .directory_route("/get_cycles", post(handler_get_cycles))
         .directory_route("/get_stable_memory", post(handler_get_stable_memory))
         .directory_route("/get_subnet", post(handler_get_subnet))
@@ -192,6 +195,8 @@ where
         //
         // The instance dashboard
         .api_route("/:id/_/dashboard", get(handler_dashboard))
+        // The topology to be retrieved via an HTTP gateway that cannot route `/read/topology`.
+        .api_route("/:id/_/topology", get(handler_topology))
         // Configures an IC instance to make progress automatically,
         // i.e., periodically update the time of the IC instance
         // to the real time and execute rounds on the subnets.
@@ -355,6 +360,19 @@ impl TryFrom<OpOut> for () {
     fn try_from(value: OpOut) -> Result<Self, Self::Error> {
         match value {
             OpOut::NoOutput => Ok(()),
+            _ => Err(OpConversionError),
+        }
+    }
+}
+
+impl TryFrom<OpOut> for Vec<RawPrincipalId> {
+    type Error = OpConversionError;
+    fn try_from(value: OpOut) -> Result<Self, Self::Error> {
+        match value {
+            OpOut::Controllers(controllers) => Ok(controllers
+                .into_iter()
+                .map(|principal_id| principal_id.0.into())
+                .collect()),
             _ => Err(OpConversionError),
         }
     }
@@ -580,6 +598,28 @@ pub async fn handler_mock_canister_http(
     (code, Json(response))
 }
 
+pub async fn handler_get_controllers(
+    State(AppState { api_state, .. }): State<AppState>,
+    Path(instance_id): Path<InstanceId>,
+    headers: HeaderMap,
+    extract::Json(raw_canister_id): extract::Json<RawCanisterId>,
+) -> (StatusCode, Json<ApiResponse<Vec<RawPrincipalId>>>) {
+    let timeout = timeout_or_default(headers);
+    match CanisterId::try_from(raw_canister_id.canister_id) {
+        Ok(canister_id) => {
+            let get_op = GetControllers { canister_id };
+            let (code, response) = run_operation(api_state, instance_id, timeout, get_op).await;
+            (code, Json(response))
+        }
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::Error {
+                message: format!("{:?}", e),
+            }),
+        ),
+    }
+}
+
 pub async fn handler_get_cycles(
     State(AppState { api_state, .. }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
@@ -766,14 +806,6 @@ async fn handle_raw<T: Operation + Send + Sync + 'static>(
 /// the return type.
 async fn op_out_to_response(op_out: OpOut) -> Response {
     match op_out {
-        OpOut::Pruned => (
-            StatusCode::GONE,
-            Json(ApiResponse::<()>::Error {
-                message: "Pruned".to_owned(),
-            })
-            .into_response(),
-        )
-            .into_response(),
         opout @ OpOut::MessageId(_) => (
             StatusCode::OK,
             Json(ApiResponse::Success(
@@ -805,6 +837,13 @@ async fn op_out_to_response(op_out: OpOut) -> Response {
             StatusCode::OK,
             Json(ApiResponse::Success(
                 RawCanisterId::try_from(opout).unwrap(),
+            )),
+        )
+            .into_response(),
+        opout @ OpOut::Controllers(_) => (
+            StatusCode::OK,
+            Json(ApiResponse::Success(
+                Vec::<RawPrincipalId>::try_from(opout).unwrap(),
             )),
         )
             .into_response(),
@@ -870,9 +909,7 @@ pub async fn handler_read_graph(
     if let Ok(state_label) = StateLabel::try_from(vec) {
         let op_id = OpId(op_id_str.clone());
         // TODO: use new_state_label and return it to library
-        if let Some((_new_state_label, op_out)) =
-            ApiState::read_result(api_state.get_graph(), &state_label, &op_id)
-        {
+        if let Some((_new_state_label, op_out)) = api_state.read_graph(&state_label, &op_id) {
             op_out_to_response(op_out).await
         } else {
             (
@@ -1049,19 +1086,20 @@ pub async fn status() -> StatusCode {
 
 fn contains_unimplemented(config: ExtendedSubnetConfigSet) -> bool {
     Iterator::any(
-        &mut vec![config.sns, config.ii, config.fiduciary, config.bitcoin]
-            .into_iter()
-            .flatten()
-            .chain(config.system)
-            .chain(config.application)
-            .chain(config.verified_application),
-        |spec: pocket_ic::common::rest::SubnetSpec| {
-            spec.get_subnet_id().is_some() || !spec.is_supported()
-        },
-    ) || config
-        .nns
-        .map(|spec| !spec.is_supported())
-        .unwrap_or_default()
+        &mut vec![
+            config.nns,
+            config.sns,
+            config.ii,
+            config.fiduciary,
+            config.bitcoin,
+        ]
+        .into_iter()
+        .flatten()
+        .chain(config.system)
+        .chain(config.application)
+        .chain(config.verified_application),
+        |spec| !spec.is_supported(),
+    )
 }
 
 /// Create a new empty IC instance from a given subnet configuration.
@@ -1076,30 +1114,28 @@ pub async fn create_instance(
     extract::Json(instance_config): extract::Json<InstanceConfig>,
 ) -> (StatusCode, Json<rest::CreateInstanceResponse>) {
     let subnet_configs = instance_config.subnet_config_set;
-    if (instance_config.state_dir.is_none()
-        || File::open(
-            instance_config
-                .state_dir
-                .clone()
-                .unwrap()
-                .join("topology.json"),
-        )
-        .is_err())
-        && subnet_configs.validate().is_err()
-    {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(rest::CreateInstanceResponse::Error {
-                message: "Bad config".to_owned(),
-            }),
-        );
+
+    let skip_validate_subnet_configs = instance_config
+        .state_dir
+        .as_ref()
+        .map(|state_dir| File::open(state_dir.clone().join("topology.json")).is_ok())
+        .unwrap_or_default();
+    if !skip_validate_subnet_configs {
+        if let Err(e) = subnet_configs.validate() {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(rest::CreateInstanceResponse::Error {
+                    message: format!("Subnet config failed to validate: {:?}", e),
+                }),
+            );
+        }
     }
     // TODO: Remove this once the SubnetStateConfig variants are implemented
     if contains_unimplemented(subnet_configs.clone()) {
         return (
             StatusCode::BAD_REQUEST,
             Json(rest::CreateInstanceResponse::Error {
-                message: "SubnetStateConfig::FromPath is currently only implemented for NNS. SubnetStateConfig::FromBlobStore is not yet implemented".to_owned(),
+                message: "SubnetStateConfig::FromBlobStore is not yet implemented".to_owned(),
             }),
         );
     }
@@ -1120,21 +1156,19 @@ pub async fn create_instance(
         None
     };
 
-    let pocket_ic = tokio::task::spawn_blocking(move || {
-        PocketIc::new(
-            runtime,
-            subnet_configs,
-            instance_config.state_dir,
-            instance_config.nonmainnet_features,
-            log_level,
-            instance_config.bitcoind_addr,
-        )
-    })
-    .await
-    .expect("Failed to launch PocketIC");
-
-    let topology = pocket_ic.topology().clone();
-    let instance_id = api_state.add_instance(pocket_ic).await;
+    let (instance_id, topology) = api_state
+        .add_instance(move |seed| {
+            PocketIc::new(
+                runtime,
+                seed,
+                subnet_configs,
+                instance_config.state_dir,
+                instance_config.nonmainnet_features,
+                log_level,
+                instance_config.bitcoind_addr,
+            )
+        })
+        .await;
     (
         StatusCode::CREATED,
         Json(rest::CreateInstanceResponse::Created {

@@ -135,6 +135,33 @@ fn test_get() {
 
 #[test]
 fn test_take() {
+    fn test_take_impl<T>(
+        request_id: Reference<T>,
+        response_id: Reference<T>,
+        request: Request,
+        response: Response,
+        pool: &mut MessagePool,
+    ) {
+        let request: RequestOrResponse = request.into();
+        let response: RequestOrResponse = response.into();
+
+        // Ensure that the messages are now in the pool.
+        assert_eq!(Some(&request), pool.get(request_id));
+        assert_eq!(Some(&response), pool.get(response_id));
+
+        // Actually take the messages.
+        assert_eq!(Some(request), pool.take(request_id));
+        assert_eq!(Some(response), pool.take(response_id));
+
+        // Messages are gone.
+        assert_eq!(None, pool.get(request_id));
+        assert_eq!(None, pool.get(response_id));
+
+        // And cannot be taken out again.
+        assert_eq!(None, pool.take(request_id));
+        assert_eq!(None, pool.take(response_id));
+    }
+
     let mut pool = MessagePool::default();
 
     for deadline in [NO_DEADLINE, time(13)] {
@@ -154,33 +181,6 @@ fn test_take() {
                     let response_id = pool.insert_outbound_response(response.clone().into());
                     test_take_impl(request_id, response_id, request, response, &mut pool);
                 }
-            }
-
-            fn test_take_impl<T>(
-                request_id: Reference<T>,
-                response_id: Reference<T>,
-                request: Request,
-                response: Response,
-                pool: &mut MessagePool,
-            ) {
-                let request: RequestOrResponse = request.into();
-                let response: RequestOrResponse = response.into();
-
-                // Ensure that the messages are now in the pool.
-                assert_eq!(Some(&request), pool.get(request_id));
-                assert_eq!(Some(&response), pool.get(response_id));
-
-                // Actually take the messages.
-                assert_eq!(Some(request), pool.take(request_id));
-                assert_eq!(Some(response), pool.take(response_id));
-
-                // Messages are gone.
-                assert_eq!(None, pool.get(request_id));
-                assert_eq!(None, pool.get(response_id));
-
-                // And cannot be taken out again.
-                assert_eq!(None, pool.take(request_id));
-                assert_eq!(None, pool.take(response_id));
             }
         }
     }
@@ -562,6 +562,10 @@ fn test_id_from_reference_roundtrip() {
             assert_eq!(reference.0, id.0);
             assert_eq!(id, reference.into());
             assert_eq!(SomeReference::Inbound(reference), SomeReference::from(id));
+            assert_eq!(
+                (id.context(), id.class(), id.kind()),
+                (reference.context(), reference.class(), reference.kind())
+            );
 
             // Outbound.
             let reference = OutboundReference::new(class, kind, 13);
@@ -569,49 +573,88 @@ fn test_id_from_reference_roundtrip() {
             assert_eq!(reference.0, id.0);
             assert_eq!(id, reference.into());
             assert_eq!(SomeReference::Outbound(reference), SomeReference::from(id));
+            assert_eq!(
+                (id.context(), id.class(), id.kind()),
+                (reference.context(), reference.class(), reference.kind())
+            );
+        }
+    }
+}
+
+#[test]
+fn test_is_inbound_best_effort_response() {
+    use Class::*;
+    use Kind::*;
+
+    for kind in [Request, Response] {
+        for class in [GuaranteedResponse, BestEffort] {
+            let reference = InboundReference::new(class, kind, 13);
+            let id = Id::from(reference);
+            assert_eq!(
+                class == BestEffort && kind == Response,
+                id.is_inbound_best_effort_response()
+            );
+            assert_eq!(
+                class == BestEffort && kind == Response,
+                reference.is_inbound_best_effort_response()
+            );
+
+            let reference = OutboundReference::new(class, kind, 13);
+            let id = Id::from(reference);
+            assert!(!id.is_inbound_best_effort_response());
+            assert!(!reference.is_inbound_best_effort_response());
+        }
+    }
+}
+
+#[test]
+fn test_is_outbound_guaranteed_request() {
+    use Class::*;
+    use Kind::*;
+
+    for kind in [Request, Response] {
+        for class in [GuaranteedResponse, BestEffort] {
+            let reference = InboundReference::new(class, kind, 13);
+            let id = Id::from(reference);
+            assert!(!id.is_outbound_guaranteed_request());
+
+            let reference = OutboundReference::new(class, kind, 13);
+            let id = Id::from(reference);
+            assert_eq!(
+                class == GuaranteedResponse && kind == Request,
+                id.is_outbound_guaranteed_request()
+            );
         }
     }
 }
 
 #[test]
 fn test_reference_roundtrip_encode() {
-    fn queue_item(id: Id) -> pb_queues::canister_queue::QueueItem {
-        pb_queues::canister_queue::QueueItem {
-            r: Some(pb_queues::canister_queue::queue_item::R::Reference(id.0)),
-        }
-    }
-
     for kind in [Kind::Request, Kind::Response] {
         for class in [Class::GuaranteedResponse, Class::BestEffort] {
             // Inbound.
-            let id = Id::from(InboundReference::new(class, kind, 13));
-            let item = queue_item(id);
-            // Can be converted to an `InboundReference`.
-            let reference = InboundReference::try_from(item).unwrap();
-            assert_eq!(reference.0, id.0);
-            assert_eq!(id, reference.into());
+            let reference = InboundReference::new(class, kind, 13);
+            let encoded = u64::from(&reference);
+            // Can be converted back to the same `InboundReference`.
+            let decoded = InboundReference::try_from(encoded).unwrap();
+            assert_eq!(reference, decoded);
             // Fails to convert to an `OutboundReference`.
             assert_matches!(
-                OutboundReference::try_from(item),
-                Err(ProxyDecodeError::Other(msg)) if msg == "Not an outbound reference"
+                OutboundReference::try_from(encoded),
+                Err(ProxyDecodeError::Other(msg)) if msg.contains("Mismatched reference context")
             );
-            // Roundtrip encode produces the same item.
-            assert_eq!(item, (&reference).into());
 
             // Outbound.
-            let id = Id::from(OutboundReference::new(class, kind, 13));
-            let item = queue_item(id);
+            let reference = OutboundReference::new(class, kind, 13);
+            let encoded = u64::from(&reference);
             // Fails to convert to an `InboundReference`.
             assert_matches!(
-                InboundReference::try_from(item),
-                Err(ProxyDecodeError::Other(msg)) if msg == "Not an inbound reference"
+                InboundReference::try_from(encoded),
+                Err(ProxyDecodeError::Other(msg)) if msg.contains("Mismatched reference context")
             );
-            // Can be converted to an `OutboundReference`.
-            let reference = OutboundReference::try_from(item).unwrap();
-            assert_eq!(reference.0, id.0);
-            assert_eq!(id, reference.into());
-            // Roundtrip encode produces the same item.
-            assert_eq!(item, (&reference).into());
+            // Can be converted back to the same `OutboundReference`.
+            let decoded = OutboundReference::try_from(encoded).unwrap();
+            assert_eq!(reference, decoded);
         }
     }
 }

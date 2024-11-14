@@ -27,6 +27,13 @@ type DefiniteCanisterSettings = record {
   memory_allocation : nat;
   compute_allocation : nat;
   reserved_cycles_limit : nat;
+  log_visibility: LogVisibility;
+  wasm_memory_limit : nat;
+};
+
+type LogVisibility = variant {
+    controllers;
+    public;
 };
 
 type RetrieveBtcArgs = record {
@@ -186,6 +193,9 @@ type InitArgs = record {
 
     /// The canister id of the KYT canister.
     kyt_principal: opt principal;
+
+    /// The canister id of the new KYT canister.
+    new_kyt_principal: opt principal;
 };
 
 // The upgrade parameters of the minter canister.
@@ -209,6 +219,9 @@ type UpgradeArgs = record {
 
     /// The principal of the KYT canister.
     kyt_principal : opt principal;
+
+    /// The principal of the new KYT canister.
+    new_kyt_principal : opt principal;
 };
 
 type RetrieveBtcStatus = variant {
@@ -300,6 +313,8 @@ type BitcoinAddress = variant {
 
 type MinterInfo = record {
     min_confirmations : nat32;
+    // This fee is based on the `retrieve_btc_min_amount` setting during canister
+    // initialization or upgrades, but may vary according to current network fees.
     retrieve_btc_min_amount : nat64;
     kyt_fee : nat64;
 };
@@ -453,7 +468,7 @@ service : (minter_arg : MinterArg) -> {
 
     /// Returns the status of a withdrawal request request using the RetrieveBtcStatusV2 type.
     retrieve_btc_status_v2 : (record { block_index : nat64 }) -> (RetrieveBtcStatusV2) query;
-    
+
     // Returns the withdrawal statues by account.
     //
     // # Note

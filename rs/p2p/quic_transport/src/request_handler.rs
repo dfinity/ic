@@ -12,36 +12,32 @@
 //!
 use std::time::Duration;
 
-use anyhow::{anyhow, Context};
-use axum::{
-    body::Body,
-    http::{Method, Request, Response, Version},
-    Router,
-};
+use anyhow::Context;
+use axum::{body::Body, Router};
 use bytes::Bytes;
+use http::{Method, Request, Response, Version};
 use ic_base_types::NodeId;
 use ic_logger::{info, ReplicaLogger};
 use ic_protobuf::transport::v1 as pb;
 use prost::Message;
-use quinn::{Connection, RecvStream, SendStream};
+use quinn::RecvStream;
 use tower::ServiceExt;
-use tracing::instrument;
 
 use crate::{
+    connection_handle::ConnectionHandle,
     metrics::{
-        QuicTransportMetrics, ERROR_TYPE_ACCEPT, ERROR_TYPE_APP, ERROR_TYPE_FINISH,
-        ERROR_TYPE_READ, ERROR_TYPE_STOPPED, ERROR_TYPE_WRITE, STREAM_TYPE_BIDI,
+        observe_conn_error, observe_read_to_end_error, observe_stopped_error, observe_write_error,
+        QuicTransportMetrics, ERROR_TYPE_APP, INFALIBBLE, STREAM_TYPE_BIDI,
     },
-    ConnId, MAX_MESSAGE_SIZE_BYTES,
+    ConnId, ResetStreamOnDrop, MAX_MESSAGE_SIZE_BYTES,
 };
 
 const QUIC_METRIC_SCRAPE_INTERVAL: Duration = Duration::from_secs(5);
 
-pub(crate) async fn run_stream_acceptor(
+pub async fn run_stream_acceptor(
     log: ReplicaLogger,
     peer_id: NodeId,
-    conn_id: ConnId,
-    connection: Connection,
+    conn_handle: ConnectionHandle,
     metrics: QuicTransportMetrics,
     router: Router,
 ) {
@@ -55,86 +51,75 @@ pub(crate) async fn run_stream_acceptor(
     loop {
         tokio::select! {
              _ = quic_metrics_scrape.tick() => {
-                metrics.collect_quic_connection_stats(&connection, &peer_id);
+                metrics.collect_quic_connection_stats(conn_handle.conn(), &peer_id);
             }
-            bi = connection.accept_bi() => {
+            bi = conn_handle.conn().accept_bi() => {
                 match bi {
                     Ok((bi_tx, bi_rx)) => {
+                        let send_stream = ResetStreamOnDrop::new(bi_tx);
                         inflight_requests.spawn(
                             metrics.request_task_monitor.instrument(
                                 handle_bi_stream(
-                                    log.clone(),
                                     peer_id,
-                                    conn_id,
+                                    conn_handle.conn_id(),
                                     metrics.clone(),
                                     router.clone(),
-                                    bi_tx,
+                                    send_stream,
                                     bi_rx
                                 )
                             )
                         );
                     }
-                    Err(e) => {
-                        info!(log, "Error accepting bi stream {}", e.to_string());
-                        metrics
-                            .request_handle_errors_total
-                            .with_label_values(&[
-                                STREAM_TYPE_BIDI,
-                                ERROR_TYPE_ACCEPT,
-                            ])
-                            .inc();
+                    Err(err) => {
+                        info!(log, "Error accepting bi stream {:?}", err.to_string());
+                        observe_conn_error(&err, "accept_bi", &metrics.request_handle_errors_total);
                         break;
                     }
                 }
             },
-            _ = connection.accept_uni() => {},
-            _ = connection.read_datagram() => {},
+            _ = conn_handle.conn().accept_uni() => {},
+            _ = conn_handle.conn().read_datagram() => {},
             Some(completed_request) = inflight_requests.join_next() => {
-                if let Err(err) = completed_request {
-                    // Cancelling tasks is ok. Panicking tasks are not.
-                    if err.is_panic() {
-                        std::panic::resume_unwind(err.into_panic());
+                match completed_request {
+                    Ok(res) => {
+                        let _ = res.inspect_err(|err| info!(every_n_seconds => 60, log, "{:?}", err));
+                    }
+                    Err(err) => {
+                        // Cancelling tasks is ok. Panicking tasks are not.
+                        if err.is_panic() {
+                            std::panic::resume_unwind(err.into_panic());
+                        }
                     }
                 }
             },
         }
     }
-    info!(log, "Shutting down request handler for peer {}", peer_id);
+    info!(log, "Shutting down request handler for peer {:?}", peer_id);
 
     inflight_requests.shutdown().await;
 }
 
-#[instrument(skip(log, metrics, router, bi_tx, bi_rx))]
+/// Note: The method is cancel-safe.
 async fn handle_bi_stream(
-    log: ReplicaLogger,
     peer_id: NodeId,
     conn_id: ConnId,
     metrics: QuicTransportMetrics,
     router: Router,
-    mut bi_tx: SendStream,
-    bi_rx: RecvStream,
-) {
-    let mut request = match read_request(bi_rx).await {
-        Ok(request) => request,
-        Err(e) => {
-            info!(every_n_seconds => 60, log, "Failed to read request from bidi stream: {}", e);
-            metrics
-                .request_handle_errors_total
-                .with_label_values(&[STREAM_TYPE_BIDI, ERROR_TYPE_READ])
-                .inc();
-            return;
-        }
-    };
-
+    mut send_stream_guard: ResetStreamOnDrop,
+    recv_stream: RecvStream,
+) -> Result<(), anyhow::Error> {
+    // Note that the 'recv_stream' is dropped before we call any method on the 'send_stream'
+    let mut request = read_request(recv_stream, &metrics).await?;
     request.extensions_mut().insert::<NodeId>(peer_id);
     request.extensions_mut().insert::<ConnId>(conn_id);
 
+    let send_stream = &mut send_stream_guard.send_stream;
     let svc = router.oneshot(request);
-    let stopped = bi_tx.stopped();
+    let stopped = send_stream.stopped();
     let response = tokio::select! {
         response = svc => response.expect("Infallible"),
-        _ = stopped => {
-            return;
+        stopped_res = stopped => {
+            return stopped_res.map(|_| ()).with_context(|| "stopped.");
         }
     };
 
@@ -149,73 +134,70 @@ async fn handle_bi_stream(
     // We can ignore the errors because if both peers follow the protocol an errors will only occur
     // if the other peer has closed the connection. In this case `accept_bi` in the peer event
     // loop will close this connection.
-    if let Err(e) = write_response(&mut bi_tx, response).await {
-        info!(every_n_seconds => 60, log, "Failed to write response to stream: {}", e);
+    let response_bytes = to_response_bytes(response).await?;
+    send_stream
+        .write_all(&response_bytes)
+        .await
+        .inspect_err(|err| {
+            observe_write_error(err, "write_all", &metrics.request_handle_errors_total);
+        })?;
+    send_stream.finish().inspect_err(|_| {
         metrics
             .request_handle_errors_total
-            .with_label_values(&[STREAM_TYPE_BIDI, ERROR_TYPE_WRITE])
+            .with_label_values(&["finish", INFALIBBLE])
             .inc();
-    }
-    if let Err(e) = bi_tx.finish() {
-        info!(every_n_seconds => 60, log, "Failed to finish stream: {}", e.to_string());
-        metrics
-            .request_handle_errors_total
-            .with_label_values(&[STREAM_TYPE_BIDI, ERROR_TYPE_FINISH])
-            .inc();
-    }
-    if let Err(e) = bi_tx.stopped().await {
-        info!(every_n_seconds => 60, log, "Failed to stop stream: {}", e.to_string());
-        metrics
-            .request_handle_errors_total
-            .with_label_values(&[STREAM_TYPE_BIDI, ERROR_TYPE_STOPPED])
-            .inc();
-    }
+    })?;
+    send_stream.stopped().await.inspect_err(|err| {
+        observe_stopped_error(err, "stopped", &metrics.request_handle_errors_total);
+    })?;
+    Ok(())
 }
 
-async fn read_request(mut recv_stream: RecvStream) -> Result<Request<Body>, anyhow::Error> {
-    let raw_msg = recv_stream
+// The function returns infallible error.
+async fn read_request(
+    mut recv_stream: RecvStream,
+    metrics: &QuicTransportMetrics,
+) -> Result<Request<Body>, anyhow::Error> {
+    let request_bytes = recv_stream
         .read_to_end(MAX_MESSAGE_SIZE_BYTES)
         .await
-        .with_context(|| "Failed to read request from the stream.")?;
+        .inspect_err(|err| {
+            observe_read_to_end_error(err, "read_to_end", &metrics.request_handle_errors_total)
+        })?;
 
-    let request_proto = pb::HttpRequest::decode(raw_msg.as_slice())
-        .with_context(|| "Failed to decode http request.")?;
-
-    let mut request = Request::builder()
-        .method(match pb::HttpMethod::try_from(request_proto.method) {
-            Ok(pb::HttpMethod::Get) => Method::GET,
-            Ok(pb::HttpMethod::Post) => Method::POST,
-            Ok(pb::HttpMethod::Put) => Method::PUT,
-            Ok(pb::HttpMethod::Delete) => Method::DELETE,
-            Ok(pb::HttpMethod::Head) => Method::HEAD,
-            Ok(pb::HttpMethod::Options) => Method::OPTIONS,
-            Ok(pb::HttpMethod::Connect) => Method::CONNECT,
-            Ok(pb::HttpMethod::Patch) => Method::PATCH,
-            Ok(pb::HttpMethod::Trace) => Method::TRACE,
-            Ok(pb::HttpMethod::Unspecified) => {
-                return Err(anyhow!("received http method unspecified."));
-            }
-            Err(e) => {
-                return Err(anyhow!("received invalid method {}", e));
-            }
-        })
+    let request_proto = pb::HttpRequest::decode(request_bytes.as_slice())?;
+    let pb_http_method = pb::HttpMethod::try_from(request_proto.method)?;
+    let http_method = match pb_http_method {
+        pb::HttpMethod::Get => Some(Method::GET),
+        pb::HttpMethod::Post => Some(Method::POST),
+        pb::HttpMethod::Put => Some(Method::PUT),
+        pb::HttpMethod::Delete => Some(Method::DELETE),
+        pb::HttpMethod::Head => Some(Method::HEAD),
+        pb::HttpMethod::Options => Some(Method::OPTIONS),
+        pb::HttpMethod::Connect => Some(Method::CONNECT),
+        pb::HttpMethod::Patch => Some(Method::PATCH),
+        pb::HttpMethod::Trace => Some(Method::TRACE),
+        pb::HttpMethod::Unspecified => None,
+    };
+    let mut request_builder = Request::builder();
+    if let Some(http_method) = http_method {
+        request_builder = request_builder.method(http_method);
+    }
+    request_builder = request_builder
         .version(Version::HTTP_3)
         .uri(request_proto.uri);
     for h in request_proto.headers {
         let pb::HttpHeader { key, value } = h;
-        request = request.header(key, value);
+        request_builder = request_builder.header(key, value);
     }
     // This consumes the body without requiring allocation or cloning the whole content.
     let body_bytes = Bytes::from(request_proto.body);
-    request
+    request_builder
         .body(Body::from(body_bytes))
         .with_context(|| "Failed to build request.")
 }
 
-async fn write_response(
-    send_stream: &mut SendStream,
-    response: Response<Body>,
-) -> Result<(), anyhow::Error> {
+async fn to_response_bytes(response: Response<Body>) -> Result<Vec<u8>, anyhow::Error> {
     let (parts, body) = response.into_parts();
     // Check for axum error in body
     // TODO: Think about this. What is the error that can happen here?
@@ -236,11 +218,5 @@ async fn write_response(
             .collect(),
         body: body.into(),
     };
-
-    let response_bytes = response_proto.encode_to_vec();
-    send_stream
-        .write_all(&response_bytes)
-        .await
-        .with_context(|| "Failed to write request to stream.")?;
-    Ok(())
+    Ok(response_proto.encode_to_vec())
 }

@@ -1,4 +1,5 @@
 use crate::{
+    checkpoint::validate_checkpoint_and_remove_unverified_marker,
     compute_bundled_manifest, release_lock_and_persist_metadata,
     state_sync::types::{
         FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET, MAX_SUPPORTED_STATE_SYNC_VERSION,
@@ -122,10 +123,8 @@ pub(crate) enum TipRequest {
     },
     /// Validate the checkpointed state is valid and identical to the execution state.
     /// Crash if diverges.
-    #[cfg(debug_assertions)]
     ValidateReplicatedState {
-        checkpointed_state: Box<ReplicatedState>,
-        execution_state: Box<ReplicatedState>,
+        checkpoint_layout: CheckpointLayout<ReadOnly>,
     },
     /// Wait for the message to be executed and notify back via sender.
     /// State: *
@@ -449,17 +448,18 @@ pub(crate) fn spawn_tip_thread(
                             have_latest_manifest = true;
                         }
 
-                        #[cfg(debug_assertions)]
-                        TipRequest::ValidateReplicatedState {
-                            checkpointed_state,
-                            execution_state,
-                        } => {
-                            debug_assert!(
-                                checkpointed_state == execution_state,
-                                "Divergence: checkpointed {:#?}, \nexecution: {:#?}",
-                                checkpointed_state,
-                                execution_state,
-                            );
+                        TipRequest::ValidateReplicatedState { checkpoint_layout } => {
+                            if let Err(err) = validate_checkpoint_and_remove_unverified_marker(
+                                &checkpoint_layout,
+                                Some(&mut thread_pool),
+                            ) {
+                                fatal!(
+                                    &log,
+                                    "Checkpoint validation for {} has failed: {:#}",
+                                    checkpoint_layout.raw_path().display(),
+                                    err
+                                )
+                            }
                         }
 
                         TipRequest::Noop => {}
@@ -982,6 +982,7 @@ fn serialize_canister_to_tip(
                 metadata: execution_state.metadata.clone(),
                 binary_hash: Some(execution_state.wasm_binary.binary.module_hash().into()),
                 next_scheduled_method: execution_state.next_scheduled_method,
+                is_wasm64: execution_state.is_wasm64,
             })
         }
         None => {
@@ -1020,7 +1021,7 @@ fn serialize_canister_to_tip(
             reserved_balance: canister_state.system_state.reserved_balance(),
             reserved_balance_limit: canister_state.system_state.reserved_balance_limit(),
             execution_state_bits,
-            status: canister_state.system_state.status.clone(),
+            status: canister_state.system_state.get_status().clone(),
             scheduled_as_first: canister_state
                 .system_state
                 .canister_metrics
@@ -1047,12 +1048,7 @@ fn serialize_canister_to_tip(
                 .scheduler_state
                 .time_of_last_allocation_charge
                 .as_nanos_since_unix_epoch(),
-            task_queue: canister_state
-                .system_state
-                .task_queue
-                .clone()
-                .into_iter()
-                .collect(),
+            task_queue: canister_state.system_state.task_queue.get_queue().into(),
             global_timer_nanos: canister_state
                 .system_state
                 .global_timer
@@ -1077,7 +1073,8 @@ fn serialize_canister_to_tip(
             snapshots_memory_usage: canister_state.system_state.snapshots_memory_usage,
             on_low_wasm_memory_hook_status: canister_state
                 .system_state
-                .get_on_low_wasm_memory_hook_status(),
+                .task_queue
+                .peek_hook_status(),
         }
         .into(),
     )?;

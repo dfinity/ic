@@ -3,11 +3,9 @@ use ic_config::{
     execution_environment::Config as HypervisorConfig, flag_status::FlagStatus,
     subnet_config::SubnetConfig,
 };
-use ic_management_canister_types::LogVisibilityV2;
+use ic_management_canister_types::{CanisterSettingsArgsBuilder, LogVisibilityV2};
 use ic_registry_subnet_type::SubnetType;
-use ic_state_machine_tests::{
-    CanisterSettingsArgsBuilder, ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig,
-};
+use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig};
 use ic_types::{CanisterId, Cycles, PrincipalId};
 
 const B: u128 = 1_000 * 1_000 * 1_000;
@@ -188,7 +186,7 @@ fn backtrace_test_stable_oob() {
         "Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister trapped:",
         r#"stable memory out of bounds
 Canister Backtrace:
-ic0::ic0::stable_write
+ic0::ic0::stable64_write
 _wasm_backtrace_canister::stable_oob::inner_2
 _wasm_backtrace_canister::stable_oob::inner
 _wasm_backtrace_canister::stable_oob::outer

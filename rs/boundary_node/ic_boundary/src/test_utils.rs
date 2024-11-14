@@ -13,6 +13,7 @@ use ic_bn_lib::http::{Client as HttpClient, ConnInfo};
 use ic_certification_test_utils::CertificateBuilder;
 use ic_certification_test_utils::CertificateData::*;
 use ic_crypto_tree_hash::Digest;
+use ic_limits::INITIAL_NOTARY_DELAY;
 use ic_protobuf::registry::{
     crypto::v1::{PublicKey as PublicKeyProto, X509PublicKeyCert},
     node::v1::{ConnectionEndpoint, NodeRecord},
@@ -111,7 +112,7 @@ pub fn test_subnet_record() -> SubnetRecord {
         max_ingress_messages_per_block: 1000,
         max_block_payload_size: 4 * 1024 * 1024,
         unit_delay_millis: 500,
-        initial_notary_delay_millis: 1500,
+        initial_notary_delay_millis: INITIAL_NOTARY_DELAY.as_millis() as u64,
         replica_version_id: ReplicaVersion::default().into(),
         dkg_interval_length: 59,
         dkg_dealings_per_block: 1,
@@ -270,13 +271,13 @@ pub fn setup_test_router(
 ) -> (Router, Vec<Subnet>) {
     let mut args = vec![
         "",
-        "--local-store-path",
+        "--registry-local-store-path",
         "/tmp",
-        "--log-null",
+        "--obs-log-null",
         "--retry-update-call",
     ];
     if !enable_logging {
-        args.push("--disable-request-logging");
+        args.push("--obs-disable-request-logging");
     }
 
     // Hacky, but required due to &str
@@ -290,7 +291,7 @@ pub fn setup_test_router(
     let cli = Cli::parse_from(args);
     #[cfg(feature = "tls")]
     let cli = Cli::parse_from({
-        args.extend_from_slice(&["--hostname", "foobar"]);
+        args.extend_from_slice(&["--tls-hostname", "foobar"]);
         args
     });
 

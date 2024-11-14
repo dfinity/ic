@@ -9,7 +9,7 @@ from data_source.slack_findings_failover.data import (
     SlackFinding,
 )
 from data_source.slack_findings_failover.parse_format import parse_slack_field, parse_slack_optional_hyperlink
-from data_source.slack_findings_failover.vuln_info import SlackVulnerabilityInfo
+from data_source.slack_findings_failover.vuln_info import SlackVulnerabilityInfo, SlackVulnerabilityMessageInfo
 from integration.slack.slack_api import SlackApi
 from model.vulnerability import Vulnerability
 
@@ -46,6 +46,7 @@ class SlackVulnerabilityLoader:
                 cur_block = next(block_iter)
                 assert cur_block["type"] == "section" and cur_block["text"] and cur_block["text"]["text"]
                 vuln_desc = unescape(parse_slack_field(cur_block["text"]["text"], "Description"))
+
                 slack_vuln = Vulnerability(id=vuln_id, name=vuln_name, description=vuln_desc, score=vuln_score)
 
                 findings_by_id: Dict[Tuple[str, str, str, str], SlackFinding] = {}
@@ -96,11 +97,15 @@ class SlackVulnerabilityLoader:
                         raise RuntimeError(
                             f"vulnerability with same id but different values found in slack findings: {slack_vuln} {vuln_by_vuln_id[slack_vuln.id].vulnerability}"
                         )
-                    vuln_by_vuln_id[slack_vuln.id].merge_with(findings_by_id, channel_id, slack_msg.id)
+                    vuln_by_vuln_id[slack_vuln.id].merge_with(
+                        findings_by_id, SlackVulnerabilityMessageInfo(channel_id, slack_msg.id, slack_msg.reactions)
+                    )
                 else:
                     vuln_by_vuln_id[slack_vuln.id] = SlackVulnerabilityInfo(
                         vulnerability=slack_vuln,
                         finding_by_id=findings_by_id,
-                        msg_id_by_channel={channel_id: slack_msg.id},
+                        msg_info_by_channel={
+                            channel_id: SlackVulnerabilityMessageInfo(channel_id, slack_msg.id, slack_msg.reactions)
+                        },
                     )
         return vuln_by_vuln_id

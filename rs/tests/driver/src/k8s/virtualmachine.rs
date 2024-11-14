@@ -49,12 +49,27 @@ spec:
             passt: {}
             ports:
             - port: 22
+            - port: 8100
+            - port: 8101
+            - port: 8102
+            - port: 8103
+            - port: 8104
+            - port: 8105
+            - port: 8106
+            - port: 8107
+            - port: 8108
+            - port: 8109
+            - port: 8110
+            - port: 8111
             - port: 8332
             - port: 18444
             - port: 20443
         resources:
+          overcommitGuestOverhead: true
           requests:
-            memory: {memory}Ki
+            memory: {memory_request}Ki
+        memory:
+          guest: {memory}Ki
       networks:
       - name: default
         pod: {}
@@ -153,8 +168,11 @@ spec:
               - port: 19100
               - port: 19531
         resources:
+          overcommitGuestOverhead: true
           requests:
-            memory: {memory}Ki
+            memory: {memory_request}Ki
+        memory:
+          guest: {memory}Ki
       networks:
       - name: default
         pod: {}
@@ -172,6 +190,7 @@ pub async fn create_vm(
     name: &str,
     cpus: &str,
     memory: &str,
+    memory_request: &str,
     ipv4: Ipv4Addr,
     ipv6: Ipv6Addr,
     running: bool,
@@ -189,6 +208,7 @@ pub async fn create_vm(
         .replace("{tnet}", &owner.name)
         .replace("{running}", &running.to_string())
         .replace("{memory}", memory)
+        .replace("{memory_request}", memory_request)
         .replace("{cpus}", cpus)
         .replace("{ipv4}", &ipv4.to_string())
         .replace("{ipv6}", &ipv6.to_string());

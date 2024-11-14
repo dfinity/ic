@@ -1,0 +1,35 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS")
+
+package(default_visibility = ["//rs:system-tests-pkg"])
+
+rust_library(
+    name = "utils",
+    testonly = True,
+    srcs = [
+        "src/constants.rs",
+        "src/helpers.rs",
+        "src/lib.rs",
+        "src/setup.rs",
+    ],
+    compile_data = COUNTER_CANISTER_RUNTIME_DEPS,
+    crate_name = "ic_boundary_nodes_system_test_utils",
+    deps = [
+        # Keep sorted.
+        "//rs/interfaces/registry",
+        "//rs/protobuf",
+        "//rs/registry/keys",
+        "//rs/registry/nns_data_provider",
+        "//rs/registry/routing_table",
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:futures",
+        "@crate_index//:ic-agent",
+        "@crate_index//:ic-utils",
+        "@crate_index//:slog",
+        "@crate_index//:url",
+    ],
+)

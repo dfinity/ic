@@ -11,7 +11,7 @@ documentation.workspace = true
 [dependencies]
 candid = { workspace = true }
 ciborium = { workspace = true }
-clap = { version = "3.2.25", features = ["derive"] }
+clap = { workspace = true}
 hex = { workspace = true }
 ic-artifact-pool = { path = "../artifact_pool" }
 ic-btc-adapter-client = { path = "../bitcoin/client" }

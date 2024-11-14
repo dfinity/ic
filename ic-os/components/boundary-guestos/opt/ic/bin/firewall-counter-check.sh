@@ -3,7 +3,6 @@
 set -o nounset
 set -o pipefail
 
-# Source the functions required for writing metrics
 source /opt/ic/bin/metrics.sh
 METRICS_FILE="${METRICS_DIR}/firewall_counters.prom"
 

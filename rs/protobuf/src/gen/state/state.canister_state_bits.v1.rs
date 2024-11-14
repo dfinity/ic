@@ -236,6 +236,8 @@ pub struct ExecutionStateBits {
     pub binary_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
     #[prost(enumeration = "NextScheduledMethod", optional, tag = "7")]
     pub next_scheduled_method: ::core::option::Option<i32>,
+    #[prost(bool, tag = "8")]
+    pub is_wasm64: bool,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StopCanisterContext {

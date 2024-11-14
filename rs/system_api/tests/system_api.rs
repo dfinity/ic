@@ -988,14 +988,13 @@ fn test_canister_balance() {
     let mut system_state = get_system_state_with_cycles(Cycles::from(cycles_amount));
 
     system_state
-        .call_context_manager_mut()
-        .unwrap()
         .new_call_context(
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5), NO_DEADLINE),
             Cycles::new(50),
             Time::from_nanos_since_unix_epoch(0),
             RequestMetadata::new(0, UNIX_EPOCH),
-        );
+        )
+        .unwrap();
 
     let mut api = get_system_api(
         ApiTypeBuilder::build_update_api(),
@@ -1017,14 +1016,13 @@ fn test_canister_cycle_balance() {
     let mut system_state = get_system_state_with_cycles(cycles_amount);
 
     system_state
-        .call_context_manager_mut()
-        .unwrap()
         .new_call_context(
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5), NO_DEADLINE),
             Cycles::new(50),
             Time::from_nanos_since_unix_epoch(0),
             RequestMetadata::new(0, UNIX_EPOCH),
-        );
+        )
+        .unwrap();
 
     let mut api = get_system_api(
         ApiTypeBuilder::build_update_api(),
@@ -1053,14 +1051,13 @@ fn test_msg_cycles_available_traps() {
     let mut system_state = get_system_state_with_cycles(cycles_amount);
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     system_state
-        .call_context_manager_mut()
-        .unwrap()
         .new_call_context(
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5), NO_DEADLINE),
             available_cycles,
             Time::from_nanos_since_unix_epoch(0),
             RequestMetadata::new(0, UNIX_EPOCH),
-        );
+        )
+        .unwrap();
 
     let api = get_system_api(
         ApiTypeBuilder::build_update_api(),
@@ -1219,14 +1216,13 @@ fn msg_cycles_accept_all_cycles_in_call_context() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let mut system_state = SystemStateBuilder::default().build();
     system_state
-        .call_context_manager_mut()
-        .unwrap()
         .new_call_context(
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5), NO_DEADLINE),
             Cycles::from(amount),
             Time::from_nanos_since_unix_epoch(0),
             RequestMetadata::new(0, UNIX_EPOCH),
-        );
+        )
+        .unwrap();
     let mut api = get_system_api(
         ApiTypeBuilder::build_update_api(),
         &system_state,
@@ -1243,14 +1239,13 @@ fn msg_cycles_accept_all_cycles_in_call_context_when_more_asked() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let mut system_state = SystemStateBuilder::default().build();
     system_state
-        .call_context_manager_mut()
-        .unwrap()
         .new_call_context(
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5), NO_DEADLINE),
             Cycles::new(40),
             Time::from_nanos_since_unix_epoch(0),
             RequestMetadata::new(0, UNIX_EPOCH),
-        );
+        )
+        .unwrap();
     let mut api = get_system_api(
         ApiTypeBuilder::build_update_api(),
         &system_state,
@@ -1276,14 +1271,13 @@ fn call_perform_not_enough_cycles_does_not_trap() {
         .initial_cycles(initial_cycles)
         .build();
     system_state
-        .call_context_manager_mut()
-        .unwrap()
         .new_call_context(
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5), NO_DEADLINE),
             Cycles::new(40),
             Time::from_nanos_since_unix_epoch(0),
             RequestMetadata::new(0, UNIX_EPOCH),
-        );
+        )
+        .unwrap();
     let mut api = get_system_api(
         ApiTypeBuilder::build_update_api(),
         &system_state,
@@ -1329,7 +1323,7 @@ fn growing_wasm_memory_updates_subnet_available_memory() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let api_type = ApiTypeBuilder::build_update_api();
     let execution_mode = api_type.execution_mode();
-    let sandbox_safe_system_state = SandboxSafeSystemState::new(
+    let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
@@ -1406,7 +1400,7 @@ fn helper_test_on_low_wasm_memory(
     execution_parameters.memory_allocation = system_state.memory_allocation;
     execution_parameters.wasm_memory_limit = system_state.wasm_memory_limit;
 
-    let sandbox_safe_system_state = SandboxSafeSystemState::new(
+    let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         CyclesAccountManagerBuilder::new().build(),
         &NetworkTopology::default(),
@@ -1455,10 +1449,7 @@ fn helper_test_on_low_wasm_memory(
         )
         .unwrap();
 
-    assert_eq!(
-        system_state.get_on_low_wasm_memory_hook_status(),
-        expected_status
-    );
+    assert_eq!(system_state.task_queue.peek_hook_status(), expected_status);
 }
 
 #[test]
@@ -1629,7 +1620,7 @@ fn push_output_request_respects_memory_limits() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let api_type = ApiTypeBuilder::build_update_api();
     let execution_mode = api_type.execution_mode();
-    let mut sandbox_safe_system_state = SandboxSafeSystemState::new(
+    let mut sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
@@ -1742,7 +1733,7 @@ fn push_output_request_oversized_request_memory_limits() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let api_type = ApiTypeBuilder::build_update_api();
     let execution_mode = api_type.execution_mode();
-    let mut sandbox_safe_system_state = SandboxSafeSystemState::new(
+    let mut sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         cycles_account_manager,
         &NetworkTopology::default(),

@@ -77,9 +77,6 @@ options may be specified:
   --denylist_url url
     Specify the url where to download denylist
 
-  --prober-identity path
-    specify an identity file for the prober
-
   --system-domains
     comma-delimited list of domains serving system canisters (e.g., ic0.dev or ic0.app)
 
@@ -291,9 +288,6 @@ function build_ic_bootstrap_tar() {
                 ;;
             --denylist_url)
                 local DENYLIST_URL="$2"
-                ;;
-            --prober-identity)
-                local PROBER_IDENTITY="$2"
                 ;;
             --system-domains)
                 local SYSTEM_DOMAINS="$2"
@@ -518,12 +512,6 @@ logging_url=${LOGGING_URL:-"http://127.0.0.1:12345"}
 logging_user=${LOGGING_USER:-"undefined"}
 logging_password=${LOGGING_PASSWORD:-"undefined"}
 EOF
-
-    # setup the prober identity
-    if [[ -n "${PROBER_IDENTITY:-}" ]]; then
-        echo "Using prober identity ${PROBER_IDENTITY}"
-        cp "${PROBER_IDENTITY}" "${BOOTSTRAP_TMPDIR}/prober_identity.pem"
-    fi
 
     # setup the certificates
     if [[ -n "${CERT_DIR:-}" && -f "${CERT_DIR}/fullchain.pem" && -f "${CERT_DIR}/privkey.pem" && -f "${CERT_DIR}/chain.pem" ]]; then

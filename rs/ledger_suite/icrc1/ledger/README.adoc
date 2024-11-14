@@ -18,7 +18,7 @@ $ cd icrc1_ledger_test
 
 [,console]
 ----
-$ export IC_VERSION=b43543ce7365acd1720294e701e8e8361fa30c8f
+$ export IC_VERSION=ca8847547d327ce8a3bd81d25a590e01da1a3af5
 ----
 
 Download the ledger wasm and its candid file and unzip the ledger wasm

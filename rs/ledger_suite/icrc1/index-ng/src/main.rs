@@ -371,6 +371,16 @@ fn post_upgrade(index_arg: Option<IndexArg>) {
         _ => (),
     };
 
+    with_account_data(|account_data| {
+        // Try to read the first key-value from the account data map. This will fail (and the
+        // canister will trap, i.e., the upgrade will fail) if:
+        // - the map is non-empty, i.e., there is at least one balance
+        // - the token type of the account data map does not match the one of this wasm, e.g.,
+        //   if the balances are stored using `u256` tokens and this wasm uses `u64` tokens, or
+        //   vice versa.
+        let _maybe_first_key_value = account_data.first_key_value();
+    });
+
     // set the first build_index to be called after init
     set_build_index_timer(with_state(|state| {
         state.retrieve_blocks_from_ledger_interval()
@@ -1107,12 +1117,12 @@ fn http_request(req: HttpRequest) -> HttpResponse {
 pub fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
     w.encode_gauge(
         "index_stable_memory_pages",
-        ic_cdk::api::stable::stable64_size() as f64,
+        ic_cdk::api::stable::stable_size() as f64,
         "Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
     )?;
     w.encode_gauge(
         "index_stable_memory_bytes",
-        (ic_cdk::api::stable::stable64_size() * 64 * 1024) as f64,
+        (ic_cdk::api::stable::stable_size() * 64 * 1024) as f64,
         "Size of the stable memory allocated by this canister.",
     )?;
     w.encode_gauge(

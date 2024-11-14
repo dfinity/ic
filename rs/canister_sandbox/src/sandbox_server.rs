@@ -153,10 +153,7 @@ mod tests {
     use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
     use ic_logger::replica_logger::no_op_logger;
     use ic_registry_subnet_type::SubnetType;
-    use ic_replicated_state::{
-        canister_state::system_state::OnLowWasmMemoryHookStatus, Global, NumWasmPages, PageIndex,
-        PageMap,
-    };
+    use ic_replicated_state::{Global, NumWasmPages, PageIndex, PageMap};
     use ic_system_api::{
         sandbox_safe_system_state::{CanisterStatusView, SandboxSafeSystemState},
         ApiType, ExecutionParameters, InstructionLimits,
@@ -175,6 +172,7 @@ mod tests {
     use std::sync::{Arc, Condvar, Mutex};
 
     const INSTRUCTION_LIMIT: u64 = 100_000;
+    const IS_WASM64_EXECUTION: bool = false;
 
     fn execution_parameters() -> ExecutionParameters {
         ExecutionParameters {
@@ -231,7 +229,7 @@ mod tests {
             RequestMetadata::new(0, Time::from_nanos_since_unix_epoch(0)),
             caller,
             0,
-            OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
+            IS_WASM64_EXECUTION,
         )
     }
 

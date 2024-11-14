@@ -23,6 +23,7 @@ use ic_sns_governance::{
     },
     reward,
 };
+use ic_sns_test_utils::itest_helpers::state_machine_test_on_sns_subnet;
 use ic_sns_test_utils::{
     itest_helpers::{local_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder, UserInfo},
     now_seconds,
@@ -435,8 +436,14 @@ fn test_bad_proposal_id_candid_encoding() {
                 .query_("get_proposal", bytes, b"This is not valid candid!".to_vec())
                 .await;
 
+            let expected_error = "failed to decode";
             match res {
-                Err(e) => assert!(e.contains("Deserialization Failed")),
+                Err(e) => assert!(
+                    e.contains(expected_error),
+                    "Expected error string \"{}\" not present in actual error. Error was: {:?}",
+                    expected_error,
+                    e
+                ),
                 Ok(_) => panic!("get_proposal should fail to deserialize"),
             };
             Ok(())
@@ -1627,6 +1634,11 @@ fn test_proposal_garbage_collection() {
             .await
             .expect("Expected set_time_warp to succeed");
 
+        sns_canisters
+            .run_periodic_tasks_now()
+            .await
+            .expect("Expected run_periodic_tasks_now to succeed");
+
         // Proposals should have been garbage_collected. Get all the proposals kept in the current
         // SNS
         let proposals_after_gc = list_all_proposals_through_pagination(
@@ -1948,7 +1960,7 @@ fn test_change_voting_rewards_round_duration() {
 ///         ID of the most recent proposal.
 #[test]
 fn test_intermittent_proposal_submission() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         // Chapter 0: Prepare the world.
 
         // Initialize the ledger with an account for a user who will make proposals
@@ -2251,13 +2263,13 @@ fn test_intermittent_proposal_submission() {
         sns_canisters.set_time_warp(delta_s).await?;
 
         // Wait for the number of proposals to decrease.
-        for _ in 0..25 {
+        for _ in 0..250 {
             proposals = sns_canisters.list_proposals(&proposer.sender).await;
             if proposals.len() < 3 {
                 // GC occurred
                 break;
             }
-            std::thread::sleep(std::time::Duration::from_millis(100));
+            runtime.tick().await;
         }
 
         // Assert that proposal 1 has disappeared.

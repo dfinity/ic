@@ -4,12 +4,17 @@ use serde::{Deserialize, Serialize};
 
 use crate::CallCanisters;
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Copy, Clone, Debug, Deserialize, Serialize)]
 pub struct RootCanister {
     pub canister_id: PrincipalId,
 }
 
 impl RootCanister {
+    pub fn new(canister_id: impl Into<PrincipalId>) -> Self {
+        let canister_id = canister_id.into();
+        Self { canister_id }
+    }
+
     pub async fn sns_canisters_summary<C: CallCanisters>(
         &self,
         agent: &C,
