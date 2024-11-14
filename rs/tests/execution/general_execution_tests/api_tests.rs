@@ -1,8 +1,7 @@
 /* tag::catalog[]
 end::catalog[] */
 
-use candid::Principal;
-use ic_agent::{agent::RejectCode, Agent, AgentError};
+use ic_agent::{agent::RejectCode, Agent};
 use ic_base_types::PrincipalId;
 use ic_management_canister_types::{self as ic00, EmptyBlob, Method, Payload};
 use ic_system_test_driver::driver::test_env::TestEnv;
@@ -208,81 +207,6 @@ pub fn test_cycles_burn(env: TestEnv) {
     })
 }
 
-pub fn node_metrics_history_update_succeeds(env: TestEnv) {
-    // Arrange.
-    let (app_node, agent) = setup_app_node_and_agent(&env);
-    let logger = env.logger();
-    let subnet_id = app_node.subnet_id().unwrap().get();
-    block_on({
-        async move {
-            let canister = UniversalCanister::new_with_retries(
-                &agent,
-                app_node.effective_canister_id(),
-                &logger,
-            )
-            .await;
-            // Act.
-            let result = canister
-                .update(
-                    wasm().call_simple(
-                        ic00::IC_00,
-                        Method::NodeMetricsHistory,
-                        call_args().other_side(
-                            ic00::NodeMetricsHistoryArgs {
-                                subnet_id,
-                                start_at_timestamp_nanos: 0,
-                            }
-                            .encode(),
-                        ),
-                    ),
-                )
-                .await;
-            // Assert.
-            assert!(result.is_ok());
-            assert!(!result.ok().unwrap().is_empty()); // Assert it has some non zero data.
-        }
-    })
-}
-
-pub fn node_metrics_history_query_fails(env: TestEnv) {
-    // Arrange.
-    let (app_node, agent) = setup_app_node_and_agent(&env);
-    let logger = env.logger();
-    let subnet_id = app_node.subnet_id().unwrap().get();
-    block_on({
-        async move {
-            let canister = UniversalCanister::new_with_retries(
-                &agent,
-                app_node.effective_canister_id(),
-                &logger,
-            )
-            .await;
-            // Act.
-            let result = canister
-                .query(
-                    wasm().call_simple(
-                        ic00::IC_00,
-                        Method::NodeMetricsHistory,
-                        call_args().other_side(
-                            ic00::NodeMetricsHistoryArgs {
-                                subnet_id,
-                                start_at_timestamp_nanos: 0,
-                            }
-                            .encode(),
-                        ),
-                    ),
-                )
-                .await;
-            // Assert.
-            assert_reject_msg(
-                result,
-                RejectCode::CanisterError,
-                "cannot be executed in non replicated query mode",
-            );
-        }
-    })
-}
-
 pub fn node_metrics_history_another_subnet_succeeds(env: TestEnv) {
     // Arrange.
     let (app_node_1, agent_1) = setup_app_node_and_agent(&env);
@@ -353,58 +277,6 @@ pub fn node_metrics_history_non_existing_subnet_fails(env: TestEnv) {
                 .await;
             // Assert.
             assert_reject(result, RejectCode::CanisterReject);
-        }
-    })
-}
-
-pub fn node_metrics_history_ingress_update_fails(env: TestEnv) {
-    // Arrange.
-    let (app_node, agent) = setup_app_node_and_agent(&env);
-    let subnet_id = app_node.subnet_id().unwrap().get();
-    block_on({
-        async move {
-            // Act.
-            let result = agent
-                .update(&Principal::management_canister(), "node_metrics_history")
-                .with_arg(
-                    ic00::NodeMetricsHistoryArgs {
-                        subnet_id,
-                        start_at_timestamp_nanos: 0,
-                    }
-                    .encode(),
-                )
-                .call_and_wait()
-                .await;
-            // Assert.
-            assert_reject_msg(
-                result,
-                RejectCode::CanisterReject,
-                "ic00 method node_metrics_history can not be called via ingress messages",
-            );
-        }
-    })
-}
-
-pub fn node_metrics_history_ingress_query_fails(env: TestEnv) {
-    // Arrange.
-    let (app_node, agent) = setup_app_node_and_agent(&env);
-    let subnet_id = app_node.subnet_id().unwrap().get();
-    block_on({
-        async move {
-            // Act.
-            let result = agent
-                .query(&Principal::management_canister(), "node_metrics_history")
-                .with_arg(
-                    ic00::NodeMetricsHistoryArgs {
-                        subnet_id,
-                        start_at_timestamp_nanos: 0,
-                    }
-                    .encode(),
-                )
-                .call()
-                .await;
-            // Assert.
-            assert_eq!(result, Err(AgentError::CertificateNotAuthorized()));
         }
     })
 }

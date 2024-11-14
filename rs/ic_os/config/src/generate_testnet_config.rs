@@ -55,12 +55,9 @@ pub enum Ipv6ConfigType {
     RouterAdvertisement,
 }
 
-/// Generates a writes a serialized GuestOSConfig to guestos_config_json_path
-/// Any required config fields that aren't specified will receive dummy values
-pub fn generate_testnet_config(
-    config: GenerateTestnetConfigArgs,
-    guestos_config_json_path: PathBuf,
-) -> Result<()> {
+/// Constructs and returns a GuestOSConfig based on the provided arguments.
+/// Any required config fields that aren't specified will receive dummy values.
+fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSConfig> {
     let GenerateTestnetConfigArgs {
         ipv6_config_type,
         deterministic_prefix,
@@ -246,6 +243,17 @@ pub fn generate_testnet_config(
         guestos_settings,
     };
 
+    Ok(guestos_config)
+}
+
+/// Generates and writes a serialized GuestOSConfig to guestos_config_json_path.
+/// Any required config fields that aren't specified will receive dummy values.
+pub fn generate_testnet_config(
+    config: GenerateTestnetConfigArgs,
+    guestos_config_json_path: PathBuf,
+) -> Result<()> {
+    let guestos_config = create_guestos_config(config)?;
+
     println!("GuestOSConfig: {:?}", guestos_config);
 
     serialize_and_write_config(&guestos_config_json_path, &guestos_config)?;
@@ -261,7 +269,6 @@ pub fn generate_testnet_config(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
 
     #[test]
     fn test_valid_configuration() {
@@ -272,8 +279,26 @@ mod tests {
             ..Default::default()
         };
 
-        let result = generate_testnet_config(args, PathBuf::from("/tmp/guestos_config.json"));
-        assert!(result.is_ok());
+        let guestos_config =
+            create_guestos_config(args).expect("Expected valid configuration to succeed");
+
+        assert_eq!(
+            guestos_config.icos_settings.mgmt_mac.to_string(),
+            "00:11:22:33:44:55"
+        );
+        assert_eq!(
+            guestos_config
+                .icos_settings
+                .nns_urls
+                .first()
+                .unwrap()
+                .as_str(),
+            "https://example.com/"
+        );
+        assert_eq!(
+            guestos_config.network_settings.ipv6_config,
+            Ipv6Config::RouterAdvertisement
+        );
     }
 
     #[test]
@@ -286,10 +311,11 @@ mod tests {
             ..Default::default()
         };
 
-        let result = generate_testnet_config(args, PathBuf::from("/dev/null"));
-        assert!(result.is_err());
+        let err = create_guestos_config(args)
+            .expect_err("Expected an error due to missing deterministic_prefix");
+
         assert_eq!(
-            result.unwrap_err().to_string(),
+            err.to_string(),
             "deterministic_prefix is required when ipv6_config_type is 'Deterministic'"
         );
     }
@@ -304,10 +330,11 @@ mod tests {
             ..Default::default()
         };
 
-        let result = generate_testnet_config(args, PathBuf::from("/dev/null"));
-        assert!(result.is_err());
+        let err = create_guestos_config(args)
+            .expect_err("Expected an error due to missing deterministic_prefix_length");
+
         assert_eq!(
-            result.unwrap_err().to_string(),
+            err.to_string(),
             "deterministic_prefix_length is required when ipv6_config_type is 'Deterministic'"
         );
     }
@@ -322,10 +349,11 @@ mod tests {
             ..Default::default()
         };
 
-        let result = generate_testnet_config(args, PathBuf::from("/dev/null"));
-        assert!(result.is_err());
+        let err = create_guestos_config(args)
+            .expect_err("Expected an error due to missing deterministic_gateway");
+
         assert_eq!(
-            result.unwrap_err().to_string(),
+            err.to_string(),
             "deterministic_gateway is required when ipv6_config_type is 'Deterministic'"
         );
     }
@@ -340,12 +368,15 @@ mod tests {
             ..Default::default()
         };
 
-        let result = generate_testnet_config(args, PathBuf::from("/dev/null"));
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Failed to parse deterministic_gateway"));
+        let err = create_guestos_config(args)
+            .expect_err("Expected parsing error due to invalid deterministic_gateway");
+
+        assert!(
+            err.to_string()
+                .contains("Failed to parse deterministic_gateway"),
+            "Expected parsing error, got: {}",
+            err
+        );
     }
 
     #[test]
@@ -357,10 +388,11 @@ mod tests {
             ..Default::default()
         };
 
-        let result = generate_testnet_config(args, PathBuf::from("/dev/null"));
-        assert!(result.is_err());
+        let err = create_guestos_config(args)
+            .expect_err("Expected an error due to missing fixed_address");
+
         assert_eq!(
-            result.unwrap_err().to_string(),
+            err.to_string(),
             "fixed_address is required when ipv6_config_type is 'Fixed'"
         );
     }
@@ -374,10 +406,11 @@ mod tests {
             ..Default::default()
         };
 
-        let result = generate_testnet_config(args, PathBuf::from("/dev/null"));
-        assert!(result.is_err());
+        let err = create_guestos_config(args)
+            .expect_err("Expected an error due to missing fixed_gateway");
+
         assert_eq!(
-            result.unwrap_err().to_string(),
+            err.to_string(),
             "fixed_gateway is required when ipv6_config_type is 'Fixed'"
         );
     }
@@ -391,12 +424,14 @@ mod tests {
             ..Default::default()
         };
 
-        let result = generate_testnet_config(args, PathBuf::from("/dev/null"));
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Failed to parse fixed_gateway"));
+        let err = create_guestos_config(args)
+            .expect_err("Expected parsing error due to invalid fixed_gateway");
+
+        assert!(
+            err.to_string().contains("Failed to parse fixed_gateway"),
+            "Expected parsing error, got: {}",
+            err
+        );
     }
 
     #[test]
@@ -408,10 +443,11 @@ mod tests {
             ..Default::default()
         };
 
-        let result = generate_testnet_config(args, PathBuf::from("/dev/null"));
-        assert!(result.is_err());
+        let err = create_guestos_config(args)
+            .expect_err("Expected an error due to incomplete IPv4 configuration");
+
         assert_eq!(
-            result.unwrap_err().to_string(),
+            err.to_string(),
             "Incomplete IPv4 configuration provided. All parameters (ipv4_address, ipv4_gateway, ipv4_prefix_length) are required for IPv4 configuration."
         );
     }
@@ -425,12 +461,14 @@ mod tests {
             ..Default::default()
         };
 
-        let result = generate_testnet_config(args, PathBuf::from("/dev/null"));
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Failed to parse ipv4_address"));
+        let err = create_guestos_config(args)
+            .expect_err("Expected parsing error due to invalid ipv4_address");
+
+        assert!(
+            err.to_string().contains("Failed to parse ipv4_address"),
+            "Expected parsing error, got: {}",
+            err
+        );
     }
 
     #[test]
@@ -442,11 +480,13 @@ mod tests {
             ..Default::default()
         };
 
-        let result = generate_testnet_config(args, PathBuf::from("/dev/null"));
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Failed to parse ipv4_gateway"));
+        let err = create_guestos_config(args)
+            .expect_err("Expected parsing error due to invalid ipv4_gateway");
+
+        assert!(
+            err.to_string().contains("Failed to parse ipv4_gateway"),
+            "Expected parsing error, got: {}",
+            err
+        );
     }
 }

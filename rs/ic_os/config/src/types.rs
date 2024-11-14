@@ -11,7 +11,7 @@
 //!
 //! - **Adding New Fields**: If adding a new field to a configuration struct, make sure it is optional or has a default value by implementing `Default` or via `#[serde(default)]`.
 //!
-//! - **Removing Fields**: To prevent backwards-compatibility deserialization errors, required fields must not be removed directly: In a first step, they have to be made optional and code that reads the value must be removed/handle missing values. In a second step, after the first step has rolled out to all OSes and there is no risk of a rollback, the field can be removed.
+//! - **Removing Fields**: To prevent backwards-compatibility deserialization errors, required fields must not be removed directly: In a first step, they have to be made optional and code that reads the value must be removed/handle missing values. In a second step, after the first step has rolled out to all OSes and there is no risk of a rollback, the field can be removed. Additionally, to avoid reintroducing a previously removed field, add your removed field to the RESERVED_FIELD_NAMES list.
 //!
 //! - **Renaming Fields**: Avoid renaming fields unless absolutely necessary. If you must rename a field, use `#[serde(rename = "old_name")]`.
 use ic_types::malicious_behaviour::MaliciousBehaviour;
@@ -21,6 +21,9 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 use url::Url;
 
 pub const CONFIG_VERSION: &str = "1.0.0";
+
+/// List of field names that have been removed and should not be reused.
+pub static RESERVED_FIELD_NAMES: &[&str] = &["DUMMY_RESERVED_VALUE"];
 
 /// SetupOS configuration. User-facing configuration files
 /// (e.g., `config.ini`, `deployment.json`) are transformed into `SetupOSConfig`.
@@ -177,4 +180,76 @@ pub struct FixedIpv6Config {
     // Fixed ipv6 address includes subnet mask /64
     pub address: String,
     pub gateway: Ipv6Addr,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::Value;
+    use std::collections::HashSet;
+
+    #[test]
+    fn test_no_reserved_field_names_used() -> Result<(), Box<dyn std::error::Error>> {
+        let reserved_field_names: HashSet<&str> = RESERVED_FIELD_NAMES.iter().cloned().collect();
+
+        let setupos_config = SetupOSConfig {
+            config_version: CONFIG_VERSION.to_string(),
+            network_settings: NetworkSettings {
+                ipv6_config: Ipv6Config::RouterAdvertisement,
+                ipv4_config: None,
+                domain_name: None,
+            },
+            icos_settings: ICOSSettings {
+                mgmt_mac: FormattedMacAddress::try_from("00:00:00:00:00:00")?,
+                deployment_environment: String::new(),
+                logging: Logging {
+                    elasticsearch_hosts: String::new(),
+                    elasticsearch_tags: None,
+                },
+                nns_public_key_exists: false,
+                nns_urls: vec![],
+                node_operator_private_key_exists: false,
+                use_ssh_authorized_keys: false,
+                icos_dev_settings: ICOSDevSettings::default(),
+            },
+            setupos_settings: SetupOSSettings,
+            hostos_settings: HostOSSettings {
+                vm_memory: 0,
+                vm_cpu: String::new(),
+                verbose: false,
+            },
+            guestos_settings: GuestOSSettings::default(),
+        };
+
+        fn get_all_field_names(value: &Value, field_names: &mut HashSet<String>) {
+            match value {
+                Value::Object(map) => {
+                    for (key, val) in map {
+                        field_names.insert(key.clone());
+                        get_all_field_names(val, field_names);
+                    }
+                }
+                Value::Array(arr) => {
+                    for val in arr {
+                        get_all_field_names(val, field_names);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        let setupos_config = serde_json::to_value(&setupos_config)?;
+
+        let mut field_names = HashSet::new();
+        get_all_field_names(&setupos_config, &mut field_names);
+        for field in field_names {
+            assert!(
+                !reserved_field_names.contains(field.as_str()),
+                "Field name '{}' is reserved and should not be used.",
+                field
+            );
+        }
+
+        Ok(())
+    }
 }

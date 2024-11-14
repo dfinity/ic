@@ -59,7 +59,6 @@ function copy_config_files() {
         fi
     else
         echo >&2 "Warning: node_operator_private_key.pem does not exist, requiring HSM."
-        insert_hsm
     fi
 
     echo "* Copying NNS public key to hostOS config partition..."
@@ -88,18 +87,22 @@ function copy_config_files() {
     fi
 }
 
-function insert_hsm() {
-    retry=0
-    while [ -z "$(lsusb | grep -E 'Nitro|Clay')" ]; do
-        let retry=retry+1
-        if [ ${retry} -ge 3600 ]; then
-            log_and_halt_installation_on_error "1" "Nitrokey HSM USB device could not be detected, giving up."
-            break
-        else
-            echo "* Please insert Nitrokey HSM USB device..."
-            sleep 3
-        fi
-    done
+function insert_hsm_if_necessary() {
+    if [ ! -f "${CONFIG_DIR}/node_operator_private_key.pem" ]; then
+        retry=0
+        while [ -z "$(lsusb | grep -E 'Nitro|Clay')" ]; do
+            let retry=retry+1
+            if [ ${retry} -ge 3600 ]; then
+                log_and_halt_installation_on_error "1" "Nitrokey HSM USB device could not be detected, giving up."
+            else
+                echo "* Please insert Nitrokey HSM USB device..."
+                sleep 3
+            fi
+        done
+        echo "HSM successfully detected."
+    else
+        echo "node_operator_private_key.pem found."
+    fi
 }
 
 function unmount_config_partition() {
@@ -120,6 +123,7 @@ main() {
     log_start "$(basename $0)"
     mount_config_partition
     copy_config_files
+    insert_hsm_if_necessary
     unmount_config_partition
     log_end "$(basename $0)"
 }
