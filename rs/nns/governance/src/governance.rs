@@ -63,7 +63,7 @@ use crate::{
         StopOrStartCanister, Tally, Topic, UpdateCanisterSettings, UpdateNodeProvider, Visibility,
         Vote, WaitForQuietState, XdrConversionRate as XdrConversionRatePb,
     },
-    proposals::{call_canister::CallCanister, sum_weighted_voting_power},
+    proposals::call_canister::CallCanister,
 };
 use async_trait::async_trait;
 use candid::{Decode, Encode};
@@ -7028,19 +7028,58 @@ impl Governance {
         // reward weight of proposals being voted on.
         let mut actually_distributed_e8s_equivalent = 0_u64;
 
-        let proposals = considered_proposals.iter().filter_map(|proposal_id| {
-            let result = self.heap_data.proposals.get(&proposal_id.id);
-            if result.is_none() {
-                println!(
-                    "{}ERROR: Trying to give voting rewards for proposal {}, \
-                         but it was not found.",
-                    LOG_PREFIX, proposal_id.id,
-                );
+        // Sum up "voting rights", which determine the share of the pot earned
+        // by a neuron.
+        //
+        // Construct map voters -> total _used_ voting rights for
+        // considered proposals as well as the overall total voting
+        // power on considered proposals, whether or not this voting
+        // power was used to vote (yes or no).
+        let (voters_to_used_voting_right, total_voting_rights) = {
+            let mut voters_to_used_voting_right: HashMap<NeuronId, f64> = HashMap::new();
+            let mut total_voting_rights = 0f64;
+
+            for pid in considered_proposals.iter() {
+                if let Some(proposal) = self.get_proposal_data(*pid) {
+                    let reward_weight = proposal.topic().reward_weight();
+
+                    let total_potential_voting_power =
+                        proposal
+                            .total_potential_voting_power
+                            .map(|total_potential_voting_power| {
+                                reward_weight * (total_potential_voting_power as f64)
+                            });
+
+                    let mut proposal_total_deciding_voting_rights = 0_f64;
+                    for (voter, ballot) in proposal.ballots.iter() {
+                        let voting_rights = (ballot.voting_power as f64) * reward_weight;
+                        proposal_total_deciding_voting_rights += voting_rights;
+                        #[allow(clippy::blocks_in_conditions)]
+                        if Vote::try_from(ballot.vote)
+                            .unwrap_or_else(|_| {
+                                println!(
+                                    "{}Vote::from invoked with unexpected value {}.",
+                                    LOG_PREFIX, ballot.vote
+                                );
+                                Vote::Unspecified
+                            })
+                            .eligible_for_rewards()
+                        {
+                            *voters_to_used_voting_right
+                                .entry(NeuronId { id: *voter })
+                                .or_insert(0f64) += voting_rights;
+                        }
+                    }
+
+                    total_voting_rights = total_potential_voting_power
+                        // This is to handle legacy proposals, which were
+                        // created before there was a distinction between
+                        // *deciding* voting power vs. *potential* voting power.
+                        .unwrap_or(proposal_total_deciding_voting_rights);
+                }
             }
-            result
-        });
-        let (voters_to_used_voting_right, total_voting_rights) =
-            sum_weighted_voting_power(proposals);
+            (voters_to_used_voting_right, total_voting_rights)
+        };
 
         // Increment neuron maturities (and actually_distributed_e8s_equivalent).
         //
