@@ -408,16 +408,10 @@ impl NodeRegistration {
 
         let key_handler = self.key_handler.clone();
         let sign_cmd = move |msg: &MessageId| {
-            // Implementation of 'sign_basic' uses Tokio's 'block_on' when issuing a RPC
-            // to the crypto service. 'block_on' panics when called from async context
-            // that's why we need to wrap 'sign_basic' in 'block_in_place'.
-            #[allow(clippy::disallowed_methods)]
-            tokio::task::block_in_place(|| {
-                key_handler
-                    .sign_basic(msg, node_id, registry_version)
-                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
-                    .map(|value| value.get().0)
-            })
+            key_handler
+                .sign_basic(msg, node_id, registry_version)
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+                .map(|value| value.get().0)
         };
 
         let sender = Sender::Node {

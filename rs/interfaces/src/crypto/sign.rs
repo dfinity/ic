@@ -57,12 +57,6 @@ pub trait BasicSigner<T: Signable> {
     /// * `CryptoError::MalformedSecretKey`: if the secret key is malformed.
     /// * `CryptoError::InvalidArgument`: if the signature algorithm is not
     ///   supported.
-    ///
-    /// When called within a Tokio runtime the function should be wrapped inside
-    /// 'tokio::task::spawn_blocking' when in async function or
-    /// 'tokio::task::block_in_place' when in sync function (using 'block_in_place'
-    /// should be very rare event). Otherwise the call panics because the
-    /// implementation of 'sign_basic' calls 'tokio::runtime::Runtime.block_on'.
     fn sign_basic(
         &self,
         message: &T,
