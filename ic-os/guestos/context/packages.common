@@ -24,9 +24,10 @@ libunwind8
 libselinux1
 
 # Smartcard support for replica
-pcsc-tools
 pcscd
-opensc
+opensc-pkcs11
+sssd
+libpam-sss
 
 # Required system setup tools
 attr

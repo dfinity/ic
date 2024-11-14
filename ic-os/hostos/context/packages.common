@@ -20,7 +20,9 @@ openssh-server
 
 # Smartcard support
 pcscd
-opensc
+opensc-pkcs11
+sssd
+libpam-sss
 
 # Required system setup tools
 attr
