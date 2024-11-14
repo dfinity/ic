@@ -1,7 +1,7 @@
 use candid::{CandidType, Deserialize, Principal};
 use ic_agent::Agent;
 use ic_ckbtc_minter::state::eventlog::{replay, Event};
-use ic_ckbtc_minter::state::invariants::CheckInvariants;
+use ic_ckbtc_minter::state::invariants::{CheckInvariants, CheckInvariantsImpl};
 use ic_ckbtc_minter::state::{CkBtcMinterState, Network};
 use std::path::PathBuf;
 
@@ -33,8 +33,25 @@ async fn should_replay_events_for_testnet() {
     assert_eq!(state.get_total_btc_managed(), 16_578_205_978);
 }
 
+// This test is ignored because it takes too long to run,
+// roughly 50 minutes. It's useful to run it locally when
+// updating mainnet_events.gz or testnet_events.gz.
+// bazel test //rs/bitcoin/ckbtc/minter:ckbtc_minter_replay_events_tests --test_arg="should_replay_events_and_check_invariants" --test_arg=--ignored
+#[test]
+#[ignore]
+fn should_replay_events_and_check_invariants() {
+    for file in [GetEventsFile::Mainnet, GetEventsFile::Testnet] {
+        let events = file.deserialize();
+        println!("Replaying {} {:?} events", events.total_event_count, file);
+        let _state = replay::<CheckInvariantsImpl>(events.events.into_iter())
+            .expect("Failed to replay events");
+    }
+}
+
+// It's not clear why those events are here in the first place
+// but this test ensures that the number of such events doesn't grow.
 #[tokio::test]
-async fn should_not_have_too_many_useless_events() {
+async fn should_not_grow_number_of_useless_events() {
     for file in [GetEventsFile::Mainnet, GetEventsFile::Testnet] {
         let events = file.deserialize();
         let received_utxo_to_minter_with_empty_utxos = Event::ReceivedUtxos {
@@ -75,6 +92,7 @@ async fn should_not_have_too_many_useless_events() {
     }
 }
 
+#[derive(Debug)]
 enum GetEventsFile {
     Mainnet,
     Testnet,
@@ -200,6 +218,12 @@ pub struct GetEventsResult {
     pub total_event_count: u64,
 }
 
+/// This struct is used to skip the check invariants when replaying the events
+/// because it takes otherwise too long.
+///
+/// This is because invariants are checked upon `ReceivedUtxos` event and
+/// each check is linear over the state size, meaning overall complexity is quadratic
+/// with the number of `ReceivedUtxos` events.
 pub enum SkipCheckInvariantsImpl {}
 
 impl CheckInvariants for SkipCheckInvariantsImpl {
