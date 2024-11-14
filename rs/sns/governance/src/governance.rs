@@ -5562,38 +5562,43 @@ impl Governance {
                 .clone_from(&target_version.archive_wasm_hash);
         }
 
-        // TODO: DO NOT MERGE
-        //
-        // This condition is simplified, but it does not take into account the fact that Ledgers
-        // may be of a different version than Archives. This is due to the fact that a Ledger
-        // is responsible for spawning archives using the sources stored in its own memory, whereas
-        // currently the Ledger is *not* responsible for upgrading the archives it had previously
-        // spawned. Due to this unfortunate circumstances, the SNS needs to take special care to
-        // treat the case of upgrading the archives.
-        //
-        // If in doubt, revert the change in this condition to the code on the master branch.
-        if running_version == target_version {
-            self.set_proposal_execution_status(proposal_id, Ok(()));
+        let cached_upgrade_steps = match self.proto.cached_upgrade_steps_or_err() {
+            Err(err) => {
+                let cached_upgrade_steps =
+                    CachedUpgradeSteps::empty(running_version.clone(), self.env.now());
 
-            self.proto.pending_version = None;
+                self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeStepsReset {
+                    upgrade_steps: Some(Versions {
+                        versions: cached_upgrade_steps.clone().into_iter().collect(),
+                    }),
+                    human_readable: Some(format!(
+                        "When the SNS reached the expected version {:?}, an inconsistency has been \
+                        detected in SNS Governance at timestamp {} seconds: {}",
+                        target_version, self.env.now(), err,
+                    )),
+                });
 
-            self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome {
-                status: Some(upgrade_journal_entry::upgrade_outcome::Status::Success(
-                    Empty {},
-                )),
-                human_readable: Some(format!(
-                    "Marking upgrade SUCCESS at {} seconds.",
-                    self.env.now()
-                )),
-            });
-        } else {
+                cached_upgrade_steps
+            }
+            Ok(cached_upgrade_steps) => cached_upgrade_steps,
+        };
+
+        let expected_changes = cached_upgrade_steps
+            .current()
+            .changes_against(&target_version);
+
+        // TODO[FI-1582]: Simplify this condition when SNS Ledger assumes the responsibility
+        // TODO[FI-1582]: to upgrade its own Archive(s).
+        if let Err(err) = running_version.version_has_expected_hashes(&expected_changes) {
             if self.env.now() > mark_failed_at {
                 let message = format!(
                     "Upgrade marked as failed at timestamp {} seconds. \
-                     Running SNS version {:?} was still different from the expected version {:?}",
+                     Running SNS version {:?} was still different from the expected version {:?}. \
+                     err = {:?}",
                     self.env.now(),
                     running_version,
                     target_version,
+                    err,
                 );
 
                 self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome {
@@ -5613,71 +5618,56 @@ impl Governance {
             return;
         }
 
+        // The upgrade succeeded!
+
+        self.set_proposal_execution_status(proposal_id, Ok(()));
+
+        self.proto.pending_version = None;
+
+        self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome {
+            status: Some(upgrade_journal_entry::upgrade_outcome::Status::Success(
+                Empty {},
+            )),
+            human_readable: Some(format!(
+                "Marking upgrade SUCCESS at {} seconds.",
+                self.env.now()
+            )),
+        });
+
         // Update the cached upgrade steps to reflect the fact the 1st version is no longer needed.
-        //
-        // The rest of the code in this function should comply with the following specification:
-        //
-        // Case I:
-        //     old state (before previous await):
-        //         cached_upgrade_steps: [v1, v2, v3, v4]
-        //         v1: running_version -> v2: target_version
-        //
-        //     new state:
-        //         v2: running_version == target_version
-        //         cached_upgrade_steps: [v1]                  // notice that this is a singleton
-        //
-        //     cached_upgrade_steps' == [v2]                   // reset
-        //
-        // Case II:
-        //     old state (before previous await):
-        //         cached_upgrade_steps: [v1, v2, v3, v4]
-        //         v1: running_version -> v2: target_version
-        //
-        //     new state:
-        //         v2: running_version == target_version
-        //         cached_upgrade_steps: [v1, v2', ...]
-        //
-        //     Case II(a): v2' == v2:
-        //         cached_upgrade_steps' == [v2, ...]            // consume
-        //
-        //     Case II(b): v2' != v2:
-        //         cached_upgrade_steps' == [v2]                 // reset
-        match self
-            .proto
-            .cached_upgrade_steps_or_err()
-            .and_then(CachedUpgradeSteps::consume)
-            .and_then(|(_, new_cached_upgrade_steps)| {
-                if new_cached_upgrade_steps.current() == target_version {
-                    Ok(new_cached_upgrade_steps)
-                } else {
-                    Err("new_cached_upgrade_steps.current() != target_version".to_string())
-                }
-            }) {
-            Ok(new_cached_upgrade_steps) => {
-                self.proto
-                    .cached_upgrade_steps
-                    .replace(CachedUpgradeStepsPb::from(new_cached_upgrade_steps.clone()));
-            }
-            Err(err) => {
-                let cached_upgrade_steps =
-                    CachedUpgradeSteps::empty(running_version, self.env.now());
+        let new_cached_upgrade_steps =
+            match cached_upgrade_steps
+                .consume()
+                .and_then(|(_, new_cached_upgrade_steps)| {
+                    if new_cached_upgrade_steps.current() == target_version {
+                        Ok(new_cached_upgrade_steps)
+                    } else {
+                        Err("new_cached_upgrade_steps.current() != target_version".to_string())
+                    }
+                }) {
+                Ok(new_cached_upgrade_steps) => new_cached_upgrade_steps,
+                Err(err) => {
+                    let cached_upgrade_steps =
+                        CachedUpgradeSteps::empty(running_version, self.env.now());
 
-                self.proto
-                    .cached_upgrade_steps
-                    .replace(CachedUpgradeStepsPb::from(cached_upgrade_steps.clone()));
-
-                self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeStepsReset {
-                    upgrade_steps: Some(Versions {
-                        versions: cached_upgrade_steps.into_iter().collect(),
-                    }),
-                    human_readable: Some(format!(
+                    self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeStepsReset {
+                        upgrade_steps: Some(Versions {
+                            versions: cached_upgrade_steps.clone().into_iter().collect(),
+                        }),
+                        human_readable: Some(format!(
                         "When the SNS reached the expected version {:?}, an inconsistency has been \
                          detected in SNS Governance at timestamp {} seconds: {}",
                         target_version, self.env.now(), err,
                     )),
-                });
-            }
-        };
+                    });
+
+                    cached_upgrade_steps
+                }
+            };
+
+        self.proto
+            .cached_upgrade_steps
+            .replace(CachedUpgradeStepsPb::from(new_cached_upgrade_steps));
     }
 
     // This method sets internal state to remove pending_version and sets the proposal status to
@@ -5998,7 +5988,10 @@ mod tests {
         },
         reward,
         sns_upgrade::{
-            CanisterSummary, GetNextSnsVersionRequest, GetNextSnsVersionResponse, GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse, GetWasmRequest, GetWasmResponse, ListUpgradeStep, ListUpgradeStepsRequest, ListUpgradeStepsResponse, SnsCanisterType, SnsVersion, SnsWasm
+            CanisterSummary, GetNextSnsVersionRequest, GetNextSnsVersionResponse,
+            GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse, GetWasmRequest,
+            GetWasmResponse, ListUpgradeStep, ListUpgradeStepsRequest, ListUpgradeStepsResponse,
+            SnsCanisterType, SnsVersion, SnsWasm,
         },
         types::test_helpers::NativeEnvironment,
     };

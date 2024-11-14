@@ -416,6 +416,54 @@ impl Version {
 
         differences
     }
+    pub(crate) fn version_has_expected_hashes(
+        &self,
+        expected_hashes: &[(SnsCanisterType, Vec<u8> /* wasm hash*/)],
+    ) -> Result<(), Vec<String>> {
+        let results = expected_hashes
+            .iter()
+            .map(|(canister_type, expected_hash)| {
+                let actual_hash = self.get_hash_for_type(canister_type);
+                if &actual_hash == expected_hash {
+                    Ok(())
+                } else {
+                    Err(format!(
+                        "Expected hash for {:?} to be: '{}', but it was '{}'",
+                        canister_type,
+                        hex::encode(expected_hash),
+                        hex::encode(actual_hash)
+                    ))
+                }
+            })
+            .collect::<Vec<Result<(), String>>>();
+
+        if results.iter().any(|r| r.is_err()) {
+            Err(results
+                .into_iter()
+                .flat_map(|result| match result {
+                    Ok(_) => None,
+                    Err(e) => Some(e),
+                })
+                .collect::<Vec<_>>())
+        } else {
+            Ok(())
+        }
+    }
+
+    fn get_hash_for_type(&self, canister_type: &SnsCanisterType) -> Vec<u8> {
+        match canister_type {
+            // Unspecified should be impossible given we create the diff we are using,
+            // but we must not panic in a heartbeat, so  we use a value that won't match a
+            // real hash so downstream check will fail.
+            SnsCanisterType::Unspecified => vec![0; 3],
+            SnsCanisterType::Root => self.root_wasm_hash.clone(),
+            SnsCanisterType::Governance => self.governance_wasm_hash.clone(),
+            SnsCanisterType::Ledger => self.ledger_wasm_hash.clone(),
+            SnsCanisterType::Swap => self.swap_wasm_hash.clone(),
+            SnsCanisterType::Archive => self.archive_wasm_hash.clone(),
+            SnsCanisterType::Index => self.index_wasm_hash.clone(),
+        }
+    }
 }
 
 impl From<Version> for SnsVersion {
