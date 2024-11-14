@@ -1863,13 +1863,15 @@ impl IngressHistoryState {
     /// already present this entry will be overwritten. If `status` is a terminal
     /// status (`completed`, `failed`, or `done`) the entry will also be enrolled
     /// to be pruned at `time + MAX_INGRESS_TTL`.
+    ///
+    /// Returns the previous status associated with `message_id`.
     pub fn insert(
         &mut self,
         message_id: MessageId,
         status: IngressStatus,
         time: Time,
         ingress_memory_capacity: NumBytes,
-    ) {
+    ) -> Arc<IngressStatus> {
         // Store the associated expiry time for the given message id only for a
         // "terminal" ingress status. This way we are not risking deleting any status
         // for a message that is still not in a terminal status.
@@ -1889,7 +1891,8 @@ impl IngressHistoryState {
             }
         }
         self.memory_usage += status.payload_bytes();
-        if let Some(old) = Arc::make_mut(&mut self.statuses).insert(message_id, Arc::new(status)) {
+        let old_status = Arc::make_mut(&mut self.statuses).insert(message_id, Arc::new(status));
+        if let Some(old) = &old_status {
             self.memory_usage -= old.payload_bytes();
         }
 
@@ -1901,6 +1904,8 @@ impl IngressHistoryState {
             Self::compute_memory_usage(&self.statuses),
             self.memory_usage
         );
+
+        old_status.unwrap_or_else(|| IngressStatus::Unknown.into())
     }
 
     /// Returns an iterator over response statuses, sorted lexicographically by

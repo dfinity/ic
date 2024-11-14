@@ -132,18 +132,12 @@ MACRO_DEV_DEPENDENCIES = []
 ALIASES = {}
 
 DEV_DATA = [
+    # Keep sorted.
+    "src/neurons.csv",
     ":canister-playground-canister",
     ":governance-mem-test-canister",
-    ":unstoppable-canister",
     ":mem-utils-test-canister",
-    "//rs/nns/cmc:cycles-minting-canister",
-    "//rs/nns/governance:governance-canister",
-    "//rs/nns/governance:governance-canister-test",
-    "//rs/nns/gtc:genesis-token-canister",
-    "//rs/nns/handlers/root/impl:root-canister",
-    "//rs/nns/handlers/lifeline/impl:lifeline_canister",
-    "//rs/nns/sns-wasm:sns-wasm-canister",
-    "//rs/registry/canister:registry-canister",
+    ":unstoppable-canister",
     "//rs/ledger_suite/icp/archive:ledger-archive-node-canister-wasm",
     "//rs/ledger_suite/icp/ledger:ledger-canister-wasm",
     "//rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method",
@@ -151,11 +145,19 @@ DEV_DATA = [
     "//rs/ledger_suite/icrc1/index:index_canister",
     "//rs/ledger_suite/icrc1/index-ng:index_ng_canister",
     "//rs/ledger_suite/icrc1/ledger:ledger_canister",
+    "//rs/nns/cmc:cycles-minting-canister",
+    "//rs/nns/governance:governance-canister",
+    "//rs/nns/governance:governance-canister-test",
+    "//rs/nns/gtc:genesis-token-canister",
+    "//rs/nns/handlers/lifeline/impl:lifeline_canister",
+    "//rs/nns/handlers/root/impl:root-canister",
+    "//rs/nns/sns-wasm:sns-wasm-canister",
+    "//rs/registry/canister:registry-canister",
     "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister",
     "//rs/sns/governance:sns-governance-canister",
     "//rs/sns/root:sns-root-canister",
     "//rs/sns/swap:sns-swap-canister",
-    "src/neurons.csv",
+    "//rs/universal_canister/impl:universal_canister.wasm.gz",
     "@cycles-ledger.wasm.gz//file",
     "@subnet_rental_canister//file",
 ]
@@ -188,6 +190,7 @@ DEV_ENV = {
     "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:root-canister)",
     "XRC_MOCK_WASM_PATH": "$(rootpath //rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister)",
     "SUBNET_RENTAL_CANISTER_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
+    "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
 }
 
 rust_library(

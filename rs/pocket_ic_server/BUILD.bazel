@@ -153,7 +153,7 @@ rust_library(
     ]),
     crate_name = "pocket_ic_server",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "6.0.0",
+    version = "7.0.0",
     deps = LIB_DEPENDENCIES + [":build_script"],
 )
 
@@ -197,11 +197,13 @@ rust_test(
         ":pocket-ic-server",
         "//rs/tests/httpbin-rs:httpbin",
         "//rs/tests/research:ic-hs",
+        "//rs/universal_canister/impl:universal_canister.wasm.gz",
     ],
     env = {
         "HTTPBIN_BIN": "$(rootpath //rs/tests/httpbin-rs:httpbin)",
         "POCKET_IC_BIN": "$(rootpath :pocket-ic-server)",
         "IC_REF_TEST_ROOT": "rs/tests/research/ic-hs",
+        "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
     tags = ["cpu:8"],
     deps = SPEC_TEST_DEPENDENCIES,
