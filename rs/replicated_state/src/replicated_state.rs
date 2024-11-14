@@ -35,7 +35,7 @@ use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
-use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::Arc;
 use strum_macros::{EnumCount, EnumIter};
 
@@ -460,7 +460,8 @@ impl ReplicatedState {
         Arc::clone(&self.metadata.network_topology.routing_table)
     }
 
-    pub fn get_scheduler_priorities(&self) -> HashMap<CanisterId, AccumulatedPriority> {
+    /// Time complexity: O(n), where n is the number of canisters.
+    pub fn get_scheduler_priorities(&self) -> BTreeMap<CanisterId, AccumulatedPriority> {
         self.canister_states
             .iter()
             .map(|(canister_id, canister_state)| {

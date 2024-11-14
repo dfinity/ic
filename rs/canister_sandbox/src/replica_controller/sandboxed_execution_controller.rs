@@ -1739,7 +1739,10 @@ fn evict_sandbox_processes(
         Backend::Empty => false,
     });
 
-    let priorities = state_reader.get_latest_scheduler_priorities();
+    let scheduler_priorities = state_reader
+        .get_latest_state()
+        .get_ref()
+        .get_scheduler_priorities();
 
     let candidates: Vec<_> = backends
         .iter()
@@ -1748,7 +1751,9 @@ fn evict_sandbox_processes(
                 id: *id,
                 last_used: stats.last_used,
                 rss: stats.rss,
-                scheduler_priority: *priorities.get(id).unwrap_or(&AccumulatedPriority::new(0)),
+                scheduler_priority: *scheduler_priorities
+                    .get(id)
+                    .unwrap_or(&AccumulatedPriority::new(0)),
             }),
             Backend::Evicted { .. } | Backend::Empty => None,
         })

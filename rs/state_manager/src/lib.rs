@@ -52,7 +52,6 @@ use ic_replicated_state::{
 use ic_state_layout::{
     error::LayoutError, AccessPolicy, CheckpointLayout, PageMapLayout, ReadOnly, StateLayout,
 };
-use ic_types::AccumulatedPriority;
 use ic_types::{
     batch::BatchSummary,
     consensus::certification::Certification,
@@ -67,7 +66,6 @@ use ic_utils_thread::JoinOnDrop;
 use ic_validate_eq::ValidateEq;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
 use prost::Message;
-use std::collections::HashMap;
 use std::convert::{From, TryFrom};
 use std::fs::File;
 use std::fs::OpenOptions;
@@ -3712,16 +3710,6 @@ impl StateReader for StateManagerImpl {
                     Self::INITIAL_STATE_HEIGHT,
                     Arc::new(initial_state(self.own_subnet_id, self.own_subnet_type).take()),
                 )
-            })
-    }
-
-    fn get_latest_scheduler_priorities(&self) -> HashMap<CanisterId, AccumulatedPriority> {
-        self.states
-            .read()
-            .snapshots
-            .back()
-            .map_or_else(HashMap::new, |snapshot| {
-                snapshot.state.get_scheduler_priorities()
             })
     }
 

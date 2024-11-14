@@ -24,11 +24,10 @@ use ic_types::{
         CertifiedStreamSlice, RejectReason, RejectSignal, StreamFlags, StreamHeader, StreamIndex,
         StreamIndexedQueue, StreamSlice,
     },
-    AccumulatedPriority, CanisterId, CryptoHashOfPartialState, CryptoHashOfState, Height,
-    RegistryVersion, SubnetId,
+    CryptoHashOfPartialState, CryptoHashOfState, Height, RegistryVersion, SubnetId,
 };
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeSet, HashMap, VecDeque};
+use std::collections::{BTreeSet, VecDeque};
 use std::sync::{Arc, Barrier, RwLock};
 
 #[derive(Clone)]
@@ -269,16 +268,6 @@ impl StateReader for FakeStateManager {
             .unwrap()
             .last()
             .map_or_else(initial_state, |snap| snap.make_labeled_state())
-    }
-
-    fn get_latest_scheduler_priorities(&self) -> HashMap<CanisterId, AccumulatedPriority> {
-        self.states
-            .read()
-            .unwrap()
-            .last()
-            .map_or_else(HashMap::new, |snapshot| {
-                snapshot.state.get_scheduler_priorities()
-            })
     }
 
     fn get_state_at(&self, height: Height) -> StateManagerResult<Labeled<Arc<Self::State>>> {
@@ -742,10 +731,6 @@ impl StateReader for RefMockStateManager {
 
     fn get_latest_state(&self) -> Labeled<Arc<Self::State>> {
         self.mock.read().unwrap().get_latest_state()
-    }
-
-    fn get_latest_scheduler_priorities(&self) -> HashMap<CanisterId, AccumulatedPriority> {
-        self.mock.read().unwrap().get_latest_scheduler_priorities()
     }
 
     fn get_state_at(&self, height: Height) -> StateManagerResult<Labeled<Arc<Self::State>>> {
