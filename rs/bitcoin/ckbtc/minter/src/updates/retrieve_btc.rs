@@ -151,13 +151,6 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
     state::read_state(|s| s.mode.is_withdrawal_available_for(&caller))
         .map_err(RetrieveBtcError::TemporarilyUnavailable)?;
 
-    if crate::blocklist::BTC_ADDRESS_BLOCKLIST
-        .binary_search(&args.address.trim())
-        .is_ok()
-    {
-        ic_cdk::trap("attempted to retrieve BTC to a blocked address");
-    }
-
     let ecdsa_public_key = init_ecdsa_public_key().await;
     let main_address = account_to_bitcoin_address(
         &ecdsa_public_key,
@@ -263,13 +256,6 @@ pub async fn retrieve_btc_with_approval(
     state::read_state(|s| s.mode.is_withdrawal_available_for(&caller))
         .map_err(RetrieveBtcWithApprovalError::TemporarilyUnavailable)?;
 
-    if crate::blocklist::BTC_ADDRESS_BLOCKLIST
-        .binary_search(&args.address.trim())
-        .is_ok()
-    {
-        ic_cdk::trap("attempted to retrieve BTC to a blocked address");
-    }
-
     let ecdsa_public_key = init_ecdsa_public_key().await;
     let main_address = account_to_bitcoin_address(
         &ecdsa_public_key,
@@ -306,7 +292,7 @@ pub async fn retrieve_btc_with_approval(
             .into()
     });
 
-    match new_kyt_check_address(new_kyt_principal, args.address.clone()).await {
+    match new_kyt_check_address(new_kyt_principal, parsed_address.display(btc_network)).await {
         Err(error) => {
             return Err(RetrieveBtcWithApprovalError::GenericError {
                 error_message: format!("Failed to call KYT canister with error: {:?}", error),
