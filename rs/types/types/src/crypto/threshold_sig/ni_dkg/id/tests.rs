@@ -193,6 +193,52 @@ fn should_return_error_if_ni_dkg_tag_invalid_with_invalid_master_public_key_when
 }
 
 #[test]
+fn should_return_error_if_ni_dkg_tag_invalid_with_nonempty_keyid_for_low_thres_tag_when_parsing_proto(
+) {
+    let master_public_key_id = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+        curve: EcdsaCurve::Secp256k1,
+        name: "key".to_string(),
+    });
+    let proto = NiDkgIdProto {
+        start_block_height: 7,
+        dealer_subnet: vec![42; PrincipalId::MAX_LENGTH_IN_BYTES],
+        remote_target_id: Some(vec![42; NiDkgTargetId::SIZE]),
+        dkg_tag: pb::NiDkgTag::LowThreshold as i32,
+        key_id: Some(pb::MasterPublicKeyId::from(&master_public_key_id)),
+    };
+
+    let result = NiDkgId::try_from(proto);
+
+    assert_matches!(
+        result.unwrap_err(),
+        NiDkgIdFromProtoError::InvalidDkgTagNonEmptyMasterPublicKeyId
+    );
+}
+
+#[test]
+fn should_return_error_if_ni_dkg_tag_invalid_with_nonempty_keyid_for_high_thres_tag_when_parsing_proto(
+) {
+    let master_public_key_id = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+        curve: EcdsaCurve::Secp256k1,
+        name: "key".to_string(),
+    });
+    let proto = NiDkgIdProto {
+        start_block_height: 7,
+        dealer_subnet: vec![42; PrincipalId::MAX_LENGTH_IN_BYTES],
+        remote_target_id: Some(vec![42; NiDkgTargetId::SIZE]),
+        dkg_tag: pb::NiDkgTag::HighThreshold as i32,
+        key_id: Some(pb::MasterPublicKeyId::from(&master_public_key_id)),
+    };
+
+    let result = NiDkgId::try_from(proto);
+
+    assert_matches!(
+        result.unwrap_err(),
+        NiDkgIdFromProtoError::InvalidDkgTagNonEmptyMasterPublicKeyId
+    );
+}
+
+#[test]
 fn should_return_error_if_ni_dkg_tag_invalid_when_parsing_proto() {
     let invalid_dkg_tag = 4;
     let proto = NiDkgIdProto {

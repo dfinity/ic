@@ -72,8 +72,20 @@ impl TryFrom<NiDkgIdProto> for NiDkgId {
             ),
             dkg_tag: {
                 match ni_dkg_id_proto.dkg_tag {
-                    1 => Ok(NiDkgTag::LowThreshold),
-                    2 => Ok(NiDkgTag::HighThreshold),
+                    1 => {
+                        if ni_dkg_id_proto.key_id.is_some() {
+                            Err(NiDkgIdFromProtoError::InvalidDkgTagNonEmptyMasterPublicKeyId)
+                        } else {
+                            Ok(NiDkgTag::LowThreshold)
+                        }
+                    }
+                    2 => {
+                        if ni_dkg_id_proto.key_id.is_some() {
+                            Err(NiDkgIdFromProtoError::InvalidDkgTagNonEmptyMasterPublicKeyId)
+                        } else {
+                            Ok(NiDkgTag::HighThreshold)
+                        }
+                    }
                     3 => {
                         let mpkid_proto = ni_dkg_id_proto
                             .key_id
@@ -124,6 +136,7 @@ pub enum NiDkgIdFromProtoError {
     InvalidDkgTagMissingKeyId,
     InvalidRemoteTargetIdSize(InvalidNiDkgTargetIdSizeError),
     InvalidMasterPublicKeyId(String),
+    InvalidDkgTagNonEmptyMasterPublicKeyId,
 }
 
 impl From<NiDkgIdFromProtoError> for ic_protobuf::proxy::ProxyDecodeError {
@@ -140,6 +153,9 @@ impl From<NiDkgIdFromProtoError> for ic_protobuf::proxy::ProxyDecodeError {
             }
             InvalidMasterPublicKeyId(e) => {
                 Self::Other(format!("Invalid master public key for NiDkgTag: {e}."))
+            }
+            InvalidDkgTagNonEmptyMasterPublicKeyId => {
+                Self::Other("Invalid DKG tag: expected the master public key ID to be empty, but it was non-empty".to_string())
             }
         }
     }
