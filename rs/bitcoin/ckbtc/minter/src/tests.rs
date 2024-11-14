@@ -1,3 +1,4 @@
+use crate::state::invariants::CheckInvariantsImpl;
 use crate::MINTER_FEE_CONSTANT;
 use crate::{
     address::BitcoinAddress, build_unsigned_transaction, estimate_retrieve_btc_fee, fake_sign,
@@ -842,7 +843,7 @@ proptest! {
             new_kyt_principal: None
         });
         for (utxo, acc_idx) in utxos_acc_idx {
-            state.add_utxos(accounts[acc_idx], vec![utxo]);
+            state.add_utxos::<CheckInvariantsImpl>(accounts[acc_idx], vec![utxo]);
             state.check_invariants().expect("invariant check failed");
         }
     }
@@ -870,7 +871,7 @@ proptest! {
         let mut available_amount = 0;
         for (utxo, acc_idx) in utxos_acc_idx {
             available_amount += utxo.value;
-            state.add_utxos(accounts[acc_idx], vec![utxo]);
+            state.add_utxos::<CheckInvariantsImpl>(accounts[acc_idx], vec![utxo]);
         }
         for req in requests {
             let block_index = req.block_index;
@@ -912,7 +913,7 @@ proptest! {
         });
 
         for (utxo, acc_idx) in utxos_acc_idx {
-            state.add_utxos(accounts[acc_idx], vec![utxo]);
+            state.add_utxos::<CheckInvariantsImpl>(accounts[acc_idx], vec![utxo]);
         }
         let fee_per_vbyte = 100_000u64;
 
@@ -1206,8 +1207,8 @@ fn test_build_account_to_utxos_table_pagination() {
     let mut utxos = (1..=30).map(dummy_utxo_from_value).collect::<Vec<_>>();
     utxos.sort_unstable();
 
-    state.add_utxos(account1, utxos[..10].to_vec());
-    state.add_utxos(account2, utxos[10..].to_vec());
+    state.add_utxos::<CheckInvariantsImpl>(account1, utxos[..10].to_vec());
+    state.add_utxos::<CheckInvariantsImpl>(account2, utxos[10..].to_vec());
 
     // Check if all pages combined together would give the full utxos set.
     let pages = [
