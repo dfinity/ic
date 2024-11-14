@@ -91,7 +91,7 @@ jobs:
           BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
       - <<: *bazel-bep
 
-  bazel-run-fuzzers-limited:
+  bazel-run-fuzzers-hourly:
     name: Bazel Run Fuzzers Hourly
     <<: *dind-large-setup
     steps:
@@ -108,6 +108,6 @@ jobs:
         if: success() || failure() # testing
         with:
           channel-id: prodsec-fuzzing
-          slack-message: "Bazel Run Fuzzers Hourly failed :disappointed: - <${{github.server_url}}/${{github.repository}}/actions/runs/${{github.event.workflow_run.id}}|Run#${{github.event.workflow_run.id}}>"
+          slack-message: "${{ github.jobs[github.job].name }} failed :disappointed: - <${{github.server_url}}/${{github.repository}}/actions/runs/${{github.run_id}}/job/${{github.job}}|Run#${{github.run_id}}>"
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}
