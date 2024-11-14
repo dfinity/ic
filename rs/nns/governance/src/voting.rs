@@ -3,7 +3,6 @@ use crate::{
     pb::v1::{Ballot, Topic, Topic::NeuronManagement, Vote},
 };
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
-use maplit::btreemap;
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet, HashMap},
@@ -225,20 +224,15 @@ mod test {
         governance::MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
         neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
         neuron_store::NeuronStore,
-        pb::v1::{neuron::Followees, Topic, Vote},
+        pb::v1::{neuron::Followees, Ballot, Topic, Vote},
         voting::ProposalVotingStateMachine,
     };
-
-    use crate::pb::v1::Ballot;
     use ic_base_types::PrincipalId;
     use ic_nns_common::pb::v1::{NeuronId, ProposalId};
     use icp_ledger::Subaccount;
     use maplit::{btreemap, hashmap};
     use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-    // Only some fields are relevant for the functionality, but because we're benchmarking we need
-    // neurons that have some heft to them, so we populate fields that aren't strictly necessary for
-    // the functionality.
     fn make_neuron(
         id: u64,
         cached_neuron_stake_e8s: u64,
@@ -256,18 +250,6 @@ mod test {
             aging_since_timestamp_seconds: now - MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
         };
 
-        let hot_keys = (0..15).map(PrincipalId::new_user_test_id).collect();
-
-        let followees = if followees.is_empty() {
-            hashmap! {
-                Topic::Unspecified as i32 => Followees {
-                    followees: (0..15).map(|id| NeuronId { id }).collect(),
-                },
-            }
-        } else {
-            followees
-        };
-
         NeuronBuilder::new(
             NeuronId { id },
             subaccount,
@@ -275,7 +257,6 @@ mod test {
             dissolve_state_and_age,
             now,
         )
-        .with_hot_keys(hot_keys)
         .with_followees(followees)
         .with_cached_neuron_stake_e8s(cached_neuron_stake_e8s)
         .build()
@@ -283,13 +264,8 @@ mod test {
 
     #[test]
     fn test_invalid_topic() {
-        let err = ProposalVotingStateMachine::try_new(
-            ProposalId { id: 0 },
-            Topic::Unspecified,
-            NeuronId { id: 0 },
-            Vote::Yes,
-        )
-        .unwrap_err();
+        let err = ProposalVotingStateMachine::try_new(ProposalId { id: 0 }, Topic::Unspecified)
+            .unwrap_err();
 
         assert_eq!(err, "Topic must be specified");
     }
@@ -333,13 +309,9 @@ mod test {
 
     #[test]
     fn test_continue_processsing() {
-        let mut state_machine = ProposalVotingStateMachine::try_new(
-            ProposalId { id: 0 },
-            Topic::NetworkEconomics,
-            NeuronId { id: 1 },
-            Vote::Yes,
-        )
-        .unwrap();
+        let mut state_machine =
+            ProposalVotingStateMachine::try_new(ProposalId { id: 0 }, Topic::NetworkEconomics)
+                .unwrap();
 
         let mut ballots = HashMap::new();
         let mut neuron_store = NeuronStore::new(btreemap! {});
@@ -370,6 +342,7 @@ mod test {
             },
         );
 
+        state_machine.cast_vote(&mut ballots, NeuronId { id: 1 }, Vote::Yes);
         state_machine.continue_processing(&mut neuron_store, &mut ballots);
 
         assert_eq!(
