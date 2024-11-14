@@ -10,7 +10,6 @@ rust_library(
     deps = [
         # Keep sorted.
         "//packages/icrc-ledger-types:icrc_ledger_types",
-        "//rs/crypto/tree_hash",
         "@crate_index//:candid",
         "@crate_index//:ciborium",
         "@crate_index//:hex",

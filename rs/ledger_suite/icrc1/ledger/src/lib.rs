@@ -11,9 +11,8 @@ use candid::{
 use ic_base_types::PrincipalId;
 use ic_canister_log::{log, Sink};
 use ic_certification::{
-    hash_tree::{empty, fork, label, leaf, pruned, Hash, Label},
-    hash_tree::{HashTreeNode, SubtreeLookupResult},
-    Certificate, HashTree,
+    hash_tree::{empty, fork, label, leaf, Label},
+    HashTree,
 };
 use ic_icrc1::blocks::encoded_block_to_generic_block;
 use ic_icrc1::{Block, LedgerAllowances, LedgerBalances, Transaction};
@@ -716,13 +715,15 @@ impl<Tokens: TokensType> Ledger<Tokens> {
             Some(hash) => {
                 let last_block_index = self.blockchain().chain_length().checked_sub(1).unwrap();
                 #[allow(unused_mut)]
+                #[allow(unused_assignments)]
                 let mut last_block_hash_label = Label::from("tip_hash");
                 #[cfg(feature = "icrc3-compatible-data-certificate")]
                 {
                     last_block_hash_label = Label::from("last_block_hash");
                 }
                 let mut buf = std::io::Cursor::new(Vec::new());
-                leb128::write::unsigned(&mut buf, last_block_index).expect("Failed to write LEB128");
+                leb128::write::unsigned(&mut buf, last_block_index)
+                    .expect("Failed to write LEB128");
                 let last_block_index_encoded = buf.into_inner();
                 fork(
                     label(last_block_hash_label, leaf(hash.as_slice().to_vec())),
