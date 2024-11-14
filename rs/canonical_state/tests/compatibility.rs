@@ -224,7 +224,7 @@ pub(crate) fn arb_valid_versioned_message(
 ) -> impl Strategy<Value = (RequestOrResponse, RangeInclusive<CertificationVersion>)> {
     prop_oneof![
         (
-            // Optionally populate `Request::metadata` from version 14 on.
+            // No `deadline` before version 18.
             arbitrary::request_or_response_with_config(false),
             Just(MIN_SUPPORTED_CERTIFICATION_VERSION..=MAX_SUPPORTED_CERTIFICATION_VERSION)
         ),
