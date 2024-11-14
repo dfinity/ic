@@ -4,10 +4,72 @@ use crate::{
 };
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use maplit::btreemap;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::{
+    cell::RefCell,
+    collections::{BTreeMap, BTreeSet, HashMap},
+};
+
+thread_local! {
+    // TODO DO NOT MERGE - if this has ongoing votes to process, should prevent upgrading...
+    static VOTING_STATE_MACHINE: RefCell<VotingStateMachine> = RefCell::new(VotingStateMachine::new());
+}
+
+struct VotingStateMachine {
+    // machines
+    machines: BTreeMap<ProposalId, ProposalVotingStateMachine>,
+}
+
+impl VotingStateMachine {
+    fn new() -> Self {
+        Self {
+            machines: BTreeMap::new(),
+        }
+    }
+
+    fn get_or_create_machine(
+        &mut self,
+        proposal_id: ProposalId,
+        topic: Topic,
+    ) -> &mut ProposalVotingStateMachine {
+        self.machines
+            .entry(proposal_id)
+            .or_insert_with(|| ProposalVotingStateMachine::try_new(proposal_id, topic).unwrap())
+    }
+
+    fn add_vote(
+        &mut self,
+        proposal_id: ProposalId,
+        topic: Topic,
+        neuron_id: NeuronId,
+        vote: Vote,
+    ) -> &mut ProposalVotingStateMachine {
+        let machine = self.get_or_create_machine(proposal_id, topic);
+
+        machine.add_vote(neuron_id, vote);
+
+        machine
+    }
+
+    fn continue_processing(
+        &mut self,
+        neuron_store: &mut NeuronStore,
+        ballots: &mut HashMap<u64, Ballot>,
+    ) {
+        for (_, machine) in self.machines.iter_mut() {
+            machine.continue_processing(neuron_store, ballots);
+            if machine.is_done() {
+                self.machines.remove(&machine.proposal_id);
+            }
+        }
+    }
+
+    fn is_done(&self) -> bool {
+        self.machines.is_empty()
+    }
+}
 
 #[derive(Debug, PartialEq)]
-struct VotingStateMachine {
+struct ProposalVotingStateMachine {
     // The proposal ID that is being voted on.
     proposal_id: ProposalId,
     // The topic of the proposal.
@@ -22,26 +84,16 @@ struct VotingStateMachine {
     recent_neuron_ballots_to_record: BTreeMap<NeuronId, Vote>,
 }
 
-impl VotingStateMachine {
-    fn try_new(
-        proposal_id: ProposalId,
-        topic: Topic,
-        neuron_id: NeuronId,
-        vote: Vote,
-    ) -> Result<Self, String> {
+impl ProposalVotingStateMachine {
+    fn try_new(proposal_id: ProposalId, topic: Topic) -> Result<Self, String> {
         if topic == Topic::Unspecified {
             return Err("Topic must be specified".to_string());
         }
 
-        let votes_to_cast = btreemap! { neuron_id => vote };
-
         Ok(Self {
             proposal_id,
             topic,
-            votes_to_cast,
-            neurons_to_check_followers: BTreeSet::new(),
-            followers_to_check: BTreeSet::new(),
-            recent_neuron_ballots_to_record: BTreeMap::new(),
+            ..Default::default()
         })
     }
 
@@ -50,6 +102,10 @@ impl VotingStateMachine {
             && self.neurons_to_check_followers.is_empty()
             && self.followers_to_check.is_empty()
             && self.recent_neuron_ballots_to_record.is_empty()
+    }
+
+    fn add_vote(&mut self, neuron_id: NeuronId, vote: Vote) {
+        self.votes_to_cast.insert(neuron_id, vote);
     }
 
     fn add_followers_to_check(
@@ -170,18 +226,14 @@ pub(crate) fn cast_vote_and_cascade_follow(
     topic: Topic,
     neuron_store: &mut NeuronStore,
 ) {
-    let mut state_machine =
-        match VotingStateMachine::try_new(*proposal_id, topic, *voting_neuron_id, vote_of_neuron) {
-            Ok(sm) => sm,
-            Err(e) => {
-                // TODO - make this whole function return possible errors?
-                panic!("error in cast_vote_and_cascade_follow: {:?}", e);
-            }
-        };
+    VOTING_STATE_MACHINE.with(|mut vsm| {
+        let big_machine = vsm.borrow_mut();
+        big_machine.add_vote(*proposal_id, topic, *voting_neuron_id, vote_of_neuron)?;
 
-    while !state_machine.is_done() {
-        state_machine.continue_processing(neuron_store, ballots);
-    }
+        while !big_machine.is_done() {
+            big_machine.continue_processing(neuron_store, ballots);
+        }
+    });
 }
 
 #[cfg(test)]
@@ -192,7 +244,7 @@ mod test {
         neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
         neuron_store::NeuronStore,
         pb::v1::{neuron::Followees, Topic, Vote},
-        voting::VotingStateMachine,
+        voting::ProposalVotingStateMachine,
     };
 
     use crate::pb::v1::Ballot;
@@ -249,7 +301,7 @@ mod test {
 
     #[test]
     fn test_invalid_topic() {
-        let err = VotingStateMachine::try_new(
+        let err = ProposalVotingStateMachine::try_new(
             ProposalId { id: 0 },
             Topic::Unspecified,
             NeuronId { id: 0 },
@@ -262,7 +314,7 @@ mod test {
 
     #[test]
     fn test_is_done() {
-        let mut state_machine = VotingStateMachine {
+        let mut state_machine = ProposalVotingStateMachine {
             proposal_id: ProposalId { id: 0 },
             topic: Topic::Governance,
             votes_to_cast: BTreeMap::new(),
@@ -299,7 +351,7 @@ mod test {
 
     #[test]
     fn test_continue_processsing() {
-        let mut state_machine = VotingStateMachine::try_new(
+        let mut state_machine = ProposalVotingStateMachine::try_new(
             ProposalId { id: 0 },
             Topic::NetworkEconomics,
             NeuronId { id: 1 },
