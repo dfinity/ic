@@ -85,6 +85,14 @@ pub fn spawn_canister_sandbox_process(
     launcher: &dyn LauncherService,
 ) -> std::io::Result<(Arc<dyn SandboxService>, u32, std::thread::JoinHandle<()>)> {
     let (sock_controller, sock_sandbox) = std::os::unix::net::UnixStream::pair()?;
+    // let mut new_argv = vec![exec_path.to_string()];
+    // new_argv.extend_from_slice(&argv[..]);
+    // let request = LaunchSandboxRequest {
+    //     sandbox_exec_path: "/usr/bin/heaptrack".to_string(),
+    //     argv: new_argv,
+    //     canister_id,
+    //     socket: sock_sandbox.as_raw_fd(),
+    // };
     let request = LaunchSandboxRequest {
         sandbox_exec_path: exec_path.to_string(),
         argv: argv.to_vec(),
@@ -93,6 +101,15 @@ pub fn spawn_canister_sandbox_process(
     };
     let LaunchSandboxReply { pid } = launcher.launch_sandbox(request).sync()?;
     println!("Sandbox pid is {pid}");
+    std::thread::spawn(move || loop {
+        let status = std::fs::read_to_string(format!("/proc/{pid}/status")).unwrap();
+        for line in status.lines() {
+            if line.contains("RssAnon") {
+                println!("{}", line);
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_secs(5));
+    });
     std::thread::sleep(std::time::Duration::from_secs(15));
 
     let socket = Arc::new(sock_controller);

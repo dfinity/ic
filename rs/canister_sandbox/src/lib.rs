@@ -27,6 +27,7 @@ pub mod protocol {
     pub mod structs;
     pub mod transport;
 }
+pub mod allocator;
 pub mod fdenum;
 
 use protocol::{

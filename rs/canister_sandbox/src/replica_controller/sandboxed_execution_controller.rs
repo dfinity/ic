@@ -380,7 +380,9 @@ impl OpenedWasm {
 
 impl Drop for OpenedWasm {
     fn drop(&mut self) {
+        println!("Dropping opened Wasm");
         if let Some(sandbox_process) = self.sandbox_process.upgrade() {
+            println!("Sending close request to sandbox {}", sandbox_process.pid);
             sandbox_process
                 .history
                 .record(format!("CloseWasm(wasm_id={})", self.wasm_id));
@@ -830,6 +832,7 @@ impl WasmExecutor for SandboxedExecutionController {
             execution_tracing,
             execution_start,
         );
+        drop_opened_wasm(&mut *execution_state.wasm_binary.embedder_cache.lock().unwrap());
         (compilation_result, execution_result)
     }
 
@@ -899,6 +902,10 @@ impl WasmExecutor for SandboxedExecutionController {
                                 "CreateExecutionStateSerialized(wasm_id={}, next_wasm_memory_id={})",
                                 wasm_id, next_wasm_memory_id
                             ));
+                            println!(
+                                "Creating execution state with serialized size: {:.2} MiB",
+                                serialized_module.bytes.as_slice().len() as f64 / (1024.0 * 1024.0)
+                            );
                             let sandbox_result = sandbox_process
                                 .sandbox_service
                                 .create_execution_state_serialized(
@@ -1517,6 +1524,10 @@ fn cache_opened_wasm(
     *embedder_cache = Some(EmbedderCache::new(opened_wasm));
 }
 
+fn drop_opened_wasm(embedder_cache: &mut Option<EmbedderCache>) {
+    drop(std::mem::take(embedder_cache));
+}
+
 /// Cache an error from compilation so that we don't try to recompile just to
 /// get the same error.
 fn cache_errored_wasm(embedder_cache: &mut Option<EmbedderCache>, err: HypervisorError) {
@@ -1534,6 +1545,7 @@ fn open_wasm(
     metrics: &SandboxedExecutionMetrics,
     log: &ReplicaLogger,
 ) -> HypervisorResult<(WasmId, Option<CompilationResult>)> {
+    println!("opening Wasm");
     let mut embedder_cache = wasm_binary.embedder_cache.lock().unwrap();
     if let Some(cache) = embedder_cache.as_ref() {
         if let Some(opened_wasm) = cache.downcast::<HypervisorResult<OpenedWasm>>() {
@@ -1555,6 +1567,7 @@ fn open_wasm(
         }
     }
 
+    println!("looking up in compilation cache");
     let wasm_id = WasmId::new();
     match compilation_cache.get(&wasm_binary.binary) {
         None => {
@@ -1581,6 +1594,10 @@ fn open_wasm(
                     sandbox_process
                         .history
                         .record(format!("OpenWasmSerialized(wasm_id={})", wasm_id));
+                    println!(
+                        "Opening Wasm module with serialized size: {:.2} MiB",
+                        serialized_module.bytes.as_slice().len() as f64 / (1024.0 * 1024.0)
+                    );
                     sandbox_process
                         .sandbox_service
                         .open_wasm_serialized(protocol::sbxsvc::OpenWasmSerializedRequest {
@@ -1611,6 +1628,10 @@ fn open_wasm(
             sandbox_process
                 .history
                 .record(format!("OpenWasmSerialized(wasm_id={})", wasm_id));
+            println!(
+                "Opening Wasm module with serialized size: {:.2} MiB",
+                serialized_module.bytes.as_slice().len() as f64 / (1024.0 * 1024.0)
+            );
             sandbox_process
                 .sandbox_service
                 .open_wasm_serialized(protocol::sbxsvc::OpenWasmSerializedRequest {
@@ -1623,6 +1644,7 @@ fn open_wasm(
         }
     }
 }
+
 // Returns the id of the remote memory after making sure that the remote memory
 // is in sync with the local memory.
 fn open_remote_memory(

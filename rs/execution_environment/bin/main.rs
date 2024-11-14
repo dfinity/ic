@@ -7,6 +7,7 @@ use ic_state_machine_tests::{
 use ic_types::Cycles;
 
 const B: u128 = 1_000 * 1_000 * 1_000;
+
 fn main() {
     println!("Running demo");
     let wasm = include_bytes!("../tests/test-data/task_canister.wasm.gz");
@@ -23,17 +24,20 @@ fn main() {
 
     let initial_cycles = Cycles::new(1_000_000 * B);
     let canister_settings = CanisterSettingsArgsBuilder::new().build();
-    let canister_id = env
-        .install_canister_with_cycles(
-            wasm.to_vec(),
-            vec![],
-            Some(canister_settings),
-            initial_cycles,
-        )
-        .unwrap();
-    let _result = env
-        .execute_ingress(canister_id, "no_op", Encode!(&()).unwrap())
-        .unwrap();
+    for _ in 0..1 {
+        let canister_id = env
+            .install_canister_with_cycles(
+                wasm.to_vec(),
+                vec![],
+                Some(canister_settings.clone()),
+                initial_cycles,
+            )
+            .unwrap();
+
+        let _result = env
+            .execute_ingress(canister_id, "no_op", Encode!(&()).unwrap())
+            .unwrap();
+    }
     println!("Sleeping");
     std::thread::sleep(std::time::Duration::from_secs(60 * 60));
 }
