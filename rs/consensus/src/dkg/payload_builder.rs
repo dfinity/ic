@@ -1215,7 +1215,7 @@ mod tests {
                         /////////////////////////////////////////////////////
                         // TODO(CON-1417): extend this test once we have support for vetKD transcripts in registry CUPs
                         /////////////////////////////////////////////////////
-                        NiDkgTag::HighThresholdForKey(_) => panic!("not applicable"),
+                        NiDkgTag::HighThresholdForKey(_) => todo!("CON-1417"),
                     }
                 );
             }
@@ -1324,7 +1324,7 @@ mod tests {
                             /////////////////////////////////////////////////////
                             // TODO(CON-1413): extend this test once we can create local transcript configs for vetKeys that were requested by registry
                             /////////////////////////////////////////////////////
-                            NiDkgTag::HighThresholdForKey(_) => panic!("not applicable"),
+                            NiDkgTag::HighThresholdForKey(_) => todo!("CON-1413"),
                         }
                     );
 
