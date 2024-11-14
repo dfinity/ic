@@ -33,6 +33,9 @@ pub struct UpgradeArgs {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub kyt_principal: Option<CanisterId>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub new_kyt_principal: Option<CanisterId>,
 }
 
 pub fn post_upgrade(upgrade_args: Option<UpgradeArgs>) {

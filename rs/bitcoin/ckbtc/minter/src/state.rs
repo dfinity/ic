@@ -340,6 +340,9 @@ pub struct CkBtcMinterState {
     /// The principal of the KYT canister.
     pub kyt_principal: Option<CanisterId>,
 
+    /// The new principal of the KYT canister.
+    pub new_kyt_principal: Option<CanisterId>,
+
     /// The set of UTXOs unused in pending transactions.
     pub available_utxos: BTreeSet<Utxo>,
 
@@ -432,6 +435,7 @@ impl CkBtcMinterState {
             mode,
             kyt_fee,
             kyt_principal,
+            new_kyt_principal,
         }: InitArgs,
     ) {
         self.btc_network = btc_network.into();
@@ -442,6 +446,7 @@ impl CkBtcMinterState {
         self.max_time_in_queue_nanos = max_time_in_queue_nanos;
         self.mode = mode;
         self.kyt_principal = kyt_principal;
+        self.new_kyt_principal = new_kyt_principal;
         if let Some(kyt_fee) = kyt_fee {
             self.kyt_fee = kyt_fee;
         }
@@ -457,6 +462,7 @@ impl CkBtcMinterState {
             max_time_in_queue_nanos,
             min_confirmations,
             mode,
+            new_kyt_principal,
             kyt_principal,
             kyt_fee,
         }: UpgradeArgs,
@@ -483,6 +489,9 @@ impl CkBtcMinterState {
         if let Some(mode) = mode {
             self.mode = mode;
         }
+        if let Some(new_kyt_principal) = new_kyt_principal {
+            self.new_kyt_principal = Some(new_kyt_principal);
+        }
         if let Some(kyt_principal) = kyt_principal {
             self.kyt_principal = Some(kyt_principal);
         }
@@ -500,6 +509,9 @@ impl CkBtcMinterState {
         }
         if self.kyt_principal.is_none() {
             ic_cdk::trap("KYT principal is not set");
+        }
+        if self.new_kyt_principal.is_none() {
+            ic_cdk::trap("New KYT principal is not set");
         }
     }
 
@@ -1014,7 +1026,9 @@ impl CkBtcMinterState {
                 kyt_provider,
                 kyt_fee,
             } => {
-                *self.owed_kyt_amount.entry(kyt_provider).or_insert(0) += kyt_fee;
+                if kyt_fee > 0 {
+                    *self.owed_kyt_amount.entry(kyt_provider).or_insert(0) += kyt_fee;
+                }
             }
             ReimbursementReason::CallFailed => {}
         }
@@ -1189,6 +1203,7 @@ impl From<InitArgs> for CkBtcMinterState {
             tokens_burned: 0,
             ledger_id: args.ledger_id,
             kyt_principal: args.kyt_principal,
+            new_kyt_principal: args.new_kyt_principal,
             available_utxos: Default::default(),
             outpoint_account: Default::default(),
             utxos_state_addresses: Default::default(),

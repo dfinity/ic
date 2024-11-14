@@ -210,11 +210,10 @@ async fn get_canister_status() -> ic_cdk::api::management_canister::main::Canist
 #[query]
 fn estimate_withdrawal_fee(arg: EstimateFeeArg) -> WithdrawalFee {
     read_state(|s| {
-        ic_ckbtc_minter::estimate_fee(
+        ic_ckbtc_minter::estimate_retrieve_btc_fee(
             &s.available_utxos,
             arg.amount,
             s.last_fee_per_vbyte[50],
-            s.kyt_fee,
         )
     })
 }

@@ -1,8 +1,8 @@
 use crate::state::invariants::CheckInvariantsImpl;
 use crate::MINTER_FEE_CONSTANT;
 use crate::{
-    address::BitcoinAddress, build_unsigned_transaction, estimate_fee, fake_sign, greedy,
-    signature::EncodedSignature, tx, BuildTxError,
+    address::BitcoinAddress, build_unsigned_transaction, estimate_retrieve_btc_fee, fake_sign,
+    greedy, signature::EncodedSignature, tx, BuildTxError,
 };
 use crate::{
     lifecycle::init::InitArgs,
@@ -686,8 +686,8 @@ proptest! {
 
         let target = total_value / 2;
 
-        let fee_estimate = estimate_fee(&utxos, Some(target), fee_per_vbyte, crate::lifecycle::init::DEFAULT_KYT_FEE);
-        let fee_estimate = fee_estimate.minter_fee + fee_estimate.bitcoin_fee - crate::lifecycle::init::DEFAULT_KYT_FEE;
+        let fee_estimate = estimate_retrieve_btc_fee(&utxos, Some(target), fee_per_vbyte);
+        let fee_estimate = fee_estimate.minter_fee + fee_estimate.bitcoin_fee;
 
         let (unsigned_tx, _, _) = build_unsigned_transaction(
             &mut utxos,
@@ -839,7 +839,8 @@ proptest! {
             min_confirmations: None,
             mode: Mode::GeneralAvailability,
             kyt_fee: None,
-            kyt_principal: None
+            kyt_principal: None,
+            new_kyt_principal: None
         });
         for (utxo, acc_idx) in utxos_acc_idx {
             state.add_utxos::<CheckInvariantsImpl>(accounts[acc_idx], vec![utxo]);
@@ -863,7 +864,8 @@ proptest! {
             min_confirmations: None,
             mode: Mode::GeneralAvailability,
             kyt_fee: None,
-            kyt_principal: None
+            kyt_principal: None,
+            new_kyt_principal: None
         });
 
         let mut available_amount = 0;
@@ -906,7 +908,8 @@ proptest! {
             min_confirmations: None,
             mode: Mode::GeneralAvailability,
             kyt_fee: None,
-            kyt_principal: None
+            kyt_principal: None,
+            new_kyt_principal: None
         });
 
         for (utxo, acc_idx) in utxos_acc_idx {
@@ -1108,9 +1111,8 @@ proptest! {
     ) {
         const SMALLEST_TX_SIZE_VBYTES: u64 = 140; // one input, two outputs
         const MIN_MINTER_FEE: u64 = 312;
-        let kyt_fee: u64 = crate::lifecycle::init::DEFAULT_KYT_FEE;
 
-        let estimate = estimate_fee(&utxos, amount, fee_per_vbyte, kyt_fee);
+        let estimate = estimate_retrieve_btc_fee(&utxos, amount, fee_per_vbyte);
         let lower_bound = MIN_MINTER_FEE + SMALLEST_TX_SIZE_VBYTES * fee_per_vbyte / 1000;
         let estimate_amount = estimate.minter_fee + estimate.bitcoin_fee;
         prop_assert!(
@@ -1134,6 +1136,7 @@ fn can_form_a_batch_conditions() {
         mode: Mode::GeneralAvailability,
         kyt_fee: None,
         kyt_principal: None,
+        new_kyt_principal: None,
     });
     // no request, can't form a batch, fail.
     assert!(!state.can_form_a_batch(1, 0));
@@ -1191,6 +1194,7 @@ fn test_build_account_to_utxos_table_pagination() {
         mode: Mode::GeneralAvailability,
         kyt_fee: None,
         kyt_principal: None,
+        new_kyt_principal: None,
     });
     let account1 = Account::from(
         Principal::from_str("gjfkw-yiolw-ncij7-yzhg2-gq6ec-xi6jy-feyni-g26f4-x7afk-thx6z-6ae")

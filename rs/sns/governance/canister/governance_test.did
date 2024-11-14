@@ -744,6 +744,7 @@ type WaitForQuietState = record {
 type UpgradeJournalEntry = record {
   event : opt variant {
     UpgradeStepsRefreshed : UpgradeStepsRefreshed;
+    UpgradeStepsReset : UpgradeStepsReset;
     TargetVersionSet : TargetVersionSet;
     TargetVersionReset : TargetVersionReset;
     UpgradeStarted : UpgradeStarted;
@@ -753,6 +754,11 @@ type UpgradeJournalEntry = record {
 };
 
 type UpgradeStepsRefreshed = record {
+  upgrade_steps : opt Versions;
+};
+
+type UpgradeStepsReset = record {
+  human_readable : opt text;
   upgrade_steps : opt Versions;
 };
 

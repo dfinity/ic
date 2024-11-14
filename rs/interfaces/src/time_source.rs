@@ -58,7 +58,7 @@ impl TimeSource for SysTimeSource {
 /// Return the current system time. Note that the value returned is not
 /// guaranteed to be monotonic.
 #[inline]
-fn system_time_now() -> Time {
+pub fn system_time_now() -> Time {
     UNIX_EPOCH
         + SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
