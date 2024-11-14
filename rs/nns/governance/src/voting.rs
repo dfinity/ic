@@ -20,8 +20,6 @@ struct VotingStateMachine {
     followers_to_check: BTreeSet<NeuronId>,
     // votes that need to be recorded in each neuron's recent_ballots
     recent_neuron_ballots_to_record: BTreeMap<NeuronId, Vote>,
-    // votes cast
-    votes_fully_cast: BTreeMap<NeuronId, Vote>,
 }
 
 impl VotingStateMachine {
@@ -44,7 +42,6 @@ impl VotingStateMachine {
             neurons_to_check_followers: BTreeSet::new(),
             followers_to_check: BTreeSet::new(),
             recent_neuron_ballots_to_record: BTreeMap::new(),
-            votes_fully_cast: BTreeMap::new(),
         })
     }
 
@@ -136,9 +133,7 @@ impl VotingStateMachine {
                 match neuron_store.with_neuron_mut(&neuron_id, |neuron| {
                     neuron.register_recent_ballot(self.topic, &self.proposal_id, vote)
                 }) {
-                    Ok(_) => {
-                        self.votes_fully_cast.insert(neuron_id, vote);
-                    }
+                    Ok(_) => {}
                     Err(e) => {
                         // This is a bad inconsistency, but there is
                         // nothing that can be done about it at this
@@ -274,7 +269,6 @@ mod test {
             neurons_to_check_followers: BTreeSet::new(),
             followers_to_check: BTreeSet::new(),
             recent_neuron_ballots_to_record: BTreeMap::new(),
-            votes_fully_cast: BTreeMap::new(),
         };
 
         assert!(state_machine.is_done());
@@ -301,12 +295,6 @@ mod test {
             .insert(NeuronId { id: 0 }, Vote::Yes);
         assert!(!state_machine.is_done());
         state_machine.recent_neuron_ballots_to_record.clear();
-
-        // Votes fully cast don't mean it's not done.
-        state_machine
-            .votes_fully_cast
-            .insert(NeuronId { id: 0 }, Vote::Yes);
-        assert!(state_machine.is_done());
     }
 
     #[test]
