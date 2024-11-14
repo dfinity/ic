@@ -312,7 +312,7 @@ fn main() -> io::Result<()> {
             tracing_handle,
         )?;
 
-    info!(logger, "Constructed IC stack");
+    info!(logger, "Constructed IC stack!?test34");
 
     std::thread::sleep(Duration::from_millis(5000));
 

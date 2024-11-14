@@ -16,6 +16,7 @@ metadata:
 spec:
   contentType: {type}
   pvc:
+    storageClassName: openebs-hostpath
     accessModes:
     - ReadWriteOnce
     resources:

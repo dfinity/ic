@@ -20,7 +20,7 @@ use crate::driver::universal_vm::UniversalVm;
 use crate::k8s::tnet::TNet;
 use crate::util::block_on;
 use anyhow::{self, bail};
-use kube::ResourceExt;
+//use kube::ResourceExt;
 use serde::{Deserialize, Serialize};
 use slog::{info, warn};
 use std::collections::BTreeMap;
@@ -343,13 +343,18 @@ pub fn allocate_resources(
                     vm_name,
                     block_on(tnet.vm_create(
                         CreateVmRequest {
-                            primary_image: ImageLocation::PersistentVolumeClaim {
-                                name: match req.primary_image.image_type {
-                                    ImageType::IcOsImage => {
-                                        format!("{}-image-guestos", tnet.owner.name_any())
+                            primary_image: match req.primary_image.image_type {
+                                ImageType::IcOsImage => ImageLocation::ImageViaUrl {
+                                    url: req.primary_image.url.clone(),
+                                    sha256: req.primary_image.sha256.clone(),
+                                },
+                                ImageType::PrometheusImage => {
+                                    ImageLocation::PersistentVolumeClaim {
+                                        name: "img-prometheus-vm".into(),
                                     }
-                                    ImageType::PrometheusImage => "img-prometheus-vm".into(),
-                                    ImageType::UniversalImage => "img-universal-vm".into(),
+                                }
+                                ImageType::UniversalImage => ImageLocation::PersistentVolumeClaim {
+                                    name: "img-universal-vm".into(),
                                 },
                             },
                             ..create_vm_request

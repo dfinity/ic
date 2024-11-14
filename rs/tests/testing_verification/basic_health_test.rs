@@ -53,9 +53,9 @@ fn main() -> Result<()> {
 }
 
 pub fn setup(env: TestEnv) {
-    PrometheusVm::default()
-        .start(&env)
-        .expect("failed to start prometheus VM");
+    //PrometheusVm::default()
+    //    .start(&env)
+    //    .expect("failed to start prometheus VM");
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
@@ -69,7 +69,7 @@ pub fn setup(env: TestEnv) {
         )
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
-    env.sync_with_prometheus();
+    //env.sync_with_prometheus();
 }
 
 const MSG: &[u8] = b"this beautiful prose should be persisted for future generations";

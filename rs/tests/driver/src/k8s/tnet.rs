@@ -313,21 +313,21 @@ impl TNet {
         info!("Creating DV {} from {}", name, url);
         create_datavolume(&api_dv, &dvinfo, self.owner_reference()).await?;
         // wait for the datavolume to be ready
-        tokio::time::timeout(tokio::time::Duration::from_secs(300), async {
-            while (|| async {
-                api_dv
-                    .get(name)
-                    .await
-                    .map(|r| r.data["status"]["phase"] != "Succeeded")
-            })
-            .retry(&ExponentialBuilder::default())
-            .await?
-            {
-                tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-            }
-            anyhow::Ok(())
-        })
-        .await??;
+        //tokio::time::timeout(tokio::time::Duration::from_secs(300), async {
+        //    while (|| async {
+        //        api_dv
+        //            .get(name)
+        //            .await
+        //            .map(|r| r.data["status"]["phase"] != "Succeeded")
+        //    })
+        //    .retry(&ExponentialBuilder::default())
+        //    .await?
+        //    {
+        //        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+        //    }
+        //    anyhow::Ok(())
+        //})
+        //.await??;
 
         Ok(())
     }
@@ -347,26 +347,32 @@ impl TNet {
                     format!("{}-{}", self.nodes.len(), vm_req.name),
             }
         );
-        let pvc_name = format!("{}-guestos", vm_name.clone());
-        let data_source = Some(TypedLocalObjectReference {
-            api_group: None,
-            kind: "PersistentVolumeClaim".to_string(),
-            name: match vm_req.primary_image {
-                ImageLocation::PersistentVolumeClaim { name } => name,
-                _ => unimplemented!(),
-            },
-        });
 
-        create_pvc(
-            &k8s_client.api_pvc,
-            &pvc_name,
-            "100Gi",
-            None,
-            None,
-            data_source,
-            self.owner_reference(),
-        )
-        .await?;
+        let pvc_name = format!("{}-guestos", vm_name.clone());
+        // prometheus or universal vm
+        if let ImageLocation::PersistentVolumeClaim { name: _ } = vm_req.primary_image {
+            let data_source = Some(TypedLocalObjectReference {
+                api_group: None,
+                kind: "PersistentVolumeClaim".to_string(),
+                name: match vm_req.primary_image {
+                    ImageLocation::PersistentVolumeClaim { name } => name,
+                    _ => unimplemented!(),
+                },
+            });
+
+            create_pvc(
+                &k8s_client.api_pvc,
+                &pvc_name,
+                "100Gi",
+                None,
+                None,
+                data_source,
+                self.owner_reference(),
+            )
+            .await?;
+        } else if let ImageLocation::ImageViaUrl { url, sha256: _ } = vm_req.primary_image {
+            self.deploy_image(&pvc_name, url.as_ref()).await?;
+        }
 
         let mut ipam_pod: Pod = serde_yaml::from_str(&format!(
             r#"
@@ -475,7 +481,7 @@ spec:
             &(vm_req.memory_kibibytes / 2).to_string(),
             ipv4,
             ipv6,
-            false,
+            true,
             self.owner_reference(),
             self.access_key.clone(),
             vm_type.clone(),

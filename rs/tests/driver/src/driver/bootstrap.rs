@@ -305,7 +305,7 @@ pub fn setup_and_start_vms(
                         DataVolumeContentType::Kubevirt,
                     ))
                     .expect("deploying config image failed");
-                    block_on(tnet_node.start()).expect("starting vm failed");
+                    //block_on(tnet_node.start()).expect("starting vm failed");
                 }
                 InfraProvider::Farm => {
                     let image_spec = AttachImageSpec::new(upload_config_disk_image(
