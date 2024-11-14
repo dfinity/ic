@@ -881,10 +881,22 @@ impl IcNodeSnapshot {
                     .expect("Optional routing table is None in local registry.");
                 match canister_ranges.first() {
                     Some(range) => range.start.get(),
-                    None => PrincipalId::default(),
+                    None => {
+                        warn!(
+                            self.env.logger(),
+                            "No canister ranges found for subnet_id={}", subnet_id
+                        );
+                        PrincipalId::default()
+                    }
                 }
             }
-            None => PrincipalId::default(),
+            None => {
+                warn!(
+                    self.env.logger(),
+                    "Node {} is not assigned to any subnet", self.node_id
+                );
+                PrincipalId::default()
+            }
         }
     }
 

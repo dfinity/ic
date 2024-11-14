@@ -26,14 +26,14 @@ use crate::{
             nervous_system_function::FunctionType,
             neuron::Followees,
             proposal::Action,
-            upgrade_journal_entry, ClaimSwapNeuronsError, ClaimSwapNeuronsResponse,
-            ClaimedSwapNeuronStatus, DefaultFollowees, DeregisterDappCanisters, Empty,
-            ExecuteGenericNervousSystemFunction, GovernanceError, ManageDappCanisterSettings,
-            ManageLedgerParameters, ManageNeuronResponse, ManageSnsMetadata, MintSnsTokens, Motion,
-            NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId, NeuronIds,
-            NeuronPermission, NeuronPermissionList, NeuronPermissionType, ProposalId,
-            RegisterDappCanisters, RewardEvent, TransferSnsTreasuryFunds,
-            UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote, VotingRewardsParameters,
+            ClaimSwapNeuronsError, ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus,
+            DefaultFollowees, DeregisterDappCanisters, Empty, ExecuteGenericNervousSystemFunction,
+            GovernanceError, ManageDappCanisterSettings, ManageLedgerParameters,
+            ManageNeuronResponse, ManageSnsMetadata, MintSnsTokens, Motion, NervousSystemFunction,
+            NervousSystemParameters, Neuron, NeuronId, NeuronIds, NeuronPermission,
+            NeuronPermissionList, NeuronPermissionType, ProposalId, RegisterDappCanisters,
+            RewardEvent, TransferSnsTreasuryFunds, UpgradeSnsControlledCanister,
+            UpgradeSnsToNextVersion, Vote, VotingRewardsParameters,
         },
     },
     proposal::ValidGenericNervousSystemFunction,
@@ -2749,25 +2749,6 @@ pub mod test_helpers {
         }
     }
 }
-
-impl From<upgrade_journal_entry::UpgradeStepsRefreshed> for upgrade_journal_entry::Event {
-    fn from(event: upgrade_journal_entry::UpgradeStepsRefreshed) -> Self {
-        upgrade_journal_entry::Event::UpgradeStepsRefreshed(event)
-    }
-}
-impl From<upgrade_journal_entry::UpgradeStarted> for upgrade_journal_entry::Event {
-    fn from(event: upgrade_journal_entry::UpgradeStarted) -> Self {
-        upgrade_journal_entry::Event::UpgradeStarted(event)
-    }
-}
-impl From<upgrade_journal_entry::UpgradeOutcome> for upgrade_journal_entry::Event {
-    fn from(event: upgrade_journal_entry::UpgradeOutcome) -> Self {
-        upgrade_journal_entry::Event::UpgradeOutcome(event)
-    }
-}
-// Note, we do not implement From<upgrade_journal_entry::TargetVersionSet> for upgrade_journal_entry::Event
-// because it is ambiguous which event variant to convert it to (TargetVersionSet vs TargetVersionReset).
-
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;

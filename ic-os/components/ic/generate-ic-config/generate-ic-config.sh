@@ -6,7 +6,7 @@
 function usage() {
     cat <<EOF
 Usage:
-  generate-replica-config [-n network.conf] [-c nns.conf] [-b backup.conf] [-m malicious_behavior.conf] [-q query_stats.conf] -i ic.json5.template -o ic.json5
+  generate-ic-config [-n network.conf] [-c nns.conf] [-b backup.conf] [-m malicious_behavior.conf] [-q query_stats.conf] -i ic.json5.template -o ic.json5
 
   Generate replica config from template file.
 

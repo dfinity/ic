@@ -3381,7 +3381,7 @@ pub struct AdvanceTargetVersionResponse {}
 pub struct UpgradeJournalEntry {
     #[prost(uint64, optional, tag = "6")]
     pub timestamp_seconds: ::core::option::Option<u64>,
-    #[prost(oneof = "upgrade_journal_entry::Event", tags = "1, 2, 3, 4, 5")]
+    #[prost(oneof = "upgrade_journal_entry::Event", tags = "1, 7, 2, 3, 4, 5")]
     pub event: ::core::option::Option<upgrade_journal_entry::Event>,
 }
 /// Nested message and enum types in `UpgradeJournalEntry`.
@@ -3396,6 +3396,21 @@ pub mod upgrade_journal_entry {
         ::prost::Message,
     )]
     pub struct UpgradeStepsRefreshed {
+        #[prost(message, optional, tag = "2")]
+        pub upgrade_steps: ::core::option::Option<super::governance::Versions>,
+    }
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        serde::Serialize,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct UpgradeStepsReset {
+        #[prost(string, optional, tag = "1")]
+        pub human_readable: ::core::option::Option<::prost::alloc::string::String>,
         #[prost(message, optional, tag = "2")]
         pub upgrade_steps: ::core::option::Option<super::governance::Versions>,
     }
@@ -3528,6 +3543,8 @@ pub mod upgrade_journal_entry {
     pub enum Event {
         #[prost(message, tag = "1")]
         UpgradeStepsRefreshed(UpgradeStepsRefreshed),
+        #[prost(message, tag = "7")]
+        UpgradeStepsReset(UpgradeStepsReset),
         #[prost(message, tag = "2")]
         TargetVersionSet(TargetVersionSet),
         #[prost(message, tag = "3")]
