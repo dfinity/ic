@@ -440,14 +440,9 @@ fn icrc1_test_upgrade_serialization() {
     ic_ledger_suite_state_machine_tests::test_upgrade_serialization(
         ledger_mainnet_wasm(),
         ledger_wasm(),
-        None,
         init_args,
         upgrade_args,
         minter,
-        true,
-        // With the ckBTC and ckETH mainnet canisters being at V1, and the tip-of-master also being V1,
-        // downgrading the ledger canister to the mainnet version from the tip-of-master version
-        // should succeed.
         true,
     );
 }
@@ -504,7 +499,6 @@ mod metrics {
     fn should_set_ledger_upgrade_instructions_consumed_metric() {
         ic_ledger_suite_state_machine_tests::metrics::assert_ledger_upgrade_instructions_consumed_metric_set(
             ledger_wasm(),
-            None,
             encode_init_args,
             encode_upgrade_args,
         );

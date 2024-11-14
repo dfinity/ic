@@ -1,5 +1,3 @@
-#![allow(clippy::unwrap_used)]
-
 use super::*;
 use crate::common::test_utils::crypto_component::crypto_component_with_csp_and_vault;
 use assert_matches::assert_matches;

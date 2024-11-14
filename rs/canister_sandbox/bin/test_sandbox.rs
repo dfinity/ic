@@ -51,6 +51,13 @@ impl sandbox_service::SandboxService for DummySandboxService {
         unimplemented!();
     }
 
+    fn open_wasm_via_file(
+        &self,
+        _req: sbxsvc::OpenWasmViaFileRequest,
+    ) -> rpc::Call<sbxsvc::OpenWasmSerializedReply> {
+        unimplemented!()
+    }
+
     fn close_wasm(&self, _req: sbxsvc::CloseWasmRequest) -> rpc::Call<sbxsvc::CloseWasmReply> {
         unimplemented!();
     }
@@ -97,6 +104,13 @@ impl sandbox_service::SandboxService for DummySandboxService {
     fn create_execution_state_serialized(
         &self,
         _req: sbxsvc::CreateExecutionStateSerializedRequest,
+    ) -> rpc::Call<sbxsvc::CreateExecutionStateSerializedReply> {
+        unimplemented!()
+    }
+
+    fn create_execution_state_via_file(
+        &self,
+        _req: sbxsvc::CreateExecutionStateViaFileRequest,
     ) -> rpc::Call<sbxsvc::CreateExecutionStateSerializedReply> {
         unimplemented!()
     }

@@ -180,6 +180,28 @@ impl CountBytes for WasmHash {
     }
 }
 
+impl std::fmt::Display for WasmHash {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        for byte in self.0 {
+            write!(f, "{:2x}", byte)?;
+        }
+        Ok(())
+    }
+}
+
+#[test]
+fn wasmhash_display() {
+    let hash = WasmHash([0; WASM_HASH_LENGTH]);
+    let expected: String = "00".repeat(WASM_HASH_LENGTH);
+    assert_eq!(expected, format!("{}", hash));
+    let hash = WasmHash([11; WASM_HASH_LENGTH]);
+    let expected: String = "0b".repeat(WASM_HASH_LENGTH);
+    assert_eq!(expected, format!("{}", hash));
+    let hash = WasmHash([255; WASM_HASH_LENGTH]);
+    let expected: String = "ff".repeat(WASM_HASH_LENGTH);
+    assert_eq!(expected, format!("{}", hash));
+}
+
 // We introduce another enum instead of making `BinaryEncodedWasm` an enum to
 // keep constructors private. We want `BinaryEncodedWasm` to be visible, but not
 // its structure.

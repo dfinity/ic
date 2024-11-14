@@ -11,6 +11,8 @@ use ic_icp_rosetta_client::{
     RosettaCreateNeuronArgs, RosettaDisburseNeuronArgs, RosettaSetNeuronDissolveDelayArgs,
 };
 use ic_nns_governance::pb::v1::neuron::DissolveState;
+use ic_nns_governance::pb::v1::KnownNeuronData;
+use ic_rosetta_api::ledger_client::list_known_neurons_response::ListKnownNeuronsResponse;
 use ic_rosetta_api::{
     models::AccountBalanceRequest,
     request::transaction_operation_results::TransactionOperationResults,
@@ -18,6 +20,8 @@ use ic_rosetta_api::{
 use ic_types::PrincipalId;
 use icp_ledger::{AccountIdentifier, DEFAULT_TRANSFER_FEE};
 use lazy_static::lazy_static;
+use rosetta_core::objects::ObjectMap;
+use rosetta_core::request_types::CallRequest;
 use std::{
     sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
@@ -649,5 +653,73 @@ fn test_disburse_neuron() {
             .value.parse::<u64>().unwrap();
         // The balance should be the same as before the creation of the neuron minus the transfer fee
         assert_eq!(balance_after_disburse, balance_before_disburse + staked_amount - DEFAULT_TRANSFER_FEE.get_e8s());
+    });
+}
+
+#[test]
+fn test_list_known_neurons() {
+    let rt = Runtime::new().unwrap();
+    rt.block_on(async {
+        let env = RosettaTestingEnvironment::builder()
+            .with_initial_balances(
+                vec![(
+                    AccountIdentifier::from(TEST_IDENTITY.sender().unwrap()),
+                    // A hundred million ICP should be enough
+                    icp_ledger::Tokens::from_tokens(100_000_000).unwrap(),
+                )]
+                .into_iter()
+                .collect(),
+            )
+            .with_governance_canister()
+            .build()
+            .await;
+
+        // Stake the minimum amount 100 million e8s
+        let staked_amount = 100_000_000u64;
+
+        env.rosetta_client
+            .create_neuron(
+                env.network_identifier.clone(),
+                &(*TEST_IDENTITY).clone(),
+                RosettaCreateNeuronArgs::builder(staked_amount.into()).build(),
+            )
+            .await
+            .unwrap();
+
+        // See if the neuron was created successfully
+        let agent = get_test_agent(env.pocket_ic.url().unwrap().port().unwrap()).await;
+        let mut neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
+
+        neuron.known_neuron_data = Some(KnownNeuronData {
+            name: "KnownNeuron 0".to_owned(),
+            description: Some("This is a known neuron".to_owned()),
+        });
+        update_neuron(&agent, neuron.into()).await;
+
+        let known_neurons = ListKnownNeuronsResponse::try_from(Some(
+            env.rosetta_client
+                .call(CallRequest {
+                    network_identifier: env.network_identifier.clone(),
+                    method_name: "list_known_neurons".to_owned(),
+                    parameters: ObjectMap::new(),
+                })
+                .await
+                .unwrap()
+                .result,
+        ))
+        .unwrap();
+
+        assert_eq!(known_neurons.known_neurons.len(), 1);
+        assert_eq!(
+            known_neurons.known_neurons[0]
+                .known_neuron_data
+                .clone()
+                .unwrap(),
+            KnownNeuronData {
+                name: "KnownNeuron 0".to_owned(),
+                description: Some("This is a known neuron".to_owned())
+            }
+            .into()
+        );
     });
 }

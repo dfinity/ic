@@ -24,7 +24,10 @@ use ic_types::{
 };
 use ic_wasm_types::CanisterModule;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntGauge};
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use crate::execution::common::{apply_canister_state_changes, update_round_limits};
 use crate::execution_environment::{as_round_instructions, CompilationCostHandling, RoundLimits};
@@ -239,7 +242,7 @@ impl Hypervisor {
         if let Err(err) = wasm_size_result {
             round_limits.instructions -= as_round_instructions(compilation_cost);
             self.compilation_cache
-                .insert(&canister_module, Err(err.clone().into()));
+                .insert_err(&canister_module, err.clone().into());
             return (compilation_cost, Err(err.into()));
         }
 
@@ -276,6 +279,7 @@ impl Hypervisor {
         cycles_account_manager: Arc<CyclesAccountManager>,
         dirty_page_overhead: NumInstructions,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+        temp_dir: &Path,
     ) -> Self {
         let mut embedder_config = config.embedders_config.clone();
         embedder_config.subnet_type = own_subnet_type;
@@ -302,7 +306,8 @@ impl Hypervisor {
                 Arc::new(executor)
             }
         };
-
+        let temp_dir = tempfile::tempdir_in(temp_dir).unwrap();
+        // println!("Cache temp directory {:?}", temp_dir.path());
         Self {
             wasm_executor,
             metrics: Arc::new(HypervisorMetrics::new(metrics_registry)),
@@ -310,7 +315,10 @@ impl Hypervisor {
             own_subnet_type,
             log,
             cycles_account_manager,
-            compilation_cache: Arc::new(CompilationCache::new(config.max_compilation_cache_size)),
+            compilation_cache: Arc::new(CompilationCache::new_on_disk_for_testing(
+                temp_dir,
+                MAX_COMPILATION_CACHE_SIZE,
+            )),
             deterministic_time_slicing: config.deterministic_time_slicing,
             cost_to_compile_wasm_instruction: config
                 .embedders_config
@@ -331,6 +339,8 @@ impl Hypervisor {
         cost_to_compile_wasm_instruction: NumInstructions,
         dirty_page_overhead: NumInstructions,
     ) -> Self {
+        let temp_dir = tempfile::tempdir().unwrap();
+        // println!("Cache temp directory {:?}", temp_dir.path());
         Self {
             wasm_executor,
             metrics: Arc::new(HypervisorMetrics::new(metrics_registry)),
@@ -338,7 +348,10 @@ impl Hypervisor {
             own_subnet_type,
             log,
             cycles_account_manager,
-            compilation_cache: Arc::new(CompilationCache::new(MAX_COMPILATION_CACHE_SIZE)),
+            compilation_cache: Arc::new(CompilationCache::new_on_disk_for_testing(
+                temp_dir,
+                MAX_COMPILATION_CACHE_SIZE,
+            )),
             deterministic_time_slicing,
             cost_to_compile_wasm_instruction,
             dirty_page_overhead,
@@ -447,6 +460,7 @@ impl Hypervisor {
             request_metadata,
             api_type.caller(),
             api_type.call_context_id(),
+            execution_state.is_wasm64,
         );
         let api_type_str = api_type.as_str();
         let (compilation_result, mut execution_result) = Arc::clone(&self.wasm_executor).execute(

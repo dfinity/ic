@@ -1080,6 +1080,13 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "scraper": crate.spec(
                 version = "^0.17.1",
             ),
+            "secp256k1": crate.spec(
+                version = "^0.22",
+                features = [
+                    "global-context",
+                    "rand-std",
+                ],
+            ),
             "semver": crate.spec(
                 version = "^1.0.9",
                 features = [
@@ -1221,7 +1228,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.8",
             ),
             "thiserror": crate.spec(
-                version = "^1.0.62",
+                version = "^1.0.65",
             ),
             "thousands": crate.spec(
                 version = "^0.2.0",
@@ -1286,11 +1293,11 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.12.3",
             ),
             "tower": crate.spec(
-                version = "^0.4.13",
+                version = "^0.5.1",
                 features = ["full"],
             ),
             "tower-http": crate.spec(
-                version = "^0.5.2",
+                version = "^0.6.1",
                 features = [
                     "cors",
                     "limit",
@@ -1388,7 +1395,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.217.0",
             ),
             "wasmtime": crate.spec(
-                version = "=25.0.2",
+                git = "https://github.com/adambratschikaye/wasmtime.git",
+                rev = "9d957b72ca3b1fcd66106a52da3c2515b22af62e",
                 default_features = False,
                 features = [
                     "cranelift",
@@ -1398,7 +1406,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "wasmtime-environ": crate.spec(
-                version = "^25.0.0",
+                git = "https://github.com/adambratschikaye/wasmtime.git",
+                rev = "9d957b72ca3b1fcd66106a52da3c2515b22af62e",
             ),
             "wast": crate.spec(
                 version = "^212.0.0",

@@ -1,9 +1,8 @@
 use candid::Encode;
 use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
+use ic_management_canister_types::CanisterSettingsArgsBuilder;
 use ic_registry_subnet_type::SubnetType;
-use ic_state_machine_tests::{
-    CanisterSettingsArgsBuilder, StateMachineBuilder, StateMachineConfig,
-};
+use ic_state_machine_tests::{StateMachineBuilder, StateMachineConfig};
 use ic_types::Cycles;
 
 const B: u128 = 1_000 * 1_000 * 1_000;

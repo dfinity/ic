@@ -1,6 +1,7 @@
 use crate::in_memory_ledger::{verify_ledger_state, InMemoryLedger};
 use candid::{CandidType, Decode, Encode, Int, Nat, Principal};
 use ic_agent::identity::{BasicIdentity, Identity};
+use ic_base_types::CanisterId;
 use ic_base_types::PrincipalId;
 use ic_error_types::UserError;
 use ic_icrc1::blocks::encoded_block_to_generic_block;
@@ -15,7 +16,7 @@ use ic_management_canister_types::{
     self as ic00, CanisterInfoRequest, CanisterInfoResponse, Method, Payload,
 };
 use ic_rosetta_test_utils::test_http_request_decoding_quota;
-use ic_state_machine_tests::{CanisterId, ErrorCode, StateMachine, WasmResult};
+use ic_state_machine_tests::{ErrorCode, StateMachine, WasmResult};
 use ic_types::Cycles;
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
@@ -2336,12 +2337,10 @@ fn apply_arg_with_caller(
 pub fn test_upgrade_serialization(
     ledger_wasm_mainnet: Vec<u8>,
     ledger_wasm_current: Vec<u8>,
-    ledger_wasm_nextmigrationversionmemorymanager: Option<Vec<u8>>,
     init_args: Vec<u8>,
     upgrade_args: Vec<u8>,
     minter: Arc<BasicIdentity>,
     verify_blocks: bool,
-    downgrade_to_mainnet_should_succeed: bool,
 ) {
     let mut runner = TestRunner::new(TestRunnerConfig::with_cases(1));
     let now = SystemTime::now();
@@ -2351,12 +2350,7 @@ pub fn test_upgrade_serialization(
     const TOTAL_TX_COUNT: usize = INITIAL_TX_BATCH_SIZE + 8 * ADDITIONAL_TX_BATCH_SIZE;
     runner
         .run(
-            &(valid_transactions_strategy(
-                minter,
-                FEE,
-                TOTAL_TX_COUNT,
-                now,
-            ).no_shrink(),),
+            &(valid_transactions_strategy(minter, FEE, TOTAL_TX_COUNT, now).no_shrink(),),
             |(transactions,)| {
                 let env = StateMachine::new();
                 env.set_time(now);
@@ -2396,48 +2390,6 @@ pub fn test_upgrade_serialization(
                 // Test if the old serialized approvals and balances are correctly deserialized
                 test_upgrade(ledger_wasm_current.clone());
                 // Test the new wasm serialization
-                test_upgrade(ledger_wasm_current.clone());
-                if let Some(ledger_wasm_nextmigrationversionmemorymanager) =
-                    ledger_wasm_nextmigrationversionmemorymanager.clone()
-                {
-                    // Test serializing to the memory manager
-                    test_upgrade(ledger_wasm_nextmigrationversionmemorymanager.clone());
-                    // Test upgrade to memory manager again
-                    test_upgrade(ledger_wasm_nextmigrationversionmemorymanager.clone());
-
-                    // Current mainnet ICP and ICRC wasms (V1) can both deserialize from memory manager
-                    match env.upgrade_canister(
-                        ledger_id,
-                        ledger_wasm_mainnet.clone(),
-                        upgrade_args.clone(),
-                    ) {
-                        Ok(_) => {
-                            if !downgrade_to_mainnet_should_succeed {
-                                panic!("Downgrade from memory manager directly to mainnet should fail!")
-                            } else {
-                                // In case this succeeded, we need to upgrade the ledger back to
-                                // the next version (via the current version), so that the
-                                // subsequent upgrade is from
-                                // `ledger_wasm_nextmigrationversionmemorymanager` to
-                                // `ledger_wasm_current`, rather than from `ledger_wasm_mainnet` to
-                                // `ledger_wasm_current` (currently, from V2 -> V1, rather than from
-                                // V0 -> V1).
-                                test_upgrade(ledger_wasm_current.clone());
-                                test_upgrade(ledger_wasm_nextmigrationversionmemorymanager);
-                            }
-                        }
-                        Err(e) => {
-                            if downgrade_to_mainnet_should_succeed {
-                               panic!("Downgrade from memory manager to mainnet should succeed (since mainnet is V1), but failed with error: {}", e)
-                            }
-                            assert!(
-                                e.description().contains("failed to decode ledger state")
-                                    || e.description().contains("Decoding stable memory failed")
-                            )
-                        }
-                    };
-                }
-                // Test deserializing from memory manager
                 test_upgrade(ledger_wasm_current.clone());
                 // Test downgrade to mainnet wasm
                 test_upgrade(ledger_wasm_mainnet.clone());

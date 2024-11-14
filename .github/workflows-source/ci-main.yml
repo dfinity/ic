@@ -34,7 +34,7 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:ced9611af39119f62feedc8a5ad75a8fac478cb43d2d56b623023766f6ce8ca7
+    image: ghcr.io/dfinity/ic-build@sha256:80e976b63af2b1b352c8c5959cb6c6b02aaa56a4efa327569d8c85c9c81a2cec
   dind-large-setup: &dind-large-setup
     runs-on:
       labels: dind-large
@@ -51,12 +51,6 @@ anchors:
     container:
       <<: *image
     timeout-minutes: 30
-  before-script: &before-script
-    name: Before script
-    id: before-script
-    shell: bash
-    run: |
-      [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
   docker-login: &docker-login
     name: Login to Dockerhub
     shell: bash
@@ -107,7 +101,6 @@ jobs:
       labels: dind-large
     steps:
       - <<: *checkout
-      - <<: *before-script
       - <<: *docker-login
       - name: Set BAZEL_EXTRA_ARGS
         shell: bash
@@ -156,6 +149,7 @@ jobs:
           AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
           # Only run ci/bazel-scripts/diff.sh on PRs that are not labeled with "CI_ALL_BAZEL_TARGETS".
           OVERRIDE_DIDC_CHECK: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}
+          CI_OVERRIDE_BUF_BREAKING: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_BUF_BREAKING') }}
           RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
         with:
           BAZEL_COMMAND: "test"
@@ -172,7 +166,6 @@ jobs:
     name: Bazel Build All Config Check
     steps:
       - <<: *checkout
-      - <<: *before-script
       - <<: *docker-login
       - name: Run bazel build --config=check //rs/...
         id: bazel-build-config-check
@@ -221,7 +214,6 @@ jobs:
     <<: *dind-large-setup
     steps:
       - <<: *checkout
-      - <<: *before-script
       - name: Run Bazel Build Fuzzers
         id: bazel-build-fuzzers
         uses:  ./.github/actions/bazel-test-all/
@@ -237,7 +229,6 @@ jobs:
     <<: *dind-large-setup
     steps:
       - <<: *checkout
-      - <<: *before-script
       - name: Run Bazel Build Fuzzers AFL
         id: bazel-build-fuzzers-afl
         uses:  ./.github/actions/bazel-test-all/
@@ -276,13 +267,13 @@ jobs:
     if: ${{ github.event_name != 'merge_group' }}
     steps:
       - <<: *checkout
-      - <<: *before-script
       - <<: *docker-login
       - name: Run Build IC
         id: build-ic
         shell: bash
         run: |
           set -eExuo pipefail
+          [ -n "${NODE_NAME:-}" ] && echo "Run on node: $NODE_NAME" >>$GITHUB_STEP_SUMMARY
           REPO_NAME="${GITHUB_REPOSITORY##*/}"
           rm -rf "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}"
           mkdir -p "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}/artifacts"
@@ -417,21 +408,3 @@ jobs:
           set -eExuo pipefail
           buildevents cmd "$CI_RUN_ID" "$CI_JOB_NAME" build-command -- \
               cargo build --release --locked
-
-  # CI job is also executed in Schedule Hourly
-  bazel-test-coverage:
-    name: Bazel Test Coverage
-    <<: *dind-large-setup
-    if: |
-      github.event_name == 'pull_request' &&
-      contains(github.event.pull_request.labels.*.name, 'CI_COVERAGE')
-    steps:
-      - <<: *checkout
-      - <<: *before-script
-      - name: Run Bazel Test Coverage
-        shell: bash
-        run: |
-          ./ci/scripts/bazel-coverage.sh
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
