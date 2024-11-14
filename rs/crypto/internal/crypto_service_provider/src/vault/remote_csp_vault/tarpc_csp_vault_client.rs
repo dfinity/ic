@@ -127,7 +127,7 @@ impl RemoteCspVault {
 
 pub struct RemoteCspVaultBuilder {
     socket_path: PathBuf,
-    rt_handle: tokio::runtime::Handle,
+    tokio_rt: tokio::runtime::Runtime,
     max_frame_length: usize,
     rpc_timeout: Duration,
     long_rpc_timeout: Duration,
@@ -139,9 +139,16 @@ pub struct RemoteCspVaultBuilder {
 
 impl RemoteCspVaultBuilder {
     pub fn new(socket_path: PathBuf, rt_handle: tokio::runtime::Handle) -> Self {
+        let tokio_rt = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(4)
+            .thread_name("Crypto-Thread3".to_string())
+            .enable_all()
+            .build()
+            .unwrap();
+
         RemoteCspVaultBuilder {
             socket_path,
-            rt_handle,
+            tokio_rt,
             max_frame_length: FOUR_GIGA_BYTES,
             rpc_timeout: DEFAULT_RPC_TIMEOUT,
             long_rpc_timeout: LONG_RPC_TIMEOUT,
@@ -194,7 +201,7 @@ impl RemoteCspVaultBuilder {
 
     pub fn build(self) -> Result<RemoteCspVault, RemoteCspVaultError> {
         let conn = self
-            .rt_handle
+            .tokio_rt
             .block_on(robust_unix_socket::connect(
                 self.socket_path.clone(),
                 new_logger!(&self.logger),
@@ -213,7 +220,7 @@ impl RemoteCspVaultBuilder {
             ),
         );
         let client = {
-            let _enter_guard = self.rt_handle.enter();
+            let _enter_guard = self.tokio_rt.enter();
             TarpcCspVaultClient::new(Default::default(), transport).spawn()
         };
         debug!(self.logger, "Instantiated remote CSP vault client");
@@ -221,7 +228,7 @@ impl RemoteCspVaultBuilder {
             tarpc_csp_client: client,
             rpc_timeout: self.rpc_timeout,
             long_rpc_timeout: self.long_rpc_timeout,
-            tokio_runtime_handle: self.rt_handle,
+            tokio_runtime_handle: self.tokio_rt.handle().clone(),
             logger: self.logger,
             metrics: self.metrics,
             #[cfg(test)]

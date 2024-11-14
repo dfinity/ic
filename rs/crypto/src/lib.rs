@@ -108,11 +108,11 @@ impl<C: CryptoServiceProvider> CryptoComponentImpl<C> {
         time_source: Option<Arc<dyn TimeSource>>,
     ) -> Self {
         let tokio_rt = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(4)
-        .thread_name("Crypto-Thread".to_string())
-        .enable_all()
-        .build()
-        .unwrap();
+            .worker_threads(4)
+            .thread_name("Crypto-Thread".to_string())
+            .enable_all()
+            .build()
+            .unwrap();
 
         CryptoComponentImpl {
             lockable_threshold_sig_data_store: LockableThresholdSigDataStore::new(),

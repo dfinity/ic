@@ -54,7 +54,7 @@ impl AdapterMetricsRegistry {
     /// Write accesses to here can not be starved by `gather()` calls, due to
     /// the write-preffering behaviour of the used `tokio::sync::RwLock`.
     pub fn register(&self, adapter_metrics: AdapterMetrics) -> Result<(), Error> {
-        /* 
+        /*
         if self
             .adapters
             .blocking_read()
@@ -70,7 +70,7 @@ impl AdapterMetricsRegistry {
 
     /// Concurrently scrapes metrics from all registered adapters.
     pub async fn gather(&self, timeout: Duration) -> Vec<MetricFamily> {
-        /* 
+        /*
         join_all(
             self.adapters
                 .read()

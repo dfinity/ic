@@ -172,12 +172,17 @@ impl Orchestrator {
         let c_registry = registry.clone();
         let crypto_config = config.crypto.clone();
         let c_metrics = metrics_registry.clone();
-        let crypto = Arc::new(CryptoComponent::new(
-            &crypto_config,
-            c_registry.get_registry_client(),
-            c_log.clone(),
-            Some(&c_metrics),
-        ));
+        let crypto = tokio::task::spawn_blocking(move || {
+            Arc::new(CryptoComponent::new(
+                &crypto_config,
+                Some(tokio::runtime::Handle::current()),
+                c_registry.get_registry_client(),
+                c_log.clone(),
+                Some(&c_metrics),
+            ))
+        })
+        .await
+        .unwrap();
 
         let slog_logger = logger.inner_logger.root.clone();
         let (metrics, _metrics_runtime) =

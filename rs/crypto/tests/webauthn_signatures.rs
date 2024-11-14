@@ -158,5 +158,5 @@ fn crypto_component(config: &CryptoConfig) -> CryptoComponent {
     );
     ic_crypto_node_key_generation::generate_node_signing_keys(vault.as_ref());
 
-    CryptoComponent::new(config,  Arc::new(dummy_registry), no_op_logger(), None)
+    CryptoComponent::new(config, Arc::new(dummy_registry), no_op_logger(), None)
 }
