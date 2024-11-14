@@ -7043,12 +7043,11 @@ impl Governance {
                 if let Some(proposal) = self.get_proposal_data(*pid) {
                     let reward_weight = proposal.topic().reward_weight();
 
-                    let total_potential_voting_power =
-                        proposal
-                            .total_potential_voting_power
-                            .map(|total_potential_voting_power| {
-                                reward_weight * (total_potential_voting_power as f64)
-                            });
+                    let weighted_total_potential_voting_power = proposal
+                        .total_potential_voting_power
+                        .map(|total_potential_voting_power| {
+                            reward_weight * (total_potential_voting_power as f64)
+                        });
 
                     let mut proposal_total_deciding_voting_rights = 0_f64;
                     for (voter, ballot) in proposal.ballots.iter() {
@@ -7071,7 +7070,7 @@ impl Governance {
                         }
                     }
 
-                    total_voting_rights = total_potential_voting_power
+                    total_voting_rights += weighted_total_potential_voting_power
                         // This is to handle legacy proposals, which were
                         // created before there was a distinction between
                         // *deciding* voting power vs. *potential* voting power.
