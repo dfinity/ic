@@ -9,8 +9,8 @@ use ic_ledger_suite_state_machine_tests::in_memory_ledger::{
     BlockConsumer, BurnsWithoutSpender, InMemoryLedger,
 };
 use ic_ledger_suite_state_machine_tests::{
-    generate_transactions, get_all_ledger_and_archive_blocks, get_blocks,
-    list_archives, TransactionGenerationParameters,
+    generate_transactions, get_all_ledger_and_archive_blocks, get_blocks, list_archives,
+    TransactionGenerationParameters,
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_fiduciary_state_or_panic;
 use ic_state_machine_tests::StateMachine;
