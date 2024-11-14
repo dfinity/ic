@@ -23,7 +23,7 @@ use futures::future::Shared;
 use http::{
     header::{
         ACCEPT_RANGES, CACHE_CONTROL, CONTENT_LENGTH, CONTENT_RANGE, CONTENT_TYPE, COOKIE, DNT,
-        IF_MODIFIED_SINCE, IF_NONE_MATCH, RANGE, USER_AGENT,
+        IF_MODIFIED_SINCE, IF_NONE_MATCH, RANGE, UPGRADE_INSECURE_REQUESTS, USER_AGENT,
     },
     HeaderName, Method, StatusCode, Uri,
 };
@@ -506,6 +506,7 @@ pub(crate) struct HandlerState {
     backend_client: Client<HttpConnector, Body>,
     resolver: DomainResolver,
     replica_url: String,
+    is_https: bool,
 }
 
 impl HandlerState {
@@ -514,12 +515,14 @@ impl HandlerState {
         backend_client: Client<HttpConnector, Body>,
         resolver: DomainResolver,
         replica_url: String,
+        is_https: bool,
     ) -> Self {
         Self {
             http_gateway_client,
             backend_client,
             resolver,
             replica_url,
+            is_https,
         }
     }
 
@@ -614,8 +617,15 @@ async fn handler(
             req.send().await
         };
 
+        let mut http_response = resp.canister_response;
+        if !state.is_https {
+            http_response
+                .headers_mut()
+                .remove(UPGRADE_INSECURE_REQUESTS);
+        }
+
         // Convert it into Axum response
-        let response = resp.canister_response.into_response();
+        let response = http_response.into_response();
 
         Ok(HandlerResponse::ResponseBody(response))
     }
@@ -968,6 +978,7 @@ impl ApiState {
                 backend_client,
                 domain_resolver,
                 replica_url.clone(),
+                http_gateway_config.https_config.is_some(),
             ));
 
             let router_api_v2 = Router::new()
