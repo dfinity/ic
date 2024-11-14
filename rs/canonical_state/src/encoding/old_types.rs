@@ -11,7 +11,7 @@ use std::{
     sync::Arc,
 };
 
-use crate::{is_supported, CertificationVersion};
+use crate::CertificationVersion;
 
 use super::types;
 use crate::encoding::types::{
@@ -234,10 +234,8 @@ pub struct StreamHeaderV18 {
 
 impl From<(&ic_types::xnet::StreamHeader, CertificationVersion)> for StreamHeaderV18 {
     fn from(
-        (header, certification_version): (&ic_types::xnet::StreamHeader, CertificationVersion),
+        (header, _certification_version): (&ic_types::xnet::StreamHeader, CertificationVersion),
     ) -> Self {
-        assert!(is_supported(certification_version));
-
         let mut next_index = header.signals_end();
         let mut reject_signal_deltas = vec![0; header.reject_signals().len()];
         for (i, stream_index) in header

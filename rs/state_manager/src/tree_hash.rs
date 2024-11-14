@@ -61,7 +61,9 @@ mod tests {
     use super::*;
     use hex::FromHex;
     use ic_base_types::{NumBytes, NumSeconds};
-    use ic_canonical_state::{all_supported_versions, is_supported, CertificationVersion};
+    use ic_canonical_state::{
+        all_supported_versions, CertificationVersion, CURRENT_CERTIFICATION_VERSION,
+    };
     use ic_crypto_tree_hash::Digest;
     use ic_error_types::{ErrorCode, UserError};
     use ic_management_canister_types::{
@@ -165,7 +167,7 @@ mod tests {
     #[test]
     fn test_backward_compatibility() {
         fn state_fixture(certification_version: CertificationVersion) -> ReplicatedState {
-            assert!(is_supported(certification_version));
+            assert!(certification_version <= CURRENT_CERTIFICATION_VERSION);
 
             let subnet_id = subnet_test_id(1);
             let mut state = ReplicatedState::new(subnet_id, SubnetType::Application);

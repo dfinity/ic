@@ -2,7 +2,7 @@ use super::*;
 use crate::message_routing::{LABEL_REMOTE, METRIC_TIME_IN_BACKLOG, METRIC_TIME_IN_STREAM};
 use assert_matches::assert_matches;
 use ic_base_types::{NumSeconds, PrincipalId};
-use ic_certification_version::{is_supported, CertificationVersion, CURRENT_CERTIFICATION_VERSION};
+use ic_certification_version::{CertificationVersion, CURRENT_CERTIFICATION_VERSION};
 use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_interfaces::messaging::LABEL_VALUE_CANISTER_NOT_FOUND;
 use ic_metrics::MetricsRegistry;
@@ -639,7 +639,7 @@ fn with_induct_loopback_stream_setup(
     certification_version: CertificationVersion,
     test_impl: impl FnOnce(StreamHandlerImpl, ReplicatedState, MetricsFixture),
 ) {
-    assert!(is_supported(certification_version));
+    assert!(certification_version <= CURRENT_CERTIFICATION_VERSION);
     with_local_test_setup_and_config(
         config,
         subnet_type,
@@ -3842,7 +3842,7 @@ fn with_test_setup_and_config(
         MetricsFixture,
     ),
 ) {
-    assert!(is_supported(certification_version));
+    assert!(certification_version <= CURRENT_CERTIFICATION_VERSION);
     with_test_replica_logger(|log| {
         // Generate an empty `ReplicatedState` for `LOCAL_SUBNET`.
         let mut state = ReplicatedState::new(LOCAL_SUBNET, subnet_type);

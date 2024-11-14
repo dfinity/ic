@@ -1,4 +1,4 @@
-use crate::{is_supported, CertificationVersion};
+use crate::CertificationVersion;
 use ic_error_types::RejectCode;
 use ic_test_utilities_types::ids::canister_test_id;
 use ic_types::{
@@ -13,7 +13,6 @@ use ic_types::{
 
 pub fn stream_header(certification_version: CertificationVersion) -> StreamHeader {
     use CertificationVersion::*;
-    assert!(is_supported(certification_version));
     let reject_signals = match certification_version {
         version if version < V19 => vec![
             RejectSignal::new(RejectReason::CanisterMigrating, 10.into()),

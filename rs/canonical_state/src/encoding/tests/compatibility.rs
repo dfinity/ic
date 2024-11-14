@@ -8,7 +8,7 @@
 //! (and ideally forwards) compatibility with one or more preceding
 //! protocol versions.
 
-use crate::{all_supported_versions, encoding::*, is_supported, CertificationVersion};
+use crate::{all_supported_versions, encoding::*, CertificationVersion};
 use assert_matches::assert_matches;
 use ic_error_types::RejectCode;
 use ic_management_canister_types::{
@@ -1446,8 +1446,7 @@ fn encode_with_mutation<T: serde::Serialize>(
 // Own fixtures, to ensure that compatibility tests are self-contained.
 //
 
-fn stream_header(certification_version: CertificationVersion) -> StreamHeader {
-    assert!(is_supported(certification_version));
+fn stream_header(_certification_version: CertificationVersion) -> StreamHeader {
     StreamHeader::new(
         23.into(),
         25.into(),
@@ -1469,7 +1468,6 @@ fn request_message(certification_version: CertificationVersion) -> RequestOrResp
 }
 
 fn request(certification_version: CertificationVersion) -> Request {
-    assert!(is_supported(certification_version));
     Request {
         receiver: canister_test_id(1),
         sender: canister_test_id(2),
@@ -1477,13 +1475,12 @@ fn request(certification_version: CertificationVersion) -> Request {
         payment: cycles(),
         method_name: "test".to_string(),
         method_payload: vec![6],
-        metadata: request_metadata(certification_version),
+        metadata: request_metadata(),
         deadline: deadline(certification_version),
     }
 }
 
 fn response(certification_version: CertificationVersion) -> Response {
-    assert!(is_supported(certification_version));
     Response {
         originator: canister_test_id(6),
         respondent: canister_test_id(5),
@@ -1514,8 +1511,7 @@ fn reject_context() -> RejectContext {
     RejectContext::new(RejectCode::SysFatal, "Oops")
 }
 
-fn request_metadata(certification_version: CertificationVersion) -> Option<RequestMetadata> {
-    assert!(is_supported(certification_version));
+fn request_metadata() -> Option<RequestMetadata> {
     Some(RequestMetadata::new(
         13,
         Time::from_nanos_since_unix_epoch(101),
@@ -1523,7 +1519,6 @@ fn request_metadata(certification_version: CertificationVersion) -> Option<Reque
 }
 
 fn deadline(certification_version: CertificationVersion) -> CoarseTime {
-    assert!(is_supported(certification_version));
     if certification_version >= CertificationVersion::V18 {
         CoarseTime::from_secs_since_unix_epoch(8)
     } else {
