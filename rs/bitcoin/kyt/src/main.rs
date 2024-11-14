@@ -237,9 +237,6 @@ impl FetchEnv for KytCanisterEnv {
     fn cycles_accept(&self, cycles: u128) -> u128 {
         ic_cdk::api::call::msg_cycles_accept128(cycles)
     }
-    fn cycles_available(&self) -> u128 {
-        ic_cdk::api::call::msg_cycles_available128()
-    }
 }
 
 /// Check the input addresses of a transaction given its txid.
