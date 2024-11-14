@@ -24,6 +24,13 @@ pub(crate) fn evict(
     last_used_threshold: Instant,
     max_sandboxes_rss: NumBytes,
 ) -> Vec<EvictionCandidate> {
+    let evict_at_least: usize = candidates.len().saturating_sub(max_count_threshold);
+
+    if evict_at_least == 0 && total_rss <= max_sandboxes_rss {
+        // No need to evict any candidate.
+        return vec![];
+    }
+
     let min_scheduler_priority = AccumulatedPriority::new(i64::MIN);
 
     candidates.sort_by_key(|x| {
@@ -37,12 +44,14 @@ pub(crate) fn evict(
         }
     });
 
-    let evict_at_least: usize = candidates.len().saturating_sub(max_count_threshold);
     let mut evicted = vec![];
     let mut evicted_rss = NumBytes::new(0);
 
     // Evict as many idle candidates as required.
     for candidate in candidates.into_iter() {
+        evicted_rss = evicted_rss.saturating_add(&candidate.rss);
+        evicted.push(candidate);
+
         if evicted.len() >= evict_at_least
             && total_rss <= max_sandboxes_rss.saturating_add(&evicted_rss)
         {
@@ -50,9 +59,6 @@ pub(crate) fn evict(
             // No need to evict more.
             break;
         }
-
-        evicted_rss = evicted_rss.saturating_add(&candidate.rss);
-        evicted.push(candidate);
     }
 
     evicted
