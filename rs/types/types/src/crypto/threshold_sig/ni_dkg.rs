@@ -9,7 +9,8 @@ use core::fmt;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{CspNiDkgDealing, CspNiDkgTranscript};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_management_canister_types::MasterPublicKeyId;
+use ic_management_canister_types::{MasterPublicKeyId, VetKdKeyId};
+use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::types::v1 as pb;
 use ic_protobuf::types::v1::NiDkgId as NiDkgIdProto;
 use serde::{Deserialize, Serialize};
@@ -30,6 +31,61 @@ pub use id::NiDkgId;
 #[cfg(test)]
 mod tests;
 
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, EnumCount, Serialize, Deserialize)]
+pub enum NiDkgMasterPublicKeyId {
+    VetKd(VetKdKeyId),
+}
+
+impl From<NiDkgMasterPublicKeyId> for MasterPublicKeyId {
+    fn from(val: NiDkgMasterPublicKeyId) -> Self {
+        match val {
+            NiDkgMasterPublicKeyId::VetKd(k) => MasterPublicKeyId::VetKd(k),
+        }
+    }
+}
+
+impl From<&NiDkgMasterPublicKeyId> for pb::MasterPublicKeyId {
+    fn from(item: &NiDkgMasterPublicKeyId) -> Self {
+        Self {
+            key_id: Some(match item {
+                NiDkgMasterPublicKeyId::VetKd(vetkd_key_id) => {
+                    pb::master_public_key_id::KeyId::Vetkd(pb::VetKdKeyId::from(vetkd_key_id))
+                }
+            }),
+        }
+    }
+}
+
+impl TryFrom<pb::MasterPublicKeyId> for NiDkgMasterPublicKeyId {
+    type Error = ProxyDecodeError;
+    fn try_from(item: pb::MasterPublicKeyId) -> Result<Self, Self::Error> {
+        use pb::master_public_key_id::KeyId;
+        let Some(key_id_pb) = item.key_id else {
+            return Err(ProxyDecodeError::MissingField("MasterPublicKeyId::key_id"));
+        };
+        Ok(match key_id_pb {
+            KeyId::Vetkd(vetkd_key_id_pb) => {
+                NiDkgMasterPublicKeyId::VetKd(VetKdKeyId::try_from(vetkd_key_id_pb)?)
+            }
+            KeyId::Ecdsa(_) | KeyId::Schnorr(_) => {
+                return Err(ProxyDecodeError::ValueOutOfRange {
+                    typ: "NiDkgMasterPublicKeyId",
+                    err: format!(
+                        "Unable to convert {:?} to a NiDkgMasterPublicKeyId",
+                        key_id_pb
+                    ),
+                });
+            }
+        })
+    }
+}
+
+impl fmt::Display for NiDkgMasterPublicKeyId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&MasterPublicKeyId::from(self.clone()), f)
+    }
+}
+
 /// Allows to distinguish protocol executions in high and low threshold
 /// settings.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, EnumCount, Serialize)]
@@ -37,7 +93,7 @@ mod tests;
 pub enum NiDkgTag {
     LowThreshold = 1,
     HighThreshold = 2,
-    HighThresholdForKey(MasterPublicKeyId) = 3,
+    HighThresholdForKey(NiDkgMasterPublicKeyId) = 3,
 }
 
 impl From<&NiDkgTag> for pb::NiDkgTag {
