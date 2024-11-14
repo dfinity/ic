@@ -524,8 +524,9 @@ impl CkBtcMinterState {
             account_bucket.insert(utxo);
         }
 
-        #[cfg(debug_assertions)]
-        I::check_invariants(&self).expect("state invariants are violated");
+        if cfg!(debug_assertions) {
+            I::check_invariants(self).expect("state invariants are violated");
+        }
     }
 
     pub fn retrieve_btc_status_v2_by_account(

@@ -130,15 +130,10 @@ rust_test(
 
 rust_test(
     name = "ckbtc_minter_replay_events_tests",
-    timeout = "eternal",
     srcs = ["tests/replay_events.rs"],
     data = [
         "test_resources/mainnet_events.gz",
         "test_resources/testnet_events.gz",
-    ],
-    tags = [
-        "k8s",
-        "long_test",  # since it takes longer than 5 minutes.
     ],
     deps = [
         # Keep sorted.
