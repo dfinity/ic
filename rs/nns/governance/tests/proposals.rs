@@ -92,7 +92,6 @@ lazy_static! {
             total_potential_voting_power: Some(40_000),
             wait_for_quiet_state: Some(WaitForQuietState {
                 current_deadline_timestamp_seconds: NOW_SECONDS - 5 * ONE_DAY_SECONDS,
-                ..Default::default()
             }),
             ..Default::default()
         };
@@ -126,8 +125,8 @@ lazy_static! {
         // Verify all ReadyToSettle.
         assert_eq!(
             proposals
-                .iter()
-                .map(|(_, proposal): (_, &ProposalData)| proposal.reward_status(NOW_SECONDS, 4 * ONE_DAY_SECONDS))
+                .values()
+                .map(|proposal| proposal.reward_status(NOW_SECONDS, 4 * ONE_DAY_SECONDS))
                 .collect::<Vec<_>>(),
             // Using all is more concise, but if the assert fails, assert! gives
             // less diagnostic information than assert_eq!.
@@ -141,8 +140,8 @@ lazy_static! {
         // Verify reward weights.
         assert_eq!(
             proposals
-                .iter()
-                .map(|(_, proposal): (_, &ProposalData)| proposal.topic().reward_weight())
+                .values()
+                .map(|proposal| proposal.topic().reward_weight())
                 .collect::<Vec<f64>>(),
             [1.0, 1.0, 20.0]
         );
