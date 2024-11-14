@@ -213,7 +213,7 @@ prop_compose! {
     }
 }
 
-/// Produces an arbitrary [`RequestOrResponse`], with the respective fields
+/// Produces an arbitrary [`RequestOrResponse`], with the `deadline` field
 /// populated or not.
 pub fn request_or_response_with_config(
     populate_deadline: bool,
