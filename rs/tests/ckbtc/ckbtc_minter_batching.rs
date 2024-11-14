@@ -316,15 +316,12 @@ pub fn test_batching(env: TestEnv) {
                 * (RETRIEVE_REQUESTS_COUNT_TO_BATCH as u64 + 1)
             + ic_ckbtc_minter::MINTER_FEE_CONSTANT;
 
-        let kyts_fee = RETRIEVE_REQUESTS_COUNT_TO_BATCH as u64 * KYT_FEE;
-
         // We can check that the destination address has received all the bitcoin
         assert_eq!(
             destination_balance,
             (RETRIEVE_REQUESTS_COUNT_TO_BATCH as u64) * retrieve_amount
                 - EXPECTED_FEE
                 - minters_fee
-                - kyts_fee
         );
 
         // We also check that the destination address have received 20 utxos
