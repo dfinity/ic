@@ -833,7 +833,7 @@ impl WasmExecutor for SandboxedExecutionController {
             execution_tracing,
             execution_start,
         );
-        drop_opened_wasm(&mut *execution_state.wasm_binary.embedder_cache.lock().unwrap());
+        // drop_opened_wasm(&mut *execution_state.wasm_binary.embedder_cache.lock().unwrap());
         (compilation_result, execution_result)
     }
 
