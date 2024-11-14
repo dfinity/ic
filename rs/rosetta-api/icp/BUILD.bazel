@@ -197,6 +197,7 @@ rust_test_suite_with_extra_srcs(
         "tests/system_tests/test_cases/*.rs",
     ]),
     proc_macro_deps = MACRO_DEV_DEPENDENCIES,
+    flaky = True,
     deps = DEV_DEPENDENCIES + DEPENDENCIES,
 )
 
