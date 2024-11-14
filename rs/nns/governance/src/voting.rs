@@ -11,15 +11,15 @@ use std::{
 
 thread_local! {
     // TODO DO NOT MERGE - if this has ongoing votes to process, should prevent upgrading...
-    static VOTING_STATE_MACHINE: RefCell<VotingStateMachine> = RefCell::new(VotingStateMachine::new());
+    static VOTING_STATE_MACHINES: RefCell<VotingStateMachines> = RefCell::new(VotingStateMachines::new());
 }
 
-struct VotingStateMachine {
+struct VotingStateMachines {
     // machines
     machines: BTreeMap<ProposalId, ProposalVotingStateMachine>,
 }
 
-impl VotingStateMachine {
+impl VotingStateMachines {
     fn new() -> Self {
         Self {
             machines: BTreeMap::new(),
@@ -36,39 +36,16 @@ impl VotingStateMachine {
             .or_insert_with(|| ProposalVotingStateMachine::try_new(proposal_id, topic).unwrap())
     }
 
-    fn add_vote(
-        &mut self,
-        proposal_id: ProposalId,
-        topic: Topic,
-        neuron_id: NeuronId,
-        vote: Vote,
-    ) -> &mut ProposalVotingStateMachine {
-        let machine = self.get_or_create_machine(proposal_id, topic);
-
-        machine.add_vote(neuron_id, vote);
-
-        machine
-    }
-
-    fn continue_processing(
-        &mut self,
-        neuron_store: &mut NeuronStore,
-        ballots: &mut HashMap<u64, Ballot>,
-    ) {
-        for (_, machine) in self.machines.iter_mut() {
-            machine.continue_processing(neuron_store, ballots);
+    fn remove_if_done(&mut self, proposal_id: &ProposalId) {
+        if let Some(machine) = self.machines.get(proposal_id) {
             if machine.is_done() {
-                self.machines.remove(&machine.proposal_id);
+                self.machines.remove(proposal_id);
             }
         }
     }
-
-    fn is_done(&self) -> bool {
-        self.machines.is_empty()
-    }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Default)]
 struct ProposalVotingStateMachine {
     // The proposal ID that is being voted on.
     proposal_id: ProposalId,
@@ -102,10 +79,6 @@ impl ProposalVotingStateMachine {
             && self.neurons_to_check_followers.is_empty()
             && self.followers_to_check.is_empty()
             && self.recent_neuron_ballots_to_record.is_empty()
-    }
-
-    fn add_vote(&mut self, neuron_id: NeuronId, vote: Vote) {
-        self.votes_to_cast.insert(neuron_id, vote);
     }
 
     fn add_followers_to_check(
@@ -226,13 +199,22 @@ pub(crate) fn cast_vote_and_cascade_follow(
     topic: Topic,
     neuron_store: &mut NeuronStore,
 ) {
-    VOTING_STATE_MACHINE.with(|mut vsm| {
-        let big_machine = vsm.borrow_mut();
-        big_machine.add_vote(*proposal_id, topic, *voting_neuron_id, vote_of_neuron)?;
+    // Use of thread local storage to store the state machines prevents
+    // more than one state machine per proposal, which limits the overall
+    // memory usage for voting, which will be relevant when this can be used
+    // across multiple messages.
+    VOTING_STATE_MACHINES.with(|vsm| {
+        let mut voting_state_machines = vsm.borrow_mut();
+        let proposal_voting_machine =
+            voting_state_machines.get_or_create_machine(*proposal_id, topic);
 
-        while !big_machine.is_done() {
-            big_machine.continue_processing(neuron_store, ballots);
+        proposal_voting_machine.cast_vote(ballots, *voting_neuron_id, vote_of_neuron);
+
+        while !proposal_voting_machine.is_done() {
+            proposal_voting_machine.continue_processing(neuron_store, ballots);
         }
+
+        voting_state_machines.remove_if_done(proposal_id);
     });
 }
 
