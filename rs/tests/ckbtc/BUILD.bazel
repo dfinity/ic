@@ -233,6 +233,7 @@ system_test_nns(
             # Keep sorted.
             "//rs/bitcoin/ckbtc/kyt:kyt_canister",
             "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
+            "//rs/bitcoin/kyt:btc_kyt_canister",
             "//rs/ledger_suite/icrc1/ledger:ledger_canister",
             "//rs/universal_canister/impl:universal_canister.wasm.gz",
             "@btc_canister//file",
