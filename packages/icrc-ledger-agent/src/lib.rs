@@ -341,13 +341,12 @@ impl Icrc1Agent {
         };
         self.verify_root_hash(&certificate, &hash_tree.digest())
             .await?;
-        let last_block_index_encoded =
-            lookup_leaf(&hash_tree, "last_block_index")?.ok_or_else(|| {
-                Icrc1AgentError::VerificationFailed(
-                    "certified hash_tree contains last_block_hash but not last_block_index"
-                        .to_string(),
-                )
-            })?;
+        let last_block_index_encoded = match lookup_leaf(&hash_tree, "last_block_index")? {
+            Some(last_block_index) => last_block_index,
+            None => {
+                return Ok(None);
+            }
+        };
 
         fn convert_block_hash(block_hash: Vec<u8>) -> Result<Hash, Icrc1AgentError> {
             match block_hash.clone().try_into() {
