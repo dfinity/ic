@@ -168,8 +168,6 @@ pub fn api_endpoints_test(env: TestEnv) {
             if replica_health_status != "healthy" {
                 bail!("{name} failed: status check failed: {replica_health_status}")
             }
-
-            info!(&logger, "done {}", name);
             Ok(())
         }
     }));
@@ -186,21 +184,17 @@ pub fn api_endpoints_test(env: TestEnv) {
         async move {
             let cid = install_counter_canister(env, logger.clone()).await?;
 
-            info!(&logger, "creating agent");
             let transport =
                 ReqwestTransport::create_with_client(format!("https://{host}/"), client)?;
 
             let agent = Agent::builder().with_transport(transport).build()?;
-            info!(&logger, "fetch root key");
             agent.fetch_root_key().await?;
 
-            info!(&logger, "query");
             let out = agent.query(&cid, "read").call().await?;
             if !out.eq(&[0, 0, 0, 0]) {
                 bail!("{name} failed: got {:?}, expected {:?}", out, &[0, 0, 0, 0],)
             }
 
-            info!(&logger, "done {}", name);
             Ok(())
         }
     }));
@@ -217,24 +211,21 @@ pub fn api_endpoints_test(env: TestEnv) {
         async move {
             let cid = install_counter_canister(env, logger.clone()).await?;
 
-            info!(&logger, "creating agent");
             let transport =
                 ReqwestTransport::create_with_client(format!("https://{host}/"), client)?;
 
             let agent = Agent::builder().with_transport(transport).build()?;
-            info!(&logger, "fetch root key");
             agent.fetch_root_key().await?;
 
-            info!(&logger, "updating canister");
+            // update call
             agent.update(&cid, "write").call_and_wait().await?;
 
-            info!(&logger, "querying canister");
+            // check that the update call went through
             let out = agent.query(&cid, "read").call().await?;
             if !out.eq(&[1, 0, 0, 0]) {
                 bail!("{name} failed: got {:?}, expected {:?}", out, &[1, 0, 0, 0],)
             }
 
-            info!(&logger, "done {}", name);
             Ok(())
         }
     }));
@@ -251,25 +242,21 @@ pub fn api_endpoints_test(env: TestEnv) {
         async move {
             let cid = install_counter_canister(env.clone(), logger.clone()).await?;
 
-            info!(&logger, "creating agent");
             let transport =
                 ReqwestTransport::create_with_client(format!("https://{host}/"), client)?
                     .with_use_call_v3_endpoint();
 
             let agent = Agent::builder().with_transport(transport).build()?;
-            info!(&logger, "fetch root key");
             agent.fetch_root_key().await?;
 
-            info!(&logger, "updating canister");
+            // update call
             agent.update(&cid, "write").call_and_wait().await?;
 
-            info!(&logger, "querying canister");
+            // check that the update call went through
             let out = agent.query(&cid, "read").call().await?;
             if !out.eq(&[1, 0, 0, 0]) {
                 bail!("{name} failed: got {:?}, expected {:?}", out, &[1, 0, 0, 0],)
             }
-
-            info!(&logger, "done {}", name);
             Ok(())
         }
     }));
@@ -284,12 +271,10 @@ pub fn api_endpoints_test(env: TestEnv) {
         info!(&logger, "Starting subtest {}", name);
 
         async move {
-            info!(&logger, "creating agent");
             let transport =
                 ReqwestTransport::create_with_client(format!("https://{host}/"), client)?;
 
             let agent = Agent::builder().with_transport(transport).build()?;
-            info!(&logger, "fetch root key");
             agent.fetch_root_key().await?;
 
             let subnet_id: Principal = env
@@ -302,8 +287,6 @@ pub fn api_endpoints_test(env: TestEnv) {
                 .0;
             let metrics = agent.read_state_subnet_metrics(subnet_id).await?;
             info!(&logger, "subnet metrics are {:?}", metrics);
-
-            info!(&logger, "done {}", name);
             Ok(())
         }
     }));
@@ -320,19 +303,14 @@ pub fn api_endpoints_test(env: TestEnv) {
         async move {
             let cid = install_counter_canister(env.clone(), logger.clone()).await?;
 
-            info!(&logger, "creating agent");
             let transport =
                 ReqwestTransport::create_with_client(format!("https://{host}/"), client)?;
 
             let agent = Agent::builder().with_transport(transport).build()?;
-            info!(&logger, "fetch root key");
             agent.fetch_root_key().await?;
 
-            let data = agent.read_state_canister_info(cid, "module_hash").await?;
-            let module_hash: String = data.iter().map(|x| format!("{:02x}", x)).collect();
-            info!(&logger, "canister module hash is {:?}", module_hash);
+            let _ = agent.read_state_canister_info(cid, "module_hash").await?;
 
-            info!(&logger, "done {}", name);
             Ok(())
         }
     }));
