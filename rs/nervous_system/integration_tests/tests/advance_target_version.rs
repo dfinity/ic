@@ -285,55 +285,31 @@ async fn test_get_upgrade_journal() {
     {
         expected_upgrade_journal_entries.push(
             sns_pb::upgrade_journal_entry::Event::UpgradeStarted(
-                sns_pb::upgrade_journal_entry::UpgradeStarted {
-                    current_version: Some(initial_sns_version.clone()),
-                    expected_version: Some(new_sns_version_1.clone()),
-                    reason: Some(
-                        sns_pb::upgrade_journal_entry::upgrade_started::Reason::BehindTargetVersion(
-                            sns_pb::Empty {},
-                        ),
-                    ),
-                },
+                sns_pb::upgrade_journal_entry::UpgradeStarted::from_behind_target(
+                    initial_sns_version.clone(),
+                    new_sns_version_1.clone(),
+                ),
             ),
         );
 
         expected_upgrade_journal_entries.push(
             sns_pb::upgrade_journal_entry::Event::UpgradeOutcome(
-                sns_pb::upgrade_journal_entry::UpgradeOutcome {
-                    status: Some(
-                        sns_pb::upgrade_journal_entry::upgrade_outcome::Status::Success(
-                            sns_pb::Empty {},
-                        ),
-                    ),
-                    human_readable: None,
-                },
+                sns_pb::upgrade_journal_entry::UpgradeOutcome::success(None),
             ),
         );
 
         expected_upgrade_journal_entries.push(
             sns_pb::upgrade_journal_entry::Event::UpgradeStarted(
-                sns_pb::upgrade_journal_entry::UpgradeStarted {
-                    current_version: Some(new_sns_version_1.clone()),
-                    expected_version: Some(new_sns_version_2.clone()),
-                    reason: Some(
-                        sns_pb::upgrade_journal_entry::upgrade_started::Reason::BehindTargetVersion(
-                            sns_pb::Empty {},
-                        ),
-                    ),
-                },
+                sns_pb::upgrade_journal_entry::UpgradeStarted::from_behind_target(
+                    new_sns_version_1.clone(),
+                    new_sns_version_2.clone(),
+                ),
             ),
         );
 
         expected_upgrade_journal_entries.push(
             sns_pb::upgrade_journal_entry::Event::UpgradeOutcome(
-                sns_pb::upgrade_journal_entry::UpgradeOutcome {
-                    status: Some(
-                        sns_pb::upgrade_journal_entry::upgrade_outcome::Status::Success(
-                            sns_pb::Empty {},
-                        ),
-                    ),
-                    human_readable: None,
-                },
+                sns_pb::upgrade_journal_entry::UpgradeOutcome::success(None),
             ),
         );
 

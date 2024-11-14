@@ -3443,6 +3443,8 @@ pub mod upgrade_journal_entry {
         pub old_target_version: ::core::option::Option<super::governance::Version>,
         #[prost(message, optional, tag = "2")]
         pub new_target_version: ::core::option::Option<super::governance::Version>,
+        #[prost(string, optional, tag = "3")]
+        pub human_readable: ::core::option::Option<::prost::alloc::string::String>,
     }
     #[derive(
         candid::CandidType,

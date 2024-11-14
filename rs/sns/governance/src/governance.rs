@@ -389,6 +389,13 @@ impl GovernanceProto {
         index
     }
 
+    pub fn root_canister_id(&self) -> Result<CanisterId, GovernanceError> {
+        let root_canister_id = self.root_canister_id.ok_or_else(|| {
+            GovernanceError::new_with_message(ErrorType::Unavailable, "No root_canister_id.")
+        })?;
+        Ok(CanisterId::unchecked_from_principal(root_canister_id))
+    }
+
     pub fn root_canister_id_or_panic(&self) -> CanisterId {
         CanisterId::unchecked_from_principal(self.root_canister_id.expect("No root_canister_id."))
     }
@@ -2467,7 +2474,7 @@ impl Governance {
                 .map_err(|e| {
                     GovernanceError::new_with_message(
                         ErrorType::External,
-                        format!("Could not get list of SNS canisters from root: {}", e),
+                        format!("Could not get list of SNS canisters from SNS Root: {}", e),
                     )
                 })?;
 
@@ -2546,7 +2553,6 @@ impl Governance {
             })
     }
 
-
     /// Used for checking that no upgrades are in progress. Also checks that there are no upgrade proposals in progress except, optionally, one that you pass in as `proposal_id`
     pub fn check_no_upgrades_in_progress(
         &self,
@@ -2571,7 +2577,13 @@ impl Governance {
         if self.proto.pending_version.is_some() {
             return Err(GovernanceError::new_with_message(
                 ErrorType::ResourceExhausted,
-                "Upgrade lock currently acquired, not upgrading".to_string(),
+                format!(
+                    "Upgrade lock acquired (expires at {:?}), not upgrading",
+                    self.proto
+                        .pending_version
+                        .as_ref()
+                        .map(|p| p.mark_failed_at_seconds)
+                ),
             ));
         }
 
@@ -2665,7 +2677,7 @@ impl Governance {
         new_wasm_hash: Vec<u8>,
         canister_type_to_upgrade: SnsCanisterType,
     ) -> Result<(), GovernanceError> {
-        let root_canister_id = self.proto.root_canister_id_or_panic();
+        let root_canister_id = self.proto.root_canister_id()?;
 
         let target_wasm = get_wasm(&*self.env, new_wasm_hash.to_vec(), canister_type_to_upgrade)
             .await
@@ -2694,7 +2706,7 @@ impl Governance {
                     .map_err(|e| {
                         GovernanceError::new_with_message(
                             ErrorType::External,
-                            format!("Could not get list of SNS canisters from root: {}", e),
+                            format!("Could not get list of SNS canisters from SNS Root: {}", e),
                         )
                     })?;
             for target_canister_id in canister_ids_to_upgrade {
@@ -4755,7 +4767,7 @@ impl Governance {
                 self.refresh_cached_upgrade_steps().await;
             }
 
-            self.initiate_upgrade_if_behind_target_version().await;
+            self.initiate_upgrade_if_sns_behind_target_version().await;
 
             self.release_upgrade_periodic_task_lock();
         }
@@ -4812,7 +4824,7 @@ impl Governance {
     }
     /// Checks if an automatic upgrade is needed and initiates it.
     /// An automatic upgrade is needed if `target_version` is set to a future version on the upgrade path
-    async fn initiate_upgrade_if_behind_target_version(&mut self) {
+    async fn initiate_upgrade_if_sns_behind_target_version(&mut self) {
         // Check that no upgrades are in progress
         if self.check_no_upgrades_in_progress(None).is_err() {
             // An upgrade is already in progress
@@ -4820,6 +4832,8 @@ impl Governance {
         }
 
         let Some(deployed_version) = self.proto.deployed_version.clone() else {
+            // TODO(NNS1-3445): there should be some way to recover from this state.
+            log!(ERROR, "No deployed version! This is an internal bug");
             return;
         };
 
@@ -4841,19 +4855,39 @@ impl Governance {
         // Find the current position of the deployed version
         let Some(deployed_position) = upgrade_steps.iter().position(|v| v == &deployed_version)
         else {
-            log!(ERROR, "Deployed version is not on the upgrade path");
-            self.invalidate_cached_upgrade_steps();
+            let human_readable = format!(
+                "Deployed version {} is not on the upgrade path {:?}",
+                deployed_version, upgrade_steps
+            );
+            log!(ERROR, "{}", human_readable);
+            self.invalidate_cached_upgrade_steps(human_readable);
             return;
         };
 
         // Find the target position of the target version
         let Some(target_position) = upgrade_steps.iter().position(|v| v == &target_version) else {
-            log!(ERROR, "Target version is not on the upgrade path");
+            let message = format!(
+                "Target version {} is not on the upgrade path {:?}",
+                target_version, upgrade_steps
+            );
+            log!(ERROR, "{}", message);
+            self.invalidate_target_version(message);
             return;
         };
 
-        if target_position <= deployed_position {
-            // Target version is not after the deployed version
+        // If the target version is the same as the deployed version, there is nothing to do.
+        if target_position == deployed_position {
+            return;
+        }
+
+        // If the target version is behind the deployed version, we should reset the target version, since otherwise
+        // people might be under the impression that we could go backwards.
+        if target_position < deployed_position {
+            let message = format!(
+                "Target version {} is behind the deployed version {}",
+                target_version, deployed_version
+            );
+            self.invalidate_target_version(message);
             return;
         }
 
@@ -4865,19 +4899,17 @@ impl Governance {
                 Ok((canister_type, wasm_hash)) => (canister_type, wasm_hash),
 
                 Err(err) => {
-                    log!(ERROR, "Upgrade attempt failed: {}", err);
-                    self.proto.target_version = None;
+                    let message = format!("Upgrade attempt failed: {}", err);
+                    log!(ERROR, "{}", message);
+                    self.invalidate_target_version(message);
                     return;
                 }
             };
 
-        self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeStarted {
-            current_version: self.proto.deployed_version.clone(),
-            expected_version: Some(next_version.clone()),
-            reason: Some(
-                upgrade_journal_entry::upgrade_started::Reason::BehindTargetVersion(Empty {}),
-            ),
-        });
+        self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeStarted::from_behind_target(
+            deployed_version.clone(),
+            next_version.clone(),
+        ));
 
         self.proto.pending_version = Some(PendingVersion {
             target_version: Some(next_version.clone()),
@@ -4891,15 +4923,30 @@ impl Governance {
             .upgrade_sns_framework_canister(wasm_hash, canister_type)
             .await;
         if let Err(err) = upgrade_attempt {
-            log!(ERROR, "Upgrade attempt failed: {}", err);
+            let message = format!("Upgrade attempt failed: {}", err);
+            log!(ERROR, "{}", message);
             self.proto.pending_version = None;
-            self.proto.target_version = None;
+            self.invalidate_target_version(message);
         }
     }
 
     /// Invalidates the cached upgrade steps.
-    fn invalidate_cached_upgrade_steps(&mut self) {
+    fn invalidate_cached_upgrade_steps(&mut self, human_readable: String) {
+        self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeStepsReset::new(
+            human_readable,
+            vec![],
+        ));
         self.proto.cached_upgrade_steps = None;
+    }
+
+    /// Invalidates the cached upgrade steps.
+    fn invalidate_target_version(&mut self, reason: String) {
+        self.push_to_upgrade_journal(upgrade_journal_entry::TargetVersionReset::new(
+            self.proto.target_version.clone(),
+            None,
+            reason,
+        ));
+        self.proto.target_version = None;
     }
 
     fn release_upgrade_periodic_task_lock(&mut self) {

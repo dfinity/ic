@@ -761,6 +761,7 @@ type TargetVersionSet = record {
 type TargetVersionReset = record {
   new_target_version : opt Version;
   old_target_version : opt Version;
+  human_readable : opt text;
 };
 
 type UpgradeStarted = record {
