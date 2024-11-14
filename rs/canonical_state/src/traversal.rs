@@ -113,7 +113,7 @@ mod tests {
                     E::EndSubtree, // canisters
                     edge("metadata"),
                     E::VisitBlob(encode_metadata(SystemMetadata {
-                        id_counter: None,
+                        deprecated_id_counter: None,
                         prev_state_hash: None,
                     })),
                     edge("request_status"),
@@ -178,7 +178,6 @@ mod tests {
                     E::EnterEdge(canister_id.get().into_vec()),
                     E::StartSubtree,
                 ]),
-                None,
                 Some(vec![
                     edge("controllers"),
                     E::VisitBlob(controllers_cbor.clone()),
@@ -188,7 +187,7 @@ mod tests {
                     E::EndSubtree, // canisters
                     edge("metadata"),
                     E::VisitBlob(encode_metadata(SystemMetadata {
-                        id_counter: None,
+                        deprecated_id_counter: None,
                         prev_state_hash: None,
                     })),
                     edge("request_status"),
@@ -302,7 +301,7 @@ mod tests {
                     E::EndSubtree, // canisters
                     edge("metadata"),
                     E::VisitBlob(encode_metadata(SystemMetadata {
-                        id_counter: None,
+                        deprecated_id_counter: None,
                         prev_state_hash: None,
                     })),
                     edge("request_status"),
@@ -373,7 +372,7 @@ mod tests {
                     E::EndSubtree, // canisters
                     edge("metadata"),
                     E::VisitBlob(encode_metadata(SystemMetadata {
-                        id_counter: None,
+                        deprecated_id_counter: None,
                         prev_state_hash: None,
                     })),
                     edge("request_status"),
@@ -601,7 +600,7 @@ mod tests {
                     E::EndSubtree, // canisters
                     edge("metadata"),
                     E::VisitBlob(encode_metadata(SystemMetadata {
-                        id_counter: None,
+                        deprecated_id_counter: None,
                         prev_state_hash: None,
                     })),
                     edge("request_status"),
@@ -686,7 +685,7 @@ mod tests {
                     E::EndSubtree, // canisters
                     edge("metadata"),
                     E::VisitBlob(encode_metadata(SystemMetadata {
-                        id_counter: None,
+                        deprecated_id_counter: None,
                         prev_state_hash: None,
                     })),
                     edge("request_status"),
@@ -844,7 +843,7 @@ mod tests {
                     E::EndSubtree, // canisters
                     edge("metadata"),
                     E::VisitBlob(encode_metadata(SystemMetadata {
-                        id_counter: None,
+                        deprecated_id_counter: None,
                         prev_state_hash: None,
                     })),
                     edge("request_status"),

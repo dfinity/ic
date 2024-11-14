@@ -195,7 +195,7 @@ pub struct RejectContext {
 pub struct SystemMetadata {
     /// The counter used to allocate canister ids.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub id_counter: Option<u64>,
+    pub deprecated_id_counter: Option<u64>,
     /// Hash bytes of the previous (partial) canonical state.
     pub prev_state_hash: Option<Vec<u8>>,
 }
@@ -734,7 +734,7 @@ impl
         ),
     ) -> Self {
         Self {
-            id_counter: None,
+            deprecated_id_counter: None,
             prev_state_hash: metadata
                 .prev_state_hash
                 .as_ref()
