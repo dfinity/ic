@@ -71,8 +71,8 @@ pub(crate) fn arb_valid_versioned_stream_header(
     max_signal_count: usize,
 ) -> impl Strategy<Value = (StreamHeader, RangeInclusive<CertificationVersion>)> {
     prop_oneof![
-        // Stream headers may have the `StreamHeaderFlagBits::DeprecatedResponsesOnly` flag set
-        // starting with certification version 17.
+        // Stream headers up to version 18 may have reject signals for responses
+        // (`CanisterMigrating` only) and the `DeprecatedResponsesOnly` flag set.
         (
             arb_stream_header(
                 /* min_signal_count */ 0,
