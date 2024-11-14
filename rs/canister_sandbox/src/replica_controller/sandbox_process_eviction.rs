@@ -24,14 +24,12 @@ pub(crate) fn evict(
     last_used_threshold: Instant,
     max_sandboxes_rss: NumBytes,
 ) -> Vec<EvictionCandidate> {
-    let evict_at_least: usize = candidates.len().saturating_sub(max_count_threshold);
-
-    let min_possible_priority = AccumulatedPriority::new(i64::MIN);
+    let min_scheduler_priority = AccumulatedPriority::new(i64::MIN);
 
     candidates.sort_by_key(|x| {
         if x.last_used < last_used_threshold {
             // We will first evict `idle` candidates in order of their `last_used` value.
-            (0, min_possible_priority, x.last_used)
+            (0, min_scheduler_priority, x.last_used)
         } else {
             // `Non idle` candidates will be evicted based on the `scheduler_priority` or based
             // on the vale `last_used` in the case multiple candidates have the same priority.
@@ -39,6 +37,7 @@ pub(crate) fn evict(
         }
     });
 
+    let evict_at_least: usize = candidates.len().saturating_sub(max_count_threshold);
     let mut evicted = vec![];
     let mut evicted_rss = NumBytes::new(0);
 
