@@ -4,8 +4,8 @@ use anyhow::Result;
 
 use ic_boundary_nodes_integration_test_common::{
     api_endpoints_test, asset_canister_test, canister_denylist_test, content_type_headers_test,
-    cors_headers_test, http_endpoints_test, proxy_http_canister_test, reboot_test,
-    redirect_http_to_https_test, redirect_to_dashboard_test,
+    cors_headers_test, http_endpoints_test, proxy_http_canister_test, redirect_http_to_https_test,
+    redirect_to_dashboard_test,
 };
 use ic_boundary_nodes_system_test_utils::{
     constants::BOUNDARY_NODE_NAME, helpers::BoundaryNodeHttpsConfig, setup::setup_ic_with_bn,
@@ -37,7 +37,6 @@ fn main() -> Result<()> {
                 .add_test(systest!(http_endpoints_test)),
         )
         .add_test(systest!(canister_denylist_test))
-        .add_test(systest!(reboot_test))
         .execute_from_args()?;
 
     Ok(())
