@@ -6,8 +6,8 @@ use ic_btc_consensus::BitcoinPayloadBuilder;
 use ic_config::{
     adapters::AdaptersConfig,
     bitcoin_payload_builder_config::Config as BitcoinPayloadBuilderConfig,
-    execution_environment::Config as HypervisorConfig, flag_status::FlagStatus,
-    state_manager::LsmtConfig, subnet_config::SubnetConfig,
+    execution_environment::Config as HypervisorConfig, state_manager::LsmtConfig,
+    subnet_config::SubnetConfig,
 };
 use ic_consensus::{
     consensus::payload_builder::PayloadBuilderImpl,
@@ -831,13 +831,13 @@ pub struct StateMachine {
     // The atomicity is required for internal mutability and sending across threads.
     checkpoint_interval_length: AtomicU64,
     nonce: AtomicU64,
-    // the time used to derive the time of the next round:
+    // the time used to derive the time of the next round that is:
     //  - equal to `time` + 1ns if `time` = `time_of_last_round`;
     //  - equal to `time`       otherwise.
     time: AtomicU64,
     // the time of the last round
     // (equal to `time` when this `StateMachine` is initialized)
-    time_of_last_round: RwLock<SystemTime>,
+    time_of_last_round: RwLock<Time>,
     idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     idkg_subnet_secret_keys: BTreeMap<MasterPublicKeyId, SignatureSecretKey>,
     pub replica_logger: ReplicaLogger,
@@ -923,7 +923,6 @@ pub struct StateMachineBuilder {
     is_root_subnet: bool,
     seed: [u8; 32],
     with_extra_canister_range: Option<std::ops::RangeInclusive<CanisterId>>,
-    dts: bool,
     log_level: Option<Level>,
     bitcoin_testnet_uds_path: Option<PathBuf>,
 }
@@ -956,7 +955,6 @@ impl StateMachineBuilder {
             is_root_subnet: false,
             seed: [42; 32],
             with_extra_canister_range: None,
-            dts: true,
             log_level: None,
             bitcoin_testnet_uds_path: None,
         }
@@ -1128,11 +1126,6 @@ impl StateMachineBuilder {
         }
     }
 
-    /// Only use from pocket-ic-server binary.
-    pub fn no_dts(self) -> Self {
-        Self { dts: false, ..self }
-    }
-
     pub fn with_log_level(self, log_level: Option<Level>) -> Self {
         Self { log_level, ..self }
     }
@@ -1170,7 +1163,6 @@ impl StateMachineBuilder {
             self.lsmt_override,
             self.is_root_subnet,
             self.seed,
-            self.dts,
             self.log_level,
         )
     }
@@ -1293,7 +1285,8 @@ impl Default for StateMachineBuilder {
 }
 
 impl StateMachine {
-    /// Provides the time increment for a single round of execution.
+    /// Provides the implicit time increment for a single round of execution
+    /// if time does not advance between consecutive rounds.
     pub const EXECUTE_ROUND_TIME_INCREMENT: Duration = Duration::from_nanos(1);
 
     // TODO: cleanup, replace external calls with `StateMachineBuilder`.
@@ -1408,24 +1401,7 @@ impl StateMachine {
             .subnet_call_context_manager
             .sign_with_threshold_contexts
         {
-            match context.args {
-                ThresholdArguments::Ecdsa(_) if self.is_ecdsa_signing_enabled => {
-                    let response = self.build_sign_with_ecdsa_reply(context);
-                    payload.consensus_responses.push(ConsensusResponse::new(
-                        *id,
-                        MsgPayload::Data(response.encode()),
-                    ));
-                }
-                ThresholdArguments::Schnorr(_) if self.is_schnorr_signing_enabled => {
-                    if let Some(response) = self.build_sign_with_schnorr_reply(context) {
-                        payload.consensus_responses.push(ConsensusResponse::new(
-                            *id,
-                            MsgPayload::Data(response.encode()),
-                        ));
-                    }
-                }
-                _ => {}
-            }
+            self.process_threshold_signing_request(id, context, &mut payload);
         }
 
         // Finally execute the payload.
@@ -1482,7 +1458,6 @@ impl StateMachine {
         lsmt_override: Option<LsmtConfig>,
         is_root_subnet: bool,
         seed: [u8; 32],
-        dts: bool,
         log_level: Option<Level>,
     ) -> Self {
         let checkpoint_interval_length = checkpoint_interval_length.unwrap_or(match subnet_type {
@@ -1493,7 +1468,7 @@ impl StateMachine {
 
         let metrics_registry = MetricsRegistry::new();
 
-        let (mut subnet_config, mut hypervisor_config) = match config {
+        let (mut subnet_config, hypervisor_config) = match config {
             Some(config) => (config.subnet_config, config.hypervisor_config),
             None => (SubnetConfig::new(subnet_type), HypervisorConfig::default()),
         };
@@ -1533,10 +1508,6 @@ impl StateMachine {
         let mut sm_config = ic_config::state_manager::Config::new(state_dir.path().to_path_buf());
         if let Some(lsmt_override) = lsmt_override {
             sm_config.lsmt_config = lsmt_override;
-        }
-
-        if !dts {
-            hypervisor_config.deterministic_time_slicing = FlagStatus::Disabled;
         }
 
         // We are not interested in ingress signature validation.
@@ -1815,7 +1786,7 @@ impl StateMachine {
             checkpoint_interval_length: checkpoint_interval_length.into(),
             nonce: AtomicU64::new(nonce),
             time: AtomicU64::new(time.as_nanos_since_unix_epoch()),
-            time_of_last_round: RwLock::new(time.into()),
+            time_of_last_round: RwLock::new(time),
             idkg_subnet_public_keys,
             idkg_subnet_secret_keys,
             replica_logger: replica_logger.clone(),
@@ -2136,7 +2107,7 @@ impl StateMachine {
     fn build_sign_with_ecdsa_reply(
         &self,
         context: &SignWithThresholdContext,
-    ) -> SignWithECDSAReply {
+    ) -> Result<SignWithECDSAReply, UserError> {
         assert!(context.is_ecdsa());
 
         if let Some(SignatureSecretKey::EcdsaSecp256k1(k)) =
@@ -2150,16 +2121,23 @@ impl StateMachine {
             let signature = dk
                 .sign_digest_with_ecdsa(&context.ecdsa_args().message_hash)
                 .to_vec();
-            SignWithECDSAReply { signature }
+            Ok(SignWithECDSAReply { signature })
         } else {
-            panic!("No ECDSA key with key id {} found", context.key_id());
+            Err(UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "Subnet {} does not hold threshold key {}.",
+                    self.subnet_id,
+                    context.key_id()
+                ),
+            ))
         }
     }
 
     fn build_sign_with_schnorr_reply(
         &self,
         context: &SignWithThresholdContext,
-    ) -> Option<SignWithSchnorrReply> {
+    ) -> Result<SignWithSchnorrReply, UserError> {
         assert!(context.is_schnorr());
 
         let signature = match self.idkg_subnet_secret_keys.get(&context.key_id()) {
@@ -2183,11 +2161,61 @@ impl StateMachine {
                 dk.sign_message(&context.schnorr_args().message).to_vec()
             }
             _ => {
-                panic!("No Schnorr key with specified key id found");
+                return Err(UserError::new(
+                    ErrorCode::CanisterRejectedMessage,
+                    format!(
+                        "Subnet {} does not hold threshold key {}.",
+                        self.subnet_id,
+                        context.key_id()
+                    ),
+                ));
             }
         };
 
-        Some(SignWithSchnorrReply { signature })
+        Ok(SignWithSchnorrReply { signature })
+    }
+
+    fn process_threshold_signing_request(
+        &self,
+        id: &CallbackId,
+        context: &SignWithThresholdContext,
+        payload: &mut PayloadBuilder,
+    ) {
+        match context.args {
+            ThresholdArguments::Ecdsa(_) if self.is_ecdsa_signing_enabled => {
+                match self.build_sign_with_ecdsa_reply(context) {
+                    Ok(response) => {
+                        payload.consensus_responses.push(ConsensusResponse::new(
+                            *id,
+                            MsgPayload::Data(response.encode()),
+                        ));
+                    }
+                    Err(user_error) => {
+                        payload.consensus_responses.push(ConsensusResponse::new(
+                            *id,
+                            MsgPayload::Reject(RejectContext::from(user_error)),
+                        ));
+                    }
+                }
+            }
+            ThresholdArguments::Schnorr(_) if self.is_schnorr_signing_enabled => {
+                match self.build_sign_with_schnorr_reply(context) {
+                    Ok(response) => {
+                        payload.consensus_responses.push(ConsensusResponse::new(
+                            *id,
+                            MsgPayload::Data(response.encode()),
+                        ));
+                    }
+                    Err(user_error) => {
+                        payload.consensus_responses.push(ConsensusResponse::new(
+                            *id,
+                            MsgPayload::Reject(RejectContext::from(user_error)),
+                        ));
+                    }
+                }
+            }
+            _ => {}
+        }
     }
 
     /// If set to true, the state machine will handle sign_with_ecdsa calls during `tick()`.
@@ -2212,24 +2240,7 @@ impl StateMachine {
             .subnet_call_context_manager
             .sign_with_threshold_contexts
         {
-            match context.args {
-                ThresholdArguments::Ecdsa(_) if self.is_ecdsa_signing_enabled => {
-                    let response = self.build_sign_with_ecdsa_reply(context);
-                    payload.consensus_responses.push(ConsensusResponse::new(
-                        *id,
-                        MsgPayload::Data(response.encode()),
-                    ));
-                }
-                ThresholdArguments::Schnorr(_) if self.is_schnorr_signing_enabled => {
-                    if let Some(response) = self.build_sign_with_schnorr_reply(context) {
-                        payload.consensus_responses.push(ConsensusResponse::new(
-                            *id,
-                            MsgPayload::Data(response.encode()),
-                        ));
-                    }
-                }
-                _ => {}
-            }
+            self.process_threshold_signing_request(id, context, &mut payload);
         }
 
         self.execute_payload(payload);
@@ -2296,12 +2307,13 @@ impl StateMachine {
         let requires_full_state_hash =
             batch_number.get() % checkpoint_interval_length_plus_one == 0;
 
-        let time_of_next_round = Time::from_nanos_since_unix_epoch(
-            self.time_of_next_round()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos() as u64,
-        );
+        let current_time = self.get_time();
+        let time_of_next_round = if current_time == *self.time_of_last_round.read().unwrap() {
+            current_time + Self::EXECUTE_ROUND_TIME_INCREMENT
+        } else {
+            current_time
+        };
+
         let batch = Batch {
             batch_number,
             batch_summary,
@@ -2341,7 +2353,7 @@ impl StateMachine {
         self.check_critical_errors();
 
         self.set_time(time_of_next_round.into());
-        *self.time_of_last_round.write().unwrap() = time_of_next_round.into();
+        *self.time_of_last_round.write().unwrap() = time_of_next_round;
 
         batch_number
     }
@@ -2428,20 +2440,12 @@ impl StateMachine {
     }
 
     /// Returns the current state machine time.
+    /// The time of a round executed by this state machine equals its current time
+    /// if its current time increased since the last round.
+    /// Otherwise, the current time is implicitly increased by `StateMachine::EXECUTE_ROUND_TIME_INCREMENT` (1ns)
+    /// before executing the next round.
     pub fn time(&self) -> SystemTime {
         SystemTime::UNIX_EPOCH + Duration::from_nanos(self.time.load(Ordering::Relaxed))
-    }
-
-    /// Returns the state machine time at the beginning of next round
-    /// under the assumption that time won't be advanced before that
-    /// round is finalized.
-    fn time_of_next_round(&self) -> SystemTime {
-        let time = self.time();
-        if time == *self.time_of_last_round.read().unwrap() {
-            time + Self::EXECUTE_ROUND_TIME_INCREMENT
-        } else {
-            time
-        }
     }
 
     /// Returns the current state machine time.
@@ -2701,6 +2705,14 @@ impl StateMachine {
         ))
     }
 
+    /// Returns the controllers of a canister or `None` if the canister does not exist.
+    pub fn get_controllers(&self, canister_id: CanisterId) -> Option<Vec<PrincipalId>> {
+        let state = self.state_manager.get_latest_state().take();
+        state
+            .canister_state(&canister_id)
+            .map(|s| s.controllers().iter().cloned().collect())
+    }
+
     pub fn install_wasm_in_mode(
         &self,
         canister_id: CanisterId,
@@ -2708,11 +2720,15 @@ impl StateMachine {
         wasm: Vec<u8>,
         payload: Vec<u8>,
     ) -> Result<(), UserError> {
-        let state = self.state_manager.get_latest_state().take();
-        let sender = state
-            .canister_state(&canister_id)
-            .and_then(|s| s.controllers().iter().next().cloned())
-            .unwrap_or_else(PrincipalId::new_anonymous);
+        let sender = self
+            .get_controllers(canister_id)
+            .map(|controllers| {
+                controllers
+                    .into_iter()
+                    .next()
+                    .unwrap_or(PrincipalId::new_anonymous())
+            })
+            .unwrap_or(PrincipalId::new_anonymous());
         self.execute_ingress_as(
             sender,
             ic00::IC_00,
@@ -3004,6 +3020,17 @@ impl StateMachine {
             .take()
             .canister_states
             .contains_key(&canister)
+    }
+
+    /// Returns true if the canister with the specified id exists and is not empty.
+    pub fn canister_not_empty(&self, canister: CanisterId) -> bool {
+        self.state_manager
+            .get_latest_state()
+            .take()
+            .canister_states
+            .get(&canister)
+            .map(|canister| canister.execution_state.is_some())
+            .unwrap_or_default()
     }
 
     /// Queries the canister with the specified ID using the anonymous principal.
@@ -3778,7 +3805,6 @@ impl PayloadBuilder {
         .unwrap();
 
         self.ingress_messages.push(msg);
-        self.expiry_time += StateMachine::EXECUTE_ROUND_TIME_INCREMENT;
         self.nonce = self.nonce.map(|n| n + 1);
         self
     }

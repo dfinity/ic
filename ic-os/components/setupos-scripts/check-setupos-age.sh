@@ -25,7 +25,11 @@ function check_setupos_age() {
 
 main() {
     log_start "$(basename $0)"
-    check_setupos_age
+    if kernel_cmdline_bool_default_true ic.setupos.check_age; then
+        check_setupos_age
+    else
+        echo "* SetupOS age check skipped by request via kernel command line"
+    fi
     log_end "$(basename $0)"
 }
 

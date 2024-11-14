@@ -12,7 +12,7 @@ use crate::storage::API_BOUNDARY_NODE_PRINCIPALS;
 use candid::Principal;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::call::call;
-use ic_cdk_macros::{init, post_upgrade, query, update};
+use ic_cdk_macros::{init, inspect_message, post_upgrade, query, update};
 use rate_limits_api::{
     AddConfigResponse, ApiBoundaryNodeIdRecord, DiscloseRulesArg, DiscloseRulesResponse,
     GetApiBoundaryNodeIdsRequest, GetConfigResponse, GetRuleByIdResponse, InitArg, InputConfig,
@@ -21,6 +21,41 @@ use rate_limits_api::{
 
 const REGISTRY_CANISTER_ID: &str = "rwlgt-iiaaa-aaaaa-aaaaa-cai";
 const REGISTRY_CANISTER_METHOD: &str = "get_api_boundary_node_ids";
+
+const UPDATE_METHODS: [&str; 2] = ["add_config", "disclose_rules"];
+const REPLICATED_QUERY_METHOD: &str = "get_config";
+
+#[inspect_message]
+fn inspect_message() {
+    // In order for this hook to succeed, accept_message() must be invoked.
+    let caller_id: Principal = ic_cdk::api::caller();
+    let called_method = ic_cdk::api::call::method_name();
+
+    let (has_full_access, has_full_read_access) = with_canister_state(|state| {
+        let authorized_principal = state.get_authorized_principal();
+        (
+            Some(caller_id) == authorized_principal,
+            state.is_api_boundary_node_principal(&caller_id),
+        )
+    });
+
+    if called_method == REPLICATED_QUERY_METHOD {
+        if has_full_access || has_full_read_access {
+            ic_cdk::api::call::accept_message();
+        }
+    } else if UPDATE_METHODS.contains(&called_method.as_str()) {
+        if has_full_access {
+            ic_cdk::api::call::accept_message();
+        } else {
+            ic_cdk::api::trap("message_inspection_failed: unauthorized caller");
+        }
+    } else {
+        // All others calls are rejected
+        ic_cdk::api::trap(
+            "message_inspection_failed: method call is prohibited in the current context",
+        );
+    }
+}
 
 #[init]
 fn init(init_arg: InitArg) {
@@ -63,7 +98,7 @@ fn get_config(version: Option<Version>) -> GetConfigResponse {
         let fetcher = ConfigFetcher::new(state, formatter);
         fetcher.fetch(version)
     })?;
-    Ok(response.into())
+    Ok(response)
 }
 
 #[query]
@@ -76,7 +111,7 @@ fn get_rule_by_id(rule_id: RuleId) -> GetRuleByIdResponse {
         let fetcher = RuleFetcher::new(state, formatter);
         fetcher.fetch(rule_id)
     })?;
-    Ok(response.into())
+    Ok(response)
 }
 
 #[update]
@@ -86,7 +121,7 @@ fn add_config(config: InputConfig) -> AddConfigResponse {
     with_canister_state(|state| {
         let access_resolver = AccessLevelResolver::new(caller_id, state.clone());
         let config_adder = ConfigAdder::new(state, access_resolver);
-        config_adder.add_config(config.into(), current_time)
+        config_adder.add_config(config, current_time)
     })?;
     Ok(())
 }
@@ -94,10 +129,11 @@ fn add_config(config: InputConfig) -> AddConfigResponse {
 #[update]
 fn disclose_rules(args: DiscloseRulesArg) -> DiscloseRulesResponse {
     let caller_id = ic_cdk::api::caller();
+    let current_time = ic_cdk::api::time();
     with_canister_state(|state| {
         let access_resolver = AccessLevelResolver::new(caller_id, state.clone());
         let discloser = RulesDiscloser::new(state, access_resolver);
-        discloser.disclose_rules(args.into())
+        discloser.disclose_rules(args, current_time)
     })?;
     Ok(())
 }

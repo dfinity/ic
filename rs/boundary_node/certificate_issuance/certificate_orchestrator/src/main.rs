@@ -582,6 +582,11 @@ fn post_upgrade_fn() {
     // this can be removed after we upgraded the canisters that didn't do it in init_fn()
     ALLOWED_PRINCIPALS.with(|m| m.borrow_mut().insert(id().to_text().into(), ()));
 
+    MANAGEMENT_TASK_INTERVAL.with(|s| {
+        let mut s = s.borrow_mut();
+        s.insert((), MINUTE);
+    });
+
     init_timers_fn();
 
     // rebuild the IC certification tree

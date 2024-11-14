@@ -75,6 +75,12 @@ const REPLICA_PROMETHEUS_TARGET: &str = "replica.json";
 const ORCHESTRATOR_PROMETHEUS_TARGET: &str = "orchestrator.json";
 const NODE_EXPORTER_PROMETHEUS_TARGET: &str = "node_exporter.json";
 const LEDGER_CANISTER_PROMETHEUS_TARGET: &str = "ledger_canister.json";
+const BITCOIN_MAINNET_CANISTER_PROMETHEUS_TARGET: &str = "bitcoin_mainnet_canister.json";
+const BITCOIN_TESTNET_CANISTER_PROMETHEUS_TARGET: &str = "bitcoin_testnet_canister.json";
+const BITCOIN_WATCHDOG_MAINNET_CANISTER_PROMETHEUS_TARGET: &str =
+    "bitcoin_watchdog_mainnet_canister.json";
+const BITCOIN_WATCHDOG_TESTNET_CANISTER_PROMETHEUS_TARGET: &str =
+    "bitcoin_watchdog_testnet_canister.json";
 const BN_PROMETHEUS_TARGET: &str = "boundary_nodes.json";
 const BN_EXPORTER_PROMETHEUS_TARGET: &str = "boundary_nodes_exporter.json";
 const IC_BOUNDARY_PROMETHEUS_TARGET: &str = "ic_boundary.json";
@@ -257,9 +263,9 @@ pub trait HasPrometheus {
     fn sync_with_prometheus(&self);
 
     /// Retrieves a topology snapshot by name, converts it into p8s scraping target
-    /// JSON files and scps them to the prometheus VM. If `farm_url` is specified, add a
+    /// JSON files and scps them to the prometheus VM. If `playnet_url` is specified, add a
     /// scraping target for NNS canisters (currently only the ICP ledger) to the prometheus VM.
-    fn sync_with_prometheus_by_name(&self, name: &str, farm_url: Option<String>);
+    fn sync_with_prometheus_by_name(&self, name: &str, playnet_url: Option<String>);
 
     /// Downloads prometheus' data directory to the test artifacts
     /// such that we can run a local p8s on that later.
@@ -268,20 +274,25 @@ pub trait HasPrometheus {
     /// This allows this function to be used in a finalizer where no prometheus
     /// server has been setup.
     fn download_prometheus_data_dir_if_exists(&self);
+
+    /// Get the playnet URL of the boundary node with the given name.
+    fn get_playnet_url(&self, boundary_node_name: &str) -> Option<String>;
 }
 
 impl HasPrometheus for TestEnv {
+    fn get_playnet_url(&self, boundary_node_name: &str) -> Option<String> {
+        self.get_deployed_boundary_node(boundary_node_name)
+            .ok()
+            .and_then(|bn| bn.get_snapshot().ok()?.get_playnet())
+    }
+
     fn sync_with_prometheus(&self) {
         self.sync_with_prometheus_by_name("", None)
     }
 
-    fn sync_with_prometheus_by_name(
-        &self,
-        name: &str,
-        mut farm_url_for_ledger_canister: Option<String>,
-    ) {
+    fn sync_with_prometheus_by_name(&self, name: &str, mut playnet_url: Option<String>) {
         if InfraProvider::read_attribute(self) == InfraProvider::K8s {
-            farm_url_for_ledger_canister = None;
+            playnet_url = None;
         }
 
         let vm_name = PROMETHEUS_VM_NAME.to_string();
@@ -292,7 +303,7 @@ impl HasPrometheus for TestEnv {
             prometheus_config_dir.clone(),
             group_name.clone(),
             self.topology_snapshot_by_name(name),
-            &farm_url_for_ledger_canister,
+            &playnet_url,
         )
         .expect("Failed to synchronize prometheus config with the latest IC topology!");
         sync_prometheus_config_dir_with_boundary_nodes(
@@ -315,8 +326,12 @@ impl HasPrometheus for TestEnv {
             BN_EXPORTER_PROMETHEUS_TARGET,
             IC_BOUNDARY_PROMETHEUS_TARGET,
         ];
-        if farm_url_for_ledger_canister.is_some() {
+        if playnet_url.is_some() {
             target_json_files.push(LEDGER_CANISTER_PROMETHEUS_TARGET);
+            target_json_files.push(BITCOIN_MAINNET_CANISTER_PROMETHEUS_TARGET);
+            target_json_files.push(BITCOIN_TESTNET_CANISTER_PROMETHEUS_TARGET);
+            target_json_files.push(BITCOIN_WATCHDOG_MAINNET_CANISTER_PROMETHEUS_TARGET);
+            target_json_files.push(BITCOIN_WATCHDOG_TESTNET_CANISTER_PROMETHEUS_TARGET);
         }
         for file in &target_json_files {
             let from = prometheus_config_dir.join(file);
@@ -419,6 +434,16 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
         Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(NODE_EXPORTER_PROMETHEUS_TARGET);
     let ledger_canister_scraping_target_path =
         Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(LEDGER_CANISTER_PROMETHEUS_TARGET);
+    let bitcoin_mainnet_canister_scraping_target_path =
+        Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(BITCOIN_MAINNET_CANISTER_PROMETHEUS_TARGET);
+    let bitcoin_testnet_canister_scraping_target_path =
+        Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(BITCOIN_TESTNET_CANISTER_PROMETHEUS_TARGET);
+    let bitcoin_watchdog_mainnet_canister_scraping_target_path =
+        Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR)
+            .join(BITCOIN_WATCHDOG_MAINNET_CANISTER_PROMETHEUS_TARGET);
+    let bitcoin_watchdog_testnet_canister_scraping_target_path =
+        Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR)
+            .join(BITCOIN_WATCHDOG_TESTNET_CANISTER_PROMETHEUS_TARGET);
     let scrape_interval_str: String = format!("{}s", scrape_interval.as_secs());
     let prometheus_config = json!({
         "global": {"scrape_interval": scrape_interval_str},
@@ -451,6 +476,42 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
                 "follow_redirects": true,
                 "enable_http2": true,
                 "file_sd_configs": [{"files": [ledger_canister_scraping_target_path]}],
+            },
+            {
+                "job_name": "bitcoin-mainnet-canister",
+                "honor_timestamps": true,
+                "metrics_path": "/metrics",
+                "scheme": "https",
+                "follow_redirects": true,
+                "enable_http2": true,
+                "file_sd_configs": [{"files": [bitcoin_mainnet_canister_scraping_target_path]}],
+            },
+            {
+                "job_name": "bitcoin-testnet-canister",
+                "honor_timestamps": true,
+                "metrics_path": "/metrics",
+                "scheme": "https",
+                "follow_redirects": true,
+                "enable_http2": true,
+                "file_sd_configs": [{"files": [bitcoin_testnet_canister_scraping_target_path]}],
+            },
+            {
+                "job_name": "bitcoin-watchdog-mainnet-canister",
+                "honor_timestamps": true,
+                "metrics_path": "/metrics",
+                "scheme": "https",
+                "follow_redirects": true,
+                "enable_http2": true,
+                "file_sd_configs": [{"files": [bitcoin_watchdog_mainnet_canister_scraping_target_path]}],
+            },
+            {
+                "job_name": "bitcoin-watchdog-testnet-canister",
+                "honor_timestamps": true,
+                "metrics_path": "/metrics",
+                "scheme": "https",
+                "follow_redirects": true,
+                "enable_http2": true,
+                "file_sd_configs": [{"files": [bitcoin_watchdog_testnet_canister_scraping_target_path]}],
             },
         ],
     });
@@ -513,7 +574,7 @@ fn sync_prometheus_config_dir(
     prometheus_config_dir: PathBuf,
     group_name: String,
     topology_snapshot: TopologySnapshot,
-    farm_url_for_ledger_canister: &Option<String>,
+    playnet_url: &Option<String>,
 ) -> Result<()> {
     let mut replica_p8s_static_configs: Vec<PrometheusStaticConfig> = Vec::new();
     let mut ic_boundary_p8s_static_configs: Vec<PrometheusStaticConfig> = Vec::new();
@@ -584,15 +645,42 @@ fn sync_prometheus_config_dir(
         });
     }
 
-    if let Some(farm_url) = farm_url_for_ledger_canister {
-        let ledger_canister_p8s_static_config = vec![PrometheusStaticConfig {
-            targets: vec![format!("ryjl3-tyaaa-aaaaa-aaaba-cai.raw.{}", farm_url)],
-            labels: hashmap! {"ic".to_string() => group_name.clone(), "token".to_string() => "icp".to_string()},
-        }];
+    if let Some(playnet_url) = playnet_url {
+        // ICP ledger canister
         serde_json::to_writer(
             &File::create(prometheus_config_dir.join(LEDGER_CANISTER_PROMETHEUS_TARGET))?,
-            &ledger_canister_p8s_static_config,
+            &vec![PrometheusStaticConfig {
+                targets: vec![format!("ryjl3-tyaaa-aaaaa-aaaba-cai.raw.{}", playnet_url)],
+                labels: hashmap! {"ic".to_string() => group_name.clone(), "token".to_string() => "icp".to_string()},
+            }],
         )?;
+        // Bitcoin canisters
+        for (prometheus_target, canister_id) in [
+            (
+                BITCOIN_MAINNET_CANISTER_PROMETHEUS_TARGET,
+                "ghsi2-tqaaa-aaaan-aaaca-cai",
+            ),
+            (
+                BITCOIN_TESTNET_CANISTER_PROMETHEUS_TARGET,
+                "g4xu7-jiaaa-aaaan-aaaaq-cai",
+            ),
+            (
+                BITCOIN_WATCHDOG_MAINNET_CANISTER_PROMETHEUS_TARGET,
+                "gatoo-6iaaa-aaaan-aaacq-cai",
+            ),
+            (
+                BITCOIN_WATCHDOG_TESTNET_CANISTER_PROMETHEUS_TARGET,
+                "gjqfs-iaaaa-aaaan-aaada-cai",
+            ),
+        ] {
+            serde_json::to_writer(
+                &File::create(prometheus_config_dir.join(prometheus_target))?,
+                &vec![PrometheusStaticConfig {
+                    targets: vec![format!("{canister_id}.raw.{playnet_url}")],
+                    labels: hashmap! {"ic".to_string() => group_name.clone()},
+                }],
+            )?;
+        }
     }
     for (name, p8s_static_configs) in &[
         (REPLICA_PROMETHEUS_TARGET, replica_p8s_static_configs),

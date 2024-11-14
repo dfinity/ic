@@ -10,7 +10,7 @@ use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
 use on_wire::bytes;
 
 async fn set_up_universal_canister(runtime: &'_ Runtime) -> Canister<'_> {
-    Wasm::from_bytes(UNIVERSAL_CANISTER_WASM)
+    Wasm::from_bytes(UNIVERSAL_CANISTER_WASM.to_vec())
         .install(runtime)
         .bytes(Vec::new())
         .await
