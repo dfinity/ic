@@ -24,6 +24,8 @@ libunwind8
 libselinux1
 
 # Smartcard support for replica
+pcsc-tools
+opensc
 pcscd
 opensc-pkcs11
 sssd
