@@ -175,7 +175,6 @@ impl Orchestrator {
         let crypto = tokio::task::spawn_blocking(move || {
             Arc::new(CryptoComponent::new(
                 &crypto_config,
-                Some(tokio::runtime::Handle::current()),
                 c_registry.get_registry_client(),
                 c_log.clone(),
                 Some(&c_metrics),

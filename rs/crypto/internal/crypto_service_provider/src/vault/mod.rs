@@ -85,7 +85,7 @@ fn unix_socket_vault(
             rt_handle.clone(),
         ));
     }
-    let vault = RemoteCspVault::new(socket_path, rt_handle, logger, metrics).unwrap_or_else(|e| {
+    let vault = RemoteCspVault::new(socket_path, logger, metrics).unwrap_or_else(|e| {
         panic!(
             "Could not connect to CspVault at socket {:?}: {:?}",
             socket_path, e
