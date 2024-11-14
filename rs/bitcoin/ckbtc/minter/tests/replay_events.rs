@@ -1,7 +1,8 @@
 use candid::{CandidType, Deserialize, Principal};
 use ic_agent::Agent;
 use ic_ckbtc_minter::state::eventlog::{replay, Event};
-use ic_ckbtc_minter::state::Network;
+use ic_ckbtc_minter::state::invariants::CheckInvariants;
+use ic_ckbtc_minter::state::{CkBtcMinterState, Network};
 use std::path::PathBuf;
 
 #[tokio::test]
@@ -10,8 +11,9 @@ async fn should_replay_events_for_mainnet() {
         .retrieve_and_store_events_if_env()
         .await;
 
-    let state = replay(GetEventsFile::Mainnet.deserialize().events.into_iter())
-        .expect("Failed to replay events");
+    let state =
+        replay::<SkipCheckInvariantsImpl>(GetEventsFile::Mainnet.deserialize().events.into_iter())
+            .expect("Failed to replay events");
 
     assert_eq!(state.btc_network, Network::Mainnet);
     assert_eq!(state.get_total_btc_managed(), 21_723_786_340);
@@ -23,8 +25,9 @@ async fn should_replay_events_for_testnet() {
         .retrieve_and_store_events_if_env()
         .await;
 
-    let state = replay(GetEventsFile::Testnet.deserialize().events.into_iter())
-        .expect("Failed to replay events");
+    let state =
+        replay::<SkipCheckInvariantsImpl>(GetEventsFile::Testnet.deserialize().events.into_iter())
+            .expect("Failed to replay events");
 
     assert_eq!(state.btc_network, Network::Testnet);
     assert_eq!(state.get_total_btc_managed(), 16_578_205_978);
@@ -195,4 +198,12 @@ async fn get_events(agent: &Agent, minter_id: &Principal, start: u64, length: u6
 pub struct GetEventsResult {
     pub events: Vec<Event>,
     pub total_event_count: u64,
+}
+
+pub enum SkipCheckInvariantsImpl {}
+
+impl CheckInvariants for SkipCheckInvariantsImpl {
+    fn check_invariants(_state: &CkBtcMinterState) -> Result<(), String> {
+        Ok(())
+    }
 }

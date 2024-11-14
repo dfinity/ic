@@ -8,6 +8,7 @@ use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::lifecycle::{self, init::MinterArg};
 use ic_ckbtc_minter::metrics::encode_metrics;
 use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest, WithdrawalFee};
+use ic_ckbtc_minter::state::invariants::CheckInvariantsImpl;
 use ic_ckbtc_minter::state::{
     read_state, BtcRetrievalStatusV2, RetrieveBtcStatus, RetrieveBtcStatusV2,
 };
@@ -65,7 +66,7 @@ fn check_invariants() -> Result<(), String> {
         s.check_invariants()?;
 
         let events: Vec<_> = storage::events().collect();
-        let recovered_state = replay(events.clone().into_iter())
+        let recovered_state = replay::<CheckInvariantsImpl>(events.clone().into_iter())
             .unwrap_or_else(|e| panic!("failed to replay log {:?}: {:?}", events, e));
 
         recovered_state.check_invariants()?;

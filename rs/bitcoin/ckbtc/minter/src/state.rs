@@ -10,10 +10,12 @@ use std::{
 
 pub mod audit;
 pub mod eventlog;
+pub mod invariants;
 
 use crate::lifecycle::init::InitArgs;
 use crate::lifecycle::upgrade::UpgradeArgs;
 use crate::logs::P0;
+use crate::state::invariants::CheckInvariants;
 use crate::{address::BitcoinAddress, ECDSAPublicKey};
 use candid::{CandidType, Deserialize, Principal};
 use ic_base_types::CanisterId;
@@ -586,7 +588,7 @@ impl CkBtcMinterState {
     }
 
     // public for only for tests
-    pub(crate) fn add_utxos(&mut self, account: Account, utxos: Vec<Utxo>) {
+    pub(crate) fn add_utxos<I: CheckInvariants>(&mut self, account: Account, utxos: Vec<Utxo>) {
         if utxos.is_empty() {
             return;
         }
@@ -603,8 +605,7 @@ impl CkBtcMinterState {
         }
 
         #[cfg(debug_assertions)]
-        self.check_invariants()
-            .expect("state invariants are violated");
+        I::check_invariants(&self).expect("state invariants are violated");
     }
 
     pub fn retrieve_btc_status_v2_by_account(
