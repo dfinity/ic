@@ -18,7 +18,7 @@ pub(crate) struct EvictionCandidate {
 /// The function also tries to evict candidates that have been idle for a long
 /// time (`last_used_threshold`).
 pub(crate) fn evict(
-    candidates: Vec<EvictionCandidate>,
+    mut candidates: Vec<EvictionCandidate>,
     total_rss: NumBytes,
     max_count_threshold: usize,
     last_used_threshold: Instant,
@@ -26,39 +26,24 @@ pub(crate) fn evict(
 ) -> Vec<EvictionCandidate> {
     let evict_at_least: usize = candidates.len().saturating_sub(max_count_threshold);
 
-    let (mut idle, mut non_idle): (_, Vec<_>) = candidates
-        .into_iter()
-        .partition(|candidate| candidate.last_used < last_used_threshold);
+    let min_possible_priority = AccumulatedPriority::new(i64::MIN);
+
+    candidates.sort_by_key(|x| {
+        if x.last_used < last_used_threshold {
+            // We will first evict `idle` candidates in order of their `last_used` value.
+            (0, min_possible_priority, x.last_used)
+        } else {
+            // `Non idle` candidates will be evicted based on the `scheduler_priority` or based
+            // on the vale `last_used` in the case multiple candidates have the same priority.
+            (1, x.scheduler_priority, x.last_used)
+        }
+    });
+
+    let mut evicted = vec![];
+    let mut evicted_rss = NumBytes::new(0);
 
     // Evict as many idle candidates as required.
-    idle.sort_by_key(|x| x.last_used);
-    let mut evicted_rss = NumBytes::new(0);
-    let mut evicted_num = 0;
-
-    for candidate in idle.iter() {
-        if evicted_num >= evict_at_least
-            && total_rss <= max_sandboxes_rss.saturating_add(&evicted_rss)
-        {
-            break;
-        }
-        evicted_num += 1;
-        evicted_rss = evicted_rss.saturating_add(&candidate.rss);
-    }
-
-    if evicted_num >= evict_at_least && total_rss <= max_sandboxes_rss.saturating_add(&evicted_rss)
-    {
-        // We have already evicted the minimum required number of candidates.
-        // No need to evict more.
-        idle.truncate(evicted_num);
-        return idle;
-    }
-
-    // All idle candidates are evicted.
-    let mut evicted = idle;
-
-    non_idle.sort_by_key(|x| (x.scheduler_priority, x.last_used));
-
-    for candidate in non_idle.into_iter() {
+    for candidate in candidates.into_iter() {
         if evicted.len() >= evict_at_least
             && total_rss <= max_sandboxes_rss.saturating_add(&evicted_rss)
         {
@@ -66,6 +51,7 @@ pub(crate) fn evict(
             // No need to evict more.
             break;
         }
+
         evicted_rss = evicted_rss.saturating_add(&candidate.rss);
         evicted.push(candidate);
     }
