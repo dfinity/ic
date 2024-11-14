@@ -80,7 +80,7 @@ fn canonical_encoding_stream_header() {
     }
 }
 
-/// Canonical CBOR encoding (with certification to version up to 18) of:
+/// Canonical CBOR encoding (with certification version up to 18) of:
 ///
 /// ```no_run
 /// StreamHeader {
