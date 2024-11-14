@@ -558,23 +558,14 @@ impl TlsHandshakeCspVault for RemoteCspVault {
 
     #[instrument(skip_all)]
     fn tls_sign(&self, message: Vec<u8>, key_id: KeyId) -> Result<CspSignature, CspTlsSignError> {
-        // Here we cannot call `block_on` directly but have to wrap it in
-        // `block_in_place` because this method here is called via a Rustls
-        // callback (via our implementation of the `rustls::sign::Signer`
-        // trait) from the async function `tokio_rustls::TlsAcceptor::accept`,
-        // which in turn is called from our async function
-        // `TlsHandshake::perform_tls_server_handshake`.
-        #[allow(clippy::disallowed_methods)]
-        tokio::task::block_in_place(|| {
-            self.tokio_block_on(self.tarpc_csp_client.tls_sign(
-                context_with_timeout(self.rpc_timeout),
-                ByteBuf::from(message),
-                key_id,
-            ))
-            .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-                Err(CspTlsSignError::TransientInternalError {
-                    internal_error: rpc_error.to_string(),
-                })
+        self.tokio_block_on(self.tarpc_csp_client.tls_sign(
+            context_with_timeout(self.rpc_timeout),
+            ByteBuf::from(message),
+            key_id,
+        ))
+        .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
+            Err(CspTlsSignError::TransientInternalError {
+                internal_error: rpc_error.to_string(),
             })
         })
     }
