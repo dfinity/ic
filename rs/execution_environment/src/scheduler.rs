@@ -41,6 +41,7 @@ use ic_types::{
     MAX_WASM_MEMORY_IN_BYTES,
 };
 use ic_types::{nominal_cycles::NominalCycles, NumMessages};
+use more_asserts::debug_assert_le;
 use num_rational::Ratio;
 use std::{
     cell::RefCell,
@@ -547,6 +548,11 @@ impl SchedulerImpl {
                     * state.num_canisters() as u64,
             );
             scheduler_round_limits.update_canister_round_limits(&round_limits);
+            debug_assert_le!(
+                scheduler_round_limits.subnet_available_callbacks,
+                self.exec_env.subnet_available_callbacks(&state),
+                "`subnet_available_callbacks` is a lower bound estimate for the number of available callbacks"
+            );
 
             if instructions_consumed == RoundInstructions::from(0) {
                 break state;
