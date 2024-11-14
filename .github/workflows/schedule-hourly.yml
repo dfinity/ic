@@ -118,3 +118,11 @@ jobs:
       - name: Run AFL targets
         shell: bash
         run: ./bin/run-all-fuzzers.sh --afl 100
+      - name: Post Slack Notification
+        uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
+        if: success() || failure() # testing
+        with:
+          channel-id: prodsec-fuzzing
+          slack-message: "Bazel Run Fuzzers Hourly failed :disappointed: - <${{github.server_url}}/${{github.repository}}/actions/runs/${{github.event.workflow_run.id}}|Run#${{github.event.workflow_run.id}}>"
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}
