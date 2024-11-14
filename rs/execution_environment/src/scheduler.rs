@@ -41,7 +41,7 @@ use ic_types::{
     MAX_WASM_MEMORY_IN_BYTES,
 };
 use ic_types::{nominal_cycles::NominalCycles, NumMessages};
-use more_asserts::debug_assert_le;
+use more_asserts::{debug_assert_ge, debug_assert_le};
 use num_rational::Ratio;
 use std::{
     cell::RefCell,
@@ -777,6 +777,10 @@ impl SchedulerImpl {
             );
             heap_delta += result.heap_delta;
 
+            debug_assert_ge!(
+                round_limits_per_thread.subnet_available_callbacks,
+                result.round_limits.subnet_available_callbacks,
+            );
             callbacks_created += round_limits_per_thread.subnet_available_callbacks
                 - result.round_limits.subnet_available_callbacks;
         }
