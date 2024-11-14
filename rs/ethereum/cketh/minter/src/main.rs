@@ -16,7 +16,9 @@ use ic_cketh_minter::endpoints::{
     WithdrawalDetail, WithdrawalError, WithdrawalSearchParameter,
 };
 use ic_cketh_minter::erc20::CkTokenSymbol;
-use ic_cketh_minter::eth_logs::{EventSource, ReceivedErc20Event, ReceivedEthEvent};
+use ic_cketh_minter::eth_logs::{
+    EventSource, LedgerSubaccount, ReceivedErc20Event, ReceivedEthEvent,
+};
 use ic_cketh_minter::guard::retrieve_withdraw_guard;
 use ic_cketh_minter::ledger_client::{LedgerBurnError, LedgerClient};
 use ic_cketh_minter::lifecycle::MinterArg;
@@ -43,6 +45,7 @@ use ic_cketh_minter::{
     SCRAPING_ETH_LOGS_INTERVAL,
 };
 use ic_ethereum_types::Address;
+use icrc_ledger_types::icrc1::account::Account;
 use std::collections::BTreeSet;
 use std::convert::TryFrom;
 use std::str::FromStr;
@@ -267,7 +270,11 @@ async fn get_minter_info() -> MinterInfo {
 
 #[update]
 async fn withdraw_eth(
-    WithdrawalArg { amount, recipient }: WithdrawalArg,
+    WithdrawalArg {
+        amount,
+        recipient,
+        from_subaccount,
+    }: WithdrawalArg,
 ) -> Result<RetrieveEthRequest, WithdrawalError> {
     let caller = validate_caller_not_anonymous();
     let _guard = retrieve_withdraw_guard(caller).unwrap_or_else(|e| {
@@ -300,7 +307,10 @@ async fn withdraw_eth(
     log!(INFO, "[withdraw]: burning {:?}", amount);
     match client
         .burn_from(
-            caller.into(),
+            Account {
+                owner: caller,
+                subaccount: from_subaccount,
+            },
             amount,
             BurnMemo::Convert {
                 to_address: destination,
@@ -314,7 +324,7 @@ async fn withdraw_eth(
                 destination,
                 ledger_burn_index,
                 from: caller,
-                from_subaccount: None,
+                from_subaccount: from_subaccount.and_then(LedgerSubaccount::from_bytes),
                 created_at: Some(now),
             };
 
@@ -375,8 +385,8 @@ async fn withdrawal_status(parameter: WithdrawalSearchParameter) -> Vec<Withdraw
                 from: request.from(),
                 from_subaccount: request
                     .from_subaccount()
-                    .clone()
-                    .map(|subaccount| subaccount.0),
+                    .cloned()
+                    .map(LedgerSubaccount::to_bytes),
                 status,
             })
             .collect()
@@ -389,6 +399,8 @@ async fn withdraw_erc20(
         amount,
         ckerc20_ledger_id,
         recipient,
+        from_cketh_subaccount,
+        from_ckerc20_subaccount,
     }: WithdrawErc20Arg,
 ) -> Result<RetrieveErc20Request, WithdrawErc20Error> {
     validate_ckerc20_active();
@@ -426,11 +438,24 @@ async fn withdraw_erc20(
     let erc20_tx_fee = estimate_erc20_transaction_fee().await.ok_or_else(|| {
         WithdrawErc20Error::TemporarilyUnavailable("Failed to retrieve current gas fee".to_string())
     })?;
+    let cketh_account = Account {
+        owner: caller,
+        subaccount: from_cketh_subaccount,
+    };
+    let ckerc20_account = Account {
+        owner: caller,
+        subaccount: from_ckerc20_subaccount,
+    };
     let now = ic_cdk::api::time();
-    log!(INFO, "[withdraw_erc20]: burning {:?} ckETH", erc20_tx_fee);
+    log!(
+        INFO,
+        "[withdraw_erc20]: burning {:?} ckETH from account {}",
+        erc20_tx_fee,
+        cketh_account
+    );
     match cketh_ledger
         .burn_from(
-            caller.into(),
+            cketh_account,
             erc20_tx_fee,
             BurnMemo::Erc20GasFee {
                 ckerc20_token_symbol: ckerc20_token.ckerc20_token_symbol.clone(),
@@ -443,13 +468,14 @@ async fn withdraw_erc20(
         Ok(cketh_ledger_burn_index) => {
             log!(
                 INFO,
-                "[withdraw_erc20]: burning {} {}",
+                "[withdraw_erc20]: burning {} {} from account {}",
                 ckerc20_withdrawal_amount,
-                ckerc20_token.ckerc20_token_symbol
+                ckerc20_token.ckerc20_token_symbol,
+                ckerc20_account
             );
             match LedgerClient::ckerc20_ledger(&ckerc20_token)
                 .burn_from(
-                    caller.into(),
+                    ckerc20_account,
                     ckerc20_withdrawal_amount,
                     BurnMemo::Erc20Convert {
                         ckerc20_withdrawal_id: cketh_ledger_burn_index.get(),
@@ -468,7 +494,8 @@ async fn withdraw_erc20(
                         ckerc20_ledger_burn_index,
                         erc20_contract_address: ckerc20_token.erc20_contract_address,
                         from: caller,
-                        from_subaccount: None,
+                        from_subaccount: from_ckerc20_subaccount
+                            .and_then(LedgerSubaccount::from_bytes),
                         created_at: now,
                     };
                     log!(
@@ -497,8 +524,10 @@ async fn withdraw_erc20(
                         let reimbursement_request = ReimbursementRequest {
                             ledger_burn_index: cketh_ledger_burn_index,
                             reimbursed_amount: reimbursed_amount.change_units(),
-                            to: caller,
-                            to_subaccount: None,
+                            to: cketh_account.owner,
+                            to_subaccount: cketh_account
+                                .subaccount
+                                .and_then(LedgerSubaccount::from_bytes),
                             transaction_hash: None,
                         };
                         mutate_state(|s| {
@@ -728,7 +757,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     destination: destination.to_string(),
                     ledger_burn_index: ledger_burn_index.get().into(),
                     from,
-                    from_subaccount: from_subaccount.map(|s| s.0),
+                    from_subaccount: from_subaccount.map(LedgerSubaccount::to_bytes),
                     created_at,
                 },
                 EventType::CreatedTransaction {
@@ -815,7 +844,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     ckerc20_ledger_id,
                     ckerc20_ledger_burn_index: ckerc20_ledger_burn_index.get().into(),
                     from,
-                    from_subaccount: from_subaccount.map(|s| s.0),
+                    from_subaccount: from_subaccount.map(LedgerSubaccount::to_bytes),
                     created_at,
                 },
                 EventType::MintedCkErc20 {
@@ -839,7 +868,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     withdrawal_id: ledger_burn_index.get().into(),
                     reimbursed_amount: reimbursed_amount.into(),
                     to,
-                    to_subaccount: to_subaccount.map(|s| s.0),
+                    to_subaccount: to_subaccount.map(LedgerSubaccount::to_bytes),
                 },
                 EventType::QuarantinedDeposit { event_source } => EP::QuarantinedDeposit {
                     event_source: map_event_source(event_source),

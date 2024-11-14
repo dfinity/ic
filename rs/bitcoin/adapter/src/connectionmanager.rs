@@ -428,7 +428,15 @@ impl ConnectionManager {
             .get_connection(address)
             .map_err(|_| ProcessBitcoinNetworkMessageError::InvalidMessage)?;
         if !conn.is_seed() && !self.validate_received_version(message) {
-            warn!(self.logger, "Received an invalid version from {}", address);
+            warn!(
+                self.logger,
+                "Received an invalid version from {}. Version: {}; Height: {}; Services: {}, while current height is: {}",
+                address,
+                message.version,
+                message.start_height,
+                message.services,
+                self.current_height,
+            );
             return Err(ProcessBitcoinNetworkMessageError::InvalidMessage);
         }
         self.send_verack(address).ok();

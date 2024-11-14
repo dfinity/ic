@@ -20,8 +20,8 @@ use crate::{
             governance::{
                 self,
                 neuron_in_flight_command::{self, Command as InFlightCommand},
-                CachedUpgradeSteps, MaturityModulation, NeuronInFlightCommand, SnsMetadata,
-                UpgradeInProgress, Version, Versions,
+                CachedUpgradeSteps, MaturityModulation, NeuronInFlightCommand, PendingVersion,
+                SnsMetadata, Version, Versions,
             },
             governance_error::ErrorType,
             manage_neuron::{
@@ -54,8 +54,8 @@ use crate::{
             NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId, NeuronPermission,
             NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
             ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RegisterDappCanisters,
-            RewardEvent, Tally, TransferSnsTreasuryFunds, UpgradeJournal, UpgradeJournalEntry,
-            UpgradeSnsControlledCanister, Vote, WaitForQuietState,
+            RewardEvent, Tally, TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, Vote,
+            WaitForQuietState,
         },
     },
     proposal::{
@@ -2600,15 +2600,11 @@ impl Governance {
                 )
             })?;
 
-        self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeStarted {
-            current_version: Some(current_version.clone()),
-            expected_version: Some(next_version.clone()),
-            reason: Some(
-                upgrade_journal_entry::upgrade_started::Reason::UpgradeSnsToNextVersionProposal(
-                    ProposalId { id: proposal_id },
-                ),
-            ),
-        });
+        self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeStarted::from_proposal(
+            current_version.clone(),
+            next_version.clone(),
+            ProposalId { id: proposal_id },
+        ));
 
         let target_wasm = get_wasm(&*self.env, new_wasm_hash.to_vec(), canister_type_to_upgrade)
             .await
@@ -2645,7 +2641,7 @@ impl Governance {
         // A canister upgrade has been successfully kicked-off. Set the pending upgrade-in-progress
         // field so that Governance's run_periodic_tasks logic can check on the status of
         // this upgrade.
-        self.proto.pending_version = Some(UpgradeInProgress {
+        self.proto.pending_version = Some(PendingVersion {
             target_version: Some(next_version),
             mark_failed_at_seconds: self.env.now() + 5 * 60,
             checking_upgrade_lock: 0,
@@ -4828,30 +4824,9 @@ impl Governance {
         // Refresh the upgrade steps if they have changed
         if cached_upgrade_steps.upgrade_steps != Some(upgrade_steps.clone()) {
             cached_upgrade_steps.upgrade_steps = Some(upgrade_steps.clone());
-            self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeStepsRefreshed {
-                upgrade_steps: Some(upgrade_steps),
-            });
-        }
-    }
-
-    pub fn push_to_upgrade_journal<Event>(&mut self, event: Event)
-    where
-        upgrade_journal_entry::Event: From<Event>,
-    {
-        let event = upgrade_journal_entry::Event::from(event);
-        let upgrade_journal_entry = UpgradeJournalEntry {
-            event: Some(event),
-            timestamp_seconds: Some(self.env.now()),
-        };
-        match self.proto.upgrade_journal {
-            None => {
-                self.proto.upgrade_journal = Some(UpgradeJournal {
-                    entries: vec![upgrade_journal_entry],
-                });
-            }
-            Some(ref mut journal) => {
-                journal.entries.push(upgrade_journal_entry);
-            }
+            self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeStepsRefreshed::new(
+                upgrade_steps.versions,
+            ));
         }
     }
 
@@ -4879,11 +4854,9 @@ impl Governance {
         &mut self,
         request: AdvanceTargetVersionRequest,
     ) -> AdvanceTargetVersionResponse {
-        self.push_to_upgrade_journal(upgrade_journal_entry::Event::TargetVersionSet(
-            upgrade_journal_entry::TargetVersionSet {
-                old_target_version: self.proto.target_version.clone(),
-                new_target_version: request.target_version.clone(),
-            },
+        self.push_to_upgrade_journal(upgrade_journal_entry::TargetVersionSet::new(
+            self.proto.target_version.clone(),
+            request.target_version.clone(),
         ));
 
         self.proto.target_version = request.target_version;
@@ -5355,14 +5328,10 @@ impl Governance {
             let msg = "No target_version set for upgrade_in_progress. This should be impossible. \
                 Clearing upgrade_in_progress state and marking proposal failed to unblock further upgrades.";
 
-            self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome {
-                status: Some(
-                    upgrade_journal_entry::upgrade_outcome::Status::InvalidState(
-                        upgrade_journal_entry::upgrade_outcome::InvalidState { version: None },
-                    ),
-                ),
-                human_readable: Some(msg.to_string()),
-            });
+            self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome::invalid_state(
+                msg.to_string(),
+                None,
+            ));
             self.fail_sns_upgrade_to_next_version_proposal(
                 upgrade_in_progress.proposal_id,
                 GovernanceError::new_with_message(ErrorType::PreconditionFailed, msg),
@@ -5394,12 +5363,9 @@ impl Governance {
             let error =
                 "Too many attempts to check upgrade without success.  Marking upgrade failed.";
 
-            self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome {
-                status: Some(upgrade_journal_entry::upgrade_outcome::Status::Timeout(
-                    Empty {},
-                )),
-                human_readable: Some(error.to_string()),
-            });
+            self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome::timeout(
+                error.to_string(),
+            ));
 
             self.fail_sns_upgrade_to_next_version_proposal(
                 proposal_id,
@@ -5438,12 +5404,9 @@ impl Governance {
                         message,
                     );
 
-                    self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome {
-                        status: Some(upgrade_journal_entry::upgrade_outcome::Status::Timeout(
-                            Empty {},
-                        )),
-                        human_readable: Some(error.to_string()),
-                    });
+                    self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome::timeout(
+                        error.to_string(),
+                    ));
                     self.fail_sns_upgrade_to_next_version_proposal(
                         proposal_id,
                         GovernanceError::new_with_message(ErrorType::External, error),
@@ -5470,14 +5433,10 @@ impl Governance {
                     self.env.now(),
                 );
 
-                self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome {
-                    status: Some(
-                        upgrade_journal_entry::upgrade_outcome::Status::InvalidState(
-                            upgrade_journal_entry::upgrade_outcome::InvalidState { version: None },
-                        ),
-                    ),
-                    human_readable: Some(error.to_string()),
-                });
+                self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome::invalid_state(
+                    error.to_string(),
+                    None,
+                ));
 
                 self.proto.deployed_version = Some(running_version);
                 self.fail_sns_upgrade_to_next_version_proposal(
@@ -5499,12 +5458,7 @@ impl Governance {
                     self.env.now(),
                     target_version
                 );
-                self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome {
-                    status: Some(upgrade_journal_entry::upgrade_outcome::Status::Success(
-                        Empty {},
-                    )),
-                    human_readable: None,
-                });
+                self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome::success(None));
                 self.set_proposal_execution_status(proposal_id, Ok(()));
                 self.proto.deployed_version = Some(target_version);
                 self.proto.pending_version = None;
@@ -5519,13 +5473,9 @@ impl Governance {
                         errors
                     );
 
-                    self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome {
-                        status: Some(upgrade_journal_entry::upgrade_outcome::Status::Timeout(
-                            Empty {},
-                        )),
-                        human_readable: Some(error.to_string()),
-                    });
-
+                    self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome::timeout(
+                        error.to_string(),
+                    ));
                     self.fail_sns_upgrade_to_next_version_proposal(
                         proposal_id,
                         GovernanceError::new_with_message(ErrorType::External, error),
@@ -5848,8 +5798,8 @@ mod tests {
             manage_neuron_response,
             nervous_system_function::{FunctionType, GenericNervousSystemFunction},
             neuron, Account as AccountProto, Motion, NeuronPermissionType, ProposalData,
-            ProposalId, Tally, UpgradeSnsControlledCanister, UpgradeSnsToNextVersion,
-            VotingRewardsParameters, WaitForQuietState,
+            ProposalId, Tally, UpgradeJournalEntry, UpgradeSnsControlledCanister,
+            UpgradeSnsToNextVersion, VotingRewardsParameters, WaitForQuietState,
         },
         reward,
         sns_upgrade::{
@@ -7321,7 +7271,7 @@ mod tests {
         assert_required_calls();
         assert_eq!(
             governance.proto.pending_version.clone().unwrap(),
-            UpgradeInProgress {
+            PendingVersion {
                 target_version: Some(next_version.into()),
                 mark_failed_at_seconds: now + 5 * 60,
                 checking_upgrade_lock: 0,
@@ -7636,7 +7586,7 @@ mod tests {
         // Now set the pending_version in Governance such that the period_task to check upgrade
         // status is triggered.
         let mark_failed_at_seconds = governance.env.now() + ONE_DAY_SECONDS;
-        governance.proto.pending_version = Some(UpgradeInProgress {
+        governance.proto.pending_version = Some(PendingVersion {
             target_version: Some(next_version.clone().into()),
             mark_failed_at_seconds,
             checking_upgrade_lock: 0,
@@ -7646,7 +7596,7 @@ mod tests {
         // Make sure Governance state is correctly set
         assert_eq!(
             governance.proto.pending_version.clone().unwrap(),
-            UpgradeInProgress {
+            PendingVersion {
                 target_version: Some(next_version.clone().into()),
                 mark_failed_at_seconds,
                 checking_upgrade_lock: 0,
@@ -7734,7 +7684,7 @@ mod tests {
             GovernanceProto {
                 root_canister_id: Some(root_canister_id.get()),
                 deployed_version: Some(current_version.clone().into()),
-                pending_version: Some(UpgradeInProgress {
+                pending_version: Some(PendingVersion {
                     target_version: Some(next_version.clone().into()),
                     mark_failed_at_seconds: now - 1,
                     checking_upgrade_lock: 0,
@@ -7752,7 +7702,7 @@ mod tests {
 
         assert_eq!(
             governance.proto.pending_version.clone().unwrap(),
-            UpgradeInProgress {
+            PendingVersion {
                 target_version: Some(next_version.into()),
                 mark_failed_at_seconds: now - 1,
                 checking_upgrade_lock: 0,
@@ -7829,7 +7779,7 @@ mod tests {
             GovernanceProto {
                 root_canister_id: Some(root_canister_id.get()),
                 deployed_version: Some(current_version.clone().into()),
-                pending_version: Some(UpgradeInProgress {
+                pending_version: Some(PendingVersion {
                     target_version: Some(next_version.clone().into()),
                     mark_failed_at_seconds: now + 5 * 60,
                     checking_upgrade_lock: 0,
@@ -7875,7 +7825,7 @@ mod tests {
 
         assert_eq!(
             governance.proto.pending_version.clone().unwrap(),
-            UpgradeInProgress {
+            PendingVersion {
                 target_version: Some(next_version.clone().into()),
                 mark_failed_at_seconds: now + 5 * 60,
                 checking_upgrade_lock: 0,
@@ -7970,7 +7920,7 @@ mod tests {
             GovernanceProto {
                 root_canister_id: Some(root_canister_id.get()),
                 deployed_version: Some(current_version.clone().into()),
-                pending_version: Some(UpgradeInProgress {
+                pending_version: Some(PendingVersion {
                     target_version: Some(next_version.clone().into()),
                     mark_failed_at_seconds: now + 1,
                     checking_upgrade_lock: 0,
@@ -8016,7 +7966,7 @@ mod tests {
 
         assert_eq!(
             governance.proto.pending_version.clone().unwrap(),
-            UpgradeInProgress {
+            PendingVersion {
                 target_version: Some(next_version.clone().into()),
                 mark_failed_at_seconds: now + 1,
                 checking_upgrade_lock: 0,
@@ -8033,7 +7983,7 @@ mod tests {
         // We still have pending version
         assert_eq!(
             governance.proto.pending_version.clone().unwrap(),
-            UpgradeInProgress {
+            PendingVersion {
                 target_version: Some(next_version.into()),
                 mark_failed_at_seconds: now + 1,
                 checking_upgrade_lock: 0,
@@ -8106,7 +8056,7 @@ mod tests {
             GovernanceProto {
                 root_canister_id: Some(root_canister_id.get()),
                 deployed_version: Some(current_version.clone().into()),
-                pending_version: Some(UpgradeInProgress {
+                pending_version: Some(PendingVersion {
                     target_version: Some(next_version.clone().into()),
                     mark_failed_at_seconds: now - 1,
                     checking_upgrade_lock: 0,
@@ -8152,7 +8102,7 @@ mod tests {
 
         assert_eq!(
             governance.proto.pending_version.clone().unwrap(),
-            UpgradeInProgress {
+            PendingVersion {
                 target_version: Some(next_version.clone().into()),
                 mark_failed_at_seconds: now - 1,
                 checking_upgrade_lock: 0,
@@ -8253,7 +8203,7 @@ mod tests {
             GovernanceProto {
                 root_canister_id: Some(root_canister_id.get()),
                 deployed_version: Some(current_version.into()),
-                pending_version: Some(UpgradeInProgress {
+                pending_version: Some(PendingVersion {
                     // This should be impossible due to how it's set, but is the condition of this test
                     target_version: None,
                     mark_failed_at_seconds: now - 1,
@@ -8389,7 +8339,7 @@ mod tests {
             GovernanceProto {
                 root_canister_id: Some(root_canister_id.get()),
                 deployed_version: None,
-                pending_version: Some(UpgradeInProgress {
+                pending_version: Some(PendingVersion {
                     target_version: Some(next_version.clone().into()),
                     mark_failed_at_seconds: now + 5 * 60,
                     checking_upgrade_lock: 0,
@@ -8435,7 +8385,7 @@ mod tests {
 
         assert_eq!(
             governance.proto.pending_version.clone().unwrap(),
-            UpgradeInProgress {
+            PendingVersion {
                 target_version: Some(next_version.into()),
                 mark_failed_at_seconds: now + 5 * 60,
                 checking_upgrade_lock: 0,
@@ -8596,7 +8546,7 @@ mod tests {
             GovernanceProto {
                 root_canister_id: Some(root_canister_id.get()),
                 deployed_version: Some(current_version.clone().into()),
-                pending_version: Some(UpgradeInProgress {
+                pending_version: Some(PendingVersion {
                     target_version: Some(next_version.clone().into()),
                     mark_failed_at_seconds: now + 5 * 60,
                     checking_upgrade_lock: 0,
@@ -8614,7 +8564,7 @@ mod tests {
 
         assert_eq!(
             governance.proto.pending_version.clone().unwrap(),
-            UpgradeInProgress {
+            PendingVersion {
                 target_version: Some(next_version.clone().into()),
                 mark_failed_at_seconds: now + 5 * 60,
                 checking_upgrade_lock: 0,
@@ -8674,7 +8624,7 @@ mod tests {
             GovernanceProto {
                 root_canister_id: Some(root_canister_id.get()),
                 deployed_version: Some(current_version.clone().into()),
-                pending_version: Some(UpgradeInProgress {
+                pending_version: Some(PendingVersion {
                     target_version: Some(next_version.clone().into()),
                     mark_failed_at_seconds: now + 5 * 60,
                     checking_upgrade_lock: 0,
@@ -8692,7 +8642,7 @@ mod tests {
 
         assert_eq!(
             governance.proto.pending_version.clone().unwrap(),
-            UpgradeInProgress {
+            PendingVersion {
                 target_version: Some(next_version.clone().into()),
                 mark_failed_at_seconds: now + 5 * 60,
                 checking_upgrade_lock: 0,
@@ -9103,7 +9053,7 @@ mod tests {
                     proposal_id => proposal,
                 },
                 // There's already an upgrade pending
-                pending_version: Some(UpgradeInProgress {
+                pending_version: Some(PendingVersion {
                     ..Default::default()
                 }),
                 ..basic_governance_proto()
