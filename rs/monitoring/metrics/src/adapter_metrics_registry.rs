@@ -53,15 +53,14 @@ impl AdapterMetricsRegistry {
     /// Write accesses to here can not be starved by `gather()` calls, due to
     /// the write-preffering behaviour of the used `tokio::sync::RwLock`.
     pub fn register(&self, adapter_metrics: AdapterMetrics) -> Result<(), Error> {
-        if self
-            .adapters
-            .read()
+        let mut adapters = self.adapters.write();
+        if adapters
             .iter()
             .any(|a| a.get_name() == adapter_metrics.get_name())
         {
             return Err(Error::AlreadyReg);
         }
-        self.adapters.write().push(adapter_metrics);
+        adapters.push(adapter_metrics);
         Ok(())
     }
 
