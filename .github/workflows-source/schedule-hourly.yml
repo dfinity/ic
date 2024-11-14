@@ -96,7 +96,6 @@ jobs:
     <<: *dind-large-setup
     steps:
       - <<: *checkout
-      - <<: *docker-login
       - name: Run Libfuzzer targets
         shell: bash
         run: ./bin/run-all-fuzzers.sh --libfuzzer 100

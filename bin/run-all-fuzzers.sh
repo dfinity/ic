@@ -1,14 +1,18 @@
 #!/usr/bin/env bash
 # A utility script to run all fuzzers on IC for limited turns defined under MAX_EXECUTIONS
-set -euo pipefail
+set -ex
 
-MAX_EXECUTIONS=$2
+MAX_EXECUTIONS=100
+if [[ -n "$2" ]]; then
+    MAX_EXECUTIONS=$2
+fi
+
 case $1 in
     -h | --help)
         cat <<EOF >&2
         usage:
             $0 --libfuzzer 100 # Run all libfuzzer targets. Each target will have 100 executions.
-            $0 --afl 100        # Run all afl targets. Each target will have 100 executions.
+            $0 --afl 100       # Run all afl targets. Each target will have 100 executions.
 EOF
         exit 0
         ;;
