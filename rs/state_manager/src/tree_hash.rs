@@ -61,9 +61,7 @@ mod tests {
     use super::*;
     use hex::FromHex;
     use ic_base_types::{NumBytes, NumSeconds};
-    use ic_canonical_state::{
-        all_supported_versions, CertificationVersion, CURRENT_CERTIFICATION_VERSION,
-    };
+    use ic_canonical_state::{all_supported_versions, CertificationVersion};
     use ic_crypto_tree_hash::Digest;
     use ic_error_types::{ErrorCode, UserError};
     use ic_management_canister_types::{
