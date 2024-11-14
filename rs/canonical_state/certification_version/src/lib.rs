@@ -76,8 +76,14 @@ fn convert_from_u32_succeeds_for_all_supported_certification_versions() {
     assert!(all_supported_versions().all(|v| (v as u32).try_into() == Ok(v)));
     // Old unsupported version should fail.
     let v = all_supported_versions().next().unwrap() as u32 - 1;
-    assert_eq!(v.try_into(), Err(UnsupportedCertificationVersion(v)));
+    assert_eq!(
+        CertificationVersion::try_from(v),
+        Err(UnsupportedCertificationVersion(v))
+    );
     // Non-existent version should fail.
     let v = all_supported_versions().last().unwrap() as u32 + 1;
-    assert_eq!(v.try_into(), Err(UnsupportedCertificationVersion(v)));
+    assert_eq!(
+        CertificationVersion::try_from(v),
+        Err(UnsupportedCertificationVersion(v))
+    );
 }
