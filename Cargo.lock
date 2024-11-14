@@ -6551,6 +6551,7 @@ dependencies = [
  "ic-base-types",
  "ic-bitcoin-canister-mock",
  "ic-btc-interface",
+ "ic-btc-kyt",
  "ic-canister-log 0.2.0",
  "ic-canisters-http-types",
  "ic-cdk 0.16.0",
@@ -10976,6 +10977,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-registry-canister-client"
+version = "0.9.0"
+dependencies = [
+ "ic-cdk 0.16.0",
+ "ic-interfaces-registry",
+ "ic-registry-keys",
+ "ic-types",
+]
+
+[[package]]
 name = "ic-registry-client"
 version = "0.9.0"
 dependencies = [
@@ -13052,6 +13063,7 @@ dependencies = [
  "ic-agent",
  "ic-base-types",
  "ic-btc-interface",
+ "ic-btc-kyt",
  "ic-canister-client",
  "ic-ckbtc-agent",
  "ic-ckbtc-kyt",
@@ -16954,7 +16966,7 @@ dependencies = [
 
 [[package]]
 name = "pocket-ic"
-version = "5.0.0"
+version = "6.0.0"
 dependencies = [
  "base64 0.13.1",
  "candid",
@@ -16989,7 +17001,7 @@ dependencies = [
 
 [[package]]
 name = "pocket-ic-server"
-version = "6.0.0"
+version = "7.0.0"
 dependencies = [
  "aide",
  "askama",
@@ -17951,15 +17963,17 @@ dependencies = [
  "ic-cdk 0.16.0",
  "ic-cdk-macros 0.9.0",
  "ic-cdk-timers",
- "ic-metrics-encoder",
+ "ic-nns-constants",
  "ic-stable-structures",
  "mockall",
+ "prometheus",
  "rand_chacha 0.3.1",
  "rate-limit-canister-integration-tests",
  "rate-limits-api",
  "serde",
  "serde_cbor",
  "serde_json",
+ "strum",
  "thiserror",
  "uuid",
 ]

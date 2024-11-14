@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+
+
+## 7.0.0 - 2024-11-13
+
 ### Added
 - Support for IC Bitcoin API via the management canister if the bitcoin canister is installed as the bitcoin testnet canister
   (canister ID `g4xu7-jiaaa-aaaan-aaaaq-cai`) on the bitcoin subnet and configured with `Network::Regtest`

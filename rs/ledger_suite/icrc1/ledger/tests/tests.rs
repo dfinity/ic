@@ -488,8 +488,8 @@ mod metrics {
     }
 
     #[test]
-    fn should_export_total_memory_usage_metrics() {
-        ic_ledger_suite_state_machine_tests::metrics::assert_existence_of_ledger_total_memory_bytes_metric(
+    fn should_export_heap_memory_usage_metrics() {
+        ic_ledger_suite_state_machine_tests::metrics::assert_existence_of_heap_memory_bytes_metric(
             ledger_wasm(),
             encode_init_args,
         );
