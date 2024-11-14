@@ -1,33 +1,12 @@
-load("//rs/tests:common.bzl", "DEPENDENCIES", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "DEPENDENCIES", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
-
-BTC_RUNTIME_DEPS = [
-    # Keep sorted.
-    "//rs/tests:btc_uvm_config_image",
-    "@btc_canister//file",
-]
 
 LEDGER_CANISTER_RUNTIME_DEPS = [
     # Keep sorted.
     "//rs/ledger_suite/icrc1/ledger:ledger_canister",
 ]
-
-system_test_nns(
-    name = "btc_get_balance_test",
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "k8s",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS +
-        BTC_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
-)
 
 system_test(
     name = "icrc1_agent_test",
@@ -35,18 +14,34 @@ system_test(
         "LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
     },
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS + LEDGER_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        "//packages/icrc-ledger-agent:icrc_ledger_agent",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//rs/crypto/tree_hash",
+        "//rs/ledger_suite/common/ledger_core",
+        "//rs/ledger_suite/icrc1/ledger",
+        "//rs/nns/test_utils",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/rust_canisters/dfn_candid",
+        "//rs/rust_canisters/on_wire",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+        "@crate_index//:assert_matches",
+        "@crate_index//:candid",
+        "@crate_index//:serde_cbor",
+    ],
 )
 
 system_test_nns(
     name = "token_fault_tolerance_test",
+    env = UNIVERSAL_CANISTER_ENV,
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -54,7 +49,7 @@ system_test_nns(
         "system_test_hourly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 

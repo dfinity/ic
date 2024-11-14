@@ -170,7 +170,7 @@ where
 
 fn to_validation_error(error: ic_validator::RequestValidationError) -> RequestValidationError {
     match error {
-        ic_validator::RequestValidationError::InvalidIngressExpiry(msg) => {
+        ic_validator::RequestValidationError::InvalidRequestExpiry(msg) => {
             RequestValidationError::InvalidIngressExpiry(msg)
         }
         ic_validator::RequestValidationError::InvalidDelegationExpiry(msg) => {
@@ -194,13 +194,13 @@ fn to_validation_error(error: ic_validator::RequestValidationError) -> RequestVa
         ic_validator::RequestValidationError::CanisterNotInDelegationTargets(canister_id) => {
             RequestValidationError::CanisterNotInDelegationTargets(canister_id)
         }
-        ic_validator::RequestValidationError::TooManyPathsError { length, maximum } => {
+        ic_validator::RequestValidationError::TooManyPaths { length, maximum } => {
             RequestValidationError::TooManyPathsError { length, maximum }
         }
-        ic_validator::RequestValidationError::PathTooLongError { length, maximum } => {
+        ic_validator::RequestValidationError::PathTooLong { length, maximum } => {
             RequestValidationError::PathTooLongError { length, maximum }
         }
-        ic_validator::RequestValidationError::NonceTooBigError { num_bytes, maximum } => {
+        ic_validator::RequestValidationError::NonceTooBig { num_bytes, maximum } => {
             RequestValidationError::NonceTooBigError { num_bytes, maximum }
         }
     }

@@ -1,16 +1,19 @@
 use crate::events::MinterEventAssert;
-use crate::flow::{DepositParams, LedgerTransactionAssert, ProcessWithdrawal};
+use crate::flow::{
+    encode_principal, DepositCkEthParams, DepositParams, DepositTransactionData,
+    LedgerTransactionAssert, ProcessWithdrawal,
+};
 use crate::mock::{
     JsonRpcMethod, JsonRpcRequestMatcher, MockJsonRpcProviders, MockJsonRpcProvidersBuilder,
 };
-use crate::response::{block_response, empty_logs, fee_history, Erc20LogEntry};
+use crate::response::{block_response, empty_logs, fee_history};
 use crate::{
-    assert_reply, format_ethereum_address_to_eip_55, new_state_machine, CkEthSetup,
-    DEFAULT_DEPOSIT_BLOCK_NUMBER, DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_DEPOSIT_LOG_INDEX,
-    DEFAULT_DEPOSIT_TRANSACTION_HASH, DEFAULT_ERC20_DEPOSIT_LOG_INDEX,
-    DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH, DEFAULT_PRINCIPAL_ID, ERC20_HELPER_CONTRACT_ADDRESS,
+    assert_reply, format_ethereum_address_to_eip_55, new_state_machine, CkEthSetup, LedgerBalance,
+    DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_ERC20_DEPOSIT_LOG_INDEX,
+    DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH, DEFAULT_PRINCIPAL_ID,
+    DEPOSIT_WITH_SUBACCOUNT_HELPER_CONTRACT_ADDRESS, ERC20_HELPER_CONTRACT_ADDRESS,
     ETH_HELPER_CONTRACT_ADDRESS, LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MAX_TICKS,
-    RECEIVED_ERC20_EVENT_TOPIC,
+    RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC,
 };
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
@@ -27,13 +30,14 @@ use ic_ethereum_types::Address;
 pub use ic_ledger_suite_orchestrator::candid::AddErc20Arg as Erc20Token;
 use ic_ledger_suite_orchestrator::candid::InitArg as LedgerSuiteOrchestratorInitArg;
 use ic_ledger_suite_orchestrator_test_utils::{supported_erc20_tokens, LedgerSuiteOrchestrator};
-use ic_state_machine_tests::{ErrorCode, MessageId, StateMachine, WasmResult};
+use ic_state_machine_tests::{ErrorCode, StateMachine, WasmResult};
+use ic_types::messages::MessageId;
 use icrc_ledger_types::icrc1::account::Account;
 use num_traits::ToPrimitive;
 use serde_json::json;
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::identity;
-use std::iter::zip;
+use std::iter::{once, zip};
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -125,6 +129,11 @@ impl CkErc20Setup {
         self
     }
 
+    pub fn add_support_for_subaccount(mut self) -> Self {
+        self.cketh = self.cketh.add_support_for_subaccount();
+        self
+    }
+
     pub fn check_events(self) -> MinterEventAssert<Self> {
         MinterEventAssert::from_fetching_all_events(self)
     }
@@ -146,14 +155,11 @@ impl CkErc20Setup {
             .unwrap()
     }
 
-    pub fn deposit(self, params: CkErc20DepositParams) -> CkErc20DepositFlow {
-        CkErc20DepositFlow {
-            setup: self,
-            params,
-        }
+    pub fn deposit<T: Into<DepositCkErc20>>(self, params: T) -> CkErc20DepositFlow {
+        CkErc20DepositFlow::new(self, params)
     }
 
-    pub fn deposit_cketh(mut self, params: DepositParams) -> Self {
+    pub fn deposit_cketh<T: Into<DepositParams>>(mut self, params: T) -> Self {
         self.cketh = self.cketh.deposit(params).expect_mint();
         self
     }
@@ -165,14 +171,18 @@ impl CkErc20Setup {
         token: CkErc20Token,
         recipient: Principal,
     ) -> CkErc20DepositFlow {
-        CkErc20DepositFlow {
-            setup: self,
-            params: CkErc20DepositParams {
-                cketh_amount: Some(cketh_amount),
+        CkErc20DepositFlow::new(
+            self,
+            DepositCkErc20Params {
+                cketh_deposit: Some(DepositParams::from(DepositCkEthParams {
+                    recipient,
+                    amount: cketh_amount,
+                    ..Default::default()
+                })),
                 recipient,
-                ..CkErc20DepositParams::for_token(ckerc20_amount, token)
+                ..DepositCkErc20Params::new(ckerc20_amount, token)
             },
-        }
+        )
     }
 
     pub fn deposit_ckerc20(
@@ -181,14 +191,13 @@ impl CkErc20Setup {
         token: CkErc20Token,
         recipient: Principal,
     ) -> CkErc20DepositFlow {
-        CkErc20DepositFlow {
-            setup: self,
-            params: CkErc20DepositParams {
-                cketh_amount: None,
+        CkErc20DepositFlow::new(
+            self,
+            DepositCkErc20Params {
                 recipient,
-                ..CkErc20DepositParams::for_token(ckerc20_amount, token)
+                ..DepositCkErc20Params::new(ckerc20_amount, token)
             },
-        }
+        )
     }
 
     pub fn wait_for_updated_ledger_balance(
@@ -315,12 +324,22 @@ impl CkErc20Setup {
             amount: amount.into(),
             ckerc20_ledger_id,
             recipient: recipient.into(),
+            from_cketh_subaccount: None,
+            from_ckerc20_subaccount: None,
         };
+        self.call_minter_withdraw_erc20_with(from, arg)
+    }
+
+    pub fn call_minter_withdraw_erc20_with(
+        self,
+        from: Principal,
+        withdraw_erc20_arg: WithdrawErc20Arg,
+    ) -> RefreshGasFeeEstimate {
         let message_id = self.env.send_ingress(
             PrincipalId::from(from),
             self.cketh.minter_id,
             "withdraw_erc20",
-            Encode!(&arg).expect("failed to encode withdraw args"),
+            Encode!(&withdraw_erc20_arg).expect("failed to encode withdraw args"),
         );
         RefreshGasFeeEstimate {
             setup: self,
@@ -365,47 +384,223 @@ impl CkErc20Setup {
         self.as_ref()
             .json_topic(RECEIVED_ERC20_EVENT_TOPIC.to_string())
     }
+
+    pub fn received_eth_or_erc20_with_subaccount_event_topic(&self) -> serde_json::Value {
+        self.as_ref()
+            .json_topic(RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC.to_string())
+    }
 }
 
-pub struct CkErc20DepositParams {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DepositCkErc20 {
+    CkErc20(DepositCkErc20Params),
+    CkErc20WithSubaccount(DepositCkErc20WithSubaccountParams),
+}
+
+impl DepositCkErc20 {
+    pub fn from_address(&self) -> &Address {
+        match self {
+            Self::CkErc20(params) => &params.from_address,
+            Self::CkErc20WithSubaccount(params) => &params.from_address,
+        }
+    }
+
+    pub fn recipient(&self) -> Account {
+        match self {
+            Self::CkErc20(params) => Account {
+                owner: params.recipient,
+                subaccount: None,
+            },
+            Self::CkErc20WithSubaccount(params) => Account {
+                owner: params.recipient,
+                subaccount: params.recipient_subaccount,
+            },
+        }
+    }
+
+    pub fn token(&self) -> &CkErc20Token {
+        match self {
+            Self::CkErc20(params) => &params.token,
+            Self::CkErc20WithSubaccount(params) => &params.token,
+        }
+    }
+
+    pub fn cketh_deposit(&self) -> Option<&DepositParams> {
+        match self {
+            Self::CkErc20(params) => params.cketh_deposit.as_ref(),
+            Self::CkErc20WithSubaccount(params) => params.cketh_deposit.as_ref(),
+        }
+    }
+
+    pub fn ckerc20_amount(&self) -> u64 {
+        match self {
+            Self::CkErc20(params) => params.ckerc20_amount,
+            Self::CkErc20WithSubaccount(params) => params.ckerc20_amount,
+        }
+    }
+
+    pub fn transaction_data(&self) -> &DepositTransactionData {
+        match self {
+            Self::CkErc20(params) => &params.transaction_data,
+            Self::CkErc20WithSubaccount(params) => &params.transaction_data,
+        }
+    }
+
+    pub fn to_log_entry(&self) -> ethers_core::types::Log {
+        match self {
+            Self::CkErc20(params) => params.to_log_entry(),
+            Self::CkErc20WithSubaccount(params) => params.to_log_entry(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DepositCkErc20Params {
+    pub cketh_deposit: Option<DepositParams>,
     pub from_address: Address,
-    pub cketh_amount: Option<u64>,
     pub ckerc20_amount: u64,
     pub recipient: Principal,
     pub token: CkErc20Token,
-    pub override_erc20_log_entry: Box<dyn Fn(Erc20LogEntry) -> Erc20LogEntry>,
+    pub transaction_data: DepositTransactionData,
 }
 
-impl CkErc20DepositParams {
-    pub fn for_token(ckerc20_amount: u64, token: CkErc20Token) -> Self {
+impl DepositCkErc20Params {
+    pub fn new(ckerc20_amount: u64, token: CkErc20Token) -> Self {
         Self {
+            cketh_deposit: None,
             from_address: DEFAULT_DEPOSIT_FROM_ADDRESS.parse().unwrap(),
-            cketh_amount: None,
-            ckerc20_amount,
             recipient: PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID).into(),
+            ckerc20_amount,
             token,
-            override_erc20_log_entry: Box::new(identity),
+            transaction_data: erc20_default_deposit_transaction_data(),
         }
     }
 
-    pub fn erc20_log(&self) -> ethers_core::types::Log {
-        ethers_core::types::Log::from((self.override_erc20_log_entry)(self.erc20_log_entry()))
+    pub fn to_log_entry(&self) -> ethers_core::types::Log {
+        let amount_hex = format!("0x{:0>64x}", self.ckerc20_amount);
+        let topics = vec![
+            RECEIVED_ERC20_EVENT_TOPIC.to_string(),
+            format!(
+                "0x000000000000000000000000{}",
+                hex::encode(
+                    self.token
+                        .erc20_contract_address
+                        .parse::<Address>()
+                        .unwrap()
+                ),
+            ),
+            format!(
+                "0x000000000000000000000000{}",
+                hex::encode(self.from_address.as_ref())
+            ),
+            encode_principal(self.recipient),
+        ];
+
+        let json_value = json!({
+            "address": "0xb44b5e756a894775fc32eddf3314bb1b1944dc34",
+            "blockHash": self.transaction_data.block_hash,
+            "blockNumber": format!("0x{:x}", self.transaction_data.block_number),
+            "data": amount_hex,
+            "logIndex": format!("0x{:x}", self.transaction_data.log_index),
+            "removed": false,
+            "topics": topics,
+            "transactionHash": self.transaction_data.transaction_hash,
+            "transactionIndex": format!("0x{:x}", self.transaction_data.transaction_index),
+        });
+        serde_json::from_value(json_value).expect("BUG: invalid log entry")
+    }
+}
+
+impl From<DepositCkErc20Params> for DepositCkErc20 {
+    fn from(params: DepositCkErc20Params) -> Self {
+        DepositCkErc20::CkErc20(params)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DepositCkErc20WithSubaccountParams {
+    pub cketh_deposit: Option<DepositParams>,
+    pub from_address: Address,
+    pub ckerc20_amount: u64,
+    pub recipient: Principal,
+    pub recipient_subaccount: Option<[u8; 32]>,
+    pub token: CkErc20Token,
+    pub transaction_data: DepositTransactionData,
+}
+
+impl DepositCkErc20WithSubaccountParams {
+    pub fn new(ckerc20_amount: u64, token: CkErc20Token, recipient: Account) -> Self {
+        Self {
+            cketh_deposit: None,
+            from_address: DEFAULT_DEPOSIT_FROM_ADDRESS.parse().unwrap(),
+            recipient: recipient.owner,
+            recipient_subaccount: recipient.subaccount,
+            ckerc20_amount,
+            token,
+            transaction_data: erc20_default_deposit_transaction_data(),
+        }
     }
 
-    pub fn erc20_log_entry(&self) -> Erc20LogEntry {
-        Erc20LogEntry {
-            encoded_principal: crate::flow::encode_principal(self.recipient),
-            amount: self.ckerc20_amount,
-            from_address: self.from_address,
-            transaction_hash: DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH.to_string(),
-            erc20_contract_address: self.token.erc20_contract_address.parse().unwrap(),
-        }
+    pub fn to_log_entry(&self) -> ethers_core::types::Log {
+        let data = {
+            let amount_hex = format!("{:0>64x}", self.ckerc20_amount);
+            assert_eq!(amount_hex.len(), 64);
+            let subaccount = hex::encode(self.recipient_subaccount.unwrap_or([0; 32]));
+            assert_eq!(amount_hex.len(), 64);
+            format!("0x{}{}", amount_hex, subaccount)
+        };
+
+        let topics = vec![
+            RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC.to_string(),
+            format!(
+                "0x000000000000000000000000{}",
+                hex::encode(
+                    self.token
+                        .erc20_contract_address
+                        .parse::<Address>()
+                        .unwrap()
+                ),
+            ),
+            format!(
+                "0x000000000000000000000000{}",
+                ethers_core::utils::hex::encode(self.from_address.as_ref())
+            ),
+            encode_principal(self.recipient),
+        ];
+
+        let json_value = json!({
+            "address": "0xb44b5e756a894775fc32eddf3314bb1b1944dc34",
+            "blockHash": self.transaction_data.block_hash,
+            "blockNumber": format!("0x{:x}", self.transaction_data.block_number),
+            "data": data,
+            "logIndex": format!("0x{:x}", self.transaction_data.log_index),
+            "removed": false,
+            "topics": topics,
+            "transactionHash": self.transaction_data.transaction_hash,
+            "transactionIndex": format!("0x{:x}", self.transaction_data.transaction_index),
+        });
+        serde_json::from_value(json_value).expect("BUG: invalid log entry")
+    }
+}
+
+impl From<DepositCkErc20WithSubaccountParams> for DepositCkErc20 {
+    fn from(params: DepositCkErc20WithSubaccountParams) -> Self {
+        DepositCkErc20::CkErc20WithSubaccount(params)
+    }
+}
+
+fn erc20_default_deposit_transaction_data() -> DepositTransactionData {
+    DepositTransactionData {
+        transaction_hash: DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH.to_string(),
+        log_index: DEFAULT_ERC20_DEPOSIT_LOG_INDEX,
+        ..Default::default()
     }
 }
 
 pub struct CkErc20DepositFlow {
     pub setup: CkErc20Setup,
-    params: CkErc20DepositParams,
+    params: DepositCkErc20,
+    override_erc20_log_entry: Box<dyn Fn(ethers_core::types::Log) -> ethers_core::types::Log>,
 }
 
 impl AsRef<CkEthSetup> for CkErc20DepositFlow {
@@ -415,13 +610,58 @@ impl AsRef<CkEthSetup> for CkErc20DepositFlow {
 }
 
 impl CkErc20DepositFlow {
+    pub fn new<T: Into<DepositCkErc20>>(setup: CkErc20Setup, params: T) -> Self {
+        Self {
+            setup,
+            params: params.into(),
+            override_erc20_log_entry: Box::new(identity),
+        }
+    }
+
+    pub fn with_override_erc20_log_entry<
+        F: Fn(ethers_core::types::Log) -> ethers_core::types::Log + 'static,
+    >(
+        mut self,
+        override_mock: F,
+    ) -> Self {
+        self.override_erc20_log_entry = Box::new(override_mock);
+        self
+    }
+
     pub fn expect_mint(mut self) -> CkErc20Setup {
-        let cketh_balance_before = self
-            .setup
-            .balance_of_ledger(self.setup.cketh_ledger_id(), self.params.recipient);
-        let ckerc20_balance_before = self
-            .setup
-            .balance_of_ledger(self.params.token.ledger_canister_id, self.params.recipient);
+        let mut initial_balances = Vec::new();
+        let mut expected_balances_diff = Vec::new();
+        if let Some(cketh_deposit) = self.params.cketh_deposit() {
+            let account = cketh_deposit.recipient();
+            let ledger_id = self.setup.cketh_ledger_id();
+            let balance = self.setup.balance_of_ledger(ledger_id, account);
+            initial_balances.push(LedgerBalance {
+                ledger_id,
+                account,
+                balance,
+            });
+            expected_balances_diff.push(LedgerBalance {
+                ledger_id,
+                account,
+                balance: Nat::from(cketh_deposit.amount()),
+            })
+        }
+        {
+            let account = self.params.recipient();
+            let ledger_id = self.params.token().ledger_canister_id;
+            let balance = self.setup.balance_of_ledger(ledger_id, account);
+            initial_balances.push(LedgerBalance {
+                ledger_id,
+                account,
+                balance,
+            });
+            expected_balances_diff.push(LedgerBalance {
+                ledger_id,
+                account,
+                balance: Nat::from(self.params.ckerc20_amount()),
+            })
+        }
+        assert_eq!(initial_balances.len(), expected_balances_diff.len());
         let MinterInfo {
             erc20_balances: erc20_balances_before,
             ..
@@ -429,39 +669,37 @@ impl CkErc20DepositFlow {
 
         self.handle_log_scraping();
 
-        let cketh_balance_after = self.setup.wait_for_updated_ledger_balance(
-            self.setup.cketh_ledger_id(),
-            self.params.recipient,
-            &cketh_balance_before,
-        );
-        let ckerc20_balance_after = self.setup.wait_for_updated_ledger_balance(
-            self.params.token.ledger_canister_id,
-            self.params.recipient,
-            &ckerc20_balance_before,
-        );
+        for (initial_balance, expected_balance_diff) in
+            zip(initial_balances, expected_balances_diff)
+        {
+            let balance_after = self.setup.wait_for_updated_ledger_balance(
+                initial_balance.ledger_id,
+                initial_balance.account,
+                &initial_balance.balance,
+            );
+            assert_eq!(
+                balance_after - initial_balance.balance,
+                expected_balance_diff.balance,
+                "Unexpected balance difference for ledger {} and account {}",
+                initial_balance.ledger_id,
+                initial_balance.account
+            );
+        }
+
         let MinterInfo {
             erc20_balances: erc20_balances_after,
             ..
         } = self.setup.get_minter_info();
-
-        assert_eq!(
-            cketh_balance_after - cketh_balance_before,
-            self.params.cketh_amount.unwrap_or_default()
-        );
-        assert_eq!(
-            ckerc20_balance_after - ckerc20_balance_before,
-            self.params.ckerc20_amount
-        );
 
         let erc20_balances_before = erc20_balances_before.unwrap();
         let erc20_balances_after = erc20_balances_after.unwrap();
         assert_eq!(erc20_balances_before.len(), erc20_balances_after.len());
         let mut has_deposited_token = false;
         for (balance_before, balance_after) in zip(erc20_balances_before, erc20_balances_after) {
-            if balance_before.erc20_contract_address == self.params.token.erc20_contract_address {
+            if balance_before.erc20_contract_address == self.params.token().erc20_contract_address {
                 assert_eq!(
                     balance_after.balance - balance_before.balance,
-                    self.params.ckerc20_amount
+                    self.params.ckerc20_amount()
                 );
                 has_deposited_token = true;
             } else {
@@ -472,55 +710,53 @@ impl CkErc20DepositFlow {
 
         self.setup.cketh.check_audit_log();
 
-        let mut expected_events = match self.params.cketh_amount {
-            Some(amount) => {
-                vec![
-                    EventPayload::AcceptedDeposit {
-                        transaction_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.to_string(),
-                        block_number: Nat::from(DEFAULT_DEPOSIT_BLOCK_NUMBER),
-                        log_index: Nat::from(DEFAULT_DEPOSIT_LOG_INDEX),
-                        from_address: format_ethereum_address_to_eip_55(
-                            DEFAULT_DEPOSIT_FROM_ADDRESS,
-                        ),
-                        value: amount.into(),
-                        principal: self.params.recipient,
+        if let Some(deposit) = self.params.cketh_deposit() {
+            let eth_tx_data = deposit.transaction_data();
+
+            self.setup.cketh = self.setup.cketh.assert_has_unique_events_in_order(&vec![
+                EventPayload::AcceptedDeposit {
+                    transaction_hash: eth_tx_data.transaction_hash.to_string(),
+                    block_number: Nat::from(eth_tx_data.block_number),
+                    log_index: Nat::from(eth_tx_data.log_index),
+                    from_address: deposit.from_address().to_string(),
+                    value: Nat::from(deposit.amount()),
+                    principal: deposit.recipient().owner,
+                    subaccount: deposit.recipient().subaccount,
+                },
+                EventPayload::MintedCkEth {
+                    event_source: EventSource {
+                        transaction_hash: eth_tx_data.transaction_hash.clone(),
+                        log_index: Nat::from(eth_tx_data.log_index),
                     },
-                    EventPayload::MintedCkEth {
-                        event_source: EventSource {
-                            transaction_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.to_string(),
-                            log_index: Nat::from(DEFAULT_DEPOSIT_LOG_INDEX),
-                        },
-                        mint_block_index: Nat::from(0_u8),
-                    },
-                ]
-            }
-            None => vec![],
-        };
-        expected_events.extend(vec![
+                    mint_block_index: Nat::from(0_u8),
+                },
+            ]);
+        }
+
+        let erc20_tx_data = self.params.transaction_data();
+        self.setup.cketh = self.setup.cketh.assert_has_unique_events_in_order(&vec![
             EventPayload::AcceptedErc20Deposit {
-                transaction_hash: DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH.to_string(),
-                block_number: Nat::from(DEFAULT_DEPOSIT_BLOCK_NUMBER),
-                log_index: Nat::from(DEFAULT_ERC20_DEPOSIT_LOG_INDEX),
-                from_address: format_ethereum_address_to_eip_55(DEFAULT_DEPOSIT_FROM_ADDRESS),
-                value: self.params.ckerc20_amount.into(),
-                principal: self.params.recipient,
-                erc20_contract_address: self.params.token.erc20_contract_address.clone(),
+                transaction_hash: erc20_tx_data.transaction_hash.to_string(),
+                block_number: Nat::from(erc20_tx_data.block_number),
+                log_index: Nat::from(erc20_tx_data.log_index),
+                from_address: format_ethereum_address_to_eip_55(
+                    &self.params.from_address().to_string(),
+                ),
+                value: self.params.ckerc20_amount().into(),
+                principal: self.params.recipient().owner,
+                erc20_contract_address: self.params.token().erc20_contract_address.clone(),
+                subaccount: self.params.recipient().subaccount,
             },
             EventPayload::MintedCkErc20 {
                 event_source: EventSource {
-                    transaction_hash: DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH.to_string(),
-                    log_index: Nat::from(DEFAULT_ERC20_DEPOSIT_LOG_INDEX),
+                    transaction_hash: erc20_tx_data.transaction_hash.to_string(),
+                    log_index: Nat::from(erc20_tx_data.log_index),
                 },
-                ckerc20_token_symbol: self.params.token.ckerc20_token_symbol,
-                erc20_contract_address: self.params.token.erc20_contract_address,
+                ckerc20_token_symbol: self.params.token().ckerc20_token_symbol.clone(),
+                erc20_contract_address: self.params.token().erc20_contract_address.clone(),
                 mint_block_index: Nat::from(0_u8),
             },
         ]);
-
-        self.setup.cketh = self
-            .setup
-            .cketh
-            .assert_has_unique_events_in_order(&expected_events);
         self.setup
     }
 
@@ -540,14 +776,9 @@ impl CkErc20DepositFlow {
             .checked_add(BlockNumber::from(max_eth_logs_block_range))
             .unwrap();
 
-        let eth_logs = match self.params.cketh_amount {
-            Some(amount) => vec![DepositParams {
-                amount,
-                recipient: self.params.recipient,
-                ..Default::default()
-            }
-            .eth_log()],
-            None => empty_logs(),
+        let eth_logs = match self.params.cketh_deposit() {
+            Some(DepositParams::CkEth(deposit)) => vec![deposit.to_log_entry()],
+            Some(DepositParams::CkEthWithSubaccount(_)) | None => empty_logs(),
         };
         MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
             .with_request_params(json!([{
@@ -560,6 +791,12 @@ impl CkErc20DepositFlow {
             .build()
             .expect_rpc_calls(self);
 
+        let erc20_logs = match &self.params {
+            DepositCkErc20::CkErc20(params) => {
+                vec![(self.override_erc20_log_entry)(params.to_log_entry())]
+            }
+            DepositCkErc20::CkErc20WithSubaccount(_) => empty_logs(),
+        };
         MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
             .with_request_params(json!([{
                 "fromBlock": first_from_block,
@@ -567,29 +804,67 @@ impl CkErc20DepositFlow {
                 "address": [ERC20_HELPER_CONTRACT_ADDRESS],
                 "topics": [self.setup.received_erc20_event_topic(), erc20_topics.clone()]
             }]))
-            .respond_for_all_with(vec![self.params.erc20_log()])
+            .respond_for_all_with(erc20_logs)
             .build()
             .expect_rpc_calls(self);
+
+        if self.setup.as_ref().support_subaccount {
+            let deposit_with_subaccount_logs = match (&self.params, self.params.cketh_deposit()) {
+                (DepositCkErc20::CkErc20(_), Some(DepositParams::CkEth(_)) | None) => empty_logs(),
+                (DepositCkErc20::CkErc20(_), Some(DepositParams::CkEthWithSubaccount(deposit))) => {
+                    vec![deposit.to_log_entry()]
+                }
+                (
+                    DepositCkErc20::CkErc20WithSubaccount(deposit),
+                    Some(DepositParams::CkEth(_)) | None,
+                ) => {
+                    vec![deposit.to_log_entry()]
+                }
+                (
+                    DepositCkErc20::CkErc20WithSubaccount(erc20_deposit),
+                    Some(DepositParams::CkEthWithSubaccount(eth_deposit)),
+                ) => {
+                    vec![eth_deposit.to_log_entry(), erc20_deposit.to_log_entry()]
+                }
+            };
+
+            let deposit_with_subaccount_2nd_topics: Vec<_> = once(
+                "0x0000000000000000000000000000000000000000000000000000000000000000".to_string(),
+            )
+            .chain(erc20_topics)
+            .collect();
+            MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
+                .with_request_params(json!([{
+                "fromBlock": first_from_block,
+                "toBlock": first_to_block,
+                "address": [DEPOSIT_WITH_SUBACCOUNT_HELPER_CONTRACT_ADDRESS.to_lowercase()],
+                "topics": [self.setup.received_eth_or_erc20_with_subaccount_event_topic(), deposit_with_subaccount_2nd_topics]
+            }]))
+                .respond_for_all_with(deposit_with_subaccount_logs)
+                .build()
+                .expect_rpc_calls(self);
+        }
     }
 
     pub fn expect_no_mint(self) -> CkErc20Setup {
         let cketh_balance_before = self
             .setup
-            .balance_of_ledger(self.setup.cketh_ledger_id(), self.params.recipient);
-        let ckerc20_balance_before = self
-            .setup
-            .balance_of_ledger(self.params.token.ledger_canister_id, self.params.recipient);
+            .balance_of_ledger(self.setup.cketh_ledger_id(), self.params.recipient());
+        let ckerc20_balance_before = self.setup.balance_of_ledger(
+            self.params.token().ledger_canister_id,
+            self.params.recipient(),
+        );
 
         self.handle_log_scraping();
 
         let cketh_balance_after = self.setup.wait_for_updated_ledger_balance(
             self.setup.cketh_ledger_id(),
-            self.params.recipient,
+            self.params.recipient(),
             &cketh_balance_before,
         );
         let ckerc20_balance_after = self.setup.wait_for_updated_ledger_balance(
-            self.params.token.ledger_canister_id,
-            self.params.recipient,
+            self.params.token().ledger_canister_id,
+            self.params.recipient(),
             &ckerc20_balance_before,
         );
 

@@ -1,5 +1,3 @@
-#![allow(clippy::unwrap_used)]
-
 use super::*;
 use crate::sign::threshold_sig::tests::{NI_DKG_ID_1, NI_DKG_ID_2};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::PublicCoefficientsBytes;
@@ -16,10 +14,10 @@ const NODE_2_INDEX: NodeIndex = 2;
 
 #[test]
 fn should_contain_transcript_data_after_insertion_with_nidkg_id() {
-    should_contain_transcript_data_after_insertion_with_dkg_id(NI_DKG_ID_1);
+    should_contain_transcript_data_after_insertion_with_dkg_id(&NI_DKG_ID_1);
 }
 
-fn should_contain_transcript_data_after_insertion_with_dkg_id(dkg_id: NiDkgId) {
+fn should_contain_transcript_data_after_insertion_with_dkg_id(dkg_id: &NiDkgId) {
     let mut store = ThresholdSigDataStoreImpl::new();
     let indices = indices_with(vec![
         (node_test_id(NODE_1), NODE_1_INDEX),
@@ -45,7 +43,7 @@ fn should_contain_transcript_data_after_insertion_with_dkg_id(dkg_id: NiDkgId) {
 fn should_not_contain_nonexistent_transcript_data() {
     let store = ThresholdSigDataStoreImpl::new();
 
-    assert!(store.transcript_data(NI_DKG_ID_1).is_none());
+    assert!(store.transcript_data(&NI_DKG_ID_1).is_none());
 }
 
 #[test]
@@ -54,10 +52,10 @@ fn should_contain_individual_public_keys_after_insertion_with_nidkg_id() {
     let mut store = ThresholdSigDataStoreImpl::new();
     let csp_pubkey = csp_public_key();
 
-    store.insert_individual_public_key(dkg_id, node_test_id(NODE_1), csp_pubkey);
+    store.insert_individual_public_key(&dkg_id, node_test_id(NODE_1), csp_pubkey);
 
     assert_eq!(
-        store.individual_public_key(dkg_id, node_test_id(NODE_1)),
+        store.individual_public_key(&dkg_id, node_test_id(NODE_1)),
         Some(&csp_pubkey)
     );
 }
@@ -69,20 +67,20 @@ fn should_insert_multiple_individual_public_keys() {
     let csp_pubkey_2 = csp_public_key();
 
     assert_ne!(NI_DKG_ID_1, NI_DKG_ID_2);
-    store.insert_individual_public_key(NI_DKG_ID_1, node_test_id(NODE_1), csp_pubkey_1);
-    store.insert_individual_public_key(NI_DKG_ID_1, node_test_id(NODE_2), csp_pubkey_2);
-    store.insert_individual_public_key(NI_DKG_ID_2, node_test_id(NODE_1), csp_pubkey_2);
+    store.insert_individual_public_key(&NI_DKG_ID_1, node_test_id(NODE_1), csp_pubkey_1);
+    store.insert_individual_public_key(&NI_DKG_ID_1, node_test_id(NODE_2), csp_pubkey_2);
+    store.insert_individual_public_key(&NI_DKG_ID_2, node_test_id(NODE_1), csp_pubkey_2);
 
     assert_eq!(
-        store.individual_public_key(NI_DKG_ID_1, node_test_id(NODE_1)),
+        store.individual_public_key(&NI_DKG_ID_1, node_test_id(NODE_1)),
         Some(&csp_pubkey_1)
     );
     assert_eq!(
-        store.individual_public_key(NI_DKG_ID_1, node_test_id(NODE_2)),
+        store.individual_public_key(&NI_DKG_ID_1, node_test_id(NODE_2)),
         Some(&csp_pubkey_2)
     );
     assert_eq!(
-        store.individual_public_key(NI_DKG_ID_2, node_test_id(NODE_1)),
+        store.individual_public_key(&NI_DKG_ID_2, node_test_id(NODE_1)),
         Some(&csp_pubkey_2)
     );
 }
@@ -92,7 +90,7 @@ fn should_not_contain_nonexistent_individual_public_key() {
     let store = ThresholdSigDataStoreImpl::new();
 
     assert_eq!(
-        store.individual_public_key(NI_DKG_ID_1, node_test_id(NODE_1)),
+        store.individual_public_key(&NI_DKG_ID_1, node_test_id(NODE_1)),
         None
     );
 }
@@ -103,10 +101,10 @@ fn should_overwrite_existing_public_coefficients() {
     let (public_coeffs_1, public_coeffs_2) = (public_coeffs_1(), public_coeffs_2());
     assert_ne!(public_coeffs_1, public_coeffs_2);
 
-    store.insert_transcript_data(NI_DKG_ID_1, public_coeffs_1, BTreeMap::new());
-    store.insert_transcript_data(NI_DKG_ID_1, public_coeffs_2.clone(), BTreeMap::new());
+    store.insert_transcript_data(&NI_DKG_ID_1, public_coeffs_1, BTreeMap::new());
+    store.insert_transcript_data(&NI_DKG_ID_1, public_coeffs_2.clone(), BTreeMap::new());
 
-    let transcript_data = store.transcript_data(NI_DKG_ID_1).unwrap();
+    let transcript_data = store.transcript_data(&NI_DKG_ID_1).unwrap();
     assert_eq!(transcript_data.public_coefficients(), &public_coeffs_2);
 }
 
@@ -117,10 +115,10 @@ fn should_overwrite_existing_indices() {
     let indices_2 = indices_with(vec![(node_test_id(NODE_2), NODE_2_INDEX)]);
     let public_coeffs = public_coeffs();
 
-    store.insert_transcript_data(NI_DKG_ID_1, public_coeffs.clone(), indices_1);
-    store.insert_transcript_data(NI_DKG_ID_1, public_coeffs, indices_2);
+    store.insert_transcript_data(&NI_DKG_ID_1, public_coeffs.clone(), indices_1);
+    store.insert_transcript_data(&NI_DKG_ID_1, public_coeffs, indices_2);
 
-    let transcript_data = store.transcript_data(NI_DKG_ID_1).unwrap();
+    let transcript_data = store.transcript_data(&NI_DKG_ID_1).unwrap();
     assert_eq!(transcript_data.index(node_test_id(NODE_1)), None);
     assert_eq!(
         transcript_data.index(node_test_id(NODE_2)),
@@ -135,11 +133,11 @@ fn should_overwrite_existing_individual_public_keys() {
     let csp_pubkey_2 = other_csp_public_key();
     assert_ne!(csp_pubkey_1, csp_pubkey_2);
 
-    store.insert_individual_public_key(NI_DKG_ID_1, node_test_id(NODE_1), csp_pubkey_1);
-    store.insert_individual_public_key(NI_DKG_ID_1, node_test_id(NODE_1), csp_pubkey_2);
+    store.insert_individual_public_key(&NI_DKG_ID_1, node_test_id(NODE_1), csp_pubkey_1);
+    store.insert_individual_public_key(&NI_DKG_ID_1, node_test_id(NODE_1), csp_pubkey_2);
 
     assert_eq!(
-        store.individual_public_key(NI_DKG_ID_1, node_test_id(NODE_1)),
+        store.individual_public_key(&NI_DKG_ID_1, node_test_id(NODE_1)),
         Some(&csp_pubkey_2)
     );
 }
@@ -154,7 +152,7 @@ fn should_not_purge_data_on_inserting_coeffs_and_indices_if_capacity_not_exceede
     let mut store = ThresholdSigDataStoreImpl::new();
 
     for i in 1..=ThresholdSigDataStoreImpl::CAPACITY_PER_TAG {
-        store.insert_transcript_data(ni_dkg_id(i), public_coeffs(), BTreeMap::new());
+        store.insert_transcript_data(&ni_dkg_id(i), public_coeffs(), BTreeMap::new());
     }
 
     assert_eq!(
@@ -168,7 +166,7 @@ fn should_not_purge_data_on_inserting_pubkeys_if_capacity_not_exceeded() {
     let mut store = ThresholdSigDataStoreImpl::new();
 
     for i in 1..=ThresholdSigDataStoreImpl::CAPACITY_PER_TAG {
-        store.insert_individual_public_key(ni_dkg_id(i), node_test_id(NODE_1), csp_public_key());
+        store.insert_individual_public_key(&ni_dkg_id(i), node_test_id(NODE_1), csp_public_key());
     }
 
     assert_eq!(
@@ -183,14 +181,14 @@ fn should_purge_data_on_inserting_coeffs_and_indices_if_capacity_exceeded() {
     let pub_coeffs = public_coeffs();
 
     for i in 1..=ThresholdSigDataStoreImpl::CAPACITY_PER_TAG + 1 {
-        store.insert_transcript_data(ni_dkg_id(i), pub_coeffs.clone(), BTreeMap::new());
+        store.insert_transcript_data(&ni_dkg_id(i), pub_coeffs.clone(), BTreeMap::new());
     }
 
     assert_eq!(
         store.store.len(),
         ThresholdSigDataStoreImpl::CAPACITY_PER_TAG
     );
-    assert!(store.transcript_data(ni_dkg_id(1)).is_none());
+    assert!(store.transcript_data(&ni_dkg_id(1)).is_none());
     for i in 2..=ThresholdSigDataStoreImpl::CAPACITY_PER_TAG + 1 {
         assert_eq!(pub_coeffs_from_store(&store, ni_dkg_id(i)), pub_coeffs);
     }
@@ -202,7 +200,7 @@ fn should_purge_data_in_insertion_order_on_inserting_coeffs_and_indices_if_capac
     let pub_coeffs = public_coeffs();
 
     for i in (1..=ThresholdSigDataStoreImpl::CAPACITY_PER_TAG + 1).rev() {
-        store.insert_transcript_data(ni_dkg_id(i), pub_coeffs.clone(), BTreeMap::new());
+        store.insert_transcript_data(&ni_dkg_id(i), pub_coeffs.clone(), BTreeMap::new());
     }
 
     assert_eq!(
@@ -213,7 +211,7 @@ fn should_purge_data_in_insertion_order_on_inserting_coeffs_and_indices_if_capac
         assert_eq!(pub_coeffs_from_store(&store, ni_dkg_id(i)), pub_coeffs);
     }
     assert!(store
-        .transcript_data(ni_dkg_id(ThresholdSigDataStoreImpl::CAPACITY_PER_TAG + 1))
+        .transcript_data(&ni_dkg_id(ThresholdSigDataStoreImpl::CAPACITY_PER_TAG + 1))
         .is_none());
 }
 
@@ -225,13 +223,13 @@ fn should_not_purge_all_transcripts_of_certain_threshold_if_capacity_exceeded(
     let pub_coeffs = public_coeffs();
 
     store.insert_transcript_data(
-        ni_dkg_id_with_tag(single_transcript_threshold, 1),
+        &ni_dkg_id_with_tag(single_transcript_threshold.clone(), 1),
         pub_coeffs.clone(),
         BTreeMap::new(),
     );
     for i in 0..ThresholdSigDataStoreImpl::CAPACITY_PER_TAG + 1 {
         store.insert_transcript_data(
-            ni_dkg_id_with_tag(other_transcripts_threshold, i),
+            &ni_dkg_id_with_tag(other_transcripts_threshold.clone(), i),
             pub_coeffs.clone(),
             BTreeMap::new(),
         );
@@ -287,7 +285,7 @@ fn should_purge_data_on_inserting_pubkeys_if_capacity_exceeded() {
     let node_id = node_test_id(NODE_1);
 
     for i in 1..=ThresholdSigDataStoreImpl::CAPACITY_PER_TAG + 1 {
-        store.insert_individual_public_key(ni_dkg_id(i), node_id, csp_pubkey);
+        store.insert_individual_public_key(&ni_dkg_id(i), node_id, csp_pubkey);
     }
 
     assert_eq!(
@@ -296,11 +294,11 @@ fn should_purge_data_on_inserting_pubkeys_if_capacity_exceeded() {
     );
     for i in 2..=ThresholdSigDataStoreImpl::CAPACITY_PER_TAG + 1 {
         assert_eq!(
-            store.individual_public_key(ni_dkg_id(i), node_id),
+            store.individual_public_key(&ni_dkg_id(i), node_id),
             Some(&csp_pubkey)
         );
     }
-    assert_eq!(store.individual_public_key(ni_dkg_id(1), node_id), None);
+    assert_eq!(store.individual_public_key(&ni_dkg_id(1), node_id), None);
 }
 
 #[test]
@@ -310,7 +308,7 @@ fn should_purge_data_in_insertion_order_on_inserting_pubkeys_if_max_size_exceede
     let node_id = node_test_id(NODE_1);
 
     for i in (1..=ThresholdSigDataStoreImpl::CAPACITY_PER_TAG + 1).rev() {
-        store.insert_individual_public_key(ni_dkg_id(i), node_id, csp_pubkey);
+        store.insert_individual_public_key(&ni_dkg_id(i), node_id, csp_pubkey);
     }
 
     assert_eq!(
@@ -319,13 +317,13 @@ fn should_purge_data_in_insertion_order_on_inserting_pubkeys_if_max_size_exceede
     );
     for i in 1..=ThresholdSigDataStoreImpl::CAPACITY_PER_TAG {
         assert_eq!(
-            store.individual_public_key(ni_dkg_id(i), node_id),
+            store.individual_public_key(&ni_dkg_id(i), node_id),
             Some(&csp_pubkey)
         );
     }
     assert_eq!(
         store.individual_public_key(
-            ni_dkg_id(ThresholdSigDataStoreImpl::CAPACITY_PER_TAG + 1),
+            &ni_dkg_id(ThresholdSigDataStoreImpl::CAPACITY_PER_TAG + 1),
             node_id
         ),
         None
@@ -339,12 +337,12 @@ fn should_store_up_to_capacity_per_tag_for_both_tags() {
 
     for i in 0..ThresholdSigDataStoreImpl::CAPACITY_PER_TAG {
         store.insert_transcript_data(
-            ni_dkg_id_with_tag(NiDkgTag::LowThreshold, i),
+            &ni_dkg_id_with_tag(NiDkgTag::LowThreshold, i),
             pub_coeffs.clone(),
             BTreeMap::new(),
         );
         store.insert_transcript_data(
-            ni_dkg_id_with_tag(NiDkgTag::HighThreshold, i),
+            &ni_dkg_id_with_tag(NiDkgTag::HighThreshold, i),
             pub_coeffs.clone(),
             BTreeMap::new(),
         );
@@ -363,7 +361,7 @@ fn should_store_up_to_capacity_per_tag_for_both_tags() {
 
     // Insert one more transcript per tag
     store.insert_transcript_data(
-        ni_dkg_id_with_tag(
+        &ni_dkg_id_with_tag(
             NiDkgTag::LowThreshold,
             ThresholdSigDataStoreImpl::CAPACITY_PER_TAG,
         ),
@@ -371,7 +369,7 @@ fn should_store_up_to_capacity_per_tag_for_both_tags() {
         BTreeMap::new(),
     );
     store.insert_transcript_data(
-        ni_dkg_id_with_tag(
+        &ni_dkg_id_with_tag(
             NiDkgTag::HighThreshold,
             ThresholdSigDataStoreImpl::CAPACITY_PER_TAG,
         ),
@@ -428,7 +426,7 @@ fn pub_coeffs_from_store(
     dkg_id: NiDkgId,
 ) -> CspPublicCoefficients {
     store
-        .transcript_data(dkg_id)
+        .transcript_data(&dkg_id)
         .expect("Expecting transcript data to be present for dkg id")
         .public_coefficients()
         .clone()

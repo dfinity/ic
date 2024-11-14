@@ -427,8 +427,8 @@ impl Swap {
             purge_old_tickets_next_principal: Some(FIRST_PRINCIPAL_BYTES.to_vec()),
             already_tried_to_auto_finalize: Some(false),
             auto_finalize_swap_response: None,
-            direct_participation_icp_e8s: None,
-            neurons_fund_participation_icp_e8s: None,
+            direct_participation_icp_e8s: Some(0),
+            neurons_fund_participation_icp_e8s: Some(0),
             timers: None,
         };
         if init.validate_swap_init_for_one_proposal_flow().is_ok() {
@@ -676,9 +676,10 @@ impl Swap {
     ///
     /// See also: `Swap.run_periodic_tasks`.
     pub fn requires_periodic_tasks(&self) -> bool {
-        // Practically, already_tried_to_auto_finalize should never be None, but we err towards
-        // caution, which in this case means to continue scheduling periodic tasks.
-        !self.lifecycle_is_terminal() || !self.already_tried_to_auto_finalize.unwrap_or(false)
+        // Practically, already_tried_to_auto_finalize should never be None, unless a Swap has not
+        // been updated since this field had been introduced. We default this field to `true` to
+        // capture those old Swaps (which were finalized manually).
+        !self.lifecycle_is_terminal() || !self.already_tried_to_auto_finalize.unwrap_or(true)
     }
 
     //
@@ -1413,7 +1414,10 @@ impl Swap {
         let result = self.restore_dapp_controllers(sns_root_client).await;
 
         match result {
-            Ok(result) => result.into(),
+            Ok(result) => {
+                log!(INFO, "Successfully restored dapp controllers, {:?}", result);
+                SetDappControllersCallResult::from(result)
+            }
             Err(err_message) => {
                 log!(ERROR, "Halting set_dapp_controllers(), {:?}", err_message);
                 SetDappControllersCallResult { possibility: None }
@@ -1431,7 +1435,14 @@ impl Swap {
             .await;
 
         match result {
-            Ok(result) => result.into(),
+            Ok(result) => {
+                log!(
+                    INFO,
+                    "Successfully took sole control of dapp controllers, {:?}",
+                    result
+                );
+                SetDappControllersCallResult::from(result)
+            }
             Err(err_message) => {
                 log!(ERROR, "Halting set_dapp_controllers(), {:?}", err_message);
                 SetDappControllersCallResult { possibility: None }
@@ -4721,8 +4732,8 @@ mod tests {
             .with_swap_start_due(None, Some(10_000_000))
             .build();
 
-        let try_purge_old_tickets = |sale: &mut Swap, time: u64| loop {
-            match sale.try_purge_old_tickets(
+        let try_purge_old_tickets = |swap: &mut Swap, time: u64| loop {
+            match swap.try_purge_old_tickets(
                 || time,
                 NUMBER_OF_TICKETS_THRESHOLD,
                 MAX_AGE_IN_NANOSECONDS,

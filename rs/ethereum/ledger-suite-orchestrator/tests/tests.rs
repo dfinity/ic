@@ -7,48 +7,20 @@ use ic_ledger_suite_orchestrator::candid::{
     ManagedCanisters, ManagedLedgerSuite, OrchestratorArg, OrchestratorInfo,
     UpdateCyclesManagement, UpgradeArg,
 };
-use ic_ledger_suite_orchestrator_test_utils::arbitrary::{arb_init_arg, arb_principal};
 use ic_ledger_suite_orchestrator_test_utils::{
     assert_reply, cketh_installed_canisters, default_init_arg, ledger_suite_orchestrator_wasm,
-    new_state_machine, supported_erc20_tokens, usdc, usdc_erc20_contract, usdt,
-    LedgerSuiteOrchestrator, GIT_COMMIT_HASH_UPGRADE, MINTER_PRINCIPAL, NNS_ROOT_PRINCIPAL,
+    new_state_machine, usdc, usdc_erc20_contract, usdt, LedgerSuiteOrchestrator,
+    GIT_COMMIT_HASH_UPGRADE, MINTER_PRINCIPAL, NNS_ROOT_PRINCIPAL,
 };
 use ic_state_machine_tests::ErrorCode;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as LedgerMetadataValue;
 use icrc_ledger_types::icrc1::account::Account as LedgerAccount;
-use proptest::prelude::ProptestConfig;
-use proptest::proptest;
 use std::sync::Arc;
 
 const MAX_TICKS: usize = 10;
 const GIT_COMMIT_HASH: &str = "6a8e5fca2c6b4e12966638c444e994e204b42989";
 
 pub const TEN_TRILLIONS: u64 = 10_000_000_000_000; // 10 TC
-
-proptest! {
-    #![proptest_config(ProptestConfig {
-            cases: 10,
-            .. ProptestConfig::default()
-        })]
-    #[test]
-    fn should_install_orchestrator_and_add_supported_erc20_tokens(mut init_arg in arb_init_arg(), minter_id in arb_principal()) {
-        init_arg.minter_id = Some(minter_id);
-        let more_controllers = init_arg.more_controller_ids.clone();
-        let mut orchestrator = LedgerSuiteOrchestrator::new(Arc::new(new_state_machine()), init_arg).register_embedded_wasms();
-        let orchestrator_principal: Principal = orchestrator.ledger_suite_orchestrator_id.get().into();
-        let controllers: Vec<_> = std::iter::once(orchestrator_principal).chain(more_controllers.into_iter()).collect();
-
-        for token in supported_erc20_tokens() {
-            orchestrator = orchestrator
-                .add_erc20_token(token)
-                .expect_new_ledger_and_index_canisters()
-                .assert_all_controlled_by(&controllers)
-                .assert_ledger_icrc1_total_supply(0_u8)
-                .assert_index_has_correct_ledger_id()
-                .setup;
-        }
-    }
-}
 
 #[test]
 fn should_spawn_ledger_with_correct_init_args() {
@@ -569,7 +541,7 @@ mod upgrade {
         default_init_arg, ledger_suite_orchestrator_wasm, ledger_wasm, tweak_ledger_suite_wasms,
         usdt_erc20_contract, GIT_COMMIT_HASH_UPGRADE,
     };
-    use ic_state_machine_tests::{CanisterSettingsArgsBuilder, CanisterStatusType};
+    use ic_management_canister_types::{CanisterSettingsArgsBuilder, CanisterStatusType};
     use icrc_ledger_types::icrc1::transfer::TransferArg;
     use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
     use proptest::prelude::Rng;

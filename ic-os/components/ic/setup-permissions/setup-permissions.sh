@@ -37,6 +37,7 @@ make_group_owned_and_sticky /var/lib/ic/data/cups ic-replica nonconfidential
 make_group_owned_and_sticky /var/lib/ic/data/orchestrator ic-replica nonconfidential
 make_group_owned_and_sticky /var/lib/ic/data/ic_registry_local_store ic-replica ic-registry-local-store
 make_group_owned_and_sticky /var/lib/ic/data/ic_state/page_deltas ic-replica nonconfidential
+make_group_owned_and_sticky /var/lib/ic/data/recovery admin nonconfidential
 
 # Fix up security labels for everything.
 echo "Restoring SELinux security contexts in /var/lib/ic"

@@ -125,26 +125,6 @@ pub fn distributed_kyt_fee(
     state.distribute_kyt_fee(kyt_provider, amount)
 }
 
-pub fn retrieve_btc_kyt_failed(
-    state: &mut CkBtcMinterState,
-    owner: Principal,
-    address: String,
-    amount: u64,
-    kyt_provider: Principal,
-    uuid: String,
-    block_index: u64,
-) {
-    record_event(&Event::RetrieveBtcKytFailed {
-        owner,
-        address,
-        amount,
-        kyt_provider,
-        uuid,
-        block_index,
-    });
-    *state.owed_kyt_amount.entry(kyt_provider).or_insert(0) += state.kyt_fee;
-}
-
 pub fn schedule_deposit_reimbursement(
     state: &mut CkBtcMinterState,
     account: Account,

@@ -127,7 +127,7 @@ impl WasmtimeInstanceBuilder {
         }
         .dirty_page_overhead;
 
-        let sandbox_safe_system_state = SandboxSafeSystemState::new(
+        let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
             &system_state,
             cycles_account_manager,
             &self.network_topology,

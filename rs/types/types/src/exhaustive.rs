@@ -2,12 +2,12 @@
 
 use crate::consensus::hashed::Hashed;
 use crate::consensus::idkg::common::{PreSignatureInCreation, PreSignatureRef};
-use crate::consensus::idkg::ecdsa::{QuadrupleInCreation, ThresholdEcdsaSigInputsRef};
+use crate::consensus::idkg::ecdsa::QuadrupleInCreation;
 use crate::consensus::idkg::{
     CompletedReshareRequest, CompletedSignature, HasMasterPublicKeyId, IDkgPayload,
     IDkgReshareRequest, IDkgUIDGenerator, MaskedTranscript, MasterKeyTranscript, PreSigId,
-    PseudoRandomId, RandomTranscriptParams, RandomUnmaskedTranscriptParams, RequestId,
-    ReshareOfMaskedParams, ReshareOfUnmaskedParams, UnmaskedTimesMaskedParams, UnmaskedTranscript,
+    PseudoRandomId, RandomTranscriptParams, RandomUnmaskedTranscriptParams, ReshareOfMaskedParams,
+    ReshareOfUnmaskedParams, UnmaskedTimesMaskedParams, UnmaskedTranscript,
 };
 use crate::consensus::{
     Block, BlockPayload, CatchUpShareContent, ConsensusMessageHashable, Payload, SummaryPayload,
@@ -918,30 +918,36 @@ trait HasId<T> {
 
 impl HasId<NiDkgId> for NiDkgConfig {
     fn get_id(&self) -> Option<NiDkgId> {
-        Some(self.dkg_id())
+        Some(self.dkg_id().clone())
     }
 }
+
 impl HasId<IDkgTranscriptId> for IDkgTranscript {
     fn get_id(&self) -> Option<IDkgTranscriptId> {
         Some(self.transcript_id)
     }
 }
-impl HasId<IDkgReshareRequest> for ReshareOfUnmaskedParams {}
-impl HasId<PseudoRandomId> for CompletedSignature {}
-impl HasId<IDkgReshareRequest> for CompletedReshareRequest {}
-impl HasId<NodeIndex> for BatchSignedIDkgDealing {}
-impl HasId<SubnetId> for CertifiedStreamSlice {}
-impl HasId<NiDkgTag> for NiDkgTranscript {}
-impl HasId<NiDkgTargetId> for u32 {}
-impl HasId<RequestId> for ThresholdEcdsaSigInputsRef {}
-impl HasId<PreSigId> for PreSignatureInCreation {}
-impl HasId<PreSigId> for PreSignatureRef {}
+
+impl HasId<NiDkgTag> for NiDkgTranscript {
+    fn get_id(&self) -> Option<NiDkgTag> {
+        Some(self.dkg_id.dkg_tag.clone())
+    }
+}
 
 impl HasId<MasterPublicKeyId> for MasterKeyTranscript {
     fn get_id(&self) -> Option<MasterPublicKeyId> {
         Some(self.key_id())
     }
 }
+
+impl HasId<IDkgReshareRequest> for ReshareOfUnmaskedParams {}
+impl HasId<PseudoRandomId> for CompletedSignature {}
+impl HasId<IDkgReshareRequest> for CompletedReshareRequest {}
+impl HasId<NodeIndex> for BatchSignedIDkgDealing {}
+impl HasId<SubnetId> for CertifiedStreamSlice {}
+impl HasId<NiDkgTargetId> for u32 {}
+impl HasId<PreSigId> for PreSignatureInCreation {}
+impl HasId<PreSigId> for PreSignatureRef {}
 
 #[cfg(test)]
 mod tests {

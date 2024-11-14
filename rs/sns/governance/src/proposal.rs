@@ -2197,6 +2197,30 @@ impl ProposalData {
             ballots: limited_ballots,
         }
     }
+
+    /// "Upgrade proposals" are those that upgrade the SNS or a canister it controls.
+    pub(crate) fn is_upgrade_proposal(&self) -> bool {
+        let action_is_upgrade = matches!(
+            self.proposal,
+            Some(Proposal {
+                action: Some(
+                    Action::UpgradeSnsControlledCanister(_)
+                        | Action::UpgradeSnsToNextVersion(_)
+                        | Action::ManageLedgerParameters(_)
+                ),
+                ..
+            })
+        );
+        // In production, the above condition is exactly what we want. However, in some tests, we only set the action_id
+        // and not the action.
+        let upgrade_action_ids: [u64; 3] = [
+            (&Action::UpgradeSnsControlledCanister(UpgradeSnsControlledCanister::default())).into(),
+            (&Action::UpgradeSnsToNextVersion(UpgradeSnsToNextVersion::default())).into(),
+            (&Action::ManageLedgerParameters(ManageLedgerParameters::default())).into(),
+        ];
+        let action_id_is_upgrade = upgrade_action_ids.contains(&self.action);
+        action_is_upgrade || action_id_is_upgrade
+    }
 }
 
 impl ProposalDecisionStatus {
@@ -2488,6 +2512,9 @@ mod tests {
             is_finalizing_disburse_maturity: None,
             maturity_modulation: None,
             cached_upgrade_steps: None,
+            target_version: None,
+            timers: None,
+            upgrade_journal: None,
         }
     }
 

@@ -505,10 +505,62 @@ fn test_abridged_neuron_size() {
         neuron_type: Some(i32::MAX),
         dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(u64::MAX)),
         visibility: None,
+        voting_power_refreshed_timestamp_seconds: Some(u64::MAX),
     };
 
     assert!(abridged_neuron.encoded_len() as u32 <= AbridgedNeuron::BOUND.max_size());
-    // This size can be updated. This assertion is created so that we are aware of the available
-    // headroom.
-    assert_eq!(abridged_neuron.encoded_len(), 184);
+    // This size can be updated. This assertion is here to make sure we are very aware of growth.
+    // Reminder: the amount we allocated for AbridgedNeuron is 380 bytes.
+    assert_eq!(abridged_neuron.encoded_len(), 196);
+}
+
+#[test]
+fn test_range_neurons_reconstitutes_fully() {
+    let mut store = new_heap_based();
+    let neurons = {
+        let mut neurons = vec![];
+        for i in 1..10 {
+            let neuron = create_model_neuron(i);
+            store.create(neuron.clone()).unwrap();
+            neurons.push(neuron);
+        }
+        neurons
+    };
+
+    let result = store.range_neurons(..).collect::<Vec<_>>();
+
+    assert_eq!(result, neurons);
+}
+
+#[test]
+fn test_range_neurons_ranges_work_correctly() {
+    // This test is here to ensure that the conversions that happen inside range_neurons are correct.
+    let mut store = new_heap_based();
+    let neurons = {
+        let mut neurons = vec![];
+        for i in 1..=10 {
+            let neuron = create_model_neuron(i);
+            store.create(neuron.clone()).unwrap();
+            neurons.push(neuron);
+        }
+        neurons
+    };
+
+    let result = store
+        .range_neurons(NeuronId::from_u64(2)..NeuronId::from_u64(9))
+        .collect::<Vec<_>>();
+    assert_eq!(result, neurons[1..8]);
+
+    let result = store
+        .range_neurons(NeuronId::from_u64(2)..=NeuronId::from_u64(3))
+        .collect::<Vec<_>>();
+    assert_eq!(result, neurons[1..3]);
+
+    let result = store
+        .range_neurons((
+            std::ops::Bound::Excluded(NeuronId::from_u64(2)),
+            std::ops::Bound::Included(NeuronId::from_u64(3)),
+        ))
+        .collect::<Vec<_>>();
+    assert_eq!(result, neurons[2..3]);
 }

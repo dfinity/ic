@@ -39,8 +39,8 @@ use ic_management_canister_types::{
     LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs,
     Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
     SchnorrPublicKeyArgs, SchnorrPublicKeyResponse, SetupInitialDKGArgs, SignWithECDSAArgs,
-    SignWithSchnorrArgs, StoredChunksArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
-    UpdateSettingsArgs, UploadChunkArgs, IC_00,
+    SignWithSchnorrArgs, StoredChunksArgs, SubnetInfoArgs, SubnetInfoResponse,
+    TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs, IC_00,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -72,7 +72,7 @@ use ic_types::{
     },
     methods::SystemMethod,
     nominal_cycles::NominalCycles,
-    CanisterId, Cycles, NumBytes, NumInstructions, SubnetId, Time,
+    CanisterId, Cycles, NumBytes, NumInstructions, ReplicaVersion, SubnetId, Time,
 };
 use ic_types::{messages::MessageId, methods::WasmMethod};
 use ic_wasm_types::WasmHash;
@@ -472,6 +472,7 @@ impl ExecutionEnvironment {
         instruction_limits: InstructionLimits,
         rng: &mut dyn RngCore,
         idkg_subnet_public_keys: &BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+        replica_version: &ReplicaVersion,
         registry_settings: &RegistryExecutionSettings,
         round_limits: &mut RoundLimits,
     ) -> (ReplicatedState, Option<NumInstructions>) {
@@ -1369,14 +1370,31 @@ impl ExecutionEnvironment {
                 }
             }
 
-            Ok(Ic00Method::NodeMetricsHistory) => {
-                let res = NodeMetricsHistoryArgs::decode(payload)
-                    .and_then(|args| self.node_metrics_history(&state, args));
-                ExecuteSubnetMessageResult::Finished {
-                    response: res,
-                    refund: msg.take_cycles(),
+            Ok(Ic00Method::NodeMetricsHistory) => match &msg {
+                CanisterCall::Ingress(_) => {
+                    self.reject_unexpected_ingress(Ic00Method::NodeMetricsHistory)
                 }
-            }
+                CanisterCall::Request(_) => {
+                    let res = NodeMetricsHistoryArgs::decode(payload)
+                        .and_then(|args| self.node_metrics_history(&state, args));
+                    ExecuteSubnetMessageResult::Finished {
+                        response: res,
+                        refund: msg.take_cycles(),
+                    }
+                }
+            },
+
+            Ok(Ic00Method::SubnetInfo) => match &msg {
+                CanisterCall::Ingress(_) => self.reject_unexpected_ingress(Ic00Method::SubnetInfo),
+                CanisterCall::Request(_) => {
+                    let res = SubnetInfoArgs::decode(payload)
+                        .and_then(|args| self.subnet_info(replica_version, args));
+                    ExecuteSubnetMessageResult::Finished {
+                        response: res,
+                        refund: msg.take_cycles(),
+                    }
+                }
+            },
 
             Ok(Ic00Method::FetchCanisterLogs) => ExecuteSubnetMessageResult::Finished {
                 response: Err(UserError::new(
@@ -1389,123 +1407,74 @@ impl ExecutionEnvironment {
                 refund: msg.take_cycles(),
             },
 
-            Ok(Ic00Method::TakeCanisterSnapshot) => match self.config.canister_snapshots {
-                FlagStatus::Enabled => match TakeCanisterSnapshotArgs::decode(payload) {
-                    Err(err) => ExecuteSubnetMessageResult::Finished {
-                        response: Err(err),
-                        refund: msg.take_cycles(),
-                    },
-                    Ok(args) => {
-                        let (result, instructions_used) = self.take_canister_snapshot(
-                            *msg.sender(),
-                            &mut state,
-                            args,
-                            registry_settings.subnet_size,
-                            round_limits,
-                        );
-                        let msg_result = ExecuteSubnetMessageResult::Finished {
-                            response: result,
-                            refund: msg.take_cycles(),
-                        };
-
-                        let state =
-                            self.finish_subnet_message_execution(state, msg, msg_result, since);
-                        return (state, Some(instructions_used));
-                    }
+            Ok(Ic00Method::TakeCanisterSnapshot) => match TakeCanisterSnapshotArgs::decode(payload)
+            {
+                Err(err) => ExecuteSubnetMessageResult::Finished {
+                    response: Err(err),
+                    refund: msg.take_cycles(),
                 },
-                FlagStatus::Disabled => {
-                    let err = Err(UserError::new(
-                        ErrorCode::CanisterContractViolation,
-                        "This API is not enabled on this subnet".to_string(),
-                    ));
-                    ExecuteSubnetMessageResult::Finished {
-                        response: err,
+                Ok(args) => {
+                    let (result, instructions_used) = self.take_canister_snapshot(
+                        *msg.sender(),
+                        &mut state,
+                        args,
+                        registry_settings.subnet_size,
+                        round_limits,
+                    );
+                    let msg_result = ExecuteSubnetMessageResult::Finished {
+                        response: result,
                         refund: msg.take_cycles(),
-                    }
+                    };
+
+                    let state = self.finish_subnet_message_execution(state, msg, msg_result, since);
+                    return (state, Some(instructions_used));
                 }
             },
 
-            Ok(Ic00Method::LoadCanisterSnapshot) => match self.config.canister_snapshots {
-                FlagStatus::Enabled => match LoadCanisterSnapshotArgs::decode(payload) {
-                    Err(err) => ExecuteSubnetMessageResult::Finished {
-                        response: Err(err),
-                        refund: msg.take_cycles(),
-                    },
-                    Ok(args) => {
-                        let origin = msg.canister_change_origin(args.get_sender_canister_version());
-                        let (result, instructions_used) = self.load_canister_snapshot(
-                            registry_settings.subnet_size,
-                            *msg.sender(),
-                            &mut state,
-                            args,
-                            round_limits,
-                            origin,
-                        );
-                        let msg_result = ExecuteSubnetMessageResult::Finished {
-                            response: result,
-                            refund: msg.take_cycles(),
-                        };
-
-                        let state =
-                            self.finish_subnet_message_execution(state, msg, msg_result, since);
-                        return (state, Some(instructions_used));
-                    }
+            Ok(Ic00Method::LoadCanisterSnapshot) => match LoadCanisterSnapshotArgs::decode(payload)
+            {
+                Err(err) => ExecuteSubnetMessageResult::Finished {
+                    response: Err(err),
+                    refund: msg.take_cycles(),
                 },
-                FlagStatus::Disabled => {
-                    let err = Err(UserError::new(
-                        ErrorCode::CanisterContractViolation,
-                        "This API is not enabled on this subnet".to_string(),
-                    ));
-                    ExecuteSubnetMessageResult::Finished {
-                        response: err,
+                Ok(args) => {
+                    let origin = msg.canister_change_origin(args.get_sender_canister_version());
+                    let (result, instructions_used) = self.load_canister_snapshot(
+                        registry_settings.subnet_size,
+                        *msg.sender(),
+                        &mut state,
+                        args,
+                        round_limits,
+                        origin,
+                    );
+                    let msg_result = ExecuteSubnetMessageResult::Finished {
+                        response: result,
                         refund: msg.take_cycles(),
-                    }
+                    };
+
+                    let state = self.finish_subnet_message_execution(state, msg, msg_result, since);
+                    return (state, Some(instructions_used));
                 }
             },
 
-            Ok(Ic00Method::ListCanisterSnapshots) => match self.config.canister_snapshots {
-                FlagStatus::Enabled => {
-                    let res = ListCanisterSnapshotArgs::decode(payload).and_then(|args| {
-                        self.list_canister_snapshot(*msg.sender(), &mut state, args)
-                    });
-                    ExecuteSubnetMessageResult::Finished {
-                        response: res,
-                        refund: msg.take_cycles(),
-                    }
+            Ok(Ic00Method::ListCanisterSnapshots) => {
+                let res = ListCanisterSnapshotArgs::decode(payload)
+                    .and_then(|args| self.list_canister_snapshot(*msg.sender(), &mut state, args));
+                ExecuteSubnetMessageResult::Finished {
+                    response: res,
+                    refund: msg.take_cycles(),
                 }
-                FlagStatus::Disabled => {
-                    let err = Err(UserError::new(
-                        ErrorCode::CanisterContractViolation,
-                        "This API is not enabled on this subnet".to_string(),
-                    ));
-                    ExecuteSubnetMessageResult::Finished {
-                        response: err,
-                        refund: msg.take_cycles(),
-                    }
-                }
-            },
+            }
 
-            Ok(Ic00Method::DeleteCanisterSnapshot) => match self.config.canister_snapshots {
-                FlagStatus::Enabled => {
-                    let res = DeleteCanisterSnapshotArgs::decode(payload).and_then(|args| {
-                        self.delete_canister_snapshot(*msg.sender(), &mut state, args, round_limits)
-                    });
-                    ExecuteSubnetMessageResult::Finished {
-                        response: res,
-                        refund: msg.take_cycles(),
-                    }
+            Ok(Ic00Method::DeleteCanisterSnapshot) => {
+                let res = DeleteCanisterSnapshotArgs::decode(payload).and_then(|args| {
+                    self.delete_canister_snapshot(*msg.sender(), &mut state, args, round_limits)
+                });
+                ExecuteSubnetMessageResult::Finished {
+                    response: res,
+                    refund: msg.take_cycles(),
                 }
-                FlagStatus::Disabled => {
-                    let err = Err(UserError::new(
-                        ErrorCode::CanisterContractViolation,
-                        "This API is not enabled on this subnet".to_string(),
-                    ));
-                    ExecuteSubnetMessageResult::Finished {
-                        response: err,
-                        refund: msg.take_cycles(),
-                    }
-                }
-            },
+            }
 
             Err(ParseError::VariantNotFound) => {
                 let res = Err(UserError::new(
@@ -2223,6 +2192,26 @@ impl ExecutionEnvironment {
                 args.start_at_timestamp_nanos,
             ));
         Ok(Encode!(&result).unwrap())
+    }
+
+    fn subnet_info(
+        &self,
+        replica_version: &ReplicaVersion,
+        args: SubnetInfoArgs,
+    ) -> Result<Vec<u8>, UserError> {
+        if args.subnet_id != self.own_subnet_id.get() {
+            return Err(UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "Provided target subnet ID {} does not match current subnet ID {}.",
+                    args.subnet_id, self.own_subnet_id
+                ),
+            ));
+        }
+        let res = SubnetInfoResponse {
+            replica_version: replica_version.to_string(),
+        };
+        Ok(Encode!(&res).unwrap())
     }
 
     // Executes an inter-canister response.
@@ -3224,7 +3213,6 @@ impl ExecutionEnvironment {
                     .task_queue
                     .replace_paused_with_aborted_task(aborted_task);
             }
-            canister.apply_priority_credit();
             let canister_id = canister.canister_id();
             canister.system_state.apply_ingress_induction_cycles_debit(
                 canister_id,
@@ -3352,7 +3340,7 @@ impl ExecutionEnvironment {
                         time,
                         state: ingress_state,
                     },
-                )
+                );
             }
             StopCanisterContext::Canister {
                 sender,
