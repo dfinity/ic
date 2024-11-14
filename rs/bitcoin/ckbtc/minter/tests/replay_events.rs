@@ -14,6 +14,9 @@ async fn should_replay_events_for_mainnet() {
     let state =
         replay::<SkipCheckInvariantsImpl>(GetEventsFile::Mainnet.deserialize().events.into_iter())
             .expect("Failed to replay events");
+    state
+        .check_invariants()
+        .expect("Failed to check invariants");
 
     assert_eq!(state.btc_network, Network::Mainnet);
     assert_eq!(state.get_total_btc_managed(), 21_723_786_340);
@@ -28,6 +31,9 @@ async fn should_replay_events_for_testnet() {
     let state =
         replay::<SkipCheckInvariantsImpl>(GetEventsFile::Testnet.deserialize().events.into_iter())
             .expect("Failed to replay events");
+    state
+        .check_invariants()
+        .expect("Failed to check invariants");
 
     assert_eq!(state.btc_network, Network::Testnet);
     assert_eq!(state.get_total_btc_managed(), 16_578_205_978);
