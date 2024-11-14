@@ -1,6 +1,10 @@
 #![allow(clippy::disallowed_types)]
 
-use std::{sync::Arc, time::Instant};
+use std::{
+    hash::{DefaultHasher, Hash, Hasher},
+    sync::Arc,
+    time::Instant,
+};
 
 use anyhow::Error;
 use arc_swap::ArcSwapOption;
@@ -23,7 +27,7 @@ use prometheus::{
 use tikv_jemalloc_ctl::{epoch, stats};
 use tokio::sync::RwLock;
 use tower_http::request_id::RequestId;
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::{
     cache::{Cache, CacheStatus},
@@ -481,6 +485,7 @@ pub async fn metrics_middleware_status(
 pub async fn metrics_middleware(
     State(metric_params): State<HttpMetricParams>,
     Extension(request_id): Extension<RequestId>,
+    Extension(salt): Extension<Arc<ArcSwapOption<Vec<u8>>>>,
     request: Request,
     next: Next,
 ) -> impl IntoResponse {
@@ -491,6 +496,12 @@ pub async fn metrics_middleware(
         .get::<Arc<ConnInfo>>()
         .map(|x| x.remote_addr.family())
         .unwrap_or("0");
+
+    let remote_addr = request
+        .extensions()
+        .get::<Arc<ConnInfo>>()
+        .map(|x| x.remote_addr.ip().to_string())
+        .unwrap_or_default();
 
     let request_type = &request
         .extensions()
@@ -623,6 +634,20 @@ pub async fn metrics_middleware(
             .with_label_values(labels)
             .observe(response_size as f64);
 
+        // Anonymization
+        let hash_fn = |s: &str| {
+            let mut h = DefaultHasher::new();
+            s.hash(&mut h);
+            salt.load().hash(&mut h);
+            format!("{:x}", h.finish())
+        };
+
+        let remote_addr = hash_fn(&remote_addr);
+
+        let sender = sender.unwrap_or_default();
+        let sender = hash_fn(&sender);
+
+        // Log
         if !log_failed_requests_only || failed {
             info!(
                 action,
@@ -638,6 +663,7 @@ pub async fn metrics_middleware(
                 canister_id_actual = canister_id_actual.map(|x| x.to_string()),
                 canister_id_cbor = ctx.canister_id.map(|x| x.to_string()),
                 sender,
+                remote_addr,
                 method = ctx.method_name,
                 duration = proc_duration,
                 duration_full = full_duration,

@@ -15,7 +15,7 @@ use axum::{
     middleware,
     response::IntoResponse,
     routing::method_routing::{get, post},
-    Router,
+    Extension, Router,
 };
 use axum_extra::middleware::option_layer;
 use candid::DecoderConfig;
@@ -210,6 +210,12 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         cli.rate_limiting.rate_limit_generic.clone(),
     ));
 
+    // HTTP Logs Anonymization
+    let salt = Arc::new(ArcSwapOption::<Vec<u8>>::empty());
+
+    // Start salt tracker
+    // TODO(or.ricon) Call track(...)
+
     // Prepare Axum Router
     let router = setup_router(
         registry_snapshot.clone(),
@@ -220,6 +226,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         &cli,
         &metrics_registry,
         cache.clone(),
+        salt.clone(),
     );
 
     // HTTP server metrics
@@ -661,6 +668,7 @@ pub fn setup_router(
     cli: &Cli,
     metrics_registry: &Registry,
     cache: Option<Arc<Cache>>,
+    salt: Arc<ArcSwapOption<Vec<u8>>>,
 ) -> Router {
     let proxy_router = ProxyRouter::new(
         http_client.clone(),
@@ -860,6 +868,7 @@ pub fn setup_router(
         .merge(subnet_read_state_route)
         .merge(status_route)
         .merge(health_route)
+        .layer(Extension(salt))
 }
 
 #[async_trait]
