@@ -538,15 +538,17 @@ def upload_to_file_share(
     log.info(f"Image ready at {file_share_endpoint}:/{file_share_dir}/{file_share_image_name}")
 
 
-def inject_config_into_image(setupos_inject_configuration_path: Path,
-                             working_dir: Path,
-                             compressed_image_path: Path,
-                             node_reward_type: str,
-                             ipv6_prefix: str,
-                             ipv6_gateway: str,
-                             ipv4_args: Optional[Ipv4Args],
-                             verbose: Optional[str],
-                             pub_key: Optional[str]) -> Path:
+def inject_config_into_image(
+    setupos_inject_configuration_path: Path,
+    working_dir: Path,
+    compressed_image_path: Path,
+    node_reward_type: str,
+    ipv6_prefix: str,
+    ipv6_gateway: str,
+    ipv4_args: Optional[Ipv4Args],
+    verbose: Optional[str],
+    pub_key: Optional[str],
+) -> Path:
     """
     Transform the compressed image.
     * Decompress image into working_dir
@@ -587,7 +589,10 @@ def inject_config_into_image(setupos_inject_configuration_path: Path,
     if pub_key:
         admin_key_part = f'--public-keys "{pub_key}"'
 
-    invoke.run(f"{setupos_inject_configuration_path} {image_part} {reward_part} {prefix_part} {gateway_part} {ipv4_part} {verbose_part} {admin_key_part}", echo=True)
+    invoke.run(
+        f"{setupos_inject_configuration_path} {image_part} {reward_part} {prefix_part} {gateway_part} {ipv4_part} {verbose_part} {admin_key_part}",
+        echo=True,
+    )
 
     # Reuse the name of the compressed image path in the working directory
     result_filename = compressed_image_path.name
