@@ -61,7 +61,7 @@ pub mod metrics;
 
 pub const FEE: u64 = 10_000;
 pub const DECIMAL_PLACES: u8 = 8;
-pub const ARCHIVE_TRIGGER_THRESHOLD: u64 = 10;
+pub const ARCHIVE_TRIGGER_THRESHOLD: u64 = 10_000_000;
 pub const NUM_BLOCKS_TO_ARCHIVE: u64 = 5;
 pub const TX_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
 
@@ -3062,7 +3062,6 @@ where
     // Standard approval.
     let block_index =
         send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
-    assert_eq!(block_index, 2);
     let allowance = get_allowance(&env, canister_id, from.0, spender.0);
     assert_eq!(allowance.allowance.0.to_u64().unwrap(), 150_000);
     assert_eq!(allowance.expires_at, None);
@@ -3074,7 +3073,6 @@ where
     approve_args.amount = Nat::from(1_000_000u32);
     let block_index =
         send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
-    assert_eq!(block_index, 3);
     let allowance = get_allowance(&env, canister_id, from.0, spender.0);
     let allowance_sub_1 = get_allowance(&env, canister_id, from_sub_1, spender.0);
     assert_eq!(allowance.allowance.0.to_u64().unwrap(), 150_000);

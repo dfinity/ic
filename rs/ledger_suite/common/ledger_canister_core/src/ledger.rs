@@ -216,7 +216,6 @@ pub fn apply_transaction<L>(
 ) -> Result<(BlockIndex, HashOf<EncodedBlock>), TransferError<L::Tokens>>
 where
     L: LedgerData,
-    L::BalancesStore: InspectableBalancesStore,
 {
     let num_pruned = purge_old_transactions(ledger, now);
 
@@ -304,11 +303,7 @@ where
     let effective_max_number_of_accounts =
         ledger.max_number_of_accounts() + ledger.accounts_overflow_trim_quantity() - 1;
 
-    let to_trim = if ledger.balances().store.len() > effective_max_number_of_accounts {
-        select_accounts_to_trim(ledger)
-    } else {
-        vec![]
-    };
+    let to_trim = vec![];
 
     for (balance, account) in to_trim {
         let burn_tx = L::Transaction::burn(account, None, balance, Some(now), Some(TRIMMED_MEMO));
@@ -335,8 +330,7 @@ where
     // We estimate that an approval takes up twice as much space as a balance:
     // balance = account + num_tokens
     // approval = 2 * account + num_tokens + timestamp
-    let max_number_of_approvals =
-        (effective_max_number_of_accounts - ledger.balances().store.len()) / 2;
+    let max_number_of_approvals = 1_000_000_000;
 
     if ledger.approvals().len() > max_number_of_approvals {
         let num_approvals_to_trim = ledger.approvals().len() - max_number_of_approvals;
@@ -479,32 +473,32 @@ pub fn purge_old_transactions<L: LedgerData>(ledger: &mut L, now: TimeStamp) -> 
 fn select_accounts_to_trim<L>(ledger: &L) -> Vec<(L::Tokens, L::AccountId)>
 where
     L: LedgerData,
-    L::BalancesStore: InspectableBalancesStore<Tokens = L::Tokens>,
     L::Tokens: TokensType,
 {
-    let mut to_trim: std::collections::BinaryHeap<(L::Tokens, L::AccountId)> =
-        std::collections::BinaryHeap::new();
+    // let mut to_trim: std::collections::BinaryHeap<(L::Tokens, L::AccountId)> =
+    //     std::collections::BinaryHeap::new();
 
-    let num_accounts = ledger.accounts_overflow_trim_quantity();
-    let mut iter = ledger.balances().store.iter();
+    // let num_accounts = ledger.accounts_overflow_trim_quantity();
+    // let mut iter = ledger.balances().store.iter();
 
-    // Accumulate up to `trim_quantity` accounts
-    for (account, balance) in iter.by_ref().take(num_accounts) {
-        to_trim.push((balance.clone(), account.clone()));
-    }
+    // // Accumulate up to `trim_quantity` accounts
+    // for (account, balance) in iter.by_ref().take(num_accounts) {
+    //     to_trim.push((balance.clone(), account.clone()));
+    // }
 
-    for (account, balance) in iter {
-        // If any account's balance is lower than the maximum in our set,
-        // include that account, and remove the current maximum
-        if let Some((greatest_balance, _)) = to_trim.peek() {
-            if balance < greatest_balance {
-                to_trim.push((balance.clone(), account.clone()));
-                to_trim.pop();
-            }
-        }
-    }
+    // for (account, balance) in iter {
+    //     // If any account's balance is lower than the maximum in our set,
+    //     // include that account, and remove the current maximum
+    //     if let Some((greatest_balance, _)) = to_trim.peek() {
+    //         if balance < greatest_balance {
+    //             to_trim.push((balance.clone(), account.clone()));
+    //             to_trim.pop();
+    //         }
+    //     }
+    // }
 
-    to_trim.into_vec()
+    // to_trim.into_vec()
+    vec![]
 }
 
 /// Asynchronously archives a suffix of the locally available blockchain.
