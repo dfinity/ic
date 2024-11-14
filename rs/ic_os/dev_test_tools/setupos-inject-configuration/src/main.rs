@@ -39,7 +39,7 @@ struct Cli {
 #[derive(Args)]
 struct ConfigIni {
     #[arg(long)]
-    node_remuneration_type: Option<String>,
+    node_reward_type: Option<String>,
 
     #[arg(long)]
     ipv6_prefix: Option<String>,
@@ -185,7 +185,7 @@ async fn write_config(path: &Path, cfg: &ConfigIni) -> Result<(), Error> {
     let mut f = File::create(path).context("failed to create config file")?;
 
     let ConfigIni {
-        node_remuneration_type,
+        node_reward_type,
         ipv6_prefix,
         ipv6_gateway,
         ipv4_address,
@@ -195,8 +195,8 @@ async fn write_config(path: &Path, cfg: &ConfigIni) -> Result<(), Error> {
         verbose,
     } = cfg;
 
-    if let Some(node_remuneration_type) = node_remuneration_type {
-        writeln!(&mut f, "node_remuneration_type={}", node_remuneration_type)?;
+    if let Some(node_reward_type) = node_reward_type {
+        writeln!(&mut f, "node_reward_type={}", node_reward_type)?;
     }
 
     if let (Some(ipv6_prefix), Some(ipv6_gateway)) = (ipv6_prefix, ipv6_gateway) {

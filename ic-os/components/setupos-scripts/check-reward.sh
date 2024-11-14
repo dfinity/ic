@@ -15,28 +15,28 @@ function read_variables() {
     # otherwise lead to executing arbitrary shell code!
     while IFS="=" read -r key value; do
         case "$key" in
-            "node_remuneration_type") node_remuneration_type="${value}" ;;
+            "node_reward_type") node_reward_type="${value}" ;;
         esac
     done <"${CONFIG}"
 }
 
-function validate_node_remuneration() {
-    if [[ -z "$node_remuneration_type" ]]; then
-        log_and_halt_installation_on_error 1 "Configuration error: node_remuneration_type is not set"
+function validate_node_reward() {
+    if [[ -z "$node_reward_type" ]]; then
+        log_and_halt_installation_on_error 1 "Configuration error: node_reward_type is not set"
     fi
 
-    if [[ ! "$node_remuneration_type" =~ ^type[0-9]+(\.[0-9])?$ ]]; then
-        log_and_halt_installation_on_error 1 "Configuration error: node_remuneration_type is invalid: ${node_remuneration_type}"
+    if [[ ! "$node_reward_type" =~ ^type[0-9]+(\.[0-9])?$ ]]; then
+        log_and_halt_installation_on_error 1 "Configuration error: node_reward_type is invalid: ${node_reward_type}"
     fi
 
-    echo "Valid node remuneration type: ${node_remuneration_type}"
+    echo "Valid node reward type: ${node_reward_type}"
 }
 
 # Establish run order
 main() {
     log_start "$(basename $0)"
     read_variables
-    validate_node_remuneration
+    validate_node_reward
     log_end "$(basename $0)"
 }
 
