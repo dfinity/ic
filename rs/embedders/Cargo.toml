@@ -8,7 +8,6 @@ version.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
-cfg-if = "1.0.0"
 ic-config = { path = "../config" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-interfaces = { path = "../interfaces" }
@@ -77,9 +76,6 @@ slog = { workspace = true }
 wasmprinter = { workspace = true }
 wast = { workspace = true }
 wat = { workspace = true }
-
-[features]
-fuzzing_code = []
 
 [[bin]]
 name = "instrument-wasm"

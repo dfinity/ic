@@ -286,6 +286,8 @@ fn ic0_performance_counter_helper(
     }
 }
 
+/// pub for usage in fuzzing to generate the available system api imports
+#[doc(hidden)]
 pub fn syscalls<
     I: TryInto<usize>
         + TryInto<u64>

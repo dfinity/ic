@@ -8146,7 +8146,6 @@ dependencies = [
  "assert_matches",
  "candid",
  "canister-test",
- "cfg-if 1.0.0",
  "criterion",
  "embedders_bench",
  "ic-base-types",
