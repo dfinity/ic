@@ -12,6 +12,11 @@ function log_and_halt_installation_on_error() {
 
     if [ "${exit_code}" -ne 0 ]; then
         {
+            # Sleep before printing error log to ensure previous log messages
+            # have time to display on console (helpful for screen recordings).
+            echo "ERROR DETECTED..."
+            sleep 5
+
             echo -e "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
             echo "--------------------------------------------------------------------------------"
             echo "                       INTERNET COMPUTER - SETUP - FAILED"

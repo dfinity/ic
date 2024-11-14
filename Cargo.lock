@@ -6547,7 +6547,9 @@ dependencies = [
  "candid_parser",
  "canister-test",
  "ciborium",
+ "flate2",
  "hex",
+ "ic-agent",
  "ic-base-types",
  "ic-bitcoin-canister-mock",
  "ic-btc-interface",
@@ -6585,6 +6587,7 @@ dependencies = [
  "serde_bytes",
  "serde_json",
  "simple_asn1",
+ "tokio",
 ]
 
 [[package]]
@@ -15093,6 +15096,16 @@ dependencies = [
  "cc",
  "libc",
  "pkg-config",
+]
+
+[[package]]
+name = "load-simulator"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "ic-cdk 0.16.0",
+ "ic-cdk-macros 0.9.0",
+ "ic-cdk-timers",
 ]
 
 [[package]]

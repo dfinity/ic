@@ -4,6 +4,7 @@ use super::{
     eventlog::Event, CkBtcMinterState, FinalizedBtcRetrieval, FinalizedStatus, RetrieveBtcRequest,
     SubmittedBtcTransaction, UtxoCheckStatus,
 };
+use crate::state::invariants::CheckInvariantsImpl;
 use crate::state::{ReimburseDepositTask, ReimbursedDeposit};
 use crate::storage::record_event;
 use crate::ReimbursementReason;
@@ -38,7 +39,7 @@ pub fn add_utxos(
         utxos: utxos.clone(),
     });
 
-    state.add_utxos(account, utxos);
+    state.add_utxos::<CheckInvariantsImpl>(account, utxos);
 }
 
 pub fn remove_retrieve_btc_request(state: &mut CkBtcMinterState, request: RetrieveBtcRequest) {

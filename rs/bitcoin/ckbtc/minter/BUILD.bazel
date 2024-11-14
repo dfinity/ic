@@ -129,6 +129,25 @@ rust_test(
     ],
 )
 
+rust_test(
+    name = "ckbtc_minter_replay_events_tests",
+    srcs = ["tests/replay_events.rs"],
+    data = [
+        "test_resources/mainnet_events.gz",
+        "test_resources/testnet_events.gz",
+    ],
+    deps = [
+        # Keep sorted.
+        ":ckbtc_minter_lib",
+        "@crate_index//:bitcoin",
+        "@crate_index//:candid",
+        "@crate_index//:flate2",
+        "@crate_index//:ic-agent",
+        "@crate_index//:serde",
+        "@crate_index//:tokio",
+    ],
+)
+
 # integration tests defined in ckbtc minter tests/
 rust_ic_test(
     name = "ckbtc_minter_tests",

@@ -526,32 +526,42 @@ fn init_fn(
     });
 
     ID_SEED.with(|s| {
-        let mut s = s.borrow_mut();
-        s.insert((), id_seed);
+        s.borrow_mut().insert(
+            (),      //
+            id_seed, //
+        )
     });
 
-    let registration_expiration_ttl = registration_expiration_ttl.unwrap_or(3 * DAY);
-
+    // REGISTRATION_EXPIRATION_TTL
     REGISTRATION_EXPIRATION_TTL.with(|s| {
-        let mut s = s.borrow_mut();
-        s.insert((), registration_expiration_ttl);
+        s.borrow_mut().insert(
+            (),                                             //
+            registration_expiration_ttl.unwrap_or(3 * DAY), //
+        )
     });
 
-    let in_progress_ttl = in_progress_ttl.unwrap_or(10 * MINUTE);
-
+    // IN_PROGRESS_TTL
     IN_PROGRESS_TTL.with(|s| {
-        let mut s = s.borrow_mut();
-        s.insert((), in_progress_ttl);
+        s.borrow_mut().insert(
+            (),                                     //
+            in_progress_ttl.unwrap_or(10 * MINUTE), //
+        )
+    });
+
+    // MANAGEMENT_TASK_INTERVAL
+    MANAGEMENT_TASK_INTERVAL.with(|s| {
+        s.borrow_mut().insert(
+            (),                                         //
+            management_task_interval.unwrap_or(MINUTE), //
+        )
     });
 
     // authorize the canister ID so that timer functions are authorized
-    ALLOWED_PRINCIPALS.with(|m| m.borrow_mut().insert(id().to_text().into(), ()));
-
-    let management_task_interval = management_task_interval.unwrap_or(MINUTE);
-
-    MANAGEMENT_TASK_INTERVAL.with(|s| {
-        let mut s = s.borrow_mut();
-        s.insert((), management_task_interval);
+    ALLOWED_PRINCIPALS.with(|m| {
+        m.borrow_mut().insert(
+            id().to_text().into(), // principal
+            (),                    //
+        )
     });
 
     init_timers_fn();
@@ -612,12 +622,35 @@ fn post_upgrade_fn() {
     });
 
     // authorize the canister ID so that timer functions are authorized
-    // this can be removed after we upgraded the canisters that didn't do it in init_fn()
-    ALLOWED_PRINCIPALS.with(|m| m.borrow_mut().insert(id().to_text().into(), ()));
+    ALLOWED_PRINCIPALS.with(|m| {
+        m.borrow_mut().insert(
+            id().to_text().into(), // principal
+            (),                    //
+        )
+    });
 
+    // REGISTRATION_EXPIRATION_TTL
+    REGISTRATION_EXPIRATION_TTL.with(|s| {
+        s.borrow_mut().insert(
+            (),                                     //
+            s.borrow().get(&()).unwrap_or(3 * DAY), //
+        )
+    });
+
+    // IN_PROGRESS_TTL
+    IN_PROGRESS_TTL.with(|s| {
+        s.borrow_mut().insert(
+            (),                                         //
+            s.borrow().get(&()).unwrap_or(10 * MINUTE), //
+        )
+    });
+
+    // MANAGEMENT_TASK_INTERVAL
     MANAGEMENT_TASK_INTERVAL.with(|s| {
-        let mut s = s.borrow_mut();
-        s.insert((), MINUTE);
+        s.borrow_mut().insert(
+            (),                                    //
+            s.borrow().get(&()).unwrap_or(MINUTE), //
+        )
     });
 
     init_timers_fn();

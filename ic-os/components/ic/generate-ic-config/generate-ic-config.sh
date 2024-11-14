@@ -114,9 +114,6 @@ function set_default_config_values() {
     [ "${QUERY_STATS_EPOCH_LENGTH}" = "null" ] && QUERY_STATS_EPOCH_LENGTH="600"          # Default is 600 blocks (around 10min)
     [ "${JAEGER_ADDR}" = "null" ] && JAEGER_ADDR=""
     [ "${DOMAIN_NAME}" = "null" ] && DOMAIN_NAME=""
-
-    # todo: remove node_index variable and hard-code into ic.json5.template
-    NODE_INDEX="0"
 }
 
 while getopts "i:o:" OPT; do
@@ -150,7 +147,6 @@ sed -e "s@{{ ipv6_address }}@${IPV6_ADDRESS}@" \
     -e "s@{{ ipv4_gateway }}@${IPV4_GATEWAY}@" \
     -e "s@{{ domain_name }}@${DOMAIN_NAME}@" \
     -e "s@{{ nns_urls }}@${NNS_URLS}@" \
-    -e "s@{{ node_index }}@${NODE_INDEX}@" \
     -e "s@{{ backup_retention_time_secs }}@${BACKUP_RETENTION_TIME_SECS}@" \
     -e "s@{{ backup_purging_interval_secs }}@${BACKUP_PURGING_INTERVAL_SECS}@" \
     -e "s@{{ malicious_behavior }}@${MALICIOUS_BEHAVIOR}@" \
