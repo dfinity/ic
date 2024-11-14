@@ -337,7 +337,7 @@ fn canonical_encoding_stream_header_v19_plus() {
 /// ```
 /// Used http://cbor.me/ for printing the human friendly output.
 #[test]
-fn canonical_encoding_subnet_metrics_v15_plus() {
+fn canonical_encoding_subnet_metrics() {
     for certification_version in all_supported_versions() {
         let mut metrics = SubnetMetrics::default();
         metrics.consumed_cycles_by_deleted_canisters = NominalCycles::from(0);
