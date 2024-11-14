@@ -717,6 +717,8 @@ impl<Tokens: TokensType> Ledger<Tokens> {
                 #[allow(unused_mut)]
                 #[allow(unused_assignments)]
                 let mut last_block_hash_label = Label::from("tip_hash");
+                let last_block_index_label = Label::from("last_block_index");
+
                 #[allow(unused_mut)]
                 #[allow(unused_assignments)]
                 let mut last_block_index_encoded = last_block_index.to_be_bytes().to_vec();
@@ -729,13 +731,19 @@ impl<Tokens: TokensType> Ledger<Tokens> {
                     last_block_index_encoded = buf.into_inner();
                 }
 
-                fork(
-                    label(last_block_hash_label, leaf(hash.as_slice().to_vec())),
-                    label(
-                        Label::from("last_block_index"),
-                        leaf(last_block_index_encoded),
-                    ),
-                )
+                let mut tree_nodes = vec![
+                    (last_block_hash_label, leaf(hash.as_slice().to_vec())),
+                    (last_block_index_label, leaf(last_block_index_encoded)),
+                ];
+
+                // The nodes in the tree need to be in the correct order.
+                // Depending on whether icrc3 is enabled or not, the order of the nodes is different.
+                tree_nodes.sort_by(|a, b| a.0.cmp(&b.0));
+                let n = tree_nodes
+                    .into_iter()
+                    .map(|(l, n)| label(l, n))
+                    .collect::<Vec<_>>();
+                fork(n.first().unwrap().to_owned(), n.last().unwrap().to_owned())
             }
             None => empty(),
         }
