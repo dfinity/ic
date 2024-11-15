@@ -3,7 +3,9 @@
 ///
 use criterion::{BatchSize, Criterion};
 use ic_config::embedders::{Config as EmbeddersConfig, FeatureFlags};
-use ic_config::execution_environment::Config;
+use ic_config::execution_environment::{
+    Config, CANISTER_GUARANTEED_CALLBACK_QUOTA, SUBNET_CALLBACK_SOFT_LIMIT,
+};
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::{SchedulerConfig, SubnetConfig};
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
@@ -72,6 +74,7 @@ pub struct BenchmarkArgs {
     pub network_topology: Arc<NetworkTopology>,
     pub execution_parameters: ExecutionParameters,
     pub subnet_available_memory: SubnetAvailableMemory,
+    pub subnet_available_callbacks: i64,
     pub call_origin: CallOrigin,
     pub callback: Callback,
 }
@@ -94,6 +97,7 @@ where
     let mut round_limits = RoundLimits {
         instructions: as_round_instructions(MAX_NUM_INSTRUCTIONS),
         subnet_available_memory: *MAX_SUBNET_AVAILABLE_MEMORY,
+        subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
         compute_allocation_used: 0,
     };
     let execution_state = hypervisor
@@ -161,6 +165,7 @@ where
         canister_memory_limit: canister_state.memory_limit(NumBytes::new(u64::MAX)),
         wasm_memory_limit: None,
         memory_allocation: canister_state.memory_allocation(),
+        canister_guaranteed_callback_quota: CANISTER_GUARANTEED_CALLBACK_QUOTA as u64,
         compute_allocation: canister_state.compute_allocation(),
         subnet_type: hypervisor.subnet_type(),
         execution_mode: ExecutionMode::Replicated,
@@ -185,6 +190,7 @@ where
         network_topology,
         execution_parameters,
         subnet_available_memory: *MAX_SUBNET_AVAILABLE_MEMORY,
+        subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
         call_origin,
         callback,
     }

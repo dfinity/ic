@@ -1,0 +1,14 @@
+[package]
+name = "load-simulator"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "load-simulator"
+path = "src/main.rs"
+
+[dependencies]
+candid = { workspace = true }
+ic-cdk = { workspace = true }
+ic-cdk-macros = { workspace = true }
+ic-cdk-timers = { workspace = true }

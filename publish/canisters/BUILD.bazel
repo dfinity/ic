@@ -8,6 +8,7 @@ load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
 # 4. Canisters required for test environments.
 CANISTERS = {
     "canister-creator-canister.wasm.gz": "//rs/rust_canisters/canister_creator:canister_creator_canister",
+    "load_simulator_canister.wasm.gz": "//rs/rust_canisters/load_simulator:load_simulator_canister",
     "cycles-minting-canister.wasm.gz": "//rs/nns/cmc:cycles-minting-canister",
     "genesis-token-canister.wasm.gz": "//rs/nns/gtc:genesis-token-canister",
     "governance-canister.wasm.gz": "//rs/nns/governance:governance-canister",
