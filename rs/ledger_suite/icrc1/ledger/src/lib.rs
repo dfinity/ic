@@ -719,10 +719,9 @@ impl<Tokens: TokensType> Ledger<Tokens> {
                 #[cfg(feature = "icrc3-compatible-data-certificate")]
                 {
                     let last_block_hash_label = Label::from("last_block_hash");
-                    let mut buf = std::io::Cursor::new(Vec::new());
-                    leb128::write::unsigned(&mut buf, last_block_index)
+                    let mut last_block_index_encoded = Vec::new();
+                    leb128::write::unsigned(&mut last_block_index_encoded, last_block_index)
                         .expect("Failed to write LEB128");
-                    let last_block_index_encoded = buf.into_inner();
                     return fork(
                         label(
                             last_block_hash_label,
