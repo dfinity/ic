@@ -269,17 +269,12 @@ impl BasicSignatureCspVault for RemoteCspVault {
         message: Vec<u8>,
         key_id: KeyId,
     ) -> Result<CspSignature, CspBasicSignatureError> {
-        let c = self.tarpc_csp_client.clone();
-        let t = self.rpc_timeout.clone();
-        self.tokio_block_on(async move {
-            c.sign(
-                context_with_timeout(t),
-                algorithm_id,
-                ByteBuf::from(message),
-                key_id,
-            )
-            .await
-        })
+        self.tokio_block_on(self.tarpc_csp_client.sign(
+            context_with_timeout(self.rpc_timeout),
+            algorithm_id,
+            ByteBuf::from(message),
+            key_id,
+        ))
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
             Err(CspBasicSignatureError::TransientInternalError {
                 internal_error: rpc_error.to_string(),
