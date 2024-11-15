@@ -631,26 +631,20 @@ fn post_upgrade_fn() {
 
     // REGISTRATION_EXPIRATION_TTL
     REGISTRATION_EXPIRATION_TTL.with(|s| {
-        s.borrow_mut().insert(
-            (),                                     //
-            s.borrow().get(&()).unwrap_or(3 * DAY), //
-        )
+        let v = s.borrow().get(&()).unwrap_or(3 * DAY);
+        s.borrow_mut().insert((), v)
     });
 
     // IN_PROGRESS_TTL
     IN_PROGRESS_TTL.with(|s| {
-        s.borrow_mut().insert(
-            (),                                         //
-            s.borrow().get(&()).unwrap_or(10 * MINUTE), //
-        )
+        let v = s.borrow().get(&()).unwrap_or(10 * MINUTE);
+        s.borrow_mut().insert((), v)
     });
 
     // MANAGEMENT_TASK_INTERVAL
     MANAGEMENT_TASK_INTERVAL.with(|s| {
-        s.borrow_mut().insert(
-            (),                                    //
-            s.borrow().get(&()).unwrap_or(MINUTE), //
-        )
+        let v = s.borrow().get(&()).unwrap_or(MINUTE);
+        s.borrow_mut().insert((), v)
     });
 
     init_timers_fn();

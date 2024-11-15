@@ -63,6 +63,7 @@ component_files = {
     Label("misc/guestos/sysfs.d/hugepage.conf"): "/etc/sysfs.d/hugepage.conf",
     Label("misc/log-config/log-config-guestos.service"): "/etc/systemd/system/log-config.service",
     Label("misc/log-config/log-config.sh"): "/opt/ic/bin/log-config.sh",
+    Label("misc/guestos/hsm/pcscd"): "/etc/default/pcscd",
 
     # monitoring
     Label("monitoring/filebeat/setup-filebeat-permissions.sh"): "/opt/ic/bin/setup-filebeat-permissions.sh",

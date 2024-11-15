@@ -241,6 +241,7 @@ go_deps.bzl               @dfinity/idx
 /rs/tests/boundary_nodes/                               @dfinity/boundary-node @dfinity/idx
 /rs/tests/ckbtc/                                        @dfinity/cross-chain-team @dfinity/idx
 /rs/tests/consensus/                                    @dfinity/consensus @dfinity/idx
+/rs/tests/cross_chain/                                  @dfinity/cross-chain-team @dfinity/idx
 /rs/tests/crypto/                                       @dfinity/crypto-team @dfinity/idx
 /rs/tests/dre/                                          @dfinity/dre @dfinity/idx
 /rs/tests/execution/                                    @dfinity/execution @dfinity/idx
