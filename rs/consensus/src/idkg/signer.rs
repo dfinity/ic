@@ -553,7 +553,7 @@ impl ThresholdSigner for ThresholdSignerImpl {
             .get_state()
             .signature_request_contexts()
             .iter()
-            .flat_map(|(callback_id, context)| match context.args {
+            .flat_map(|(callback_id, context)| match &context.args {
                 ThresholdArguments::Ecdsa(_) | ThresholdArguments::Schnorr(_) => {
                     context.matched_pre_signature.map(|(_, height)| RequestId {
                         callback_id: *callback_id,
