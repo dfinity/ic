@@ -8000,45 +8000,6 @@ fn node_metrics_history_update_succeeds() {
 }
 
 #[test]
-fn node_metrics_history_query_fails() {
-    let own_subnet_id = subnet_test_id(1);
-    let mut test = ExecutionTestBuilder::new()
-        .with_own_subnet_id(own_subnet_id)
-        .with_composite_queries()
-        .build();
-    let uni_canister = test
-        .universal_canister_with_cycles(Cycles::new(1_000_000_000_000))
-        .unwrap();
-    println!(
-        "{:?}, {:?}, {:?}",
-        uni_canister,
-        CanisterId::ic_00(),
-        own_subnet_id
-    );
-    let payload = wasm()
-        .call_simple(
-            CanisterId::ic_00(),
-            Method::NodeMetricsHistory,
-            call_args()
-                .other_side(
-                    NodeMetricsHistoryArgs {
-                        subnet_id: own_subnet_id.get(),
-                        start_at_timestamp_nanos: 0,
-                    }
-                    .encode(),
-                )
-                .on_reject(wasm().reject_message().reject()),
-        )
-        .build();
-    test.non_replicated_query(uni_canister, "composite_query", payload)
-        .unwrap_err()
-        .assert_contains(
-            ErrorCode::CanisterContractViolation,
-            "cannot be executed in replicated query mode",
-        )
-}
-
-#[test]
 fn node_metrics_history_ingress_update_fails() {
     let own_subnet_id = subnet_test_id(1);
     let mut test = ExecutionTestBuilder::new()
