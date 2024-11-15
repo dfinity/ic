@@ -435,6 +435,7 @@ fn create_config_disk_image(
         ipv4_gateway: None,
         ipv4_prefix_length: None,
         domain_name: None,
+        node_reward_type: None,
         mgmt_mac: None,
         deployment_environment: Some("testnet".to_string()),
         elasticsearch_hosts: None,
