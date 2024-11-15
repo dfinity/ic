@@ -5,9 +5,14 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//rs/boundary_node/anonymization/client",
+    "//rs/canister_client",
+    "//rs/canister_client/sender",
     "//rs/certification/test-utils",
     "//rs/config",
     "//rs/crypto/ed25519",
+    "//rs/crypto/internal/crypto_service_provider",
+    "//rs/crypto/internal/logmon",
     "//rs/crypto/tree_hash",
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/crypto/utils/tls",
@@ -42,6 +47,7 @@ DEPENDENCIES = [
     "@crate_index//:http",
     "@crate_index//:http-body",
     "@crate_index//:humantime",
+    "@crate_index//:ic-agent",
     "@crate_index//:ic-bn-lib",
     "@crate_index//:lazy_static",
     "@crate_index//:little-loadshedder",

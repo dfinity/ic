@@ -3,9 +3,12 @@ use std::{
     error::Error as StdError,
     net::{Ipv6Addr, SocketAddr},
     sync::Arc,
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
+use anonymization_client::{
+    Canister as AnonymizationCanister, Track, Tracker as AnonymizationTracker,
+};
 use anyhow::{anyhow, Context, Error};
 use arc_swap::ArcSwapOption;
 use async_scoped::TokioScope;
@@ -18,7 +21,7 @@ use axum::{
     Extension, Router,
 };
 use axum_extra::middleware::option_layer;
-use candid::DecoderConfig;
+use candid::{DecoderConfig, Principal};
 use futures::TryFutureExt;
 use ic_bn_lib::{
     http::{
@@ -31,13 +34,22 @@ use ic_bn_lib::{
     },
     types::RequestType,
 };
+use ic_canister_client::{Agent, Sender};
+use ic_config::crypto::CryptoConfig;
+use ic_crypto_internal_csp::{key_id::KeyId, types::CspPublicKey, vault::vault_from_config};
+use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
+use ic_logger::replica_logger::no_op_logger;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_local_store::{LocalStoreImpl, LocalStoreReader};
 use ic_registry_replicator::RegistryReplicator;
-use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
+use ic_types::{
+    crypto::{threshold_sig::ThresholdSigPublicKey, Signable},
+    messages::MessageId,
+};
 use nix::unistd::{getpgid, setpgid, Pid};
 use prometheus::Registry;
+use rand::{rngs::StdRng, SeedableRng};
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 use tower::{limit::ConcurrencyLimitLayer, util::MapResponseLayer, ServiceBuilder};
@@ -213,8 +225,59 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     // HTTP Logs Anonymization
     let salt = Arc::new(ArcSwapOption::<Vec<u8>>::empty());
 
-    // Start salt tracker
-    // TODO(or.ricon) Call track(...)
+    // Vault
+    let v = vault_from_config(
+        &CryptoConfig::new("TODO".into()), // config
+        None,                              // tokio_runtime_handle
+        no_op_logger(),                    // logger
+        Arc::new(CryptoMetrics::none()),   // metrics
+    );
+
+    let pk = v
+        .current_node_public_keys()
+        .map_err(|err| anyhow!("failed to retrieve public key: {err:?}"))?
+        .node_signing_public_key
+        .context("missing node public key")?;
+
+    let pk = CspPublicKey::Ed25519(pk.key_value.try_into()?);
+
+    let algo = pk.algorithm_id();
+    let kid = KeyId::try_from(&pk).map_err(|err| anyhow!("failed to derive key id: {err:?}"))?;
+
+    // Custom Signer
+    let s = Sender::Node {
+        pub_key: pk.pk_bytes().to_vec(),
+        sign: Arc::new(move |msg: &MessageId| {
+            let sig = v
+                .sign(
+                    algo,                  // algorithm_id
+                    msg.as_signed_bytes(), // message
+                    kid,                   // key_id
+                )
+                .map_err(|err| anyhow!("failed to sign message: {err:?}"))?;
+
+            Ok(sig.as_ref().to_vec())
+        }),
+    };
+
+    // Agent
+    let ag = Agent::new(
+        "http://localhost:9000".try_into()?, // url
+        s,                                   // sender
+    );
+
+    // Canister
+    let c = AnonymizationCanister::new(
+        ag,                        // agent
+        Principal::from_text("")?, // canister_id
+    );
+
+    // Rng
+    let rng_seed = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
+    let rng = Box::new(StdRng::seed_from_u64(rng_seed as u64));
+
+    // Tracker
+    let mut tracker = AnonymizationTracker::new(rng, c.into())?;
 
     // Prepare Axum Router
     let router = setup_router(
@@ -364,6 +427,15 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
                 Ok::<(), Error>(())
             });
         }
+
+        // Anonymization Tracker
+        s.spawn(async move {
+            tracker
+                .track(|value| {
+                    println!("{:?}", &value[..8]);
+                })
+                .await
+        });
 
         // HTTP servers
         s.spawn(async move {
