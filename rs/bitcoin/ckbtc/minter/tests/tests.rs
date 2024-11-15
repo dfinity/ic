@@ -14,14 +14,10 @@ use ic_ckbtc_kyt::{InitArg as KytInitArg, KytMode, LifecycleArg, SetApiKeyArg};
 use ic_ckbtc_minter::lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterArg};
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest, WithdrawalFee};
-use ic_ckbtc_minter::state::{
-    BtcRetrievalStatusV2, Mode, ReimburseDepositTask, ReimbursedDeposit,
-    ReimbursementReason::{CallFailed, TaintedDestination},
-    RetrieveBtcStatus, RetrieveBtcStatusV2,
-};
+use ic_ckbtc_minter::state::{BtcRetrievalStatusV2, Mode, RetrieveBtcStatus, RetrieveBtcStatusV2};
 use ic_ckbtc_minter::updates::get_btc_address::GetBtcAddressArgs;
 use ic_ckbtc_minter::updates::retrieve_btc::{
-    RetrieveBtcArgs, RetrieveBtcError, RetrieveBtcOk, RetrieveBtcWithApprovalArgs,
+    ErrorCode, RetrieveBtcArgs, RetrieveBtcError, RetrieveBtcOk, RetrieveBtcWithApprovalArgs,
     RetrieveBtcWithApprovalError,
 };
 use ic_ckbtc_minter::updates::update_balance::{
@@ -2138,12 +2134,10 @@ fn test_retrieve_btc_with_approval_fail() {
     let start_canister_result = ckbtc.env.start_canister(ckbtc.ledger_id);
     assert_matches!(start_canister_result, Ok(_));
 
-    assert_eq!(
-        ckbtc.balance_of(user_account),
-        Nat::from(deposit_value - KYT_FEE - TRANSFER_FEE)
-    );
+    let deposited_value = deposit_value - KYT_FEE - TRANSFER_FEE;
+    assert_eq!(ckbtc.balance_of(user_account), Nat::from(deposited_value));
 
-    // Check that we reimburse ckBTC if the KYT check of the address fails
+    // Check that the correct error_code is returned if the KYT check of the address fails
 
     ckbtc
         .env
@@ -2164,25 +2158,13 @@ fn test_retrieve_btc_with_approval_fail() {
     );
     assert_matches!(
         retrieve_btc_result,
-        Err(RetrieveBtcWithApprovalError::GenericError { .. })
+        Err(RetrieveBtcWithApprovalError::GenericError { error_code, .. })
+          if error_code == ErrorCode::TaintedAddress as u64
     );
     ckbtc.env.tick();
-    assert_eq!(
-        ckbtc.balance_of(user_account),
-        Nat::from(deposit_value - KYT_FEE - TRANSFER_FEE)
-    );
+    assert_eq!(ckbtc.balance_of(user_account), Nat::from(deposited_value));
 
-    ckbtc
-        .env
-        .execute_ingress(ckbtc.minter_id, "distribute_kyt_fee", Encode!().unwrap())
-        .expect("failed to transfer funds");
-
-    assert_eq!(
-        ckbtc.balance_of(Principal::from(ckbtc.kyt_provider)),
-        Nat::from(KYT_FEE)
-    );
-
-    // Check that we reimburse ckBTC if the call to the KYT canister fails
+    // Check that the correct error_code is returned if the call to the KYT canister fails
 
     let stop_canister_result = ckbtc.env.stop_canister(ckbtc.new_kyt_id);
     assert_matches!(stop_canister_result, Ok(_));
@@ -2194,56 +2176,15 @@ fn test_retrieve_btc_with_approval_fail() {
     );
     assert_matches!(
         retrieve_btc_result,
-        Err(RetrieveBtcWithApprovalError::GenericError { .. })
+        Err(RetrieveBtcWithApprovalError::GenericError { error_code, .. })
+          if error_code == ErrorCode::KytCallFailed as u64
     );
 
-    let reimbursed_tx_block_index_2 = BtcRetrievalStatusV2 {
-        block_index: 2,
-        status_v2: Some(RetrieveBtcStatusV2::Reimbursed(ReimbursedDeposit {
-            account: user_account,
-            amount: withdrawal_amount,
-            reason: TaintedDestination {
-                kyt_provider: ckbtc.new_kyt_id.into(),
-                kyt_fee: 0,
-            },
-            mint_block_index: 3,
-        })),
-    };
-
+    // Balance should be unchanged
+    assert_eq!(ckbtc.balance_of(user_account), Nat::from(deposited_value));
+    // No known reimbursement or pending status because the withdrawal is now rejected before burn.
     assert_eq!(
         ckbtc.retrieve_btc_status_v2_by_account(Some(user_account)),
-        vec![
-            reimbursed_tx_block_index_2.clone(),
-            BtcRetrievalStatusV2 {
-                block_index: 5,
-                status_v2: Some(RetrieveBtcStatusV2::WillReimburse(ReimburseDepositTask {
-                    account: user_account,
-                    amount: withdrawal_amount,
-                    reason: CallFailed
-                }))
-            }
-        ]
-    );
-
-    ckbtc.env.tick();
-    assert_eq!(
-        ckbtc.balance_of(user_account),
-        Nat::from(deposit_value - KYT_FEE - TRANSFER_FEE)
-    );
-
-    assert_eq!(
-        ckbtc.retrieve_btc_status_v2_by_account(Some(user_account)),
-        vec![
-            reimbursed_tx_block_index_2,
-            BtcRetrievalStatusV2 {
-                block_index: 5,
-                status_v2: Some(RetrieveBtcStatusV2::Reimbursed(ReimbursedDeposit {
-                    account: user_account,
-                    amount: withdrawal_amount,
-                    reason: CallFailed,
-                    mint_block_index: 6
-                }))
-            }
-        ]
+        vec![]
     );
 }

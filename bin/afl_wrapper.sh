@@ -26,8 +26,6 @@ cleanup() {
     ps -ax | grep afl | awk '{print $1}' | xargs -I {} kill -9 {}
 }
 
-trap cleanup EXIT
-
 # This allows us to skip false positive crashes for wasm runtime
 if [[ "$1" == *"wasmtime"* ]] || [[ "$1" == *"wasm_executor"* ]]; then
     # We handle segv for wasm execution
@@ -101,6 +99,7 @@ function afl_env() {
 # Make sure you have enough cores, as each job occupies a core.
 
 if [[ ! -z "$AFL_PARALLEL" ]]; then
+    trap cleanup EXIT
     # master fuzzer
     afl_env -i $INPUT_DIR -o $OUTPUT_DIR -P exploit -p explore -M fuzzer1 ${@:2} -- $1 </dev/null &>/dev/null &
 

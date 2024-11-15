@@ -25,7 +25,7 @@ use super::payload_builder::IDkgPayloadError;
 use super::pre_signer::IDkgTranscriptBuilder;
 use super::signer::ThresholdSignatureBuilder;
 use super::utils::{
-    block_chain_cache, get_chain_key_config_if_enabled, BuildSignatureInputsError,
+    block_chain_cache, get_idkg_chain_key_config_if_enabled, BuildSignatureInputsError,
     IDkgBlockReaderImpl, InvalidChainCacheError,
 };
 use crate::idkg::metrics::timed_call;
@@ -239,7 +239,7 @@ fn validate_summary_payload(
         InvalidIDkgPayloadReason::ConsensusRegistryVersionNotFound(height),
     )?;
     let chain_key_config =
-        get_chain_key_config_if_enabled(subnet_id, registry_version, registry_client)
+        get_idkg_chain_key_config_if_enabled(subnet_id, registry_version, registry_client)
             .map_err(IDkgPayloadValidationFailure::from)?;
     if chain_key_config.is_none() {
         if summary_payload.is_some() {
@@ -627,6 +627,7 @@ mod test {
     use ic_types::{
         consensus::idkg::{
             common::PreSignatureRef, ecdsa::PreSignatureQuadrupleRef, CompletedSignature,
+            IDkgMasterPublicKeyId,
         },
         crypto::AlgorithmId,
         messages::CallbackId,
@@ -643,7 +644,7 @@ mod test {
         }
     }
 
-    fn test_validate_transcript_refs(key_id: MasterPublicKeyId) {
+    fn test_validate_transcript_refs(key_id: IDkgMasterPublicKeyId) {
         let mut rng = reproducible_rng();
         let num_of_nodes = 4;
         let subnet_id = subnet_test_id(1);
@@ -758,7 +759,7 @@ mod test {
         }
     }
 
-    fn test_validate_reshare_dealings(key_id: MasterPublicKeyId) {
+    fn test_validate_reshare_dealings(key_id: IDkgMasterPublicKeyId) {
         let mut rng = reproducible_rng();
         let num_of_nodes = 4;
         let subnet_id = subnet_test_id(1);
@@ -863,7 +864,7 @@ mod test {
         }
     }
 
-    fn test_validate_new_signature_agreements(key_id: MasterPublicKeyId) {
+    fn test_validate_new_signature_agreements(key_id: IDkgMasterPublicKeyId) {
         let mut rng = reproducible_rng();
         let num_nodes = 4;
         let subnet_id = subnet_test_id(0);
@@ -1028,7 +1029,7 @@ mod test {
         }
     }
 
-    fn test_validate_new_signature_agreements_missing_input(key_id: MasterPublicKeyId) {
+    fn test_validate_new_signature_agreements_missing_input(key_id: IDkgMasterPublicKeyId) {
         let height = Height::from(0);
         let subnet_id = subnet_test_id(0);
         let crypto = &CryptoReturningOk::default();
@@ -1052,7 +1053,7 @@ mod test {
         let fake_response =
             CompletedSignature::Unreported(ic_types::batch::ConsensusResponse::new(
                 CallbackId::from(0),
-                ic_types::messages::Payload::Data(match key_id {
+                ic_types::messages::Payload::Data(match key_id.inner() {
                     MasterPublicKeyId::Ecdsa(_) => {
                         SignWithECDSAReply { signature: vec![] }.encode()
                     }
@@ -1088,11 +1089,11 @@ mod test {
         // Insert agreement for context matched with pre-signature of different scheme
         let mut idkg_payload_mismatched_context =
             empty_idkg_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
-        let wrong_key_id = match key_id {
+        let wrong_key_id = match key_id.inner() {
             MasterPublicKeyId::Ecdsa(_) => {
-                fake_schnorr_master_public_key_id(SchnorrAlgorithm::Ed25519)
+                fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Ed25519)
             }
-            MasterPublicKeyId::Schnorr(_) => fake_ecdsa_master_public_key_id(),
+            MasterPublicKeyId::Schnorr(_) => fake_ecdsa_idkg_master_public_key_id(),
             MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
         };
         // Add a pre-signature for the "wrong_key_id"
@@ -1154,7 +1155,8 @@ mod test {
         let crypto = &CryptoReturningOk::default();
         let mut block_reader = TestIDkgBlockReader::new();
         let key_id = fake_ecdsa_key_id();
-        let master_public_key_id = MasterPublicKeyId::Ecdsa(key_id.clone());
+        let master_public_key_id: IDkgMasterPublicKeyId =
+            MasterPublicKeyId::Ecdsa(key_id.clone()).try_into().unwrap();
         let mut prev_payload =
             empty_idkg_payload_with_key_ids(subnet_id, vec![master_public_key_id.clone()]);
         let mut curr_payload = prev_payload.clone();

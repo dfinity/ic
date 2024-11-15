@@ -316,6 +316,7 @@ members = [
     "rs/rust_canisters/downstream_calls_test",
     "rs/rust_canisters/ecdsa",
     "rs/rust_canisters/http_types",
+    "rs/rust_canisters/load_simulator",
     "rs/rust_canisters/memory_test",
     "rs/rust_canisters/on_wire",
     "rs/rust_canisters/pmap",
