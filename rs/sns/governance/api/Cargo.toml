@@ -17,7 +17,7 @@ clap = { workspace = true }
 comparable = { version = "0.5", features = ["derive"] }
 ic-base-types = { path = "../../../types/base_types" }
 ic-nervous-system-proto = { path = "../../../nervous_system/proto" }
-ic-nns-common = { path = "../../common" }
+ic-nns-common = { path = "../../../nns/common" }
 ic-protobuf = { path = "../../../protobuf" }
 ic-types = { path = "../../../types/types" }
 icp-ledger = { path = "../../../ledger_suite/icp" }

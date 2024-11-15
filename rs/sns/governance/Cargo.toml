@@ -81,7 +81,6 @@ serde = { workspace = true }
 serde_bytes = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
-syn = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 ic-types = { path = "../../types/types" }
