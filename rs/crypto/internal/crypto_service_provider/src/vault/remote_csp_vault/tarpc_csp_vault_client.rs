@@ -107,7 +107,7 @@ impl RemoteCspVault {
             let res = task.await;
             let _ = tx.send(res);
         });
-        rx.recv().unwrap()
+        rx.recv().expect("The channel cannot be closed before receiving a value, unless the sending thread panics.")
     }
 }
 
@@ -237,7 +237,7 @@ impl RemoteCspVaultBuilder {
             .thread_name("Crypto-Internal-Thread".to_string())
             .enable_all()
             .build()
-            .unwrap();
+            .expect("Could not create a Tokio runtime.");
         Ok(RemoteCspVault {
             tarpc_csp_client: client,
             rpc_timeout: self.rpc_timeout,
@@ -581,7 +581,7 @@ impl TlsHandshakeCspVault for RemoteCspVault {
     #[instrument(skip_all)]
     fn tls_sign(&self, message: Vec<u8>, key_id: KeyId) -> Result<CspSignature, CspTlsSignError> {
         let client = self.tarpc_csp_client.clone();
-        let timeout = self.rpc_timeout.clone();
+        let timeout = self.rpc_timeout;
         self.tokio_safe_block_on(async move {
             client
                 .tls_sign(
