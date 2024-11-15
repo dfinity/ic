@@ -5,7 +5,7 @@ use std::time::Duration;
 
 proptest! {
     #[test]
-    fn queue_holds_one_copy_of_each_task(
+    fn should_hold_one_copy_of_each_task(
         timestamps in pvec(1_000_000_u64..1_000_000_000, 2..100),
     ) {
         let mut task_queue: TaskQueue = Default::default();
