@@ -33,5 +33,8 @@ elif [[ -n "${HOSTUSER:-}" ]]; then
     echo "USER ${HOSTUSER}"
 fi
 
+# Track HEAD outside of the git directory, to support worktrees.
+git rev-parse --verify HEAD >"${WORKSPACE_ROOT}/git-head.txt"
+
 # Generate a file that changes every time bazel runs. It can be used as dependency for targets we want to always rebuild.
 date '+%s' >"${WORKSPACE_ROOT}/bazel-timestamp.txt"
