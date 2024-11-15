@@ -475,6 +475,7 @@ do
     ./testnet/tools/nns-tools/submit-mainnet-nns-upgrade-proposal.sh \
         $PROPOSALS_DIR/nns-$CANISTER.md \
         $SUBMITTING_NEURON_ID
+done
 
 # SNS:
 for CANISTER in "${SNS_CANISTERS[@]}"
