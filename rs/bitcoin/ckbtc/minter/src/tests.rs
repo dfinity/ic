@@ -30,6 +30,21 @@ use serde_bytes::ByteBuf;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::str::FromStr;
 
+fn default_init_args() -> InitArgs {
+    InitArgs {
+        btc_network: Network::Regtest.into(),
+        ecdsa_key_name: "".to_string(),
+        retrieve_btc_min_amount: 0,
+        ledger_id: CanisterId::from_u64(42),
+        max_time_in_queue_nanos: 0,
+        min_confirmations: None,
+        mode: Mode::GeneralAvailability,
+        kyt_fee: None,
+        kyt_principal: None,
+        new_kyt_principal: None,
+    }
+}
+
 fn dummy_utxo_from_value(v: u64) -> Utxo {
     let mut bytes = [0u8; 32];
     bytes[0..8].copy_from_slice(&v.to_be_bytes());
@@ -820,15 +835,8 @@ proptest! {
         accounts in pvec(arb_account(), 5),
     ) {
         let mut state = CkBtcMinterState::from(InitArgs {
-            btc_network: Network::Regtest.into(),
-            ecdsa_key_name: "".to_string(),
-            retrieve_btc_min_amount: 0,
-            ledger_id: CanisterId::from_u64(42),
-            max_time_in_queue_nanos: 0,
-            min_confirmations: None,
-            mode: Mode::GeneralAvailability,
-            kyt_fee: None,
-            new_kyt_principal: None
+            retrieve_btc_min_amount: 1000,
+            ..default_init_args()
         });
         for (utxo, acc_idx) in utxos_acc_idx {
             state.add_utxos::<CheckInvariantsImpl>(accounts[acc_idx], vec![utxo]);
@@ -844,17 +852,9 @@ proptest! {
         limit in 1..25usize,
     ) {
         let mut state = CkBtcMinterState::from(InitArgs {
-            btc_network: Network::Regtest.into(),
-            ecdsa_key_name: "".to_string(),
-            retrieve_btc_min_amount: 5_000u64,
-            ledger_id: CanisterId::from_u64(42),
-            max_time_in_queue_nanos: 0,
-            min_confirmations: None,
-            mode: Mode::GeneralAvailability,
-            kyt_fee: None,
-            new_kyt_principal: None
+            retrieve_btc_min_amount: 5000,
+            ..default_init_args()
         });
-
         let mut available_amount = 0;
         for (utxo, acc_idx) in utxos_acc_idx {
             available_amount += utxo.value;
@@ -887,17 +887,9 @@ proptest! {
         resubmission_chain_length in 1..=5,
     ) {
         let mut state = CkBtcMinterState::from(InitArgs {
-            btc_network: Network::Regtest.into(),
-            ecdsa_key_name: "".to_string(),
             retrieve_btc_min_amount: 100_000,
-            ledger_id: CanisterId::from_u64(42),
-            max_time_in_queue_nanos: 0,
-            min_confirmations: None,
-            mode: Mode::GeneralAvailability,
-            kyt_fee: None,
-            new_kyt_principal: None
+            ..default_init_args()
         });
-
         for (utxo, acc_idx) in utxos_acc_idx {
             state.add_utxos::<CheckInvariantsImpl>(accounts[acc_idx], vec![utxo]);
         }
@@ -1113,15 +1105,8 @@ proptest! {
 #[test]
 fn can_form_a_batch_conditions() {
     let mut state = CkBtcMinterState::from(InitArgs {
-        btc_network: Network::Regtest.into(),
-        ecdsa_key_name: "".to_string(),
-        retrieve_btc_min_amount: 0,
-        ledger_id: CanisterId::from_u64(42),
         max_time_in_queue_nanos: 1000,
-        min_confirmations: None,
-        mode: Mode::GeneralAvailability,
-        kyt_fee: None,
-        new_kyt_principal: None,
+        ..default_init_args()
     });
     // no request, can't form a batch, fail.
     assert!(!state.can_form_a_batch(1, 0));
@@ -1170,15 +1155,8 @@ fn test_build_account_to_utxos_table_pagination() {
     use crate::dashboard;
 
     let mut state = CkBtcMinterState::from(InitArgs {
-        btc_network: Network::Regtest.into(),
-        ecdsa_key_name: "".to_string(),
         retrieve_btc_min_amount: 5_000u64,
-        ledger_id: CanisterId::from_u64(42),
-        max_time_in_queue_nanos: 0,
-        min_confirmations: None,
-        mode: Mode::GeneralAvailability,
-        kyt_fee: None,
-        new_kyt_principal: None,
+        ..default_init_args()
     });
     let account1 = Account::from(
         Principal::from_str("gjfkw-yiolw-ncij7-yzhg2-gq6ec-xi6jy-feyni-g26f4-x7afk-thx6z-6ae")

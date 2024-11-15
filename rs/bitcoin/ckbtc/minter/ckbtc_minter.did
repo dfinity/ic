@@ -191,6 +191,9 @@ type InitArgs = record {
     /// The fee paid per check by the KYT canister.
     kyt_fee : opt nat64;
 
+    /// The canister id of the KYT canister.
+    kyt_principal: opt principal;
+
     /// The canister id of the new KYT canister.
     new_kyt_principal: opt principal;
 };
@@ -213,6 +216,9 @@ type UpgradeArgs = record {
 
     /// The fee per check by the KYT canister.
     kyt_fee : opt nat64;
+
+    /// The principal of the KYT canister.
+    kyt_principal : opt principal;
 
     /// The principal of the new KYT canister.
     new_kyt_principal : opt principal;

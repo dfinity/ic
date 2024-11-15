@@ -203,12 +203,25 @@ pub fn replay<I: CheckInvariants>(
         None => return Err(ReplayLogError::EmptyLog),
     };
 
+    // Because `kyt_principal` was previously used as a default
+    // substitute for `kyt_provider` during kyt_fee accounting,
+    // we need to keep track of this value so that `distribute_kyt_fee`
+    // knows when to skip giving fees to `kyt_principal`.
+    let mut previous_kyt_principal = None;
     for event in events {
         match event {
             Event::Init(args) => {
+                if args.kyt_principal.is_some() {
+                    previous_kyt_principal = args.kyt_principal.map(Principal::from);
+                }
                 state.reinit(args);
             }
-            Event::Upgrade(args) => state.upgrade(args),
+            Event::Upgrade(args) => {
+                if args.kyt_principal.is_some() {
+                    previous_kyt_principal = args.kyt_principal.map(Principal::from);
+                }
+                state.upgrade(args);
+            }
             Event::ReceivedUtxos {
                 to_account, utxos, ..
             } => state.add_utxos::<I>(to_account, utxos),
@@ -322,8 +335,12 @@ pub fn replay<I: CheckInvariants>(
                 amount,
                 ..
             } => {
-                if let Err(Overdraft(overdraft)) = state.distribute_kyt_fee(kyt_provider, amount) {
-                    return Err(ReplayLogError::InconsistentLog(format!("Attempted to distribute {amount} to {kyt_provider}, causing an overdraft of {overdraft}")));
+                if Some(kyt_provider) != previous_kyt_principal {
+                    if let Err(Overdraft(overdraft)) =
+                        state.distribute_kyt_fee(kyt_provider, amount)
+                    {
+                        return Err(ReplayLogError::InconsistentLog(format!("Attempted to distribute {amount} to {kyt_provider}, causing an overdraft of {overdraft}")));
+                    }
                 }
             }
             Event::RetrieveBtcKytFailed { kyt_provider, .. } => {

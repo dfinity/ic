@@ -44,6 +44,21 @@ const MIN_CONFIRMATIONS: u32 = 12;
 const MAX_TIME_IN_QUEUE: Duration = Duration::from_secs(10);
 const WITHDRAWAL_ADDRESS: &str = "bc1q34aq5drpuwy3wgl9lhup9892qp6svr8ldzyy7c";
 
+fn default_init_args() -> CkbtcMinterInitArgs {
+    CkbtcMinterInitArgs {
+        btc_network: Network::Regtest.into(),
+        ecdsa_key_name: "master_ecdsa_public_key".into(),
+        retrieve_btc_min_amount: 2000,
+        ledger_id: CanisterId::from(0),
+        max_time_in_queue_nanos: MAX_TIME_IN_QUEUE.as_nanos() as u64,
+        min_confirmations: Some(MIN_CONFIRMATIONS),
+        mode: Mode::GeneralAvailability,
+        kyt_fee: None,
+        kyt_principal: None,
+        new_kyt_principal: Some(CanisterId::from(0)),
+    }
+}
+
 fn ledger_wasm() -> Vec<u8> {
     let path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
         .parent()
@@ -102,17 +117,8 @@ fn install_ledger(env: &StateMachine) -> CanisterId {
 
 fn install_minter(env: &StateMachine, ledger_id: CanisterId) -> CanisterId {
     let args = CkbtcMinterInitArgs {
-        btc_network: Network::Regtest.into(),
-        // The name of the [EcdsaKeyId]. Use "dfx_test_key" for local replica and "test_key_1" for
-        // a testing key for testnet and mainnet
-        ecdsa_key_name: "dfx_test_key".parse().unwrap(),
-        retrieve_btc_min_amount: 2000,
         ledger_id,
-        max_time_in_queue_nanos: 0,
-        min_confirmations: Some(1),
-        mode: Mode::GeneralAvailability,
-        kyt_fee: None,
-        new_kyt_principal: Some(CanisterId::from(0)),
+        ..default_init_args()
     };
     let minter_arg = MinterArg::Init(args);
     env.install_canister(minter_wasm(), Encode!(&minter_arg).unwrap(), None)
@@ -175,30 +181,16 @@ fn test_wrong_upgrade_parameter() {
     // wrong init args
 
     let args = MinterArg::Init(CkbtcMinterInitArgs {
-        btc_network: Network::Regtest.into(),
         ecdsa_key_name: "".into(),
-        retrieve_btc_min_amount: 100_000,
-        ledger_id: CanisterId::from_u64(0),
-        max_time_in_queue_nanos: MAX_TIME_IN_QUEUE.as_nanos() as u64,
-        min_confirmations: Some(6_u32),
-        mode: Mode::GeneralAvailability,
-        kyt_fee: Some(1001),
-        new_kyt_principal: None,
+        ..default_init_args()
     });
     let args = Encode!(&args).unwrap();
     if env.install_canister(minter_wasm(), args, None).is_ok() {
         panic!("init expected to fail")
     }
     let args = MinterArg::Init(CkbtcMinterInitArgs {
-        btc_network: Network::Regtest.into(),
-        ecdsa_key_name: "some_key".into(),
-        retrieve_btc_min_amount: 100_000,
-        ledger_id: CanisterId::from_u64(0),
-        max_time_in_queue_nanos: MAX_TIME_IN_QUEUE.as_nanos() as u64,
-        min_confirmations: Some(6_u32),
-        mode: Mode::GeneralAvailability,
-        kyt_fee: Some(1001),
         new_kyt_principal: None,
+        ..default_init_args()
     });
     let args = Encode!(&args).unwrap();
     if env.install_canister(minter_wasm(), args, None).is_ok() {
@@ -213,11 +205,9 @@ fn test_wrong_upgrade_parameter() {
 
     let upgrade_args = UpgradeArgs {
         retrieve_btc_min_amount: Some(100),
-        min_confirmations: None,
         max_time_in_queue_nanos: Some(100),
         mode: Some(Mode::ReadOnly),
-        new_kyt_principal: None,
-        kyt_fee: None,
+        ..Default::default()
     };
     let minter_arg = MinterArg::Upgrade(Some(upgrade_args));
     if env
@@ -240,12 +230,8 @@ fn test_upgrade_read_only() {
 
     // upgrade
     let upgrade_args = UpgradeArgs {
-        retrieve_btc_min_amount: Some(2000),
-        min_confirmations: None,
-        max_time_in_queue_nanos: Some(100),
         mode: Some(Mode::ReadOnly),
-        new_kyt_principal: Some(CanisterId::from(0)),
-        kyt_fee: None,
+        ..Default::default()
     };
     let minter_arg = MinterArg::Upgrade(Some(upgrade_args));
     env.upgrade_canister(minter_id, minter_wasm(), Encode!(&minter_arg).unwrap())
@@ -310,12 +296,8 @@ fn test_upgrade_restricted() {
 
     // upgrade
     let upgrade_args = UpgradeArgs {
-        retrieve_btc_min_amount: Some(2000),
-        min_confirmations: None,
-        max_time_in_queue_nanos: Some(100),
         mode: Some(Mode::RestrictedTo(vec![authorized_principal])),
-        kyt_fee: None,
-        new_kyt_principal: Some(CanisterId::from(0)),
+        ..Default::default()
     };
     let minter_arg = MinterArg::Upgrade(Some(upgrade_args));
     env.upgrade_canister(minter_id, minter_wasm(), Encode!(&minter_arg).unwrap())
@@ -364,14 +346,7 @@ fn test_upgrade_restricted() {
     );
 
     // Test restricted BTC deposits.
-    let upgrade_args = UpgradeArgs {
-        retrieve_btc_min_amount: Some(100),
-        min_confirmations: None,
-        max_time_in_queue_nanos: Some(100),
-        mode: Some(Mode::DepositsRestrictedTo(vec![authorized_principal])),
-        new_kyt_principal: Some(CanisterId::from(0)),
-        kyt_fee: None,
-    };
+    let upgrade_args = UpgradeArgs::default();
     env.upgrade_canister(minter_id, minter_wasm(), Encode!(&upgrade_args).unwrap())
         .expect("Failed to upgrade the minter canister");
 
@@ -450,12 +425,8 @@ fn test_no_new_utxos() {
 fn update_balance_should_return_correct_confirmations() {
     let ckbtc = CkBtcSetup::new();
     let upgrade_args = UpgradeArgs {
-        retrieve_btc_min_amount: None,
         min_confirmations: Some(3),
-        max_time_in_queue_nanos: None,
-        mode: None,
-        new_kyt_principal: None,
-        kyt_fee: None,
+        ..Default::default()
     };
     let minter_arg = MinterArg::Upgrade(Some(upgrade_args));
     ckbtc
@@ -565,15 +536,10 @@ fn test_minter() {
 
     let env = new_state_machine();
     let args = MinterArg::Init(CkbtcMinterInitArgs {
-        btc_network: Network::Regtest.into(),
-        ecdsa_key_name: "master_ecdsa_public_key".into(),
         retrieve_btc_min_amount: 100_000,
-        ledger_id: CanisterId::from_u64(0),
-        max_time_in_queue_nanos: MAX_TIME_IN_QUEUE.as_nanos() as u64,
         min_confirmations: Some(6_u32),
-        mode: Mode::GeneralAvailability,
         kyt_fee: Some(1001),
-        new_kyt_principal: Some(CanisterId::from(0)),
+        ..default_init_args()
     });
     let args = Encode!(&args).unwrap();
     let minter_id = env.install_canister(minter_wasm(), args, None).unwrap();
@@ -669,14 +635,12 @@ impl CkBtcSetup {
             minter_wasm(),
             Encode!(&MinterArg::Init(CkbtcMinterInitArgs {
                 btc_network: btc_network.into(),
-                ecdsa_key_name: "master_ecdsa_public_key".to_string(),
                 retrieve_btc_min_amount,
                 ledger_id,
                 max_time_in_queue_nanos: 100,
-                min_confirmations: Some(MIN_CONFIRMATIONS),
-                mode: Mode::GeneralAvailability,
                 kyt_fee: Some(KYT_FEE),
                 new_kyt_principal: new_kyt_id.into(),
+                ..default_init_args()
             }))
             .unwrap(),
         )

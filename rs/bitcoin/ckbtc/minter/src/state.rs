@@ -432,6 +432,7 @@ impl CkBtcMinterState {
             mode,
             kyt_fee,
             new_kyt_principal,
+            ..
         }: InitArgs,
     ) {
         self.btc_network = btc_network.into();
@@ -459,6 +460,7 @@ impl CkBtcMinterState {
             mode,
             new_kyt_principal,
             kyt_fee,
+            ..
         }: UpgradeArgs,
     ) {
         if let Some(retrieve_btc_min_amount) = retrieve_btc_min_amount {

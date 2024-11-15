@@ -405,6 +405,7 @@ pub async fn install_minter(
         min_confirmations: Some(BTC_MIN_CONFIRMATIONS as u32),
         mode: Mode::GeneralAvailability,
         kyt_fee: Some(KYT_FEE),
+        kyt_principal: None,
         new_kyt_principal: Some(new_kyt_canister_id),
     };
 
