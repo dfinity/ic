@@ -4,6 +4,7 @@ use config::config_ini::{get_config_ini_settings, ConfigIniSettings};
 use config::deployment_json::get_deployment_settings;
 use config::serialize_and_write_config;
 use mac_address::mac_address::{get_ipmi_mac, FormattedMacAddress};
+use regex::Regex;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
@@ -210,6 +211,14 @@ pub fn main() -> Result<()> {
             };
 
             let node_reward_type = node_reward_type.expect("Node reward type is required.");
+
+            let node_reward_type_pattern = Regex::new(r"^type[0-9]+(\.[0-9])?$")?;
+            if !node_reward_type_pattern.is_match(&node_reward_type) {
+                anyhow::bail!(
+                    "Invalid node_reward_type '{}'. It must match the pattern ^type[0-9]+(\\.[0-9])?$",
+                    node_reward_type
+                );
+            }
 
             let icos_settings = ICOSSettings {
                 node_reward_type,
