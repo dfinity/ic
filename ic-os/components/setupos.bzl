@@ -13,7 +13,6 @@ component_files = {
     Label("//ic-os/components/setupos-scripts:setup-disk.sh"): "/opt/ic/bin/setup-disk.sh",
     Label("//ic-os/components/setupos-scripts:functions.sh"): "/opt/ic/bin/functions.sh",
     Label("//ic-os/components/setupos-scripts:install-guestos.sh"): "/opt/ic/bin/install-guestos.sh",
-    Label("//ic-os/components/setupos-scripts:check-reward.sh"): "/opt/ic/bin/check-reward.sh",
     Label("//ic-os/components/setupos-scripts:check-hardware.sh"): "/opt/ic/bin/check-hardware.sh",
     Label("//ic-os/components/setupos-scripts:install-hostos.sh"): "/opt/ic/bin/install-hostos.sh",
     Label("//ic-os/components/setupos-scripts:check-network.sh"): "/opt/ic/bin/check-network.sh",
