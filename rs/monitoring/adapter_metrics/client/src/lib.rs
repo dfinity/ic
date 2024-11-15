@@ -59,7 +59,7 @@ impl AdapterMetrics {
 
     /// Get adapter name.
     pub fn get_name(&self) -> &str {
-        &self.name
+        self.name
     }
 
     /// Scrapes metrics from remote adapter. Returns an error if unable to fetch metrics.
@@ -79,7 +79,7 @@ impl AdapterMetrics {
                         // Prepend unique adapter prefix to avoid prometheus duplicate.
                         // I.e adapter_btc_requests
                         mf.set_name(
-                            ADAPTER_PREFIX.to_owned() + "_" + &self.name + "_" + mf.get_name(),
+                            ADAPTER_PREFIX.to_owned() + "_" + self.name + "_" + mf.get_name(),
                         );
                         mf
                     })
