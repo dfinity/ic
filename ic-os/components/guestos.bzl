@@ -60,6 +60,7 @@ component_files = {
     Label("misc/guestos/sysctl.d/dfn-max-map-count.conf"): "/etc/sysctl.d/dfn-max-map-count.conf",
     Label("misc/guestos/sysctl.d/privileged-ports.conf"): "/etc/sysctl.d/privileged-ports.conf",
     Label("misc/guestos/sysfs.d/hugepage.conf"): "/etc/sysfs.d/hugepage.conf",
+    Label("misc/hsm/pcscd"): "/etc/default/pcscd",
 
     # monitoring
     Label("monitoring/filebeat/setup-filebeat-permissions.sh"): "/opt/ic/bin/setup-filebeat-permissions.sh",
