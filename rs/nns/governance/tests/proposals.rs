@@ -8,6 +8,7 @@ use ic_nns_governance::{
         NetworkEconomics, Neuron, Proposal, ProposalData, ProposalRewardStatus, Vote,
         WaitForQuietState,
     },
+    proposals::sum_weighted_voting_power,
 };
 use icp_ledger::Tokens;
 use lazy_static::lazy_static;
@@ -170,6 +171,38 @@ lazy_static! {
         economics: Some(NetworkEconomics::with_default_values()),
         ..Default::default()
     };
+}
+
+#[test]
+fn test_sum_weighted_voting_power() {
+    // Step 1: Prepare the world.
+
+    // Step 2: Call code under test.
+    let result = sum_weighted_voting_power(PROPOSALS.iter().map(|(_id, proposal)| proposal));
+
+    // Step 3: Inspect result(s).
+    #[rustfmt::skip]
+    assert_eq!(
+        result,
+        (
+            hashmap! {
+                // Neuron 1042 never voted, and because of this, the return
+                // value has no entry for this neuron.
+
+                // Voted (Yes) twice on 1x weight proposals and once on a 20x weight proposal.
+                NeuronId { id: 1043 } => ((2_000 + 1_000 + 20 * 2_000) * E8) as f64,
+
+                // Similar to previous, but voted No, and has different (more) voting power.
+                // In voting rewards, Yes and No are treated the same.
+                NeuronId { id: 1044 } => ((30_000 + 20_000 + 20 * 30_000) * E8) as f64,
+            },
+            ((
+                (100 + 2_000 + 30_000) // First proposal.
+                + 80_000               // Second proposal
+                + 20 * 80_000          // Third proposal
+            ) * E8) as f64
+        ),
+    );
 }
 
 #[tokio::test]
