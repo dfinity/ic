@@ -366,7 +366,7 @@ impl From<Result<NeuronsFundAuditInfo, GovernanceError>> for GetNeuronsFundAudit
 
 impl Vote {
     /// Returns whether this vote is eligible for voting reward.
-    fn eligible_for_rewards(&self) -> bool {
+    pub fn eligible_for_rewards(&self) -> bool {
         match self {
             Vote::Unspecified => false,
             Vote::Yes => true,
@@ -1413,7 +1413,7 @@ impl Topic {
     /// neurons voting on proposals are weighted by this amount. The
     /// weights are designed to encourage active participation from
     /// neuron holders.
-    fn reward_weight(&self) -> f64 {
+    pub fn reward_weight(&self) -> f64 {
         match self {
             // We provide higher voting rewards for neuron holders
             // who vote on Governance and SnsAndCommunityFund proposals.
@@ -7042,9 +7042,17 @@ impl Governance {
             for pid in considered_proposals.iter() {
                 if let Some(proposal) = self.get_proposal_data(*pid) {
                     let reward_weight = proposal.topic().reward_weight();
+
+                    let weighted_total_potential_voting_power = proposal
+                        .total_potential_voting_power
+                        .map(|total_potential_voting_power| {
+                            reward_weight * (total_potential_voting_power as f64)
+                        });
+
+                    let mut proposal_total_deciding_voting_rights = 0_f64;
                     for (voter, ballot) in proposal.ballots.iter() {
                         let voting_rights = (ballot.voting_power as f64) * reward_weight;
-                        total_voting_rights += voting_rights;
+                        proposal_total_deciding_voting_rights += voting_rights;
                         #[allow(clippy::blocks_in_conditions)]
                         if Vote::try_from(ballot.vote)
                             .unwrap_or_else(|_| {
@@ -7061,6 +7069,12 @@ impl Governance {
                                 .or_insert(0f64) += voting_rights;
                         }
                     }
+
+                    total_voting_rights += weighted_total_potential_voting_power
+                        // This is to handle legacy proposals, which were
+                        // created before there was a distinction between
+                        // *deciding* voting power vs. *potential* voting power.
+                        .unwrap_or(proposal_total_deciding_voting_rights);
                 }
             }
             (voters_to_used_voting_right, total_voting_rights)
