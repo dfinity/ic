@@ -8,6 +8,7 @@ use ic_btc_interface::{
     Address, GetCurrentFeePercentilesRequest, GetUtxosRequest, GetUtxosResponse,
     MillisatoshiPerByte, Network, Utxo, UtxosFilterInRequest,
 };
+use ic_btc_kyt::{CheckAddressArgs, CheckAddressResponse};
 use ic_canister_log::log;
 use ic_cdk::api::call::RejectionCode;
 use ic_ckbtc_kyt::{DepositRequest, Error as KytError, FetchAlertsResponse, WithdrawalAttempt};
@@ -343,6 +344,24 @@ pub async fn fetch_withdrawal_alerts(
     .await
     .map_err(|(code, message)| CallError {
         method: "fetch_withdrawal_alerts".to_string(),
+        reason: Reason::from_reject(code, message),
+    })?;
+    Ok(res)
+}
+
+/// Check if the given Bitcoin address is blocked.
+pub async fn check_withdrawal_destination_address(
+    kyt_principal: Principal,
+    address: String,
+) -> Result<CheckAddressResponse, CallError> {
+    let (res,): (CheckAddressResponse,) = ic_cdk::api::call::call(
+        kyt_principal,
+        "check_address",
+        (CheckAddressArgs { address },),
+    )
+    .await
+    .map_err(|(code, message)| CallError {
+        method: "check_address".to_string(),
         reason: Reason::from_reject(code, message),
     })?;
     Ok(res)

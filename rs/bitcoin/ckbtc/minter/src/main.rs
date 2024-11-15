@@ -59,13 +59,13 @@ fn ok_or_die(result: Result<(), String>) {
 /// Checks that ckBTC minter state internally consistent.
 #[cfg(feature = "self_check")]
 fn check_invariants() -> Result<(), String> {
-    use ic_ckbtc_minter::state::eventlog::replay;
+    use ic_ckbtc_minter::state::{eventlog::replay, invariants::CheckInvariantsImpl};
 
     read_state(|s| {
         s.check_invariants()?;
 
         let events: Vec<_> = storage::events().collect();
-        let recovered_state = replay(events.clone().into_iter())
+        let recovered_state = replay::<CheckInvariantsImpl>(events.clone().into_iter())
             .unwrap_or_else(|e| panic!("failed to replay log {:?}: {:?}", events, e));
 
         recovered_state.check_invariants()?;
@@ -210,11 +210,10 @@ async fn get_canister_status() -> ic_cdk::api::management_canister::main::Canist
 #[query]
 fn estimate_withdrawal_fee(arg: EstimateFeeArg) -> WithdrawalFee {
     read_state(|s| {
-        ic_ckbtc_minter::estimate_fee(
+        ic_ckbtc_minter::estimate_retrieve_btc_fee(
             &s.available_utxos,
             arg.amount,
             s.last_fee_per_vbyte[50],
-            s.kyt_fee,
         )
     })
 }

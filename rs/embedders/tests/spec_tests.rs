@@ -803,13 +803,19 @@ fn error_to_string(e: anyhow::Error) -> String {
 #[test]
 fn spec_testsuite() {
     let test_files = parse_env_test_files("WASM_SPEC_BASE");
-    run_testsuite(test_files, &default_config(), false)
+    run_testsuite(test_files, default_config().wasm_memory64(false), false)
 }
 
 #[test]
 fn multi_memory_testsuite() {
     let test_files = parse_env_test_files("WASM_SPEC_MULTI_MEMORY");
-    run_testsuite(test_files, default_config().wasm_multi_memory(true), true)
+    run_testsuite(
+        test_files,
+        default_config()
+            .wasm_multi_memory(true)
+            .wasm_memory64(false),
+        true,
+    )
 }
 
 #[test]

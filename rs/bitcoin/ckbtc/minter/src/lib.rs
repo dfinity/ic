@@ -18,7 +18,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 
 pub mod address;
-pub mod blocklist;
 pub mod dashboard;
 pub mod guard;
 pub mod lifecycle;
@@ -1254,11 +1253,10 @@ pub fn tx_vsize_estimate(input_count: u64, output_count: u64) -> u64 {
 ///   * `available_utxos` - the list of UTXOs available to the minter.
 ///   * `maybe_amount` - the withdrawal amount.
 ///   * `median_fee_millisatoshi_per_vbyte` - the median network fee, in millisatoshi per vbyte.
-pub fn estimate_fee(
+pub fn estimate_retrieve_btc_fee(
     available_utxos: &BTreeSet<Utxo>,
     maybe_amount: Option<u64>,
     median_fee_millisatoshi_per_vbyte: u64,
-    kyt_fee: u64,
 ) -> WithdrawalFee {
     const DEFAULT_INPUT_COUNT: u64 = 2;
     // One output for the caller and one for the change.
@@ -1292,7 +1290,7 @@ pub fn estimate_fee(
         vsize * median_fee_millisatoshi_per_vbyte / 1000 / (DEFAULT_OUTPUT_COUNT - 1).max(1);
     let minter_fee = minter_fee / (DEFAULT_OUTPUT_COUNT - 1).max(1);
     WithdrawalFee {
-        minter_fee: kyt_fee + minter_fee,
+        minter_fee,
         bitcoin_fee,
     }
 }

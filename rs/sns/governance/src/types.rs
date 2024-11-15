@@ -16,7 +16,7 @@ use crate::{
             governance::{
                 self,
                 neuron_in_flight_command::{self, SyncCommand},
-                SnsMetadata,
+                SnsMetadata, Version,
             },
             governance_error::ErrorType,
             manage_neuron,
@@ -26,14 +26,14 @@ use crate::{
             nervous_system_function::FunctionType,
             neuron::Followees,
             proposal::Action,
-            upgrade_journal_entry, ClaimSwapNeuronsError, ClaimSwapNeuronsResponse,
-            ClaimedSwapNeuronStatus, DefaultFollowees, DeregisterDappCanisters, Empty,
-            ExecuteGenericNervousSystemFunction, GovernanceError, ManageDappCanisterSettings,
-            ManageLedgerParameters, ManageNeuronResponse, ManageSnsMetadata, MintSnsTokens, Motion,
-            NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId, NeuronIds,
-            NeuronPermission, NeuronPermissionList, NeuronPermissionType, ProposalId,
-            RegisterDappCanisters, RewardEvent, TransferSnsTreasuryFunds,
-            UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote, VotingRewardsParameters,
+            ClaimSwapNeuronsError, ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus,
+            DefaultFollowees, DeregisterDappCanisters, Empty, ExecuteGenericNervousSystemFunction,
+            GovernanceError, ManageDappCanisterSettings, ManageLedgerParameters,
+            ManageNeuronResponse, ManageSnsMetadata, MintSnsTokens, Motion, NervousSystemFunction,
+            NervousSystemParameters, Neuron, NeuronId, NeuronIds, NeuronPermission,
+            NeuronPermissionList, NeuronPermissionType, ProposalId, RegisterDappCanisters,
+            RewardEvent, TransferSnsTreasuryFunds, UpgradeSnsControlledCanister,
+            UpgradeSnsToNextVersion, Vote, VotingRewardsParameters,
         },
     },
     proposal::ValidGenericNervousSystemFunction,
@@ -46,8 +46,8 @@ use ic_icrc1_ledger::UpgradeArgs as LedgerUpgradeArgs;
 use ic_ledger_core::tokens::TOKEN_SUBDIVIDABLE_BY;
 use ic_management_canister_types::CanisterInstallModeError;
 use ic_nervous_system_common::{
-    ledger_validation::MAX_LOGO_LENGTH, NervousSystemError, DEFAULT_TRANSFER_FEE, ONE_DAY_SECONDS,
-    ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
+    hash_to_hex_string, ledger_validation::MAX_LOGO_LENGTH, NervousSystemError,
+    DEFAULT_TRANSFER_FEE, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
 };
 use ic_nervous_system_common_validation::validate_proposal_url;
 use ic_nervous_system_proto::pb::v1::{Duration as PbDuration, Percentage};
@@ -2531,6 +2531,21 @@ impl From<NeuronRecipes> for Vec<NeuronRecipe> {
     }
 }
 
+impl std::fmt::Display for Version {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "SnsVersion {{ root:{}, governance:{}, swap:{}, index:{}, ledger:{}, archive:{} }}",
+            hash_to_hex_string(&self.root_wasm_hash),
+            hash_to_hex_string(&self.governance_wasm_hash),
+            hash_to_hex_string(&self.swap_wasm_hash),
+            hash_to_hex_string(&self.index_wasm_hash),
+            hash_to_hex_string(&self.ledger_wasm_hash),
+            hash_to_hex_string(&self.archive_wasm_hash)
+        )
+    }
+}
+
 pub mod test_helpers {
     use super::*;
     use rand::Rng;
@@ -2749,25 +2764,6 @@ pub mod test_helpers {
         }
     }
 }
-
-impl From<upgrade_journal_entry::UpgradeStepsRefreshed> for upgrade_journal_entry::Event {
-    fn from(event: upgrade_journal_entry::UpgradeStepsRefreshed) -> Self {
-        upgrade_journal_entry::Event::UpgradeStepsRefreshed(event)
-    }
-}
-impl From<upgrade_journal_entry::UpgradeStarted> for upgrade_journal_entry::Event {
-    fn from(event: upgrade_journal_entry::UpgradeStarted) -> Self {
-        upgrade_journal_entry::Event::UpgradeStarted(event)
-    }
-}
-impl From<upgrade_journal_entry::UpgradeOutcome> for upgrade_journal_entry::Event {
-    fn from(event: upgrade_journal_entry::UpgradeOutcome) -> Self {
-        upgrade_journal_entry::Event::UpgradeOutcome(event)
-    }
-}
-// Note, we do not implement From<upgrade_journal_entry::TargetVersionSet> for upgrade_journal_entry::Event
-// because it is ambiguous which event variant to convert it to (TargetVersionSet vs TargetVersionReset).
-
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;

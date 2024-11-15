@@ -1900,8 +1900,8 @@ pub mod governance {
         #[prost(uint64, tag = "3")]
         pub checking_upgrade_lock: u64,
         /// The proposal that initiated this upgrade
-        #[prost(uint64, tag = "4")]
-        pub proposal_id: u64,
+        #[prost(uint64, optional, tag = "4")]
+        pub proposal_id: ::core::option::Option<u64>,
     }
     #[derive(
         candid::CandidType,
@@ -3381,7 +3381,7 @@ pub struct AdvanceTargetVersionResponse {}
 pub struct UpgradeJournalEntry {
     #[prost(uint64, optional, tag = "6")]
     pub timestamp_seconds: ::core::option::Option<u64>,
-    #[prost(oneof = "upgrade_journal_entry::Event", tags = "1, 2, 3, 4, 5")]
+    #[prost(oneof = "upgrade_journal_entry::Event", tags = "1, 7, 2, 3, 4, 5")]
     pub event: ::core::option::Option<upgrade_journal_entry::Event>,
 }
 /// Nested message and enum types in `UpgradeJournalEntry`.
@@ -3396,6 +3396,21 @@ pub mod upgrade_journal_entry {
         ::prost::Message,
     )]
     pub struct UpgradeStepsRefreshed {
+        #[prost(message, optional, tag = "2")]
+        pub upgrade_steps: ::core::option::Option<super::governance::Versions>,
+    }
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        serde::Serialize,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct UpgradeStepsReset {
+        #[prost(string, optional, tag = "1")]
+        pub human_readable: ::core::option::Option<::prost::alloc::string::String>,
         #[prost(message, optional, tag = "2")]
         pub upgrade_steps: ::core::option::Option<super::governance::Versions>,
     }
@@ -3428,6 +3443,8 @@ pub mod upgrade_journal_entry {
         pub old_target_version: ::core::option::Option<super::governance::Version>,
         #[prost(message, optional, tag = "2")]
         pub new_target_version: ::core::option::Option<super::governance::Version>,
+        #[prost(string, optional, tag = "3")]
+        pub human_readable: ::core::option::Option<::prost::alloc::string::String>,
     }
     #[derive(
         candid::CandidType,
@@ -3528,6 +3545,8 @@ pub mod upgrade_journal_entry {
     pub enum Event {
         #[prost(message, tag = "1")]
         UpgradeStepsRefreshed(UpgradeStepsRefreshed),
+        #[prost(message, tag = "7")]
+        UpgradeStepsReset(UpgradeStepsReset),
         #[prost(message, tag = "2")]
         TargetVersionSet(TargetVersionSet),
         #[prost(message, tag = "3")]
@@ -3583,6 +3602,8 @@ pub struct GetUpgradeJournalResponse {
     /// feature, it reflect the version of the SNS that the community has decided to upgrade to.
     #[prost(message, optional, tag = "3")]
     pub target_version: ::core::option::Option<governance::Version>,
+    #[prost(message, optional, tag = "5")]
+    pub deployed_version: ::core::option::Option<governance::Version>,
     #[prost(message, optional, tag = "4")]
     pub upgrade_journal: ::core::option::Option<UpgradeJournal>,
 }

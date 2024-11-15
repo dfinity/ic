@@ -4,6 +4,7 @@ use super::{
 };
 #[cfg(test)]
 use crate::scheduler::test_utilities::{on_response, other_side};
+use assert_matches::assert_matches;
 use candid::Encode;
 use ic00::{
     CanisterHttpRequestArgs, HttpMethod, SignWithECDSAArgs, TransformContext, TransformFunc,
@@ -34,13 +35,14 @@ use ic_test_utilities_state::{get_running_canister, get_stopped_canister, get_st
 use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::{
     batch::ConsensusResponse,
+    ingress::IngressStatus,
     messages::{
         CallbackId, CanisterMessageOrTask, CanisterTask, Payload, RejectContext,
         StopCanisterCallId, StopCanisterContext, MAX_RESPONSE_COUNT_BYTES,
     },
     methods::SystemMethod,
     time::{expiry_time_from_now, UNIX_EPOCH},
-    ComputeAllocation, Cycles, Height, NumBytes,
+    ComputeAllocation, Cycles, Height, LongExecutionMode, NumBytes,
 };
 use ic_types_test_utils::ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id};
 use proptest::prelude::*;
@@ -1158,6 +1160,70 @@ fn charging_for_message_memory_works() {
     );
 }
 
+/// Tests that given specific subnet callback soft cap and guaranteed canister
+/// callback quota values, two canisters trying to call themselves recursively
+/// twice will result in the execution of a specific number of messages.
+fn test_subnet_callback_soft_cap_impl(
+    subnet_callback_soft_cap: usize,
+    canister_callback_quota: usize,
+    expected_message_executions: u64,
+) {
+    let mut test = SchedulerTestBuilder::new()
+        .with_subnet_callback_soft_limit(subnet_callback_soft_cap)
+        .with_canister_guaranteed_callback_quota(canister_callback_quota)
+        .build();
+
+    for _ in 0..2 {
+        let canister = test.create_canister();
+        test.send_ingress(
+            canister,
+            ingress(1).call(
+                other_side(canister, 1).call(other_side(canister, 1), on_response(1)),
+                on_response(1),
+            ),
+        );
+    }
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_metrics
+            .update_transactions_total,
+        expected_message_executions
+    );
+}
+
+#[test]
+fn subnet_callback_soft_cap_exceeded() {
+    // Given a shared pool size of 2 callbacks, the canisters should be able to
+    // execute the first call but not the second one (i.e. 3 messages each).
+    let subnet_callback_soft_cap = 2;
+    let canister_callback_quota = 0;
+    test_subnet_callback_soft_cap_impl(subnet_callback_soft_cap, canister_callback_quota, 6);
+}
+
+#[test]
+fn subnet_callback_soft_cap_not_exceeded() {
+    // Given a shared pool of 3 callbacks, the canisters should each be able to
+    // execute both their calls (5 messages each). This is because each of the 2
+    // execution threads is allowed full use of the remaining pool (1 callback).
+    let subnet_callback_soft_cap = 3;
+    let canister_callback_quota = 0;
+    test_subnet_callback_soft_cap_impl(subnet_callback_soft_cap, canister_callback_quota, 10);
+}
+
+#[test]
+fn subnet_callback_soft_cap_ignored() {
+    // A shared pool size of 2 callbacks (which would prevent the canisters from
+    // making a second call) is ignored if the canisters have available callback
+    // quota (with each canister executing 2 calls, i.e. 5 messages).
+    let subnet_callback_soft_cap = 2;
+    let canister_callback_quota = 10;
+    test_subnet_callback_soft_cap_impl(subnet_callback_soft_cap, canister_callback_quota, 10);
+}
+
 #[test]
 fn dont_execute_any_canisters_if_not_enough_instructions_in_round() {
     let instructions_per_message = NumInstructions::from(5);
@@ -1784,6 +1850,103 @@ fn max_canisters_per_round() {
     // and 10 instructions on each scheduler core.
     let executed_canisters = run(200, 200);
     assert_eq!(executed_canisters, 200 + 2 * 5);
+}
+
+#[test]
+fn scheduler_long_execution_progress_across_checkpoints() {
+    let scheduler_cores = 2;
+    let slice_instructions = 2;
+    let message_instructions = 40;
+
+    let num_canisters = scheduler_cores;
+
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores,
+            max_instructions_per_round: slice_instructions.into(),
+            max_instructions_per_message: message_instructions.into(),
+            max_instructions_per_message_without_dts: slice_instructions.into(),
+            max_instructions_per_slice: slice_instructions.into(),
+            instruction_overhead_per_execution: 0.into(),
+            instruction_overhead_per_canister: 0.into(),
+            ..SchedulerConfig::application_subnet()
+        })
+        .build();
+
+    let penalized_long_id = test.create_canister();
+    let other_long_id = test.create_canister();
+    let mut canister_ids = vec![];
+    for _ in 0..num_canisters {
+        let canister_id = test.create_canister();
+        canister_ids.push(canister_id);
+    }
+
+    // Penalize canister for a long execution.
+    let message_id = test.send_ingress(penalized_long_id, ingress(message_instructions));
+    assert_eq!(test.ingress_status(&message_id), IngressStatus::Unknown);
+    for _ in 0..message_instructions / slice_instructions {
+        test.execute_round(ExecutionRoundType::OrdinaryRound);
+    }
+    assert_matches!(
+        test.ingress_status(&message_id),
+        IngressStatus::Known {
+            // Canister did not reply.
+            state: IngressState::Failed(_),
+            ..
+        }
+    );
+    // Assert penalized canister accumulated priority is lower.
+    let penalized = test.state().canister_state(&penalized_long_id).unwrap();
+    let other = test.state().canister_state(&other_long_id).unwrap();
+    assert!(
+        penalized.scheduler_state.accumulated_priority < other.scheduler_state.accumulated_priority
+    );
+
+    // Start another long execution on the penalized canister.
+    test.send_ingress(penalized_long_id, ingress(message_instructions));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    // Assert the LEM is prioritized.
+    let penalized = test.state().canister_state(&penalized_long_id).unwrap();
+    assert_eq!(
+        penalized.scheduler_state.long_execution_mode,
+        LongExecutionMode::Prioritized
+    );
+
+    // Start a long execution on another non-penalized canister.
+    test.send_ingress(other_long_id, ingress(message_instructions));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    // Assert the LEM is opportunistic.
+    let other = test.state().canister_state(&other_long_id).unwrap();
+    assert_eq!(
+        other.scheduler_state.long_execution_mode,
+        LongExecutionMode::Opportunistic
+    );
+
+    // Abort both canisters on checkpoint.
+    test.execute_round(ExecutionRoundType::CheckpointRound);
+
+    // Assert penalized canister accumulated priority is still lower.
+    let penalized = test.state().canister_state(&penalized_long_id).unwrap();
+    let other = test.state().canister_state(&other_long_id).unwrap();
+    assert!(
+        penalized.scheduler_state.accumulated_priority < other.scheduler_state.accumulated_priority
+    );
+    let penalized_executed_before = penalized.system_state.canister_metrics.executed;
+
+    // Send a bunch of messages.
+    for canister_id in &canister_ids {
+        test.send_ingress(*canister_id, ingress(slice_instructions));
+    }
+
+    // Assert that after the checkpoint the penalized canister continues its long execution.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    let penalized = test.state().canister_state(&penalized_long_id).unwrap();
+    assert_eq!(
+        penalized_executed_before + 1,
+        penalized.system_state.canister_metrics.executed
+    );
 }
 
 #[test]
