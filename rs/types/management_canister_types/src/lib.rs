@@ -2670,6 +2670,35 @@ impl ReshareChainKeyArgs {
     }
 }
 
+/// Struct used to return the chain key resharing.
+#[derive(Debug, Deserialize, Serialize)]
+pub enum ReshareChainKeyResponse {
+    IDkg(InitialIDkgDealings),
+    NiDkg(InitialNiDkgTranscriptRecord),
+}
+
+impl ReshareChainKeyResponse {
+    pub fn encode(&self) -> Vec<u8> {
+        let serde_encoded_bytes = self.encode_with_serde_cbor();
+        Encode!(&serde_encoded_bytes).unwrap()
+    }
+
+    fn encode_with_serde_cbor(&self) -> Vec<u8> {
+        serde_cbor::to_vec(self).unwrap()
+    }
+
+    pub fn decode(blob: &[u8]) -> Result<Self, UserError> {
+        let serde_encoded_bytes =
+            Decode!([decoder_config()]; blob, Vec<u8>).map_err(candid_error_to_user_error)?;
+        serde_cbor::from_slice::<Self>(&serde_encoded_bytes).map_err(|err| {
+            UserError::new(
+                ErrorCode::InvalidManagementPayload,
+                format!("Payload deserialization error: '{}'", err),
+            )
+        })
+    }
+}
+
 /// Represents the argument of the sign_with_schnorr API.
 /// ```text
 /// (record {
