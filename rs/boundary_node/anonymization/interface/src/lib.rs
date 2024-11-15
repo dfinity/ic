@@ -72,4 +72,5 @@ pub struct HttpResponse {
 
     #[serde(with = "serde_bytes")]
     pub body: Vec<u8>,
+    pub upgrade: bool,
 }
