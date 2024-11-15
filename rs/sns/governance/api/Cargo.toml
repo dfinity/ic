@@ -13,6 +13,7 @@ path = "src/lib.rs"
 [dependencies]
 bytes = { workspace = true }
 candid = { workspace = true }
+clap = { workspace = true }
 comparable = { version = "0.5", features = ["derive"] }
 ic-base-types = { path = "../../../types/base_types" }
 ic-nervous-system-proto = { path = "../../../nervous_system/proto" }
