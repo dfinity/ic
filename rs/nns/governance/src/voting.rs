@@ -9,7 +9,6 @@ use std::{
 };
 
 thread_local! {
-    // TODO DO NOT MERGE - if this has ongoing votes to process, should prevent upgrading...
     static VOTING_STATE_MACHINES: RefCell<VotingStateMachines> = RefCell::new(VotingStateMachines::new());
 }
 
@@ -50,8 +49,6 @@ struct ProposalVotingStateMachine {
     proposal_id: ProposalId,
     // The topic of the proposal.
     topic: Topic,
-    // votes to cast
-    votes_to_cast: BTreeMap<NeuronId, Vote>,
     // Votes that have been cast before checking followees
     neurons_to_check_followers: BTreeSet<NeuronId>,
     // followers to process
@@ -74,8 +71,7 @@ impl ProposalVotingStateMachine {
     }
 
     fn is_done(&self) -> bool {
-        self.votes_to_cast.is_empty()
-            && self.neurons_to_check_followers.is_empty()
+        self.neurons_to_check_followers.is_empty()
             && self.followers_to_check.is_empty()
             && self.recent_neuron_ballots_to_record.is_empty()
     }
@@ -98,12 +94,19 @@ impl ProposalVotingStateMachine {
 
     fn cast_vote(&mut self, ballots: &mut HashMap<u64, Ballot>, neuron_id: NeuronId, vote: Vote) {
         if let Some(ballot) = ballots.get_mut(&neuron_id.id) {
+            // The following conditional is CRITICAL, as it prevents a neuron's vote from
+            // being overwritten by a later vote. This is important because otherwse
+            // a cyclic voting graph is possible, which could result in never finishing voting.
             if ballot.vote == Vote::Unspecified as i32 {
+                // Cast vote in ballot
                 ballot.vote = vote as i32;
                 // record the votes that have been cast, to log
-                self.neurons_to_check_followers.insert(neuron_id);
-                // votes to be recorded
                 self.recent_neuron_ballots_to_record.insert(neuron_id, vote);
+
+                // Do not check followers for NeuronManagement topic
+                if self.topic != NeuronManagement {
+                    self.neurons_to_check_followers.insert(neuron_id);
+                }
             }
         }
     }
@@ -113,63 +116,43 @@ impl ProposalVotingStateMachine {
         neuron_store: &mut NeuronStore,
         ballots: &mut HashMap<u64, Ballot>,
     ) {
-        if !self.votes_to_cast.is_empty() {
-            while let Some((neuron_id, vote)) = self.votes_to_cast.pop_first() {
-                if neuron_store.contains(neuron_id) {
-                    self.cast_vote(ballots, neuron_id, vote);
-                } else {
-                    // This is a bad inconsistency, but there is
-                    // nothing that can be done about it at this
-                    // place.  We somehow have followers recorded that don't exist.
-                    eprintln!("error in cast_vote_and_cascade_follow when gathering induction votes: neuron {} not found", neuron_id.id);
-                }
-            }
-        }
-
-        if !self.neurons_to_check_followers.is_empty() {
-            while let Some(neuron_id) = self.neurons_to_check_followers.pop_first() {
-                if self.topic != NeuronManagement {
-                    self.add_followers_to_check(neuron_store, neuron_id, self.topic);
-                }
-            }
+        while let Some(neuron_id) = self.neurons_to_check_followers.pop_first() {
+            self.add_followers_to_check(neuron_store, neuron_id, self.topic);
         }
 
         retain_neurons_with_castable_ballots(&mut self.followers_to_check, ballots);
 
-        if !self.followers_to_check.is_empty() {
-            while let Some(follower) = self.followers_to_check.pop_first() {
-                let vote = match neuron_store
-                    .neuron_would_follow_ballots(follower, self.topic, ballots)
-                {
-                    Ok(vote) => vote,
-                    Err(e) => {
-                        // This is a bad inconsistency, but there is
-                        // nothing that can be done about it at this
-                        // place.  We somehow have followers recorded that don't exist.
-                        eprintln!("error in cast_vote_and_cascade_follow when gathering induction votes: {:?}", e);
-                        Vote::Unspecified
-                    }
-                };
-                if vote != Vote::Unspecified {
-                    self.votes_to_cast.insert(follower, vote);
+        while let Some(follower) = self.followers_to_check.pop_first() {
+            let vote = match neuron_store.neuron_would_follow_ballots(follower, self.topic, ballots)
+            {
+                Ok(vote) => vote,
+                Err(e) => {
+                    // This is a bad inconsistency, but there is
+                    // nothing that can be done about it at this
+                    // place.  We somehow have followers recorded that don't exist.
+                    eprintln!("error in cast_vote_and_cascade_follow when gathering induction votes: {:?}", e);
+                    Vote::Unspecified
                 }
+            };
+            if vote != Vote::Unspecified {
+                // Casting vote immediately might affect other follower votes, which makes
+                // voting resolution take fewer iterations.
+                self.cast_vote(ballots, follower, vote);
             }
         }
 
-        if !self.recent_neuron_ballots_to_record.is_empty() {
-            while let Some((neuron_id, vote)) = self.recent_neuron_ballots_to_record.pop_first() {
-                match neuron_store.with_neuron_mut(&neuron_id, |neuron| {
-                    neuron.register_recent_ballot(self.topic, &self.proposal_id, vote)
-                }) {
-                    Ok(_) => {}
-                    Err(e) => {
-                        // This is a bad inconsistency, but there is
-                        // nothing that can be done about it at this
-                        // place.  We somehow have followers recorded that don't exist.
-                        eprintln!("error in cast_vote_and_cascade_follow when gathering induction votes: {:?}", e);
-                    }
-                };
-            }
+        while let Some((neuron_id, vote)) = self.recent_neuron_ballots_to_record.pop_first() {
+            match neuron_store.with_neuron_mut(&neuron_id, |neuron| {
+                neuron.register_recent_ballot(self.topic, &self.proposal_id, vote)
+            }) {
+                Ok(_) => {}
+                Err(e) => {
+                    // This is a bad inconsistency, but there is
+                    // nothing that can be done about it at this
+                    // place.  We somehow have followers recorded that don't exist.
+                    eprintln!("error in cast_vote_and_cascade_follow when gathering induction votes: {:?}", e);
+                }
+            };
         }
     }
 }
@@ -201,7 +184,7 @@ pub(crate) fn cast_vote_and_cascade_follow(
     // Use of thread local storage to store the state machines prevents
     // more than one state machine per proposal, which limits the overall
     // memory usage for voting, which will be relevant when this can be used
-    // across multiple messages.
+    // across multiple messages, which would cause the memory usage to accumulate.
     VOTING_STATE_MACHINES.with(|vsm| {
         let mut voting_state_machines = vsm.borrow_mut();
         let proposal_voting_machine =
@@ -262,6 +245,25 @@ mod test {
         .build()
     }
 
+    fn add_neuron_with_ballot(
+        neuron_store: &mut NeuronStore,
+        ballots: &mut HashMap<u64, Ballot>,
+        neuron: Neuron,
+    ) {
+        let cached_stake = neuron.cached_neuron_stake_e8s;
+        let id = neuron.id().id;
+        neuron_store
+            .add_neuron(neuron)
+            .expect("Couldn't add neuron");
+        ballots.insert(
+            id,
+            Ballot {
+                vote: Vote::Unspecified as i32,
+                voting_power: cached_stake,
+            },
+        );
+    }
+
     #[test]
     fn test_invalid_topic() {
         let err = ProposalVotingStateMachine::try_new(ProposalId { id: 0 }, Topic::Unspecified)
@@ -275,20 +277,12 @@ mod test {
         let mut state_machine = ProposalVotingStateMachine {
             proposal_id: ProposalId { id: 0 },
             topic: Topic::Governance,
-            votes_to_cast: BTreeMap::new(),
             neurons_to_check_followers: BTreeSet::new(),
             followers_to_check: BTreeSet::new(),
             recent_neuron_ballots_to_record: BTreeMap::new(),
         };
 
         assert!(state_machine.is_done());
-
-        // Test that the 4 state field all result in things not being finished.
-        state_machine
-            .votes_to_cast
-            .insert(NeuronId { id: 0 }, Vote::Yes);
-        assert!(!state_machine.is_done());
-        state_machine.votes_to_cast.clear();
 
         state_machine
             .neurons_to_check_followers
@@ -315,31 +309,22 @@ mod test {
 
         let mut ballots = HashMap::new();
         let mut neuron_store = NeuronStore::new(btreemap! {});
-        neuron_store
-            .add_neuron(make_neuron(1, 101, hashmap! {}))
-            .expect("Couldn't add neuron");
-        ballots.insert(
-            1,
-            Ballot {
-                vote: Vote::Unspecified as i32,
-                voting_power: 101,
-            },
+
+        add_neuron_with_ballot(
+            &mut neuron_store,
+            &mut ballots,
+            make_neuron(1, 101, hashmap! {}),
         );
-        neuron_store
-            .add_neuron(make_neuron(
+        add_neuron_with_ballot(
+            &mut neuron_store,
+            &mut ballots,
+            make_neuron(
                 2,
                 102,
                 hashmap! {Topic::NetworkEconomics.into() => Followees {
                     followees: vec![NeuronId { id: 1 }],
                 }},
-            ))
-            .expect("Couldn't add neuron");
-        ballots.insert(
-            2,
-            Ballot {
-                vote: Vote::Unspecified as i32,
-                voting_power: 102,
-            },
+            ),
         );
 
         state_machine.cast_vote(&mut ballots, NeuronId { id: 1 }, Vote::Yes);
@@ -349,7 +334,7 @@ mod test {
             ballots,
             hashmap! {
             1 => Ballot { vote: Vote::Yes as i32, voting_power: 101 },
-            2 => Ballot { vote: Vote::Unspecified as i32, voting_power: 102 }}
+            2 => Ballot { vote: Vote::Yes as i32, voting_power: 102 }}
         );
         assert_eq!(
             neuron_store
@@ -359,11 +344,15 @@ mod test {
                 .unwrap(),
             Vote::Yes as i32
         );
-        assert!(neuron_store
-            .with_neuron(&NeuronId { id: 2 }, |n| {
-                n.recent_ballots.first().is_none()
-            })
-            .unwrap());
+        assert_eq!(
+            neuron_store
+                .with_neuron(&NeuronId { id: 2 }, |n| {
+                    n.recent_ballots.first().unwrap().vote
+                })
+                .unwrap(),
+            Vote::Yes as i32
+        );
+
         assert!(!state_machine.is_done());
 
         state_machine.continue_processing(&mut neuron_store, &mut ballots);
@@ -390,6 +379,70 @@ mod test {
                 .unwrap(),
             Vote::Yes as i32
         );
+        assert!(state_machine.is_done());
+    }
+
+    #[test]
+    fn test_cyclic_following_will_terminate() {
+        let mut state_machine =
+            ProposalVotingStateMachine::try_new(ProposalId { id: 0 }, Topic::NetworkEconomics)
+                .unwrap();
+
+        let mut ballots = HashMap::new();
+        let mut neuron_store = NeuronStore::new(btreemap! {});
+
+        add_neuron_with_ballot(
+            &mut neuron_store,
+            &mut ballots,
+            make_neuron(
+                1,
+                101,
+                hashmap! {Topic::NetworkEconomics.into() => Followees {
+                    followees: vec![NeuronId { id: 2 }],
+                }},
+            ),
+        );
+        add_neuron_with_ballot(
+            &mut neuron_store,
+            &mut ballots,
+            make_neuron(
+                2,
+                102,
+                hashmap! {Topic::NetworkEconomics.into() => Followees {
+                    followees: vec![NeuronId { id: 1 }],
+                }},
+            ),
+        );
+
+        state_machine.cast_vote(&mut ballots, NeuronId { id: 1 }, Vote::Yes);
+        state_machine.continue_processing(&mut neuron_store, &mut ballots);
+
+        assert_eq!(
+            ballots,
+            hashmap! {
+            1 => Ballot { vote: Vote::Yes as i32, voting_power: 101 },
+            2 => Ballot { vote: Vote::Yes as i32, voting_power: 102 }}
+        );
+        assert_eq!(
+            neuron_store
+                .with_neuron(&NeuronId { id: 1 }, |n| {
+                    n.recent_ballots.first().unwrap().vote
+                })
+                .unwrap(),
+            Vote::Yes as i32
+        );
+        assert_eq!(
+            neuron_store
+                .with_neuron(&NeuronId { id: 2 }, |n| {
+                    n.recent_ballots.first().unwrap().vote
+                })
+                .unwrap(),
+            Vote::Yes as i32
+        );
+
+        assert!(!state_machine.is_done());
+
+        state_machine.continue_processing(&mut neuron_store, &mut ballots);
         assert!(state_machine.is_done());
     }
 }
