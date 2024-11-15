@@ -573,7 +573,6 @@ mod tests {
     fn test_idkg_priority_fn_args() {
         let state_manager = Arc::new(RefMockStateManager::default());
         let height = Height::from(100);
-
         state_manager
             .get_mut()
             .expect_latest_certified_height()

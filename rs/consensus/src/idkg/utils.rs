@@ -18,7 +18,7 @@ use ic_replicated_state::metadata_state::subnet_call_context_manager::{
 use ic_types::consensus::idkg::common::{PreSignatureRef, SignatureScheme, ThresholdSigInputsRef};
 use ic_types::consensus::idkg::ecdsa::ThresholdEcdsaSigInputsRef;
 use ic_types::consensus::idkg::schnorr::ThresholdSchnorrSigInputsRef;
-use ic_types::consensus::idkg::HasMasterPublicKeyId;
+use ic_types::consensus::idkg::{HasIDkgMasterPublicKeyId, IDkgMasterPublicKeyId};
 use ic_types::consensus::Block;
 use ic_types::consensus::{
     idkg::{
@@ -81,7 +81,7 @@ impl IDkgBlockReader for IDkgBlockReaderImpl {
 
     fn pre_signatures_in_creation(
         &self,
-    ) -> Box<dyn Iterator<Item = (PreSigId, MasterPublicKeyId)> + '_> {
+    ) -> Box<dyn Iterator<Item = (PreSigId, IDkgMasterPublicKeyId)> + '_> {
         self.chain.tip().payload.as_ref().as_idkg().map_or(
             Box::new(std::iter::empty()),
             |idkg_payload| {
@@ -357,10 +357,10 @@ pub(super) fn transcript_op_summary(op: &IDkgTranscriptOperation) -> String {
 
 /// Inspect chain_key_initializations field in the CUPContent.
 /// Return key_id and dealings.
-pub(crate) fn inspect_chain_key_initializations(
+pub(crate) fn inspect_idkg_chain_key_initializations(
     ecdsa_initializations: &[pb::EcdsaInitialization],
     chain_key_initializations: &[pb::ChainKeyInitialization],
-) -> Result<BTreeMap<MasterPublicKeyId, InitialIDkgDealings>, String> {
+) -> Result<BTreeMap<IDkgMasterPublicKeyId, InitialIDkgDealings>, String> {
     let mut initial_dealings_per_key_id = BTreeMap::new();
 
     if !ecdsa_initializations.is_empty() && !chain_key_initializations.is_empty() {
@@ -395,12 +395,15 @@ pub(crate) fn inspect_chain_key_initializations(
                 )
             })?;
 
-        initial_dealings_per_key_id.insert(MasterPublicKeyId::Ecdsa(ecdsa_key_id), dealings);
+        initial_dealings_per_key_id.insert(
+            MasterPublicKeyId::Ecdsa(ecdsa_key_id).try_into().unwrap(),
+            dealings,
+        );
     }
 
     // TODO(CON-1332): Do not panic if fields are missing
     for chain_key_init in chain_key_initializations {
-        let key_id = chain_key_init
+        let key_id: MasterPublicKeyId = chain_key_init
             .key_id
             .clone()
             .expect("Error: Failed to find key_id in chain_key_initializations")
@@ -411,6 +414,12 @@ pub(crate) fn inspect_chain_key_initializations(
                     err
                 )
             })?;
+
+        // Skip non-idkg keys
+        let key_id = match key_id.try_into() {
+            Ok(key_id) => key_id,
+            Err(_) => continue,
+        };
 
         let dealings = match &chain_key_init.initialization {
             Some(pb::chain_key_initialization::Initialization::Dealings(dealings)) => dealings,
@@ -435,8 +444,8 @@ pub(crate) fn inspect_chain_key_initializations(
     Ok(initial_dealings_per_key_id)
 }
 
-pub(crate) fn algorithm_for_key_id(key_id: &MasterPublicKeyId) -> AlgorithmId {
-    match key_id {
+pub(crate) fn algorithm_for_key_id(key_id: &IDkgMasterPublicKeyId) -> AlgorithmId {
+    match key_id.inner() {
         MasterPublicKeyId::Ecdsa(ecdsa_key_id) => match ecdsa_key_id.curve {
             EcdsaCurve::Secp256k1 => AlgorithmId::ThresholdEcdsaSecp256k1,
         },
@@ -450,7 +459,7 @@ pub(crate) fn algorithm_for_key_id(key_id: &MasterPublicKeyId) -> AlgorithmId {
     }
 }
 
-pub(crate) fn get_chain_key_config_if_enabled(
+pub(crate) fn get_idkg_chain_key_config_if_enabled(
     subnet_id: SubnetId,
     registry_version: RegistryVersion,
     registry_client: &dyn RegistryClient,
@@ -458,10 +467,12 @@ pub(crate) fn get_chain_key_config_if_enabled(
     if let Some(chain_key_config) =
         registry_client.get_chain_key_config(subnet_id, registry_version)?
     {
-        // A key that has `presignatures_to_create_in_advance` set to 0 is not active
         let num_active_key_ids = chain_key_config
             .key_configs
             .iter()
+            // Skip keys that don't need to run IDKG protocol
+            .filter(|key_config| key_config.key_id.is_idkg_key())
+            // A key that has `presignatures_to_create_in_advance` set to 0 is not active
             .filter(|key_config| key_config.pre_signatures_to_create_in_advance != 0)
             .count();
 
@@ -486,7 +497,7 @@ pub(crate) fn get_pre_signature_ids_to_deliver(
 
     let mut pre_sig_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>> = BTreeMap::new();
     for key_id in idkg.key_transcripts.keys() {
-        pre_sig_ids.insert(key_id.clone(), BTreeSet::default());
+        pre_sig_ids.insert(key_id.clone().into(), BTreeSet::default());
     }
 
     for (pre_sig_id, pre_signature) in &idkg.available_pre_signatures {
@@ -498,7 +509,10 @@ pub(crate) fn get_pre_signature_ids_to_deliver(
                     == pre_signature.key_unmasked().as_ref().transcript_id
             })
         {
-            pre_sig_ids.entry(key_id).or_default().insert(*pre_sig_id);
+            pre_sig_ids
+                .entry(key_id.into())
+                .or_default()
+                .insert(*pre_sig_id);
         }
     }
 
@@ -557,7 +571,7 @@ pub(crate) fn get_idkg_subnet_public_keys(
         };
 
         if let Some(public_key) = ecdsa_subnet_public_key {
-            public_keys.insert(key_id.clone(), public_key);
+            public_keys.insert(key_id.clone().into(), public_key);
         }
     }
 
@@ -592,9 +606,9 @@ pub(crate) fn update_purge_height(cell: &RefCell<Height>, new_height: Height) ->
 mod tests {
     use super::*;
     use crate::idkg::test_utils::{
-        create_available_pre_signature_with_key_transcript, fake_ecdsa_key_id,
-        fake_ecdsa_master_public_key_id, fake_master_public_key_ids_for_all_algorithms,
-        set_up_idkg_payload, IDkgPayloadTestHelper,
+        create_available_pre_signature_with_key_transcript, fake_ecdsa_idkg_master_public_key_id,
+        fake_ecdsa_key_id, fake_master_public_key_ids_for_all_algorithms, set_up_idkg_payload,
+        IDkgPayloadTestHelper,
     };
     use ic_config::artifact_pool::ArtifactPoolConfig;
     use ic_consensus_mocks::{dependencies, Dependencies};
@@ -624,7 +638,7 @@ mod tests {
 
     #[test]
     fn test_inspect_chain_key_initializations_no_keys() {
-        let init = inspect_chain_key_initializations(&[], &[])
+        let init = inspect_idkg_chain_key_initializations(&[], &[])
             .expect("Should successfully get initializations");
 
         assert!(init.is_empty());
@@ -643,12 +657,15 @@ mod tests {
             dealings: Some((&initial_dealings).into()),
         };
 
-        let init = inspect_chain_key_initializations(&[ecdsa_init], &[])
+        let init = inspect_idkg_chain_key_initializations(&[ecdsa_init], &[])
             .expect("Should successfully get initializations");
 
         assert_eq!(
             init,
-            BTreeMap::from([(MasterPublicKeyId::Ecdsa(key_id), initial_dealings)])
+            BTreeMap::from([(
+                MasterPublicKeyId::Ecdsa(key_id).try_into().unwrap(),
+                initial_dealings
+            )])
         );
     }
 
@@ -659,15 +676,15 @@ mod tests {
             ic_types::crypto::AlgorithmId::ThresholdEcdsaSecp256k1,
             &mut rng,
         );
-        let key_id = fake_ecdsa_master_public_key_id();
+        let key_id = fake_ecdsa_idkg_master_public_key_id();
         let chain_key_init = ChainKeyInitialization {
-            key_id: Some((&key_id).into()),
+            key_id: Some((&MasterPublicKeyId::from(key_id.clone())).into()),
             initialization: Some(pb::chain_key_initialization::Initialization::Dealings(
                 (&initial_dealings).into(),
             )),
         };
 
-        let init = inspect_chain_key_initializations(&[], &[chain_key_init])
+        let init = inspect_idkg_chain_key_initializations(&[], &[chain_key_init])
             .expect("Should successfully get initializations");
 
         assert_eq!(init, BTreeMap::from([(key_id, initial_dealings)]));
@@ -710,18 +727,26 @@ mod tests {
             )),
         };
 
-        let init =
-            inspect_chain_key_initializations(&[ecdsa_init.clone(), ecdsa_init_2.clone()], &[])
-                .expect("Should successfully inspect initializations");
+        let init = inspect_idkg_chain_key_initializations(
+            &[ecdsa_init.clone(), ecdsa_init_2.clone()],
+            &[],
+        )
+        .expect("Should successfully inspect initializations");
         assert_eq!(
             init,
             BTreeMap::from([
-                (master_key_id.clone(), initial_dealings.clone()),
-                (master_key_id_2.clone(), initial_dealings_2.clone()),
+                (
+                    master_key_id.clone().try_into().unwrap(),
+                    initial_dealings.clone()
+                ),
+                (
+                    master_key_id_2.clone().try_into().unwrap(),
+                    initial_dealings_2.clone()
+                ),
             ])
         );
 
-        let init = inspect_chain_key_initializations(
+        let init = inspect_idkg_chain_key_initializations(
             &[],
             &[chain_key_init.clone(), chain_key_init_2.clone()],
         )
@@ -729,12 +754,18 @@ mod tests {
         assert_eq!(
             init,
             BTreeMap::from([
-                (master_key_id.clone(), initial_dealings.clone()),
-                (master_key_id_2.clone(), initial_dealings_2.clone()),
+                (
+                    master_key_id.clone().try_into().unwrap(),
+                    initial_dealings.clone()
+                ),
+                (
+                    master_key_id_2.clone().try_into().unwrap(),
+                    initial_dealings_2.clone()
+                ),
             ])
         );
 
-        inspect_chain_key_initializations(&[ecdsa_init.clone()], &[chain_key_init_2.clone()])
+        inspect_idkg_chain_key_initializations(&[ecdsa_init.clone()], &[chain_key_init_2.clone()])
             .expect_err("Should fail when both arguments are non-empty");
     }
 
@@ -770,8 +801,9 @@ mod tests {
             let (subnet_id, registry, version) =
                 set_up_get_chain_key_config_test(&chain_key_config_with_no_keys, pool_config);
 
-            let config = get_chain_key_config_if_enabled(subnet_id, version, registry.as_ref())
-                .expect("Should successfully get the config");
+            let config =
+                get_idkg_chain_key_config_if_enabled(subnet_id, version, registry.as_ref())
+                    .expect("Should successfully get the config");
 
             assert!(config.is_none());
         })
@@ -794,8 +826,9 @@ mod tests {
             let (subnet_id, registry, version) =
                 set_up_get_chain_key_config_test(&chain_key_config_with_one_key, pool_config);
 
-            let config = get_chain_key_config_if_enabled(subnet_id, version, registry.as_ref())
-                .expect("Should successfully get the config");
+            let config =
+                get_idkg_chain_key_config_if_enabled(subnet_id, version, registry.as_ref())
+                    .expect("Should successfully get the config");
 
             assert_eq!(config, Some(chain_key_config_with_one_key));
         })
@@ -827,8 +860,9 @@ mod tests {
             let (subnet_id, registry, version) =
                 set_up_get_chain_key_config_test(&chain_key_config_with_two_keys, pool_config);
 
-            let config = get_chain_key_config_if_enabled(subnet_id, version, registry.as_ref())
-                .expect("Should successfully get the config");
+            let config =
+                get_idkg_chain_key_config_if_enabled(subnet_id, version, registry.as_ref())
+                    .expect("Should successfully get the config");
 
             assert_eq!(
                 config,
@@ -856,8 +890,9 @@ mod tests {
             let (subnet_id, registry, version) =
                 set_up_get_chain_key_config_test(&malformed_chain_key_config, pool_config);
 
-            let config = get_chain_key_config_if_enabled(subnet_id, version, registry.as_ref())
-                .expect("Should successfully get the config");
+            let config =
+                get_idkg_chain_key_config_if_enabled(subnet_id, version, registry.as_ref())
+                    .expect("Should successfully get the config");
 
             assert!(config.is_none());
         })
@@ -866,7 +901,7 @@ mod tests {
     fn add_available_pre_signatures_with_key_transcript(
         idkg_payload: &mut IDkgPayload,
         key_transcript: UnmaskedTranscript,
-        key_id: &MasterPublicKeyId,
+        key_id: &IDkgMasterPublicKeyId,
     ) -> Vec<PreSigId> {
         let mut pre_sig_ids = vec![];
         for i in 0..10 {
@@ -909,7 +944,7 @@ mod tests {
         }
     }
 
-    fn test_get_pre_signature_ids_to_deliver(key_id: MasterPublicKeyId) {
+    fn test_get_pre_signature_ids_to_deliver(key_id: IDkgMasterPublicKeyId) {
         let mut rng = reproducible_rng();
         let (mut idkg_payload, env, _) = set_up_idkg_payload(
             &mut rng,
@@ -981,7 +1016,7 @@ mod tests {
         }
     }
 
-    fn test_block_without_key_should_not_deliver_pre_signatures(key_id: MasterPublicKeyId) {
+    fn test_block_without_key_should_not_deliver_pre_signatures(key_id: IDkgMasterPublicKeyId) {
         let mut rng = reproducible_rng();
         let (mut idkg_payload, env, _) = set_up_idkg_payload(
             &mut rng,
