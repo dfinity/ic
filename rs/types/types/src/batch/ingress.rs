@@ -148,6 +148,25 @@ impl IngressPayload {
                 }
             })
     }
+
+    pub fn from_iter<'a>(msgs: impl Iterator<Item=&'a SignedIngress>) -> Self {
+        let mut buf = Cursor::new(Vec::new());
+        let mut id_and_pos = Vec::new();
+        for ingress in msgs {
+            let id = IngressMessageId::from(ingress);
+            let pos = buf.position();
+            // This panic will only happen when we run out of memory.
+            buf.write_all(ingress.binary().as_ref())
+                .unwrap_or_else(|err| panic!("SignedIngress serialization error: {:?}", err));
+
+            id_and_pos.push((id, pos));
+        }
+        Self {
+            id_and_pos,
+            buffer: buf.into_inner(),
+        }
+
+    }
 }
 
 impl CountBytes for IngressPayload {
@@ -158,21 +177,13 @@ impl CountBytes for IngressPayload {
 
 impl From<Vec<SignedIngress>> for IngressPayload {
     fn from(msgs: Vec<SignedIngress>) -> IngressPayload {
-        let mut buf = Cursor::new(Vec::new());
-        let mut id_and_pos = Vec::new();
-        for ingress in msgs {
-            let id = IngressMessageId::from(&ingress);
-            let pos = buf.position();
-            // This panic will only happen when we run out of memory.
-            buf.write_all(ingress.binary().as_ref())
-                .unwrap_or_else(|err| panic!("SignedIngress serialization error: {:?}", err));
+        IngressPayload::from_iter(msgs.iter())
+    }
+}
 
-            id_and_pos.push((id, pos));
-        }
-        IngressPayload {
-            id_and_pos,
-            buffer: buf.into_inner(),
-        }
+impl From<&[&SignedIngress]> for IngressPayload {
+    fn from(msgs: &[&SignedIngress]) -> IngressPayload {
+        IngressPayload::from_iter(msgs.iter().copied())
     }
 }
 
