@@ -103,6 +103,8 @@ pub struct GenerateTestnetConfigClapArgs {
 
     // ICOSSettings arguments
     #[arg(long)]
+    pub node_reward_type: Option<String>,
+    #[arg(long)]
     pub mgmt_mac: Option<String>,
     #[arg(long)]
     pub deployment_environment: Option<String>,
@@ -174,6 +176,7 @@ pub fn main() -> Result<()> {
                 ipv4_prefix_length,
                 domain_name,
                 verbose,
+                node_reward_type,
             } = get_config_ini_settings(&config_ini_path)?;
 
             // create NetworkSettings
@@ -222,7 +225,10 @@ pub fn main() -> Result<()> {
                 None => get_ipmi_mac()?,
             };
 
+            let node_reward_type = node_reward_type.expect("Node reward type is required.");
+
             let icos_settings = ICOSSettings {
+                node_reward_type,
                 mgmt_mac,
                 deployment_environment: deployment_json_settings.deployment.name,
                 logging,
@@ -352,6 +358,7 @@ pub fn main() -> Result<()> {
                 ipv4_gateway: clap_args.ipv4_gateway,
                 ipv4_prefix_length: clap_args.ipv4_prefix_length,
                 domain_name: clap_args.domain_name,
+                node_reward_type: clap_args.node_reward_type,
                 mgmt_mac: clap_args.mgmt_mac,
                 deployment_environment: clap_args.deployment_environment,
                 elasticsearch_hosts: clap_args.elasticsearch_hosts,
