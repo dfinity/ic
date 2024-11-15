@@ -219,26 +219,19 @@ mod tests {
             for i in 1..6 {
                 stream.push(
                     RequestBuilder::new()
-                        .metadata(
-                            (certification_version >= CertificationVersion::V14 && i % 5 != 0)
-                                .then_some(RequestMetadata::new(
-                                    i % 3,
-                                    Time::from_nanos_since_unix_epoch(i % 2),
-                                )),
-                        )
+                        .metadata((i % 5 != 0).then_some(RequestMetadata::new(
+                            i % 3,
+                            Time::from_nanos_since_unix_epoch(i % 2),
+                        )))
                         .deadline(maybe_deadline(i))
                         .build()
                         .into(),
                 );
             }
-            if certification_version >= CertificationVersion::V8 {
-                stream.push_reject_signal(RejectReason::CanisterMigrating);
-            }
-            if certification_version >= CertificationVersion::V17 {
-                stream.set_reverse_stream_flags(StreamFlags {
-                    deprecated_responses_only: true,
-                });
-            }
+            stream.push_reject_signal(RejectReason::CanisterMigrating);
+            stream.set_reverse_stream_flags(StreamFlags {
+                deprecated_responses_only: true,
+            });
             if certification_version >= CertificationVersion::V19 {
                 stream.push_reject_signal(RejectReason::CanisterNotFound);
                 stream.push_reject_signal(RejectReason::QueueFull);
@@ -259,21 +252,19 @@ mod tests {
                 );
             }
 
-            if certification_version >= CertificationVersion::V11 {
-                state.set_ingress_status(
-                    message_test_id(7),
-                    IngressStatus::Known {
-                        state: IngressState::Failed(UserError::new(
-                            ErrorCode::CanisterNotFound,
-                            "canister not found",
-                        )),
-                        receiver: canister_id.into(),
-                        user_id: user_test_id(1),
-                        time: Time::from_nanos_since_unix_epoch(12345),
-                    },
-                    NumBytes::from(u64::MAX),
-                );
-            }
+            state.set_ingress_status(
+                message_test_id(7),
+                IngressStatus::Known {
+                    state: IngressState::Failed(UserError::new(
+                        ErrorCode::CanisterNotFound,
+                        "canister not found",
+                    )),
+                    receiver: canister_id.into(),
+                    user_id: user_test_id(1),
+                    time: Time::from_nanos_since_unix_epoch(12345),
+                },
+                NumBytes::from(u64::MAX),
+            );
 
             state.metadata.node_public_keys = btreemap! {
                 node_test_id(1) => vec![1; 44],

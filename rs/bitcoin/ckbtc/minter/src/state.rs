@@ -10,17 +10,19 @@ use std::{
 
 pub mod audit;
 pub mod eventlog;
+pub mod invariants;
 
 use crate::lifecycle::init::InitArgs;
 use crate::lifecycle::upgrade::UpgradeArgs;
 use crate::logs::P0;
+use crate::state::invariants::{CheckInvariants, CheckInvariantsImpl};
 use crate::{address::BitcoinAddress, ECDSAPublicKey};
 use candid::{CandidType, Deserialize, Principal};
 use ic_base_types::CanisterId;
 pub use ic_btc_interface::Network;
 use ic_btc_interface::{OutPoint, Txid, Utxo};
 use ic_canister_log::log;
-use ic_utils_ensure::{ensure, ensure_eq};
+use ic_utils_ensure::ensure_eq;
 use icrc_ledger_types::icrc1::account::Account;
 use serde::Serialize;
 use std::collections::btree_map::Entry;
@@ -514,91 +516,11 @@ impl CkBtcMinterState {
     }
 
     pub fn check_invariants(&self) -> Result<(), String> {
-        for utxo in self.available_utxos.iter() {
-            ensure!(
-                self.outpoint_account.contains_key(&utxo.outpoint),
-                "the output_account map is missing an entry for {:?}",
-                utxo.outpoint
-            );
-
-            ensure!(
-                self.utxos_state_addresses
-                    .iter()
-                    .any(|(_, utxos)| utxos.contains(utxo)),
-                "available utxo {:?} does not belong to any account",
-                utxo
-            );
-        }
-
-        for (addr, utxos) in self.utxos_state_addresses.iter() {
-            for utxo in utxos.iter() {
-                ensure_eq!(
-                    self.outpoint_account.get(&utxo.outpoint),
-                    Some(addr),
-                    "missing outpoint account for {:?}",
-                    utxo.outpoint
-                );
-            }
-        }
-
-        for (l, r) in self
-            .pending_retrieve_btc_requests
-            .iter()
-            .zip(self.pending_retrieve_btc_requests.iter().skip(1))
-        {
-            ensure!(
-                l.received_at <= r.received_at,
-                "pending retrieve_btc requests are not sorted by receive time"
-            );
-        }
-
-        for tx in &self.stuck_transactions {
-            ensure!(
-                self.replacement_txid.contains_key(&tx.txid),
-                "stuck transaction {} does not have a replacement id",
-                &tx.txid,
-            );
-        }
-
-        for (old_txid, new_txid) in &self.replacement_txid {
-            ensure!(
-                self.stuck_transactions
-                    .iter()
-                    .any(|tx| &tx.txid == old_txid),
-                "not found stuck transaction {}",
-                old_txid,
-            );
-
-            ensure!(
-                self.submitted_transactions
-                    .iter()
-                    .chain(self.stuck_transactions.iter())
-                    .any(|tx| &tx.txid == new_txid),
-                "not found replacement transaction {}",
-                new_txid,
-            );
-        }
-
-        ensure_eq!(
-            self.replacement_txid.len(),
-            self.rev_replacement_txid.len(),
-            "direct and reverse TX replacement links don't match"
-        );
-        for (old_txid, new_txid) in &self.replacement_txid {
-            ensure_eq!(
-                self.rev_replacement_txid.get(new_txid),
-                Some(old_txid),
-                "no back link for {} -> {} TX replacement",
-                old_txid,
-                new_txid,
-            );
-        }
-
-        Ok(())
+        CheckInvariantsImpl::check_invariants(self)
     }
 
     // public for only for tests
-    pub(crate) fn add_utxos(&mut self, account: Account, utxos: Vec<Utxo>) {
+    pub(crate) fn add_utxos<I: CheckInvariants>(&mut self, account: Account, utxos: Vec<Utxo>) {
         if utxos.is_empty() {
             return;
         }
@@ -614,9 +536,9 @@ impl CkBtcMinterState {
             account_bucket.insert(utxo);
         }
 
-        #[cfg(debug_assertions)]
-        self.check_invariants()
-            .expect("state invariants are violated");
+        if cfg!(debug_assertions) {
+            I::check_invariants(self).expect("state invariants are violated");
+        }
     }
 
     pub fn retrieve_btc_status_v2_by_account(
@@ -1233,6 +1155,17 @@ impl CkBtcMinterState {
         );
 
         Ok(())
+    }
+
+    pub fn get_total_btc_managed(&self) -> u64 {
+        let mut total_btc = 0_u64;
+        for req in self.submitted_transactions.iter() {
+            if let Some(change_output) = &req.change_output {
+                total_btc += change_output.value;
+            }
+        }
+        total_btc += self.available_utxos.iter().map(|u| u.value).sum::<u64>();
+        total_btc
     }
 }
 
