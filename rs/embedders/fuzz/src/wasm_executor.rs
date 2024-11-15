@@ -1,6 +1,7 @@
 use crate::ic_wasm::ICWasmModule;
 use ic_config::{
     embedders::{Config, FeatureFlags},
+    execution_environment::Config as HypervisorConfig,
     flag_status::FlagStatus,
     subnet_config::SchedulerConfig,
 };

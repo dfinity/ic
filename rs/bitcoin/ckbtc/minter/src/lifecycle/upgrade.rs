@@ -1,5 +1,6 @@
 use crate::logs::P0;
 use crate::state::eventlog::{replay, Event};
+use crate::state::invariants::CheckInvariantsImpl;
 use crate::state::{replace_state, Mode};
 use crate::storage::{count_events, events, record_event};
 use candid::{CandidType, Deserialize};
@@ -51,7 +52,7 @@ pub fn post_upgrade(upgrade_args: Option<UpgradeArgs>) {
 
     log!(P0, "[upgrade]: replaying {} events", count_events());
 
-    let state = replay(events()).unwrap_or_else(|e| {
+    let state = replay::<CheckInvariantsImpl>(events()).unwrap_or_else(|e| {
         ic_cdk::trap(&format!(
             "[upgrade]: failed to replay the event log: {:?}",
             e
