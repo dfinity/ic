@@ -207,6 +207,7 @@ pub struct Hypervisor {
     deterministic_time_slicing: FlagStatus,
     cost_to_compile_wasm_instruction: NumInstructions,
     dirty_page_overhead: NumInstructions,
+    canister_guaranteed_callback_quota: usize,
 }
 
 impl Hypervisor {
@@ -316,6 +317,7 @@ impl Hypervisor {
                 .embedders_config
                 .cost_to_compile_wasm_instruction,
             dirty_page_overhead,
+            canister_guaranteed_callback_quota: config.canister_guaranteed_callback_quota,
         }
     }
 
@@ -330,6 +332,7 @@ impl Hypervisor {
         deterministic_time_slicing: FlagStatus,
         cost_to_compile_wasm_instruction: NumInstructions,
         dirty_page_overhead: NumInstructions,
+        canister_guaranteed_callback_quota: usize,
     ) -> Self {
         Self {
             wasm_executor,
@@ -342,6 +345,7 @@ impl Hypervisor {
             deterministic_time_slicing,
             cost_to_compile_wasm_instruction,
             dirty_page_overhead,
+            canister_guaranteed_callback_quota,
         }
     }
 
@@ -438,12 +442,25 @@ impl Hypervisor {
             ),
         }
         let caller = api_type.caller();
+        let subnet_available_callbacks = round_limits.subnet_available_callbacks.max(0) as u64;
+        let remaining_canister_callback_quota = system_state.call_context_manager().map_or(
+            // The default is never used (since we would never end up here with no
+            // `CallContextManager`) but preferrable to an `unwrap()`.
+            self.canister_guaranteed_callback_quota,
+            |ccm| {
+                self.canister_guaranteed_callback_quota
+                    .saturating_sub(ccm.callbacks().len())
+            },
+        ) as u64;
+        // Maximum between remaining canister quota and available subnet shared pool.
+        let available_callbacks = subnet_available_callbacks.max(remaining_canister_callback_quota);
         let static_system_state = SandboxSafeSystemState::new(
             system_state,
             *self.cycles_account_manager,
             network_topology,
             self.dirty_page_overhead,
             execution_parameters.compute_allocation,
+            available_callbacks,
             request_metadata,
             api_type.caller(),
             api_type.call_context_id(),

@@ -190,6 +190,8 @@ pub struct ExecutionTest {
     message_id: u64,
     // The memory available in the subnet.
     subnet_available_memory: SubnetAvailableMemory,
+    // The pool of callbacks available on the subnet.
+    subnet_available_callbacks: i64,
     // The number of instructions executed so far per canister.
     executed_instructions: HashMap<CanisterId, NumInstructions>,
     // The total cost of execution so far per canister.
@@ -451,6 +453,14 @@ impl ExecutionTest {
 
     pub fn set_subnet_available_memory(&mut self, memory: SubnetAvailableMemory) {
         self.subnet_available_memory = memory
+    }
+
+    pub fn subnet_available_callbacks(&self) -> i64 {
+        self.subnet_available_callbacks
+    }
+
+    pub fn set_subnet_available_callbacks(&mut self, callbacks: i64) {
+        self.subnet_available_callbacks = callbacks
     }
 
     pub fn metrics_registry(&self) -> &MetricsRegistry {
@@ -1050,6 +1060,7 @@ impl ExecutionTest {
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
             subnet_available_memory: self.subnet_available_memory,
+            subnet_available_callbacks: self.subnet_available_callbacks,
             compute_allocation_used,
         };
         let instruction_limits = InstructionLimits::new(
@@ -1094,6 +1105,7 @@ impl ExecutionTest {
             self.subnet_size(),
         );
         self.subnet_available_memory = round_limits.subnet_available_memory;
+        self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
         state.put_canister_state(result.canister);
         state.metadata.heap_delta_estimate += result.heap_delta;
         self.state = Some(state);
@@ -1168,6 +1180,7 @@ impl ExecutionTest {
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
             subnet_available_memory: self.subnet_available_memory,
+            subnet_available_callbacks: self.subnet_available_callbacks,
             compute_allocation_used,
         };
         let result = self.exec_env.execute_canister_response(
@@ -1192,6 +1205,7 @@ impl ExecutionTest {
             }
         };
         self.subnet_available_memory = round_limits.subnet_available_memory;
+        self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
 
         state.metadata.heap_delta_estimate += heap_delta;
         self.update_execution_stats(
@@ -1265,6 +1279,7 @@ impl ExecutionTest {
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
             subnet_available_memory: self.subnet_available_memory,
+            subnet_available_callbacks: self.subnet_available_callbacks,
             compute_allocation_used,
         };
 
@@ -1279,6 +1294,7 @@ impl ExecutionTest {
             &mut round_limits,
         );
         self.subnet_available_memory = round_limits.subnet_available_memory;
+        self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
         self.state = Some(new_state);
         if let Some(canister_id) = maybe_canister_id {
             if let Some(instructions_used) = instructions_used {
@@ -1317,6 +1333,7 @@ impl ExecutionTest {
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
             subnet_available_memory: self.subnet_available_memory,
+            subnet_available_callbacks: self.subnet_available_callbacks,
             compute_allocation_used,
         };
         for canister_id in canister_ids {
@@ -1358,6 +1375,7 @@ impl ExecutionTest {
             canisters.insert(canister_id, canister);
         }
         self.subnet_available_memory = round_limits.subnet_available_memory;
+        self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
         state.put_canister_states(canisters);
         self.state = Some(state);
         executed_any
@@ -1394,6 +1412,7 @@ impl ExecutionTest {
                 let mut round_limits = RoundLimits {
                     instructions: RoundInstructions::from(i64::MAX),
                     subnet_available_memory: self.subnet_available_memory,
+                    subnet_available_callbacks: self.subnet_available_callbacks,
                     compute_allocation_used,
                 };
                 let (new_state, instructions_used) = self.exec_env.resume_install_code(
@@ -1405,6 +1424,7 @@ impl ExecutionTest {
                 );
                 state = new_state;
                 self.subnet_available_memory = round_limits.subnet_available_memory;
+                self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
                 if let Some(instructions_used) = instructions_used {
                     self.update_execution_stats(
                         canister_id,
@@ -1417,6 +1437,7 @@ impl ExecutionTest {
                 let mut round_limits = RoundLimits {
                     instructions: RoundInstructions::from(i64::MAX),
                     subnet_available_memory: self.subnet_available_memory,
+                    subnet_available_callbacks: self.subnet_available_callbacks,
                     compute_allocation_used,
                 };
                 let result = execute_canister(
@@ -1431,6 +1452,7 @@ impl ExecutionTest {
                 );
                 state.metadata.heap_delta_estimate += result.heap_delta;
                 self.subnet_available_memory = round_limits.subnet_available_memory;
+                self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
                 if let Some(instructions_used) = result.instructions_used {
                     self.update_execution_stats(
                         canister_id,
@@ -1911,6 +1933,11 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_canister_callback_quota(mut self, canister_callback_quota: usize) -> Self {
+        self.execution_config.canister_guaranteed_callback_quota = canister_callback_quota;
+        self
+    }
+
     pub fn with_subnet_features(self, subnet_features: &str) -> Self {
         Self {
             subnet_features: String::from(subnet_features),
@@ -2322,6 +2349,7 @@ impl ExecutionTestBuilder {
                     .subnet_wasm_custom_sections_memory_capacity
                     .get() as i64,
             ),
+            subnet_available_callbacks: self.execution_config.subnet_callback_soft_limit as i64,
             time: self.time,
             dirty_heap_page_overhead,
             instruction_limits: InstructionLimits::new(
