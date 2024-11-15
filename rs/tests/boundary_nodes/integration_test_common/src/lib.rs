@@ -31,7 +31,7 @@ use ic_system_test_driver::{
         },
     },
     retry_with_msg_async,
-    util::{agent_observes_canister_module, assert_create_agent},
+    util::{agent_observes_canister_module, assert_create_agent, block_on},
 };
 use std::{env, iter, net::SocketAddrV6, time::Duration};
 
@@ -95,24 +95,7 @@ async fn install_counter_canister(env: TestEnv, logger: Logger) -> Result<Princi
     Ok::<_, Error>(cid)
 }
 
-/* tag::catalog[]
-Title:: Boundary Nodes API Endpoints Test
-
-Goal:: Check all API endpoints (status/read_state/query/call)
-
-Runbook:
-There are 5 subtests:
-* api/v2/status - just make a status call against the boundary node
-* api/v2/query - install a counter canister and query it
-* api/v2/call - install a counter canister and update it
-* api/v3/call - install a counter canister and update it
-* api/v2/read_state subnet path - request the subnet metrics from the certified state
-* api/v2/read_state canister path - install a counter canister and request the module hash of the canister from the state
-
-end::catalog[] */
-pub fn api_endpoints_test(env: TestEnv) {
-    let logger = env.logger();
-
+fn setup_client(env: TestEnv) -> Result<(reqwest::Client, String), Error> {
     let boundary_node = env
         .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
         .unwrap()
@@ -120,7 +103,7 @@ pub fn api_endpoints_test(env: TestEnv) {
         .expect("failed to get BN snapshot");
 
     let client_builder = ClientBuilder::new().redirect(Policy::none());
-    let (client_builder, host_orig) = if let Some(playnet) = boundary_node.get_playnet() {
+    let (client_builder, host) = if let Some(playnet) = boundary_node.get_playnet() {
         (client_builder, playnet)
     } else {
         let host = "ic0.app";
@@ -132,213 +115,213 @@ pub fn api_endpoints_test(env: TestEnv) {
     };
     let client = client_builder.build().unwrap();
 
-    let rt = Runtime::new().expect("failed to create tokio runtime");
-    let futs: FuturesUnordered<tokio::task::JoinHandle<Result<(), Error>>> =
-        FuturesUnordered::new();
+    Ok((client, host))
+}
 
-    // api/v2/status
-    futs.push(rt.spawn({
-        let host = host_orig.clone();
-        let client = client.clone();
-        let logger = logger.clone();
-        let name = "api/v2/status";
-        info!(&logger, "Starting subtest {}", name);
+/* tag::catalog[]
+Title:: Boundary Nodes API Endpoints Test - Status
 
-        async move {
-            let res = client
-                .get(format!("https://{host}/api/v2/status"))
-                .send()
-                .await?;
+Goal:: api/v2/status - just make a status call against the boundary node
 
-            if res.status() != StatusCode::OK {
-                bail!("{name} failed: {}", res.status())
-            }
+end::catalog[] */
+pub fn api_status_test(env: TestEnv) {
+    let name = "api/v2/status";
+    let logger = env.logger();
+    info!(&logger, "Starting {name} test");
 
-            #[derive(Deserialize)]
-            struct Status {
-                replica_health_status: String,
-            }
+    let (client, host) = setup_client(env).expect("failed to setup client");
 
-            let body = res.bytes().await?;
+    block_on(async move {
+        let res = client
+            .get(format!("https://{host}/api/v2/status"))
+            .send()
+            .await?;
 
-            let Status {
-                replica_health_status,
-            } = serde_cbor::from_slice::<Status>(&body)?;
-
-            if replica_health_status != "healthy" {
-                bail!("{name} failed: status check failed: {replica_health_status}")
-            }
-            Ok(())
-        }
-    }));
-
-    // api/v2/query
-    let host = host_orig.clone();
-    futs.push(rt.spawn({
-        let logger = logger.clone();
-        let client = client.clone();
-        let env = env.clone();
-        let name = "api/v2/query - query counter";
-        info!(&logger, "Starting subtest {}", name);
-
-        async move {
-            let cid = install_counter_canister(env, logger.clone()).await?;
-
-            let transport =
-                ReqwestTransport::create_with_client(format!("https://{host}/"), client)?;
-
-            let agent = Agent::builder().with_transport(transport).build()?;
-            agent.fetch_root_key().await?;
-
-            let out = agent.query(&cid, "read").call().await?;
-            if !out.eq(&[0, 0, 0, 0]) {
-                bail!("{name} failed: got {:?}, expected {:?}", out, &[0, 0, 0, 0],)
-            }
-
-            Ok(())
-        }
-    }));
-
-    // api/v2/call
-    futs.push(rt.spawn({
-        let host = host_orig.clone();
-        let logger = logger.clone();
-        let client = client.clone();
-        let env = env.clone();
-        let name = "api/v2/call - update counter";
-        info!(&logger, "Starting subtest {}", name);
-
-        async move {
-            let cid = install_counter_canister(env, logger.clone()).await?;
-
-            let transport =
-                ReqwestTransport::create_with_client(format!("https://{host}/"), client)?;
-
-            let agent = Agent::builder().with_transport(transport).build()?;
-            agent.fetch_root_key().await?;
-
-            // update call
-            agent.update(&cid, "write").call_and_wait().await?;
-
-            // check that the update call went through
-            let out = agent.query(&cid, "read").call().await?;
-            if !out.eq(&[1, 0, 0, 0]) {
-                bail!("{name} failed: got {:?}, expected {:?}", out, &[1, 0, 0, 0],)
-            }
-
-            Ok(())
-        }
-    }));
-
-    // api/v3/call
-    futs.push(rt.spawn({
-        let host = host_orig.clone();
-        let logger = logger.clone();
-        let client = client.clone();
-        let env = env.clone();
-        let name = "api/v3/call - update counter";
-        info!(&logger, "Starting subtest {}", name);
-
-        async move {
-            let cid = install_counter_canister(env.clone(), logger.clone()).await?;
-
-            let transport =
-                ReqwestTransport::create_with_client(format!("https://{host}/"), client)?
-                    .with_use_call_v3_endpoint();
-
-            let agent = Agent::builder().with_transport(transport).build()?;
-            agent.fetch_root_key().await?;
-
-            // update call
-            agent.update(&cid, "write").call_and_wait().await?;
-
-            // check that the update call went through
-            let out = agent.query(&cid, "read").call().await?;
-            if !out.eq(&[1, 0, 0, 0]) {
-                bail!("{name} failed: got {:?}, expected {:?}", out, &[1, 0, 0, 0],)
-            }
-            Ok(())
-        }
-    }));
-
-    // api/v2/read_state via subnet (fetching the subnet metrics)
-    futs.push(rt.spawn({
-        let host = host_orig.clone();
-        let logger = logger.clone();
-        let client = client.clone();
-        let env = env.clone();
-        let name = "api/v2/read state - subnet path";
-        info!(&logger, "Starting subtest {}", name);
-
-        async move {
-            let transport =
-                ReqwestTransport::create_with_client(format!("https://{host}/"), client)?;
-
-            let agent = Agent::builder().with_transport(transport).build()?;
-            agent.fetch_root_key().await?;
-
-            let subnet_id: Principal = env
-                .topology_snapshot()
-                .subnets()
-                .next()
-                .expect("no subnets found")
-                .subnet_id
-                .get()
-                .0;
-            let metrics = agent.read_state_subnet_metrics(subnet_id).await?;
-            info!(&logger, "subnet metrics are {:?}", metrics);
-            Ok(())
-        }
-    }));
-
-    // api/v2/read_state via canister (fetching the module hash of a canister)
-    futs.push(rt.spawn({
-        let host = host_orig.clone();
-        let logger = logger.clone();
-        let client = client;
-        let env = env.clone();
-        let name = "api/v2/read state - canister path";
-        info!(&logger, "Starting subtest {}", name);
-
-        async move {
-            let cid = install_counter_canister(env.clone(), logger.clone()).await?;
-
-            let transport =
-                ReqwestTransport::create_with_client(format!("https://{host}/"), client)?;
-
-            let agent = Agent::builder().with_transport(transport).build()?;
-            agent.fetch_root_key().await?;
-
-            let _ = agent.read_state_canister_info(cid, "module_hash").await?;
-
-            Ok(())
-        }
-    }));
-
-    rt.block_on(async move {
-        let mut cnt_err = 0;
-        info!(&logger, "Waiting for subtests");
-
-        for fut in futs {
-            match fut.await {
-                Ok(Err(err)) => {
-                    error!(logger, "test failed: {}", err);
-                    cnt_err += 1;
-                }
-                Err(err) => {
-                    error!(logger, "test panicked: {}", err);
-                    cnt_err += 1;
-                }
-                _ => {}
-            }
+        if res.status() != StatusCode::OK {
+            bail!("{name} failed: {}", res.status())
         }
 
-        match cnt_err {
-            0 => Ok(()),
-            _ => bail!("failed with {cnt_err} errors"),
+        #[derive(Deserialize)]
+        struct Status {
+            replica_health_status: String,
         }
+
+        let body = res.bytes().await?;
+
+        let Status {
+            replica_health_status,
+        } = serde_cbor::from_slice::<Status>(&body)?;
+
+        if replica_health_status != "healthy" {
+            bail!("{name} failed: status check failed: {replica_health_status}")
+        }
+        Ok(())
     })
-    .expect("test suite failed");
+    .unwrap();
+}
+
+/* tag::catalog[]
+Title:: Boundary Nodes API Endpoints Test - Query
+
+Goal:: api/v2/query - install a counter canister and query it
+
+end::catalog[] */
+pub fn api_query_test(env: TestEnv) {
+    let name = "api/v2/query - query counter";
+    let logger = env.logger();
+    info!(&logger, "Starting {name} test");
+
+    let (client, host) = setup_client(env.clone()).expect("failed to setup client");
+
+    block_on(async move {
+        let cid = install_counter_canister(env, logger.clone()).await?;
+
+        let transport = ReqwestTransport::create_with_client(format!("https://{host}/"), client)?;
+
+        let agent = Agent::builder().with_transport(transport).build()?;
+        agent.fetch_root_key().await?;
+
+        let out = agent.query(&cid, "read").call().await?;
+        if !out.eq(&[0, 0, 0, 0]) {
+            bail!("{name} failed: got {:?}, expected {:?}", out, &[0, 0, 0, 0],)
+        }
+
+        Ok(())
+    })
+    .unwrap();
+}
+
+/* tag::catalog[]
+Title:: Boundary Nodes API Endpoints Test - Call
+
+Goal:: api/v2/call - install a counter canister and update it
+
+end::catalog[] */
+pub fn api_call_test(env: TestEnv) {
+    let name = "api/v2/call - update counter";
+    let logger = env.logger();
+    info!(&logger, "Starting {name} test");
+
+    let (client, host) = setup_client(env.clone()).expect("failed to setup client");
+
+    block_on(async move {
+        let cid = install_counter_canister(env, logger.clone()).await?;
+
+        let transport = ReqwestTransport::create_with_client(format!("https://{host}/"), client)?;
+
+        let agent = Agent::builder().with_transport(transport).build()?;
+        agent.fetch_root_key().await?;
+
+        // update call
+        agent.update(&cid, "write").call_and_wait().await?;
+
+        // check that the update call went through
+        let out = agent.query(&cid, "read").call().await?;
+        if !out.eq(&[1, 0, 0, 0]) {
+            bail!("{name} failed: got {:?}, expected {:?}", out, &[1, 0, 0, 0],)
+        }
+
+        Ok(())
+    })
+    .unwrap();
+}
+
+/* tag::catalog[]
+Title:: Boundary Nodes API Endpoints Test - Sync Call
+
+Goal:: api/v3/call - install a counter canister and update it
+
+end::catalog[] */
+pub fn api_sync_call_test(env: TestEnv) {
+    let name = "api/v3/call - update counter";
+    let logger = env.logger();
+    info!(&logger, "Starting {name} test");
+
+    let (client, host) = setup_client(env.clone()).expect("failed to setup client");
+
+    block_on(async move {
+        let cid = install_counter_canister(env.clone(), logger.clone()).await?;
+
+        let transport = ReqwestTransport::create_with_client(format!("https://{host}/"), client)?
+            .with_use_call_v3_endpoint();
+
+        let agent = Agent::builder().with_transport(transport).build()?;
+        agent.fetch_root_key().await?;
+
+        // update call
+        agent.update(&cid, "write").call_and_wait().await?;
+
+        // check that the update call went through
+        let out = agent.query(&cid, "read").call().await?;
+        if !out.eq(&[1, 0, 0, 0]) {
+            bail!("{name} failed: got {:?}, expected {:?}", out, &[1, 0, 0, 0],)
+        }
+        Ok(())
+    })
+    .unwrap();
+}
+
+/* tag::catalog[]
+Title:: Boundary Nodes API Endpoints Test - Read State Canister Path
+
+Goal:: api/v2/read_state canister path - install a counter canister and request the module hash of the canister from the state
+
+end::catalog[] */
+pub fn api_canister_read_state_test(env: TestEnv) {
+    let name = "api/v2/read state - canister path";
+    let logger = env.logger();
+    info!(&logger, "Starting {name} test");
+
+    let (client, host) = setup_client(env.clone()).expect("failed to setup client");
+
+    block_on(async move {
+        let cid = install_counter_canister(env.clone(), logger.clone()).await?;
+
+        let transport = ReqwestTransport::create_with_client(format!("https://{host}/"), client)?;
+
+        let agent = Agent::builder().with_transport(transport).build()?;
+        agent.fetch_root_key().await?;
+
+        let _ = agent.read_state_canister_info(cid, "module_hash").await?;
+
+        Ok::<(), Error>(())
+    })
+    .unwrap();
+}
+
+/* tag::catalog[]
+Title:: Boundary Nodes API Endpoints Test - Read State Subnet Path
+
+Goal:: api/v2/read_state subnet path - request the subnet metrics from the certified state
+
+end::catalog[] */
+pub fn api_subnet_read_state_test(env: TestEnv) {
+    let name = "api/v2/read state - subnet path";
+    let logger = env.logger();
+    info!(&logger, "Starting {name} test");
+
+    let (client, host) = setup_client(env.clone()).expect("failed to setup client");
+
+    block_on(async move {
+        let transport = ReqwestTransport::create_with_client(format!("https://{host}/"), client)?;
+
+        let agent = Agent::builder().with_transport(transport).build()?;
+        agent.fetch_root_key().await?;
+
+        let subnet_id: Principal = env
+            .topology_snapshot()
+            .subnets()
+            .next()
+            .expect("no subnets found")
+            .subnet_id
+            .get()
+            .0;
+        let metrics = agent.read_state_subnet_metrics(subnet_id).await?;
+        info!(&logger, "subnet metrics are {:?}", metrics);
+
+        Ok::<(), Error>(())
+    })
+    .expect("{name} failed");
 }
 
 /* tag::catalog[]

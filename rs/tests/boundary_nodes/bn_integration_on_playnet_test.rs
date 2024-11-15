@@ -3,9 +3,10 @@
 use anyhow::Result;
 
 use ic_boundary_nodes_integration_test_common::{
-    api_endpoints_test, asset_canister_test, canister_denylist_test, content_type_headers_test,
-    cors_headers_test, http_endpoints_test, proxy_http_canister_test, redirect_http_to_https_test,
-    redirect_to_dashboard_test,
+    api_call_test, api_canister_read_state_test, api_query_test, api_status_test,
+    api_subnet_read_state_test, api_sync_call_test, asset_canister_test, canister_denylist_test,
+    content_type_headers_test, cors_headers_test, http_endpoints_test, proxy_http_canister_test,
+    redirect_http_to_https_test, redirect_to_dashboard_test,
 };
 use ic_boundary_nodes_system_test_utils::{
     constants::BOUNDARY_NODE_NAME, helpers::BoundaryNodeHttpsConfig, setup::setup_ic_with_bn,
@@ -27,8 +28,13 @@ fn main() -> Result<()> {
         .with_setup(setup)
         .add_parallel(
             SystemTestSubGroup::new()
+                .add_test(systest!(api_status_test))
+                .add_test(systest!(api_query_test))
+                .add_test(systest!(api_call_test))
+                .add_test(systest!(api_sync_call_test))
+                .add_test(systest!(api_canister_read_state_test))
+                .add_test(systest!(api_subnet_read_state_test))
                 .add_test(systest!(asset_canister_test))
-                .add_test(systest!(api_endpoints_test))
                 .add_test(systest!(content_type_headers_test))
                 .add_test(systest!(cors_headers_test))
                 .add_test(systest!(proxy_http_canister_test))
