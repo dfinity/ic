@@ -8,8 +8,6 @@ DEPENDENCIES = [
     "//rs/ledger_suite/icp:icp_ledger",
     "//rs/nervous_system/proto",
     "//rs/protobuf",
-    "//rs/sns/root",
-    "//rs/sns/swap:swap",
     "//rs/types/base_types",
     "//rs/types/types",
     "//rs/utils",

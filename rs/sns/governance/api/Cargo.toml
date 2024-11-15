@@ -18,8 +18,6 @@ ic-base-types = { path = "../../../types/base_types" }
 ic-nervous-system-proto = { path = "../../../nervous_system/proto" }
 ic-nns-common = { path = "../../common" }
 ic-protobuf = { path = "../../../protobuf" }
-ic-sns-root = { path = "../../../sns/root" }                             # This is just for a couple of PB definitions.
-ic-sns-swap = { path = "../../../sns/swap" }                             # This is just for a couple of PB definitions.
 ic-types = { path = "../../../types/types" }
 icp-ledger = { path = "../../../ledger_suite/icp" }
 itertools = { workspace = true }
