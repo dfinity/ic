@@ -3,7 +3,6 @@ use crate::logs::{P0, P1};
 use crate::memo::Status;
 use crate::queries::WithdrawalFee;
 use crate::state::ReimbursementReason;
-use crate::tasks::schedule_after;
 use async_trait::async_trait;
 use candid::{CandidType, Deserialize};
 use ic_btc_interface::{MillisatoshiPerByte, Network, OutPoint, Satoshi, Txid, Utxo};
@@ -1172,72 +1171,10 @@ pub async fn distribute_kyt_fees() {
 }
 
 pub fn timer<R: CanisterRuntime + 'static>(runtime: R) {
-    use tasks::{pop_if_ready, TaskType};
+    use tasks::{pop_if_ready, run_task};
 
-    const INTERVAL_PROCESSING: Duration = Duration::from_secs(5);
-
-    let task = match pop_if_ready(&runtime) {
-        Some(task) => task,
-        None => return,
-    };
-
-    match task.task_type {
-        TaskType::ProcessLogic => {
-            ic_cdk::spawn(async move {
-                let _guard = match crate::guard::TimerLogicGuard::new() {
-                    Some(guard) => guard,
-                    None => return,
-                };
-
-                let _enqueue_followup_guard = guard((), |_| {
-                    schedule_after(INTERVAL_PROCESSING, TaskType::ProcessLogic, &runtime)
-                });
-
-                submit_pending_requests().await;
-                finalize_requests().await;
-                reimburse_failed_kyt().await;
-            });
-        }
-        TaskType::RefreshFeePercentiles => {
-            ic_cdk::spawn(async move {
-                let _guard = match crate::guard::TimerLogicGuard::new() {
-                    Some(guard) => guard,
-                    None => return,
-                };
-                const FEE_ESTIMATE_DELAY: Duration = Duration::from_secs(60 * 60);
-                let _ = estimate_fee_per_vbyte().await;
-                schedule_after(
-                    FEE_ESTIMATE_DELAY,
-                    TaskType::RefreshFeePercentiles,
-                    &runtime,
-                );
-            });
-        }
-        TaskType::DistributeKytFee => {
-            ic_cdk::spawn(async move {
-                let _guard = match crate::guard::DistributeKytFeeGuard::new() {
-                    Some(guard) => guard,
-                    None => return,
-                };
-
-                const MAINNET_KYT_FEE_DISTRIBUTION_PERIOD: Duration =
-                    Duration::from_secs(24 * 60 * 60);
-
-                match crate::state::read_state(|s| s.btc_network) {
-                    Network::Mainnet | Network::Testnet => {
-                        distribute_kyt_fees().await;
-                        schedule_after(
-                            MAINNET_KYT_FEE_DISTRIBUTION_PERIOD,
-                            TaskType::DistributeKytFee,
-                            &runtime,
-                        );
-                    }
-                    // We use a debug canister build exposing an endpoint
-                    // triggering the fee distribution in tests.
-                    Network::Regtest => {}
-                }
-            });
-        }
+    if let Some(task) = pop_if_ready(&runtime) {
+        ic_cdk::spawn(run_task(task, runtime));
     }
 }
 

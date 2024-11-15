@@ -1,4 +1,9 @@
-use crate::CanisterRuntime;
+use crate::{
+    distribute_kyt_fees, estimate_fee_per_vbyte, finalize_requests, reimburse_failed_kyt,
+    submit_pending_requests, CanisterRuntime,
+};
+use ic_btc_interface::Network;
+use scopeguard::guard;
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
@@ -122,4 +127,60 @@ pub fn pop_if_ready<R: CanisterRuntime>(runtime: &R) -> Option<Task> {
 /// Returns the current value of the global task timer.
 pub fn global_timer() -> u64 {
     LAST_GLOBAL_TIMER.with(|v| v.get())
+}
+
+pub(crate) async fn run_task<R: CanisterRuntime>(task: Task, runtime: R) {
+    const INTERVAL_PROCESSING: Duration = Duration::from_secs(5);
+
+    match task.task_type {
+        TaskType::ProcessLogic => {
+            let _guard = match crate::guard::TimerLogicGuard::new() {
+                Some(guard) => guard,
+                None => return,
+            };
+
+            let _enqueue_followup_guard = guard((), |_| {
+                schedule_after(INTERVAL_PROCESSING, TaskType::ProcessLogic, &runtime)
+            });
+
+            submit_pending_requests().await;
+            finalize_requests().await;
+            reimburse_failed_kyt().await;
+        }
+        TaskType::RefreshFeePercentiles => {
+            let _guard = match crate::guard::TimerLogicGuard::new() {
+                Some(guard) => guard,
+                None => return,
+            };
+            const FEE_ESTIMATE_DELAY: Duration = Duration::from_secs(60 * 60);
+            let _ = estimate_fee_per_vbyte().await;
+            schedule_after(
+                FEE_ESTIMATE_DELAY,
+                TaskType::RefreshFeePercentiles,
+                &runtime,
+            );
+        }
+        TaskType::DistributeKytFee => {
+            let _guard = match crate::guard::DistributeKytFeeGuard::new() {
+                Some(guard) => guard,
+                None => return,
+            };
+
+            const MAINNET_KYT_FEE_DISTRIBUTION_PERIOD: Duration = Duration::from_secs(24 * 60 * 60);
+
+            match crate::state::read_state(|s| s.btc_network) {
+                Network::Mainnet | Network::Testnet => {
+                    distribute_kyt_fees().await;
+                    schedule_after(
+                        MAINNET_KYT_FEE_DISTRIBUTION_PERIOD,
+                        TaskType::DistributeKytFee,
+                        &runtime,
+                    );
+                }
+                // We use a debug canister build exposing an endpoint
+                // triggering the fee distribution in tests.
+                Network::Regtest => {}
+            }
+        }
+    }
 }
