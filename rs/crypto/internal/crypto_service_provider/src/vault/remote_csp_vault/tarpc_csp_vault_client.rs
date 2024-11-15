@@ -52,7 +52,7 @@ use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{mpsc::sync_channel, Arc};
 use std::time::{Duration, SystemTime};
 use tarpc::serde_transport;
 use tracing::instrument;
@@ -102,7 +102,7 @@ impl RemoteCspVault {
         F: Future + Send + 'static,
         F::Output: Send + 'static,
     {
-        let (tx, rx) = std::sync::mpsc::channel();
+        let (tx, rx) = sync_channel(1);
         self.internal_rt_for_safe_block_on.spawn(async move {
             let res = task.await;
             let _ = tx.send(res);
