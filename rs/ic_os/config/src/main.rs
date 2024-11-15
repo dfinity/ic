@@ -419,6 +419,7 @@ pub fn main() -> Result<()> {
                 ipv4_prefix_length,
                 domain_name,
                 verbose,
+                node_reward_type,
             } = get_config_ini_settings(&config_ini_path)?;
 
             // create NetworkSettings
@@ -473,6 +474,7 @@ pub fn main() -> Result<()> {
             let use_ssh_authorized_keys = Path::new("/boot/config/ssh_authorized_keys").exists();
 
             let icos_settings = ICOSSettings {
+                node_reward_type,
                 mgmt_mac,
                 deployment_environment: deployment_json_settings.deployment.name,
                 logging,
