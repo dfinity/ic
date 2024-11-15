@@ -113,7 +113,7 @@ impl From<(&ic_types::messages::Request, CertificationVersion)> for RequestV17 {
             method_name: request.method_name.clone(),
             method_payload: request.method_payload.clone(),
             cycles_payment: None,
-            metadata: request.metadata.as_ref().map(From::from),
+            metadata: Some((&request.metadata).into()),
         }
     }
 }
@@ -139,7 +139,7 @@ impl TryFrom<RequestV17> for ic_types::messages::Request {
             payment,
             method_name: request.method_name,
             method_payload: request.method_payload,
-            metadata: request.metadata.into(),
+            metadata: request.metadata.map_or_else(Default::default, From::from),
             deadline: NO_DEADLINE,
         })
     }

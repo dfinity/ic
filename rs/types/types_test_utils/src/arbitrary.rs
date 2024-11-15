@@ -141,11 +141,7 @@ prop_compose! {
             payment: Cycles::from(cycles_payment),
             method_name,
             method_payload,
-<<<<<<< HEAD
-            metadata: if populate_metadata { metadata } else { Default::default() },
-=======
             metadata,
->>>>>>> 2244bbbcbc0021c896b71f12c84c7454214f15db
             deadline: if populate_deadline { deadline } else { NO_DEADLINE },
         }
     }

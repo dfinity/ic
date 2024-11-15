@@ -522,7 +522,7 @@ impl From<(&ic_types::messages::Request, CertificationVersion)> for Request {
             method_name: request.method_name.clone(),
             method_payload: request.method_payload.clone(),
             cycles_payment: None,
-            metadata: request.metadata.as_ref().map(From::from),
+            metadata: Some((&request.metadata).into()),
             deadline: request.deadline.as_secs_since_unix_epoch(),
         }
     }
@@ -549,7 +549,7 @@ impl TryFrom<Request> for ic_types::messages::Request {
             payment,
             method_name: request.method_name,
             method_payload: request.method_payload,
-            metadata: request.metadata.map(From::from),
+            metadata: request.metadata.map_or_else(Default::default, From::from),
             deadline: CoarseTime::from_secs_since_unix_epoch(request.deadline),
         })
     }

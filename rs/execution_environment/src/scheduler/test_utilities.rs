@@ -1322,7 +1322,7 @@ impl TestWasmExecutorCore {
             payment: Cycles::zero(),
             method_name: "update".into(),
             method_payload: encode_message_id_as_payload(call_message_id),
-            metadata: None,
+            metadata: Default::default(),
             deadline,
         };
         if let Err(req) = system_state.push_output_request(

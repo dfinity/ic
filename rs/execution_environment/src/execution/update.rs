@@ -102,10 +102,9 @@ pub fn execute_update(
     );
 
     let request_metadata = match &call_or_task {
-        CanisterCallOrTask::Call(CanisterCall::Request(request)) => match &request.metadata {
-            Some(metadata) => metadata.for_downstream_call(),
-            None => RequestMetadata::for_new_call_tree(time),
-        },
+        CanisterCallOrTask::Call(CanisterCall::Request(request)) => {
+            request.metadata.for_downstream_call()
+        }
         _ => RequestMetadata::for_new_call_tree(time),
     };
 

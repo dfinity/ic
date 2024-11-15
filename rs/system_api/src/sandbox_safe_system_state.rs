@@ -348,7 +348,7 @@ impl SystemStateChanges {
             metadata: self
                 .requests
                 .first()
-                .map_or_else(Default::default(), |request| request.metadata.clone()),
+                .map_or_else(Default::default, |request| request.metadata.clone()),
             count: self.requests.len() as u64,
         };
 
