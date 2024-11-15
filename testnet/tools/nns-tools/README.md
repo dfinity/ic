@@ -408,33 +408,44 @@ At a high level, there are two sub-step here:
 Generate a mostly pre-populated proposal text file:
 
 ```bash
+# Fill these in.
+RC=FAKE
+# Space separated names. E.g. governance sns-wasm
+NNS_CANISTERS=
+# Similar to NNS_CANISTERS
+SNS_CANISTERS=
+# Path to an empty dir where the proposal files will be saved.
+PROPOSALS_DIR=/tmp/release-$(date --iso)
+
+mkdir $PROPOSALS_DIR
+
 # NNS:
-./testnet/tools/nns-tools/prepare-nns-upgrade-proposal-text.sh \
-    <CANISTER_NAME> \
-    <TARGET_VERSION> \
-    > <OUTPUT_PROPOSAL_FILE>
+for CANISTER in $NNS_CANISTERS
+do
+    ./testnet/tools/nns-tools/prepare-nns-upgrade-proposal-text.sh \
+        $CANISTER \
+        $RC \
+        > $PROPOSALS_DIR/nns-$CANISTER.md
+done
 
 # SNS:
-./testnet/tools/nns-tools/prepare-publish-sns-wasm-proposal-text.sh \
-    <CANISTER_NAME> \
-    <TARGET_VERSION> \
-    <OUTPUT_PROPOSAL_FILE> # no `>`
+for CANISTER in $SNS_CANISTERS
+do
+    ./testnet/tools/nns-tools/prepare-publish-sns-wasm-proposal-text.sh \
+        $CANISTER \
+        $RC \
+        $PROPOSALS_DIR/sns-$CANISTER.md # no `>`
+done
+
+ls $PROPOSALS_DIR
 ```
 
-For example:
+You may need to set the `PREVIOUS_COMMIT` environment variable. This is needed
+in the unlikely case where the git commit ID is not recorded in the currently
+running WASM.
 
-```bash
-./testnet/tools/nns-tools/prepare-nns-upgrade-proposal-text.sh \
-    registry \
-    d2d9d63309cf568e3b2c2a0bc366b6850b044792 \
-    > /tmp/registry-upgrade-proposal-2023-09-29.md
-```
-
-You may need to set the `PREVIOUS_COMMIT` environment variable. This is needed in the unlikely case
-where the git commit ID is not recorded in the currently running WASM.
-
-Once the script has done its part, your job is then to fill in the TODO(s). Figuring out how to fill
-those out is a matter of looking at the list of commits generated in the proposal.
+It used to be that you had to fill in some TODOs, but we simplified somewhat
+recently, and that is no longer required.
 
 ### Submit the Proposal(s)
 
@@ -452,15 +463,24 @@ pkcs11-tool --login --test
 Finally, run
 
 ```bash
+# In addition to the following, we assume that you still have the environment
+# variables from the previous section...
+SUBMITTING_NEURON_ID=51 # e.g. for Daniel Wong, 51
+
 # NNS:
-./testnet/tools/nns-tools/submit-mainnet-nns-upgrade-proposal.sh \
-    <PROPOSAL_FILE> \
-    <YOUR_NEURON_ID>
+for CANISTER in $NNS_CANISTERS
+do
+    ./testnet/tools/nns-tools/submit-mainnet-nns-upgrade-proposal.sh \
+        $PROPOSALS_DIR/nns-$CANISTER.md \
+        $SUBMITTING_NEURON_ID
 
 # SNS:
-./testnet/tools/nns-tools/submit-mainnet-publish-sns-wasm-proposal.sh \
-    <PROPOSAL_FILE> \
-    <YOUR_NEURON_ID>
+for CANISTER in $SNS_CANISTERS
+do
+    ./testnet/tools/nns-tools/submit-mainnet-publish-sns-wasm-proposal.sh \
+        $PROPOSALS_DIR/sns-$CANISTER.md \
+        $SUBMITTING_NEURON_ID
+done
 ```
 
 You can look up your neuron ID [here in Notion][neuron-id]. For example, Daniel Wong has neuron ID 51.
