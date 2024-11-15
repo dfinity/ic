@@ -221,7 +221,7 @@ pub fn main() -> Result<()> {
             }
 
             let icos_settings = ICOSSettings {
-                node_reward_type,
+                node_reward_type: Some(node_reward_type),
                 mgmt_mac,
                 deployment_environment: deployment_json_settings.deployment.name,
                 logging,
