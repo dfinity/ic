@@ -3,6 +3,7 @@ use anyhow::Result;
 use bitcoincore_rpc::RpcApi;
 use candid::{Nat, Principal};
 use ic_base_types::PrincipalId;
+use ic_btc_kyt::KytMode as NewKytMode;
 use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::{
     lifecycle::upgrade::UpgradeArgs,
@@ -24,7 +25,7 @@ use ic_system_test_driver::{
 };
 use ic_tests_ckbtc::{
     activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_ledger,
-    install_minter, install_new_kyt, setup, subnet_sys,
+    install_minter, install_new_kyt, setup, subnet_sys, upgrade_new_kyt,
     utils::{
         assert_account_balance, assert_burn_transaction, assert_mint_transaction, ensure_wallet,
         generate_blocks, get_btc_address, get_btc_client, update_balance,
@@ -94,6 +95,11 @@ pub fn test_retrieve_btc(env: TestEnv) {
             owner: caller,
             subaccount: Some(subaccount1),
         };
+
+        // Because bitcoind only allows to see one's own transaction, and we
+        // are using multiple addresses in this test. We have to change KYT
+        // mode to AcceptAll, otherwise bitcoind will return 500 error.
+        upgrade_new_kyt(&mut new_kyt_canister, NewKytMode::AcceptAll).await;
 
         // Get the BTC address of the caller's sub-accounts.
         let btc_address0 = get_btc_address(&minter_agent, &logger, subaccount0).await;
