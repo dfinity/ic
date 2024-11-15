@@ -527,8 +527,13 @@ fn test_list_neurons() {
         .expect("Failed to start dissolving neuron");
     state_machine.advance_time(Duration::from_secs(INITIAL_NEURON_DISSOLVE_DELAY + 1));
     state_machine.tick();
-    let disburse_result =
-        nns_disburse_neuron(&state_machine, principal_1, neuron_id_2, 200_000_000, None);
+    let disburse_result = nns_disburse_neuron(
+        &state_machine,
+        principal_1,
+        neuron_id_2,
+        Some(200_000_000),
+        None,
+    );
 
     match disburse_result {
         ManageNeuronResponse {
