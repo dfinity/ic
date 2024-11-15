@@ -95,6 +95,19 @@ impl RemoteCspVault {
     fn tokio_block_on<T: Future>(&self, task: T) -> T::Output {
         self.tokio_runtime_handle.block_on(task)
     }
+
+    fn tokio_safe_block_on<F: Future>(&self, task: F) -> F::Output
+    where
+        F: Future + Send + 'static,
+        F::Output: Send + 'static,
+    {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        self.tokio_runtime_handle.spawn(async move {
+            let res = task.await;
+            let _ = tx.send(res);
+        });
+        rx.blocking_recv().unwrap()
+    }
 }
 
 const DEFAULT_RPC_TIMEOUT: Duration = Duration::from_secs(300); // 5 minutes
@@ -256,12 +269,17 @@ impl BasicSignatureCspVault for RemoteCspVault {
         message: Vec<u8>,
         key_id: KeyId,
     ) -> Result<CspSignature, CspBasicSignatureError> {
-        self.tokio_block_on(self.tarpc_csp_client.sign(
-            context_with_timeout(self.rpc_timeout),
-            algorithm_id,
-            ByteBuf::from(message),
-            key_id,
-        ))
+        let c = self.tarpc_csp_client.clone();
+        let t = self.rpc_timeout.clone();
+        self.tokio_block_on(async move {
+            c.sign(
+                context_with_timeout(t),
+                algorithm_id,
+                ByteBuf::from(message),
+                key_id,
+            )
+            .await
+        })
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
             Err(CspBasicSignatureError::TransientInternalError {
                 internal_error: rpc_error.to_string(),
@@ -559,23 +577,20 @@ impl TlsHandshakeCspVault for RemoteCspVault {
 
     #[instrument(skip_all)]
     fn tls_sign(&self, message: Vec<u8>, key_id: KeyId) -> Result<CspSignature, CspTlsSignError> {
-        // Here we cannot call `block_on` directly but have to wrap it in
-        // `block_in_place` because this method here is called via a Rustls
-        // callback (via our implementation of the `rustls::sign::Signer`
-        // trait) from the async function `tokio_rustls::TlsAcceptor::accept`,
-        // which in turn is called from our async function
-        // `TlsHandshake::perform_tls_server_handshake`.
-        #[allow(clippy::disallowed_methods)]
-        tokio::task::block_in_place(|| {
-            self.tokio_block_on(self.tarpc_csp_client.tls_sign(
-                context_with_timeout(self.rpc_timeout),
-                ByteBuf::from(message),
-                key_id,
-            ))
-            .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-                Err(CspTlsSignError::TransientInternalError {
-                    internal_error: rpc_error.to_string(),
-                })
+        let client = self.tarpc_csp_client.clone();
+        let timeout = self.rpc_timeout.clone();
+        self.tokio_safe_block_on(async move {
+            client
+                .tls_sign(
+                    context_with_timeout(timeout),
+                    ByteBuf::from(message),
+                    key_id,
+                )
+                .await
+        })
+        .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
+            Err(CspTlsSignError::TransientInternalError {
+                internal_error: rpc_error.to_string(),
             })
         })
     }
