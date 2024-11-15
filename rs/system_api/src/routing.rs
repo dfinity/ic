@@ -10,9 +10,10 @@ use ic_management_canister_types::{
     ClearChunkStoreArgs, ComputeInitialIDkgDealingsArgs, DeleteCanisterSnapshotArgs,
     ECDSAPublicKeyArgs, InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs,
     LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs,
-    Payload, ProvisionalTopUpCanisterArgs, SchnorrPublicKeyArgs, SignWithECDSAArgs,
-    SignWithSchnorrArgs, StoredChunksArgs, SubnetInfoArgs, TakeCanisterSnapshotArgs,
-    UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs,
+    Payload, ProvisionalTopUpCanisterArgs, ReshareChainKeyArgs, SchnorrPublicKeyArgs,
+    SignWithECDSAArgs, SignWithSchnorrArgs, StoredChunksArgs, SubnetInfoArgs,
+    TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs,
+    VetKdDeriveEncryptedKeyArgs, VetKdPublicKeyArgs,
 };
 use ic_replicated_state::NetworkTopology;
 use itertools::Itertools;
@@ -205,6 +206,15 @@ pub(super) fn resolve_destination(
                 IDkgSubnetKind::OnlyHoldsKey,
             )
         }
+        Ok(Ic00Method::ReshareChainKey) => {
+            let args = ReshareChainKeyArgs::decode(payload)?;
+            route_idkg_message(
+                &args.key_id,
+                network_topology,
+                &Some(args.subnet_id),
+                IDkgSubnetKind::OnlyHoldsKey,
+            )
+        }
         Ok(Ic00Method::SchnorrPublicKey) => {
             let args = SchnorrPublicKeyArgs::decode(payload)?;
             route_idkg_message(
@@ -218,6 +228,24 @@ pub(super) fn resolve_destination(
             let args = SignWithSchnorrArgs::decode(payload)?;
             route_idkg_message(
                 &MasterPublicKeyId::Schnorr(args.key_id),
+                network_topology,
+                &None,
+                IDkgSubnetKind::HoldsAndSignWithKey,
+            )
+        }
+        Ok(Ic00Method::VetKdPublicKey) => {
+            let args = VetKdPublicKeyArgs::decode(payload)?;
+            route_idkg_message(
+                &MasterPublicKeyId::VetKd(args.key_id),
+                network_topology,
+                &None,
+                IDkgSubnetKind::OnlyHoldsKey,
+            )
+        }
+        Ok(Ic00Method::VetKdDeriveEncryptedKey) => {
+            let args = VetKdDeriveEncryptedKeyArgs::decode(payload)?;
+            route_idkg_message(
+                &MasterPublicKeyId::VetKd(args.key_id),
                 network_topology,
                 &None,
                 IDkgSubnetKind::HoldsAndSignWithKey,

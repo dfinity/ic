@@ -1242,6 +1242,14 @@ impl ExecutionEnvironment {
                 }
             },
 
+            Ok(Ic00Method::ReshareChainKey) => Self::reject_due_to_api_not_implemented(&mut msg),
+
+            Ok(Ic00Method::VetKdPublicKey) => Self::reject_due_to_api_not_implemented(&mut msg),
+
+            Ok(Ic00Method::VetKdDeriveEncryptedKey) => {
+                Self::reject_due_to_api_not_implemented(&mut msg)
+            }
+
             Ok(Ic00Method::ProvisionalCreateCanisterWithCycles) => {
                 let res =
                     ProvisionalCreateCanisterWithCyclesArgs::decode(payload).and_then(|args| {
@@ -1515,6 +1523,17 @@ impl ExecutionEnvironment {
         // these cases.
         let state = self.finish_subnet_message_execution(state, msg, result, since);
         (state, Some(NumInstructions::from(0)))
+    }
+
+    // Rejects message because API is not implemented.
+    fn reject_due_to_api_not_implemented(msg: &mut CanisterCall) -> ExecuteSubnetMessageResult {
+        ExecuteSubnetMessageResult::Finished {
+            response: Err(UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!("{} API is not yet implemented.", msg.method_name()),
+            )),
+            refund: msg.take_cycles(),
+        }
     }
 
     /// Observes a subnet message metrics and outputs the given subnet response.
