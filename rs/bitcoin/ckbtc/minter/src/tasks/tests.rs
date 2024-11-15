@@ -1,6 +1,32 @@
 use crate::tasks::tests::mock::MockCanisterRuntime;
-use crate::tasks::{pop_if_ready, run_task, schedule_now, Task, TaskType, TASKS};
+use crate::tasks::{pop_if_ready, run_task, schedule_now, Task, TaskQueue, TaskType, TASKS};
+use proptest::{collection::vec as pvec, prop_assert_eq, proptest};
 use std::time::Duration;
+
+proptest! {
+    #[test]
+    fn queue_holds_one_copy_of_each_task(
+        timestamps in pvec(1_000_000_u64..1_000_000_000, 2..100),
+    ) {
+        let mut task_queue: TaskQueue = Default::default();
+        for (i, ts) in timestamps.iter().enumerate() {
+            task_queue.schedule_at(*ts, TaskType::ProcessLogic);
+            prop_assert_eq!(task_queue.len(), 1, "queue: {:?}", task_queue);
+
+            let task = task_queue.pop_if_ready(u64::MAX).unwrap();
+
+            prop_assert_eq!(task_queue.len(), 0);
+
+            prop_assert_eq!(&task, &Task{
+                execute_at: timestamps[0..=i].iter().cloned().min().unwrap(),
+                task_type: TaskType::ProcessLogic
+            });
+            task_queue.schedule_at(task.execute_at, task.task_type);
+
+            prop_assert_eq!(task_queue.len(), 1);
+        }
+    }
+}
 
 #[tokio::test]
 async fn should_reschedule_process_logic() {
