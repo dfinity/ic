@@ -73,7 +73,7 @@ mod tests {
         };
         let icos_dev_settings = ICOSDevSettings::default();
         let icos_settings = ICOSSettings {
-            node_reward_type: "type3.1".to_string(),
+            node_reward_type: Some("type3.1".to_string()),
             mgmt_mac: FormattedMacAddress::try_from("ec:2a:72:31:a2:0c")?,
             deployment_environment: "Mainnet".to_string(),
             logging,
