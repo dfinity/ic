@@ -14,6 +14,16 @@ impl upgrade_journal_entry::UpgradeStepsRefreshed {
     }
 }
 
+impl upgrade_journal_entry::UpgradeStepsReset {
+    /// Creates a new UpgradeStepsReset event with the given versions and message
+    pub fn new(human_readable: String, versions: Vec<Version>) -> Self {
+        Self {
+            human_readable: Some(human_readable),
+            upgrade_steps: Some(Versions { versions }),
+        }
+    }
+}
+
 impl upgrade_journal_entry::TargetVersionSet {
     /// Creates a new TargetVersionSet event with old and new versions
     pub fn new(old_version: Option<Version>, new_version: Option<Version>) -> Self {
@@ -26,10 +36,15 @@ impl upgrade_journal_entry::TargetVersionSet {
 
 impl upgrade_journal_entry::TargetVersionReset {
     /// Creates a new TargetVersionReset event with old and new versions
-    pub fn new(old_version: Option<Version>, new_version: Option<Version>) -> Self {
+    pub fn new(
+        old_version: Option<Version>,
+        new_version: Option<Version>,
+        human_readable: String,
+    ) -> Self {
         Self {
             old_target_version: old_version,
             new_target_version: new_version,
+            human_readable: Some(human_readable),
         }
     }
 }
@@ -118,6 +133,11 @@ impl Governance {
 impl From<upgrade_journal_entry::UpgradeStepsRefreshed> for upgrade_journal_entry::Event {
     fn from(event: upgrade_journal_entry::UpgradeStepsRefreshed) -> Self {
         upgrade_journal_entry::Event::UpgradeStepsRefreshed(event)
+    }
+}
+impl From<upgrade_journal_entry::UpgradeStepsReset> for upgrade_journal_entry::Event {
+    fn from(event: upgrade_journal_entry::UpgradeStepsReset) -> Self {
+        upgrade_journal_entry::Event::UpgradeStepsReset(event)
     }
 }
 impl From<upgrade_journal_entry::UpgradeStarted> for upgrade_journal_entry::Event {
