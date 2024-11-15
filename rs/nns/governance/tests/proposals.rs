@@ -1,5 +1,5 @@
 use ic_base_types::PrincipalId;
-use ic_nervous_system_common::ONE_DAY_SECONDS;
+use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_governance::{
     governance::{Governance, REWARD_DISTRIBUTION_PERIOD_SECONDS},
@@ -67,15 +67,15 @@ lazy_static! {
         let ballots = hashmap! {
             1042 => Ballot {
                 vote: Vote::Unspecified as i32,
-                voting_power: 100,
+                voting_power: 100 * E8,
             },
             1043 => Ballot {
                 vote: Vote::Yes as i32,
-                voting_power: 2_000,
+                voting_power: 2_000 * E8,
             },
             1044 => Ballot {
                 vote: Vote::No as i32,
-                voting_power: 30_000,
+                voting_power: 30_000 * E8,
             },
         };
 
@@ -89,7 +89,7 @@ lazy_static! {
         let proposal_data = ProposalData {
             proposal,
             ballots,
-            total_potential_voting_power: Some(40_000),
+            total_potential_voting_power: Some(80_000 * E8),
             wait_for_quiet_state: Some(WaitForQuietState {
                 current_deadline_timestamp_seconds: NOW_SECONDS - 5 * ONE_DAY_SECONDS,
             }),
@@ -108,6 +108,20 @@ lazy_static! {
             // reward weight.). Has 1x reward weight.
             78 => ProposalData {
                 id: Some(ProposalId { id: 78 }),
+                ballots: hashmap! {
+                    1042 => Ballot {
+                        vote: Vote::Unspecified as i32,
+                        voting_power: 700 * E8,
+                    },
+                    1043 => Ballot {
+                        vote: Vote::Yes as i32,
+                        voting_power: 1_000 * E8,
+                    },
+                    1044 => Ballot {
+                        vote: Vote::No as i32,
+                        voting_power: 20_000 * E8,
+                    },
+                },
                 ..proposal_data.clone()
             },
 
@@ -164,11 +178,7 @@ async fn test_distribute_rewards_with_total_potential_voting_power() {
 
     let fake_driver = fake::FakeDriver::default()
         .at(NOW_SECONDS)
-        // This ensures that the rewards purse is exactly equal to 2x the total
-        // weighted voting power. That way, the amount of rewards that each
-        // neuron gets is equal to its voting power (times the reward weight of
-        // the proposal).
-        .with_supply(Tokens::from_e8s(5844002454));
+        .with_supply(Tokens::from_tokens(100).unwrap());
 
     let mut governance = Governance::new(
         GOVERNANCE_PROTO.clone(),
@@ -191,16 +201,51 @@ async fn test_distribute_rewards_with_total_potential_voting_power() {
 
     assert_eq!(get_neuron_rewards(1042), 0); // Didn't vote -> no rewards.
 
-    let reward_ratio = get_neuron_rewards(1043) as f64 / get_neuron_rewards(1044) as f64;
+    let rewards = (get_neuron_rewards(1043), get_neuron_rewards(1044));
 
-    let weighted_voting_power_ratio = (2 * 2_000 + 20 * 2_000) as f64 /   // neuron 1043
-        (2 * 30_000 + 20 * 30_000) as f64; // neuron 1044
+    let weighted_voting_powers = (
+        // 2nd neuron (id = 1043)
+        (
+            2_000 +       // First proposal
+            1_000 +       // Second proposal
+            20 * 2_000  // Third proposal
+        ),
 
-    let error = (reward_ratio - weighted_voting_power_ratio) / weighted_voting_power_ratio;
-    assert!(
-        error < 1e-8,
-        "{:?} vs {:?}",
-        [get_neuron_rewards(1043), get_neuron_rewards(1044)],
-        [2 * 2_000 + 20 * 2_000, 2 * 30_000 + 20 * 30_000],
+        // 3rd neuron (id = 1044)
+        (
+            30_000 +
+            20_000 +
+            20 * 30_000
+        )
+    );
+
+    // Remember, this can return NEGATIVE. Most of the time, you want to do
+    // assert!(e.abs() < EPSILON, ...). Do NOT forget the .abs() !
+    fn assert_ratio_relative_error_close(observed: (u64, u64), expected: (u64, u64), epsilon: f64, msg: &str) {
+        let ob = observed.0 as f64 / observed.1 as f64;
+        let ex = expected.0 as f64 / expected.1 as f64;
+
+        let relative_error = (ob - ex) / ex;
+
+        assert!(
+            relative_error.abs() < epsilon,
+            "{}: {:?} vs. {:?} (relative error = {})",
+            msg, observed, expected, relative_error,
+        );
+    }
+
+    assert_ratio_relative_error_close(
+        rewards,
+        weighted_voting_powers,
+        2e-6,
+        "rewards vs. weighted_voting_powers",
+    );
+
+    let reward_event = governance.latest_reward_event();
+    assert_ratio_relative_error_close(
+        (rewards.0, reward_event.total_available_e8s_equivalent),
+        (weighted_voting_powers.0, (32_100 + 80_000 + 20 * 80_000)),
+        2e-6,
+        "2nd neuron (ID = 1043)",
     );
 }
