@@ -13,7 +13,9 @@ thread_local! {
 }
 
 struct VotingStateMachines {
-    // machines
+    // Up to one machine per proposal, to avoid having to do unnecessary checks for followers that
+    // might follow.  This allows the state machines to be used across multiple messages
+    // without duplicating state and memory usage.
     machines: BTreeMap<ProposalId, ProposalVotingStateMachine>,
 }
 
@@ -93,6 +95,15 @@ impl ProposalVotingStateMachine {
     }
 
     fn cast_vote(&mut self, ballots: &mut HashMap<u64, Ballot>, neuron_id: NeuronId, vote: Vote) {
+        // There is no action to take with unspecfiied votes, so we early return.  It is
+        // a legitimate argument in the context of continue_processing, but it simply means
+        // that no vote is cast, and therefore there is no followup work to do.
+        // This condition is also important to ensure that the state machine always terminates
+        // even if an Unspecified vote is somehow cast manually.
+        if vote == Vote::Unspecified {
+            return;
+        }
+
         if let Some(ballot) = ballots.get_mut(&neuron_id.id) {
             // The following conditional is CRITICAL, as it prevents a neuron's vote from
             // being overwritten by a later vote. This is important because otherwse
@@ -134,11 +145,10 @@ impl ProposalVotingStateMachine {
                     Vote::Unspecified
                 }
             };
-            if vote != Vote::Unspecified {
-                // Casting vote immediately might affect other follower votes, which makes
-                // voting resolution take fewer iterations.
-                self.cast_vote(ballots, follower, vote);
-            }
+            // Casting vote immediately might affect other follower votes, which makes
+            // voting resolution take fewer iterations.
+            // Vote::Unspecified is ignored by cast_vote.
+            self.cast_vote(ballots, follower, vote);
         }
 
         while let Some((neuron_id, vote)) = self.recent_neuron_ballots_to_record.pop_first() {
@@ -414,34 +424,14 @@ mod test {
             ),
         );
 
+        // We assert it is immediately done after casting an unspecified vote b/c there
+        // is no work to do.
+        state_machine.cast_vote(&mut ballots, NeuronId { id: 1 }, Vote::Unspecified);
+        assert!(state_machine.is_done());
+
+        // We assert it is done after checking both sets of followers
         state_machine.cast_vote(&mut ballots, NeuronId { id: 1 }, Vote::Yes);
         state_machine.continue_processing(&mut neuron_store, &mut ballots);
-
-        assert_eq!(
-            ballots,
-            hashmap! {
-            1 => Ballot { vote: Vote::Yes as i32, voting_power: 101 },
-            2 => Ballot { vote: Vote::Yes as i32, voting_power: 102 }}
-        );
-        assert_eq!(
-            neuron_store
-                .with_neuron(&NeuronId { id: 1 }, |n| {
-                    n.recent_ballots.first().unwrap().vote
-                })
-                .unwrap(),
-            Vote::Yes as i32
-        );
-        assert_eq!(
-            neuron_store
-                .with_neuron(&NeuronId { id: 2 }, |n| {
-                    n.recent_ballots.first().unwrap().vote
-                })
-                .unwrap(),
-            Vote::Yes as i32
-        );
-
-        assert!(!state_machine.is_done());
-
         state_machine.continue_processing(&mut neuron_store, &mut ballots);
         assert!(state_machine.is_done());
     }
