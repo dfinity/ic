@@ -320,7 +320,7 @@ pub fn build_metadata(s: &CkBtcMinterState) -> String {
         DisplayAmount(s.kyt_fee),
         DisplayAmount(s.retrieve_btc_min_amount),
         DisplayAmount(s.fee_based_retrieve_btc_min_amount),
-        DisplayAmount(get_total_btc_managed(s))
+        DisplayAmount(s.get_total_btc_managed())
     )
 }
 
@@ -512,17 +512,6 @@ pub fn build_update_balance_principals(s: &CkBtcMinterState) -> String {
             writeln!(buf, "<li>{}</li>", p).unwrap();
         }
     })
-}
-
-fn get_total_btc_managed(s: &CkBtcMinterState) -> u64 {
-    let mut total_btc = 0_u64;
-    for req in s.submitted_transactions.iter() {
-        if let Some(change_output) = &req.change_output {
-            total_btc += change_output.value;
-        }
-    }
-    total_btc += s.available_utxos.iter().map(|u| u.value).sum::<u64>();
-    total_btc
 }
 
 pub fn build_retrieve_btc_principals(s: &CkBtcMinterState) -> String {

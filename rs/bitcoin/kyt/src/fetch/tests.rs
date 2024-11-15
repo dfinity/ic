@@ -65,9 +65,6 @@ impl FetchEnv for MockEnv {
         *available -= cycles;
         cycles
     }
-    fn cycles_available(&self) -> u128 {
-        *self.available_cycles.borrow()
-    }
 }
 
 impl MockEnv {
@@ -98,6 +95,9 @@ impl MockEnv {
     }
     fn cycles_accepted(&self) -> u128 {
         *self.accepted_cycles.borrow()
+    }
+    fn cycles_available(&self) -> u128 {
+        *self.available_cycles.borrow()
     }
 }
 
