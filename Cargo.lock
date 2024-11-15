@@ -9686,6 +9686,7 @@ dependencies = [
  "ic-adapter-metrics-client",
  "ic-logger",
  "libc",
+ "parking_lot 0.12.3",
  "procfs 0.9.1",
  "prometheus",
  "slog",
