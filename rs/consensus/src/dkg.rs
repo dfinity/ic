@@ -8,7 +8,7 @@ use crate::{
     idkg::{
         make_bootstrap_summary,
         payload_builder::make_bootstrap_summary_with_initial_dealings,
-        utils::{get_chain_key_config_if_enabled, inspect_chain_key_initializations},
+        utils::{get_idkg_chain_key_config_if_enabled, inspect_idkg_chain_key_initializations},
     },
 };
 use ic_consensus_utils::crypto::ConsensusCrypto;
@@ -563,7 +563,7 @@ fn bootstrap_idkg_summary_from_cup_contents(
     subnet_id: SubnetId,
     logger: &ReplicaLogger,
 ) -> Result<idkg::Summary, String> {
-    let initial_dealings = inspect_chain_key_initializations(
+    let initial_dealings = inspect_idkg_chain_key_initializations(
         &cup_contents.ecdsa_initializations,
         &cup_contents.chain_key_initializations,
     )?;
@@ -593,7 +593,7 @@ fn bootstrap_idkg_summary(
         return Ok(Some(summary));
     }
 
-    match get_chain_key_config_if_enabled(subnet_id, registry_version, registry_client)
+    match get_idkg_chain_key_config_if_enabled(subnet_id, registry_version, registry_client)
         .map_err(|err| format!("Failed getting the chain key config: {:?}", err))?
     {
         Some(chain_key_config) => Ok(make_bootstrap_summary(
@@ -602,6 +602,7 @@ fn bootstrap_idkg_summary(
                 .key_configs
                 .iter()
                 .map(|key_config| key_config.key_id.clone())
+                .filter_map(|key_id| key_id.try_into().ok())
                 .collect(),
             Height::new(cup_contents.height),
         )),
