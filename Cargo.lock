@@ -11895,6 +11895,7 @@ dependencies = [
  "ic-nns-common",
  "ic-protobuf",
  "ic-types",
+ "ic-utils 0.9.0",
  "icp-ledger",
  "itertools 0.12.1",
  "prost 0.13.3",
