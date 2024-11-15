@@ -16,10 +16,11 @@ const ADAPTER_PREFIX: &str = "adapter";
 /// Adapter metrics client
 ///
 /// Fetches prometheus metrics from remote process adapters that provide UDS metrics endpoint.
+/// [AdapterMetrics is cheap to clone.](https://docs.rs/tonic/latest/tonic/transport/struct.Channel.html)
 #[derive(Clone)]
 pub struct AdapterMetrics {
     /// Unique adapter name.
-    name: String,
+    name: &'static str,
     channel: Channel,
 }
 
@@ -37,7 +38,7 @@ impl AdapterMetrics {
     /// Name needs to be a unique value for this adapter.
     // / A metrics server is expected to be listenting on the `uds_path`.
     /// `rt_handle` is the runtime used for fetching the metrics.
-    pub fn new(name: &str, uds_path: PathBuf, rt_handle: tokio::runtime::Handle) -> Self {
+    pub fn new(name: &'static str, uds_path: PathBuf, rt_handle: tokio::runtime::Handle) -> Self {
         // We will ignore this uri because uds does not use it. If we are unable to connect
         // to the metrics endpoint the adapter metrics will be ignored.
         let endpoint = Endpoint::try_from("http://[::]:50152")
@@ -53,10 +54,7 @@ impl AdapterMetrics {
             }
         }));
 
-        Self {
-            name: name.to_string(),
-            channel,
-        }
+        Self { name, channel }
     }
 
     /// Get adapter name.
