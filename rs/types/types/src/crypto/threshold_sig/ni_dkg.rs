@@ -9,12 +9,13 @@ use core::fmt;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{CspNiDkgDealing, CspNiDkgTranscript};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
+use ic_management_canister_types::MasterPublicKeyId;
 use ic_protobuf::types::v1 as pb;
 use ic_protobuf::types::v1::NiDkgId as NiDkgIdProto;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::convert::TryFrom;
-use strum_macros::EnumIter;
+use strum_macros::EnumCount;
 use thiserror::Error;
 
 pub mod config;
@@ -29,13 +30,17 @@ pub use id::NiDkgId;
 #[cfg(test)]
 mod tests;
 
-/// Allows to distinguish protocol executions in high and low threshold
-/// settings.
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, EnumIter, Serialize)]
-#[cfg_attr(test, derive(ExhaustiveSet))]
+/// Allows to distinguish NI-DKG protocol executions for different purposes:
+/// * LowThreshold: generate a transcript with a low threshold,
+/// * HighThreshold: generate a transcript with a high threshold,
+/// * HighThresholdForKey: generate a transcript with a high threshold for
+///   a master public key with a particular ID
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, EnumCount, Serialize)]
+#[repr(isize)]
 pub enum NiDkgTag {
     LowThreshold = 1,
     HighThreshold = 2,
+    HighThresholdForKey(MasterPublicKeyId) = 3,
 }
 
 impl From<&NiDkgTag> for pb::NiDkgTag {
@@ -43,6 +48,9 @@ impl From<&NiDkgTag> for pb::NiDkgTag {
         match tag {
             NiDkgTag::LowThreshold => pb::NiDkgTag::LowThreshold,
             NiDkgTag::HighThreshold => pb::NiDkgTag::HighThreshold,
+            NiDkgTag::HighThresholdForKey(_master_public_key_id) => {
+                pb::NiDkgTag::HighThresholdForKey
+            }
         }
     }
 }
@@ -97,18 +105,6 @@ impl fmt::Debug for NiDkgTargetSubnet {
 impl fmt::Display for NiDkgTargetSubnet {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self)
-    }
-}
-
-impl TryFrom<i32> for NiDkgTag {
-    type Error = ();
-
-    fn try_from(ni_dkg_tag: i32) -> Result<Self, Self::Error> {
-        match ni_dkg_tag {
-            1 => Ok(NiDkgTag::LowThreshold),
-            2 => Ok(NiDkgTag::HighThreshold),
-            _ => Err(()),
-        }
     }
 }
 

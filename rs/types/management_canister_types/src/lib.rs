@@ -35,7 +35,7 @@ use serde::Serialize;
 use serde_bytes::ByteBuf;
 use std::mem::size_of;
 use std::{collections::BTreeSet, convert::TryFrom, error::Error, fmt, slice::Iter, str::FromStr};
-use strum_macros::{Display, EnumIter, EnumString};
+use strum_macros::{Display, EnumCount, EnumIter, EnumString};
 
 /// The id of the management canister.
 pub const IC_00: CanisterId = CanisterId::ic_00();
@@ -2390,7 +2390,17 @@ impl FromStr for VetKdKeyId {
 /// (variant { EcdsaKeyId; SchnorrKeyId })
 /// ```
 #[derive(
-    Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, CandidType, Deserialize, Serialize,
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    Debug,
+    CandidType,
+    Deserialize,
+    EnumCount,
+    Serialize,
 )]
 pub enum MasterPublicKeyId {
     Ecdsa(EcdsaKeyId),
