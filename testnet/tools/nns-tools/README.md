@@ -410,17 +410,19 @@ Generate a mostly pre-populated proposal text file:
 ```bash
 # Fill these in.
 RC=FAKE
-# Space separated names. E.g. governance sns-wasm
-NNS_CANISTERS=
+# In case you aren't familiar, this is bash array.
+NNS_CANISTERS=(
+)
 # Similar to NNS_CANISTERS
-SNS_CANISTERS=
+SNS_CANISTERS=(
+)
 # Path to an empty dir where the proposal files will be saved.
 PROPOSALS_DIR=/tmp/release-$(date --iso)
 
 mkdir $PROPOSALS_DIR
 
 # NNS:
-for CANISTER in $NNS_CANISTERS
+for CANISTER in "${NNS_CANISTERS[@]}"
 do
     ./testnet/tools/nns-tools/prepare-nns-upgrade-proposal-text.sh \
         $CANISTER \
@@ -429,7 +431,7 @@ do
 done
 
 # SNS:
-for CANISTER in $SNS_CANISTERS
+for CANISTER in "${SNS_CANISTERS[@]}"
 do
     ./testnet/tools/nns-tools/prepare-publish-sns-wasm-proposal-text.sh \
         $CANISTER \
@@ -468,14 +470,14 @@ Finally, run
 SUBMITTING_NEURON_ID=51 # e.g. for Daniel Wong, 51
 
 # NNS:
-for CANISTER in $NNS_CANISTERS
+for CANISTER in "${NNS_CANISTERS[@]}"
 do
     ./testnet/tools/nns-tools/submit-mainnet-nns-upgrade-proposal.sh \
         $PROPOSALS_DIR/nns-$CANISTER.md \
         $SUBMITTING_NEURON_ID
 
 # SNS:
-for CANISTER in $SNS_CANISTERS
+for CANISTER in "${SNS_CANISTERS[@]}"
 do
     ./testnet/tools/nns-tools/submit-mainnet-publish-sns-wasm-proposal.sh \
         $PROPOSALS_DIR/sns-$CANISTER.md \
