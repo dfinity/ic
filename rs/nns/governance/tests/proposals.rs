@@ -204,24 +204,18 @@ async fn test_distribute_rewards_with_total_potential_voting_power() {
     let rewards = (get_neuron_rewards(1043), get_neuron_rewards(1044));
 
     let weighted_voting_powers = (
-        // 2nd neuron (id = 1043)
-        (
-            2_000 +       // First proposal
-            1_000 +       // Second proposal
-            20 * 2_000  // Third proposal
-        ),
-
-        // 3rd neuron (id = 1044)
-        (
-            30_000 +
-            20_000 +
-            20 * 30_000
-        )
+        2_000 + 1_000 + 20 * 2_000,    // 2nd neuron (id = 1043)
+        30_000 + 20_000 + 20 * 30_000, // 3rd neuron (id = 1044)
     );
 
     // Remember, this can return NEGATIVE. Most of the time, you want to do
     // assert!(e.abs() < EPSILON, ...). Do NOT forget the .abs() !
-    fn assert_ratio_relative_error_close(observed: (u64, u64), expected: (u64, u64), epsilon: f64, msg: &str) {
+    fn assert_ratio_relative_error_close(
+        observed: (u64, u64),
+        expected: (u64, u64),
+        epsilon: f64,
+        msg: &str,
+    ) {
         let ob = observed.0 as f64 / observed.1 as f64;
         let ex = expected.0 as f64 / expected.1 as f64;
 
@@ -230,7 +224,10 @@ async fn test_distribute_rewards_with_total_potential_voting_power() {
         assert!(
             relative_error.abs() < epsilon,
             "{}: {:?} vs. {:?} (relative error = {})",
-            msg, observed, expected, relative_error,
+            msg,
+            observed,
+            expected,
+            relative_error,
         );
     }
 
@@ -245,6 +242,12 @@ async fn test_distribute_rewards_with_total_potential_voting_power() {
     assert_ratio_relative_error_close(
         (rewards.0, reward_event.total_available_e8s_equivalent),
         (weighted_voting_powers.0, (32_100 + 80_000 + 20 * 80_000)),
+        2e-6,
+        "2nd neuron (ID = 1043)",
+    );
+    assert_ratio_relative_error_close(
+        (rewards.1, reward_event.total_available_e8s_equivalent),
+        (weighted_voting_powers.1, (32_100 + 80_000 + 20 * 80_000)),
         2e-6,
         "2nd neuron (ID = 1043)",
     );
