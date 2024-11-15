@@ -257,7 +257,12 @@ type GetProposalResponse = record {
 
 type GetRunningSnsVersionResponse = record {
   deployed_version : opt Version;
-  pending_version : opt UpgradeInProgress;
+  pending_version : opt record {
+    mark_failed_at_seconds : nat64;
+    checking_upgrade_lock : nat64;
+    proposal_id : nat64;
+    target_version : opt Version;
+  };
 };
 
 type GetSnsInitializationParametersResponse = record {
@@ -674,14 +679,14 @@ type TransferSnsTreasuryFunds = record {
 type UpgradeInProgress = record {
   mark_failed_at_seconds : nat64;
   checking_upgrade_lock : nat64;
-  proposal_id : nat64;
+  proposal_id : opt nat64;
   target_version : opt Version;
 };
 
 type PendingVersion = record {
   mark_failed_at_seconds : nat64;
   checking_upgrade_lock : nat64;
-  proposal_id : nat64;
+  proposal_id : opt nat64;
   target_version : opt Version;
 };
 
@@ -756,6 +761,7 @@ type TargetVersionSet = record {
 type TargetVersionReset = record {
   new_target_version : opt Version;
   old_target_version : opt Version;
+  human_readable : opt text;
 };
 
 type UpgradeStarted = record {
@@ -787,6 +793,7 @@ type GetUpgradeJournalResponse = record {
   upgrade_steps : opt Versions;
   response_timestamp_seconds : opt nat64;
   target_version : opt Version;
+  deployed_version : opt Version;
   upgrade_journal : opt UpgradeJournal;
 };
 
