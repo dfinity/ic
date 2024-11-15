@@ -76,6 +76,7 @@ pub struct RemoteCspVault {
     // special, long timeout for RPC calls that should not really timeout.
     long_rpc_timeout: Duration,
     tokio_runtime_handle: tokio::runtime::Handle,
+    internal_rt_for_safe_block_on: tokio::runtime::Runtime,
     logger: ReplicaLogger,
     metrics: Arc<CryptoMetrics>,
     #[cfg(test)]
@@ -101,12 +102,12 @@ impl RemoteCspVault {
         F: Future + Send + 'static,
         F::Output: Send + 'static,
     {
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        self.tokio_runtime_handle.spawn(async move {
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.internal_rt_for_safe_block_on.spawn(async move {
             let res = task.await;
             let _ = tx.send(res);
         });
-        rx.blocking_recv().unwrap()
+        rx.recv().unwrap()
     }
 }
 
@@ -231,11 +232,18 @@ impl RemoteCspVaultBuilder {
             TarpcCspVaultClient::new(Default::default(), transport).spawn()
         };
         debug!(self.logger, "Instantiated remote CSP vault client");
+        let internal_rt_for_safe_block_on = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(1)
+            .thread_name("Crypto-Internal-Thread".to_string())
+            .enable_all()
+            .build()
+            .unwrap();
         Ok(RemoteCspVault {
             tarpc_csp_client: client,
             rpc_timeout: self.rpc_timeout,
             long_rpc_timeout: self.long_rpc_timeout,
             tokio_runtime_handle: self.rt_handle,
+            internal_rt_for_safe_block_on,
             logger: self.logger,
             metrics: self.metrics,
             #[cfg(test)]
