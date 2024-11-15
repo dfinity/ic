@@ -190,17 +190,17 @@ fn test_sum_weighted_voting_power() {
                 // value has no entry for this neuron.
 
                 // Voted (Yes) twice on 1x weight proposals and once on a 20x weight proposal.
-                NeuronId { id: 1043 } => (2 * 2_000 + 20 * 2_000) as f64,
+                NeuronId { id: 1043 } => ((2_000 + 1_000 + 20 * 2_000) * E8) as f64,
 
                 // Similar to previous, but voted No, and has different (more) voting power.
                 // In voting rewards, Yes and No are treated the same.
-                NeuronId { id: 1044 } => (2 * 30_000 + 20 * 30_000) as f64,
+                NeuronId { id: 1044 } => ((30_000 + 20_000 + 20 * 30_000) * E8) as f64,
             },
-            (
+            ((
                 (100 + 2_000 + 30_000) // First proposal.
-                + 40_000               // Second proposal
-                + 20 * 40_000          // Third proposal
-            ) as f64
+                + 80_000               // Second proposal
+                + 20 * 80_000          // Third proposal
+            ) * E8) as f64
         ),
     );
 }
