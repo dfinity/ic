@@ -778,6 +778,16 @@ fn checked_div_mod(dividend: usize, divisor: usize) -> Option<(usize, usize)> {
     Some((quotient, remainder))
 }
 
+/// Converts a sha256 hash into a hex string representation
+pub fn hash_to_hex_string(hash: &[u8]) -> String {
+    use std::fmt::Write;
+    let mut result_hash = String::new();
+    for b in hash {
+        let _ = write!(result_hash, "{:02x}", b);
+    }
+    result_hash
+}
+
 #[cfg(test)]
 mod serve_logs_tests;
 

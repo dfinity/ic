@@ -195,7 +195,7 @@ impl ValidSetRuleImpl {
 
     /// Checks whether the given message has already been inducted.
     fn is_duplicate(&self, state: &ReplicatedState, msg: &SignedIngressContent) -> bool {
-        state.get_ingress_status(&msg.id()) != IngressStatus::Unknown
+        state.get_ingress_status(&msg.id()) != &IngressStatus::Unknown
     }
 
     /// Records the result of inducting an ingress message.

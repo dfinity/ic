@@ -59,7 +59,8 @@ use icrc_ledger_types::icrc1::{
 };
 use maplit::btreemap;
 use pocket_ic::{
-    nonblocking::PocketIc, CanisterSettings, ErrorCode, PocketIcBuilder, UserError, WasmResult,
+    management_canister::CanisterSettings, nonblocking::PocketIc, ErrorCode, PocketIcBuilder,
+    UserError, WasmResult,
 };
 use prost::Message;
 use rust_decimal::prelude::ToPrimitive;
