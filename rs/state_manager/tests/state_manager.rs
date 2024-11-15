@@ -1,9 +1,5 @@
 use assert_matches::assert_matches;
 use ic_base_types::SnapshotId;
-use ic_certification_version::{
-    CertificationVersion::{V11, V15},
-    CURRENT_CERTIFICATION_VERSION,
-};
 use ic_config::{
     flag_status::FlagStatus,
     state_manager::{lsmt_config_default, Config, LsmtConfig},
@@ -4427,31 +4423,23 @@ fn certified_read_can_certify_node_public_keys_since_v12() {
             .expect("failed to read certified state");
         assert_eq!(cert, delivered_certification);
 
-        if CURRENT_CERTIFICATION_VERSION > V11 {
-            assert_eq!(
-                tree_payload(mixed_tree),
-                SubTree(flatmap! {
-                    label("subnet") => SubTree(
-                        flatmap! {
-                            label(subnet_test_id(42).get_ref()) => SubTree(
-                                flatmap!{
-                                    label("node") => SubTree(
-                                        flatmap! {
-                                            label(node_test_id(39).get_ref()) => SubTree(
-                                                flatmap!(label("public_key") => Leaf(vec![39u8; 44]))
-                                            ),
-                                        })
-                            })
+        assert_eq!(
+            tree_payload(mixed_tree),
+            SubTree(flatmap! {
+                label("subnet") => SubTree(
+                    flatmap! {
+                        label(subnet_test_id(42).get_ref()) => SubTree(
+                            flatmap!{
+                                label("node") => SubTree(
+                                    flatmap! {
+                                        label(node_test_id(39).get_ref()) => SubTree(
+                                            flatmap!(label("public_key") => Leaf(vec![39u8; 44]))
+                                        ),
+                                    })
                         })
-                })
-            );
-        } else {
-            assert!(
-                mixed_tree.lookup(&path[..]).is_absent(),
-                "mixed_tree: {:#?}",
-                mixed_tree
-            );
-        }
+                    })
+            })
+        );
     })
 }
 
@@ -4493,28 +4481,20 @@ fn certified_read_can_certify_api_boundary_nodes_since_v16() {
             .expect("failed to read certified state");
         assert_eq!(cert, delivered_certification);
 
-        if CURRENT_CERTIFICATION_VERSION > V15 {
-            assert_eq!(
-                tree_payload(mixed_tree),
-                SubTree(flatmap! {
-                    label("api_boundary_nodes") => SubTree(
-                        flatmap! {
-                            label(node_test_id(11).get_ref()) => SubTree(
-                                flatmap!{
-                                    label("domain") => Leaf("api-bn11-example.com".to_string().into_bytes()),
-                                    label("ipv4_address") => Leaf("127.0.0.1".to_string().into_bytes()),
-                                    label("ipv6_address") => Leaf("2001:0db8:85a3:0000:0000:8a2e:0370:7334".to_string().into_bytes()),
-                            })
+        assert_eq!(
+            tree_payload(mixed_tree),
+            SubTree(flatmap! {
+                label("api_boundary_nodes") => SubTree(
+                    flatmap! {
+                        label(node_test_id(11).get_ref()) => SubTree(
+                            flatmap!{
+                                label("domain") => Leaf("api-bn11-example.com".to_string().into_bytes()),
+                                label("ipv4_address") => Leaf("127.0.0.1".to_string().into_bytes()),
+                                label("ipv6_address") => Leaf("2001:0db8:85a3:0000:0000:8a2e:0370:7334".to_string().into_bytes()),
                         })
-                })
-            );
-        } else {
-            assert!(
-                mixed_tree.lookup(&path[..]).is_absent(),
-                "mixed_tree: {:#?}",
-                mixed_tree
-            );
-        }
+                    })
+            })
+        );
     })
 }
 
@@ -4547,21 +4527,12 @@ fn certified_read_succeeds_for_empty_forks() {
             LookupStatus::Found(&ic_crypto_tree_hash::MixedHashTree::Empty)
         );
 
-        if CURRENT_CERTIFICATION_VERSION > V15 {
-            // If there are no api boundary nodes present, the lookup status should be `MixedHashTree::Empty`.
-            // This behavior is in consistent with looking up  `/streams` and `/canister`.
-            assert_matches!(
-                lookup_api_boundary_nodes,
-                LookupStatus::Found(&ic_crypto_tree_hash::MixedHashTree::Empty)
-            );
-        } else {
-            // The `/api_boundary_nodes` subtree is not added to the state tree yet. The lookup status should be absent.
-            assert!(
-                lookup_api_boundary_nodes.is_absent(),
-                "api_boundary_nodes: {:#?}",
-                lookup_api_boundary_nodes
-            )
-        }
+        // If there are no api boundary nodes present, the lookup status should be `MixedHashTree::Empty`.
+        // This behavior is in consistent with looking up  `/streams` and `/canister`.
+        assert_matches!(
+            lookup_api_boundary_nodes,
+            LookupStatus::Found(&ic_crypto_tree_hash::MixedHashTree::Empty)
+        );
     })
 }
 
