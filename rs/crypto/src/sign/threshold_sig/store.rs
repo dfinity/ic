@@ -112,6 +112,15 @@ impl Default for ThresholdSigDataStoreImpl {
     }
 }
 
+const _SHOULD_HAVE_CAPACITY_GREATER_ZERO: () = assert!(
+    ThresholdSigDataStoreImpl::CAPACITY_PER_TAG_OR_KEY > 0,
+    "Capacity per tag or key must be at least 1"
+);
+const _SHOULD_HAVE_CAPACITY_OF_NINE: () = assert!(
+    ThresholdSigDataStoreImpl::CAPACITY_PER_TAG_OR_KEY == 9,
+    "Capacity per tag or key must be 9"
+);
+
 impl ThresholdSigDataStoreImpl {
     pub const CAPACITY_PER_TAG_OR_KEY: usize = 9;
 

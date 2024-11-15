@@ -178,11 +178,6 @@ fn should_overwrite_existing_individual_public_keys() {
 }
 
 #[test]
-fn should_have_capacity_per_tag_or_key_of_9() {
-    assert_eq!(ThresholdSigDataStoreImpl::CAPACITY_PER_TAG_OR_KEY, 9)
-}
-
-#[test]
 fn should_not_purge_data_on_inserting_coeffs_and_indices_if_capacity_not_exceeded() {
     for tag in all_tags() {
         let mut store = ThresholdSigDataStoreImpl::new();
