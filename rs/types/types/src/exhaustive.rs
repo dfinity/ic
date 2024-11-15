@@ -3,8 +3,9 @@
 use crate::consensus::hashed::Hashed;
 use crate::consensus::idkg::common::{PreSignatureInCreation, PreSignatureRef};
 use crate::consensus::idkg::ecdsa::QuadrupleInCreation;
+use crate::consensus::idkg::IDkgMasterPublicKeyId;
 use crate::consensus::idkg::{
-    CompletedReshareRequest, CompletedSignature, HasMasterPublicKeyId, IDkgPayload,
+    CompletedReshareRequest, CompletedSignature, HasIDkgMasterPublicKeyId, IDkgPayload,
     IDkgReshareRequest, IDkgUIDGenerator, MaskedTranscript, MasterKeyTranscript, PreSigId,
     PseudoRandomId, RandomTranscriptParams, RandomUnmaskedTranscriptParams, ReshareOfMaskedParams,
     ReshareOfUnmaskedParams, UnmaskedTimesMaskedParams, UnmaskedTranscript,
@@ -835,7 +836,7 @@ pub struct DerivedIDkgPayload {
     pub idkg_transcripts: BTreeMap<IDkgTranscriptId, IDkgTranscript>,
     pub ongoing_xnet_reshares: BTreeMap<IDkgReshareRequest, ReshareOfUnmaskedParams>,
     pub xnet_reshare_agreements: BTreeMap<IDkgReshareRequest, CompletedReshareRequest>,
-    pub key_transcripts: BTreeMap<MasterPublicKeyId, MasterKeyTranscript>,
+    pub key_transcripts: BTreeMap<IDkgMasterPublicKeyId, MasterKeyTranscript>,
 }
 
 impl ExhaustiveSet for IDkgPayload {
@@ -936,6 +937,12 @@ impl HasId<NiDkgTag> for NiDkgTranscript {
 
 impl HasId<MasterPublicKeyId> for MasterKeyTranscript {
     fn get_id(&self) -> Option<MasterPublicKeyId> {
+        Some(self.key_id().into())
+    }
+}
+
+impl HasId<IDkgMasterPublicKeyId> for MasterKeyTranscript {
+    fn get_id(&self) -> Option<IDkgMasterPublicKeyId> {
         Some(self.key_id())
     }
 }

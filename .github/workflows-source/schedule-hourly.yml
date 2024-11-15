@@ -90,3 +90,23 @@ jobs:
           BAZEL_EXTRA_ARGS: "--keep_going --test_tag_filters=system_test_hourly"
           BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
       - <<: *bazel-bep
+
+  bazel-run-fuzzers-hourly:
+    name: Bazel Run Fuzzers Hourly
+    <<: *dind-large-setup
+    steps:
+      - <<: *checkout
+      - name: Run Libfuzzer targets
+        shell: bash
+        run: ./bin/run-all-fuzzers.sh --libfuzzer 100
+      - name: Run AFL targets
+        shell: bash
+        run: ./bin/run-all-fuzzers.sh --afl 100
+      - name: Post Slack Notification
+        uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
+        if: failure()
+        with:
+          channel-id: prodsec-fuzzing
+          slack-message: "${{ github.job }} failed :disappointed: - <${{github.server_url}}/${{github.repository}}/actions/runs/${{github.run_id}}|Run#${{github.run_id}}>"
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}
