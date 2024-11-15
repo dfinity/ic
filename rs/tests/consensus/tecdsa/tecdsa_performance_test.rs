@@ -58,7 +58,7 @@ use ic_system_test_driver::driver::{
     farm::HostFeature,
     ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
     prometheus_vm::{HasPrometheus, PrometheusVm},
-    simulate_network::{FixedNetworkSimulation, SimulateNetwork},
+    simulate_network::{ProductionSubnetTopology, SimulateNetwork},
     test_env::TestEnv,
     test_env_api::{HasTopologySnapshot, IcNodeContainer, NnsCustomizations},
 };
@@ -78,11 +78,11 @@ use std::time::Duration;
 use tokio::runtime::{Builder, Runtime};
 
 // Environment parameters
-const NODES_COUNT: usize = 25;
+const NODES_COUNT: usize = 13;
 const SUCCESS_THRESHOLD: f64 = 0.33; // If more than 33% of the expected calls are successful the test passes
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1);
-const TESTING_PERIOD: Duration = Duration::from_secs(900); // testing time under load
-const COOLDOWN_PERIOD: Duration = Duration::from_secs(300); // sleep time before downloading p8s data
+const TESTING_PERIOD: Duration = Duration::from_secs(600); // testing time under load
+const COOLDOWN_PERIOD: Duration = Duration::from_secs(120); // sleep time before downloading p8s data
 const DKG_INTERVAL: u64 = 499;
 const MAX_RUNTIME_THREADS: usize = 64;
 const MAX_RUNTIME_BLOCKING_THREADS: usize = MAX_RUNTIME_THREADS;
@@ -90,16 +90,16 @@ const MAX_RUNTIME_BLOCKING_THREADS: usize = MAX_RUNTIME_THREADS;
 // Network parameters
 const BANDWIDTH_MBITS: u32 = 80; // artificial cap on bandwidth
 const LATENCY: Duration = Duration::from_millis(120); // artificial added latency
-const NETWORK_SIMULATION: FixedNetworkSimulation = FixedNetworkSimulation::new()
-    .with_latency(LATENCY)
-    .with_bandwidth(BANDWIDTH_MBITS);
+// const NETWORK_SIMULATION: FixedNetworkSimulation = FixedNetworkSimulation::new()
+//     .with_latency(LATENCY)
+//     .with_bandwidth(BANDWIDTH_MBITS);
 
 // Signature parameters
-const PRE_SIGNATURES_TO_CREATE: u32 = 30;
-const MAX_QUEUE_SIZE: u32 = 10;
+const PRE_SIGNATURES_TO_CREATE: u32 = 10;
+const MAX_QUEUE_SIZE: u32 = 30;
 const CANISTER_COUNT: usize = 4;
-const SIGNATURE_REQUESTS_PER_SECOND: f64 = 2.5;
-const SCHNORR_MSG_SIZE_BYTES: usize = 2_096_000; // 2MiB minus some message overhead
+const SIGNATURE_REQUESTS_PER_SECOND: f64 = 5.0;
+const SCHNORR_MSG_SIZE_BYTES: usize = 32; // 2MiB minus some message overhead
 
 const BENCHMARK_REPORT_FILE: &str = "benchmark/benchmark.json";
 
@@ -108,8 +108,18 @@ const BENCHMARK_REPORT_FILE: &str = "benchmark/benchmark.json";
 fn make_key_ids() -> Vec<MasterPublicKeyId> {
     vec![
         ic_consensus_threshold_sig_system_test_utils::make_ecdsa_key_id(),
-        // ic_consensus_threshold_sig_system_test_utils::make_bip340_key_id(),
-        // ic_consensus_threshold_sig_system_test_utils::make_eddsa_key_id(),
+        ic_consensus_threshold_sig_system_test_utils::make_bip340_key_id(),
+        ic_consensus_threshold_sig_system_test_utils::make_eddsa_key_id(),
+    ]
+}
+
+fn make_request_key_ids() -> Vec<MasterPublicKeyId> {
+    vec![
+        ic_consensus_threshold_sig_system_test_utils::make_ecdsa_key_id(),
+        ic_consensus_threshold_sig_system_test_utils::make_bip340_key_id(),
+        ic_consensus_threshold_sig_system_test_utils::make_eddsa_key_id(),
+        ic_consensus_threshold_sig_system_test_utils::make_bip340_key_id(),
+        ic_consensus_threshold_sig_system_test_utils::make_eddsa_key_id(),
     ]
 }
 
@@ -161,7 +171,7 @@ pub fn setup(env: TestEnv) {
 }
 
 pub fn test(env: TestEnv) {
-    tecdsa_performance_test(env, false, false);
+    tecdsa_performance_test(env, true, true);
 }
 
 pub fn tecdsa_performance_test(
@@ -214,7 +224,7 @@ pub fn tecdsa_performance_test(
         .collect::<Vec<_>>();
     let mut requests = vec![];
     for principal in principals {
-        for key_id in make_key_ids() {
+        for key_id in make_request_key_ids() {
             requests.push(ChainSignatureRequest::new(
                 principal,
                 key_id,
@@ -225,7 +235,7 @@ pub fn tecdsa_performance_test(
 
     if apply_network_settings {
         info!(log, "Optional Step: Modify all nodes' traffic using tc");
-        app_subnet.apply_network_settings(NETWORK_SIMULATION);
+        app_subnet.apply_network_settings(ProductionSubnetTopology::IO67);
     }
 
     // create the runtime that lives until this variable is dropped.

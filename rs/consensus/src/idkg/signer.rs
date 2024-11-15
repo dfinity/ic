@@ -2,7 +2,7 @@
 
 use crate::idkg::complaints::IDkgTranscriptLoader;
 use crate::idkg::metrics::{timed_call, IDkgPayloadMetrics, ThresholdSignerMetrics};
-use crate::idkg::utils::{load_transcripts, IDkgBlockReaderImpl, MAX_PARALLELISM};
+use crate::idkg::utils::{load_transcripts, IDkgBlockReaderImpl, MAX_PARALLELISM, MAX_PARALLELISM_2};
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_interfaces::consensus_pool::ConsensusBlockCache;
 use ic_interfaces::crypto::{
@@ -234,7 +234,7 @@ impl ThresholdSignerImpl {
 
         let results: Vec<_> = inputs
             .into_par_iter()
-            .chunks(MAX_PARALLELISM)
+            .chunks(MAX_PARALLELISM_2)
             .flat_map_iter(|chunk| {
                 chunk.into_iter().flat_map(|(id, share, sig_inputs_ref)| {
                     let key = (share.request_id(), share.signer());

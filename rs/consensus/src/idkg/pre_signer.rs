@@ -29,7 +29,7 @@ use std::collections::{btree_map::Entry, BTreeMap, BTreeSet};
 use std::fmt::{self, Debug, Formatter};
 use std::sync::Arc;
 
-use super::utils::{update_purge_height, MAX_PARALLELISM};
+use super::utils::{update_purge_height, MAX_PARALLELISM, MAX_PARALLELISM_2};
 use super::IDkgSchedule;
 
 pub(crate) trait IDkgPreSigner: Send {
@@ -187,7 +187,7 @@ impl IDkgPreSignerImpl {
 
         let results: Vec<_> = inputs
             .into_par_iter()
-            .chunks(MAX_PARALLELISM)
+            .chunks(MAX_PARALLELISM_2)
             .flat_map_iter(|chunk| {
                 chunk
                     .into_iter()
@@ -482,7 +482,7 @@ impl IDkgPreSignerImpl {
 
         let results: Vec<_> = inputs
             .into_par_iter()
-            .chunks(MAX_PARALLELISM)
+            .chunks(MAX_PARALLELISM_2)
             .flat_map_iter(|chunk| {
                 chunk.into_iter().flat_map(
                     |(id, support, signed_dealing, transcript_params_ref)| {
