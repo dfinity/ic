@@ -87,6 +87,7 @@ rust_ic_bench(
         # Keep sorted.
         ":ingress_manager",
         "//rs/artifact_pool",
+        "//rs/canister_client/sender",
         "//rs/interfaces",
         "//rs/interfaces/mocks",
         "//rs/interfaces/registry",
@@ -109,6 +110,7 @@ rust_ic_bench(
         "@crate_index//:criterion",
         "@crate_index//:pprof",
         "@crate_index//:rand",
+        "@crate_index//:rand_chacha",
         "@crate_index//:tokio",
     ],
 )

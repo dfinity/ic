@@ -29,6 +29,7 @@ slog = { workspace = true }
 assert_matches = { workspace = true }
 criterion = { workspace = true }
 ic-artifact-pool = { path = "../artifact_pool" }
+ic-canister-client-sender = { path = "../canister_client/sender" }
 ic-config = { path = "../config" }
 ic-interfaces-mocks = { path = "../interfaces/mocks" }
 ic-interfaces-state-manager-mocks = { path = "../interfaces/state_manager/mocks" }
@@ -43,6 +44,7 @@ ic-test-utilities-types = { path = "../test_utilities/types" }
 pprof = { workspace = true }
 proptest = { workspace = true }
 rand = { workspace = true }
+rand_chacha = { workspace = true }
 tokio = { workspace = true }
 
 [[bench]]

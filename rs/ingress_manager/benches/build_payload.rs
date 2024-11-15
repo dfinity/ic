@@ -61,6 +61,7 @@ struct TestCase {
     canisters_count: usize,
     ingress_pool_size: usize,
     ingress_message_size: usize,
+    signed: bool,
 }
 
 /// Helper to run a single test with dependency setup.
@@ -132,6 +133,7 @@ where
             now,
             test_case.ingress_pool_size,
             test_case.ingress_message_size,
+            test_case.signed,
             &canisters,
         );
         time_source.set_time(then).unwrap();
@@ -173,22 +175,33 @@ fn prepare(
     now: Time,
     number_of_ingress_messages: usize,
     ingress_message_size: usize,
+    signed: bool,
     canisters: &[CanisterId],
 ) -> Time {
     let mut changeset = Mutations::new();
     let mut pool = pool.write().unwrap();
 
     let mut canisters = canisters.iter().cycle();
+    let mut rng: rand_chacha::ChaCha8Rng = rand::SeedableRng::seed_from_u64(42);
 
     for i in 0..number_of_ingress_messages {
         let expiry = 5 * MAX_INGRESS_TTL;
-        let ingress = SignedIngressBuilder::new()
+        let key_pair = ic_canister_client_sender::Ed25519KeyPair::generate(&mut rng);
+        let sender = ic_canister_client_sender::Sender::SigKeys(
+            ic_canister_client_sender::SigKeys::Ed25519(key_pair),
+        );
+        let mut ingress_builder = SignedIngressBuilder::new()
             .method_name("provisional_create_canister_with_cycles")
-            .method_payload(vec![0; ingress_message_size - 200])
+            .method_payload(vec![0; ingress_message_size - 400])
             .nonce(i as u64)
             .expiry_time(now + expiry)
-            .canister_id(*canisters.next().unwrap())
-            .build();
+            .canister_id(*canisters.next().unwrap());
+
+        if signed {
+            ingress_builder = ingress_builder.sign_for_sender(&sender);
+        }
+
+        let ingress = ingress_builder.build();
 
         let message_id = IngressMessageId::from(&ingress);
         pool.insert(UnvalidatedArtifact {
@@ -237,52 +250,63 @@ fn build_payload(criterion: &mut Criterion) {
     let mut group = criterion.benchmark_group("get_ingress_payload");
     group.measurement_time(MEASUREMENT_TIME);
 
-    let test_cases = [
-        TestCase {
-            canisters_count: 100_000,
-            ingress_pool_size: 100 * MAX_INGRESS_MESSAGES_PER_BLOCK as usize,
-            ingress_message_size: (MAX_BLOCK_PAYLOAD_SIZE / MAX_INGRESS_MESSAGES_PER_BLOCK)
-                as usize,
-        },
-        TestCase {
-            canisters_count: 1,
-            ingress_pool_size: 100 * MAX_INGRESS_MESSAGES_PER_BLOCK as usize,
-            ingress_message_size: (MAX_BLOCK_PAYLOAD_SIZE / MAX_INGRESS_MESSAGES_PER_BLOCK)
-                as usize,
-        },
-        TestCase {
-            canisters_count: 1_000,
-            ingress_pool_size: MAX_INGRESS_MESSAGES_PER_BLOCK as usize,
-            ingress_message_size: (MAX_BLOCK_PAYLOAD_SIZE / MAX_INGRESS_MESSAGES_PER_BLOCK)
-                as usize,
-        },
-        TestCase {
-            canisters_count: 1,
-            ingress_pool_size: MAX_INGRESS_MESSAGES_PER_BLOCK as usize,
-            ingress_message_size: (MAX_BLOCK_PAYLOAD_SIZE / MAX_INGRESS_MESSAGES_PER_BLOCK)
-                as usize,
-        },
-        TestCase {
-            canisters_count: 1,
-            ingress_pool_size: 2,
-            ingress_message_size: MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET as usize,
-        },
-        TestCase {
-            canisters_count: 1,
-            ingress_pool_size: 100,
-            ingress_message_size: MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET as usize,
-        },
-    ];
+    let mut test_cases = Vec::new();
+
+    for signed in [false, true] {
+        test_cases.append(&mut vec![
+            TestCase {
+                canisters_count: 100_000,
+                ingress_pool_size: 100 * MAX_INGRESS_MESSAGES_PER_BLOCK as usize,
+                ingress_message_size: (MAX_BLOCK_PAYLOAD_SIZE / MAX_INGRESS_MESSAGES_PER_BLOCK)
+                    as usize,
+                signed,
+            },
+            TestCase {
+                canisters_count: 1,
+                ingress_pool_size: 100 * MAX_INGRESS_MESSAGES_PER_BLOCK as usize,
+                ingress_message_size: (MAX_BLOCK_PAYLOAD_SIZE / MAX_INGRESS_MESSAGES_PER_BLOCK)
+                    as usize,
+                signed,
+            },
+            TestCase {
+                canisters_count: 1_000,
+                ingress_pool_size: MAX_INGRESS_MESSAGES_PER_BLOCK as usize,
+                ingress_message_size: (MAX_BLOCK_PAYLOAD_SIZE / MAX_INGRESS_MESSAGES_PER_BLOCK)
+                    as usize,
+                signed,
+            },
+            TestCase {
+                canisters_count: 1,
+                ingress_pool_size: MAX_INGRESS_MESSAGES_PER_BLOCK as usize,
+                ingress_message_size: (MAX_BLOCK_PAYLOAD_SIZE / MAX_INGRESS_MESSAGES_PER_BLOCK)
+                    as usize,
+                signed,
+            },
+            TestCase {
+                canisters_count: 1,
+                ingress_pool_size: 2,
+                ingress_message_size: MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET as usize,
+                signed,
+            },
+            TestCase {
+                canisters_count: 1,
+                ingress_pool_size: 100,
+                ingress_message_size: MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET as usize,
+                signed,
+            },
+        ]);
+    }
 
     for test_case in test_cases {
         set_up_dependencies_and_run_test(
             test_case,
             |manager: &mut IngressManager, current_time: Time| {
                 let name = format!(
-                    "canisters: {}, ingress pool size: {}, ingress message size: {}",
+                    "canisters: {}, pool size: {}, message size: {}, signed: {}",
                     test_case.canisters_count,
                     test_case.ingress_pool_size,
-                    test_case.ingress_message_size
+                    test_case.ingress_message_size,
+                    test_case.signed,
                 );
 
                 group.bench_function(&name, |bench| {
@@ -312,12 +336,28 @@ fn validate_payload(criterion: &mut Criterion) {
             ingress_pool_size: MAX_INGRESS_MESSAGES_PER_BLOCK as usize,
             ingress_message_size: (MAX_BLOCK_PAYLOAD_SIZE / MAX_INGRESS_MESSAGES_PER_BLOCK)
                 as usize,
+            signed: true,
         },
         TestCase {
             canisters_count: 1,
             ingress_pool_size: (MAX_BLOCK_PAYLOAD_SIZE / MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET)
                 as usize,
             ingress_message_size: MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET as usize,
+            signed: true,
+        },
+        TestCase {
+            canisters_count: 1,
+            ingress_pool_size: MAX_INGRESS_MESSAGES_PER_BLOCK as usize,
+            ingress_message_size: (MAX_BLOCK_PAYLOAD_SIZE / MAX_INGRESS_MESSAGES_PER_BLOCK)
+                as usize,
+            signed: false,
+        },
+        TestCase {
+            canisters_count: 1,
+            ingress_pool_size: (MAX_BLOCK_PAYLOAD_SIZE / MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET)
+                as usize,
+            ingress_message_size: MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET as usize,
+            signed: false,
         },
     ];
 
@@ -332,9 +372,10 @@ fn validate_payload(criterion: &mut Criterion) {
                 );
 
                 let name = format!(
-                    "ingress message count: {}, ingress message size: {}",
+                    "message count: {}, message size: {}, signed: {}",
                     payload.message_count(),
-                    test_case.ingress_message_size
+                    test_case.ingress_message_size,
+                    test_case.signed,
                 );
 
                 group.bench_function(&name, |bench| {
