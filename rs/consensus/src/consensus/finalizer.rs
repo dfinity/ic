@@ -479,7 +479,7 @@ mod tests {
                     payment: Cycles::zero(),
                     method_name: "".to_string(),
                     method_payload: vec![],
-                    metadata: None,
+                    metadata: Default::default(),
                     deadline: NO_DEADLINE,
                 },
                 nodes_in_target_subnet: BTreeSet::new(),
