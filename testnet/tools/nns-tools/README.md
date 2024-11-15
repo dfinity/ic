@@ -492,15 +492,9 @@ You can look up your neuron ID [here in Notion][neuron-id]. For example, Daniel 
 
 [neuron-id]: https://www.notion.so/dfinityorg/3a1856c603704d51a6fcd2a57c98f92f?v=fc597afede904e499744f3528cad6682
 
-For example:
 
-```bash
-./testnet/tools/nns-tools/submit-mainnet-nns-upgrade-proposal.sh \
-    /tmp/registry-upgrade-proposal-2023-09-29.md \
-    51
-```
-
-The script validates your proposal text. Specifically, it enforces the following requirements:
+The submission scripts validate your proposal texts. Specifically, it enforces
+the following requirements:
 
 1. There are no TODO items left in the proposal text.
 
