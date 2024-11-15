@@ -62,6 +62,14 @@ impl<T> WithThrottle<T> {
 }
 
 #[async_trait]
+impl<T: Register> Register for WithThrottle<T> {
+    async fn register(&self, pubkey: &[u8]) -> Result<(), RegisterError> {
+        self.throttle().await;
+        self.0.register(pubkey).await
+    }
+}
+
+#[async_trait]
 impl<T: Query> Query for WithThrottle<T> {
     async fn query(&self) -> Result<Vec<u8>, QueryError> {
         self.throttle().await;
@@ -421,7 +429,8 @@ impl From<Canister> for CanisterMethods {
         Self {
             register: Arc::new({
                 let v = value.clone();
-                WithLogs(v)
+                let v = WithLogs(v);
+                WithThrottle(v, ThrottleParams::new(Duration::from_secs(10)))
             }),
             query: Arc::new({
                 let v = value.clone();

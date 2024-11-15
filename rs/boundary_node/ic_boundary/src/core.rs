@@ -227,10 +227,10 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
 
     // Vault
     let v = vault_from_config(
-        &CryptoConfig::new("TODO".into()), // config
-        None,                              // tokio_runtime_handle
-        no_op_logger(),                    // logger
-        Arc::new(CryptoMetrics::none()),   // metrics
+        &CryptoConfig::new("/home/orricon/workspace/ic-cdk-logs/out/node-1/crypto".into()), // config
+        None,                            // tokio_runtime_handle
+        no_op_logger(),                  // logger
+        Arc::new(CryptoMetrics::none()), // metrics
     );
 
     let pk = v
@@ -268,8 +268,8 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
 
     // Canister
     let c = AnonymizationCanister::new(
-        ag,                        // agent
-        Principal::from_text("")?, // canister_id
+        ag,                                                   // agent
+        Principal::from_text("bd3sg-teaaa-aaaaa-qaaba-cai")?, // canister_id
     );
 
     // Rng
