@@ -489,6 +489,9 @@ pub(crate) fn get_configs_for_local_transcripts(
     registry_version: RegistryVersion,
 ) -> Result<Vec<NiDkgConfig>, PayloadCreationError> {
     let mut new_configs = Vec::new();
+    ////////////////////////////////////////////////////////////////////////////////
+    // TODO(CON-1413): In addition to iterating over TAGS, also iterate over all vetKD keys that were requested by registry
+    ///////////////////////////////////////////////////////////////////////////////
     for tag in TAGS.iter() {
         let dkg_id = NiDkgId {
             start_block_height,
@@ -498,8 +501,8 @@ pub(crate) fn get_configs_for_local_transcripts(
         };
         let (dealers, resharing_transcript) = match tag {
             NiDkgTag::LowThreshold => (node_ids.clone(), None),
-            NiDkgTag::HighThreshold => {
-                let resharing_transcript = reshared_transcripts.get(&NiDkgTag::HighThreshold);
+            NiDkgTag::HighThreshold | NiDkgTag::HighThresholdForKey(_) => {
+                let resharing_transcript = reshared_transcripts.get(tag);
                 (
                     resharing_transcript
                         .map(|transcript| transcript.committee.get().clone())
@@ -1206,9 +1209,13 @@ mod tests {
                 assert_eq!(conf.max_corrupt_dealers().get(), 2);
                 assert_eq!(
                     conf.threshold().get().get(),
-                    match *tag {
+                    match tag {
                         NiDkgTag::LowThreshold => 3,
                         NiDkgTag::HighThreshold => 5,
+                        /////////////////////////////////////////////////////
+                        // TODO(CON-1417): extend this test once we have support for vetKD transcripts in registry CUPs
+                        /////////////////////////////////////////////////////
+                        NiDkgTag::HighThresholdForKey(_) => todo!("CON-1417"),
                     }
                 );
             }
@@ -1311,9 +1318,13 @@ mod tests {
                     assert_eq!(conf.max_corrupt_dealers().get(), 2);
                     assert_eq!(
                         conf.threshold().get().get(),
-                        match *tag {
+                        match tag {
                             NiDkgTag::LowThreshold => 3,
                             NiDkgTag::HighThreshold => 5,
+                            /////////////////////////////////////////////////////
+                            // TODO(CON-1413): extend this test once we can create local transcript configs for vetKeys that were requested by registry
+                            /////////////////////////////////////////////////////
+                            NiDkgTag::HighThresholdForKey(_) => todo!("CON-1413"),
                         }
                     );
 

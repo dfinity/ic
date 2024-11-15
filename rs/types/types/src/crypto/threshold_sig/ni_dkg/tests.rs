@@ -301,18 +301,3 @@ fn empty_ni_csp_dkg_transcript() -> CspNiDkgTranscript {
         receiver_data: Default::default(),
     })
 }
-
-#[test]
-fn should_correctly_convert_i32_to_ni_dkg_tag() {
-    assert!(NiDkgTag::try_from(-1).is_err());
-    assert!(NiDkgTag::try_from(0).is_err());
-    assert_eq!(NiDkgTag::try_from(1), Ok(NiDkgTag::LowThreshold));
-    assert_eq!(NiDkgTag::try_from(2), Ok(NiDkgTag::HighThreshold));
-    assert!(NiDkgTag::try_from(3).is_err());
-}
-
-#[test]
-fn should_correctly_convert_ni_dkg_tag_to_i32() {
-    assert_eq!(NiDkgTag::LowThreshold as i32, 1);
-    assert_eq!(NiDkgTag::HighThreshold as i32, 2);
-}

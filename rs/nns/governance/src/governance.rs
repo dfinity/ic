@@ -63,7 +63,7 @@ use crate::{
         StopOrStartCanister, Tally, Topic, UpdateCanisterSettings, UpdateNodeProvider, Visibility,
         Vote, WaitForQuietState, XdrConversionRate as XdrConversionRatePb,
     },
-    proposals::call_canister::CallCanister,
+    proposals::{call_canister::CallCanister, sum_weighted_voting_power},
 };
 use async_trait::async_trait;
 use candid::{Decode, Encode};
@@ -190,7 +190,7 @@ pub const MAX_NEURON_RECENT_BALLOTS: usize = 100;
 pub const REWARD_DISTRIBUTION_PERIOD_SECONDS: u64 = ONE_DAY_SECONDS;
 
 /// The maximum number of neurons supported.
-pub const MAX_NUMBER_OF_NEURONS: usize = 350_000;
+pub const MAX_NUMBER_OF_NEURONS: usize = 380_000;
 
 // Spawning is exempted from rate limiting, so we don't need large of a limit here.
 pub const MAX_SUSTAINED_NEURONS_PER_HOUR: u64 = 15;
@@ -366,7 +366,7 @@ impl From<Result<NeuronsFundAuditInfo, GovernanceError>> for GetNeuronsFundAudit
 
 impl Vote {
     /// Returns whether this vote is eligible for voting reward.
-    fn eligible_for_rewards(&self) -> bool {
+    pub fn eligible_for_rewards(&self) -> bool {
         match self {
             Vote::Unspecified => false,
             Vote::Yes => true,
@@ -1413,7 +1413,7 @@ impl Topic {
     /// neurons voting on proposals are weighted by this amount. The
     /// weights are designed to encourage active participation from
     /// neuron holders.
-    fn reward_weight(&self) -> f64 {
+    pub fn reward_weight(&self) -> f64 {
         match self {
             // We provide higher voting rewards for neuron holders
             // who vote on Governance and SnsAndCommunityFund proposals.
@@ -7028,43 +7028,19 @@ impl Governance {
         // reward weight of proposals being voted on.
         let mut actually_distributed_e8s_equivalent = 0_u64;
 
-        // Sum up "voting rights", which determine the share of the pot earned
-        // by a neuron.
-        //
-        // Construct map voters -> total _used_ voting rights for
-        // considered proposals as well as the overall total voting
-        // power on considered proposals, whether or not this voting
-        // power was used to vote (yes or no).
-        let (voters_to_used_voting_right, total_voting_rights) = {
-            let mut voters_to_used_voting_right: HashMap<NeuronId, f64> = HashMap::new();
-            let mut total_voting_rights = 0f64;
-
-            for pid in considered_proposals.iter() {
-                if let Some(proposal) = self.get_proposal_data(*pid) {
-                    let reward_weight = proposal.topic().reward_weight();
-                    for (voter, ballot) in proposal.ballots.iter() {
-                        let voting_rights = (ballot.voting_power as f64) * reward_weight;
-                        total_voting_rights += voting_rights;
-                        #[allow(clippy::blocks_in_conditions)]
-                        if Vote::try_from(ballot.vote)
-                            .unwrap_or_else(|_| {
-                                println!(
-                                    "{}Vote::from invoked with unexpected value {}.",
-                                    LOG_PREFIX, ballot.vote
-                                );
-                                Vote::Unspecified
-                            })
-                            .eligible_for_rewards()
-                        {
-                            *voters_to_used_voting_right
-                                .entry(NeuronId { id: *voter })
-                                .or_insert(0f64) += voting_rights;
-                        }
-                    }
-                }
+        let proposals = considered_proposals.iter().filter_map(|proposal_id| {
+            let result = self.heap_data.proposals.get(&proposal_id.id);
+            if result.is_none() {
+                println!(
+                    "{}ERROR: Trying to give voting rewards for proposal {}, \
+                         but it was not found.",
+                    LOG_PREFIX, proposal_id.id,
+                );
             }
-            (voters_to_used_voting_right, total_voting_rights)
-        };
+            result
+        });
+        let (voters_to_used_voting_right, total_voting_rights) =
+            sum_weighted_voting_power(proposals);
 
         // Increment neuron maturities (and actually_distributed_e8s_equivalent).
         //
