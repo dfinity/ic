@@ -6,7 +6,7 @@
 function usage() {
     cat <<EOF
 Usage:
-  generate-replica-config [-n network.conf] [-c nns.conf] [-b backup.conf] [-m malicious_behavior.conf] [-q query_stats.conf] -i ic.json5.template -o ic.json5
+  generate-ic-config [-n network.conf] [-c nns.conf] [-b backup.conf] [-m malicious_behavior.conf] [-q query_stats.conf] -i ic.json5.template -o ic.json5
 
   Generate replica config from template file.
 
@@ -217,7 +217,6 @@ IPV4_ADDRESS="${ipv4_address:-}"
 IPV4_GATEWAY="${ipv4_gateway:-}"
 DOMAIN="${domain:-}"
 NNS_URLS="${nns_urls:-http://[::1]:8080}"
-NODE_INDEX="${node_index:-0}"
 # Default value is 24h
 BACKUP_RETENTION_TIME_SECS="${backup_retention_time_secs:-86400}"
 # Default value is 1h
@@ -239,7 +238,6 @@ sed -e "s@{{ ipv6_address }}@${IPV6_ADDRESS}@" \
     -e "s@{{ ipv4_gateway }}@${IPV4_GATEWAY}@" \
     -e "s@{{ domain }}@${DOMAIN}@" \
     -e "s@{{ nns_urls }}@${NNS_URLS}@" \
-    -e "s@{{ node_index }}@${NODE_INDEX}@" \
     -e "s@{{ backup_retention_time_secs }}@${BACKUP_RETENTION_TIME_SECS}@" \
     -e "s@{{ backup_purging_interval_secs }}@${BACKUP_PURGING_INTERVAL_SECS}@" \
     -e "s@{{ malicious_behavior }}@${MALICIOUS_BEHAVIOR}@" \

@@ -1,8 +1,9 @@
 use crate::{
-    access_control::{AccessLevel, ResolveAccessLevel},
     state::CanisterApi,
     types::{DiscloseRulesArg, DiscloseRulesArgError, IncidentId, RuleId, Timestamp},
 };
+use strum::AsRefStr;
+use thiserror::Error;
 
 pub trait DisclosesRules {
     fn disclose_rules(
@@ -12,53 +13,51 @@ pub trait DisclosesRules {
     ) -> Result<(), DiscloseRulesError>;
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Error, AsRefStr)]
 pub enum DiscloseRulesError {
-    #[error("Invalid input: {0}")]
-    InvalidInput(#[from] DiscloseRulesArgError),
-    #[error("Operation is not permitted")]
+    #[error("Unauthorized operation")]
+    #[strum(serialize = "unauthorized_error")]
     Unauthorized,
+    #[error("Invalid input: {0}")]
+    #[strum(serialize = "invalid_input_error")]
+    InvalidInput(#[from] DiscloseRulesArgError),
     #[error("Incident with ID={0} not found")]
+    #[strum(serialize = "incident_id_not_found_error")]
     IncidentIdNotFound(IncidentId),
     #[error("Rule with ID={0} not found")]
+    #[strum(serialize = "rule_id_not_found_error")]
     RuleIdNotFound(RuleId),
-    #[error(transparent)]
-    UnexpectedError(#[from] anyhow::Error),
+    #[error("An unexpected internal error occurred: {0}")]
+    #[strum(serialize = "internal_error")]
+    Internal(#[from] anyhow::Error),
 }
 
-pub struct RulesDiscloser<S, A> {
-    pub canister_api: S,
-    pub access_resolver: A,
+pub struct RulesDiscloser<A> {
+    pub canister_api: A,
 }
 
-impl<S, A> RulesDiscloser<S, A> {
-    pub fn new(canister_api: S, access_resolver: A) -> Self {
-        Self {
-            canister_api,
-            access_resolver,
-        }
+impl<A> RulesDiscloser<A> {
+    pub fn new(canister_api: A) -> Self {
+        Self { canister_api }
     }
 }
 
-impl<S: CanisterApi, A: ResolveAccessLevel> DisclosesRules for RulesDiscloser<S, A> {
+impl<A: CanisterApi> DisclosesRules for RulesDiscloser<A> {
     fn disclose_rules(
         &self,
         arg: rate_limits_api::DiscloseRulesArg,
         current_time: Timestamp,
     ) -> Result<(), DiscloseRulesError> {
-        if self.access_resolver.get_access_level() == AccessLevel::FullAccess {
-            let arg = DiscloseRulesArg::try_from(arg)?;
-            match arg {
-                DiscloseRulesArg::RuleIds(rule_ids) => {
-                    disclose_rules(&self.canister_api, current_time, &rule_ids)?;
-                }
-                DiscloseRulesArg::IncidentIds(incident_ids) => {
-                    disclose_incidents(&self.canister_api, current_time, &incident_ids)?;
-                }
+        let arg = DiscloseRulesArg::try_from(arg)?;
+        match arg {
+            DiscloseRulesArg::RuleIds(rule_ids) => {
+                disclose_rules(&self.canister_api, current_time, &rule_ids)?;
             }
-            return Ok(());
+            DiscloseRulesArg::IncidentIds(incident_ids) => {
+                disclose_incidents(&self.canister_api, current_time, &incident_ids)?;
+            }
         }
-        Err(DiscloseRulesError::Unauthorized)
+        Ok(())
     }
 }
 
@@ -84,10 +83,7 @@ fn disclose_rules(
     for (rule_id, mut metadata) in rules {
         if metadata.disclosed_at.is_none() {
             metadata.disclosed_at = Some(time);
-            assert!(
-                canister_api.upsert_rule(*rule_id, metadata).is_some(),
-                "Rule with rule_id = {rule_id} not found, failed to update"
-            );
+            let _ = canister_api.upsert_rule(*rule_id, metadata);
         }
     }
 
@@ -99,7 +95,7 @@ fn disclose_incidents(
     time: Timestamp,
     incident_ids: &[IncidentId],
 ) -> Result<(), DiscloseRulesError> {
-    let mut incidents_metadata = Vec::with_capacity(incident_ids.len());
+    let mut incidents_metadata: Vec<(_, _)> = Vec::with_capacity(incident_ids.len());
 
     // Return the first error while assembling the metadata
     for incident_id in incident_ids.iter() {
@@ -118,12 +114,7 @@ fn disclose_incidents(
             let rule_ids: Vec<RuleId> = metadata.rule_ids.iter().cloned().collect();
             disclose_rules(canister_api, time, &rule_ids)?;
             metadata.is_disclosed = true;
-            assert!(
-                canister_api
-                    .upsert_incident(incident_id, metadata)
-                    .is_some(),
-                "failed to update incident, incident_id = {incident_id} not found"
-            )
+            let _ = canister_api.upsert_incident(incident_id, metadata);
         }
     }
 

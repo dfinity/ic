@@ -5,11 +5,11 @@ use crate::{
 use anyhow::Context;
 use getrandom::getrandom;
 use std::collections::{HashMap, HashSet};
+use strum::AsRefStr;
 use thiserror::Error;
 use uuid::Uuid;
 
 use crate::{
-    access_control::{AccessLevel, ResolveAccessLevel},
     state::CanisterApi,
     storage::{StorableConfig, StorableRuleMetadata},
     types::{InputConfig, RuleId, Version},
@@ -35,31 +35,32 @@ pub enum RulePolicyError {
     },
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, AsRefStr)]
 pub enum AddConfigError {
-    #[error("Invalid input configuration: {0}")]
-    InvalidInputConfig(#[from] InputConfigError),
-    #[error("Rule violates policy: {0}")]
-    RulePolicyViolation(#[from] RulePolicyError),
-    #[error("Initial version and configuration were not set")]
-    NoInitConfigVersion,
     #[error("Unauthorized operation")]
+    #[strum(serialize = "unauthorized_error")]
     Unauthorized,
-    #[error("An unexpected error occurred: {0}")]
-    Unexpected(#[from] anyhow::Error),
+    #[error("Invalid input configuration: {0}")]
+    #[strum(serialize = "invalid_input_error")]
+    InvalidInput(#[from] InputConfigError),
+    #[error("Rule violates policy: {0}")]
+    #[strum(serialize = "policy_violation_error")]
+    PolicyViolation(#[from] RulePolicyError),
+    #[error("Initial version and configuration were not set")]
+    #[strum(serialize = "missing_initial_version_error")]
+    MissingInitialVersion,
+    #[error("An unexpected internal error occurred: {0}")]
+    #[strum(serialize = "internal_error")]
+    Internal(#[from] anyhow::Error),
 }
 
-pub struct ConfigAdder<R, A> {
-    pub canister_api: R,
-    pub access_resolver: A,
+pub struct ConfigAdder<A> {
+    pub canister_api: A,
 }
 
-impl<R, A> ConfigAdder<R, A> {
-    pub fn new(canister_api: R, access_resolver: A) -> Self {
-        Self {
-            canister_api,
-            access_resolver,
-        }
+impl<A> ConfigAdder<A> {
+    pub fn new(canister_api: A) -> Self {
+        Self { canister_api }
     }
 }
 
@@ -86,36 +87,31 @@ impl<R, A> ConfigAdder<R, A> {
 // - Operation of resubmitting a "removed" rule would result in creation of a rule with a new ID.
 // - New rules cannot be linked to already disclosed incidents (LinkingRuleToDisclosedIncident error)
 
-impl<R: CanisterApi, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
+impl<A: CanisterApi> AddsConfig for ConfigAdder<A> {
     fn add_config(
         &self,
         input_config: rate_limits_api::InputConfig,
         time: Timestamp,
     ) -> Result<(), AddConfigError> {
-        // Only privileged users can perform this operation
-        if self.access_resolver.get_access_level() != AccessLevel::FullAccess {
-            return Err(AddConfigError::Unauthorized);
-        }
-
         // Convert config from api type
         let next_config = types::InputConfig::try_from(input_config)?;
 
         let current_version = self
             .canister_api
             .get_version()
-            .ok_or_else(|| AddConfigError::NoInitConfigVersion)?;
+            .ok_or_else(|| AddConfigError::MissingInitialVersion)?;
 
         let next_version = current_version + 1;
 
         let current_config: StorableConfig = self
             .canister_api
             .get_config(current_version)
-            .ok_or_else(|| AddConfigError::NoInitConfigVersion)?;
+            .ok_or_else(|| AddConfigError::MissingInitialVersion)?;
 
         let current_full_config: InputConfig =
             self.canister_api
                 .get_full_config(current_version)
-                .ok_or_else(|| AddConfigError::NoInitConfigVersion)?;
+                .ok_or_else(|| AddConfigError::MissingInitialVersion)?;
 
         // Ordered IDs of all rules in the submitted config
         let mut rule_ids = Vec::<RuleId>::new();
@@ -148,7 +144,7 @@ impl<R: CanisterApi, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
                 if let Some(incident) = existing_incident {
                     // A new rule can't be linked to a disclosed incident
                     if incident.is_disclosed {
-                        Err(AddConfigError::RulePolicyViolation(
+                        Err(AddConfigError::PolicyViolation(
                             RulePolicyError::LinkingRuleToDisclosedIncident {
                                 index: rule_idx,
                                 incident_id: input_rule.incident_id,
@@ -279,7 +275,7 @@ fn commit_changes(
 
 #[cfg(test)]
 mod tests {
-    use crate::access_control::MockResolveAccessLevel;
+    use crate::access_control::{AccessLevel, MockResolveAccessLevel};
     use crate::state::MockCanisterApi;
 
     use super::*;
@@ -317,7 +313,7 @@ mod tests {
             .expect_upsert_config()
             .returning(|_, _| None);
 
-        let writer = ConfigAdder::new(mock_canister_api, mock_access);
+        let writer = ConfigAdder::new(mock_canister_api);
 
         writer
             .add_config(config, current_time)

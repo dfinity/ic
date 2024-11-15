@@ -49,7 +49,7 @@ use std::{sync::Arc, time::Duration};
 /// The acceptable gap between the finalized height and the certified height. If
 /// the actual gap is greater than this, consensus starts slowing down the block
 /// rate.
-const ACCEPTABLE_FINALIZATION_CERTIFICATION_GAP: u64 = 2;
+const ACCEPTABLE_FINALIZATION_CERTIFICATION_GAP: u64 = 1;
 
 /// The amount of time consensus should delay notarization of the next block by,
 /// for each height that the latest finalized block is ahead of the latest certified state.

@@ -228,7 +228,8 @@ impl Request {
             | Ok(Method::BitcoinSendTransactionInternal)
             | Ok(Method::BitcoinGetSuccessors)
             | Ok(Method::BitcoinGetCurrentFeePercentiles)
-            | Ok(Method::NodeMetricsHistory) => {
+            | Ok(Method::NodeMetricsHistory)
+            | Ok(Method::SubnetInfo) => {
                 // No effective canister id.
                 None
             }

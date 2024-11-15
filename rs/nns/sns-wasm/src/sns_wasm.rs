@@ -1,22 +1,18 @@
 use crate::{
     canister_api::CanisterApi,
-    pb::{
-        hash_to_hex_string,
-        v1::{
-            add_wasm_response, AddWasmRequest, AddWasmResponse, DappCanistersTransferResult,
-            DeployNewSnsRequest, DeployNewSnsResponse, DeployedSns,
-            GetDeployedSnsByProposalIdRequest, GetDeployedSnsByProposalIdResponse,
-            GetNextSnsVersionRequest, GetNextSnsVersionResponse, GetProposalIdThatAddedWasmRequest,
-            GetProposalIdThatAddedWasmResponse, GetSnsSubnetIdsResponse,
-            GetWasmMetadataRequest as GetWasmMetadataRequestPb,
-            GetWasmMetadataResponse as GetWasmMetadataResponsePb, GetWasmRequest, GetWasmResponse,
-            InsertUpgradePathEntriesRequest, InsertUpgradePathEntriesResponse,
-            ListDeployedSnsesRequest, ListDeployedSnsesResponse, ListUpgradeStep,
-            ListUpgradeStepsRequest, ListUpgradeStepsResponse,
-            MetadataSection as MetadataSectionPb, SnsCanisterIds, SnsCanisterType, SnsUpgrade,
-            SnsVersion, SnsWasm, SnsWasmError, SnsWasmStableIndex, StableCanisterState,
-            UpdateSnsSubnetListRequest, UpdateSnsSubnetListResponse,
-        },
+    pb::v1::{
+        add_wasm_response, AddWasmRequest, AddWasmResponse, DappCanistersTransferResult,
+        DeployNewSnsRequest, DeployNewSnsResponse, DeployedSns, GetDeployedSnsByProposalIdRequest,
+        GetDeployedSnsByProposalIdResponse, GetNextSnsVersionRequest, GetNextSnsVersionResponse,
+        GetProposalIdThatAddedWasmRequest, GetProposalIdThatAddedWasmResponse,
+        GetSnsSubnetIdsResponse, GetWasmMetadataRequest as GetWasmMetadataRequestPb,
+        GetWasmMetadataResponse as GetWasmMetadataResponsePb, GetWasmRequest, GetWasmResponse,
+        InsertUpgradePathEntriesRequest, InsertUpgradePathEntriesResponse,
+        ListDeployedSnsesRequest, ListDeployedSnsesResponse, ListUpgradeStep,
+        ListUpgradeStepsRequest, ListUpgradeStepsResponse, MetadataSection as MetadataSectionPb,
+        SnsCanisterIds, SnsCanisterType, SnsUpgrade, SnsVersion, SnsWasm, SnsWasmError,
+        SnsWasmStableIndex, StableCanisterState, UpdateSnsSubnetListRequest,
+        UpdateSnsSubnetListResponse,
     },
     stable_memory::SnsWasmStableMemory,
     wasm_metadata::MetadataSection,
@@ -25,7 +21,7 @@ use candid::Encode;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::api::stable::StableMemory;
 use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
-use ic_nervous_system_common::{ONE_TRILLION, SNS_CREATION_FEE};
+use ic_nervous_system_common::{hash_to_hex_string, ONE_TRILLION, SNS_CREATION_FEE};
 use ic_nervous_system_proto::pb::v1::Canister;
 use ic_nns_constants::{
     DEFAULT_SNS_GOVERNANCE_CANISTER_WASM_MEMORY_LIMIT,
