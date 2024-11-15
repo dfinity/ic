@@ -11877,6 +11877,7 @@ dependencies = [
  "serde_bytes",
  "strum",
  "strum_macros",
+ "syn 1.0.109",
  "tempfile",
  "tokio",
  "tokio-test",
