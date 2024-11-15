@@ -30,8 +30,11 @@ pub use id::NiDkgId;
 #[cfg(test)]
 mod tests;
 
-/// Allows to distinguish protocol executions in high and low threshold
-/// settings.
+/// Allows to distinguish NI-DKG protocol executions for different purposes:
+/// * LowThreshold: generate a transcript with a low threshold,
+/// * HighThreshold: generate a transcript with a high threshold,
+/// * HighThresholdForKey: generate a transcript with a high threshold for
+///   a master public key with a particular ID
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, EnumCount, Serialize)]
 #[repr(isize)]
 pub enum NiDkgTag {
