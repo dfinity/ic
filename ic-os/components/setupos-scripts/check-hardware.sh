@@ -275,6 +275,7 @@ function read_variables() {
 }
 
 function validate_node_reward() {
+    read_variables
     if [[ -z "$node_reward_type" ]]; then
         log_and_halt_installation_on_error 1 "Configuration error: node_reward_type is not set"
     fi
