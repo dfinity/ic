@@ -467,7 +467,9 @@ Finally, run
 ```bash
 # In addition to the following, we assume that you still have the environment
 # variables from the previous section...
-SUBMITTING_NEURON_ID=51 # e.g. for Daniel Wong, 51
+
+# e.g. for Daniel Wong, 51
+SUBMITTING_NEURON_ID=51
 
 # NNS:
 for CANISTER in "${NNS_CANISTERS[@]}"
