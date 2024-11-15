@@ -551,6 +551,7 @@ fn validate_new_signature_agreements(
     let contexts = state.signature_request_contexts();
     let context_map = contexts
         .iter()
+        .filter(|(_, ctxt)| ctxt.is_ecdsa() || ctxt.is_schnorr())
         .map(|(id, c)| (c.pseudo_random_id, (id, c)))
         .collect::<BTreeMap<_, _>>();
     for (random_id, completed) in curr_payload.signature_agreements.iter() {

@@ -99,8 +99,21 @@ pub struct SchnorrArguments {
     pub message: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct VetKdArguments {
+    #[prost(message, optional, tag = "1")]
+    pub key_id: ::core::option::Option<super::super::super::types::v1::VetKdKeyId>,
+    #[prost(bytes = "vec", tag = "2")]
+    pub derivation_id: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "3")]
+    pub encryption_key: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, optional, tag = "4")]
+    pub ni_dkg_id: ::core::option::Option<super::super::super::types::v1::NiDkgId>,
+    #[prost(uint64, tag = "5")]
+    pub height: u64,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ThresholdArguments {
-    #[prost(oneof = "threshold_arguments::ThresholdScheme", tags = "1, 2")]
+    #[prost(oneof = "threshold_arguments::ThresholdScheme", tags = "1, 2, 3")]
     pub threshold_scheme: ::core::option::Option<threshold_arguments::ThresholdScheme>,
 }
 /// Nested message and enum types in `ThresholdArguments`.
@@ -111,6 +124,8 @@ pub mod threshold_arguments {
         Ecdsa(super::EcdsaArguments),
         #[prost(message, tag = "2")]
         Schnorr(super::SchnorrArguments),
+        #[prost(message, tag = "3")]
+        VetKd(super::VetKdArguments),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]

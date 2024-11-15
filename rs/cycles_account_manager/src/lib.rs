@@ -668,6 +668,11 @@ impl CyclesAccountManager {
         self.scale_cost(self.config.schnorr_signature_fee, subnet_size)
     }
 
+    /// Amount to charge for vet KD.
+    pub fn vet_kd_fee(&self, subnet_size: usize) -> Cycles {
+        self.scale_cost(self.config.vet_kd_fee, subnet_size)
+    }
+
     ////////////////////////////////////////////////////////////////////////////
     //
     // Storage
@@ -925,6 +930,7 @@ impl CyclesAccountManager {
             | CyclesUseCase::CanisterCreation
             | CyclesUseCase::ECDSAOutcalls
             | CyclesUseCase::SchnorrOutcalls
+            | CyclesUseCase::VetKd
             | CyclesUseCase::HTTPOutcalls
             | CyclesUseCase::DeletedCanisters
             | CyclesUseCase::NonConsumed

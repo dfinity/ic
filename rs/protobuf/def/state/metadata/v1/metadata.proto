@@ -78,10 +78,19 @@ message SchnorrArguments {
   bytes message = 2;
 }
 
+message VetKdArguments {
+  types.v1.VetKdKeyId key_id = 1;
+  bytes derivation_id = 2;
+  bytes encryption_key = 3;
+  types.v1.NiDkgId ni_dkg_id = 4;
+  uint64 height = 5;
+}
+
 message ThresholdArguments {
   oneof threshold_scheme {
     EcdsaArguments ecdsa = 1;
     SchnorrArguments schnorr = 2;
+    VetKdArguments vet_kd = 3;
   }
 }
 

@@ -472,6 +472,7 @@ impl SubnetMetrics {
                 | CyclesUseCase::Uninstall
                 | CyclesUseCase::CanisterCreation
                 | CyclesUseCase::SchnorrOutcalls
+                | CyclesUseCase::VetKd
                 | CyclesUseCase::BurnedCycles => total += *cycles,
             }
         }
