@@ -97,7 +97,7 @@ impl RemoteCspVault {
         self.tokio_runtime_handle.block_on(task)
     }
 
-    fn tokio_safe_block_on<F: Future>(&self, task: F) -> F::Output
+    fn tokio_safe_block_on<F>(&self, task: F) -> F::Output
     where
         F: Future + Send + 'static,
         F::Output: Send + 'static,
