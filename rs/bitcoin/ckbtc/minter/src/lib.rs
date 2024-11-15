@@ -18,7 +18,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 
 pub mod address;
-pub mod blocklist;
 pub mod dashboard;
 pub mod guard;
 pub mod lifecycle;
