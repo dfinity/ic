@@ -148,8 +148,16 @@ impl IngressPayload {
                 }
             })
     }
+}
 
-    pub fn from_iter<'a>(msgs: impl Iterator<Item = &'a SignedIngress>) -> Self {
+impl CountBytes for IngressPayload {
+    fn count_bytes(&self) -> usize {
+        self.buffer.len() + self.id_and_pos.len() * EXPECTED_MESSAGE_ID_LENGTH
+    }
+}
+
+impl<'a> FromIterator<&'a SignedIngress> for IngressPayload {
+    fn from_iter<I: IntoIterator<Item = &'a SignedIngress>>(msgs: I) -> Self {
         let mut buf = Cursor::new(Vec::new());
         let mut id_and_pos = Vec::new();
         for ingress in msgs {
@@ -168,21 +176,9 @@ impl IngressPayload {
     }
 }
 
-impl CountBytes for IngressPayload {
-    fn count_bytes(&self) -> usize {
-        self.buffer.len() + self.id_and_pos.len() * EXPECTED_MESSAGE_ID_LENGTH
-    }
-}
-
 impl From<Vec<SignedIngress>> for IngressPayload {
     fn from(msgs: Vec<SignedIngress>) -> IngressPayload {
-        IngressPayload::from_iter(msgs.iter())
-    }
-}
-
-impl From<&[&SignedIngress]> for IngressPayload {
-    fn from(msgs: &[&SignedIngress]) -> IngressPayload {
-        IngressPayload::from_iter(msgs.iter().copied())
+        IngressPayload::from_iter(&msgs)
     }
 }
 
