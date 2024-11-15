@@ -34,6 +34,8 @@ pub mod tx;
 pub mod updates;
 
 #[cfg(test)]
+pub mod test_fixtures;
+#[cfg(test)]
 mod tests;
 
 /// Time constants
