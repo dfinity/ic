@@ -31,6 +31,7 @@ const TEST_SUBNET_SIZES: [usize; 3] = [4, 13, 34];
 
 pub const ECDSA_SIGNATURE_FEE: Cycles = Cycles::new(10 * B as u128);
 pub const SCHNORR_SIGNATURE_FEE: Cycles = Cycles::new(10 * B as u128);
+pub const VET_KD_FEE: Cycles = Cycles::new(10 * B as u128);
 const DEFAULT_CYCLES_PER_NODE: Cycles = Cycles::new(100 * B as u128);
 const TEST_CANISTER_INSTALL_EXECUTION_INSTRUCTIONS: u64 = 0;
 
