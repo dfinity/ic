@@ -93,10 +93,14 @@ pub enum RemoteCspVaultError {
 }
 
 impl RemoteCspVault {
+    // This function panics if the calling stack enters (and remains within) a Tokio runtime.
     fn tokio_block_on<T: Future>(&self, task: T) -> T::Output {
         self.tokio_runtime_handle.block_on(task)
     }
 
+    // This is a safer version of the function above that blocks the local thread until the future is executed but
+    // it will not panic if the parent context is within a Tokio runtime.
+    // Use this function when you are unsure the calling stack enters (and remains within) a Tokio runtime.
     fn tokio_safe_block_on<F>(&self, task: F) -> F::Output
     where
         F: Future + Send + 'static,
