@@ -730,7 +730,7 @@ impl<Tokens: TokensType> Ledger<Tokens> {
                         label(last_block_index_label, leaf(last_block_index_encoded)),
                     );
                 }
-                #[allow(unreachable_code)]
+                #[cfg(not(feature = "icrc3-compatible-data-certificate"))]
                 {
                     let tip_hash_label = Label::from("tip_hash");
                     let last_block_index_encoded = last_block_index.to_be_bytes().to_vec();
