@@ -283,22 +283,23 @@ fn compute_next_difficulty(
     // actual_interval will deviate slightly from 2 weeks. Our goal is to
     // readjust the difficulty target so that the expected time taken for the next
     // 2016 blocks is again 2 weeks.
-    let actual_interval = prev_header.time - last_adjustment_time;
+    let actual_interval = (prev_header.time as i64) - (last_adjustment_time as i64);
     let mut adjusted_interval = actual_interval;
 
     // The target_adjustment_interval_time is 2 weeks of time expressed in seconds
-    let target_adjustment_interval_time: u32 = DIFFICULTY_ADJUSTMENT_INTERVAL * TEN_MINUTES; //Number of seconds in 2 weeks
+    let target_adjustment_interval_time: i64 =
+        (DIFFICULTY_ADJUSTMENT_INTERVAL * TEN_MINUTES) as i64; //Number of seconds in 2 weeks
 
     // Adjusting the actual_interval to [0.5 week, 8 week] range in case the
     // actual_interval deviates too much from the expected 2 weeks.
-    adjusted_interval = u32::max(adjusted_interval, target_adjustment_interval_time / 4);
-    adjusted_interval = u32::min(adjusted_interval, target_adjustment_interval_time * 4);
+    adjusted_interval = i64::max(adjusted_interval, target_adjustment_interval_time / 4);
+    adjusted_interval = i64::min(adjusted_interval, target_adjustment_interval_time * 4);
 
     // Computing new difficulty target.
     // new difficulty target = old difficult target * (adjusted_interval /
     // 2_weeks);
     let mut target = prev_header.target();
-    target = target.mul_u32(adjusted_interval);
+    target = target.mul_u32(adjusted_interval as u32); // at this point adjusted_interval is between 0.5 week and 8 weeks so it's safe to cast to u32.
     target = target / Uint256::from_u64(target_adjustment_interval_time as u64).unwrap();
 
     // Adjusting the newly computed difficulty target so that it doesn't exceed the
@@ -648,5 +649,62 @@ mod test {
             !is_header_within_one_year_of_tip(1, BLOCKS_IN_ONE_YEAR + 3),
             "chain height difference is one year + 1 block"
         );
+    }
+
+    #[test]
+    fn test_compute_next_difficulty_underflow() {
+        // This test sets up a chain where the next block has timestamp less than the block 2015 blocks ago.
+
+        // Set up a chain of length DIFFICULTY_ADJUSTMENT_INTERVAL (2016 blocks)
+        let network = Network::Bitcoin;
+
+        // Create a store with the initial header (genesis block)
+        let mut store = SimpleHeaderStore::new(
+            BlockHeader {
+                version: 0,
+                prev_blockhash: BlockHash::default(),
+                merkle_root: TxMerkleNode::default(),
+                time: 2000, // Time of the genesis block (height 0)
+                bits: 0,
+                nonce: 0,
+            },
+            0,
+        );
+
+        let mut prev_header = store.headers.get(&store.initial_hash).unwrap().header;
+        let mut prev_hash = prev_header.block_hash();
+        let mut prev_height = 0;
+
+        // Build up to height DIFFICULTY_ADJUSTMENT_INTERVAL - 1 (2015)
+        for height in 1..DIFFICULTY_ADJUSTMENT_INTERVAL {
+            let header = BlockHeader {
+                version: 0,
+                prev_blockhash: prev_hash,
+                merkle_root: TxMerkleNode::default(),
+                time: 2000 + height, // Increment time normally
+                bits: 0,
+                nonce: 0,
+            };
+            store.add(header);
+            prev_hash = header.block_hash();
+            prev_header = header;
+            prev_height = height;
+        }
+
+        // Now, prev_height = 2015 (DIFFICULTY_ADJUSTMENT_INTERVAL - 1)
+        // Modify prev_header.time to be less than last_adjustment_time (2000)
+        prev_header.time = 1000; // Set time less than genesis block time
+
+        // Update the store with the modified prev_header
+        store.headers.insert(
+            prev_hash,
+            StoredHeader {
+                header: prev_header,
+                height: prev_height,
+            },
+        );
+
+        // Call compute_next_difficulty, which should not panic
+        compute_next_difficulty(&network, &store, &prev_header, prev_height);
     }
 }
