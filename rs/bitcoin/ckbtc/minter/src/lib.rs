@@ -166,18 +166,13 @@ async fn fetch_main_utxos(main_account: &Account, main_address: &BitcoinAddress)
 /// Returns the minimum withdrawal amount based on the current median fee rate (in millisatoshi per byte).
 /// The returned amount is in satoshi.
 fn compute_min_withdrawal_amount(
-    btc_network: Network,
     median_fee_rate_e3s: MillisatoshiPerByte,
+    min_withdrawal_amount: u64,
 ) -> u64 {
     const PER_REQUEST_RBF_BOUND: u64 = 22_100;
     const PER_REQUEST_VSIZE_BOUND: u64 = 221;
     const PER_REQUEST_MINTER_FEE_BOUND: u64 = 305;
     const PER_REQUEST_KYT_FEE: u64 = 2_000;
-
-    let min_withdrawal_amount = match btc_network {
-        Network::Testnet | Network::Regtest => 10_000,
-        Network::Mainnet => 100_000,
-    };
 
     let median_fee_rate = median_fee_rate_e3s / 1_000;
     ((PER_REQUEST_RBF_BOUND
@@ -206,8 +201,8 @@ pub async fn estimate_fee_per_vbyte() -> Option<MillisatoshiPerByte> {
             if fees.len() >= 100 {
                 state::mutate_state(|s| {
                     s.last_fee_per_vbyte.clone_from(&fees);
-                    s.retrieve_btc_min_amount =
-                        compute_min_withdrawal_amount(s.btc_network, fees[50]);
+                    s.fee_based_retrieve_btc_min_amount =
+                        compute_min_withdrawal_amount(fees[50], s.retrieve_btc_min_amount);
                 });
                 Some(fees[50])
             } else {
@@ -1203,6 +1198,10 @@ pub fn timer() {
         }
         TaskType::RefreshFeePercentiles => {
             ic_cdk::spawn(async {
+                let _guard = match crate::guard::TimerLogicGuard::new() {
+                    Some(guard) => guard,
+                    None => return,
+                };
                 const FEE_ESTIMATE_DELAY: Duration = Duration::from_secs(60 * 60);
                 let _ = estimate_fee_per_vbyte().await;
                 schedule_after(FEE_ESTIMATE_DELAY, TaskType::RefreshFeePercentiles);
@@ -1255,11 +1254,10 @@ pub fn tx_vsize_estimate(input_count: u64, output_count: u64) -> u64 {
 ///   * `available_utxos` - the list of UTXOs available to the minter.
 ///   * `maybe_amount` - the withdrawal amount.
 ///   * `median_fee_millisatoshi_per_vbyte` - the median network fee, in millisatoshi per vbyte.
-pub fn estimate_fee(
+pub fn estimate_retrieve_btc_fee(
     available_utxos: &BTreeSet<Utxo>,
     maybe_amount: Option<u64>,
     median_fee_millisatoshi_per_vbyte: u64,
-    kyt_fee: u64,
 ) -> WithdrawalFee {
     const DEFAULT_INPUT_COUNT: u64 = 2;
     // One output for the caller and one for the change.
@@ -1293,7 +1291,7 @@ pub fn estimate_fee(
         vsize * median_fee_millisatoshi_per_vbyte / 1000 / (DEFAULT_OUTPUT_COUNT - 1).max(1);
     let minter_fee = minter_fee / (DEFAULT_OUTPUT_COUNT - 1).max(1);
     WithdrawalFee {
-        minter_fee: kyt_fee + minter_fee,
+        minter_fee,
         bitcoin_fee,
     }
 }

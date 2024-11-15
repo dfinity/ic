@@ -1424,7 +1424,7 @@ message Governance {
     // allowing us to fail in case we otherwise have gotten stuck.
     uint64 checking_upgrade_lock = 3;
     // The proposal that initiated this upgrade
-    uint64 proposal_id = 4;
+    optional uint64 proposal_id = 4;
   }
 
   // Version SNS is in process of upgrading to.
@@ -2160,6 +2160,7 @@ message AdvanceTargetVersionResponse {}
 message UpgradeJournalEntry {
   oneof event {
     UpgradeStepsRefreshed upgrade_steps_refreshed = 1;
+    UpgradeStepsReset upgrade_steps_reset = 7;
     TargetVersionSet target_version_set = 2;
     TargetVersionReset target_version_reset = 3;
     UpgradeStarted upgrade_started = 4;
@@ -2171,6 +2172,11 @@ message UpgradeJournalEntry {
     optional Governance.Versions upgrade_steps = 2;
   }
 
+  message UpgradeStepsReset {
+    optional string human_readable = 1;
+    optional Governance.Versions upgrade_steps = 2;
+  }
+
   message TargetVersionSet {
     optional Governance.Version old_target_version = 1;
     optional Governance.Version new_target_version = 2;
@@ -2179,6 +2185,7 @@ message UpgradeJournalEntry {
   message TargetVersionReset {
     optional Governance.Version old_target_version = 1;
     optional Governance.Version new_target_version = 2;
+    optional string human_readable = 3;
   }
 
   message UpgradeStarted {
@@ -2224,6 +2231,7 @@ message GetUpgradeJournalResponse {
   // Currently, this field is always None, but in the "effortless SNS upgrade"
   // feature, it reflect the version of the SNS that the community has decided to upgrade to.
   Governance.Version target_version = 3;
+  Governance.Version deployed_version = 5;
 
   UpgradeJournal upgrade_journal = 4;
 }

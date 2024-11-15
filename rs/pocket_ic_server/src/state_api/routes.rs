@@ -8,9 +8,10 @@
 use super::state::{ApiState, OpOut, PocketIcError, StateLabel, UpdateReply};
 use crate::pocket_ic::{
     AddCycles, AwaitIngressMessage, CallRequest, CallRequestVersion, CanisterReadStateRequest,
-    DashboardRequest, ExecuteIngressMessage, GetCanisterHttp, GetCyclesBalance, GetStableMemory,
-    GetSubnet, GetTime, GetTopology, MockCanisterHttp, PubKey, Query, QueryRequest,
-    SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage, SubnetReadStateRequest, Tick,
+    DashboardRequest, ExecuteIngressMessage, GetCanisterHttp, GetControllers, GetCyclesBalance,
+    GetStableMemory, GetSubnet, GetTime, GetTopology, MockCanisterHttp, PubKey, Query,
+    QueryRequest, SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage,
+    SubnetReadStateRequest, Tick,
 };
 use crate::{async_trait, pocket_ic::PocketIc, BlobStore, InstanceId, OpId, Operation};
 use aide::{
@@ -38,8 +39,8 @@ use pocket_ic::common::rest::{
     self, ApiResponse, AutoProgressConfig, ExtendedSubnetConfigSet, HttpGatewayConfig,
     HttpGatewayDetails, InstanceConfig, MockCanisterHttpResponse, RawAddCycles, RawCanisterCall,
     RawCanisterHttpRequest, RawCanisterId, RawCanisterResult, RawCycles, RawMessageId,
-    RawMockCanisterHttpResponse, RawSetStableMemory, RawStableMemory, RawSubmitIngressResult,
-    RawSubnetId, RawTime, RawWasmResult, Topology,
+    RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory,
+    RawSubmitIngressResult, RawSubnetId, RawTime, RawWasmResult, Topology,
 };
 use pocket_ic::WasmResult;
 use serde::Serialize;
@@ -75,6 +76,7 @@ where
         .directory_route("/topology", get(handler_topology))
         .directory_route("/get_time", get(handler_get_time))
         .directory_route("/get_canister_http", get(handler_get_canister_http))
+        .directory_route("/get_controllers", post(handler_get_controllers))
         .directory_route("/get_cycles", post(handler_get_cycles))
         .directory_route("/get_stable_memory", post(handler_get_stable_memory))
         .directory_route("/get_subnet", post(handler_get_subnet))
@@ -363,6 +365,19 @@ impl TryFrom<OpOut> for () {
     }
 }
 
+impl TryFrom<OpOut> for Vec<RawPrincipalId> {
+    type Error = OpConversionError;
+    fn try_from(value: OpOut) -> Result<Self, Self::Error> {
+        match value {
+            OpOut::Controllers(controllers) => Ok(controllers
+                .into_iter()
+                .map(|principal_id| principal_id.0.into())
+                .collect()),
+            _ => Err(OpConversionError),
+        }
+    }
+}
+
 impl TryFrom<OpOut> for RawCycles {
     type Error = OpConversionError;
     fn try_from(value: OpOut) -> Result<Self, Self::Error> {
@@ -583,6 +598,28 @@ pub async fn handler_mock_canister_http(
     (code, Json(response))
 }
 
+pub async fn handler_get_controllers(
+    State(AppState { api_state, .. }): State<AppState>,
+    Path(instance_id): Path<InstanceId>,
+    headers: HeaderMap,
+    extract::Json(raw_canister_id): extract::Json<RawCanisterId>,
+) -> (StatusCode, Json<ApiResponse<Vec<RawPrincipalId>>>) {
+    let timeout = timeout_or_default(headers);
+    match CanisterId::try_from(raw_canister_id.canister_id) {
+        Ok(canister_id) => {
+            let get_op = GetControllers { canister_id };
+            let (code, response) = run_operation(api_state, instance_id, timeout, get_op).await;
+            (code, Json(response))
+        }
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::Error {
+                message: format!("{:?}", e),
+            }),
+        ),
+    }
+}
+
 pub async fn handler_get_cycles(
     State(AppState { api_state, .. }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
@@ -800,6 +837,13 @@ async fn op_out_to_response(op_out: OpOut) -> Response {
             StatusCode::OK,
             Json(ApiResponse::Success(
                 RawCanisterId::try_from(opout).unwrap(),
+            )),
+        )
+            .into_response(),
+        opout @ OpOut::Controllers(_) => (
+            StatusCode::OK,
+            Json(ApiResponse::Success(
+                Vec::<RawPrincipalId>::try_from(opout).unwrap(),
             )),
         )
             .into_response(),

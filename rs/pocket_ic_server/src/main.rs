@@ -54,7 +54,7 @@ const LOG_DIR_PATH_ENV_NAME: &str = "POCKET_IC_LOG_DIR";
 const LOG_DIR_LEVELS_ENV_NAME: &str = "POCKET_IC_LOG_DIR_LEVELS";
 
 #[derive(Parser)]
-#[clap(version = "6.0.0")]
+#[clap(version = "7.0.0")]
 struct Args {
     /// The IP address to which the PocketIC server should bind (defaults to 127.0.0.1)
     #[clap(long, short)]
@@ -254,6 +254,7 @@ async fn terminate(
 ) {
     debug!("The PocketIC server will terminate");
 
+    app_state.api_state.stop_all_http_gateways().await;
     ApiState::delete_all_instances(app_state.api_state).await;
 
     if let Some(port_file_path) = port_file_path {
