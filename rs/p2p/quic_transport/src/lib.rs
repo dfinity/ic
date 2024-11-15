@@ -115,6 +115,7 @@ impl Shutdown {
 
 #[derive(Clone)]
 pub struct QuicTransport {
+    log: ReplicaLogger,
     conn_handles: Arc<RwLock<HashMap<NodeId, ConnectionHandle>>>,
     shutdown: Arc<RwLock<Option<Shutdown>>>,
 }
@@ -166,6 +167,7 @@ impl QuicTransport {
         );
 
         QuicTransport {
+            log: log.clone(),
             conn_handles,
             shutdown: Arc::new(RwLock::new(Some(shutdown))),
         }
@@ -219,7 +221,9 @@ impl Transport for QuicTransport {
             .get(peer_id)
             .ok_or(anyhow!("Currently not connected to this peer"))?
             .clone();
-        peer.rpc(request).await
+        peer.rpc(request).await.inspect_err(|err| {
+            info!(self.log, "{:?}", err);
+        })
     }
 
     fn peers(&self) -> Vec<(NodeId, ConnId)> {
