@@ -138,9 +138,15 @@ pub fn generate_node_keys_once(
     config: &CryptoConfig,
     tokio_runtime_handle: Option<tokio::runtime::Handle>,
 ) -> Result<ValidNodePublicKeys, NodeKeyGenerationError> {
+    let tokio_rt = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(4)
+        .thread_name("Crypto-Thread2".to_string())
+        .enable_all()
+        .build()
+        .unwrap();
     let vault = vault_from_config(
         config,
-        tokio_runtime_handle,
+        Some(tokio_rt.handle().clone()),
         no_op_logger(),
         Arc::new(CryptoMetrics::none()),
     );

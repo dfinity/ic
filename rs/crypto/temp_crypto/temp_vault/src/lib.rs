@@ -34,7 +34,6 @@ impl<Builder> RemoteVaultEnvironment<Builder> {
     pub fn new_vault_client_builder(&self) -> RemoteCspVaultBuilder {
         RemoteCspVault::builder(
             self.vault_server.vault_socket_path(),
-            self.vault_client_runtime.handle().clone(),
         )
     }
 

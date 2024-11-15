@@ -68,21 +68,19 @@ use ic_logger::replica_logger::no_op_logger;
 use slog_async::AsyncGuard;
 
 /// An implementation of `CspVault`-trait that talks to a remote CSP vault.
-#[allow(dead_code)]
 pub struct RemoteCspVault {
     tarpc_csp_client: TarpcCspVaultClient,
     // default timeout for RPC calls that can timeout.
     rpc_timeout: Duration,
     // special, long timeout for RPC calls that should not really timeout.
     long_rpc_timeout: Duration,
-    tokio_runtime_handle: tokio::runtime::Handle,
+    tokio_rt: tokio::runtime::Runtime,
     logger: ReplicaLogger,
     metrics: Arc<CryptoMetrics>,
     #[cfg(test)]
     _logger_guard: Option<AsyncGuard>,
 }
 
-#[allow(dead_code)]
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub enum RemoteCspVaultError {
     TransportError {
@@ -92,15 +90,19 @@ pub enum RemoteCspVaultError {
 }
 
 impl RemoteCspVault {
-    fn tokio_block_on<T: Future>(&self, task: T) -> T::Output {
-        self.tokio_runtime_handle.block_on(task)
+    fn tokio_block_on<T: Future + Send + 'static>(&self, task: T) -> T::Output where <T as futures::Future>::Output: std::marker::Send,  <T as futures::Future>::Output: 'static {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        self.tokio_rt.handle().spawn(async move {
+            let res = task.await;
+            tx.send(res);
+        });
+        rx.blocking_recv().unwrap()
     }
 }
 
 const DEFAULT_RPC_TIMEOUT: Duration = Duration::from_secs(300); // 5 minutes
 const LONG_RPC_TIMEOUT: Duration = Duration::from_secs(3600 * 24 * 100); // 100 days
 
-#[allow(dead_code)]
 impl RemoteCspVault {
     /// Creates a new `RemoteCspVault`-object that communicates
     /// with a server via a Unix socket specified by `socket_path`.
@@ -108,11 +110,10 @@ impl RemoteCspVault {
     /// otherwise the constructor will fail.
     pub fn new(
         socket_path: &Path,
-        rt_handle: tokio::runtime::Handle,
         logger: ReplicaLogger,
         metrics: Arc<CryptoMetrics>,
     ) -> Result<Self, RemoteCspVaultError> {
-        RemoteCspVaultBuilder::new(socket_path.to_path_buf(), rt_handle)
+        RemoteCspVaultBuilder::new(socket_path.to_path_buf())
             .with_logger(logger)
             .with_metrics(metrics)
             .build()
@@ -120,15 +121,14 @@ impl RemoteCspVault {
 
     pub fn builder(
         socket_path: PathBuf,
-        rt_handle: tokio::runtime::Handle,
     ) -> RemoteCspVaultBuilder {
-        RemoteCspVaultBuilder::new(socket_path, rt_handle)
+        RemoteCspVaultBuilder::new(socket_path)
     }
 }
 
 pub struct RemoteCspVaultBuilder {
     socket_path: PathBuf,
-    rt_handle: tokio::runtime::Handle,
+    tokio_rt: tokio::runtime::Runtime,
     max_frame_length: usize,
     rpc_timeout: Duration,
     long_rpc_timeout: Duration,
@@ -139,10 +139,17 @@ pub struct RemoteCspVaultBuilder {
 }
 
 impl RemoteCspVaultBuilder {
-    pub fn new(socket_path: PathBuf, rt_handle: tokio::runtime::Handle) -> Self {
+    pub fn new(socket_path: PathBuf) -> Self {
+        let tokio_rt = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(4)
+            .thread_name("Crypto-Thread3".to_string())
+            .enable_all()
+            .build()
+            .unwrap();
+
         RemoteCspVaultBuilder {
             socket_path,
-            rt_handle,
+            tokio_rt,
             max_frame_length: FOUR_GIGA_BYTES,
             rpc_timeout: DEFAULT_RPC_TIMEOUT,
             long_rpc_timeout: LONG_RPC_TIMEOUT,
@@ -195,7 +202,7 @@ impl RemoteCspVaultBuilder {
 
     pub fn build(self) -> Result<RemoteCspVault, RemoteCspVaultError> {
         let conn = self
-            .rt_handle
+            .tokio_rt
             .block_on(robust_unix_socket::connect(
                 self.socket_path.clone(),
                 new_logger!(&self.logger),
@@ -214,7 +221,7 @@ impl RemoteCspVaultBuilder {
             ),
         );
         let client = {
-            let _enter_guard = self.rt_handle.enter();
+            let _enter_guard = self.tokio_rt.enter();
             TarpcCspVaultClient::new(Default::default(), transport).spawn()
         };
         debug!(self.logger, "Instantiated remote CSP vault client");
@@ -222,7 +229,7 @@ impl RemoteCspVaultBuilder {
             tarpc_csp_client: client,
             rpc_timeout: self.rpc_timeout,
             long_rpc_timeout: self.long_rpc_timeout,
-            tokio_runtime_handle: self.rt_handle,
+            tokio_rt: self.tokio_rt,
             logger: self.logger,
             metrics: self.metrics,
             #[cfg(test)]
@@ -256,12 +263,15 @@ impl BasicSignatureCspVault for RemoteCspVault {
         message: Vec<u8>,
         key_id: KeyId,
     ) -> Result<CspSignature, CspBasicSignatureError> {
-        self.tokio_block_on(self.tarpc_csp_client.sign(
-            context_with_timeout(self.rpc_timeout),
+        let c = self.tarpc_csp_client.clone();
+        let t = self.rpc_timeout.clone();
+        self.tokio_block_on(async move {
+            c.sign(
+            context_with_timeout(t),
             algorithm_id,
             ByteBuf::from(message),
             key_id,
-        ))
+        ).await})
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
             Err(CspBasicSignatureError::TransientInternalError {
                 internal_error: rpc_error.to_string(),
@@ -559,23 +569,14 @@ impl TlsHandshakeCspVault for RemoteCspVault {
 
     #[instrument(skip_all)]
     fn tls_sign(&self, message: Vec<u8>, key_id: KeyId) -> Result<CspSignature, CspTlsSignError> {
-        // Here we cannot call `block_on` directly but have to wrap it in
-        // `block_in_place` because this method here is called via a Rustls
-        // callback (via our implementation of the `rustls::sign::Signer`
-        // trait) from the async function `tokio_rustls::TlsAcceptor::accept`,
-        // which in turn is called from our async function
-        // `TlsHandshake::perform_tls_server_handshake`.
-        #[allow(clippy::disallowed_methods)]
-        tokio::task::block_in_place(|| {
-            self.tokio_block_on(self.tarpc_csp_client.tls_sign(
-                context_with_timeout(self.rpc_timeout),
-                ByteBuf::from(message),
-                key_id,
-            ))
-            .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-                Err(CspTlsSignError::TransientInternalError {
-                    internal_error: rpc_error.to_string(),
-                })
+        self.tokio_block_on(self.tarpc_csp_client.tls_sign(
+            context_with_timeout(self.rpc_timeout),
+            ByteBuf::from(message),
+            key_id,
+        ))
+        .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
+            Err(CspTlsSignError::TransientInternalError {
+                internal_error: rpc_error.to_string(),
             })
         })
     }

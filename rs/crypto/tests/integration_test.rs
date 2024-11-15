@@ -49,13 +49,7 @@ fn should_successfully_construct_crypto_component_with_default_config() {
     CryptoConfig::run_with_temp_config(|config| {
         generate_node_keys_once(&config, None).expect("error generating node public keys");
         let registry_client = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
-        CryptoComponent::new(
-            &config,
-            None,
-            Arc::new(registry_client),
-            no_op_logger(),
-            None,
-        );
+        CryptoComponent::new(&config, Arc::new(registry_client), no_op_logger(), None);
     })
 }
 
@@ -69,13 +63,7 @@ fn should_successfully_construct_crypto_component_with_remote_csp_vault() {
     generate_node_keys_once(&config, Some(tokio_rt.handle().clone()))
         .expect("error generating node public keys");
     let registry_client = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
-    CryptoComponent::new(
-        &config,
-        Some(tokio_rt.handle().clone()),
-        Arc::new(registry_client),
-        no_op_logger(),
-        None,
-    );
+    CryptoComponent::new(&config, Arc::new(registry_client), no_op_logger(), None);
 }
 
 #[test]
@@ -87,13 +75,7 @@ fn should_not_construct_crypto_component_if_remote_csp_vault_is_missing() {
     let config = CryptoConfig::new_with_unix_socket_vault(crypto_root, socket_path, None);
     let tokio_rt = new_tokio_runtime();
     let registry_client = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
-    CryptoComponent::new(
-        &config,
-        Some(tokio_rt.handle().clone()),
-        Arc::new(registry_client),
-        no_op_logger(),
-        None,
-    );
+    CryptoComponent::new(&config, Arc::new(registry_client), no_op_logger(), None);
 }
 
 // TODO(CRP-430): check/improve the test coverage of SKS checks.

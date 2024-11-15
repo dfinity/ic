@@ -83,7 +83,6 @@ fn crypto_component(
     let metrics_registry = MetricsRegistry::new();
     Arc::new(CryptoComponent::new(
         config,
-        tokio_runtime_handle,
         Arc::new(registry_client),
         logger,
         Some(&metrics_registry),

@@ -329,7 +329,6 @@ mod logging {
         let socket_path = start_new_remote_csp_vault_server_for_test(tokio_rt.handle());
         let csp_vault = RemoteCspVault::new(
             &socket_path,
-            tokio_rt.handle().clone(),
             ReplicaLogger::from(&in_memory_logger),
             Arc::new(CryptoMetrics::none()),
         )

@@ -58,6 +58,7 @@ pub struct CryptoComponentImpl<C: CryptoServiceProvider> {
     vault: Arc<dyn CspVault>,
     csp: C,
     registry_client: Arc<dyn RegistryClient>,
+    tokio_rt: tokio::runtime::Runtime,
     // The node id of the node that instantiated this crypto component.
     node_id: NodeId,
     logger: ReplicaLogger,
@@ -106,6 +107,13 @@ impl<C: CryptoServiceProvider> CryptoComponentImpl<C> {
         metrics: Arc<CryptoMetrics>,
         time_source: Option<Arc<dyn TimeSource>>,
     ) -> Self {
+        let tokio_rt = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(4)
+            .thread_name("Crypto-Thread".to_string())
+            .enable_all()
+            .build()
+            .unwrap();
+
         CryptoComponentImpl {
             lockable_threshold_sig_data_store: LockableThresholdSigDataStore::new(),
             csp,
@@ -114,6 +122,7 @@ impl<C: CryptoServiceProvider> CryptoComponentImpl<C> {
             node_id,
             logger,
             metrics,
+            tokio_rt,
             time_source: time_source.unwrap_or_else(|| Arc::new(SysTimeSource::new())),
         }
     }
@@ -184,15 +193,21 @@ impl CryptoComponentImpl<Csp> {
     /// ```
     pub fn new(
         config: &CryptoConfig,
-        tokio_runtime_handle: Option<tokio::runtime::Handle>,
         registry_client: Arc<dyn RegistryClient>,
         logger: ReplicaLogger,
         metrics_registry: Option<&MetricsRegistry>,
     ) -> Self {
+        let tokio_rt = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(4)
+            .thread_name("Crypto-Thread".to_string())
+            .enable_all()
+            .build()
+            .unwrap();
+
         let metrics = Arc::new(CryptoMetrics::new(metrics_registry));
         let vault = vault_from_config(
             config,
-            tokio_runtime_handle,
+            Some(tokio_rt.handle().clone()),
             new_logger!(&logger),
             Arc::clone(&metrics),
         );
@@ -214,6 +229,7 @@ impl CryptoComponentImpl<Csp> {
         let crypto_component = CryptoComponentImpl {
             lockable_threshold_sig_data_store: LockableThresholdSigDataStore::new(),
             csp,
+            tokio_rt,
             vault,
             registry_client,
             node_id,
