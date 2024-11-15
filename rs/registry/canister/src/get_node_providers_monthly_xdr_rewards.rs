@@ -1,8 +1,10 @@
+use crate::mutations::node_management::common::get_existing_records;
 use crate::{
-    mutations::node_management::common::{get_key_family, get_key_family_between_versions_iter, get_key_family_iter},
+    mutations::node_management::common::{get_key_family, get_key_family_iter},
     pb::v1::NodeProvidersMonthlyXdrRewards,
     registry::Registry,
 };
+use ic_base_types::PrincipalId;
 use ic_protobuf::registry::{
     dc::v1::DataCenterRecord, node::v1::NodeRecord, node_operator::v1::NodeOperatorRecord, node_rewards::v2::NodeRewardsTable
 };
@@ -10,9 +12,10 @@ use ic_registry_keys::{
     DATA_CENTER_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY
 };
 use ic_registry_node_provider_rewards::calculate_rewards_v0;
-use ic_types::PrincipalId;
+use itertools::Itertools;
 use prost::Message;
 use std::collections::BTreeMap;
+use std::str::FromStr;
 
 impl Registry {
     /// Return a map from Node Provider IDs to the amount (in 10,000ths of an
@@ -53,18 +56,25 @@ impl Registry {
     pub fn get_node_providers_monthly_xdr_rewards_v1(
         &self,
         from_ts: u64,
-        from_registry_version: u64
+        registry_version_start: u64
     ) -> Result<NodeProvidersMonthlyXdrRewards, String> {
         let mut nodes = BTreeMap::new();
         let mut rewardable_nodes = BTreeMap::new();
 
         // Management canister call for getting metrics 
         
-        let node_records: Vec<(String, NodeRecord)> = get_key_family_between_versions_iter::<NodeRecord>(self, NODE_RECORD_KEY_PREFIX, from_registry_version, self.latest_version()).collect();
-
+        let node_records = get_existing_records::<NodeRecord>(self, NODE_RECORD_KEY_PREFIX, &registry_version_start)
+            .collect_vec();
+        
+        let node_operators = get_existing_records::<NodeOperatorRecord>(self, NODE_OPERATOR_RECORD_KEY_PREFIX, &registry_version_start)
+            .collect::<BTreeMap<String, DataCenterRecord>>();
+        
+        let data_center_records = get_existing_records::<DataCenterRecord>(self, DATA_CENTER_KEY_PREFIX, &registry_version_start)
+            .collect::<BTreeMap<String, DataCenterRecord>>();
+        
         for (p, node_record) in node_records {
-            let principal = PrincipalId::from_str(p.as_str()).unwrap();
-
+            let principal = PrincipalId::from_str(p.as_str())?;
+            
             if let Entry::Vacant(node) = nodes.entry(principal) {
                 let node_operator_id: PrincipalId = node_record.node_operator_id.try_into().unwrap();
                 let key = make_node_operator_record_key(node_operator_id);

@@ -304,3 +304,22 @@ pub(crate) fn get_key_family_versioned_iter<'a, T: prost::Message + Default>(
             Some((id, record))
         })
 }
+
+pub fn get_existing_records<'a, T: prost::Message + Default>(
+    registry: &'a Registry,
+    prefix: &'a str,
+    after_registry_version: &'a u64,
+) -> impl Iterator<Item = (String, T)> + 'a {
+    get_key_family_versioned_iter::<T>(registry, prefix)
+        .into_iter()
+        .filter(|(_, record)| record.version.get() > after_registry_version)
+        .map(|(key, record)| {
+            if record.is_none() {
+                let previous_version = record.version.get().saturating_sub(1);
+                let valid_record = T::decode(registry.get(record.key.as_bytes(), previous_version).ok()?)?;
+                (key, valid_record)
+            } else {
+                (key, record)
+            }
+        })
+}
