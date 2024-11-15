@@ -149,7 +149,7 @@ impl IngressPayload {
             })
     }
 
-    pub fn from_iter<'a>(msgs: impl Iterator<Item=&'a SignedIngress>) -> Self {
+    pub fn from_iter<'a>(msgs: impl Iterator<Item = &'a SignedIngress>) -> Self {
         let mut buf = Cursor::new(Vec::new());
         let mut id_and_pos = Vec::new();
         for ingress in msgs {
@@ -165,7 +165,6 @@ impl IngressPayload {
             id_and_pos,
             buffer: buf.into_inner(),
         }
-
     }
 }
 
