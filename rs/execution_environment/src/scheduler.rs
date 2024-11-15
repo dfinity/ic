@@ -485,6 +485,16 @@ impl SchedulerImpl {
 
             let (mut active_canisters_partitioned_by_cores, inactive_canisters) =
                 active_round_schedule.partition_canisters_to_cores(canisters);
+            println!(
+                "active_canisters_partitioned_by_cores: {:?}",
+                active_canisters_partitioned_by_cores
+                    .iter()
+                    .map(|x| x
+                        .iter()
+                        .map(|y| y.canister_id().get().as_slice()[7])
+                        .collect::<Vec<_>>())
+                    .collect::<Vec<_>>()
+            );
 
             if is_first_iteration {
                 for partition in active_canisters_partitioned_by_cores.iter_mut() {
@@ -1077,6 +1087,7 @@ impl SchedulerImpl {
                         accumulated_priority: canister.scheduler_state.accumulated_priority,
                         compute_allocation: Default::default(), // not used
                         long_execution_mode: canister.scheduler_state.long_execution_mode,
+                        good_standing: true,
                         has_aborted_or_paused_execution: true,
                     })
                 } else {
