@@ -178,7 +178,7 @@ fn should_overwrite_existing_individual_public_keys() {
 }
 
 #[test]
-fn should_have_capacity_per_tag_of_9() {
+fn should_have_capacity_per_tag_or_key_of_9() {
     assert_eq!(ThresholdSigDataStoreImpl::CAPACITY_PER_TAG_OR_KEY, 9)
 }
 
