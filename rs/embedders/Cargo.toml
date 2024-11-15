@@ -77,6 +77,7 @@ wasmprinter = { workspace = true }
 wast = { workspace = true }
 wat = { workspace = true }
 
+
 [[bin]]
 name = "instrument-wasm"
 path = "bin/instrument_wasm.rs"

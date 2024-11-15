@@ -141,6 +141,7 @@ pub(crate) fn get_system_state(api_type: ApiType) -> SandboxSafeSystemState {
         &network_topology,
         dirty_page_overhead,
         ComputeAllocation::default(),
+        HypervisorConfig::default().subnet_callback_soft_limit as u64,
         RequestMetadata::new(0, UNIX_EPOCH),
         api_type.caller(),
         api_type.call_context_id(),
@@ -157,6 +158,8 @@ pub(crate) fn get_execution_parameters() -> ExecutionParameters {
         canister_memory_limit: NumBytes::from(4 << 30),
         wasm_memory_limit: None,
         memory_allocation: MemoryAllocation::default(),
+        canister_guaranteed_callback_quota: HypervisorConfig::default()
+            .canister_guaranteed_callback_quota as u64,
         compute_allocation: ComputeAllocation::default(),
         subnet_type: SubnetType::Application,
         execution_mode: ExecutionMode::Replicated,
