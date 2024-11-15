@@ -88,7 +88,7 @@ impl From<pb::Neuron> for pb_api::Neuron {
             followees: item
                 .followees
                 .into_iter()
-                .map(|(k, v)| (k.into(), v.into()))
+                .map(|(k, v)| (k, v.into()))
                 .collect(),
             maturity_e8s_equivalent: item.maturity_e8s_equivalent,
             voting_power_percentage_multiplier: item.voting_power_percentage_multiplier,
@@ -117,7 +117,7 @@ impl From<pb_api::Neuron> for pb::Neuron {
             followees: item
                 .followees
                 .into_iter()
-                .map(|(k, v)| (k.into(), v.into()))
+                .map(|(k, v)| (k, v.into()))
                 .collect(),
             maturity_e8s_equivalent: item.maturity_e8s_equivalent,
             voting_power_percentage_multiplier: item.voting_power_percentage_multiplier,
@@ -180,7 +180,7 @@ impl From<pb::NervousSystemFunction> for pb_api::NervousSystemFunction {
         Self {
             id: item.id,
             name: item.name,
-            description: item.description.map(|x| x.into()),
+            description: item.description,
             function_type: item.function_type.map(|x| x.into()),
         }
     }
@@ -190,7 +190,7 @@ impl From<pb_api::NervousSystemFunction> for pb::NervousSystemFunction {
         Self {
             id: item.id,
             name: item.name,
-            description: item.description.map(|x| x.into()),
+            description: item.description,
             function_type: item.function_type.map(|x| x.into()),
         }
     }
@@ -202,9 +202,9 @@ impl From<pb::nervous_system_function::GenericNervousSystemFunction>
     fn from(item: pb::nervous_system_function::GenericNervousSystemFunction) -> Self {
         Self {
             target_canister_id: item.target_canister_id,
-            target_method_name: item.target_method_name.map(|x| x.into()),
+            target_method_name: item.target_method_name,
             validator_canister_id: item.validator_canister_id,
-            validator_method_name: item.validator_method_name.map(|x| x.into()),
+            validator_method_name: item.validator_method_name,
         }
     }
 }
@@ -214,9 +214,9 @@ impl From<pb_api::nervous_system_function::GenericNervousSystemFunction>
     fn from(item: pb_api::nervous_system_function::GenericNervousSystemFunction) -> Self {
         Self {
             target_canister_id: item.target_canister_id,
-            target_method_name: item.target_method_name.map(|x| x.into()),
+            target_method_name: item.target_method_name,
             validator_canister_id: item.validator_canister_id,
-            validator_method_name: item.validator_method_name.map(|x| x.into()),
+            validator_method_name: item.validator_method_name,
         }
     }
 }
@@ -289,7 +289,7 @@ impl From<pb::UpgradeSnsControlledCanister> for pb_api::UpgradeSnsControlledCani
         Self {
             canister_id: item.canister_id,
             new_canister_wasm: item.new_canister_wasm,
-            canister_upgrade_arg: item.canister_upgrade_arg.map(|x| x.into()),
+            canister_upgrade_arg: item.canister_upgrade_arg,
             mode: item.mode,
         }
     }
@@ -299,7 +299,7 @@ impl From<pb_api::UpgradeSnsControlledCanister> for pb::UpgradeSnsControlledCani
         Self {
             canister_id: item.canister_id,
             new_canister_wasm: item.new_canister_wasm,
-            canister_upgrade_arg: item.canister_upgrade_arg.map(|x| x.into()),
+            canister_upgrade_arg: item.canister_upgrade_arg,
             mode: item.mode,
         }
     }
@@ -367,9 +367,9 @@ impl From<pb::ManageLedgerParameters> for pb_api::ManageLedgerParameters {
     fn from(item: pb::ManageLedgerParameters) -> Self {
         Self {
             transfer_fee: item.transfer_fee,
-            token_name: item.token_name.map(|x| x.into()),
-            token_symbol: item.token_symbol.map(|x| x.into()),
-            token_logo: item.token_logo.map(|x| x.into()),
+            token_name: item.token_name,
+            token_symbol: item.token_symbol,
+            token_logo: item.token_logo,
         }
     }
 }
@@ -377,9 +377,9 @@ impl From<pb_api::ManageLedgerParameters> for pb::ManageLedgerParameters {
     fn from(item: pb_api::ManageLedgerParameters) -> Self {
         Self {
             transfer_fee: item.transfer_fee,
-            token_name: item.token_name.map(|x| x.into()),
-            token_symbol: item.token_symbol.map(|x| x.into()),
-            token_logo: item.token_logo.map(|x| x.into()),
+            token_name: item.token_name,
+            token_symbol: item.token_symbol,
+            token_logo: item.token_logo,
         }
     }
 }
@@ -408,20 +408,20 @@ impl From<pb_api::MintSnsTokens> for pb::MintSnsTokens {
 impl From<pb::ManageSnsMetadata> for pb_api::ManageSnsMetadata {
     fn from(item: pb::ManageSnsMetadata) -> Self {
         Self {
-            logo: item.logo.map(|x| x.into()),
-            url: item.url.map(|x| x.into()),
-            name: item.name.map(|x| x.into()),
-            description: item.description.map(|x| x.into()),
+            logo: item.logo,
+            url: item.url,
+            name: item.name,
+            description: item.description,
         }
     }
 }
 impl From<pb_api::ManageSnsMetadata> for pb::ManageSnsMetadata {
     fn from(item: pb_api::ManageSnsMetadata) -> Self {
         Self {
-            logo: item.logo.map(|x| x.into()),
-            url: item.url.map(|x| x.into()),
-            name: item.name.map(|x| x.into()),
-            description: item.description.map(|x| x.into()),
+            logo: item.logo,
+            url: item.url,
+            name: item.name,
+            description: item.description,
         }
     }
 }
@@ -823,7 +823,7 @@ impl From<pb::ProposalData> for pb_api::ProposalData {
             ballots: item
                 .ballots
                 .into_iter()
-                .map(|(k, v)| (k.into(), v.into()))
+                .map(|(k, v)| (k, v.into()))
                 .collect(),
             latest_tally: item.latest_tally.map(|x| x.into()),
             decided_timestamp_seconds: item.decided_timestamp_seconds,
@@ -832,7 +832,7 @@ impl From<pb::ProposalData> for pb_api::ProposalData {
             failure_reason: item.failure_reason.map(|x| x.into()),
             reward_event_round: item.reward_event_round,
             wait_for_quiet_state: item.wait_for_quiet_state.map(|x| x.into()),
-            payload_text_rendering: item.payload_text_rendering.map(|x| x.into()),
+            payload_text_rendering: item.payload_text_rendering,
             is_eligible_for_rewards: item.is_eligible_for_rewards,
             initial_voting_period_seconds: item.initial_voting_period_seconds,
             wait_for_quiet_deadline_increase_seconds: item.wait_for_quiet_deadline_increase_seconds,
@@ -855,7 +855,7 @@ impl From<pb_api::ProposalData> for pb::ProposalData {
             ballots: item
                 .ballots
                 .into_iter()
-                .map(|(k, v)| (k.into(), v.into()))
+                .map(|(k, v)| (k, v.into()))
                 .collect(),
             latest_tally: item.latest_tally.map(|x| x.into()),
             decided_timestamp_seconds: item.decided_timestamp_seconds,
@@ -864,7 +864,7 @@ impl From<pb_api::ProposalData> for pb::ProposalData {
             failure_reason: item.failure_reason.map(|x| x.into()),
             reward_event_round: item.reward_event_round,
             wait_for_quiet_state: item.wait_for_quiet_state.map(|x| x.into()),
-            payload_text_rendering: item.payload_text_rendering.map(|x| x.into()),
+            payload_text_rendering: item.payload_text_rendering,
             is_eligible_for_rewards: item.is_eligible_for_rewards,
             initial_voting_period_seconds: item.initial_voting_period_seconds,
             wait_for_quiet_deadline_increase_seconds: item.wait_for_quiet_deadline_increase_seconds,
@@ -1080,7 +1080,7 @@ impl From<pb::DefaultFollowees> for pb_api::DefaultFollowees {
             followees: item
                 .followees
                 .into_iter()
-                .map(|(k, v)| (k.into(), v.into()))
+                .map(|(k, v)| (k, v.into()))
                 .collect(),
         }
     }
@@ -1091,7 +1091,7 @@ impl From<pb_api::DefaultFollowees> for pb::DefaultFollowees {
             followees: item
                 .followees
                 .into_iter()
-                .map(|(k, v)| (k.into(), v.into()))
+                .map(|(k, v)| (k, v.into()))
                 .collect(),
         }
     }
@@ -1153,19 +1153,19 @@ impl From<pb::Governance> for pb_api::Governance {
             neurons: item
                 .neurons
                 .into_iter()
-                .map(|(k, v)| (k.into(), v.into()))
+                .map(|(k, v)| (k, v.into()))
                 .collect(),
             proposals: item
                 .proposals
                 .into_iter()
-                .map(|(k, v)| (k.into(), v.into()))
+                .map(|(k, v)| (k, v.into()))
                 .collect(),
             parameters: item.parameters.map(|x| x.into()),
             latest_reward_event: item.latest_reward_event.map(|x| x.into()),
             in_flight_commands: item
                 .in_flight_commands
                 .into_iter()
-                .map(|(k, v)| (k.into(), v.into()))
+                .map(|(k, v)| (k, v.into()))
                 .collect(),
             genesis_timestamp_seconds: item.genesis_timestamp_seconds,
             metrics: item.metrics.map(|x| x.into()),
@@ -1174,7 +1174,7 @@ impl From<pb::Governance> for pb_api::Governance {
             id_to_nervous_system_functions: item
                 .id_to_nervous_system_functions
                 .into_iter()
-                .map(|(k, v)| (k.into(), v.into()))
+                .map(|(k, v)| (k, v.into()))
                 .collect(),
             mode: item.mode,
             swap_canister_id: item.swap_canister_id,
@@ -1197,19 +1197,19 @@ impl From<pb_api::Governance> for pb::Governance {
             neurons: item
                 .neurons
                 .into_iter()
-                .map(|(k, v)| (k.into(), v.into()))
+                .map(|(k, v)| (k, v.into()))
                 .collect(),
             proposals: item
                 .proposals
                 .into_iter()
-                .map(|(k, v)| (k.into(), v.into()))
+                .map(|(k, v)| (k, v.into()))
                 .collect(),
             parameters: item.parameters.map(|x| x.into()),
             latest_reward_event: item.latest_reward_event.map(|x| x.into()),
             in_flight_commands: item
                 .in_flight_commands
                 .into_iter()
-                .map(|(k, v)| (k.into(), v.into()))
+                .map(|(k, v)| (k, v.into()))
                 .collect(),
             genesis_timestamp_seconds: item.genesis_timestamp_seconds,
             metrics: item.metrics.map(|x| x.into()),
@@ -1218,7 +1218,7 @@ impl From<pb_api::Governance> for pb::Governance {
             id_to_nervous_system_functions: item
                 .id_to_nervous_system_functions
                 .into_iter()
-                .map(|(k, v)| (k.into(), v.into()))
+                .map(|(k, v)| (k, v.into()))
                 .collect(),
             mode: item.mode,
             swap_canister_id: item.swap_canister_id,
@@ -1379,27 +1379,11 @@ impl From<pb::governance::GovernanceCachedMetrics> for pb_api::governance::Gover
             timestamp_seconds: item.timestamp_seconds,
             total_supply_governance_tokens: item.total_supply_governance_tokens,
             dissolving_neurons_count: item.dissolving_neurons_count,
-            dissolving_neurons_e8s_buckets: item
-                .dissolving_neurons_e8s_buckets
-                .into_iter()
-                .map(|(k, v)| (k.into(), v.into()))
-                .collect(),
-            dissolving_neurons_count_buckets: item
-                .dissolving_neurons_count_buckets
-                .into_iter()
-                .map(|(k, v)| (k.into(), v.into()))
-                .collect(),
+            dissolving_neurons_e8s_buckets: item.dissolving_neurons_e8s_buckets,
+            dissolving_neurons_count_buckets: item.dissolving_neurons_count_buckets,
             not_dissolving_neurons_count: item.not_dissolving_neurons_count,
-            not_dissolving_neurons_e8s_buckets: item
-                .not_dissolving_neurons_e8s_buckets
-                .into_iter()
-                .map(|(k, v)| (k.into(), v.into()))
-                .collect(),
-            not_dissolving_neurons_count_buckets: item
-                .not_dissolving_neurons_count_buckets
-                .into_iter()
-                .map(|(k, v)| (k.into(), v.into()))
-                .collect(),
+            not_dissolving_neurons_e8s_buckets: item.not_dissolving_neurons_e8s_buckets,
+            not_dissolving_neurons_count_buckets: item.not_dissolving_neurons_count_buckets,
             dissolved_neurons_count: item.dissolved_neurons_count,
             dissolved_neurons_e8s: item.dissolved_neurons_e8s,
             garbage_collectable_neurons_count: item.garbage_collectable_neurons_count,
@@ -1418,27 +1402,11 @@ impl From<pb_api::governance::GovernanceCachedMetrics> for pb::governance::Gover
             timestamp_seconds: item.timestamp_seconds,
             total_supply_governance_tokens: item.total_supply_governance_tokens,
             dissolving_neurons_count: item.dissolving_neurons_count,
-            dissolving_neurons_e8s_buckets: item
-                .dissolving_neurons_e8s_buckets
-                .into_iter()
-                .map(|(k, v)| (k.into(), v.into()))
-                .collect(),
-            dissolving_neurons_count_buckets: item
-                .dissolving_neurons_count_buckets
-                .into_iter()
-                .map(|(k, v)| (k.into(), v.into()))
-                .collect(),
+            dissolving_neurons_e8s_buckets: item.dissolving_neurons_e8s_buckets,
+            dissolving_neurons_count_buckets: item.dissolving_neurons_count_buckets,
             not_dissolving_neurons_count: item.not_dissolving_neurons_count,
-            not_dissolving_neurons_e8s_buckets: item
-                .not_dissolving_neurons_e8s_buckets
-                .into_iter()
-                .map(|(k, v)| (k.into(), v.into()))
-                .collect(),
-            not_dissolving_neurons_count_buckets: item
-                .not_dissolving_neurons_count_buckets
-                .into_iter()
-                .map(|(k, v)| (k.into(), v.into()))
-                .collect(),
+            not_dissolving_neurons_e8s_buckets: item.not_dissolving_neurons_e8s_buckets,
+            not_dissolving_neurons_count_buckets: item.not_dissolving_neurons_count_buckets,
             dissolved_neurons_count: item.dissolved_neurons_count,
             dissolved_neurons_e8s: item.dissolved_neurons_e8s,
             garbage_collectable_neurons_count: item.garbage_collectable_neurons_count,
@@ -1455,20 +1423,20 @@ impl From<pb_api::governance::GovernanceCachedMetrics> for pb::governance::Gover
 impl From<pb::governance::SnsMetadata> for pb_api::governance::SnsMetadata {
     fn from(item: pb::governance::SnsMetadata) -> Self {
         Self {
-            logo: item.logo.map(|x| x.into()),
-            url: item.url.map(|x| x.into()),
-            name: item.name.map(|x| x.into()),
-            description: item.description.map(|x| x.into()),
+            logo: item.logo,
+            url: item.url,
+            name: item.name,
+            description: item.description,
         }
     }
 }
 impl From<pb_api::governance::SnsMetadata> for pb::governance::SnsMetadata {
     fn from(item: pb_api::governance::SnsMetadata) -> Self {
         Self {
-            logo: item.logo.map(|x| x.into()),
-            url: item.url.map(|x| x.into()),
-            name: item.name.map(|x| x.into()),
-            description: item.description.map(|x| x.into()),
+            logo: item.logo,
+            url: item.url,
+            name: item.name,
+            description: item.description,
         }
     }
 }
@@ -1607,20 +1575,20 @@ impl From<pb_api::GetMetadataRequest> for pb::GetMetadataRequest {
 impl From<pb::GetMetadataResponse> for pb_api::GetMetadataResponse {
     fn from(item: pb::GetMetadataResponse) -> Self {
         Self {
-            logo: item.logo.map(|x| x.into()),
-            url: item.url.map(|x| x.into()),
-            name: item.name.map(|x| x.into()),
-            description: item.description.map(|x| x.into()),
+            logo: item.logo,
+            url: item.url,
+            name: item.name,
+            description: item.description,
         }
     }
 }
 impl From<pb_api::GetMetadataResponse> for pb::GetMetadataResponse {
     fn from(item: pb_api::GetMetadataResponse) -> Self {
         Self {
-            logo: item.logo.map(|x| x.into()),
-            url: item.url.map(|x| x.into()),
-            name: item.name.map(|x| x.into()),
-            description: item.description.map(|x| x.into()),
+            logo: item.logo,
+            url: item.url,
+            name: item.name,
+            description: item.description,
         }
     }
 }
@@ -3130,7 +3098,7 @@ impl From<pb::upgrade_journal_entry::UpgradeStepsReset>
 {
     fn from(item: pb::upgrade_journal_entry::UpgradeStepsReset) -> Self {
         Self {
-            human_readable: item.human_readable.map(|x| x.into()),
+            human_readable: item.human_readable,
             upgrade_steps: item.upgrade_steps.map(|x| x.into()),
         }
     }
@@ -3140,7 +3108,7 @@ impl From<pb_api::upgrade_journal_entry::UpgradeStepsReset>
 {
     fn from(item: pb_api::upgrade_journal_entry::UpgradeStepsReset) -> Self {
         Self {
-            human_readable: item.human_readable.map(|x| x.into()),
+            human_readable: item.human_readable,
             upgrade_steps: item.upgrade_steps.map(|x| x.into()),
         }
     }
@@ -3174,7 +3142,7 @@ impl From<pb::upgrade_journal_entry::TargetVersionReset>
         Self {
             old_target_version: item.old_target_version.map(|x| x.into()),
             new_target_version: item.new_target_version.map(|x| x.into()),
-            human_readable: item.human_readable.map(|x| x.into()),
+            human_readable: item.human_readable,
         }
     }
 }
@@ -3185,7 +3153,7 @@ impl From<pb_api::upgrade_journal_entry::TargetVersionReset>
         Self {
             old_target_version: item.old_target_version.map(|x| x.into()),
             new_target_version: item.new_target_version.map(|x| x.into()),
-            human_readable: item.human_readable.map(|x| x.into()),
+            human_readable: item.human_readable,
         }
     }
 }
@@ -3239,7 +3207,7 @@ impl From<pb::upgrade_journal_entry::UpgradeOutcome>
 {
     fn from(item: pb::upgrade_journal_entry::UpgradeOutcome) -> Self {
         Self {
-            human_readable: item.human_readable.map(|x| x.into()),
+            human_readable: item.human_readable,
             status: item.status.map(|x| x.into()),
         }
     }
@@ -3249,7 +3217,7 @@ impl From<pb_api::upgrade_journal_entry::UpgradeOutcome>
 {
     fn from(item: pb_api::upgrade_journal_entry::UpgradeOutcome) -> Self {
         Self {
-            human_readable: item.human_readable.map(|x| x.into()),
+            human_readable: item.human_readable,
             status: item.status.map(|x| x.into()),
         }
     }
