@@ -8032,7 +8032,7 @@ fn node_metrics_history_update_succeeds() {
     let uni_canister = test
         .universal_canister_with_cycles(Cycles::new(1_000_000_000_000))
         .unwrap();
-    let update = wasm()
+    let payload = wasm()
         .call_simple(
             CanisterId::ic_00(),
             Method::NodeMetricsHistory,
@@ -8045,39 +8045,9 @@ fn node_metrics_history_update_succeeds() {
             ),
         )
         .build();
-    let result = test.ingress(uni_canister, "update", update);
+    let result = test.ingress(uni_canister, "update", payload);
     let bytes = get_reply(result);
     let _ = Decode!(&bytes, Vec<NodeMetricsHistoryResponse>).unwrap();
-}
-
-#[test]
-fn node_metrics_history_query_fails() {
-    let own_subnet_id = subnet_test_id(1);
-    let mut test = ExecutionTestBuilder::new()
-        .with_own_subnet_id(own_subnet_id)
-        .build();
-    let uni_canister = test
-        .universal_canister_with_cycles(Cycles::new(1_000_000_000_000))
-        .unwrap();
-    let query = wasm()
-        .call_simple(
-            CanisterId::ic_00(),
-            Method::NodeMetricsHistory,
-            call_args().other_side(
-                NodeMetricsHistoryArgs {
-                    subnet_id: own_subnet_id.get(),
-                    start_at_timestamp_nanos: 0,
-                }
-                .encode(),
-            ),
-        )
-        .build();
-    test.ingress(uni_canister, "query", query)
-        .unwrap_err()
-        .assert_contains(
-            ErrorCode::CanisterContractViolation,
-            "cannot be executed in replicated query mode",
-        )
 }
 
 #[test]

@@ -1,15 +1,12 @@
-use std::collections::{BTreeMap, BTreeSet};
-
 use ic_error_types::RejectCode;
-use ic_management_canister_types::{
-    MasterPublicKeyId, Payload, SignWithECDSAReply, SignWithSchnorrReply,
-};
+use ic_management_canister_types::{Payload, SignWithECDSAReply, SignWithSchnorrReply};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithThresholdContext;
 use ic_types::{
-    consensus::idkg::{self, common::CombinedSignature},
+    consensus::idkg::{self, common::CombinedSignature, IDkgMasterPublicKeyId},
     messages::{CallbackId, RejectContext},
     Time,
 };
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{idkg::metrics::IDkgPayloadMetrics, idkg::signer::ThresholdSignatureBuilder};
 
@@ -39,7 +36,7 @@ pub(crate) fn update_signature_agreements(
     signature_builder: &dyn ThresholdSignatureBuilder,
     request_expiry_time: Option<Time>,
     payload: &mut idkg::IDkgPayload,
-    valid_keys: &BTreeSet<MasterPublicKeyId>,
+    valid_keys: &BTreeSet<IDkgMasterPublicKeyId>,
     idkg_payload_metrics: Option<&IDkgPayloadMetrics>,
 ) {
     let all_random_ids = all_requests
@@ -158,8 +155,13 @@ pub(crate) fn update_signature_agreements(
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
-
+    use crate::idkg::test_utils::{
+        create_available_pre_signature, empty_idkg_payload_with_key_ids, empty_response,
+        fake_ecdsa_idkg_master_public_key_id, fake_master_public_key_ids_for_all_algorithms,
+        fake_signature_request_context, fake_signature_request_context_from_id,
+        fake_signature_request_context_with_pre_sig, request_id, set_up_idkg_payload,
+        TestThresholdSignatureBuilder,
+    };
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_management_canister_types::MasterPublicKeyId;
@@ -171,21 +173,14 @@ mod tests {
         },
         Height,
     };
-
-    use crate::idkg::test_utils::{
-        create_available_pre_signature, empty_idkg_payload_with_key_ids, empty_response,
-        fake_ecdsa_master_public_key_id, fake_master_public_key_ids_for_all_algorithms,
-        fake_signature_request_context, fake_signature_request_context_from_id,
-        fake_signature_request_context_with_pre_sig, request_id, set_up_idkg_payload,
-        TestThresholdSignatureBuilder,
-    };
+    use std::collections::BTreeSet;
 
     use super::*;
 
     fn set_up(
         should_create_key_transcript: bool,
         pseudo_random_ids: Vec<[u8; 32]>,
-        key_id: MasterPublicKeyId,
+        key_id: IDkgMasterPublicKeyId,
     ) -> (IDkgPayload, BTreeMap<CallbackId, SignWithThresholdContext>) {
         let mut rng = reproducible_rng();
         let (idkg_payload, _env, _block_reader) = set_up_idkg_payload(
@@ -216,7 +211,7 @@ mod tests {
         let delivered_pseudo_random_id = pseudo_random_id(0);
         let old_pseudo_random_id = pseudo_random_id(1);
         let new_pseudo_random_id = pseudo_random_id(2);
-        let key_id = fake_ecdsa_master_public_key_id();
+        let key_id = fake_ecdsa_idkg_master_public_key_id();
         let (mut idkg_payload, contexts) = set_up(
             /*should_create_key_transcript=*/ true,
             vec![old_pseudo_random_id, new_pseudo_random_id],
@@ -260,7 +255,7 @@ mod tests {
         }
     }
 
-    fn test_update_signature_agreements_success(key_id: MasterPublicKeyId) {
+    fn test_update_signature_agreements_success(key_id: IDkgMasterPublicKeyId) {
         let subnet_id = subnet_test_id(0);
         let mut idkg_payload = empty_idkg_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
         let valid_keys = BTreeSet::from_iter([key_id.clone()]);
@@ -300,7 +295,7 @@ mod tests {
         for (i, _) in pre_sig_ids.iter().enumerate().skip(1) {
             signature_builder.signatures.insert(
                 ids[i],
-                match key_id {
+                match key_id.inner() {
                     MasterPublicKeyId::Ecdsa(_) => {
                         CombinedSignature::Ecdsa(ThresholdEcdsaCombinedSignature {
                             signature: vec![i as u8; 32],
