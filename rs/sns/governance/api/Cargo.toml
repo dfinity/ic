@@ -20,6 +20,7 @@ ic-nervous-system-proto = { path = "../../../nervous_system/proto" }
 ic-nns-common = { path = "../../../nns/common" }
 ic-protobuf = { path = "../../../protobuf" }
 ic-types = { path = "../../../types/types" }
+ic-utils = { path = "../../../utils" }
 icp-ledger = { path = "../../../ledger_suite/icp" }
 itertools = { workspace = true }
 prost = { workspace = true }
