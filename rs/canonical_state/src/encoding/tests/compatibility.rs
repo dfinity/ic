@@ -436,10 +436,7 @@ fn canonical_encoding_request() {
             payment: Cycles::new(4),
             method_name: "test".to_string(),
             method_payload: vec![6],
-            metadata: Some(RequestMetadata::new(
-                13,
-                Time::from_nanos_since_unix_epoch(101),
-            )),
+            metadata: RequestMetadata::new(13, Time::from_nanos_since_unix_epoch(101)),
             deadline: NO_DEADLINE,
         }
         .into();
@@ -519,10 +516,7 @@ fn canonical_encoding_request_v18_plus() {
             payment: Cycles::new(4),
             method_name: "test".to_string(),
             method_payload: vec![6],
-            metadata: Some(RequestMetadata::new(
-                13,
-                Time::from_nanos_since_unix_epoch(101),
-            )),
+            metadata: RequestMetadata::new(13, Time::from_nanos_since_unix_epoch(101)),
             deadline: CoarseTime::from_secs_since_unix_epoch(8),
         }
         .into();
@@ -591,7 +585,7 @@ fn canonical_encoding_request_with_u128_cycles() {
             payment: Cycles::new(123456789012345678901234567890),
             method_name: "test".to_string(),
             method_payload: vec![6],
-            metadata: None,
+            metadata: Default::default(),
             deadline: NO_DEADLINE,
         }
         .into();
@@ -1511,11 +1505,8 @@ fn reject_context() -> RejectContext {
     RejectContext::new(RejectCode::SysFatal, "Oops")
 }
 
-fn request_metadata() -> Option<RequestMetadata> {
-    Some(RequestMetadata::new(
-        13,
-        Time::from_nanos_since_unix_epoch(101),
-    ))
+fn request_metadata() -> RequestMetadata {
+    RequestMetadata::new(13, Time::from_nanos_since_unix_epoch(101))
 }
 
 fn deadline(certification_version: CertificationVersion) -> CoarseTime {
