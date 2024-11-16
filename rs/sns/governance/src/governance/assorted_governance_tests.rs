@@ -1,3 +1,8 @@
+//! Unit tests that were previously written in rs/sns/governance/src/governance.rs are now
+//! here, so that Bazel does not recompile the whole production crate each time the tests are run.
+//! The name of this file is indeed too generic; feel free to factor specific tests out into
+//! more appropriate locations, or create new file modules for them, whatever makes more sense.
+
 use super::*;
 use crate::{
     pb::v1::{
