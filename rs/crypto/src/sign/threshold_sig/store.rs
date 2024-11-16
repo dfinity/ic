@@ -112,32 +112,28 @@ impl Default for ThresholdSigDataStoreImpl {
     }
 }
 
+const _SHOULD_HAVE_CAPACITY_GREATER_ZERO: () = assert!(
+    ThresholdSigDataStoreImpl::CAPACITY_PER_TAG_OR_KEY > 0,
+    "Capacity per tag or key must be at least 1"
+);
+const _SHOULD_HAVE_CAPACITY_OF_NINE: () = assert!(
+    ThresholdSigDataStoreImpl::CAPACITY_PER_TAG_OR_KEY == 9,
+    "Capacity per tag or key must be 9"
+);
+
 impl ThresholdSigDataStoreImpl {
     pub const CAPACITY_PER_TAG_OR_KEY: usize = 9;
 
-    /// Creates a new store with a default maximum size per tag.
+    /// Creates a new store with a default capacity per tag or key.
     pub fn new() -> Self {
-        Self::new_with_max_size(Self::CAPACITY_PER_TAG_OR_KEY)
-    }
-
-    /// Creates a new store that keeps the data for the
-    /// given maximum number of DKG IDs per tag.
-    ///
-    /// # Panics
-    /// If `max_num_of_dkg_ids_per_tag` is smaller than 1.
-    fn new_with_max_size(max_num_of_dkg_ids_per_tag_or_key: usize) -> Self {
-        assert!(
-            max_num_of_dkg_ids_per_tag_or_key >= 1,
-            "The maximum size per tag must be at least 1"
-        );
         ThresholdSigDataStoreImpl {
             store: BTreeMap::new(),
-            max_num_of_dkg_ids_per_tag_or_key,
+            max_num_of_dkg_ids_per_tag_or_key: Self::CAPACITY_PER_TAG_OR_KEY,
             low_threshold_dkg_id_insertion_order: VecDeque::with_capacity(
-                max_num_of_dkg_ids_per_tag_or_key,
+                Self::CAPACITY_PER_TAG_OR_KEY,
             ),
             high_threshold_dkg_id_insertion_order: VecDeque::with_capacity(
-                max_num_of_dkg_ids_per_tag_or_key,
+                Self::CAPACITY_PER_TAG_OR_KEY,
             ),
             high_threshold_for_key_dkg_id_insertion_order: BTreeMap::new(),
         }
