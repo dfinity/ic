@@ -2,10 +2,7 @@ use super::assorted_governance_tests::{
     basic_governance_proto, DoNothingLedger, TEST_GOVERNANCE_CANISTER_ID, TEST_ROOT_CANISTER_ID,
 };
 use crate::{
-    governance::{
-        Governance,
-        ValidGovernanceProto,
-    },
+    governance::{Governance, ValidGovernanceProto},
     pb::v1::{
         get_proposal_response,
         governance::{PendingVersion, Version},

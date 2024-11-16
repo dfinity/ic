@@ -4,9 +4,9 @@ use crate::{
         governance::SnsMetadata,
         manage_neuron_response,
         nervous_system_function::{FunctionType, GenericNervousSystemFunction},
-        neuron, Account as AccountProto, Motion, NeuronPermissionType, ProposalData,
-        ProposalId, Tally, UpgradeJournalEntry, UpgradeSnsControlledCanister,
-        UpgradeSnsToNextVersion, VotingRewardsParameters, WaitForQuietState,
+        neuron, Account as AccountProto, Motion, NeuronPermissionType, ProposalData, ProposalId,
+        Tally, UpgradeJournalEntry, UpgradeSnsControlledCanister, UpgradeSnsToNextVersion,
+        VotingRewardsParameters, WaitForQuietState,
     },
     reward,
     sns_upgrade::{
@@ -28,8 +28,8 @@ use ic_nervous_system_clients::{
     },
 };
 use ic_nervous_system_common::{
-    assert_is_err, assert_is_ok, cmc::FakeCmc, ledger::compute_neuron_staking_subaccount_bytes,
-    E8, ONE_DAY_SECONDS, START_OF_2022_TIMESTAMP_SECONDS,
+    assert_is_err, assert_is_ok, cmc::FakeCmc, ledger::compute_neuron_staking_subaccount_bytes, E8,
+    ONE_DAY_SECONDS, START_OF_2022_TIMESTAMP_SECONDS,
 };
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL, TEST_USER1_KEYPAIR,
@@ -124,8 +124,8 @@ const TRANSITION_ROUND_COUNT: u64 = 42;
 const BASE_VOTING_REWARDS_PARAMETERS: VotingRewardsParameters = VotingRewardsParameters {
     round_duration_seconds: Some(7 * 24 * 60 * 60), // 1 week
     reward_rate_transition_duration_seconds: Some(TRANSITION_ROUND_COUNT * 7 * 24 * 60 * 60), // 42 weeks
-    initial_reward_rate_basis_points: Some(200), // 2%
-    final_reward_rate_basis_points: Some(100),   // 1%
+    initial_reward_rate_basis_points: Some(200),                                              // 2%
+    final_reward_rate_basis_points: Some(100),                                                // 1%
 };
 
 lazy_static! {
@@ -200,8 +200,8 @@ fn garbage_mode_is_invalid() {
 }
 
 #[tokio::test]
-async fn test_perform_transfer_sns_treasury_funds_execution_fails_when_another_call_is_in_progress(
-) {
+async fn test_perform_transfer_sns_treasury_funds_execution_fails_when_another_call_is_in_progress()
+{
     // Step 0: Define helpers.
 
     // This expects a transfer_funds call. That call takes 10 ms to complete. This allows us to
@@ -228,10 +228,7 @@ async fn test_perform_transfer_sns_treasury_funds_execution_fails_when_another_c
             unimplemented!()
         }
 
-        async fn account_balance(
-            &self,
-            _account: Account,
-        ) -> Result<Tokens, NervousSystemError> {
+        async fn account_balance(&self, _account: Account) -> Result<Tokens, NervousSystemError> {
             unimplemented!()
         }
 
@@ -359,10 +356,7 @@ async fn test_neuron_operations_exclude_one_another() {
             unimplemented!()
         }
 
-        async fn account_balance(
-            &self,
-            _account: Account,
-        ) -> Result<Tokens, NervousSystemError> {
+        async fn account_balance(&self, _account: Account) -> Result<Tokens, NervousSystemError> {
             Ok(Tokens::new(1, 0).unwrap())
         }
 
@@ -1086,17 +1080,15 @@ async fn no_new_reward_event_when_there_are_no_new_proposals() {
     // fall within. That window is pretty small, and should be sufficient to
     // detect an incorrect implementation of roll over, which is the main
     // thing we are trying to do here.
-    let min_distributed_e8s = (i2d(supply.get_e8s()) * i2d(wait_days)
-        / *reward::NOMINAL_DAYS_PER_YEAR
-        * min_reward_rate)
-        .floor();
+    let min_distributed_e8s =
+        (i2d(supply.get_e8s()) * i2d(wait_days) / *reward::NOMINAL_DAYS_PER_YEAR * min_reward_rate)
+            .floor();
     // Scale up by 1%, because the max/initial reward rate is exactly this
     // much bigger than the min/final reward rate.
     let max_distributed_e8s = min_distributed_e8s * i2d(101) / i2d(100);
     let distributed_e8s_range = min_distributed_e8s..max_distributed_e8s;
     assert!(
-        distributed_e8s_range
-            .contains(&i2d(final_latest_reward_event.distributed_e8s_equivalent)),
+        distributed_e8s_range.contains(&i2d(final_latest_reward_event.distributed_e8s_equivalent)),
         "distributed_e8s_range = {:?}\n\
             final_latest_reward_event = {:#?}",
         distributed_e8s_range,
@@ -2493,9 +2485,7 @@ fn test_no_target_version_fails_check_upgrade_status() {
                     human_readable: Some(_),
                     status: Some(
                         upgrade_journal_entry::upgrade_outcome::Status::InvalidState(
-                            upgrade_journal_entry::upgrade_outcome::InvalidState {
-                                version: None
-                            }
+                            upgrade_journal_entry::upgrade_outcome::InvalidState { version: None }
                         )
                     ),
                 }
@@ -2644,9 +2634,7 @@ fn test_check_upgrade_fails_and_sets_deployed_version_if_deployed_version_missin
                     human_readable: Some(_),
                     status: Some(
                         upgrade_journal_entry::upgrade_outcome::Status::InvalidState(
-                            upgrade_journal_entry::upgrade_outcome::InvalidState {
-                                version: None,
-                            }
+                            upgrade_journal_entry::upgrade_outcome::InvalidState { version: None }
                         )
                     ),
                 }
@@ -3569,8 +3557,7 @@ fn test_stake_maturity_fails_if_invalid_percentage_to_stake() {
         };
 
         // Step 2: Run code under test.
-        let result =
-            governance.stake_maturity_of_neuron(&neuron_id, &controller, &stake_maturity);
+        let result = governance.stake_maturity_of_neuron(&neuron_id, &controller, &stake_maturity);
 
         // Step 3: Inspect result(s).
         assert_matches!(
@@ -3706,11 +3693,10 @@ fn test_disburse_maturity_succeeds_to_self() {
         percentage_to_disburse: 100,
         to_account: None,
     };
-    let result = setup.governance.disburse_maturity(
-        &setup.neuron_id,
-        &setup.controller,
-        &disburse_maturity,
-    );
+    let result =
+        setup
+            .governance
+            .disburse_maturity(&setup.neuron_id, &setup.controller, &disburse_maturity);
 
     // Step 3: Inspect result(s).
     let response = result.expect("Operation failed unexpectedly.");
@@ -3759,11 +3745,10 @@ fn test_disburse_maturity_succeeds_to_other_account() {
             subaccount: None,
         }),
     };
-    let result = setup.governance.disburse_maturity(
-        &setup.neuron_id,
-        &setup.controller,
-        &disburse_maturity,
-    );
+    let result =
+        setup
+            .governance
+            .disburse_maturity(&setup.neuron_id, &setup.controller, &disburse_maturity);
 
     // Step 3: Inspect result(s).
     let response = result.expect("Operation failed unexpectedly.");
@@ -3808,11 +3793,10 @@ fn test_disburse_maturity_succeeds_with_partial_percentage() {
         percentage_to_disburse: partial_percentage,
         to_account: None,
     };
-    let result = setup.governance.disburse_maturity(
-        &setup.neuron_id,
-        &setup.controller,
-        &disburse_maturity,
-    );
+    let result =
+        setup
+            .governance
+            .disburse_maturity(&setup.neuron_id, &setup.controller, &disburse_maturity);
 
     // Step 3: Inspect result(s).
     let response = result.expect("Operation failed unexpectedly.");
@@ -3945,11 +3929,10 @@ fn test_disburse_maturity_fails_if_maturity_too_low() {
         percentage_to_disburse: 100,
         to_account: None,
     };
-    let result = setup.governance.disburse_maturity(
-        &setup.neuron_id,
-        &setup.controller,
-        &disburse_maturity,
-    );
+    let result =
+        setup
+            .governance
+            .disburse_maturity(&setup.neuron_id, &setup.controller, &disburse_maturity);
 
     // Step 3: Inspect result(s).
     assert_matches!(
@@ -4020,10 +4003,7 @@ struct SplitNeuronTestSetup {
 // - an initialized governance, whose API can be called
 // - an id of a neuron (with the specified stake and maturity) contained in the initialized governance
 // - an id of a principal that controls the neuron
-fn prepare_setup_for_split_neuron_tests(
-    stake_e8s: u64,
-    maturity_e8s: u64,
-) -> SplitNeuronTestSetup {
+fn prepare_setup_for_split_neuron_tests(stake_e8s: u64, maturity_e8s: u64) -> SplitNeuronTestSetup {
     let controller = *TEST_NEURON_1_OWNER_PRINCIPAL;
     let neuron_id = test_neuron_id(controller);
     let permission = NeuronPermission {
@@ -4338,8 +4318,8 @@ fn assert_adding_generic_nervous_system_function_fails_for_target_and_validator(
             },
         )),
     };
-    let result = governance
-        .perform_add_generic_nervous_system_function(nns_function_invalid_target.clone());
+    let result =
+        governance.perform_add_generic_nervous_system_function(nns_function_invalid_target.clone());
     assert!(
         result.is_err(),
         "function: {:?}\nresult: {:?}",
@@ -4444,8 +4424,7 @@ fn test_cast_vote_and_cascade_follow_critical_vs_normal_proposals() {
     let voting_neuron_id = NeuronId { id: vec![1] };
     let follows_on_catch_all_neuron_id = NeuronId { id: vec![2] };
     let follows_on_transfer_sns_treasury_funds_neuron_id = NeuronId { id: vec![3] };
-    let follows_on_catch_all_and_transfer_sns_treasury_funds_neuron_id =
-        NeuronId { id: vec![4] };
+    let follows_on_catch_all_and_transfer_sns_treasury_funds_neuron_id = NeuronId { id: vec![4] };
 
     let non_critical_function_id = u64::from(&Action::Motion(Default::default()));
     let critical_function_id = u64::from(&Action::TransferSnsTreasuryFunds(Default::default()));
