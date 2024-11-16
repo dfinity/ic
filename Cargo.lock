@@ -11849,6 +11849,7 @@ dependencies = [
  "ic-nns-constants",
  "ic-protobuf",
  "ic-sns-governance",
+ "ic-sns-governance-api",
  "ic-sns-governance-proposal-criticality",
  "ic-sns-governance-proposals-amount-total-limit",
  "ic-sns-governance-protobuf-generator",
@@ -11879,6 +11880,29 @@ dependencies = [
  "tempfile",
  "tokio",
  "tokio-test",
+]
+
+[[package]]
+name = "ic-sns-governance-api"
+version = "0.9.0"
+dependencies = [
+ "bytes",
+ "candid",
+ "clap 4.5.20",
+ "comparable",
+ "ic-base-types",
+ "ic-nervous-system-proto",
+ "ic-nns-common",
+ "ic-protobuf",
+ "ic-types",
+ "ic-utils 0.9.0",
+ "icp-ledger",
+ "itertools 0.12.1",
+ "prost 0.13.3",
+ "serde",
+ "serde_bytes",
+ "strum",
+ "strum_macros",
 ]
 
 [[package]]
