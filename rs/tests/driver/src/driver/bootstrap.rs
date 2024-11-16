@@ -428,6 +428,7 @@ fn create_config_disk_image(
         .expect("no no-name IC")
         .registry_local_store_path();
     cmd.arg(img_path.clone())
+        .args(["--node_reward_type", "type3.1"])
         .arg("--hostname")
         .arg(node.node_id.to_string())
         .arg("--ic_registry_local_store")
