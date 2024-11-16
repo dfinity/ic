@@ -1,5 +1,5 @@
 use assert_matches::assert_matches;
-use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId};
+use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, VetKdCurve};
 
 use super::*;
 
@@ -34,8 +34,8 @@ fn should_convert_ni_dkg_id_with_key_id_to_proto() {
     let principal_id = PrincipalId::new_subnet_test_id(42);
     let target_id = [42; NiDkgTargetId::SIZE];
     let height = 7;
-    let master_public_key_id = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
-        curve: EcdsaCurve::Secp256k1,
+    let master_public_key_id = NiDkgMasterPublicKeyId::VetKd(VetKdKeyId {
+        curve: VetKdCurve::Bls12_381_G2,
         name: "key".to_string(),
     });
     let id = NiDkgId {
@@ -98,8 +98,8 @@ fn should_parse_valid_proto_as_ni_dkg_id_with_key_id() {
     let principal_id_blob = vec![42; PrincipalId::MAX_LENGTH_IN_BYTES];
     let target_id = [42; NiDkgTargetId::SIZE];
     let height = 7;
-    let master_public_key_id = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
-        curve: EcdsaCurve::Secp256k1,
+    let ni_dkg_master_public_key_id = NiDkgMasterPublicKeyId::VetKd(VetKdKeyId {
+        curve: VetKdCurve::Bls12_381_G2,
         name: "key".to_string(),
     });
 
@@ -109,7 +109,7 @@ fn should_parse_valid_proto_as_ni_dkg_id_with_key_id() {
             dealer_subnet: principal_id_blob.clone(),
             remote_target_id: val.clone(),
             dkg_tag: pb::NiDkgTag::HighThresholdForKey as i32,
-            key_id: Some(pb::MasterPublicKeyId::from(&master_public_key_id)),
+            key_id: Some(pb::MasterPublicKeyId::from(&ni_dkg_master_public_key_id)),
         };
 
         let id = NiDkgId::try_from(proto).unwrap();
@@ -121,7 +121,7 @@ fn should_parse_valid_proto_as_ni_dkg_id_with_key_id() {
                 dealer_subnet: SubnetId::from(
                     PrincipalId::try_from(principal_id_blob.as_slice()).unwrap()
                 ),
-                dkg_tag: NiDkgTag::HighThresholdForKey(master_public_key_id.clone()),
+                dkg_tag: NiDkgTag::HighThresholdForKey(ni_dkg_master_public_key_id.clone()),
                 target_subnet: match val {
                     None => NiDkgTargetSubnet::Local,
                     Some(_) => NiDkgTargetSubnet::Remote(NiDkgTargetId::new(target_id)),
@@ -170,7 +170,31 @@ fn should_return_error_if_ni_dkg_tag_invalid_with_missing_keyid_when_parsing_pro
 }
 
 #[test]
-fn should_return_error_if_ni_dkg_tag_invalid_with_invalid_master_public_key_when_parsing_proto() {
+fn should_return_error_if_ni_dkg_tag_invalid_with_invalid_vetkd_master_public_key_when_parsing_proto(
+) {
+    let proto = NiDkgIdProto {
+        start_block_height: 7,
+        dealer_subnet: vec![42; PrincipalId::MAX_LENGTH_IN_BYTES],
+        remote_target_id: Some(vec![42; NiDkgTargetId::SIZE]),
+        dkg_tag: pb::NiDkgTag::HighThresholdForKey as i32,
+        key_id: Some(pb::MasterPublicKeyId {
+            key_id: Some(pb::master_public_key_id::KeyId::Vetkd(pb::VetKdKeyId {
+                curve: 99,
+                name: "invalid_curve".to_string(),
+            })),
+        }),
+    };
+
+    let result = NiDkgId::try_from(proto);
+
+    assert_matches!(
+        result.unwrap_err(),
+        NiDkgIdFromProtoError::InvalidMasterPublicKeyId(_)
+    );
+}
+
+#[test]
+fn should_return_error_if_ni_dkg_tag_invalid_with_non_vetkd_master_public_key_when_parsing_proto() {
     let proto = NiDkgIdProto {
         start_block_height: 7,
         dealer_subnet: vec![42; PrincipalId::MAX_LENGTH_IN_BYTES],
@@ -178,8 +202,8 @@ fn should_return_error_if_ni_dkg_tag_invalid_with_invalid_master_public_key_when
         dkg_tag: pb::NiDkgTag::HighThresholdForKey as i32,
         key_id: Some(pb::MasterPublicKeyId {
             key_id: Some(pb::master_public_key_id::KeyId::Ecdsa(pb::EcdsaKeyId {
-                curve: 99,
-                name: "invalid_curve".to_string(),
+                curve: 1,
+                name: "name".to_string(),
             })),
         }),
     };

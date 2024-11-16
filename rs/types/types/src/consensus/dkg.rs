@@ -4,12 +4,12 @@ use super::*;
 use crate::{
     artifact::PbArtifact,
     crypto::threshold_sig::ni_dkg::{
-        config::NiDkgConfig, NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTranscript,
+        config::NiDkgConfig, NiDkgDealing, NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag,
+        NiDkgTargetId, NiDkgTranscript,
     },
     messages::CallbackId,
     ReplicaVersion,
 };
-use ic_management_canister_types::MasterPublicKeyId;
 use ic_protobuf::types::v1 as pb;
 use serde_with::serde_as;
 use std::collections::BTreeMap;
@@ -414,13 +414,13 @@ fn build_tagged_transcripts_map(
                                                 .to_string(),
                                         )
                                     })?;
-                                let mpkid = MasterPublicKeyId::try_from(mpkid_proto.clone())
+                                let mpkid = NiDkgMasterPublicKeyId::try_from(mpkid_proto.clone())
                                     .map_err(|e| {
-                                        ProxyDecodeError::Other(format!(
-                                            "Failed to convert NiDkgTag of transcript: \
+                                    ProxyDecodeError::Other(format!(
+                                        "Failed to convert NiDkgTag of transcript: \
                                             Invalid MasterPublicKeyId: {e}"
-                                        ))
-                                    })?;
+                                    ))
+                                })?;
                                 Ok(NiDkgTag::HighThresholdForKey(mpkid))
                             }
                             _ => Err(ProxyDecodeError::Other(
@@ -634,10 +634,7 @@ impl TryFrom<pb::DkgPayload> for Payload {
 mod tests {
 
     use super::*;
-    use ic_management_canister_types::{
-        EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
-        VetKdKeyId,
-    };
+    use ic_management_canister_types::{VetKdCurve, VetKdKeyId};
     use strum::EnumCount;
     use strum::IntoEnumIterator;
 
@@ -670,26 +667,13 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::single_element_loop)]
     fn should_correctly_calculate_threshold_for_ni_dkg_tag_high_threshold_for_key() {
-        for master_public_key_id in [
-            MasterPublicKeyId::Ecdsa(EcdsaKeyId {
-                curve: EcdsaCurve::Secp256k1,
-                name: "some key".to_string(),
-            }),
-            MasterPublicKeyId::Schnorr(SchnorrKeyId {
-                algorithm: SchnorrAlgorithm::Bip340Secp256k1,
-                name: "some key".to_string(),
-            }),
-            MasterPublicKeyId::Schnorr(SchnorrKeyId {
-                algorithm: SchnorrAlgorithm::Ed25519,
-                name: "some key".to_string(),
-            }),
-            MasterPublicKeyId::VetKd(VetKdKeyId {
-                curve: VetKdCurve::Bls12_381_G2,
-                name: "some key".to_string(),
-            }),
-        ] {
-            let tag = NiDkgTag::HighThresholdForKey(master_public_key_id);
+        for ni_dkg_master_public_key_id in [NiDkgMasterPublicKeyId::VetKd(VetKdKeyId {
+            curve: VetKdCurve::Bls12_381_G2,
+            name: "some key".to_string(),
+        })] {
+            let tag = NiDkgTag::HighThresholdForKey(ni_dkg_master_public_key_id);
 
             assert_eq!(tag.threshold_for_subnet_of_size(0), 1);
             assert_eq!(tag.threshold_for_subnet_of_size(1), 1);
@@ -701,9 +685,7 @@ mod tests {
             assert_eq!(tag.threshold_for_subnet_of_size(28), 19);
             assert_eq!(tag.threshold_for_subnet_of_size(64), 43);
         }
-        assert_eq!(MasterPublicKeyId::COUNT, 3);
-        assert_eq!(EcdsaCurve::iter().count(), 1);
-        assert_eq!(SchnorrAlgorithm::iter().count(), 2);
+        assert_eq!(NiDkgMasterPublicKeyId::COUNT, 1);
         assert_eq!(VetKdCurve::iter().count(), 1);
     }
 

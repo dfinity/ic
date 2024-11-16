@@ -2,9 +2,7 @@ use super::*;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::PublicCoefficientsBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
-use ic_management_canister_types::{
-    EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve, VetKdKeyId,
-};
+use ic_management_canister_types::{VetKdCurve, VetKdKeyId};
 use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTargetId, NiDkgTargetSubnet};
 use ic_types::Height;
 use ic_types_test_utils::ids::{node_test_id, SUBNET_1};
@@ -505,43 +503,17 @@ fn ni_dkg_id_with_tag(ni_dkg_tag: NiDkgTag, height: usize) -> NiDkgId {
 }
 
 fn all_tags() -> Vec<NiDkgTag> {
-    assert_eq!(MasterPublicKeyId::COUNT, 3);
-    assert_eq!(EcdsaCurve::iter().count(), 1);
-    assert_eq!(SchnorrAlgorithm::iter().count(), 2);
+    assert_eq!(NiDkgMasterPublicKeyId::COUNT, 1);
     assert_eq!(VetKdCurve::iter().count(), 1);
     vec![
         NiDkgTag::LowThreshold,
         NiDkgTag::HighThreshold,
-        NiDkgTag::HighThresholdForKey(ecdsa_secp256k1_master_public_key_id()),
-        NiDkgTag::HighThresholdForKey(schnorr_bip340_master_public_key_id()),
-        NiDkgTag::HighThresholdForKey(schnorr_ed25519_master_public_key_id()),
         NiDkgTag::HighThresholdForKey(vetkd_master_public_key_id()),
     ]
 }
 
-fn ecdsa_secp256k1_master_public_key_id() -> MasterPublicKeyId {
-    MasterPublicKeyId::Ecdsa(EcdsaKeyId {
-        curve: EcdsaCurve::Secp256k1,
-        name: "ecdsa_secp256k1_key".to_string(),
-    })
-}
-
-fn schnorr_bip340_master_public_key_id() -> MasterPublicKeyId {
-    MasterPublicKeyId::Schnorr(SchnorrKeyId {
-        algorithm: SchnorrAlgorithm::Bip340Secp256k1,
-        name: "schnorr_bip340_secp256k1_key".to_string(),
-    })
-}
-
-fn schnorr_ed25519_master_public_key_id() -> MasterPublicKeyId {
-    MasterPublicKeyId::Schnorr(SchnorrKeyId {
-        algorithm: SchnorrAlgorithm::Ed25519,
-        name: "schnorr_ed25519_key".to_string(),
-    })
-}
-
-fn vetkd_master_public_key_id() -> MasterPublicKeyId {
-    MasterPublicKeyId::VetKd(VetKdKeyId {
+fn vetkd_master_public_key_id() -> NiDkgMasterPublicKeyId {
+    NiDkgMasterPublicKeyId::VetKd(VetKdKeyId {
         curve: VetKdCurve::Bls12_381_G2,
         name: "vetkd_bls12_381_g2_key".to_string(),
     })
