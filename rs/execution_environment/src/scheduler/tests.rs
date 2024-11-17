@@ -1884,7 +1884,11 @@ fn scheduler_long_execution_progress_across_checkpoints() {
     // Penalize canister for a long execution.
     let message_id = test.send_ingress(penalized_long_id, ingress(message_instructions));
     assert_eq!(test.ingress_status(&message_id), IngressStatus::Unknown);
-    for _ in 0..message_instructions / slice_instructions {
+    for i in 0..message_instructions / slice_instructions {
+        // Without short executions, all idle canister will be equally executed.
+        if let Some(canister_id) = canister_ids.get(i as usize % num_canisters) {
+            test.send_ingress(*canister_id, ingress(slice_instructions));
+        }
         test.execute_round(ExecutionRoundType::OrdinaryRound);
     }
     assert_matches!(
