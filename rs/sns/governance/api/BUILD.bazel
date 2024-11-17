@@ -1,0 +1,43 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# See rs/nervous_system/feature_test.md
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/ledger_suite/icp:icp_ledger",
+    "//rs/nervous_system/proto",
+    "//rs/protobuf",
+    "//rs/types/base_types",
+    "//rs/types/types",
+    "//rs/utils",
+    "@crate_index//:bytes",
+    "@crate_index//:candid",
+    "@crate_index//:clap",
+    "@crate_index//:comparable",
+    "@crate_index//:itertools",
+    "@crate_index//:prost",
+    "@crate_index//:serde",
+    "@crate_index//:serde_bytes",
+    "@crate_index//:strum",
+]
+
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:strum_macros",
+]
+
+ALIASES = {}
+
+rust_library(
+    name = "api",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["**/*tests.rs"],
+    ),
+    aliases = ALIASES,
+    crate_name = "ic_sns_governance_api",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
+    deps = DEPENDENCIES,
+)

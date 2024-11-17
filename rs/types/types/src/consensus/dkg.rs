@@ -4,7 +4,8 @@ use super::*;
 use crate::{
     artifact::PbArtifact,
     crypto::threshold_sig::ni_dkg::{
-        config::NiDkgConfig, NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTranscript,
+        config::NiDkgConfig, NiDkgDealing, NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag,
+        NiDkgTargetId, NiDkgTranscript,
     },
     messages::CallbackId,
     ReplicaVersion,
@@ -300,6 +301,10 @@ fn build_tagged_transcripts_vec(
         .map(|(tag, transcript)| pb::TaggedNiDkgTranscript {
             tag: pb::NiDkgTag::from(tag) as i32,
             transcript: Some(pb::NiDkgTranscript::from(transcript)),
+            key_id: match tag {
+                NiDkgTag::HighThresholdForKey(k) => Some(pb::MasterPublicKeyId::from(k)),
+                _ => None,
+            },
         })
         .collect()
 }
@@ -375,12 +380,54 @@ fn build_tagged_transcripts_map(
                 .ok_or_else(|| ProxyDecodeError::MissingField("TaggedNiDkgTranscript::transcript"))
                 .and_then(|t| {
                     Ok((
-                        NiDkgTag::try_from(tagged_transcript.tag).map_err(|e| {
-                            ProxyDecodeError::Other(format!(
-                                "Failed to convert NiDkgTag of transcript: {:?}",
-                                e
-                            ))
-                        })?,
+                        match tagged_transcript.tag {
+                            1 => {
+                                if tagged_transcript.key_id.is_some() {
+                                    Err(ProxyDecodeError::Other(
+                                        "Failed to convert NiDkgTag of transcript: \
+                                        Invalid DkgTag: expected the master public key \
+                                        ID to be empty"
+                                            .to_string(),
+                                    ))
+                                } else {
+                                    Ok(NiDkgTag::LowThreshold)
+                                }
+                            }
+                            2 => {
+                                if tagged_transcript.key_id.is_some() {
+                                    Err(ProxyDecodeError::Other(
+                                        "Failed to convert NiDkgTag of transcript: \
+                                        Invalid DkgTag: expected the master public key \
+                                        ID to be empty"
+                                            .to_string(),
+                                    ))
+                                } else {
+                                    Ok(NiDkgTag::HighThreshold)
+                                }
+                            }
+                            3 => {
+                                let mpkid_proto =
+                                    tagged_transcript.key_id.as_ref().ok_or_else(|| {
+                                        ProxyDecodeError::Other(
+                                            "Failed to convert NiDkgTag of transcript: \
+                                            Invalid DkgTag: missing key ID"
+                                                .to_string(),
+                                        )
+                                    })?;
+                                let mpkid = NiDkgMasterPublicKeyId::try_from(mpkid_proto.clone())
+                                    .map_err(|e| {
+                                    ProxyDecodeError::Other(format!(
+                                        "Failed to convert NiDkgTag of transcript: \
+                                            Invalid MasterPublicKeyId: {e}"
+                                    ))
+                                })?;
+                                Ok(NiDkgTag::HighThresholdForKey(mpkid))
+                            }
+                            _ => Err(ProxyDecodeError::Other(
+                                "Failed to convert NiDkgTag of transcript: Invalid DKG tag"
+                                    .to_string(),
+                            )),
+                        }?,
                         NiDkgTranscript::try_from(t).map_err(ProxyDecodeError::Other)?,
                     ))
                 })
@@ -535,7 +582,7 @@ impl NiDkgTag {
         let f = crate::consensus::get_faults_tolerated(committee_size);
         match self {
             NiDkgTag::LowThreshold => f + 1,
-            NiDkgTag::HighThreshold => committee_size - f,
+            NiDkgTag::HighThreshold | NiDkgTag::HighThresholdForKey(_) => committee_size - f,
         }
     }
 }
@@ -585,7 +632,11 @@ impl TryFrom<pb::DkgPayload> for Payload {
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
+    use ic_management_canister_types::{VetKdCurve, VetKdKeyId};
+    use strum::EnumCount;
+    use strum::IntoEnumIterator;
 
     #[test]
     fn should_correctly_calculate_threshold_for_ni_dkg_tag_low_threshold() {
@@ -600,6 +651,7 @@ mod tests {
         assert_eq!(low_threshold_tag.threshold_for_subnet_of_size(28), 10);
         assert_eq!(low_threshold_tag.threshold_for_subnet_of_size(64), 22);
     }
+
     #[test]
     fn should_correctly_calculate_threshold_for_ni_dkg_tag_high_threshold() {
         let high_threshold_tag = NiDkgTag::HighThreshold;
@@ -612,6 +664,29 @@ mod tests {
         assert_eq!(high_threshold_tag.threshold_for_subnet_of_size(6), 3);
         assert_eq!(high_threshold_tag.threshold_for_subnet_of_size(28), 19);
         assert_eq!(high_threshold_tag.threshold_for_subnet_of_size(64), 43);
+    }
+
+    #[test]
+    #[allow(clippy::single_element_loop)]
+    fn should_correctly_calculate_threshold_for_ni_dkg_tag_high_threshold_for_key() {
+        for ni_dkg_master_public_key_id in [NiDkgMasterPublicKeyId::VetKd(VetKdKeyId {
+            curve: VetKdCurve::Bls12_381_G2,
+            name: "some key".to_string(),
+        })] {
+            let tag = NiDkgTag::HighThresholdForKey(ni_dkg_master_public_key_id);
+
+            assert_eq!(tag.threshold_for_subnet_of_size(0), 1);
+            assert_eq!(tag.threshold_for_subnet_of_size(1), 1);
+            assert_eq!(tag.threshold_for_subnet_of_size(2), 1);
+            assert_eq!(tag.threshold_for_subnet_of_size(3), 1);
+            assert_eq!(tag.threshold_for_subnet_of_size(4), 3);
+            assert_eq!(tag.threshold_for_subnet_of_size(5), 3);
+            assert_eq!(tag.threshold_for_subnet_of_size(6), 3);
+            assert_eq!(tag.threshold_for_subnet_of_size(28), 19);
+            assert_eq!(tag.threshold_for_subnet_of_size(64), 43);
+        }
+        assert_eq!(NiDkgMasterPublicKeyId::COUNT, 1);
+        assert_eq!(VetKdCurve::iter().count(), 1);
     }
 
     #[test]
