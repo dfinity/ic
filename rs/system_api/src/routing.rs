@@ -307,11 +307,15 @@ pub(super) fn resolve_destination(
         )),
     }
 }
+
+/// TODO(CRP-2614): Rename to include VetKD
 enum IDkgSubnetKind {
     OnlyHoldsKey,
     HoldsAndSignWithKey,
 }
 
+/// TODO(CRP-2614): Rename to include VetKD
+/// TODO(CRP-2615): Unit tests for VetKD routing
 /// Routes to the `requested_subnet` if it holds the key (and fails if that
 /// subnet doesn't hold the key).  If a `requested_subnet` is not provided,
 /// route to the first subnet enabled to sign with the given key.
