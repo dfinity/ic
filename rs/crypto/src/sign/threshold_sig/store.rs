@@ -1,5 +1,5 @@
 use super::*;
-use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
+use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgMasterPublicKeyId};
 use std::collections::VecDeque;
 
 #[cfg(test)]
@@ -79,15 +79,25 @@ impl TranscriptData {
 /// data was inserted _first_ is removed, that is, DKG IDs are purged in
 /// insertion order.
 ///
-/// The maximum number of threshold signature data stored per tag is defined by
-/// `CAPACITY_PER_TAG`. For the moment there are two tags, `LowThreshold` and `HighThreshold`,
-/// meaning that the total capacity of the threshold signature data store is `2 * CAPACITY_PER_TAG`.
+/// The maximum number of threshold signature data stored per tag or key is defined by
+/// `CAPACITY_PER_TAG_OR_KEY`. For the moment there are three tags:
+/// * `LowThreshold`
+/// * `HighThreshold`
+/// * `HighThresholdForKey(NiDkgMasterPublicKeyId)`
+///
+/// and the total capacity of the threshold signature data store is
+/// `2*CAPACITY_PER_TAG_OR_KEY + K*CAPACITY_PER_TAG_OR_KEY` where `K` is
+/// the number of different `NiDkgMasterPublicKeyId`s that are stored on the
+/// subnet. In production, currently at most 3 keys are stored per subnet
+/// (1 ECDSA key, 2 Schnorr keys).
 pub struct ThresholdSigDataStoreImpl {
     store: BTreeMap<NiDkgId, ThresholdSigData>,
-    max_num_of_dkg_ids_per_tag: usize,
+    max_num_of_dkg_ids_per_tag_or_key: usize,
     // VecDeque used as queue: `push_back` to add, `pop_front` to remove
     low_threshold_dkg_id_insertion_order: VecDeque<NiDkgId>,
     high_threshold_dkg_id_insertion_order: VecDeque<NiDkgId>,
+    high_threshold_for_key_dkg_id_insertion_order:
+        BTreeMap<NiDkgMasterPublicKeyId, VecDeque<NiDkgId>>,
 }
 
 #[derive(Default)]
@@ -102,33 +112,30 @@ impl Default for ThresholdSigDataStoreImpl {
     }
 }
 
+const _SHOULD_HAVE_CAPACITY_GREATER_ZERO: () = assert!(
+    ThresholdSigDataStoreImpl::CAPACITY_PER_TAG_OR_KEY > 0,
+    "Capacity per tag or key must be at least 1"
+);
+const _SHOULD_HAVE_CAPACITY_OF_NINE: () = assert!(
+    ThresholdSigDataStoreImpl::CAPACITY_PER_TAG_OR_KEY == 9,
+    "Capacity per tag or key must be 9"
+);
+
 impl ThresholdSigDataStoreImpl {
-    pub const CAPACITY_PER_TAG: usize = 9;
+    pub const CAPACITY_PER_TAG_OR_KEY: usize = 9;
 
-    /// Creates a new store with a default maximum size per tag.
+    /// Creates a new store with a default capacity per tag or key.
     pub fn new() -> Self {
-        Self::new_with_max_size(Self::CAPACITY_PER_TAG)
-    }
-
-    /// Creates a new store that keeps the data for the
-    /// given maximum number of DKG IDs per tag.
-    ///
-    /// # Panics
-    /// If `max_num_of_dkg_ids_per_tag` is smaller than 1.
-    fn new_with_max_size(max_num_of_dkg_ids_per_tag: usize) -> Self {
-        assert!(
-            max_num_of_dkg_ids_per_tag >= 1,
-            "The maximum size per tag must be at least 1"
-        );
         ThresholdSigDataStoreImpl {
             store: BTreeMap::new(),
-            max_num_of_dkg_ids_per_tag,
+            max_num_of_dkg_ids_per_tag_or_key: Self::CAPACITY_PER_TAG_OR_KEY,
             low_threshold_dkg_id_insertion_order: VecDeque::with_capacity(
-                max_num_of_dkg_ids_per_tag,
+                Self::CAPACITY_PER_TAG_OR_KEY,
             ),
             high_threshold_dkg_id_insertion_order: VecDeque::with_capacity(
-                max_num_of_dkg_ids_per_tag,
+                Self::CAPACITY_PER_TAG_OR_KEY,
             ),
+            high_threshold_for_key_dkg_id_insertion_order: BTreeMap::new(),
         }
     }
 
@@ -137,7 +144,7 @@ impl ThresholdSigDataStoreImpl {
         if !self.store.contains_key(dkg_id) {
             self.store
                 .insert(dkg_id.clone(), ThresholdSigData::default());
-            match dkg_id.dkg_tag {
+            match &dkg_id.dkg_tag {
                 NiDkgTag::LowThreshold => {
                     self.low_threshold_dkg_id_insertion_order
                         .push_back(dkg_id.clone());
@@ -145,6 +152,21 @@ impl ThresholdSigDataStoreImpl {
                 NiDkgTag::HighThreshold => {
                     self.high_threshold_dkg_id_insertion_order
                         .push_back(dkg_id.clone());
+                }
+                NiDkgTag::HighThresholdForKey(master_public_key_id) => {
+                    match self
+                        .high_threshold_for_key_dkg_id_insertion_order
+                        .get_mut(master_public_key_id)
+                    {
+                        Some(insertion_order) => insertion_order.push_back(dkg_id.clone()),
+                        None => {
+                            let mut buf =
+                                VecDeque::with_capacity(self.max_num_of_dkg_ids_per_tag_or_key);
+                            buf.push_back(dkg_id.clone());
+                            self.high_threshold_for_key_dkg_id_insertion_order
+                                .insert(master_public_key_id.clone(), buf);
+                        }
+                    }
                 }
             }
         }
@@ -155,24 +177,34 @@ impl ThresholdSigDataStoreImpl {
 
     fn purge_entry_for_oldest_dkg_id_if_necessary(&mut self, tag: &NiDkgTag) {
         let dkg_id_insertion_order = match tag {
-            NiDkgTag::LowThreshold => &mut self.low_threshold_dkg_id_insertion_order,
-            NiDkgTag::HighThreshold => &mut self.high_threshold_dkg_id_insertion_order,
+            NiDkgTag::LowThreshold => Some(&mut self.low_threshold_dkg_id_insertion_order),
+            NiDkgTag::HighThreshold => Some(&mut self.high_threshold_dkg_id_insertion_order),
+            NiDkgTag::HighThresholdForKey(master_public_key_id) => self
+                .high_threshold_for_key_dkg_id_insertion_order
+                .get_mut(master_public_key_id),
         };
-        if dkg_id_insertion_order.len() > self.max_num_of_dkg_ids_per_tag {
-            let oldest_dkg_id = dkg_id_insertion_order
-                .pop_front()
-                .expect("dkg store unexpectedly empty");
-            self.store.remove(&oldest_dkg_id);
+        if let Some(insertion_order) = dkg_id_insertion_order {
+            if insertion_order.len() > self.max_num_of_dkg_ids_per_tag_or_key {
+                let oldest_dkg_id = insertion_order
+                    .pop_front()
+                    .expect("dkg store unexpectedly empty");
+                self.store.remove(&oldest_dkg_id);
+            }
         }
     }
 
     fn assert_length_invariant(&self) {
+        let high_threshold_for_key_id_dkg_id_insertion_order_len: usize = self
+            .high_threshold_for_key_dkg_id_insertion_order
+            .values()
+            .map(|v| v.len())
+            .sum();
         assert_eq!(
             self.store.len(),
             self.low_threshold_dkg_id_insertion_order.len()
-                + self.high_threshold_dkg_id_insertion_order.len(),
-            "The combined length of the queues maintaining DKG ID insertion order must be the \
-            same as that of the map containing the DKG ID data."
+                + self.high_threshold_dkg_id_insertion_order.len()
+                + high_threshold_for_key_id_dkg_id_insertion_order_len,
+            "ThresholdSigDataStore length invariant violated"
         );
     }
 }

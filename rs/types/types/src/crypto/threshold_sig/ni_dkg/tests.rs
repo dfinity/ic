@@ -7,6 +7,8 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_
     Dealing, EncryptedShares, PublicCoefficientsBytes, ZKProofDec, ZKProofShare, NUM_CHUNKS,
     NUM_ZK_REPETITIONS,
 };
+use ic_management_canister_types::VetKdCurve;
+use std::str::FromStr;
 
 #[test]
 fn should_correctly_convert_csp_dkg_dealing_to_dkg_dealing() {
@@ -229,6 +231,21 @@ fn should_correctly_format_dealing_display_message() {
     assert_eq!(display_text, expected_text);
 }
 
+#[test]
+fn should_correctly_format_ni_dkg_id() {
+    let vetkd_key_id = VetKdKeyId {
+        curve: VetKdCurve::Bls12_381_G2,
+        name: "abcdefg".to_string(),
+    };
+
+    let nidkg_mpkid = NiDkgMasterPublicKeyId::VetKd(vetkd_key_id);
+
+    assert_eq!(
+        MasterPublicKeyId::from_str(&format!("{}", nidkg_mpkid)),
+        Ok(MasterPublicKeyId::from(nidkg_mpkid))
+    );
+}
+
 fn transcript_with_internal_csp_transcript(
     csp_dkg_transcript: &CspNiDkgTranscript,
 ) -> NiDkgTranscript {
@@ -300,19 +317,4 @@ fn empty_ni_csp_dkg_transcript() -> CspNiDkgTranscript {
         },
         receiver_data: Default::default(),
     })
-}
-
-#[test]
-fn should_correctly_convert_i32_to_ni_dkg_tag() {
-    assert!(NiDkgTag::try_from(-1).is_err());
-    assert!(NiDkgTag::try_from(0).is_err());
-    assert_eq!(NiDkgTag::try_from(1), Ok(NiDkgTag::LowThreshold));
-    assert_eq!(NiDkgTag::try_from(2), Ok(NiDkgTag::HighThreshold));
-    assert!(NiDkgTag::try_from(3).is_err());
-}
-
-#[test]
-fn should_correctly_convert_ni_dkg_tag_to_i32() {
-    assert_eq!(NiDkgTag::LowThreshold as i32, 1);
-    assert_eq!(NiDkgTag::HighThreshold as i32, 2);
 }

@@ -632,6 +632,13 @@ impl<T: ExhaustiveSet> ExhaustiveSet for Signed<T, MultiSignature<T>> {
     }
 }
 
+// TODO(CON-1433): Remove once NiDkgTag::HighThresholdForKey variant is supported by the mainnet version
+impl ExhaustiveSet for NiDkgTag {
+    fn exhaustive_set<R: RngCore + CryptoRng>(_: &mut R) -> Vec<Self> {
+        vec![NiDkgTag::LowThreshold, NiDkgTag::HighThreshold]
+    }
+}
+
 impl ExhaustiveSet for NiDkgConfig {
     fn exhaustive_set<R: RngCore + CryptoRng>(_: &mut R) -> Vec<Self> {
         vec![NiDkgConfig::new(valid_dkg_config_data()).unwrap()]
