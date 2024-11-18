@@ -21,7 +21,7 @@ use ic_types::crypto::threshold_sig::ni_dkg::{
 use ic_types::crypto::{CombinedThresholdSig, SignableMock, ThresholdSigShare};
 use ic_types::Height;
 use ic_types::SubnetId;
-use ic_types_test_utils::ids::{NODE_1, SUBNET_0, SUBNET_1};
+use ic_types_test_utils::ids::{NODE_1, SUBNET_1};
 
 pub const NODE_ID: NodeId = NODE_1;
 
@@ -30,13 +30,6 @@ pub const NI_DKG_ID_1: NiDkgId = NiDkgId {
     dealer_subnet: SUBNET_1,
     dkg_tag: NiDkgTag::HighThreshold,
     target_subnet: NiDkgTargetSubnet::Remote(NiDkgTargetId::new([42; 32])),
-};
-
-pub const NI_DKG_ID_2: NiDkgId = NiDkgId {
-    start_block_height: Height::new(2),
-    dealer_subnet: SUBNET_0,
-    dkg_tag: NiDkgTag::HighThreshold,
-    target_subnet: NiDkgTargetSubnet::Remote(NiDkgTargetId::new([23; 32])),
 };
 
 mod sign_threshold {

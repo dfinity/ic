@@ -1,0 +1,10 @@
+package(default_visibility = ["//visibility:public"])
+
+sh_binary(
+    name = "afl_wrapper",
+    srcs = ["afl_wrapper.sh"],
+    tags = [
+        "afl",
+        "fuzz_test",
+    ],
+)

@@ -9,8 +9,8 @@ use ic_ledger_core::block::BlockIndex;
 use ic_ledger_core::{block::BlockType, Tokens};
 use ic_ledger_suite_state_machine_tests::{
     balance_of, default_approve_args, default_transfer_from_args, expect_icrc2_disabled,
-    get_allowance, send_approval, send_transfer_from, setup, supported_standards, total_supply,
-    transfer, FEE, MINTER,
+    send_approval, send_transfer_from, setup, supported_standards, total_supply, transfer,
+    AllowanceProvider, FEE, MINTER,
 };
 use ic_state_machine_tests::{ErrorCode, StateMachine, UserError};
 use icp_ledger::{
@@ -463,18 +463,18 @@ fn test_tx_time_bounds() {
 // Check that different blocks produce different hashes.
 #[test]
 fn transaction_hashes_are_unique() {
-    ic_ledger_suite_state_machine_tests::transaction_hashes_are_unique();
+    ic_ledger_suite_state_machine_tests::transaction_hashes_are_unique::<Tokens>();
 }
 
 #[test]
 fn block_hashes_are_unique() {
-    ic_ledger_suite_state_machine_tests::block_hashes_are_unique();
+    ic_ledger_suite_state_machine_tests::block_hashes_are_unique::<Tokens>();
 }
 
 // Generate random blocks and check that the block hash is stable.
 #[test]
 fn block_hashes_are_stable() {
-    ic_ledger_suite_state_machine_tests::block_hashes_are_stable();
+    ic_ledger_suite_state_machine_tests::block_hashes_are_stable::<Tokens>();
 }
 
 #[test]
@@ -1239,7 +1239,7 @@ fn test_upgrade_serialization() {
 
     let init_args = CandidOne(payload).into_bytes().unwrap();
     let upgrade_args = Encode!(&LedgerCanisterPayload::Upgrade(None)).unwrap();
-    ic_ledger_suite_state_machine_tests::test_upgrade_serialization(
+    ic_ledger_suite_state_machine_tests::test_upgrade_serialization::<Tokens>(
         ledger_wasm_mainnet,
         ledger_wasm_current,
         init_args,
@@ -1306,11 +1306,11 @@ fn test_upgrade_serialization_fixed_tx() {
         )
         .unwrap();
 
-        let allowance = get_allowance(&env, canister_id, p1.0, p2.0);
+        let allowance = Account::get_allowance(&env, canister_id, p1.0, p2.0);
         assert_eq!(allowance.allowance.0.to_u64().unwrap(), 120_000);
         assert_eq!(allowance.expires_at, None);
 
-        let allowance = get_allowance(&env, canister_id, p1.0, p3.0);
+        let allowance = Account::get_allowance(&env, canister_id, p1.0, p3.0);
         assert_eq!(allowance.allowance.0.to_u64().unwrap(), 130_000);
         assert_eq!(allowance.expires_at, Some(expiration));
 
@@ -1367,7 +1367,10 @@ fn test_approve_cant_pay_fee() {
 
 #[test]
 fn test_approve_cap() {
-    ic_ledger_suite_state_machine_tests::test_approve_cap(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_approve_cap::<LedgerCanisterInitPayload, Tokens>(
+        ledger_wasm(),
+        encode_init_args,
+    );
 }
 
 #[test]
@@ -1465,12 +1468,12 @@ fn test_feature_flags() {
     let block_index =
         send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
     assert_eq!(block_index, 1);
-    let allowance = get_allowance(&env, canister_id, from.0, spender.0);
+    let allowance = Account::get_allowance(&env, canister_id, from.0, spender.0);
     assert_eq!(allowance.allowance.0.to_u64().unwrap(), 150_000);
     let block_index = send_transfer_from(&env, canister_id, spender.0, &transfer_from_args)
         .expect("transfer_from failed");
     assert_eq!(block_index, 2);
-    let allowance = get_allowance(&env, canister_id, from.0, spender.0);
+    let allowance = Account::get_allowance(&env, canister_id, from.0, spender.0);
     assert_eq!(allowance.allowance.0.to_u64().unwrap(), 130_000);
     assert_eq!(balance_of(&env, canister_id, from.0), 70_000);
     assert_eq!(balance_of(&env, canister_id, to.0), 10_000);
@@ -1724,8 +1727,8 @@ mod metrics {
     }
 
     #[test]
-    fn should_export_total_memory_usage_metrics() {
-        ic_ledger_suite_state_machine_tests::metrics::assert_existence_of_ledger_total_memory_bytes_metric(
+    fn should_export_ledger_heap_memory_usage_metrics() {
+        ic_ledger_suite_state_machine_tests::metrics::assert_existence_of_heap_memory_bytes_metric(
             ledger_wasm(),
             encode_init_args,
         );
