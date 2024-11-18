@@ -90,8 +90,10 @@ pub enum Method {
     SignWithSchnorr,
 
     // VetKd interface.
+    #[strum(serialize = "vetkd_public_key")]
     VetKdPublicKey,
-    VetKdEncryptedKey,
+    #[strum(serialize = "vetkd_derive_encrypted_key")]
+    VetKdDeriveEncryptedKey,
 
     // Bitcoin Interface.
     BitcoinGetBalance,
@@ -2802,18 +2804,18 @@ impl ComputeInitialIDkgDealingsResponse {
     }
 }
 
-// Represents the argument of the vet_kd_encrypted_key API.
+// Represents the argument of the vetkd_derive_encrypted_key API.
 /// ```text
 /// (record {
-///   public_key_derivation_path : vec blob;
 ///   derivation_id: blob;
-///   key_id : vet_kd_key_id;
+///   derivation_path : vec blob;
+///   key_id : record { curve : vetkd_curve; name : text };
 ///   encryption_public_key: blob;
 /// })
 /// ```
 #[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
-pub struct VetKdEncryptedKeyArgs {
-    pub public_key_derivation_path: DerivationPath,
+pub struct VetKdDeriveEncryptedKeyArgs {
+    pub derivation_path: DerivationPath,
     #[serde(with = "serde_bytes")]
     pub derivation_id: Vec<u8>,
     pub key_id: VetKdKeyId,
@@ -2821,23 +2823,28 @@ pub struct VetKdEncryptedKeyArgs {
     pub encryption_public_key: Vec<u8>,
 }
 
-impl Payload<'_> for VetKdEncryptedKeyArgs {}
+impl Payload<'_> for VetKdDeriveEncryptedKeyArgs {}
 
 /// Struct used to return vet KD result.
+/// ```text
+/// (record {
+///   encrypted_key : blob;
+/// })
+/// ```
 #[derive(Debug, CandidType, Deserialize)]
-pub struct VetKdEncryptedKeyResult {
+pub struct VetKdDeriveEncryptedKeyResult {
     #[serde(with = "serde_bytes")]
     pub encrypted_key: Vec<u8>,
 }
 
-impl Payload<'_> for VetKdEncryptedKeyResult {}
+impl Payload<'_> for VetKdDeriveEncryptedKeyResult {}
 
-/// Represents the argument of the vet_kd_public_key API.
+/// Represents the argument of the vetkd_public_key API.
 /// ```text
 /// (record {
 ///   canister_id : opt canister_id;
 ///   derivation_path : vec blob;
-///   key_id : vet_kd_key_id;
+///   key_id : record { curve : vetkd_curve; name : text };
 /// })
 /// ```
 #[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
@@ -2849,7 +2856,7 @@ pub struct VetKdPublicKeyArgs {
 
 impl Payload<'_> for VetKdPublicKeyArgs {}
 
-/// Represents the response of the vet_kd_public_key API.
+/// Represents the response of the vetkd_public_key API.
 /// ```text
 /// (record {
 ///   public_key : blob;

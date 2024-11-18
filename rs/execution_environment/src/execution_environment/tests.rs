@@ -173,11 +173,11 @@ fn sign_with_threshold_key_payload(method: Method, key_id: MasterPublicKeyId) ->
             key_id: into_inner_schnorr(key_id),
         }
         .encode(),
-        Method::VetKdEncryptedKey => ic00::VetKdEncryptedKeyArgs {
+        Method::VetKdDeriveEncryptedKey => ic00::VetKdDeriveEncryptedKeyArgs {
             derivation_id: vec![],
             encryption_public_key: vec![],
-            public_key_derivation_path: DerivationPath::new(vec![]),
-            key_id: into_inner_vet_kd(key_id),
+            derivation_path: DerivationPath::new(vec![]),
+            key_id: into_inner_vetkd(key_id),
         }
         .encode(),
         _ => panic!("unexpected method"),
@@ -2291,7 +2291,7 @@ fn make_schnorr_key(name: &str) -> MasterPublicKeyId {
     })
 }
 
-fn make_vet_kd_key(name: &str) -> MasterPublicKeyId {
+fn make_vetkd_key(name: &str) -> MasterPublicKeyId {
     MasterPublicKeyId::VetKd(VetKdKeyId {
         curve: VetKdCurve::Bls12_381_G2,
         name: name.to_string(),
@@ -2312,7 +2312,7 @@ fn into_inner_schnorr(key_id: MasterPublicKeyId) -> SchnorrKeyId {
     }
 }
 
-fn into_inner_vet_kd(key_id: MasterPublicKeyId) -> VetKdKeyId {
+fn into_inner_vetkd(key_id: MasterPublicKeyId) -> VetKdKeyId {
     match key_id {
         MasterPublicKeyId::VetKd(key) => key,
         _ => panic!("unexpected key_id type"),
@@ -3170,7 +3170,7 @@ fn test_sign_with_schnorr_api_is_enabled() {
 }
 
 #[test]
-fn test_vet_kd_public_key_api_is_disabled() {
+fn test_vetkd_public_key_api_is_disabled() {
     let own_subnet = subnet_test_id(1);
     let nns_subnet = subnet_test_id(2);
     let nns_canister = canister_test_id(0x10);
@@ -3184,7 +3184,7 @@ fn test_vet_kd_public_key_api_is_disabled() {
         ic00::VetKdPublicKeyArgs {
             canister_id: None,
             derivation_path: DerivationPath::new(vec![]),
-            key_id: into_inner_vet_kd(make_vet_kd_key("some_key")),
+            key_id: into_inner_vetkd(make_vetkd_key("some_key")),
         }
         .encode(),
         Cycles::new(0),
@@ -3193,12 +3193,12 @@ fn test_vet_kd_public_key_api_is_disabled() {
     let response = test.xnet_messages()[0].clone();
     assert_eq!(
         get_reject_message(response),
-        "vet_kd_public_key API is not yet implemented.",
+        "vetkd_public_key API is not yet implemented.",
     )
 }
 
 #[test]
-fn test_vet_kd_encrypted_key_api_is_disabled() {
+fn test_vetkd_derive_encrypted_key_api_is_disabled() {
     let own_subnet = subnet_test_id(1);
     let nns_subnet = subnet_test_id(2);
     let nns_canister = canister_test_id(0x10);
@@ -3207,17 +3207,17 @@ fn test_vet_kd_encrypted_key_api_is_disabled() {
         .with_nns_subnet_id(nns_subnet)
         .with_caller(nns_subnet, nns_canister)
         .build();
-    let method = Method::VetKdEncryptedKey;
+    let method = Method::VetKdDeriveEncryptedKey;
     test.inject_call_to_ic00(
         method,
-        sign_with_threshold_key_payload(method, make_vet_kd_key("some_key")),
+        sign_with_threshold_key_payload(method, make_vetkd_key("some_key")),
         Cycles::new(0),
     );
     test.execute_all();
     let response = test.xnet_messages()[0].clone();
     assert_eq!(
         get_reject_message(response),
-        "vet_kd_encrypted_key API is not yet implemented.",
+        "vetkd_derive_encrypted_key API is not yet implemented.",
     )
 }
 
@@ -3237,7 +3237,7 @@ fn reshare_chain_key_api_is_disabled() {
     test.inject_call_to_ic00(
         method,
         ic00::ReshareChainKeyArgs::new(
-            make_vet_kd_key("some_key"),
+            make_vetkd_key("some_key"),
             nns_subnet,
             nodes,
             registry_version,
