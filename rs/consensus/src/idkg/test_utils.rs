@@ -189,9 +189,9 @@ where
     }
 }
 
-pub fn into_idkg_contexts<'a>(
-    contexts: &'a BTreeMap<CallbackId, SignWithThresholdContext>,
-) -> BTreeMap<CallbackId, IDkgSignWithThresholdContext<'a>> {
+pub fn into_idkg_contexts(
+    contexts: &BTreeMap<CallbackId, SignWithThresholdContext>,
+) -> BTreeMap<CallbackId, IDkgSignWithThresholdContext<'_>> {
     contexts
         .iter()
         .flat_map(|(id, ctxt)| IDkgSignWithThresholdContext::try_from(ctxt).map(|ctxt| (*id, ctxt)))
