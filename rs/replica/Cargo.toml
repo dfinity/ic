@@ -45,7 +45,7 @@ ic-types = { path = "../types/types" }
 ic-xnet-payload-builder = { path = "../xnet/payload_builder" }
 libc = { workspace = true }
 nix = { workspace = true }
-num_cpus = "1.13.1"
+num_cpus = { workspace = true }
 opentelemetry = { workspace = true }
 opentelemetry-otlp = { workspace = true }
 opentelemetry_sdk = { workspace = true }
