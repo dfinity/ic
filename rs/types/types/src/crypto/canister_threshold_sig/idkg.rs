@@ -1,9 +1,9 @@
 //! Defines interactive distributed key generation (IDkg) types.
 use crate::consensus::get_faults_tolerated;
-use crate::crypto::canister_threshold_sig::error::impl_display_using_debug;
 use crate::crypto::canister_threshold_sig::error::{
     IDkgParamsValidationError, IDkgTranscriptIdError, InitialIDkgDealingsValidationError,
 };
+use crate::crypto::impl_display_using_debug;
 use crate::crypto::{AlgorithmId, CryptoHashOf, Signed, SignedBytesWithoutDomainSeparator};
 use crate::signature::{BasicSignature, BasicSignatureBatch};
 use crate::{Height, NodeId, NumberOfNodes, RegistryVersion};
